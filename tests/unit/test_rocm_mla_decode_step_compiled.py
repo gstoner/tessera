@@ -7,6 +7,7 @@ from tessera import runtime as rt
 from tessera.cache import LatentKVCacheHandle
 from tessera.stdlib import attention
 from tests._support.compiler_tool import run_tessera_opt
+from tests._support.rocm_build import runtime_for_host
 from tests._support.launch_overhead import (
     assert_launch_overhead_bounded,
     launch_execution_kind,
@@ -146,10 +147,11 @@ def test_rocm_mla_decode_step_native_gpu_matches_reference_on_hardware():
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
+    host = runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
     weights, x_t, ref_caches, rt_caches = _case(seed=46)
     expected = attention.mla_decode_step(x_t, ref_caches[0], ref_caches[1], weights)
-    res = rt.launch(_artifact(), (x_t, rt_caches[0], rt_caches[1], weights))
+    res = host.launch(_artifact(), (x_t, rt_caches[0], rt_caches[1], weights))
 
     assert res["ok"], res.get("reason")
     assert res["execution_kind"] == "native_gpu"

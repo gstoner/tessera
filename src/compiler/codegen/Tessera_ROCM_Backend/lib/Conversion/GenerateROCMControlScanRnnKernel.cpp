@@ -189,7 +189,7 @@ struct GenerateROCMControlScanRnnKernelPass
     auto fnTy = b.getFunctionType(
         {memTy, memTy, memTy, memTy, memTy, memTy, memTy, idxTy}, {});
     auto f = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
-    f->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    f.setKernelAttr(b.getUnitAttr());
 
     auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
     auto ldsT = MemRefType::get({BD}, f32, MemRefLayoutAttrInterface(), ws);

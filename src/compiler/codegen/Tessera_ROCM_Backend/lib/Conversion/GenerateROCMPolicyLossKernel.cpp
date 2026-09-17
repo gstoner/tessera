@@ -136,7 +136,7 @@ struct GenerateROCMPolicyLossKernelPass
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
       auto fnTy = b.getFunctionType({memTy, memTy, memTy, memTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitPolicyLossBody(body, loc, gpuFunc, storeTy, kind, clip);
       op->erase();

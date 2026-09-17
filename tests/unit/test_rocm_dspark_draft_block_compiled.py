@@ -4,6 +4,7 @@ import pytest
 from tessera import runtime as rt
 from tessera.stdlib import dspark
 from tests._support.compiler_tool import run_tessera_opt
+from tests._support.rocm_build import runtime_for_host
 
 
 def _weights(vocab=8, hidden=6, seed=0):
@@ -43,7 +44,7 @@ def test_rocm_dspark_draft_block_runtime_matches_reference_oracle():
     anchors = np.array([0, 3], dtype=np.int64)
 
     ref = dspark.draft_block_forward(target_hidden, prev_tokens, anchors, weights, cfg)
-    res = rt.launch(_artifact(cfg), (target_hidden, prev_tokens, anchors, weights))
+    res = runtime_for_host(rt).launch(_artifact(cfg), (target_hidden, prev_tokens, anchors, weights))
 
     assert res["ok"]
     assert res["compiler_path"] == "rocm_dspark_draft_block_compiled"
@@ -80,7 +81,7 @@ def test_rocm_dspark_draft_block_accepts_weight_mapping_and_infers_static_shape(
         "ops": [{"op_name": "tessera.dspark.draft_block"}],
     })
 
-    res = rt.launch(art, {
+    res = runtime_for_host(rt).launch(art, {
         "target_hidden": target_hidden,
         "prev_tokens": prev_tokens,
         "anchors": anchors,
@@ -96,7 +97,7 @@ def test_rocm_dspark_draft_block_requires_executable_metadata():
     cfg = dspark.DSparkConfig(num_anchors=1, block_size=2, vocab_size=8)
     art = _artifact(cfg)
     art.metadata["executable"] = False
-    res = rt.launch(art, ())
+    res = runtime_for_host(rt).launch(art, ())
     assert not res["ok"]
     assert res["runtime_status"] in {"unimplemented", "missing_backend"}
 
@@ -106,6 +107,7 @@ def test_rocm_dspark_draft_block_native_gpu_matches_reference_on_hardware():
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
+    host = runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
     cfg = dspark.DSparkConfig(num_anchors=2, block_size=3, vocab_size=8)
     weights = _weights(seed=21)
@@ -115,7 +117,7 @@ def test_rocm_dspark_draft_block_native_gpu_matches_reference_on_hardware():
     anchors = np.array([1, 3], dtype=np.int64)
 
     ref = dspark.draft_block_forward(target_hidden, prev_tokens, anchors, weights, cfg)
-    res = rt.launch(_artifact(cfg), (target_hidden, prev_tokens, anchors, weights))
+    res = host.launch(_artifact(cfg), (target_hidden, prev_tokens, anchors, weights))
 
     assert res["ok"], res.get("reason")
     assert res["execution_kind"] == "native_gpu"

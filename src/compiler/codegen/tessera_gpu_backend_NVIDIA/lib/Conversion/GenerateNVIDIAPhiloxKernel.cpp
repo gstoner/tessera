@@ -375,8 +375,7 @@ struct GenerateNVIDIAPhiloxKernelPass
       builder.setInsertionPointToStart(&gpuModule.getBodyRegion().front());
       auto function = builder.create<gpu::GPUFuncOp>(
           loc, name.getValue(), functionType);
-      function->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                        builder.getUnitAttr());
+      function.setKernelAttr(builder.getUnitAttr());
       OpBuilder body(function.getContext());
       if (mode.getValue() == "uniform_core")
         emitUniformCore(body, loc, function);

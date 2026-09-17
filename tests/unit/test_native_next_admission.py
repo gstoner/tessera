@@ -10,6 +10,7 @@ from tessera.compiler.native_ann import prepare_native_ann, affine_error_bound, 
 from tessera.compiler.native_persistent_tape import materialize_persistent_tape
 from benchmarks.record_native_tape_extensions import data_while_source, predicate_source
 from test_native_ann_composition import source
+from tests._support.environment import require_native_storage_lane
 
 
 def relu_source():
@@ -41,6 +42,7 @@ def test_terminal_relu_native_analytic_admission():
 
 
 def test_data_dependent_while_preserves_native_checkpoint_and_scalar_storage():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from tests._support.rocm_build import require_rocm_hsaco_toolkit
     require_rocm_hsaco_toolkit()  # packages a gfx1151 HSACO
     pair=materialize_persistent_tape(data_while_source(),compiler=compiler(),
@@ -53,6 +55,7 @@ def test_data_dependent_while_preserves_native_checkpoint_and_scalar_storage():
 
 
 def test_data_while_requires_actual_conjunctive_capacity():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from tests._support.rocm_build import require_rocm_hsaco_toolkit
     require_rocm_hsaco_toolkit()  # packages a gfx1151 HSACO
     text=data_while_source().replace('arith.andi %bounded, %active','arith.ori %bounded, %active')
@@ -91,6 +94,7 @@ def test_completion_poll_retains_owners_until_success(status):
 
 
 def test_gpu_ann_source_replay_rejects_modified_lowered_program():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from dataclasses import replace
     from tessera.compiler.native_ann_gpu import materialize_native_ann_gpu
     tool=compiler()
@@ -105,6 +109,7 @@ def test_gpu_ann_source_replay_rejects_modified_lowered_program():
 
 
 def test_rank_zero_predicate_materializes_native_device_descriptor():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from tests._support.rocm_build import require_rocm_hsaco_toolkit
     require_rocm_hsaco_toolkit()  # packages a gfx1151 HSACO
     pair=materialize_persistent_tape(predicate_source(),compiler=compiler(),llvm_bin=Path('/usr/lib/llvm-23/bin'),backend='rocm',chip='gfx1151')
@@ -114,6 +119,7 @@ def test_rank_zero_predicate_materializes_native_device_descriptor():
 
 
 def test_measurement_gate_uses_raw_samples_and_retains_incumbent():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from copy import deepcopy
     from tessera.compiler.native_ann_gpu import summarize_native_ann_measurements
     base=dict(backend='rocm',chip='gfx1151',pair='p',original='o',transformed='t',
@@ -131,6 +137,7 @@ def test_measurement_gate_uses_raw_samples_and_retains_incumbent():
 
 
 def test_measurement_gate_rejects_boolean_median_summary():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from tessera.compiler.native_ann_gpu import summarize_native_ann_measurements
     base=dict(backend='rocm',chip='gfx1151',pair='p',original='o',transformed='t',
         input_bound=1.0,absolute_budget=.001,bounds=['a','b'],
@@ -166,6 +173,7 @@ def test_derivative_release_retains_allocations_if_completion_fails(fail_complet
 
 
 def test_fixed_nine_run_bound_tolerates_one_outlier_but_not_two():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from copy import deepcopy
     from tessera.compiler.native_ann_gpu import summarize_native_ann_measurements
     base=dict(backend='rocm',chip='gfx1151',pair='p',original='o',transformed='t',

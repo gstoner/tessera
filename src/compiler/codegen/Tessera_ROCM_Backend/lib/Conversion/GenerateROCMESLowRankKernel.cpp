@@ -373,8 +373,7 @@ struct GenerateROCMESLowRankKernelPass
           {f32Buffer, i64Buffer, i64Buffer, f32Buffer}, {});
       auto function = builder.create<gpu::GPUFuncOp>(
           loc, name.getValue(), functionType);
-      function->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                        builder.getUnitAttr());
+      function.setKernelAttr(builder.getUnitAttr());
       OpBuilder body(function.getContext());
       emitBody(body, loc, function, population.getInt(), rows.getInt(),
                inDim.getInt(), outDim.getInt(), epoch.getInt(),

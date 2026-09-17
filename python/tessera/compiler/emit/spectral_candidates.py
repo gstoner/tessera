@@ -714,6 +714,18 @@ def run_rocm_spectral_composite(
     )
     lib = _amd_composite_lib()
     if lib is None:
+        # Name the arch this refusal is about. The composite package is a
+        # gfx1151 artifact (its schedules and evidence are owned by gfx1151), so
+        # on any other ROCm host "unavailable" is not a missing build but an
+        # arch-gated contract -- and a test must be able to tell the two apart:
+        # on gfx1151 this is a failure, on gfx1201 it is a skip.
+        import os
+        arch = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+        if arch != "gfx1151":
+            raise RuntimeError(
+                "prebuilt ROCm spectral composite image is a gfx1151 package, "
+                f"hardware-verified on gfx1151; target '{arch}' has no composite "
+                "image and is arch-gated on its own evidence")
         raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
     if (
         lib.ts_spectral_composite_package_abi_amd()

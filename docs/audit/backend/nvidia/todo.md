@@ -7648,6 +7648,64 @@ Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Cli
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## The sm_120 Lion stop-sign lane returns rc=3 on main — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1.
+
+**Follow-up required — owed to this queue, pre-existing.**
+`test_autodiff_training_series_target_binding.py::test_nvidia_lion_backward_runs_sm120_stop_sign_package`
+fails on Super-Bear with `verified SM120 Lion backward launch failed: SM120
+descriptor invoke returned rc=3`. Bisected the only valid way: `main` at
+`1b042e22` built from its own sources in a fresh worktree on that box, **both**
+trees (`build/` and `build-nvidia-cuda/`, the latter being where the PTX
+launcher and `tessera-nvidia-opt` load from), and the lane fails identically.
+It is the single remaining failure in that box's full sweep (48 → 1 on this
+branch). In `tessera_nvidia_ptx_launch.cpp` a return of 3 is always a CUDA
+memory-API failure (`cuMemAlloc` / `cuMemcpyDtoH`) or unlocked staging
+pointers — a device-runtime condition or a descriptor sizing the launcher cannot
+allocate, not a codegen error; the device is healthy in the same shell (the
+sm_120 promotion gate passes). Not diagnosed further here. The rc is opaque by
+design of the launcher; the first step is to have `tessera_nvidia_ptx_invoke_v2`
+report *which* CUDA call failed and its `CUresult`, so the next reader is not
+where this one was.
+
+Also found while bisecting, and fixed: `examples/advanced/power_retention/` could
+not compile in a fresh tree with `TESSERA_ENABLE_CUDA=ON` (which puts it in
+`all`), and the first error hid two more. Its tablegen outputs landed flat in
+the binary dir while its sources include them as `tessera/power/*.inc`; with
+that fixed, the dialect source hand-wrote a second `PowerDialect` beside the
+generated declaration, the ops source included the generated header without
+`GET_OP_CLASSES`, and `Passes.cpp` used the two-argument `PassRegistration`
+constructor LLVM removed. All four are repaired and the dialect and passes
+link in a fresh worktree of main on Super-Bear. Beneath them a fifth: the CUDA
+kernel `src/kernels/cuda/power_attention.cu` does not compile at all (an
+undefined helper `compute_phi2_q_to_smem_bf16`, an undefined `s`, a malformed
+declaration at line 226). That is scaffold code with no kernel behind it, so it
+is not "fixed" by inventing one; the kernel libraries and the runtime that links
+them are now `EXCLUDE_FROM_ALL`, and a clean `all` build of both trees succeeds
+with them out. The example stays a `scaffold` in the surface manifest (its passes
+are empty, its Python entry point prints a placeholder), and it is **owed**: either
+a real kernel or retirement to `archive/`. Four layers of rot in a target that
+was part of `all` on every CUDA-configured tree says no clean CUDA build of this
+repository had succeeded in some time — the lived-in trees on Super-Bear had
+never built the example library (no `libTesseraPowerDialect.a` in `build/`), and
+so never saw it.
+
+## Duplicate `gpu.kernel` stamp: the Philox generator had it too — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1.
+
+**Parity change, unverified on the owning device.** `GenerateNVIDIAPhiloxKernel.cpp`
+stamped `gpu.kernel` by raw attribute name on a `gpu.func` whose `kernel` is an
+inherent property in LLVM 23, exactly as 72 ROCm generators did; the ROCm queue
+records the mechanism and the assertions-only abort it produced there. The
+NVIDIA site is fixed the same way (`setKernelAttr`). Super-Bear runs an NDEBUG
+driver, so the duplicate was silent there and the fix changes no observable
+result on that box; the only host that could falsify it is an assertions-ON
+build with the NVIDIA backend configured, which none currently is. Owed: build
+one, or run the Philox lowering through the ROCm-style single-invocation fixture
+pattern (`rocm_generated_kernel_stamps_gpu_kernel_once.mlir`) with NVVM.
+
 ## Princess-Luna red zone: the shared fixes that touch this backend — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

@@ -309,7 +309,7 @@ struct GenerateROCMControlForKernelPass
     b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
     auto fnTy = b.getFunctionType({memTy, memTy, idxTy}, {});
     auto gpuFunc = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
-    gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    gpuFunc.setKernelAttr(b.getUnitAttr());
 
     OpBuilder kb(gpuFunc.getContext());
     kb.setInsertionPointToStart(&gpuFunc.getBody().front());
@@ -367,7 +367,7 @@ struct GenerateROCMControlForKernelPass
     b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
     auto fnTy = b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
     auto gpuFunc = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
-    gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    gpuFunc.setKernelAttr(b.getUnitAttr());
 
     OpBuilder kb(gpuFunc.getContext());
     kb.setInsertionPointToStart(&gpuFunc.getBody().front());
@@ -440,7 +440,7 @@ struct GenerateROCMControlForKernelPass
     b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
     auto fnTy = b.getFunctionType({memTy, memTy, idxTy}, {});
     auto gpuFunc = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
-    gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    gpuFunc.setKernelAttr(b.getUnitAttr());
 
     OpBuilder kb(gpuFunc.getContext());
     kb.setInsertionPointToStart(&gpuFunc.getBody().front());

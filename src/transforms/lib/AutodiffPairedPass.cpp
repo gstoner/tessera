@@ -43,6 +43,7 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/StringExtras.h"
@@ -1771,6 +1772,12 @@ public:
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<tessera::attn::TesseraAttnDialect>();
+    // `emit-storage-child` creates tile ops for the native storage child. Not
+    // declaring the dialect here was the third instance of the 2026-09-16
+    // class: green on every NDEBUG driver, and on the assertions-ON driver
+    // "Loading a dialect (tile) while in a multi-threaded execution context"
+    // (Tajasarus, `test_native_storage_generation`, 2026-09-17).
+    registry.insert<tessera::tile::TesseraTileDialect>();
     registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
                     mlir::func::FuncDialect, mlir::linalg::LinalgDialect,
                     mlir::scf::SCFDialect, mlir::tensor::TensorDialect, mlir::gpu::GPUDialect,
@@ -1956,6 +1963,18 @@ private:
     selected->removeAttr("tessera.autodiff.paired");
     (role=="forward" ? backward : forward).erase();
     mlir::Builder b(module.getContext());
+    // A product is not a request. The backward already carries
+    // role="backward", which is what this pass keys on to leave a function it
+    // produced alone; the forward product kept only the `tessera.autodiff =
+    // "reverse"` *request* marker, so any later pipeline that runs this pass --
+    // the JIT runs it unconditionally -- differentiated the exported forward a
+    // second time, re-materialized its residual tapes on top of the first
+    // materialization, and handed the caller a function whose ABI no longer
+    // matched the product contract it had just read. On every host with the
+    // native x86 JIT that was a segfault at the first invoke, recorded for a
+    // day as a bufferization defect in the shape-varying carry
+    // (AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17); the carry was never at fault.
+    selected->setAttr("tessera.autodiff.role",b.getStringAttr(role));
     // Forward inputs and backward residuals belong to the persistent frame.
     // Bufferization must not reuse their storage for mutable intermediates.
     for (unsigned i=0;i<selected.getNumArguments();++i)

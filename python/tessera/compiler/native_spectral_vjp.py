@@ -849,6 +849,15 @@ def execute_rocm_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequence
         raise RuntimeError("ROCm HIP runtime is unavailable")
     module = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(module), image) != 0:
+        # Name the arch this refusal is about: the image is a gfx1151 package,
+        # so on another ROCm host this is an arch-gated contract, not a build
+        # failure, and a test must be able to tell the two apart.
+        import os
+        arch = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+        if arch != "gfx1151":
+            raise RuntimeError(
+                "ROCm spectral VJP image is a gfx1151 package, hardware-verified on "
+                f"gfx1151; target '{arch}' has no image and is arch-gated on its own evidence")
         raise RuntimeError("ROCm spectral VJP image is not loadable")
     function = ctypes.c_void_p()
     if hip.hipModuleGetFunction(ctypes.byref(function), module, symbol.encode()) != 0:

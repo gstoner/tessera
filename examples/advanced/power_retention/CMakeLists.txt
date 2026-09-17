@@ -24,12 +24,21 @@ if (TESSERA_ENABLE_HIP)
   find_package(hip REQUIRED)
   add_definitions(-DTESSERA_POWER_USE_HIP=1)
 endif()
-include_directories(include ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+# Generated headers go under the *binary* include tree at the path the sources
+# include them from (`tessera/power/*.inc`). They used to land flat in the
+# binary dir with only the source `include/` on the path, so on a fresh worktree
+# of main configured with TESSERA_ENABLE_CUDA=ON -- which puts this example in
+# `all` -- the dialect could not compile at all: `fatal error:
+# tessera/power/TesseraPowerDialect.h.inc: No such file` (Super-Bear, 2026-09-17).
+# The lived-in trees on that box never compiled this target in their default
+# build, which is how a header path that cannot work survived.
+include_directories(include ${CMAKE_CURRENT_BINARY_DIR}/include ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/tessera/power)
 set(LLVM_TARGET_DEFINITIONS include/tessera/power/TesseraPower.td)
-mlir_tablegen(TesseraPowerOps.h.inc -gen-op-decls)
-mlir_tablegen(TesseraPowerOps.cpp.inc -gen-op-defs)
-mlir_tablegen(TesseraPowerDialect.h.inc -gen-dialect-decls -dialect=power)
-mlir_tablegen(TesseraPowerDialect.cpp.inc -gen-dialect-defs -dialect=power)
+mlir_tablegen(include/tessera/power/TesseraPowerOps.h.inc -gen-op-decls)
+mlir_tablegen(include/tessera/power/TesseraPowerOps.cpp.inc -gen-op-defs)
+mlir_tablegen(include/tessera/power/TesseraPowerDialect.h.inc -gen-dialect-decls -dialect=power)
+mlir_tablegen(include/tessera/power/TesseraPowerDialect.cpp.inc -gen-dialect-defs -dialect=power)
 add_public_tablegen_target(TesseraPowerIncGen)
 add_library(TesseraPowerDialect
   lib/Dialect/Power/IR/TesseraPowerDialect.cpp
@@ -44,17 +53,24 @@ add_library(TesseraPowerTransforms
 )
 target_link_libraries(TesseraPowerTransforms PUBLIC
   TesseraPowerDialect MLIRIR MLIRPass MLIRTransforms MLIRFuncDialect)
+# The kernel libraries and the runtime that links them are EXCLUDE_FROM_ALL:
+# `src/kernels/cuda/power_attention.cu` does not compile (an undefined helper
+# `compute_phi2_q_to_smem_bf16`, an undefined `s`, a malformed declaration at
+# its line 226 -- found on a fresh CUDA-configured worktree of main, Super-Bear,
+# 2026-09-17), and a scaffold's kernel must not decide whether the repository
+# builds. The dialect and passes above stay in `all` and do compile; build the
+# kernels by name when the scaffold grows a real kernel.
 if (TESSERA_ENABLE_CUDA)
-  add_library(tessera_power_kernels_cuda STATIC src/kernels/cuda/power_attention.cu)
+  add_library(tessera_power_kernels_cuda STATIC EXCLUDE_FROM_ALL src/kernels/cuda/power_attention.cu)
   target_link_libraries(tessera_power_kernels_cuda PUBLIC CUDA::cudart)
   # 120 = consumer Blackwell (RTX 50-series), the fleet's only CUDA device.
   set_target_properties(tessera_power_kernels_cuda PROPERTIES CUDA_ARCHITECTURES "80;89;90;100;120")
 endif()
 if (TESSERA_ENABLE_HIP)
-  add_library(tessera_power_kernels_hip STATIC src/kernels/hip/power_attention.hip.cu)
+  add_library(tessera_power_kernels_hip STATIC EXCLUDE_FROM_ALL src/kernels/hip/power_attention.hip.cu)
   target_link_libraries(tessera_power_kernels_hip PUBLIC hip::device)
 endif()
-add_library(tessera_power_runtime STATIC lib/Runtime/Runtime.cpp lib/Runtime/Autotune.cpp)
+add_library(tessera_power_runtime STATIC EXCLUDE_FROM_ALL lib/Runtime/Runtime.cpp lib/Runtime/Autotune.cpp)
 target_link_libraries(tessera_power_runtime PUBLIC MLIRIR
   $<IF:$<BOOL:${TESSERA_ENABLE_CUDA}>,tessera_power_kernels_cuda,>
   $<IF:$<BOOL:${TESSERA_ENABLE_HIP}>,tessera_power_kernels_hip,>)

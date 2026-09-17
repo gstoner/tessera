@@ -239,8 +239,7 @@ struct GenerateROCMMLAAbsorbDecodeKernelPass
            idxTy, idxTy, idxTy, idxTy, idxTy},
           {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitMLAAbsorbDecodeBody(body, loc, gpuFunc);
       op->erase();

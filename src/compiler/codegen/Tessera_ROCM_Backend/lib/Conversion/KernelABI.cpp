@@ -17,6 +17,15 @@ static LLVM::LLVMPointerType ptrInAS(MLIRContext *ctx, unsigned as, Type elemTy)
 namespace {
 
 struct KernelABIPass : PassWrapper<KernelABIPass, OperationPass<ModuleOp>> {
+  // The pass creates LLVM pointer types and used to `loadDialect` for them from
+  // inside runOnOperation. MLIR forbids loading a dialect while the pass
+  // manager runs; the NDEBUG fleet ran it green and the assertions-ON driver
+  // aborted the ROCm lit suite on `kernel_abi_addrspace.mlir` with "Loading a
+  // dialect (llvm) while in a multi-threaded execution context" (Tajasarus,
+  // 2026-09-17) -- the fourth instance of the 2026-09-16 class.
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<LLVM::LLVMDialect, func::FuncDialect>();
+  }
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(KernelABIPass)
   StringRef getArgument() const final { return "lower-tessera-kernel-abi"; }
   StringRef getDescription() const final {
@@ -25,7 +34,6 @@ struct KernelABIPass : PassWrapper<KernelABIPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
     auto ctx = m.getContext();
-    ctx->loadDialect<LLVM::LLVMDialect>();
     SmallVector<func::FuncOp> kernels;
     for (auto fn : m.getOps<func::FuncOp>())
       kernels.push_back(fn);

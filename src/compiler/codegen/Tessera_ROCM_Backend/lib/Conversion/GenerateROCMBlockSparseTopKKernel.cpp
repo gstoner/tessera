@@ -438,8 +438,7 @@ struct GenerateROCMBlockSparseTopKKernelPass
           {fmem, imem, imem, idxTy, idxTy, idxTy, idxTy, idxTy, idxTy, idxTy, idxTy},
           {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       if (auto strategy = op->getAttrOfType<StringAttr>("strategy");
           strategy && strategy.getValue() == "serial")

@@ -82,5 +82,10 @@ def test_partial_registration_failure_retires_installed_instances(registration, 
 def test_native_only_tests_skip_before_preparation_without_compiler(monkeypatch, name):
     import test_native_next_admission as native_tests
     monkeypatch.setattr(native_tests, 'find_tessera_opt', lambda: None)
-    with pytest.raises(pytest.skip.Exception, match='native compiler required'):
+    # Either honest "cannot evaluate here" reason is acceptable, and both come
+    # before any preparation: a host without the native compiler, or one whose
+    # toolchain cannot package the gfx1151 HSACO these tests build (the guard
+    # added when they failed inside ROCDL serialization on a CUDA host).
+    with pytest.raises(pytest.skip.Exception,
+                       match='native compiler required|no rocm device toolchain to package for'):
         getattr(native_tests, name)()

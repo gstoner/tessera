@@ -891,8 +891,7 @@ struct GenerateROCMOptimizerKernelPass
         auto makeKernel = [&](StringRef suffix, FunctionType type) {
           auto fn =
               b.create<gpu::GPUFuncOp>(loc, kname + suffix.str(), type);
-          fn->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                      b.getUnitAttr());
+          fn.setKernelAttr(b.getUnitAttr());
           return fn;
         };
         auto row = makeKernel("_row", momentTy);
@@ -958,7 +957,7 @@ struct GenerateROCMOptimizerKernelPass
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       if (backward) {
         if (adamBackward)

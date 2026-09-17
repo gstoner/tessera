@@ -79,3 +79,166 @@ def require_rocm_hsaco_toolkit():
         pytest.skip("ROCDL hsaco serialization needs a ROCm toolkit with ld.lld "
                     "(ROCM_PATH); none on this host")
     return root
+
+
+def rocm_host_arch() -> "str | None":
+    """The gfx arch this host will launch on: the ``TESSERA_ROCM_CHIP`` pin if
+    set, else the live device, else None. The same resolution the runtime uses
+    for its corpus keys (`runtime._rocm_device_name`), so a test asks the
+    question the launch path will answer."""
+    from tessera import runtime as rt
+
+    try:
+        return rt._rocm_device_name()
+    except Exception:  # pragma: no cover - a probe failure is "no device"
+        return None
+
+
+def require_rocm_compiled_family(*families: str) -> str:
+    """Skip unless every named family plugin is promoted on this host's arch.
+
+    The executable pipeline refuses, fail-closed, any family without exact-device
+    proof on the launch arch (`rocm_pipeline.promoted_families`). A test that
+    launches such a family on such a host is not measuring a defect; it is
+    measuring the absence of a proof, and the honest result is a skip that says
+    so. Before this existed ~1500 `test_rocm_*_compiled.py` tests failed on the
+    gfx1201 box with the pipeline's own refusal text.
+
+    Returns the arch so a caller can key on it.
+    """
+    import pytest
+    from tessera.compiler.rocm_pipeline import promoted_families
+
+    arch = rocm_host_arch()
+    if arch is None:
+        pytest.skip("no ROCm device arch resolved on this host (no pin, no live device)")
+    missing = sorted(f for f in families if f not in promoted_families(arch))
+    if missing:
+        pytest.skip(f"ROCm executable pipeline has no promoted {', '.join(missing)} "
+                    f"family plugin for {arch}; this lane needs a host with that proof")
+    return arch
+
+
+def require_rocm_compiled_lane_host() -> str:
+    """Skip unless this host's arch has *every* family plugin promoted.
+
+    For a compiled-family test that does not name its family. The generic
+    compiled lane is gfx1151-only by the pipeline's rule; only the five families
+    with gfx1201 proof may run there, and they must say which one they are
+    through `require_rocm_compiled_family`. Anything else on a non-gfx1151 arch
+    is asserting a gfx1151 proof on a host that cannot have one.
+    """
+    import pytest
+    from tessera.compiler.rocm_pipeline import FAMILY_PLUGINS, promoted_families
+
+    arch = rocm_host_arch()
+    if arch is None:
+        pytest.skip("no ROCm device arch resolved on this host (no pin, no live device)")
+    if promoted_families(arch) != frozenset(FAMILY_PLUGINS):
+        pytest.skip(f"the generic ROCm compiled lane has proof on gfx1151 only; "
+                    f"this host launches on {arch}")
+    return arch
+
+
+_UNPROMOTED_REFUSAL = "ROCm executable pipeline has no promoted family plugins for "
+
+
+def refused_for_host_arch(text: str, arch: "str | None" = None) -> bool:
+    """Whether `text` is one of the fail-closed refusals about *this host's* arch.
+
+    1. The family rule: "ROCm executable pipeline has no promoted family plugins
+       for <arch>; ...".
+    2. An ISA contract gated on another arch's silicon that names the host it is
+       refusing: "... hardware-verified on gfx1151; target '<arch>' ... arch-gated".
+       The 16x16x16 WMMA fragment layout is the first instance (RDNA4 is
+       16x16x32); the gfx1151 spectral composite image is the second.
+    3. That same gfx11 WMMA contract reaching the LLVM backend for a non-gfx11
+       host: "Cannot select: intrinsic %llvm.amdgcn.wmma.f32.16x16x16.f16". The
+       serializer was handed a gfx11 kernel with a gfx12 target; the honest
+       refusal happens one layer up in the runtime, and a test that lowers the
+       kernel itself never sees it.
+
+    Every pattern must name, or be conditioned on, the host's own arch, so a
+    refusal about an arch a test pinned on purpose stays a failure.
+    """
+    arch = arch or rocm_host_arch()
+    if not arch:
+        return False
+    if text.startswith(_UNPROMOTED_REFUSAL + arch + ";") or (_UNPROMOTED_REFUSAL + arch + ";") in text:
+        return True
+    if f"target '{arch}'" in text and ("arch-gated" in text or "hardware-verified on" in text):
+        return True
+    if ("Cannot select: intrinsic %llvm.amdgcn.wmma.f32.16x16x16" in text
+            and not arch.startswith("gfx11")):
+        return True
+    # 4. A gfx1151-owned artifact or lane refusing on a host that is not gfx1151.
+    #    These refusals name the owner but not the host: "exact gfx1151 spectral
+    #    reverse package is unavailable", "gfx1151 native HSACO module load
+    #    failed", "gfx1151 streaming STFT physical package is unavailable",
+    #    "solver IFT package is verified for gfx1151, not gfx1201", "attention
+    #    backward requires its exact owning ROCm device". On gfx1151 every one of
+    #    them is a real failure and stays one; on any other arch it is the proof
+    #    not existing here.
+    if arch != "gfx1151":
+        if "gfx1151" in text and any(k in text for k in (
+                "unavailable", "not loadable", "load failed", "verified for gfx1151")):
+            return True
+        if "requires its exact owning ROCm device" in text:
+            return True
+    return False
+
+
+def refused_by_type_for_host_arch(exc: BaseException, arch: "str | None" = None) -> bool:
+    """`_RocmCompiledUnavailable` is the runtime's fail-closed class for its
+    compiled lanes, which are gfx11-verified; raised on a non-gfx11 host it is
+    "no proof here" whatever its message says ("rocm f32 GEMM lane unavailable —
+    no chunked SSD"). On gfx11 it is a failure."""
+    arch = arch or rocm_host_arch()
+    return bool(arch) and not arch.startswith("gfx11") and type(exc).__name__ == "_RocmCompiledUnavailable"
+
+
+class _RuntimeForHost:
+    """`tessera.runtime` with one change: a launch the executable pipeline
+    refuses *for lack of proof on this host's arch* becomes a skip.
+
+    Everything else passes through untouched — a numerical mismatch, a launch
+    error, a refusal about some other arch a test pinned on purpose, all still
+    fail. Only the exact fail-closed text from `ROCMExecutablePipeline`, naming
+    the arch this host resolves to, is a skip: that result says "this proof does
+    not exist here", and a test that reads it as "this proof is broken" is the
+    defect that put ~1500 red tests on the gfx1201 box. Returned by the
+    compiled-family guards (`_rocm_or_skip` and its siblings) so no launch site
+    changes.
+    """
+
+    def __init__(self, runtime_module):
+        self._rt = runtime_module
+
+    def __getattr__(self, name):
+        return getattr(self._rt, name)
+
+    def _refused_for_this_host(self, text: str) -> bool:
+        return refused_for_host_arch(text)
+
+    def launch(self, *args, **kwargs):
+        import pytest
+
+        unavailable = getattr(self._rt, "_RocmCompiledUnavailable", None)
+        caught: tuple[type[BaseException], ...] = (ValueError,)
+        if isinstance(unavailable, type) and issubclass(unavailable, BaseException):
+            caught = caught + (unavailable,)
+        try:
+            result = self._rt.launch(*args, **kwargs)
+        except caught as exc:
+            if self._refused_for_this_host(str(exc)):
+                pytest.skip(str(exc))
+            raise
+        if (isinstance(result, dict) and result.get("ok") is False
+                and self._refused_for_this_host(str(result.get("reason", "")))):
+            pytest.skip(str(result["reason"]))
+        return result
+
+
+def runtime_for_host(runtime_module) -> _RuntimeForHost:
+    """Wrap the runtime so unpromoted-family refusals for this host skip."""
+    return _RuntimeForHost(runtime_module)

@@ -130,8 +130,7 @@ struct GenerateROCMAlibiKernelPass
       // (Slopes : memref<?xf32>, O : memref<?xstore>, H : index, S : index)
       auto fnTy = b.getFunctionType({slopeTy, outTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitAlibiBody(body, loc, gpuFunc, storeTy);
       op->erase();

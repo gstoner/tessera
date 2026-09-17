@@ -99,7 +99,7 @@ struct GenerateROCMSpecAcceptTreeSampleKernelPass
     b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
     auto fnTy = b.getFunctionType({fMem, fMem, fMem, iMem}, {});  // TLP,DLP,AU,OUT
     auto f = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
-    f->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    f.setKernelAttr(b.getUnitAttr());
 
     auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
     auto ldsT = MemRefType::get({BD}, i32, MemRefLayoutAttrInterface(), ws);

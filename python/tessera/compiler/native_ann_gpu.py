@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import threading
 import numpy as np
 from .native_ann import NativeANNPair, _affine, _affine_error_bounds, _exact_output, _exact_error, _output_shape
-from .native_gpu_storage import NativeGPUStoragePackage, _run, build_native_gpu_storage, replay_arena_ir
+from .native_gpu_storage import NativeGPUStoragePackage, _run, build_native_gpu_storage, replay_arena_ir, _resolve_tool
 from .native_gpu_tensor import TensorSpec, IndexSpec
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
 from .native_persistent_tape import _attribute
@@ -77,7 +77,11 @@ class NativeANNDevicePair:
         for source,package in zip((self.logical.original,self.logical.transformed),
                                   (self.original,self.transformed),strict=True):
             package.validate()
-            if hashlib.sha256((self.llvm_bin/'mlir-opt').read_bytes()).hexdigest()!=package.llvm_digest:
+            # Resolve the companion like the packager does: callers pass the Ubuntu
+            # /usr/lib/llvm-23/bin, which does not exist on a host whose LLVM lives
+            # in a toolchain prefix (Tajasarus), and the digest is of the tool that
+            # actually ran.
+            if hashlib.sha256(_resolve_tool(self.llvm_bin/'mlir-opt').read_bytes()).hexdigest()!=package.llvm_digest:
                 raise ValueError('ANN physical toolchain identity changed')
             pipeline=_attribute(package.arena_ir,'tessera.ann.pipeline')
             if pipeline not in ('serial-v1','elementwise-fused-v1','serial-rows-v1','elementwise-fused-rows-v1'):

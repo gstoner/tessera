@@ -613,8 +613,7 @@ struct GenerateROCMNormKernelPass
             {});
       }
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       if (backward)
         emitNormBackwardBody(body, loc, gpuFunc, storeTy,
@@ -630,8 +629,7 @@ struct GenerateROCMNormKernelPass
             {});
         auto finalize =
             b.create<gpu::GPUFuncOp>(loc, kname + "_reduce", finalizeTy);
-        finalize->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                          b.getUnitAttr());
+        finalize.setKernelAttr(b.getUnitAttr());
         OpBuilder finalizeBody(finalize.getContext());
         emitNormBackwardFinalizeBody(finalizeBody, loc, finalize, storeTy);
       }

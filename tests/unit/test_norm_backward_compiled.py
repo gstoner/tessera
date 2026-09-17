@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from tests._support.rocm_build import runtime_for_host
 
 
 def _artifact(rt, target, op_name, *, affine, beta=False, eps=1e-5):
@@ -67,7 +68,7 @@ def _target_or_skip(target):
             pytest.skip("ROCm compiler/GPU unavailable")
     elif not rt._x86_elementwise_available():
         pytest.skip("AVX-512 runtime unavailable")
-    return rt
+    return runtime_for_host(rt)  # refusals for lack of proof on this arch skip
 
 
 @pytest.mark.parametrize("target", ["x86", "rocm"])

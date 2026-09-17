@@ -2,13 +2,36 @@
 
 import numpy as np
 import pytest
+from pathlib import Path
 
 from tessera.compiler import apple_native, scheduled_attention_backward, scheduled_kernel
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 from test_scheduled_attention_backward_consumers import _apple_module, _apple_backward_reference
 
-pytestmark = pytest.mark.skipif(find_tessera_opt() is None, reason='native compiler required')
+def _apple_backend_reason() -> str | None:
+    """Why this module cannot run here, or None when it can.
+
+    `find_tessera_opt() is None` was the only guard, and it is the wrong
+    question on a Linux box: tessera-opt exists there, built without
+    TESSERA_BUILD_APPLE_BACKEND, so every `--tessera-*-to-apple_gpu` pass is
+    unknown and 39 tests failed with "Unknown command line argument" on both
+    Princess-Luna and Super-Bear — a host reporting "no Apple backend here" as a
+    broken contract. Ask the binary what it registered.
+    """
+    from tests._support.compiler_tool import registered_passes
+
+    tool = find_tessera_opt()
+    if tool is None:
+        return 'native compiler required'
+    if 'tessera-lower-to-apple_gpu' not in registered_passes(Path(tool)):
+        return ("this host's tessera-opt was built without the Apple backend "
+                "(no tessera-lower-to-apple_gpu pipeline)")
+    return None
+
+
+_SKIP_REASON = _apple_backend_reason()
+pytestmark = pytest.mark.skipif(_SKIP_REASON is not None, reason=_SKIP_REASON or '')
 
 
 def softmax_module(dtype):

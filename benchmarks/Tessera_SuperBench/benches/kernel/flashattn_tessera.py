@@ -18,6 +18,7 @@ if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
 from benchmarks.common import (  # noqa: E402
+    infer_execution_kind,
     ArtifactLevels,
     BenchmarkOperator,
     BenchmarkRow,
@@ -70,10 +71,12 @@ def main(argv=None) -> int:
     ref = flash_attn(q.astype(np.float64), k.astype(np.float64), v.astype(np.float64)).astype(np.float32)
     corr = correctness_report(out, ref, tolerance=1e-5)
     runtime_status = RuntimeStatus.ARTIFACT_ONLY if info.get("available") else RuntimeStatus.EXECUTABLE
+    compiler_path = CompilerPath.GRAPH_IR_ONLY if info.get("available") else CompilerPath.REFERENCE
     row = BenchmarkRow(
         operator=BenchmarkOperator("flash_attn", "f32", f"{args.batch}x{args.heads}x{args.seq}x{args.d}", "cpu"),
-        compiler_path=CompilerPath.GRAPH_IR_ONLY if info.get("available") else CompilerPath.REFERENCE,
+        compiler_path=compiler_path,
         runtime_status=runtime_status,
+        execution_kind=infer_execution_kind(compiler_path, runtime_status),
         artifact_levels=ArtifactLevels(graph=bool(info.get("graph_ir")), artifact_hash=info.get("artifact_hash")),
         correctness=corr,
         profile=Profile(cpu_wall_ms=last_ms),

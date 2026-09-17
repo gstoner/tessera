@@ -201,7 +201,7 @@ Use these as implementation anchors:
 - `tests/unit/test_nccl_adapter.py`: collective behavior tests.
 - `tests/unit/test_bayesian_autotuner.py`: schedule artifact tests.
 - `tests/unit/`: runtime, diagnostics, shape, and semantic-core tests.
-- `docs/benchmarks/`: benchmark and performance validation material.
+- `docs/benchmarks/`: index to the benchmark surface (runners in `benchmarks/`, sealed evidence in `benchmarks/baselines/`, live status in `docs/audit/generated/`).
 
 ## 10. Related Guides
 

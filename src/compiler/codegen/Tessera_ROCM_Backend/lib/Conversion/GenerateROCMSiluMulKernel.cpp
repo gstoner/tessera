@@ -121,8 +121,7 @@ struct GenerateROCMSiluMulKernelPass
       // (A, B, O : memref<?xstore>, N : index)
       auto fnTy = b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitSiluMulBody(body, loc, gpuFunc, storeTy);
       op->erase();

@@ -514,7 +514,7 @@ struct GenerateROCMStateMachineKernelPass
     b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
     auto gpuFunc =
         gpu::GPUFuncOp::create(b, loc, kname, b.getFunctionType(abi, {}));
-    gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    gpuFunc.setKernelAttr(b.getUnitAttr());
     if (digests.size() == 1) {
       gpuFunc->setAttr(kDigestAttr, digests.front());
     } else {

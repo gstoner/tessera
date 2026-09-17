@@ -43,6 +43,7 @@ if str(_PY_ROOT) not in sys.path:
 from benchmarks.benchmark_gemm import GEMMBenchmark, GEMMResult
 from benchmarks.benchmark_attention import FlashAttnBenchmark, AttnResult
 from benchmarks.benchmark_collective import CollectiveBenchmark, CollectiveResult, CollectiveOp
+from benchmarks.common.artifact_schema import infer_execution_kind
 from tessera.telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 
 
@@ -160,8 +161,12 @@ class BenchmarkSuite:
                     "memory_bw_gbps": r.memory_bw_gbps,
                     "roofline_bound": r.roofline_bound,
                     "compiler_path": r.compiler_path,
-                    "runtime_status": "executable" if r.compiler_path == "tessera_jit_cpu" else "skipped" if r.compiler_path.startswith("tessera") else "executable",
-                    "execution_kind": "reference" if r.compiler_path in {"reference", "tessera_jit_cpu"} else "unknown",
+                    # Decision #12 (amended 2026-08-30): a latency without its route is not
+                    # comparable, and a wall-clock number is not a device-clock number.
+                    "route": r.compiler_path,
+                    "latency_source": "wall_clock",
+                    "runtime_status": _gemm_runtime_status(r.compiler_path),
+                    "execution_kind": infer_execution_kind(r.compiler_path, _gemm_runtime_status(r.compiler_path)).value,
                     "compiler_lowering": r.compiler_lowering,
                     "timestamp": r.timestamp,
                     "telemetry": self._gemm_event(r),
@@ -177,8 +182,12 @@ class BenchmarkSuite:
                     "tokens_per_sec": r.tokens_per_sec,
                     "tflops": r.tflops, "mfu": r.mfu,
                     "compiler_path": r.compiler_path,
-                    "runtime_status": "skipped" if r.compiler_path == "graph_ir_only" else "executable",
-                    "execution_kind": "artifact_only" if r.compiler_path == "graph_ir_only" else "reference",
+                    # Decision #12 (amended 2026-08-30): a latency without its route is not
+                    # comparable, and a wall-clock number is not a device-clock number.
+                    "route": r.compiler_path,
+                    "latency_source": "wall_clock",
+                    "runtime_status": _attn_runtime_status(r.compiler_path),
+                    "execution_kind": infer_execution_kind(r.compiler_path, _attn_runtime_status(r.compiler_path)).value,
                     "compiler_lowering": r.compiler_lowering,
                     "timestamp": r.timestamp,
                     "telemetry": self._attn_event(r),
@@ -231,6 +240,10 @@ class BenchmarkSuite:
             metadata={
                 "roofline_bound": r.roofline_bound,
                 "compiler_path": r.compiler_path,
+                # Decision #12 (amended 2026-08-30): a latency without its route is not
+                # comparable, and a wall-clock number is not a device-clock number.
+                "route": r.compiler_path,
+                "latency_source": "wall_clock",
                 "compiler_lowering": r.compiler_lowering,
             },
             timestamp=r.timestamp,
@@ -258,6 +271,10 @@ class BenchmarkSuite:
                 "tokens_per_sec": r.tokens_per_sec,
                 "mfu": r.mfu,
                 "compiler_path": r.compiler_path,
+                # Decision #12 (amended 2026-08-30): a latency without its route is not
+                # comparable, and a wall-clock number is not a device-clock number.
+                "route": r.compiler_path,
+                "latency_source": "wall_clock",
                 "compiler_lowering": r.compiler_lowering,
             },
             timestamp=r.timestamp,
@@ -396,6 +413,20 @@ def run_all_benchmarks(
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+
+def _gemm_runtime_status(compiler_path: str) -> str:
+    """The GEMM lane's runtime status from its compiler path; the execution
+    kind is derived from the pair by `infer_execution_kind` so the two fields
+    cannot disagree (they were computed by two separate inline rules)."""
+    if compiler_path == "tessera_jit_cpu":
+        return "executable"
+    return "skipped" if compiler_path.startswith("tessera") else "executable"
+
+
+def _attn_runtime_status(compiler_path: str) -> str:
+    return "skipped" if compiler_path == "graph_ir_only" else "executable"
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Tessera benchmark orchestrator — runs GEMM, attention, and collective suites.",
@@ -452,7 +483,14 @@ def main(argv=None) -> int:
         verbose=verbose,
     )
 
-    print(suite.summary())
+    # `--json-only` means the JSON document is the output: the machine-readable
+    # report on stdout and nothing else. It used to print the human summary
+    # regardless, so `--json-only --no-save` -- the README's own "produce the
+    # JSON report" recipe -- produced a banner and no JSON at all.
+    if args.json_only:
+        print(json.dumps(suite.to_dict(), indent=2))
+    else:
+        print(suite.summary())
 
     if not args.no_save:
         out_path = args.output or BenchmarkSuite.default_output_path(args.output_dir)

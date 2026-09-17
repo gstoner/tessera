@@ -232,7 +232,7 @@ struct GenerateROCMControlScanKernelPass
     // (INIT, XS, YS, COUT : memref<?xf32>, N : index)
     auto fnTy = b.getFunctionType({memTy, memTy, memTy, memTy, idxTy}, {});
     auto gpuFunc = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
-    gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    gpuFunc.setKernelAttr(b.getUnitAttr());
 
     OpBuilder kb(gpuFunc.getContext());
     kb.setInsertionPointToStart(&gpuFunc.getBody().front());

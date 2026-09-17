@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import numpy as np
 import pytest
+from tests._support.environment import require_native_storage_lane
 from benchmarks.record_native_ann_execution import source
 from benchmarks.record_native_tape_extensions import data_while_source
 from tessera.compiler.native_ann import prepare_native_ann, affine_error_bound
@@ -83,6 +84,7 @@ def test_gpu_arbiter_keeps_zero_budget_incumbent_and_retires_candidates(monkeypa
 
 
 def test_native_elementwise_fusion_pipeline_is_serialized_and_replayed():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     if not Path("/usr/lib/llvm-23/bin/mlir-opt").exists():
         pytest.skip("native LLVM 23 tools required")
     from tessera.compiler.native_ann_gpu import materialize_native_ann_gpu
@@ -95,8 +97,6 @@ def test_native_elementwise_fusion_pipeline_is_serialized_and_replayed():
 
 def test_shape_varying_tape_executes_saved_logical_extents():
     require_host_jit()
-    pytest.skip(
-        "the normalized shape-varying `scf.while` carries its primal state as a tensor iter_arg whose extent shrinks each iteration, which does not survive bufferization, so the forward crashes inside JIT-compiled code (AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17): it now compiles, because the reverse gate no longer demands an adjoint for index arithmetic, and the defect behind that gate is pre-existing — main's own tessera-opt emits the identical module and it faults identically. A segfault takes the whole pytest process down, so this skips rather than losing every later result; see docs/audit/backend/rocm/todo.md for the repro")
     from benchmarks.record_shape_varying_tape import record
     packet=record(tool())
     assert packet['execution_kind']=='native_cpu'
@@ -151,8 +151,6 @@ jit.invoke(h,'add',[np.ones(3,np.float32),np.ones(4,np.float32)],np.empty(3,np.f
 
 def test_native_shape_tape_retires_temporaries_after_dps_copy(tmp_path):
     require_host_jit()
-    pytest.skip(
-        "the normalized shape-varying `scf.while` carries its primal state as a tensor iter_arg whose extent shrinks each iteration, which does not survive bufferization, so the forward crashes inside JIT-compiled code (AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17): it now compiles, because the reverse gate no longer demands an adjoint for index arithmetic, and the defect behind that gate is pre-existing — main's own tessera-opt emits the identical module and it faults identically. A segfault takes the whole pytest process down, so this skips rather than losing every later result; see docs/audit/backend/rocm/todo.md for the repro")
     import os
     import subprocess
     import sys

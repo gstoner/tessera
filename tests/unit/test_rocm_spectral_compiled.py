@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from tests._support.rocm_build import runtime_for_host
 
 
 def _rocm_or_skip():
@@ -16,7 +17,7 @@ def _rocm_or_skip():
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
-    return rt
+    return runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
 
 def _art(rt, op_name, operands, kwargs):
@@ -145,12 +146,24 @@ def test_scalar_convolution_preserves_length_one_contract():
     np.testing.assert_array_equal(np.asarray(result["output"]), x * w)
 
 
+
+def _composite_or_skip(lib):
+    """The composite package is a gfx1151 artifact (`_amd_composite_lib` returns
+    None for any other package on purpose). On gfx1151 its absence is a failure;
+    on another arch it is the proof not existing here."""
+    from tests._support.rocm_build import rocm_host_arch
+
+    if lib is None and rocm_host_arch() != "gfx1151":
+        pytest.skip(f"prebuilt spectral composite image is a gfx1151 package; this host launches on {rocm_host_arch()}")
+    assert lib is not None
+
+
 def test_standalone_convolution_export_uses_packed_plans():
     _rocm_or_skip()
     from tessera.compiler.emit import spectral_candidates as candidates
 
     lib = candidates._amd_composite_lib()
-    assert lib is not None
+    _composite_or_skip(lib)
     fft_n = 8
     _, forward = candidates._rocm_plan(fft_n // 2, -1, "a" * 64)
     _, inverse = candidates._rocm_plan(fft_n // 2, 1, "b" * 64)
@@ -191,7 +204,7 @@ def test_composite_workspace_plan_is_reused_by_artifact_digest():
     artifact = _art(rt, "tessera.spectral_filter", (a, b), {})
     contract = artifact.metadata["scheduled_spectral"]
     lib = candidates._amd_composite_lib()
-    assert lib is not None
+    _composite_or_skip(lib)
     assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v7"
     assert lib.ts_spectral_composite_arch_amd() == b"gfx1151"
 

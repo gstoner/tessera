@@ -18,6 +18,7 @@ if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
 from benchmarks.common import (  # noqa: E402
+    infer_execution_kind,
     ArtifactLevels,
     BenchmarkOperator,
     BenchmarkRow,
@@ -113,6 +114,7 @@ def main(argv=None) -> int:
         operator=BenchmarkOperator("gemm", args.dtype, f"{args.m}x{args.n}x{args.k}", args.target),
         compiler_path=compiler_path,
         runtime_status=runtime_status,
+        execution_kind=infer_execution_kind(compiler_path, runtime_status),
         artifact_levels=artifact,
         correctness=corr,
         profile=Profile(cpu_wall_ms=last_ms),

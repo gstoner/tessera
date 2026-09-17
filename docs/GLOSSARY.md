@@ -210,7 +210,7 @@ WGMMA, TMA, mbarrier for NVIDIA; MFMA/LDS for AMD.
 ## TesseraBench
 
 The Tessera benchmarking framework (analogous to tritonbench). Documentation
-lives in [`docs/benchmarks/`](benchmarks/).
+is indexed from [`docs/benchmarks/`](benchmarks/); the runners themselves live in `benchmarks/`.
 
 ## Tile IR
 

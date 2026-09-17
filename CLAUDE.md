@@ -768,6 +768,19 @@ time, and no GitHub runner executes private GPU proofs. On Tajasarus also
 `source ~/.config/tessera/env.sh` (recorded in the gfx1201 packets) and set
 `TESSERA_ROCM_CHIP=gfx1201` + `TESSERA_GFX1201_DEVICE_PROOF=1`.
 
+**On a ROCm host whose arch lacks a proof, a fail-closed refusal reads as a
+skip, not a failure (since 2026-09-17).** The executable pipeline refuses, by
+design, any family or ISA contract without exact-device proof on the launch
+arch (`rocm_pipeline.promoted_families`). That refusal reaches a test by every
+route there is — `res["reason"]`, a raised `ValueError` or
+`_RocmCompiledUnavailable`, a `TesseraJitError` wrapper, an LLVM "Cannot
+select" one layer below — so `tests/conftest.py`'s report hook converts the
+outcome to a skip **only when the text names, or is conditioned on, the host's
+own arch** (`tests/_support/rocm_build.refused_for_host_arch`). A refusal about
+an arch a test pinned on purpose stays a failure. Before this, a full sweep on
+Tajasarus reported ~1500 gfx1151-lane tests as failures; read a gfx1201 sweep's
+skip reasons, not just its counts.
+
 Two fleet-wide lit facts: `tests/tessera-ir` holds 479 fixtures (475 active),
 and `scripts/check_lit_fleet_union.py` is the gate — every active fixture must
 pass in **at least one** fleet lane, since no single box configures every

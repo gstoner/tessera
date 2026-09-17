@@ -243,8 +243,7 @@ struct GenerateROCMScanKernelPass
       // (X, O : memref<?xstore>, M, K : index)
       auto fnTy = b.getFunctionType({memTy, memTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitScanBody(body, loc, gpuFunc, storeTy, scan);
       op->erase();

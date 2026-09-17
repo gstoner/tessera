@@ -154,8 +154,7 @@ struct GenerateROCMCoalitionButterflyKernelPass
       auto type = builder.getFunctionType({memref, memref}, {});
       auto function =
           builder.create<gpu::GPUFuncOp>(loc, name.getValue(), type);
-      function->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                        builder.getUnitAttr());
+      function.setKernelAttr(builder.getUnitAttr());
       function->setAttr("tessera.schedule_hash", hash);
       function->setAttr("tessera.block_size",
                         workgroup);

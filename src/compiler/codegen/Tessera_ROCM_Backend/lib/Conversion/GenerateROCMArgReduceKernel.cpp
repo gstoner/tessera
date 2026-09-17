@@ -218,8 +218,7 @@ struct GenerateROCMArgReduceKernelPass
       // (X : memref<?xstore>, O : memref<?xi32>, M, K : index)
       auto fnTy = b.getFunctionType({inTy, outTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitArgReduceBody(body, loc, gpuFunc, storeTy, isMax);
       op->erase();

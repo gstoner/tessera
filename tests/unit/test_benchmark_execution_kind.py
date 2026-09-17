@@ -115,3 +115,47 @@ def test_artifact_only_row_uses_artifact_only_execution_kind() -> None:
     d = row.flat_dict()
     assert d["runtime_status"] == "artifact_only"
     assert d["execution_kind"] == "artifact_only"
+
+
+@pytest.mark.parametrize("compiler_path,runtime_status,expected", [
+    (CompilerPath.REFERENCE, RuntimeStatus.EXECUTABLE, ExecutionKind.REFERENCE),
+    (CompilerPath.TESSERA_JIT_CPU, RuntimeStatus.EXECUTABLE, ExecutionKind.REFERENCE),
+    (CompilerPath.TESSERA_JIT_APPLE_GPU, RuntimeStatus.EXECUTABLE, ExecutionKind.OPTIMIZED_NATIVE),
+    (CompilerPath.GRAPH_IR_ONLY, RuntimeStatus.ARTIFACT_ONLY, ExecutionKind.ARTIFACT_ONLY),
+    (CompilerPath.TESSERA_JIT_CPU, RuntimeStatus.SKIPPED, ExecutionKind.ARTIFACT_ONLY),
+    (CompilerPath.RUNTIME_UNAVAILABLE, RuntimeStatus.MISSING_BACKEND, ExecutionKind.ARTIFACT_ONLY),
+    ("roofline_model", "executable", ExecutionKind.REFERENCE),
+    ("mock_collective", "executable", ExecutionKind.REFERENCE),
+])
+def test_infer_execution_kind_is_the_one_rule(compiler_path, runtime_status, expected):
+    """The rule `run_all.py` carried inline and the SuperBench kernels did not
+    carry at all — they reported `unknown` for lanes that ran."""
+    from benchmarks.common.artifact_schema import infer_execution_kind
+
+    assert infer_execution_kind(compiler_path, runtime_status) is expected
+    assert infer_execution_kind(getattr(compiler_path, "value", compiler_path),
+                                getattr(runtime_status, "value", runtime_status)) is expected
+
+
+def test_infer_execution_kind_refuses_to_guess_a_family_route():
+    """`rocm_norm_compiled` ran natively or fell back; only the launch result
+    knows. Guessing from the name would be a told-not-derived fact."""
+    from benchmarks.common.artifact_schema import infer_execution_kind
+
+    with pytest.raises(ValueError, match="launch result"):
+        infer_execution_kind("rocm_norm_compiled", "executable")
+
+
+def test_no_bench_leaves_execution_kind_unknown():
+    """Every bench that builds a row sets the axis (through the one rule)."""
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "benchmarks"
+    offenders = sorted(
+        str(p.relative_to(root.parent)) for p in root.rglob("*.py")
+        if "__pycache__" not in p.parts
+        and re.search(r"\bBenchmarkRow\(", p.read_text(encoding="utf-8", errors="replace"))
+        and "execution_kind" not in p.read_text(encoding="utf-8", errors="replace")
+        and p.name != "artifact_schema.py")
+    assert offenders == [], f"rows built without an execution kind: {offenders}"

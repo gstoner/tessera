@@ -8156,6 +8156,24 @@ Princess-Luna (gfx1151) for the shared code:**
      backend, and `x86_native._library_path` looks in `build/`). Reconfigured
      ON, matching the canonical primary configure; **3/3 Zen 5 attention
      backward tests pass there**.
+  1b. **The same class, in the `slow` lane:** `test_rocm_plugin.py`'s three
+     live tests asserting the `rocm_wmma` tag (the compiled fused-epilogue
+     candidate) had never run on the RDNA4 box — they are `slow`, outside
+     every default sweep — and fail there for the reason in 1: the candidate
+     correctly declines to the reference. They now gate on a gfx11 host
+     (`_rocm_wmma_lane_live`) with the reason; the seven generic-lane tests in
+     the same file keep the wider gate and pass on gfx1201 (25 passed / 10
+     skipped there, 2026-09-17).
+  8. **The `test_dynamic_shape_emit` one-off, made legible.** The emitted
+     HIP fused entry (`emit/rocm_hip.py`) returned `3` for every step from the
+     first H2D copy to the D2H copy, which is what one shape reported after
+     ~17k tests in a full sweep and nothing could explain; alone it passes
+     (13/13, twice). The entry now uses one macro per HIP call that records
+     the call's name and `hipGetErrorString` text (`<entry>_last_error`),
+     with distinct codes per stage (2 argument/alloc, 3 H2D, 4 launch, 5
+     sync, 6 D2H), and the test prints them. If it recurs, the sweep will say
+     which call and why; until it does, it is an unexplained one-off, not a
+     verified defect.
   7. **Upstream SCEV assertion: reduced to 31 lines, and the kernel it comes
      from is verified correct.** An assertions-ON `opt` and `llvm-reduce`
      built from the LLVM 23.1.1 sources on Tajasarus

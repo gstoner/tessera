@@ -1710,8 +1710,76 @@ static void normalizeDataDependentTapeWhiles(mlir::func::FuncOp fn) {
     auto zero=arith::ConstantIndexOp::create(b,loc,0);
     auto one=arith::ConstantIndexOp::create(b,loc,1);
     auto upper=arith::ConstantIndexOp::create(b,loc,*count);
-    auto replacement=scf::ForOp::create(b,loc,zero,upper,one,loop.getInits());
+
+    // Shape-varying state is carried inside its declared envelope, never as a
+    // dynamic iter_arg. A `tensor<?xf32>` iter_arg whose extent shrinks each
+    // iteration type-checks and does not survive bufferization: the carried
+    // buffer is allocated once and the loop then yields a differently sized
+    // one, so the forward crashed inside JIT-compiled code on every host that
+    // runs it (AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17). The residual tape one
+    // value over already solves exactly this -- a static envelope buffer plus
+    // an explicit length, inside `saved_slot_shape_envelope_*` -- so the
+    // primal carry gets the same treatment: the iter_arg becomes the envelope
+    // tensor and one index per dynamic dim, the body reads its dynamic view
+    // back out with extract_slice, and the yield packs the next state in with
+    // an assert that it fits. The materializer and the reverse builder see
+    // ordinary static state plus index scalars and need no knowledge of it.
+    SmallVector<Type> initTypes;
+    for (Value v:loop.getInits()) initTypes.push_back(v.getType());
+    auto envelopes=readSavedSlotShapeEnvelopes(loop,TypeRange(initTypes),/*requireEveryDynamic=*/false);
+    if (failed(envelopes)) return;  // malformed envelope: leave the while for the materializer's diagnostic
+    struct Carry { RankedTensorType dyn; RankedTensorType env; SmallVector<int64_t> dynDims; };
+    SmallVector<std::optional<Carry>> carries(loop.getInits().size());
+    for (auto [i,init]:llvm::enumerate(loop.getInits())) {
+      auto ranked=dyn_cast<RankedTensorType>(init.getType());
+      if (!ranked || ranked.hasStaticShape() || !envelopes->contains(i)) continue;
+      Carry c; c.dyn=ranked;
+      SmallVector<int64_t> shape(ranked.getShape());
+      for (auto [d,extent]:llvm::enumerate(shape))
+        if (ShapedType::isDynamic(extent)) { shape[d]=envelopes->lookup(i)[d]; c.dynDims.push_back(d); }
+      c.env=RankedTensorType::get(shape,ranked.getElementType(),ranked.getEncoding());
+      carries[i]=std::move(c);
+    }
+    auto sliceOf=[&](Value env,const Carry &c,ArrayRef<Value> lens)->Value {
+      SmallVector<OpFoldResult> offsets(c.env.getRank(),b.getIndexAttr(0));
+      SmallVector<OpFoldResult> strides(c.env.getRank(),b.getIndexAttr(1));
+      SmallVector<OpFoldResult> sizes;
+      unsigned k=0;
+      for (int64_t d=0;d<c.env.getRank();++d)
+        sizes.push_back(ShapedType::isDynamic(c.dyn.getDimSize(d)) ? OpFoldResult(lens[k++]) : b.getIndexAttr(c.dyn.getDimSize(d)));
+      return tensor::ExtractSliceOp::create(b,loc,c.dyn,env,offsets,sizes,strides);
+    };
+    auto packInto=[&](Value env,const Carry &c,Value state,SmallVectorImpl<Value> &lensOut)->Value {
+      SmallVector<OpFoldResult> offsets(c.env.getRank(),b.getIndexAttr(0));
+      SmallVector<OpFoldResult> strides(c.env.getRank(),b.getIndexAttr(1));
+      SmallVector<OpFoldResult> sizes;
+      for (int64_t d=0;d<c.env.getRank();++d) {
+        if (!ShapedType::isDynamic(c.dyn.getDimSize(d))) { sizes.push_back(b.getIndexAttr(c.dyn.getDimSize(d))); continue; }
+        Value actual=tensor::DimOp::create(b,loc,state,d);
+        Value bound=arith::ConstantIndexOp::create(b,loc,c.env.getDimSize(d));
+        Value fits=arith::CmpIOp::create(b,loc,arith::CmpIPredicate::ule,actual,bound);
+        auto guard=cf::AssertOp::create(b,loc,fits,b.getStringAttr("shape-varying loop state exceeds its carry envelope"));
+        guard->setAttr("tessera.autodiff.replay_safe_guard",b.getBoolAttr(true));
+        sizes.push_back(OpFoldResult(actual)); lensOut.push_back(actual);
+      }
+      return tensor::InsertSliceOp::create(b,loc,state,env,offsets,sizes,strides);
+    };
+    SmallVector<Value> forInits;
+    for (auto [i,init]:llvm::enumerate(loop.getInits())) {
+      if (!carries[i]) { forInits.push_back(init); continue; }
+      const Carry &c=*carries[i];
+      Value empty=tensor::EmptyOp::create(b,loc,c.env.getShape(),c.env.getElementType());
+      SmallVector<Value> lens;
+      forInits.push_back(packInto(empty,c,init,lens));
+      llvm::append_range(forInits,lens);
+    }
+    auto replacement=scf::ForOp::create(b,loc,zero,upper,one,forInits);
     replacement->setAttrs(loop->getAttrs());
+    if (llvm::any_of(carries,[](auto &c){return c.has_value();}))
+      for (StringRef name:{"tessera.autodiff.saved_slot_shape_envelope_indices",
+                           "tessera.autodiff.saved_slot_shape_envelope_ranks",
+                           "tessera.autodiff.saved_slot_shape_envelope_bounds"})
+        replacement->removeAttr(name);  // consumed: no dynamic state remains for the tape to envelope
     auto policy=loop->getAttrOfType<StringAttr>("tessera.autodiff.checkpoint_policy");
     if (policy && policy.getValue()=="save") {
       SmallVector<int64_t> checkpoints;
@@ -1719,21 +1787,51 @@ static void normalizeDataDependentTapeWhiles(mlir::func::FuncOp fn) {
       replacement->setAttr("tessera.autodiff.checkpoint_indices",b.getDenseI64ArrayAttr(checkpoints));
     }
     b.setInsertionPointToStart(replacement.getBody());
+    // The body sees each state as the while did: a dynamic view of its envelope.
+    auto iterArgs=replacement.getRegionIterArgs();
+    SmallVector<Value> stateViews, stateEnvs(loop.getInits().size());
+    unsigned cursor=0;
+    for (auto [i,_]:llvm::enumerate(loop.getInits())) {
+      if (!carries[i]) { stateViews.push_back(iterArgs[cursor++]); continue; }
+      const Carry &c=*carries[i];
+      Value env=iterArgs[cursor++]; stateEnvs[i]=env;
+      SmallVector<Value> lens;
+      for (size_t k=0;k<c.dynDims.size();++k) lens.push_back(iterArgs[cursor++]);
+      stateViews.push_back(sliceOf(env,c,lens));
+    }
     IRMapping mapping;
-    for (auto [a,v]:llvm::zip(before.getArguments(),replacement.getRegionIterArgs())) mapping.map(a,v);
+    for (auto [a,v]:llvm::zip(before.getArguments(),stateViews)) mapping.map(a,v);
     for (auto &op:before.without_terminator()) b.clone(op,mapping);
     auto branch=scf::IfOp::create(b,loc,loop.getResultTypes(),mapping.lookupOrDefault(condition.getCondition()),true);
     b.setInsertionPointToStart(&branch.getThenRegion().front());
-    for (auto [a,v]:llvm::zip(after.getArguments(),replacement.getRegionIterArgs())) mapping.map(a,v);
+    for (auto [a,v]:llvm::zip(after.getArguments(),stateViews)) mapping.map(a,v);
     for (auto &op:after.without_terminator()) b.clone(op,mapping);
     SmallVector<Value> next;
     for (Value v:yield.getOperands()) next.push_back(mapping.lookupOrDefault(v));
     scf::YieldOp::create(b,loc,next);
     b.setInsertionPointToStart(&branch.getElseRegion().front());
-    scf::YieldOp::create(b,loc,replacement.getRegionIterArgs());
+    scf::YieldOp::create(b,loc,stateViews);
     b.setInsertionPointToEnd(replacement.getBody());
-    scf::YieldOp::create(b,loc,branch.getResults());
-    loop.replaceAllUsesWith(replacement.getResults());
+    SmallVector<Value> yields;
+    for (auto [i,res]:llvm::enumerate(branch.getResults())) {
+      if (!carries[i]) { yields.push_back(res); continue; }
+      SmallVector<Value> lens;
+      yields.push_back(packInto(stateEnvs[i],*carries[i],res,lens));
+      llvm::append_range(yields,lens);
+    }
+    scf::YieldOp::create(b,loc,yields);
+    // Users of the while keep their dynamic result types.
+    b.setInsertionPointAfter(replacement);
+    SmallVector<Value> results; cursor=0;
+    for (auto [i,_]:llvm::enumerate(loop.getInits())) {
+      if (!carries[i]) { results.push_back(replacement.getResult(cursor++)); continue; }
+      const Carry &c=*carries[i];
+      Value env=replacement.getResult(cursor++);
+      SmallVector<Value> lens;
+      for (size_t k=0;k<c.dynDims.size();++k) lens.push_back(replacement.getResult(cursor++));
+      results.push_back(sliceOf(env,c,lens));
+    }
+    loop.replaceAllUsesWith(results);
     loop.erase();
   });
 }

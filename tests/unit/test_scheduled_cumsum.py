@@ -35,8 +35,15 @@ def test_cumsum_cohort_route_bypasses_old_emitter_and_refuses_tampering(monkeypa
 def test_cumsum_native_descriptor_numerical(shape):
     from tessera import runtime as rt
     from tessera.compiler.x86_native import _library_path
+    from tests._support.environment import avx512_is_plausibly_present
     if _library_path() is None:
         pytest.skip('owning x86 runtime required')
+    # The package is an `x86_64_avx512` image and the runtime refuses to execute
+    # it on a host without AVX-512 ("not executable on this host") — correctly,
+    # and as a launch result rather than an exception, so on Super-Bear (Zen 2)
+    # this read as a numerical failure. A host that cannot run the image skips.
+    if not avx512_is_plausibly_present():
+        pytest.skip('x86_64_avx512 native image needs an AVX-512 host')
     package = package_cumsum(lower_cumsum(graph(shape)),pipeline_name='tessera-lower-to-x86')
     bound = rt.RuntimeArtifact(metadata={'target':'x86'},native_image=package.image,
         launch_descriptor=package.descriptor,tile_ir=package.tile_ir,target_ir=package.target_ir)

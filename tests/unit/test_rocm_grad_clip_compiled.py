@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from tessera import optim
+from tests._support.rocm_build import runtime_for_host
 
 
 def _rocm_or_skip():
@@ -20,7 +21,7 @@ def _rocm_or_skip():
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
-    return rt
+    return runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
 
 def _art(rt, max_norm, norm_type=2.0):

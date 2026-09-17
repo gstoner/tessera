@@ -6,6 +6,7 @@ import pytest
 from tessera import runtime as rt
 from tessera.stdlib import attention
 from tests._support.compiler_tool import run_tessera_opt
+from tests._support.rocm_build import runtime_for_host
 from tests._support.launch_overhead import (
     assert_launch_overhead_bounded,
     launch_execution_kind,
@@ -224,10 +225,11 @@ def test_rocm_sparse_attention_native_gpu_matches_reference_on_hardware():
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
+    host = runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
     Q, K, V = _qkv(seed=55, Sq=8, Sk=8)
     kw = {"block_size": 2, "top_k": 2, "causal": True}
-    res = rt.launch(_artifact("tessera.msa_sparse_attention", ["Q", "K", "V"], kw),
+    res = host.launch(_artifact("tessera.msa_sparse_attention", ["Q", "K", "V"], kw),
                     (Q, K, V))
 
     assert res["ok"], res.get("reason")
@@ -244,10 +246,11 @@ def test_rocm_deepseek_sparse_attention_native_gpu_matches_reference_on_hardware
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
+    host = runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
     Q, K, V = _qkv(seed=59, Hq=2, Hkv=2, Sq=8, Sk=8, D=4, Dv=4)
     kw = {"window_size": 4, "block_size": 2, "top_k": 2, "causal": True}
-    res = rt.launch(
+    res = host.launch(
         _artifact("tessera.deepseek_sparse_attention", ["Q", "K", "V"], kw),
         (Q, K, V),
     )
@@ -309,6 +312,7 @@ def test_rocm_large_topk_cooperative_matches_serial_on_hardware():
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
+    host = runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
     rng = np.random.default_rng(61)
     scores = rng.standard_normal((1, 2, 32, 2048), dtype=np.float32)

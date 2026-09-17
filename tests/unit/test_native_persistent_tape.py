@@ -11,6 +11,7 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
 def test_jit_reverse_trace_materializes_split_products():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     tool=find_tessera_opt()
     llvm=Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
@@ -26,6 +27,7 @@ def test_jit_reverse_trace_materializes_split_products():
 
 
 def test_nested_split_products_materialize_full_residual_storage(monkeypatch):
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     tool=find_tessera_opt()
     llvm=Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
@@ -49,6 +51,7 @@ def test_nested_split_products_materialize_full_residual_storage(monkeypatch):
 
 
 def test_nested_temporary_capacity_refuses_before_packaging():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     tool=find_tessera_opt()
     llvm=Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
@@ -131,9 +134,11 @@ def test_dynamic_copy_requires_proven_extent_before_serial_loop_expansion(known)
 
 
 from benchmarks.record_tape_checkpoint_execution import mixed_source
+from tests._support.environment import require_native_storage_lane
 
 
 def test_mixed_float_products_preserve_storage_types():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from tessera.compiler.native_storage_contract import read_tensor_contract
     tool = find_tessera_opt()
     llvm = Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
@@ -197,6 +202,7 @@ def test_replay_bounds_require_derived_ssa_capacity(loaded, selected_start):
 
 
 def test_counted_while_normalizes_to_persistent_tensor_tape():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from benchmarks.record_tape_checkpoint_execution import counted_while_source
     tool = find_tessera_opt()
     llvm = Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
@@ -211,6 +217,7 @@ def test_counted_while_normalizes_to_persistent_tensor_tape():
 
 @pytest.mark.parametrize('change', ['predicate', 'step', 'capacity'])
 def test_unproven_while_does_not_enter_device_tape(change):
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     from benchmarks.record_tape_checkpoint_execution import counted_while_source
     text = counted_while_source()
     text = {'predicate': text.replace('cmpi slt', 'cmpi sle'),

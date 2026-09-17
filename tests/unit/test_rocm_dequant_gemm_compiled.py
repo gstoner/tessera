@@ -6,6 +6,7 @@ import pytest
 from tessera import runtime as rt
 from tessera.stdlib import quant
 from tests._support.compiler_tool import run_tessera_opt
+from tests._support.rocm_build import runtime_for_host
 from tests._support.launch_overhead import (
     assert_launch_overhead_bounded,
     launch_execution_kind,
@@ -128,13 +129,14 @@ def test_rocm_dequant_gemm_native_gpu_matches_reference_on_hardware():
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
+    host = runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
     rng = np.random.default_rng(34)
     x = rng.standard_normal((8, 32)).astype(np.float32)
     w = rng.standard_normal((32, 11)).astype(np.float32)
     packed = quant.quantize_weight(w, "int4", group_size=8)
 
-    res = rt.launch(_artifact("tessera.dequant_matmul", ["x", "packed_w"]), (x, packed))
+    res = host.launch(_artifact("tessera.dequant_matmul", ["x", "packed_w"]), (x, packed))
 
     assert res["ok"], res.get("reason")
     assert res["execution_kind"] == "native_gpu"

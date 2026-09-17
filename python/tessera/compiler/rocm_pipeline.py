@@ -25,6 +25,30 @@ class ROCMOutputLevel(str, Enum):
     BINARY = "binary"
 
 
+
+#: The gfx1201 promotions, by name. Every other RDNA4/CDNA arch has none.
+_GFX1201_PROMOTED_FAMILIES = frozenset(
+    {"softmax", "reduction", "matmul", "attention", "attention_backward"})
+
+
+def promoted_families(arch: str) -> frozenset[str]:
+    """The family plugins with exact-device proof on ``arch``.
+
+    This is the one place the executable pipeline's fail-closed rule lives:
+    gfx1151 has every family, gfx1201 has the five replay-verified ones, and
+    gfx1200/gfx1250 have none pending exact-device evidence. It is a function
+    rather than an inline condition so a *test* can ask the same question the
+    launch path asks, and skip where launch would refuse. Before it existed,
+    ~1500 tests in the `test_rocm_*_compiled.py` families ran on the gfx1201 box
+    and failed with this module's own refusal — a host reporting "this proof
+    does not exist here" as "this proof is broken".
+    """
+    if arch == "gfx1151":
+        return frozenset(FAMILY_PLUGINS)
+    if arch == "gfx1201":
+        return _GFX1201_PROMOTED_FAMILIES
+    return frozenset()
+
 @dataclass(frozen=True)
 class ROCMFamilyPlugin:
     family: str
@@ -133,8 +157,7 @@ class ROCMExecutablePipeline:
             raise ValueError(
                 "family 'control_state_machine' has no Target-IR boundary; "
                 "only output=binary is supported")
-        if self.arch != "gfx1151" and not (
-                self.arch == "gfx1201" and self.family in {"softmax", "reduction", "matmul", "attention", "attention_backward"}):
+        if self.family not in promoted_families(self.arch):
             raise ValueError(
                 f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "
                 "gfx1200/gfx1250 remain fail-closed pending exact-device evidence"

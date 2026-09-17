@@ -23,6 +23,7 @@ from __future__ import annotations
 import ctypes
 
 import pytest
+from tests._support.rocm_build import runtime_for_host
 
 np = pytest.importorskip("numpy")
 
@@ -33,7 +34,7 @@ def _rt_or_skip():
         pytest.skip("tessera-opt not built (ninja -C build tessera-opt)")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
-    return rt
+    return runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
 
 def _act_ref(x, activation):

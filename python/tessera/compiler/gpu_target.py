@@ -179,6 +179,32 @@ def cuda_driver_api_version() -> "str | None":
     return None
 
 
+def ptx_for_driver_jit(ptx: str) -> "tuple[str, str | None]":
+    """Re-stamp a PTX module's `.version` to what this host's driver JIT accepts.
+
+    `nvcc --ptx` stamps the toolkit's ISA (13.4 -> 9.4) whatever the kernel
+    uses; the driver's ptxas refuses any `.version` newer than its own (13.3 ->
+    9.3) before reading a single instruction, so a kernel that uses nothing new
+    is rejected for its header. The directive is a language-level claim, so
+    lowering it is sound exactly when the body needs nothing newer -- and if it
+    does, the driver's JIT still rejects the *instruction*, with its name, which
+    is the honest failure. Triton does the same for the same reason. Returns
+    the (possibly rewritten) text and the version it was lowered from, or None
+    when it was left alone.
+    """
+    import re
+
+    match = re.search(r"^\.version\s+(\d+)\.(\d+)\s*$", ptx, re.MULTILINE)
+    if match is None:
+        return ptx, None
+    stamped = (int(match.group(1)), int(match.group(2)))
+    accepted = driver_jit_ptx_isa()
+    if stamped <= tuple(int(p) for p in accepted.split(".")):
+        return ptx, None
+    rewritten = ptx[:match.start()] + f".version {accepted}" + ptx[match.end():]
+    return rewritten, f"{stamped[0]}.{stamped[1]}"
+
+
 def driver_jit_ptx_isa() -> str:
     """The PTX ISA version a kernel handed to this host's driver JIT must stamp.
 

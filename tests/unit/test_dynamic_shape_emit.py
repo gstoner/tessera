@@ -122,7 +122,8 @@ def test_live_rocm_dynamic_one_compile_serves_many_shapes():
         # 2 = argument/alloc, 3 = H2D copy, 4 = launch, 5 = sync, 6 = D2H copy;
         # the entry also names the HIP call, so a one-off in a long sweep is a
         # named device condition rather than a bare number.
-        assert rc == 1, f"entry rc={rc} at {M}x{N}x{K}: {last_entry_error(compiled.artifact)}"
+        assert rc == 1, (f"entry rc={rc} at {M}x{N}x{K}: {last_entry_error(compiled.artifact)} "
+                         f"[artifact {compiled.artifact}, TESSERA_ROCM_CHIP={os.environ.get('TESSERA_ROCM_CHIP')}]")
         np.testing.assert_allclose(out, region.reference(A, B, bias, None),
                                    rtol=1e-4, atol=1e-4)
 

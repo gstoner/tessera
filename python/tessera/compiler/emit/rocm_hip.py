@@ -47,7 +47,7 @@ from tessera.compiler.emit.candidate import (
     Tier,
     register_candidate,
 )
-from tessera.compiler.emit.kernel_cache import build, register_compiler
+from tessera.compiler.emit.kernel_cache import CompileError, build, register_compiler
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
     KernelEmitter,
@@ -341,19 +341,29 @@ class RocmHipEmitter(KernelEmitter):
 # ── compile_fn (HIP → .so) ────────────────────────────────────────────────────
 
 def _rocm_arch() -> str:
-    """gfx target: ``$TESSERA_ROCM_ARCH`` override, else the live device's chip,
-    else gfx1151 (the Strix Halo default)."""
+    """gfx target: ``$TESSERA_ROCM_ARCH`` override, else the runtime's chip
+    (``$TESSERA_ROCM_CHIP``, default gfx1151 -- the documented recorder default).
+
+    No silent fallback: this used to swallow any exception from the runtime
+    lookup and answer "gfx1151", which on a gfx1201 host compiles an image the
+    device cannot run and surfaces, thousands of tests later, as
+    `hipGetLastError(): no kernel image is available for execution on the
+    device (209)` with nothing to say why (Tajasarus sweep, 2026-09-17). A
+    semantic key never defaults (Decision #21a); if the arch cannot be
+    resolved, say so."""
     env = os.environ.get("TESSERA_ROCM_ARCH")
     if env:
         return env
     try:
         from tessera import runtime as rt
         chip = rt._rocm_chip()
-        if chip:
-            return str(chip)
-    except Exception:
-        pass
-    return "gfx1151"
+    except Exception as exc:
+        raise CompileError(
+            f"rocm offload arch could not be resolved from the runtime: {exc!r}"
+        ) from exc
+    if not chip:
+        raise CompileError("rocm offload arch is empty: set TESSERA_ROCM_CHIP or TESSERA_ROCM_ARCH")
+    return str(chip)
 
 
 def _rocm_hip_compile_fn(source: KernelSource) -> str:
@@ -361,13 +371,16 @@ def _rocm_hip_compile_fn(source: KernelSource) -> str:
     Raises on a missing toolchain/compile failure; ``build`` wraps in
     ``CompileError`` (never a silent no-op)."""
     hipcc = shutil.which("hipcc") or "/opt/rocm/bin/hipcc"
+    arch = _rocm_arch()
     d = tempfile.mkdtemp(prefix="tessera_rocm_")
     src = os.path.join(d, "kernel.hip")
-    so = os.path.join(d, "kernel.so")
+    # The arch is in the artifact's name so a launch failure can name the
+    # image it was handed, not just the device it was handed to.
+    so = os.path.join(d, f"kernel_{arch.replace(':', '_')}.so")
     with open(src, "w") as f:
         f.write(source.source)
     subprocess.run(
-        [hipcc, f"--offload-arch={_rocm_arch()}", "-O3", "-fPIC", "-shared",
+        [hipcc, f"--offload-arch={arch}", "-O3", "-fPIC", "-shared",
          src, "-o", so],
         check=True, capture_output=True, text=True)
     return so

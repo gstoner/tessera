@@ -49,7 +49,10 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
     ),
     SurfaceEntry(
         directory="benchmarks/baselines",
-        entry_point="benchmarks/baselines/cpu_smoke.json",
+        # The thing you run is the gate; the baseline is its input. Listing the
+        # JSON as the entry point had the dashboard calling a data file
+        # "runnable" (review of 2026-09-17).
+        entry_point="benchmarks/perf_gate.py",
         status="runnable",
         command=(
             "PYTHONPATH=.:python python benchmarks/perf_gate.py "

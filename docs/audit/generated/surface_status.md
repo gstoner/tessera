@@ -52,7 +52,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `benchmarks/apple_gpu` | runnable | `benchmarks/apple_gpu/benchmark_ga_ebm.py` |  |
 | `benchmarks/apple_gpu` | runnable | `benchmarks/apple_gpu/benchmark_fusion.py` |  |
 | `benchmarks/autodiff` | compile_only | `benchmarks/autodiff/benchmark_native_jvp.py` |  |
-| `benchmarks/baselines` | runnable | `benchmarks/baselines/cpu_smoke.json` |  |
+| `benchmarks/baselines` | runnable | `benchmarks/perf_gate.py` |  |
 | `benchmarks/clifford_core` | compile_only | `benchmarks/clifford_core/core.py` |  |
 | `benchmarks/common` | compile_only | `benchmarks/common/__init__.py` |  |
 | `benchmarks/corrdiff` | runnable | `benchmarks/corrdiff/benchmark_corrdiff.py` |  |

@@ -53,6 +53,46 @@ class ExecutionKind(str, Enum):
     UNKNOWN = "unknown"
 
 
+#: The proxy lanes whose execution kind follows from their path alone. Every
+#: other recorder in `benchmarks/` names its route with a family string
+#: (`rocm_norm_compiled`, `x86_native_descriptor`, `apple_value_target_ir`,
+#: ~35 of them) and sets the kind from the *launch result*, which is the only
+#: honest source for "did a native kernel run" — inferring it from a path name
+#: would be a told-not-derived fact (Decision #30). This table is deliberately
+#: closed; an unknown path is an error, not a guess.
+_REFERENCE_PATHS = frozenset({"reference", "tessera_jit_cpu", "roofline_model", "mock_collective"})
+_NATIVE_PATHS = frozenset({"tessera_jit_apple_gpu"})
+_ARTIFACT_PATHS = frozenset({"graph_ir_only", "artifact_only", "compiler_unavailable", "runtime_unavailable", "unsupported"})
+
+
+def infer_execution_kind(compiler_path: "CompilerPath | str",
+                         runtime_status: "RuntimeStatus | str") -> ExecutionKind:
+    """The execution kind a proxy lane's (compiler_path, runtime_status) implies.
+
+    One rule, so a bench cannot leave the axis at UNKNOWN by forgetting it — the
+    three SuperBench kernels did exactly that and reported ``unknown`` for lanes
+    that ran (review of 2026-09-17). It mirrors the rule ``run_all.py`` carried
+    inline: the CPU MLIR JIT lane and the roofline/mock models are *reference*
+    performance (a compiled CPU kernel or an analytical model, not a backend
+    kernel — the docstring above lists what counts as native), the Apple GPU JIT
+    lane is native, and anything that did not execute is artifact-only. A path
+    outside the closed table above must pass its measured kind instead.
+    """
+    path = getattr(compiler_path, "value", compiler_path)
+    status = getattr(runtime_status, "value", runtime_status)
+    if status != RuntimeStatus.EXECUTABLE.value:
+        return ExecutionKind.ARTIFACT_ONLY
+    if path in _REFERENCE_PATHS:
+        return ExecutionKind.REFERENCE
+    if path in _NATIVE_PATHS:
+        return ExecutionKind.OPTIMIZED_NATIVE
+    if path in _ARTIFACT_PATHS:
+        return ExecutionKind.ARTIFACT_ONLY
+    raise ValueError(
+        f"compiler_path {path!r} is not a proxy lane; set execution_kind from the "
+        "launch result rather than inferring it from the path name")
+
+
 @dataclass(frozen=True)
 class ArtifactLevels:
     graph: bool = False

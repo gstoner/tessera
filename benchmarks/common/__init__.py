@@ -1,6 +1,7 @@
 """Shared benchmark/compiler contract helpers."""
 
 from .artifact_schema import (
+    infer_execution_kind,
     ArtifactLevels,
     BenchmarkOperator,
     BenchmarkRow,
@@ -22,6 +23,7 @@ from .compiler_contract import (
 from .correctness import correctness_report, max_abs_error, relative_error, within_tolerance
 
 __all__ = [
+    "infer_execution_kind",
     "ArtifactLevels",
     "BenchmarkOperator",
     "BenchmarkRow",

@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import numpy as np
 import pytest
+from tests._support.environment import require_native_storage_lane
 from benchmarks.record_native_ann_execution import source
 from benchmarks.record_native_tape_extensions import data_while_source
 from tessera.compiler.native_ann import prepare_native_ann, affine_error_bound
@@ -83,6 +84,7 @@ def test_gpu_arbiter_keeps_zero_budget_incumbent_and_retires_candidates(monkeypa
 
 
 def test_native_elementwise_fusion_pipeline_is_serialized_and_replayed():
+    require_native_storage_lane('rocm')  # packages a gfx1151 HSACO; needs a ROCm toolkit, not a device
     if not Path("/usr/lib/llvm-23/bin/mlir-opt").exists():
         pytest.skip("native LLVM 23 tools required")
     from tessera.compiler.native_ann_gpu import materialize_native_ann_gpu

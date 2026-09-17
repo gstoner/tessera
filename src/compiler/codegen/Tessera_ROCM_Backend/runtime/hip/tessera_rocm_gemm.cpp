@@ -386,6 +386,19 @@ bool compileVariantKU(const char* type, const char* wmma, int mt, int nt, int ku
   src = substitute(src, "%MT%", std::to_string(mt));
   src = substitute(src, "%NT%", std::to_string(nt));
   src = substitute(src, "%KU%", std::to_string(ku));
+  // The same RDNA4 specialization as the rung-1 variant: 8-element A/B
+  // fragments (each half-wave owns one K half), the gfx12 builtin, and
+  // contiguous output rows per half-wave. Without it the KU reference rung
+  // failed to HIPRTC-compile on gfx1201 ("needs target feature
+  // wmma-256b-insts") and every KU test on Tajasarus read that as `rc=2`.
+  if (isGfx1201()) {
+    src = substitute(src, "_w32(", "_w32_gfx12(");
+    src = substitute(src, "ext_vector_type(16)", "ext_vector_type(8)");
+    src = substitute(src, "i < 16", "i < 8");
+    src = substitute(src, "kb + i", "kb + i + 8 * (l >> 4)");
+    src = substitute(src, "k0 + i", "k0 + i + 8 * (l >> 4)");
+    src = substitute(src, "e * 2 + (l >> 4)", "8 * (l >> 4) + e");
+  }
   return compileSrc(src, name, outMod, outFn);
 }
 

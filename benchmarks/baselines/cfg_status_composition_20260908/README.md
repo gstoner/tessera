@@ -53,3 +53,5 @@ The final frozen-tree WSL unit run passed **18,542 tests**, with 2,231 skipped
 and 870 slow tests deselected. All 30 generated-document checks passed.
 Source-inspection tests must run against unchanged files so loaded function
 line numbers continue to identify the on-disk source.
+
+Recorded by `benchmarks/record_async_status_composition.py` (`compose-{nvidia,rocm}.json`).

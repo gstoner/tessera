@@ -174,7 +174,7 @@ _SPECS = [
     OpSpec("linear_attn", "tessera.linear_attn", 3, 3, effect="state", lowering="attention"),
     OpSpec("linear_attn_state", "tessera.linear_attn_state", 3, 3, effect="state", lowering="attention"),
     # attention_variants_plan, LA-4 — Power attention + Retention promoted
-    # from `examples/advanced/power_retention/`. Same recurrence backbone
+    # from the `power_retention` example (retired to `archive/examples/advanced/`). Same recurrence backbone
     # as linear_attn with deg + window / log_g + chunk attrs.
     OpSpec("power_attn", "tessera.power_attn", 3, 3, effect="state", lowering="attention"),
     OpSpec("retention", "tessera.retention", 3, 3, effect="state", lowering="attention"),

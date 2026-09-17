@@ -7,8 +7,12 @@ as a lane that exists, while nothing can say what it recorded or where. The
 whose products are cited by date in the NVIDIA queue but never by the recorder
 that made them.
 
-A ratchet, not a claim of cleanliness: the 50 are frozen below and may only
-shrink. A new recorder that lands unnamed fails here, on the CPU-only lane.
+Those 50 were pruned on 2026-09-17 (owner-approved): 41 are now named by the
+"Recorders and their outputs" table in `benchmarks/README.md`, by a
+"Recorded by" line in their packet's README, or by the SuperBench README; the
+nine with no tracked product were deleted. The ratchet now holds at an empty
+floor: a new recorder that lands unnamed fails here, on the CPU-only lane.
+Never add an entry to `KNOWN_UNNAMED` to make a new orphan pass.
 """
 from __future__ import annotations
 
@@ -18,60 +22,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 NAMING_ROOTS = ("tests", "docs", "python", "scripts", "benchmarks", "tools", ".github", "CLAUDE.md", "AGENTS.md")
 
-#: Orphans as of 2026-09-17. Remove an entry once something names its stem;
-#: never add one to make a new orphan pass.
-KNOWN_UNNAMED = frozenset({
-    "benchmarks/Tessera_Operator_Benchmarks/scripts/plot_csv.py",
-    "benchmarks/Tessera_SuperBench/benches/kernel/conv2d_nhwc_tessera_stub.py",
-    "benchmarks/Tessera_SuperBench/benches/kernel/flashattn_tessera_stub.py",
-    "benchmarks/Tessera_SuperBench/benches/kernel/gemm_tessera_stub.py",
-    "benchmarks/apple_gpu/benchmark_coopmat.py",
-    "benchmarks/apple_gpu/benchmark_e2e2_gelu.py",
-    "benchmarks/nvidia/benchmark_scheduled_macro_matmul.py",
-    "benchmarks/nvidia/prepare_test5_profile_artifacts.py",
-    "benchmarks/nvidia/profile_gemm_schedule_candidates.py",
-    "benchmarks/nvidia/profile_test5_emitted_gemm.py",
-    "benchmarks/nvidia/profile_test5_routes.py",
-    "benchmarks/nvidia/record_attention_forward_schedule_matrix.py",
-    "benchmarks/nvidia/record_autotune_reproducibility.py",
-    "benchmarks/nvidia/record_bf16_reduction_breadth.py",
-    "benchmarks/nvidia/record_canonical_k_loop.py",
-    "benchmarks/nvidia/record_deltanet_backward_packet.py",
-    "benchmarks/nvidia/record_e2e_spine_attention.py",
-    "benchmarks/nvidia/record_e2e_spine_comparative.py",
-    "benchmarks/nvidia/record_e2e_spine_epilogue.py",
-    "benchmarks/nvidia/record_e2e_spine_paged_kv.py",
-    "benchmarks/nvidia/record_e2e_spine_reduction.py",
-    "benchmarks/nvidia/record_low_precision_native_resources.py",
-    "benchmarks/nvidia/record_packed_storage_foundation.py",
-    "benchmarks/nvidia/record_remaining_dtype_reduction.py",
-    "benchmarks/nvidia/record_replay_parity.py",
-    "benchmarks/nvidia/record_training_memory_foundation.py",
-    "benchmarks/nvidia/record_transport_parity.py",
-    "benchmarks/record_async_public_frames.py",
-    "benchmarks/record_async_status_composition.py",
-    "benchmarks/record_native_nonlinear_ad.py",
-    "benchmarks/record_owned_source_state_gpu.py",
-    "benchmarks/record_runtime_shape_frames.py",
-    "benchmarks/record_source_exception_gpu.py",
-    "benchmarks/record_source_state_gpu.py",
-    "benchmarks/record_status_fanin.py",
-    "benchmarks/rocm/benchmark_block_attnres_gfx1151.py",
-    "benchmarks/rocm/benchmark_rocm_compiled_gemm_dtype.py",
-    "benchmarks/rocm/benchmark_rocm_es_low_rank.py",
-    "benchmarks/rocm/benchmark_rocm_flash_attn_bwd_compiled.py",
-    "benchmarks/rocm/benchmark_rocm_raster.py",
-    "benchmarks/rocm/benchmark_rocm_training_backward.py",
-    "benchmarks/rocm/record_deltanet_backward_selectors.py",
-    "benchmarks/spectral/benchmark_rocm_fft_plan_cache.py",
-    "benchmarks/spectral/benchmark_tsol_composite.py",
-    "benchmarks/x86/benchmark_x86_attention_backward_parallel.py",
-    "benchmarks/x86/benchmark_x86_attention_lse.py",
-    "benchmarks/x86/benchmark_x86_es_low_rank.py",
-    "benchmarks/x86/benchmark_x86_fft_codelets.py",
-    "benchmarks/x86/benchmark_x86_t1_cache_model.py",
-    "benchmarks/x86/record_deltanet_backward_selectors.py",
-})
+#: Orphans as of 2026-09-17, pruned the same day — empty by construction.
+#: Never add an entry here to make a new orphan pass.
+KNOWN_UNNAMED: frozenset[str] = frozenset()
 
 
 def _recorders() -> list[Path]:

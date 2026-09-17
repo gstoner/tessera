@@ -15,7 +15,9 @@ from tests._support import rocm_build
 
 def test_gfx1151_has_every_family_and_unknown_archs_have_none():
     assert promoted_families("gfx1151") == frozenset(FAMILY_PLUGINS)
-    assert promoted_families("gfx1201") == {"softmax", "reduction", "matmul", "attention", "attention_backward"}
+    assert promoted_families("gfx1201") == {
+        "softmax", "reduction", "matmul", "attention", "attention_backward",
+        "control_state_machine", "ebm_affine_langevin"}
     assert promoted_families("gfx1201") < frozenset(FAMILY_PLUGINS)
     for arch in ("gfx1200", "gfx1250", "gfx1100", "gfx942", ""):
         assert promoted_families(arch) == frozenset()

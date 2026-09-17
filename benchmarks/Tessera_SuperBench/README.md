@@ -60,8 +60,11 @@ gate.
 ## Retained and retired entry points
 
 The sleep-based `attention_placeholder.py` is retired and exits with an error;
-it must not produce latency or throughput rows. The three `_stub.py` files are
-compatibility forwarding entry points to the current reference/artifact scripts.
+it must not produce latency or throughput rows. The three stubs —
+`benches/kernel/gemm_tessera_stub.py`, `benches/kernel/flashattn_tessera_stub.py`
+and `benches/kernel/conv2d_nhwc_tessera_stub.py` — are compatibility forwarding
+entry points to `gemm_tessera.py`, `flashattn_tessera.py` and
+`conv2d_nhwc_tessera.py` respectively.
 This harness's attention/conv gaps do not imply missing native compiler families
 elsewhere. See the [alignment review](../COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).
 

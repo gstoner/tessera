@@ -19,5 +19,17 @@ target_link_libraries(tessera-nvidia-opt PRIVATE
   MLIRSCFDialect
   MLIRSupport
   MLIRTransforms
+  MLIRGPUToNVVMTransforms       # convert-gpu-to-nvvm (single-invocation stamp fixture)
+  MLIRSCFToControlFlow          # convert-scf-to-cf
+  MLIRReconcileUnrealizedCasts  # reconcile-unrealized-casts
+  MLIRArithToLLVM               # ConvertToLLVMPatternInterface extensions the
+  MLIRControlFlowToLLVM         # NVVM lowering resolves per loaded dialect
+  MLIRFuncToLLVM
+  MLIRIndexToLLVM
+  MLIRMathToLLVM
+  MLIRMemRefToLLVM
+  MLIRUBToLLVM
+  MLIRNVVMToLLVM
+  MLIRGPUToGPURuntimeTransforms
   MLIROptLib
 )

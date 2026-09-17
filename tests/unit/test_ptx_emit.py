@@ -12,8 +12,11 @@ import shutil
 
 import pytest
 
-from tessera.compiler.gpu_target import TESSERA_TARGET_PTX_ISA  # PTX .version follows the pin
 from tessera.compiler import ptx_emit as P
+
+# The `.version` a kernel stamps is the driver JIT's ISA, not the toolkit's
+# (gpu_target.driver_jit_ptx_isa); the emitter's own constant is that value.
+TESSERA_TARGET_PTX_ISA = P.PTX_ISA_VERSION
 
 
 def test_canonical_mnemonic_matches_inventory():

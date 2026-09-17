@@ -35,12 +35,16 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
-# PTX ISA version — imported from the single source of truth (gpu_target.py's
-# CUDA pin) so the emitted `.version` directive can never drift from the toolchain
-# pin. CUDA Toolkit 13.3 → PTX ISA 9.3.
-from .gpu_target import TESSERA_TARGET_PTX_ISA
+# PTX ISA version stamped on every kernel this module emits. Everything here is
+# handed to the DRIVER's JIT (`cuModuleLoadDataEx`), so the `.version` must be
+# one that driver accepts -- derived from the loaded driver, capped at the
+# toolkit pin (gpu_target.driver_jit_ptx_isa). It used to copy the toolkit's own
+# ISA (nvcc 13.4 -> 9.4) while the fleet's driver 610.88 implements CUDA 13.3 and
+# JIT-compiles at most 9.3: every emitted kernel then failed to load with
+# CUDA_ERROR_UNSUPPORTED_PTX_VERSION, reported as an opaque rc=3.
+from .gpu_target import driver_jit_ptx_isa
 
-PTX_ISA_VERSION = TESSERA_TARGET_PTX_ISA
+PTX_ISA_VERSION = driver_jit_ptx_isa()
 
 # Documented canonical Hopper WGMMA bf16 tiles (docs/backends/nvidia/kernel-inventory.md).
 _WGMMA_BF16_CANONICAL: frozenset[tuple[int, int, int]] = frozenset(

@@ -1753,7 +1753,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     #                  Returns (O, state, sum_of_keys) for training/inference
     #                  variants.
     #
-    # Promoted from `examples/advanced/power_retention/` so callers can
+    # Promoted from the `power_retention` example (now under `archive/examples/`) so callers can
     # spell `@jit(target="apple_gpu") def block(q, k, v): return
     # ts.ops.power_attn(...)` once the backend lowering lands. Today the
     # forward path is the numpy reference; per-backend kernels (Hopper

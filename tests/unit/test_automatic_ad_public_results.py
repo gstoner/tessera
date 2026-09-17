@@ -71,6 +71,18 @@ def test_multiple_matrix_ad_results_use_independent_shape_sidecars(rank):
 def test_dynamic_backward_input_capacity_is_native_guarded(rank):
     tool=find_tessera_opt()
     if tool is None:pytest.skip('native compiler required')
+    if rank==2:
+        # LLVM 23.1.1's LoopInterchange asserts on this kernel's loop nest
+        # (SCEVDivision type mismatch; reduced reproducer at
+        # tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll).
+        # Upstream, not ours: NDEBUG toolchains compile it and the kernel
+        # executes correctly on gfx1151, so an assertions host skips with the
+        # reason rather than reporting LLVM's assertion as this test's failure.
+        from tessera.compiler.native_gpu_storage import _resolve_tool
+        from tests._support.environment import llvm_tool_has_assertions
+        if llvm_tool_has_assertions(_resolve_tool(Path('/usr/lib/llvm-23/bin')/'mlir-opt')):
+            pytest.skip('LLVM 23.1.1 assertion in LoopInterchange (upstream; '
+                        'tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll)')
     dynamic='''module { func.func @dynamic(%x: tensor<?xf32>) -> tensor<?xf32> attributes {tessera.autodiff = "reverse"} {
       %y = "tessera.mul"(%x,%x) : (tensor<?xf32>,tensor<?xf32>) -> tensor<?xf32>
       return %y : tensor<?xf32> } }'''

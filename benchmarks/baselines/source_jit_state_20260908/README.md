@@ -57,3 +57,6 @@ focused suite and device-state recorder were rerun against that final tree.
 Assertions-enabled validation of the new source-state admission remains a
 follow-up: the assertions-enabled Super-Bear host was unavailable. The native
 compiler build and contract tests here ran on Princess-Luna.
+
+Recorded by `benchmarks/record_source_state_gpu.py` (`source-state-rocm.json`)
+and `benchmarks/record_status_fanin.py` (`fanin-eight-rocm.json`).

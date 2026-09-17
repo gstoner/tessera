@@ -102,7 +102,7 @@ def test_dynamic_still_honors_dtype_and_region_guards(target):
 @pytest.mark.skipif(not _rocm_hip_live(),
                     reason="needs a live gfx1151 + hipcc")
 def test_live_rocm_dynamic_one_compile_serves_many_shapes():
-    from tessera.compiler.emit.rocm_hip import _load_entry, _ptr
+    from tessera.compiler.emit.rocm_hip import _load_entry, _ptr, last_entry_error
 
     region = F.FusedRegion(epilogue=("bias", "gelu"))
     cache = KC.KernelCache()
@@ -119,7 +119,11 @@ def test_live_rocm_dynamic_one_compile_serves_many_shapes():
         bias = rng.standard_normal((N,)).astype(np.float32)
         out = np.zeros((M, N), np.float32)
         rc = fn(_ptr(A), _ptr(B), _ptr(bias), _ptr(None), _ptr(out), M, N, K)
-        assert rc == 1
+        # 2 = argument/alloc, 3 = H2D copy, 4 = launch, 5 = sync, 6 = D2H copy;
+        # the entry also names the HIP call, so a one-off in a long sweep is a
+        # named device condition rather than a bare number.
+        assert rc == 1, (f"entry rc={rc} at {M}x{N}x{K}: {last_entry_error(compiled.artifact)} "
+                         f"[artifact {compiled.artifact}, TESSERA_ROCM_CHIP={os.environ.get('TESSERA_ROCM_CHIP')}]")
         np.testing.assert_allclose(out, region.reference(A, B, bias, None),
                                    rtol=1e-4, atol=1e-4)
 

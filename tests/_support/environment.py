@@ -404,3 +404,25 @@ def python_subprocess_environment(
     if overrides:
         env.update(overrides)
     return env
+
+
+def llvm_tool_has_assertions(tool: "Path | str") -> "bool | None":
+    """Whether the LLVM toolchain that owns ``tool`` was built with assertions.
+
+    Answered by the ``llvm-config`` beside the tool (``--assertion-mode``), the
+    same probe `scripts/probe_llvm_assertions.py` uses. None when there is no
+    llvm-config to ask. A test that a known *upstream* assertion aborts can
+    skip on such a host with the reason, instead of reporting LLVM's defect as
+    its own; the NDEBUG fleet still evaluates the lane.
+    """
+    import subprocess
+
+    config = Path(tool).resolve().parent / "llvm-config"
+    if not config.is_file():
+        return None
+    try:
+        out = subprocess.run([str(config), "--assertion-mode"], capture_output=True,
+                             text=True, timeout=30, check=False).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.upper() == "ON"

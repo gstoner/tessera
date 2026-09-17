@@ -223,7 +223,6 @@ layout. They should be gitignored.
 
 | Folder | Theme |
 |---|---|
-| `power_retention/` | PowerAttention port (HIP, WGMMA, autotune) |
 | `kv_cache_serving/` | KV cache + paging on Apple/x86 |
 | `long_context_attention/` | Long-context attention variants |
 | `mla/` | Multi-head Latent Attention (DeepSeek-style) |
@@ -261,7 +260,7 @@ reference.
 | `src/solvers/ebm`            | new (M6)                                         | Energy-based-model solver scaffolding |
 | `src/Operators`              | new                                              | Placeholder for operator library work (Phase 4+) |
 | `tests/kernel_tests`         | `tests/tessera_kernels_scaffold`                 | Original retained: system tests, roofline script, profile_ncu.sh |
-| `examples/advanced/power_retention` | `examples/advanced/Power Retention/…/v0_9` | v0_9: HIP kernel, WGMMA, autotune, nlohmann_json integration |
+| `archive/examples/advanced/power_retention` | `examples/advanced/Power Retention/…/v0_9` | v0_9 scaffold; retired from `examples/advanced/` 2026-09-17 (op promoted to the canonical dialect, kernel never compiled) |
 | `research/pddl_instruct`     | `src/PDDL_Instruct/pddl_instruct_tessera_v1`     | Experimental research prototype moved out of the active `src/` surface |
 | `research/sandbox_compilers` | `src/Sandbox_Toy_compilers/…`                    | Experimental sample compilers moved out of the active `src/` surface |
 | `archive/src/tpp_old`        | `src/tpp_old`                                    | Superseded by canonical `src/solvers/tpp` |

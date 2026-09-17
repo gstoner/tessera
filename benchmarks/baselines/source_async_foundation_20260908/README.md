@@ -46,3 +46,6 @@ After final code adjustments, the assertions-enabled focused suite passed 252
 tests and the native source/public-frame/x86-attention suite passed 26 tests.
 Mypy retained the zero-error baseline. Exact-device proof does not transfer to
 Apple, RDNA4 or CDNA targets. No Apple runtime was changed.
+
+Recorded by `benchmarks/record_async_public_frames.py` (`async-public-{nvidia,rocm}.json`)
+and `benchmarks/record_native_ann_execution.py` (`ann-{nvidia,rocm}/run-N.json`).

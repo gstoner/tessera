@@ -47,7 +47,7 @@ from tessera.compiler.emit.candidate import (
     Tier,
     register_candidate,
 )
-from tessera.compiler.emit.kernel_cache import build, register_compiler
+from tessera.compiler.emit.kernel_cache import CompileError, build, register_compiler
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
     KernelEmitter,
@@ -84,6 +84,7 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
     return (
         "#include <hip/hip_runtime.h>\n"
         "#include <math.h>\n"
+        "#include <stdio.h>\n"         # snprintf for the last-error text
         "#include <chrono>\n"          # the wall clock the bench entry needs
         # `span` is the ON-DEVICE clock, and is nullable so the production entry
         # pays only an untaken branch. `wall_clock64()` runs at a constant rate
@@ -135,6 +136,16 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         # — either way a wrong result carrying the rocm_hip tag. A non-sticky
         # copy error is not resurfaced by hipDeviceSynchronize, so the sync
         # check alone cannot stand in for these.
+        # A failed call names itself: `rc` alone said "3" for every step from the
+        # first H2D copy to the D2H copy, which is what a sweep on Tajasarus
+        # reported for one shape after 17k tests and nothing could explain.
+        f"static char {_ENTRY}_err[256];\n"
+        f"static void {_ENTRY}_note(const char* what, hipError_t st) {{\n"
+        f"    snprintf({_ENTRY}_err, sizeof {_ENTRY}_err, \"%s: %s (%d)\", what,\n"
+        "             hipGetErrorString(st), (int)st);\n"
+        "}\n"
+        f'extern "C" const char* {_ENTRY}_last_error(void) {{ return {_ENTRY}_err; }}\n'
+        f"#define TSR_HIP(call) do {{ hipError_t st_ = (call); if (st_ != hipSuccess) {{ {_ENTRY}_note(#call, st_); goto cleanup; }} }} while (0)\n"
         f'extern "C" int {_ENTRY}(const float* hA, const float* hB,\n'
         "        const float* hbias, const float* hresidual, float* hout,\n"
         "        int M, int N, int K) {\n"
@@ -142,25 +153,34 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "           szO=(size_t)M*N*sizeof(float), szBias=(size_t)N*sizeof(float);\n"
         "    float *dA=0,*dB=0,*dbias=0,*dres=0,*dO=0;\n"
         "    int t=64, b=0, rc=2;\n"
-        "    if (!hA||!hB||!hout) goto cleanup;\n"
-        "    if (hipMalloc(&dA,szA)!=hipSuccess) goto cleanup;\n"
-        "    if (hipMalloc(&dB,szB)!=hipSuccess) goto cleanup;\n"
-        "    if (hipMalloc(&dO,szO)!=hipSuccess) goto cleanup;\n"
-        "    if (hbias && hipMalloc(&dbias,szBias)!=hipSuccess) goto cleanup;\n"
-        "    if (hresidual && hipMalloc(&dres,szO)!=hipSuccess) goto cleanup;\n"
+        f"    {_ENTRY}_err[0]=0;\n"
+        f"    if (!hA||!hB||!hout) {{ {_ENTRY}_note(\"arguments\", hipErrorInvalidValue); goto cleanup; }}\n"
+        "    TSR_HIP(hipMalloc(&dA,szA));\n"
+        "    TSR_HIP(hipMalloc(&dB,szB));\n"
+        "    TSR_HIP(hipMalloc(&dO,szO));\n"
+        "    if (hbias) TSR_HIP(hipMalloc(&dbias,szBias));\n"
+        "    if (hresidual) TSR_HIP(hipMalloc(&dres,szO));\n"
         "    rc=3;\n"
-        "    if (hipMemcpy(dA,hA,szA,hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
-        "    if (hipMemcpy(dB,hB,szB,hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
-        "    if (hbias && hipMemcpy(dbias,hbias,szBias,\n"
-        "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
-        "    if (hresidual && hipMemcpy(dres,hresidual,szO,\n"
-        "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    TSR_HIP(hipMemcpy(dA,hA,szA,hipMemcpyHostToDevice));\n"
+        "    TSR_HIP(hipMemcpy(dB,hB,szB,hipMemcpyHostToDevice));\n"
+        "    if (hbias) TSR_HIP(hipMemcpy(dbias,hbias,szBias,hipMemcpyHostToDevice));\n"
+        "    if (hresidual) TSR_HIP(hipMemcpy(dres,hresidual,szO,hipMemcpyHostToDevice));\n"
+        "    rc=4;\n"
         "    b=(M+t-1)/t;\n"
+        # hipGetLastError is thread-sticky: a failed HIP call anywhere earlier in
+        # this thread (a refused hipModuleLoadData of another arch's image, say)
+        # is still there to be read after a launch that succeeded. Clear it, so
+        # what the check below reads is this launch's own status. A sweep on
+        # Tajasarus read a spectral lane's expected refusal here as "no kernel
+        # image is available" for this entry's own correct image (2026-09-17).
+        "    (void)hipGetLastError();\n"
         f"    hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
         "        dA,dB,dbias,dres,dO,M,N,K,(unsigned long long*)0);\n"
-        "    if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
-        "    if (hipDeviceSynchronize()!=hipSuccess) goto cleanup;\n"
-        "    if (hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost)!=hipSuccess) goto cleanup;\n"
+        "    TSR_HIP(hipGetLastError());\n"
+        "    rc=5;\n"
+        "    TSR_HIP(hipDeviceSynchronize());\n"
+        "    rc=6;\n"
+        "    TSR_HIP(hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost));\n"
         "    rc=1;\n"
         "cleanup:\n"
         "    if (dA) hipFree(dA);\n"
@@ -196,6 +216,7 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "    float ev=0.0f;\n"
         "    if (!hA||!hB||!hout||!wall_ms||!event_ms||!device_ms\n"
         "        ||iters<1||warmup<0) return 5;\n"
+        "    (void)hipGetLastError();  /* thread-sticky; drop what earlier calls left */\n"
         "    *wall_ms=0.0; *event_ms=-1.0; *device_ms=-1.0;\n"
         # A dedicated NON-BLOCKING stream. Recording on the default stream
         # implicitly serialises against every other stream, so a measurement
@@ -328,19 +349,29 @@ class RocmHipEmitter(KernelEmitter):
 # ── compile_fn (HIP → .so) ────────────────────────────────────────────────────
 
 def _rocm_arch() -> str:
-    """gfx target: ``$TESSERA_ROCM_ARCH`` override, else the live device's chip,
-    else gfx1151 (the Strix Halo default)."""
+    """gfx target: ``$TESSERA_ROCM_ARCH`` override, else the runtime's chip
+    (``$TESSERA_ROCM_CHIP``, default gfx1151 -- the documented recorder default).
+
+    No silent fallback: this used to swallow any exception from the runtime
+    lookup and answer "gfx1151", which on a gfx1201 host compiles an image the
+    device cannot run and surfaces, thousands of tests later, as
+    `hipGetLastError(): no kernel image is available for execution on the
+    device (209)` with nothing to say why (Tajasarus sweep, 2026-09-17). A
+    semantic key never defaults (Decision #21a); if the arch cannot be
+    resolved, say so."""
     env = os.environ.get("TESSERA_ROCM_ARCH")
     if env:
         return env
     try:
         from tessera import runtime as rt
         chip = rt._rocm_chip()
-        if chip:
-            return str(chip)
-    except Exception:
-        pass
-    return "gfx1151"
+    except Exception as exc:
+        raise CompileError(
+            f"rocm offload arch could not be resolved from the runtime: {exc!r}"
+        ) from exc
+    if not chip:
+        raise CompileError("rocm offload arch is empty: set TESSERA_ROCM_CHIP or TESSERA_ROCM_ARCH")
+    return str(chip)
 
 
 def _rocm_hip_compile_fn(source: KernelSource) -> str:
@@ -348,13 +379,16 @@ def _rocm_hip_compile_fn(source: KernelSource) -> str:
     Raises on a missing toolchain/compile failure; ``build`` wraps in
     ``CompileError`` (never a silent no-op)."""
     hipcc = shutil.which("hipcc") or "/opt/rocm/bin/hipcc"
+    arch = _rocm_arch()
     d = tempfile.mkdtemp(prefix="tessera_rocm_")
     src = os.path.join(d, "kernel.hip")
-    so = os.path.join(d, "kernel.so")
+    # The arch is in the artifact's name so a launch failure can name the
+    # image it was handed, not just the device it was handed to.
+    so = os.path.join(d, f"kernel_{arch.replace(':', '_')}.so")
     with open(src, "w") as f:
         f.write(source.source)
     subprocess.run(
-        [hipcc, f"--offload-arch={_rocm_arch()}", "-O3", "-fPIC", "-shared",
+        [hipcc, f"--offload-arch={arch}", "-O3", "-fPIC", "-shared",
          src, "-o", so],
         check=True, capture_output=True, text=True)
     return so
@@ -374,6 +408,23 @@ def _load_entry(artifact: str):
     fn.restype = ctypes.c_int
     fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_int] * 3
     return fn
+
+
+def last_entry_error(artifact: str) -> str:
+    """The HIP call the entry in ``artifact`` last failed on, and its error
+    text (``<call>: <hipGetErrorString> (<code>)``); empty after success or
+    for an artifact built before the entry recorded it."""
+    lib = _LIB_CACHE.get(artifact)
+    if lib is None:
+        lib = ctypes.CDLL(artifact)
+        _LIB_CACHE[artifact] = lib
+    ask = getattr(lib, f"{_ENTRY}_last_error", None)
+    if ask is None:
+        return ""
+    ask.restype = ctypes.c_char_p
+    ask.argtypes = []
+    raw = ask()
+    return raw.decode("utf-8", "replace") if raw else ""
 
 
 def _load_bench_entry(artifact: str):
@@ -540,12 +591,12 @@ __global__ void replay_out(Ctx q,int M){int z=blockIdx.x*blockDim.x+threadIdx.x;
 __global__ void replay_flush(Ctx q,int M){long long z=(long long)blockIdx.x*blockDim.x+threadIdx.x,total=(long long)q.B*q.D*q.N;if(z>=total)return;int ni=z%q.N,di=(z/q.N)%q.D,bi=z/(q.N*q.D);float value=q.s0[z];for(int i=0;i<M;i++){long long k=((long long)i*q.B+bi)*q.D+di;value=expf(q.d[k]*q.a[di])*value+q.d[k]*q.x[k]*q.b[((long long)i*q.B+bi)*q.N+ni];}q.s0[z]=value;}
 extern "C" int cr(void**out,const float*s0,const float*a,int B,int D,int N,int L,int nslots){if(!out||!s0||!a||B<1||D<1||N<1||L<1||nslots<2)return 2;Ctx*q=(Ctx*)calloc(1,sizeof(Ctx));if(!q)return 3;q->B=B;q->D=D;q->N=N;q->L=L;q->nslots=nslots;q->slots=(Slot*)calloc(nslots,sizeof(Slot));size_t bd=(size_t)L*B*D*4,bn=(size_t)L*B*N*4,ss=(size_t)B*D*N*4,cc=(size_t)B*N*4,aa=(size_t)D*4,yy=(size_t)B*D*4,gg=(size_t)L*B*4;if(!q->slots||hipMalloc(&q->d,bd)!=hipSuccess||hipMalloc(&q->x,bd)!=hipSuccess||hipMalloc(&q->b,bn)!=hipSuccess||hipMalloc(&q->s0,ss)!=hipSuccess||hipMalloc(&q->c,cc)!=hipSuccess||hipMalloc(&q->a,aa)!=hipSuccess||hipMalloc(&q->y,yy)!=hipSuccess||hipMalloc(&q->gram,gg)!=hipSuccess||hipStreamCreateWithFlags(&q->stream,hipStreamNonBlocking)!=hipSuccess||hipMemcpy(q->s0,s0,ss,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(q->a,a,aa,hipMemcpyHostToDevice)!=hipSuccess)return 3;for(int i=0;i<nslots;i++){Slot&z=q->slots[i];if(hipMalloc(&z.dy,bd)!=hipSuccess||hipHostMalloc(&z.pd,bd,hipHostMallocDefault)!=hipSuccess||hipHostMalloc(&z.px,bd,hipHostMallocDefault)!=hipSuccess||hipHostMalloc(&z.pb,bn,hipHostMallocDefault)!=hipSuccess||hipHostMalloc(&z.pc,bn,hipHostMallocDefault)!=hipSuccess||hipHostMalloc(&z.py,bd,hipHostMallocDefault)!=hipSuccess||hipEventCreate(&z.beg)!=hipSuccess||hipEventCreate(&z.done)!=hipSuccess)return 3;}*out=q;return 1;}
 extern "C" int ap(void*v,const float*d,const float*x,const float*b,int pos){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||pos<0||pos>=q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4;if(hipMemcpyAsync(q->d+(size_t)pos*q->B*q->D,d,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x+(size_t)pos*q->B*q->D,x,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b+(size_t)pos*q->B*q->N,b,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;return hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
-extern "C" int de(void*v,const float*c,float*y,int M){Ctx*q=(Ctx*)v;if(!q||!c||!y||M<1||M>q->L)return 2;size_t cb=(size_t)q->B*q->N*4,yb=(size_t)q->B*q->D*4;if(hipMemcpyAsync(q->c,c,cb,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3((M*q->B+127)/128),dim3(128),0,q->stream,*q,M);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,M);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(y,q->y,yb,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;return hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
-extern "C" int fu(void*v,int M){Ctx*q=(Ctx*)v;if(!q||M<1||M>q->L)return 2;long long n=(long long)q->B*q->D*q->N;hipLaunchKernelGGL(replay_flush,dim3((unsigned)((n+127)/128)),dim3(128),0,q->stream,*q,M);return hipGetLastError()==hipSuccess&&hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
+extern "C" int de(void*v,const float*c,float*y,int M){Ctx*q=(Ctx*)v;if(!q||!c||!y||M<1||M>q->L)return 2;(void)hipGetLastError();size_t cb=(size_t)q->B*q->N*4,yb=(size_t)q->B*q->D*4;if(hipMemcpyAsync(q->c,c,cb,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3((M*q->B+127)/128),dim3(128),0,q->stream,*q,M);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,M);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(y,q->y,yb,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;return hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
+extern "C" int fu(void*v,int M){Ctx*q=(Ctx*)v;if(!q||M<1||M>q->L)return 2;(void)hipGetLastError();long long n=(long long)q->B*q->D*q->N;hipLaunchKernelGGL(replay_flush,dim3((unsigned)((n+127)/128)),dim3(128),0,q->stream,*q,M);return hipGetLastError()==hipSuccess&&hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
 extern "C" int su(void*v,const float*d,const float*x,const float*b,const float*c,float*y,float*ms){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!y||!ms)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4;hipEvent_t beg=0,end=0;if(hipEventCreate(&beg)!=hipSuccess||hipEventCreate(&end)!=hipSuccess)return 3;hipEventRecord(beg,q->stream);if(hipMemcpyAsync(q->d,d,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x,x,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b,b,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,c,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3((q->B+127)/128),dim3(128),0,q->stream,*q,1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,1);long long n=(long long)q->B*q->D*q->N;hipLaunchKernelGGL(replay_flush,dim3((unsigned)((n+127)/128)),dim3(128),0,q->stream,*q,1);if(hipMemcpyAsync(y,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess||hipEventRecord(end,q->stream)!=hipSuccess||hipEventSynchronize(end)!=hipSuccess)return 3;int ok=hipEventElapsedTime(ms,beg,end)==hipSuccess;hipEventDestroy(beg);hipEventDestroy(end);return ok?1:3;}
-extern "C" int bl(void*v,const float*d,const float*x,const float*b,const float*c,float*y,int T,int start){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!y||T<1||start<0||start+T>q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,rows=(size_t)q->B*q->D;for(int i=0;i<T;i++){int p=start+i;if(hipMemcpyAsync(q->d+(size_t)p*rows,d+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x+(size_t)p*rows,x+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b+(size_t)p*q->B*q->N,b+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,c+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3(((p+1)*q->B+127)/128),dim3(128),0,q->stream,*q,p+1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,p+1);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(y+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;}return hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
+extern "C" int bl(void*v,const float*d,const float*x,const float*b,const float*c,float*y,int T,int start){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!y||T<1||start<0||start+T>q->L)return 2;(void)hipGetLastError();size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,rows=(size_t)q->B*q->D;for(int i=0;i<T;i++){int p=start+i;if(hipMemcpyAsync(q->d+(size_t)p*rows,d+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x+(size_t)p*rows,x+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b+(size_t)p*q->B*q->N,b+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,c+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3(((p+1)*q->B+127)/128),dim3(128),0,q->stream,*q,p+1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,p+1);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(y+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;}return hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
 static int take(Ctx*q){for(int n=0;n<q->nslots;n++){int i=(q->next+n)%q->nslots;Slot&z=q->slots[i];if(z.state==2&&hipEventQuery(z.done)==hipSuccess)z.state=0;if(z.state==0){z.state=1;q->next=(i+1)%q->nslots;return i;}}return -1;}
-extern "C" int as(void*v,const float*d,const float*x,const float*b,const float*c,int T,int start,int*slot){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!slot||T<1||start<0||start+T>q->L)return 2;int si=take(q);if(si<0)return 4;Slot&z=q->slots[si];size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,rows=(size_t)q->B*q->D;memcpy(z.pd,d,(size_t)T*bd);memcpy(z.px,x,(size_t)T*bd);memcpy(z.pb,b,(size_t)T*bn);memcpy(z.pc,c,(size_t)T*bn);if(hipEventRecord(z.beg,q->stream)!=hipSuccess)return 3;for(int i=0;i<T;i++){int p=start+i;if(hipMemcpyAsync(q->d+(size_t)p*rows,z.pd+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x+(size_t)p*rows,z.px+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b+(size_t)p*q->B*q->N,z.pb+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,z.pc+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3(((p+1)*q->B+127)/128),dim3(128),0,q->stream,*q,p+1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,p+1);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(z.dy+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(z.py+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;}z.tokens=T;if(hipEventRecord(z.done,q->stream)!=hipSuccess)return 3;*slot=si;return 1;}
+extern "C" int as(void*v,const float*d,const float*x,const float*b,const float*c,int T,int start,int*slot){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!slot||T<1||start<0||start+T>q->L)return 2;(void)hipGetLastError();int si=take(q);if(si<0)return 4;Slot&z=q->slots[si];size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,rows=(size_t)q->B*q->D;memcpy(z.pd,d,(size_t)T*bd);memcpy(z.px,x,(size_t)T*bd);memcpy(z.pb,b,(size_t)T*bn);memcpy(z.pc,c,(size_t)T*bn);if(hipEventRecord(z.beg,q->stream)!=hipSuccess)return 3;for(int i=0;i<T;i++){int p=start+i;if(hipMemcpyAsync(q->d+(size_t)p*rows,z.pd+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x+(size_t)p*rows,z.px+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b+(size_t)p*q->B*q->N,z.pb+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,z.pc+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3(((p+1)*q->B+127)/128),dim3(128),0,q->stream,*q,p+1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,p+1);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(z.dy+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(z.py+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;}z.tokens=T;if(hipEventRecord(z.done,q->stream)!=hipSuccess)return 3;*slot=si;return 1;}
 extern "C" int aw(void*v,int si,float*y,int T){Ctx*q=(Ctx*)v;if(!q||si<0||si>=q->nslots||!y)return 2;Slot&z=q->slots[si];if(z.state!=1||T!=z.tokens)return 2;if(hipEventSynchronize(z.done)!=hipSuccess)return 3;memcpy(y,z.py,(size_t)T*q->B*q->D*4);z.state=0;return 1;}
 extern "C" int ew(void*v,int si){Ctx*q=(Ctx*)v;if(!q||si<0||si>=q->nslots||q->slots[si].state!=1)return 2;return hipEventSynchronize(q->slots[si].done)==hipSuccess?1:3;}
 extern "C" int et(void*v,int si,float*ms){Ctx*q=(Ctx*)v;if(!q||si<0||si>=q->nslots||q->slots[si].state!=1||!ms)return 2;Slot&z=q->slots[si];if(hipEventSynchronize(z.done)!=hipSuccess)return 3;return hipEventElapsedTime(ms,z.beg,z.done)==hipSuccess?1:3;}

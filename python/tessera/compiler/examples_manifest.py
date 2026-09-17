@@ -304,21 +304,6 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         ),
     ),
     ExampleEntry(
-        directory="examples/advanced/power_retention",
-        entry_point=(
-            "examples/advanced/power_retention/examples/"
-            "minimal_power_attn.py"
-        ),
-        status="scaffold",
-        reason=(
-            "Placeholder — entry-point script currently just prints "
-            "``'example'``.  Real implementation lives in the "
-            "``python/tessera_power/`` subpackage (CUDA scaffolds, "
-            "Retention op) which is not wired into the audit yet."
-        ),
-        notes="See README.md for the v0.2 update plan.",
-    ),
-    ExampleEntry(
         directory="examples/advanced/Tessera_Empirical_Software_Agent",
         entry_point=(
             "examples/advanced/Tessera_Empirical_Software_Agent/src/"

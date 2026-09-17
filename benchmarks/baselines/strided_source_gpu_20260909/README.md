@@ -20,3 +20,5 @@ canonical root; duplicate alias gradients are zero.
 Remaining: negative/multidimensional view maps, general slice adjoints, caught
 exception identity/implicit context/tracebacks, dynamic causes and GPU exception
 transport. These packets do not authorize arbitrary aliased external pointers.
+
+Recorded by `benchmarks/record_owned_source_state_gpu.py` (`nvidia.json`, `rocm.json`).

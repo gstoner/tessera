@@ -7691,6 +7691,53 @@ repository had succeeded in some time — the lived-in trees on Super-Bear had
 never built the example library (no `libTesseraPowerDialect.a` in `build/`), and
 so never saw it.
 
+**Root-caused and fixed 2026-09-17 (later the same day), verified on
+Super-Bear.** The first step above was taken first: every CUDA driver call in
+`tessera_nvidia_ptx_launch.cpp` (218 sites) now records its name and `CUresult`
+on failure, the JIT log rides along, and `tessera_nvidia_ptx_last_error()`
+hands it to Python, which appends it to the rc. The next run said what a week
+of `rc=3` had not:
+
+    cuModuleLoadDataEx: CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222) -- JIT log:
+    ptxas application ptx input, line 9; fatal: Unsupported .version 9.4;
+    current version is '9.3'
+
+**The 2026-09-15 toolchain bump conflated the toolkit with the driver.** nvcc
+13.4.59 emits `.version 9.4`, and `gpu_target.py` pinned that as *the* PTX
+ISA — but driver 610.88 answers `cuDriverGetVersion` = **13030 (CUDA 13.3)**,
+and a driver's ptxas refuses any `.version` newer than its own before reading
+an instruction. Every kernel this lane hands to `cuModuleLoadDataEx` is
+JIT-compiled by the driver: the Lion VJP's PTX comes from `nvcc --ptx`
+(`nvidia_training.py`), so it carried 9.4 and could not load; the hand-emitted
+`ptx_emit.py` kernels copied the same pin. The lane was not a memory failure
+and not a descriptor-sizing one — the launcher's rc table simply had one number
+for "any device op", which is what the instrumentation exists to end.
+
+Fix, in the compiler where the claim belongs: `gpu_target` now pins the driver
+separately (`TESSERA_TARGET_CUDA_DRIVER_API = "13.3"`,
+`TESSERA_TARGET_DRIVER_JIT_PTX_ISA = "9.3"`, measured) and derives
+`driver_jit_ptx_isa()` from the loaded driver when there is one (Decision #30),
+capped at the toolkit ISA; `ptx_emit.py` stamps that; and the runtime's one
+registration point (`_register_nvidia_ptx`) re-stamps any PTX handed to the
+JIT — nvcc's included — down to it (`ptx_for_driver_jit`, the Triton
+precedent), recording the version it lowered from. A body that truly needs a
+newer instruction still fails, on that instruction's name. The toolkit pins in
+`cmake/` and `AdapterVersionPin.h` are untouched (they describe the toolkit).
+`test_nvidia_lion_backward_runs_sm120_stop_sign_package` **passes on Super-Bear**;
+the training-series file is 47 passed / 14 skipped. CLAUDE.md's toolchain
+paragraph carries the correction.
+
+**`power_retention`: retired to `archive/examples/advanced/power_retention/`
+(2026-09-17).** The decision the previous paragraph left open. Its op already
+lives in the canonical dialect (`tessera.power_attn` / `tessera.retention`,
+LA-4, with the Python surface and `test_linear_attn.py`), the CUDA kernel was
+a scaffold that never compiled, and `src/extension` was a torch pybind stub
+(Decision #23). The manifest row, the CMake subproject, and every active
+reference (`examples/README.md`, `examples/advanced/README.md`,
+`PROJECT_STRUCTURE.md`, the porting guide, the API spec, three code comments)
+now say where it went; `surface_status.{md,csv}` regenerated. Nothing under
+`examples/advanced/` is built by CMake any more.
+
 ## Duplicate `gpu.kernel` stamp: the Philox generator had it too — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1.
@@ -7705,6 +7752,32 @@ result on that box; the only host that could falsify it is an assertions-ON
 build with the NVIDIA backend configured, which none currently is. Owed: build
 one, or run the Philox lowering through the ROCm-style single-invocation fixture
 pattern (`rocm_generated_kernel_stamps_gpu_kernel_once.mlir`) with NVVM.
+
+**Built, and it found three more (2026-09-17, later the same day).** Tajasarus now
+holds `build-assertions-nvidia/` — the assertions-ON LLVM 23.1.1 with
+`TESSERA_BUILD_NVIDIA_BACKEND=ON`, CUDA off, the same `-fno-rtti -UNDEBUG`
+flags as its ROCm assertions tree — the first assertions-enabled NVIDIA driver
+in the fleet. Its first `check-tessera-nvidia` run aborted three fixtures:
+`GenerateNVIDIAPhiloxKernel` creates `math` ops without declaring the dialect
+("Loading a dialect (math) while in a multi-threaded execution context"),
+`LowerTileToNVIDIAPass` loads `tile` from inside `runOnOperation`
+(`sm120_macro_cta_matmul`), and `philox_distributions.mlir` expected `math.sin`
+before `math.cos` while the driver emitted them the other way round: the
+generator passed two nested `builder.create` calls as arguments to a third, and
+C++ leaves that evaluation order unspecified — the fixture's order held under
+the compiler that built Super-Bear's driver and not under the one that built
+this tree. That is a determinism defect in the generator, fixed by creating each
+operand in its own statement; the same shape may exist in other generators and
+should be read for. The driver also registers `convert-gpu-to-nvvm`,
+`convert-scf-to-cf`, `reconcile-unrealized-casts` and the ConvertToLLVM
+extensions the NVVM lowering promises (arith, cf, func, index, math, memref,
+ub, gpu, nvvm), so the single-invocation stamp fixture
+(`philox_stamps_gpu_kernel_once.mlir`) runs there: **62/62**, and
+`llvm.func @philox_uniform ... attributes {gpu.kernel, nvvm.kernel}` — once.
+Super-Bear rebuilt both trees after these edits: `check-tessera-nvidia` 62/62 in
+`build/` and `build-nvidia-cuda/`, 552 Philox/PTX/training-series unit tests
+passed, `tests/tessera-ir` 493/493 (NDEBUG, so the declarations change nothing
+observable there; the operand-order fix changes IR order only).
 
 ## Princess-Luna red zone: the shared fixes that touch this backend — 2026-09-17
 

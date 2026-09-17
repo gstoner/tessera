@@ -293,6 +293,13 @@ def bivector_langevin_step(
     # Final projection to clean up any float-noise leakage outside the
     # grade-restricted subspace.
     new_state = grade_projection(new_state, grade)
+    if new_state.dtype != state.dtype:
+        # The gradient helpers work in float64, so the numpy path promoted a
+        # float32 state to float64 while every device lane returns float32.
+        # A step must not change the state's dtype by which lane ran it.
+        new_state = Multivector(
+            new_state.coefficients.astype(state.dtype, copy=False), algebra,
+            grades=frozenset({grade}))
     return new_state, next_key
 
 
@@ -458,11 +465,14 @@ def sphere_langevin_step(
     else:
         y = x_arr - float(eta) * grad_tan
     y_norm = float(np.linalg.norm(y))
+    # The numpy path runs in float64; hand back the caller's own dtype so a
+    # float32 chain stays float32 whichever lane took the step.
+    out_dtype = x.dtype if isinstance(x, np.ndarray) else np.float64
     if y_norm < 1e-12:
         # Should not happen for sensible step sizes — defensively
         # return the original state.
-        return x_arr, next_key
-    return y / y_norm, next_key
+        return x_arr.astype(out_dtype, copy=False), next_key
+    return (y / y_norm).astype(out_dtype, copy=False), next_key
 
 
 def sphere_langevin_sample(

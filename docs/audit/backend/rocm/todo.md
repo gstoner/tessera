@@ -7999,6 +7999,74 @@ Parity validated on both owning devices for what did land: the admitted set meas
 
 **A hollow green signal found while collecting that evidence, and open:** on Tajasarus `ninja -C build check-ebm` and `check-clifford` print *nothing* and exit 0 in both trees. It is the documented `check-tessera-rocm` trap again — `lit` is venv-only on these boxes, a non-interactive configure does not see it, and the target degrades to a silent skip — and it means the assertions-enabled host's domain fixture coverage looked green while running zero fixtures. Running lit directly with `BUILD_DIR` set and the toolchain's `FileCheck` on PATH gives the real result (EBM 18/18, Clifford 22/22 and tests/tessera-ir 491/491 in **both** trees, assertions included). Owed: pass `-DTESSERA_LIT=$PWD/.venv/bin/lit` when configuring these trees, so the target either runs or fails instead of skipping.
 
+## gfx1201 parity with gfx1151, and what only gfx1201 can do — the next loop, scoped 2026-09-17
+
+Sync `GFX1201-PARITY-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1 (opens after `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17` lands).
+
+**Measured starting state (2026-09-17, end of the follow-ups loop).**
+`rocm_pipeline.FAMILY_PLUGINS` has 63 families; `promoted_families("gfx1201")`
+names 7 (softmax, reduction, matmul, attention, attention_backward,
+control_state_machine, ebm_affine_langevin). A full `-m "not slow"` sweep skips
+~4500 tests on Tajasarus against ~2570 on Princess-Luna; the ~1900 difference
+is gfx1151 lanes with no gfx1201 proof, every one now skipping with the arch
+named rather than failing. Routes that already run on both chips through
+arch-neutral kernels: the Clifford native GPU route, the EBM cooperative
+Langevin kernel, the hand-written HIPRTC WMMA GEMM (all rungs), the generic
+dynamic HIP lane. gfx1201-only capability that is declared and device-verified
+but consumed by no promoted family: FP8/BF8 OCP WMMA (`gfx1201_wmma_dtypes_20260913`)
+and the 2:4 `tessera_rocm.swmmac` sparse stack (public admission closed). No
+counters on either WSL2 box (`/dev/kfd` absent), so this program is correctness
+promotion only; performance promotion needs a counter-capable host.
+
+**The structural fact that sets the order.** The runtime's generic compiled
+GEMM lane (`rocm_compiled`: `_build_compiled_gemm_hsaco` → the
+`tessera_rocm.wmma_gemm` directive → `generate-wmma-gemm-kernel`) is gfx11-only
+in both its Python gate and its C++ generator (`GenerateWMMAGemmKernel.cpp:1271`
+refuses a non-gfx11 `schedule_arch`), and it is the lane that carries the fused
+epilogue, int8 and int4 storage for the matmul family and everything fused on
+top of it. The *typed* Tile route (`TileToROCM.cpp`) already has the RDNA4
+fragment family (`FragmentFamily::RDNA4WMMA`: 8-element A/B fragments, output
+rows spread over registers and half-waves, k=16 int8 / k=32 fp8 on gfx12, OCP
+FP8), and the scheduled matmul artifact (`scheduled_matmul.py`) already carries
+`bias`, `residual` and `activation` in its Tile IR — but `package_scheduled_matmul`
+admits only the `fp16/fp16/fp32` contract and the gfx1201 package is packaged
+through `_compile_native_tile_ir(family="matmul", staging="register")`. So
+parity for the matmul family is a *routing* slice, not a second generator
+(Decision #31): send `rocm_compiled` on gfx12 through the typed route and widen
+that route's admitted contracts, rather than teaching the legacy generator a
+second layout.
+
+**Slices, in order of leverage; each is device-verified on Tajasarus and
+re-run on Princess-Luna before it is recorded, per family:**
+
+1. **Matmul family on the typed route for gfx1201:** fused epilogue
+   (bias/relu/gelu/silu) and int8/int4 storage through `package_scheduled_matmul`
+   + `TileToROCM`'s RDNA4 family; `_execute_rocm_compiled_gemm` selects that
+   route on gfx12 instead of refusing. Turns today's 23 fused-epilogue/int
+   skips into passes or named defects. Then the legacy generator's gfx11 gate
+   becomes the documented boundary, not the lane's ceiling.
+2. **Scalar and row-program families:** scalar_{unary,binary,compare,logical,
+   bitwise,predicate,where,activation}, loss_*, normalization, rng_philox,
+   indexing_*, position_*, quant_*, reduction_arg, scan, optimizer, fused_silu_mul.
+   No WMMA fragment in any of them; promote the way state machine and affine
+   Langevin promoted today — add to both profiles, run the family's test files
+   on the box, keep what passes, record what does not as a named defect.
+3. **Attention tail:** attention_mla_decode, depth_attention, paged_kv,
+   sparse_block_attention/topk, and the WMMA flash-attention backward
+   generator (has gfx12 mentions, no gfx1201 proof); moe_dispatch and the
+   sequence_* families behind them.
+4. **Spectral and solver families**, gfx1151-only by construction in their
+   generators; and the batched/f32 matmul variants.
+5. **gfx1201-only consumers:** an FP8 matmul family on the OCP WMMA audit and
+   public Graph admission for the 2:4 sparse stack — the first promoted
+   families that gfx1151 cannot have (Decision #29: the declarations exist;
+   they need consumers).
+
+Rule for every slice: `promoted_families` (Python) and the C++ profile in
+`Passes.cpp` move together, the family's tests are the evidence, and a family
+that does not pass on the device is recorded as owed with its failure, never
+promoted to make a count move.
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
@@ -8100,6 +8168,116 @@ past the reason:
   `test_scheduled_cumsum.py` launching an `x86_64_avx512` image on Zen 2 — the
   runtime refused correctly, as a launch result, and the test read it as a
   numerical failure (it skips without AVX-512 now).
+
+**Worked 2026-09-17 (later the same day), each item to its real disposition,
+verified on Tajasarus (gfx1201, RX 9070 XT, ROCm 10.0) and re-run on
+Princess-Luna (gfx1151) for the shared code:**
+
+  1. **Fused epilogue: the "wrong numbers" were the bare matmul.** The compiled
+     16x16x16 lane refuses on gfx1201 (correctly), and
+     `_execute_rocm_compiled_gemm` fell back to the hand-written `rocm_wmma`
+     oracle — which is RDNA4-aware (it specializes the fragment layout at
+     HIPRTC time) but implements the *plain* two-operand f16/bf16 matmul and
+     nothing else. It ignored the `activation` kwarg (relu/gelu/silu rows: the
+     raw product, atol-0.05 mismatches), rejected the bias operand ("matmul
+     requires exactly two operands") and rejected int8 with its own wording.
+     Not a gfx11 kernel on gfx12; a fallback that computes a different program.
+     Fixed in two layers: the oracle now refuses any op with an activation or a
+     third operand (fail closed), and the compiled lane falls back only when
+     the oracle computes the same thing (`_rocm_wmma_oracle_can_stand_in`:
+     plain matmul, two operands, no activation, f16/bf16 storage); otherwise
+     the compiled lane's own refusal propagates, naming `target 'gfx1201'`, and
+     the report hook reads it as a skip. gfx1201: 14 fused-epilogue rows and
+     9 int8/int4 rows now **skip with that reason**; gfx1151 unchanged. The
+     fused epilogue and integer storage on RDNA4 are the compiled lane's
+     16x16x32-layout work, owed under the gfx1201 scheduled-package program,
+     not a launch-path defect.
+  2. **int8 routing:** the same mechanism as 1 (the oracle has no int8);
+     same fix, same skip.
+  3. **KU reference `rc=2`:** `compileVariantKU` lacked the RDNA4
+     specialization the rung-1 variant already had, so HIPRTC refused the
+     gfx11 builtin ("needs target feature wmma-256b-insts") and every KU test
+     read the compile failure as `rc=2`. The KU template now gets the same
+     substitution (8-element fragments, `_gfx12` builtin, per-half-wave K and
+     contiguous output rows). **8/8 KU tests pass on gfx1201**, 8/8 on gfx1151.
+  4. **State machine (5) and EBM affine Langevin (4): promoted on gfx1201.**
+     Both are scalar per-thread families with no WMMA fragment; the refusal
+     was the fail-closed rule, not a defect. `control_state_machine` and
+     `ebm_affine_langevin` are now in the gfx1201 profile of both the C++ pass
+     (`Passes.cpp`) and `rocm_pipeline.promoted_families`, on the evidence the
+     tests then produced: forward + generated backward of the irreducible and
+     data-dependent machines, and the affine core under the bivector and sphere
+     samplers spied to fire on all 8 chain steps, **9/9 on gfx1201** and 9/9
+     on gfx1151. The C++ refusal text ("architecture '<arch>' has no promoted
+     family-plugin profile") is now a recognised host-arch refusal, so a test
+     that drives `tessera-rocm-executable` itself skips on an unpromoted arch.
+     A real defect found beside it and fixed: the numpy fallback of both
+     samplers returned float64 for a float32 state (the gradient helpers work
+     in float64); a step now hands back the caller's dtype whichever lane ran.
+  5. **WMMA compare harness:** the record's "hipFree line" was wrong; the
+     inline kernel used the gfx11 builtin and 16-element fragments. The harness
+     now selects the fragment layout per device pass (`__gfx1201__` → 8-element
+     fragments, `_gfx12` builtin, contiguous output rows) and names the host
+     chip in its compile target. **Passes on gfx1201** and on gfx1151.
+  6. **x86 shared image:** Tajasarus's `build/` was configured with
+     `TESSERA_BUILD_X86_BACKEND=OFF` (only its `build-assertions/` built the
+     backend, and `x86_native._library_path` looks in `build/`). Reconfigured
+     ON, matching the canonical primary configure; **3/3 Zen 5 attention
+     backward tests pass there**.
+  1b. **The same class, in the `slow` lane:** `test_rocm_plugin.py`'s three
+     live tests asserting the `rocm_wmma` tag (the compiled fused-epilogue
+     candidate) had never run on the RDNA4 box — they are `slow`, outside
+     every default sweep — and fail there for the reason in 1: the candidate
+     correctly declines to the reference. They now gate on a gfx11 host
+     (`_rocm_wmma_lane_live`) with the reason; the seven generic-lane tests in
+     the same file keep the wider gate and pass on gfx1201 (25 passed / 10
+     skipped there, 2026-09-17).
+  8. **The `test_dynamic_shape_emit` one-off: `hipGetLastError` is
+     thread-sticky, and the entry read another lane's expected refusal.** In
+     a full sweep (three of them, deterministically) one shape reported
+     `hipGetLastError(): no kernel image is available for execution on the
+     device (209)` for its own image — which, once the emitted entry named
+     its failing call and its artifact carried the arch, was demonstrably
+     `kernel_gfx1201.so` under `TESSERA_ROCM_CHIP=gfx1201` on a one-device
+     host. Alone: 13/13, every time. An ordered bisect (457 earlier files →
+     halves → per-test pairing → primed single-process experiments) landed on
+     `test_autodiff_spectral_target_binding.py::test_rocm_public_compound_spectral_backward_uses_prebuilt_image`:
+     its `hipModuleLoadData` of the gfx1151 spectral package on the gfx1201
+     device fails with 209 *by design* (and the test skips, naming the arch),
+     nothing reads that error, and the fused entry's post-launch
+     `hipGetLastError()` returns it — the launch had succeeded. Reproduced in
+     one process by loading any gfx1151 code object first (`MODE H`), and
+     gone once the entry clears the slot before launching. The wrong-arch
+     fat-binary hypothesis tried first was tested and excluded (a dlopened
+     wrong-arch `.so` does not break later launches). Fixed in every emitted
+     HIP entry that uses `hipGetLastError` as a launch check (`emit/rocm_hip.py`:
+     the fused entry, its bench entry, the four SSM replay entries), with the
+     entry now also naming its failing call and stage (2 argument/alloc, 3
+     H2D, 4 launch, 5 sync, 6 D2H). Two pieces of hygiene landed on the way
+     and stay: the spectral source candidate compiles for the resolved chip
+     (it defaulted to gfx1151), and the ROCm emitter's offload arch no longer
+     falls back to gfx1151 on an exception (Decision #21a). A gate that refused
+     to dlopen the prebuilt gfx1151 image on another chip was tried, shown to
+     be neither the cause nor the fix, and removed (the loader is what the
+     fake-package tests exercise).
+  7. **Upstream SCEV assertion: reduced to 31 lines, and the kernel it comes
+     from is verified correct.** An assertions-ON `opt` and `llvm-reduce`
+     built from the LLVM 23.1.1 sources on Tajasarus
+     (`~/toolchains/llvm-tools-build/bin`, kept) reproduce
+     `SCEVDivision::divide`'s type assertion inside `LoopInterchangePass` on
+     the `product` kernel of the rank-2 dynamic backward and shrink it to a
+     two-deep loop nest storing through a generic pointer cast from address
+     space 5 (`tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll`).
+     `-enable-loopinterchange=0` passes; ROCm 10.0's NDEBUG `opt` compiles it
+     in silence. The NDEBUG check that was owed:
+     `benchmarks/record_runtime_shape_frames.py` executes exactly this kernel
+     and compares against `2*x` — re-run on Princess-Luna, 11/11 cases incl.
+     `dynamic_matrix_backward` at (2,2), (1,4), (0,4)
+     (`runtime_shape_frames_20260908/rocm_gfx1151_revalidation_20260917.json`).
+     `test_dynamic_backward_input_capacity_is_native_guarded[2]` now skips on a
+     host whose LLVM has assertions, with the reason and the reproducer path
+     (`tests/_support/environment.llvm_tool_has_assertions`). Filing it
+     upstream is the owner's call; the reproducer is ready.
 
 ## Two red zones nobody had swept — 2026-09-17
 

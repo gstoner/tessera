@@ -27,8 +27,18 @@ class ROCMOutputLevel(str, Enum):
 
 
 #: The gfx1201 promotions, by name. Every other RDNA4/CDNA arch has none.
-_GFX1201_PROMOTED_FAMILIES = frozenset(
-    {"softmax", "reduction", "matmul", "attention", "attention_backward"})
+_GFX1201_PROMOTED_FAMILIES = frozenset({
+    "softmax", "reduction", "matmul", "attention", "attention_backward",
+    # Two scalar per-thread families with no WMMA fragment in them, promoted
+    # 2026-09-17 on exact-device evidence from Tajasarus (RX 9070 XT):
+    # `test_rocm_state_machine_exec.py` (forward + generated backward of the
+    # irreducible and data-dependent machines) and
+    # `test_rocm_ebm_geo_langevin_compiled.py` (the affine Langevin core under
+    # the bivector and sphere samplers, spied to fire on every chain step).
+    # The C++ pass (`Passes.cpp`, tessera-rocm-executable) carries the same
+    # two names; keep both lists identical.
+    "control_state_machine", "ebm_affine_langevin",
+})
 
 
 def promoted_families(arch: str) -> frozenset[str]:

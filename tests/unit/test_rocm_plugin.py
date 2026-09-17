@@ -40,6 +40,7 @@ def _rocm_flash_live() -> bool:
 
 
 def _rocm_hip_live() -> bool:
+    """A live AMD device with hipcc: the generic HIP lane runs on any arch."""
     if not (shutil.which("hipcc") or os.path.exists("/opt/rocm/bin/hipcc")):
         return False
     try:
@@ -47,6 +48,23 @@ def _rocm_hip_live() -> bool:
         return rt._rocm_wmma_runtime_available()
     except Exception:
         return False
+
+
+def _rocm_wmma_lane_live() -> bool:
+    """A live device whose arch has the `rocm_wmma_gemm` candidate's lane.
+
+    That candidate is the compiled 16x16x16 WMMA GEMM with its fused epilogue
+    -- a gfx11 (RDNA3/3.5) contract, hardware-verified on gfx1151. On gfx1201
+    the lane refuses and the candidate correctly declines to the reference, so
+    a test asserting the `rocm_wmma` tag there asserts a gfx1151 proof on a
+    host that cannot have one (these are `slow`, outside the default sweep,
+    and were first run on the RDNA4 box on 2026-09-17). The generic-lane tests
+    keep the wider gate above: that lane runs on gfx1201.
+    """
+    if not _rocm_hip_live():
+        return False
+    from tests._support.rocm_build import rocm_host_arch
+    return (rocm_host_arch() or "").startswith("gfx11")
 
 
 # ── 1. Registration + emit + decline paths (host-free) ────────────────────────
@@ -306,8 +324,8 @@ def test_wmma_candidate_forwards_shared_raster_contract(monkeypatch):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not _rocm_hip_live(),
-                    reason="live gfx1151 + WMMA GEMM lane required")
+@pytest.mark.skipif(not _rocm_wmma_lane_live(),
+                    reason="live gfx11 (gfx1151) WMMA GEMM lane required; the compiled fused-epilogue lane is gfx11-only")
 @pytest.mark.parametrize("region", _WMMA_CHAINS,
                          ids=lambda r: f"{r.epilogue}")
 def test_live_wmma_candidate_gated(region):
@@ -328,8 +346,8 @@ def test_live_wmma_candidate_gated(region):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not _rocm_hip_live(),
-                    reason="live gfx1151 + WMMA GEMM lane required")
+@pytest.mark.skipif(not _rocm_wmma_lane_live(),
+                    reason="live gfx11 (gfx1151) WMMA GEMM lane required; the compiled fused-epilogue lane is gfx11-only")
 def test_live_arbiter_prefers_wmma_but_falls_to_generic():
     # Default (tier-priority) arbitration: the crown-jewel WMMA wins where it
     # applies; a softmax region it cannot fuse falls to the generic HIP lane.
@@ -352,8 +370,8 @@ def test_live_arbiter_prefers_wmma_but_falls_to_generic():
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not _rocm_hip_live(),
-                    reason="live gfx1151 + WMMA GEMM lane required")
+@pytest.mark.skipif(not _rocm_wmma_lane_live(),
+                    reason="live gfx11 (gfx1151) WMMA GEMM lane required; the compiled fused-epilogue lane is gfx11-only")
 def test_live_escape_hatch_forces_generic_over_crown_jewel():
     # E3: a hand-tuned candidate is never orphaned AND a lower tier can be forced.
     # Force the generic HIP lane on a region WMMA would otherwise win by tier.
@@ -410,8 +428,13 @@ def test_fused_hip_wrapper_checks_every_transfer_and_allocation():
              if "hipMalloc(" in stmt or "hipMemcpy(" in stmt]
     # 5 allocations (A, B, O, bias, residual) + 4 H2D copies + 1 D2H.
     assert len(calls) == 10, calls
+    # Every one goes through TSR_HIP, the one macro that checks the status,
+    # records the failing call's name and text, and jumps to cleanup.
     for call in calls:
-        assert "!=hipSuccess) goto cleanup" in call, call
+        assert "TSR_HIP(" in call, call
+    source = _fused_hip_source()
+    macro = source[source.index("#define TSR_HIP(call)"):].split("\n", 1)[0]
+    assert "!= hipSuccess" in macro and "goto cleanup" in macro and "_note(#call" in macro, macro
 
 
 def test_fused_hip_bench_entry_checks_its_transfers_too():
@@ -478,5 +501,6 @@ def test_fused_hip_wrapper_frees_every_allocation_on_every_path():
 
 def test_fused_hip_wrapper_rejects_null_buffers_before_allocating():
     wrapper = _fused_hip_source()
-    assert wrapper.index("if (!hA||!hB||!hout) goto cleanup;") < \
-        wrapper.index("hipMalloc(&dA")
+    assert wrapper.index("if (!hA||!hB||!hout)") < wrapper.index("hipMalloc(&dA")
+    null_check = wrapper[wrapper.index("if (!hA||!hB||!hout)"):].split("\n", 1)[0]
+    assert "goto cleanup" in null_check, null_check

@@ -168,7 +168,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-09-06 | 10 | ✓ |
 | `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-09-09 | 7 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-09-09 | 7 | ✓ |
-| `compiler/COMPILER_AUDIT.md` | - | 2026-09-07 | 9 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-09-16 | 0 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-09-08 | 8 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 50 | ✓ |
 | `compiler/CORE_SUBSTRATE_VIEW.md` | - | 2026-09-07 | 9 | ✓ |
@@ -182,7 +182,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-09-06 | 10 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 9 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 5 | ✓ |
-| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-09-15 | 1 | ✓ |
+| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-09-16 | 0 | ✓ |
 | `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-09-15 | 1 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-04 | 12 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 45 | ✓ |
@@ -205,9 +205,9 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md` | - | 2026-08-25 | 22 | ✓ |
 | `compiler/compiler_enhancement.md` | - | 2026-09-08 | 8 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-09-04 | 12 | ✓ |
-| `domain/DOMAIN_AUDIT.md` | - | 2026-09-15 | 1 | ✓ |
+| `domain/DOMAIN_AUDIT.md` | - | 2026-09-16 | 0 | ✓ |
 | `domain/EBM_NATIVE_LOOP_ARCHITECTURE.md` | - | 2026-09-16 | 0 | ✓ |
-| `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-09-15 | 1 | ✓ |
+| `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-09-16 | 0 | ✓ |
 | `roadmap/CF_CROSS_ELEMENT_PLAN.md` | - | 2026-06-30 | 78 | ✓ |
 | `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-08-12 | 35 | ✓ |
 | `roadmap/ROADMAP_AUDIT.md` | - | 2026-08-11 | 36 | ✓ |

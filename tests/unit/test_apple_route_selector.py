@@ -337,8 +337,13 @@ def test_strict_loader_rejects_stale_context_reference_and_wrong_domain(tmp_path
 
     wrong = _CONTEXT.as_mapping() | {"physical_device": "Apple M9"}
     path.write_text(json.dumps(_strict_payload(context=wrong)), encoding="utf-8")
-    assert "context_mismatch:physical_device" in load_strict_route_ledger(
-        path, context=_CONTEXT, now=now).rejected
+    # The rejection names both values since 2026-09-16, so match the prefix and
+    # then check it actually reports what changed — a bare field name sent one
+    # session chasing a mismatch it could not see.
+    mismatch = [r for r in load_strict_route_ledger(path, context=_CONTEXT, now=now).rejected
+                if r.startswith("context_mismatch:physical_device")]
+    assert len(mismatch) == 1, mismatch
+    assert "sealed=Apple M9" in mismatch[0] and "live=Apple M1 Max" in mismatch[0], mismatch[0]
 
     payload = _strict_payload()
     decision = payload["decisions"][0]  # type: ignore[index]

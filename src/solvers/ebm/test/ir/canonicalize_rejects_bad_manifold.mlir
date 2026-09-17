@@ -19,7 +19,7 @@ module {
     // CHECK: error: 'tessera_ebm.langevin_step' op attribute 'manifold' failed to satisfy constraint
     // CHECK-SAME: 'euclidean', 'sphere', or 'bivector'
     %step:2 = "tessera_ebm.langevin_step"(%x, %key)
-        { energy_fn = @user_energy_fn,
+        { operandSegmentSizes = array<i32: 1, 1, 0, 0>, energy_fn = @user_energy_fn,
           eta = 0.005 : f64,
           temperature = 1.0 : f64,
           manifold = "banana" }

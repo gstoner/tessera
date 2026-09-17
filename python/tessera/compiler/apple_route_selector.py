@@ -61,6 +61,15 @@ def _command_text(*args: str) -> str:
         return ""
 
 
+def _short(value: object) -> str:
+    """A context value trimmed for a rejection string: digests are recognisable
+    from their first bytes and unreadable in full."""
+    text = "None" if value is None else str(value)
+    if text.startswith("sha256:") and len(text) > 19:
+        return text[:19] + "..."
+    return text if len(text) <= 48 else text[:45] + "..."
+
+
 def _runtime_source_fingerprint() -> str:
     source = (
         Path(__file__).resolve().parents[3]
@@ -496,7 +505,15 @@ def load_strict_route_ledger(
     for field, expected in ctx.as_mapping().items():
         actual = retained.get(field)
         if actual != expected:
-            rejected.append(f"context_mismatch:{field}")
+            # Name both values, not just the field. "context_mismatch:
+            # runtime_fingerprint" tells a reader that the evidence is dead and
+            # nothing about *why*, and the why is the whole question: a rebuilt
+            # runtime, an OS upgrade and a leaked environment override all look
+            # identical through that string. Chasing one of these cost a session
+            # (2026-09-16) precisely because the rejection was silent about the
+            # observed value.
+            rejected.append(
+                f"context_mismatch:{field}(sealed={_short(actual)},live={_short(expected)})")
     measured_at = _parse_utc(payload.get("measured_at"))
     expires_at = _parse_utc(payload.get("expires_at"))
     current = now or datetime.now(timezone.utc)

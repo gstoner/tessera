@@ -297,3 +297,88 @@ def test_bivector_admits_another_grade_and_algebra():
     np.testing.assert_allclose(got[0], want[0], rtol=1e-6, atol=1e-6)
     off_grade = [i for i, g in enumerate(nl.blade_grades()) if g != 1]
     assert np.all(np.asarray(got[0])[:, off_grade] == 0.0)
+
+
+# --- the annealing schedule (a runtime temperature) ------------------------
+
+@pytest.mark.parametrize("anneal", [1.0, 0.5, 0.1])
+@pytest.mark.parametrize("manifold", ["euclidean", "sphere"])
+def test_an_annealed_chain_is_one_compiled_loop(anneal, manifold):
+    """The temperature was a constant attribute, so a K-step loop sampled one
+    temperature and a schedule had to be unrolled into K differently attributed
+    steps. As a runtime operand carried by the loop it stays one function."""
+    rng = np.random.default_rng(int(anneal * 100) + len(manifold))
+    y0 = rng.standard_normal((4, 8)).astype(np.float32)
+    x = rng.standard_normal((4, 8)).astype(np.float32)
+    if manifold == "sphere":
+        y0 = (y0 / np.linalg.norm(y0, axis=1, keepdims=True)).astype(np.float32)
+    key = [0x1234ABCD, 7]
+    got = nl.native_langevin_loop(y0, x, key, eta=0.1, temperature=0.7, steps=5,
+                                  manifold=manifold, anneal=anneal)
+    want = nl.reference_langevin_loop(y0, x, key, eta=0.1, temperature=0.7, steps=5,
+                                      manifold=manifold, anneal=anneal)
+    np.testing.assert_allclose(np.asarray(got[0]), want[0], rtol=1e-5, atol=1e-6)
+    assert list(np.asarray(got[1])) == list(want[1])
+
+
+def test_a_ratio_of_one_reproduces_the_constant_chain_exactly():
+    """The two temperature sources must agree where they describe the same chain,
+    bit for bit — otherwise the runtime path is a second, subtly different
+    integrator rather than a generalization of the first."""
+    rng = np.random.default_rng(31)
+    y0 = rng.standard_normal((6, 16)).astype(np.float32)
+    x = rng.standard_normal((6, 16)).astype(np.float32)
+    key = [99, 3]
+    annealed = nl.native_langevin_loop(y0, x, key, eta=0.05, temperature=0.4, steps=6, anneal=1.0)
+    constant = nl.native_langevin_loop(y0, x, key, eta=0.05, temperature=0.4, steps=6)
+    np.testing.assert_array_equal(np.asarray(annealed[0]), np.asarray(constant[0]))
+    assert list(np.asarray(annealed[1])) == list(np.asarray(constant[1]))
+
+
+def test_a_zero_start_temperature_anneals_to_plain_descent():
+    rng = np.random.default_rng(17)
+    y0 = rng.standard_normal((3, 8)).astype(np.float32)
+    x = rng.standard_normal((3, 8)).astype(np.float32)
+    got = nl.native_langevin_loop(y0, x, [5, 1], eta=0.1, temperature=0.0, steps=4, anneal=0.5)
+    plain = nl.native_langevin_loop(y0, x, [5, 1], eta=0.1, temperature=0.0, steps=4)
+    np.testing.assert_array_equal(np.asarray(got[0]), np.asarray(plain[0]))
+
+
+@pytest.mark.parametrize("anneal", [0.0, -0.5, 1.5])
+def test_a_cooling_ratio_outside_the_unit_interval_is_refused(anneal):
+    """A ratio above 1 heats the chain and a ratio of 0 kills the noise after one
+    step; neither is an annealing schedule, and guessing which was meant is not
+    the compiler's call."""
+    y0 = np.zeros((2, 4), dtype=np.float32)
+    with pytest.raises(ValueError, match="cooling ratio"):
+        nl.langevin_loop_module((2, 4), eta=0.1, temperature=0.5, steps=2, anneal=anneal)
+    with pytest.raises(ValueError, match="cooling ratio"):
+        nl.reference_langevin_loop(y0, y0, [1, 1], eta=0.1, temperature=0.5, steps=2, anneal=anneal)
+
+
+def test_the_temperature_has_exactly_one_source():
+    """Decision #21a on the op itself: the temperature selects which distribution
+    is sampled, so neither absent nor doubled is allowed."""
+    import subprocess
+    from tessera.compiler.scheduled_matmul import find_tessera_opt
+    tool = find_tessera_opt()
+    if tool is None:
+        pytest.skip("tessera-opt required")
+    both = '''module {
+      func.func private @E(%y: tensor<4xf32>) -> tensor<1xf32>
+      func.func @both(%y: tensor<4xf32>, %k: tensor<2xi64>, %t: f32) -> tensor<4xf32> {
+        %n:2 = "tessera_ebm.langevin_step"(%y, %k, %t) {
+            operandSegmentSizes = array<i32: 1, 1, 1, 0>,
+            energy_fn = @E, eta = 1.000000e-01 : f64, temperature = 5.000000e-01 : f64,
+            manifold = "euclidean"
+        } : (tensor<4xf32>, tensor<2xi64>, f32) -> (tensor<4xf32>, tensor<2xi64>)
+        return %n#0 : tensor<4xf32>
+      }
+    }'''
+    result = subprocess.run([str(tool), "-"], input=both, capture_output=True, text=True)
+    assert result.returncode != 0 and "temperature is given twice" in result.stderr
+    neither = both.replace("temperature = 5.000000e-01 : f64,\n            ", "").replace(
+        "array<i32: 1, 1, 1, 0>", "array<i32: 1, 1, 0, 0>").replace(", %t: f32", "").replace(
+        "(%y, %k, %t)", "(%y, %k)").replace(", f32) ->", ") ->")
+    result = subprocess.run([str(tool), "-"], input=neither, capture_output=True, text=True)
+    assert result.returncode != 0 and "requires a temperature" in result.stderr

@@ -9071,6 +9071,20 @@ Follow-up required: the arena pipeline route is NVVM/ROCDL only; the Apple arena
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## Row-program math admission, rotor sampling, ragged batches, annealing — 2026-09-16
+
+Sync `EBM-GA-GAPCLOSE-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+**Follow-up required; nothing in this slice reaches an Apple device.** The CPU-lane work is host-free and does run on the Mac — Clifford `exp`/`log`/`rotor_from_axis`, ragged batches and the annealed Langevin chain all execute through `libtessera_jit` there, and the Mac is where the lit suite (491), EBM lit (18/18) and Clifford lit (22/22) were run. What does not exist is the **Apple package route** for either the Langevin loop or the GA products: the row-program emitter targets `nvidia` and `rocm` only, and the `apple_gpu` GA rows in the proof ladder are still the Python-emitted MSL kernels. The math admission table is per-route by construction, so an Apple route would need its own sweep on Apple hardware before any of its results could be called exact — the sweep on the other two routes is what found a kernel silently shipping no body at all, so this is not a formality.
+
+Also relevant here: `math.tanh` and `math.log1p` left the admitted set on the ROCm route (a dropped kernel body, and `log1p` computed as `log(1 + x)`). Neither says anything about MSL's own library. `philox_msl_source` already exists for the noise, so the Apple side of the loop is a route question, not an algorithm question.
+
+**One Apple defect fixed here, and it was misfiled as an OS regression.** `test_f16_cond_native_selects_branch` has been red since the macOS 27 upgrade and was recorded as "MPSGraph f16 cond off 10%". It is ours. `mpsg_build_branch` built every authored-branch op at the **boundary** dtype, so an f16 cond branch computed its internals in f16 — against this ABI's own policy of a low-precision boundary with f32 internals, which the authored-*package* path in the same file states in its comment. The tell is that the parts were fine and the composition was not: in an f16 cond branch `matmul` is accurate to 2e-3, `sigmoid` to 3e-4, `relu` to 3e-4, and `silu(x @ w)` — exactly those composed — was **34% off**. Writing it as an explicit `mul(m, sigmoid(m))` reproduced the error, so it was not the `silu` node, and the identical graph through the bf16 boundary (which already upcast) stayed inside its boundary rounding. The fix casts once at the branch edges. Standing lesson for this queue: do not file a numeric red as a vendor regression before bisecting our own lanes — check whether the individual ops are accurate and only their composition is wrong, which points at our precision policy, not theirs.
+
+Changing the runtime invalidated both sealed artifacts, as the standing rule says. Both were **re-measured, not re-stamped**: `benchmark_legacy_retune.py --profile extended --runs 5` reproduced all 24 decisions and 6 ineligible rows with identical key sets, selected routes and incumbents (only `runtime_fingerprint` moved), and the e2e packet was re-recorded through `record_apple_packet.py --lane apple_gpu`, which refuses a modified tree and so required the runtime fix to land first. **Still open on this box:** the f16 `sliceTensor` → bf16 rounding, which *is* MPSGraph behaviour on 27.0 and needs a slice route that avoids it.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-math-a-kernel-is-allowed-to-contain-and-four-closed-domain-gaps) and the [device packets](../../../../benchmarks/baselines/row_program_math_precision_20260916/README.md).
+
 ## EBM bivector integrator and the overhead measurement — 2026-09-16
 
 Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

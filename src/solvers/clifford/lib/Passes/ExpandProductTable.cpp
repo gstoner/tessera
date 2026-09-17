@@ -46,11 +46,13 @@
 #include "CayleyTable.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -60,13 +62,25 @@
 
 #include <cstdint>
 #include <functional>
+#include "llvm/ADT/DenseSet.h"
+
+#include <cmath>
 #include <set>
+#include <optional>
 #include <vector>
 
 using namespace mlir;
 
 namespace tessera {
 namespace {
+
+// Defined with the rest of the shared machinery below; used by the geometric
+// product, which appears first in this file.
+static Value emitPerMultivector(PatternRewriter &rewriter, Location loc, RankedTensorType resultTy,
+                                llvm::function_ref<std::vector<Value>(ArrayRef<Value>)> body,
+                                Value shapeSource);
+static void assertShapesAgree(PatternRewriter &rewriter, Location loc, Value a, Value b);
+
 
 constexpr StringRef kGeoProductOpName = "tessera_clifford.geo_product";
 constexpr StringRef kOutputGradesAttr = "tessera.clifford.output_grades";
@@ -117,10 +131,11 @@ struct ExpandProductTablePattern : public RewritePattern {
     auto lhsTy = dyn_cast<RankedTensorType>(lhs.getType());
     auto rhsTy = dyn_cast<RankedTensorType>(rhs.getType());
     if (!lhsTy || !rhsTy) return failure();
-    if (lhsTy.getRank() < 1 || !lhsTy.hasStaticShape() || !rhsTy.hasStaticShape()) {
-      op->emitError("ExpandProductTable: operands must be static ranked "
-                    "tensors of shape [..., ")
-          << dim << "]; dynamic or unranked operands are not lowered";
+    if (lhsTy.getRank() < 1 ||
+        lhsTy.isDynamicDim(lhsTy.getRank() - 1) || rhsTy.isDynamicDim(rhsTy.getRank() - 1)) {
+      op->emitError("ExpandProductTable: operands must be ranked tensors of shape [..., ")
+          << dim << "] whose coefficient axis is static; it indexes the algebra's "
+          << "compile-time table. Leading axes may be dynamic (a ragged batch)";
       return failure();
     }
     if (lhsTy.getShape() != rhsTy.getShape()) {
@@ -203,43 +218,11 @@ struct ExpandProductTablePattern : public RewritePattern {
       return outCoeffs;
     };
 
-    Value resultTensor;
-    if (rank == 1) {
-      // Single multivector: tensor.from_elements %c0, ..., %c{dim-1}.
-      std::vector<Value> outCoeffs = productAt({});
-      resultTensor = rewriter.create<tensor::FromElementsOp>(loc, lhsTy, outCoeffs);
-    } else {
-      // Batched: an scf.for nest over the leading axes carrying the result
-      // tensor; every coefficient (pruned grades included, as zero) is
-      // written, so the result is fully defined.
-      Value init = rewriter.create<tensor::EmptyOp>(loc, lhsTy.getShape(), elemTy);
-      Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
-      Value c1 = rewriter.create<arith::ConstantIndexOp>(loc, 1);
-      std::function<Value(int64_t, SmallVector<Value> &, Value)> buildLoops =
-          [&](int64_t axis, SmallVector<Value> &ivs, Value carried) -> Value {
-        if (axis == rank - 1) {
-          std::vector<Value> outCoeffs = productAt(ivs);
-          Value updated = carried;
-          for (int64_t k = 0; k < dim; ++k) {
-            SmallVector<Value> indices(ivs.begin(), ivs.end());
-            indices.push_back(rewriter.create<arith::ConstantIndexOp>(loc, k));
-            updated = rewriter.create<tensor::InsertOp>(loc, outCoeffs[k], updated, indices);
-          }
-          return updated;
-        }
-        Value ub = rewriter.create<arith::ConstantIndexOp>(loc, lhsTy.getShape()[axis]);
-        auto loop = rewriter.create<scf::ForOp>(loc, c0, ub, c1, ValueRange{carried});
-        OpBuilder::InsertionGuard guard(rewriter);
-        rewriter.setInsertionPointToStart(loop.getBody());
-        ivs.push_back(loop.getInductionVar());
-        Value inner = buildLoops(axis + 1, ivs, loop.getRegionIterArgs()[0]);
-        ivs.pop_back();
-        rewriter.create<scf::YieldOp>(loc, ValueRange{inner});
-        return loop.getResult(0);
-      };
-      SmallVector<Value> ivs;
-      resultTensor = buildLoops(0, ivs, init);
-    }
+    // The same nest the rest of the family emits: one implementation, so a
+    // ragged batch (or a change to how the nest is built) lands everywhere at
+    // once. This used to be a second, static-only copy of it.
+    assertShapesAgree(rewriter, loc, lhs, rhs);
+    Value resultTensor = emitPerMultivector(rewriter, loc, lhsTy, productAt, lhs);
 
     rewriter.replaceOp(op, resultTensor);
     return success();
@@ -261,12 +244,19 @@ static bool readAlgebra(Operation *op, int64_t &p, int64_t &q, int64_t &r) {
   return p >= 0 && q >= 0 && r >= 0 && p + q + r <= 4;
 }
 
-// Validates a `[..., dim]` static float operand and returns its type.
+// Validates a `[..., dim]` float operand and returns its type. Leading axes may
+// be dynamic (a ragged batch); the coefficient axis may not, since it indexes the
+// compile-time Cayley table.
 static RankedTensorType multivectorType(Operation *op, Value v, int64_t dim,
                                         StringRef what) {
   auto ty = dyn_cast<RankedTensorType>(v.getType());
-  if (!ty || ty.getRank() < 1 || !ty.hasStaticShape()) {
-    op->emitError("Clifford lowering: ") << what << " must be a static ranked tensor of shape [..., " << dim << "]";
+  if (!ty || ty.getRank() < 1) {
+    op->emitError("Clifford lowering: ") << what << " must be a ranked tensor of shape [..., " << dim << "]";
+    return nullptr;
+  }
+  if (ty.isDynamicDim(ty.getRank() - 1)) {
+    op->emitError("Clifford lowering: ") << what << " coefficient axis must be static ("
+        << dim << "); it indexes the algebra's compile-time table";
     return nullptr;
   }
   if (ty.getShape().back() != dim) {
@@ -285,13 +275,22 @@ static RankedTensorType multivectorType(Operation *op, Value v, int64_t dim,
 // `body` returns the trailing coefficients (resultTy's last dim of them).
 // Rank 1 uses tensor.from_elements; higher ranks an scf.for nest carrying the
 // result tensor as iter_arg, every coefficient written.
+// `shapeSource` supplies the runtime extent of any dynamic leading axis: a
+// ragged batch has no static bound for its loop, and `tensor.dim` on the operand
+// is the bound. The coefficient axis stays static in every case -- it indexes the
+// compile-time Cayley table, so a dynamic one has no meaning here.
 static Value emitPerMultivector(
     PatternRewriter &rewriter, Location loc, RankedTensorType resultTy,
-    llvm::function_ref<std::vector<Value>(ArrayRef<Value>)> body) {
+    llvm::function_ref<std::vector<Value>(ArrayRef<Value>)> body,
+    Value shapeSource) {
   const int64_t rank = resultTy.getRank();
   if (rank == 1)
     return rewriter.create<tensor::FromElementsOp>(loc, resultTy, body({}));
-  Value init = rewriter.create<tensor::EmptyOp>(loc, resultTy.getShape(), resultTy.getElementType());
+  SmallVector<Value> dynamicSizes;
+  for (int64_t axis = 0; axis < rank; ++axis)
+    if (resultTy.isDynamicDim(axis))
+      dynamicSizes.push_back(rewriter.create<tensor::DimOp>(loc, shapeSource, axis));
+  Value init = rewriter.create<tensor::EmptyOp>(loc, resultTy, dynamicSizes);
   Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
   Value c1 = rewriter.create<arith::ConstantIndexOp>(loc, 1);
   const int64_t trailing = resultTy.getShape().back();
@@ -307,7 +306,9 @@ static Value emitPerMultivector(
       }
       return updated;
     }
-    Value ub = rewriter.create<arith::ConstantIndexOp>(loc, resultTy.getShape()[axis]);
+    Value ub = resultTy.isDynamicDim(axis)
+                   ? rewriter.create<tensor::DimOp>(loc, shapeSource, axis).getResult()
+                   : rewriter.create<arith::ConstantIndexOp>(loc, resultTy.getShape()[axis]).getResult();
     auto loop = rewriter.create<scf::ForOp>(loc, c0, ub, c1, ValueRange{carried});
     OpBuilder::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToStart(loop.getBody());
@@ -331,6 +332,23 @@ static std::vector<Value> coefficientsAt(PatternRewriter &rewriter, Location loc
     out[i] = rewriter.create<tensor::ExtractOp>(loc, v, indices);
   }
   return out;
+}
+
+// A ragged batch has no static extent to compare, so "the operands have the same
+// shape" -- which every bilinear op here requires -- cannot be checked by the
+// types alone. Emit the check instead of assuming it: one `cf.assert` per dynamic
+// axis, hoisted outside the loop nest. Without it a mismatched pair would read
+// past the shorter operand and return a plausible answer.
+static void assertShapesAgree(PatternRewriter &rewriter, Location loc, Value a, Value b) {
+  auto ty = cast<RankedTensorType>(a.getType());
+  for (int64_t axis = 0; axis < ty.getRank(); ++axis) {
+    if (!ty.isDynamicDim(axis)) continue;
+    Value lhs = rewriter.create<tensor::DimOp>(loc, a, axis);
+    Value rhs = rewriter.create<tensor::DimOp>(loc, b, axis);
+    Value same = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, lhs, rhs);
+    rewriter.create<cf::AssertOp>(loc, same,
+        "Clifford: ragged operands must have the same batch extents");
+  }
 }
 
 static int reverseSign(int k) { return ((k * (k - 1)) / 2) % 2 ? -1 : 1; }
@@ -368,6 +386,7 @@ struct BilinearTablePattern : public RewritePattern {
     Location loc = op->getLoc();
     Type elemTy = lhsTy.getElementType();
     Value zero = rewriter.create<arith::ConstantOp>(loc, elemTy, cast<TypedAttr>(rewriter.getZeroAttr(elemTy)));
+    assertShapesAgree(rewriter, loc, lhs, rhs);
     Value result = emitPerMultivector(rewriter, loc, lhsTy, [&](ArrayRef<Value> prefix) {
       auto a = coefficientsAt(rewriter, loc, lhs, dim, prefix);
       auto b = coefficientsAt(rewriter, loc, rhs, dim, prefix);
@@ -384,7 +403,7 @@ struct BilinearTablePattern : public RewritePattern {
           out[entry.result_mask] = fma(rewriter, loc, out[entry.result_mask], a[i], b[j], entry.sign);
         }
       return out;
-    });
+    }, lhs);
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -421,6 +440,7 @@ struct ScalarFormPattern : public RewritePattern {
     Location loc = op->getLoc();
     Type elemTy = lhsTy.getElementType();
     Value zero = rewriter.create<arith::ConstantOp>(loc, elemTy, cast<TypedAttr>(rewriter.getZeroAttr(elemTy)));
+    if (!isNorm) assertShapesAgree(rewriter, loc, lhs, rhs);
     Value result = emitPerMultivector(rewriter, loc, resultTy, [&](ArrayRef<Value> prefix) {
       auto a = coefficientsAt(rewriter, loc, lhs, dim, prefix);
       auto b = isNorm ? a : coefficientsAt(rewriter, loc, rhs, dim, prefix);
@@ -437,7 +457,190 @@ struct ScalarFormPattern : public RewritePattern {
         acc = rewriter.create<math::SqrtOp>(loc, clipped);
       }
       return std::vector<Value>{acc};
-    });
+    }, lhs);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+// The closed-form exponential and logarithm on Cl(3, 0) -- the pair that puts
+// rotor sampling on the group instead of the Lie algebra (GA/EBM review, "exp/log
+// of multivectors"). Both match `python/tessera/ga/ops.py` term for term.
+//
+//   exp(B) for a *pure bivector* B: cos|B| + sin|B| * B / |B|, with the
+//   reference's own zero-bivector guard (divide by 1 below 1e-12, so exp(0) = 1).
+//   log(a) on Cl(3, 0): (theta/2) * Bhat where theta/2 = atan2(|<a>_2|, <a>_0),
+//   carried on the grade-2 part, with the same guard.
+//
+// The general power series the reference falls back to is deliberately *not*
+// emitted. For `exp` it is 24 geometric products -- about 1500 unrolled mul-adds
+// per multivector at dim 8 -- and the reference only takes that branch when the
+// operand is not a pure bivector, which is a property of the *value*. A compiler
+// cannot read the value, so rather than guess (or emit both branches and select),
+// `exp` refuses unless the operand is *provably* a pure bivector: produced by
+// `tessera_clifford.grade` keeping grade 2 only. That is Decision #30's "derive,
+// don't ask" -- and it is exactly the shape rotor sampling has, since the tangent
+// element is grade-projected before it is exponentiated. The diagnostic says so.
+//
+// `log` needs no such proof: on Cl(3, 0) the reference takes the closed form for
+// every input, whatever its grades, so the lowering is unconditional there.
+static std::optional<std::set<int64_t>> provableGrades(Value v) {
+  Operation *def = v.getDefiningOp();
+  if (!def || def->getName().getStringRef() != "tessera_clifford.grade") return std::nullopt;
+  auto grades = def->getAttrOfType<ArrayAttr>("grades");
+  if (!grades) return std::nullopt;
+  std::set<int64_t> out;
+  for (Attribute g : grades) {
+    auto value = dyn_cast<IntegerAttr>(g);
+    if (!value) return std::nullopt;
+    out.insert(value.getInt());
+  }
+  return out;
+}
+
+struct ExpLogPattern : public RewritePattern {
+  bool isLog;
+  ExpLogPattern(MLIRContext *ctx, StringRef name, bool isLog)
+      : RewritePattern(name, /*benefit=*/1, ctx), isLog(isLog) {}
+
+  LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+    int64_t p, q, r;
+    if (!readAlgebra(op, p, q, r)) return failure();
+    if (p != 3 || q != 0 || r != 0)
+      return op->emitError("Clifford lowering: closed-form ")
+             << (isLog ? "log" : "exp") << " is defined for Cl(3, 0) only, not Cl("
+             << p << ", " << q << ", " << r << "); the reference's power-series fallback has no "
+             << "native lowering (it is 24 geometric products per multivector)";
+    const int64_t dim = 8;
+    Value in = op->getOperand(0);
+    auto ty = multivectorType(op, in, dim, "operand");
+    if (!ty) return failure();
+    if (op->getResult(0).getType() != ty) {
+      op->emitError("Clifford lowering: result type must match the operand's ") << ty;
+      return failure();
+    }
+    if (!isLog) {
+      auto grades = provableGrades(in);
+      if (!grades || *grades != std::set<int64_t>{2})
+        return op->emitError(
+            "Clifford lowering: exp admits an operand that is provably a pure bivector -- the "
+            "result of tessera_clifford.grade keeping grade 2 only. The reference uses the "
+            "closed form exactly for that case and a 24-term power series otherwise, and which "
+            "branch applies is a property of the value, not of the type; project the operand "
+            "through `grade` (grades = [2]) if that is what it is");
+    }
+    Type elemTy = ty.getElementType();
+    Location loc = op->getLoc();
+    // Grade-2 blades of Cl(3, 0): the masks with exactly two generators.
+    SmallVector<int64_t, 3> bivectorMasks;
+    for (int64_t mask = 0; mask < dim; ++mask)
+      if (tessera::clifford::gradeOfMask(mask) == 2) bivectorMasks.push_back(mask);
+    auto constant = [&](double v) {
+      return rewriter.create<arith::ConstantOp>(loc, elemTy,
+                                               cast<TypedAttr>(rewriter.getFloatAttr(elemTy, v)));
+    };
+    Value zero = constant(0.0), one = constant(1.0), tiny = constant(1e-12);
+    auto table = tessera::clifford::buildCayleyTable(p, q, r);
+    llvm::SmallDenseSet<int64_t, 4> isBivector(bivectorMasks.begin(), bivectorMasks.end());
+    Value result = emitPerMultivector(rewriter, loc, ty, [&](ArrayRef<Value> prefix) {
+      auto a = coefficientsAt(rewriter, loc, in, dim, prefix);
+      // |<a>_2| through the same scalar form `clifford.norm` lowers to --
+      // sqrt(max(<B, reverse(B)>_0, 0)) over the Cayley table, on the grade-2
+      // coefficients -- rather than a hand-rolled sum of squares, so the two ops
+      // agree by construction instead of by an argument in a comment.
+      Value sum = zero;
+      for (int64_t i = 0; i < dim; ++i) {
+        auto entry = table[i][i];
+        if (entry.sign == 0 || entry.result_mask != 0) continue;
+        Value coefficient = isBivector.contains(i) ? a[i] : zero;
+        sum = fma(rewriter, loc, sum, coefficient, coefficient,
+                  entry.sign * reverseSign(tessera::clifford::gradeOfMask(i)));
+      }
+      Value norm = rewriter.create<math::SqrtOp>(loc, rewriter.create<arith::MaximumFOp>(loc, sum, zero));
+      // The reference's guard: divide by 1 when the bivector part underflows, so
+      // exp(0) = 1 and log(scalar) = 0 rather than NaN.
+      Value big = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGT, norm, tiny);
+      Value safe = rewriter.create<arith::SelectOp>(loc, big, norm, one);
+      std::vector<Value> out(dim, zero);
+      if (isLog) {
+        Value half = rewriter.create<math::Atan2Op>(loc, norm, a[0]);
+        Value scale = rewriter.create<arith::DivFOp>(loc, half, safe);
+        for (int64_t mask : bivectorMasks)
+          out[mask] = rewriter.create<arith::MulFOp>(loc, a[mask], scale);
+      } else {
+        Value scale = rewriter.create<arith::DivFOp>(loc, rewriter.create<math::SinOp>(loc, norm), safe);
+        for (int64_t i = 0; i < dim; ++i) out[i] = rewriter.create<arith::MulFOp>(loc, a[i], scale);
+        out[0] = rewriter.create<arith::AddFOp>(loc, rewriter.create<math::CosOp>(loc, norm), out[0]);
+      }
+      return out;
+    }, in);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+// rotor_from_axis(B, angle) = cos(angle/2) - sin(angle/2) * <B>_2 / |<B>_2|.
+// This is exp(-angle/2 * Bhat) with the exponential already resolved: the angle
+// is an attribute, so both transcendentals are compile-time constants and the
+// emitted code is a reciprocal and a scale. Matches `ga.ops.rotor_from_axis`
+// (whose exp_mv takes its closed-form branch for a pure bivector) for both signs
+// of the angle, since cos is even and sin(|t|)*sign(t) == sin(t).
+struct RotorFromAxisPattern : public RewritePattern {
+  RotorFromAxisPattern(MLIRContext *ctx)
+      : RewritePattern("tessera_clifford.rotor_from_axis", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+    int64_t p, q, r;
+    if (!readAlgebra(op, p, q, r)) return failure();
+    if (p != 3 || q != 0 || r != 0)
+      return op->emitError("Clifford lowering: rotor_from_axis is defined for Cl(3, 0) only, not Cl(")
+             << p << ", " << q << ", " << r << ")";
+    auto angleAttr = op->getAttrOfType<FloatAttr>("angle");
+    if (!angleAttr)
+      return op->emitError("Clifford lowering: rotor_from_axis requires the `angle` attribute; a "
+                           "runtime angle is a scaled bivector through tessera_clifford.exp");
+    const int64_t dim = 8;
+    Value in = op->getOperand(0);
+    auto ty = multivectorType(op, in, dim, "axis");
+    if (!ty) return failure();
+    if (op->getResult(0).getType() != ty) {
+      op->emitError("Clifford lowering: result type must match the axis' ") << ty;
+      return failure();
+    }
+    Type elemTy = ty.getElementType();
+    Location loc = op->getLoc();
+    const double half = angleAttr.getValueAsDouble() / 2.0;
+    auto constant = [&](double v) {
+      return rewriter.create<arith::ConstantOp>(loc, elemTy,
+                                               cast<TypedAttr>(rewriter.getFloatAttr(elemTy, v)));
+    };
+    Value zero = constant(0.0), cosHalf = constant(std::cos(half)), sinHalf = constant(std::sin(half));
+    auto table = tessera::clifford::buildCayleyTable(p, q, r);
+    SmallVector<int64_t, 3> bivectorMasks;
+    for (int64_t mask = 0; mask < dim; ++mask)
+      if (tessera::clifford::gradeOfMask(mask) == 2) bivectorMasks.push_back(mask);
+    llvm::SmallDenseSet<int64_t, 4> isBivector(bivectorMasks.begin(), bivectorMasks.end());
+    Value result = emitPerMultivector(rewriter, loc, ty, [&](ArrayRef<Value> prefix) {
+      auto a = coefficientsAt(rewriter, loc, in, dim, prefix);
+      Value sum = zero;
+      for (int64_t i = 0; i < dim; ++i) {
+        auto entry = table[i][i];
+        if (entry.sign == 0 || entry.result_mask != 0) continue;
+        Value coefficient = isBivector.contains(i) ? a[i] : zero;
+        sum = fma(rewriter, loc, sum, coefficient, coefficient,
+                  entry.sign * reverseSign(tessera::clifford::gradeOfMask(i)));
+      }
+      Value norm = rewriter.create<math::SqrtOp>(loc, rewriter.create<arith::MaximumFOp>(loc, sum, zero));
+      // No zero-magnitude guard on purpose: a degenerate axis has no rotor, and
+      // returning the identity would be a wrong answer. The frontend refuses it.
+      Value scale = rewriter.create<arith::DivFOp>(loc, sinHalf, norm);
+      std::vector<Value> out(dim, zero);
+      out[0] = cosHalf;
+      for (int64_t mask : bivectorMasks)
+        out[mask] = rewriter.create<arith::NegFOp>(
+            loc, rewriter.create<arith::MulFOp>(loc, a[mask], scale));
+      return out;
+    }, in);
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -530,7 +733,12 @@ struct UnaryMapPattern : public RewritePattern {
       SmallVector<AffineMap> maps{rewriter.getMultiDimIdentityMap(rank), bladeMap, bladeMap,
                                   rewriter.getMultiDimIdentityMap(rank)};
       SmallVector<utils::IteratorType> iterators(rank, utils::IteratorType::parallel);
-      Value init = rewriter.create<tensor::EmptyOp>(loc, ty.getShape(), elemTy);
+      // A ragged batch needs its runtime extents here too, or tensor.empty has
+      // fewer sizes than the type has dynamic dims.
+      SmallVector<Value> dynamicSizes;
+      for (int64_t axis = 0; axis < rank; ++axis)
+        if (ty.isDynamicDim(axis)) dynamicSizes.push_back(rewriter.create<tensor::DimOp>(loc, in, axis));
+      Value init = rewriter.create<tensor::EmptyOp>(loc, ty, dynamicSizes);
       auto generic = rewriter.create<linalg::GenericOp>(
           loc, TypeRange{ty}, ValueRange{in, keepMask, negMask}, ValueRange{init}, maps, iterators,
           [&](OpBuilder &b, Location l, ValueRange args) {
@@ -550,7 +758,7 @@ struct UnaryMapPattern : public RewritePattern {
         out[target[i]] = sign[i] > 0 ? a[i] : rewriter.create<arith::NegFOp>(loc, a[i]).getResult();
       }
       return out;
-    });
+    }, in);
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -622,12 +830,24 @@ struct CliffordExpandProductTablePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, linalg::LinalgDialect, math::MathDialect, scf::SCFDialect,
+    registry.insert<arith::ArithDialect, cf::ControlFlowDialect, linalg::LinalgDialect, math::MathDialect, scf::SCFDialect,
                     tensor::TensorDialect>();
   }
 
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
+    // A refused op used to leave this pass with exit status 0: the diagnostic was
+    // printed, the op stayed in place, and a consumer shelling out to the driver
+    // saw success. That is the fail-open exit status the EBM lowering was fixed
+    // for on 2026-09-16, and it is the same defect here. Count the errors any
+    // pattern emits and fail the pass, without claiming that every surviving
+    // Clifford op is an error -- `rotor_sandwich` survives by design when the
+    // expansion is not requested, and the field ops have no lowering yet.
+    unsigned errors = 0;
+    ScopedDiagnosticHandler counter(ctx, [&](Diagnostic &diagnostic) {
+      if (diagnostic.getSeverity() == DiagnosticSeverity::Error) ++errors;
+      return failure();  // not handled here: let the real handler print it
+    });
     RewritePatternSet patterns(ctx);
     patterns.add<ExpandProductTablePattern>(ctx);
     if (expandRotorSandwich) patterns.add<RotorSandwichExpandPattern>(ctx);
@@ -640,7 +860,10 @@ struct CliffordExpandProductTablePass
     patterns.add<UnaryMapPattern>(ctx, "tessera_clifford.conjugate", Unary::Conjugate);
     patterns.add<UnaryMapPattern>(ctx, "tessera_clifford.hodge_star", Unary::HodgeStar);
     patterns.add<UnaryMapPattern>(ctx, "tessera_clifford.grade", Unary::Grade);
-    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns)))) {
+    patterns.add<ExpLogPattern>(ctx, "tessera_clifford.exp", /*isLog=*/false);
+    patterns.add<ExpLogPattern>(ctx, "tessera_clifford.log", /*isLog=*/true);
+    patterns.add<RotorFromAxisPattern>(ctx);
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))) || errors) {
       signalPassFailure();
     }
   }

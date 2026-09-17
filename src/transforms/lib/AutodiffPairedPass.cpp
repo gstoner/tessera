@@ -1814,6 +1814,29 @@ public:
           !fn->hasAttr("tessera.autodiff.role"))
         targets.push_back(fn);
     });
+    // A function that already has its partner is not a *fresh* reverse request.
+    // Leaving an existing partner alone is right for a plain re-pairing run
+    // (2026-09-16: before that, one unpaired function dragged every paired one
+    // back through the pass and MLIR rejected the second definition). But a
+    // product request — native VJP storage child, typed export, checkpoint — asks
+    // this pass to derive something from a pairing it is about to perform, and
+    // there is nothing to derive it from when the pairing already happened.
+    // Before the partner-skip, such a replay failed loudly because MLIR rejected
+    // the duplicate; afterwards it exited 0 having emitted no product at all.
+    // CI cannot see either outcome: its unit lane has no tessera-opt, so the test
+    // that covers this skips there.
+    const bool wantsProduct =
+        emitStorageChild || !exportProduct.empty() || !checkpointProduct.empty();
+    if (wantsProduct) {
+      for (auto fn : targets)
+        if (module.lookupSymbol<mlir::func::FuncOp>((fn.getName() + "__bwd").str())) {
+          module.emitError("autodiff product request needs a fresh reverse pairing: @")
+              << fn.getName() << " already has its partner @" << fn.getName()
+              << "__bwd, so there is no pairing left for this pass to derive the "
+                 "product from; request the product on the unpaired module";
+          return signalPassFailure();
+        }
+    }
     if (!exportProduct.empty() && (emitStorageChild || !checkpointProduct.empty() || targets.size()!=1 ||
         (exportProduct!="forward" && exportProduct!="backward"))) {
       module.emitError("typed product export requires one fresh reverse request and one forward/backward role");

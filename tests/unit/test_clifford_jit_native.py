@@ -154,6 +154,15 @@ def test_rotor_sandwich_preserves_vector_norm():
     assert not np.allclose(rotated, v)
 
 
+def _pure_bivector(shape, seed):
+    """Only grade 2 populated: what `exp`'s closed form admits."""
+    out = np.zeros(shape, dtype=np.float32)
+    rng = np.random.default_rng(seed)
+    for mask in (3, 5, 6):
+        out[..., mask] = rng.standard_normal(shape[:-1]).astype(np.float32)
+    return out
+
+
 def test_family_launch_consumer():
     from tessera import runtime as rt
     from tessera.compiler.clifford_jit import package_clifford_cpu
@@ -161,6 +170,11 @@ def test_family_launch_consumer():
     result = rt.launch(package_clifford_cpu("wedge", (3, 8)), (a, b))
     assert result["ok"] and result["execution_kind"] == "native_cpu"
     np.testing.assert_allclose(np.asarray(result["output"]), _reference_op("wedge", a, b), rtol=1e-5, atol=1e-5)
+    # `exp` used to be the negative case here: declared with no lowering. It has
+    # one since 2026-09-16, so the negative case moves to a field op, which still
+    # has none.
+    exp_result = rt.launch(package_clifford_cpu("exp", (3, 8)), (_pure_bivector((3, 8), 4),))
+    assert exp_result["ok"] and exp_result["execution_kind"] == "native_cpu"
     with pytest.raises(Exception, match="no lowering"):
-        package_clifford_cpu("exp", (3, 8))
+        package_clifford_cpu("ext_deriv", (3, 8))
 

@@ -279,6 +279,35 @@ def native_storage_target() -> tuple[str, str] | None:
     return None
 
 
+def native_storage_lane_available(backend: str) -> bool:
+    """Whether this host's *toolchain* can serialize a native GPU storage package
+    for ``backend`` — `ptxas` (and libdevice) for ``nvidia``, a ROCm root with
+    `ld.lld` for ``rocm``.
+
+    `native_storage_target` answers "which lane can this host evaluate"; this
+    answers "can it evaluate *this* lane", which is what a test with a
+    hard-coded backend needs. Without it such a test does not skip on a host
+    lacking that toolchain — it *fails*, deep inside an `mlir-opt` serialization,
+    reporting a missing toolchain as a broken compiler. Five tests did exactly
+    that on both ROCm boxes and the reds sat on main, invisible to CI (whose unit
+    lane has neither toolchain).
+    """
+    if backend == "nvidia":
+        return nvidia_cuda_tool("ptxas") is not None
+    if backend == "rocm":
+        roots = [os.environ.get("ROCM_PATH", "")] + ["/opt/rocm", "/opt/rocm/core", "/opt/rocm/core-10.0"]
+        return any(root and (Path(root) / "llvm/bin/ld.lld").is_file() for root in roots)
+    return False
+
+
+def require_native_storage_lane(backend: str) -> None:
+    """Skip unless this host can serialize native GPU storage for ``backend``."""
+    import pytest
+
+    if not native_storage_lane_available(backend):
+        pytest.skip(f"this host has no {backend} device toolchain to package for")
+
+
 @dataclass(frozen=True)
 class CompilerToolchain:
     """Discovered host compiler tools; requirement checks skip consistently."""

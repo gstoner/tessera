@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-16
 audit_role: theme
 ---
 
@@ -7,6 +7,33 @@ audit_role: theme
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
+
+## Recorded debt — `NativeTapeToGPUPass` owner markers (2026-09-16)
+
+The EBM native-loop work named this as debt to record here, and the record was
+owed rather than written. `src/transforms/lib/NativeTapeToGPUPass.cpp` admits a
+module by matching one of a fixed list of *owner markers*
+(`tessera.ssd.source`, `tessera.ann.source`, the AD product pair,
+`tessera.native_result_program`, `tessera.source_state`). Each new resident
+producer has added one more, and the EBM Langevin loop would have been the
+sixth — it took the row-program route instead, so the marker was never added,
+but the shape of the pass is unchanged: admission is a closed enumeration of
+who happened to arrive first, and a new producer's only way in is to edit the
+list.
+
+Fold it into one *isolated buffer program* admission with a required
+`tessera.source_kind` attribute naming the producer, so the pass checks the
+program's shape (isolated, static f32/f64 buffers, bounded for/if control) and
+the attribute carries provenance for diagnostics and packets. That is one
+admission rule plus a declared key, instead of five special cases, and it is
+Decision #29-clean because the key has a consumer: the pass reads it, and the
+packets already record which producer a package came from.
+
+Not urgent and not a correctness defect — the enumeration fails *closed*, which
+is why it has been survivable. It is recorded because the next producer will
+otherwise add a seventh case, and because "record it in the compiler audit" was
+an outstanding action item from
+[the EBM native loop architecture](../domain/EBM_NATIVE_LOOP_ARCHITECTURE.md) §6.
 
 ## Archive reconciliation — 2026-09-04
 

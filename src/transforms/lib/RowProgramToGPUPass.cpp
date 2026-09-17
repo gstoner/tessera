@@ -56,45 +56,157 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <string>
 
 using namespace mlir;
 
-// The emitter's numeric contract is IEEE arithmetic. `math.sqrt` on the NVVM
-// route lowers to libdevice's __nv_sqrtf, which takes the approximate path
-// (MUFU.SQRT, 1 ulp) because MLIR's pipeline leaves the NVVM reflect flag for
-// precise sqrt unset (measured 2026-09-16: one row of the row-normalization
-// proof differed by 1 ulp on sm_120 only). convert-gpu-to-nvvm marks the LLVM
-// math intrinsics illegal, so on NVIDIA the kernel calls libdevice's
+// The emitter's numeric contract is IEEE arithmetic, and on both device routes
+// a `math.*` op reaches a vendor library whose default accuracy is a property
+// of that library, not of this pass. `math.sqrt` is the measured instance:
+// on the NVVM route it lowers to libdevice's __nv_sqrtf, whose precise branch
+// is gated on the __CUDA_PREC_SQRT reflect value MLIR's pipeline never sets, so
+// it ran MUFU.SQRT and one row of the row-normalization proof differed by 1 ulp
+// on sm_120 only (2026-09-16). convert-gpu-to-nvvm marks the LLVM math
+// intrinsics illegal, so on NVIDIA the kernel calls libdevice's
 // rounding-explicit __nv_fsqrt_rn / __nv_dsqrt_rn (correctly rounded whatever
 // the reflect flags say); on ROCm llvm.intr.sqrt lowers to AMDGPU's correctly
 // rounded expansion.
-static void pinSqrt(gpu::GPUFuncOp kernel, StringRef backend) {
-  SmallVector<math::SqrtOp> ops;
-  kernel->walk([&](math::SqrtOp op) { ops.push_back(op); });
-  if (ops.empty()) return;
-  auto gpuModule = kernel->getParentOfType<gpu::GPUModuleOp>();
-  for (math::SqrtOp op : ops) {
-    OpBuilder b(op);
-    Value r;
-    if (backend == "nvidia") {
-      bool f64 = op.getType().isF64();
-      StringRef name = f64 ? "__nv_dsqrt_rn" : "__nv_fsqrt_rn";
-      auto fn = gpuModule.lookupSymbol<LLVM::LLVMFuncOp>(name);
-      if (!fn) {
-        OpBuilder mb(gpuModule.getBodyRegion());
-        fn = LLVM::LLVMFuncOp::create(mb, op.getLoc(), name,
-                                      LLVM::LLVMFunctionType::get(op.getType(), {op.getType()}));
-      }
-      r = LLVM::CallOp::create(b, op.getLoc(), fn, ValueRange{op.getOperand()}).getResult();
-    } else {
-      r = LLVM::SqrtOp::create(b, op.getLoc(), op.getType(), op.getOperand());
-    }
-    op.replaceAllUsesWith(r);
-    op.erase();
+//
+// Every *other* math op on these routes is subject to the same vendor default,
+// so admitting one silently would let a result be called exact that nobody
+// measured. The table below is therefore the admission list, and it is closed:
+// an op that is not in it refuses with a diagnostic rather than passing through
+// (Decision #21a -- the accuracy of a result is a semantic property of this
+// lane, whose whole claim is bit-exactness against the host fold). Each
+// admitted op carries a *plan*, and the plan is what the kernel declares:
+//
+//   rounding_explicit -- realized as a correctly-rounded call, so the result is
+//                        exact whatever the vendor default is;
+//   bit_exact         -- sign/bit manipulation, exact on every route by
+//                        construction;
+//   measured          -- the vendor default, admitted because
+//                        `benchmarks/record_row_program_math_precision.py` has
+//                        measured it against the host on the owning device.
+//
+// The declaration has a consumer: the emitted kernel carries
+// `tessera.row_program.math` (one `"<op>:<plan>"` entry per distinct math op),
+// the recorder asserts that every `measured` op in a program it packages has a
+// row in the audit packet, and `tests/unit/test_row_program_math_admission.py`
+// gates this table against the Python mirror. Adding an op means measuring it
+// on all three devices first, not editing the table.
+namespace {
+
+enum class MathPlan { RoundingExplicit, BitExact, Measured };
+
+struct MathAdmission {
+  const char *op;    // MLIR op name
+  MathPlan plan;
+  const char *nv32;  // rounding-explicit libdevice entry (RoundingExplicit only)
+  const char *nv64;
+};
+
+// Keep in sync with `native_row_program.ADMITTED_MATH` (drift-gated).
+static const MathAdmission kMathAdmission[] = {
+    {"math.sqrt", MathPlan::RoundingExplicit, "__nv_fsqrt_rn", "__nv_dsqrt_rn"},
+    {"math.absf", MathPlan::BitExact, nullptr, nullptr},
+    {"math.exp", MathPlan::Measured, nullptr, nullptr},
+    {"math.log", MathPlan::Measured, nullptr, nullptr},
+    {"math.cos", MathPlan::Measured, nullptr, nullptr},
+};
+
+// Refused on purpose, with what the audit measured (2026-09-16, gfx1151):
+//
+//   math.tanh  -- lowers to `__ocml_tanh_f32`, and the packager's binary
+//                 serialization ships a kernel whose whole body is one
+//                 `s_endpgm`: the launch succeeds and writes nothing, so every
+//                 element read back is whatever was in the buffer (measured as
+//                 all zeros). The same module serialized with `format=isa`
+//                 contains the correct 40-instruction implementation, so the
+//                 body is lost in the binary path, not in this lowering.
+//                 `build_native_gpu_storage` now refuses such an image outright;
+//                 this op stays out of the table until it ships real code.
+//   math.log1p -- lowers to `__ocml_log1p_f32` and the device computes
+//                 log(1 + x): log1p(-1e-6) came back -1.0132795e-06 against the
+//                 host's -1.0000005e-06. Accuracy near zero is the only reason
+//                 log1p exists, so admitting it would admit a trap. Use
+//                 log(1 + x) explicitly if that is what you want.
+
+static const char *planName(MathPlan plan) {
+  switch (plan) {
+  case MathPlan::RoundingExplicit: return "rounding_explicit";
+  case MathPlan::BitExact: return "bit_exact";
+  case MathPlan::Measured: return "measured";
   }
+  return "unknown";
+}
+
+static const MathAdmission *admissionFor(StringRef name) {
+  for (const MathAdmission &entry : kMathAdmission)
+    if (name == entry.op) return &entry;
+  return nullptr;
+}
+
+}  // namespace
+
+// Replace each rounding-explicit op with its correctly-rounded realization and
+// collect the plan the kernel declares. Refuses any math op outside the table.
+static LogicalResult planMath(gpu::GPUFuncOp kernel, StringRef backend,
+                             SmallVectorImpl<Attribute> &declared) {
+  SmallVector<Operation *> ops;
+  kernel->walk([&](Operation *op) {
+    if (op->getName().getDialectNamespace() == "math") ops.push_back(op);
+  });
+  MLIRContext *ctx = kernel.getContext();
+  llvm::SmallSetVector<StringRef, 8> seen;
+  auto gpuModule = kernel->getParentOfType<gpu::GPUModuleOp>();
+  for (Operation *op : ops) {
+    StringRef name = op->getName().getStringRef();
+    const MathAdmission *entry = admissionFor(name);
+    if (!entry)
+      return op->emitError("row program: `")
+             << name
+             << "` is not in the emitter's math admission table, so its accuracy on this "
+                "device route has not been measured; measure it with "
+                "benchmarks/record_row_program_math_precision.py on every owning device and "
+                "add it to kMathAdmission (RowProgramToGPUPass.cpp) before using it here";
+    if (seen.insert(name)) {
+      std::string text = (name + ":" + planName(entry->plan)).str();
+      declared.push_back(StringAttr::get(ctx, text));
+    }
+    if (entry->plan != MathPlan::RoundingExplicit || backend != "nvidia") continue;
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return op->emitError("row program: rounding-explicit math op must be unary");
+    Type ty = op->getResult(0).getType();
+    const char *symbol = ty.isF64() ? entry->nv64 : entry->nv32;
+    if (!ty.isF32() && !ty.isF64())
+      return op->emitError("row program: rounding-explicit math op must be f32 or f64, got ") << ty;
+    auto fn = gpuModule.lookupSymbol<LLVM::LLVMFuncOp>(symbol);
+    if (!fn) {
+      OpBuilder mb(gpuModule.getBodyRegion());
+      fn = LLVM::LLVMFuncOp::create(mb, op->getLoc(), symbol,
+                                    LLVM::LLVMFunctionType::get(ty, {ty}));
+    }
+    OpBuilder b(op);
+    Value r = LLVM::CallOp::create(b, op->getLoc(), fn, ValueRange{op->getOperand(0)}).getResult();
+    op->getResult(0).replaceAllUsesWith(r);
+    op->erase();
+  }
+  // ROCm keeps math.sqrt as the LLVM intrinsic, which is its correctly rounded
+  // expansion; nothing to rewrite there.
+  if (backend != "nvidia") {
+    SmallVector<math::SqrtOp> sqrts;
+    kernel->walk([&](math::SqrtOp op) { sqrts.push_back(op); });
+    for (math::SqrtOp op : sqrts) {
+      OpBuilder b(op);
+      Value r = LLVM::SqrtOp::create(b, op.getLoc(), op.getType(), op.getOperand());
+      op.replaceAllUsesWith(r);
+      op.erase();
+    }
+  }
+  return success();
 }
 
 
@@ -666,9 +778,13 @@ struct Emitter {
       storeResult(s, pointers[entry.getNumArguments() + r], terminator);
       if (broken) return failure();
     }
-    pinSqrt(kernel, backend);
+    SmallVector<Attribute> declaredMath;
+    // planMath names every refusal itself; record that so the pass's
+    // no-diagnostic fallback does not fire on top of it.
+    if (failed(planMath(kernel, backend, declaredMath))) { broken = true; return failure(); }
     // Replace the module contents with the kernel module.
     module->setAttrs((*lowered)->getAttrs());
+    module->setAttr("tessera.row_program.math", ArrayAttr::get(module.getContext(), declaredMath));
     module.getBody()->clear();
     module.getBody()->getOperations().splice(module.getBody()->end(), lowered->getBody()->getOperations());
     return success();

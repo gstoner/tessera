@@ -17,7 +17,7 @@ module {
   // still has no integrator behind a valid enum value.
   func.func @bivector_without_status(%y: tensor<4x8xf32>, %key: tensor<2xi64>) -> tensor<4x8xf32> {
     %r:2 = "tessera_ebm.langevin_step"(%y, %key)
-        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "bivector",
+        { operandSegmentSizes = array<i32: 1, 1, 0, 0>, energy_fn = @E, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "bivector",
           grade = 2 : i64, algebra = [3, 0, 0] }
         : (tensor<4x8xf32>, tensor<2xi64>) -> (tensor<4x8xf32>, tensor<2xi64>)
     return %r#0 : tensor<4x8xf32>
@@ -26,13 +26,13 @@ module {
   // declare it cannot observe the entry precondition, so it is refused.
   func.func @sphere_without_status(%y: tensor<4x8xf32>, %key: tensor<2xi64>) -> tensor<4x8xf32> {
     %r:2 = "tessera_ebm.langevin_step"(%y, %key)
-        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "sphere" }
+        { operandSegmentSizes = array<i32: 1, 1, 0, 0>, energy_fn = @E, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "sphere" }
         : (tensor<4x8xf32>, tensor<2xi64>) -> (tensor<4x8xf32>, tensor<2xi64>)
     return %r#0 : tensor<4x8xf32>
   }
   func.func @no_gradient(%y: tensor<4x8xf32>, %key: tensor<2xi64>) -> tensor<4x8xf32> {
     %r:2 = "tessera_ebm.langevin_step"(%y, %key)
-        { energy_fn = @Missing, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "euclidean" }
+        { operandSegmentSizes = array<i32: 1, 1, 0, 0>, energy_fn = @Missing, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "euclidean" }
         : (tensor<4x8xf32>, tensor<2xi64>) -> (tensor<4x8xf32>, tensor<2xi64>)
     return %r#0 : tensor<4x8xf32>
   }

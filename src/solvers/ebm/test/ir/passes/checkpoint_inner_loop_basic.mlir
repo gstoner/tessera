@@ -16,7 +16,7 @@ module {
     %final:2 = scf.for %t = %c0 to %T step %c1
         iter_args(%y = %y0, %key = %key0) -> (tensor<8x4xf32>, tensor<2xi64>) {
       %step:2 = "tessera_ebm.langevin_step"(%y, %key)
-          { energy_fn = @user_E,
+          { operandSegmentSizes = array<i32: 1, 1, 0, 0>, energy_fn = @user_E,
             eta = 0.05 : f64,
             temperature = 1.0 : f64,
             manifold = "euclidean" }

@@ -32,7 +32,7 @@ module {
   // CHECK-NOT: tessera_ebm.
   func.func @sample(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>, %key: tensor<2xi64>) -> (tensor<4x8xf32>, tensor<2xi64>) {
     %r:2 = "tessera_ebm.langevin_step"(%y, %key, %x)
-        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "euclidean" }
+        { operandSegmentSizes = array<i32: 1, 1, 0, 1>, energy_fn = @E, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "euclidean" }
         : (tensor<4x8xf32>, tensor<2xi64>, tensor<4x8xf32>) -> (tensor<4x8xf32>, tensor<2xi64>)
     return %r#0, %r#1 : tensor<4x8xf32>, tensor<2xi64>
   }
@@ -45,7 +45,7 @@ module {
   // CHECK-NOT: tessera_ebm.
   func.func @descent(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>, %key: tensor<2xi64>) -> tensor<4x8xf32> {
     %r:2 = "tessera_ebm.langevin_step"(%y, %key, %x)
-        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.0 : f64, manifold = "euclidean" }
+        { operandSegmentSizes = array<i32: 1, 1, 0, 1>, energy_fn = @E, eta = 0.1 : f64, temperature = 0.0 : f64, manifold = "euclidean" }
         : (tensor<4x8xf32>, tensor<2xi64>, tensor<4x8xf32>) -> (tensor<4x8xf32>, tensor<2xi64>)
     return %r#0 : tensor<4x8xf32>
   }

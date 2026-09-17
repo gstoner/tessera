@@ -678,12 +678,20 @@ CLIFFORD_JIT_OPS: dict[str, tuple[int, bool]] = {
     "inner": (2, True), "norm": (1, True), "rotor_sandwich": (2, False),
     "reverse": (1, False), "grade_involute": (1, False), "conjugate": (1, False),
     "hodge_star": (1, False), "grade": (1, False),
+    # Closed-form transcendentals on Cl(3, 0) -- the pair that puts rotor
+    # sampling on the group instead of the Lie algebra. `exp` admits a pure
+    # bivector only (checked below); `log` admits any Cl(3, 0) multivector,
+    # matching the reference, which takes the closed form for all of them.
+    "exp": (1, False), "log": (1, False),
+    # The rotor constructor: one operand (the axis) plus a compile-time angle.
+    "rotor_from_axis": (1, False),
 }
 
 
 def jit_clifford_op(
     op: str, *operands: np.ndarray, algebra: tuple[int, int, int] = (3, 0, 0),
-    grades: Sequence[int] | None = None,
+    grades: Sequence[int] | None = None, angle: float | None = None,
+    ragged: bool = False,
 ) -> np.ndarray:
     """One Clifford op on ``[..., 2**n]`` multivector tensors through the
     MLIR/LLVM lane (W6.4 batched native GA, 2026-09-16).
@@ -725,19 +733,79 @@ def jit_clifford_op(
         attrs += f", {key} = [" + ", ".join(map(str, wanted)) + "]"
     elif op == "grade":
         raise TesseraJitError("grade requires the grades to keep")
-    t = "tensor<" + "x".join(str(s) for s in shape) + "xf32>"
+    if op == "rotor_from_axis":
+        if angle is None:
+            raise TesseraJitError("rotor_from_axis requires the angle; a runtime angle is a scaled "
+                                  "bivector through exp")
+        rotor_angle = float(angle)
+        if (p, q, r) != (3, 0, 0):
+            raise TesseraJitError("rotor_from_axis is defined for Cl(3, 0) only")
+        bivector = [m for m in range(dim) if bin(m).count("1") == 2]
+        if np.any(np.all(arrays[0][..., bivector] == 0, axis=-1)):
+            # The reference raises here too: an axis with no grade-2 part has no
+            # rotor, and returning the identity for it would be a wrong answer.
+            raise TesseraJitError("rotor_from_axis: the axis must have a non-zero grade-2 part")
+    elif angle is not None:
+        raise TesseraJitError(f"angle applies to rotor_from_axis, not {op}")
+    if op in ("exp", "log"):
+        if (p, q, r) != (3, 0, 0):
+            raise TesseraJitError(f"clifford {op} has a closed form on Cl(3, 0) only; the "
+                                  "reference's power-series fallback has no native lowering")
+        if op == "exp":
+            # The pass admits an operand it can *prove* is a pure bivector, because
+            # the reference switches to a 24-term series otherwise and that choice
+            # depends on the value. The lane therefore projects to grade 2 in IR and
+            # refuses an input that is not already one, so the emitted program and
+            # the reference never take different branches for the same input.
+            bivector = [m for m in range(dim) if bin(m).count("1") == 2]
+            other = [m for m in range(dim) if m not in bivector]
+            if np.any(arrays[0][..., other] != 0):
+                raise TesseraJitError(
+                    "clifford exp admits a pure bivector (grade 2 only); the reference falls back "
+                    "to a 24-term power series for anything else and that branch has no native "
+                    "lowering. Project the input with grade(x, 2) if that is what you meant")
     out_shape = (*shape[:-1], 1) if scalar else shape
-    t_out = "tensor<" + "x".join(str(s) for s in out_shape) + "xf32>"
+    if ragged:
+        # Leading axes dynamic, coefficient axis static: one compiled module serves
+        # every batch length, since `compile_module` keys on the module text. The
+        # coefficient axis indexes the compile-time Cayley table and stays static.
+        if len(shape) < 2:
+            raise TesseraJitError("ragged needs a batched operand ([..., dim] with rank >= 2)")
+        def _spelling(dims):
+            return "tensor<" + "x".join(["?"] * (len(dims) - 1) + [str(dims[-1])]) + "xf32>"
+        t, t_out = _spelling(shape), _spelling(out_shape)
+    else:
+        t = "tensor<" + "x".join(str(s) for s in shape) + "xf32>"
+        t_out = "tensor<" + "x".join(str(s) for s in out_shape) + "xf32>"
     sym = f"tessera_jit_clifford_{op}"
     args = ", ".join(f"%a{i}: {t}" for i in range(arity))
     names = ", ".join(f"%a{i}" for i in range(arity))
     types = ", ".join([t] * arity)
-    mlir = (
-        f"func.func @{sym}({args}) -> {t_out} {{\n"
-        f"  %0 = \"tessera_clifford.{op}\"({names}) {{{attrs}}} : ({types}) -> {t_out}\n"
-        f"  return %0 : {t_out}\n"
-        f"}}\n"
-    )
+    if op == "rotor_from_axis":
+        mlir = (
+            f"func.func @{sym}({args}) -> {t_out} {{\n"
+            f"  %0 = \"tessera_clifford.rotor_from_axis\"({names}) "
+            f"{{{attrs}, angle = {rotor_angle:.17e} : f64}} : ({types}) -> {t_out}\n"
+            f"  return %0 : {t_out}\n"
+            f"}}\n"
+        )
+    elif op == "exp":
+        # grade(x, 2) then exp: the projection is what makes the operand provably a
+        # pure bivector for the pass, and a no-op for the values this lane admits.
+        mlir = (
+            f"func.func @{sym}({args}) -> {t_out} {{\n"
+            f"  %g = \"tessera_clifford.grade\"({names}) {{{attrs}, grades = [2]}} : ({types}) -> {t}\n"
+            f"  %0 = \"tessera_clifford.exp\"(%g) {{{attrs}}} : ({t}) -> {t_out}\n"
+            f"  return %0 : {t_out}\n"
+            f"}}\n"
+        )
+    else:
+        mlir = (
+            f"func.func @{sym}({args}) -> {t_out} {{\n"
+            f"  %0 = \"tessera_clifford.{op}\"({names}) {{{attrs}}} : ({types}) -> {t_out}\n"
+            f"  return %0 : {t_out}\n"
+            f"}}\n"
+        )
     handle = compile_module(mlir)
     try:
         out = np.empty(out_shape, dtype=np.float32)

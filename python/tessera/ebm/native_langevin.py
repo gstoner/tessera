@@ -130,23 +130,50 @@ def energy_function_text(energy: str, rows: int, features: int) -> str:
 
 def langevin_loop_module(shape, *, eta: float, temperature: float, steps: int,
                          manifold: str = "euclidean", energy: str = "quadratic",
-                         grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA) -> str:
+                         grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA,
+                         anneal: float | None = None) -> str:
     """The Graph-level program: an energy + a K-step Langevin loop.
 
     "sphere" carries the integrator's per-row i32 status word through the loop
     (OR of every step: bit 0 entry precondition violated, bit 1 retraction
     underflow) and returns it as a third result.
+
+    ``anneal`` turns the chain into an *annealed* one: the temperature of step
+    ``k`` is ``temperature * anneal**k``, computed in IR inside the loop and
+    handed to the step as its ``temperature_value`` operand. With a constant
+    attribute the whole loop samples one temperature, and a schedule would have
+    to be unrolled into K differently attributed steps; as a runtime value the
+    annealed chain stays one loop, and one kernel on the device route.
     """
     rows, features = _check(shape, eta, temperature, steps)
     _check_kinds(energy, manifold, (rows, features), grade, algebra)
+    if anneal is not None and not (0.0 < float(anneal) <= 1.0):
+        raise ValueError("anneal must be a cooling ratio in (0, 1]")
     st = f"tensor<{rows}x{features}xf32>"
     en = f"tensor<{rows}xf32>"
     stt = f"tensor<{rows}xi32>"
-    attrs = (f"energy_fn = @energy, eta = {float(eta)!r} : f64, temperature = {float(temperature)!r} : f64, "
-             f'manifold = "{manifold}"')
+    annealed = anneal is not None
+    attrs = f"energy_fn = @energy, eta = {float(eta)!r} : f64, "
+    if not annealed:
+        attrs += f"temperature = {float(temperature)!r} : f64, "
+    attrs += f'manifold = "{manifold}"'
     if manifold == "bivector":
         attrs += (f", grade = {int(grade)} : i64, "
                   f"algebra = [{', '.join(str(int(v)) for v in algebra)}]")
+    # The generic op form needs the operand segments spelled out once the op has
+    # an optional operand ahead of its variadic captures; the declarative form
+    # infers them, but this emitter uses the generic one throughout.
+    attrs += f", operandSegmentSizes = array<i32: 1, 1, {1 if annealed else 0}, 1>"
+    # The temperature is carried by the loop and cooled by one multiply per step:
+    # T_0 = temperature, T_{k+1} = T_k * anneal. Not `powf` of the loop index --
+    # the row-program emitter admits no `math.powf` (its accuracy on the device
+    # routes is unmeasured), and a carried multiply needs no transcendental at
+    # all, so the same schedule reaches the GPU lane.
+    cool = "" if anneal is None else (
+        f"      %ratio = arith.constant {float(anneal)!r} : f32\n"
+        f"      %cooled = arith.mulf %temp, %ratio : f32\n")
+    tv = "%temp, " if annealed else ""
+    tvt = "f32, " if annealed else ""
     common = ("    %c0 = arith.constant 0 : index\n"
               "    %c1 = arith.constant 1 : index\n"
               f"    %steps = arith.constant {steps} : index\n")
@@ -154,21 +181,31 @@ def langevin_loop_module(shape, *, eta: float, temperature: float, steps: int,
         loop = (f"  func.func @tessera_jit_ebm_langevin_loop(%y0: {st}, %x: {st}, %key0: tensor<2xi64>) -> ({st}, tensor<2xi64>, {stt}) {{\n"
                 + common +
                 f"    %ok = arith.constant dense<0> : {stt}\n"
-                f"    %r:3 = scf.for %t = %c0 to %steps step %c1 iter_args(%y = %y0, %key = %key0, %status = %ok) -> ({st}, tensor<2xi64>, {stt}) {{\n"
-                f'      %n:3 = "tessera_ebm.langevin_step"(%y, %key, %x) {{ {attrs} }}\n'
-                f"          : ({st}, tensor<2xi64>, {st}) -> ({st}, tensor<2xi64>, {stt})\n"
-                f"      %acc = arith.ori %status, %n#2 : {stt}\n"
-                f"      scf.yield %n#0, %n#1, %acc : {st}, tensor<2xi64>, {stt}\n"
+                + (f"    %temp0 = arith.constant {float(temperature)!r} : f32\n" if annealed else "")
+                + f"    %r:{4 if annealed else 3} = scf.for %t = %c0 to %steps step %c1 iter_args(%y = %y0, %key = %key0, %status = %ok"
+                + (", %temp = %temp0" if annealed else "")
+                + f") -> ({st}, tensor<2xi64>, {stt}" + (", f32" if annealed else "") + ") {\n"
+                + f'      %n:3 = "tessera_ebm.langevin_step"(%y, %key, {tv}%x) {{ {attrs} }}\n'
+                + f"          : ({st}, tensor<2xi64>, {tvt}{st}) -> ({st}, tensor<2xi64>, {stt})\n"
+                + f"      %acc = arith.ori %status, %n#2 : {stt}\n"
+                + cool
+                + "      scf.yield %n#0, %n#1, %acc" + (", %cooled" if annealed else "")
+                + f" : {st}, tensor<2xi64>, {stt}" + (", f32" if annealed else "") + "\n"
                 "    }\n"
                 f"    return %r#0, %r#1, %r#2 : {st}, tensor<2xi64>, {stt}\n"
                 "  }\n")
     else:
         loop = (f"  func.func @tessera_jit_ebm_langevin_loop(%y0: {st}, %x: {st}, %key0: tensor<2xi64>) -> ({st}, tensor<2xi64>) {{\n"
-                + common +
-                f"    %r:2 = scf.for %t = %c0 to %steps step %c1 iter_args(%y = %y0, %key = %key0) -> ({st}, tensor<2xi64>) {{\n"
-                f'      %n:2 = "tessera_ebm.langevin_step"(%y, %key, %x) {{ {attrs} }}\n'
-                f"          : ({st}, tensor<2xi64>, {st}) -> ({st}, tensor<2xi64>)\n"
-                f"      scf.yield %n#0, %n#1 : {st}, tensor<2xi64>\n"
+                + common
+                + (f"    %temp0 = arith.constant {float(temperature)!r} : f32\n" if annealed else "")
+                + f"    %r:{3 if annealed else 2} = scf.for %t = %c0 to %steps step %c1 iter_args(%y = %y0, %key = %key0"
+                + (", %temp = %temp0" if annealed else "")
+                + f") -> ({st}, tensor<2xi64>" + (", f32" if annealed else "") + ") {\n"
+                + f'      %n:2 = "tessera_ebm.langevin_step"(%y, %key, {tv}%x) {{ {attrs} }}\n'
+                + f"          : ({st}, tensor<2xi64>, {tvt}{st}) -> ({st}, tensor<2xi64>)\n"
+                + cool
+                + "      scf.yield %n#0, %n#1" + (", %cooled" if annealed else "")
+                + f" : {st}, tensor<2xi64>" + (", f32" if annealed else "") + "\n"
                 "    }\n"
                 f"    return %r#0, %r#1 : {st}, tensor<2xi64>\n"
                 "  }\n")
@@ -203,12 +240,17 @@ def native_quadratic_energy(y, x, *, energy: str = "quadratic") -> np.ndarray:
 
 def native_langevin_loop(y0, x, key: Sequence[int], *, eta: float, temperature: float, steps: int,
                          manifold: str = "euclidean", energy: str = "quadratic",
-                         grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA):
+                         grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA,
+                         anneal: float | None = None):
     """K Langevin steps as one compiled function.
 
     Returns ``(y_K, next_key)``, or ``(y_K, next_key, status)`` on the sphere
     (per-row i32: 0 ok; 1 entry |x| != 1; 2 retraction underflow, state kept).
     ``key`` is two int64 words (S4 RNGKey words).
+
+    ``anneal`` is a cooling ratio: step ``k`` runs at ``temperature * anneal**k``,
+    computed inside the compiled loop and passed to the step as its runtime
+    temperature. Still one compiled function and one loop.
     """
     _require()
     y0 = np.ascontiguousarray(y0, dtype=np.float32); x = np.ascontiguousarray(x, dtype=np.float32)
@@ -218,7 +260,8 @@ def native_langevin_loop(y0, x, key: Sequence[int], *, eta: float, temperature: 
     _check_kinds(energy, manifold, shape, grade, algebra)
     key_arr = np.ascontiguousarray(np.asarray(key, dtype=np.int64).reshape(2))
     handle = jb.compile_module(langevin_loop_module(shape, eta=eta, temperature=temperature, steps=steps,
-                                                    manifold=manifold, energy=energy, grade=grade, algebra=algebra))
+                                                    manifold=manifold, energy=energy, grade=grade,
+                                                    algebra=algebra, anneal=anneal))
     try:
         out = np.empty(shape, np.float32)
         next_key = np.empty((2,), np.int64)
@@ -291,7 +334,8 @@ SPHERE_UNDERFLOW = 1.0e-12   # on |y|^2
 
 def reference_langevin_loop(y0, x, key: Sequence[int], *, eta: float, temperature: float, steps: int,
                             manifold: str = "euclidean", energy: str = "quadratic",
-                            grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA):
+                            grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA,
+                            anneal: float | None = None):
     """The declared policy in numpy, bit-for-bit for the noise and the
     euclidean step; next key = (key[0], key[1] + 1) per step.
 
@@ -306,11 +350,26 @@ def reference_langevin_loop(y0, x, key: Sequence[int], *, eta: float, temperatur
     shape = _check(y.shape, eta, temperature, steps)
     _check_kinds(energy, manifold, shape, grade, algebra)
     k = [int(v) for v in np.asarray(key, dtype=np.int64).reshape(2)]
-    scale = math.sqrt(2.0 * float(eta) * float(temperature))
+    if anneal is not None and not (0.0 < float(anneal) <= 1.0):
+        raise ValueError("anneal must be a cooling ratio in (0, 1]")
+    # The emitted schedule, step for step: the temperature is carried and cooled
+    # by one f32 multiply per step (not pow of the index), and the noise scale is
+    # sqrt(max(2*eta*T, 0)) in f32 -- the same order of operations the kernel uses.
+    carried = np.float32(temperature)
+    ratio = None if anneal is None else np.float32(anneal)
+    def _scale(t) -> float:
+        if anneal is None:
+            return math.sqrt(2.0 * float(eta) * float(temperature))
+        scaled = np.float32(np.float32(2.0 * float(eta)) * t)
+        return float(np.sqrt(np.maximum(scaled, np.float32(0.0))))
+    scale = _scale(carried)
     status = np.zeros(shape[0], np.int32)
-    for _ in range(steps):
+    for step in range(steps):
+        scale = _scale(carried)
+        if ratio is not None:
+            carried = np.float32(carried * ratio)
         grad = reference_gradient(y, x, energy=energy)
-        z = _philox_normals(shape, k[0], k[1]) if scale > 0.0 else None
+        z = _philox_normals(shape, k[0], k[1]) if (scale > 0.0 or anneal is not None) else None
         if manifold == "euclidean":
             y = (y - np.float32(eta) * grad).astype(np.float32)
             if z is not None:
@@ -381,7 +440,8 @@ _DEVICE_PIPELINE = ("--tessera-autodiff-paired", "--tessera-ebm-canonicalize", "
 
 def langevin_device_source(shape, *, eta: float, temperature: float, steps: int, backend: str, compiler,
                            manifold: str = "euclidean", energy: str = "quadratic",
-                           grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA):
+                           grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA,
+                           anneal: float | None = None):
     """Run the whole chain in one tessera-opt invocation and attach the tensor contract."""
     from tessera.compiler.native_gpu_tensor import TensorSpec
     from tessera.compiler.native_row_program import MAX_FEATURES, row_program_device_source
@@ -398,7 +458,7 @@ def langevin_device_source(shape, *, eta: float, temperature: float, steps: int,
         specs = specs + (TensorSpec("status", "int32", (rows,), True),)
     source, full = row_program_device_source(
         langevin_loop_module((rows, feats), eta=eta, temperature=temperature, steps=steps, manifold=manifold,
-                             energy=energy, grade=grade, algebra=algebra), entry=DEVICE_ENTRY,
+                             energy=energy, grade=grade, algebra=algebra, anneal=anneal), entry=DEVICE_ENTRY,
         specs=specs, rows=rows, backend=backend, compiler=compiler, passes=_DEVICE_PIPELINE)
     if "tessera_ebm." in source.split("gpu.func @row_program(", 1)[1]:
         raise ValueError("langevin device route: an EBM op survived the lowering")
@@ -407,12 +467,13 @@ def langevin_device_source(shape, *, eta: float, temperature: float, steps: int,
 
 def bind_ebm_langevin_gpu(shape, *, eta, temperature, steps, compiler, llvm_bin, backend, chip,
                           manifold: str = "euclidean", energy: str = "quadratic",
-                          grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA):
+                          grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA,
+                          anneal: float | None = None):
     """Package the loop for (backend, chip) and return its native tensor call."""
     from tessera.compiler.native_row_program import bind_row_program
     source, specs = langevin_device_source(shape, eta=eta, temperature=temperature, steps=steps,
                                            backend=backend, compiler=compiler, manifold=manifold, energy=energy,
-                                           grade=grade, algebra=algebra)
+                                           grade=grade, algebra=algebra, anneal=anneal)
     return bind_row_program(source, specs, compiler=compiler, llvm_bin=llvm_bin, backend=backend, chip=chip)
 
 
@@ -422,30 +483,35 @@ _PROGRAM_LOCK = threading.Lock()
 
 def ebm_langevin_program(shape, *, eta, temperature, steps, backend, chip, compiler, llvm_bin,
                          manifold: str = "euclidean", energy: str = "quadratic",
-                         grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA):
+                         grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA,
+                         anneal: float | None = None):
     """Compile (once per process) and return the device program for the loop."""
     from tessera.compiler.native_host_program import HostArrayProgram, ensure_device_context
     key = (tuple(shape), float(eta), float(temperature), int(steps), backend, chip, str(compiler), str(llvm_bin),
-           manifold, energy, int(grade), tuple(int(v) for v in algebra))
+           manifold, energy, int(grade), tuple(int(v) for v in algebra),
+           None if anneal is None else float(anneal))
     with _PROGRAM_LOCK:
         program = _PROGRAMS.get(key)
         if program is None:
             ensure_device_context(backend)
             binding = bind_ebm_langevin_gpu(shape, eta=eta, temperature=temperature, steps=steps,
                                             compiler=compiler, llvm_bin=llvm_bin, backend=backend, chip=chip,
-                                            manifold=manifold, energy=energy, grade=grade, algebra=algebra)
+                                            manifold=manifold, energy=energy, grade=grade, algebra=algebra,
+                                            anneal=anneal)
             program = _PROGRAMS[key] = HostArrayProgram(binding, f"ebm langevin loop ({energy}, {manifold})")
         return program
 
 
 def native_langevin_loop_device(y0, x, key, *, eta, temperature, steps, backend, chip, compiler, llvm_bin,
                                 manifold: str = "euclidean", energy: str = "quadratic",
-                                grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA):
+                                grade: int = BIVECTOR_GRADE, algebra=BIVECTOR_ALGEBRA,
+                                anneal: float | None = None):
     """K Langevin steps as one device launch; returns (y_K, next_key) or, on
     the sphere, (y_K, next_key, status)."""
     program = ebm_langevin_program(np.asarray(y0).shape, eta=eta, temperature=temperature, steps=steps,
                                    backend=backend, chip=chip, compiler=compiler, llvm_bin=llvm_bin,
-                                   manifold=manifold, energy=energy, grade=grade, algebra=algebra)
+                                   manifold=manifold, energy=energy, grade=grade, algebra=algebra,
+                                   anneal=anneal)
     return tuple(program.run(y0, x, np.asarray(key, dtype=np.int64).reshape(2)))
 
 

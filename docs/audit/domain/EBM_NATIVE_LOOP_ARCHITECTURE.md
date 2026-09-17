@@ -12,7 +12,9 @@ acceptance from the [GA/EBM review](GA_EBM_ARCHITECTURE_REVIEW.md) §"an
 energy is a typed program". Sync keys `EBM-NATIVE-QUADRATIC-2026-09-16`
 (CPU lane), `EBM-NATIVE-GPU-2026-09-16` (device lane) and
 `EBM-NONLINEAR-MANIFOLD-2026-09-16` (N1 nonlinear energies, M1 sphere) and
-`EBM-BIVECTOR-OVERHEAD-2026-09-16` (M2 bivector, and the overhead measurement).
+`EBM-BIVECTOR-OVERHEAD-2026-09-16` (M2 bivector, and the overhead measurement) and
+`EBM-GA-GAPCLOSE-2026-09-16` (the annealing schedule, the opaque-adjoint refusal,
+and the emitter's math admission table).
 Written after the CPU-lane slice landed (`tests/unit/test_ebm_native_langevin.py`)
 and after driving that same loop as far as the existing device routes take it;
 every "today" claim below is a measured stop, not a reading of prose.
@@ -455,6 +457,81 @@ as `unverified`. Second, **on two of the three devices the cooperative kernel
 is the only compiled Langevin lane at all** — gfx1201 has no promoted
 Python-emitted EBM family and sm_120 never had one — so only gfx1151 can run
 the comparison. No lane is promoted by this packet.
+
+## 5b. An annealing schedule, and the math a kernel may contain (2026-09-16)
+
+Two things this document had left as properties of the *attribute set* turned out
+to be capability limits.
+
+**The temperature was a constant attribute**, so a K-step loop sampled one
+temperature and an annealed chain — the standard EBM sampler — had to be unrolled
+into K differently attributed steps, or driven a step at a time from the host,
+which is the per-step launch this whole route exists to avoid. `langevin_step`
+now takes the temperature either as that attribute or as a runtime operand,
+exactly one of the two (Decision #21a: it selects which distribution is sampled,
+so it may be neither defaulted nor doubled). The annealed chain is one loop and
+one cooperative kernel, with the temperature carried in registers beside the
+state and both key words — `iter_args -> (f32, i64, i64, f32)`.
+
+The schedule is a **carried multiply**, not `powf` of the loop index. That is the
+numerically cleaner form, and it is also the only one that reaches the GPU: the
+emitter's math admission table (below) refuses `math.powf`, so a `powf` schedule
+would compile on the CPU lane and refuse on the device — the two lanes would
+diverge in capability rather than in results. A cooling ratio of 1.0 reproduces
+the constant-temperature chain **bit for bit** on both lanes, which is what makes
+the runtime path a generalization of the attribute path rather than a second,
+slightly different integrator. The attribute keeps its one advantage: at a
+constant T = 0 no noise op is emitted at all, which a runtime temperature cannot
+know.
+
+**The emitter admitted any `math.*` op that reached it.** Only `sqrt` had been
+measured against the host (§6), and the pin that fixed it was written as if
+`sqrt` were special. It was not: every `math.*` op on both device routes reaches
+a vendor library whose default accuracy is a property of that library. The
+emitter now carries a closed admission table in which each op declares *why* its
+result can be trusted — `rounding_explicit`, `bit_exact`, or `measured` — and
+refuses anything else by name. The kernel carries the plan it took
+(`tessera.row_program.math`), the recorder refuses a kernel whose declaration
+disagrees with the table, and a unit test holds the Python mirror against the C++
+table so an op cannot be admitted in one place and left out of the sweep in the
+other.
+
+Measured on all three devices at 16384 points per input domain
+([packets](../../../benchmarks/baselines/row_program_math_precision_20260916/README.md)):
+
+| op | plan | gfx1151 | gfx1201 | sm_120 |
+|---|---|---|---|---|
+| `sqrt` | rounding_explicit | 0 ulp | 0 ulp | **0 ulp** |
+| `absf` | bit_exact | 0 | 0 | 0 |
+| `cos` | measured | 1 | 1 | 1 |
+| `exp` | measured | 2 | 2 | 3 |
+| `log` | measured | 3 | 3 | 3 |
+
+`sqrt` reading 0 on sm_120 is §6's pin working. These bounds do not weaken the
+packets recorded earlier in this stream, which stated zero error for *their*
+inputs and remain true at that scope; this is the wider statement those rows
+never made.
+
+**Two ops left the table with the measurement that removed them.** `math.tanh`
+lowers to `__ocml_tanh_f32`, and the packaged image's kernel body was **one
+`s_endpgm`**: the launch succeeded, wrote nothing, and every element read back as
+zero — an answer-shaped result. The identical module serialized with
+`format=isa` contains the correct 40-instruction implementation, so the body is
+lost in the *binary* path, not the lowering. `build_native_gpu_storage` now
+disassembles the image it is about to ship and refuses one whose kernel contains
+no store; every kernel in this ABI writes at least one output buffer, so that is
+a sound refusal rather than a heuristic. It covers the AMDGPU image only — the
+NVIDIA cubin needs `nvdisasm`, not a matched-LLVM tool — and that gap is named in
+the NVIDIA queue rather than papered over. `math.log1p` left for a quieter
+reason: the device computes `log(1 + x)`, so `log1p(-1e-6)` returned
+-1.0132795e-06 against the host's -1.0000005e-06, and accuracy near zero is the
+only reason log1p exists.
+
+**An opaque energy adjoint** is now refused where it can be explained. §1 said
+the lowering refuses an `@E__bwd` containing `tessera.custom_adjoint_call`;
+nothing checked, and what actually happened was a JIT pipeline error naming
+nothing, or the row-program emitter refusing an op it could not place. The
+refusal is in the EBM lowering now, naming the energy and the callback.
 
 ## 6. Risks named now
 

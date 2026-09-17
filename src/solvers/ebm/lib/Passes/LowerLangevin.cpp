@@ -35,6 +35,7 @@
 // per-row status word (2026-09-16).
 //
 //===----------------------------------------------------------------------===//
+#include "tessera/EBM/EBMDialect.h"
 #include "tessera/EBM/EBMPasses.h"
 #ifdef TESSERA_EBM_HAVE_CLIFFORD
 #include "tessera/Clifford/CliffordDialect.h"
@@ -243,7 +244,12 @@ struct LowerLangevin : public RewritePattern {
     auto eta = op->getAttrOfType<FloatAttr>("eta");
     auto temperature = op->getAttrOfType<FloatAttr>("temperature");
     auto manifold = op->getAttrOfType<StringAttr>("manifold");
-    if (!fn || !eta || !temperature || !manifold) return failure();
+    // The temperature is either a constant attribute or a runtime scalar operand
+    // (an annealing schedule). The op verifier has already established that
+    // exactly one is present.
+    auto stepOp = cast<::tessera::ebm::LangevinStepOp>(op);
+    Value temperatureValue = stepOp.getTemperatureValue();
+    if (!fn || !eta || !manifold || (!temperature && !temperatureValue)) return failure();
     const bool sphere = manifold.getValue() == "sphere";
     const bool bivector = manifold.getValue() == "bivector";
     if (manifold.getValue() != "euclidean" && !sphere && !bivector) {
@@ -287,7 +293,7 @@ struct LowerLangevin : public RewritePattern {
       }
       gradesAttr = rewriter.getI64ArrayAttr({grade.getInt()});
     }
-    if (eta.getValueAsDouble() <= 0.0 || temperature.getValueAsDouble() < 0.0) {
+    if (eta.getValueAsDouble() <= 0.0 || (temperature && temperature.getValueAsDouble() < 0.0)) {
       op->emitError("EBM lowering: langevin_step requires eta > 0 and temperature >= 0");
       return failure();
     }
@@ -343,8 +349,33 @@ struct LowerLangevin : public RewritePattern {
              "tessera.autodiff = \"reverse\" before this pass";
       return failure();
     }
+    // The gradient has to be the compiler's all the way down. An energy built
+    // from an op whose adjoint is a placeholder leaves
+    // `tessera.custom_adjoint_call` in @E__bwd -- a host callback -- and a chain
+    // that calls back to the host once per step is not this lane, on the CPU or
+    // on the device. This was documented as refused and was not checked: on the
+    // CPU the JIT failed later with a pipeline error naming nothing, and on the
+    // device route the row-program emitter refused an op it could not place.
+    // Refuse here instead, where the energy and the op can both be named.
+    {
+      Operation *opaque = nullptr;
+      backward.walk([&](Operation *inner) {
+        if (inner->getName().getStringRef() == "tessera.custom_adjoint_call" && !opaque)
+          opaque = inner;
+      });
+      if (opaque) {
+        auto name = opaque->getAttrOfType<StringAttr>("name");
+        op->emitError("EBM lowering: the gradient of @") << fn.getValue()
+            << " is not the compiler's: @" << fn.getValue() << "__bwd calls out to the host ("
+            << (name ? name.getValue() : StringRef("custom_adjoint_call"))
+            << "). An opaque adjoint means a host round trip per step, which this lane does not "
+               "have; give every op in the energy a native adjoint, or keep the energy on the "
+               "reference path";
+        return failure();
+      }
+    }
     // @E__bwd(state, captures..., cotangent) -> (dstate, dcaptures...)
-    SmallVector<Value> captures(op->getOperands().begin() + 2, op->getOperands().end());
+    SmallVector<Value> captures(stepOp.getCaptures().begin(), stepOp.getCaptures().end());
     if (backward.getNumArguments() != captures.size() + 2 || backward.getNumResults() < 1 ||
         backward.getArgument(0).getType() != stateTy || backward.getResultTypes()[0] != stateTy) {
       op->emitError("EBM lowering: @") << fn.getValue() << "__bwd must be (state, captures..., cotangent) -> (dstate, ...)";
@@ -366,7 +397,37 @@ struct LowerLangevin : public RewritePattern {
     for (auto [i, capture] : llvm::enumerate(captures)) args[i + 1] = capture;
     args[captures.size() + 1] = splat(rewriter, loc, cotTy, 1.0);  // dE/dE = 1 per energy
     Value grad = rewriter.create<func::CallOp>(loc, backward, args).getResult(0);
-    const double noiseScale = std::sqrt(2.0 * eta.getValueAsDouble() * temperature.getValueAsDouble());
+    // sqrt(2 * eta * T). With the attribute this folds at compile time, and a
+    // zero temperature emits no noise op at all; with a runtime schedule the
+    // scale is computed per step and the noise is always emitted, since the pass
+    // cannot know the schedule ever reaches zero. At T = 0 the two agree exactly:
+    // the scale is +0.0 and the draws are finite.
+    const double noiseScale =
+        temperature ? std::sqrt(2.0 * eta.getValueAsDouble() * temperature.getValueAsDouble()) : 1.0;
+    // A constant T = 0 is the one case where no noise op is emitted at all.
+    const bool emitNoise = !temperature || noiseScale > 0.0;
+    auto noiseScaleFor = [&](RankedTensorType ty) -> Value {
+      if (temperature) return splat(rewriter, loc, ty, noiseScale);
+      Value t = temperatureValue;
+      if (!t.getType().isF32()) {
+        if (t.getType().isF64())
+          t = rewriter.create<arith::TruncFOp>(loc, rewriter.getF32Type(), t);
+        else
+          t = rewriter.create<arith::ExtFOp>(loc, rewriter.getF32Type(), t);
+      }
+      Value scaled = rewriter.create<arith::MulFOp>(
+          loc, t, rewriter.create<arith::ConstantOp>(
+                      loc, rewriter.getF32FloatAttr(float(2.0 * eta.getValueAsDouble()))));
+      // Negative temperatures have no meaning; clamp to zero before the sqrt so a
+      // bad schedule yields no noise rather than NaN state that propagates.
+      Value clamped = rewriter.create<arith::MaximumFOp>(
+          loc, scaled, rewriter.create<arith::ConstantOp>(loc, rewriter.getF32FloatAttr(0.0f)));
+      Value root = rewriter.create<math::SqrtOp>(loc, clamped);
+      // linalg.fill, not linalg.broadcast: the scale is a scalar, and fill is the
+      // destination-passing form the JIT's bufferization already handles.
+      Value empty = rewriter.create<tensor::EmptyOp>(loc, ty.getShape(), ty.getElementType());
+      return rewriter.create<linalg::FillOp>(loc, ValueRange{root}, ValueRange{empty}).getResult(0);
+    };
     auto bump = DenseElementsAttr::get(keyTy, ArrayRef<int64_t>{0, 1});
     auto bumpKey = [&]() -> Value {
       return rewriter.create<arith::AddIOp>(loc, key, rewriter.create<arith::ConstantOp>(loc, bump));
@@ -386,11 +447,11 @@ struct LowerLangevin : public RewritePattern {
       Value gk = gradeProject(rewriter, loc, grad, gradesAttr, algebraAttr);
       Value next = rewriter.create<arith::SubFOp>(
           loc, state, rewriter.create<arith::MulFOp>(loc, gk, splat(rewriter, loc, stateTy, eta.getValueAsDouble())));
-      if (noiseScale > 0.0) {
+      if (emitNoise) {
         Value zk = gradeProject(rewriter, loc, standardNormals(rewriter, loc, stateTy, key),
                                 gradesAttr, algebraAttr);
         next = rewriter.create<arith::AddFOp>(
-            loc, next, rewriter.create<arith::MulFOp>(loc, zk, splat(rewriter, loc, stateTy, noiseScale)));
+            loc, next, rewriter.create<arith::MulFOp>(loc, zk, noiseScaleFor(stateTy)));
       }
       next = gradeProject(rewriter, loc, next, gradesAttr, algebraAttr);
       auto statusRow = [&](int64_t v) {
@@ -403,15 +464,15 @@ struct LowerLangevin : public RewritePattern {
     if (!sphere) {
       Value step = rewriter.create<arith::MulFOp>(loc, grad, splat(rewriter, loc, stateTy, eta.getValueAsDouble()));
       Value next = rewriter.create<arith::SubFOp>(loc, state, step);
-      if (noiseScale > 0.0) {
+      if (emitNoise) {
         Value noise = standardNormals(rewriter, loc, stateTy, key);
-        next = rewriter.create<arith::AddFOp>(loc, next, rewriter.create<arith::MulFOp>(loc, noise, splat(rewriter, loc, stateTy, noiseScale)));
+        next = rewriter.create<arith::AddFOp>(loc, next, rewriter.create<arith::MulFOp>(loc, noise, noiseScaleFor(stateTy)));
       }
       rewriter.replaceOp(op, {next, bumpKey()});
       return success();
     }
     Value noise;  // standard normals, drawn once per step when T > 0
-    if (noiseScale > 0.0) noise = standardNormals(rewriter, loc, stateTy, key);
+    if (emitNoise) noise = standardNormals(rewriter, loc, stateTy, key);
     Value nextKey = bumpKey();
     // Sphere (geo_sampling.sphere_langevin_step, per row):
     //   g_t = g - <g, x> x ; xi_t = xi - <xi, x> x
@@ -434,7 +495,7 @@ struct LowerLangevin : public RewritePattern {
     Value y = rewriter.create<arith::SubFOp>(loc, state, rewriter.create<arith::MulFOp>(loc, gt, splat(rewriter, loc, stateTy, eta.getValueAsDouble())));
     if (noise) {
       Value xt = project(noise);
-      y = rewriter.create<arith::AddFOp>(loc, y, rewriter.create<arith::MulFOp>(loc, xt, splat(rewriter, loc, stateTy, noiseScale)));
+      y = rewriter.create<arith::AddFOp>(loc, y, rewriter.create<arith::MulFOp>(loc, xt, noiseScaleFor(stateTy)));
     }
     Value n2 = rowSum(rewriter, loc, rewriter.create<arith::MulFOp>(loc, y, y));
     Value under = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLT, n2, rowSplat(1.0e-12));

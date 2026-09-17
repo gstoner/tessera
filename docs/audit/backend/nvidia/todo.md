@@ -7774,7 +7774,10 @@ extensions the NVVM lowering promises (arith, cf, func, index, math, memref,
 ub, gpu, nvvm), so the single-invocation stamp fixture
 (`philox_stamps_gpu_kernel_once.mlir`) runs there: **62/62**, and
 `llvm.func @philox_uniform ... attributes {gpu.kernel, nvvm.kernel}` — once.
-Both NVIDIA lit trees on Super-Bear re-run after these edits (below).
+Super-Bear rebuilt both trees after these edits: `check-tessera-nvidia` 62/62 in
+`build/` and `build-nvidia-cuda/`, 552 Philox/PTX/training-series unit tests
+passed, `tests/tessera-ir` 493/493 (NDEBUG, so the declarations change nothing
+observable there; the operand-order fix changes IR order only).
 
 ## Princess-Luna red zone: the shared fixes that touch this backend — 2026-09-17
 

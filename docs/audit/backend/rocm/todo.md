@@ -8232,16 +8232,32 @@ Princess-Luna (gfx1151) for the shared code:**
      (`_rocm_wmma_lane_live`) with the reason; the seven generic-lane tests in
      the same file keep the wider gate and pass on gfx1201 (25 passed / 10
      skipped there, 2026-09-17).
-  8. **The `test_dynamic_shape_emit` one-off, made legible.** The emitted
-     HIP fused entry (`emit/rocm_hip.py`) returned `3` for every step from the
-     first H2D copy to the D2H copy, which is what one shape reported after
-     ~17k tests in a full sweep and nothing could explain; alone it passes
-     (13/13, twice). The entry now uses one macro per HIP call that records
-     the call's name and `hipGetErrorString` text (`<entry>_last_error`),
-     with distinct codes per stage (2 argument/alloc, 3 H2D, 4 launch, 5
-     sync, 6 D2H), and the test prints them. If it recurs, the sweep will say
-     which call and why; until it does, it is an unexplained one-off, not a
-     verified defect.
+  8. **The `test_dynamic_shape_emit` one-off: `hipGetLastError` is
+     thread-sticky, and the entry read another lane's expected refusal.** In
+     a full sweep (three of them, deterministically) one shape reported
+     `hipGetLastError(): no kernel image is available for execution on the
+     device (209)` for its own image — which, once the emitted entry named
+     its failing call and its artifact carried the arch, was demonstrably
+     `kernel_gfx1201.so` under `TESSERA_ROCM_CHIP=gfx1201` on a one-device
+     host. Alone: 13/13, every time. An ordered bisect (457 earlier files →
+     halves → per-test pairing → primed single-process experiments) landed on
+     `test_autodiff_spectral_target_binding.py::test_rocm_public_compound_spectral_backward_uses_prebuilt_image`:
+     its `hipModuleLoadData` of the gfx1151 spectral package on the gfx1201
+     device fails with 209 *by design* (and the test skips, naming the arch),
+     nothing reads that error, and the fused entry's post-launch
+     `hipGetLastError()` returns it — the launch had succeeded. Reproduced in
+     one process by loading any gfx1151 code object first (`MODE H`), and
+     gone once the entry clears the slot before launching. The wrong-arch
+     fat-binary hypothesis tried first was tested and excluded (a dlopened
+     wrong-arch `.so` does not break later launches). Fixed in every emitted
+     HIP entry that uses `hipGetLastError` as a launch check (`emit/rocm_hip.py`:
+     the fused entry, its bench entry, the four SSM replay entries), with the
+     entry now also naming its failing call and stage (2 argument/alloc, 3
+     H2D, 4 launch, 5 sync, 6 D2H). Two pieces of hygiene landed on the way
+     and stay: the spectral source candidate compiles for the resolved chip
+     (it defaulted to gfx1151), and the prebuilt gfx1151 spectral image is not
+     dlopened on another chip at all. The ROCm emitter's offload arch also no
+     longer falls back to gfx1151 on an exception (Decision #21a).
   7. **Upstream SCEV assertion: reduced to 31 lines, and the kernel it comes
      from is verified correct.** An assertions-ON `opt` and `llvm-reduce`
      built from the LLVM 23.1.1 sources on Tajasarus

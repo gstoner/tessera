@@ -124,17 +124,34 @@ def _x86_istft_broadcast_full_axis2(spectrum, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "filter"))
+# The ROCm spectral adjoints are a **gfx1151** capability, so they are requested
+# by that name and not by the generic `rocm`.
+#
+# `GenerateROCMSpectralBackwardKernel.cpp` says so itself — "native gfx1151
+# consumers", refusing with "no gfx1151 native package" — and the capability
+# registry records it the same way: `rocm_gfx1151` declares `tessera.stft` and
+# `tessera.istft`; `rocm`, `rocm_gfx1201`, `rocm_gfx90a` and the rest declare
+# nothing. That is the standing rule that the generic `rocm` name inherits no
+# proof, and the registry was applying it correctly.
+#
+# Asked under the generic name these were refused with "dtype 'complex64' is not
+# supported for tessera.istft on rocm" — twelve red tests on both ROCm boxes,
+# invisible to CI, and the gate was right every time. The `stft` half passed
+# only because the check reads the *operand* dtype and stft takes a real input,
+# which is why this read as a complex-storage problem rather than a naming one.
+
+
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("x", "filter"))
 def _rocm_spectral_filter(x, filter):
     return ts.ops.spectral_filter(x, filter)
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "kernel"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("x", "kernel"))
 def _rocm_spectral_conv(x, kernel):
     return ts.ops.spectral_conv(x, kernel, axis=-1, norm="backward")
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("x", "window"))
 def _rocm_stft(x, window):
     return ts.ops.stft(
         x, window, axis=-1, n_fft=16, hop=8, center=False,
@@ -142,7 +159,7 @@ def _rocm_stft(x, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("spectrum", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("spectrum", "window"))
 def _rocm_istft(spectrum, window):
     return ts.ops.istft(
         spectrum, window, axis=-1, n_fft=16, hop=8, center=False,
@@ -150,7 +167,7 @@ def _rocm_istft(spectrum, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("x", "window"))
 def _rocm_stft_ragged_batch(x, window):
     return ts.ops.stft(
         x, window, axis=-1, n_fft=18, hop=7, center=False,
@@ -158,7 +175,7 @@ def _rocm_stft_ragged_batch(x, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("spectrum", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("spectrum", "window"))
 def _rocm_istft_ragged_batch(spectrum, window):
     return ts.ops.istft(
         spectrum, window, axis=-1, n_fft=18, hop=7, center=False,
@@ -166,7 +183,7 @@ def _rocm_istft_ragged_batch(spectrum, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("x", "window"))
 def _rocm_stft_centered_reflect(x, window):
     return ts.ops.stft(
         x, window, axis=-1, n_fft=18, hop=7, center=True,
@@ -174,7 +191,7 @@ def _rocm_stft_centered_reflect(x, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("spectrum", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("spectrum", "window"))
 def _rocm_istft_centered_crop(spectrum, window):
     return ts.ops.istft(
         spectrum, window, axis=-1, n_fft=18, hop=7, center=True,
@@ -182,7 +199,7 @@ def _rocm_istft_centered_crop(spectrum, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("x", "window"))
 def _rocm_stft_centered_axis1(x, window):
     return ts.ops.stft(
         x, window, axis=1, n_fft=18, hop=7, center=True,
@@ -190,7 +207,7 @@ def _rocm_stft_centered_axis1(x, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("spectrum", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("spectrum", "window"))
 def _rocm_istft_centered_axis2(spectrum, window):
     return ts.ops.istft(
         spectrum, window, axis=2, n_fft=18, hop=7, center=True,
@@ -198,7 +215,7 @@ def _rocm_istft_centered_axis2(spectrum, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("x", "window"))
 def _rocm_stft_broadcast_full_axis1(x, window):
     return ts.ops.stft(
         x, window, axis=1, n_fft=10, hop=4, center=False,
@@ -206,7 +223,7 @@ def _rocm_stft_broadcast_full_axis1(x, window):
     )
 
 
-@ts.jit(target="rocm", autodiff="reverse", wrt=("spectrum", "window"))
+@ts.jit(target="rocm_gfx1151", autodiff="reverse", wrt=("spectrum", "window"))
 def _rocm_istft_broadcast_full_axis2(spectrum, window):
     return ts.ops.istft(
         spectrum, window, axis=2, n_fft=10, hop=4, center=False,

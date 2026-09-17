@@ -36,6 +36,18 @@ _NON_SOURCE_DIRS = frozenset({
 })
 
 
+def read_source(path: Path) -> str:
+    """Read a source file for substring scanning, tolerating undecodable bytes.
+
+    A gate that asks "does any source mention X" does not care whether every byte
+    is valid UTF-8, and it must not fail because something in the tree is not a
+    text file. Strict decoding turned unrelated filesystem debris into a
+    `UnicodeDecodeError` from a registry gate (Super-Bear, 2026-09-17), which is
+    both a false failure and an unreadable one.
+    """
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def _is_nested_checkout(path: Path) -> bool:
     """True if `path` is a git worktree or clone nested inside the tree."""
     return (path / ".git").exists()
@@ -69,5 +81,16 @@ def iter_repo_files(
                 if skip_nested_checkouts and _is_nested_checkout(entry):
                     continue
                 stack.append(entry)
+            elif entry.name.startswith("._"):
+                # AppleDouble resource forks. A macOS-to-Linux copy leaves a
+                # `._name.py` beside every file, and its name carries the real
+                # suffix, so a `*.py` / `*.mlir` scan picks it up and then dies
+                # decoding its binary header — `UnicodeDecodeError: ... 0xa3`
+                # from a registry gate that has nothing to do with encodings.
+                # Measured on Super-Bear (2026-09-17): 49 of them, untracked
+                # debris, failing two source-registry gates on that host only.
+                # Skipping them by name keeps the gates a property of the repo
+                # rather than of whatever is lying around in the tree.
+                continue
             elif wanted is None or entry.suffix in wanted:
                 yield entry

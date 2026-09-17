@@ -8061,6 +8061,26 @@ declared product ABI matches the emitted signature exactly
 tensor<2x1xi64>)`), so it is neither an ABI nor a harness mismatch. The residual
 tape's 2 slots for a 3-iteration loop are *intentional* (the entry state is the
 loop input, so only iterations 1..n-1 are saved), so the sizing is not it either.
+
+**Mechanism, from the emitted forward.** The normalizer rewrites the
+data-dependent `scf.while` into an `scf.for` that carries the primal state as a
+`tensor<?xf32>` iter_arg, and the body replaces it with a *smaller* slice each
+iteration (`extract_slice %state[0][dim-1][1]`). A loop-carried tensor whose
+extent changes between iterations type-checks — the iter_arg is `tensor<?xf32>` —
+and does not survive bufferization: the carried buffer is allocated once and the
+loop then yields a differently sized one. That is the crash, and it is in the
+*primal carry*, not in the tape.
+
+The shape of the fix is already in the same function, one value over: the residual
+tape carries its shape-varying state as `tensor<2x16xf32>` **plus** an explicit
+`tensor<2x1xindex>` of lengths, inside a declared envelope
+(`saved_slot_shape_envelope_bounds = 16`), with a `cf.assert` that the length fits.
+The primal carry needs the same treatment — an envelope-sized buffer and a carried
+length, with every use inside the body reading the envelope through that length.
+That is a capability change to the normalizer with a design (carry envelopes for
+shape-varying loop state), not a patch, which is why it is recorded here rather
+than attempted alongside the rest of this sweep.
+
 Repro:
 
 ```bash

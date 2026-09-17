@@ -22,6 +22,7 @@ from tessera.compiler import (
     JitDiagnosticCode,
     TesseraNativeRequiredError,
 )
+from tests._support.repo_scan import read_source
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -65,7 +66,14 @@ class TestJitDiagnosticCode:
         for path in COMPILER_DIR.glob("*.py"):
             if path.name == "diagnostics.py":
                 continue
-            for match in pattern.finditer(path.read_text(encoding="utf-8")):
+            # AppleDouble resource forks (`._name.py`) match this glob and are
+            # binary, so strict UTF-8 decoding turned unrelated filesystem debris
+            # into a UnicodeDecodeError out of a diagnostics registry gate
+            # (Super-Bear, 2026-09-17). Skip them and decode tolerantly: a
+            # substring inventory does not need every byte to be text.
+            if path.name.startswith("._"):
+                continue
+            for match in pattern.finditer(read_source(path)):
                 used.add(match.group(1))
         # Every used string must be in the enum (the test file itself
         # is excluded so this gate doesn't fire on docstrings).

@@ -1,6 +1,13 @@
 #include "tessera/gpu/BackendRegistration.h"
 
+#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/IndexToLLVM/IndexToLLVM.h"
+#include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
+#include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/Passes.h"
+#include "mlir/Conversion/UBToLLVM/UBToLLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -20,5 +27,16 @@ int main(int argc, char **argv) {
   mlir::registerConvertGpuOpsToNVVMOps();
   mlir::registerSCFToControlFlowPass();
   mlir::registerReconcileUnrealizedCastsPass();
+  // convert-gpu-to-nvvm lowers the dialects inside the kernel through the
+  // ConvertToLLVMPatternInterface each dialect *promises*; without these
+  // extensions the assertions-ON driver aborts with "checking for an
+  // interface ... promised by dialect 'arith' but never implemented".
+  mlir::arith::registerConvertArithToLLVMInterface(registry);
+  mlir::cf::registerConvertControlFlowToLLVMInterface(registry);
+  mlir::registerConvertFuncToLLVMInterface(registry);
+  mlir::index::registerConvertIndexToLLVMInterface(registry);
+  mlir::registerConvertMathToLLVMInterface(registry);
+  mlir::registerConvertMemRefToLLVMInterface(registry);
+  mlir::ub::registerConvertUBToLLVMInterface(registry);
   return failed(mlir::MlirOptMain(argc, argv, "tessera-nvidia-opt\n", registry));
 }

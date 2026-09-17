@@ -5315,6 +5315,31 @@ Not applicable with a reason: the GPU storage route has no CPU package; x86's na
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## Princess-Luna red zone: the x86 JIT lane is where three of them live — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+**Follow-up required, and it is an x86-lane item despite being found on a ROCm
+box.** Four of the 26 were the reverse-mode gate refusing ops that carry no
+gradient or have a perfectly good transpose: `arith.select` is linear in its two
+value operands (the branch taken receives the cotangent, the other receives zero),
+and `arith.index_cast` is index arithmetic, which is not a differentiable variable
+at all. Both now behave, and the rule for the second is a property of the *types*
+rather than a list of op names.
+
+Those tests run on a host with the **native x86 JIT** — they skip on the Mac as
+"native x86 JIT required" — so they were red on both Zen 5 boxes and invisible to
+CI, whose unit lane has no such lane. That is worth noting for this queue: the x86
+JIT AD path currently has **no host in any automated check**, so a defect in it is
+only ever found by a manual sweep on Princess-Luna or Tajasarus.
+
+The owed item is on that same lane: with the gate fixed, three shape-varying
+`scf.while` tests now compile and **crash inside JIT-compiled code** on the forward
+invoke (`AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17`). Pre-existing and independent —
+main's own `tessera-opt` emits a byte-identical forward and it faults identically —
+and the declared product ABI matches the emitted signature, so it is neither an ABI
+nor a harness mismatch. The ROCm queue carries the repro.
+
 ## Row-program math admission, rotor sampling, ragged batches, annealing — 2026-09-16
 
 Sync `EBM-GA-GAPCLOSE-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

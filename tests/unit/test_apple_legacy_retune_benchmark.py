@@ -469,7 +469,19 @@ def test_every_committed_promotion_obeys_its_own_ledgers_rules():
     root = Path(__file__).resolve().parents[2]
     checked = 0
     for path in sorted((root / "benchmarks/baselines").glob("*.json")):
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        # AppleDouble resource forks (`._name.json`) match this glob and are
+        # binary; strict decoding turned filesystem debris into a
+        # UnicodeDecodeError out of a promotion-rule gate (Super-Bear,
+        # 2026-09-17). A malformed or non-JSON file is already skipped below, so
+        # an undecodable one belongs in the same bucket rather than failing the
+        # gate — this scan asks a question about the committed ledgers, not about
+        # everything that happens to be lying in the directory.
+        if path.name.startswith("._"):
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
         if not isinstance(payload, dict):
             continue
         rules = payload.get("promotion_rules")

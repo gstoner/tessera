@@ -424,35 +424,11 @@ def _prebuilt_amd_paths() -> tuple[Path, ...]:
     return tuple(paths)
 
 
-def _prebuilt_amd_image_arch() -> str:
-    """The arch every prebuilt AMD spectral image in the tree is built for."""
-    return "gfx1151"
-
-
 def _amd_lib() -> ctypes.CDLL | None:
-    """Load the canonical prebuilt ROCm spectral image; never invoke hipcc.
-
-    Never on a host whose chip is not the image's. The image says which arch it
-    is only through a symbol read *after* `dlopen`, and by then its embedded fat
-    binary is registered with the HIP runtime -- which, on the next launch,
-    walks every registered fat binary, finds this one has no code object for
-    the device, and fails that launch, of any module, with
-    hipErrorNoBinaryForGpu (209). On Tajasarus (gfx1201) that surfaced 300 test
-    files later as `test_dynamic_shape_emit`'s own, correctly built gfx1201
-    kernel "having no image" (2026-09-17). A wrong-arch image must not be
-    loaded at all; the arch-neutral FFT-plan ABI does not change that, since
-    its kernels are the same gfx1151 code objects.
-    """
+    """Load the canonical prebuilt ROCm spectral image; never invoke hipcc."""
     cached = _libs.get("amd_prebuilt")
     if cached is not None:
         return cached
-    from tessera.compiler.emit.rocm_hip import _rocm_arch
-    try:
-        host = _rocm_arch()
-    except Exception:
-        return None
-    if not host.startswith(_prebuilt_amd_image_arch()):
-        return None
     fallback = None
     for path in _prebuilt_amd_paths():
         if not path.is_file():

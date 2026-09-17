@@ -1206,6 +1206,14 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
 
     # ── TILE-SYNC-TYPED-2026-08-15 — CAKE Phase 1 typed sync verifiers ─────
     DiagnosticCode(
+        code="TILE_STORE_EPILOGUE_BIAS",
+        pass_origin="StoreOp::verify",
+        severity="error",
+        summary="A tile.store carrying a tile.epilogue with bias=true has no trailing bias operand to add.",
+        fix_hint="Pass the rank-1 bias memref as the store's last operand (after the leading dims) when the epilogue declares a bias; the verifier discounts it from the arity check.",
+        spec="docs/audit/backend/rocm/todo.md §GFX1201-PARITY-2026-09-17", sprint="GFX1201-PARITY-1",
+    ),
+    DiagnosticCode(
         code="TILE_WAIT_UNTYPED_DEPENDENCY",
         pass_origin="MBarrierWaitOp::verify",
         severity="error",
@@ -3048,6 +3056,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         summary="No exact RDNA3, RDNA4, gfx125x, or CDNA physical fragment descriptor accepts the requested Tile MMA family, dtype, shape, and layouts.",
         fix_hint="Select a matrix family, dtype, shape, and logical A/B layout supported by the exact gfx architecture; do not reuse another architecture's fragment ABI.",
         spec="docs/audit/backend/rocm/todo.md §ROCM-5", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_STORE_EPILOGUE", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="The fused epilogue on a typed fragment store is float-only with activation none/relu/gelu/silu, and its bias operand must be a rank-1 f32 memref.",
+        fix_hint="Keep integer-accumulator stores epilogue-free (slice 1b owns int storage), use a supported activation, and pass the bias as a rank-1 f32 memref; the epilogue is applied per element after the fragment family resolves row and column.",
+        spec="docs/audit/backend/rocm/todo.md §GFX1201-PARITY-2026-09-17", sprint="GFX1201-PARITY-1",
     ),
     DiagnosticCode(
         code="ROCM_FRAGMENT_TYPE_DISAGREES", pass_origin="LowerTileToROCMPass",

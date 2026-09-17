@@ -1866,6 +1866,20 @@ class JitFn:
             )
         source_module = self._specialized_autodiff_module(args, kwargs)
         target_kind = normalize_target_kind(self.target)
+        # Lane selection below is per *family*; the capability registry, the
+        # plugin lookup and the emitted Graph IR are per *chip*. Both forms reach
+        # here legitimately — `pipeline_gates._normalize_target` documents the
+        # same split — and only this comparison rejected the chip-qualified one,
+        # so `@jit(target="rocm_gfx1151")` fell through to "native_backward
+        # currently supports ..." even though the ROCm lane is exactly what it
+        # asked for. Chip-precise names are what make a gfx1151-only capability
+        # (the spectral adjoints) requestable without claiming it for every ROCm
+        # part, so the family collapse belongs here and nowhere else.
+        target_family = (
+            "rocm" if target_kind.startswith("rocm")
+            else "nvidia_sm120" if target_kind == "nvidia_sm120"
+            else target_kind
+        )
         graph_ops = [
             op for function in source_module.functions for op in function.body
         ]
@@ -1951,7 +1965,7 @@ class JitFn:
             if plugin_result is not None:
                 self.last_backward_execution = dict(plugin_result.execution)
                 return plugin_result.gradients
-        if target_kind == "rocm":
+        if target_family == "rocm":
             if len(graph_ops) == 1:
                 raise TesseraJitError(
                     "no registered ROCm native VJP plugin for "
@@ -1960,7 +1974,7 @@ class JitFn:
             raise TesseraJitError(
                 "ROCm native backward requires one registered Graph op"
             )
-        if target_kind == "nvidia_sm120":
+        if target_family == "nvidia_sm120":
             if len(graph_ops) == 1:
                 raise TesseraJitError(
                     "no registered NVIDIA SM120 native VJP plugin for "
@@ -1969,7 +1983,7 @@ class JitFn:
             raise TesseraJitError(
                 "NVIDIA SM120 native backward requires one registered Graph op"
             )
-        if target_kind == "x86":
+        if target_family == "x86":
             if len(graph_ops) == 1:
                 raise TesseraJitError(
                     "no registered x86 native VJP plugin for "
@@ -1978,7 +1992,7 @@ class JitFn:
             raise TesseraJitError(
                 "x86 native backward currently requires one registered Graph op"
             )
-        if target_kind != "cpu":
+        if target_family != "cpu":
             raise TesseraJitError(
                 "native_backward currently supports target='cpu'/'x86', "
                 "verified ROCm lanes, or verified NVIDIA SM120 lanes")

@@ -86,7 +86,7 @@ def check_op_legality(
     attrs = attrs or {}
 
     _check_tensor_contracts(op, operands, result, diagnostics)
-    _check_capability(op, target_name, operands, result, diagnostics)
+    _check_capability(op, _capability_target(target_name), operands, result, diagnostics)
     if op in {"tessera.matmul", "tessera.gemm"}:
         _check_matmul(op, operands, diagnostics)
     elif op in {"tessera.softmax", "tessera.softmax_safe"}:
@@ -110,6 +110,32 @@ def check_op_legality(
         ))
 
     return LegalityResult(op_name=op, target=target_name, diagnostics=tuple(diagnostics))
+
+
+#: The chip a generic backend name compiles for, when the rest of the stack has
+#: already chosen one. `native_vjp_plugins` registers its ROCm consumers under
+#: the family name and resolves them to `gfx1151` internally, and `jit.py` emits
+#: its Graph IR for `rocm_gfx1151` when the request said `rocm` — so a `rocm`
+#: request *is* a gfx1151 compilation everywhere except here.
+#:
+#: The capability registry is deliberately chip-precise: `rocm_gfx1151` declares
+#: `tessera.stft`/`tessera.istft` and no other ROCm entry does, because
+#: `GenerateROCMSpectralBackwardKernel.cpp` is gfx1151-only and says so. Asking
+#: it about the *generic* name for a request that will compile for gfx1151 gave
+#: "dtype 'complex64' is not supported for tessera.istft on rocm" — twelve red
+#: tests on both ROCm boxes, refusing at trace time a capability the lane would
+#: then have provided.
+#:
+#: This routes the question, it does not widen the answer: `supports_op("rocm",
+#: "tessera.istft")` is still False, so dashboards and audit rows still say the
+#: generic ROCm name inherits no proof. Only a concrete compilation request is
+#: resolved to the chip it will run on.
+_GENERIC_TARGET_CHIP = {"rocm": "rocm_gfx1151"}
+
+
+def _capability_target(target_name: str) -> str:
+    """The registry key for a compilation request against ``target_name``."""
+    return _GENERIC_TARGET_CHIP.get(target_name, target_name)
 
 
 def _check_tensor_contracts(

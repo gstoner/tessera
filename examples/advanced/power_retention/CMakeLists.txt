@@ -24,12 +24,21 @@ if (TESSERA_ENABLE_HIP)
   find_package(hip REQUIRED)
   add_definitions(-DTESSERA_POWER_USE_HIP=1)
 endif()
-include_directories(include ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+# Generated headers go under the *binary* include tree at the path the sources
+# include them from (`tessera/power/*.inc`). They used to land flat in the
+# binary dir with only the source `include/` on the path, so on a fresh worktree
+# of main configured with TESSERA_ENABLE_CUDA=ON -- which puts this example in
+# `all` -- the dialect could not compile at all: `fatal error:
+# tessera/power/TesseraPowerDialect.h.inc: No such file` (Super-Bear, 2026-09-17).
+# The lived-in trees on that box never compiled this target in their default
+# build, which is how a header path that cannot work survived.
+include_directories(include ${CMAKE_CURRENT_BINARY_DIR}/include ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/tessera/power)
 set(LLVM_TARGET_DEFINITIONS include/tessera/power/TesseraPower.td)
-mlir_tablegen(TesseraPowerOps.h.inc -gen-op-decls)
-mlir_tablegen(TesseraPowerOps.cpp.inc -gen-op-defs)
-mlir_tablegen(TesseraPowerDialect.h.inc -gen-dialect-decls -dialect=power)
-mlir_tablegen(TesseraPowerDialect.cpp.inc -gen-dialect-defs -dialect=power)
+mlir_tablegen(include/tessera/power/TesseraPowerOps.h.inc -gen-op-decls)
+mlir_tablegen(include/tessera/power/TesseraPowerOps.cpp.inc -gen-op-defs)
+mlir_tablegen(include/tessera/power/TesseraPowerDialect.h.inc -gen-dialect-decls -dialect=power)
+mlir_tablegen(include/tessera/power/TesseraPowerDialect.cpp.inc -gen-dialect-defs -dialect=power)
 add_public_tablegen_target(TesseraPowerIncGen)
 add_library(TesseraPowerDialect
   lib/Dialect/Power/IR/TesseraPowerDialect.cpp

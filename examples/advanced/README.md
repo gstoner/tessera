@@ -50,9 +50,9 @@ These bypass the Python `@tessera.jit` surface and emit Graph IR through interna
 
 ### Stubs
 
-| Subdir | Status |
-|--------|--------|
-| [`power_retention/`](power_retention/) | README + C++ kernel sketch only. Retention-attention op is unimplemented. |
+None. `power_retention/` (a CUDA kernel sketch with no kernel behind it) was
+retired to `archive/examples/advanced/power_retention/` on 2026-09-17; its op
+lives in the canonical dialect as `tessera.power_attn` / `tessera.retention`.
 
 ---
 

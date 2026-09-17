@@ -67,6 +67,12 @@ int tessera_nvidia_ptx_resources(const char* kernel_name, int block_size,
                                  int* local_bytes,
                                  int* active_blocks_per_sm);
 
+// Why the last call on this thread returned a nonzero rc: the CUDA driver call
+// that failed, its CUresult name/number/text, and for a JIT failure the driver's
+// JIT log. Empty after a successful call. Valid until the next bridge call on
+// the same thread; copy it out before calling again.
+const char* tessera_nvidia_ptx_last_error(void);
+
 // Query the exact CUDA device memory envelope associated with the bridge's
 // retained primary context. Both outputs are required.
 int tessera_nvidia_ptx_device_memory(size_t* total_bytes, size_t* free_bytes);

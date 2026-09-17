@@ -92,6 +92,37 @@ std::map<std::string, CUmodule>    g_modules;        // kernel name -> JIT'd mod
 std::map<std::string, CUfunction>  g_funcs;          // kernel name -> entry fn
 bool g_ctx_ready = false;
 
+// What the last nonzero rc actually was. Every public entry clears it and
+// every driver-call check below records the call name and its CUresult, so a
+// caller that sees `rc=3` can ask which of the ~200 CUDA calls behind that code
+// failed and why -- the sm_120 Lion lane returned an opaque rc=3 for a week
+// (docs/audit/backend/nvidia/todo.md, 2026-09-17) because nothing here said.
+// Per thread: the bridge is serialized under g_mu for launches, but
+// ensureContext runs outside it.
+thread_local std::string g_last_error;
+
+void noteFailure(const char* what, const char* detail) {
+    if (!g_last_error.empty()) return;  // keep the first failure of this call
+    g_last_error = what;
+    if (detail && *detail) {
+        g_last_error += ": ";
+        g_last_error += detail;
+    }
+}
+
+bool cuOk(CUresult result, const char* what) {
+    if (result == CUDA_SUCCESS) return true;
+    const char* name = nullptr;
+    const char* text = nullptr;
+    cuGetErrorName(result, &name);
+    cuGetErrorString(result, &text);
+    std::string detail = name ? name : "CUDA_ERROR_?";
+    detail += " (" + std::to_string(static_cast<int>(result)) + ")";
+    if (text && *text) { detail += ": "; detail += text; }
+    noteFailure(what, detail.c_str());
+    return false;
+}
+
 // The bridge retains device 0's primary context and serializes every invoke
 // under g_mu through cuCtxSynchronize. A single grow-only staging region is
 // therefore safe for the synchronous host-buffer GEMM ABIs below. This is not
@@ -125,13 +156,13 @@ bool stagingPointersLocked(const size_t* sizes, size_t count,
         const CUdeviceptr previous = g_staging.base;
         CUresult allocation = cuMemAlloc(&replacement, total);
         if (allocation == CUDA_ERROR_OUT_OF_MEMORY && previous) {
-            if (cuMemFree(previous) != CUDA_SUCCESS) return false;
+            if (!cuOk(cuMemFree(previous), "cuMemFree")) return false;
             g_staging = {};
             allocation = cuMemAlloc(&replacement, total);
         }
-        if (allocation != CUDA_SUCCESS) return false;
+        if (!cuOk(allocation, "cuMemAlloc(staging arena)")) return false;
         if (previous && g_staging.base &&
-            cuMemFree(previous) != CUDA_SUCCESS) {
+            !cuOk(cuMemFree(previous), "cuMemFree")) {
             cuMemFree(replacement);
             return false;
         }
@@ -151,14 +182,14 @@ bool stagingPointersLocked(const size_t* sizes, size_t count,
 // usable GPU is present — the caller maps that to rc 2 (skip-clean upstream).
 bool ensureContext() {
     if (g_ctx_ready) return true;
-    if (cuInit(0) != CUDA_SUCCESS) return false;
+    if (!cuOk(cuInit(0), "cuInit")) return false;
     int n = 0;
-    if (cuDeviceGetCount(&n) != CUDA_SUCCESS || n < 1) return false;
+    if (!cuOk(cuDeviceGetCount(&n), "cuDeviceGetCount") || n < 1) return false;
     CUdevice dev;
-    if (cuDeviceGet(&dev, 0) != CUDA_SUCCESS) return false;
+    if (!cuOk(cuDeviceGet(&dev, 0), "cuDeviceGet")) return false;
     CUcontext ctx;
-    if (cuDevicePrimaryCtxRetain(&ctx, dev) != CUDA_SUCCESS) return false;
-    if (cuCtxSetCurrent(ctx) != CUDA_SUCCESS) return false;
+    if (!cuOk(cuDevicePrimaryCtxRetain(&ctx, dev), "cuDevicePrimaryCtxRetain")) return false;
+    if (!cuOk(cuCtxSetCurrent(ctx), "cuCtxSetCurrent")) return false;
     g_ctx_ready = true;
     return true;
 }
@@ -177,10 +208,12 @@ CUfunction getFunctionLocked(const std::string& name) {
                            CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES};
     void* optv[2] = {(void*)log, (void*)(size_t)sizeof(log)};
     CUmodule mod = nullptr;
-    if (cuModuleLoadDataEx(&mod, ptx->second.c_str(), 2, opt, optv) != CUDA_SUCCESS)
+    if (!cuOk(cuModuleLoadDataEx(&mod, ptx->second.c_str(), 2, opt, optv), "cuModuleLoadDataEx")) {
+        if (log[0]) { g_last_error += " -- JIT log: "; g_last_error += log; }
         return nullptr;
+    }
     CUfunction fn = nullptr;
-    if (cuModuleGetFunction(&fn, mod, name.c_str()) != CUDA_SUCCESS) {
+    if (!cuOk(cuModuleGetFunction(&fn, mod, name.c_str()), "cuModuleGetFunction")) {
         cuModuleUnload(mod);
         return nullptr;
     }
@@ -207,14 +240,14 @@ int invokeMma(CUfunction fn, void** buffers, size_t nbuf,
     CUdeviceptr dA = device[0], dB = device[1], dD = device[2];
     int rc = 0;
     do {
-        if (cuMemcpyHtoD(dA, A, sA) != CUDA_SUCCESS) { rc = 3; break; }
-        if (cuMemcpyHtoD(dB, B, sB) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuMemcpyHtoD(dA, A, sA), "cuMemcpyHtoD")) { rc = 3; break; }
+        if (!cuOk(cuMemcpyHtoD(dB, B, sB), "cuMemcpyHtoD")) { rc = 3; break; }
         void* args[] = {&dA, &dB, &dD};
-        if (cuLaunchKernel(fn, 1, 1, 1, 32, 1, 1, 0, 0, args, 0) != CUDA_SUCCESS) {
+        if (!cuOk(cuLaunchKernel(fn, 1, 1, 1, 32, 1, 1, 0, 0, args, 0), "cuLaunchKernel")) {
             rc = 3; break;
         }
-        if (cuCtxSynchronize() != CUDA_SUCCESS) { rc = 3; break; }
-        if (cuMemcpyDtoH(D, dD, sD) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) { rc = 3; break; }
+        if (!cuOk(cuMemcpyDtoH(D, dD, sD), "cuMemcpyDtoH")) { rc = 3; break; }
     } while (0);
     return rc;
 }
@@ -232,14 +265,14 @@ int copyLogicalRowsDtoH(void* host, CUdeviceptr device, long long rows,
     auto* hostBytes = static_cast<unsigned char*>(host);
     const size_t rowBytes = static_cast<size_t>(columns) * elementBytes;
     if (leadingDimension == columns)
-        return cuMemcpyDtoH(host, device,
-                           static_cast<size_t>(rows) * rowBytes) == CUDA_SUCCESS
+        return cuOk(cuMemcpyDtoH(host, device,
+                           static_cast<size_t>(rows) * rowBytes), "cuMemcpyDtoH")
             ? 0 : 3;
     const size_t pitchBytes = static_cast<size_t>(leadingDimension) * elementBytes;
     for (long long row = 0; row < rows; ++row) {
-        if (cuMemcpyDtoH(hostBytes + static_cast<size_t>(row) * pitchBytes,
+        if (!cuOk(cuMemcpyDtoH(hostBytes + static_cast<size_t>(row) * pitchBytes,
                          device + static_cast<CUdeviceptr>(row) * pitchBytes,
-                         rowBytes) != CUDA_SUCCESS)
+                         rowBytes), "cuMemcpyDtoH"))
             return 3;
     }
     return 0;
@@ -299,8 +332,8 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
     CUdeviceptr dA = device[0], dB = device[1], dD = device[2];
     int rc = 0;
     do {
-        if (cuMemcpyHtoD(dA, A, sA) != CUDA_SUCCESS) { rc = 3; break; }
-        if (cuMemcpyHtoD(dB, B, sB) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuMemcpyHtoD(dA, A, sA), "cuMemcpyHtoD")) { rc = 3; break; }
+        if (!cuOk(cuMemcpyHtoD(dB, B, sB), "cuMemcpyHtoD")) { rc = 3; break; }
         long long MArg = M64, NArg = N64, KArg = K64;
         long long LDAArg = LDA64, LDBArg = LDB64, LDDArg = LDD64;
         void* args32[] = {&dA, &dB, &dD, &M, &N, &K};
@@ -315,11 +348,11 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
         unsigned gy = columnMajorGrid
             ? (unsigned)((M + tileM - 1) / tileM)
             : (unsigned)((N + tileN - 1) / tileN);
-        if (cuLaunchKernel(fn, gx, gy, 1, (unsigned)threads, 1, 1,
-                           0, 0, args, 0) != CUDA_SUCCESS) {
+        if (!cuOk(cuLaunchKernel(fn, gx, gy, 1, (unsigned)threads, 1, 1,
+                           0, 0, args, 0), "cuLaunchKernel")) {
             rc = 3; break;
         }
-        if (cuCtxSynchronize() != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) { rc = 3; break; }
         rc = copyLogicalRowsDtoH(D, dD, M64, N64, LDD64, outputBytes);
         if (rc) break;
     } while (0);
@@ -348,14 +381,14 @@ int invokeNvfp4(CUfunction fn, void** buffers, size_t nbuf,
     CUdeviceptr device[5] = {};
     int rc = 0;
     for (int i = 0; i < 5; ++i) {
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
             rc = 3;
             break;
         }
     }
     if (!rc) {
         for (int i = 0; i < 4; ++i)
-            if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) {
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) {
                 rc = 3;
                 break;
             }
@@ -366,9 +399,8 @@ int invokeNvfp4(CUfunction fn, void** buffers, size_t nbuf,
                         &device[4], &MArg, &NArg, &KArg};
         unsigned gx = (unsigned)((N + 7) / 8);
         unsigned gy = (unsigned)((M + 15) / 16);
-        if (cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0) !=
-                CUDA_SUCCESS || cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[4], device[4], sizes[4]) != CUDA_SUCCESS)
+        if (!cuOk(cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0), "cuLaunchKernel") || !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[4], device[4], sizes[4]), "cuMemcpyDtoH"))
             rc = 3;
     }
     for (CUdeviceptr ptr : device)
@@ -394,12 +426,12 @@ int invokeInt4(CUfunction fn, void** buffers, size_t nbuf,
     CUdeviceptr device[3] = {};
     int rc = 0;
     for (int i = 0; i < 3; ++i)
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
             rc = 3; break;
         }
     if (!rc &&
-        (cuMemcpyHtoD(device[0], buffers[0], sizes[0]) != CUDA_SUCCESS ||
-         cuMemcpyHtoD(device[1], buffers[1], sizes[1]) != CUDA_SUCCESS))
+        (!cuOk(cuMemcpyHtoD(device[0], buffers[0], sizes[0]), "cuMemcpyHtoD") ||
+         !cuOk(cuMemcpyHtoD(device[1], buffers[1], sizes[1]), "cuMemcpyHtoD")))
         rc = 3;
     if (!rc) {
         long long MArg = M, NArg = N, KArg = K;
@@ -408,10 +440,9 @@ int invokeInt4(CUfunction fn, void** buffers, size_t nbuf,
         };
         const unsigned gx = (unsigned)((N + 31) / 32);
         const unsigned gy = (unsigned)((M + 7) / 8);
-        if (cuLaunchKernel(fn, gx, gy, 1, 32, 8, 1, 0, 0, args, 0) !=
-                CUDA_SUCCESS ||
-            cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[2], device[2], sizes[2]) != CUDA_SUCCESS)
+        if (!cuOk(cuLaunchKernel(fn, gx, gy, 1, 32, 8, 1, 0, 0, args, 0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[2], device[2], sizes[2]), "cuMemcpyDtoH"))
             rc = 3;
     }
     for (CUdeviceptr ptr : device)
@@ -428,12 +459,12 @@ int invokeCudaIntrinsic(CUfunction fn, void** buffers, size_t nbuf,
     CUdeviceptr device[4] = {};
     int rc = 0;
     for (int i = 0; i < 4; ++i)
-        if (cuMemAlloc(&device[i], bytes) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemAlloc(&device[i], bytes), "cuMemAlloc")) {
             rc = 3; break;
         }
     if (!rc)
         for (int i = 0; i < 3; ++i)
-            if (cuMemcpyHtoD(device[i], buffers[i], bytes) != CUDA_SUCCESS) {
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], bytes), "cuMemcpyHtoD")) {
                 rc = 3; break;
             }
     if (!rc) {
@@ -442,10 +473,9 @@ int invokeCudaIntrinsic(CUfunction fn, void** buffers, size_t nbuf,
             &device[0], &device[1], &device[2], &device[3], &nArg,
         };
         const unsigned grid = (unsigned)((n + 127) / 128);
-        if (cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0) !=
-                CUDA_SUCCESS ||
-            cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[3], device[3], bytes) != CUDA_SUCCESS)
+        if (!cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[3], device[3], bytes), "cuMemcpyDtoH"))
             rc = 3;
     }
     for (CUdeviceptr ptr : device)
@@ -472,12 +502,12 @@ int invokePackedDecode(CUfunction fn, void** buffers, size_t nbuf,
     };
     int rc = 0;
     for (int i = 0; i < 3; ++i)
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
             rc = 3; break;
         }
     if (!rc &&
-        (cuMemcpyHtoD(device[0], buffers[0], sizes[0]) != CUDA_SUCCESS ||
-         cuMemcpyHtoD(device[1], buffers[1], sizes[1]) != CUDA_SUCCESS))
+        (!cuOk(cuMemcpyHtoD(device[0], buffers[0], sizes[0]), "cuMemcpyHtoD") ||
+         !cuOk(cuMemcpyHtoD(device[1], buffers[1], sizes[1]), "cuMemcpyHtoD")))
         rc = 3;
     if (!rc) {
         long long rowArg = row, colArg = col;
@@ -490,10 +520,9 @@ int invokePackedDecode(CUfunction fn, void** buffers, size_t nbuf,
         };
         const unsigned grid =
             (unsigned)(((size_t)rows * (size_t)columns + 127) / 128);
-        if (cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0) !=
-                CUDA_SUCCESS ||
-            cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[2], device[2], outputBytes) != CUDA_SUCCESS)
+        if (!cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[2], device[2], outputBytes), "cuMemcpyDtoH"))
             rc = 3;
     }
     for (CUdeviceptr ptr : device)
@@ -524,12 +553,12 @@ int benchmarkPackedDecode(CUfunction fn, void** buffers, size_t nbuf,
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
     for (int i = 0; i < 3; ++i)
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
             rc = 3; break;
         }
     if (!rc &&
-        (cuMemcpyHtoD(device[0], buffers[0], sizes[0]) != CUDA_SUCCESS ||
-         cuMemcpyHtoD(device[1], buffers[1], sizes[1]) != CUDA_SUCCESS))
+        (!cuOk(cuMemcpyHtoD(device[0], buffers[0], sizes[0]), "cuMemcpyHtoD") ||
+         !cuOk(cuMemcpyHtoD(device[1], buffers[1], sizes[1]), "cuMemcpyHtoD")))
         rc = 3;
     if (!rc) {
         long long rowArg = row, colArg = col;
@@ -546,19 +575,19 @@ int benchmarkPackedDecode(CUfunction fn, void** buffers, size_t nbuf,
             return cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
         };
         for (int i = 0; i < warmup; ++i)
-            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
-        if (!rc && (cuCtxSynchronize() != CUDA_SUCCESS ||
-                    cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-                    cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS))
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
+        if (!rc && (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+                    !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                    !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate")))
             rc = 3;
-        if (!rc && cuEventRecord(start, 0) != CUDA_SUCCESS) rc = 3;
+        if (!rc && !cuOk(cuEventRecord(start, 0), "cuEventRecord")) rc = 3;
         for (int i = 0; !rc && i < repetitions; ++i)
-            if (launch() != CUDA_SUCCESS) rc = 3;
-        if (!rc && (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-                    cuEventSynchronize(stop) != CUDA_SUCCESS))
+            if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+        if (!rc && (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+                    !cuOk(cuEventSynchronize(stop), "cuEventSynchronize")))
             rc = 3;
         float totalMs = 0.0f;
-        if (!rc && cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS)
+        if (!rc && !cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime"))
             rc = 3;
         if (!rc) *latencyMs = totalMs / (float)repetitions;
     }
@@ -592,14 +621,14 @@ int invokeMx(CUfunction fn, void** buffers, size_t nbuf,
     CUdeviceptr device[5] = {};
     int rc = 0;
     for (int i = 0; i < 5; ++i) {
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
             rc = 3;
             break;
         }
     }
     if (!rc) {
         for (int i = 0; i < 4; ++i)
-            if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) {
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) {
                 rc = 3;
                 break;
             }
@@ -610,9 +639,8 @@ int invokeMx(CUfunction fn, void** buffers, size_t nbuf,
                         &device[4], &MArg, &NArg, &KArg};
         const unsigned gx = (unsigned)((N + 7) / 8);
         const unsigned gy = (unsigned)((M + 15) / 16);
-        if (cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0) !=
-                CUDA_SUCCESS || cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[4], device[4], sizes[4]) != CUDA_SUCCESS)
+        if (!cuOk(cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0), "cuLaunchKernel") || !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[4], device[4], sizes[4]), "cuMemcpyDtoH"))
             rc = 3;
     }
     for (CUdeviceptr ptr : device)
@@ -663,7 +691,7 @@ int invokeFusedMatmul16(CUfunction fn, const char* name, void** buffers,
     const size_t outputIndex = nbuf - 1;
     if (!rc) {
         for (size_t i = 0; i < outputIndex; ++i)
-            if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) {
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) {
                 rc = 3;
                 break;
             }
@@ -683,11 +711,11 @@ int invokeFusedMatmul16(CUfunction fn, const char* name, void** buffers,
         const unsigned tileN = direct || (scheduled && !scheduledMacro) ? 8 : 32;
         const unsigned tileM = direct || (scheduled && !scheduledMacro) ? 16 : 32;
         const unsigned threads = direct || (scheduled && !scheduledMacro) ? 32 : 128;
-        if (cuLaunchKernel(fn, (unsigned)((N + tileN - 1) / tileN),
+        if (!cuOk(cuLaunchKernel(fn, (unsigned)((N + tileN - 1) / tileN),
                            (unsigned)((M + tileM - 1) / tileM), 1,
                            threads, 1, 1,
-                           0, 0, args, 0) != CUDA_SUCCESS ||
-            cuCtxSynchronize() != CUDA_SUCCESS)
+                           0, 0, args, 0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize"))
             rc = 3;
         if (!rc)
             rc = copyLogicalRowsDtoH(
@@ -710,23 +738,22 @@ int invokeSoftmax(CUfunction fn, void** buffers, size_t nbuf,
     if (elementBytes == 0 || elements > SIZE_MAX / elementBytes) return 5;
     const size_t bytes = elements * elementBytes;
     CUdeviceptr dx = 0, dout = 0;
-    if (cuMemAlloc(&dx, bytes) != CUDA_SUCCESS) return 3;
-    if (cuMemAlloc(&dout, bytes) != CUDA_SUCCESS) {
+    if (!cuOk(cuMemAlloc(&dx, bytes), "cuMemAlloc")) return 3;
+    if (!cuOk(cuMemAlloc(&dout, bytes), "cuMemAlloc")) {
         cuMemFree(dx);
         return 3;
     }
     int rc = 0;
     do {
-        if (cuMemcpyHtoD(dx, buffers[0], bytes) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemcpyHtoD(dx, buffers[0], bytes), "cuMemcpyHtoD")) {
             rc = 3;
             break;
         }
         long long rowsArg = rows, kArg = K;
         void* args[] = {&dx, &dout, &rowsArg, &kArg};
         unsigned grid = (unsigned)((rows + 127) / 128);
-        if (cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0) !=
-                CUDA_SUCCESS || cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[1], dout, bytes) != CUDA_SUCCESS)
+        if (!cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0), "cuLaunchKernel") || !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[1], dout, bytes), "cuMemcpyDtoH"))
             rc = 3;
     } while (0);
     cuMemFree(dx);
@@ -745,23 +772,22 @@ int invokeReduce(CUfunction fn, void** buffers, size_t nbuf,
     const size_t inputBytes=outputs*(size_t)axis*elementBytes;
     const size_t outputBytes=outputs*sizeof(float);
     CUdeviceptr dx = 0, dout = 0;
-    if (cuMemAlloc(&dx, inputBytes) != CUDA_SUCCESS) return 3;
-    if (cuMemAlloc(&dout, outputBytes) != CUDA_SUCCESS) {
+    if (!cuOk(cuMemAlloc(&dx, inputBytes), "cuMemAlloc")) return 3;
+    if (!cuOk(cuMemAlloc(&dout, outputBytes), "cuMemAlloc")) {
         cuMemFree(dx);
         return 3;
     }
     int rc = 0;
     do {
-        if (cuMemcpyHtoD(dx, buffers[0], inputBytes) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemcpyHtoD(dx, buffers[0], inputBytes), "cuMemcpyHtoD")) {
             rc = 3;
             break;
         }
         long long outerArg=outer,axisArg=axis,innerArg=inner;
         void* args[] = {&dx,&dout,&outerArg,&axisArg,&innerArg};
         unsigned grid=cooperative?(unsigned)outputs:(unsigned)((outputs+127)/128);
-        if (cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0) !=
-                CUDA_SUCCESS || cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[1], dout, outputBytes) != CUDA_SUCCESS)
+        if (!cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0), "cuLaunchKernel") || !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[1], dout, outputBytes), "cuMemcpyDtoH"))
             rc = 3;
     } while (0);
     cuMemFree(dx);
@@ -803,18 +829,18 @@ int invokeMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
     }
     CUdeviceptr device[4]={}; int rc=0;
     for(size_t i=0;i<nbuf;++i)
-        if(cuMemAlloc(&device[i],sizes[i])!=CUDA_SUCCESS){rc=3;break;}
+        if(!cuOk(cuMemAlloc(&device[i],sizes[i]), "cuMemAlloc")){rc=3;break;}
     const size_t outputIndex=nbuf-1;
     for(size_t i=0;!rc&&i<outputIndex;++i)
-        if(cuMemcpyHtoD(device[i],buffers[i],sizes[i])!=CUDA_SUCCESS) rc=3;
+        if(!cuOk(cuMemcpyHtoD(device[i],buffers[i],sizes[i]), "cuMemcpyHtoD")) rc=3;
     long long args64[4]={};
     for(size_t i=0;i<ndim;++i) args64[i]=dims[i];
     void* args[8]={}; size_t arg=0;
     for(size_t i=0;i<nbuf;++i) args[arg++]=&device[i];
     for(size_t i=0;i<ndim;++i) args[arg++]=&args64[i];
-    if(!rc&&(cuLaunchKernel(fn,grid,1,1,threads,1,1,0,0,args,0)!=CUDA_SUCCESS||
-             cuCtxSynchronize()!=CUDA_SUCCESS||
-             cuMemcpyDtoH(buffers[outputIndex],device[outputIndex],sizes[outputIndex])!=CUDA_SUCCESS)) rc=3;
+    if(!rc&&(!cuOk(cuLaunchKernel(fn,grid,1,1,threads,1,1,0,0,args,0), "cuLaunchKernel")||
+             !cuOk(cuCtxSynchronize(), "cuCtxSynchronize")||
+             !cuOk(cuMemcpyDtoH(buffers[outputIndex],device[outputIndex],sizes[outputIndex]), "cuMemcpyDtoH"))) rc=3;
     for(CUdeviceptr ptr:device) if(ptr) cuMemFree(ptr);
     return rc;
 }
@@ -876,10 +902,10 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
     CUdeviceptr device[6] = {};
     int rc = 0;
     for (size_t i = 0; i < nbuf; ++i)
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc = 3; break; }
     if (!rc)
         for (size_t i = 0; i < outputIndex; ++i)
-            if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) { rc = 3; break; }
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) { rc = 3; break; }
     if (!rc) {
         long long args64[7];
         for (int i = 0; i < 7; ++i) args64[i] = dims[i];
@@ -889,12 +915,12 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
         for (int i = 0; i < 7; ++i) args[arg++] = &args64[i];
         unsigned grid = (unsigned)((oElements + 127) / 128);
         if (grid == 0 || grid > 0x7fffffffU ||
-            cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0) != CUDA_SUCCESS ||
-            cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[outputIndex], device[outputIndex],
-                         sizes[outputIndex]) != CUDA_SUCCESS ||
-            (hasSavedLse && cuMemcpyDtoH(buffers[lseIndex], device[lseIndex],
-                                         sizes[lseIndex]) != CUDA_SUCCESS))
+            !cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[outputIndex], device[outputIndex],
+                         sizes[outputIndex]), "cuMemcpyDtoH") ||
+            (hasSavedLse && !cuOk(cuMemcpyDtoH(buffers[lseIndex], device[lseIndex],
+                                         sizes[lseIndex]), "cuMemcpyDtoH")))
             rc = 3;
     }
     for (CUdeviceptr ptr : device) if (ptr) cuMemFree(ptr);
@@ -913,17 +939,17 @@ int invokePagedKV(CUfunction fn, void** buffers, size_t nbuf,
     CUdeviceptr device[3] = {};
     size_t sizes[3] = {pages, table, output};
     int rc = 0;
-    for (int i=0;i<3;++i) if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
-    if (!rc && (cuMemcpyHtoD(device[0], buffers[0], pages) != CUDA_SUCCESS ||
-                cuMemcpyHtoD(device[1], buffers[1], table) != CUDA_SUCCESS)) rc=3;
+    for (int i=0;i<3;++i) if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc=3; break; }
+    if (!rc && (!cuOk(cuMemcpyHtoD(device[0], buffers[0], pages), "cuMemcpyHtoD") ||
+                !cuOk(cuMemcpyHtoD(device[1], buffers[1], table), "cuMemcpyHtoD"))) rc=3;
     if (!rc) {
         long long args64[7]; for(int i=0;i<7;++i) args64[i]=dims[i];
         void* args[] = {&device[0],&device[1],&device[2],&args64[0],&args64[1],
                         &args64[2],&args64[3],&args64[4],&args64[5],&args64[6]};
         size_t count=(size_t)tokens*H*D;
-        if (cuLaunchKernel(fn,(unsigned)((count+255)/256),1,1,256,1,1,0,0,args,0)!=CUDA_SUCCESS ||
-            cuCtxSynchronize()!=CUDA_SUCCESS ||
-            cuMemcpyDtoH(buffers[2],device[2],output)!=CUDA_SUCCESS) rc=3;
+        if (!cuOk(cuLaunchKernel(fn,(unsigned)((count+255)/256),1,1,256,1,1,0,0,args,0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[2],device[2],output), "cuMemcpyDtoH")) rc=3;
     }
     for(CUdeviceptr ptr:device) if(ptr) cuMemFree(ptr);
     return rc;
@@ -951,9 +977,9 @@ int invokePagedAttention(CUfunction fn, void** buffers, size_t nbuf,
        !checkedBytes({(size_t)H,(size_t)Q,(size_t)D},4,outBytes)) return 5;
     size_t sizes[6]={qBytes,pageBytes,pageBytes,tableBytes,indexBytes,outBytes};
     CUdeviceptr device[6]={}; int rc=0;
-    for(int i=0;i<6;++i) if(cuMemAlloc(&device[i],sizes[i])!=CUDA_SUCCESS){rc=3;break;}
+    for(int i=0;i<6;++i) if(!cuOk(cuMemAlloc(&device[i],sizes[i]), "cuMemAlloc")){rc=3;break;}
     if(!rc) for(int i=0;i<5;++i)
-        if(cuMemcpyHtoD(device[i],buffers[i],sizes[i])!=CUDA_SUCCESS){rc=3;break;}
+        if(!cuOk(cuMemcpyHtoD(device[i],buffers[i],sizes[i]), "cuMemcpyHtoD")){rc=3;break;}
     if(!rc){
         long long args64[8]; for(int i=0;i<8;++i)args64[i]=dims[i];
         void* args[14]; size_t arg=0;
@@ -961,9 +987,9 @@ int invokePagedAttention(CUfunction fn, void** buffers, size_t nbuf,
         for(int i=0;i<8;++i)args[arg++]=&args64[i];
         size_t count=(size_t)H*Q*D;
         if(count==0 || count>(size_t)0x7fffffffU*128 ||
-           cuLaunchKernel(fn,(unsigned)((count+127)/128),1,1,128,1,1,0,0,args,0)!=CUDA_SUCCESS ||
-           cuCtxSynchronize()!=CUDA_SUCCESS ||
-           cuMemcpyDtoH(buffers[5],device[5],outBytes)!=CUDA_SUCCESS) rc=3;
+           !cuOk(cuLaunchKernel(fn,(unsigned)((count+127)/128),1,1,128,1,1,0,0,args,0), "cuLaunchKernel") ||
+           !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+           !cuOk(cuMemcpyDtoH(buffers[5],device[5],outBytes), "cuMemcpyDtoH")) rc=3;
     }
     for(CUdeviceptr ptr:device)if(ptr)cuMemFree(ptr);
     return rc;
@@ -1012,10 +1038,10 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
     CUdeviceptr device[9] = {};
     int rc = 0;
     for (size_t i=0;i<nbuf;++i)
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc=3; break; }
     if (!rc)
         for (size_t i=0;i<outputBase;++i)
-            if (cuMemcpyHtoD(device[i],buffers[i],sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
+            if (!cuOk(cuMemcpyHtoD(device[i],buffers[i],sizes[i]), "cuMemcpyHtoD")) { rc=3; break; }
     if (!rc) {
         long long args64[7]; for(int i=0;i<7;++i) args64[i]=dims[i];
         void* args[16] = {};
@@ -1024,10 +1050,10 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
         for(int i=0;i<7;++i) args[arg++]=&args64[i];
         size_t elements=qBytes/elementBytes+kBytes/elementBytes+vBytes/elementBytes;
         if (elements==0 || elements > (size_t)0x7fffffffU*128 ||
-            cuLaunchKernel(fn,(unsigned)((elements+127)/128),1,1,128,1,1,0,0,args,0)!=CUDA_SUCCESS ||
-            cuCtxSynchronize()!=CUDA_SUCCESS) rc=3;
+            !cuOk(cuLaunchKernel(fn,(unsigned)((elements+127)/128),1,1,128,1,1,0,0,args,0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) rc=3;
         for(size_t i=outputBase;!rc && i<nbuf;++i)
-            if(cuMemcpyDtoH(buffers[i],device[i],sizes[i])!=CUDA_SUCCESS) rc=3;
+            if(!cuOk(cuMemcpyDtoH(buffers[i],device[i],sizes[i]), "cuMemcpyDtoH")) rc=3;
     }
     for(CUdeviceptr ptr:device) if(ptr) cuMemFree(ptr);
     return rc;
@@ -1136,14 +1162,14 @@ int benchmarkTileGemm16(CUfunction fn, const char* name, void** buffers,
     CUdeviceptr dA = 0, dB = 0, dD = 0;
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
-    if (cuMemAlloc(&dA, sA) != CUDA_SUCCESS) return 3;
-    if (cuMemAlloc(&dB, sB) != CUDA_SUCCESS) { cuMemFree(dA); return 3; }
-    if (cuMemAlloc(&dD, sD) != CUDA_SUCCESS) {
+    if (!cuOk(cuMemAlloc(&dA, sA), "cuMemAlloc")) return 3;
+    if (!cuOk(cuMemAlloc(&dB, sB), "cuMemAlloc")) { cuMemFree(dA); return 3; }
+    if (!cuOk(cuMemAlloc(&dD, sD), "cuMemAlloc")) {
         cuMemFree(dA); cuMemFree(dB); return 3;
     }
     do {
-        if (cuMemcpyHtoD(dA, buffers[0], sA) != CUDA_SUCCESS ||
-            cuMemcpyHtoD(dB, buffers[1], sB) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuMemcpyHtoD(dA, buffers[0], sA), "cuMemcpyHtoD") ||
+            !cuOk(cuMemcpyHtoD(dB, buffers[1], sB), "cuMemcpyHtoD")) { rc = 3; break; }
         long long MArg = M, NArg = N, KArg = K;
         void* args[] = {&dA, &dB, &dD, &MArg, &NArg, &KArg};
         unsigned gx = columnMajorGrid
@@ -1157,21 +1183,21 @@ int benchmarkTileGemm16(CUfunction fn, const char* name, void** buffers,
                                   0, 0, args, 0);
         };
         for (int i = 0; i < warmup; ++i)
-            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
         if (rc) break;
-        if (cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-            cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS) {
+        if (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+            !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate")) {
             rc = 3; break;
         }
-        if (cuEventRecord(start, 0) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuEventRecord(start, 0), "cuEventRecord")) { rc = 3; break; }
         for (int i = 0; i < repetitions; ++i)
-            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
         if (rc) break;
-        if (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-            cuEventSynchronize(stop) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+            !cuOk(cuEventSynchronize(stop), "cuEventSynchronize")) { rc = 3; break; }
         float totalMs = 0.0f;
-        if (cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS) {
+        if (!cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime")) {
             rc = 3; break;
         }
         *latencyMs = totalMs / (float)repetitions;
@@ -1209,14 +1235,14 @@ int benchmarkMx(CUfunction fn, const char* name, void** buffers,
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
     for (int i = 0; i < 5; ++i) {
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
             rc = 3;
             break;
         }
     }
     if (!rc) {
         for (int i = 0; i < 4; ++i)
-            if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) {
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) {
                 rc = 3;
                 break;
             }
@@ -1231,18 +1257,18 @@ int benchmarkMx(CUfunction fn, const char* name, void** buffers,
             return cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0);
         };
         for (int i = 0; i < warmup; ++i)
-            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
-        if (!rc && (cuCtxSynchronize() != CUDA_SUCCESS ||
-                    cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-                    cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS))
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
+        if (!rc && (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+                    !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                    !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate")))
             rc = 3;
-        if (!rc && cuEventRecord(start, 0) != CUDA_SUCCESS) rc = 3;
+        if (!rc && !cuOk(cuEventRecord(start, 0), "cuEventRecord")) rc = 3;
         for (int i = 0; !rc && i < repetitions; ++i)
-            if (launch() != CUDA_SUCCESS) rc = 3;
-        if (!rc && (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-                    cuEventSynchronize(stop) != CUDA_SUCCESS)) rc = 3;
+            if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+        if (!rc && (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+                    !cuOk(cuEventSynchronize(stop), "cuEventSynchronize"))) rc = 3;
         float totalMs = 0.0f;
-        if (!rc && cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS)
+        if (!rc && !cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime"))
             rc = 3;
         if (!rc) *latencyMs = totalMs / (float)repetitions;
     }
@@ -1278,13 +1304,13 @@ int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
     CUdeviceptr dx = 0, dout = 0;
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
-    if (cuMemAlloc(&dx, inputBytes) != CUDA_SUCCESS) return 3;
-    if (cuMemAlloc(&dout, outputBytes) != CUDA_SUCCESS) {
+    if (!cuOk(cuMemAlloc(&dx, inputBytes), "cuMemAlloc")) return 3;
+    if (!cuOk(cuMemAlloc(&dout, outputBytes), "cuMemAlloc")) {
         cuMemFree(dx);
         return 3;
     }
     do {
-        if (cuMemcpyHtoD(dx, buffers[0], inputBytes) != CUDA_SUCCESS) {
+        if (!cuOk(cuMemcpyHtoD(dx, buffers[0], inputBytes), "cuMemcpyHtoD")) {
             rc = 3;
             break;
         }
@@ -1298,18 +1324,18 @@ int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
             return cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
         };
         for (int i = 0; i < warmup; ++i)
-            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
         if (rc) break;
-        if (cuCtxSynchronize() != CUDA_SUCCESS ||
-            cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-            cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-            cuEventRecord(start, 0) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+            !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") ||
+            !cuOk(cuEventRecord(start, 0), "cuEventRecord")) { rc = 3; break; }
         for (int i = 0; i < repetitions; ++i)
-            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
-        if (rc || cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-            cuEventSynchronize(stop) != CUDA_SUCCESS) { rc = 3; break; }
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
+        if (rc || !cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+            !cuOk(cuEventSynchronize(stop), "cuEventSynchronize")) { rc = 3; break; }
         float totalMs = 0.0f;
-        if (cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS) {
+        if (!cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime")) {
             rc = 3;
             break;
         }
@@ -1375,10 +1401,10 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
     for (size_t i = 0; i < nbuf; ++i)
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc = 3; break; }
     if (!rc)
         for (size_t i = 0; i < outputIndex; ++i)
-            if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) { rc = 3; break; }
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) { rc = 3; break; }
     if (!rc) {
         long long args64[7];
         for (int i = 0; i < 7; ++i) args64[i] = dims[i];
@@ -1391,17 +1417,17 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
             return cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
         };
         for (int i = 0; i < warmup; ++i)
-            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
-        if (!rc && (cuCtxSynchronize() != CUDA_SUCCESS ||
-                    cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-                    cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-                    cuEventRecord(start, 0) != CUDA_SUCCESS)) rc = 3;
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
+        if (!rc && (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+                    !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                    !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                    !cuOk(cuEventRecord(start, 0), "cuEventRecord"))) rc = 3;
         for (int i = 0; !rc && i < repetitions; ++i)
-            if (launch() != CUDA_SUCCESS) rc = 3;
-        if (!rc && (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-                    cuEventSynchronize(stop) != CUDA_SUCCESS)) rc = 3;
+            if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+        if (!rc && (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+                    !cuOk(cuEventSynchronize(stop), "cuEventSynchronize"))) rc = 3;
         float totalMs = 0.0f;
-        if (!rc && cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS) rc = 3;
+        if (!rc && !cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime")) rc = 3;
         if (!rc) *latencyMs = totalMs / (float)repetitions;
     }
     if (start) cuEventDestroy(start);
@@ -1446,9 +1472,9 @@ int benchmarkAttentionBackward(CUfunction fn, const char* name, void** buffers,
     sizes[outputBase] = qBytes; sizes[outputBase+1] = kBytes; sizes[outputBase+2] = vBytes;
     CUdeviceptr device[9] = {}; CUevent start=nullptr, stop=nullptr; int rc=0;
     for (size_t i=0; i<nbuf; ++i)
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc=3; break; }
     if (!rc) for (size_t i=0; i<outputBase; ++i)
-        if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
+        if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) { rc=3; break; }
     if (!rc) {
         long long args64[7]; for (int i=0;i<7;++i) args64[i]=dims[i];
         void* args[16] = {}; size_t arg=0;
@@ -1457,13 +1483,13 @@ int benchmarkAttentionBackward(CUfunction fn, const char* name, void** buffers,
         size_t elements=qBytes/elementBytes+kBytes/elementBytes+vBytes/elementBytes;
         unsigned grid=(unsigned)((elements+127)/128);
         auto launch = [&]() { return cuLaunchKernel(fn, grid,1,1,128,1,1,0,0,args,0); };
-        for (int i=0;i<warmup;++i) if (launch()!=CUDA_SUCCESS) { rc=3; break; }
-        if (!rc && (cuCtxSynchronize()!=CUDA_SUCCESS || cuEventCreate(&start, CU_EVENT_DEFAULT)!=CUDA_SUCCESS ||
-                    cuEventCreate(&stop, CU_EVENT_DEFAULT)!=CUDA_SUCCESS || cuEventRecord(start,0)!=CUDA_SUCCESS)) rc=3;
-        for (int i=0;!rc && i<repetitions;++i) if (launch()!=CUDA_SUCCESS) rc=3;
-        if (!rc && (cuEventRecord(stop,0)!=CUDA_SUCCESS || cuEventSynchronize(stop)!=CUDA_SUCCESS)) rc=3;
+        for (int i=0;i<warmup;++i) if (!cuOk(launch(), "cuLaunchKernel")) { rc=3; break; }
+        if (!rc && (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") || !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                    !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") || !cuOk(cuEventRecord(start,0), "cuEventRecord"))) rc=3;
+        for (int i=0;!rc && i<repetitions;++i) if (!cuOk(launch(), "cuLaunchKernel")) rc=3;
+        if (!rc && (!cuOk(cuEventRecord(stop,0), "cuEventRecord") || !cuOk(cuEventSynchronize(stop), "cuEventSynchronize"))) rc=3;
         float totalMs=0.0f;
-        if (!rc && cuEventElapsedTime(&totalMs,start,stop)!=CUDA_SUCCESS) rc=3;
+        if (!rc && !cuOk(cuEventElapsedTime(&totalMs,start,stop), "cuEventElapsedTime")) rc=3;
         if (!rc) *latencyMs=totalMs/(float)repetitions;
     }
     if (start) cuEventDestroy(start); if (stop) cuEventDestroy(stop);
@@ -1497,11 +1523,11 @@ int benchmarkFusedMatmul16(CUfunction fn, const char* name, void** buffers,
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
     for (size_t i = 0; i < nbuf; ++i)
-        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc = 3; break; }
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc = 3; break; }
     const size_t outputIndex = nbuf - 1;
     if (!rc)
         for (size_t i = 0; i < outputIndex; ++i)
-            if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) {
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) {
                 rc = 3;
                 break;
             }
@@ -1519,17 +1545,17 @@ int benchmarkFusedMatmul16(CUfunction fn, const char* name, void** buffers,
                                   0, 0, args, 0);
         };
         for (int i = 0; i < warmup; ++i)
-            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
-        if (!rc && (cuCtxSynchronize() != CUDA_SUCCESS ||
-                    cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-                    cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-                    cuEventRecord(start, 0) != CUDA_SUCCESS)) rc = 3;
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
+        if (!rc && (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+                    !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                    !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                    !cuOk(cuEventRecord(start, 0), "cuEventRecord"))) rc = 3;
         for (int i = 0; !rc && i < repetitions; ++i)
-            if (launch() != CUDA_SUCCESS) rc = 3;
-        if (!rc && (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-                    cuEventSynchronize(stop) != CUDA_SUCCESS)) rc = 3;
+            if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+        if (!rc && (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+                    !cuOk(cuEventSynchronize(stop), "cuEventSynchronize"))) rc = 3;
         float totalMs = 0.0f;
-        if (!rc && cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS)
+        if (!rc && !cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime"))
             rc = 3;
         if (!rc) *latencyMs = totalMs / (float)repetitions;
     }
@@ -1551,24 +1577,24 @@ int benchmarkPagedKV(CUfunction fn, void** buffers, size_t nbuf,
     size_t pages=(size_t)P*PS*H*D*4,table=(size_t)LP*4,output=(size_t)tokens*H*D*4;
     CUdeviceptr device[3]={}; int rc=0; CUevent start=nullptr,stop=nullptr;
     size_t sizes[3]={pages,table,output};
-    for(int i=0;i<3;++i) if(cuMemAlloc(&device[i],sizes[i])!=CUDA_SUCCESS){rc=3;break;}
-    if(!rc&&(cuMemcpyHtoD(device[0],buffers[0],pages)!=CUDA_SUCCESS||
-             cuMemcpyHtoD(device[1],buffers[1],table)!=CUDA_SUCCESS)) rc=3;
+    for(int i=0;i<3;++i) if(!cuOk(cuMemAlloc(&device[i],sizes[i]), "cuMemAlloc")){rc=3;break;}
+    if(!rc&&(!cuOk(cuMemcpyHtoD(device[0],buffers[0],pages), "cuMemcpyHtoD")||
+             !cuOk(cuMemcpyHtoD(device[1],buffers[1],table), "cuMemcpyHtoD"))) rc=3;
     long long args64[7]; for(int i=0;i<7;++i) args64[i]=dims[i];
     void* args[]={&device[0],&device[1],&device[2],&args64[0],&args64[1],
                   &args64[2],&args64[3],&args64[4],&args64[5],&args64[6]};
     size_t count=(size_t)tokens*H*D; unsigned grid=(unsigned)((count+255)/256);
     for(int i=0;!rc&&i<warmup;++i)
-        if(cuLaunchKernel(fn,grid,1,1,256,1,1,0,0,args,0)!=CUDA_SUCCESS) rc=3;
-    if(!rc&&(cuCtxSynchronize()!=CUDA_SUCCESS||cuEventCreate(&start,0)!=CUDA_SUCCESS||
-             cuEventCreate(&stop,0)!=CUDA_SUCCESS)) rc=3;
-    if(!rc&&cuEventRecord(start,0)!=CUDA_SUCCESS) rc=3;
+        if(!cuOk(cuLaunchKernel(fn,grid,1,1,256,1,1,0,0,args,0), "cuLaunchKernel")) rc=3;
+    if(!rc&&(!cuOk(cuCtxSynchronize(), "cuCtxSynchronize")||!cuOk(cuEventCreate(&start,0), "cuEventCreate")||
+             !cuOk(cuEventCreate(&stop,0), "cuEventCreate"))) rc=3;
+    if(!rc&&!cuOk(cuEventRecord(start,0), "cuEventRecord")) rc=3;
     for(int i=0;!rc&&i<repetitions;++i)
-        if(cuLaunchKernel(fn,grid,1,1,256,1,1,0,0,args,0)!=CUDA_SUCCESS) rc=3;
-    if(!rc&&(cuEventRecord(stop,0)!=CUDA_SUCCESS||cuEventSynchronize(stop)!=CUDA_SUCCESS)) rc=3;
+        if(!cuOk(cuLaunchKernel(fn,grid,1,1,256,1,1,0,0,args,0), "cuLaunchKernel")) rc=3;
+    if(!rc&&(!cuOk(cuEventRecord(stop,0), "cuEventRecord")||!cuOk(cuEventSynchronize(stop), "cuEventSynchronize"))) rc=3;
     float total=0.0f;
-    if(!rc&&(cuEventElapsedTime(&total,start,stop)!=CUDA_SUCCESS||
-             cuMemcpyDtoH(buffers[2],device[2],output)!=CUDA_SUCCESS)) rc=3;
+    if(!rc&&(!cuOk(cuEventElapsedTime(&total,start,stop), "cuEventElapsedTime")||
+             !cuOk(cuMemcpyDtoH(buffers[2],device[2],output), "cuMemcpyDtoH"))) rc=3;
     if(!rc)*latencyMs=total/(float)repetitions;
     if(start)cuEventDestroy(start); if(stop)cuEventDestroy(stop);
     for(CUdeviceptr ptr:device)if(ptr)cuMemFree(ptr);
@@ -1610,25 +1636,25 @@ int benchmarkMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
     }
     CUdeviceptr device[4]={}; CUevent start=nullptr,stop=nullptr; int rc=0;
     for(size_t i=0;i<nbuf;++i)
-        if(cuMemAlloc(&device[i],sizes[i])!=CUDA_SUCCESS){rc=3;break;}
+        if(!cuOk(cuMemAlloc(&device[i],sizes[i]), "cuMemAlloc")){rc=3;break;}
     const size_t outputIndex=nbuf-1;
     for(size_t i=0;!rc&&i<outputIndex;++i)
-        if(cuMemcpyHtoD(device[i],buffers[i],sizes[i])!=CUDA_SUCCESS)rc=3;
+        if(!cuOk(cuMemcpyHtoD(device[i],buffers[i],sizes[i]), "cuMemcpyHtoD"))rc=3;
     long long args64[4]={};for(size_t i=0;i<ndim;++i)args64[i]=dims[i];
     void* args[8]={};size_t arg=0;
     for(size_t i=0;i<nbuf;++i)args[arg++]=&device[i];
     for(size_t i=0;i<ndim;++i)args[arg++]=&args64[i];
     for(int i=0;!rc&&i<warmup;++i)
-        if(cuLaunchKernel(fn,grid,1,1,threads,1,1,0,0,args,0)!=CUDA_SUCCESS)rc=3;
-    if(!rc&&(cuCtxSynchronize()!=CUDA_SUCCESS||cuEventCreate(&start,0)!=CUDA_SUCCESS||
-             cuEventCreate(&stop,0)!=CUDA_SUCCESS))rc=3;
-    if(!rc&&cuEventRecord(start,0)!=CUDA_SUCCESS)rc=3;
+        if(!cuOk(cuLaunchKernel(fn,grid,1,1,threads,1,1,0,0,args,0), "cuLaunchKernel"))rc=3;
+    if(!rc&&(!cuOk(cuCtxSynchronize(), "cuCtxSynchronize")||!cuOk(cuEventCreate(&start,0), "cuEventCreate")||
+             !cuOk(cuEventCreate(&stop,0), "cuEventCreate")))rc=3;
+    if(!rc&&!cuOk(cuEventRecord(start,0), "cuEventRecord"))rc=3;
     for(int i=0;!rc&&i<repetitions;++i)
-        if(cuLaunchKernel(fn,grid,1,1,threads,1,1,0,0,args,0)!=CUDA_SUCCESS)rc=3;
-    if(!rc&&(cuEventRecord(stop,0)!=CUDA_SUCCESS||cuEventSynchronize(stop)!=CUDA_SUCCESS))rc=3;
+        if(!cuOk(cuLaunchKernel(fn,grid,1,1,threads,1,1,0,0,args,0), "cuLaunchKernel"))rc=3;
+    if(!rc&&(!cuOk(cuEventRecord(stop,0), "cuEventRecord")||!cuOk(cuEventSynchronize(stop), "cuEventSynchronize")))rc=3;
     float total=0.0f;
-    if(!rc&&(cuEventElapsedTime(&total,start,stop)!=CUDA_SUCCESS||
-             cuMemcpyDtoH(buffers[outputIndex],device[outputIndex],sizes[outputIndex])!=CUDA_SUCCESS))rc=3;
+    if(!rc&&(!cuOk(cuEventElapsedTime(&total,start,stop), "cuEventElapsedTime")||
+             !cuOk(cuMemcpyDtoH(buffers[outputIndex],device[outputIndex],sizes[outputIndex]), "cuMemcpyDtoH")))rc=3;
     if(!rc)*latencyMs=total/(float)repetitions;
     if(start)cuEventDestroy(start);if(stop)cuEventDestroy(stop);
     for(CUdeviceptr ptr:device)if(ptr)cuMemFree(ptr);
@@ -1878,15 +1904,21 @@ int runTraining(CUfunction fn, const char* name, void** buffers, size_t nbuf,
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
     for (size_t i = 0; i < nbuf; ++i) {
-        if (!buffers[i] ||
-            cuMemAlloc(&device[i], layout.sizes[i]) != CUDA_SUCCESS) {
+        if (!buffers[i]) {
+            noteFailure("training launch", ("host buffer " + std::to_string(i) + " is null").c_str());
+            rc = 3;
+            break;
+        }
+        if (!cuOk(cuMemAlloc(&device[i], layout.sizes[i]), "cuMemAlloc")) {
+            g_last_error += " (training buffer " + std::to_string(i) + ", " +
+                            std::to_string(layout.sizes[i]) + " bytes)";
             rc = 3;
             break;
         }
     }
     for (size_t i = 0; !rc && i < nbuf; ++i) {
         if (!layout.outputs[i] &&
-            cuMemcpyHtoD(device[i], buffers[i], layout.sizes[i]) != CUDA_SUCCESS)
+            !cuOk(cuMemcpyHtoD(device[i], buffers[i], layout.sizes[i]), "cuMemcpyHtoD"))
             rc = 3;
     }
     long long args64[10] = {};
@@ -1901,30 +1933,30 @@ int runTraining(CUfunction fn, const char* name, void** buffers, size_t nbuf,
         return cuLaunchKernel(fn, layout.grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
     };
     for (int i = 0; !rc && i < warmup; ++i)
-        if (launch() != CUDA_SUCCESS) rc = 3;
-    if (!rc && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+        if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+    if (!rc && !cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) rc = 3;
     if (!rc && latencyMs &&
-        (cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-         cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-         cuEventRecord(start, 0) != CUDA_SUCCESS))
+        (!cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+         !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") ||
+         !cuOk(cuEventRecord(start, 0), "cuEventRecord")))
         rc = 3;
     for (int i = 0; !rc && i < repetitions; ++i)
-        if (launch() != CUDA_SUCCESS) rc = 3;
+        if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
     if (!rc && latencyMs &&
-        (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-         cuEventSynchronize(stop) != CUDA_SUCCESS))
+        (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+         !cuOk(cuEventSynchronize(stop), "cuEventSynchronize")))
         rc = 3;
-    if (!rc && !latencyMs && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && !latencyMs && !cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) rc = 3;
     if (!rc && latencyMs) {
         float totalMs = 0.0f;
-        if (cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS)
+        if (!cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime"))
             rc = 3;
         else
             *latencyMs = totalMs / static_cast<float>(repetitions);
     }
     for (size_t i = 0; !rc && i < nbuf; ++i) {
         if (layout.outputs[i] &&
-            cuMemcpyDtoH(buffers[i], device[i], layout.sizes[i]) != CUDA_SUCCESS)
+            !cuOk(cuMemcpyDtoH(buffers[i], device[i], layout.sizes[i]), "cuMemcpyDtoH"))
             rc = 3;
     }
     if (start) cuEventDestroy(start);
@@ -1955,7 +1987,7 @@ int runDynamicSharedProbe(CUfunction fn, void** buffers, size_t nbuf,
     if (dynamicSharedBytes != required) return 5;
     CUdeviceptr output = 0;
     CUevent start = nullptr, stop = nullptr;
-    int rc = cuMemAlloc(&output, 2 * sizeof(float)) == CUDA_SUCCESS ? 0 : 3;
+    int rc = cuOk(cuMemAlloc(&output, 2 * sizeof(float)), "cuMemAlloc") ? 0 : 3;
     long long args64[3] = {dims[0], dims[1], dims[2]};
     void* args[] = {&output, &args64[0], &args64[1], &args64[2]};
     auto launch = [&]() {
@@ -1964,28 +1996,28 @@ int runDynamicSharedProbe(CUfunction fn, void** buffers, size_t nbuf,
                               0, args, 0);
     };
     for (int i = 0; !rc && i < warmup; ++i)
-        if (launch() != CUDA_SUCCESS) rc = 3;
-    if (!rc && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+        if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+    if (!rc && !cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) rc = 3;
     if (!rc && latencyMs &&
-        (cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-         cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-         cuEventRecord(start, 0) != CUDA_SUCCESS))
+        (!cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+         !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") ||
+         !cuOk(cuEventRecord(start, 0), "cuEventRecord")))
         rc = 3;
     for (int i = 0; !rc && i < repetitions; ++i)
-        if (launch() != CUDA_SUCCESS) rc = 3;
+        if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
     if (!rc && latencyMs &&
-        (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-         cuEventSynchronize(stop) != CUDA_SUCCESS))
+        (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+         !cuOk(cuEventSynchronize(stop), "cuEventSynchronize")))
         rc = 3;
-    if (!rc && !latencyMs && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && !latencyMs && !cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) rc = 3;
     if (!rc && latencyMs) {
         float total = 0.0f;
-        if (cuEventElapsedTime(&total, start, stop) != CUDA_SUCCESS)
+        if (!cuOk(cuEventElapsedTime(&total, start, stop), "cuEventElapsedTime"))
             rc = 3;
         else
             *latencyMs = total / static_cast<float>(repetitions);
     }
-    if (!rc && cuMemcpyDtoH(buffers[0], output, 2 * sizeof(float)) != CUDA_SUCCESS)
+    if (!rc && !cuOk(cuMemcpyDtoH(buffers[0], output, 2 * sizeof(float)), "cuMemcpyDtoH"))
         rc = 3;
     if (start) cuEventDestroy(start);
     if (stop) cuEventDestroy(stop);
@@ -2022,7 +2054,7 @@ int runDynamicSharedExpressionProbe(
 
     CUdeviceptr output = 0;
     CUevent start = nullptr, stop = nullptr;
-    int rc = cuMemAlloc(&output, 2 * sizeof(float)) == CUDA_SUCCESS ? 0 : 3;
+    int rc = cuOk(cuMemAlloc(&output, 2 * sizeof(float)), "cuMemAlloc") ? 0 : 3;
     long long args64[5] = {
         dims[0], dims[1], dims[2], dims[3], dims[4]};
     void* args[] = {
@@ -2034,29 +2066,29 @@ int runDynamicSharedExpressionProbe(
             static_cast<unsigned>(dynamicSharedBytes), 0, args, 0);
     };
     for (int i = 0; !rc && i < warmup; ++i)
-        if (launch() != CUDA_SUCCESS) rc = 3;
-    if (!rc && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+        if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+    if (!rc && !cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) rc = 3;
     if (!rc && latencyMs &&
-        (cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-         cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
-         cuEventRecord(start, 0) != CUDA_SUCCESS))
+        (!cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+         !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") ||
+         !cuOk(cuEventRecord(start, 0), "cuEventRecord")))
         rc = 3;
     for (int i = 0; !rc && i < repetitions; ++i)
-        if (launch() != CUDA_SUCCESS) rc = 3;
+        if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
     if (!rc && latencyMs &&
-        (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
-         cuEventSynchronize(stop) != CUDA_SUCCESS))
+        (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+         !cuOk(cuEventSynchronize(stop), "cuEventSynchronize")))
         rc = 3;
-    if (!rc && !latencyMs && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && !latencyMs && !cuOk(cuCtxSynchronize(), "cuCtxSynchronize")) rc = 3;
     if (!rc && latencyMs) {
         float total = 0.0f;
-        if (cuEventElapsedTime(&total, start, stop) != CUDA_SUCCESS)
+        if (!cuOk(cuEventElapsedTime(&total, start, stop), "cuEventElapsedTime"))
             rc = 3;
         else
             *latencyMs = total / static_cast<float>(repetitions);
     }
     if (!rc &&
-        cuMemcpyDtoH(buffers[0], output, 2 * sizeof(float)) != CUDA_SUCCESS)
+        !cuOk(cuMemcpyDtoH(buffers[0], output, 2 * sizeof(float)), "cuMemcpyDtoH"))
         rc = 3;
     if (start) cuEventDestroy(start);
     if (stop) cuEventDestroy(stop);
@@ -2068,6 +2100,7 @@ int runDynamicSharedExpressionProbe(
 int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
                const int64_t* dims, size_t ndim,
                size_t dynamicSharedBytes = 0) {
+    g_last_error.clear();
     if (!kernel_name || !buffers || !dims) return 5;
     if (!ensureContext()) return 2;
     std::lock_guard<std::mutex> lock(g_mu);
@@ -2262,6 +2295,7 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
                                  size_t num_buffers, const int64_t* dims,
                                  size_t num_dims, int warmup, int repetitions,
                                  float* latency_ms) {
+    g_last_error.clear();
     if (!kernel_name || !buffers || !dims || !latency_ms) return 5;
     if (!ensureContext()) return 2;
     std::lock_guard<std::mutex> lock(g_mu);
@@ -2320,6 +2354,7 @@ int tessera_nvidia_ptx_benchmark_v2(const char* kernel_name, void** buffers,
                                     size_t num_dims,
                                     size_t dynamic_shared_bytes, int warmup,
                                     int repetitions, float* latency_ms) {
+    g_last_error.clear();
     if (!kernel_name || !buffers || !dims || !latency_ms) return 5;
     if (!ensureContext()) return 2;
     std::lock_guard<std::mutex> lock(g_mu);
@@ -2351,26 +2386,31 @@ int tessera_nvidia_ptx_resources(const char* kernel_name, int block_size,
     std::lock_guard<std::mutex> lock(g_mu);
     CUfunction fn = getFunctionLocked(kernel_name);
     if (!fn) return g_ptx.count(kernel_name) ? 3 : 4;
-    if (cuFuncGetAttribute(registers_per_thread, CU_FUNC_ATTRIBUTE_NUM_REGS,
-                           fn) != CUDA_SUCCESS ||
-        cuFuncGetAttribute(static_shared_bytes,
+    if (!cuOk(cuFuncGetAttribute(registers_per_thread, CU_FUNC_ATTRIBUTE_NUM_REGS,
+                           fn), "cuFuncGetAttribute") ||
+        !cuOk(cuFuncGetAttribute(static_shared_bytes,
                            CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES,
-                           fn) != CUDA_SUCCESS ||
-        cuFuncGetAttribute(local_bytes, CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES,
-                           fn) != CUDA_SUCCESS ||
-        cuOccupancyMaxActiveBlocksPerMultiprocessor(
+                           fn), "cuFuncGetAttribute") ||
+        !cuOk(cuFuncGetAttribute(local_bytes, CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES,
+                           fn), "cuFuncGetAttribute") ||
+        !cuOk(cuOccupancyMaxActiveBlocksPerMultiprocessor(
             active_blocks_per_sm, fn, block_size,
-            dynamic_shared_bytes) != CUDA_SUCCESS)
+            dynamic_shared_bytes), "cuOccupancyMaxActiveBlocksPerMultiprocessor"))
         return 3;
     return 0;
 }
 
+const char* tessera_nvidia_ptx_last_error(void) {
+    return g_last_error.c_str();
+}
+
 int tessera_nvidia_ptx_device_memory(size_t* total_bytes, size_t* free_bytes) {
+    g_last_error.clear();
     if (!total_bytes || !free_bytes) return 5;
     if (!ensureContext()) return 2;
     size_t total = 0;
     size_t free = 0;
-    if (cuMemGetInfo(&free, &total) != CUDA_SUCCESS) return 3;
+    if (!cuOk(cuMemGetInfo(&free, &total), "cuMemGetInfo")) return 3;
     *total_bytes = total;
     *free_bytes = free;
     return 0;

@@ -166,6 +166,11 @@ def refused_for_host_arch(text: str, arch: "str | None" = None) -> bool:
         return False
     if text.startswith(_UNPROMOTED_REFUSAL + arch + ";") or (_UNPROMOTED_REFUSAL + arch + ";") in text:
         return True
+    # 1b. The same rule spoken by the C++ pass when a test drives
+    #     `tessera-rocm-executable{... arch=<host>}` itself: "tessera-rocm-executable:
+    #     architecture '<arch>' has no promoted family-plugin profile".
+    if f"architecture '{arch}' has no promoted family-plugin profile" in text:
+        return True
     if f"target '{arch}'" in text and ("arch-gated" in text or "hardware-verified on" in text):
         return True
     if ("Cannot select: intrinsic %llvm.amdgcn.wmma.f32.16x16x16" in text

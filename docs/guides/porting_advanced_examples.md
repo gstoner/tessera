@@ -35,7 +35,7 @@ already know how `@tessera.jit`, `tessera.ops.*`, `tessera.nn.*`, and
 | `kv_cache_serving` | ✅ | Real ops via `tessera.ops.{quantize_kv, dequantize_kv}` + `tessera.cache.KVCacheHandle(quantize_bits=...)` + `auto_evict=True`. | — |
 | `long_context_attention` | ✅ | Sliding-window + retrieval-head pure-Python. | Optional: GPU sliding-window attention kernel (Phase G). |
 | `mla` | ✅ smoke | Latent compress/expand + RoPE split/merge + `tessera.cache.LatentKVCacheHandle`. | FlashMLA absorb-K kernel (Phase G). |
-| `power_retention` | ❌ stub | — | Retention/power attention op (CUDA kernel sketch only). |
+| `power_retention` | 📦 archived | `tessera.ops.power_attn` / `tessera.ops.retention` (LA-4) | Folder retired to `archive/examples/advanced/power_retention/` 2026-09-17; the CUDA sketch never compiled. |
 | `rlvr_reasoning_suite` | ✅ | GRPO/RLVR rollout batching + reward accounting. | — |
 | `gumiho` | ✅ | Hybrid speculative decoding (Gumiho, ICML'25): serial 2-layer Transformer + 5 parallel MLP heads + Full Tree Attention; draft+verify dense math on `@jit(target="apple_gpu"/"apple_cpu")`, acceptance/advance via `tessera.speculative`. | Single-kernel `@jit` of the whole loop (Phase G). |
 
@@ -361,7 +361,7 @@ JAX — it works as written.
 | Native FlashMLA target kernel (Hopper / Blackwell absorb-K) | Phase G. |
 | Mamba2 chunked-scan target kernels (NVIDIA / ROCm) | Phase G — Python op + VJP ship today. |
 | Real NCCL all-gather of parameters in `FSDP(stage=3)` / `ZeRO3` | Phase G. |
-| `power_retention` op (retention attention) | Out of scope. The example folder is a CUDA kernel sketch with no current users. |
+| `power_retention` example kernels | Retired to `archive/examples/advanced/power_retention/` (2026-09-17). The op itself ships as `tessera.ops.power_attn` / `retention`; device kernels for it are Phase G. |
 
 ## Cross-references
 

@@ -2094,8 +2094,17 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     values = _bind_launch_args(args, arg_names)
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
+    # This oracle applies no epilogue. An op that asks for one must not reach it,
+    # or the caller reads a bare matmul as the fused result (fail closed).
+    activation = str((op.get("kwargs") or {}).get("activation") or "none")
+    if activation != "none":
+        raise ValueError(
+            "rocm_wmma executor implements the plain matmul only; it does not apply "
+            f"activation={activation!r} (the fused epilogue needs the compiled lane)")
     if len(operand_names) != 2:
-        raise ValueError("matmul requires exactly two operands")
+        raise ValueError(
+            "rocm_wmma executor implements the plain two-operand matmul only; got "
+            f"{len(operand_names)} operands (a bias operand needs the compiled lane)")
     a = _as_numpy(values[operand_names[0]])
     b = _as_numpy(values[operand_names[1]])
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
@@ -2791,6 +2800,22 @@ def _nvidia_ptx_launch_lib_path() -> Optional[Path]:
     return None
 
 
+def _nvidia_ptx_failure(lib: Any, rc: int) -> str:
+    """``rc=<n>`` plus the bridge's own account of which CUDA driver call failed
+    and why (``tessera_nvidia_ptx_last_error``), when the loaded bridge can say.
+    A bare rc is opaque by construction -- rc=3 stands for ~200 driver calls --
+    and the sm_120 Lion lane sat on one for a week for exactly that reason."""
+    detail = ""
+    ask = getattr(lib, "tessera_nvidia_ptx_last_error", None)
+    if ask is not None:
+        try:
+            raw = ask()
+            detail = raw.decode("utf-8", "replace") if raw else ""
+        except Exception:
+            detail = ""
+    return f"rc={rc}" + (f" ({detail})" if detail else "")
+
+
 def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
     """Load the PTX launch bridge once (preloading libcuda globally so its weak
     ``tsrRegisterGpuLauncher`` ref and cuda deps resolve). Returns None (never
@@ -2872,6 +2897,9 @@ def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
         ctypes.POINTER(ctypes.c_size_t),
     ]
     lib.tessera_nvidia_ptx_device_memory.restype = ctypes.c_int
+    if hasattr(lib, "tessera_nvidia_ptx_last_error"):
+        lib.tessera_nvidia_ptx_last_error.argtypes = []
+        lib.tessera_nvidia_ptx_last_error.restype = ctypes.c_char_p
     _nvidia_ptx_launch_lib = lib
     return lib
 
@@ -3587,7 +3615,7 @@ def _submit_nvidia_sm120_native(
             len(dimensions),
         )
     if rc:
-        raise RuntimeError(f"SM120 descriptor invoke returned rc={rc}")
+        raise RuntimeError(f"SM120 descriptor invoke returned {_nvidia_ptx_failure(lib, rc)}")
     return (
         output
         if descriptor.abi_id in unary_abis | attention_abis | attention_backward_abis | moe_abis | training_abis
@@ -7306,7 +7334,47 @@ def _execute_rocm_compiled_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
     try:
         return _rocm_compiled_gemm_impl(artifact, args)
     except _RocmCompiledUnavailable:
+        if not _rocm_wmma_oracle_can_stand_in(artifact, args):
+            raise
         return _execute_rocm_wmma_artifact(artifact, args)
+
+
+def _rocm_wmma_oracle_can_stand_in(artifact: RuntimeArtifact, args: Any) -> bool:
+    """Whether the hand-written ``rocm_wmma`` oracle computes the *same thing* the
+    compiled lane was asked for. It implements the plain two-operand f16/bf16
+    matmul and nothing else: no bias operand, no activation, no int8/int4
+    storage. Falling back for anything richer is not a fallback, it is a
+    different program -- on gfx1201, where the compiled 16x16x16 lane refuses,
+    every fused-epilogue launch used to return the bare matmul (the activation
+    silently dropped, atol 0.05 mismatches) while bias and int8 requests failed
+    inside the oracle with its own unrelated wording. When the oracle cannot
+    stand in, the compiled lane's refusal propagates unchanged, naming the arch
+    it refused for."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1:
+        return False
+    op = ops[0]
+    if str(op.get("op_name", "")) not in ("tessera.matmul", "tessera.gemm"):
+        return False
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) != 2:
+        return False
+    if str((op.get("kwargs") or {}).get("activation") or "none") != "none":
+        return False
+    if metadata.get("wmma_inputs_packed") or str(metadata.get("wmma_dtype") or "") in ("int4", "i4"):
+        return False
+    try:
+        values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+        a = _as_numpy(values[operand_names[0]])
+        b = _as_numpy(values[operand_names[1]])
+    except Exception:
+        return False
+    bf16 = _bfloat16_dtype()
+    floats = {np.dtype(np.float16)} | ({np.dtype(bf16)} if bf16 is not None else set())
+    return a.dtype in floats and b.dtype in floats
 
 
 def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:

@@ -1353,8 +1353,8 @@ def Tessera_LinearAttnStateOp : Op<
 // RetNet 2023) are both linear-cost causal attention variants; share
 // the (Q, K, V, optional decay/log_g, optional state) input shape
 // with `linear_attn`. The distinct op_names anchor backend-specific
-// kernels (the example folder ships CUDA + HIP sketches under
-// `examples/advanced/power_retention/src/kernels/`).
+// kernels (the retired scaffold's CUDA + HIP sketches live under
+// `archive/examples/advanced/power_retention/src/kernels/`; neither compiled).
 
 def Tessera_PowerAttnOp : Op<
   Tessera_Dialect, "power_attn",

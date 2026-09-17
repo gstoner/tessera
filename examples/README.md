@@ -25,7 +25,6 @@ This directory contains examples and tutorials for using Tessera.
 - [`advanced/Jet_nemotron/`](advanced/Jet_nemotron/) - hybrid efficient language model and PostNAS scaffold
 - [`advanced/Nemotron_Nano_12B_v2/`](advanced/Nemotron_Nano_12B_v2/) - hybrid Mamba2/GQA/MLP model port
 - [`advanced/mla/`](advanced/mla/) - Multi-Latent Attention / FlashMLA examples
-- [`advanced/power_retention/`](advanced/power_retention/) - retention and PowerAttention kernels
 - [`advanced/long_context_attention/`](advanced/long_context_attention/) - retrieval-head vs streaming-head planning
 - [`advanced/kv_cache_serving/`](advanced/kv_cache_serving/) - compressed KV-cache and disaggregated serving planner
 - [`advanced/gumiho/`](advanced/gumiho/) - Gumiho (ICML'25) hybrid speculative decoding on the Apple GPU/CPU backend

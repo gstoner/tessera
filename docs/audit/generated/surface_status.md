@@ -6,7 +6,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 
 | Surface | Entries | Status breakdown |
 |---|--:|---|
-| examples | 22 | runnable=15, runnable_optional=1, scaffold=6 |
+| examples | 21 | runnable=15, runnable_optional=1, scaffold=5 |
 | benchmarks | 24 | archived=1, compile_only=12, runnable=11 |
 | research | 2 | compile_only=1, runnable=1 |
 | tools | 6 | archived=1, compile_only=2, runnable=3 |
@@ -25,7 +25,6 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `examples/advanced/kv_cache_serving` | runnable | `examples/advanced/kv_cache_serving/demo.py` |  |
 | `examples/advanced/long_context_attention` | runnable | `examples/advanced/long_context_attention/demo.py` |  |
 | `examples/advanced/mla` | runnable | `examples/advanced/mla/tests/smoke_random.py` |  |
-| `examples/advanced/power_retention` | scaffold | `examples/advanced/power_retention/examples/minimal_power_attn.py` | Placeholder — entry-point script currently just prints ``'example'``.  Real implementation lives in the ``python/tessera_power/`` subpackage (CUDA scaffolds, Retention op) which is not wired into the audit yet. |
 | `examples/advanced/rlvr_reasoning_suite` | runnable | `examples/advanced/rlvr_reasoning_suite/run_demo.py` |  |
 | `examples/attention` | runnable | `examples/attention/minimax_sparse_attention.py` |  |
 | `examples/compiler/dnas` | runnable | `examples/compiler/dnas/dnas_schedule_autotune.py` |  |

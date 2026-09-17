@@ -3,7 +3,8 @@
 An evidence file nobody names is a claim nobody can check: it cannot be read
 back through a dashboard, a log entry or a test, so it is either a stale
 artifact or evidence for a record that no longer says where it came from. The
-2026-09-17 review found 34 top-level baseline files and four packet directories
+2026-09-17 review found 31 top-level baseline files (four more are read by a
+derived name) and four packet directories
 in that state, some dating to July, and ten packet directories with no manifest
 or README at all.
 
@@ -46,6 +47,7 @@ KNOWN_UNCITED_FILES = frozenset({
     "nvidia_sm120_replay_resources.json",
     "nvidia_sm120_test5_resources.json",
     "nvidia_sm120_transport_serving_resources.json",
+    "ring_protocol_nvidia.json",  # read as a whole token: its siblings' names only *contain* it
     "ring_protocol_nvidia_ncu_depth2.csv",
     "ring_protocol_nvidia_ncu_direct.csv",
     "ring_protocol_nvidia_nsys_api.csv",
@@ -77,21 +79,30 @@ KNOWN_MANIFESTLESS_DIRS = frozenset({
 
 
 def _cited_names(names: list[str]) -> set[str]:
-    """Which of `names` appear in a tracked file under the citing roots.
-
-    One `git grep` with fixed strings: tracked files only (a stray local
-    artifact cannot count as a citation), Aho-Corasick over ~300 names in a
-    couple of seconds where a per-name grep took 231 s. This test file is
-    excluded from the search, or the frozen lists above would cite every orphan
-    they name.
+    """Which of `names` appear as a whole identifier token in a tracked file
+    under the citing roots. One pass, tokenised — the same method as
+    `test_benchmark_recorders_are_named.py`; a `git grep -F` over ~200 names
+    cost 10 s, this costs about two. This test file is excluded, or the frozen
+    lists above would cite every orphan they name.
     """
-    if not names:
-        return set()
-    result = subprocess.run(
-        ["git", "grep", "-o", "-h", "-F", "-f", "-", "--",
-         *CITING_ROOTS, ":!benchmarks/baselines", f":!tests/unit/{Path(__file__).name}"],
-        cwd=ROOT, input="\n".join(names) + "\n", capture_output=True, text=True, check=False)
-    return set(result.stdout.split())
+    import re
+
+    wanted = set(names)
+    tracked = subprocess.run(
+        ["git", "ls-files", "--", *CITING_ROOTS, ":!benchmarks/baselines"],
+        cwd=ROOT, capture_output=True, text=True, check=False).stdout.split("\n")
+    token = re.compile(r"[A-Za-z0-9_]+")
+    self_name = f"tests/unit/{Path(__file__).name}"
+    cited: set[str] = set()
+    for rel in tracked:
+        if not rel or rel == self_name:
+            continue
+        try:
+            text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        cited |= set(token.findall(text)) & wanted
+    return cited
 
 
 def test_every_top_level_baseline_is_cited_or_frozen():

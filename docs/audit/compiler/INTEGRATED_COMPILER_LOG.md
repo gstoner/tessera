@@ -4265,3 +4265,31 @@ Remaining: **`AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17`** — three shape-varying
 Evidence: `tests/unit/test_runtime_link_requirements.py`, `tests/unit/test_lit_fixture_keywords.py`; `check-tessera-rocm` 68/68 and `tests/unit/test_autodiff_spectral_target_binding.py` 40/40 on Princess-Luna, whose full sweep is **19455 passed / 0 failed**; the Mac at **18380 passed / 0 failed**; the bisect against `4898812c` built from its own sources in worktrees on Princess-Luna and Super-Bear.
 
 <!-- entry-fields:end -->
+
+### 2026-09-17 — the gfx1201 tail: two boxes swept to their real defects, and the benchmark surface reviewed
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: ROCm-host red zone follow-ups (sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`); co-owner [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+Outcome: **The three items the previous entry left open are closed or reduced to named, verified defects, and the two red zones it found are swept.** The shape-varying `scf.while` crash was not the mechanism recorded; the exported forward product still carried the `tessera.autodiff = "reverse"` *request* marker, so the JIT's unconditional paired pass differentiated it again and re-materialized its tapes — ten hand-written modules through the JIT in subprocesses established it, the envelope-carry change written against the wrong story was reverted, and products now carry their role. Tajasarus's ~1500 gfx1151-family failures were one gating class in a dozen wordings; the fail-closed refusals now become skips at the report hook, only when they name the host's own arch. Super-Bear's 48 were four gating bugs and one real device failure.
+
+**Four assertions-only compiler defects in one day, all invisible on every NDEBUG driver.** 81 sites in 72 ROCm generators (and the NVIDIA Philox generator) stamped `gpu.kernel` by raw attribute name on top of LLVM 23's inherent property, so single-invocation pipelines aborted with `DictionaryAttr element names must be unique` — the NDEBUG build shows it as `attributes {gpu.kernel, gpu.kernel, rocdl.kernel}`, and a text round-trip hides it, which is why upstream `mlir-opt` on the printed IR never saw it. The paired pass's `emit-storage-child` and this backend's `KernelABIPass` each loaded a dialect from inside `runOnOperation` (tile, llvm). All fixed; `rocm_generated_kernel_stamps_gpu_kernel_once.mlir` catches the first class on NDEBUG hosts too.
+
+**Owed, verified on gfx1201 and not diagnosed past the reason** (the ROCm queue lists each): `fused_epilogue_launch_execute` produces **wrong numbers** rather than refusing — a gfx11 WMMA kernel run through a path that never consults the arch guard — and 8 more rows fail with "matmul requires exactly two operands"; `int8 @ int8` routes to the WMMA f16/bf16 executor; the KU reference kernel fails to launch (rc=2); the state-machine and geo-Langevin lanes; one inline HIP source that no longer compiles under HIP 7.15; an x86 shared image missing from that box's tree. On Super-Bear the sm_120 Lion stop-sign lane returns `rc=3` from the PTX launcher — a CUDA memory-API failure — **on `main` as well**, bisected with both trees built fresh in a worktree there. That bisect found the `power_retention` example could not build in a clean CUDA-configured tree at all (four layers: header path, a hand-written dialect beside the generated one, a missing `GET_OP_CLASSES`, a removed `PassRegistration` constructor — and beneath them a CUDA kernel that does not compile, now `EXCLUDE_FROM_ALL`).
+
+**The benchmark surface** (`docs/benchmarks`, `benchmarks/`) reviewed the same way is recorded in the previous entry's addendum: the TesseraBench sketch archived with its check, `run_all.py --json-only` producing JSON with `route` and `latency_source`, one execution-kind rule, and ratchets for uncited baselines (31 files, 14 directories) and unnamed recorders (50).
+
+| Host | Before | After |
+|---|---|---|
+| Princess-Luna (gfx1151) | 26 failed (3 crashing) | **19490 passed, 0 failed**; `check-tessera-rocm` 68/68; lit 493/493 |
+| Tajasarus (gfx1201, assertions LLVM) | 1578 failed | **50 failed, 16247 passed** — all in the owed list; `check-tessera-rocm` 68/68 on the assertions driver; lit 493/493 in both trees |
+| Super-Bear (sm_120) | 48 failed | **1 failed, 16091 passed** — the Lion lane, pre-existing on `main` (bisected, both trees built fresh); one sweep also reported 8 in `test_automatic_ad_public_results.py` that reproduced neither alone, in alphabetical order, nor in a second full sweep; lit 493/493 |
+| Mac (M1 Max) | 1 failed | **18400 passed, 0 failed**; lit 493/493; mypy, ruff, doc and plan gates clean |
+
+Remaining: the owed gfx1201 list above; the Lion `rc=3` on sm_120 (first step: make `tessera_nvidia_ptx_invoke_v2` say which CUDA call failed); the `power_retention` scaffold's kernel; `test_dynamic_shape_emit` passes alone and failed once in a full Tajasarus sweep (order-dependent, not chased); and whether the frozen orphan baselines and recorders are pruned, cited or indexed — the owner's call.
+
+Evidence: `tests/unit/test_rocm_compiled_family_gate.py`, `tests/tessera-ir/phase2_autodiff/autodiff_paired_export_product_is_not_a_request.mlir`, `tests/tessera-ir/phase3/rocm_generated_kernel_stamps_gpu_kernel_once.mlir`, `tests/unit/test_benchmark_baselines_are_cited.py`, `tests/unit/test_benchmark_recorders_are_named.py`; the bisects built `main` from its own sources in fresh worktrees on Princess-Luna and Super-Bear.
+
+<!-- entry-fields:end -->
+

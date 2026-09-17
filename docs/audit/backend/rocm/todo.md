@@ -8083,9 +8083,15 @@ past the reason:
      "X86 native packaging requires tessera-opt and the x86_64_avx512 shared
      image" — Tajasarus is a Zen 5 AVX-512 host and builds the x86 backend, so
      the shared image is missing from its tree, not from its silicon.
-  7. `test_automatic_ad_public_results.py`: one remaining case runs the
-     assertions `mlir-opt` pipeline that fails (`CalledProcessError`) — possibly
-     a fifth assertion; not captured.
+  7. `test_automatic_ad_public_results.py` (rank-2 dynamic backward): the
+     **upstream** assertions-ON `mlir-opt` aborts inside `gpu-module-to-binary`'s
+     LLVM optimization pipeline — `ScalarEvolutionDivision.cpp:59`,
+     `SCEVDivision::divide`, while `LoopInterchangePass` runs on the generated
+     `product` kernel. That is an LLVM 23.1.1 assertion, not Tessera code, and
+     the NDEBUG fleet runs the same pipeline through it in silence; whether the
+     result it produces there is correct is exactly what an assertion cannot
+     tell us. Owed: a minimal `.ll` reproducer for upstream, and until then a
+     check that the rank-2 kernel's NDEBUG output matches the reference.
 
 * **Super-Bear's 48:** 39 were `test_apple_lowp_native_contract.py` running on a
   Linux `tessera-opt` built without the Apple backend (it asked only whether

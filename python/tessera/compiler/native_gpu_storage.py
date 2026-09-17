@@ -26,7 +26,11 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-_LLVM_COMPANIONS = frozenset({"mlir-opt", "mlir-translate", "llc", "llvm-link", "clang", "clang++"})
+# `llvm-objdump` is the kernel-body check's disassembler (below); it was missing
+# from this set, so a caller's `/usr/lib/llvm-23/bin/llvm-objdump` was used as
+# given and raised FileNotFoundError on Tajasarus, whose LLVM lives in a
+# toolchain prefix (review of 2026-09-17).
+_LLVM_COMPANIONS = frozenset({"mlir-opt", "mlir-translate", "llc", "llvm-link", "clang", "clang++", "llvm-objdump"})
 
 
 def _resolve_tool(tool: Path) -> Path:

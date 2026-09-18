@@ -104,6 +104,8 @@ def require_rocm_host_arch(arch: str, why: str) -> str:
     wider assertion. Unlike the report hook, this is an explicit pin: the
     skip reason names both archs and the owning item.
     """
+    import pytest
+
     host = rocm_host_arch()
     if host is None:
         pytest.skip("no ROCm device on this host")

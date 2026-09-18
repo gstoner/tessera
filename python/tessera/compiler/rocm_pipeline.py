@@ -49,19 +49,43 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
     "rng_philox", "indexing_gather", "indexing_scatter", "position_alibi",
     "position_rope", "quant_dequant_gemm", "quant_fp", "quant_int4_pack",
     "reduction_arg", "scan", "optimizer", "fused_silu_mul",
-    # MEASUREMENT WIP (engineering loops): every remaining family is a
-    # candidate for the per-test diff on Tajasarus; the final set is pruned
-    # to what passes on the device.
-    "algebra_clifford", "attention_mla_decode", "depth_attention",
-    "draft_dspark", "ebm_decode_init", "ebm_ebt_tiny", "ebm_energy_quadratic",
-    "ebm_langevin", "ebm_partition", "es_low_rank_correction",
-    "matmul_batched_f32", "matmul_f32", "moe_dispatch", "ordering_sort",
-    "paged_kv", "sequence_deltanet", "sequence_linear_attention",
-    "sequence_recurrent_cell", "sequence_selective_ssm",
-    "sequence_selective_ssm_backward", "solver_cholesky", "solver_ift",
-    "solver_lu", "solver_qr", "solver_svd", "solver_triangular_solve",
-    "sparse_block_attention", "sparse_block_topk", "sparse_sddmm",
-    "sparse_spmm", "spectral_backward", "spectral_dft",
+    # Slices 3-5 of the same program (engineering loops, 2026-09-17): the
+    # attention tail, the spectral/solver/EBM/f32-matmul families and the
+    # RDNA4-only FP8 matmul contract, each measured on Tajasarus (the per-test
+    # diff, then the family files at the loop's head). `paged_kv` is the one
+    # family left out: its device tests are gated on the gfx11 flash-attention
+    # directive lane and produced no gfx1201 evidence (owed).
+    "algebra_clifford",
+    "attention_mla_decode",
+    "depth_attention",
+    "draft_dspark",
+    "ebm_decode_init",
+    "ebm_ebt_tiny",
+    "ebm_energy_quadratic",
+    "ebm_langevin",
+    "ebm_partition",
+    "es_low_rank_correction",
+    "matmul_batched_f32",
+    "matmul_f32",
+    "moe_dispatch",
+    "ordering_sort",
+    "sequence_deltanet",
+    "sequence_linear_attention",
+    "sequence_recurrent_cell",
+    "sequence_selective_ssm",
+    "sequence_selective_ssm_backward",
+    "solver_cholesky",
+    "solver_ift",
+    "solver_lu",
+    "solver_qr",
+    "solver_svd",
+    "solver_triangular_solve",
+    "sparse_block_attention",
+    "sparse_block_topk",
+    "sparse_sddmm",
+    "sparse_spmm",
+    "spectral_backward",
+    "spectral_dft",
 })
 
 

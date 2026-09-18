@@ -7648,6 +7648,67 @@ Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Cli
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## sm_120 engineering loops: the device-timed corpus reaches dispatch, the cubin gets its store check, the HVP packet lands — 2026-09-17
+
+Sync `GFX1201-PARITY-2026-09-17` (shared branch with the ROCm slices 3-5); owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+**Four of the six items the plan listed for this backend were already closed
+on `main`, and the queue said so further down; the record here corrects the
+premises before the work.** The emitted PTX GEMM has had a CUDA-event device
+timer since the `columnMajorGrid` fix (`tessera_nvidia_ptx_benchmark`), and
+the corpus races all four sm_120 matmul candidates under `timing="device"`;
+the Clifford family has an `nvidia_sm120` column in the GA proof ladder and a
+packet; the EBM nonlinear energies and sphere integrator run on sm_120 (32/32);
+`__nv_fsqrt_rn` is the shipping sqrt on the NVVM row-program route. What was
+open, and is now closed:
+
+* **Production dispatch never read the device-timed corpus.** `run_arbitrated`
+  consulted `corpus_winner` with its default wall-clock timing only, so the
+  rows proving the emitted GEMM 1.5-1.7x faster than the shipped delegate were
+  never a selector input and `OP_MATMUL` fell back to tier priority
+  (`NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30`, follow-up #1). It now
+  consults the device-timed verdict first and the wall-clock one only when no
+  device row exists; both stay hints behind availability and the F4 gate
+  (`test_default_dispatch_consults_the_device_timed_row_first`).
+* **The cubin-side store check.** `_reject_bodyless_image` covered the AMDGPU
+  image only. The NVIDIA twin disassembles the fatbin with the toolkit's
+  `cuobjdump --dump-sass` (found via `CUDA_HOME`/`CUDA_PATH`/`/usr/local/cuda`/PATH)
+  and refuses a kernel with no `STG`; on a host without the tool it is
+  skipped, never faked, and `cuda_store_check_available()` says which. Live on
+  Super-Bear (the EBM, Clifford and HVP GPU tests all package through it).
+* **Exact sm_120 HVP execution, recorded.** `native_hvp.py` was already
+  backend-parametric and its test parametrized for sm_120; what was missing was
+  the run and the packet. `benchmarks/record_native_hvp.py` records the
+  device-resident gradient and Hessian-vector product against the closed forms
+  for two source functions × three shapes: `benchmarks/baselines/native_hvp_20260917/nvidia_sm120.json`
+  and `rocm_gfx1201.json`, both exact (worst abs error 0). Correctness only.
+
+**Owed, with the first step named.**
+* *NVFP4 emitted kernel as a consumer.* `ptx_emit.emit_nvfp4_block_scale_mma_ptx`
+  is still tests-only: its entry is not in the launcher's ABI table, so
+  registering it returns rc=5. The first step is an `invokeNvfp4Emitted`
+  launcher entry for the fixed m16n8k64 warp tile plus an operand packer that
+  lays A/B/scale fragments out in the PTX ISA's per-lane order; the
+  exact-operation packet follows from that packer, and an arbiter candidate
+  only once the kernel has general-shape dispatch (otherwise it is a
+  declaration with a one-tile consumer).
+* *Isolated CUDA attention.* `resident_attention.py` (CUDA) and
+  `DriverIsolationLease` exist; `isolated_rocm_attention.py` composes them for
+  HIP only. The first step is extracting the spawn/health-check body into a
+  backend-parametric `IsolatedAttentionTape` and instantiating it over the CUDA
+  resident program, proven by a `test_isolated_cuda_attention.py` twin on
+  Super-Bear.
+* *EBM sphere front door on CUDA.* `geo_sampling.sphere_langevin_step` has one
+  device fast path (Apple's fused MSL kernel); on sm_120 the native route
+  exists only through `native_langevin` explicitly. The first step is a
+  `[rows, features]` row-program module (two projections, the affine step,
+  the retract normalisation) through `native_row_program` behind a
+  `_try_cuda_gpu_sphere_langevin_step_f32` branch.
+* *Toolchain.* Driver 610.88 is unchanged (CUDA 13.3 API, PTX ≤ 9.3); the pin
+  test says when a driver update lifts the cap. Nothing to do until then.
+
+FLEET_NVIDIA_ROWS
+
 ## The sm_120 Lion stop-sign lane returns rc=3 on main — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1.

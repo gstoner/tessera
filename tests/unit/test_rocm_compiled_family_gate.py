@@ -27,7 +27,41 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
         "normalization", "rng_philox", "indexing_gather", "indexing_scatter",
         "position_alibi", "position_rope", "quant_dequant_gemm", "quant_fp",
         "quant_int4_pack", "reduction_arg", "scan", "optimizer",
-        "fused_silu_mul"}
+        "fused_silu_mul",
+        # Engineering loops (2026-09-17): slices 3-5, measured per family on
+        # Tajasarus; paged_kv is the one family without gfx1201 evidence.
+        "algebra_clifford",
+        "attention_mla_decode",
+        "depth_attention",
+        "draft_dspark",
+        "ebm_decode_init",
+        "ebm_ebt_tiny",
+        "ebm_energy_quadratic",
+        "ebm_langevin",
+        "ebm_partition",
+        "es_low_rank_correction",
+        "matmul_batched_f32",
+        "matmul_f32",
+        "moe_dispatch",
+        "ordering_sort",
+        "sequence_deltanet",
+        "sequence_linear_attention",
+        "sequence_recurrent_cell",
+        "sequence_selective_ssm",
+        "sequence_selective_ssm_backward",
+        "solver_cholesky",
+        "solver_ift",
+        "solver_lu",
+        "solver_qr",
+        "solver_svd",
+        "solver_triangular_solve",
+        "sparse_block_attention",
+        "sparse_block_topk",
+        "sparse_sddmm",
+        "sparse_spmm",
+        "spectral_backward",
+        "spectral_dft",
+    }
     assert promoted_families("gfx1201") < frozenset(FAMILY_PLUGINS)
     for arch in ("gfx1200", "gfx1250", "gfx1100", "gfx942", ""):
         assert promoted_families(arch) == frozenset()
@@ -36,7 +70,7 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
 @pytest.mark.parametrize("arch,family,accepted", [
     ("gfx1151", "scalar_unary", True),
     ("gfx1201", "softmax", True),
-    ("gfx1201", "spectral_dft", False),
+    ("gfx1201", "paged_kv", False),
     ("gfx1200", "softmax", False),
 ])
 def test_the_config_refuses_exactly_what_the_rule_says(arch, family, accepted):
@@ -51,8 +85,8 @@ def test_the_config_refuses_exactly_what_the_rule_says(arch, family, accepted):
 def test_guards_skip_where_the_rule_refuses(monkeypatch):
     monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1201")
     assert rocm_build.require_rocm_compiled_family("softmax", "matmul") == "gfx1201"
-    with pytest.raises(pytest.skip.Exception, match="spectral_dft.*gfx1201"):
-        rocm_build.require_rocm_compiled_family("softmax", "spectral_dft")
+    with pytest.raises(pytest.skip.Exception, match="paged_kv.*gfx1201"):
+        rocm_build.require_rocm_compiled_family("softmax", "paged_kv")
     with pytest.raises(pytest.skip.Exception, match="gfx1151 only"):
         rocm_build.require_rocm_compiled_lane_host()
     monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1151")

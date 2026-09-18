@@ -1882,8 +1882,13 @@ struct GenerateWMMAGemmKernelPass
         if (auto a = moduleOp->getAttrOfType<StringAttr>("tessera.arch"))
           requestArch = a.getValue();
       const bool gfx11Request = requestArch.starts_with("gfx11");
-      if (viaTile && gfx11Request && mt == 2 && nt == 4 && T.pack == 0 &&
-          !hasBias && activation == "none" && outputTy == T.accElem) {
+      // The stamp claims THIS body is gfx1151's measured 2x4 register panel,
+      // and TileToROCM pins anything carrying it to that chip. An LDS-staged
+      // body with the same panel is a different physical body, so it must not
+      // claim the contract (2026-09-18).
+      if (viaTile && gfx11Request && canonicalStaging != "lds" && mt == 2 &&
+          nt == 4 && T.pack == 0 && !hasBias && activation == "none" &&
+          outputTy == T.accElem) {
         gpuFunc->setAttr("tessera.rocm.typed_gfx11_gemm_contract",
                          b.getUnitAttr());
         gpuFunc->setAttr("tessera.rocm.physical_panel_mt",

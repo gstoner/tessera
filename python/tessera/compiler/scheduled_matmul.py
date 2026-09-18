@@ -141,9 +141,15 @@ def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool) -> int:
         4096^3   65.5 / 92.5 / 77.4
 
     so 4 below 2048 and 2 from 2048 up, against a production 32x64 k=1 body
-    that reached 36.8 / 46.4 / 57.6 -- 1.6x to 1.9x. gfx1151 keeps the
-    established single-slab loop: its own sweep put every unrolled variant at
-    or below k = 1, and evidence does not transfer between the two RDNA parts.
+    that reached 36.8 / 46.4 / 57.6 -- 1.6x to 1.9x.
+
+    gfx1151 keeps the established single-slab loop, and the reason is a gap in
+    the evidence rather than a negative result: the unroll does help its 4x4
+    panel (19.2 vs 17.4 TFLOP/s at 2048^3), but its *selected* 2x4 panel could
+    not be measured unrolled until the same day's fix stopped an unrolled body
+    claiming the gfx11 typed-contract topology, and no sweep has been run
+    since. Evidence does not transfer between the two RDNA parts, so the knob
+    stays off here until that sweep exists (ROCm queue, typed-route gap).
     """
     if dynamic or not arch.startswith("gfx1201") or min(m, n) < 1024 or k < 64:
         return 1

@@ -263,7 +263,8 @@ static std::unique_ptr<Pass> configuredPass(std::unique_ptr<Pass> pass,
 
 static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool viaTile, StringRef staging, bool depthCooperative = false,
-                               int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1) {
+                               int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
+                               int wavesPerEu = 0) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -434,7 +435,8 @@ static void buildROCMExecutablePipeline(
   bool matmulPlugin = family == "matmul";
   if (matmulPlugin && input != "graph" && output == "binary")
     addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
-                       opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll);
+                       opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
+                       opts.wavesPerEu);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

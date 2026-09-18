@@ -276,8 +276,13 @@ def record(output, runs, iters):
     with tempfile.TemporaryDirectory() as directory:
         for index in range(runs):
             child = Path(directory) / f"{index}.json"
-            subprocess.run([sys.executable, str(Path(__file__).resolve()), "--worker",
-                            "--iters", str(iters), "--output", str(child)], check=True)
+            command = [sys.executable, str(Path(__file__).resolve()), "--worker",
+                       "--iters", str(iters), "--output", str(child)]
+            command += ["--panels", ",".join(f"{m}x{n}" for m, n in PANELS)]
+            command += ["--shapes", ",".join("x".join(str(v) for v in s) for s in SHAPES)]
+            if not LDS_WAVES:
+                command.append("--register-only")
+            subprocess.run(command, check=True)
             results.append(json.loads(child.read_text()))
     chip = results[0]["chip"]
     summary = []
@@ -320,7 +325,20 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--iters", type=int, default=50)
     parser.add_argument("--runs", type=int, default=3)
+    parser.add_argument("--panels", type=str, default=None,
+                        help="comma-separated MxN wave panels, e.g. 64x64,64x128,128x128")
+    parser.add_argument("--register-only", action="store_true",
+                        help="skip the LDS-staged variants (a register panel sweep)")
+    parser.add_argument("--shapes", type=str, default=None,
+                        help="comma-separated MxNxK shapes")
     args = parser.parse_args()
+    global PANELS, LDS_WAVES, SHAPES
+    if args.panels:
+        PANELS = [tuple(int(v) for v in p.split("x")) for p in args.panels.split(",")]
+    if args.register_only:
+        LDS_WAVES = []
+    if args.shapes:
+        SHAPES = [tuple(int(v) for v in s.split("x")) for s in args.shapes.split(",")]
     if args.worker:
         args.output.write_text(json.dumps(worker(args.iters)) + "\n")
     else:

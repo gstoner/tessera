@@ -69,6 +69,9 @@ STAGING = "register"
 #: (waves_m, waves_n) workgroup shapes for the LDS-staged typed body; each wave
 #: owns one `PANELS` entry, so the block tile is (WM*panel_m, WN*panel_n).
 LDS_WAVES = [(2, 2), (4, 2)]
+#: Full 16-wide K slabs per loop iteration for the register body (1 = the
+#: established loop). Latency hiding without registers for a bigger tile.
+K_UNROLL = [1]
 ROUNDS = 3
 ERROR_BUDGET = 2e-2  # relative to max |reference|, f16 storage / f32 accumulate
 
@@ -157,14 +160,16 @@ def _typed_variants(chip, shape):
         tile_ir = re.sub(r"tessera\.macro_tile_m = \d+ : i64", f"tessera.macro_tile_m = {macro_m} : i64",
                          artifact.tile_ir)
         tile_ir = re.sub(r"tessera\.macro_tile_n = \d+ : i64", f"tessera.macro_tile_n = {macro_n} : i64", tile_ir)
-        builds = [(f"typed:{macro_m}x{macro_n}", STAGING, (1, 1))]
-        builds += [(f"typed-lds:{macro_m}x{macro_n}:{wm}x{wn}", "lds", (wm, wn))
+        builds = [(f"typed:{macro_m}x{macro_n}" + (f":k{u}" if u > 1 else ""),
+                   STAGING, (1, 1), u) for u in K_UNROLL]
+        builds += [(f"typed-lds:{macro_m}x{macro_n}:{wm}x{wn}", "lds", (wm, wn), 1)
                    for wm, wn in LDS_WAVES]
-        for name, staging, (wm, wn) in builds:
+        for name, staging, (wm, wn), unroll in builds:
             try:
                 target_ir, backend_ir, payload, *_ = rocm_native._compile_native_tile_ir(
                     tile_ir, directive="tessera_rocm.wmma", family="matmul",
-                    architecture=chip, staging=staging, lds_waves=(wm, wn))
+                    architecture=chip, staging=staging, lds_waves=(wm, wn),
+                    k_unroll=unroll)
             except Exception as exc:  # the refusal is the result
                 yield name, None, dict(refused=str(exc)[:300])
                 continue
@@ -176,6 +181,7 @@ def _typed_variants(chip, shape):
             yield name, (payload, artifact.function_name, block, 32 * wm * wn), dict(
                 backend_ir_sha256=hashlib.sha256(backend_ir.encode()).hexdigest(),
                 block_tile=list(block), threads=32 * wm * wn, lds_bytes=lds_bytes,
+                k_unroll=unroll,
                 production_panel=[artifact.macro_tile_m, artifact.macro_tile_n])
 
 
@@ -280,6 +286,7 @@ def record(output, runs, iters):
                        "--iters", str(iters), "--output", str(child)]
             command += ["--panels", ",".join(f"{m}x{n}" for m, n in PANELS)]
             command += ["--shapes", ",".join("x".join(str(v) for v in s) for s in SHAPES)]
+            command += ["--k-unroll", ",".join(str(u) for u in K_UNROLL)]
             if not LDS_WAVES:
                 command.append("--register-only")
             subprocess.run(command, check=True)
@@ -301,7 +308,7 @@ def record(output, runs, iters):
         else:
             entry["refused"] = row.get("refused")
         for key in ("relative_error", "production_panel", "backend_ir_sha256", "batch_ms",
-                    "block_tile", "threads", "lds_bytes"):
+                    "block_tile", "threads", "lds_bytes", "k_unroll"):
             if key in row:
                 entry[key] = row[key]
         summary.append(entry)
@@ -327,18 +334,22 @@ def main():
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--panels", type=str, default=None,
                         help="comma-separated MxN wave panels, e.g. 64x64,64x128,128x128")
+    parser.add_argument("--k-unroll", type=str, default=None,
+                        help="comma-separated K-slab unroll factors, e.g. 1,2,4")
     parser.add_argument("--register-only", action="store_true",
                         help="skip the LDS-staged variants (a register panel sweep)")
     parser.add_argument("--shapes", type=str, default=None,
                         help="comma-separated MxNxK shapes")
     args = parser.parse_args()
-    global PANELS, LDS_WAVES, SHAPES
+    global PANELS, LDS_WAVES, SHAPES, K_UNROLL
     if args.panels:
         PANELS = [tuple(int(v) for v in p.split("x")) for p in args.panels.split(",")]
     if args.register_only:
         LDS_WAVES = []
     if args.shapes:
         SHAPES = [tuple(int(v) for v in s.split("x")) for s in args.shapes.split(",")]
+    if args.k_unroll:
+        K_UNROLL = [int(v) for v in args.k_unroll.split(",")]
     if args.worker:
         args.output.write_text(json.dumps(worker(args.iters)) + "\n")
     else:

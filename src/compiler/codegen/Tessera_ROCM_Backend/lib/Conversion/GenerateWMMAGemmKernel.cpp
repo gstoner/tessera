@@ -41,6 +41,7 @@
 //   D[(baseRow+mi*16+2e+lhi)*N + (baseCol+ni*16+lane)] = c[mi][ni][e]  (masked)
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include "TesseraROCM/Passes.h"
 #include "ROCMPhysicalWMMAPanel.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
@@ -269,7 +270,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      bool packedInt4Memory = false,
                      StringRef rasterOrder = "row_major",
                      int64_t rasterGroup = 1, int64_t staticM = 0,
-                     int64_t staticN = 0, int64_t staticK = 0) {
+                     int64_t staticN = 0, int64_t staticK = 0,
+                     int64_t kUnroll = 1) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -822,19 +824,51 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                                         OpBuilder &, Location, Value, ValueRange)>
                                         mainPanel,
                      bool masked) {
+    // K unrolling (2026-09-18): issue `kUnroll` full slabs per iteration, so
+    // this iteration's fragment loads for slab j+1 are in flight while the
+    // MMAs of slab j retire. It costs no extra registers beyond the extra
+    // fragments and needs no barriers -- on gfx1201 the register body is
+    // memory-latency bound (LDS staging measured 0.39-0.65x, and the panel
+    // axis tops out at 4x4 fragments before the VGPR cliff), so this is the
+    // remaining lever. `kUnroll = 1` is exactly the established loop.
+    const int64_t unroll = masked ? 1 : std::max<int64_t>(kUnroll, 1);
+    Value kStep = rb.create<arith::ConstantIndexOp>(loc, 16 * unroll);
+    Value kMainU = kMain;
+    if (unroll > 1) {
+      Value remU = rb.create<arith::RemUIOp>(loc, kMain, kStep);
+      kMainU = rb.create<arith::SubIOp>(loc, kMain, remU);
+    }
     auto kLoop = rb.create<scf::ForOp>(
-        loc, c0, kMain, c16, initAccs,
+        loc, c0, kMainU, kStep, initAccs,
         [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
-          bb.create<scf::YieldOp>(l, mainPanel(bb, l, k0, iter));
+          SmallVector<Value> accs(iter.begin(), iter.end());
+          for (int64_t u = 0; u < unroll; ++u) {
+            Value ku = u == 0 ? k0
+                              : bb.create<arith::AddIOp>(
+                                    l, k0,
+                                    bb.create<arith::ConstantIndexOp>(l, 16 * u));
+            accs = mainPanel(bb, l, ku, accs);
+          }
+          bb.create<scf::YieldOp>(l, accs);
         });
+    // The 1..unroll-1 full slabs the unrolled loop could not take.
+    scf::ForOp remainder;
+    if (unroll > 1) {
+      remainder = rb.create<scf::ForOp>(
+          loc, kMainU, kMain, c16, kLoop.getResults(),
+          [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
+            bb.create<scf::YieldOp>(l, mainPanel(bb, l, k0, iter));
+          });
+    }
+    ValueRange mainResults =
+        unroll > 1 ? ValueRange(remainder.getResults()) : ValueRange(kLoop.getResults());
     auto tail = rb.create<scf::IfOp>(
         loc, needTail,
         [&](OpBuilder &tb, Location l) {
-          tb.create<scf::YieldOp>(
-              l, maskedPanel(tb, l, kMain, kLoop.getResults()));
+          tb.create<scf::YieldOp>(l, maskedPanel(tb, l, kMain, mainResults));
         },
         [&](OpBuilder &eb, Location l) {
-          eb.create<scf::YieldOp>(l, ValueRange(kLoop.getResults()));
+          eb.create<scf::YieldOp>(l, mainResults);
         });
     emitStore(rb, tail.getResults(), masked);
   };
@@ -1358,6 +1392,11 @@ struct GenerateWMMAGemmKernelPass
                      "with via-tile, lds selects the multi-wave LDS-staged "
                      "typed body"),
       llvm::cl::init("register")};
+  Option<int> kUnroll{*this, "k-unroll",
+                      llvm::cl::desc("typed body: full 16-wide K slabs issued "
+                                     "per loop iteration (latency hiding; 1 = "
+                                     "the established one-slab loop)"),
+                      llvm::cl::init(1)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged typed body: waves along M "
                                        "per workgroup"),
@@ -1984,7 +2023,7 @@ struct GenerateWMMAGemmKernelPass
                         portableContract, viaTile, hasBias, activation,
                         packDesc && dt == "int4", request.rasterOrder,
                         request.rasterGroup, request.staticM, request.staticN,
-                        request.staticK);
+                        request.staticK, kUnroll);
       }
       if (gpuFunc->hasAttr("tessera.rocm.typed_gfx11_gemm_contract"))
         gpuFunc->setAttr(

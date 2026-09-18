@@ -1264,6 +1264,7 @@ def _compile_native_tile_ir(
     architecture: str = "gfx1151",
     schedule_kernel: bool = False,
     lds_waves: tuple[int, int] = (2, 2),
+    k_unroll: int = 1,
 ) -> tuple[
     str,
     str,
@@ -1287,7 +1288,7 @@ def _compile_native_tile_ir(
     key = hashlib.sha256(
         (
             f"{architecture}|{tile_ir}|{directive}|{family}|{input_level.value}|"
-            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
+            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|k{k_unroll}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
         ).encode()
     ).hexdigest()
     cached = _cache.get(key)
@@ -1311,6 +1312,7 @@ def _compile_native_tile_ir(
         tile_kv=tile_kv,
         staging=staging,
         lds_waves=(int(lds_waves[0]), int(lds_waves[1])),
+        k_unroll=int(k_unroll),
         depth_cooperative=depth_cooperative,
     )
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
@@ -1542,6 +1544,7 @@ def package_scheduled_matmul(
     pipeline_name: str,
     staging: str = "register",
     lds_waves: tuple[int, int] = (2, 2),
+    k_unroll: int = 1,
 ) -> ROCMNativePackage:
     """Package the exact Schedule-to-Tile artifact without re-entering Graph IR.
 
@@ -1580,10 +1583,11 @@ def package_scheduled_matmul(
         device_libraries,
         compile_state,
     ) = (_compile_scheduled_matmul_tile_ir(artifact.tile_ir)
-         if arch == "gfx1151" and staging == "register" else
+         if arch == "gfx1151" and staging == "register" and k_unroll == 1 else
          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.wmma",
                                  family="matmul", architecture=arch, staging=staging,
-                                 lds_waves=(int(lds_waves[0]), int(lds_waves[1]))))
+                                 lds_waves=(int(lds_waves[0]), int(lds_waves[1])),
+                                 k_unroll=int(k_unroll)))
     entry = artifact.function_name
     if artifact.residual_name is not None:
         raise ValueError("ROCm scheduled matmul does not carry a residual epilogue")
@@ -1660,6 +1664,7 @@ def package_scheduled_matmul(
                                if staging == "register" else
                                f"{arch}_lds_wmma_{lds_waves[0]}x{lds_waves[1]}waves_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}"),
             "staging": staging,
+            "k_unroll": int(k_unroll),
             "workgroup": [32 if staging == "register" else 32 * lds_waves[0] * lds_waves[1], 1, 1],
             "shape_policy": "bounded_dynamic" if dynamic else "static",
             "shape": [artifact.m, artifact.n, artifact.k],

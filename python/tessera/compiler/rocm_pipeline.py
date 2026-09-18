@@ -218,6 +218,9 @@ class ROCMExecutablePipeline:
     #: Waves per workgroup (rows x cols of per-wave panels) for the LDS-staged
     #: typed matmul body; ignored under register staging.
     lds_waves: tuple[int, int] = (2, 2)
+    #: Full 16-wide K slabs the typed matmul body issues per loop iteration
+    #: (latency hiding; 1 is the established one-slab loop).
+    k_unroll: int = 1
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -250,6 +253,8 @@ class ROCMExecutablePipeline:
             raise ValueError("ROCm matmul staging must be register or lds")
         if (len(self.lds_waves) != 2 or any(type(w) is not int or w <= 0 or w > 8 for w in self.lds_waves)):
             raise ValueError("ROCm LDS staging takes a positive (waves_m, waves_n) pair of at most 8 each")
+        if type(self.k_unroll) is not int or not 1 <= self.k_unroll <= 8:
+            raise ValueError("ROCm matmul k_unroll must be an integer in [1, 8]")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -263,6 +268,7 @@ class ROCMExecutablePipeline:
             f"family={self.family} input={self.input_level.value} "
             f"output={terminal.value} arch={self.arch} staging={self.staging} "
             f"lds-waves-m={self.lds_waves[0]} lds-waves-n={self.lds_waves[1]} "
+            f"k-unroll={self.k_unroll} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"
@@ -276,6 +282,7 @@ class ROCMExecutablePipeline:
             self.arch,
             self.staging,
             f"{self.lds_waves[0]}x{self.lds_waves[1]}",
+            str(self.k_unroll),
             str(self.tile_q),
             str(self.tile_kv),
             str(self.depth_cooperative),

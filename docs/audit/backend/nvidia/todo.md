@@ -7712,6 +7712,50 @@ Fleet at the head: Super-Bear **16096 passed, 0 failed** (full sweep at
 files touched afterwards 86 passed at `ecb086c5`); the ROCm and Mac rows are
 in the log entry.
 
+## The three owed sm_120 items, worked — 2026-09-18
+
+Sync `GFX1201-PARITY-2026-09-17` (shared branch `claude/gfx1201-sm120-owed-loops`
+with the ROCm owed items); owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+* **NVFP4 emitted kernel as a consumer.** The launch bridge dispatches
+  `tessera_nvfp4_mma_m16n8k64` (`invokeNvfp4Emitted`: five fixed buffers, one
+  warp, no runtime dims) instead of falling off its name chain with rc=5.
+  `compiler/nvfp4_fragments.py` lays the logical tile out per lane in the PTX
+  ISA m16n8k64 order the on-silicon spike proved — A/B nibble words,
+  `scale_vec::4X` scale words on the lower lane pair (A rows `gid`/`gid+8`)
+  and lane 0 of each quad (B column `gid`) — folds the accumulator back, and
+  carries the exact reference (e2m1 and ue4m3 decoded as the spike decodes
+  them, one scale per 16-wide K block). `runtime._nvidia_nvfp4_emitted_mma`
+  registers the emitted PTX once and runs the tile. Device: exact in all five
+  scale modes (unit, uniform 0.5 and 2.0, the spike's mapped non-uniform,
+  random) — `tests/unit/test_nvidia_nvfp4_emitted.py`, packet
+  `benchmarks/baselines/nvfp4_emitted_20260918/nvidia_sm120.json`. Still one
+  fixed tile per launch: a consumer, not an arbiter candidate.
+* **Isolated CUDA attention.** The spawn, lease, health handshake, bounded
+  relay and poison/recover/replace body moved from the HIP-only owner into
+  `isolated_attention.IsolatedAttentionTape`; the ROCm owner keeps its worker,
+  payload and split-reduced oracle as hooks (its tests unchanged).
+  `isolated_cuda_attention.IsolatedCUDAAttentionTape` retains the primary
+  context in the child, uploads Q/K/V, captures the saved-LSE checkpoint pair
+  into `ResidentAttentionTape`, admits itself through zero/nonzero VJP probes
+  against the checkpoint contract's numpy reference (GQA-aware, end-aligned
+  causal mask), and relays host-array cotangents and gradients. Device: three
+  sm_120 rows (causal/non-causal, sq≠sk) with backward at two cotangent scales,
+  forced worker death, confirmed recovery and a fresh replacement that passes
+  the same oracle — `tests/unit/test_isolated_cuda_attention.py`. Forced
+  process termination is not a driver-hang test.
+* **EBM sphere front door on CUDA.** `native_row_program.sphere_langevin_step_module`
+  is the `[rows, features]` program (two tangent projections, the
+  Euler-Maruyama step, the retraction with the host's underflow guard; the
+  scalars fold on the host so the kernel carries none), packaged behind
+  `energy._try_cuda_gpu_sphere_langevin_step_f32`, tried after the Apple
+  lane and before the x86/ROCm affine lanes, with a failed compile remembered
+  per feature width. Device: TBD-SPHERE.
+* **Toolchain.** Driver 610.88 unchanged (CUDA 13.3 API, PTX ≤ 9.3); the
+  emitted NVFP4 packet records the `.version` the driver JIT was handed.
+
+Fleet at the head: TBD-SWEEP-NVIDIA.
+
 ## The sm_120 Lion stop-sign lane returns rc=3 on main — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1.

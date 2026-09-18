@@ -79,9 +79,11 @@ def test_sm120_sphere_step_matches_the_numpy_formula(d):
     assert out.dtype == np.float32 and out.shape == (d,)
     np.testing.assert_allclose(out, _reference_step(x, grad, noise, 0.02, 0.2), rtol=2e-5, atol=2e-6)
     assert abs(float(np.linalg.norm(out)) - 1.0) < 1e-5
-    # The retraction guard: a step that lands at the origin keeps the state.
+    # A zero update re-normalizes the state (|x| is 1 to an ulp, so the
+    # retraction may move it by one). The origin guard itself is unreachable
+    # from a unit-norm x: |y|^2 = 1 + |P grad - P noise|^2 >= 1.
     zero_y = energy._try_cuda_gpu_sphere_langevin_step_f32(x, np.zeros(d, np.float32), np.zeros(d, np.float32), 1.0, 0.0)
-    np.testing.assert_array_equal(zero_y, x)
+    np.testing.assert_allclose(zero_y, x / np.linalg.norm(x), rtol=1e-6, atol=1e-7)
 
 
 @pytest.mark.hardware_nvidia

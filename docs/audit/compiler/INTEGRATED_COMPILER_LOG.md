@@ -4401,3 +4401,24 @@ Remaining: `paged_kv` on gfx1201; the typed route's performance gap against the 
 Evidence: `docs/audit/backend/rocm/todo.md` §`GFX1201-PARITY-2026-09-17` slices 3-5, `docs/audit/backend/nvidia/todo.md` §"sm_120 engineering loops", `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/typed_matmul_fp8_gfx1201.mlir`, `gfx1201_tile_depth_attention_kernel.mlir`, `gfx1201_tile_attention_backward_wmma_adapter.mlir`, `tests/unit/test_rocm_gfx1201_scheduled.py`, `tests/unit/test_rocm_compiled_family_gate.py` (pins the 62), `tests/unit/test_arbiter_autotune.py`, `benchmarks/baselines/native_hvp_20260917/`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-18 — the owed loops: gfx1201 at every family, integer and bf16 storage on the typed route, the measured typed-route gap, public 2:4 sparse admission, and the three sm_120 items
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: the owed items of sync `GFX1201-PARITY-2026-09-17` on both GPU backends (branch `claude/gfx1201-sm120-owed-loops`, after the five merged branches were pruned locally, on origin and on the three boxes and every checkout synced to `main`); co-owner [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+Outcome: **gfx1201 has every family, the typed ROCm matmul route carries int8, int4 and bf16 storage on both chips, the typed route's performance gap is measured on both chips and acted on, the 2:4 sparse stack has a public admission through the production boundaries, and the three owed sm_120 items are closed on Super-Bear.** `paged_kv` was never a generator problem: the runtime built the directive flash-attention kernel without an `arch` stamp, so the family's gate probed a gfx11 kernel on gfx12; naming the chip opened the whole directive flash-attention lane on gfx1201 along with the family. Slice 1b was four admission checks between a fragment materializer that already packed integers for both chips and a runtime that already knew the dtypes. The gap measurement found that the `staging` knob the queue named does nothing on the typed route (byte-identical kernels, a false `multiwave_lds` label since corrected) and that its own first packet had timed a clock ramp; the corrected packet selects gfx1201's 2x4 panel for fully tiled problems at 1024 and above (2.1x at 1024³, 3.3x at 2048³) and shows gfx1151's typed 2x4 at parity with the directive lane. The raster contract now reaches the generator from the typed route (selection still row-major, pending counters). Sparse admission is the five layers the queue scoped — `jit.package_sparse_2to4`, a replayed Schedule artifact, a packager through an RDNA4-only family, a launch ABI that consumes every validity word and refuses a non-2:4 tile, and AD left on the logical function. On NVIDIA: the emitted NVFP4 warp tile has a launcher entry, a per-lane packer and an exact packet in five scale modes; the isolated attention tape is backend-parametric with a CUDA twin proven through death, recovery and replacement; the EBM sphere step runs as one cooperative sm_120 kernel behind its front door.
+
+| Host | Full `-m "not slow"` sweep | Lit |
+|---|---|---|
+| Tajasarus (gfx1201, assertions LLVM) | TBD-SWEEP-TAJ | `check-tessera-rocm` 74/74 in `build` and `build-assertions` (two new fixtures: `typed_matmul_int_storage.mlir`, `typed_matmul_raster_order.mlir`); `tests/tessera-ir` TBD-LIT-TAJ |
+| Princess-Luna (gfx1151) | TBD-SWEEP-LUNA | `check-tessera-rocm` 74/74; `tests/tessera-ir` TBD-LIT-LUNA |
+| Super-Bear (sm_120) | TBD-SWEEP-BEAR | both trees built |
+| Mac (M1 Max) | TBD-SWEEP-MAC | doc, plan, generated-doc and registry gates clean |
+
+Remaining: an LDS-staged typed body (the real work behind the "LDS staging" the queue named); gfx1151's 4x4 typed panel at 1024³ (10% behind the directive lane there); raster-order selection needs counters (ROCM-RASTER-1B); the packed-int4 input route on the typed path; `auto_2to4` device rows through the public package; the NVFP4 tile's general-shape dispatch before it can be an arbiter candidate. Performance promotion on both GPU boxes still needs a counter-capable native-Linux host.
+
+Evidence: `docs/audit/backend/rocm/todo.md` §"The owed items, worked — 2026-09-18", `docs/audit/backend/nvidia/todo.md` §"The three owed sm_120 items, worked — 2026-09-18", `benchmarks/baselines/typed_route_gap_20260918/`, `benchmarks/baselines/nvfp4_emitted_20260918/`, `tests/unit/test_scheduled_sparse.py`, `tests/unit/test_nvidia_nvfp4_emitted.py`, `tests/unit/test_isolated_cuda_attention.py`, `tests/unit/test_cuda_ebm_geo_langevin_compiled.py`, `tests/unit/test_rocm_compiled_family_gate.py` (pins every family on gfx1201 and the RDNA4-only one).
+
+<!-- entry-fields:end -->

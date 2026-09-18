@@ -886,7 +886,10 @@ def test_rocm_panel_follows_the_measured_gap_packets(target, shape, panel):
 def test_gfx1151_scheduled_matmul_executes_the_selected_panel(shape, panel) -> None:
     """The typed 4x4 panel gfx1151 selects in the fully tiled [1024, 2048)
     band executes exactly like the 2x4 it replaces there; a ragged neighbour
-    keeps the 2x4 (typed-route gap packet, 2026-09-18). Correctness only."""
+    keeps the 2x4 (typed-route gap packet, 2026-09-18). The K unroll rides the
+    same band, so the route is asserted against the shipped rule rather than a
+    literal -- a hard-coded route name turns a selection change into a red row
+    that says nothing about the device. Correctness only."""
     from tests._support.rocm_build import rocm_host_arch
     if (rocm_host_arch() or "") != "gfx1151":
         pytest.skip("gfx1151 owning-device proof")
@@ -896,7 +899,11 @@ def test_gfx1151_scheduled_matmul_executes_the_selected_panel(shape, panel) -> N
     scheduled_matmul.verify_matmul_projection(artifact)
     assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
     package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.provenance["physical_route"] == f"gfx1151_register_wmma_{panel[0] // 16}x{panel[1] // 16}"
+    unroll = scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1151", dynamic=False)
+    suffix = "" if unroll <= 1 else f"_k{unroll}"
+    assert package.descriptor.provenance["physical_route"] == (
+        f"gfx1151_register_wmma_{panel[0] // 16}x{panel[1] // 16}{suffix}")
+    assert package.descriptor.provenance["k_unroll"] == unroll
     rng = np.random.default_rng(1151)
     a = (rng.normal(size=(m, k)) * 0.25).astype(np.float16)
     b = (rng.normal(size=(k, n)) * 0.25).astype(np.float16)

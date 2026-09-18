@@ -2938,13 +2938,17 @@ struct LowerTileToROCMPass
         auto epilogue =
             op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
         auto parent = op->getParentOfType<func::FuncOp>();
+        const bool fp8Storage =
+            desc && (desc.getAType() == "e4m3" || desc.getAType() == "e5m2");
         if (!desc || !epilogue || !parent || desc.getFamily() != "wmma" ||
             desc.getM() != 16 || desc.getN() != 16 || desc.getK() != 16 ||
             desc.getAType() != desc.getBType() ||
-            (desc.getAType() != "f16" && desc.getAType() != "bf16") ||
+            (desc.getAType() != "f16" && desc.getAType() != "bf16" &&
+             !(fp8Storage && arch.starts_with("gfx12"))) ||
             desc.getAccType() != "f32") {
           op->emitError("ROCm Target matmul requires the typed 16x16x16 "
-                        "f16/bf16-to-f32 WMMA contract");
+                        "f16/bf16-to-f32 WMMA contract (or OCP FP8 e4m3/e5m2 "
+                        "to f32 on gfx12)");
           signalPassFailure();
           return;
         }

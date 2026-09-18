@@ -286,7 +286,7 @@ def _fake_reduce_compile(tile_ir: str):
     )
 
 
-def _fake_paged_kv_compile(tile_ir: str):
+def _fake_paged_kv_compile(tile_ir: str, **_kw):
     assert "tile.paged_kv_read_kernel" in tile_ir
     return (
         'module { "tessera_rocm.paged_kv_read"() {route = "direct"} : () -> () }',
@@ -299,7 +299,7 @@ def _fake_paged_kv_compile(tile_ir: str):
     )
 
 
-def _fake_moe_dispatch_compile(tile_ir: str):
+def _fake_moe_dispatch_compile(tile_ir: str, **_kw):
     assert "tile.moe_dispatch_kernel" in tile_ir
     return (
         'module { "tessera_rocm.moe_dispatch"() {route = "direct_gather"} : () -> () }',

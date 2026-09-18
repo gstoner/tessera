@@ -440,6 +440,19 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     return schedule;
   }
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
+      lhsElement == rhsElement &&
+      isa<Float8E4M3FNType, Float8E5M2Type>(lhsElement) && outElement.isF32() &&
+      !schedule.bias && !schedule.residual && schedule.activation == "none") {
+    // OCP FP8 storage on RDNA4 (V_WMMA_F32_16X16X16_{FP8,BF8}_{FP8,BF8},
+    // device-audited 2026-09-13); f32 accumulate, 1x1 register tile, no fused
+    // epilogue yet (GFX1201-PARITY slice 5).
+    schedule.storage = isa<Float8E4M3FNType>(lhsElement) ? "e4m3" : "e5m2";
+    schedule.accum = "f32";
+    schedule.macroTileM = 16;
+    schedule.macroTileN = 16;
+    return schedule;
+  }
+  if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
       lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
     // Independent conservative RDNA4 profile; no gfx11 panel inheritance.
     schedule.storage = "f16";

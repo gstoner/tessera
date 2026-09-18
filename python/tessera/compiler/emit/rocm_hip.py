@@ -1025,13 +1025,12 @@ class RocmWmmaGemmCandidate(Candidate):
     accuracy_atol = _F16_ATOL              # f16 storage budget (Decision #28)
     mma_target = "rocm"
 
-    @property
-    def mma_arch(self) -> str:
+    def __init__(self) -> None:
         # The footprint model keys on the chip this process launches on; the
         # candidate serves gfx1151 (directive kernel) and gfx1201 (typed route).
         from tessera import runtime as rt
 
-        return rt._rocm_chip()
+        self.mma_arch = rt._rocm_chip()
 
     def mma_dtype(self, region: Any) -> str | None:
         return "fp16"

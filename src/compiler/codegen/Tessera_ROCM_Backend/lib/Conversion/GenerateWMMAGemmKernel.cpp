@@ -386,10 +386,12 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto dynamicRowMajor = tessera::tile::TileMemoryLayoutAttr::get(
       ctx, "gmem", "row_major", 0);
   auto tileValueTy = tessera::tile::TileValueType::get(ctx);
-  StringRef fragmentElem = T.store.isF16() ? "f16"
-                           : T.store.isBF16() ? "bf16"
-                           : T.pack == 1      ? "int8"
-                                              : "int4";
+  StringRef fragmentElem = T.store.isF16()                 ? "f16"
+                           : T.store.isBF16()                ? "bf16"
+                           : isa<Float8E4M3FNType>(T.store)  ? "e4m3"
+                           : isa<Float8E5M2Type>(T.store)    ? "e5m2"
+                           : T.pack == 1                     ? "int8"
+                                                             : "int4";
   StringRef fragmentAcc = T.isInt ? "i32" : "f32";
   auto aFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, 16, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
@@ -1149,11 +1151,16 @@ struct GenerateWMMAGemmKernelPass
       bool integerContract = common &&
           (desc.getAType() == "int8" || desc.getAType() == "int4") &&
           (desc.getAccType() == "i32" || desc.getAccType() == "int32");
-      bool canonical = floatContract || integerContract;
+      // OCP FP8 storage (RDNA4 WMMA, k=16 per fragment) accumulates in f32;
+      // the typed route packs it per chip (GFX1201-PARITY slice 5).
+      bool fp8Contract = common &&
+          (desc.getAType() == "e4m3" || desc.getAType() == "e5m2") &&
+          desc.getAccType() == "f32";
+      bool canonical = floatContract || integerContract || fp8Contract;
       if (!canonical) {
         op->emitError("ROCm tile.matmul_kernel requires an m16n16k16 row/col "
-                      "WMMA descriptor: f16/bf16 with f32 accumulation or "
-                      "int8/int4 with i32 accumulation");
+                      "WMMA descriptor: f16/bf16/e4m3/e5m2 with f32 "
+                      "accumulation or int8/int4 with i32 accumulation");
         return signalPassFailure();
       }
       if (auto staging = op->getAttrOfType<StringAttr>("staging");
@@ -1406,9 +1413,27 @@ struct GenerateWMMAGemmKernelPass
         T = {i8Ty, v16i8, VectorType::get({2}, i32Ty), v8i32, i32Ty,
              /*isInt=*/true, /*halfAccumulator=*/false, /*pack=*/2,
              /*packFactor=*/2};
+      } else if (dt == "e4m3" || dt == "fp8" || dt == "fp8_e4m3" ||
+                 dt == "e5m2" || dt == "bf8" || dt == "fp8_e5m2") {
+        // OCP FP8 storage, f32 accumulate. Only the typed route carries it:
+        // TileToROCM packs the 8-bit fragment per chip (RDNA4 `rdna4_wmma`,
+        // vector<2xi32> per lane, k=16) and gfx11 has no FP8 WMMA at all, so
+        // the direct gfx11 body below refuses it by name.
+        const bool e4m3 = (dt == "e4m3" || dt == "fp8" || dt == "fp8_e4m3");
+        Type f8Ty = e4m3 ? static_cast<Type>(Float8E4M3FNType::get(b.getContext()))
+                         : static_cast<Type>(Float8E5M2Type::get(b.getContext()));
+        T = {f8Ty, VectorType::get({16}, f8Ty), VectorType::get({2}, i32Ty),
+             v8f32, f32Ty, /*isInt=*/false, /*halfAccumulator=*/false,
+             /*pack=*/0, /*packFactor=*/1};
+        if (!viaTile) {
+          op->emitError("generate-wmma-gemm-kernel: FP8 storage ('")
+              << dt << "') is a typed-route contract (via-tile=true); the "
+                        "direct gfx11 body has no FP8 WMMA";
+          return signalPassFailure();
+        }
       } else {
         op->emitError("generate-wmma-gemm-kernel: dtype must be f16, bf16, "
-                      "int8, or int4 (got '")
+                      "int8, int4, e4m3, or e5m2 (got '")
             << dt << "')";
         return signalPassFailure();
       }

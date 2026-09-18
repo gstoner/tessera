@@ -1577,8 +1577,23 @@ struct GenerateWMMAGemmKernelPass
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernel(true);
-      if (viaTile && mt == 2 && nt == 4 && T.pack == 0 && !hasBias &&
-          activation == "none" && outputTy == T.accElem) {
+      // The typed 2x4 f16/bf16 body carries gfx1151's performance-closure
+      // digest (TileToROCM refuses it on any other arch). Stamp it only when
+      // the request is gfx11's: the op's `arch`/`schedule_arch`, else the
+      // module's `tessera.arch`, else the historical gfx11 default. A gfx12
+      // 2x4 panel is an ordinary typed body, measured on its own chip
+      // (GFX1201-PARITY, typed-route gap, 2026-09-18).
+      StringRef requestArch = "gfx1151";
+      if (auto a = op->getAttrOfType<StringAttr>("arch"))
+        requestArch = a.getValue();
+      else if (auto a = op->getAttrOfType<StringAttr>("schedule_arch"))
+        requestArch = a.getValue();
+      else if (auto moduleOp = op->getParentOfType<ModuleOp>())
+        if (auto a = moduleOp->getAttrOfType<StringAttr>("tessera.arch"))
+          requestArch = a.getValue();
+      const bool gfx11Request = requestArch.starts_with("gfx11");
+      if (viaTile && gfx11Request && mt == 2 && nt == 4 && T.pack == 0 &&
+          !hasBias && activation == "none" && outputTy == T.accElem) {
         gpuFunc->setAttr("tessera.rocm.typed_gfx11_gemm_contract",
                          b.getUnitAttr());
         gpuFunc->setAttr("tessera.rocm.physical_panel_mt",

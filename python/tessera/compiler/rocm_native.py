@@ -1440,11 +1440,17 @@ def _compile_attention_backward_graph_ir(graph_ir: str, *, tile_q: int, tile_kv:
 
 
 def _compile_scheduled_matmul_tile_ir(tile_ir: str):
+    # `staging` reaches only the generator's canonical scf.for body; the typed
+    # `tile.matmul_kernel` route never enters it, so "lds" here produced the
+    # byte-identical register kernel while the provenance called it an LDS
+    # route (measured 2026-09-18, `benchmarks/baselines/typed_route_gap_20260918`:
+    # identical backend IR for every register/lds pair on both chips). Say
+    # what is built.
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.wmma",
         family="matmul",
-        staging="lds",
+        staging="register",
     )
 
 
@@ -1552,7 +1558,9 @@ def package_scheduled_matmul(
             "work_item": "E2E-REAL-3",
             "sync_key": "E2E-REAL-2026-08-05",
             "route": "canonical_scheduled_tile_consumer",
-            "physical_route": "gfx1151_multiwave_lds_wmma_2x4" if arch == "gfx1151" else "gfx1201_register_wmma_1x1",
+            # One wave per macro tile, register-staged fragments on both chips;
+            # the panel is the Schedule's macro tile (typed-route gap, 2026-09-18).
+            "physical_route": f"{arch}_register_wmma_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}",
             "shape_policy": "bounded_dynamic" if dynamic else "static",
             "shape": [artifact.m, artifact.n, artifact.k],
             "bias": artifact.bias_name is not None,

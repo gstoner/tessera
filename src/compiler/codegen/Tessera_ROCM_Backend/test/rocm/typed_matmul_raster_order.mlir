@@ -17,7 +17,7 @@ module {
       mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "f16", b = "f16", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
       epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
       warps = 1 : i64, staging = "global",
-      tessera.macro_tile_m = 32 : i64, tessera.macro_tile_n = 64 : i64,
+      tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64,
       tessera.raster_order = "grouped_m", tessera.raster_group = 4 : i64
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     return
@@ -28,5 +28,5 @@ module {
 // CHECK: gpu.func @grouped(
 // CHECK-DAG: tessera.rocm.schedule_raster_group = 4 : i64
 // CHECK-DAG: tessera.rocm.schedule_raster_order = "grouped_m"
-// CHECK: arith.divui
+// CHECK: arith.remui
 // CHECK: tessera_rocm.wmma

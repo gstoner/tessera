@@ -458,13 +458,20 @@ def test_gfx1151_scheduled_attention_backward_packages_exact_tile_program(monkey
     [(2, 2, 16, 16), (4, 2, 17, 19), (4, 1, 15, 21)],
 )
 @_needs_opt
-def test_gfx1151_scheduled_attention_backward_exact_mha_gqa_mqa(
+def test_rocm_scheduled_attention_backward_exact_mha_gqa_mqa(
     hq: int, hkv: int, sq: int, sk: int
 ) -> None:
+    from tests._support.rocm_build import rocm_host_arch
+
     if not _rocm_wmma_runtime_available():
-        pytest.skip("a WSL-visible gfx1151 device is unavailable")
+        pytest.skip("a WSL-visible ROCm device is unavailable")
+    # The canonical backward adapter and the WMMA backward generator own both
+    # RDNA chips (rdna4 fragments on gfx1201); the package names the host's own.
+    arch = rocm_host_arch()
+    if arch not in {"gfx1151", "gfx1201"}:
+        pytest.skip(f"no owned attention-backward profile for host arch {arch!r}")
     artifact = lower_scheduled_attention_backward(
-        _module(1, hq, hkv, sq, sk, 16), target="rocm_gfx1151"
+        _module(1, hq, hkv, sq, sk, 16), target=f"rocm_{arch}"
     )
     program = package_rocm(artifact, pipeline_name="tessera-lower-to-rocm")
     rng = np.random.default_rng(20260805 + hkv + sk)

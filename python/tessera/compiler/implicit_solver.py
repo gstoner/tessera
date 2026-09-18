@@ -632,10 +632,10 @@ def _residual_source(tensor_type: str) -> str:
 def build_solver_ift_contract(
     *, target: str, shape: Sequence[int], product_mode: str = "vjp"
 ) -> dict[str, Any]:
-    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+    if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
         raise ValueError(
-            "solver IFT physical packages support x86, rocm_gfx1151, and "
-            "nvidia_sm120; unmeasured architectures fail closed"
+            "solver IFT physical packages support x86, rocm_gfx1151, "
+            f"rocm_gfx1201 and nvidia_sm120; {target!r} is unmeasured; unmeasured architectures fail closed"
         )
     normalized = tuple(int(dim) for dim in shape)
     if not normalized or any(dim <= 0 for dim in normalized):
@@ -645,6 +645,7 @@ def build_solver_ift_contract(
     architecture = {
         "x86": "avx512",
         "rocm_gfx1151": "gfx1151",
+        "rocm_gfx1201": "gfx1201",
         "nvidia_sm120": "sm120",
     }[target]
     tensor_type = "tensor<" + "x".join(map(str, normalized)) + "xf32>"
@@ -698,10 +699,10 @@ def build_general_solver_product_contract(
     Graph product digests and may promote ``artifact_only`` only after its own
     executable and exact-device evidence land.
     """
-    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+    if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
         raise ValueError(
-            "general solver products support x86, rocm_gfx1151, and "
-            "nvidia_sm120 contracts"
+            "general solver products support x86, rocm_gfx1151, rocm_gfx1201 "
+            f"and nvidia_sm120 contracts; {target!r} is unmeasured; unmeasured architectures fail closed"
         )
     normalized = tuple(int(dim) for dim in shape)
     if not normalized or any(dim <= 0 for dim in normalized):
@@ -720,6 +721,7 @@ def build_general_solver_product_contract(
     architecture = {
         "x86": "zen5_avx512",
         "rocm_gfx1151": "gfx1151",
+        "rocm_gfx1201": "gfx1201",
         "nvidia_sm120": "sm120",
     }[target]
     body: dict[str, Any] = {
@@ -777,6 +779,7 @@ def build_physical_general_solver_contract(
     expected_target = {
         "x86": "x86",
         "rocm_gfx1151": "rocm",
+        "rocm_gfx1201": "rocm",
         "nvidia_sm120": "nvidia_sm120",
     }[target]
     for role in _GENERAL_CHILD_ROLES:
@@ -826,6 +829,7 @@ class PhysicalGeneralSolverArtifact:
         runtime_target = {
             "x86": "x86",
             "rocm_gfx1151": "rocm",
+            "rocm_gfx1201": "rocm",
             "nvidia_sm120": "nvidia_sm120",
         }[self.target]
         compiler_prefix = "nvidia" if self.target == "nvidia_sm120" else runtime_target
@@ -874,10 +878,10 @@ def compile_physical_general_solver_from_graph(
     bodies are differentiated from SSA dataflow. Data-dependent regions and
     unsupported dtype/layout transitions fail closed.
     """
-    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+    if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
         raise ValueError(
-            "automatic residual packaging supports x86, rocm_gfx1151, and "
-            "nvidia_sm120"
+            "automatic residual packaging supports x86, rocm_gfx1151, "
+            f"rocm_gfx1201 and nvidia_sm120; {target!r} is unmeasured; unmeasured architectures fail closed"
         )
     if len(module.functions) != 1:
         raise ValueError("automatic residual packaging requires exactly one Graph function")
@@ -935,6 +939,7 @@ def compile_physical_general_solver_from_graph(
     runtime_target = {
         "x86": "x86",
         "rocm_gfx1151": "rocm",
+        "rocm_gfx1201": "rocm",
         "nvidia_sm120": "nvidia_sm120",
     }[target]
     compiler_prefix = "nvidia" if target == "nvidia_sm120" else runtime_target
@@ -1018,6 +1023,7 @@ class ScheduledSolverIFTArtifact:
         runtime_target = {
             "x86": "x86",
             "rocm_gfx1151": "rocm",
+            "rocm_gfx1201": "rocm",
             "nvidia_sm120": "nvidia_sm120",
         }[self.target]
         compiler_prefix = "nvidia" if self.target == "nvidia_sm120" else runtime_target
@@ -1094,6 +1100,7 @@ def lower_scheduled_solver_ift(
     compiler_target = {
         "x86": "x86",
         "rocm_gfx1151": "rocm",
+        "rocm_gfx1201": "rocm",
         "nvidia_sm120": "nvidia",
     }[target]
     workgroup = int(contract["workgroup_size"])

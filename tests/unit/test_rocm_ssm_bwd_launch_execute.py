@@ -13,11 +13,21 @@ test runs on real gfx1151 and matches the numpy VJP oracle.
 from __future__ import annotations
 
 import numpy as np
+
+from tests._support import rocm_build
 import pytest
 
 import tessera as ts
 from tessera.autodiff.vjp import vjp_selective_ssm
 from tessera.compiler import execution_matrix as em
+
+
+
+def _rocm_chip() -> str:
+    """The chip this host launches on; certificates name it (slice 2b)."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
 
 
 @ts.jit(
@@ -144,7 +154,7 @@ def test_public_selective_ssm_records_exact_gfx1151_certificate() -> None:
     validate_native_vjp_execution_certificate(certificate)
     assert certificate["family"] == "selective_ssm_backward"
     assert certificate["evidence_scope"] == "exact_device"
-    assert certificate["physical_attestation"]["device_arch"] == "gfx1151"
+    assert certificate["physical_attestation"]["device_arch"] == _rocm_chip()
     assert (
         "selective_ssm_backward",
         "rocm",

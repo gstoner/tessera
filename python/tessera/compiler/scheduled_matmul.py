@@ -353,6 +353,20 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "rocm", "gfx1201", "f16", "f32", 16, 16,
         )
+    elif (
+        target == "rocm_gfx1201"
+        and a_dtype == b_dtype
+        and a_dtype in {"fp8_e4m3", "fp8_e5m2"}
+        and output_dtype == "fp32"
+    ):
+        # OCP FP8 on RDNA4 (device-audited WMMA forms, GFX1201-PARITY slice 5):
+        # f32 accumulate, no fused epilogue yet.
+        if bias_name is not None or activation != "none":
+            raise ValueError(
+                "rocm_gfx1201 FP8 scheduled matmul carries no fused epilogue yet")
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "rocm", "gfx1201", "e4m3" if a_dtype == "fp8_e4m3" else "e5m2", "f32", 16, 16,
+        )
     elif target == "rocm_gfx1151" and (a_dtype, b_dtype, output_dtype) == (
         "fp16",
         "fp16",
@@ -590,7 +604,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError('matmul native boolean field disagrees: '+key)
         return values[0] == 'true'
     def tensor(text):
-        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32|f64|ui8|si8|i8|i32)>', text)
+        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32|f64|ui8|si8|i8|i32|f8E4M3FN|f8E5M2)>', text)
         if match is None:
             raise ValueError('matmul native tensor contract is unsupported')
         return tuple(None if d == '?' else int(d) for d in match[1].split('x')[:-1]), match[2]
@@ -611,8 +625,8 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError("matmul native Tile entry is ambiguous")
         entry = entries[0]
     expected = dict(function_name=entry, m=m, n=n, k=k, storage=storage,
-        a_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[a[1]],
-        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[b[1]],
+        a_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32','f8E4M3FN':'fp8_e4m3','f8E5M2':'fp8_e5m2'}[a[1]],
+        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32','f8E4M3FN':'fp8_e4m3','f8E5M2':'fp8_e5m2'}[b[1]],
         output_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[out_storage],
         accum=string('accum'), activation=string('activation'),
         dynamic_m=a[0][0] is None or out_shape[0] is None,

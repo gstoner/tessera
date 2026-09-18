@@ -317,7 +317,7 @@ def test_predicate_regions_have_digest_bound_replay(module: GraphIRModule) -> No
         )
 
 
-@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "rocm_gfx1201"])
 @pytest.mark.parametrize(
     ("module", "theta", "solution", "expected"),
     [
@@ -334,10 +334,10 @@ def test_predicate_region_products_execute_on_native_target(
 
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
-    if target == "rocm_gfx1151" and (
-        rt._tessera_opt_path() is None or rt._rocm_live_arch() != "gfx1151"
+    if target.startswith("rocm_") and (
+        rt._tessera_opt_path() is None or rt._rocm_live_arch() != target[len("rocm_"):]
     ):
-        pytest.skip("exact gfx1151 compiler/device required")
+        pytest.skip(f"exact {target[len('rocm_'):]} compiler/device required")
     package = compile_physical_general_solver_from_graph(
         module, target=target, shape=(1,)
     )
@@ -354,7 +354,7 @@ def test_predicate_region_products_execute_on_native_target(
         np.testing.assert_allclose(result["output"], expected, atol=1.0e-6)
 
 
-@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "rocm_gfx1201"])
 def test_predicate_region_product_rejects_nondifferentiable_boundary(
     target: str,
 ) -> None:
@@ -362,10 +362,10 @@ def test_predicate_region_product_rejects_nondifferentiable_boundary(
 
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
-    if target == "rocm_gfx1151" and (
-        rt._tessera_opt_path() is None or rt._rocm_live_arch() != "gfx1151"
+    if target.startswith("rocm_") and (
+        rt._tessera_opt_path() is None or rt._rocm_live_arch() != target[len("rocm_"):]
     ):
-        pytest.skip("exact gfx1151 compiler/device required")
+        pytest.skip(f"exact {target[len('rocm_'):]} compiler/device required")
     package = compile_physical_general_solver_from_graph(
         _conditional_residual_graph(), target=target, shape=(1,)
     )
@@ -581,16 +581,16 @@ def test_generated_matmul_allows_distinct_parameter_and_solution_spaces(monkeypa
     np.testing.assert_allclose(parameter_vjp, x.T @ cotangent)
 
 
-@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "rocm_gfx1201"])
 def test_generated_nonlinear_residual_children_execute_exact_products(target: str) -> None:
     from tessera import runtime as rt
 
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
-    if target == "rocm_gfx1151" and (
-        rt._tessera_opt_path() is None or rt._rocm_live_arch() != "gfx1151"
+    if target.startswith("rocm_") and (
+        rt._tessera_opt_path() is None or rt._rocm_live_arch() != target[len("rocm_"):]
     ):
-        pytest.skip("exact gfx1151 compiler/device required")
+        pytest.skip(f"exact {target[len('rocm_'):]} compiler/device required")
     shape = (7,)
     package = compile_physical_general_solver_from_graph(
         _nonlinear_residual_graph(shape), target=target, shape=shape,
@@ -654,16 +654,16 @@ def test_general_solver_never_substitutes_gmres_for_declared_cg() -> None:
         )
 
 
-@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "rocm_gfx1201"])
 def test_physical_general_solver_executes_native_matrix_free_children(target: str) -> None:
     from tessera import runtime as rt
 
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
-    if target == "rocm_gfx1151" and (
-        rt._tessera_opt_path() is None or rt._rocm_live_arch() != "gfx1151"
+    if target.startswith("rocm_") and (
+        rt._tessera_opt_path() is None or rt._rocm_live_arch() != target[len("rocm_"):]
     ):
-        pytest.skip("exact gfx1151 compiler/device required")
+        pytest.skip(f"exact {target[len('rocm_'):]} compiler/device required")
     shape = (19,)
     package = package_physical_general_solver(
         target=target, shape=shape, residual_graph_ir="R=x-theta",
@@ -742,7 +742,7 @@ def test_solver_ift_consumes_shared_chain_into_one_tile_artifact(target: str) ->
     assert artifact.artifact_hash in artifact.tile_ir
 
 
-@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "rocm_gfx1201"])
 def test_solver_ift_compiled_package_matches_numerical_oracle(target: str) -> None:
     from tessera import runtime as rt
 
@@ -750,8 +750,11 @@ def test_solver_ift_compiled_package_matches_numerical_oracle(target: str) -> No
         pytest.skip("production tessera-opt unavailable")
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("production x86 AVX-512 image unavailable")
-    if target == "rocm_gfx1151" and not rt._rocm_wmma_runtime_available():
-        pytest.skip("gfx1151 HIP runtime unavailable")
+    if target.startswith("rocm_") and (
+        not rt._rocm_wmma_runtime_available()
+        or rt._rocm_live_arch() != target[len("rocm_"):]
+    ):
+        pytest.skip(f"exact {target[len('rocm_'):]} HIP runtime required")
 
     rng = np.random.default_rng(20260809)
     parameter = rng.uniform(0.25, 16.0, size=(3, 257)).astype(np.float32)
@@ -817,4 +820,11 @@ def test_solver_ift_rocm_runtime_fails_closed_off_gfx1151(monkeypatch) -> None:
     value = np.ones(shape, dtype=np.float32)
     result = rt.launch(rt.RuntimeArtifact(metadata=metadata), (value, value, value))
     assert result["ok"] is False
-    assert "verified for gfx1151" in result["reason"]
+    # The one per-arch rule is the family gate (rocm_pipeline.promoted_families):
+    # an unpromoted chip is refused by name there, not by a second chip check
+    # in the executor (which pinned the family to gfx1151 after gfx1201 had
+    # its own evidence).
+    reason = result["reason"]
+    assert "gfx1200" in reason and (
+        "no promoted family plugins" in reason or "fail closed" in reason
+    ), reason

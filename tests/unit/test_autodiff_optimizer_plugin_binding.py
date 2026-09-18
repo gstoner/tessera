@@ -15,6 +15,14 @@ from tessera.compiler.native_stateful_vjp import (
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
+
+def _rocm_chip() -> str:
+    """The chip this host launches on; certificates name it (slice 2b)."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 @ts.jit(target="x86", autodiff="reverse", wrt=("p", "g"))
 def _x86_sgd(p, g):
     return ts.ops.sgd(p, g, lr=0.05)
@@ -84,7 +92,6 @@ def test_rocm_sgd_momentum_variants_record_exact_gfx1151_certificates(
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/gfx1151 runtime unavailable")
-    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(20260828 + int(kind == "momentum"))
     shape = (5, 17)
     p = rng.normal(size=shape).astype(np.float32)
@@ -110,7 +117,7 @@ def test_rocm_sgd_momentum_variants_record_exact_gfx1151_certificates(
     validate_native_vjp_execution_certificate(certificate)
     assert certificate["graph_consumer"] == f"tessera.{kind}"
     assert certificate["evidence_scope"] == "exact_device"
-    assert certificate["physical_attestation"]["device_arch"] == "gfx1151"
+    assert certificate["physical_attestation"]["device_arch"] == _rocm_chip()
     assert ("optimizer_vjp", "rocm") in native_vjp_exact_execution_coverage()
     if kind == "sgd":
         stale = dict(certificate)

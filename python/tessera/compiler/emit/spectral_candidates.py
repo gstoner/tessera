@@ -465,32 +465,53 @@ def _amd_lib() -> ctypes.CDLL | None:
     return fallback
 
 
-def _is_gfx1151_composite_lib(lib: ctypes.CDLL | None) -> bool:
-    """Return whether ``lib`` is the exact promoted gfx1151 composite image."""
+def _composite_host_arch() -> str:
+    """The gfx arch a composite image must be stamped for on this host."""
+    from tessera.compiler.emit.rocm_hip import _rocm_arch
+
+    try:
+        return _rocm_arch()
+    except Exception:
+        import os
+        return os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+
+
+def _is_exact_composite_lib(lib: ctypes.CDLL | None, arch: str) -> bool:
+    """Return whether ``lib`` is the v7 composite image stamped for ``arch``."""
     return bool(
         lib is not None
         and hasattr(lib, "ts_spectral_composite_package_abi_amd")
         and lib.ts_spectral_composite_package_abi_amd()
         == b"tessera.rocm.spectral_composite.v7"
         and hasattr(lib, "ts_spectral_composite_arch_amd")
-        and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
+        and lib.ts_spectral_composite_arch_amd() == arch.encode()
     )
 
 
+def _is_gfx1151_composite_lib(lib: ctypes.CDLL | None) -> bool:
+    """Return whether ``lib`` is the exact promoted gfx1151 composite image."""
+    return _is_exact_composite_lib(lib, "gfx1151")
+
+
 def _amd_composite_lib() -> ctypes.CDLL | None:
-    """Select only the promoted gfx1151 composite package.
+    """Select the composite package stamped for this host's arch.
 
     ``_amd_lib`` deliberately retains an FFT-v1 fallback because the portable
     FFT plan ABI is architecture-neutral. Compound TSOL entry points are not:
-    their schedules and evidence are owned by gfx1151, so a mismatched v4
-    package must never inherit that FFT fallback.
+    their schedules and evidence are owned per chip, so a package stamped for
+    another arch must never inherit that FFT fallback. The prebuilt image is
+    a gfx1151 artifact; on another RDNA chip the source hook is compiled for
+    that chip (GFX1201-PARITY 2026-09-17) and its stamp must match too.
     """
+    arch = _composite_host_arch()
     cached = _libs.get("amd_composite_prebuilt")
     if cached is not None:
-        return cached if _is_gfx1151_composite_lib(cached) else None
+        return cached if _is_exact_composite_lib(cached, arch) else None
     lib = _amd_lib()
-    if not _is_gfx1151_composite_lib(lib):
-        return None
+    if not _is_exact_composite_lib(lib, arch):
+        lib = _amd_source_lib()
+        if not _is_exact_composite_lib(lib, arch):
+            return None
     _libs["amd_composite_prebuilt"] = lib
     return lib
 
@@ -728,13 +749,12 @@ def run_rocm_spectral_composite(
         # on any other ROCm host "unavailable" is not a missing build but an
         # arch-gated contract -- and a test must be able to tell the two apart:
         # on gfx1151 this is a failure, on gfx1201 it is a skip.
-        import os
-        arch = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+        arch = _composite_host_arch()
         if arch != "gfx1151":
             raise RuntimeError(
                 "prebuilt ROCm spectral composite image is a gfx1151 package, "
                 f"hardware-verified on gfx1151; target '{arch}' has no composite "
-                "image and is arch-gated on its own evidence")
+                "image built for it on this host and is arch-gated on its own evidence")
         raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
     if (
         lib.ts_spectral_composite_package_abi_amd()
@@ -743,7 +763,7 @@ def run_rocm_spectral_composite(
         raise RuntimeError("ROCm spectral composite package ABI mismatch")
     if (
         not hasattr(lib, "ts_spectral_composite_arch_amd")
-        or lib.ts_spectral_composite_arch_amd() != b"gfx1151"
+        or lib.ts_spectral_composite_arch_amd() != _composite_host_arch().encode()
     ):
         raise RuntimeError("ROCm spectral composite architecture mismatch")
     if not hasattr(lib, "ts_spectral_composite_plan_create_amd"):

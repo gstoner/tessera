@@ -206,7 +206,8 @@ def test_composite_workspace_plan_is_reused_by_artifact_digest():
     lib = candidates._amd_composite_lib()
     _composite_or_skip(lib)
     assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v7"
-    assert lib.ts_spectral_composite_arch_amd() == b"gfx1151"
+    from tessera import runtime as _rt
+    assert lib.ts_spectral_composite_arch_amd() == _rt._rocm_chip().encode()
 
     first = candidates._rocm_composite_plan(contract, lib)
     result = rt.launch(artifact, (a, b))

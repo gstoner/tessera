@@ -8,6 +8,13 @@ import pytest
 import tessera as ts
 
 
+
+def _rocm_chip() -> str:
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 @ts.jit(target="x86", autodiff="reverse", wrt=("x", "gamma"))
 def _x86_rmsnorm(x, gamma):
     return ts.ops.rmsnorm(x, gamma=gamma, eps=1.0e-5)
@@ -111,4 +118,4 @@ def test_rocm_public_native_backward(compiled, layer, path):
         np.testing.assert_allclose(np.asarray(actual, np.float32), reference,
                                    atol=2e-2, rtol=2e-2)
     assert compiled.last_backward_execution["compiler_path"] == path
-    assert compiled.last_backward_execution["evidence_target"] == "rocm_gfx1151"
+    assert compiled.last_backward_execution["evidence_target"] == f"rocm_{_rocm_chip()}"

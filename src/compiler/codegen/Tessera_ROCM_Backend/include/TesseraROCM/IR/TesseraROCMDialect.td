@@ -101,6 +101,9 @@ def ROCM_NumericDTypeAttr
 // the int8/int4 lane out of existence -- the compiled int8 matmul stopped
 // verifying and fell back to the f16/bf16 executor. Caught by the execution
 // tests, not by the ODS ones, which is the argument for keeping both.
+// OCP FP8 storage never rides `$dtype` (the W1.1b dtype contract:
+// fp8/microscaling forms ride `numeric_policy.storage`); the RDNA4 FP8 GEMM
+// leaves `dtype` at its default and the generator reads the storage policy.
 def ROCM_GemmDTypeAttr
     : ROCM_EnumStrAttr<["f16", "float16", "bf16", "bfloat16",
                         "int8", "i8", "int4", "i4"],

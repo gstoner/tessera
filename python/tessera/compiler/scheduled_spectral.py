@@ -187,6 +187,16 @@ _ARCHITECTURE_PROFILES = {
         "exact_device_validated",
         "exact gfx1151 package",
     ),
+    "rocm_gfx1201": SpectralArchitectureProfile(
+        "rocm_gfx1201",
+        "rocm",
+        "gfx1201",
+        "ready",
+        "tessera.rocm.spectral_composite.v7",
+        "exact_device_validated",
+        "exact gfx1201 package (composite hook compiled for gfx1201; "
+        "GFX1201-PARITY 2026-09-17)",
+    ),
     "rocm_gfx1200": SpectralArchitectureProfile(
         "rocm_gfx1200",
         "rocm",
@@ -219,9 +229,23 @@ _ARCHITECTURE_PROFILES = {
 }
 
 
+def _resolve_rocm_alias(target: str) -> str:
+    """``"rocm"`` names the chip this process launches on (the runtime's pin).
+
+    The alias used to be a second spelling of ``rocm_gfx1151``; on the gfx1201
+    box that stamped every composite package for a chip the host does not have
+    (GFX1201-PARITY 2026-09-17).
+    """
+    if target != "rocm":
+        return target
+    from tessera import runtime as _rt
+
+    return f"rocm_{_rt._rocm_chip()}"
+
+
 def spectral_architecture_profile(target: str) -> SpectralArchitectureProfile:
     try:
-        return _ARCHITECTURE_PROFILES[target]
+        return _ARCHITECTURE_PROFILES[_resolve_rocm_alias(target)]
     except KeyError as error:
         raise ValueError(f"unsupported scheduled TSOL target {target!r}") from error
 
@@ -548,11 +572,12 @@ class ScheduledSpectralArtifact:
             raise ValueError("TSOL package operation identity mismatch")
         if (self.target, self.architecture) not in {
             ("rocm", "gfx1151"),
+            ("rocm", "gfx1201"),
             ("x86", "zen5-avx512"),
             ("nvidia_sm120", "sm120"),
         }:
             raise ValueError(
-                "TSOL package requires exact gfx1151, Zen 5 AVX-512, or SM120"
+                "TSOL package requires exact gfx1151, gfx1201, Zen 5 AVX-512, or SM120"
             )
         semantic_digest = digest_text(self._identity_payload())
         if self.schedule_object.get("object_id") != f"spectral:{semantic_digest}":

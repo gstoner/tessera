@@ -182,12 +182,14 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         raise ValueError("depth attention requires finite eps > 0")
     if target == "x86":
         compiler_target, architecture, workgroup_size = "x86", "zen5-avx512", 1
-    elif target == "rocm_gfx1151":
-        compiler_target, architecture, workgroup_size = "rocm", "gfx1151", 256
+    elif target in {"rocm_gfx1151", "rocm_gfx1201"}:
+        # The depth-attention kernel is scalar per-thread; both RDNA chips own
+        # it on their own exact-device evidence (gfx1201: GFX1201-PARITY 2026-09-17).
+        compiler_target, architecture, workgroup_size = "rocm", target[len("rocm_"):], 256
     else:
         raise ValueError(
-            "depth attention supports only artifact construction for x86 and "
-            "rocm_gfx1151; sibling architectures require owned profiles"
+            "depth attention supports only artifact construction for x86, "
+            "rocm_gfx1151 and rocm_gfx1201; sibling architectures require owned profiles"
         )
     return (
         compiler_target,

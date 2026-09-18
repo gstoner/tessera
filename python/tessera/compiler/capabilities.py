@@ -831,13 +831,53 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops(
-            "artifact_only", ("tessera.matmul",),
-            reason=(
-                "ROCm RDNA 4 gfx1201 / Radeon AI PRO R9700 WMMA artifact; "
-                "exact-device compile and execution proof remains gated"
+        supported_ops={
+            **_ops(
+                "artifact_only", ("tessera.matmul",),
+                reason=(
+                    "ROCm RDNA 4 gfx1201 / Radeon AI PRO R9700 WMMA artifact; "
+                    "exact-device compile and execution proof remains gated"
+                ),
             ),
-        ),
+            # GFX1201-PARITY slice 4 (2026-09-17): the spectral families on
+            # gfx1201 through the same content-addressed packages as gfx1151,
+            # with the composite hook compiled for gfx1201 on the box
+            # (Tajasarus, RX 9070 XT); the per-op rows mirror gfx1151's.
+            **_ops(
+                "ready",
+                (
+                    "tessera.fft", "tessera.ifft", "tessera.rfft",
+                    "tessera.irfft", "tessera.es_low_rank_correction",
+                ),
+                dtypes=("fp32",),
+                reason=(
+                    "Exact-device gfx1201 compiler package with a checked "
+                    "numerical fixture (engineering loops, 2026-09-17)"
+                ),
+            ),
+            **_ops(
+                "ready",
+                (
+                    "tessera.dct", "tessera.stft", "tessera.istft",
+                    "tessera.spectral_conv",
+                ),
+                dtypes=("bf16", "fp16", "fp32"),
+                reason=(
+                    "Exact-device gfx1201 content-addressed compound spectral "
+                    "package (composite hook compiled for gfx1201) with "
+                    "reduced-storage conversion into f32 accumulation"
+                ),
+            ),
+            **_ops(
+                "ready",
+                ("tessera.spectral_filter",),
+                dtypes=("fp32",),
+                reason=(
+                    "Exact-device gfx1201 interleaved-complex-f32 spectral "
+                    "filter package"
+                ),
+            ),
+        },
         supported_dtypes=(
             "bf16", "fp16", "fp32", "fp8_e4m3", "fp8_e5m2",
             "int8", "int32", "int4",

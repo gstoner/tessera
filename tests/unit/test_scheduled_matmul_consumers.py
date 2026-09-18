@@ -50,7 +50,8 @@ def _module(
         else ("fp32", "f32")
     )
     dtype = dtype or inferred_dtype
-    element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32", "fp64": "f64"}[dtype]
+    element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32", "fp64": "f64",
+               "fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2"}[dtype]
     a = IRType(f"tensor<{m}x{k}x{element}>", (str(m), str(k)), dtype)
     b = IRType(f"tensor<{k}x{n}x{element}>", (str(k), str(n)), dtype)
     output_element = {"fp16": "f16", "fp32": "f32", "fp64": "f64"}[output_dtype]
@@ -793,6 +794,26 @@ def _epilogue_reference(a, b, bias, activation):
         c = np.sqrt(2.0 / np.pi)
         ref = 0.5 * ref * (1.0 + np.tanh(c * (ref + 0.044715 * ref ** 3)))
     return ref
+
+
+@pytest.mark.parametrize("storage", ["fp8_e4m3", "fp8_e5m2"])
+def test_rocm_gfx1201_fp8_matmul_contract_lowers_and_gfx1151_refuses(storage):
+    """GFX1201-PARITY slice 5 (host-free half): the OCP FP8 storage contract
+    is an RDNA4 fact -- it lowers for rocm_gfx1201 with the audited storage
+    name and is refused for rocm_gfx1151, which has no FP8 WMMA."""
+    if scheduled_matmul.find_tessera_opt() is None:
+        pytest.skip("production tessera-opt unavailable")
+    module = _module(target="rocm", shape=(32, 32, 32), dtype=storage)
+    artifact = scheduled_matmul.lower_scheduled_matmul(module, target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert artifact.storage == ("e4m3" if storage == "fp8_e4m3" else "e5m2")
+    assert artifact.architecture == "gfx1201" and artifact.accum == "f32"
+    assert f'a = "{artifact.storage}"' in artifact.tile_ir
+    assert not scheduled_matmul.supports_scheduled_matmul(module, target="rocm_gfx1151")
+    with pytest.raises(ValueError):
+        scheduled_matmul.lower_scheduled_matmul(
+            _module(target="rocm", shape=(32, 32, 32), dtype=storage, bias=True),
+            target="rocm_gfx1201")
 
 
 @pytest.mark.hardware_rocm

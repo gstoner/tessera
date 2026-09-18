@@ -570,7 +570,7 @@ def compile_graph_module(
             output = module.functions[0].body[0].result or "output"
             scheduled_paged_kv_artifact = lower_scheduled_paged_kv((pages, table, output), dims)
             graph_text = scheduled_paged_kv_artifact.graph_ir
-        elif target_kind == "rocm_gfx1151" and scheduled_depth_attention.supports_scheduled_depth_attention(
+        elif target_kind in {"rocm_gfx1151", "rocm_gfx1201"} and scheduled_depth_attention.supports_scheduled_depth_attention(
             module, target=target_kind
         ):
             scheduled_depth_attention_artifact = (

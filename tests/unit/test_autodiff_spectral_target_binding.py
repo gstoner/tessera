@@ -10,6 +10,14 @@ import pytest
 import tessera as ts
 
 
+
+def _rocm_chip() -> str:
+    """The chip this host launches on; certificates name it (slice 2b)."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 @ts.jit(target="x86", autodiff="reverse", wrt=("x", "filter"))
 def _x86_spectral_filter(x, filter):
     return ts.ops.spectral_filter(x, filter)
@@ -745,7 +753,7 @@ def test_gfx1151_per_batch_broadcast_short_window_full_spectrum_reverse() -> Non
     assert abs(lhs - rhs) <= 1.5e-3 * max(abs(lhs), 1.0)
     assert _rocm_stft_broadcast_full_axis1.last_backward_execution[
         "physical_attestation"
-    ]["device_arch"] == "gfx1151"
+    ]["device_arch"] == _rocm_chip()
 
 
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
@@ -863,7 +871,7 @@ def _assert_centered_arbitrary_axis_reverse(
         rhs = float(np.vdot(signal, actual_stft[0]))
         assert abs(lhs - rhs) <= tolerance * max(abs(lhs), 1.0)
         if target == "rocm":
-            assert forward["physical_attestation"]["device_arch"] == "gfx1151"
+            assert forward["physical_attestation"]["device_arch"] == _rocm_chip()
 
 
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
@@ -916,7 +924,7 @@ def test_rocm_public_compound_spectral_backward_uses_prebuilt_image(
         np.testing.assert_allclose(value, reference, rtol=2e-5, atol=2e-5)
     proof = compiled.last_backward_execution
     assert proof["compiler_path"] == "rocm_spectral_backward_compiled"
-    assert proof["target_consumer"] == "rocm.gfx1151_spectral_backward"
+    assert proof["target_consumer"] == f"rocm.{_rocm_chip()}_spectral_backward"
     assert proof["frontend_authority"] == "tracer"
 
 
@@ -961,10 +969,10 @@ def test_rocm_stft_istft_backward_matches_independent_vjp(kind: str) -> None:
         np.testing.assert_allclose(value, reference, rtol=2e-4, atol=2e-4)
     proof = compiled.last_backward_execution
     assert proof["algorithm"] == algorithm
-    assert proof["target_consumer"] == "rocm.gfx1151_spectral_backward"
+    assert proof["target_consumer"] == f"rocm.{_rocm_chip()}_spectral_backward"
     certificate = proof["execution_certificate"]
     assert certificate["evidence_scope"] == "exact_device"
-    assert certificate["physical_attestation"]["device_arch"] == "gfx1151"
+    assert certificate["physical_attestation"]["device_arch"] == _rocm_chip()
     validate_native_vjp_execution_certificate(certificate)
 
 
@@ -986,7 +994,7 @@ def test_rocm_stft_forward_and_adjoint_satisfy_inner_product_identity() -> None:
         (signal, window),
     )
     assert forward["ok"] is True, forward.get("reason")
-    assert forward["physical_attestation"]["device_arch"] == "gfx1151"
+    assert forward["physical_attestation"]["device_arch"] == _rocm_chip()
     signal_cotangent, _ = _rocm_stft.native_backward(
         signal, window, out_cotangents=cotangent
     )

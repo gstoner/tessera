@@ -296,7 +296,7 @@ LogicalResult SpectralProgramOp::verify() {
       getTarget() != "nvidia_sm120")
     return emitOpError("target must be x86, rocm, or nvidia_sm120");
   if ((getTarget() == "x86" && getArch() != "zen5-avx512") ||
-      (getTarget() == "rocm" && getArch() != "gfx1151") ||
+      (getTarget() == "rocm" && getArch() != "gfx1151" && getArch() != "gfx1201") ||
       (getTarget() == "nvidia_sm120" && getArch() != "sm120"))
     return emitOpError("architecture must match the exact target profile");
   if (getKind() != "tessera.spectral_filter" && getKind() != "tessera.dct" &&
@@ -361,9 +361,9 @@ LogicalResult SpectralBackwardOp::verify() {
       }))
     return emitOpError("requires a lowercase SHA-256 artifact_hash");
   if ((getTarget() == "x86" && getArch() != "zen5-avx512") ||
-      (getTarget() == "rocm" && getArch() != "gfx1151") ||
+      (getTarget() == "rocm" && getArch() != "gfx1151" && getArch() != "gfx1201") ||
       (getTarget() != "x86" && getTarget() != "rocm"))
-    return emitOpError("requires an exact x86/Zen 5 or ROCm/gfx1151 profile");
+    return emitOpError("requires an exact x86/Zen 5 or ROCm/gfx1151/gfx1201 profile");
   if (getKind() != "tessera.stft" && getKind() != "tessera.istft" &&
       getKind() != "tessera.spectral_filter" &&
       getKind() != "tessera.spectral_conv")
@@ -556,7 +556,7 @@ LogicalResult OptimizerVJPOp::verify() {
     return emitOpError("requires a lowercase SHA-256 artifact_hash");
   if (getLineagePayload().empty() ||
       (getArch() != "zen5-avx512" && getArch() != "gfx1151" &&
-       getArch() != "sm_120"))
+       getArch() != "gfx1201" && getArch() != "sm_120"))
     return emitOpError("requires lineage and a promoted architecture identity");
   for (const APFloat &value : {getLearningRate(), getBeta1(), getBeta2(),
                                getEpsilon(), getMomentum(), getWeightDecay()})
@@ -598,9 +598,9 @@ LogicalResult SolverIFTOp::verify() {
   if (getLineagePayload().empty() || getResidualDigest().size() != 64)
     return emitOpError("requires lineage payload and residual digest");
   if (getArch() != "avx512" && getArch() != "gfx1151" &&
-      getArch() != "sm120")
+      getArch() != "gfx1201" && getArch() != "sm120")
     return emitOpError(
-        "physical IFT is promoted only for avx512, gfx1151, and sm120");
+        "physical IFT is promoted only for avx512, gfx1151, gfx1201, and sm120");
   if (getResidualModel() != "diagonal_sqrt_v1" ||
       getLinearSolver() != "diagonal_matrix_free_v1" ||
       getWrt() != "parameter" || getAdjointScale().convertToDouble() != -1.0)
@@ -627,9 +627,10 @@ LogicalResult ESLowRankCorrectionOp::verify() {
       }))
     return emitOpError("requires a lowercase SHA-256 artifact_hash");
   if (getLineagePayload().empty() ||
-      (getArch() != "gfx1151" && getArch() != "zen5-avx512"))
+      (getArch() != "gfx1151" && getArch() != "gfx1201" &&
+       getArch() != "zen5-avx512"))
     return emitOpError(
-        "requires lineage payload and exact gfx1151 or Zen 5 AVX-512 identity");
+        "requires lineage payload and exact gfx1151, gfx1201 or Zen 5 AVX-512 identity");
   if (getPopulation() <= 0 || getRowsPerMember() <= 0 || getInDim() <= 0 ||
       getOutDim() <= 0 || getRank() != 1 || getEpoch() < 0)
     return emitOpError("requires positive static dimensions, epoch >= 0, and rank = 1");

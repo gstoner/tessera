@@ -1,0 +1,83 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "compiler_sha256": "837bb4fdc5a5ad0a446e2f24a2a323b081be3dc2e78ffa977b2e60f7cda4e879",
+  "evidence_scope": "exact_device",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "llvm_tools_sha256": {
+    "mlir-opt": "6a18ad10ba826cdb2709263b31e7e9b504e963ce7014a2e2935e57983ab8bb5d",
+    "mlir-translate": "50245958b66159db8677abef1a37212d299568e47ef3b111d30d85338e003d24"
+  },
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "per-call host transfers; no timer; WSL2 wall clock does not promote"
+  },
+  "rows": [
+    {
+      "binding_digest": "d3318ba7eb10317817d3b32032571ee31aec6166379d78c8558e6898d135e88d",
+      "function": "cubic",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 3,
+      "shape": [
+        4
+      ]
+    },
+    {
+      "binding_digest": "342675436a4cb1099edfff4c4cc0eb0f44a04a6104aa52a82faeae1282cd207b",
+      "function": "cubic",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 3,
+      "shape": [
+        2,
+        2
+      ]
+    },
+    {
+      "binding_digest": "8372613074fcf2c5c82188c22635f1a76776d9346a4cd64949baa9bff899501b",
+      "function": "cubic",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 3,
+      "shape": [
+        3,
+        5
+      ]
+    },
+    {
+      "binding_digest": "4442a5f5c4b7f88f64a87b26479627387aef8a96209e4ef11e2c96b751724c6c",
+      "function": "repeated_square",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 4,
+      "shape": [
+        4
+      ]
+    },
+    {
+      "binding_digest": "68b68399b109e29a92d628c48b849495e4247da154f468483dac73c117ddb141",
+      "function": "repeated_square",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 4,
+      "shape": [
+        2,
+        2
+      ]
+    },
+    {
+      "binding_digest": "59783785fdf9ddc6e8d5a2ea927b4da09cf2e84a0020f1e9f1ccd012a47e10c6",
+      "function": "repeated_square",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 4,
+      "shape": [
+        3,
+        5
+      ]
+    }
+  ],
+  "schema": "tessera.native_hvp.v1"
+}

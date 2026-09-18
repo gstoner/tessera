@@ -15,6 +15,14 @@ from tessera.compiler.native_stateful_vjp import (
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
+
+def _rocm_chip() -> str:
+    """The chip this host launches on; certificates name it (slice 2b)."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 @ts.jit(target="x86", autodiff="reverse", wrt=("p", "g", "state"))
 def _x86_adafactor_full(p, g, state):
     updated, _new_state = ts.ops.adafactor(
@@ -217,7 +225,6 @@ def test_rocm_adafactor_topologies_record_exact_gfx1151_certificates(
 
     if find_tessera_opt() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/gfx1151 runtime unavailable")
-    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(20260830 + int(topology == "factored"))
     shape = (3, 5) if topology == "factored" else (17,)
     p = rng.normal(size=shape).astype(np.float32)
@@ -269,7 +276,7 @@ def test_rocm_adafactor_topologies_record_exact_gfx1151_certificates(
     assert certificate["family"] == "adafactor_vjp"
     assert certificate["topology"] == topology
     assert certificate["evidence_scope"] == "exact_device"
-    assert certificate["physical_attestation"]["device_arch"] == "gfx1151"
+    assert certificate["physical_attestation"]["device_arch"] == _rocm_chip()
     assert ("adafactor_vjp", "rocm") in native_vjp_exact_execution_coverage()
 
 
@@ -305,7 +312,7 @@ def test_rocm_sequence_mixer_records_exact_gfx1151_certificate() -> None:
     validate_native_vjp_execution_certificate(certificate)
     assert certificate["family"] == "sequence_mixer_backward"
     assert certificate["evidence_scope"] == "exact_device"
-    assert certificate["physical_attestation"]["device_arch"] == "gfx1151"
+    assert certificate["physical_attestation"]["device_arch"] == _rocm_chip()
     assert (
         "sequence_mixer_backward",
         "rocm",

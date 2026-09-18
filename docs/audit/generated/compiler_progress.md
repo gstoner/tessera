@@ -70,7 +70,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `CUDA target-map native promotion` | open | 41 | artifact_only=41 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
 | `Audited repo surfaces` | mixed | 32 | archived=4, compile_only=18, runnable=31, runnable_optional=1, scaffold=9 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
 | `Target IR native/fused codegen` | mixed | 24 | device_verified_abi=27, device_verified_jit=196, fused=72, no_kernel_required=8, not_applicable=26, reference=24 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
-| `ROCm target-map native promotion` | mixed | 11 | artifact_only=11, device_verified_abi=2, device_verified_jit=34 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
+| `ROCm target-map native promotion` | mixed | 21 | artifact_only=11, device_verified_abi=2, device_verified_jit=34, ready=10 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
 
 ## Dashboard Map
 

@@ -2331,7 +2331,8 @@ struct LowerTileToROCMPass
         auto statistics =
             op->getAttrOfType<StringAttr>("statistics_recurrence");
         auto merge = op->getAttrOfType<StringAttr>("merge_recurrence");
-        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+        if ((arch != "gfx1151" && arch != "gfx1201") || !opArch ||
+            opArch.getValue() != arch ||
             !hash || hash.getValue().size() != 64 || !storage ||
             storage.getValue() != "f32" || !softmax ||
             softmax.getValue() != "f32" || !accum ||
@@ -2418,7 +2419,8 @@ struct LowerTileToROCMPass
         auto batch = op->getNumOperands() == 7 ? constantExtent(5) : std::nullopt;
         auto systemSize =
             op->getNumOperands() == 7 ? constantExtent(6) : std::nullopt;
-        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+        if ((arch != "gfx1151" && arch != "gfx1201") || !opArch ||
+            opArch.getValue() != arch ||
             !hash || hash.getValue().size() != 64 || !storage ||
             storage.getValue() != "f32" || !accum ||
             accum.getValue() != "f64" || !algorithm ||
@@ -2486,7 +2488,8 @@ struct LowerTileToROCMPass
         auto batch = op->getNumOperands() == 4 ? constantExtent(2) : std::nullopt;
         auto latticeSize =
             op->getNumOperands() == 4 ? constantExtent(3) : std::nullopt;
-        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+        if ((arch != "gfx1151" && arch != "gfx1201") || !opArch ||
+            opArch.getValue() != arch ||
             !hash || hash.getValue().size() != 64 || !storage ||
             storage.getValue() != "f32" || !accum ||
             accum.getValue() != "f64" || !order ||
@@ -2554,7 +2557,8 @@ struct LowerTileToROCMPass
         auto rows = op->getAttrOfType<IntegerAttr>("rows_per_member");
         auto inDim = op->getAttrOfType<IntegerAttr>("in_dim");
         auto outDim = op->getAttrOfType<IntegerAttr>("out_dim");
-        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+        if ((arch != "gfx1151" && arch != "gfx1201") || !opArch ||
+            opArch.getValue() != arch ||
             !hash || hash.getValue().size() != 64 || !rng ||
             rng.getValue() != "splitmix64-philox4x32-boxmuller" || !version ||
             version.getInt() != 1 || !rank || rank.getInt() != 1 ||
@@ -2595,7 +2599,8 @@ struct LowerTileToROCMPass
         auto opArch = op->getAttrOfType<StringAttr>("arch");
         auto kind = op->getAttrOfType<StringAttr>("kind");
         auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
-        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+        if ((arch != "gfx1151" && arch != "gfx1201") || !opArch ||
+            opArch.getValue() != arch ||
             !kind || !hash || hash.getValue().size() != 64 ||
             op->getNumOperands() != 5) {
           op->emitError("native ROCm spectral adjoint requires the content-addressed gfx1151 ABI");
@@ -2704,8 +2709,10 @@ struct LowerTileToROCMPass
             solver.getValue() != "diagonal_matrix_free_v1" || !hash ||
             !productMode ||
             (productMode.getValue() != "jvp" && productMode.getValue() != "vjp") ||
-            !residualDigest || !opArch || opArch.getValue() != "gfx1151") {
-          op->emitError("AD-SOLVER-IFT-1 ROCm requires the promoted gfx1151 diagonal-sqrt contract");
+            !residualDigest || !opArch ||
+            (arch != "gfx1151" && arch != "gfx1201") ||
+            opArch.getValue() != arch) {
+          op->emitError("AD-SOLVER-IFT-1 ROCm requires the promoted gfx1151/gfx1201 diagonal-sqrt contract");
           signalPassFailure();
           return;
         }
@@ -2931,13 +2938,17 @@ struct LowerTileToROCMPass
         auto epilogue =
             op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
         auto parent = op->getParentOfType<func::FuncOp>();
+        const bool fp8Storage =
+            desc && (desc.getAType() == "e4m3" || desc.getAType() == "e5m2");
         if (!desc || !epilogue || !parent || desc.getFamily() != "wmma" ||
             desc.getM() != 16 || desc.getN() != 16 || desc.getK() != 16 ||
             desc.getAType() != desc.getBType() ||
-            (desc.getAType() != "f16" && desc.getAType() != "bf16") ||
+            (desc.getAType() != "f16" && desc.getAType() != "bf16" &&
+             !(fp8Storage && arch.starts_with("gfx12"))) ||
             desc.getAccType() != "f32") {
           op->emitError("ROCm Target matmul requires the typed 16x16x16 "
-                        "f16/bf16-to-f32 WMMA contract");
+                        "f16/bf16-to-f32 WMMA contract (or OCP FP8 e4m3/e5m2 "
+                        "to f32 on gfx12)");
           signalPassFailure();
           return;
         }
@@ -2963,7 +2974,10 @@ struct LowerTileToROCMPass
                            builder.getI64IntegerAttr(macroM.getInt() / 16));
         state.addAttribute("nt",
                            builder.getI64IntegerAttr(macroN.getInt() / 16));
-        state.addAttribute("dtype", builder.getStringAttr(desc.getAType()));
+        // fp8 storage rides `numeric_policy.storage` (stamped below), never
+        // `$dtype`, whose enum is the f16/bf16/int8/int4 matrix-core set.
+        if (!fp8Storage)
+          state.addAttribute("dtype", builder.getStringAttr(desc.getAType()));
         state.addAttribute("bias", builder.getBoolAttr(epilogue.getBias()));
         state.addAttribute("activation",
                            builder.getStringAttr(epilogue.getActivation()));

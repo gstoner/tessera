@@ -8150,13 +8150,101 @@ gfx1201 the certificate validator correctly reports `runtime_unattested`
 their references. Those eight (`test_autodiff_optimizer_plugin_binding`
 sgd/momentum, `test_autodiff_stateful_plugin_binding` adafactor full/factored,
 `test_autodiff_training_series_target_binding` nesterov/adamw/adam/lion) are
-now pinned explicitly with `rocm_build.require_rocm_host_arch("gfx1151", …)`
-naming the owner. **Owed — slice 2b:** make `rocm_gfx1201` a first-class
-target name on the stateful/optimizer VJP lanes (`stateful_training.py`,
-`native_vjp_plugins.py`, `jit.py`, `gpu_target_map.py` all key on the
-`rocm_gfx1151` string), so the certificate can attest gfx1201 and those eight
-lose their pin. The `sequence_*` mixer certificate test stays family-gated
-(slice 3).
+pinned explicitly with `rocm_build.require_rocm_host_arch("gfx1151", …)`
+naming the owner, until slice 2b (below, the engineering loops) made
+`rocm_gfx1201` a first-class target name on those lanes and the pins came off.
+
+**Slices 3, 4 and 5, the arbiter candidate, and the record of 2b — the
+engineering loops (2026-09-17, branch `claude/gfx1201-sm120-engineering-loops`).**
+Method as in slice 2: every remaining family promoted as a candidate, a
+per-test `pytest -v` diff against the slice-2 head on Tajasarus, then each
+family's own files re-run at the loop's head until they were green or the
+failure was named. gfx1201 goes from 31 to **62 of 63** promoted families.
+
+* **Slice 3, the attention tail.** Thirteen of the fifteen families are
+  scalar per-thread kernels with no arch branch and promoted by table. The two
+  that were not: `sequence_linear_attention`'s generator
+  (`GenerateWMMALinearAttnKernel.cpp`) hard-wired gfx11's 16-element replicated
+  fragments and `2e+half` accumulator rows — it now takes the directive's
+  `arch` and switches to RDNA4's 8-element half-wave fragments and `e+8*half`
+  rows the way the flash-attention generator does (30 device rows, all shapes,
+  feature maps and decays pass on gfx1201); and `depth_attention`, whose
+  contract was chip-named in five places (`TileOps.cpp` verifier,
+  `GenerateROCMDepthAttentionKernel.cpp`, the `TileToROCM` adapter,
+  `scheduled_depth_attention.py`'s target map, `package_scheduled_depth_attention`
+  stamping `rocm_gfx1151`) and whose packager never threaded an architecture —
+  all now name the artifact's chip; the driver packages it for `rocm_gfx1201`
+  and the runtime admits `GFX_DEPTH_ATTN_F32_ABI` there. The paged-KV and MoE
+  packagers take an `architecture` too. The canonical attention-backward
+  adapter (`TileToROCM.cpp materializeCanonicalAttentionBackward`) was gated to
+  gfx1151 while the WMMA backward generator had been RDNA4-complete since
+  commissioning; it admits gfx1201 and stamps the schedule name with the arch
+  (`gfx1201_wmma_backward_split_reduced`), with lit twins for both. `paged_kv`
+  is the one family **not** promoted: its device tests are gated on the gfx11
+  flash-attention directive lane and produced no gfx1201 evidence (owed with
+  the directive lane below).
+* **Slice 4, spectral, solver, EBM, f32 matmul.** Every generator is
+  arch-neutral; the pins were above them. The five scalar-kernel `TileToROCM`
+  adapters (tridiagonal, coalition butterfly, ES low-rank, spectral backward,
+  solver IFT) and the Schedule dialect verifiers (`schedule.spectral*`,
+  `schedule.solver_ift`, the ES and optimizer lineage identities) and the
+  Schedule→Tile selectors (FFT family name, tridiagonal, coalition, depth
+  attention, TSOL compound adjoints, EGGROLL W2) admit gfx1201 beside gfx1151.
+  `target="rocm"` used to be a second spelling of `rocm_gfx1151` in the FFT and
+  TSOL target maps and in the solver lineage maps — on the gfx1201 box that
+  stamped composite packages for a chip the host does not have; the alias now
+  resolves to the runtime's pinned chip, `implicit_solver` gained
+  `rocm_gfx1201` rows, and the solver-IFT executor's own `chip != "gfx1151"`
+  check is gone (the family gate is the one per-arch rule; refusals name the
+  chip they refuse). The spectral composite image: the prebuilt `.so` is a
+  gfx1151 artifact, so `emit/spectral_candidates._amd_composite_lib` now
+  selects the image stamped for the host's chip and compiles the source hook
+  for gfx1201 when the prebuilt one does not match; `native_spectral_vjp`
+  lowers and attaches for `package.arch` instead of a literal. Thirty
+  `test_rocm_spectral_compiled` rows and the FFT/DCT/STFT composites run on
+  gfx1201. Four EBM test files and the SSM-backward certificate test now skip
+  through the host helpers instead of failing.
+* **Slice 5, the first RDNA4-only consumer: OCP FP8 matmul.** The audited
+  `V_WMMA_F32_16X16X16_{FP8,BF8}_{FP8,BF8}` forms now have a kernel-shaped
+  consumer on the typed route: `generate-wmma-gemm-kernel` has an e4m3/e5m2
+  storage row (typed route only — the direct gfx11 body refuses FP8 by name),
+  `tile.matmul_kernel` admits e4m3/e5m2→f32 on gfx12 in `TileToROCM`, the
+  `tessera_rocm.wmma_gemm` directive dtype admits the OCP spellings,
+  Graph→Schedule has a gfx1201 fp8 branch (1x1 register tile, f32 accumulate,
+  no fused epilogue yet), `scheduled_matmul` carries `fp8_e4m3`/`fp8_e5m2`
+  contracts and projects `f8E4M3FN`/`f8E5M2` tensors, `package_scheduled_matmul`
+  binds one-byte operands under `GFX_MATMUL_E4M3_F32_ABI` /
+  `GFX_MATMUL_E5M2_F32_ABI`, and the runtime admits them on gfx1201 and routes
+  `rocm_compiled` fp8 operands through the scheduled package. Fixture
+  `typed_matmul_fp8_gfx1201.mlir` (gfx1201 lowers; gfx1151 refuses at the
+  fragment layout; the direct body refuses by name). Device: `test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes_fp8`
+  6/6 (e4m3 and e5m2 × 16³, 17x19x23, 65x48x37) on Tajasarus at `5cf02b6e`,
+  against the f32 matmul of the same codes; `check-tessera-rocm` 72/72 in both
+  trees and on Princess-Luna.
+* **The `rocm_wmma_gemm` arbiter candidate on gfx12.** `_rocm_wmma_gemm_2d` and
+  `_rocm_wmma_fused_2d` divert to the scheduled package on a non-gfx11 chip
+  (f16/f32 only; a device-timing request answers `None` rather than a
+  wall-clock number dressed as a device latency), the candidate names the
+  launch chip for the footprint model, and the three `slow` arbiter tests run
+  on both chips (14 passed / 3 skipped on Tajasarus). What the directive lane
+  still has that the typed route lacks — raster order (`MatmulSchedule::rasterOrder`
+  is never assigned and its digest hard-codes `row_major`), a shape-adaptive
+  macro tile on gfx1201 (fixed 16x16), LDS staging through
+  `package_scheduled_matmul`, int4/reduced-output storage — is the measured
+  gap for the performance half of this program.
+* **Slice 2b, closed.** Every ROCm VJP lane (`native_vjp_plugins`'s six
+  evidence-target sites and fourteen `rocm.gfx1151_*` consumer names, `jit`'s
+  JVP/VJP stamps, `stateful_training`'s Lion/Adafactor/sequence-mixer lineage
+  maps) now names the chip the process launches on (`rocm_<pin>`), so the
+  certificate validator attests gfx1201 the way it attests gfx1151. The nine
+  certificate tests that were pinned to gfx1151 in slice 2 assert the host's
+  chip instead; the spectral, sequence-mixer and SSM-backward certificate
+  tests run on Tajasarus as `exact_device`.
+
+Fleet at the head: Tajasarus **18810 passed, 0 failed** (full sweep at
+`ecb086c5`; ROCm lit 72/72 in both trees; core lit 493/493 both trees);
+Princess-Luna **19504 passed, 0 failed** (ROCm lit 72/72; core lit 493/493);
+the sm_120 and Mac rows are in the log entry.
 
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 

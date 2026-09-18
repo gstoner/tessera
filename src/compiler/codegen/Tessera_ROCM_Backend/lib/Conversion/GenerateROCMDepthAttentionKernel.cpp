@@ -320,7 +320,9 @@ struct GenerateROCMDepthAttentionKernelPass
       auto statistics =
           op->getAttrOfType<StringAttr>("statistics_recurrence");
       auto merge = op->getAttrOfType<StringAttr>("merge_recurrence");
-      if (!name || !arch || arch.getValue() != "gfx1151" || !hash ||
+      if (!name || !arch ||
+          (arch.getValue() != "gfx1151" && arch.getValue() != "gfx1201") ||
+          !hash ||
           hash.getValue().size() != 64 || !eps ||
           !eps.getValue().isFinite() || eps.getValueAsDouble() <= 0.0 ||
           !sourceCount || sourceCount.getInt() <= 0 ||

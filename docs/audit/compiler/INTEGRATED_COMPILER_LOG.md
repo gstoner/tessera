@@ -4376,3 +4376,28 @@ Remaining: slice 2b (the `rocm_gfx1151` target-name key in `stateful_training.py
 Evidence: `tests/unit/test_rocm_compiled_family_gate.py` (pins the 31), `tests/_support/rocm_build.require_rocm_host_arch`, the per-file diff in the ROCm queue's slice-2 entry.
 
 <!-- entry-fields:end -->
+
+### 2026-09-17 — the engineering loops: gfx1201 to 62 of 63 families, the first RDNA4-only consumer, and the sm_120 dispatch that never read its own corpus
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: engineering loops on both GPU backends (sync `GFX1201-PARITY-2026-09-17` slices 3-5 and the sm_120 items in the NVIDIA queue); co-owner [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+Outcome: **gfx1201 promotes from 31 to 62 of 63 families, OCP FP8 matmul is the first family gfx1151 cannot have, and the sm_120 arbiter reads its device-timed corpus at dispatch.** The attention tail (slice 3) was scalar kernels behind chip-named contracts plus one real port: the linear-attention generator now switches to RDNA4's 8-element half-wave fragments like the flash-attention generator, and the canonical attention-backward adapter admits the chip the backward generator already handled. The spectral, solver, EBM and f32-matmul families (slice 4) had arch-neutral generators under a layer of `gfx1151` literals — five Tile→ROCm adapters, the Schedule verifiers, the Schedule→Tile selectors, the `rocm` alias in three target maps, a prebuilt spectral image and a solver executor's own chip check — every one now names the chip the artifact carries. Slice 5 gives the audited FP8 WMMA forms a kernel-shaped consumer through the typed route, end to end from `tessera.matmul` over `f8E4M3FN` operands to a launched package. The `rocm_wmma_gemm` arbiter candidate reaches gfx12 through the same route. On NVIDIA: the production dispatch consults the device-timed verdict before the wall-clock one, the native-storage packager gains the cubin-side store check the ROCm image already had, and the exact sm_120 HVP execution the queue owed is recorded as a packet beside a gfx1201 twin.
+
+**Corrections to the plan's premises, recorded rather than worked.** Four sm_120 items were already closed on `main` (the emitted GEMM's device timer, the Clifford lane, the EBM sphere/nonlinear lanes, the rounding-explicit sqrt); the queue entry names each. Three stay owed with their first step named: the NVFP4 emitted kernel's launcher entry and fragment-order packer, the isolated CUDA attention tape, and the EBM sphere front door on CUDA. On ROCm, `paged_kv` is the one family not promoted (its device tests sit behind the gfx11 flash-attention directive lane); slice 2b closed along the way — every ROCm VJP lane stamps the chip it launches on, so the optimizer, spectral, sequence-mixer and SSM-backward certificates attest gfx1201 — and public Graph admission for the 2:4 sparse stack is scoped in the ROCm queue as the five layers it needs (Graph op, Schedule contract, packager, launch ABI, VJP) rather than begun.
+
+| Host | Full `-m "not slow"` sweep | Lit |
+|---|---|---|
+| Tajasarus (gfx1201, assertions LLVM) | **18810 passed, 0 failed, 3291 skipped** at `ecb086c5` (17566 / 4519 before slice 2; 18538 / 3539 after it) | `check-tessera-rocm` 72/72 in `build` and `build-assertions`; `tests/tessera-ir` 493/493 both trees |
+| Princess-Luna (gfx1151) | **19504 passed, 0 failed, 2597 skipped** at `e461e368`; the eleven files touched after it 109 passed at `ecb086c5` | `check-tessera-rocm` 72/72; `tests/tessera-ir` 493/493 |
+| Super-Bear (sm_120) | **16096 passed, 0 failed, 6005 skipped** at `e461e368`; the host-free files touched after it 86 passed at `ecb086c5` | NVIDIA lit clean in `build-nvidia-cuda`; `tests/tessera-ir` clean; both trees built |
+| Mac (M1 Max) | **18410 passed, 0 failed, 3691 skipped** at `e461e368`; the touched files 67 passed at `ecb086c5` | `tests/tessera-ir` 493/493; doc, plan, generated-doc and registry gates clean |
+
+The commits after `e461e368` are Python and test changes only (the attestation's expected chip, the gfx1201 capability rows, three tests deriving the chip), so the three earlier sweeps stand for the compiled trees; Tajasarus, the host they change, was swept again in full.
+
+Remaining: `paged_kv` on gfx1201; the typed route's performance gap against the directive lane (raster order, macro tile, LDS staging, int storage); public sparse admission; the three owed sm_120 items above. `tests/unit/test_solver_ift_evidence.py::test_new_dense_krylov_run_does_not_inherit_old_performance` fails on a clean `main` worktree on the Mac independent of this branch (the benchmark stub returns text where the recorder decodes bytes) and is not touched here.
+
+Evidence: `docs/audit/backend/rocm/todo.md` §`GFX1201-PARITY-2026-09-17` slices 3-5, `docs/audit/backend/nvidia/todo.md` §"sm_120 engineering loops", `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/typed_matmul_fp8_gfx1201.mlir`, `gfx1201_tile_depth_attention_kernel.mlir`, `gfx1201_tile_attention_backward_wmma_adapter.mlir`, `tests/unit/test_rocm_gfx1201_scheduled.py`, `tests/unit/test_rocm_compiled_family_gate.py` (pins the 62), `tests/unit/test_arbiter_autotune.py`, `benchmarks/baselines/native_hvp_20260917/`.
+
+<!-- entry-fields:end -->

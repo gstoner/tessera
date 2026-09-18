@@ -164,6 +164,9 @@ def test_rocm_composite_loader_accepts_exact_gfx1151_package(monkeypatch, tmp_pa
     saved = dict(SC._libs)
     SC._libs.pop("amd_prebuilt", None)
     SC._libs.pop("amd_composite_prebuilt", None)
+    # The loader selects the image stamped for the host's chip; this test is
+    # about the gfx1151 package, so it runs as a gfx1151 host wherever it is.
+    monkeypatch.setattr(SC, "_composite_host_arch", lambda: "gfx1151")
     monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: (package,))
     monkeypatch.setattr(SC.ctypes, "CDLL", lambda _path: fake)
     monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)

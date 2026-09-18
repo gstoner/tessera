@@ -80,7 +80,7 @@ def test_gfx1201_cached_launcher_keeps_architecture_and_family_gate(architecture
 
     image = SimpleNamespace(target="rocm_gfx1201", architecture=architecture)
     descriptor = SimpleNamespace(abi_id=abi)
-    with pytest.raises(ValueError, match="proved unary, matmul or attention ABI"):
+    with pytest.raises(ValueError, match="proved unary, matmul, attention or depth-attention ABI"):
         rt._submit_rocm_gfx1151_native(image, descriptor, {}, {}, None)
 
 
@@ -123,6 +123,47 @@ def test_gfx1201_scheduled_matmul_package_executes_fused_epilogue(shape, activat
     result = rt.launch(runtime, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}})
     assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
     np.testing.assert_allclose(output, _epilogue_reference(a, b, bias_arr, activation), rtol=0, atol=5e-2)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("storage", ["fp8_e4m3", "fp8_e5m2"])
+@pytest.mark.parametrize("shape", [(16,16,16), (17,19,23), (65,48,37)])
+def test_gfx1201_scheduled_matmul_package_executes_fp8(shape, storage):
+    """GFX1201-PARITY slice 5: OCP FP8 storage through the typed route.
+
+    The RDNA4 WMMA datatype audit proved V_WMMA_F32_16X16X16_{FP8,BF8}_{FP8,BF8}
+    on this box for one 16x16x16 tile; this is the kernel-shaped consumer --
+    a Graph `tessera.matmul` over fp8 operands, scheduled, packaged and launched
+    like the f16 one. Products of fp8 values are exact in f32, so the reference
+    is the f32 matmul of the same codes; the tolerance covers accumulation order.
+    """
+    import ml_dtypes
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=shape, dtype=storage), target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert artifact.storage == ("e4m3" if storage == "fp8_e4m3" else "e5m2")
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.image.architecture == "gfx1201"
+    assert package.descriptor.abi_id == (
+        rocm_native.GFX_MATMUL_E4M3_F32_ABI if storage == "fp8_e4m3" else rocm_native.GFX_MATMUL_E5M2_F32_ABI)
+    np_dtype = ml_dtypes.float8_e4m3fn if storage == "fp8_e4m3" else ml_dtypes.float8_e5m2
+    rng = np.random.default_rng(919 + len(storage))
+    a = (rng.normal(size=(m,k)) * 0.5).astype(np_dtype)
+    b = (rng.normal(size=(k,n)) * 0.5).astype(np_dtype)
+    output = np.zeros((m,n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=1e-4, atol=1e-3)
 
 
 @pytest.mark.hardware_rocm

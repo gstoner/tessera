@@ -82,8 +82,8 @@ def build_lion_vjp_state_contract(
     adjoint and therefore has no hidden in-place update.
     """
 
-    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
-        raise ValueError("Lion VJP state lineage supports x86, rocm_gfx1151, and nvidia_sm120")
+    if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+        raise ValueError("Lion VJP state lineage supports x86, rocm_gfx1151, rocm_gfx1201, and nvidia_sm120")
     normalized_shape = tuple(int(dim) for dim in shape)
     if not normalized_shape or any(dim <= 0 for dim in normalized_shape):
         raise ValueError("Lion VJP state lineage requires a positive static shape")
@@ -142,7 +142,7 @@ def build_lion_vjp_state_contract(
         "family": "lion_vjp",
         "phase": "backward",
         "target": target,
-        "architecture": {"x86": "zen5-avx512", "rocm_gfx1151": "gfx1151", "nvidia_sm120": "sm_120"}[target],
+        "architecture": {"x86": "zen5-avx512", "rocm_gfx1151": "gfx1151", "rocm_gfx1201": "gfx1201", "nvidia_sm120": "sm_120"}[target],
         "numeric": numeric,
         "inputs": inputs,
         "outputs": outputs,
@@ -163,8 +163,8 @@ def build_adafactor_vjp_state_contract(
     topology: str,
     kwargs: Mapping[str, Any],
 ) -> dict[str, Any]:
-    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
-        raise ValueError("Adafactor VJP lineage supports x86, rocm_gfx1151, and nvidia_sm120")
+    if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+        raise ValueError("Adafactor VJP lineage supports x86, rocm_gfx1151, rocm_gfx1201, and nvidia_sm120")
     shape = tuple(int(dim) for dim in parameter_shape)
     if any(dim <= 0 for dim in shape) or topology not in {"factored", "full"}:
         raise ValueError("Adafactor VJP requires positive static shape and topology")
@@ -280,6 +280,7 @@ def build_adafactor_vjp_state_contract(
         "architecture": {
             "x86": "zen5-avx512",
             "rocm_gfx1151": "gfx1151",
+            "rocm_gfx1201": "gfx1201",
             "nvidia_sm120": "sm_120",
         }[target],
         "numeric": numeric,
@@ -328,7 +329,7 @@ def build_optimizer_vjp_state_contract(
     *, target: str, optimizer: str, shape: Sequence[int], kwargs: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Bind optimizer state/cotangents to one non-reexecuting physical VJP."""
-    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+    if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
         raise ValueError("optimizer VJP lineage has no physical target owner")
     if optimizer not in _OPTIMIZER_ABI or (
         target == "x86" and optimizer in {"adam", "adamw"}
@@ -373,6 +374,7 @@ def build_optimizer_vjp_state_contract(
         "architecture": {
             "x86": "zen5-avx512",
             "rocm_gfx1151": "gfx1151",
+            "rocm_gfx1201": "gfx1201",
             "nvidia_sm120": "sm_120",
         }[target],
         "numeric": numeric,
@@ -460,7 +462,7 @@ def lower_scheduled_optimizer_vjp(
     numeric, mutation = contract["numeric"], contract["mutation"]
     architecture = str(contract["architecture"])
     compiler_target = {
-        "x86": "x86", "rocm_gfx1151": "rocm",
+        "x86": "x86", "rocm_gfx1151": "rocm", "rocm_gfx1201": "rocm",
         "nvidia_sm120": "nvidia_sm120",
     }[target]
     writes = ", ".join(map(str, range(len(output_names))))
@@ -576,7 +578,7 @@ def lower_scheduled_lion_vjp(
     mutation = contract["mutation"]
     architecture = str(contract["architecture"])
     compiler_target = {
-        "x86": "x86", "rocm_gfx1151": "rocm",
+        "x86": "x86", "rocm_gfx1151": "rocm", "rocm_gfx1201": "rocm",
         "nvidia_sm120": "nvidia_sm120",
     }[target]
     args = ", ".join(
@@ -757,7 +759,7 @@ def lower_scheduled_adafactor_vjp(
     mutation = contract["mutation"]
     architecture = str(contract["architecture"])
     compiler_target = {
-        "x86": "x86", "rocm_gfx1151": "rocm",
+        "x86": "x86", "rocm_gfx1151": "rocm", "rocm_gfx1201": "rocm",
         "nvidia_sm120": "nvidia_sm120",
     }[target]
     write_order = ", ".join(map(str, range(len(output_shapes))))
@@ -848,8 +850,8 @@ def build_sequence_mixer_backward_state_contract(
 ) -> dict[str, Any]:
     """Describe the bounded physical DeltaNet backward buffer program."""
 
-    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
-        raise ValueError("sequence-mixer lineage supports x86, rocm_gfx1151, and nvidia_sm120")
+    if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+        raise ValueError("sequence-mixer lineage supports x86, rocm_gfx1151, rocm_gfx1201, and nvidia_sm120")
     if family not in {
         "gated_deltanet",
         "kimi_delta_attention",
@@ -912,7 +914,7 @@ def build_sequence_mixer_backward_state_contract(
         "mixer_family": family,
         "phase": "backward",
         "target": target,
-        "architecture": "zen5-avx512" if target == "x86" else "gfx1151",
+        "architecture": "zen5-avx512" if target == "x86" else target[len("rocm_"):] if target.startswith("rocm_") else "sm_120",
         "numeric": {
             "erase": bool(erase),
             "chunk_size": int(chunk_size),

@@ -13,7 +13,7 @@ A `device_verified_jit` or `device_verified_abi` row requires a checked-in numer
 |---|---|---|---|---|---|---:|
 | `rocm_gfx950` | `gfx950` | CDNA 4 | MI350X / MI355X / MI350P | `current_datacenter` | exact-device proof required | 4 |
 | `rocm_gfx1250` | `gfx1250` | CDNA 5 Wave32 XDL-WMMA | MI455X | `forward_datacenter` | upstream-LLVM artifact; exact-device proof required | 1 |
-| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 XT / Radeon AI PRO R9700 | `current_workstation` | exact-device proof required | 1 |
+| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 XT / Radeon AI PRO R9700 | `current_workstation` | exact-device proof required | 11 |
 | `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 XT | `current_consumer` | exact-device proof required | 1 |
 | `rocm_gfx1151` | `gfx1151` | RDNA 3.5 Wave32 | Ryzen AI Max+ 395 / Radeon 8060S | `proven_development` | may use checked-in gfx1151 execution evidence | 36 |
 | `rocm_gfx1152` | `gfx1152` | Wave32 development bridge | development ISA | `compiler_bridge` | no execution inheritance | 0 |
@@ -28,9 +28,12 @@ The rollup reports where proof exists; it does not promote the family alias.
 | alibi | 1 | gfx1151 | - |
 | attn_sliding_window | 1 | gfx1151 | - |
 | batched_gemm | 1 | gfx1151 | - |
+| dct | 1 | - | - |
 | deepseek_sparse_attention | 1 | gfx1151 | - |
 | einsum | 1 | gfx1151 | - |
+| es_low_rank_correction | 1 | - | - |
 | factorized_matmul | 1 | gfx1151 | - |
+| fft | 1 | - | - |
 | flash_attn | 3 | gfx1151 | gfx942, gfx950 |
 | fused_epilogue | 1 | gfx1151 | - |
 | gated_attention | 1 | gfx1151 | - |
@@ -38,6 +41,9 @@ The rollup reports where proof exists; it does not promote the family alias.
 | gelu | 3 | gfx1151 | gfx942, gfx950 |
 | gqa_attention | 1 | gfx1151 | - |
 | hybrid_attention | 1 | gfx1151 | - |
+| ifft | 1 | - | - |
+| irfft | 1 | - | - |
+| istft | 1 | - | - |
 | kimi_delta_attention | 1 | gfx1151 | - |
 | layer_norm | 1 | gfx1151 | - |
 | lightning_attention | 1 | gfx1151 | - |
@@ -52,6 +58,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | msa_index_scores | 1 | gfx1151 | - |
 | multi_head_attention | 1 | gfx1151 | - |
 | qkv_projection | 1 | gfx1151 | - |
+| rfft | 1 | - | - |
 | rmsnorm | 1 | gfx1151 | - |
 | rmsnorm_safe | 1 | gfx1151 | - |
 | rope | 1 | gfx1151 | - |
@@ -60,6 +67,9 @@ The rollup reports where proof exists; it does not promote the family alias.
 | silu_mul | 1 | gfx1151 | - |
 | softmax | 3 | gfx1151 | gfx942, gfx950 |
 | softmax_safe | 1 | gfx1151 | - |
+| spectral_conv | 1 | - | - |
+| spectral_filter | 1 | - | - |
+| stft | 1 | - | - |
 | varlen_sdpa | 1 | gfx1151 | - |
 
 ## Exact-target evidence
@@ -83,6 +93,16 @@ The rollup reports where proof exists; it does not promote the family alias.
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|
+| dct | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| es_low_rank_correction | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| fft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| ifft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| irfft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| istft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| rfft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| spectral_conv | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| spectral_filter | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| stft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
 
 ### `rocm_gfx1200` — Radeon RX 9060 XT

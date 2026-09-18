@@ -89,6 +89,13 @@ def test_fft_runtime_contract_rejects_tampering(field):
         validate_scheduled_fft_metadata(metadata, target="rocm", input_shape=(3, 100))
 
 
+def _rocm_chip() -> str:
+    """`target="rocm"` names the chip this process launches on (the runtime pin)."""
+    from tessera import runtime as rt
+
+    return rt._rocm_chip()
+
+
 @_needs_opt
 def test_schedule_to_tile_rederives_and_rejects_stale_fft_policy():
     tool = find_tessera_opt()
@@ -98,9 +105,10 @@ def test_schedule_to_tile_rederives_and_rejects_stale_fft_policy():
         target="rocm", op_name="tessera.fft", input_shape=(3, 100)
     )
     stale = artifact.schedule_ir.replace(
-        'kernel_family = "gfx1151_stockham_bluestein_v6"',
+        f'kernel_family = "{_rocm_chip()}_stockham_bluestein_v6"',
         'kernel_family = "stale_kernel"',
     )
+    assert stale != artifact.schedule_ir
 
     with pytest.raises(RuntimeError, match="FFT policy was altered after hashing"):
         run_tessera_opt(tool, stale, "--tessera-schedule-to-tile")
@@ -116,7 +124,7 @@ def test_rocm_bluestein_artifact_describes_persistent_native_plan():
     assert artifact.workspace_policy == "persistent_plan_4m"
     assert artifact.residency == "persistent_device_plan"
     assert artifact.twiddle_policy == "persistent_device_chirp_fft"
-    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v6"
+    assert artifact.kernel_family == f"{_rocm_chip()}_stockham_bluestein_v6"
 
 
 @_needs_opt
@@ -127,7 +135,7 @@ def test_rocm_small_power_of_two_artifact_selects_batched_fused_lds():
 
     assert artifact.batch == 56
     assert artifact.residency == "persistent_device_plan_fused_lds_batch"
-    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v6"
+    assert artifact.kernel_family == f"{_rocm_chip()}_stockham_bluestein_v6"
     assert 'residency = "persistent_device_plan_fused_lds_batch"' in artifact.tile_ir
 
 

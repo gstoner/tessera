@@ -141,6 +141,19 @@ struct DeclareROCMPipelineContractPass
         "position_alibi", "position_rope", "quant_dequant_gemm", "quant_fp",
         "quant_int4_pack", "reduction_arg", "scan", "optimizer",
         "fused_silu_mul",
+        // Slices 3-5 (engineering loops, 2026-09-17), measured on Tajasarus;
+        // paged_kv stays out (no gfx1201 device evidence). Mirror of Python.
+        "algebra_clifford", "attention_mla_decode", "depth_attention",
+        "draft_dspark", "ebm_decode_init", "ebm_ebt_tiny",
+        "ebm_energy_quadratic", "ebm_langevin", "ebm_partition",
+        "es_low_rank_correction", "matmul_batched_f32", "matmul_f32",
+        "moe_dispatch", "ordering_sort", "sequence_deltanet",
+        "sequence_linear_attention", "sequence_recurrent_cell",
+        "sequence_selective_ssm", "sequence_selective_ssm_backward",
+        "solver_cholesky", "solver_ift", "solver_lu", "solver_qr",
+        "solver_svd", "solver_triangular_solve",
+        "sparse_block_attention", "sparse_block_topk", "sparse_sddmm",
+        "sparse_spmm", "spectral_backward", "spectral_dft",
     };
     const bool gfx1201Promoted =
         arch == "gfx1201" &&

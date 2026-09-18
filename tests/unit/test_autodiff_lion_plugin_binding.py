@@ -14,6 +14,13 @@ from tessera.compiler.native_lion_vjp import (
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
+
+def _rocm_chip() -> str:
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 @ts.jit(target="x86", autodiff="reverse", wrt=("param", "grad", "moment"))
 def _x86_lion(param, grad, moment):
     return ts.ops.lion(
@@ -110,6 +117,6 @@ def test_lion_plugin_declares_non_reexecuting_state_lineage_policy() -> None:
     assert declaration.differential_policy == "non_reexecuting_state_lineage"
     assert declaration.target_consumers == {
         "x86": "x86.avx512_lion_backward",
-        "rocm": "rocm.gfx1151_lion_backward",
+        "rocm": f"rocm.{_rocm_chip()}_lion_backward",
         "nvidia_sm120": "nvidia.sm120_lion_backward",
     }

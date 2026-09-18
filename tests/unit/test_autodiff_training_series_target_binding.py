@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import numpy as np
+
+from tests._support import rocm_build
 import pytest
 
 import tessera as ts
@@ -309,6 +311,7 @@ def test_rocm_nesterov_backward_runs_one_gfx1151_launch():
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/GPU unavailable")
+    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(19)
     values = [rng.normal(size=(7, 13)).astype(np.float32) for _ in range(3)]
     dp = rng.normal(size=(7, 13)).astype(np.float32)
@@ -374,6 +377,7 @@ def test_rocm_adamw_backward_runs_one_gfx1151_launch():
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/GPU unavailable")
+    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(23)
     param = rng.normal(size=(7, 13)).astype(np.float32)
     grad = rng.normal(scale=0.2, size=param.shape).astype(np.float32)
@@ -415,6 +419,7 @@ def test_rocm_adam_backward_shares_exact_explicit_state_abi():
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/GPU unavailable")
+    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(24)
     shape = (5, 17)
     param = rng.normal(size=shape).astype(np.float32)
@@ -457,6 +462,7 @@ def test_rocm_lion_backward_runs_shared_stop_sign_policy_on_gfx1151():
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/GPU unavailable")
+    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(25)
     shape = (5, 19)
     param = rng.normal(size=shape).astype(np.float32)

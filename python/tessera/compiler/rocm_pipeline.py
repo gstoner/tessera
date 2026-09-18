@@ -38,6 +38,17 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
     # The C++ pass (`Passes.cpp`, tessera-rocm-executable) carries the same
     # two names; keep both lists identical.
     "control_state_machine", "ebm_affine_langevin",
+    # GFX1201-PARITY slice 2 (2026-09-17): the scalar and row-program
+    # families with no WMMA fragment in them, promoted on the full-sweep
+    # measurement on Tajasarus (972 tests skip -> pass, no kernel failure).
+    # The optimizer *VJP* certificate lanes still stamp `rocm_gfx1151`; their
+    # tests are pinned to that host until slice 2b widens the target name.
+    "scalar_unary", "scalar_binary", "scalar_compare", "scalar_logical",
+    "scalar_bitwise", "scalar_predicate", "scalar_where", "scalar_activation",
+    "loss_binary", "loss_pointwise", "loss_policy", "normalization",
+    "rng_philox", "indexing_gather", "indexing_scatter", "position_alibi",
+    "position_rope", "quant_dequant_gemm", "quant_fp", "quant_int4_pack",
+    "reduction_arg", "scan", "optimizer", "fused_silu_mul",
 })
 
 

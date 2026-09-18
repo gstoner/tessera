@@ -94,6 +94,26 @@ def rocm_host_arch() -> "str | None":
         return None
 
 
+def require_rocm_host_arch(arch: str, why: str) -> str:
+    """Skip unless this host launches on exactly ``arch``.
+
+    For a test that asserts an arch-specific *record* (a certificate naming
+    `rocm_gfx1151`, a consumer named for one chip) rather than a device
+    result. The family may be promoted on another arch while the record it
+    stamps is still chip-named; that gap is owed by name, not hidden by a
+    wider assertion. Unlike the report hook, this is an explicit pin: the
+    skip reason names both archs and the owning item.
+    """
+    import pytest
+
+    host = rocm_host_arch()
+    if host is None:
+        pytest.skip("no ROCm device on this host")
+    if host != arch:
+        pytest.skip(f"pinned to {arch}, host is {host}: {why}")
+    return host
+
+
 def require_rocm_compiled_family(*families: str) -> str:
     """Skip unless every named family plugin is promoted on this host's arch.
 

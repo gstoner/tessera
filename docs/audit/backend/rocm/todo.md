@@ -8120,6 +8120,44 @@ still builds the legacy gfx11 directive kernel and declines on gfx12 — that
 generator's gfx11 gate is now the documented boundary, and the three `slow`
 `test_rocm_plugin.py` lane tests keep their gfx11 predicate for that reason.
 
+**Slice 2 — the scalar and row-program families, promoted on measurement
+(2026-09-17, branch `claude/gfx1201-parity-slice2`).** Both tables
+(`rocm_pipeline._GFX1201_PROMOTED_FAMILIES`, `Passes.cpp`
+`kGfx1201PromotedFamilies`) gained the 24 families with no WMMA fragment in
+them: scalar_{unary,binary,compare,logical,bitwise,predicate,where,activation},
+loss_{binary,pointwise,policy}, normalization, rng_philox,
+indexing_{gather,scatter}, position_{alibi,rope},
+quant_{dequant_gemm,fp,int4_pack}, reduction_arg, scan, optimizer,
+fused_silu_mul. Method: a per-test `pytest -v` sweep on Tajasarus at `main`,
+then the same sweep with the candidates promoted, diffed per test.
+
+Result: **972 tests skip → pass, 0 kernel failures.** The largest blocks:
+`test_rocm_unary_compiled` 273, `test_rocm_norm_compiled` 109,
+`test_rocm_binary_compiled` 70, `test_rocm_compare_compiled` 67,
+`test_rocm_loss_compiled` 61, `test_rocm_scan_compiled` 49,
+`test_rocm_argreduce_compiled` 37, `test_rocm_activation_compiled` 36,
+`test_norm_backward_compiled` 24 (the paired norm VJPs), the two training-loss
+optimizer files 22, `test_rocm_rope_compiled` 15, `test_rocm_silu_mul_compiled`
+13, plus 40 smaller files (complex, conformal, digamma/lgamma, popcount,
+softcap, kv_cache, rng, scatter, fp/int quant, dequant GEMM, EBM loss/compute,
+optimizer, lamb). Promoted-set counts: 31 of 63 families.
+
+Eight tests flipped skip → fail, all one cause and not a kernel: the optimizer
+VJP plugin lanes (`native_vjp_plugins.py`, `jit.py`) stamp `rocm_gfx1151` as
+`evidence_target` and name their consumer `rocm.gfx1151_lion_backward`, so on
+gfx1201 the certificate validator correctly reports `runtime_unattested`
+(device gfx1201 ≠ claimed gfx1151) while the numerics had already matched
+their references. Those eight (`test_autodiff_optimizer_plugin_binding`
+sgd/momentum, `test_autodiff_stateful_plugin_binding` adafactor full/factored,
+`test_autodiff_training_series_target_binding` nesterov/adamw/adam/lion) are
+now pinned explicitly with `rocm_build.require_rocm_host_arch("gfx1151", …)`
+naming the owner. **Owed — slice 2b:** make `rocm_gfx1201` a first-class
+target name on the stateful/optimizer VJP lanes (`stateful_training.py`,
+`native_vjp_plugins.py`, `jit.py`, `gpu_target_map.py` all key on the
+`rocm_gfx1151` string), so the certificate can attest gfx1201 and those eight
+lose their pin. The `sequence_*` mixer certificate test stays family-gated
+(slice 3).
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

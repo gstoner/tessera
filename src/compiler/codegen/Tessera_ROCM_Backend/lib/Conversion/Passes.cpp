@@ -5,6 +5,7 @@
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/IR/Dialect.h"
 #include "TesseraROCMDialect.h.inc"
+#include "llvm/ADT/STLExtras.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassOptions.h"
@@ -127,8 +128,24 @@ struct DeclareROCMPipelineContractPass
     // Mirror of `rocm_pipeline._GFX1201_PROMOTED_FAMILIES`; the two scalar
     // per-thread families (state machine, affine Langevin) were promoted on
     // exact gfx1201 evidence 2026-09-17.
-    if (arch != "gfx1151" &&
-        !(arch == "gfx1201" && (family == "softmax" || family == "reduction" || family == "matmul" || family == "attention" || family == "attention_backward" || family == "control_state_machine" || family == "ebm_affine_langevin"))) {
+    // Slice 2 (2026-09-17) added the scalar and row-program families on the
+    // full-sweep measurement on Tajasarus; keep this list identical to the
+    // Python one.
+    static constexpr llvm::StringRef kGfx1201PromotedFamilies[] = {
+        "softmax", "reduction", "matmul", "attention", "attention_backward",
+        "control_state_machine", "ebm_affine_langevin",
+        "scalar_unary", "scalar_binary", "scalar_compare", "scalar_logical",
+        "scalar_bitwise", "scalar_predicate", "scalar_where",
+        "scalar_activation", "loss_binary", "loss_pointwise", "loss_policy",
+        "normalization", "rng_philox", "indexing_gather", "indexing_scatter",
+        "position_alibi", "position_rope", "quant_dequant_gemm", "quant_fp",
+        "quant_int4_pack", "reduction_arg", "scan", "optimizer",
+        "fused_silu_mul",
+    };
+    const bool gfx1201Promoted =
+        arch == "gfx1201" &&
+        llvm::is_contained(kGfx1201PromotedFamilies, family);
+    if (arch != "gfx1151" && !gfx1201Promoted) {
       getOperation().emitError(kExecutablePipeline)
           << ": architecture '" << arch
           << "' has no promoted family-plugin profile";

@@ -113,14 +113,31 @@ def _band_4x4(m: int, n: int, *, dynamic: bool) -> bool:
 
 
 def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
-    """The gfx1201 f16/bf16 macro tile, mirroring `getInferredMatmulSchedule`
-    in PMPasses.cpp (typed-route gap packets, 2026-09-18): the 4x4 panel for
-    every static, fully tiled problem at 1024 and above, the 1x1 otherwise.
+    """The gfx1201 macro tile, mirroring `getInferredMatmulSchedule` in
+    PMPasses.cpp: the 4x4 panel for every static, fully tiled problem at 1024
+    and above, the 1x1 otherwise.
 
-    The panel axis stops at 4x4: 4x8, 8x4 and 8x8 fall off a VGPR cliff
-    (measured at 4096^3: 64.1 TFLOP/s at 4x4, 15.6 at 4x8, 7.4 at 8x8, with
-    six accumulator fragments per lane already at 4x4). Above it, latency
-    hiding is the lever -- see `rocm_k_unroll`."""
+    **This is the tile for every storage the chip admits, not just f16/bf16**
+    (2026-09-19). It was derived on f16 and applied to f16 alone, leaving the
+    fp8 and integer branches on a hardcoded 1x1 -- the storages with the
+    *higher* ceilings (fp8 383 TFLOP/s and int4 766 TOP/s against f16's 191)
+    sitting on the smallest tile. Measured on Tajasarus, 1x1 -> 4x4:
+
+        fp8_e4m3  1024^3  15.80 -> 58.33   2048^3  20.23 -> 78.01
+        int8      1024^3  15.96 -> 58.36   2048^3  19.70 -> 76.55
+        int4      1024^3  14.95 -> 49.85   2048^3  16.96 -> 76.44
+
+    3.3x to 4.5x, from a panel the generator already emitted correctly: the
+    integer rows are *exact* against the i32 reference at every panel, so this
+    was a selection omission and never a codegen limit.
+
+    The panel axis stops at 4x4 for all of them: 4x8 and 8x8 compile but the
+    body spills (126 VGPRs already at 4x4, 1433 at 4x8, 4247 at 8x8, against a
+    compiled `vgpr_count` of 256 in every case). Whether that 256 is RDNA4's
+    architectural wave32 limit or our own occupancy policy is **not yet
+    established** -- see `ROCM-OCCUPANCY-1` in the backend queue; do not cite
+    the cliff as a hardware fact until it is. Above the panel, latency hiding
+    is the lever -- see `rocm_k_unroll`."""
     if not dynamic and m >= 1024 and n >= 1024 and m % 64 == 0 and n % 64 == 0:
         return 64, 64
     return 16, 16
@@ -433,9 +450,14 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError(
                 "ROCm integer scheduled matmul carries no fused epilogue (the epilogue is float-only)")
         rdna4 = target == "rocm_gfx1201"
+        # gfx1201 takes the same shape-selected panel as f16/bf16 (2026-09-19):
+        # 1x1 was a placeholder from slice 1b, and it costs 3.7x-4.5x. gfx1151
+        # keeps its committed 2x4 until its own sweep says otherwise -- proof
+        # never transfers between the two chips.
+        panel = (rocm_gfx1201_panel(m, n, dynamic=dynamic_m or dynamic_n or dynamic_k)
+                 if rdna4 else (32, 64))
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
-            "rocm", target.removeprefix("rocm_"), a_dtype, "i32",
-            16 if rdna4 else 32, 16 if rdna4 else 64,
+            "rocm", target.removeprefix("rocm_"), a_dtype, "i32", panel[0], panel[1],
         )
     elif (
         target == "rocm_gfx1201"
@@ -448,8 +470,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         if bias_name is not None or activation != "none":
             raise ValueError(
                 "rocm_gfx1201 FP8 scheduled matmul carries no fused epilogue yet")
+        panel = rocm_gfx1201_panel(m, n, dynamic=dynamic_m or dynamic_n or dynamic_k)
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
-            "rocm", "gfx1201", "e4m3" if a_dtype == "fp8_e4m3" else "e5m2", "f32", 16, 16,
+            "rocm", "gfx1201", "e4m3" if a_dtype == "fp8_e4m3" else "e5m2", "f32",
+            panel[0], panel[1],
         )
     elif target == "rocm_gfx1151" and a_dtype == b_dtype and a_dtype in {"fp16", "bf16"} and output_dtype == "fp32":
         panel_m, panel_n = rocm_gfx1151_panel(m, n, dynamic=dynamic_m or dynamic_n or dynamic_k)

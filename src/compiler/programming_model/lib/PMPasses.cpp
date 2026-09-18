@@ -370,8 +370,16 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   // vocabulary is portable, but gfx1200/gfx1250 must supply their own exact-
   // device schedule and instruction-family profile rather than inheriting it.
   bool rocm = schedule.arch.contains("gfx1151");
+  // The fused bias/activation epilogue is admitted on both ROCm chips since
+  // 2026-09-17 (GFX1201-PARITY slice 1): Schedule->Tile carries it onto
+  // tile.matmul_kernel and the typed Tile->ROCm consumer applies it at the
+  // fragment store on each chip's own layout. The residual add stays
+  // NVIDIA-owned.
+  const bool rocmFusedEpilogue =
+      (schedule.arch.contains("gfx1151") || schedule.arch.contains("gfx1201")) &&
+      !schedule.residual;
   if ((schedule.bias || schedule.residual || schedule.activation != "none") &&
-      !nvidia_sm120)
+      !nvidia_sm120 && !rocmFusedEpilogue)
     return failure();
   // Apple GPU has no rank-2 f32 cooperative-matrix GEMM: the shared launch
   // contract is consumed as a batch-1 MPS BMM (apple_gpu_bmm_f32_batch1).  The
@@ -3538,6 +3546,14 @@ struct ScheduleToTilePass
       };
       Value a = toPointer(graph->getOperand(0), lhsType);
       Value b = toPointer(graph->getOperand(1), rhsType);
+      // The fused epilogue is part of the launch contract on every native
+      // target, not only NVIDIA: the Graph op's third operand is the per-column
+      // bias (A/B/bias ABI order), carried as the kernel's third pointer.
+      Value biasPointer;
+      if (selected->bias) {
+        auto biasType = cast<RankedTensorType>(graph->getOperand(2).getType());
+        biasPointer = toPointer(graph->getOperand(2), biasType);
+      }
       auto outputMemref =
           MemRefType::get(outType.getShape(), outType.getElementType());
       Value runtimeMIndex, runtimeNIndex, runtimeKIndex;
@@ -3576,10 +3592,13 @@ struct ScheduleToTilePass
           selected->storage == "u8" ? "i8" : selected->storage,
           selected->accum, "row_major", "col_major", 1);
       auto epilogue = tile::TileEpilogueAttr::get(
-          &getContext(), /*bias=*/false, "none", selected->accum);
+          &getContext(), selected->bias, selected->activation, selected->accum);
 
       OperationState kernelState(loc, "tile.matmul_kernel");
-      kernelState.addOperands({a, b, d, m, n, k});
+      if (biasPointer)
+        kernelState.addOperands({a, b, biasPointer, d, m, n, k});
+      else
+        kernelState.addOperands({a, b, d, m, n, k});
       kernelState.addAttribute("mma", mma);
       kernelState.addAttribute("epilogue", epilogue);
       kernelState.addAttribute("warps",

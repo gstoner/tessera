@@ -1248,7 +1248,22 @@ LogicalResult StoreOp::verify() {
       getOperation()->getAttrOfType<TileMemoryLayoutAttr>("tile.memory");
   if (!memory)
     return emitOpError("requires a #tile.memory_layout attribute");
-  const size_t inputs = getInputs().size();
+  size_t inputs = getInputs().size();
+  // A fused matmul epilogue rides on the store: `tile.epilogue` names it, and
+  // when it declares a bias the per-column bias buffer is one trailing
+  // operand. The architecture consumer is the only place every accumulator
+  // element's column is known on every fragment layout (gfx11 replicated
+  // rows, RDNA4 half-wave rows, CDNA), so it is where a per-column add and a
+  // pointwise activation apply correctly without a second layout table.
+  if (auto epilogue = getOperation()->getAttrOfType<TileEpilogueAttr>(
+          "tile.epilogue")) {
+    if (epilogue.getBias()) {
+      if (inputs == 0)
+        return emitOpError("TILE_STORE_EPILOGUE_BIAS: a biased epilogue store "
+                           "needs its trailing bias operand");
+      --inputs;
+    }
+  }
   const bool dynamic = memory.getLeadingDim() == 0;
   const bool valid = dynamic ? (inputs == 5 || inputs == 7)
                              : (inputs == 4 || inputs == 6);

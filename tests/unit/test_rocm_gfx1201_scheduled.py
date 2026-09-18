@@ -86,6 +86,47 @@ def test_gfx1201_cached_launcher_keeps_architecture_and_family_gate(architecture
 
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("activation,bias", [("relu", False), ("gelu", False), ("silu", True), ("none", True), ("gelu", True)])
+@pytest.mark.parametrize("shape", [(16,16,16), (17,19,23), (65,48,37)])
+def test_gfx1201_scheduled_matmul_package_executes_fused_epilogue(shape, activation, bias):
+    """GFX1201-PARITY slice 1: the fused bias/activation epilogue on RDNA4.
+
+    The generator's typed body hands the epilogue to the store and TileToROCM
+    applies it per element after resolving this chip's half-wave accumulator
+    rows -- the same implementation that serves gfx1151's replicated rows. The
+    reference is the fused numpy program, not the bare matmul (the failure
+    mode the 2026-09-17 loop found on this chip was exactly a bare matmul
+    returned as the fused result)."""
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module, _epilogue_reference
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=shape, activation=activation, bias=bias), target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.image.architecture == "gfx1201"
+    assert package.descriptor.provenance["activation"] == activation
+    assert package.descriptor.provenance["bias"] is bias
+    rng = np.random.default_rng(713 + len(activation))
+    a = (rng.normal(size=(m,k)) * 0.4).astype(np.float16)
+    b = (rng.normal(size=(k,n)) * 0.4).astype(np.float16)
+    bias_arr = (rng.normal(size=(n,)) * 0.5).astype(np.float32) if bias else None
+    output = np.zeros((m,n), np.float32)
+    buffers = {"a": a, "b": b, "o": output}
+    if bias:
+        buffers["bias"] = bias_arr
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    np.testing.assert_allclose(output, _epilogue_reference(a, b, bias_arr, activation), rtol=0, atol=5e-2)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
 @pytest.mark.parametrize("shape", [(16,16,16), (17,19,23), (65,48,37)])
 def test_gfx1201_scheduled_matmul_package_executes(shape):
     from tessera import runtime as rt

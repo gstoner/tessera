@@ -4321,3 +4321,35 @@ Remaining: gfx1201 parity is now a scoped program (`GFX1201-PARITY-2026-09-17` i
 Evidence: `tests/unit/test_rocm_compiled_family_gate.py`, `tests/unit/test_target_toolchain_pins.py`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/philox_stamps_gpu_kernel_once.mlir`, `tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll`, `benchmarks/baselines/runtime_shape_frames_20260908/rocm_gfx1151_revalidation_20260917.json`; the two backend queues under `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-17 — GFX1201-PARITY slice 1: the fused matmul epilogue on the typed Tile→ROCm route
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: GFX1201-PARITY slice 1 (sync `GFX1201-PARITY-2026-09-17`, ROCm queue); co-owner [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+Outcome: **The matmul family's fused bias/activation epilogue runs on gfx1201 through the typed Tile route, and gfx1151 gets the same implementation — one epilogue, applied after the fragment family has resolved each element's row and column.** `tile.store` carries a `tile.epilogue` attribute and a trailing bias operand; `TileToROCM::materializeFragmentStore` applies `bias[col]` and the activation inside both the unmasked and the guarded stores, so `rdna3_wmma` (gfx1151, replicated rows) and `rdna4_wmma` (RDNA4, half-wave rows) share the arithmetic and differ only in the layout the family already owned. The typed generator passes the epilogue on the store instead of refusing it; Schedule→Tile's ROCm branch carries the bias pointer; `scheduled_matmul` and `package_scheduled_matmul` admit the fused contract on both ROCm targets; and the runtime's `rocm_compiled` lane sends a non-gfx11 f16 GEMM through Graph IR → `--tessera-graph-to-schedule` → Tile → native package → `launch`, so the fused-epilogue launch/execute lane on gfx1201 runs an RDNA4 kernel rather than the gfx11 one (the red-zone entry's owed item 1: 8 lowering errors and 6 wrong answers, now 14/14).
+
+**What masked it.** Graph→Schedule admitted bias/activation only on sm_120. Every one of the 39 slice rows on both boxes failed there, one level above the new consumer, before the device was reached; the first read of the failing lit fixture ("the generator emitted the untyped body") was also wrong — the typed body was emitted on both archs and the CHECK named `gfx11_wmma` where the lowering stamps `rdna3_wmma`. Both corrected in the second commit. Residual add stays NVIDIA-owned.
+
+| Host | Slice files | Lit |
+|---|---|---|
+| Tajasarus (gfx1201, assertions LLVM) | **151 passed, 0 failed, 50 skipped** (was 29 failed): `test_rocm_gfx1201_scheduled` fused epilogue 15/15, `test_rocm_fused_epilogue_launch_execute` 14/14 | `check-tessera-rocm` 69/69 in `build` and `build-assertions`; `tests/tessera-ir` 493/493 both trees |
+| Princess-Luna (gfx1151) | **140 passed, 0 failed, 61 skipped** (was 10 failed): `test_gfx1151_scheduled_matmul_executes_fused_epilogue` 10/10 | `check-tessera-rocm` 69/69; `tests/tessera-ir` 493/493 |
+
+Full sweeps on the branch at `aef83fc1`:
+
+| Host | Full `-m "not slow"` sweep at `aef83fc1` |
+|---|---|
+| Princess-Luna (gfx1151) | **19500 passed, 1 failed, 2584 skipped**; `check-tessera-rocm` 69/69; `tests/tessera-ir` 493/493 |
+| Tajasarus (gfx1201, assertions LLVM) | **17566 passed, 1 failed, 4518 skipped**; `check-tessera-rocm` 69/69 in both trees; `tests/tessera-ir` 493/493 both trees |
+| Super-Bear (sm_120) | **16092 passed, 1 failed, 5992 skipped**; both trees built; NVIDIA lit both trees and `tests/tessera-ir` clean |
+| Mac (M1 Max) | **18406 passed, 1 failed, 3678 skipped**; `tests/tessera-ir` 493/493; mypy clean on the touched Python; doc, plan and generated-doc gates clean |
+
+The one failure on every host is the same test, `test_diagnostic_code_registry.py::test_every_cpp_code_is_registered`: the slice emits two new codes (`TILE_STORE_EPILOGUE_BIAS`, `ROCM_FRAGMENT_STORE_EPILOGUE`) that were not in the registry. Registered in `b65c8916`; the registry file passes on all four hosts at that commit (40/40).
+
+Remaining: slice 1b — int8/int4 storage on the typed route (the typed generator still refuses int4 packing and a non-accumulator output dtype; the int4 rows of `test_rocm_compiled_launch_execute.py` skip on gfx1201 as unpromoted); the `rocm_wmma_gemm` arbiter candidate still builds the legacy gfx11 directive kernel and declines on gfx12 — that generator's gfx11 gate is now the documented boundary; slices 2–5 of the program as listed in the ROCm queue.
+
+Evidence: `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/typed_matmul_fused_epilogue_store.mlir`, `tests/unit/test_rocm_gfx1201_scheduled.py`, `tests/unit/test_scheduled_matmul_consumers.py`, `tests/unit/test_rocm_fused_epilogue_launch_execute.py`, `docs/audit/backend/rocm/todo.md` §`GFX1201-PARITY-2026-09-17` slice 1.
+
+<!-- entry-fields:end -->

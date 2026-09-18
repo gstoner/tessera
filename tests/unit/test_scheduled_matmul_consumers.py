@@ -780,6 +780,69 @@ def test_x86_scheduled_matmul_executes_exact_artifact(shape) -> None:
     np.testing.assert_allclose(output, a @ b, rtol=3e-5, atol=3e-5)
 
 
+def _epilogue_reference(a, b, bias, activation):
+    """numpy reference for the fused epilogue the typed ROCm route applies."""
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    if bias is not None:
+        ref = ref + bias[None, :]
+    if activation == "relu":
+        ref = np.maximum(ref, 0.0)
+    elif activation == "silu":
+        ref = ref / (1.0 + np.exp(-ref))
+    elif activation == "gelu":
+        c = np.sqrt(2.0 / np.pi)
+        ref = 0.5 * ref * (1.0 + np.tanh(c * (ref + 0.044715 * ref ** 3)))
+    return ref
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("activation,bias", [("relu", False), ("gelu", False), ("silu", True), ("none", True), ("gelu", True)])
+@pytest.mark.parametrize("shape", [(32, 32, 32), (17, 19, 23)])
+@pytest.mark.skipif(
+    not rocm_native.native_packaging_available(),
+    reason="ROCm compiler/device libraries unavailable",
+)
+def test_gfx1151_scheduled_matmul_executes_fused_epilogue(shape, activation, bias) -> None:
+    """The fused bias/activation epilogue on the typed Tile route (gfx1151).
+
+    The epilogue is applied by TileToROCM at the fragment store, after the
+    chip's accumulator layout resolved each element's row and column -- the
+    same code that serves gfx1201 -- so this proves the layout-independent
+    implementation on the replicated gfx11 rows."""
+    from tests._support.rocm_build import rocm_host_arch
+    if (rocm_host_arch() or "") != "gfx1151":
+        pytest.skip("gfx1151 exact-device test")
+    m, k, n = shape
+    bundle = compile_graph_module(
+        _module(target="rocm", shape=shape, activation=activation, bias=bias),
+        source_origin="gfx1201-parity-slice1",
+        target="rocm_gfx1151",
+        options={"package_native": True},
+        enable_tool_validation=False,
+    )
+    assert bundle.native_image is not None and bundle.launch_descriptor is not None
+    assert bundle.launch_descriptor.provenance["activation"] == activation
+    assert bundle.launch_descriptor.provenance["bias"] is bias
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": "rocm_gfx1151"},
+        native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+        tile_ir=bundle.tile.text,
+        target_ir=bundle.target_ir.text,
+    )
+    rng = np.random.default_rng(3105 + len(activation))
+    a = np.ascontiguousarray(rng.standard_normal((m, k)) * 0.4, dtype=np.float16)
+    b = np.ascontiguousarray(rng.standard_normal((k, n)) * 0.4, dtype=np.float16)
+    bias_arr = np.ascontiguousarray(rng.standard_normal((n,)) * 0.5, dtype=np.float32) if bias else None
+    output = np.zeros((m, n), dtype=np.float32)
+    buffers = {"a": a, "b": b, "o": output, "M": m, "N": n, "K": k}
+    if bias:
+        buffers["bias"] = bias_arr
+    result = rt.launch(artifact, buffers)
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_allclose(output, _epilogue_reference(a, b, bias_arr, activation), rtol=0, atol=5e-2)
+
+
 @pytest.mark.hardware_rocm
 @pytest.mark.parametrize("shape", [(32, 32, 32), (17, 19, 23)])
 @pytest.mark.skipif(

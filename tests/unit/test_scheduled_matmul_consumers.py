@@ -909,6 +909,70 @@ def test_gfx1151_scheduled_matmul_executes_the_selected_panel(shape, panel) -> N
     np.testing.assert_allclose(output, expected, rtol=0, atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
 
 
+@pytest.mark.parametrize("target", ["rocm_gfx1151", "rocm_gfx1201"])
+@pytest.mark.parametrize("waves", [(2, 2), (4, 2)])
+def test_rocm_lds_staged_package_carries_its_workgroup_and_block_tile(target, waves):
+    """The LDS-staged typed body is a packaging option, not a selection: the
+    descriptor names the workgroup it needs (32 threads per wave) and the block
+    tile the launch grid divides by (the panel times the wave shape), and the
+    route says lds rather than register (2026-09-18)."""
+    if scheduled_matmul.find_tessera_opt() is None or not rocm_native.native_packaging_available():
+        pytest.skip("production tessera-opt / ROCm device libraries unavailable")
+    from tests._support.rocm_build import rocm_host_arch
+    if (rocm_host_arch() or "") != target.removeprefix("rocm_"):
+        pytest.skip(f"{target} packaging needs its own ROCm toolchain/arch")
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        _module(target="rocm", shape=(256, 256, 256)), target=target)
+    package = rocm_native.package_scheduled_matmul(
+        artifact, pipeline_name="tessera-lower-to-rocm", staging="lds", lds_waves=waves)
+    provenance = package.descriptor.provenance
+    assert provenance["staging"] == "lds"
+    assert provenance["workgroup"] == [32 * waves[0] * waves[1], 1, 1]
+    assert provenance["macro_tile"] == [artifact.macro_tile_m * waves[0],
+                                        artifact.macro_tile_n * waves[1]]
+    assert provenance["physical_route"].endswith(
+        f"lds_wmma_{waves[0]}x{waves[1]}waves_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}")
+    # The register package is unchanged and still names one wave.
+    register = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert register.descriptor.provenance["workgroup"] == [32, 1, 1]
+    assert register.descriptor.provenance["macro_tile"] == [artifact.macro_tile_m, artifact.macro_tile_n]
+    with pytest.raises(ValueError, match="register or lds"):
+        rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm", staging="pipe")
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("waves", [(2, 2), (4, 2)])
+@pytest.mark.parametrize("shape", [(256, 256, 256), (1024, 1024, 1024), (511, 513, 509)])
+@pytest.mark.skipif(not rocm_native.native_packaging_available(),
+                    reason="ROCm compiler/device libraries unavailable")
+def test_rocm_lds_staged_package_executes(waves, shape) -> None:
+    """The LDS-staged multi-wave typed body executes on the owning chip and
+    agrees with the numpy product, including a ragged shape (the K tail and
+    both edges are zero-filled at the staging loads)."""
+    from tests._support.rocm_build import rocm_host_arch
+    from tessera import runtime as rt
+    arch = rocm_host_arch() or ""
+    if arch not in ("gfx1151", "gfx1201"):
+        pytest.skip("needs an owning ROCm device")
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        _module(target="rocm", shape=shape), target=f"rocm_{arch}")
+    package = rocm_native.package_scheduled_matmul(
+        artifact, pipeline_name="tessera-lower-to-rocm", staging="lds", lds_waves=waves)
+    rng = np.random.default_rng(sum(shape) + waves[0])
+    a = (rng.normal(size=(m, k)) * 0.25).astype(np.float16)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(np.float16)
+    output = np.zeros((m, n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+                                 native_image=package.image, launch_descriptor=package.descriptor,
+                                 tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", result
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=0,
+                               atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
+
+
 def _integer_operands(shape, storage, seed):
     m, k, n = shape
     rng = np.random.default_rng(seed)

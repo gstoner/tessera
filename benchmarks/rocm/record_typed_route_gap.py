@@ -4,6 +4,10 @@ host chip: a measured gap, never an admission.
 
 Variants, per shape, each in a fresh process (three runs, medians):
 
+* ``typed-lds:<MxN>:<WMxWN>`` -- the same Tile IR through the LDS-staged
+  multi-wave body: WM x WN waves per workgroup each owning the panel, both
+  operands staged through shared memory per 16-wide K slab (B transposed so
+  every fragment pack is a contiguous vector load).
 * ``typed:<MxN>`` -- the production scheduled package's Tile IR
   (Graph -> Schedule -> Tile through ``lower_scheduled_matmul``) with its
   ``tessera.macro_tile_*`` rewritten to the named panel, compiled by
@@ -62,6 +66,9 @@ PANELS = [(16, 16), (32, 64), (64, 64)]
 #: 2026-09-18 recorded byte-identical backend IR for every register/lds pair
 #: on both chips, so the recorder no longer pretends to vary it.
 STAGING = "register"
+#: (waves_m, waves_n) workgroup shapes for the LDS-staged typed body; each wave
+#: owns one `PANELS` entry, so the block tile is (WM*panel_m, WN*panel_n).
+LDS_WAVES = [(2, 2), (4, 2)]
 ROUNDS = 3
 ERROR_BUDGET = 2e-2  # relative to max |reference|, f16 storage / f32 accumulate
 
@@ -82,7 +89,7 @@ def _memref(pointer, size):
 class _Loaded:
     """A loaded module variant with its device buffers, timed in rounds."""
 
-    def __init__(self, hip, hsaco, symbol, a, b, m, n, k, macro):
+    def __init__(self, hip, hsaco, symbol, a, b, m, n, k, macro, threads=32):
         self.hip = hip
         self.mod = ct.c_void_p()
         if hip.hipModuleLoadData(ct.byref(self.mod), hsaco) != 0:
@@ -104,10 +111,11 @@ class _Loaded:
             self.arr[i] = ct.cast(ct.byref(v), ct.c_void_p)
         macro_m, macro_n = macro
         self.gx, self.gy = (n + macro_n - 1) // macro_n, (m + macro_m - 1) // macro_m
-        self.m, self.n = m, n
+        self.m, self.n, self.threads = m, n, threads
 
     def launch(self):
-        return self.hip.hipModuleLaunchKernel(self.fn, self.gx, self.gy, 1, 32, 1, 1, 0, None, self.arr, None)
+        return self.hip.hipModuleLaunchKernel(self.fn, self.gx, self.gy, 1, self.threads,
+                                              1, 1, 0, None, self.arr, None)
 
     def check(self, a, b):
         for _ in range(3):
@@ -149,17 +157,24 @@ def _typed_variants(chip, shape):
         tile_ir = re.sub(r"tessera\.macro_tile_m = \d+ : i64", f"tessera.macro_tile_m = {macro_m} : i64",
                          artifact.tile_ir)
         tile_ir = re.sub(r"tessera\.macro_tile_n = \d+ : i64", f"tessera.macro_tile_n = {macro_n} : i64", tile_ir)
-        name = f"typed:{macro_m}x{macro_n}"
-        try:
-            target_ir, backend_ir, payload, *_ = rocm_native._compile_native_tile_ir(
-                tile_ir, directive="tessera_rocm.wmma", family="matmul",
-                architecture=chip, staging=STAGING)
-        except Exception as exc:  # the refusal is the result
-            yield name, None, dict(refused=str(exc)[:300])
-            continue
-        yield name, (payload, artifact.function_name, (macro_m, macro_n)), dict(
-            backend_ir_sha256=hashlib.sha256(backend_ir.encode()).hexdigest(),
-            production_panel=[artifact.macro_tile_m, artifact.macro_tile_n])
+        builds = [(f"typed:{macro_m}x{macro_n}", STAGING, (1, 1))]
+        builds += [(f"typed-lds:{macro_m}x{macro_n}:{wm}x{wn}", "lds", (wm, wn))
+                   for wm, wn in LDS_WAVES]
+        for name, staging, (wm, wn) in builds:
+            try:
+                target_ir, backend_ir, payload, *_ = rocm_native._compile_native_tile_ir(
+                    tile_ir, directive="tessera_rocm.wmma", family="matmul",
+                    architecture=chip, staging=staging, lds_waves=(wm, wn))
+            except Exception as exc:  # the refusal is the result
+                yield name, None, dict(refused=str(exc)[:300])
+                continue
+            block = (macro_m * wm, macro_n * wn)
+            lds = re.search(r"tessera\.rocm\.lds_bytes = (\d+)", backend_ir)
+            yield name, (payload, artifact.function_name, block, 32 * wm * wn), dict(
+                backend_ir_sha256=hashlib.sha256(backend_ir.encode()).hexdigest(),
+                block_tile=list(block), threads=32 * wm * wn,
+                lds_bytes=int(lds.group(1)) if lds else 0,
+                production_panel=[artifact.macro_tile_m, artifact.macro_tile_n])
 
 
 def _directive_variant(chip, shape):
@@ -218,8 +233,8 @@ def worker(iters):
         b = (rng.standard_normal((k, n)) * 0.25).astype(np.float16)
         variants = list(_typed_variants(chip, shape))
         if chip.startswith("gfx11"):
-            name, spec = _directive_variant(chip, shape)
-            variants.append((name, spec, {}))
+            name, (hsaco, symbol, macro) = _directive_variant(chip, shape)
+            variants.append((name, (hsaco, symbol, macro, 32), {}))
         loaded = []
         shape_rows = []
         for name, spec, extra in variants:
@@ -227,9 +242,9 @@ def worker(iters):
             shape_rows.append(row)
             if spec is None:
                 continue
-            hsaco, symbol, macro = spec
+            hsaco, symbol, macro, threads = spec
             try:
-                module = _Loaded(hip, hsaco, symbol, a, b, m, n, k, macro)
+                module = _Loaded(hip, hsaco, symbol, a, b, m, n, k, macro, threads)
                 row["relative_error"] = module.check(a, b)
                 loaded.append((row, module))
             except Exception as exc:
@@ -278,7 +293,8 @@ def record(output, runs, iters):
                          timing_source=row.get("timing_source"))
         else:
             entry["refused"] = row.get("refused")
-        for key in ("relative_error", "production_panel", "backend_ir_sha256", "batch_ms"):
+        for key in ("relative_error", "production_panel", "backend_ir_sha256", "batch_ms",
+                    "block_tile", "threads", "lds_bytes"):
             if key in row:
                 entry[key] = row[key]
         summary.append(entry)

@@ -159,7 +159,6 @@ def _sm120_or_skip():
     return rt
 
 
-@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("mode", SCALE_MODES)
 def test_sm120_emitted_nvfp4_tile_matches_the_exact_reference(mode):
     """Exact-device row: the emitted kernel, registered under its own entry,
@@ -174,7 +173,6 @@ def test_sm120_emitted_nvfp4_tile_matches_the_exact_reference(mode):
     np.testing.assert_array_equal(out, ref)
 
 
-@pytest.mark.hardware_nvidia
 def test_sm120_emitted_nvfp4_entry_is_registered_and_reused():
     rt = _sm120_or_skip()
     from tessera.compiler import ptx_emit as pe

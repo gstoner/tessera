@@ -697,6 +697,10 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             ("sparse_block_topk", ("generate-rocm-block-sparse-topk-kernel",)),
             ("sparse_sddmm", ("generate-rocm-sddmm-kernel",)),
             ("sparse_spmm", ("generate-rocm-spmm-kernel",)),
+            # RDNA4-only (SWMMAC): Graph->Schedule builds the kernel, so the
+            # family's plugin is the Tile->ROCm consumer that lowers its
+            # tile.sparse_mma (public 2:4 admission, 2026-09-18).
+            ("sparse_matmul_2to4", ("lower-tile-to-rocm",)),
             ("spectral_dft", ("generate-rocm-dft-kernel",)),
             ("spectral_backward", ("generate-rocm-spectral-backward-kernel",)),
             ("softmax", ("generate-rocm-softmax-kernel",)),

@@ -65,7 +65,6 @@ def _cuda_only_spy(monkeypatch):
     return hits
 
 
-@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("d", [16, 33, 1024])
 def test_sm120_sphere_step_matches_the_numpy_formula(d):
     _sm120_or_skip()
@@ -86,7 +85,6 @@ def test_sm120_sphere_step_matches_the_numpy_formula(d):
     np.testing.assert_allclose(zero_y, x / np.linalg.norm(x), rtol=1e-6, atol=1e-7)
 
 
-@pytest.mark.hardware_nvidia
 def test_sm120_sphere_chain_runs_every_step_on_the_device(monkeypatch):
     _sm120_or_skip()
     hits = _cuda_only_spy(monkeypatch)

@@ -800,10 +800,10 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             ),
         },
         # ISA §7.9 Table 33: F16/BF16/IU8 executable surface; no FP8 WMMA on
-        # RDNA 3.5 (the load-bearing difference from gfx1200). int32 is the
-        # IU8/IU4 accumulator (GFX1201-PARITY slice 1b: the integer matmul
-        # contract lowers for this chip too).
-        supported_dtypes=("bf16", "fp16", "fp32", "int8", "int32", "int4"),
+        # RDNA 3.5 (the load-bearing difference from gfx1200). The int32
+        # accumulator of the integer matmul contract (slice 1b) is declared on
+        # the matmul row above, matching `rocm_dtype_contract`'s ready rows.
+        supported_dtypes=("bf16", "fp16", "fp32", "int8", "int4"),
         features=("wmma_f16", "wmma_bf16", "buffer_load_lds", "rocm_7_2_3"),
     ),
     "rocm_gfx1200": TargetCapability(

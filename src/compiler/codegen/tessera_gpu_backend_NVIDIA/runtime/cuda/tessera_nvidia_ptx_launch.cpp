@@ -366,42 +366,6 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
     return rc;
 }
 
-// The emitted one-warp NVFP4 tile: A = 32 lanes x 4 words, B = 32 x 2,
-// SFa/SFb = 32 x 1 (four ue4m3 bytes per word), D = 32 lanes x 4 f32. Lane
-// order is the PTX ISA m16n8k64 fragment layout the Python packer produces.
-int invokeNvfp4Emitted(CUfunction fn, void** buffers, size_t nbuf,
-                       size_t ndim) {
-    if (nbuf != 5 || ndim != 0) return 5;
-    const size_t sizes[] = {32 * 4 * sizeof(uint32_t), 32 * 2 * sizeof(uint32_t),
-                            32 * sizeof(uint32_t), 32 * sizeof(uint32_t),
-                            32 * 4 * sizeof(float)};
-    CUdeviceptr device[5] = {};
-    int rc = 0;
-    for (int i = 0; i < 5; ++i) {
-        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
-            rc = 3;
-            break;
-        }
-    }
-    if (!rc) {
-        for (int i = 0; i < 4; ++i)
-            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) {
-                rc = 3;
-                break;
-            }
-    }
-    if (!rc) {
-        void* args[] = {&device[0], &device[1], &device[2], &device[3], &device[4]};
-        if (!cuOk(cuLaunchKernel(fn, 1, 1, 1, 32, 1, 1, 0, 0, args, 0), "cuLaunchKernel") ||
-            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
-            !cuOk(cuMemcpyDtoH(buffers[4], device[4], sizes[4]), "cuMemcpyDtoH"))
-            rc = 3;
-    }
-    for (CUdeviceptr ptr : device)
-        if (ptr) cuMemFree(ptr);
-    return rc;
-}
-
 // Compiler-owned launch-level NVFP4 ABI: packed E2M1 A[M,ceil(K/2)] and
 // B[ceil(K/2),N], logical UE4M3 scale views SFa[M,ceil(K/16)] and
 // SFb[ceil(K/16),N], f32 D[M,N], and runtime i64 M/N/K.
@@ -443,6 +407,42 @@ int invokeNvfp4(CUfunction fn, void** buffers, size_t nbuf,
         unsigned gx = (unsigned)((N + 7) / 8);
         unsigned gy = (unsigned)((M + 15) / 16);
         if (!cuOk(cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0), "cuLaunchKernel") || !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[4], device[4], sizes[4]), "cuMemcpyDtoH"))
+            rc = 3;
+    }
+    for (CUdeviceptr ptr : device)
+        if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
+// The emitted one-warp NVFP4 tile: A = 32 lanes x 4 words, B = 32 x 2,
+// SFa/SFb = 32 x 1 (four ue4m3 bytes per word), D = 32 lanes x 4 f32. Lane
+// order is the PTX ISA m16n8k64 fragment layout the Python packer produces.
+int invokeNvfp4Emitted(CUfunction fn, void** buffers, size_t nbuf,
+                       size_t ndim) {
+    if (nbuf != 5 || ndim != 0) return 5;
+    const size_t sizes[] = {32 * 4 * sizeof(uint32_t), 32 * 2 * sizeof(uint32_t),
+                            32 * sizeof(uint32_t), 32 * sizeof(uint32_t),
+                            32 * 4 * sizeof(float)};
+    CUdeviceptr device[5] = {};
+    int rc = 0;
+    for (int i = 0; i < 5; ++i) {
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
+            rc = 3;
+            break;
+        }
+    }
+    if (!rc) {
+        for (int i = 0; i < 4; ++i)
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) {
+                rc = 3;
+                break;
+            }
+    }
+    if (!rc) {
+        void* args[] = {&device[0], &device[1], &device[2], &device[3], &device[4]};
+        if (!cuOk(cuLaunchKernel(fn, 1, 1, 1, 32, 1, 1, 0, 0, args, 0), "cuLaunchKernel") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
             !cuOk(cuMemcpyDtoH(buffers[4], device[4], sizes[4]), "cuMemcpyDtoH"))
             rc = 3;
     }

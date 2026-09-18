@@ -110,7 +110,6 @@ def test_reference_matches_the_pair_device_oracle_for_mha():
     np.testing.assert_allclose(dv, (p.swapaxes(-1, -2) @ do).sum(axis=1, keepdims=True), rtol=1e-5, atol=1e-6)
 
 
-@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(os.environ.get('TESSERA_SM120_DEVICE_PROOF') != '1', reason='owning sm_120 proof (TESSERA_SM120_DEVICE_PROOF=1)')
 @pytest.mark.parametrize('sq,sk,causal', [(3, 4, True), (5, 3, True), (3, 4, False)])
 def test_isolated_resident_attention_on_sm120(sq, sk, causal):

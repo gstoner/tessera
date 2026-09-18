@@ -49,7 +49,8 @@ def test_compound_contract_binds_physical_and_child_identity(
     assert metadata["numeric_policy"] == {"storage": "fp32", "accum": "fp32"}
     assert metadata["abi_storage"] == "f32"
     assert metadata["storage_conversion"] == "native_f32"
-    assert metadata["architecture"] == "gfx1151"
+    from tessera import runtime as rt
+    assert metadata["architecture"] == rt._rocm_chip()  # `rocm` names the pinned chip
     assert metadata["complex_layout"] == "interleaved_f32x2"
     assert metadata["workspace_policy"] == "persistent_artifact_workspace"
     assert metadata["workspace_bytes"] > 0

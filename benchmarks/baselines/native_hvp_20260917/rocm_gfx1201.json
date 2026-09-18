@@ -1,0 +1,80 @@
+{
+  "backend": "rocm",
+  "chip": "gfx1201",
+  "compiler_sha256": "e8a43aff78e7bbca3bd3d887d8014331cd6753d4084e0f518ea3c6ed5b44eb40",
+  "evidence_scope": "exact_device",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "llvm_tools_sha256": {},
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "per-call host transfers; no timer; WSL2 wall clock does not promote"
+  },
+  "rows": [
+    {
+      "binding_digest": "aec73116fbf9b1467fc50c430dd1d415b80b956c060f1dc686668b0c13dbc0e8",
+      "function": "cubic",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 3,
+      "shape": [
+        4
+      ]
+    },
+    {
+      "binding_digest": "da557babc196b9d7ac85c8f3e868aababff60ce902a316478fe1b3f1d71dfa41",
+      "function": "cubic",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 3,
+      "shape": [
+        2,
+        2
+      ]
+    },
+    {
+      "binding_digest": "2df29ea3ed51e38e57dd82e9380deaeb7b4cc1403b959ecde959584dca76e396",
+      "function": "cubic",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 3,
+      "shape": [
+        3,
+        5
+      ]
+    },
+    {
+      "binding_digest": "2f5fa3470f5b6afe9a254217cc11c44537b0bef7914678ca8090dbf7de22b6ee",
+      "function": "repeated_square",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 4,
+      "shape": [
+        4
+      ]
+    },
+    {
+      "binding_digest": "4165bde93b59cae6c3be068f8e59fb5dfc62928e253a1e1a484deaf74071c4ea",
+      "function": "repeated_square",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 4,
+      "shape": [
+        2,
+        2
+      ]
+    },
+    {
+      "binding_digest": "d336339c677de727ec21dd328b412d592212b8e8b0220c2b41d32b8a9d635850",
+      "function": "repeated_square",
+      "grad_max_abs_error": 0.0,
+      "hvp_max_abs_error": 0.0,
+      "power": 4,
+      "shape": [
+        3,
+        5
+      ]
+    }
+  ],
+  "schema": "tessera.native_hvp.v1"
+}

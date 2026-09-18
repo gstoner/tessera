@@ -7675,9 +7675,21 @@ def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
         )
     m, k = a.shape
     n = b.shape[1]
+    chip = _rocm_chip()
+    if not chip.startswith("gfx11"):
+        # gfx12: the legacy directive generator is gfx11-only by construction;
+        # the scheduled package IS the compiled route there (the same product
+        # `_rocm_compiled_gemm_impl` serves), f16 storage with f32 accumulation.
+        if dtype_tag != "f16":
+            raise _RocmCompiledUnavailable(
+                f"rocm matmul-family on {chip}: the typed route carries f16/f32 only; "
+                f"{dtype_tag} storage is owed (GFX1201-PARITY slice 1b)")
+        return _rocm_compiled_gemm_via_scheduled_package(
+            np.ascontiguousarray(a, dtype=np.float16),
+            np.ascontiguousarray(b, dtype=np.float16), None, "none", m, n, k, chip)
     from .compiler.rocm_schedule import select_rocm_gemm_schedule
 
-    schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag, arch=_rocm_chip())
+    schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag, arch=chip)
     mt, nt = schedule.macro_tile
     hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag, schedule=schedule)
 
@@ -7938,10 +7950,26 @@ def _rocm_wmma_fused_2d(
         bias_arr = np.ascontiguousarray(bias, dtype=np.float32)
         if bias_arr.shape != (n,):
             raise ValueError(f"rocm WMMA bias must have shape ({n},) (one per output column); got {bias_arr.shape}")
+    chip = _rocm_chip()
+    if not chip.startswith("gfx11"):
+        # gfx12: the fused epilogue rides the typed Tile route (applied at the
+        # fragment store on this chip's own layout, GFX1201-PARITY slice 1).
+        # Raster order and the device timer are directive-lane options the
+        # typed route does not carry yet: a timing request answers None rather
+        # than a wall-clock number dressed as a device latency.
+        if dtype_tag != "f16":
+            raise _RocmCompiledUnavailable(
+                f"rocm WMMA fused on {chip}: the typed route carries f16/f32 only; "
+                f"{dtype_tag} storage is owed (GFX1201-PARITY slice 1b)")
+        if time_iters is not None:
+            return None
+        return _rocm_compiled_gemm_via_scheduled_package(
+            np.ascontiguousarray(a, dtype=np.float16),
+            np.ascontiguousarray(b, dtype=np.float16), bias_arr, activation, m, n, k, chip)
     from .compiler.rocm_schedule import select_rocm_gemm_schedule
 
     schedule = select_rocm_gemm_schedule(
-        m, n, k, dtype=dtype_tag, arch=_rocm_chip(),
+        m, n, k, dtype=dtype_tag, arch=chip,
         raster_order=raster_order, raster_group=raster_group)
     mt, nt = schedule.macro_tile
     hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag, bias=has_bias, activation=activation, schedule=schedule)

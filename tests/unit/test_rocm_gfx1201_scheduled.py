@@ -631,3 +631,60 @@ def test_gfx1201_scheduled_matmul_package_executes_the_selected_panel(shape, pan
     assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
     expected = a.astype(np.float32) @ b.astype(np.float32)
     np.testing.assert_allclose(output, expected, rtol=0, atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("storage,out_dtype", [
+    ("fp8_e4m3", "fp32"), ("fp8_e5m2", "fp32"), ("int8", "int32"), ("int4", "int32"),
+])
+def test_gfx1201_low_precision_takes_the_selected_panel_and_executes(storage, out_dtype):
+    """The 4x4 panel is for every storage gfx1201 admits, not just f16.
+
+    fp8 and the integer pair carried a hardcoded 1x1 while holding 2x and 4x
+    f16's RDNA4 ceiling, which measured 3.3x-4.5x slower than this panel
+    (2026-09-19). This is the device row the selection owes: the panel the rule
+    picks is the panel the package carries, and the kernel at that panel
+    computes the right answer. The integer references are *exact* -- an i32
+    product has no rounding, so any error at all is a wrong kernel and not a
+    tolerance question.
+    """
+    import ml_dtypes
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    m = k = n = 1024
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=(m, k, n), dtype=storage, output_dtype=out_dtype),
+        target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert (artifact.macro_tile_m, artifact.macro_tile_n) == (64, 64)
+    assert (artifact.macro_tile_m, artifact.macro_tile_n) == scheduled_matmul.rocm_gfx1201_panel(
+        m, n, dynamic=False)
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.provenance["physical_route"].startswith("gfx1201_register_wmma_4x4")
+    integral = storage.startswith("int")
+    rng = np.random.default_rng(1201 + len(storage))
+    if integral:
+        a = rng.integers(-8, 8, size=(m, k), dtype=np.int8)
+        b = rng.integers(-8, 8, size=(k, n), dtype=np.int8)
+        output = np.zeros((m, n), np.int32)
+        expected = a.astype(np.int32) @ b.astype(np.int32)
+    else:
+        np_dt = ml_dtypes.float8_e4m3fn if storage == "fp8_e4m3" else ml_dtypes.float8_e5m2
+        a = (rng.normal(size=(m, k)) * 0.25).astype(np_dt)
+        b = (rng.normal(size=(k, n)) * 0.25).astype(np_dt)
+        output = np.zeros((m, n), np.float32)
+        expected = a.astype(np.float32) @ b.astype(np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+                                 native_image=package.image, launch_descriptor=package.descriptor,
+                                 tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output},
+                                 "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    if integral:
+        np.testing.assert_array_equal(output, expected)
+    else:
+        np.testing.assert_allclose(output, expected, rtol=0,
+                                   atol=2e-3 * float(np.abs(expected).max()))

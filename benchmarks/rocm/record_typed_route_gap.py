@@ -169,11 +169,13 @@ def _typed_variants(chip, shape):
                 yield name, None, dict(refused=str(exc)[:300])
                 continue
             block = (macro_m * wm, macro_n * wn)
-            lds = re.search(r"tessera\.rocm\.lds_bytes = (\d+)", backend_ir)
+            # Derived, not scraped: the generator's attribute lives on the
+            # gpu.func, which the binary stage has already serialized away, so
+            # reading it back gave 0. One 16-wide K slab of each operand.
+            lds_bytes = 0 if staging == "register" else (block[0] + block[1]) * 16 * 2
             yield name, (payload, artifact.function_name, block, 32 * wm * wn), dict(
                 backend_ir_sha256=hashlib.sha256(backend_ir.encode()).hexdigest(),
-                block_tile=list(block), threads=32 * wm * wn,
-                lds_bytes=int(lds.group(1)) if lds else 0,
+                block_tile=list(block), threads=32 * wm * wn, lds_bytes=lds_bytes,
                 production_panel=[artifact.macro_tile_m, artifact.macro_tile_n])
 
 

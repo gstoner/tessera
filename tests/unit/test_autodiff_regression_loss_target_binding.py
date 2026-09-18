@@ -69,7 +69,7 @@ def test_rocm_public_smooth_l1_backward_runs_gfx1151():
     "compiled,target,evidence",
     [
         (_x86_sgd, "x86", "x86_avx512"),
-        (_rocm_sgd, "rocm", "rocm_gfx1151"),
+        (_rocm_sgd, "rocm", "rocm_<pin>"),
     ],
 )
 def test_public_sgd_backward_composes_native_optimizer(
@@ -89,4 +89,6 @@ def test_public_sgd_backward_composes_native_optimizer(
     np.testing.assert_allclose(dp, seed, atol=1e-7, rtol=1e-7)
     np.testing.assert_allclose(dg, -0.125 * seed, atol=1e-7, rtol=1e-7)
     assert compiled.last_backward_execution["implementation"] == "family_plugin"
+    if evidence == "rocm_<pin>":
+        evidence = f"rocm_{rt._rocm_chip()}"  # the lane names the chip it launches on
     assert compiled.last_backward_execution["evidence_target"] == evidence

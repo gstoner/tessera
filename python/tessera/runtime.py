@@ -33578,7 +33578,9 @@ def _physical_execution_attestation(
         expected_arch = "x86_avx512"
     elif target == "rocm" and execution_kind == "native_gpu":
         device_arch = _rocm_device_name()
-        expected_arch = expected_device_arch or "gfx1151"
+        # The chip the launch was compiled for is the runtime pin; defaulting
+        # to gfx1151 left every gfx1201 launch unattested (slice 2b).
+        expected_arch = expected_device_arch or _rocm_chip()
         if expected_arch not in {"gfx1151", "gfx1201"}:
             return None
     elif target == "nvidia_sm120" and execution_kind == "native_gpu":

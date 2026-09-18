@@ -205,13 +205,14 @@ def lower_scheduled_fft(
         "x86": ("x86", "zen5-avx512"),
         "rocm": ("rocm", "gfx1151"),
         "rocm_gfx1151": ("rocm", "gfx1151"),
+        "rocm_gfx1201": ("rocm", "gfx1201"),
         "nvidia_sm120": ("nvidia_sm120", "sm120"),
     }
     try:
         compiler_target, architecture = target_profiles[target]
     except KeyError as error:
         raise ValueError(
-            "scheduled FFT supports x86, rocm_gfx1151, and nvidia_sm120"
+            "scheduled FFT supports x86, rocm_gfx1151, rocm_gfx1201, and nvidia_sm120"
         ) from error
     mode = {"tessera.rfft": "r2c", "tessera.irfft": "c2r"}.get(op_name, "c2c")
     inverse = op_name in {"tessera.ifft", "tessera.irfft"}
@@ -335,7 +336,7 @@ def lower_scheduled_fft(
         if compiler_target == "x86"
         else "sm120_cufft_workspace_v2"
         if compiler_target == "nvidia_sm120"
-        else "gfx1151_stockham_bluestein_v6"
+        else f"{architecture}_stockham_bluestein_v6"
     )
     input_element = "f32" if op_name == "tessera.rfft" else "complex<f32>"
     output_element = "f32" if op_name == "tessera.irfft" else "complex<f32>"
@@ -427,6 +428,7 @@ def validate_scheduled_fft_metadata(
         "x86": ("x86", "zen5-avx512"),
         "rocm": ("rocm", "gfx1151"),
         "rocm_gfx1151": ("rocm", "gfx1151"),
+        "rocm_gfx1201": ("rocm", "gfx1201"),
         "nvidia_sm120": ("nvidia_sm120", "sm120"),
     }
     try:

@@ -833,7 +833,7 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
              schedule.arch.contains("zen5");
-  bool rocm = schedule.arch.contains("gfx1151");
+  bool rocm = schedule.arch.contains("gfx1151") || schedule.arch.contains("gfx1201");
   bool nvidia = schedule.target == "nvidia_sm120" || schedule.arch == "sm120";
   if (!x86 && !rocm && !nvidia) return failure();
   schedule.radixPolicy = (rocm || nvidia) ? "mixed_radix" : "radix2";
@@ -846,7 +846,9 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
       rocm ? "device_sincos_per_butterfly" : "thread_local_cached_f32";
   schedule.kernelFamily =
       nvidia ? "sm120_cufft_workspace_v2" :
-      rocm ? "gfx1151_stockham_bluestein_v6" : "zen5_avx512_fft_v4";
+      rocm ? (schedule.arch.contains("gfx1201") ? "gfx1201_stockham_bluestein_v6"
+                                                : "gfx1151_stockham_bluestein_v6")
+           : "zen5_avx512_fft_v4";
   schedule.workgroupSize = (rocm || nvidia) ? 256 : 1;
   schedule.inputShape.assign(input.getShape().begin(), input.getShape().end());
   schedule.outputShape.assign(output.getShape().begin(), output.getShape().end());
@@ -1251,7 +1253,8 @@ getTridiagonalSchedule(Operation *op) {
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   bool x86 = schedule.target == "x86" &&
              (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
-  bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
+  bool rocm = schedule.target == "rocm" &&
+              (schedule.arch.contains("gfx1151") || schedule.arch.contains("gfx1201"));
   if (!x86 && !rocm)
     return failure();
   schedule.systemSize = diagonal.getDimSize(0);
@@ -1323,7 +1326,8 @@ getCoalitionButterflySchedule(Operation *op) {
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   bool x86 = schedule.target == "x86" &&
              (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
-  bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
+  bool rocm = schedule.target == "rocm" &&
+              (schedule.arch.contains("gfx1151") || schedule.arch.contains("gfx1201"));
   if (!x86 && !rocm)
     return failure();
   // The physical gfx1151 consumer retains the complete fp64 lattice in LDS.
@@ -1381,7 +1385,8 @@ getDepthAttentionSchedule(Operation *op) {
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   bool x86 = schedule.target == "x86" &&
              (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
-  bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
+  bool rocm = schedule.target == "rocm" &&
+              (schedule.arch.contains("gfx1151") || schedule.arch.contains("gfx1201"));
   if (!x86 && !rocm)
     return failure();
   schedule.storage = storageName(sources.getElementType());
@@ -1935,7 +1940,7 @@ struct GraphToSchedulePass
       if (failed(selected)) {
         op->emitError(
             "REF-TIER-PHYS-1 requires a static fp32 tridiagonal system on "
-            "Zen 5 AVX-512, or a power-of-two N<=256 system on gfx1151");
+            "Zen 5 AVX-512, or a power-of-two N<=256 system on gfx1151/gfx1201");
         return signalPassFailure();
       }
       std::string digest = tridiagonalScheduleDigest(*selected);
@@ -2000,7 +2005,7 @@ struct GraphToSchedulePass
         op->emitError(
             "REF-TIER-PHYS-1 requires a static power-of-two fp32 coalition "
             "axis on Zen 5 AVX-512, or an axis no larger than the 64 KiB "
-            "gfx1151 fp64 LDS envelope");
+            "gfx1151/gfx1201 fp64 LDS envelope");
         return signalPassFailure();
       }
       std::string digest = coalitionButterflyDigest(*selected);
@@ -2339,10 +2344,11 @@ struct GraphToSchedulePass
       const bool x86 = configuredTarget == "x86" ||
                        configuredArch.contains("avx512") ||
                        configuredArch.contains("zen5");
-      const bool rocm = configuredArch.contains("gfx1151");
+      const bool rocm = configuredArch.contains("gfx1151") ||
+                        configuredArch.contains("gfx1201");
       if (!x86 && !rocm) {
         op->emitError(
-            "AD-TSOL-SPECTRAL-1 compound adjoints require an exact Zen 5 or gfx1151 profile");
+            "AD-TSOL-SPECTRAL-1 compound adjoints require an exact Zen 5, gfx1151 or gfx1201 profile");
         return signalPassFailure();
       }
       for (Type type : op->getOperandTypes()) {
@@ -2353,7 +2359,10 @@ struct GraphToSchedulePass
         }
       }
       op->setAttr("target", builder.getStringAttr(x86 ? "x86" : "rocm"));
-      op->setAttr("arch", builder.getStringAttr(x86 ? "zen5-avx512" : "gfx1151"));
+      op->setAttr("arch", builder.getStringAttr(
+                              x86 ? "zen5-avx512"
+                                  : configuredArch.contains("gfx1201") ? "gfx1201"
+                                                                        : "gfx1151"));
       op->setAttr("mutation_lineage",
                   builder.getStringAttr("inputs_immutable_outputs_fresh_v1"));
       if (!op->hasAttr("normalization"))
@@ -2479,8 +2488,9 @@ struct GraphToSchedulePass
     for (Operation *op : esCorrections) {
       ModuleOp module = op->getParentOfType<ModuleOp>();
       StringRef configuredArch = moduleString(module, "tessera.arch", "arch");
-      if (configuredArch != "gfx1151" && configuredArch != "zen5-avx512") {
-        op->emitError("EGGROLL W2 is fail-closed outside exact gfx1151 and Zen 5 AVX-512 profiles");
+      if (configuredArch != "gfx1151" && configuredArch != "gfx1201" &&
+          configuredArch != "zen5-avx512") {
+        op->emitError("EGGROLL W2 is fail-closed outside exact gfx1151, gfx1201 and Zen 5 AVX-512 profiles");
         return signalPassFailure();
       }
       FailureOr<std::pair<std::string, std::string>> contract =
@@ -2528,7 +2538,7 @@ struct GraphToSchedulePass
       state.addAttribute("storage", builder.getStringAttr("f32"));
       state.addAttribute("accum", builder.getStringAttr("f32"));
       state.addAttribute("workgroup_size", builder.getI64IntegerAttr(
-          configuredArch == "gfx1151" ? 256 : 1));
+          configuredArch.starts_with("gfx") ? 256 : 1));
       Operation *scheduled = builder.create(state);
       for (OpOperand &use :
            llvm::make_early_inc_range(op->getResult(0).getUses()))
@@ -2549,7 +2559,7 @@ struct GraphToSchedulePass
                       builder.getNamedAttr(
                           "workgroup_size",
                           builder.getI64IntegerAttr(
-                              configuredArch == "gfx1151" ? 256 : 1)),
+                              configuredArch.starts_with("gfx") ? 256 : 1)),
                       builder.getNamedAttr("rng_version",
                                            builder.getI64IntegerAttr(1)),
                   }));
@@ -2569,7 +2579,7 @@ struct GraphToSchedulePass
       if (failed(selected)) {
         op->emitError(
             "BLOCK-ATTNRES-1 Graph->Schedule requires a static all-f32 "
-            "depth-attention contract on gfx1151 or Zen 5 AVX-512");
+            "depth-attention contract on gfx1151/gfx1201 or Zen 5 AVX-512");
         return signalPassFailure();
       }
       std::string digest = depthAttentionScheduleDigest(*selected);

@@ -412,7 +412,7 @@ def build_native_spectral_vjp_package(
     }[str(storage_dtype)]
     numeric_accum = "fp32"
     arch = ("zen5-avx512" if target == "x86" else
-            "sm120" if target == "nvidia_sm120" else "gfx1151")
+            "sm120" if target == "nvidia_sm120" else _rocm_vjp_chip())
     kind = f"tessera.{bare}"
     source_digest = hashlib.sha256(source_graph_ir.encode()).hexdigest()
     schedule_hash = _spectral_schedule_hash(
@@ -574,11 +574,21 @@ def _graph_carrier(package: NativeSpectralVJPPackage) -> str:
 '''
 
 
+_ROCM_SPECTRAL_VJP_ARCHS = ("gfx1151", "gfx1201")
+
+
+def _rocm_vjp_chip() -> str:
+    """The chip the ROCm spectral VJP is compiled for: the runtime's pin."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 def compile_rocm_native_spectral_vjp(
     package: NativeSpectralVJPPackage,
 ) -> NativeSpectralVJPPackage:
-    if package.target != "rocm" or package.arch != "gfx1151":
-        raise ValueError("ROCm spectral VJP compilation requires exact gfx1151")
+    if package.target != "rocm" or package.arch not in _ROCM_SPECTRAL_VJP_ARCHS:
+        raise ValueError("ROCm spectral VJP compilation requires exact gfx1151 or gfx1201")
     from .rocm_native import _extract_hsaco
     from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
@@ -589,14 +599,14 @@ def compile_rocm_native_spectral_vjp(
     for option in (
         "--tessera-graph-to-schedule",
         "--tessera-schedule-to-tile",
-        "--lower-tile-to-rocm=arch=gfx1151",
+        f"--lower-tile-to-rocm=arch={package.arch}",
         "--generate-rocm-spectral-backward-kernel",
     ):
         ir = run_tessera_opt(tool, ir, option)
     pipeline = (
         "builtin.module(convert-scf-to-cf,"
         "gpu.module(convert-gpu-to-rocdl,reconcile-unrealized-casts),"
-        "rocdl-attach-target{chip=gfx1151},gpu-module-to-binary)"
+        f"rocdl-attach-target{{chip={package.arch}}},gpu-module-to-binary)"
     )
     result = subprocess.run(
         [str(tool), "-", f"--pass-pipeline={pipeline}"],
@@ -771,8 +781,10 @@ def execute_rocm_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequence
         from tessera.compiler.emit import spectral_candidates
 
         lib = spectral_candidates._amd_composite_lib()
-        if lib is None or lib.ts_spectral_composite_arch_amd() != b"gfx1151":
-            raise RuntimeError("exact gfx1151 spectral reverse package is unavailable")
+        expected_arch = str(contract.get("arch") or _rocm_vjp_chip())
+        if lib is None or lib.ts_spectral_composite_arch_amd() != expected_arch.encode():
+            raise RuntimeError(
+                f"exact {expected_arch} spectral reverse package is unavailable")
 
         def descriptor(value: Any) -> tuple[Any, Any]:
             if any(stride % value.itemsize for stride in value.strides):
@@ -852,12 +864,12 @@ def execute_rocm_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequence
         # Name the arch this refusal is about: the image is a gfx1151 package,
         # so on another ROCm host this is an arch-gated contract, not a build
         # failure, and a test must be able to tell the two apart.
-        import os
-        arch = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
-        if arch != "gfx1151":
+        arch = _rocm_vjp_chip()
+        image_arch = str(contract.get("arch") or "gfx1151")
+        if arch != image_arch:
             raise RuntimeError(
-                "ROCm spectral VJP image is a gfx1151 package, hardware-verified on "
-                f"gfx1151; target '{arch}' has no image and is arch-gated on its own evidence")
+                f"ROCm spectral VJP image is a {image_arch} package, hardware-verified on "
+                f"{image_arch}; target '{arch}' has no image and is arch-gated on its own evidence")
         raise RuntimeError("ROCm spectral VJP image is not loadable")
     function = ctypes.c_void_p()
     if hip.hipModuleGetFunction(ctypes.byref(function), module, symbol.encode()) != 0:

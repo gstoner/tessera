@@ -112,7 +112,7 @@ def test_rocm_package_consumes_exact_depth_attention_artifact(monkeypatch) -> No
     monkeypatch.setattr(
         rocm_native,
         "_compile_scheduled_depth_attention_tile_ir",
-        lambda tile: (
+        lambda tile, **_kw: (
             ("target", "backend", b"hsaco", "compiler", "toolchain", (), "cold")
             if tile == artifact.tile_ir
             else pytest.fail("depth-attention Tile artifact was resynthesized")
@@ -137,7 +137,7 @@ def test_driver_records_depth_attention_schedule_tile_target_lineage(monkeypatch
     monkeypatch.setattr(
         rocm_native,
         "_compile_scheduled_depth_attention_tile_ir",
-        lambda tile: (
+        lambda tile, **_kw: (
             "target",
             "backend",
             b"hsaco",

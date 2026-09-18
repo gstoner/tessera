@@ -2080,6 +2080,7 @@ LogicalResult DepthAttentionKernelOp::verify() {
       requiredString("accum") != "f32")
     return emitOpError("initial physical boundary requires all-f32 numeric policy");
   if (requiredString("arch") != "gfx1151" &&
+      requiredString("arch") != "gfx1201" &&
       requiredString("arch") != "zen5-avx512")
     return emitOpError("requires an exact owned architecture profile");
   auto eps = getOperation()->getAttrOfType<FloatAttr>("eps");
@@ -2376,7 +2377,8 @@ LogicalResult ESLowRankCorrectionKernelOp::verify() {
   auto sigma = getOperation()->getAttrOfType<FloatAttr>("sigma");
   auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
   StringRef architecture = requiredString("arch");
-  if ((architecture != "gfx1151" && architecture != "zen5-avx512") ||
+  if ((architecture != "gfx1151" && architecture != "gfx1201" &&
+       architecture != "zen5-avx512") ||
       requiredString("score") != "gaussian" ||
       requiredString("rng_algorithm") !=
           "splitmix64-philox4x32-boxmuller" ||
@@ -2386,7 +2388,7 @@ LogicalResult ESLowRankCorrectionKernelOp::verify() {
       !sigma.getValue().isFinite() || sigma.getValueAsDouble() <= 0.0 ||
       !hash || hash.getValue().size() != 64)
     return emitOpError(
-        "requires the content-addressed gfx1151 or Zen 5 AVX-512 ES rank-1 contract");
+        "requires the content-addressed gfx1151, gfx1201 or Zen 5 AVX-512 ES rank-1 contract");
   return success();
 }
 

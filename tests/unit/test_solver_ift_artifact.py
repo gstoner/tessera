@@ -817,4 +817,8 @@ def test_solver_ift_rocm_runtime_fails_closed_off_gfx1151(monkeypatch) -> None:
     value = np.ones(shape, dtype=np.float32)
     result = rt.launch(rt.RuntimeArtifact(metadata=metadata), (value, value, value))
     assert result["ok"] is False
-    assert "verified for gfx1151" in result["reason"]
+    # The one per-arch rule is the family gate (rocm_pipeline.promoted_families):
+    # an unpromoted chip is refused by name there, not by a second chip check
+    # in the executor (which pinned the family to gfx1151 after gfx1201 had
+    # its own evidence).
+    assert "no promoted family plugins for gfx1200" in result["reason"]

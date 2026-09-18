@@ -132,28 +132,35 @@ def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool) -> int:
     A physical (performance) knob, not a Schedule-IR decision: the body is
     memory-latency bound, so issuing the next slab's fragment loads while the
     current slab's MMAs retire is the lever that the macro tile and LDS
-    staging are not. Measured 2026-09-18 with the 4x4 panel, TFLOP/s at
-    k = 1 / 2 / 4 (`benchmarks/baselines/typed_route_gap_20260918/`):
+    staging are not. Measured 2026-09-18 on the panel each chip actually
+    selects, TFLOP/s at k = 1 / 2 / 4
+    (`benchmarks/baselines/typed_route_gap_20260918/`):
 
-        gfx1201  1024^3   42.1 / 56.0 / 61.5
-                 2048^3   43.3 / 86.4 / 74.1
-                 4096^3   65.5 / 92.5 / 77.4
-        gfx1151  1024^3   11.7 / 16.9 / 11.8   (directive lane: 12.2)
-                 2048^3   17.8 / 19.2 / 17.2   (directive lane: 22.1)
+        gfx1201  1024^3   46.4 / 58.7 / 57.5   (4x4 panel)
+                 2048^3   51.6 / 88.2 / 73.7
+                 4096^3   65.2 / 90.3 / 77.8
+        gfx1151  1024^3   10.8 / 15.8 / 11.0   (4x4; directive lane 11.6)
+                 2048^3   21.2 / 20.3 /  9.8   (2x4; directive lane 23.3)
 
-    gfx1201 takes 4 below 2048 and 2 from 2048 up: 1.6x to 1.9x over the 2x4
-    k=1 body it replaces. gfx1151 takes 2 only where it also takes the 4x4
-    panel -- the [1024, 2048) band, where the pair beats its own single-slab
-    loop by 1.4x and the directive lane by 1.4x; at 2048 and above the
-    directive lane still leads and the unroll does not close it, so the knob
-    stays off there. Neither chip's number is evidence for the other.
+    Both chips take 2, and only where they also take the larger panel. That
+    is 1.4x-1.7x over the single-slab body it replaces, and on gfx1151 it is
+    what puts the typed route ahead of the directive lane in the [1024, 2048)
+    band (15.8 vs 11.6); at 2048 and above the directive lane still leads
+    there and the unroll does not close it, so the knob stays off.
+
+    **An earlier sweep took 4 below 2048 on gfx1201 and that is withdrawn.**
+    It rested on one row -- 1024^3 reading 61.5 for k=4 against 56.0 for k=2 --
+    which the re-record reversed to 58.7 against 57.5. Two runs disagreeing on
+    the sign of a 2% margin means the margin is noise, and k=2 wins 2048^3 and
+    4096^3 decisively in both runs, so the rule follows the reproducible
+    result and loses a branch. Neither chip's number is evidence for the other.
     """
     if dynamic or k < 64:
         return 1
     if arch.startswith("gfx1201"):
         if min(m, n) < 1024 or m % 64 or n % 64:
             return 1
-        return 2 if min(m, n) >= 2048 else 4
+        return 2
     if arch.startswith("gfx1151"):
         return 2 if _band_4x4(m, n, dynamic=dynamic) else 1
     return 1
@@ -161,8 +168,8 @@ def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool) -> int:
 
 def rocm_gfx1151_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
     """The gfx1151 f16/bf16 macro tile: the committed 2x4 panel, except the
-    typed 4x4 in the fully tiled [1024, 2048) band (11.2 vs 10.5 TFLOP/s at
-    1024^3, losing again at 2048^3: 17.6 vs 21.3)."""
+    typed 4x4 in the fully tiled [1024, 2048) band (10.8 vs 9.9 TFLOP/s at
+    1024^3, losing again at 2048^3: 18.7 vs 21.2)."""
     return (64, 64) if _band_4x4(m, n, dynamic=dynamic) else (32, 64)
 
 

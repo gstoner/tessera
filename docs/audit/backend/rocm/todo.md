@@ -8373,10 +8373,15 @@ blocked on counters.
   correct on device on both chips at 256³, 1024³ and 511x513x509 with 2x2 and
   4x2 waves (128 and 256 threads) — which is also the standing proof that
   `computeLaneCoordsFromThread`'s intra-wave lane holds up in a multi-wave
-  workgroup. **It is also slower than the register body everywhere it was
-  measured**: 0.39x to 0.65x on gfx1201, and on gfx1151 it won only narrowly
-  at 1024³ (12.58 vs 10.93 TFLOP/s) before the K unroll beat both (16.88).
-  The barriers cost more than the strided B gather does. It ships as a
+  workgroup. **It never wins a selection**, and the precise shape of that
+  matters. On gfx1201 it is 0.23x-0.83x of the register body at the same
+  panel, at every panel and wave count measured. On gfx1151 it *does* beat
+  the register body at the same panel -- up to 1.26x, and mostly at the 1x1
+  panel where the register body is weakest -- but it never beats the best
+  register configuration at any shape: at 1024³ its best is 12.57 against the
+  selected 4x4 k=2 body's 15.75. So staging B transposed really does remove
+  the strided gather, and the barriers still cost more than the stride does
+  wherever the register body is already competent. It ships as a
   packaging *option* carried in the descriptor (`staging`, `workgroup`,
   `macro_tile`, route suffix), not a selection; `rocm_k_unroll` is derived
   only for register staging, because the two knobs conflict.
@@ -8384,22 +8389,32 @@ blocked on counters.
 * **Per-shape panel selection on the typed route, both chips.** gfx1201 takes
   the 4x4 panel for every static fully tiled problem at 1024 and above and the
   1x1 otherwise; gfx1151 keeps its committed 2x4 except in the [1024, 2048)
-  band. The panel axis is *exhausted*, which is the useful part: on gfx1201
-  64x64 peaks at 64.1 TFLOP/s, 64x128 falls to 15.6 and 128x128 to 7.4 — a
-  VGPR cliff, not a trend. The C++ rule in `PMPasses.cpp` and the Python row in
+  band. The panel axis is *exhausted*, which is the useful part: in the packet
+  gfx1201's 4096³ single-slab row climbs 14.5 → 57.2 → 65.2 TFLOP/s across
+  1x1, 2x4 and 4x4 and stops there, and an exploratory sweep beyond the
+  packet's panels (64x128, 128x128) fell off a VGPR cliff rather than
+  continuing. The C++ rule in `PMPasses.cpp` and the Python row in
   `scheduled_matmul.py` are the same rule and a test asserts both.
 
 * **The K unroll is the lever the macro tile was not.** The typed body is
   memory-latency bound, so issuing the next K slab's fragment loads while the
-  current slab's MMAs retire is what moves it. Measured per chip, TFLOP/s at
-  k = 1 / 2 / 4: gfx1201 1024³ 42.1 / 56.0 / 61.5, 2048³ 43.3 / 86.4 / 74.1,
-  4096³ 65.5 / 92.5 / 77.4; gfx1151 1024³ 11.7 / 16.9 / 11.8 against the
-  directive lane's 12.2, 2048³ 17.8 / 19.2 / 17.2 against 22.1. gfx1201 takes
-  4 below 2048 and 2 from 2048 up (1.6x-1.9x); gfx1151 takes 2 only in the
-  band where it also takes the 4x4 panel, and above 2048 the directive lane
-  still leads so the knob stays off. **This closes the typed route's gap
-  against the directive lane on gfx1151 in that band** (16.9 vs 12.2) and
-  widens gfx1201's lead. Neither chip's number is evidence for the other.
+  current slab's MMAs retire is what moves it. Measured per chip on the panel
+  it actually selects, TFLOP/s at k = 1 / 2 / 4: gfx1201 1024³
+  46.4 / 58.7 / 57.5, 2048³ 51.6 / 88.2 / 73.7, 4096³ 65.2 / 90.3 / 77.8;
+  gfx1151 1024³ 10.8 / 15.8 / 11.0 against the directive lane's 11.6, 2048³
+  21.2 / 20.3 / 9.8 against 23.3. **Both chips take 2, and only where they
+  also take the larger panel** — 1.4x-1.7x over the single-slab body, and on
+  gfx1151 it is what **puts the typed route ahead of the directive lane in
+  the [1024, 2048) band** (15.8 vs 11.6). Above 2048 on gfx1151 the directive
+  lane still leads and the unroll does not close it, so the knob stays off.
+
+  **An earlier cut of this rule took 4 below 2048 on gfx1201; it is
+  withdrawn.** It rested on a single row — 1024³ reading 61.5 for k=4 against
+  56.0 for k=2 — which the re-record reversed to 58.7 against 57.5. Two runs
+  disagreeing on the sign of a 2% margin means the margin is noise, while k=2
+  wins 2048³ and 4096³ decisively in both runs. The rule follows the
+  reproducible result and loses a branch. Neither chip's number is evidence
+  for the other.
 
 * **`auto_2to4` device rows through the public package** landed with the
   general-shape work; **raster-order selection is still blocked on counters**
@@ -8438,8 +8453,8 @@ TFLOP/s for fp16/bf16, 383 for fp8 e4m3/e5m2, 383 TOP/s for int8, 766 TOP/s
 for int4, each doubling under 2:4 structured sparsity — and **there is no FP4
 form at all**, dense or sparse. Two consequences:
 
-* **The typed f16 GEMM's best row is 92.5 TFLOP/s, which is 48% of its
-  ceiling.** The K unroll was worth 1.6x-1.9x; the remaining 2x is still
+* **The typed f16 GEMM's best row is 90.3 TFLOP/s, which is 47% of its
+  ceiling.** The K unroll was worth 1.4x-1.7x; the remaining 2x is still
   there, and the panel axis is already exhausted, so the next lever is
   neither of the two this loop pulled.
 * **The storages with the highest ceilings are the ones on the smallest macro

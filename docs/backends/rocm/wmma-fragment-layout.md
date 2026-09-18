@@ -87,8 +87,11 @@ form for inference weights), or RDNA4's `GLOBAL_LOAD_TR_B128` load-transpose
 (§11.6.2), which reads a 16×16 block of 16-bit data from the global aperture
 directly into the transposed fragment layout and requires `EXEC` all ones.
 Staging B transposed through LDS also removes the stride, and *was* measured:
-it loses on gfx1201 and wins only narrowly on gfx1151 (see the typed-route gap
-packets), because the barriers cost more than the stride does.
+at the same panel it is 0.23–0.83× the register body on gfx1201 and up to
+1.26× on gfx1151, yet on neither chip does it beat the best register
+configuration at any shape (see the typed-route gap packets). The barriers
+cost more than the stride does wherever the register body is already
+competent.
 
 ## 4. Integer shapes — nibble order for the packed int4 operands
 
@@ -137,9 +140,9 @@ enumerates.
 Two things follow that a relative speedup hides.
 
 **The typed f16 GEMM is about halfway.** Its best measured gfx1201 row is
-92.5 TFLOP/s (4096³, 4×4 panel, K unroll 2 — `benchmarks/baselines/typed_route_gap_20260918/gfx1201.json`),
-which is **48% of the 191 dense fp16 peak**. The K unroll that got it there was
-worth 1.6–1.9×; the remaining 2× is still on the table, and the next lever is
+90.3 TFLOP/s (4096³, 4×4 panel, K unroll 2 — `benchmarks/baselines/typed_route_gap_20260918/gfx1201.json`),
+which is **47% of the 191 dense fp16 peak**. The K unroll that got it there was
+worth 1.4–1.7×; the remaining 2× is still on the table, and the next lever is
 not another macro tile.
 
 **Low precision is a bigger lever than scheduling, and int4 is the biggest.**

@@ -37,28 +37,40 @@ claimed an LDS route, now names the register panel it builds.
 **What the second cut decided (2026-09-18, same day).** Three things, in
 the order they were measured.
 
-*The LDS-staged body loses.* It is correct on device on both chips with
-multi-wave workgroups, and slower than the register body everywhere: 0.39x to
-0.65x on gfx1201, and on gfx1151 a narrow 1024^3 win that the K unroll then
-beat. Staging B transposed through shared memory does remove the strided
-gather, but the barriers cost more than the stride does. It ships as a
-packaging option, selected nowhere.
+*The LDS-staged body never wins a selection, and how it loses differs by
+chip.* It is correct on device on both chips with multi-wave workgroups. On
+gfx1201 it is 0.23x-0.83x of the register body at the same panel, at every
+panel and wave count here. On gfx1151 it *does* beat the register body at the
+same panel -- up to 1.26x, and mostly at the 1x1 panel, where the register
+body is weakest -- but it never beats the best register configuration at a
+shape: its best 1024^3 row is 12.57 against the selected 4x4 k=2 body's 15.75.
+So staging B transposed really does remove the strided gather; the barriers
+just cost more than the stride does wherever the register body is already
+competent. It ships as a packaging option, selected nowhere.
 
-*The panel axis is exhausted.* On gfx1201 64x64 peaks at 64.1 TFLOP/s; 64x128
-falls to 15.6 and 128x128 to 7.4. That is a VGPR cliff, not a trend, so there
-is no larger tile to reach for.
+*The panel axis is exhausted.* gfx1201's 4096^3 single-slab row climbs
+14.5 -> 57.2 -> 65.2 TFLOP/s across 1x1, 2x4 and 4x4 and stops there. An
+exploratory sweep beyond these panels (64x128, 128x128) fell off a VGPR cliff
+rather than continuing, which is why the packet's panel list ends at 64x64.
 
-*The K unroll is the lever.* TFLOP/s at k = 1 / 2 / 4 -- gfx1201 1024^3
-42.1 / 56.0 / 61.5, 2048^3 43.3 / 86.4 / 74.1, 4096^3 65.5 / 92.5 / 77.4;
-gfx1151 1024^3 11.7 / 16.9 / 11.8 (directive lane 12.2), 2048^3
-17.8 / 19.2 / 17.2 (directive lane 22.1). gfx1201 takes 4 below 2048 and 2
-from 2048 up; gfx1151 takes 2 only in the [1024, 2048) band where it also
-takes the 4x4 panel, and above that the directive lane still leads so the
-knob stays off. Each chip's rule comes from its own sweep.
+*The K unroll is the lever.* TFLOP/s at k = 1 / 2 / 4, on the panel each chip
+selects -- gfx1201 1024^3 46.4 / 58.7 / 57.5, 2048^3 51.6 / 88.2 / 73.7,
+4096^3 65.2 / 90.3 / 77.8; gfx1151 1024^3 10.8 / 15.8 / 11.0 (directive lane
+11.6), 2048^3 21.2 / 20.3 / 9.8 (directive lane 23.3). Both chips take 2, and
+only where they also take the larger panel; above 2048 on gfx1151 the
+directive lane still leads so the knob stays off. Each chip's rule comes from
+its own sweep.
+
+**A withdrawn row, kept as a record.** An earlier cut of this packet took k=4
+below 2048 on gfx1201 on the strength of one row: 1024^3 reading 61.5 for k=4
+against 56.0 for k=2. The re-record reversed it to 58.7 against 57.5. Two runs
+disagreeing on the sign of a 2% margin means the margin is noise, so the rule
+now takes k=2 wherever gfx1201 takes the 4x4 panel -- the result that
+reproduces, and one branch fewer.
 
 **The denominator these numbers are missing until you look it up.** AMD's
 published dense RDNA4 WMMA peak on gfx1201 is 191 TFLOP/s for f16/bf16, so
-the best row here (92.5) is 48% of it. The table for every storage, and what
+the best row here (90.3) is 47% of it. The table for every storage, and what
 follows from fp8 and int4 having higher ceilings than f16, is in
 `docs/backends/rocm/wmma-fragment-layout.md`.
 

@@ -8487,6 +8487,110 @@ which is now the highest-ceiling item on this chip; and closing the remaining
 2x to the f16 ceiling, for which neither the macro tile nor the K unroll is
 the remaining lever.
 
+## The low-precision panel, and an occupancy reading that is not yet evidence — 2026-09-19
+
+Sync `GFX1201-PARITY-2026-09-17` (branch `claude/lowp-panel-selection`); owner
+COMPILER-DEVEX-1 with W4-PRODUCT-1. Opened directly on the item the 2026-09-18
+entry named as the next loop's top ROCm work.
+
+**The gap recorder measures a storage now, which was the stated gate.**
+`--dtype` selects fp16, bf16, fp8_e4m3, fp8_e5m2, int8 or int4, and each
+carries its own reference and error budget rather than inheriting f16's: an
+integer product is exact in i32, so an integer row with any relative error at
+all is a wrong kernel and not a tolerance question, and applying f16's 2e-2 to
+one would hide precisely the packing defects the int4 nibble order can
+produce. The directive lane and the shipped HIP library are f16 kernels with
+no counterpart at another storage, so they appear only in the fp16 packet
+instead of being timed against a different program. One defect fell out of
+wiring it: the integer lanes refused before reaching a kernel because the
+recorder let the result dtype default to fp32, and the integer contract
+requires i32.
+
+**The 1x1 panel was costing 3.3x-4.5x on every low-precision storage.**
+Measured on Tajasarus, 1x1 -> 4x4, every correctness check passing and the
+integer rows exact at every panel:
+
+| storage | 1024³ | 2048³ |
+|---|---|---|
+| fp8_e4m3 | 15.80 → 58.33 | 20.23 → 78.01 |
+| int8 | 15.96 → 58.36 | 19.70 → 76.55 |
+| int4 | 14.95 → 49.85 | 16.96 → 76.44 |
+
+Because the generator already emitted that panel correctly for these storages,
+this was a **selection omission, not a codegen limit** — the panel rule was
+derived on f16 and applied in the f16/bf16 branch alone, leaving fp8 (2x f16's
+RDNA4 ceiling) and int4 (4x) on the smallest tile the chip has. The predicate
+is now hoisted once in `getInferredMatmulSchedule` and shared by all three
+branches so they cannot drift apart again, `scheduled_matmul.rocm_gfx1201_panel`
+mirrors it, and the artifact projection checks the two against each other — it
+caught the change mid-flight, before either box ran, which is the guard doing
+its job. Device rows: one per storage at 1024³ on the owning device, the
+integer ones asserted *exactly* rather than with a tolerance
+(`test_gfx1201_low_precision_takes_the_selected_panel_and_executes`). The
+pre-existing fp8 rows reach 65 in any extent, so all of them take the 1x1
+branch and none could have caught this.
+
+gfx1151 keeps its committed 2x4 for integers. Its own sweep says the lever
+there is the K unroll rather than the panel (int8 1024³: 9.94 at the 2x4,
+18.36 at 4x4 with k=2; 2048³: 20.79 at 2x4 k=1 against 22.61 at 2x4 k=2),
+and that rule is owed a clean re-run before it ships — see below.
+
+**`ROCM-OCCUPANCY-1` — open, and deliberately not concluded.** The 2026-09-18
+packet recorded the panel axis as "exhausted" because 4x8 and 8x8 fell off a
+VGPR cliff. Compile-only measurement on gfx1201 (2026-09-19) shows what that
+cliff is made of: **every panel compiles to `vgpr_count` 256**, and the
+shipped 4x4 panel **already spills 126**, with 1433 at 4x8 and 4247 at 8x8.
+The generators set no occupancy attribute anywhere, so the backend targets its
+default.
+
+An external RDNA4/FP8 optimization recipe attributes exactly this to occupancy
+policy: constrain to one wave per SIMD and the wave gets the full 512-VGPR
+file instead of a split one. A `waves-per-eu` option now stamps
+`rocdl.waves_per_eu` on the generated kernel, plumbed through
+`ROCMExecutablePipeline` and its cache key, defaulting to 0 (backend default)
+so nothing changes until it is measured.
+
+**It changed nothing** — `vgpr_count` and the spill counts are identical at 0,
+1 and 2. Two hypotheses remain, and this loop did **not** separate them:
+
+1. 256 is RDNA4's architectural wave32 VGPR limit, in which case the 512-VGPR
+   recipe is a CDNA result that does not transfer here — the usual rule, in
+   the usual direction.
+2. The attribute is not reaching the LLVM function. The emitted `backend_ir`
+   is already a serialized `gpu.binary` and the Target IR dump carries no
+   `gpu.func`, so neither artifact could confirm the attribute survives
+   lowering, and our extracted RDNA4 archive holds section titles only — it
+   has no VGPR-allocation text to settle the limit.
+
+Until one is excluded, **do not cite the cliff as a hardware fact**; the panel
+docstring no longer does. The next step is to dump the module between
+`gpu.func` and `llvm.func` and read the attribute directly, then check the
+RDNA4 ISA guide's VGPR allocation section rather than our archive.
+
+**`ROCM-GLOBAL-LOAD-TR-1` — a better answer for the B operand than LDS.**
+`amdgpu.global_transpose_load` exists in our MLIR 23 and wraps RDNA4's
+`global_load_tr` family on **gfx1200+**, with valid pairs (8 bits, 8 elements)
+→ `global_load_tr_b64` and (16 bits, 8 elements) → `global_load_tr_b128`; 4-
+and 6-bit need gfx1250+. So it covers f16/bf16 *and* fp8/int8 on gfx1201, and
+excludes int4. That is the documented remedy for the standing asymmetry in
+`materializeFragmentPack`, where A takes a single `vector.load` and B
+scalarizes into 16 guarded loads — and it is an upstream op, so no intrinsic
+hand-rolling.
+
+It also retires an avenue and explains a result. The **LDS** transpose family
+(`ds_read_tr`) is **gfx950/CDNA4 only**; neither of our chips has it, so an
+LDS-staged body here must always pay a software transpose to remove the
+stride. That is consistent with the 2026-09-18 finding that the LDS body never
+wins a selection, and it means the fix for B is a global-to-register transpose
+rather than staging through shared memory at all.
+
+**Still owed.** The low-precision K unroll on gfx1201 (its sweep was
+contaminated — a build ran concurrently with the timing, so those numbers are
+discarded rather than recorded); the gfx1151 integer K-unroll rule, whose
+clean sweep exists but which has no device row yet; `ROCM-OCCUPANCY-1` above;
+`ROCM-GLOBAL-LOAD-TR-1` above; and raster-order selection, still blocked on
+counters neither WSL2 ROCm box can produce.
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

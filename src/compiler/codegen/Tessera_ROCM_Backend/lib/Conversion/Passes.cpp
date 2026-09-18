@@ -329,8 +329,7 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " canonical-staging=" + staging +
                                   " lds-waves-m=" + Twine(ldsWavesM) +
                                   " lds-waves-n=" + Twine(ldsWavesN) +
-                                  " k-unroll=" + Twine(kUnroll) +
-));
+                                  " k-unroll=" + Twine(kUnroll)));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {

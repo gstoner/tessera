@@ -4387,7 +4387,14 @@ Outcome: **gfx1201 promotes from 31 to 62 of 63 families, OCP FP8 matmul is the 
 
 **Corrections to the plan's premises, recorded rather than worked.** Four sm_120 items were already closed on `main` (the emitted GEMM's device timer, the Clifford lane, the EBM sphere/nonlinear lanes, the rounding-explicit sqrt); the queue entry names each. Three stay owed with their first step named: the NVFP4 emitted kernel's launcher entry and fragment-order packer, the isolated CUDA attention tape, and the EBM sphere front door on CUDA. On ROCm, `paged_kv` is the one family not promoted (its device tests sit behind the gfx11 flash-attention directive lane); slice 2b closed along the way — every ROCm VJP lane stamps the chip it launches on, so the optimizer, spectral, sequence-mixer and SSM-backward certificates attest gfx1201 — and public Graph admission for the 2:4 sparse stack is scoped in the ROCm queue as the five layers it needs (Graph op, Schedule contract, packager, launch ABI, VJP) rather than begun.
 
-FLEET_TABLE
+| Host | Full `-m "not slow"` sweep | Lit |
+|---|---|---|
+| Tajasarus (gfx1201, assertions LLVM) | **18810 passed, 0 failed, 3291 skipped** at `ecb086c5` (17566 / 4519 before slice 2; 18538 / 3539 after it) | `check-tessera-rocm` 72/72 in `build` and `build-assertions`; `tests/tessera-ir` 493/493 both trees |
+| Princess-Luna (gfx1151) | **19504 passed, 0 failed, 2597 skipped** at `e461e368`; the eleven files touched after it 109 passed at `ecb086c5` | `check-tessera-rocm` 72/72; `tests/tessera-ir` 493/493 |
+| Super-Bear (sm_120) | **16096 passed, 0 failed, 6005 skipped** at `e461e368`; the host-free files touched after it 86 passed at `ecb086c5` | NVIDIA lit clean in `build-nvidia-cuda`; `tests/tessera-ir` clean; both trees built |
+| Mac (M1 Max) | **18410 passed, 0 failed, 3691 skipped** at `e461e368`; the touched files 67 passed at `ecb086c5` | `tests/tessera-ir` 493/493; doc, plan, generated-doc and registry gates clean |
+
+The commits after `e461e368` are Python and test changes only (the attestation's expected chip, the gfx1201 capability rows, three tests deriving the chip), so the three earlier sweeps stand for the compiled trees; Tajasarus, the host they change, was swept again in full.
 
 Remaining: `paged_kv` on gfx1201; the typed route's performance gap against the directive lane (raster order, macro tile, LDS staging, int storage); public sparse admission; the three owed sm_120 items above. `tests/unit/test_solver_ift_evidence.py::test_new_dense_krylov_run_does_not_inherit_old_performance` fails on a clean `main` worktree on the Mac independent of this branch (the benchmark stub returns text where the recorder decodes bytes) and is not touched here.
 

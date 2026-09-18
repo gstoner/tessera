@@ -8241,7 +8241,10 @@ failure was named. gfx1201 goes from 31 to **62 of 63** promoted families.
   chip instead; the spectral, sequence-mixer and SSM-backward certificate
   tests run on Tajasarus as `exact_device`.
 
-FLEET_ROCM_ROWS
+Fleet at the head: Tajasarus **18810 passed, 0 failed** (full sweep at
+`ecb086c5`; ROCm lit 72/72 in both trees; core lit 493/493 both trees);
+Princess-Luna **19504 passed, 0 failed** (ROCm lit 72/72; core lit 493/493);
+the sm_120 and Mac rows are in the log entry.
 
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 

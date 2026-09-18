@@ -7707,7 +7707,10 @@ open, and is now closed:
 * *Toolchain.* Driver 610.88 is unchanged (CUDA 13.3 API, PTX ≤ 9.3); the pin
   test says when a driver update lifts the cap. Nothing to do until then.
 
-FLEET_NVIDIA_ROWS
+Fleet at the head: Super-Bear **16096 passed, 0 failed** (full sweep at
+`e461e368`, both trees built, NVIDIA lit and core lit clean; the host-free
+files touched afterwards 86 passed at `ecb086c5`); the ROCm and Mac rows are
+in the log entry.
 
 ## The sm_120 Lion stop-sign lane returns rc=3 on main — 2026-09-17
 

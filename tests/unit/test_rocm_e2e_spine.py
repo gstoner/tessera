@@ -17,18 +17,18 @@ from tessera.compiler.native_artifact import (
     DeviceLibraryRecord,
 )
 from tessera.compiler.rocm_native import (
-    GFX1151_ATTN_BWD_DKDV_ABI,
-    GFX1151_ATTN_BWD_DQ_ABI,
-    GFX1151_ATTN_BWD_PRE_ABI,
-    GFX1151_ATTN_BWD_REDUCE_ABI,
-    GFX1151_ATTN_BF16_ABI,
-    GFX1151_ATTN_F16_ABI,
-    GFX1151_MOE_DISPATCH_F32_ABI,
-    GFX1151_PAGED_KV_F32_ABI,
-    GFX1151_REDUCE_BF16_ABI,
-    GFX1151_REDUCE_F16_ABI,
-    GFX1151_REDUCE_F32_ABI,
-    GFX1151_SOFTMAX_F32_ABI,
+    GFX_ATTN_BWD_DKDV_ABI,
+    GFX_ATTN_BWD_DQ_ABI,
+    GFX_ATTN_BWD_PRE_ABI,
+    GFX_ATTN_BWD_REDUCE_ABI,
+    GFX_ATTN_BF16_ABI,
+    GFX_ATTN_F16_ABI,
+    GFX_MOE_DISPATCH_F32_ABI,
+    GFX_PAGED_KV_F32_ABI,
+    GFX_REDUCE_BF16_ABI,
+    GFX_REDUCE_F16_ABI,
+    GFX_REDUCE_F32_ABI,
+    GFX_SOFTMAX_F32_ABI,
     _driver_selected_device_libraries,
     emit_attention_backward_graph_ir,
     emit_attention_graph_ir,
@@ -436,8 +436,8 @@ def _fake_attention_backward_compile(graph_ir: str, *, tile_q: int, tile_kv: int
 @pytest.mark.parametrize(
     ("dtype", "storage", "abi_id"),
     [
-        ("fp16", "f16", GFX1151_ATTN_F16_ABI),
-        ("bf16", "bf16", GFX1151_ATTN_BF16_ABI),
+        ("fp16", "f16", GFX_ATTN_F16_ABI),
+        ("bf16", "bf16", GFX_ATTN_BF16_ABI),
     ],
 )
 def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(
@@ -551,8 +551,8 @@ def test_rocm_attention_package_owns_dropout_replay_and_combined_features(
 @pytest.mark.parametrize(
     ("dtype", "storage", "forward_abi"),
     [
-        ("fp16", "f16", GFX1151_ATTN_F16_ABI),
-        ("bf16", "bf16", GFX1151_ATTN_BF16_ABI),
+        ("fp16", "f16", GFX_ATTN_F16_ABI),
+        ("bf16", "bf16", GFX_ATTN_BF16_ABI),
     ],
 )
 def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
@@ -584,10 +584,10 @@ def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
     program = package_attention_backward(module, pipeline_name="tessera-lower-to-rocm")
     assert [item.abi_id for item in program.descriptors] == [
         forward_abi,
-        GFX1151_ATTN_BWD_PRE_ABI,
-        GFX1151_ATTN_BWD_DKDV_ABI,
-        GFX1151_ATTN_BWD_REDUCE_ABI,
-        GFX1151_ATTN_BWD_DQ_ABI,
+        GFX_ATTN_BWD_PRE_ABI,
+        GFX_ATTN_BWD_DKDV_ABI,
+        GFX_ATTN_BWD_REDUCE_ABI,
+        GFX_ATTN_BWD_DQ_ABI,
     ]
     assert [item.provenance["stage"] for item in program.descriptors] == [
         "forward_recompute",
@@ -816,7 +816,7 @@ def test_rocm_softmax_package_owns_hsaco_and_descriptor(monkeypatch) -> None:
         "rocm.ockl",
         "rocm.oclc_isa_version_1151",
     ]
-    assert package.descriptor.abi_id == GFX1151_SOFTMAX_F32_ABI
+    assert package.descriptor.abi_id == GFX_SOFTMAX_F32_ABI
     assert package.descriptor.entry_symbol == "tessera_tile_softmax_f32"
     assert [item.name for item in package.descriptor.buffers] == ["x", "o"]
     assert [item.name for item in package.descriptor.scalars] == ["Rows", "K"]
@@ -926,7 +926,7 @@ def test_rocm_reduction_package_owns_outer_axis_inner_descriptor(monkeypatch) ->
         _fake_reduce_compile,
     )
     package = package_reduction(_reduction_module(axis=1), pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.abi_id == GFX1151_REDUCE_F32_ABI
+    assert package.descriptor.abi_id == GFX_REDUCE_F32_ABI
     assert [item.name for item in package.descriptor.scalars] == ["Outer", "AxisExtent", "Inner"]
     assert package.descriptor.provenance["work_item"] == "ROCM-E2E-2"
     assert package.descriptor.provenance["outer"] == 2
@@ -937,9 +937,9 @@ def test_rocm_reduction_package_owns_outer_axis_inner_descriptor(monkeypatch) ->
 @pytest.mark.parametrize(
     "dtype,abi",
     [
-        ("fp16", GFX1151_REDUCE_F16_ABI),
-        ("bf16", GFX1151_REDUCE_BF16_ABI),
-        ("fp32", GFX1151_REDUCE_F32_ABI),
+        ("fp16", GFX_REDUCE_F16_ABI),
+        ("bf16", GFX_REDUCE_BF16_ABI),
+        ("fp32", GFX_REDUCE_F32_ABI),
     ],
 )
 def test_rocm_reduction_package_has_storage_keyed_f32_output_abi(monkeypatch, dtype, abi) -> None:
@@ -990,7 +990,7 @@ def test_rocm_paged_kv_owns_typed_direct_descriptor(monkeypatch) -> None:
         _fake_paged_kv_compile,
     )
     package = package_paged_kv_read(module, pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.abi_id == GFX1151_PAGED_KV_F32_ABI
+    assert package.descriptor.abi_id == GFX_PAGED_KV_F32_ABI
     assert [item.name for item in package.descriptor.buffers] == [
         "pages",
         "page_table",
@@ -1034,7 +1034,7 @@ def test_driver_joins_gfx1151_paged_kv_native_package(monkeypatch) -> None:
     assert bundle.orchestration_state == "launchable"
     assert bundle.tile is not None and "tile.paged_kv_read_kernel" in bundle.tile.text
     assert bundle.launch_descriptor is not None
-    assert bundle.launch_descriptor.abi_id == GFX1151_PAGED_KV_F32_ABI
+    assert bundle.launch_descriptor.abi_id == GFX_PAGED_KV_F32_ABI
 
 
 def test_rocm_moe_dispatch_owns_typed_direct_descriptor(monkeypatch) -> None:
@@ -1049,7 +1049,7 @@ def test_rocm_moe_dispatch_owns_typed_direct_descriptor(monkeypatch) -> None:
         _fake_moe_dispatch_compile,
     )
     package = package_moe_dispatch(module, pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.abi_id == GFX1151_MOE_DISPATCH_F32_ABI
+    assert package.descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
     assert [item.name for item in package.descriptor.buffers] == ["x", "token", "o"]
     assert [item.name for item in package.descriptor.scalars] == ["T", "S", "H"]
     assert package.descriptor.provenance["route"] == "direct_gather"
@@ -1070,7 +1070,7 @@ def test_driver_joins_gfx1151_moe_dispatch_native_package(monkeypatch) -> None:
     assert bundle.orchestration_state == "launchable"
     assert bundle.tile is not None and "tile.moe_dispatch_kernel" in bundle.tile.text
     assert bundle.launch_descriptor is not None
-    assert bundle.launch_descriptor.abi_id == GFX1151_MOE_DISPATCH_F32_ABI
+    assert bundle.launch_descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
 
 
 def test_rocm_moe_dispatch_contract_and_launcher_reject_invalid_indices(monkeypatch) -> None:
@@ -1143,7 +1143,7 @@ def test_builtin_gfx1151_launcher_registers_typed_rocm_abis(monkeypatch) -> None
     from tessera import runtime as rt
 
     rt.unregister_native_launcher("rocm_gfx1151")
-    rt._ensure_builtin_native_launcher("rocm_gfx1151", GFX1151_SOFTMAX_F32_ABI)
+    rt._ensure_builtin_native_launcher("rocm_gfx1151", GFX_SOFTMAX_F32_ABI)
     try:
         registration = rt._native_launchers["rocm_gfx1151"]
         assert registration.binary_formats == ("hsaco",)
@@ -1156,7 +1156,7 @@ def test_builtin_gfx1151_launcher_registers_moe_abi_in_isolation() -> None:
     from tessera import runtime as rt
 
     rt.unregister_native_launcher("rocm_gfx1151")
-    rt._ensure_builtin_native_launcher("rocm_gfx1151", GFX1151_MOE_DISPATCH_F32_ABI)
+    rt._ensure_builtin_native_launcher("rocm_gfx1151", GFX_MOE_DISPATCH_F32_ABI)
     try:
         assert "rocm_gfx1151" in rt._native_launchers
         assert rt._native_launchers["rocm_gfx1151"].submit is rt._submit_rocm_gfx1151_native

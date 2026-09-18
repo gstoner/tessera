@@ -8091,7 +8091,9 @@ fragment layout is known.
   gfx1201 (the residual add stays NVIDIA-owned). Schedule->Tile's ROCm branch
   passes the bias pointer and the epilogue attribute; `scheduled_matmul`'s
   fused contract names both ROCm targets; `package_scheduled_matmul` binds the
-  fused ABI (`GFX1151_MATMUL_F16_F32_FUSED_ABI`, now shared by both chips) and
+  fused ABI (`GFX_MATMUL_F16_F32_FUSED_ABI`, shared by both chips; the whole
+  `rocm_native` ABI-constant family was renamed from its `GFX1151_` prefix the
+  same day — the ABI strings were always chip-neutral `tessera.rocm.*` ids) and
   `runtime.launch` places the bias buffer at operand 2.
 * **`rocm_compiled` on gfx12 is a compiled route, not a refusal.**
   `_rocm_compiled_gemm_impl` sends a non-gfx11 f16 GEMM through

@@ -159,6 +159,100 @@ module {{
 """
 
 
+def sphere_langevin_step_module(rows: int, features: int) -> str:
+    """One Riemannian Langevin step on S^{f-1} per row, the EBM sphere
+    front door's device program (2026-09-18):
+
+        gt = gs - <gs, x> x        (tangent projection of the scaled gradient)
+        nt = ns - <ns, x> x        (tangent projection of the scaled noise)
+        y  = x - gt + nt           (Euler-Maruyama)
+        out = y / |y|, or x when |y| < 1e-12   (retract; the host's guard)
+
+    ``gs = eta * grad`` and ``ns = sqrt(2 eta T) * noise`` are folded on the
+    host, so the kernel carries no scalar operands: three feature-axis
+    reductions (two dots and the norm), the affine step, and the
+    rounding-explicit ``math.sqrt`` of the retraction, one lane per feature.
+    Mirrors ``ebm.geo_sampling.sphere_langevin_step``'s numpy path in f32."""
+    r, f = int(rows), int(features)
+    return f"""#map = affine_map<(d0, d1) -> (d0, d1)>
+#row = affine_map<(d0, d1) -> (d0, 0)>
+#vec = affine_map<(d0) -> (d0)>
+module {{
+  func.func @sphere_langevin_step(%x: tensor<{r}x{f}xf32>, %gs: tensor<{r}x{f}xf32>, %ns: tensor<{r}x{f}xf32>) -> tensor<{r}x{f}xf32> {{
+    %zero = arith.constant 0.000000e+00 : f32
+    %one = arith.constant 1.000000e+00 : f32
+    %tiny = arith.constant 1.000000e-12 : f32
+    %e = tensor.empty() : tensor<{r}x{f}xf32>
+    %re = tensor.empty() : tensor<{r}xf32>
+    %init = linalg.fill ins(%zero : f32) outs(%re : tensor<{r}xf32>) -> tensor<{r}xf32>
+    %gx = linalg.generic {{indexing_maps = [#map, #map, #map], iterator_types = ["parallel", "parallel"]}}
+        ins(%gs, %x : tensor<{r}x{f}xf32>, tensor<{r}x{f}xf32>) outs(%e : tensor<{r}x{f}xf32>) {{
+    ^bb0(%a: f32, %b: f32, %o: f32):
+      %m = arith.mulf %a, %b : f32
+      linalg.yield %m : f32
+    }} -> tensor<{r}x{f}xf32>
+    %dg = linalg.reduce ins(%gx : tensor<{r}x{f}xf32>) outs(%init : tensor<{r}xf32>) dimensions = [1]
+      (%in: f32, %acc: f32) {{
+        %add = arith.addf %in, %acc : f32
+        linalg.yield %add : f32
+      }}
+    %nx = linalg.generic {{indexing_maps = [#map, #map, #map], iterator_types = ["parallel", "parallel"]}}
+        ins(%ns, %x : tensor<{r}x{f}xf32>, tensor<{r}x{f}xf32>) outs(%e : tensor<{r}x{f}xf32>) {{
+    ^bb0(%a: f32, %b: f32, %o: f32):
+      %m = arith.mulf %a, %b : f32
+      linalg.yield %m : f32
+    }} -> tensor<{r}x{f}xf32>
+    %dn = linalg.reduce ins(%nx : tensor<{r}x{f}xf32>) outs(%init : tensor<{r}xf32>) dimensions = [1]
+      (%in: f32, %acc: f32) {{
+        %add = arith.addf %in, %acc : f32
+        linalg.yield %add : f32
+      }}
+    %dgx = tensor.expand_shape %dg [[0, 1]] output_shape [{r}, 1] : tensor<{r}xf32> into tensor<{r}x1xf32>
+    %dnx = tensor.expand_shape %dn [[0, 1]] output_shape [{r}, 1] : tensor<{r}xf32> into tensor<{r}x1xf32>
+    %y = linalg.generic {{indexing_maps = [#map, #map, #map, #row, #row, #map], iterator_types = ["parallel", "parallel"]}}
+        ins(%x, %gs, %ns, %dgx, %dnx : tensor<{r}x{f}xf32>, tensor<{r}x{f}xf32>, tensor<{r}x{f}xf32>, tensor<{r}x1xf32>, tensor<{r}x1xf32>) outs(%e : tensor<{r}x{f}xf32>) {{
+    ^bb0(%xv: f32, %gv: f32, %nv: f32, %dgv: f32, %dnv: f32, %o: f32):
+      %gp = arith.mulf %dgv, %xv : f32
+      %gt = arith.subf %gv, %gp : f32
+      %np = arith.mulf %dnv, %xv : f32
+      %nt = arith.subf %nv, %np : f32
+      %s1 = arith.subf %xv, %gt : f32
+      %yv = arith.addf %s1, %nt : f32
+      linalg.yield %yv : f32
+    }} -> tensor<{r}x{f}xf32>
+    %yy = linalg.generic {{indexing_maps = [#map, #map, #map], iterator_types = ["parallel", "parallel"]}}
+        ins(%y, %y : tensor<{r}x{f}xf32>, tensor<{r}x{f}xf32>) outs(%e : tensor<{r}x{f}xf32>) {{
+    ^bb0(%a: f32, %b: f32, %o: f32):
+      %m = arith.mulf %a, %b : f32
+      linalg.yield %m : f32
+    }} -> tensor<{r}x{f}xf32>
+    %ss = linalg.reduce ins(%yy : tensor<{r}x{f}xf32>) outs(%init : tensor<{r}xf32>) dimensions = [1]
+      (%in: f32, %acc: f32) {{
+        %add = arith.addf %in, %acc : f32
+        linalg.yield %add : f32
+      }}
+    %nrm = linalg.generic {{indexing_maps = [#vec, #vec], iterator_types = ["parallel"]}}
+        ins(%ss : tensor<{r}xf32>) outs(%re : tensor<{r}xf32>) {{
+    ^bb0(%v: f32, %o: f32):
+      %q = math.sqrt %v : f32
+      linalg.yield %q : f32
+    }} -> tensor<{r}xf32>
+    %nrmx = tensor.expand_shape %nrm [[0, 1]] output_shape [{r}, 1] : tensor<{r}xf32> into tensor<{r}x1xf32>
+    %out = linalg.generic {{indexing_maps = [#map, #map, #row, #map], iterator_types = ["parallel", "parallel"]}}
+        ins(%y, %x, %nrmx : tensor<{r}x{f}xf32>, tensor<{r}x{f}xf32>, tensor<{r}x1xf32>) outs(%e : tensor<{r}x{f}xf32>) {{
+    ^bb0(%yv: f32, %xv: f32, %d: f32, %o: f32):
+      %degenerate = arith.cmpf olt, %d, %tiny : f32
+      %safe = arith.select %degenerate, %one, %d : f32
+      %q = arith.divf %yv, %safe : f32
+      %r = arith.select %degenerate, %xv, %q : f32
+      linalg.yield %r : f32
+    }} -> tensor<{r}x{f}xf32>
+    return %out : tensor<{r}x{f}xf32>
+  }}
+}}
+"""
+
+
 def row_unary_math_module(rows: int, features: int, op: str) -> str:
     """``y[r, f] = <op>(x[r, f])``: the smallest row program that isolates one
     ``math.*`` op, so the audit recorder measures that op and nothing else."""

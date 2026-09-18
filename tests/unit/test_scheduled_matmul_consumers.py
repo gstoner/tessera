@@ -51,10 +51,11 @@ def _module(
     )
     dtype = dtype or inferred_dtype
     element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32", "fp64": "f64",
-               "fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2"}[dtype]
+               "fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2",
+               "int8": "i8", "int4": "i4"}[dtype]
     a = IRType(f"tensor<{m}x{k}x{element}>", (str(m), str(k)), dtype)
     b = IRType(f"tensor<{k}x{n}x{element}>", (str(k), str(n)), dtype)
-    output_element = {"fp16": "f16", "fp32": "f32", "fp64": "f64"}[output_dtype]
+    output_element = {"fp16": "f16", "fp32": "f32", "fp64": "f64", "int32": "i32"}[output_dtype]
     output = IRType(
         f"tensor<{m}x{n}x{output_element}>", (str(m), str(n)), output_dtype
     )
@@ -539,9 +540,10 @@ def test_rocm_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
     assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
     assert package.descriptor.provenance["tile_ir_digest"] == artifact.tile_digest
     assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
-    assert package.descriptor.provenance["physical_route"] == (
-        "gfx1151_multiwave_lds_wmma_2x4"
-    )
+    # One wave per 2x4 macro tile, register-staged: the label says what is
+    # built (the "multiwave_lds" it carried until 2026-09-18 named a route the
+    # typed path never took -- byte-identical kernels under both stagings).
+    assert package.descriptor.provenance["physical_route"] == "gfx1151_register_wmma_2x4"
 
 
 def test_apple_gpu_packages_the_exact_scheduled_tile_artifact(monkeypatch, tmp_path) -> None:
@@ -814,6 +816,106 @@ def test_rocm_gfx1201_fp8_matmul_contract_lowers_and_gfx1151_refuses(storage):
         scheduled_matmul.lower_scheduled_matmul(
             _module(target="rocm", shape=(32, 32, 32), dtype=storage, bias=True),
             target="rocm_gfx1201")
+
+
+@pytest.mark.parametrize("target", ["rocm_gfx1151", "rocm_gfx1201"])
+@pytest.mark.parametrize("storage", ["int8", "int4"])
+def test_rocm_integer_matmul_contract_lowers_on_both_chips(target, storage):
+    """GFX1201-PARITY slice 1b (host-free half): int8/int4 storage with i32
+    accumulation lowers on the typed route for both RDNA chips (IU8/IU4 are
+    RDNA3 and RDNA4 instructions); gfx1151 keeps its 2x4 panel, gfx1201 its
+    1x1. The fused epilogue is float-only and refused by name."""
+    if scheduled_matmul.find_tessera_opt() is None:
+        pytest.skip("production tessera-opt unavailable")
+    module = _module(target="rocm", shape=(32, 32, 32), dtype=storage, output_dtype="int32")
+    artifact = scheduled_matmul.lower_scheduled_matmul(module, target=target)
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert artifact.storage == storage and artifact.accum == "i32"
+    assert artifact.architecture == target.removeprefix("rocm_")
+    assert (artifact.macro_tile_m, artifact.macro_tile_n) == ((16, 16) if target == "rocm_gfx1201" else (32, 64))
+    assert f'a = "{storage}"' in artifact.tile_ir and 'acc = "i32"' in artifact.tile_ir
+    with pytest.raises(ValueError, match="float-only"):
+        scheduled_matmul.lower_scheduled_matmul(
+            _module(target="rocm", shape=(32, 32, 32), dtype=storage, output_dtype="int32", activation="relu"),
+            target=target)
+
+
+@pytest.mark.parametrize("target", ["rocm_gfx1151", "rocm_gfx1201"])
+@pytest.mark.parametrize("bias", [False, True])
+def test_rocm_bf16_matmul_contract_lowers_on_both_chips(target, bias):
+    """bf16 storage joins f16 on the typed route (slice 1b), fused epilogue
+    included: the same fragment family, V_WMMA_F32_16X16X16_BF16."""
+    if scheduled_matmul.find_tessera_opt() is None:
+        pytest.skip("production tessera-opt unavailable")
+    module = _module(target="rocm", shape=(32, 32, 32), dtype="bf16", bias=bias, activation="gelu" if bias else "none")
+    artifact = scheduled_matmul.lower_scheduled_matmul(module, target=target)
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert artifact.storage == "bf16" and artifact.accum == "f32"
+    assert 'a = "bf16"' in artifact.tile_ir
+
+
+@pytest.mark.parametrize("shape,panel", [
+    # shapes are (m, k, n): K alignment is irrelevant to the panel, M and N are not
+    ((1024, 1024, 1024), (32, 64)), ((2048, 2048, 2048), (32, 64)), ((1024, 1040, 1024), (32, 64)),
+    ((512, 512, 512), (16, 16)), ((1024, 1024, 1000), (16, 16)), ((1000, 1024, 1024), (16, 16)),
+    ((1024, 1024, 1024), (16, 16)),
+])
+def test_rocm_gfx1201_panel_follows_the_measured_gap_packet(shape, panel):
+    """The gfx1201 f16 macro tile: the 2x4 register panel for a static, fully
+    tiled problem at 1024 and above, else 1x1 (typed-route gap packet,
+    2026-09-18). The Python contract row mirrors the C++ selection; the last
+    row is the dynamic-shape case, which stays 1x1."""
+    if scheduled_matmul.find_tessera_opt() is None:
+        pytest.skip("production tessera-opt unavailable")
+    m, k, n = shape
+    dynamic = panel == (16, 16) and shape == (1024, 1024, 1024)
+    assert scheduled_matmul.rocm_gfx1201_panel(m, n, dynamic=dynamic) == panel
+    if dynamic:
+        return
+    artifact = scheduled_matmul.lower_scheduled_matmul(_module(target="rocm", shape=shape), target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
+    assert f"tessera.macro_tile_m = {panel[0]} : i64" in artifact.tile_ir
+
+
+def _integer_operands(shape, storage, seed):
+    m, k, n = shape
+    rng = np.random.default_rng(seed)
+    lo, hi = (-8, 8) if storage == "int4" else (-128, 128)
+    a = rng.integers(lo, hi, size=(m, k), dtype=np.int8)
+    b = rng.integers(lo, hi, size=(k, n), dtype=np.int8)
+    return a, b, a.astype(np.int32) @ b.astype(np.int32)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("storage", ["int8", "int4"])
+@pytest.mark.parametrize("shape", [(32, 32, 32), (17, 19, 23), (65, 48, 37)])
+@pytest.mark.skipif(
+    not rocm_native.native_packaging_available(),
+    reason="ROCm compiler/device libraries unavailable",
+)
+def test_gfx1151_scheduled_matmul_executes_integer_storage(shape, storage) -> None:
+    """int8/int4 -> i32 on the typed Tile route, gfx1151 (slice 1b). Exact
+    against the int32 numpy product; the gfx1201 twin lives in
+    `test_rocm_gfx1201_scheduled.py`."""
+    from tests._support.rocm_build import rocm_host_arch
+    if (rocm_host_arch() or "") != "gfx1151":
+        pytest.skip("gfx1151 owning-device proof; gfx1201 has its own row")
+    from tessera import runtime as rt
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        _module(target="rocm", shape=shape, dtype=storage, output_dtype="int32"), target="rocm_gfx1151")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.abi_id == (rocm_native.GFX_MATMUL_I8_I32_ABI if storage == "int8" else rocm_native.GFX_MATMUL_I4_I32_ABI)
+    a, b, expected = _integer_operands(shape, storage, 41 + len(storage))
+    output = np.zeros((m, n), np.int32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", result
+    np.testing.assert_array_equal(output, expected)
 
 
 @pytest.mark.hardware_rocm

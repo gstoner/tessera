@@ -52,9 +52,7 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
     # Slices 3-5 of the same program (engineering loops, 2026-09-17): the
     # attention tail, the spectral/solver/EBM/f32-matmul families and the
     # RDNA4-only FP8 matmul contract, each measured on Tajasarus (the per-test
-    # diff, then the family files at the loop's head). `paged_kv` is the one
-    # family left out: its device tests are gated on the gfx11 flash-attention
-    # directive lane and produced no gfx1201 evidence (owed).
+    # diff, then the family files at the loop's head).
     "algebra_clifford",
     "attention_mla_decode",
     "depth_attention",
@@ -69,6 +67,12 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
     "matmul_f32",
     "moe_dispatch",
     "ordering_sort",
+    # paged_kv (2026-09-18): the last family. Its generator is a scalar
+    # per-thread gather with no WMMA fragment; it had no gfx1201 evidence
+    # only because its device tests gated on a probe of the gfx11 WMMA
+    # flash-attention kernel, which the runtime built without an `arch`
+    # stamp. Measured on Tajasarus once the directive carried the chip.
+    "paged_kv",
     "sequence_deltanet",
     "sequence_linear_attention",
     "sequence_recurrent_cell",
@@ -86,7 +90,20 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
     "sparse_spmm",
     "spectral_backward",
     "spectral_dft",
+    # RDNA4-only: the checked 2:4 sparse matmul on SWMMAC (public admission,
+    # 2026-09-18). gfx11 has no SWMMAC, so this family never joins gfx1151.
+    "sparse_matmul_2to4",
 })
+
+#: Families whose ISA contract exists only on RDNA4; they are excluded from
+#: the generic compiled lane's "every family" reading on gfx1151.
+RDNA4_ONLY_FAMILIES = frozenset({"sparse_matmul_2to4"})
+
+
+def generic_lane_families() -> frozenset[str]:
+    """The families the generic compiled lane (a test that names no family)
+    may assume on a fully promoted host."""
+    return frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES
 
 
 def promoted_families(arch: str) -> frozenset[str]:
@@ -102,7 +119,7 @@ def promoted_families(arch: str) -> frozenset[str]:
     does not exist here" as "this proof is broken".
     """
     if arch == "gfx1151":
-        return frozenset(FAMILY_PLUGINS)
+        return frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES
     if arch == "gfx1201":
         return _GFX1201_PROMOTED_FAMILIES
     return frozenset()
@@ -123,6 +140,7 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
         backend_codegen="rocdl_hsaco",
     )
     for family in (
+        "sparse_matmul_2to4",  # RDNA4-only (SWMMAC); see RDNA4_ONLY_FAMILIES
         "attention",
         "attention_backward",
         "depth_attention",
@@ -216,6 +234,11 @@ class ROCMExecutablePipeline:
                 "family 'control_state_machine' has no Target-IR boundary; "
                 "only output=binary is supported")
         if self.family not in promoted_families(self.arch):
+            if self.family in RDNA4_ONLY_FAMILIES:
+                raise ValueError(
+                    f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "
+                    f"{self.family!r} is an RDNA4 (SWMMAC) contract with no gfx11 form"
+                )
             raise ValueError(
                 f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "
                 "gfx1200/gfx1250 remain fail-closed pending exact-device evidence"

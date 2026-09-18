@@ -1,4 +1,4 @@
-"""ROCm gfx1151 native paged attention (#8 follow-on, ROCm lane).
+"""ROCm native paged attention (#8 follow-on, ROCm lane; gfx1151 and gfx1201).
 
 Proves the KV-cache → attention fusion on the compiled ROCm FA-2 lane: the paged
 KV state is *gathered* (the staging stage), then the dense per-head K/V feeds the
@@ -6,8 +6,10 @@ compiler-generated WMMA flash-attn forward kernel in a single launch (the folded
 ``(num_heads, S, head_dim)`` batch is exactly the lane's ``[..., S, D]`` contract).
 
 Mirrors ``test_paged_kv_native.py`` (Apple), adapted to the hardware-gated ROCm
-lane. The native path is *skipped* (not failed) when no gfx1151 GPU / tessera-opt
-is present, so the suite stays green off-box — but the provenance gate (only a
+lane. The native path is *skipped* (not failed) when no ROCm GPU / tessera-opt
+is present (the gate is the runtime's own flash-attention probe, which names
+the launch chip since 2026-09-18), so the suite stays green off-box — but the
+provenance gate (only a
 genuine ``native_gpu`` launch earns the rung) means a fallback can never
 masquerade as a native pass. f16 WMMA storage → looser tolerances than the numpy
 reference.

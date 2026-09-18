@@ -107,6 +107,16 @@ class ScheduledMatmulArtifact:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
 
+def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
+    """The gfx1201 f16/bf16 macro tile, mirroring `getInferredMatmulSchedule`
+    in PMPasses.cpp: the 2x4 register panel only for a static, fully tiled
+    problem at 1024 and above (typed-route gap packet, 2026-09-18: 2.1x at
+    1024^3, 3.3x at 2048^3, a wash at 512^3, slower on ragged shapes)."""
+    if not dynamic and m >= 1024 and n >= 1024 and m % 32 == 0 and n % 64 == 0:
+        return 32, 64
+    return 16, 16
+
+
 def lower_scheduled_matmul(
     module: GraphIRModule,
     *,
@@ -349,9 +359,27 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "x86", "zen5-avx512", "u8", "i32", 16, 16,
         )
-    elif target == "rocm_gfx1201" and (a_dtype, b_dtype, output_dtype) == ("fp16", "fp16", "fp32"):
+    elif target == "rocm_gfx1201" and a_dtype == b_dtype and a_dtype in {"fp16", "bf16"} and output_dtype == "fp32":
+        panel_m, panel_n = rocm_gfx1201_panel(m, n, dynamic=dynamic_m or dynamic_n or dynamic_k)
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
-            "rocm", "gfx1201", "f16", "f32", 16, 16,
+            "rocm", "gfx1201", "bf16" if a_dtype == "bf16" else "f16", "f32", panel_m, panel_n,
+        )
+    elif (
+        target in {"rocm_gfx1151", "rocm_gfx1201"}
+        and a_dtype == b_dtype
+        and a_dtype in {"int8", "int4"}
+        and output_dtype == "int32"
+    ):
+        # Integer WMMA storage on both RDNA chips (IU8/IU4, i32 accumulate;
+        # GFX1201-PARITY slice 1b). int4 values ride int8 containers, one
+        # logical value per byte. The fused epilogue is float-only.
+        if bias_name is not None or activation != "none":
+            raise ValueError(
+                "ROCm integer scheduled matmul carries no fused epilogue (the epilogue is float-only)")
+        rdna4 = target == "rocm_gfx1201"
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "rocm", target.removeprefix("rocm_"), a_dtype, "i32",
+            16 if rdna4 else 32, 16 if rdna4 else 64,
         )
     elif (
         target == "rocm_gfx1201"
@@ -367,15 +395,11 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "rocm", "gfx1201", "e4m3" if a_dtype == "fp8_e4m3" else "e5m2", "f32", 16, 16,
         )
-    elif target == "rocm_gfx1151" and (a_dtype, b_dtype, output_dtype) == (
-        "fp16",
-        "fp16",
-        "fp32",
-    ):
+    elif target == "rocm_gfx1151" and a_dtype == b_dtype and a_dtype in {"fp16", "bf16"} and output_dtype == "fp32":
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "rocm",
             "gfx1151",
-            "f16",
+            "bf16" if a_dtype == "bf16" else "f16",
             "f32",
             32,
             64,
@@ -604,7 +628,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError('matmul native boolean field disagrees: '+key)
         return values[0] == 'true'
     def tensor(text):
-        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32|f64|ui8|si8|i8|i32|f8E4M3FN|f8E5M2)>', text)
+        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32|f64|ui8|si8|i8|si4|i4|i32|f8E4M3FN|f8E5M2)>', text)
         if match is None:
             raise ValueError('matmul native tensor contract is unsupported')
         return tuple(None if d == '?' else int(d) for d in match[1].split('x')[:-1]), match[2]
@@ -625,8 +649,8 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError("matmul native Tile entry is ambiguous")
         entry = entries[0]
     expected = dict(function_name=entry, m=m, n=n, k=k, storage=storage,
-        a_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32','f8E4M3FN':'fp8_e4m3','f8E5M2':'fp8_e5m2'}[a[1]],
-        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32','f8E4M3FN':'fp8_e4m3','f8E5M2':'fp8_e5m2'}[b[1]],
+        a_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','si4':'int4','i4':'int4','i32':'int32','f8E4M3FN':'fp8_e4m3','f8E5M2':'fp8_e5m2'}[a[1]],
+        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','si4':'int4','i4':'int4','i32':'int32','f8E4M3FN':'fp8_e4m3','f8E5M2':'fp8_e5m2'}[b[1]],
         output_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[out_storage],
         accum=string('accum'), activation=string('activation'),
         dynamic_m=a[0][0] is None or out_shape[0] is None,

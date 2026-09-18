@@ -99,7 +99,7 @@ struct DeclareROCMPipelineContractPass
         "sequence_selective_ssm", "sequence_selective_ssm_backward",
         "solver_cholesky", "solver_lu", "solver_qr", "solver_svd",
         "solver_triangular_solve", "solver_ift", "sparse_block_attention", "sparse_block_topk",
-        "sparse_sddmm", "sparse_spmm"};
+        "sparse_sddmm", "sparse_spmm", "sparse_matmul_2to4"};
     if (llvm::find(families, family) == std::end(families)) {
       getOperation().emitError("unknown ROCm family plugin '") << family << "'";
       return signalPassFailure();
@@ -142,18 +142,21 @@ struct DeclareROCMPipelineContractPass
         "quant_int4_pack", "reduction_arg", "scan", "optimizer",
         "fused_silu_mul",
         // Slices 3-5 (engineering loops, 2026-09-17), measured on Tajasarus;
-        // paged_kv stays out (no gfx1201 device evidence). Mirror of Python.
+        // paged_kv joined 2026-09-18 (a scalar gather whose tests had gated
+        // on the gfx11 flash-attention probe). Mirror of Python.
         "algebra_clifford", "attention_mla_decode", "depth_attention",
         "draft_dspark", "ebm_decode_init", "ebm_ebt_tiny",
         "ebm_energy_quadratic", "ebm_langevin", "ebm_partition",
         "es_low_rank_correction", "matmul_batched_f32", "matmul_f32",
-        "moe_dispatch", "ordering_sort", "sequence_deltanet",
+        "moe_dispatch", "ordering_sort", "paged_kv", "sequence_deltanet",
         "sequence_linear_attention", "sequence_recurrent_cell",
         "sequence_selective_ssm", "sequence_selective_ssm_backward",
         "solver_cholesky", "solver_ift", "solver_lu", "solver_qr",
         "solver_svd", "solver_triangular_solve",
         "sparse_block_attention", "sparse_block_topk", "sparse_sddmm",
         "sparse_spmm", "spectral_backward", "spectral_dft",
+        // RDNA4-only (SWMMAC): public 2:4 admission, 2026-09-18.
+        "sparse_matmul_2to4",
     };
     const bool gfx1201Promoted =
         arch == "gfx1201" &&
@@ -162,6 +165,14 @@ struct DeclareROCMPipelineContractPass
       getOperation().emitError(kExecutablePipeline)
           << ": architecture '" << arch
           << "' has no promoted family-plugin profile";
+      return signalPassFailure();
+    }
+    if (arch == "gfx1151" && family == "sparse_matmul_2to4") {
+      // gfx11 has no SWMMAC; the family is RDNA4-only by ISA, not by proof.
+      getOperation().emitError(kExecutablePipeline)
+          << ": family 'sparse_matmul_2to4' is an RDNA4 (SWMMAC) contract; "
+             "architecture '" << arch << "' has no promoted family-plugin "
+             "profile for it";
       return signalPassFailure();
     }
     if (cooperative && family != "depth_attention") {
@@ -372,6 +383,10 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
     pm.addPass(createGenerateROCMSddmmKernelPass());
   } else if (family == "sparse_spmm") {
     pm.addPass(createGenerateROCMSpmmKernelPass());
+  } else if (family == "sparse_matmul_2to4") {
+    // No generator: Graph->Schedule already built the checked 2:4 kernel
+    // (NativeSparse.h) and Schedule->Tile carried it as `tile.sparse_mma`;
+    // the Target consumer lowers that to `tessera_rocm.swmmac`.
   }
 }
 

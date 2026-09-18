@@ -161,9 +161,18 @@ def test_gpu_hvp_executes_compiler_product(function, power, shape, backend, chip
         device.check(current(ct.byref(ordinal)))
         device.check(capability(ct.byref(major), ct.byref(minor), ordinal))
         assert f'sm_{major.value}{minor.value}' == chip
+    # The compiler and LLVM tools come from the explicit env pins when set,
+    # else from the repo's own discovery; a host with neither skips by name
+    # (until 2026-09-18 this raised a bare KeyError inside the sweep).
+    from tessera.compiler.llvm_tools import llvm_bin_dir
+    from tessera.compiler.scheduled_matmul import find_tessera_opt
+    compiler = os.environ.get('TESSERA_OPT') or find_tessera_opt()
+    llvm_bin = os.environ.get('TESSERA_LLVM_BIN') or llvm_bin_dir()
+    if not compiler or not llvm_bin:
+        pytest.skip('requires tessera-opt and the matched LLVM tools (TESSERA_OPT / TESSERA_LLVM_BIN or the build tree)')
     x = np.array([0, -.5, 1, 2], np.float32).reshape(shape)
-    package = function.compile_native_hvp(x, compiler=os.environ['TESSERA_OPT'],
-        llvm_bin=Path(os.environ['TESSERA_LLVM_BIN']), backend=backend, chip=chip)
+    package = function.compile_native_hvp(x, compiler=str(compiler),
+        llvm_bin=Path(llvm_bin), backend=backend, chip=chip)
     specs = tensor_contract_specs(read_tensor_contract(package))
     signature = inspect.Signature([inspect.Parameter(s.name, inspect.Parameter.POSITIONAL_ONLY) for s in specs])
     binding = generate_tensor_binding(package, signature)

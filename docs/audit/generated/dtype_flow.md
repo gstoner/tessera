@@ -18,8 +18,8 @@ packet to resolve the supported envelope.
 
 - Operators: **353**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **950**
-- Rows retaining at least one compiler/evidence gap: **372**
+- Operator/logical-dtype rows: **952**
+- Rows retaining at least one compiler/evidence gap: **374**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -50,8 +50,8 @@ and selected exact targets.
 | `tri_solve` | fp32 | fp64 | registered / complete / fused | device_verified_jit: fp32 | - | - | device_verified_jit: fp32 | - | - | - |
 | `batched_gemm` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_jit: bf16,fp16,fp32 | artifact_only: fp32 | device_verified_jit: bf16,fp16 | - | - | - |
 | `factorized_matmul` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_jit: fp32 | artifact_only: fp32 | device_verified_jit: bf16,fp16 | - | - | - |
-| `gemm` | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int4,int8,nvfp4,uint8 | bf16,fp16,fp32,fp64,int32 | registered / complete / fused | fused: bf16,fp32,fp64,int8 | reference: bf16,fp16,fp32,fp4_e2m1,fp8_e4m3,fp8_e5m2 | artifact_only: bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int4,int8,nvfp4 | device_verified_abi: bf16,fp16 | artifact_only: bf16,fp16,fp8_e4m3,fp8_e5m2,int4,int8; legal_only: fp32 | artifact_only: bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8; planned_gated: fp4_e2m1,fp6_e2m3,fp6_e3m2 | direct_test,physical,tile |
-| `matmul` | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int4,int8,nvfp4,uint8 | bf16,fp16,fp32,fp64,int32 | registered / complete / fused | device_verified_jit: bf16,fp32,fp64,int8 | fused: bf16,fp16,fp32,fp4_e2m1,fp8_e4m3,fp8_e5m2 | device_verified_abi: bf16,fp16,fp32,fp8_e4m3,fp8_e5m2 | device_verified_abi: bf16,fp16,int4,int8 | artifact_only: bf16,fp16,fp8_e4m3,fp8_e5m2,int4,int8; legal_only: fp32 | artifact_only: bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8; planned_gated: fp4_e2m1,fp6_e2m3,fp6_e3m2 | direct_test,physical,tile |
+| `gemm` | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int32,int4,int8,nvfp4,uint8 | bf16,fp16,fp32,fp64,int32 | registered / complete / fused | fused: bf16,fp32,fp64,int8 | reference: bf16,fp16,fp32,fp4_e2m1,fp8_e4m3,fp8_e5m2 | artifact_only: bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int4,int8,nvfp4 | device_verified_abi: bf16,fp16 | artifact_only: bf16,fp16,fp8_e4m3,fp8_e5m2,int4,int8; legal_only: fp32 | artifact_only: bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8; planned_gated: fp4_e2m1,fp6_e2m3,fp6_e3m2 | direct_test,physical,tile |
+| `matmul` | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int32,int4,int8,nvfp4,uint8 | bf16,fp16,fp32,fp64,int32 | registered / complete / fused | device_verified_jit: bf16,fp32,fp64,int8 | fused: bf16,fp16,fp32,fp4_e2m1,fp8_e4m3,fp8_e5m2 | device_verified_abi: bf16,fp16,fp32,fp8_e4m3,fp8_e5m2 | device_verified_abi: bf16,fp16,int4,int8 | artifact_only: bf16,fp16,fp8_e4m3,fp8_e5m2,int4,int8; legal_only: fp32 | artifact_only: bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8; planned_gated: fp4_e2m1,fp6_e2m3,fp6_e3m2 | direct_test,physical,tile |
 | `moe` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
 | `moe_combine` | bf16,fp32 | fp32 | registered / complete / planned | legal_only: bf16,fp32 | device_verified_jit: fp32 | - | - | - | - | direct_test,physical,tile |
 | `moe_dispatch` | bf16,fp32 | fp32 | registered / complete / planned | legal_only: bf16,fp32 | device_verified_jit: fp32 | - | - | - | - | direct_test,physical,tile |
@@ -229,12 +229,12 @@ for the complete per-dtype and per-target matrix.
 | `logical_xor` | logical | no | bool,fp32,int32 | direct_test,physical,tile |
 | `dequant_grouped_gemm` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `dequant_matmul` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
-| `gemm` | loop_nest | yes | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int4,int8,nvfp4,uint8 | direct_test,physical,tile |
+| `gemm` | loop_nest | yes | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int32,int4,int8,nvfp4,uint8 | direct_test,physical,tile |
 | `grouped_gemm` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `latent_kv_compress` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `latent_kv_expand_k` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `latent_kv_expand_v` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
-| `matmul` | loop_nest | yes | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int4,int8,nvfp4,uint8 | direct_test,physical,tile |
+| `matmul` | loop_nest | yes | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int32,int4,int8,nvfp4,uint8 | direct_test,physical,tile |
 | `moe_swiglu_block` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `quantized_matmul` | loop_nest | no | bf16,fp16,fp32 | direct_test,physical,tile |
 | `tridiagonal_solve` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |

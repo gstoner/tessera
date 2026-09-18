@@ -8246,6 +8246,118 @@ Fleet at the head: Tajasarus **18810 passed, 0 failed** (full sweep at
 Princess-Luna **19504 passed, 0 failed** (ROCm lit 72/72; core lit 493/493);
 the sm_120 and Mac rows are in the log entry.
 
+**The owed items, worked — 2026-09-18 (branch `claude/gfx1201-sm120-owed-loops`,
+after the merged branches were pruned and every checkout synced to `main`).**
+Each item below is what the queue named on 2026-09-17, taken to its
+disposition on the owning box; the sm_120 items are in the NVIDIA queue.
+
+* **`paged_kv`, the last family — and the directive flash-attention lane with
+  it.** The generator was always a scalar per-thread gather; the family had no
+  gfx1201 evidence because its tests gate on the runtime's flash-attention
+  probe, and that probe built the `tessera_rocm.flash_attn` directive with no
+  `arch` stamp, so the generator (which already had the RDNA4 fragment path)
+  defaulted to gfx1151 fragments and ISel died on gfx1201 ("Cannot select:
+  intrinsic %llvm.amdgcn.wmma.f32.16x16x16.f16"). Both directive builders
+  now name the launch chip. The effect is wider than one family: the
+  directive flash-attention lane (forward, backward, the dflash end to end)
+  runs on gfx1201 — 177 device rows passed on Tajasarus, 113 unchanged on
+  Princess-Luna. `paged_kv` joins both promotion tables (`rocm_pipeline`,
+  `Passes.cpp`) on four package rows
+  (`test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_paged_kv_package_executes`)
+  and the paged-attention routes' own tests; gfx1201 now has every family, so
+  the generic-lane guard admits both hosts, and the gfx1201 scheduled-ABI
+  admission lives in one helper (`runtime._gfx1201_proved_scheduled_abis`).
+* **Slice 1b: int8/int4 → i32 and bf16 on the typed route, both chips.** The
+  Tile→ROCm fragment machinery already packed integer fragments for both
+  families; what refused was Tile→ROCm's `tile.matmul_kernel` admission
+  (f16/bf16/fp8 only), a missing ROCm integer branch in
+  `getInferredMatmulSchedule`, the `schedule.matmul` verifier, and the
+  generator's typed-path refusal of int4 (Tile→ROCm compacts the nibbles per
+  chip; int4 rides int8 containers, one logical value per byte, the directive
+  lane's contract). The scheduled contract, the packager (`GFX_MATMUL_I8_I32_ABI`,
+  `GFX_MATMUL_I4_I32_ABI`, `GFX_MATMUL_BF16_F32_ABI` plain and fused) and the
+  runtime (executor dtype checks with an int4 range check, admission, the
+  compiled lane and both arbiter entries diverting every storage to the
+  scheduled package on gfx12) follow. Both ROCm capability rows now declare
+  their matmul dtypes explicitly, because the derivation admits floats only.
+  Device: gfx1201 int8/int4 × three shapes and bf16 plain/fused exact or in
+  budget; gfx1151 int8/int4 × three shapes exact; the nine int rows of
+  `test_rocm_compiled_launch_execute.py` run on gfx1201 (the two packed-int4
+  rows stay on the gfx11 directive lane). Fixture
+  `typed_matmul_int_storage.mlir` lowers for both archs.
+* **The typed route's gap, measured — and half of it was a false label.**
+  `benchmarks/rocm/record_typed_route_gap.py` times the production scheduled
+  package re-panelled (1x1, 2x4, 4x4) against the directive lane (gfx11) and
+  the shipped HIP GEMM on both chips (packet
+  `benchmarks/baselines/typed_route_gap_20260918/`, README). Two findings
+  before any number could be trusted: **`staging` is a no-op on the typed
+  route** — the generator's LDS body is reachable only from its canonical
+  `scf.for` matcher, so `package_scheduled_matmul`'s `staging="lds"` produced
+  the byte-identical register kernel while the provenance called it
+  `gfx1151_multiwave_lds_wmma_2x4` (the label now names the register panel
+  it builds); and the first packet's 3.4x "register vs lds" gap between two
+  identical kernels was the first variant timed per shape paying the clock
+  ramp (the recorder compiles and loads every variant first, ramps the
+  clocks and times in interleaved rounds). With that: on gfx1201 the 2x4
+  register panel is 2.1x the 1x1 at 1024³ and 3.3x at 2048³, a wash at 512³
+  and slower on ragged shapes, and the typed route beats the shipped HIP GEMM
+  at every shape; on gfx1151 the typed 2x4 matches the directive lane at every
+  shape within noise, 10% behind only at 1024³ where the directive lane picks
+  its 4x4 panel — and the typed body given the same 4x4 panel lands within 3%
+  of it there (11.2 vs 11.5 TFLOP/s), so what remains on gfx1151 is panel
+  *selection* (the typed route's 2x4 is fixed; the directive lane picks per
+  shape), not the typed body. On gfx1201 the 4x4 typed panel is 18% above the
+  2x4 at 1024³ and 3% below it at 2048³, slower everywhere else: a further
+  selection question, recorded and not acted on. **Decisions:** gfx1201's f16/bf16 panel is shape-selected
+  (`PMPasses.cpp`, mirrored by `scheduled_matmul.rocm_gfx1201_panel`): 2x4
+  for a static, fully tiled problem at 1024 and above, 1x1 otherwise, with
+  device rows for both branches; the gfx11 performance-closure stamp is
+  arch-gated so a gfx12 2x4 body is an ordinary typed body; the raster
+  contract reaches the generator on the typed route (it read only the
+  directive lane's `schedule_raster_*` spelling, so the Schedule's decision
+  was dropped; the `schedule.matmul` verifier admits the four shared orders)
+  while the selection stays row-major until ROCM-RASTER-1B's counters exist.
+  Host wall clock on WSL2 hosts, no counters: a selection input, never a
+  promotion.
+* **Public 2:4 sparse admission, the five layers.** Graph: `jit.package_sparse_2to4`
+  (the capture's admission is now `sparse_capture.native_sparse_source`,
+  shared with the isolated-worker route). Schedule contract:
+  `scheduled_sparse.lower_scheduled_sparse_matmul` carries the compiler-built
+  SWMMAC kernel (`NativeSparse.h`) with its validity words as a replayed
+  artifact. Packager: `rocm_native.package_sparse_matmul` through the
+  executable pipeline's new `sparse_matmul_2to4` family (no generator;
+  `tile.sparse_mma` → `tessera_rocm.swmmac`), RDNA4-only by ISA
+  (`RDNA4_ONLY_FAMILIES`: gfx1151's "every family" reading excludes it and the
+  C++ pass refuses it there by name). Launch ABI: `GFX_SPARSE_MATMUL_2TO4_ABI`;
+  `runtime._submit_rocm_sparse_2to4` zeroes and then consumes every validity
+  word and refuses the launch — output never copied — when any 16x16 tile's A
+  block is not 2:4 sparse. VJP: AD stays on the logical function
+  (`native_backward` after packaging, asserted on the device). Device rows on
+  Tajasarus: f16→f32, f16→f16, bf16→f32 × three shapes, the dense-tile
+  refusal, and the public front door. Envelope unchanged (extents ≤ 256,
+  16/16/32-tiled); `auto_2to4` lowers on the public route but its device rows
+  stay on the isolated worker's tests.
+
+Fleet at the head: Tajasarus **18955 passed, 4 failed** at `a5474704` (the four
+were host-side gates broken by this branch and fixed at `a9a158e0`: the
+staging-arena gate reading the new launcher entry inside the gemm handler's
+body, the sparse family missing from the pipeline registry, gfx1151's dtype
+tuple, and the device-marker location gate — the touched files 250 passed at
+`a9a158e0`; ROCm lit 74/74 in both trees; core lit 431 passed / 62 unsupported,
+0 failed, in both trees, run from the venv's `lit`); Princess-Luna **19545 passed, 4 failed** at `a5474704`
+(the same four; 195 passed at `a9a158e0`; ROCm lit 74/74; core lit 489 / 4
+unsupported); the sm_120 and Mac rows are in the log entry.
+
+**Still owed after this loop.** An LDS-staged *typed* body (the "LDS staging
+through `package_scheduled_matmul`" the queue named was a knob that did
+nothing; the real work is a multi-wave typed panel with shared-memory reuse,
+and the fork-A wave-LDS pipeline is where it starts); per-shape panel
+selection on the typed route (gfx1151's fixed 2x4 loses 10% to the directive
+lane's 4x4 at 1024³ and the typed 4x4 recovers it; gfx1201's 4x4 is 18% ahead
+at 1024³ only) — a selection rule with a device row per branch, as the gfx1201
+2x4 got; raster-order selection (counters); the packed-int4 input route on the typed path; `auto_2to4`
+device rows through the public package.
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

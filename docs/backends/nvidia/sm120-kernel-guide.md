@@ -55,7 +55,7 @@ correctness-first floor; 16-bit storage is served by the GEMM lanes below.
 | `tessera_mma_m16n8k16_bf16` | matmul (single tile) | 16×8×16 | bf16→f32 | `mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32` | ✅ |
 | `tessera_mma_gemm_bf16` | matmul (general) | aligned M%16/N%8/K%16, index < 2³¹ | bf16→f32 | m16n8k16 tile, K-loop + grid-tiled | ✅ (C2 breadth) |
 | `tessera_mma_gemm_f16` | matmul (general) | aligned M%16/N%8/K%16, index < 2³¹ | f16→f32 | m16n8k16 tile, K-loop + grid-tiled | ✅ |
-| `tessera_nvfp4_mma_m16n8k64` | matmul (block-scale) | 16×8×64 | fp4 e2m1 + ue4m3 scales → f32 | `mma.sync…m16n8k64…kind::mxf4nvf4.block_scale.scale_vec::4X` | ✅ sm_120a execute/compare, non-uniform block scales + SASS pinned |
+| `tessera_nvfp4_mma_m16n8k64` | matmul (block-scale) | 16×8×64 | fp4 e2m1 + ue4m3 scales → f32 | `mma.sync…m16n8k64…kind::mxf4nvf4.block_scale.scale_vec::4X` | ✅ sm_120a execute/compare, non-uniform block scales + SASS pinned; since 2026-09-18 a launcher entry (`invokeNvfp4Emitted`) and the per-lane packer `compiler/nvfp4_fragments.py`, exact on device in five scale modes (`benchmarks/baselines/nvfp4_emitted_20260918/`); one fixed tile, no general-shape dispatch |
 | `tessera_wgmma_matmul_bf16` | matmul (Hopper) | m64n{64,128,256}k16 | bf16→f32 | `wgmma.mma_async…` | ⬜ skeleton (needs smem descriptors + TMA; sm_90a, no Hopper box) |
 
 The emitted general GEMM (`tessera_mma_gemm_{bf16,f16}`) is the **Tier-2 emitted**

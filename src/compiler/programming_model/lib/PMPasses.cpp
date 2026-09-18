@@ -439,6 +439,27 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       schedule.arch = "apple7";
     return schedule;
   }
+  const bool rocmWmmaChip = schedule.target == "rocm" &&
+                            (schedule.arch.contains("gfx1151") ||
+                             schedule.arch.contains("gfx1201"));
+  if (rocmWmmaChip && lhsElement == rhsElement &&
+      (lhsElement.isInteger(8) || lhsElement.isInteger(4)) &&
+      !lhsElement.isUnsignedInteger() && outElement.isInteger(32) &&
+      !schedule.bias && !schedule.residual && schedule.activation == "none") {
+    // Integer WMMA storage on both RDNA chips (V_WMMA_I32_16X16X16_IU8 /
+    // IU4; RDNA3 ISA 7.9, RDNA4 ISA 7.12), i32 accumulate, no fused epilogue
+    // (the epilogue is float-only). int4 rides int8 containers with one
+    // logical value per byte, the directive lane's runtime contract.
+    // gfx1151 keeps its 2x4 panel, gfx1201 its conservative 1x1
+    // (GFX1201-PARITY slice 1b, 2026-09-18).
+    schedule.storage = lhsElement.isInteger(8) ? "int8" : "int4";
+    schedule.accum = "i32";
+    schedule.output = "i32";
+    const bool rdna4 = schedule.arch.contains("gfx1201");
+    schedule.macroTileM = rdna4 ? 16 : 32;
+    schedule.macroTileN = rdna4 ? 16 : 64;
+    return schedule;
+  }
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
       lhsElement == rhsElement &&
       isa<Float8E4M3FNType, Float8E5M2Type>(lhsElement) && outElement.isF32() &&
@@ -453,16 +474,30 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     return schedule;
   }
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
-      lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
-    // Independent conservative RDNA4 profile; no gfx11 panel inheritance.
-    schedule.storage = "f16";
+      lhsElement == rhsElement && (lhsElement.isF16() || lhsElement.isBF16()) &&
+      outElement.isF32()) {
+    // RDNA4 profile on its own evidence (no gfx11 panel inheritance). bf16
+    // storage joined f16 on 2026-09-18 (slice 1b): same fragment family,
+    // V_WMMA_F32_16X16X16_BF16. The panel follows the typed-route gap
+    // packet measured on Tajasarus the same day
+    // (benchmarks/baselines/typed_route_gap_20260918/gfx1201.json): the 2x4
+    // register panel is 2.1x the 1x1 at 1024^3 and 3.3x at 2048^3, a wash
+    // at 512^3 and slower on ragged shapes, so it is selected only for a
+    // static, fully tiled problem at 1024 and above. Wall clock on a WSL2
+    // host, no counters: a selection input, not a promotion.
+    schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
-    schedule.macroTileM = 16;
-    schedule.macroTileN = 16;
+    const bool gfx1201Panel2x4 =
+        !schedule.dynamicM && !schedule.dynamicN && !schedule.dynamicK &&
+        schedule.m >= 1024 && schedule.n >= 1024 && schedule.m % 32 == 0 &&
+        schedule.n % 64 == 0;
+    schedule.macroTileM = gfx1201Panel2x4 ? 32 : 16;
+    schedule.macroTileN = gfx1201Panel2x4 ? 64 : 16;
     return schedule;
   }
-  if (rocm && lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
-    schedule.storage = "f16";
+  if (rocm && lhsElement == rhsElement &&
+      (lhsElement.isF16() || lhsElement.isBF16()) && outElement.isF32()) {
+    schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
     // gfx1151's committed production GEMM is a 2x4 register-blocked WMMA
     // macro-tile.  Schedule IR carries logical element extents, not the

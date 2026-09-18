@@ -1272,9 +1272,17 @@ struct GenerateWMMAGemmKernelPass
         request.activation = a.getValue().str();
       if (auto a = op->getAttrOfType<StringAttr>("output"))
         request.output = a.getValue().str();
+      // The directive lane spells the raster contract `schedule_raster_*`;
+      // the typed `tile.matmul_kernel` carries the Schedule's decision as
+      // `tessera.raster_*`. Read both (ROCM-RASTER-1 on the typed route,
+      // 2026-09-18); the selection is still row-major until measured.
       if (auto a = op->getAttrOfType<StringAttr>("schedule_raster_order"))
         request.rasterOrder = a.getValue().str();
+      else if (auto a = op->getAttrOfType<StringAttr>("tessera.raster_order"))
+        request.rasterOrder = a.getValue().str();
       if (auto a = op->getAttrOfType<IntegerAttr>("schedule_raster_group"))
+        request.rasterGroup = a.getInt();
+      else if (auto a = op->getAttrOfType<IntegerAttr>("tessera.raster_group"))
         request.rasterGroup = a.getInt();
       request.storagePack =
           op->getAttrOfType<tessera::tile::TilePackedFormatAttr>(
@@ -1577,8 +1585,23 @@ struct GenerateWMMAGemmKernelPass
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernel(true);
-      if (viaTile && mt == 2 && nt == 4 && T.pack == 0 && !hasBias &&
-          activation == "none" && outputTy == T.accElem) {
+      // The typed 2x4 f16/bf16 body carries gfx1151's performance-closure
+      // digest (TileToROCM refuses it on any other arch). Stamp it only when
+      // the request is gfx11's: the op's `arch`/`schedule_arch`, else the
+      // module's `tessera.arch`, else the historical gfx11 default. A gfx12
+      // 2x4 panel is an ordinary typed body, measured on its own chip
+      // (GFX1201-PARITY, typed-route gap, 2026-09-18).
+      StringRef requestArch = "gfx1151";
+      if (auto a = op->getAttrOfType<StringAttr>("arch"))
+        requestArch = a.getValue();
+      else if (auto a = op->getAttrOfType<StringAttr>("schedule_arch"))
+        requestArch = a.getValue();
+      else if (auto moduleOp = op->getParentOfType<ModuleOp>())
+        if (auto a = moduleOp->getAttrOfType<StringAttr>("tessera.arch"))
+          requestArch = a.getValue();
+      const bool gfx11Request = requestArch.starts_with("gfx11");
+      if (viaTile && gfx11Request && mt == 2 && nt == 4 && T.pack == 0 &&
+          !hasBias && activation == "none" && outputTy == T.accElem) {
         gpuFunc->setAttr("tessera.rocm.typed_gfx11_gemm_contract",
                          b.getUnitAttr());
         gpuFunc->setAttr("tessera.rocm.physical_panel_mt",
@@ -1593,6 +1616,14 @@ struct GenerateWMMAGemmKernelPass
                                  "schedule_raster_group"})
         if (Attribute attr = op->getAttr(attrName))
           gpuFunc->setAttr((Twine("tessera.rocm.") + attrName).str(), attr);
+      // The typed spelling lands under the same kernel attribute names so a
+      // reader of the generated kernel sees one raster contract.
+      if (!op->hasAttr("schedule_raster_order"))
+        for (auto [typed, kernel] :
+             {std::pair{"tessera.raster_order", "tessera.rocm.schedule_raster_order"},
+              std::pair{"tessera.raster_group", "tessera.rocm.schedule_raster_group"}})
+          if (Attribute attr = op->getAttr(typed))
+            gpuFunc->setAttr(kernel, attr);
       if (request.canonicalKLoop) {
         gpuFunc->setAttr("tessera.rocm.source",
                          b.getStringAttr("canonical_mnk_scf_for"));
@@ -1616,12 +1647,14 @@ struct GenerateWMMAGemmKernelPass
 
       OpBuilder bodyB(gpuFunc.getContext());
       // The typed via-tile path carries the fused bias/activation epilogue
-      // since 2026-09-17 (applied by the architecture consumer at the store);
-      // int4 nibble packing and a reduced output type remain untyped-only.
-      if (viaTile && (T.pack == 2 || outputTy != T.accElem)) {
+      // since 2026-09-17 (applied by the architecture consumer at the store)
+      // and, since 2026-09-18, int4: the typed producer hands TileToROCM an
+      // i8 tile view and its fragment materializer compacts the nibbles per
+      // chip (slice 1b). A reduced output type remains untyped-only.
+      if (viaTile && outputTy != T.accElem) {
         op->emitError(
-            "generate-wmma-gemm-kernel: typed via-tile pilot requires an "
-            "f16/bf16/int8 GEMM stored in its accumulator type");
+            "generate-wmma-gemm-kernel: typed via-tile pilot requires a GEMM "
+            "stored in its accumulator type");
         return signalPassFailure();
       }
       if (request.canonicalKLoop && canonicalStaging == "lds") {

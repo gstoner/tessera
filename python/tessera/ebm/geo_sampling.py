@@ -413,6 +413,15 @@ def sphere_langevin_step(
         )
         if gpu_out is not None:
             return gpu_out, next_key
+        # CUDA (sm_120) front door: the whole step as one cooperative kernel
+        # through the row-program emitter (2026-09-18). None off that silicon.
+        from tessera.ebm.energy import _try_cuda_gpu_sphere_langevin_step_f32
+        cuda_out = _try_cuda_gpu_sphere_langevin_step_f32(
+            x_arr.astype(np.float32, copy=False), grad_f32, noise,
+            float(eta), float(noise_scale),
+        )
+        if cuda_out is not None:
+            return cuda_out, next_key
         # Native x86 (AVX-512) / ROCm (gfx1151) lane. Apple fuses the whole step;
         # here the tangent projection + retract (normalize) run on the host and the
         # affine core `x - eta*grad_tan + noise_scale*noise_tan` runs on the shared

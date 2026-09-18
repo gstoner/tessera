@@ -52,27 +52,27 @@ if TYPE_CHECKING:  # noqa: SIM108 -- see below
         ScheduledAttentionBackwardArtifact,
     )
 
-GFX1151_SOFTMAX_F16_ABI = "tessera.rocm.softmax.x_o_rows_k.f16.v1"
-GFX1151_SOFTMAX_F32_ABI = "tessera.rocm.softmax.x_o_rows_k.f32.v1"
-GFX1151_REDUCE_F32_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.f32.v1"
-GFX1151_REDUCE_F16_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.f16_f32out.v1"
-GFX1151_REDUCE_BF16_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.bf16_f32out.v1"
-GFX1151_PAGED_KV_F32_ABI = "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1"
-GFX1151_MOE_DISPATCH_F32_ABI = "tessera.rocm.moe_dispatch.x_token_o_t_s_h.f32_i32.v1"
-GFX1151_ATTN_F16_ABI = "tessera.rocm.attention.q_k_v_o_dims.f16_f32out.v1"
-GFX1151_ATTN_BF16_ABI = "tessera.rocm.attention.q_k_v_o_dims.bf16_f32out.v1"
-GFX1151_ATTN_BWD_PRE_ABI = "tessera.rocm.attention_backward.pre.v1"
-GFX1151_ATTN_BWD_DKDV_ABI = "tessera.rocm.attention_backward.dkdv_split.v1"
-GFX1151_ATTN_BWD_REDUCE_ABI = "tessera.rocm.attention_backward.dkdv_reduce.v1"
-GFX1151_ATTN_BWD_DQ_ABI = "tessera.rocm.attention_backward.dq.v1"
-GFX1151_MATMUL_F16_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.f16_f32.v1"
+GFX_SOFTMAX_F16_ABI = "tessera.rocm.softmax.x_o_rows_k.f16.v1"
+GFX_SOFTMAX_F32_ABI = "tessera.rocm.softmax.x_o_rows_k.f32.v1"
+GFX_REDUCE_F32_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.f32.v1"
+GFX_REDUCE_F16_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.f16_f32out.v1"
+GFX_REDUCE_BF16_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.bf16_f32out.v1"
+GFX_PAGED_KV_F32_ABI = "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1"
+GFX_MOE_DISPATCH_F32_ABI = "tessera.rocm.moe_dispatch.x_token_o_t_s_h.f32_i32.v1"
+GFX_ATTN_F16_ABI = "tessera.rocm.attention.q_k_v_o_dims.f16_f32out.v1"
+GFX_ATTN_BF16_ABI = "tessera.rocm.attention.q_k_v_o_dims.bf16_f32out.v1"
+GFX_ATTN_BWD_PRE_ABI = "tessera.rocm.attention_backward.pre.v1"
+GFX_ATTN_BWD_DKDV_ABI = "tessera.rocm.attention_backward.dkdv_split.v1"
+GFX_ATTN_BWD_REDUCE_ABI = "tessera.rocm.attention_backward.dkdv_reduce.v1"
+GFX_ATTN_BWD_DQ_ABI = "tessera.rocm.attention_backward.dq.v1"
+GFX_MATMUL_F16_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.f16_f32.v1"
 #: The same f16/f32 matmul with the fused epilogue: an optional per-column f32
 #: bias buffer between B and the output (the portable Tile ABI order
 #: A, B, [bias], D, M, N, K) and/or a pointwise activation named in the
 #: descriptor's provenance. One ABI for both chips; the architecture consumer
 #: applies the epilogue at the fragment store on each chip's own layout.
-GFX1151_MATMUL_F16_F32_FUSED_ABI = "tessera.rocm.matmul.a_b_bias_o_m_n_k.f16_f32.fused.v1"
-GFX1151_DEPTH_ATTN_F32_ABI = (
+GFX_MATMUL_F16_F32_FUSED_ABI = "tessera.rocm.matmul.a_b_bias_o_m_n_k.f16_f32.fused.v1"
+GFX_DEPTH_ATTN_F32_ABI = (
     "tessera.rocm.depth_attention.query_sources_o.f32.v1"
 )
 
@@ -1467,7 +1467,7 @@ def package_scheduled_matmul(
     if artifact.residual_name is not None:
         raise ValueError("ROCm scheduled matmul does not carry a residual epilogue")
     fused = artifact.bias_name is not None or artifact.activation != "none"
-    abi_id = GFX1151_MATMUL_F16_F32_FUSED_ABI if fused else GFX1151_MATMUL_F16_F32_ABI
+    abi_id = GFX_MATMUL_F16_F32_FUSED_ABI if fused else GFX_MATMUL_F16_F32_ABI
     image = NativeImageArtifact(
         target=f"rocm_{arch}",
         architecture=arch,
@@ -1562,14 +1562,14 @@ def package_scheduled_kernel(
     arch = artifact.architecture
     scalars: tuple[ScalarArgument, ...]
     if artifact.family == "softmax":
-        abi = GFX1151_SOFTMAX_F32_ABI
+        abi = GFX_SOFTMAX_F32_ABI
         compile_result = (_compile_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
                           _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.softmax",
                                                   family="softmax", architecture=arch))
         scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
         geometry = f"{arch}_softmax_workgroup_per_row_256"
     elif artifact.family == "reduce":
-        abi = GFX1151_REDUCE_F32_ABI
+        abi = GFX_REDUCE_F32_ABI
         compile_result = (_compile_reduction_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
                           _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.reduce",
                                                   family="reduction", architecture=arch))
@@ -1662,7 +1662,7 @@ def package_scheduled_attention(
         compile_state,
     ) = (_compile_scheduled_attention_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.flash_attn", family="attention", architecture=arch))
-    abi = GFX1151_ATTN_F16_ABI if artifact.dtype == "fp16" else GFX1151_ATTN_BF16_ABI
+    abi = GFX_ATTN_F16_ABI if artifact.dtype == "fp16" else GFX_ATTN_BF16_ABI
     entry = artifact.function_name
     image = NativeImageArtifact(
         target=f"rocm_{arch}",
@@ -1838,14 +1838,14 @@ def package_scheduled_depth_attention(
         target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
         binary_format="hsaco",
         payload=payload,
-        entry_points=(NativeEntryPoint(entry, GFX1151_DEPTH_ATTN_F32_ABI),),
+        entry_points=(NativeEntryPoint(entry, GFX_DEPTH_ATTN_F32_ABI),),
         compile_state=compile_state,
         device_libraries=device_libraries,
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
-        abi_id=GFX1151_DEPTH_ATTN_F32_ABI,
+        abi_id=GFX_DEPTH_ATTN_F32_ABI,
         buffers=(
             BufferBinding(0, artifact.query_name, "input", "fp32", 1, "row_major", 4),
             BufferBinding(
@@ -1918,7 +1918,7 @@ def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativeP
     input_name, output_name, dtype, shape = contract
     storage = "f16" if dtype == "fp16" else "f32"
     entry = f"tessera_tile_softmax_{storage}"
-    abi_id = GFX1151_SOFTMAX_F16_ABI if dtype == "fp16" else GFX1151_SOFTMAX_F32_ABI
+    abi_id = GFX_SOFTMAX_F16_ABI if dtype == "fp16" else GFX_SOFTMAX_F32_ABI
     alignment = 2 if dtype == "fp16" else 4
     tile_ir = emit_softmax_tile_ir(entry=entry, storage=storage)
     (
@@ -1997,9 +1997,9 @@ def package_reduction(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
     storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     entry = f"tessera_tile_reduce_{kind}_{storage}"
     abi_id = {
-        "fp16": GFX1151_REDUCE_F16_ABI,
-        "bf16": GFX1151_REDUCE_BF16_ABI,
-        "fp32": GFX1151_REDUCE_F32_ABI,
+        "fp16": GFX_REDUCE_F16_ABI,
+        "bf16": GFX_REDUCE_BF16_ABI,
+        "fp32": GFX_REDUCE_F32_ABI,
     }[dtype]
     outer = math.prod(shape[:axis]) if axis else 1
     axis_extent = shape[axis]
@@ -2114,14 +2114,14 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
         target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
         binary_format="hsaco",
         payload=payload,
-        entry_points=(NativeEntryPoint(entry, GFX1151_PAGED_KV_F32_ABI),),
+        entry_points=(NativeEntryPoint(entry, GFX_PAGED_KV_F32_ABI),),
         compile_state=compile_state,
         device_libraries=device_libraries,
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
-        abi_id=GFX1151_PAGED_KV_F32_ABI,
+        abi_id=GFX_PAGED_KV_F32_ABI,
         buffers=(
             BufferBinding(0, pages_name, "input", "fp32", 4, "row_major", 4),
             BufferBinding(1, table_name, "input", "int32", 1, "row_major", 4),
@@ -2190,7 +2190,7 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         f"{dropout_seed}".encode()
     ).hexdigest()[:10]
     entry = f"tessera_tile_attention_{storage}_{'causal' if causal else 'full'}_{semantic_key}"
-    abi_id = GFX1151_ATTN_F16_ABI if dtype == "fp16" else GFX1151_ATTN_BF16_ABI
+    abi_id = GFX_ATTN_F16_ABI if dtype == "fp16" else GFX_ATTN_BF16_ABI
     canonical_route = (window_left < 0 and window_right < 0) or (causal and window_left >= 0 and window_right == 0)
     if canonical_route:
         tile_kv = 16
@@ -2480,11 +2480,11 @@ def package_attention_backward(
         f"{backward_entry}_dq",
     )
     stage_abis = (
-        GFX1151_ATTN_F16_ABI if dtype == "fp16" else GFX1151_ATTN_BF16_ABI,
-        GFX1151_ATTN_BWD_PRE_ABI,
-        GFX1151_ATTN_BWD_DKDV_ABI,
-        GFX1151_ATTN_BWD_REDUCE_ABI,
-        GFX1151_ATTN_BWD_DQ_ABI,
+        GFX_ATTN_F16_ABI if dtype == "fp16" else GFX_ATTN_BF16_ABI,
+        GFX_ATTN_BWD_PRE_ABI,
+        GFX_ATTN_BWD_DKDV_ABI,
+        GFX_ATTN_BWD_REDUCE_ABI,
+        GFX_ATTN_BWD_DQ_ABI,
     )
     tile_ir = (
         artifact.tile_ir
@@ -2847,14 +2847,14 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
         target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
         binary_format="hsaco",
         payload=payload,
-        entry_points=(NativeEntryPoint(entry, GFX1151_MOE_DISPATCH_F32_ABI),),
+        entry_points=(NativeEntryPoint(entry, GFX_MOE_DISPATCH_F32_ABI),),
         compile_state=compile_state,
         device_libraries=device_libraries,
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
-        abi_id=GFX1151_MOE_DISPATCH_F32_ABI,
+        abi_id=GFX_MOE_DISPATCH_F32_ABI,
         buffers=(
             BufferBinding(0, x_name, "input", "fp32", 2, "row_major", 4),
             BufferBinding(1, token_name, "input", "int32", 1, "row_major", 4),
@@ -2888,22 +2888,22 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
 
 
 __all__ = [
-    "GFX1151_ATTN_BF16_ABI",
-    "GFX1151_ATTN_BWD_DKDV_ABI",
-    "GFX1151_ATTN_BWD_DQ_ABI",
-    "GFX1151_ATTN_BWD_PRE_ABI",
-    "GFX1151_ATTN_BWD_REDUCE_ABI",
-    "GFX1151_ATTN_F16_ABI",
-    "GFX1151_DEPTH_ATTN_F32_ABI",
-    "GFX1151_MOE_DISPATCH_F32_ABI",
-    "GFX1151_MATMUL_F16_F32_ABI",
-    "GFX1151_MATMUL_F16_F32_FUSED_ABI",
-    "GFX1151_PAGED_KV_F32_ABI",
-    "GFX1151_REDUCE_BF16_ABI",
-    "GFX1151_REDUCE_F16_ABI",
-    "GFX1151_REDUCE_F32_ABI",
-    "GFX1151_SOFTMAX_F16_ABI",
-    "GFX1151_SOFTMAX_F32_ABI",
+    "GFX_ATTN_BF16_ABI",
+    "GFX_ATTN_BWD_DKDV_ABI",
+    "GFX_ATTN_BWD_DQ_ABI",
+    "GFX_ATTN_BWD_PRE_ABI",
+    "GFX_ATTN_BWD_REDUCE_ABI",
+    "GFX_ATTN_F16_ABI",
+    "GFX_DEPTH_ATTN_F32_ABI",
+    "GFX_MOE_DISPATCH_F32_ABI",
+    "GFX_MATMUL_F16_F32_ABI",
+    "GFX_MATMUL_F16_F32_FUSED_ABI",
+    "GFX_PAGED_KV_F32_ABI",
+    "GFX_REDUCE_BF16_ABI",
+    "GFX_REDUCE_F16_ABI",
+    "GFX_REDUCE_F32_ABI",
+    "GFX_SOFTMAX_F16_ABI",
+    "GFX_SOFTMAX_F32_ABI",
     "ROCMNativePackage",
     "ROCMNativeProgram",
     "ROCMWorkspaceSlice",

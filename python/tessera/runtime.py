@@ -3679,12 +3679,12 @@ def _bind_rocm_attention_backward_program(
     import numpy as np
 
     from tessera.compiler.rocm_native import (
-        GFX1151_ATTN_BWD_DKDV_ABI,
-        GFX1151_ATTN_BWD_DQ_ABI,
-        GFX1151_ATTN_BWD_PRE_ABI,
-        GFX1151_ATTN_BWD_REDUCE_ABI,
-        GFX1151_ATTN_BF16_ABI,
-        GFX1151_ATTN_F16_ABI,
+        GFX_ATTN_BWD_DKDV_ABI,
+        GFX_ATTN_BWD_DQ_ABI,
+        GFX_ATTN_BWD_PRE_ABI,
+        GFX_ATTN_BWD_REDUCE_ABI,
+        GFX_ATTN_BF16_ABI,
+        GFX_ATTN_F16_ABI,
         ROCMNativeProgram,
     )
 
@@ -3695,11 +3695,11 @@ def _bind_rocm_attention_backward_program(
             _rocm_live_arch() != program.image.architecture):
         raise ValueError("attention backward requires its exact owning ROCm device")
     expected_abis = (
-        GFX1151_ATTN_F16_ABI if program.image.entry_points[0].abi_id == GFX1151_ATTN_F16_ABI else GFX1151_ATTN_BF16_ABI,
-        GFX1151_ATTN_BWD_PRE_ABI,
-        GFX1151_ATTN_BWD_DKDV_ABI,
-        GFX1151_ATTN_BWD_REDUCE_ABI,
-        GFX1151_ATTN_BWD_DQ_ABI,
+        GFX_ATTN_F16_ABI if program.image.entry_points[0].abi_id == GFX_ATTN_F16_ABI else GFX_ATTN_BF16_ABI,
+        GFX_ATTN_BWD_PRE_ABI,
+        GFX_ATTN_BWD_DKDV_ABI,
+        GFX_ATTN_BWD_REDUCE_ABI,
+        GFX_ATTN_BWD_DQ_ABI,
     )
     if tuple(item.abi_id for item in program.descriptors) != expected_abis:
         raise RuntimeError("gfx1151 attention backward launch stages are not canonical")
@@ -3744,7 +3744,7 @@ def _bind_rocm_attention_backward_program(
     dk_name, dv_name = kv_outputs
     q, key, value, do = (buffers[name] for name in (q_name, k_name, v_name, do_name))
     dq, dk, dv_out = (buffers[name] for name in (dq_name, dk_name, dv_name))
-    expected_storage = np.float16 if expected_abis[0] == GFX1151_ATTN_F16_ABI else _bfloat16_dtype()
+    expected_storage = np.float16 if expected_abis[0] == GFX_ATTN_F16_ABI else _bfloat16_dtype()
     if expected_storage is None:
         raise RuntimeError("gfx1151 bf16 attention backward requires ml_dtypes")
     if (
@@ -4095,51 +4095,51 @@ def _submit_rocm_gfx1151_native(
     import numpy as np
 
     from tessera.compiler.rocm_native import (
-        GFX1151_ATTN_BF16_ABI,
-        GFX1151_ATTN_F16_ABI,
-        GFX1151_DEPTH_ATTN_F32_ABI,
-        GFX1151_MATMUL_F16_F32_ABI,
-        GFX1151_MATMUL_F16_F32_FUSED_ABI,
-        GFX1151_MOE_DISPATCH_F32_ABI,
-        GFX1151_PAGED_KV_F32_ABI,
-        GFX1151_REDUCE_BF16_ABI,
-        GFX1151_REDUCE_F16_ABI,
-        GFX1151_REDUCE_F32_ABI,
-        GFX1151_SOFTMAX_F16_ABI,
-        GFX1151_SOFTMAX_F32_ABI,
+        GFX_ATTN_BF16_ABI,
+        GFX_ATTN_F16_ABI,
+        GFX_DEPTH_ATTN_F32_ABI,
+        GFX_MATMUL_F16_F32_ABI,
+        GFX_MATMUL_F16_F32_FUSED_ABI,
+        GFX_MOE_DISPATCH_F32_ABI,
+        GFX_PAGED_KV_F32_ABI,
+        GFX_REDUCE_BF16_ABI,
+        GFX_REDUCE_F16_ABI,
+        GFX_REDUCE_F32_ABI,
+        GFX_SOFTMAX_F16_ABI,
+        GFX_SOFTMAX_F32_ABI,
     )
 
     if image.target == "rocm_gfx1201" and (
         image.architecture != "gfx1201"
-        or descriptor.abi_id not in {GFX1151_SOFTMAX_F32_ABI, GFX1151_REDUCE_F32_ABI, GFX1151_MATMUL_F16_F32_ABI, GFX1151_MATMUL_F16_F32_FUSED_ABI, GFX1151_ATTN_F16_ABI, GFX1151_ATTN_BF16_ABI}
+        or descriptor.abi_id not in {GFX_SOFTMAX_F32_ABI, GFX_REDUCE_F32_ABI, GFX_MATMUL_F16_F32_ABI, GFX_MATMUL_F16_F32_FUSED_ABI, GFX_ATTN_F16_ABI, GFX_ATTN_BF16_ABI}
     ):
         raise ValueError("gfx1201 scheduled launch requires a proved unary, matmul or attention ABI")
 
     if descriptor.abi_id not in {
-        GFX1151_SOFTMAX_F16_ABI,
-        GFX1151_SOFTMAX_F32_ABI,
-        GFX1151_REDUCE_F16_ABI,
-        GFX1151_REDUCE_BF16_ABI,
-        GFX1151_REDUCE_F32_ABI,
-        GFX1151_PAGED_KV_F32_ABI,
-        GFX1151_MOE_DISPATCH_F32_ABI,
-        GFX1151_ATTN_F16_ABI,
-        GFX1151_ATTN_BF16_ABI,
-        GFX1151_MATMUL_F16_F32_ABI,
-        GFX1151_MATMUL_F16_F32_FUSED_ABI,
-        GFX1151_DEPTH_ATTN_F32_ABI,
+        GFX_SOFTMAX_F16_ABI,
+        GFX_SOFTMAX_F32_ABI,
+        GFX_REDUCE_F16_ABI,
+        GFX_REDUCE_BF16_ABI,
+        GFX_REDUCE_F32_ABI,
+        GFX_PAGED_KV_F32_ABI,
+        GFX_MOE_DISPATCH_F32_ABI,
+        GFX_ATTN_F16_ABI,
+        GFX_ATTN_BF16_ABI,
+        GFX_MATMUL_F16_F32_ABI,
+        GFX_MATMUL_F16_F32_FUSED_ABI,
+        GFX_DEPTH_ATTN_F32_ABI,
     }:
         raise RuntimeError(f"unsupported gfx1151 descriptor ABI {descriptor.abi_id!r}")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
-    paged_kv = descriptor.abi_id == GFX1151_PAGED_KV_F32_ABI
-    moe_dispatch = descriptor.abi_id == GFX1151_MOE_DISPATCH_F32_ABI
+    paged_kv = descriptor.abi_id == GFX_PAGED_KV_F32_ABI
+    moe_dispatch = descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
     attention = descriptor.abi_id in {
-        GFX1151_ATTN_F16_ABI,
-        GFX1151_ATTN_BF16_ABI,
+        GFX_ATTN_F16_ABI,
+        GFX_ATTN_BF16_ABI,
     }
-    matmul = descriptor.abi_id in {GFX1151_MATMUL_F16_F32_ABI, GFX1151_MATMUL_F16_F32_FUSED_ABI}
+    matmul = descriptor.abi_id in {GFX_MATMUL_F16_F32_ABI, GFX_MATMUL_F16_F32_FUSED_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
-    depth_attention = descriptor.abi_id == GFX1151_DEPTH_ATTN_F32_ABI
+    depth_attention = descriptor.abi_id == GFX_DEPTH_ATTN_F32_ABI
     attention_bias = attention and bool(descriptor.provenance["bias"])
     expected_buffers = (
         5
@@ -4153,9 +4153,9 @@ def _submit_rocm_gfx1151_native(
     if len(ordered) != expected_buffers:
         raise RuntimeError(f"gfx1151 descriptor requires {expected_buffers} buffers")
     reduction_abis = {
-        GFX1151_REDUCE_F16_ABI,
-        GFX1151_REDUCE_BF16_ABI,
-        GFX1151_REDUCE_F32_ABI,
+        GFX_REDUCE_F16_ABI,
+        GFX_REDUCE_BF16_ABI,
+        GFX_REDUCE_F32_ABI,
     }
     reduction = descriptor.abi_id in reduction_abis
     dimensions: tuple[int, ...] = ()
@@ -4219,7 +4219,7 @@ def _submit_rocm_gfx1151_native(
         bias = buffers[ordered[3].name] if attention_bias else None
         output = buffers[ordered[-1].name]
         b, hq, hkv, sq, sk, d, dv = (int(value) for value in cast(list[int], descriptor.provenance["shape"]))
-        expected_storage = np.float16 if descriptor.abi_id == GFX1151_ATTN_F16_ABI else _bfloat16_dtype()
+        expected_storage = np.float16 if descriptor.abi_id == GFX_ATTN_F16_ABI else _bfloat16_dtype()
         if expected_storage is None:
             raise RuntimeError("gfx1151 bf16 attention requires ml_dtypes")
         if (
@@ -4313,9 +4313,9 @@ def _submit_rocm_gfx1151_native(
             raise RuntimeError("gfx1151 reduction shapes disagree with Outer/AxisExtent/Inner scalars")
         dimensions = (outer, axis_extent, inner)
         grid_x = outer * inner
-        if descriptor.abi_id == GFX1151_REDUCE_F16_ABI:
+        if descriptor.abi_id == GFX_REDUCE_F16_ABI:
             expected_dtype = np.float16
-        elif descriptor.abi_id == GFX1151_REDUCE_BF16_ABI:
+        elif descriptor.abi_id == GFX_REDUCE_BF16_ABI:
             expected_dtype = _bfloat16_dtype()
             if expected_dtype is None:
                 raise RuntimeError("gfx1151 bf16 reduction requires ml_dtypes")
@@ -4328,7 +4328,7 @@ def _submit_rocm_gfx1151_native(
             raise RuntimeError("gfx1151 softmax X/O shapes disagree with Rows/K scalars")
         dimensions = (rows, columns)
         grid_x = rows
-        expected_dtype = np.float16 if descriptor.abi_id == GFX1151_SOFTMAX_F16_ABI else np.float32
+        expected_dtype = np.float16 if descriptor.abi_id == GFX_SOFTMAX_F16_ABI else np.float32
     if not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention:
         expected_output_dtype = np.float32 if reduction else expected_dtype
         if x.dtype != expected_dtype or output.dtype != expected_output_dtype:
@@ -5263,38 +5263,38 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         return
 
     from tessera.compiler.rocm_native import (
-        GFX1151_ATTN_F16_ABI,
-        GFX1151_ATTN_BF16_ABI,
-        GFX1151_DEPTH_ATTN_F32_ABI,
-        GFX1151_MATMUL_F16_F32_ABI,
-        GFX1151_MATMUL_F16_F32_FUSED_ABI,
-        GFX1151_MOE_DISPATCH_F32_ABI,
-        GFX1151_PAGED_KV_F32_ABI,
-        GFX1151_REDUCE_BF16_ABI,
-        GFX1151_REDUCE_F16_ABI,
-        GFX1151_REDUCE_F32_ABI,
-        GFX1151_SOFTMAX_F16_ABI,
-        GFX1151_SOFTMAX_F32_ABI,
+        GFX_ATTN_F16_ABI,
+        GFX_ATTN_BF16_ABI,
+        GFX_DEPTH_ATTN_F32_ABI,
+        GFX_MATMUL_F16_F32_ABI,
+        GFX_MATMUL_F16_F32_FUSED_ABI,
+        GFX_MOE_DISPATCH_F32_ABI,
+        GFX_PAGED_KV_F32_ABI,
+        GFX_REDUCE_BF16_ABI,
+        GFX_REDUCE_F16_ABI,
+        GFX_REDUCE_F32_ABI,
+        GFX_SOFTMAX_F16_ABI,
+        GFX_SOFTMAX_F32_ABI,
     )
 
     if (
         (target == "rocm_gfx1151" or (target == "rocm_gfx1201" and abi_id in {
-            GFX1151_SOFTMAX_F32_ABI, GFX1151_REDUCE_F32_ABI,
-            GFX1151_MATMUL_F16_F32_ABI, GFX1151_MATMUL_F16_F32_FUSED_ABI, GFX1151_ATTN_F16_ABI, GFX1151_ATTN_BF16_ABI}))
+            GFX_SOFTMAX_F32_ABI, GFX_REDUCE_F32_ABI,
+            GFX_MATMUL_F16_F32_ABI, GFX_MATMUL_F16_F32_FUSED_ABI, GFX_ATTN_F16_ABI, GFX_ATTN_BF16_ABI}))
         and abi_id
         in {
-            GFX1151_SOFTMAX_F16_ABI,
-            GFX1151_SOFTMAX_F32_ABI,
-            GFX1151_REDUCE_F16_ABI,
-            GFX1151_REDUCE_BF16_ABI,
-            GFX1151_REDUCE_F32_ABI,
-            GFX1151_PAGED_KV_F32_ABI,
-            GFX1151_MOE_DISPATCH_F32_ABI,
-            GFX1151_MATMUL_F16_F32_ABI,
-            GFX1151_MATMUL_F16_F32_FUSED_ABI,
-            GFX1151_DEPTH_ATTN_F32_ABI,
-            GFX1151_ATTN_F16_ABI,
-            GFX1151_ATTN_BF16_ABI,
+            GFX_SOFTMAX_F16_ABI,
+            GFX_SOFTMAX_F32_ABI,
+            GFX_REDUCE_F16_ABI,
+            GFX_REDUCE_BF16_ABI,
+            GFX_REDUCE_F32_ABI,
+            GFX_PAGED_KV_F32_ABI,
+            GFX_MOE_DISPATCH_F32_ABI,
+            GFX_MATMUL_F16_F32_ABI,
+            GFX_MATMUL_F16_F32_FUSED_ABI,
+            GFX_DEPTH_ATTN_F32_ABI,
+            GFX_ATTN_F16_ABI,
+            GFX_ATTN_BF16_ABI,
         }
         and target not in _native_launchers
     ):

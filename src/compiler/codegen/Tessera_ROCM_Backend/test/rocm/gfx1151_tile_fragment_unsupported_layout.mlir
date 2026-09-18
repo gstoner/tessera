@@ -14,8 +14,12 @@ module {
         tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
         tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 16>
       } : (memref<256xf16>, index, index) -> !tile.tile
-      // B lives in LDS, which this materializer cannot address: it emits
-      // global loads against a rank-1 gmem buffer.
+      // B's view CLAIMS the LDS space over a default-space buffer. Since
+      // 2026-09-18 the materializer does address LDS -- the multi-wave staged
+      // body packs from it -- but only when the attribute and the memref's
+      // address space agree. A view that claims "lds" over a global buffer
+      // would lower to global loads reading the wrong memory, so it is refused
+      // by name. The positive case is `typed_matmul_lds_staged.mlir`.
       //
       // This fixture used to assert something else -- that a ROW-MAJOR B
       // contradicted the descriptor's `b_layout = "col_major"` and was

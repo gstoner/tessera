@@ -120,8 +120,11 @@ static FailureOr<Value> materializeFragmentPack(
                               : (viewInputs == 3 + linearBaseOffset ||
                                  viewInputs == 5 + linearBaseOffset);
   // A view may name global memory or the workgroup's LDS (the LDS-staged
-  // typed body packs its fragments from shared memory, 2026-09-18); the
-  // address space is the memref's, the load path is the same.
+  // typed body packs its fragments from shared memory, 2026-09-18). The load
+  // path is the same; what differs is the memref's address space, and the
+  // attribute must AGREE with it -- a view claiming "lds" over a default-space
+  // buffer would lower to global loads that read the wrong memory, which is
+  // the whole class this refusal exists to catch.
   if ((role != "a" && role != "b") || !memory ||
       !layout || !validArity ||
       (memory.getSpace() != "gmem" && memory.getSpace() != "lds") ||
@@ -179,6 +182,20 @@ static FailureOr<Value> materializeFragmentPack(
   if (memrefTy.getElementType() != elementTy) {
     op->emitError("ROCM_FRAGMENT_SOURCE_TYPE: source element type does not "
                   "match the architecture MMA descriptor");
+    return failure();
+  }
+  // The declared space and the buffer's address space must agree.
+  const bool workgroupBuffer = [&] {
+    auto space = memrefTy.getMemorySpace();
+    if (auto gpuSpace = dyn_cast_or_null<gpu::AddressSpaceAttr>(space))
+      return gpuSpace.getValue() == gpu::AddressSpace::Workgroup;
+    return false;
+  }();
+  if ((memory.getSpace() == "lds") != workgroupBuffer) {
+    op->emitError("ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT: unsupported ")
+        << physical.familyName << " fragment source layout for role " << role
+        << " (tile.memory space '" << memory.getSpace()
+        << "' disagrees with the buffer's address space)";
     return failure();
   }
 

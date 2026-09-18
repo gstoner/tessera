@@ -23,6 +23,23 @@ from typing import Any, Callable, Mapping, Sequence
 from .._jit_boundary import TesseraJitError
 
 
+
+def _rocm_launch_target() -> str:
+    """`rocm_<chip>` for the chip this process launches on (the runtime pin).
+
+    Slice 2b of `GFX1201-PARITY-2026-09-17`: every ROCm VJP lane used to stamp
+    `rocm_gfx1151` as its evidence target and consumer name whatever the host,
+    so on gfx1201 the certificate validator (correctly) reported
+    `runtime_unattested` after the numerics had matched.
+    """
+    from tessera import runtime as _rt
+
+    return f"rocm_{_rt._rocm_chip()}"
+
+
+def _rocm_consumer(name: str) -> str:
+    return f"rocm.{_rocm_launch_target()[len('rocm_'):]}_{name}"
+
 @dataclass(frozen=True)
 class NativeVJPPluginDeclaration:
     """Typed ownership declaration across the complete compiler spine."""
@@ -300,7 +317,7 @@ def register_native_vjp_plugin(
     tile_consumer="tile.native_vjp_program",
     target_consumers={
         "x86": "x86.avx512_normalization",
-        "rocm": "rocm.gfx1151_normalization",
+        "rocm": _rocm_consumer("normalization"),
         "nvidia_sm120": "nvidia.sm120_normalization",
         "apple_gpu": "apple.metal_normalization",
     },
@@ -340,7 +357,7 @@ def _execute_normalization(
     gradient_names = [f"d_{name}" for name in operand_names]
     target_identity = {
         "x86": ("cpu_avx512", "native_cpu", "x86_avx512"),
-        "rocm": ("hip_runtime", "native_gpu", "rocm_gfx1151"),
+        "rocm": ("hip_runtime", "native_gpu", _rocm_launch_target()),
         "nvidia_sm120": ("cuda_driver", "native_gpu", "nvidia_sm120"),
         "apple_gpu": ("metal_runtime", "native_gpu", "apple7"),
     }
@@ -421,7 +438,7 @@ def _execute_normalization(
     tile_consumer="tile.spectral_backward_kernel",
     target_consumers={
         "x86": "x86.avx512_spectral_backward",
-        "rocm": "rocm.gfx1151_spectral_backward",
+        "rocm": _rocm_consumer("spectral_backward"),
         "nvidia_sm120": "nvidia.sm120_spectral_backward",
     },
 )
@@ -498,7 +515,7 @@ def _execute_compound_spectral(
             "execution_mode": expected_mode,
             "evidence_target": ("x86_avx512" if target == "x86" else
                                 "nvidia_sm120" if target == "nvidia_sm120" else
-                                "rocm_gfx1151"),
+                                _rocm_launch_target()),
             "implementation": "family_plugin",
             "residual_policy": "save_inputs",
             "family": declaration.family,
@@ -523,7 +540,7 @@ def _execute_compound_spectral(
     tile_consumer="tile.training_kernel",
     target_consumers={
         "x86": "x86.avx512_lion_backward",
-        "rocm": "rocm.gfx1151_lion_backward",
+        "rocm": _rocm_consumer("lion_backward"),
         "nvidia_sm120": "nvidia.sm120_lion_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
@@ -686,7 +703,7 @@ def _execute_lion(
             "execution_mode": execution_mode,
             "evidence_target": {
                 "x86": "x86_avx512",
-                "rocm": "rocm_gfx1151",
+                "rocm": _rocm_launch_target(),
                 "nvidia_sm120": "nvidia_sm120",
             }[target],
             "implementation": "family_plugin",
@@ -781,7 +798,7 @@ def _execute_stateful_package(
             "execution_mode": execution_mode,
             "evidence_target": {
                 "x86": "x86_avx512",
-                "rocm": "rocm_gfx1151",
+                "rocm": _rocm_launch_target(),
                 "nvidia_sm120": "nvidia_sm120",
             }[target],
             "implementation": "family_plugin",
@@ -812,7 +829,7 @@ def _execute_stateful_package(
     tile_consumer="tile.training_kernel",
     target_consumers={
         "x86": "x86.avx512_sgd_backward",
-        "rocm": "rocm.gfx1151_sgd_backward",
+        "rocm": _rocm_consumer("sgd_backward"),
         "nvidia_sm120": "nvidia.sm120_sgd_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
@@ -824,7 +841,7 @@ def _execute_stateful_package(
     tile_consumer="tile.training_kernel",
     target_consumers={
         "x86": "x86.avx512_momentum_backward",
-        "rocm": "rocm.gfx1151_momentum_backward",
+        "rocm": _rocm_consumer("momentum_backward"),
         "nvidia_sm120": "nvidia.sm120_momentum_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
@@ -835,7 +852,7 @@ def _execute_stateful_package(
     schedule_consumer="schedule.optimizer_vjp",
     tile_consumer="tile.training_kernel",
     target_consumers={
-        "rocm": "rocm.gfx1151_adam_backward",
+        "rocm": _rocm_consumer("adam_backward"),
         "nvidia_sm120": "nvidia.sm120_adam_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
@@ -867,7 +884,7 @@ def _execute_optimizer_vjp(
     tile_consumer="tile.training_kernel",
     target_consumers={
         "x86": "x86.avx512_adafactor_backward",
-        "rocm": "rocm.gfx1151_adafactor_backward",
+        "rocm": _rocm_consumer("adafactor_backward"),
         "nvidia_sm120": "nvidia.sm120_adafactor_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
@@ -911,7 +928,7 @@ def _execute_adafactor(
     tile_consumer="tile.training_kernel",
     target_consumers={
         "x86": "x86.avx512_sequence_mixer_backward",
-        "rocm": "rocm.gfx1151_sequence_mixer_backward",
+        "rocm": _rocm_consumer("sequence_mixer_backward"),
         "nvidia_sm120": "nvidia.sm120_sequence_mixer_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
@@ -1070,7 +1087,7 @@ def _execute_sequence_mixer(
     tile_consumer="tile.attention_backward_kernel",
     target_consumers={
         "x86": "x86.avx512_attention_backward",
-        "rocm": "rocm.gfx1151_attention_backward_program",
+        "rocm": _rocm_consumer("attention_backward_program"),
     },
     differential_policy="zero_dropout_attention",
 )
@@ -1268,7 +1285,7 @@ def _execute_loss_family(
             "evidence_target": (
                 "nvidia_sm120"
                 if nvidia
-                else "rocm_gfx1151" if target == "rocm" else "x86_avx512"
+                else _rocm_launch_target() if target == "rocm" else "x86_avx512"
             ),
             "implementation": "family_plugin",
             "residual_policy": "save_inputs",
@@ -1297,7 +1314,7 @@ def _execute_loss_family(
     tile_consumer="tile.loss_backward_kernel",
     target_consumers={
         "x86": "x86.avx512_regression_loss_backward",
-        "rocm": "rocm.gfx1151_regression_loss_backward",
+        "rocm": _rocm_consumer("regression_loss_backward"),
         "nvidia_sm120": "nvidia.sm120_regression_loss_backward",
     },
 )
@@ -1313,7 +1330,7 @@ def _execute_regression_loss(**kwargs: Any) -> NativeVJPResult:
     tile_consumer="tile.loss_backward_kernel",
     target_consumers={
         "x86": "x86.avx512_binary_loss_backward",
-        "rocm": "rocm.gfx1151_binary_loss_backward",
+        "rocm": _rocm_consumer("binary_loss_backward"),
         "nvidia_sm120": "nvidia.sm120_binary_loss_backward",
     },
 )
@@ -1330,7 +1347,7 @@ def _execute_binary_loss(**kwargs: Any) -> NativeVJPResult:
     tile_consumer="tile.loss_backward_kernel",
     target_consumers={
         "x86": "x86.avx512_class_loss_backward",
-        "rocm": "rocm.gfx1151_class_loss_backward",
+        "rocm": _rocm_consumer("class_loss_backward"),
         "nvidia_sm120": "nvidia.sm120_class_loss_backward",
     },
 )
@@ -1346,7 +1363,7 @@ def _execute_class_loss(**kwargs: Any) -> NativeVJPResult:
     family="distribution_loss_backward",
     schedule_consumer="schedule.loss_backward",
     tile_consumer="tile.loss_backward_kernel",
-    target_consumers={"rocm": "rocm.gfx1151_distribution_loss_backward"},
+    target_consumers={"rocm": _rocm_consumer("distribution_loss_backward")},
 )
 def _execute_distribution_loss(**kwargs: Any) -> NativeVJPResult:
     return _execute_loss_family(**kwargs, loss_kind="distribution_loss")
@@ -1469,7 +1486,7 @@ def _execute_rocm_matmul_backward(
     family="selective_ssm_backward",
     schedule_consumer="schedule.sequence_mixer_backward",
     tile_consumer="tile.training_kernel",
-    target_consumers={"rocm": "rocm.gfx1151_selective_ssm_backward"},
+    target_consumers={"rocm": _rocm_consumer("selective_ssm_backward")},
     differential_policy="non_reexecuting_state_lineage",
 )
 def _execute_rocm_selective_ssm_backward(
@@ -1543,7 +1560,7 @@ def _execute_rocm_selective_ssm_backward(
             "compiler_path": "rocm_selective_ssm_bwd_compiled",
             "execution_kind": "native_gpu",
             "execution_mode": "hip_runtime",
-            "evidence_target": "rocm_gfx1151",
+            "evidence_target": _rocm_launch_target(),
             "implementation": "family_plugin",
             "residual_policy": "recompute_all",
             "family": declaration.family,

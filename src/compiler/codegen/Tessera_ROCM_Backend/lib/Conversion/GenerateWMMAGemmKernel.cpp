@@ -1256,6 +1256,16 @@ struct GenerateWMMAGemmKernelPass
         request.nt = a.getInt();
       if (auto a = op->getAttrOfType<StringAttr>("dtype"))
         request.dtype = a.getValue().str();
+      // OCP FP8 never rides `$dtype` (the dtype contract keeps fp8 and
+      // microscaling forms on `numeric_policy.storage`); the RDNA4 FP8 GEMM
+      // leaves `dtype` at its default and names its storage here.
+      if (auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy"))
+        if (auto storage = policy.getAs<StringAttr>("storage")) {
+          StringRef s = storage.getValue();
+          if (s == "e4m3" || s == "e5m2" || s == "fp8" || s == "bf8" ||
+              s == "fp8_e4m3" || s == "fp8_e5m2")
+            request.dtype = s.str();
+        }
       if (auto a = op->getAttrOfType<BoolAttr>("bias"))
         request.bias = a.getValue();
       if (auto a = op->getAttrOfType<StringAttr>("activation"))

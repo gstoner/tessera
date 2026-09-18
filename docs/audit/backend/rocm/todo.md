@@ -8150,13 +8150,9 @@ gfx1201 the certificate validator correctly reports `runtime_unattested`
 their references. Those eight (`test_autodiff_optimizer_plugin_binding`
 sgd/momentum, `test_autodiff_stateful_plugin_binding` adafactor full/factored,
 `test_autodiff_training_series_target_binding` nesterov/adamw/adam/lion) are
-now pinned explicitly with `rocm_build.require_rocm_host_arch("gfx1151", …)`
-naming the owner. **Owed — slice 2b:** make `rocm_gfx1201` a first-class
-target name on the stateful/optimizer VJP lanes (`stateful_training.py`,
-`native_vjp_plugins.py`, `jit.py`, `gpu_target_map.py` all key on the
-`rocm_gfx1151` string), so the certificate can attest gfx1201 and those eight
-lose their pin. The `sequence_*` mixer certificate test stays family-gated
-(slice 3).
+pinned explicitly with `rocm_build.require_rocm_host_arch("gfx1151", …)`
+naming the owner, until slice 2b (below, the engineering loops) made
+`rocm_gfx1201` a first-class target name on those lanes and the pins came off.
 
 **Slices 3, 4 and 5, the arbiter candidate, and the record of 2b — the
 engineering loops (2026-09-17, branch `claude/gfx1201-sm120-engineering-loops`).**
@@ -8236,8 +8232,14 @@ failure was named. gfx1201 goes from 31 to **62 of 63** promoted families.
   macro tile on gfx1201 (fixed 16x16), LDS staging through
   `package_scheduled_matmul`, int4/reduced-output storage — is the measured
   gap for the performance half of this program.
-* **Slice 2b stays owed by name.** The optimizer/stateful VJP lanes still stamp
-  `rocm_gfx1151`; the eight certificate tests keep their explicit pin.
+* **Slice 2b, closed.** Every ROCm VJP lane (`native_vjp_plugins`'s six
+  evidence-target sites and fourteen `rocm.gfx1151_*` consumer names, `jit`'s
+  JVP/VJP stamps, `stateful_training`'s Lion/Adafactor/sequence-mixer lineage
+  maps) now names the chip the process launches on (`rocm_<pin>`), so the
+  certificate validator attests gfx1201 the way it attests gfx1151. The nine
+  certificate tests that were pinned to gfx1151 in slice 2 assert the host's
+  chip instead; the spectral, sequence-mixer and SSM-backward certificate
+  tests run on Tajasarus as `exact_device`.
 
 FLEET_ROCM_ROWS
 

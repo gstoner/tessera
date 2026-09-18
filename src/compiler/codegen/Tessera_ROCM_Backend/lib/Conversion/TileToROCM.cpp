@@ -2974,7 +2974,10 @@ struct LowerTileToROCMPass
                            builder.getI64IntegerAttr(macroM.getInt() / 16));
         state.addAttribute("nt",
                            builder.getI64IntegerAttr(macroN.getInt() / 16));
-        state.addAttribute("dtype", builder.getStringAttr(desc.getAType()));
+        // fp8 storage rides `numeric_policy.storage` (stamped below), never
+        // `$dtype`, whose enum is the f16/bf16/int8/int4 matrix-core set.
+        if (!fp8Storage)
+          state.addAttribute("dtype", builder.getStringAttr(desc.getAType()));
         state.addAttribute("bias", builder.getBoolAttr(epilogue.getBias()));
         state.addAttribute("activation",
                            builder.getStringAttr(epilogue.getActivation()));

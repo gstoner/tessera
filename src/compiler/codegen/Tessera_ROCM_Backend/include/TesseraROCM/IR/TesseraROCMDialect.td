@@ -101,15 +101,14 @@ def ROCM_NumericDTypeAttr
 // the int8/int4 lane out of existence -- the compiled int8 matmul stopped
 // verifying and fell back to the f16/bf16 executor. Caught by the execution
 // tests, not by the ODS ones, which is the argument for keeping both.
-// OCP FP8 storage (e4m3 / e5m2, plus AMD's fp8 / bf8 spellings) is the RDNA4
-// WMMA form; the generator admits it on the typed route only and gfx11
-// refuses it by name (GFX1201-PARITY slice 5, 2026-09-17).
+// OCP FP8 storage never rides `$dtype` (the W1.1b dtype contract:
+// fp8/microscaling forms ride `numeric_policy.storage`); the RDNA4 FP8 GEMM
+// leaves `dtype` at its default and the generator reads the storage policy.
 def ROCM_GemmDTypeAttr
     : ROCM_EnumStrAttr<["f16", "float16", "bf16", "bfloat16",
-                        "int8", "i8", "int4", "i4",
-                        "e4m3", "fp8", "fp8_e4m3", "e5m2", "bf8", "fp8_e5m2"],
-                       "ROCm WMMA GEMM dtype: f16/bf16, OCP FP8 e4m3/e5m2 "
-                       "(RDNA4), or the iu8/iu4 integer matrix-core widths">;
+                        "int8", "i8", "int4", "i4"],
+                       "ROCm WMMA GEMM dtype: f16/bf16 or the iu8/iu4 "
+                       "integer matrix-core widths">;
 
 // ── W1.1b — `$kind` on the three ops that FAILED OPEN ─────────────────────
 //

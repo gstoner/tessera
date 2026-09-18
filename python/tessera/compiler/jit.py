@@ -77,6 +77,13 @@ from .._jit_boundary import TesseraJitError  # noqa: E402,F401 — re-exported
 import threading
 
 
+
+def _rocm_chip() -> str:
+    """The chip `target="rocm"` launches on (the runtime pin) — slice 2b."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
 class _ConstraintTLS(threading.local):
     """Thread-local stack of constraint-collection lists.
 
@@ -1836,7 +1843,7 @@ class JitFn:
             "execution_mode": execution_mode,
             "evidence_target": ("x86_avx512" if target == "x86" else
                                 "nvidia_sm120" if target == "nvidia_sm120" else
-                                "rocm_gfx1151"),
+                                f"rocm_{_rocm_chip()}"),
             "artifact_hash": package.artifact_hash,
             "paired_jvp_ir_digest": package.contract["paired_jvp_ir_digest"],
             "source_graph_ir_digest": package.contract["source_graph_ir_digest"],
@@ -1957,7 +1964,7 @@ class JitFn:
                 source_graph_ir=source_module.to_mlir(
                     canonical=True,
                     target=(
-                        "rocm_gfx1151" if target_kind == "rocm" else target_kind
+                        f"rocm_{_rocm_chip()}" if target_kind == "rocm" else target_kind
                     ),
                 ),
                 frontend_certificate=frontend_certificate,

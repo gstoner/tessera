@@ -10,6 +10,14 @@ import pytest
 import tessera as ts
 
 
+
+def _rocm_chip() -> str:
+    """The chip this host launches on; certificates name it (slice 2b)."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 def _assert_exact_rocm_certificate(compiled, family: str) -> None:
     from tessera.compiler.native_vjp_plugins import (
         native_vjp_exact_execution_coverage,
@@ -20,11 +28,11 @@ def _assert_exact_rocm_certificate(compiled, family: str) -> None:
     validate_native_vjp_execution_certificate(certificate)
     assert certificate["family"] == family
     assert certificate["target"] == "rocm"
-    assert certificate["evidence_target"] == "rocm_gfx1151"
+    assert certificate["evidence_target"] == f"rocm_{_rocm_chip()}"
     assert certificate["evidence_scope"] == "exact_device"
     attestation = certificate["physical_attestation"]
     assert attestation["schema"] == "tessera.runtime_physical_execution.v1"
-    assert attestation["device_arch"] == "gfx1151"
+    assert attestation["device_arch"] == _rocm_chip()
     assert (family, "rocm") in native_vjp_exact_execution_coverage()
 
 
@@ -311,7 +319,6 @@ def test_rocm_nesterov_backward_runs_one_gfx1151_launch():
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/GPU unavailable")
-    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(19)
     values = [rng.normal(size=(7, 13)).astype(np.float32) for _ in range(3)]
     dp = rng.normal(size=(7, 13)).astype(np.float32)
@@ -377,7 +384,6 @@ def test_rocm_adamw_backward_runs_one_gfx1151_launch():
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/GPU unavailable")
-    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(23)
     param = rng.normal(size=(7, 13)).astype(np.float32)
     grad = rng.normal(scale=0.2, size=param.shape).astype(np.float32)
@@ -419,7 +425,6 @@ def test_rocm_adam_backward_shares_exact_explicit_state_abi():
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/GPU unavailable")
-    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(24)
     shape = (5, 17)
     param = rng.normal(size=shape).astype(np.float32)
@@ -462,7 +467,6 @@ def test_rocm_lion_backward_runs_shared_stop_sign_policy_on_gfx1151():
 
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/GPU unavailable")
-    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(25)
     shape = (5, 19)
     param = rng.normal(size=shape).astype(np.float32)
@@ -489,7 +493,7 @@ def test_rocm_lion_backward_runs_shared_stop_sign_policy_on_gfx1151():
     assert _rocm_lion.last_backward_execution["residual_policy"] == "none"
     assert _rocm_lion.last_backward_execution["implementation"] == "family_plugin"
     assert _rocm_lion.last_backward_execution["target_consumer"] == (
-        "rocm.gfx1151_lion_backward"
+        f"rocm.{_rocm_chip()}_lion_backward"
     )
     assert _rocm_lion.last_backward_execution["proof_mode"] == (
         "structural_non_reexecuting"

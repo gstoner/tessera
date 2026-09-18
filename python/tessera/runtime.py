@@ -7731,8 +7731,9 @@ def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
         # `_rocm_compiled_gemm_impl` serves), f16 storage with f32 accumulation.
         if dtype_tag != "f16":
             raise _RocmCompiledUnavailable(
-                f"rocm matmul-family on {chip}: the typed route carries f16/f32 only; "
-                f"{dtype_tag} storage is owed (GFX1201-PARITY slice 1b)")
+                f"rocm matmul-family: {dtype_tag} storage on the typed route is "
+                f"hardware-verified on gfx1151 only; target '{chip}' is arch-gated on its "
+                "own evidence (GFX1201-PARITY slice 1b)")
         return _rocm_compiled_gemm_via_scheduled_package(
             np.ascontiguousarray(a, dtype=np.float16),
             np.ascontiguousarray(b, dtype=np.float16), None, "none", m, n, k, chip)
@@ -8008,8 +8009,9 @@ def _rocm_wmma_fused_2d(
         # than a wall-clock number dressed as a device latency.
         if dtype_tag != "f16":
             raise _RocmCompiledUnavailable(
-                f"rocm WMMA fused on {chip}: the typed route carries f16/f32 only; "
-                f"{dtype_tag} storage is owed (GFX1201-PARITY slice 1b)")
+                f"rocm WMMA fused: {dtype_tag} storage on the typed route is "
+                f"hardware-verified on gfx1151 only; target '{chip}' is arch-gated on its "
+                "own evidence (GFX1201-PARITY slice 1b)")
         if time_iters is not None:
             return None
         return _rocm_compiled_gemm_via_scheduled_package(

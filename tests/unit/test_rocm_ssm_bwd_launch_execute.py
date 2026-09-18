@@ -22,6 +22,14 @@ from tessera.autodiff.vjp import vjp_selective_ssm
 from tessera.compiler import execution_matrix as em
 
 
+
+def _rocm_chip() -> str:
+    """The chip this host launches on; certificates name it (slice 2b)."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 @ts.jit(
     target="rocm",
     autodiff="reverse",
@@ -114,7 +122,6 @@ def test_launch_rocm_ssm_bwd_matches_vjp(n, a_1d, gated):
 
 def test_public_selective_ssm_records_exact_gfx1151_certificate() -> None:
     _ssm_or_skip()
-    rocm_build.require_rocm_host_arch("gfx1151", "the selective-SSM VJP lane stamps rocm_gfx1151 as its evidence target (GFX1201-PARITY slice 2b)")
     from tessera.compiler.native_vjp_plugins import (
         native_vjp_exact_execution_coverage,
         validate_native_vjp_execution_certificate,
@@ -147,7 +154,7 @@ def test_public_selective_ssm_records_exact_gfx1151_certificate() -> None:
     validate_native_vjp_execution_certificate(certificate)
     assert certificate["family"] == "selective_ssm_backward"
     assert certificate["evidence_scope"] == "exact_device"
-    assert certificate["physical_attestation"]["device_arch"] == "gfx1151"
+    assert certificate["physical_attestation"]["device_arch"] == _rocm_chip()
     assert (
         "selective_ssm_backward",
         "rocm",

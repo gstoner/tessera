@@ -118,6 +118,54 @@ the int32 numpy product on both chips at 16³, 17×19×23 and 65×48×37 —
 `test_gfx1201_scheduled_matmul_package_executes_integer_storage` and its
 gfx1151 twin. An off-by-one nibble order would not be exact anywhere.
 
+## 5. What each form is worth, and the one that does not exist
+
+A fragment layout tells you how to be correct. This table tells you when to
+stop: it is the denominator every ROCm GEMM number on gfx1201 should be quoted
+against, and each row is the peak of an instruction `wmma_dtype_forms` already
+enumerates.
+
+| Storage | Instruction family | Dense | 2:4 structured |
+|---|---|---:|---:|
+| fp16 | `V_WMMA_F32_16X16X16_F16` | 191 TFLOP/s | 383 TFLOP/s |
+| bf16 | `V_WMMA_F32_16X16X16_BF16` | 191 TFLOP/s | 383 TFLOP/s |
+| fp8 e4m3 / e5m2 | `V_WMMA_F32_16X16X16_{FP8,BF8}_{FP8,BF8}` | 383 TFLOP/s | 766 TFLOP/s |
+| int8 | `V_WMMA_I32_16X16X16_IU8` | 383 TOP/s | 766 TOP/s |
+| int4 | `V_WMMA_I32_16X16X{16,32}_IU4` | 766 TOP/s | 1531 TOP/s |
+| fp4 | **no form exists** | — | — |
+
+Two things follow that a relative speedup hides.
+
+**The typed f16 GEMM is about halfway.** Its best measured gfx1201 row is
+92.5 TFLOP/s (4096³, 4×4 panel, K unroll 2 — `benchmarks/baselines/typed_route_gap_20260918/gfx1201.json`),
+which is **48% of the 191 dense fp16 peak**. The K unroll that got it there was
+worth 1.6–1.9×; the remaining 2× is still on the table, and the next lever is
+not another macro tile.
+
+**Low precision is a bigger lever than scheduling, and int4 is the biggest.**
+Each step down the table doubles the ceiling: int4 dense is 4× fp16, and 2:4
+structured int4 is 8×. Tessera already emits `V_SWMMAC_*` for the 2:4 stack on
+gfx1201, so the packed-int4 *input* route on the typed path composes with work
+that exists rather than starting a new lane.
+
+**gfx1201 has no FP4 matrix instruction, and Tessera refuses rather than
+pretending.** There is no `v_wmma_*_fp4` in any form, dense or sparse. The
+common workaround in other stacks is to dequantize an FP4-stored weight to fp16
+before the MMA, which silently returns the *fp16* ceiling — an FP4 request that
+reports FP4 throughput while running at 191. `_ROCM_DTYPES[GFX_1201]` therefore
+omits `fp4_e2m1` and `wmma_dtype_forms` enumerates no FP4 row, so the storage
+dtype is a Decision #21a semantic key that fails closed on this arch. If an FP4
+lane is ever wanted here it must be a *declared* dequantize-and-fp16-MMA route
+that says so in its provenance, never an FP4 claim. (CDNA 4 / gfx950 is the
+arch that does have native FP4/FP6, which is why that row carries them and this
+one does not — evidence never transfers.)
+
+*Source*: AMD's published RDNA4 WMMA throughput for the Radeon AI PRO R9700
+(gfx1201), cross-checked against the instruction set this repo extracts into
+`docs/reference/isa/rdna/rdna4/`. The Tessera-side table is
+`rocm_target.wmma_dtype_forms`, which lists exactly these families and no
+others.
+
 ## Where the machine truth lives
 
 Opcode tables, pseudocode and the VGPR-usage tables come from

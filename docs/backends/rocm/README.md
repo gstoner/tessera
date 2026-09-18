@@ -16,6 +16,9 @@ and from the historical bring-up record.
   is current execution and placement truth.
 - [ROCm target map](../../audit/generated/rocm_target_map.md) is the generated
   per-op target view.
+- [WMMA fragment layout](wmma-fragment-layout.md) is the normative lane /
+  accumulator / operand / int4-nibble contract the generators are written
+  against, with the device evidence for each claim.
 - [ROCm kernel inventory](kernel-inventory.md) explains MFMA/WMMA contracts;
   it is not a mutable status ledger.
 

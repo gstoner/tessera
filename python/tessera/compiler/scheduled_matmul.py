@@ -107,14 +107,30 @@ class ScheduledMatmulArtifact:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
 
+def _band_4x4(m: int, n: int, *, dynamic: bool) -> bool:
+    """The fully tiled [1024, 2048) band where the 4x4 panel wins on both chips."""
+    return not dynamic and 1024 <= m < 2048 and 1024 <= n < 2048 and m % 64 == 0 and n % 64 == 0
+
+
 def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
     """The gfx1201 f16/bf16 macro tile, mirroring `getInferredMatmulSchedule`
-    in PMPasses.cpp: the 2x4 register panel only for a static, fully tiled
-    problem at 1024 and above (typed-route gap packet, 2026-09-18: 2.1x at
-    1024^3, 3.3x at 2048^3, a wash at 512^3, slower on ragged shapes)."""
+    in PMPasses.cpp (typed-route gap packets, 2026-09-18): the 4x4 panel in
+    the fully tiled [1024, 2048) band (44.7 vs 37.9 TFLOP/s at 1024^3), the
+    2x4 register panel for a static fully tiled problem from 2048 up (a wash
+    against 4x4 there, 3.3x the 1x1), the 1x1 otherwise (a wash at 512^3,
+    faster on ragged shapes)."""
+    if _band_4x4(m, n, dynamic=dynamic):
+        return 64, 64
     if not dynamic and m >= 1024 and n >= 1024 and m % 32 == 0 and n % 64 == 0:
         return 32, 64
     return 16, 16
+
+
+def rocm_gfx1151_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
+    """The gfx1151 f16/bf16 macro tile: the committed 2x4 panel, except the
+    typed 4x4 in the fully tiled [1024, 2048) band (11.2 vs 10.5 TFLOP/s at
+    1024^3, losing again at 2048^3: 17.6 vs 21.3)."""
+    return (64, 64) if _band_4x4(m, n, dynamic=dynamic) else (32, 64)
 
 
 def lower_scheduled_matmul(
@@ -396,13 +412,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             "rocm", "gfx1201", "e4m3" if a_dtype == "fp8_e4m3" else "e5m2", "f32", 16, 16,
         )
     elif target == "rocm_gfx1151" and a_dtype == b_dtype and a_dtype in {"fp16", "bf16"} and output_dtype == "fp32":
+        panel_m, panel_n = rocm_gfx1151_panel(m, n, dynamic=dynamic_m or dynamic_n or dynamic_k)
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
-            "rocm",
-            "gfx1151",
-            "bf16" if a_dtype == "bf16" else "f16",
-            "f32",
-            32,
-            64,
+            "rocm", "gfx1151", "bf16" if a_dtype == "bf16" else "f16", "f32", panel_m, panel_n,
         )
     elif target == "nvidia_sm120" and (a_dtype, b_dtype, output_dtype) == ("int4", "int4", "int32"):
         if not op.result or function.return_values != ["%" + op.result] or len(function.args) != 2:

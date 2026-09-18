@@ -485,14 +485,23 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     // at 512^3 and slower on ragged shapes, so it is selected only for a
     // static, fully tiled problem at 1024 and above. Wall clock on a WSL2
     // host, no counters: a selection input, not a promotion.
+    // Per-shape panel (typed-route gap packets, 2026-09-18, both chips):
+    // the 4x4 panel wins only in the fully tiled [1024, 2048) band (gfx1201
+    // 44.7 vs 37.9 TFLOP/s at 1024^3; a wash or worse at 2048^3 and slower
+    // on ragged shapes); the 2x4 panel from 2048 up; the 1x1 elsewhere.
     schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
-    const bool gfx1201Panel2x4 =
-        !schedule.dynamicM && !schedule.dynamicN && !schedule.dynamicK &&
-        schedule.m >= 1024 && schedule.n >= 1024 && schedule.m % 32 == 0 &&
-        schedule.n % 64 == 0;
-    schedule.macroTileM = gfx1201Panel2x4 ? 32 : 16;
-    schedule.macroTileN = gfx1201Panel2x4 ? 64 : 16;
+    const bool staticShape =
+        !schedule.dynamicM && !schedule.dynamicN && !schedule.dynamicK;
+    const bool band4x4 = staticShape && schedule.m >= 1024 &&
+                         schedule.n >= 1024 && schedule.m < 2048 &&
+                         schedule.n < 2048 && schedule.m % 64 == 0 &&
+                         schedule.n % 64 == 0;
+    const bool panel2x4 = staticShape && schedule.m >= 1024 &&
+                          schedule.n >= 1024 && schedule.m % 32 == 0 &&
+                          schedule.n % 64 == 0;
+    schedule.macroTileM = band4x4 ? 64 : panel2x4 ? 32 : 16;
+    schedule.macroTileN = band4x4 ? 64 : panel2x4 ? 64 : 16;
     return schedule;
   }
   if (rocm && lhsElement == rhsElement &&
@@ -501,8 +510,17 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.accum = "f32";
     // gfx1151's committed production GEMM is a 2x4 register-blocked WMMA
     // macro-tile.  Schedule IR carries logical element extents, not the
-    // backend's mt/nt spelling, so preserve that decision as 32x64x16.
-    schedule.macroTileM = 32;
+    // backend's mt/nt spelling, so preserve that decision as 32x64x16 --
+    // except in the fully tiled [1024, 2048) band, where the typed 4x4
+    // panel recovers the 10% the directive lane's 4x4 had over it
+    // (11.2 vs 10.5 TFLOP/s at 1024^3, gfx1151 gap packet 2026-09-18) and
+    // loses again at 2048^3 (17.6 vs 21.3).
+    const bool band4x4 = !schedule.dynamicM && !schedule.dynamicN &&
+                         !schedule.dynamicK && schedule.m >= 1024 &&
+                         schedule.n >= 1024 && schedule.m < 2048 &&
+                         schedule.n < 2048 && schedule.m % 64 == 0 &&
+                         schedule.n % 64 == 0;
+    schedule.macroTileM = band4x4 ? 64 : 32;
     schedule.macroTileN = 64;
     if (schedule.arch.empty())
       schedule.arch = "gfx1151";

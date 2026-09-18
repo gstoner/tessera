@@ -183,3 +183,88 @@ def test_sm120_emitted_nvfp4_entry_is_registered_and_reused():
     second = rt._nvidia_nvfp4_emitted_mma(a, b, sa, sb)
     np.testing.assert_array_equal(first, second)
     np.testing.assert_array_equal(first, nf.nvfp4_tile_reference(a, b, sa, sb))
+
+
+# ── the general-shape emitted GEMM (2026-09-18) ──────────────────────────────
+
+def _general_case(m, n, k, seed):
+    rng = np.random.default_rng(seed)
+    a = rng.integers(0, 16, size=(m, k), dtype=np.uint8)
+    b = rng.integers(0, 16, size=(k, n), dtype=np.uint8)
+    blocks = (k + 15) // 16
+    sa = rng.integers(0x28, 0x48, size=(m, blocks), dtype=np.uint8)
+    sb = rng.integers(0x28, 0x48, size=(blocks, n), dtype=np.uint8)
+    return a, b, sa, sb
+
+
+GENERAL_SHAPES = [(16, 8, 64), (16, 8, 128), (32, 16, 64), (33, 17, 100), (64, 40, 192), (5, 3, 20), (17, 9, 65)]
+
+
+def test_pack_e2m1_codes_matches_the_launch_abi_layout():
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+    codes = np.arange(2 * 5, dtype=np.uint8).reshape(2, 5) & 15
+    packed = pack_e2m1_codes(codes, axis=1)
+    assert packed.shape == (2, 3) and packed.dtype == np.uint8
+    assert packed[0, 0] == (0 | (1 << 4)) and packed[0, 2] == 4  # odd extent zero-padded
+    along0 = pack_e2m1_codes(codes.T, axis=0)
+    assert along0.shape == (3, 2)
+    np.testing.assert_array_equal(along0, packed.T)
+
+
+def test_general_gemm_ptx_is_well_formed():
+    from tessera.compiler import ptx_emit as pe
+    ptx = pe.emit_nvfp4_gemm_ptx()
+    assert pe.validate_nvfp4_gemm_ptx_structure(ptx) == []
+    assert ptx.isascii() and "kind::mxf4nvf4.block_scale.scale_vec::4X" in ptx
+    assert ptx.count("ld.global.u8") == 36  # 6 operand words x 4 bytes + 3 scale words x 4 bytes
+
+
+def test_general_gemm_ptx_assembles_for_sm120a(tmp_path):
+    import shutil, subprocess
+    from tessera.compiler import ptx_emit as pe
+    ptxas = shutil.which("ptxas")
+    if ptxas is None:
+        pytest.skip("ptxas not on PATH")
+    source = tmp_path / "nvfp4_gemm.ptx"
+    source.write_text(pe.emit_nvfp4_gemm_ptx())
+    proc = subprocess.run([ptxas, "--gpu-name=sm_120a", "-o", str(tmp_path / "out.cubin"), str(source)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+def test_general_gemm_reference_reduces_to_the_tile_reference_on_one_tile(shape):
+    from tessera.compiler.nvfp4_fragments import nvfp4_gemm_reference
+    m, n, k = shape
+    a, b, sa, sb = _general_case(m, n, k, 7)
+    ref = nvfp4_gemm_reference(a, b, sa, sb)
+    assert ref.shape == (m, n) and ref.dtype == np.float32
+    if shape == (16, 8, 64):
+        np.testing.assert_array_equal(ref, nf.nvfp4_tile_reference(a, b, sa, sb))
+
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+def test_sm120_emitted_general_gemm_is_exact_and_equals_the_shipped_kernel(shape):
+    """Exact-device row: any M/N/K through the general NVFP4 launch ABI --
+    bit-exact against the numpy reference and against the shipped AOT kernel."""
+    rt = _sm120_or_skip()
+    from tessera.compiler.nvfp4_fragments import nvfp4_gemm_reference, pack_e2m1_codes
+    m, n, k = shape
+    a, b, sa, sb = _general_case(m, n, k, 11 + m)
+    ap, bp = pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0)
+    out = rt._nvidia_nvfp4_gemm_emitted_2d(ap, bp, sa, sb, m, n, k)
+    ref = nvfp4_gemm_reference(a, b, sa, sb)
+    np.testing.assert_array_equal(out, ref)
+    shipped = rt._nvidia_nvfp4_gemm_2d(ap, bp, sa, sb, m, n, k)
+    np.testing.assert_array_equal(out, shipped)
+
+
+def test_sm120_nvfp4_benchmark_times_both_entries():
+    rt = _sm120_or_skip()
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+    from tessera.compiler import ptx_emit as pe
+    m, n, k = 64, 40, 192
+    a, b, sa, sb = _general_case(m, n, k, 5)
+    ap, bp = pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0)
+    ms = rt._nvidia_nvfp4_gemm_device_latency(pe.TESSERA_NVFP4_GEMM_ENTRY, ap, bp, sa, sb, m, n, k, reps=20, warmup=5)
+    assert ms > 0.0

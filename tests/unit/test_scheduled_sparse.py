@@ -126,6 +126,40 @@ def test_gfx1201_sparse_package_executes_and_refuses_dense_tiles(storage, output
 
 
 @pytest.mark.hardware_rocm
+@pytest.mark.parametrize("density", ["sparse", "dense", "mixed"])
+@pytest.mark.parametrize("storage,output,dtype,out_dtype", [("fp16", "fp32", np.float16, np.float32), ("bf16", "bf16", "bfloat16", "bfloat16")])
+def test_gfx1201_auto_selection_package_takes_dense_and_mixed_tiles(density, storage, output, dtype, out_dtype):
+    """`auto_2to4` through the public package: every K tile picks SWMMAC or
+    the dense branch by wave-uniform agreement, so dense and mixed A blocks
+    compute correctly and no validity word refuses (the isolated worker's
+    rows proved the same selection; these are its public-route twins)."""
+    rt = _gfx1201_or_skip()
+    from tessera.compiler import rocm_native
+    if dtype == "bfloat16":
+        ml = pytest.importorskip("ml_dtypes"); dtype = out_dtype = ml.bfloat16
+    m, k, n = 64, 128, 48
+    artifact = scheduled_sparse.lower_scheduled_sparse_matmul(sparse_module(m, k, n, storage, output), selection="auto_2to4")
+    assert artifact.selection == "auto_2to4" and "gpu.shuffle" in artifact.tile_ir
+    package = rocm_native.package_sparse_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.provenance["selection"] == "auto_2to4"
+    rng = np.random.default_rng(len(density))
+    if density == "sparse":
+        a = two_to_four(rng, m, k, dtype)
+    elif density == "dense":
+        a = (rng.normal(size=(m, k)) * 0.2).astype(dtype)
+    else:
+        a = two_to_four(rng, m, k, dtype)
+        a[:16, :32] = (rng.normal(size=(16, 32)) * 0.2).astype(dtype)  # one dense K tile of the first row block
+    b = (rng.normal(size=(k, n)) * 0.2).astype(dtype)
+    out = np.zeros((m, n), out_dtype)
+    result, status = _launch(rt, package, a, b, out)
+    assert result["ok"] and result["execution_kind"] == "native_gpu", result
+    assert np.all(status == 1)
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(out.astype(np.float32), expected, rtol=4e-3, atol=2e-3)
+
+
+@pytest.mark.hardware_rocm
 def test_gfx1201_public_sparse_packaging_keeps_logical_native_backward():
     rt = _gfx1201_or_skip()
     import tessera as ts

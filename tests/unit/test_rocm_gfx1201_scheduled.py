@@ -602,11 +602,12 @@ def test_gfx1201_scheduled_matmul_package_executes_bf16(shape, activation, bias)
 
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
-@pytest.mark.parametrize("shape,panel", [((1024, 1024, 1024), (32, 64)), ((1024, 1024, 1000), (16, 16))])
+@pytest.mark.parametrize("shape,panel", [((1024, 1024, 1024), (64, 64)), ((2048, 2048, 2048), (32, 64)), ((1024, 1024, 1000), (16, 16))])
 def test_gfx1201_scheduled_matmul_package_executes_the_selected_panel(shape, panel):
-    """The 2x4 register panel gfx1201 selects at 1024 and above (typed-route
-    gap packet: 2.1x at 1024^3) executes exactly like the 1x1 it replaces; a
-    ragged neighbour keeps the 1x1. Correctness only."""
+    """The panels gfx1201 selects per shape (typed-route gap packets: the
+    4x4 in the fully tiled [1024, 2048) band, the 2x4 from 2048 up) execute
+    exactly like the 1x1 they replace; a ragged neighbour keeps the 1x1.
+    Correctness only."""
     from tessera import runtime as rt
     from tessera.compiler import scheduled_matmul
     from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module

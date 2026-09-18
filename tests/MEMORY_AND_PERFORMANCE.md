@@ -22,11 +22,11 @@ reported by their own collection commands, not added to the CPU total.
 
 | Suite | Tests | Wall clock | Peak RSS | Source of pressure |
 |---|---:|---:|---:|---|
-| **Fast unit collection** | ~18,674 | collection count only | workload dependent | `tests/unit -m "not slow"`; execution is split by proof environment |
+| **Fast unit collection** | ~22,189 | collection count only | workload dependent | `tests/unit -m "not slow"`; execution is split by proof environment |
 | **CPU PR state** | 14,217 selected | 6m18s on 32-core/62-GB WSL (24 workers) | worker-count dependent | Hermetic semantics plus capability-skipped legacy tests; excludes slow, performance, and all hardware markers |
 | **NVIDIA correctness** | 223 | NVIDIA-box measurement pending | device dependent | Exact-device execute/compare; `hardware_nvidia and not performance` |
 | **NVIDIA performance** | 18 | NVIDIA-box measurement pending; serial only | device dependent | Repeated timing/resource ratchets; `hardware_nvidia and performance` |
-| **Full unit collection** | ~19,536 | execution intentionally split by state | workload dependent | Includes CPU, external tools, device-marked states, measured performance, and the legacy slow tail under `tests/unit` |
+| **Full unit collection** | ~23,061 | execution intentionally split by state | workload dependent | Includes CPU, external tools, device-marked states, measured performance, and the legacy slow tail under `tests/unit` |
 
 The CPU lane remains larger than a pure unit suite because migration is
 incremental. Compiler-tool, integration, device, performance, and audit layers

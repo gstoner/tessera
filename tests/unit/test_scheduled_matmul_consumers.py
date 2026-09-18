@@ -854,28 +854,59 @@ def test_rocm_bf16_matmul_contract_lowers_on_both_chips(target, bias):
     assert 'a = "bf16"' in artifact.tile_ir
 
 
-@pytest.mark.parametrize("shape,panel", [
-    # shapes are (m, k, n): K alignment is irrelevant to the panel, M and N are not
-    ((1024, 1024, 1024), (32, 64)), ((2048, 2048, 2048), (32, 64)), ((1024, 1040, 1024), (32, 64)),
-    ((512, 512, 512), (16, 16)), ((1024, 1024, 1000), (16, 16)), ((1000, 1024, 1024), (16, 16)),
-    ((1024, 1024, 1024), (16, 16)),
+@pytest.mark.parametrize("target,shape,panel", [
+    # shapes are (m, k, n): K alignment is irrelevant to the panel, M and N are not.
+    ("rocm_gfx1201", (1024, 1024, 1024), (64, 64)), ("rocm_gfx1201", (1536, 1024, 1024), (64, 64)),
+    ("rocm_gfx1201", (2048, 2048, 2048), (32, 64)), ("rocm_gfx1201", (1024, 1040, 1024), (64, 64)),
+    ("rocm_gfx1201", (1056, 1024, 1024), (32, 64)), ("rocm_gfx1201", (512, 512, 512), (16, 16)),
+    ("rocm_gfx1201", (1024, 1024, 1000), (16, 16)), ("rocm_gfx1201", (1000, 1024, 1024), (16, 16)),
+    ("rocm_gfx1151", (1024, 1024, 1024), (64, 64)), ("rocm_gfx1151", (2048, 2048, 2048), (32, 64)),
+    ("rocm_gfx1151", (512, 512, 512), (32, 64)), ("rocm_gfx1151", (1024, 1024, 1000), (32, 64)),
 ])
-def test_rocm_gfx1201_panel_follows_the_measured_gap_packet(shape, panel):
-    """The gfx1201 f16 macro tile: the 2x4 register panel for a static, fully
-    tiled problem at 1024 and above, else 1x1 (typed-route gap packet,
-    2026-09-18). The Python contract row mirrors the C++ selection; the last
-    row is the dynamic-shape case, which stays 1x1."""
+def test_rocm_panel_follows_the_measured_gap_packets(target, shape, panel):
+    """Per-shape macro tile on both chips (typed-route gap packets,
+    2026-09-18): the 4x4 panel in the fully tiled [1024, 2048) band, the 2x4
+    from 2048 up (gfx1201) or everywhere else (gfx1151), the 1x1 elsewhere on
+    gfx1201. The Python contract row mirrors the C++ selection."""
     if scheduled_matmul.find_tessera_opt() is None:
         pytest.skip("production tessera-opt unavailable")
     m, k, n = shape
-    dynamic = panel == (16, 16) and shape == (1024, 1024, 1024)
-    assert scheduled_matmul.rocm_gfx1201_panel(m, n, dynamic=dynamic) == panel
-    if dynamic:
-        return
-    artifact = scheduled_matmul.lower_scheduled_matmul(_module(target="rocm", shape=shape), target="rocm_gfx1201")
+    rule = scheduled_matmul.rocm_gfx1201_panel if target == "rocm_gfx1201" else scheduled_matmul.rocm_gfx1151_panel
+    assert rule(m, n, dynamic=False) == panel
+    assert rule(m, n, dynamic=True) == ((16, 16) if target == "rocm_gfx1201" else (32, 64))
+    artifact = scheduled_matmul.lower_scheduled_matmul(_module(target="rocm", shape=shape), target=target)
     scheduled_matmul.verify_matmul_projection(artifact)
     assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
     assert f"tessera.macro_tile_m = {panel[0]} : i64" in artifact.tile_ir
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("shape,panel", [((1024, 1024, 1024), (64, 64)), ((1024, 1024, 1000), (32, 64))])
+@pytest.mark.skipif(not rocm_native.native_packaging_available(), reason="ROCm compiler/device libraries unavailable")
+def test_gfx1151_scheduled_matmul_executes_the_selected_panel(shape, panel) -> None:
+    """The typed 4x4 panel gfx1151 selects in the fully tiled [1024, 2048)
+    band executes exactly like the 2x4 it replaces there; a ragged neighbour
+    keeps the 2x4 (typed-route gap packet, 2026-09-18). Correctness only."""
+    from tests._support.rocm_build import rocm_host_arch
+    if (rocm_host_arch() or "") != "gfx1151":
+        pytest.skip("gfx1151 owning-device proof")
+    from tessera import runtime as rt
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(_module(target="rocm", shape=shape), target="rocm_gfx1151")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.provenance["physical_route"] == f"gfx1151_register_wmma_{panel[0] // 16}x{panel[1] // 16}"
+    rng = np.random.default_rng(1151)
+    a = (rng.normal(size=(m, k)) * 0.25).astype(np.float16)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(np.float16)
+    output = np.zeros((m, n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target}, native_image=package.image,
+                                 launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", result
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=0, atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
 
 
 def _integer_operands(shape, storage, seed):

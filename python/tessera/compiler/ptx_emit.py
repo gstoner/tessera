@@ -723,6 +723,229 @@ def emit_nvfp4_block_scale_mma_ptx(
 """
 
 
+#: Entry name for the general-shape sm_120a NVFP4 block-scale GEMM.
+TESSERA_NVFP4_GEMM_ENTRY = "tessera_nvfp4_gemm_emitted"
+
+
+def _nvfp4_gather_word(*, word: str, base: str, pointer_row_stride: str, half_col: str,
+                       row_ok: str, byte_stride: str, K: str, tag: str) -> str:
+    """PTX for one operand word: four packed E2M1 bytes gathered one at a time
+    (byte ``i`` holds k = 2(kb+i) in its low nibble and k+1 in its high one),
+    each predicated on its k being inside ``K`` and masked to its low nibble
+    when only k is; the row/column predicate zero-fills a whole word. ``base``
+    is the operand pointer, ``pointer_row_stride`` the byte offset of the row or
+    column already multiplied out, ``half_col`` the first byte index along K
+    (``c/2``), ``byte_stride`` the byte distance between successive bytes (1 for
+    A along a row, N for B down a column)."""
+    lines = [f"    mov.b32 {word}, 0;"]
+    for i in range(4):
+        lines += [
+            f"    add.s32 %r50, {half_col}, {i};             // kb = c/2 + {i}",
+            f"    shl.b32 %r51, %r50, 1;                    // 2kb",
+            f"    setp.lt.s32 %pk, %r51, {K};",
+            f"    and.pred %pk, %pk, {row_ok};",
+            f"    mov.b32 %r52, 0;",
+            f"    mul.lo.s32 %r53, %r50, {byte_stride};     // kb * stride",
+            f"    add.s32 %r53, %r53, {pointer_row_stride};",
+            f"    cvt.s64.s32 %off, %r53;  add.s64 %addr, {base}, %off;",
+            f"    @%pk ld.global.u8 %r52, [%addr];",
+            f"    add.s32 %r54, %r51, 1;",
+            f"    setp.ge.s32 %ph, %r54, {K};               // only k=2kb inside: keep the low nibble",
+            f"    @%ph and.b32 %r52, %r52, 15;",
+            f"    shl.b32 %r52, %r52, {8 * i};",
+            f"    or.b32 {word}, {word}, %r52;",
+        ]
+    return "\n".join(lines) + f"\n    // {tag} word done"
+
+
+def _nvfp4_scale_word(*, word: str, base: str, row_off: str, kb0: str, stride: str,
+                      ok: str, scaleK: str) -> str:
+    """PTX for one ``scale_vec::4X`` word: four UE4M3 bytes for K blocks
+    kb0..kb0+3 (``stride`` 1 along an SFa row, N down an SFb column), each
+    predicated on the block existing; zero when ``ok`` is false."""
+    lines = [f"    mov.b32 {word}, 0;"]
+    for i in range(4):
+        lines += [
+            f"    add.s32 %r50, {kb0}, {i};",
+            f"    setp.lt.s32 %pk, %r50, {scaleK};",
+            f"    and.pred %pk, %pk, {ok};",
+            f"    mov.b32 %r52, 0;",
+            f"    mul.lo.s32 %r53, %r50, {stride};",
+            f"    add.s32 %r53, %r53, {row_off};",
+            f"    cvt.s64.s32 %off, %r53;  add.s64 %addr, {base}, %off;",
+            f"    @%pk ld.global.u8 %r52, [%addr];",
+            f"    shl.b32 %r52, %r52, {8 * i};",
+            f"    or.b32 {word}, {word}, %r52;",
+        ]
+    return "\n".join(lines)
+
+
+def emit_nvfp4_gemm_ptx(*, arch: str = "sm_120a", entry: str = TESSERA_NVFP4_GEMM_ENTRY) -> str:
+    """Emit a COMPLETE, assemblable, launchable sm_120a NVFP4 block-scale GEMM
+    for ARBITRARY M/N/K on the launcher's general NVFP4 ABI (``invokeNvfp4``):
+    ``A[M, ceil(K/2)]`` and ``B[ceil(K/2), N]`` packed E2M1 (even k in the low
+    nibble), ``SFa[M, ceil(K/16)]`` and ``SFb[ceil(K/16), N]`` raw UE4M3 codes,
+    ``D[M, N]`` f32 row-major, ``M/N/K`` as 64-bit params; grid
+    ``(ceil(N/8), ceil(M/16))``, one warp per 16x8 tile.
+
+    The data path is the shipped AOT kernel's (``kSrcNvfp4`` in
+    ``tessera_nvidia_gemm.cpp``): every K slab of 64 gathers each lane's
+    fragment words nibble-pair by nibble-pair with zero-fill past M, N and K,
+    the scale words ride ``scale_vec::4X`` with byte-id and thread-id zero (the
+    lower lane pair supplies A rows ``gid``/``gid+8``, lane 0 of each quad
+    supplies B column ``gid``), and ragged K needs no separate tail because an
+    E2M1 zero contributes exactly nothing. Correctness-first: the gathers are
+    byte loads, so this is a general-shape *dispatch* for the emitted family,
+    not yet a fast kernel (2026-09-18)."""
+    mma = NVFP4_MMA_MNEMONIC
+    gA = lambda word, row_off, half_col, ok, tag: _nvfp4_gather_word(  # noqa: E731
+        word=word, base="%A", pointer_row_stride=row_off, half_col=half_col, row_ok=ok,
+        byte_stride="1", K="%K", tag=tag)
+    gB = lambda word, half_row, ok, tag: _nvfp4_gather_word(  # noqa: E731
+        word=word, base="%B", pointer_row_stride="%r42", half_col=half_row, row_ok=ok,
+        byte_stride="%N", K="%K", tag=tag)
+    body_a = "\n".join([
+        gA("%a0", "%r9", "%r30", "%pa0", "a0"),
+        gA("%a1", "%r10", "%r30", "%pa1", "a1"),
+        gA("%a2", "%r9", "%r31", "%pa0", "a2"),
+        gA("%a3", "%r10", "%r31", "%pa1", "a3"),
+    ])
+    body_b = "\n".join([gB("%b0", "%r32", "%pb", "b0"), gB("%b1", "%r33", "%pb", "b1")])
+    scale_a_lo = _nvfp4_scale_word(word="%r60", base="%SFa", row_off="%r13", kb0="%r34", stride="1", ok="%pa0", scaleK="%r19")
+    scale_a_hi = _nvfp4_scale_word(word="%r61", base="%SFa", row_off="%r14", kb0="%r34", stride="1", ok="%pa1", scaleK="%r19")
+    scale_b = _nvfp4_scale_word(word="%r62", base="%SFb", row_off="%r42", kb0="%r34", stride="%N", ok="%pb", scaleK="%r19")
+    return f""".version {PTX_ISA_VERSION}
+.target {arch}
+.address_size 64
+
+// Tessera sm_120a NVFP4 block-scale GEMM -- arbitrary M/N/K on the general
+// NVFP4 launch ABI: D[MxN] f32 = A[MxK] e2m1 * B[KxN] e2m1 with one ue4m3 scale
+// per 16-wide K block of each A row and B column. One warp per 16x8 output
+// tile (grid ceil(N/8) x ceil(M/16)), K slabs of 64, zero-fill past every
+// edge, byte-granular gathers (correctness-first).
+.visible .entry {entry}(
+    .param .u64 p_A,
+    .param .u64 p_B,
+    .param .u64 p_SFa,
+    .param .u64 p_SFb,
+    .param .u64 p_D,
+    .param .u64 p_M,
+    .param .u64 p_N,
+    .param .u64 p_K
+)
+{{
+    .reg .pred %p, %pk, %ph, %pa0, %pa1, %pb, %pt0, %pt1, %ps;
+    .reg .b32  %r<70>;
+    .reg .b32  %a0,%a1,%a2,%a3,%b0,%b1,%sfa,%sfb;
+    .reg .b32  %M,%N,%K,%k0,%packedK;
+    .reg .f32  %d0,%d1,%d2,%d3;
+    .reg .b64  %A,%B,%SFa,%SFb,%D,%off,%addr,%M64,%N64,%K64;
+
+    ld.param.u64 %A,   [p_A];   cvta.to.global.u64 %A,   %A;
+    ld.param.u64 %B,   [p_B];   cvta.to.global.u64 %B,   %B;
+    ld.param.u64 %SFa, [p_SFa]; cvta.to.global.u64 %SFa, %SFa;
+    ld.param.u64 %SFb, [p_SFb]; cvta.to.global.u64 %SFb, %SFb;
+    ld.param.u64 %D,   [p_D];   cvta.to.global.u64 %D,   %D;
+    ld.param.u64 %M64, [p_M];  cvt.u32.u64 %M, %M64;
+    ld.param.u64 %N64, [p_N];  cvt.u32.u64 %N, %N64;
+    ld.param.u64 %K64, [p_K];  cvt.u32.u64 %K, %K64;
+
+    mov.u32 %r1, %tid.x;          // lane
+    shr.u32 %r2, %r1, 2;          // gid
+    and.b32 %r3, %r1, 3;          // tig
+    shl.b32 %r4, %r3, 1;          // 2*tig
+    shl.b32 %r18, %r3, 3;         // 8*tig
+    mov.u32 %r5, %ctaid.y;  mul.lo.s32 %r5, %r5, 16;   // mt = ctaid.y*16 (launcher: gy over M)
+    mov.u32 %r6, %ctaid.x;  mul.lo.s32 %r6, %r6, 8;    // nt = ctaid.x*8
+
+    add.s32 %packedK, %K, 1;  shr.s32 %packedK, %packedK, 1;   // ceil(K/2)
+    add.s32 %r19, %K, 15;     shr.s32 %r19, %r19, 4;           // scaleK = ceil(K/16)
+
+    add.s32 %r7, %r5, %r2;        // rowA0 = mt+gid
+    add.s32 %r8, %r7, 8;          // rowA1 = mt+gid+8
+    add.s32 %r42, %r6, %r2;       // colB = nt+gid
+    setp.lt.s32 %pa0, %r7, %M;
+    setp.lt.s32 %pa1, %r8, %M;
+    setp.lt.s32 %pb,  %r42, %N;
+    mul.lo.s32 %r9,  %r7, %packedK;   // rowA0 * packedK  (A byte row offset)
+    mul.lo.s32 %r10, %r8, %packedK;   // rowA1 * packedK
+    mul.lo.s32 %r13, %r7, %r19;       // rowA0 * scaleK   (SFa row offset)
+    mul.lo.s32 %r14, %r8, %r19;       // rowA1 * scaleK
+    setp.eq.s32 %pt0, %r3, 0;         // tig == 0
+    setp.eq.s32 %pt1, %r3, 1;         // tig == 1
+
+    mov.f32 %d0, 0f00000000;
+    mov.f32 %d1, 0f00000000;
+    mov.f32 %d2, 0f00000000;
+    mov.f32 %d3, 0f00000000;
+
+    mov.u32 %k0, 0;
+    setp.ge.s32 %p, %k0, %K;
+    @%p bra $Kdone_{entry};
+$Lk_{entry}:
+    // half-column (byte index along K) of this lane's A/B words
+    add.s32 %r30, %k0, %r18;  shr.s32 %r30, %r30, 1;          // (k0 + 8tig)/2
+    add.s32 %r31, %r30, 16;                                    // (k0 + 8tig + 32)/2
+    mov.b32 %r32, %r30;                                        // B rows share the same k origin
+    mov.b32 %r33, %r31;
+    shr.s32 %r34, %k0, 4;                                      // kb0 = k0/16
+{body_a}
+{body_b}
+{scale_a_lo}
+{scale_a_hi}
+{scale_b}
+    // scale_vec::4X lane roles: tig 0 -> A row gid and B col gid; tig 1 -> A row gid+8
+    mov.b32 %sfa, 0;  mov.b32 %sfb, 0;
+    @%pt0 mov.b32 %sfa, %r60;
+    @%pt1 mov.b32 %sfa, %r61;
+    @%pt0 mov.b32 %sfb, %r62;
+
+    {mma}
+        {{%d0,%d1,%d2,%d3}}, {{%a0,%a1,%a2,%a3}}, {{%b0,%b1}}, {{%d0,%d1,%d2,%d3}},
+        {{%sfa}}, {{0, 0}}, {{%sfb}}, {{0, 0}};
+
+    add.s32 %k0, %k0, 64;
+    setp.lt.s32 %p, %k0, %K;
+    @%p bra $Lk_{entry};
+
+$Kdone_{entry}:
+    // D[row, nt+2tig .. +1] predicated on the edges
+    add.s32 %r40, %r6, %r4;                 // col0 = nt + 2tig
+    add.s32 %r41, %r40, 1;                  // col1
+    setp.lt.s32 %ps, %r40, %N;  and.pred %ps, %ps, %pa0;
+    mul.lo.s32 %r45, %r7, %N;  add.s32 %r45, %r45, %r40;
+    mul.wide.s32 %off, %r45, 4;  add.s64 %addr, %D, %off;
+    @%ps st.global.f32 [%addr], %d0;
+    setp.lt.s32 %ps, %r41, %N;  and.pred %ps, %ps, %pa0;
+    @%ps st.global.f32 [%addr+4], %d1;
+    setp.lt.s32 %ps, %r40, %N;  and.pred %ps, %ps, %pa1;
+    mul.lo.s32 %r46, %r8, %N;  add.s32 %r46, %r46, %r40;
+    mul.wide.s32 %off, %r46, 4;  add.s64 %addr, %D, %off;
+    @%ps st.global.f32 [%addr], %d2;
+    setp.lt.s32 %ps, %r41, %N;  and.pred %ps, %ps, %pa1;
+    @%ps st.global.f32 [%addr+4], %d3;
+    ret;
+}}
+"""
+
+
+def validate_nvfp4_gemm_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> list[str]:
+    """Structural validation of the general-shape NVFP4 GEMM (no toolchain)."""
+    problems = validate_nvfp4_ptx_structure(ptx, arch=arch)
+    problems = [p for p in problems if "fp4 fragment loads" not in p]
+    for needle, why in (
+        (".param .u64 p_M", "missing the 64-bit M param the general NVFP4 launch ABI passes"),
+        (".param .u64 p_K", "missing the 64-bit K param"),
+        ("ld.global.u8", "no byte-granular fragment gathers emitted"),
+        ("%ctaid.y", "the tile origin must read ctaid.y for M (launcher grid convention)"),
+        ("add.s32 %k0, %k0, 64", "no K loop over 64-wide slabs"),
+        ("@%pt1 mov.b32 %sfa", "the upper lane pair must supply A row gid+8's scales"),
+    ):
+        if needle not in ptx:
+            problems.append(why)
+    return problems
+
+
 def validate_nvfp4_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> list[str]:
     """Structural validation of the emitted NVFP4 block-scale kernel (no toolchain).
     Empty list = well-formed: the block-scale mma, the 5 pointer params, the fp4

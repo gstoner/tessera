@@ -981,14 +981,20 @@ def test_rocm_lds_staged_package_executes(waves, shape) -> None:
 
 
 @pytest.mark.parametrize("shape,gfx1201,gfx1151", [
-    ((512, 512, 512), 1, 1), ((1024, 1024, 1024), 4, 2), ((2048, 2048, 2048), 2, 1),
-    ((4096, 4096, 4096), 2, 1), ((1024, 1024, 1000), 1, 1), ((1536, 1024, 1024), 4, 2),
+    ((512, 512, 512), 1, 1), ((1024, 1024, 1024), 2, 2), ((2048, 2048, 2048), 2, 1),
+    ((4096, 4096, 4096), 2, 1), ((1024, 1024, 1000), 1, 1), ((1536, 1024, 1024), 2, 2),
 ])
 def test_rocm_k_unroll_follows_each_chips_own_measurement(shape, gfx1201, gfx1151):
     """K unrolling is a physical performance key derived from each chip's own
-    sweep: gfx1201 takes 4 below 2048 and 2 above; gfx1151 takes 2 only in the
-    band where it also takes the 4x4 panel, because at 2048 and above the
-    directive lane still leads there. A dynamic shape takes neither."""
+    sweep. Both chips take 2, and only where they also take the larger panel:
+    gfx1201 from 1024 up on a fully tiled shape, gfx1151 in the [1024, 2048)
+    band alone, because at 2048 and above the directive lane still leads
+    there. A dynamic shape takes neither.
+
+    gfx1201's 1024-band answer used to be 4. That rested on one row the
+    re-record reversed inside a 2% margin, so it is the noise-level
+    difference, not the rule -- see `rocm_k_unroll`. Pinning it here is what
+    keeps an unreproduced measurement from surviving as a shipped branch."""
     m, k, n = shape
     assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=False) == gfx1201
     assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1151", dynamic=False) == gfx1151

@@ -130,30 +130,33 @@ def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool) -> int:
     """Full 16-wide K slabs the typed matmul body issues per loop iteration.
 
     A physical (performance) knob, not a Schedule-IR decision: the body is
-    memory-latency bound on RDNA4, so issuing the next slab's fragment loads
-    while the current slab's MMAs retire is the lever that the macro tile and
-    LDS staging are not. Measured on Tajasarus 2026-09-18 with the 4x4 panel
-    (`benchmarks/baselines/typed_route_gap_20260918/gfx1201_kunroll.json`),
-    TFLOP/s at k = 1 / 2 / 4:
+    memory-latency bound, so issuing the next slab's fragment loads while the
+    current slab's MMAs retire is the lever that the macro tile and LDS
+    staging are not. Measured 2026-09-18 with the 4x4 panel, TFLOP/s at
+    k = 1 / 2 / 4 (`benchmarks/baselines/typed_route_gap_20260918/`):
 
-        1024^3   42.1 / 56.0 / 61.5
-        2048^3   43.3 / 86.4 / 74.1
-        4096^3   65.5 / 92.5 / 77.4
+        gfx1201  1024^3   42.1 / 56.0 / 61.5
+                 2048^3   43.3 / 86.4 / 74.1
+                 4096^3   65.5 / 92.5 / 77.4
+        gfx1151  1024^3   11.7 / 16.9 / 11.8   (directive lane: 12.2)
+                 2048^3   17.8 / 19.2 / 17.2   (directive lane: 22.1)
 
-    so 4 below 2048 and 2 from 2048 up, against a production 32x64 k=1 body
-    that reached 36.8 / 46.4 / 57.6 -- 1.6x to 1.9x.
-
-    gfx1151 keeps the established single-slab loop, and the reason is a gap in
-    the evidence rather than a negative result: the unroll does help its 4x4
-    panel (19.2 vs 17.4 TFLOP/s at 2048^3), but its *selected* 2x4 panel could
-    not be measured unrolled until the same day's fix stopped an unrolled body
-    claiming the gfx11 typed-contract topology, and no sweep has been run
-    since. Evidence does not transfer between the two RDNA parts, so the knob
-    stays off here until that sweep exists (ROCm queue, typed-route gap).
+    gfx1201 takes 4 below 2048 and 2 from 2048 up: 1.6x to 1.9x over the 2x4
+    k=1 body it replaces. gfx1151 takes 2 only where it also takes the 4x4
+    panel -- the [1024, 2048) band, where the pair beats its own single-slab
+    loop by 1.4x and the directive lane by 1.4x; at 2048 and above the
+    directive lane still leads and the unroll does not close it, so the knob
+    stays off there. Neither chip's number is evidence for the other.
     """
-    if dynamic or not arch.startswith("gfx1201") or min(m, n) < 1024 or k < 64:
+    if dynamic or k < 64:
         return 1
-    return 2 if min(m, n) >= 2048 else 4
+    if arch.startswith("gfx1201"):
+        if min(m, n) < 1024 or m % 64 or n % 64:
+            return 1
+        return 2 if min(m, n) >= 2048 else 4
+    if arch.startswith("gfx1151"):
+        return 2 if _band_4x4(m, n, dynamic=dynamic) else 1
+    return 1
 
 
 def rocm_gfx1151_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:

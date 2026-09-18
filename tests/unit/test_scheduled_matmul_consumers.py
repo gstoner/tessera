@@ -973,19 +973,23 @@ def test_rocm_lds_staged_package_executes(waves, shape) -> None:
                                atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
 
 
-@pytest.mark.parametrize("shape,expected", [
-    ((512, 512, 512), 1), ((1024, 1024, 1024), 4), ((2048, 2048, 2048), 2),
-    ((4096, 4096, 4096), 2), ((1024, 1024, 1000), 1),
+@pytest.mark.parametrize("shape,gfx1201,gfx1151", [
+    ((512, 512, 512), 1, 1), ((1024, 1024, 1024), 4, 2), ((2048, 2048, 2048), 2, 1),
+    ((4096, 4096, 4096), 2, 1), ((1024, 1024, 1000), 1, 1), ((1536, 1024, 1024), 4, 2),
 ])
-def test_rocm_k_unroll_follows_the_measured_rule_and_only_on_gfx1201(shape, expected):
-    """K unrolling is a physical performance key derived from the measured
-    sweep, gfx1201 only -- gfx1151's own sweep put every unrolled variant at
-    or below the single-slab loop, and evidence never transfers between the
-    two RDNA parts."""
+def test_rocm_k_unroll_follows_each_chips_own_measurement(shape, gfx1201, gfx1151):
+    """K unrolling is a physical performance key derived from each chip's own
+    sweep: gfx1201 takes 4 below 2048 and 2 above; gfx1151 takes 2 only in the
+    band where it also takes the 4x4 panel, because at 2048 and above the
+    directive lane still leads there. A dynamic shape takes neither."""
     m, k, n = shape
-    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=False) == expected
-    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=True) == 1
-    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1151", dynamic=False) == 1
+    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=False) == gfx1201
+    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1151", dynamic=False) == gfx1151
+    for arch in ("gfx1201", "gfx1151"):
+        assert scheduled_matmul.rocm_k_unroll(m, n, k, arch=arch, dynamic=True) == 1
+    # An arch with no sweep of its own gets the established loop, never another
+    # chip's answer.
+    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1200", dynamic=False) == 1
 
 
 @pytest.mark.hardware_rocm

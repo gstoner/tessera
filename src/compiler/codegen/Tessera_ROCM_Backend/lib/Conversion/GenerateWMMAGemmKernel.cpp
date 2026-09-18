@@ -1272,9 +1272,17 @@ struct GenerateWMMAGemmKernelPass
         request.activation = a.getValue().str();
       if (auto a = op->getAttrOfType<StringAttr>("output"))
         request.output = a.getValue().str();
+      // The directive lane spells the raster contract `schedule_raster_*`;
+      // the typed `tile.matmul_kernel` carries the Schedule's decision as
+      // `tessera.raster_*`. Read both (ROCM-RASTER-1 on the typed route,
+      // 2026-09-18); the selection is still row-major until measured.
       if (auto a = op->getAttrOfType<StringAttr>("schedule_raster_order"))
         request.rasterOrder = a.getValue().str();
+      else if (auto a = op->getAttrOfType<StringAttr>("tessera.raster_order"))
+        request.rasterOrder = a.getValue().str();
       if (auto a = op->getAttrOfType<IntegerAttr>("schedule_raster_group"))
+        request.rasterGroup = a.getInt();
+      else if (auto a = op->getAttrOfType<IntegerAttr>("tessera.raster_group"))
         request.rasterGroup = a.getInt();
       request.storagePack =
           op->getAttrOfType<tessera::tile::TilePackedFormatAttr>(
@@ -1608,6 +1616,14 @@ struct GenerateWMMAGemmKernelPass
                                  "schedule_raster_group"})
         if (Attribute attr = op->getAttr(attrName))
           gpuFunc->setAttr((Twine("tessera.rocm.") + attrName).str(), attr);
+      // The typed spelling lands under the same kernel attribute names so a
+      // reader of the generated kernel sees one raster contract.
+      if (!op->hasAttr("schedule_raster_order"))
+        for (auto [typed, kernel] :
+             {std::pair{"tessera.raster_order", "tessera.rocm.schedule_raster_order"},
+              std::pair{"tessera.raster_group", "tessera.rocm.schedule_raster_group"}})
+          if (Attribute attr = op->getAttr(typed))
+            gpuFunc->setAttr(kernel, attr);
       if (request.canonicalKLoop) {
         gpuFunc->setAttr("tessera.rocm.source",
                          b.getStringAttr("canonical_mnk_scf_for"));

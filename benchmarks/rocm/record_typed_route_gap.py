@@ -56,7 +56,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 SHAPES = [(256, 256, 256), (512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048), (511, 513, 509)]
-PANELS = [(16, 16), (32, 64)]
+PANELS = [(16, 16), (32, 64), (64, 64)]
 #: `staging` is a no-op on the typed route (the generator's LDS body is
 #: reachable only from its canonical scf.for matcher): the first packet of
 #: 2026-09-18 recorded byte-identical backend IR for every register/lds pair

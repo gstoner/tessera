@@ -598,3 +598,33 @@ def test_gfx1201_scheduled_matmul_package_executes_bf16(shape, activation, bias)
     result = rt.launch(runtime, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}})
     assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
     np.testing.assert_allclose(output, _epilogue_reference(a.astype(np.float32), b.astype(np.float32), bias_arr, activation), rtol=0, atol=8e-2)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("shape,panel", [((1024, 1024, 1024), (32, 64)), ((1024, 1024, 1000), (16, 16))])
+def test_gfx1201_scheduled_matmul_package_executes_the_selected_panel(shape, panel):
+    """The 2x4 register panel gfx1201 selects at 1024 and above (typed-route
+    gap packet: 2.1x at 1024^3) executes exactly like the 1x1 it replaces; a
+    ragged neighbour keeps the 1x1. Correctness only."""
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(matmul_module(target="rocm", shape=shape), target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.provenance["physical_route"] == f"gfx1201_register_wmma_{panel[0] // 16}x{panel[1] // 16}"
+    rng = np.random.default_rng(1024)
+    a = (rng.normal(size=(m, k)) * 0.25).astype(np.float16)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(np.float16)
+    output = np.zeros((m, n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=0, atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)

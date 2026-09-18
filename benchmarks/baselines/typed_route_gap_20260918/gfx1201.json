@@ -1,0 +1,1825 @@
+{
+  "chip": "gfx1201",
+  "evidence_scope": "measured_gap",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "iters": 50,
+  "promotion": {
+    "correctness_eligible": false,
+    "performance_eligible": false,
+    "reason": "host wall clock on a WSL2 /dev/dxg host; no /dev/kfd, no counters; a selection input only where the gap dwarfs run-to-run spread"
+  },
+  "raw": [
+    {
+      "chip": "gfx1201",
+      "pid": 762867,
+      "rows": [
+        {
+          "backend_ir_sha256": "835001de345afc95b88ac8553d3ec7b464458f1a4f002ecffb4070801466ea76",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.1049310399685055,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 7.300302513613133e-07,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "835001de345afc95b88ac8553d3ec7b464458f1a4f002ecffb4070801466ea76",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.03301133983768523,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 7.300302513613133e-07,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c256_i64, %c256_i64_2, %c256_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c256_i64, %c256_i64_2, %c256_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.03911413908004761,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.19403066635131835,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.1850411796569824,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "935e1dca6f45069eda85404d604cd2e0194871c7aa669f80a5f887e0202eea10",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.11570495960768312,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.1981438774455455e-06,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "935e1dca6f45069eda85404d604cd2e0194871c7aa669f80a5f887e0202eea10",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.030244659865275025,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.1981438774455455e-06,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c512_i64, %c512_i64_2, %c512_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c512_i64, %c512_i64_2, %c512_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.2071053886413574,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.7637059783935547,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.6357055282592774,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "7862c440e833f17d61185d6cb41c290490bb00060179e7e380428bbcc1ddea4d",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.2034085599007085,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.9474330201774137e-06,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "7862c440e833f17d61185d6cb41c290490bb00060179e7e380428bbcc1ddea4d",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.1485347602283582,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.9474330201774137e-06,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c1024_i64, %c1024_i64_2, %c1024_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c1024_i64, %c1024_i64_2, %c1024_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.393997917175293,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 2.007529602050781,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 2.0122987365722658,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "e999959bedbe039b8254f594babd6482c51cbde3fc6fd26439e5842962ebafcc",
+          "lds_bytes": 0,
+          "per_launch_ms": 1.2376395799219608,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 3.411830221011769e-06,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "e999959bedbe039b8254f594babd6482c51cbde3fc6fd26439e5842962ebafcc",
+          "lds_bytes": 0,
+          "per_launch_ms": 1.1575699597597122,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 3.411830221011769e-06,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c2048_i64, %c2048_i64_2, %c2048_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c2048_i64, %c2048_i64_2, %c2048_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 1.817665557861328,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 15.0744970703125,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 15.062327880859375,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "9cb6d2437e5cb7550a59b81cbdac262272cd416c9aca224bb9111863a413a5b3",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.2843318600207567,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.4305667264125077e-06,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "9cb6d2437e5cb7550a59b81cbdac262272cd416c9aca224bb9111863a413a5b3",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.03559446020517498,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.4305667264125077e-06,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c511_i64, %c513_i64, %c509_i64 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = 16, ",
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c511_i64, %c513_i64, %c509_i64 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = 16, ",
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.06900998115539551,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.5791020965576172,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.5512327194213867,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        }
+      ]
+    },
+    {
+      "chip": "gfx1201",
+      "pid": 763190,
+      "rows": [
+        {
+          "backend_ir_sha256": "835001de345afc95b88ac8553d3ec7b464458f1a4f002ecffb4070801466ea76",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.08957215992268175,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 7.300302513613133e-07,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "835001de345afc95b88ac8553d3ec7b464458f1a4f002ecffb4070801466ea76",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.0952750799478963,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 7.300302513613133e-07,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c256_i64, %c256_i64_2, %c256_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c256_i64, %c256_i64_2, %c256_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.03726186037063599,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.18342544555664062,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.1876276969909668,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "935e1dca6f45069eda85404d604cd2e0194871c7aa669f80a5f887e0202eea10",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.10767386003863066,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.1981438774455455e-06,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "935e1dca6f45069eda85404d604cd2e0194871c7aa669f80a5f887e0202eea10",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.23757330025546253,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.1981438774455455e-06,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c512_i64, %c512_i64_2, %c512_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c512_i64, %c512_i64_2, %c512_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.2071120834350586,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.5594987106323243,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.6364825820922851,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "7862c440e833f17d61185d6cb41c290490bb00060179e7e380428bbcc1ddea4d",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.36713070003315806,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.9474330201774137e-06,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "7862c440e833f17d61185d6cb41c290490bb00060179e7e380428bbcc1ddea4d",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.27017293963581324,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.9474330201774137e-06,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c1024_i64, %c1024_i64_2, %c1024_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c1024_i64, %c1024_i64_2, %c1024_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.5174848937988281,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 2.0010310363769532,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 2.005446014404297,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "e999959bedbe039b8254f594babd6482c51cbde3fc6fd26439e5842962ebafcc",
+          "lds_bytes": 0,
+          "per_launch_ms": 1.1849924398120493,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 3.411830221011769e-06,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "e999959bedbe039b8254f594babd6482c51cbde3fc6fd26439e5842962ebafcc",
+          "lds_bytes": 0,
+          "per_launch_ms": 1.2063107400899753,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 3.411830221011769e-06,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c2048_i64, %c2048_i64_2, %c2048_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c2048_i64, %c2048_i64_2, %c2048_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 1.8170436096191407,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 15.117698974609375,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 15.09538818359375,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "9cb6d2437e5cb7550a59b81cbdac262272cd416c9aca224bb9111863a413a5b3",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.1485991000663489,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.4305667264125077e-06,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "9cb6d2437e5cb7550a59b81cbdac262272cd416c9aca224bb9111863a413a5b3",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.03610683954320848,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.4305667264125077e-06,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c511_i64, %c513_i64, %c509_i64 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = 16, ",
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c511_i64, %c513_i64, %c509_i64 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = 16, ",
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.15793977737426756,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.572962646484375,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.5483583068847656,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        }
+      ]
+    },
+    {
+      "chip": "gfx1201",
+      "pid": 763513,
+      "rows": [
+        {
+          "backend_ir_sha256": "835001de345afc95b88ac8553d3ec7b464458f1a4f002ecffb4070801466ea76",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.16101113986223936,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 7.300302513613133e-07,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "835001de345afc95b88ac8553d3ec7b464458f1a4f002ecffb4070801466ea76",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.017808600096032023,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 7.300302513613133e-07,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c256_i64, %c256_i64_2, %c256_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c256_i64, %c256_i64_2, %c256_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.01896996021270752,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.2433966064453125,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.1844972038269043,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "935e1dca6f45069eda85404d604cd2e0194871c7aa669f80a5f887e0202eea10",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.14346570009365678,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.1981438774455455e-06,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "935e1dca6f45069eda85404d604cd2e0194871c7aa669f80a5f887e0202eea10",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.03355798020493239,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.1981438774455455e-06,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c512_i64, %c512_i64_2, %c512_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c512_i64, %c512_i64_2, %c512_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.20541885375976562,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.5596108627319336,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.6349871063232422,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "7862c440e833f17d61185d6cb41c290490bb00060179e7e380428bbcc1ddea4d",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.19611085997894406,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.9474330201774137e-06,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "7862c440e833f17d61185d6cb41c290490bb00060179e7e380428bbcc1ddea4d",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.18061251961626112,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.9474330201774137e-06,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c1024_i64, %c1024_i64_2, %c1024_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c1024_i64, %c1024_i64_2, %c1024_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.5987138366699218,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 2.0031776428222656,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 2.0088900756835937,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "e999959bedbe039b8254f594babd6482c51cbde3fc6fd26439e5842962ebafcc",
+          "lds_bytes": 0,
+          "per_launch_ms": 1.2801457004388794,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 3.411830221011769e-06,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "e999959bedbe039b8254f594babd6482c51cbde3fc6fd26439e5842962ebafcc",
+          "lds_bytes": 0,
+          "per_launch_ms": 1.1947498400695622,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 3.411830221011769e-06,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c2048_i64, %c2048_i64_2, %c2048_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c2048_i64, %c2048_i64_2, %c2048_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 1.8072979736328125,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 15.096220703125,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 15.14217041015625,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        },
+        {
+          "backend_ir_sha256": "9cb6d2437e5cb7550a59b81cbdac262272cd416c9aca224bb9111863a413a5b3",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.1031967403832823,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.4305667264125077e-06,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:register"
+        },
+        {
+          "backend_ir_sha256": "9cb6d2437e5cb7550a59b81cbdac262272cd416c9aca224bb9111863a413a5b3",
+          "lds_bytes": 0,
+          "per_launch_ms": 0.0409739202586934,
+          "production_panel": [
+            16,
+            16
+          ],
+          "relative_error": 1.4305667264125077e-06,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:16x16:lds"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c511_i64, %c513_i64, %c509_i64 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = 16, ",
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "variant": "typed:32x64:register"
+        },
+        {
+          "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c511_i64, %c513_i64, %c509_i64 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = 16, ",
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "variant": "typed:32x64:lds"
+        },
+        {
+          "per_launch_ms": 0.1599425983428955,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:register"
+        },
+        {
+          "per_launch_ms": 0.8030821228027344,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:lds"
+        },
+        {
+          "per_launch_ms": 0.5579783630371093,
+          "shape": [
+            511,
+            513,
+            509
+          ],
+          "timing_source": "hip_event_checked_against_wall",
+          "variant": "shipped:pipe"
+        }
+      ]
+    }
+  ],
+  "runs": 3,
+  "schema": "tessera.typed_route_gap.v1",
+  "summary": [
+    {
+      "backend_ir_sha256": "835001de345afc95b88ac8553d3ec7b464458f1a4f002ecffb4070801466ea76",
+      "lds_bytes": 0,
+      "median_ms": 0.1049310399685055,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 7.300302513613133e-07,
+      "run_ms": [
+        0.1049310399685055,
+        0.08957215992268175,
+        0.16101113986223936
+      ],
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tflops": 0.31977603586194503,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:register"
+    },
+    {
+      "backend_ir_sha256": "835001de345afc95b88ac8553d3ec7b464458f1a4f002ecffb4070801466ea76",
+      "lds_bytes": 0,
+      "median_ms": 0.03301133983768523,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 7.300302513613133e-07,
+      "run_ms": [
+        0.03301133983768523,
+        0.0952750799478963,
+        0.017808600096032023
+      ],
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tflops": 1.0164516849356955,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:lds"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c256_i64, %c256_i64_2, %c256_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "variant": "typed:32x64:register"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c256_i64, %c256_i64_2, %c256_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "variant": "typed:32x64:lds"
+    },
+    {
+      "median_ms": 0.03726186037063599,
+      "run_ms": [
+        0.03911413908004761,
+        0.03726186037063599,
+        0.01896996021270752
+      ],
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tflops": 0.9005034012322797,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:register"
+    },
+    {
+      "median_ms": 0.19403066635131835,
+      "run_ms": [
+        0.19403066635131835,
+        0.18342544555664062,
+        0.2433966064453125
+      ],
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tflops": 0.17293365338057043,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:lds"
+    },
+    {
+      "median_ms": 0.1850411796569824,
+      "run_ms": [
+        0.1850411796569824,
+        0.1876276969909668,
+        0.1844972038269043
+      ],
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tflops": 0.18133494426592542,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:pipe"
+    },
+    {
+      "backend_ir_sha256": "935e1dca6f45069eda85404d604cd2e0194871c7aa669f80a5f887e0202eea10",
+      "lds_bytes": 0,
+      "median_ms": 0.11570495960768312,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 1.1981438774455455e-06,
+      "run_ms": [
+        0.11570495960768312,
+        0.10767386003863066,
+        0.14346570009365678
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tflops": 2.3199995653615453,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:register"
+    },
+    {
+      "backend_ir_sha256": "935e1dca6f45069eda85404d604cd2e0194871c7aa669f80a5f887e0202eea10",
+      "lds_bytes": 0,
+      "median_ms": 0.03355798020493239,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 1.1981438774455455e-06,
+      "run_ms": [
+        0.030244659865275025,
+        0.23757330025546253,
+        0.03355798020493239
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tflops": 7.9991541314678125,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:lds"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c512_i64, %c512_i64_2, %c512_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "variant": "typed:32x64:register"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c512_i64, %c512_i64_2, %c512_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = ",
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "variant": "typed:32x64:lds"
+    },
+    {
+      "median_ms": 0.2071053886413574,
+      "run_ms": [
+        0.2071053886413574,
+        0.2071120834350586,
+        0.20541885375976562
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tflops": 1.2961297519150856,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:register"
+    },
+    {
+      "median_ms": 0.5596108627319336,
+      "run_ms": [
+        0.7637059783935547,
+        0.5594987106323243,
+        0.5596108627319336
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tflops": 0.4796823540728635,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:lds"
+    },
+    {
+      "median_ms": 0.6357055282592774,
+      "run_ms": [
+        0.6357055282592774,
+        0.6364825820922851,
+        0.6349871063232422
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tflops": 0.4222638376844766,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:pipe"
+    },
+    {
+      "backend_ir_sha256": "7862c440e833f17d61185d6cb41c290490bb00060179e7e380428bbcc1ddea4d",
+      "lds_bytes": 0,
+      "median_ms": 0.2034085599007085,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 1.9474330201774137e-06,
+      "run_ms": [
+        0.2034085599007085,
+        0.36713070003315806,
+        0.19611085997894406
+      ],
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tflops": 10.55748907051045,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:register"
+    },
+    {
+      "backend_ir_sha256": "7862c440e833f17d61185d6cb41c290490bb00060179e7e380428bbcc1ddea4d",
+      "lds_bytes": 0,
+      "median_ms": 0.18061251961626112,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 1.9474330201774137e-06,
+      "run_ms": [
+        0.1485347602283582,
+        0.27017293963581324,
+        0.18061251961626112
+      ],
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tflops": 11.890004372690537,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:lds"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c1024_i64, %c1024_i64_2, %c1024_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "variant": "typed:32x64:register"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c1024_i64, %c1024_i64_2, %c1024_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "variant": "typed:32x64:lds"
+    },
+    {
+      "median_ms": 0.5174848937988281,
+      "run_ms": [
+        0.393997917175293,
+        0.5174848937988281,
+        0.5987138366699218
+      ],
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tflops": 4.1498479931181,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:register"
+    },
+    {
+      "median_ms": 2.0031776428222656,
+      "run_ms": [
+        2.007529602050781,
+        2.0010310363769532,
+        2.0031776428222656
+      ],
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tflops": 1.072038546204231,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:lds"
+    },
+    {
+      "median_ms": 2.0088900756835937,
+      "run_ms": [
+        2.0122987365722658,
+        2.005446014404297,
+        2.0088900756835937
+      ],
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tflops": 1.0689901224531886,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:pipe"
+    },
+    {
+      "backend_ir_sha256": "e999959bedbe039b8254f594babd6482c51cbde3fc6fd26439e5842962ebafcc",
+      "lds_bytes": 0,
+      "median_ms": 1.2376395799219608,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 3.411830221011769e-06,
+      "run_ms": [
+        1.2376395799219608,
+        1.1849924398120493,
+        1.2801457004388794
+      ],
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "tflops": 13.881156891478271,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:register"
+    },
+    {
+      "backend_ir_sha256": "e999959bedbe039b8254f594babd6482c51cbde3fc6fd26439e5842962ebafcc",
+      "lds_bytes": 0,
+      "median_ms": 1.1947498400695622,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 3.411830221011769e-06,
+      "run_ms": [
+        1.1575699597597122,
+        1.2063107400899753,
+        1.1947498400695622
+      ],
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "tflops": 14.379469749918302,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:lds"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c2048_i64, %c2048_i64_2, %c2048_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "variant": "typed:32x64:register"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c2048_i64, %c2048_i64_2, %c2048_i64_3 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m",
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "variant": "typed:32x64:lds"
+    },
+    {
+      "median_ms": 1.8170436096191407,
+      "run_ms": [
+        1.817665557861328,
+        1.8170436096191407,
+        1.8072979736328125
+      ],
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "tflops": 9.454846924450518,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:register"
+    },
+    {
+      "median_ms": 15.096220703125,
+      "run_ms": [
+        15.0744970703125,
+        15.117698974609375,
+        15.096220703125
+      ],
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "tflops": 1.1380245110250458,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:lds"
+    },
+    {
+      "median_ms": 15.09538818359375,
+      "run_ms": [
+        15.062327880859375,
+        15.09538818359375,
+        15.14217041015625
+      ],
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "tflops": 1.1380872737457486,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:pipe"
+    },
+    {
+      "backend_ir_sha256": "9cb6d2437e5cb7550a59b81cbdac262272cd416c9aca224bb9111863a413a5b3",
+      "lds_bytes": 0,
+      "median_ms": 0.1485991000663489,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 1.4305667264125077e-06,
+      "run_ms": [
+        0.2843318600207567,
+        0.1485991000663489,
+        0.1031967403832823
+      ],
+      "shape": [
+        511,
+        513,
+        509
+      ],
+      "tflops": 1.795849193439579,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:register"
+    },
+    {
+      "backend_ir_sha256": "9cb6d2437e5cb7550a59b81cbdac262272cd416c9aca224bb9111863a413a5b3",
+      "lds_bytes": 0,
+      "median_ms": 0.03610683954320848,
+      "production_panel": [
+        16,
+        16
+      ],
+      "relative_error": 1.4305667264125077e-06,
+      "run_ms": [
+        0.03559446020517498,
+        0.03610683954320848,
+        0.0409739202586934
+      ],
+      "shape": [
+        511,
+        513,
+        509
+      ],
+      "tflops": 7.390887083336413,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:16x16:lds"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c511_i64, %c513_i64, %c509_i64 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = 16, ",
+      "shape": [
+        511,
+        513,
+        509
+      ],
+      "variant": "typed:32x64:register"
+    },
+    {
+      "refused": "ROCm native packaging failed: <stdin>:18:5: error: typed gfx11 GEMM physical-body contract requires gfx1151\n    tile.matmul_kernel %2, %5, %7, %c511_i64, %c513_i64, %c509_i64 {epilogue = #tile.epilogue<bias = false, activation = \"none\", output = \"f32\">, mma = #tile.mma_desc<family = \"wmma\", m = 16, ",
+      "shape": [
+        511,
+        513,
+        509
+      ],
+      "variant": "typed:32x64:lds"
+    },
+    {
+      "median_ms": 0.15793977737426756,
+      "run_ms": [
+        0.06900998115539551,
+        0.15793977737426756,
+        0.1599425983428955
+      ],
+      "shape": [
+        511,
+        513,
+        509
+      ],
+      "tflops": 1.689641320486492,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:register"
+    },
+    {
+      "median_ms": 0.5791020965576172,
+      "run_ms": [
+        0.5791020965576172,
+        0.572962646484375,
+        0.8030821228027344
+      ],
+      "shape": [
+        511,
+        513,
+        509
+      ],
+      "tflops": 0.4608195611556534,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:lds"
+    },
+    {
+      "median_ms": 0.5512327194213867,
+      "run_ms": [
+        0.5512327194213867,
+        0.5483583068847656,
+        0.5579783630371093
+      ],
+      "shape": [
+        511,
+        513,
+        509
+      ],
+      "tflops": 0.48411780469076104,
+      "timing_source": "hip_event_checked_against_wall",
+      "variant": "shipped:pipe"
+    }
+  ]
+}

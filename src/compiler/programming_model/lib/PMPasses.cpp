@@ -476,13 +476,23 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
       lhsElement == rhsElement && (lhsElement.isF16() || lhsElement.isBF16()) &&
       outElement.isF32()) {
-    // Independent conservative RDNA4 profile; no gfx11 panel inheritance.
-    // bf16 storage joined f16 on 2026-09-18 (slice 1b): same fragment
-    // family, V_WMMA_F32_16X16X16_BF16.
+    // RDNA4 profile on its own evidence (no gfx11 panel inheritance). bf16
+    // storage joined f16 on 2026-09-18 (slice 1b): same fragment family,
+    // V_WMMA_F32_16X16X16_BF16. The panel follows the typed-route gap
+    // packet measured on Tajasarus the same day
+    // (benchmarks/baselines/typed_route_gap_20260918/gfx1201.json): the 2x4
+    // register panel is 2.1x the 1x1 at 1024^3 and 3.3x at 2048^3, a wash
+    // at 512^3 and slower on ragged shapes, so it is selected only for a
+    // static, fully tiled problem at 1024 and above. Wall clock on a WSL2
+    // host, no counters: a selection input, not a promotion.
     schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
-    schedule.macroTileM = 16;
-    schedule.macroTileN = 16;
+    const bool gfx1201Panel2x4 =
+        !schedule.dynamicM && !schedule.dynamicN && !schedule.dynamicK &&
+        schedule.m >= 1024 && schedule.n >= 1024 && schedule.m % 32 == 0 &&
+        schedule.n % 64 == 0;
+    schedule.macroTileM = gfx1201Panel2x4 ? 32 : 16;
+    schedule.macroTileN = gfx1201Panel2x4 ? 64 : 16;
     return schedule;
   }
   if (rocm && lhsElement == rhsElement &&

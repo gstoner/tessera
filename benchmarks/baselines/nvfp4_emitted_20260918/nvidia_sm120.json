@@ -1,0 +1,45 @@
+{
+  "arch": "sm_120a",
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "driver_jit_ptx_version": "9.3",
+  "entry": "tessera_nvfp4_mma_m16n8k64",
+  "evidence_scope": "exact_device",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "mnemonic": "mma.sync.aligned.m16n8k64.row.col.kind::mxf4nvf4.block_scale.scale_vec::4X.f32.e2m1.e2m1.f32.ue4m3",
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "one fixed m16n8k64 warp tile per launch with host transfers; no general-shape dispatch, no timer"
+  },
+  "ptx_sha256": "8201c77a0b94055ed79ba0dbc624d70b37994b85d2fc90da3a57a51a5ea84ed3",
+  "ptx_version_lowered_from": null,
+  "rows": [
+    {
+      "elements": 128,
+      "max_abs_error": 0.0,
+      "scale_mode": "unit"
+    },
+    {
+      "elements": 128,
+      "max_abs_error": 0.0,
+      "scale_mode": "uniform:30"
+    },
+    {
+      "elements": 128,
+      "max_abs_error": 0.0,
+      "scale_mode": "uniform:40"
+    },
+    {
+      "elements": 128,
+      "max_abs_error": 0.0,
+      "scale_mode": "mapped"
+    },
+    {
+      "elements": 128,
+      "max_abs_error": 0.0,
+      "scale_mode": "random"
+    }
+  ],
+  "schema": "tessera.nvfp4_emitted.v1"
+}

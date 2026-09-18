@@ -724,6 +724,55 @@ def _try_rocm_ebm_affine_langevin_step_f32(
         return None
 
 
+#: Per feature width: "ok" once the sm_120 program bound, else the refusal
+#: text; a failed compile is not retried on every chain step.
+_CUDA_SPHERE_STATE: dict[int, str] = {}
+
+
+def _try_cuda_gpu_sphere_langevin_step_f32(
+    x: np.ndarray, grad: np.ndarray, noise: np.ndarray,
+    eta: float, noise_scale: float,
+) -> Optional[np.ndarray]:
+    """The whole sphere step (two tangent projections, the Euler-Maruyama
+    affine step, the retraction) as one cooperative sm_120 kernel through the
+    row-program emitter (`native_row_program.sphere_langevin_step_module`),
+    one lane per feature. ``None`` off the CUDA silicon or when the program
+    cannot be packaged here (the reason is kept in ``_CUDA_SPHERE_STATE``)."""
+    if any(a.dtype != np.float32 or a.ndim != 1 for a in (x, grad, noise)):
+        return None
+    if x.shape != grad.shape or x.shape != noise.shape:
+        return None
+    d = int(x.shape[0])
+    state = _CUDA_SPHERE_STATE.get(d)
+    if state is not None and state != "ok":
+        return None
+    try:
+        from tessera.compiler.llvm_tools import llvm_bin_dir
+        from tessera.compiler.native_gpu_tensor import TensorSpec
+        from tessera.compiler.native_row_program import (
+            MAX_FEATURES, row_program_device, sphere_langevin_step_module)
+        from tessera.compiler.scheduled_matmul import find_tessera_opt
+        if d > MAX_FEATURES:
+            raise ValueError(f"sphere row program admits at most {MAX_FEATURES} features")
+        compiler, llvm_bin = find_tessera_opt(), llvm_bin_dir()
+        if compiler is None or llvm_bin is None:
+            raise RuntimeError("tessera-opt or the matched LLVM tools are unavailable")
+        specs = (TensorSpec("x", "fp32", (1, d)), TensorSpec("gs", "fp32", (1, d)),
+                 TensorSpec("ns", "fp32", (1, d)), TensorSpec("y", "fp32", (1, d), True))
+        program = row_program_device(
+            sphere_langevin_step_module(1, d), entry="sphere_langevin_step", specs=specs, rows=1,
+            backend="nvidia", chip="sm_120", compiler=compiler, llvm_bin=llvm_bin,
+            name="sphere langevin step")
+        gs = (np.float32(eta) * grad).astype(np.float32, copy=False)
+        ns = (np.float32(noise_scale) * noise).astype(np.float32, copy=False)
+        out = program.run(x[None, :], gs[None, :], ns[None, :])
+        _CUDA_SPHERE_STATE[d] = "ok"
+        return np.ascontiguousarray(np.asarray(out, np.float32).reshape(d))
+    except Exception as error:
+        _CUDA_SPHERE_STATE.setdefault(d, f"{type(error).__name__}: {error}"[:300])
+        return None
+
+
 def _try_x86_langevin_step_philox_f32(
     y: np.ndarray, grad: np.ndarray,
     eta: float, noise_scale: float,

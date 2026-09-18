@@ -107,6 +107,16 @@ class ScheduledMatmulArtifact:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
 
+def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
+    """The gfx1201 f16/bf16 macro tile, mirroring `getInferredMatmulSchedule`
+    in PMPasses.cpp: the 2x4 register panel only for a static, fully tiled
+    problem at 1024 and above (typed-route gap packet, 2026-09-18: 2.1x at
+    1024^3, 3.3x at 2048^3, a wash at 512^3, slower on ragged shapes)."""
+    if not dynamic and m >= 1024 and n >= 1024 and m % 32 == 0 and n % 64 == 0:
+        return 32, 64
+    return 16, 16
+
+
 def lower_scheduled_matmul(
     module: GraphIRModule,
     *,
@@ -350,8 +360,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             "x86", "zen5-avx512", "u8", "i32", 16, 16,
         )
     elif target == "rocm_gfx1201" and a_dtype == b_dtype and a_dtype in {"fp16", "bf16"} and output_dtype == "fp32":
+        panel_m, panel_n = rocm_gfx1201_panel(m, n, dynamic=dynamic_m or dynamic_n or dynamic_k)
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
-            "rocm", "gfx1201", "bf16" if a_dtype == "bf16" else "f16", "f32", 16, 16,
+            "rocm", "gfx1201", "bf16" if a_dtype == "bf16" else "f16", "f32", panel_m, panel_n,
         )
     elif (
         target in {"rocm_gfx1151", "rocm_gfx1201"}

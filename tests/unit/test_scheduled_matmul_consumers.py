@@ -540,9 +540,10 @@ def test_rocm_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
     assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
     assert package.descriptor.provenance["tile_ir_digest"] == artifact.tile_digest
     assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
-    assert package.descriptor.provenance["physical_route"] == (
-        "gfx1151_multiwave_lds_wmma_2x4"
-    )
+    # One wave per 2x4 macro tile, register-staged: the label says what is
+    # built (the "multiwave_lds" it carried until 2026-09-18 named a route the
+    # typed path never took -- byte-identical kernels under both stagings).
+    assert package.descriptor.provenance["physical_route"] == "gfx1151_register_wmma_2x4"
 
 
 def test_apple_gpu_packages_the_exact_scheduled_tile_artifact(monkeypatch, tmp_path) -> None:
@@ -851,6 +852,30 @@ def test_rocm_bf16_matmul_contract_lowers_on_both_chips(target, bias):
     scheduled_matmul.verify_matmul_projection(artifact)
     assert artifact.storage == "bf16" and artifact.accum == "f32"
     assert 'a = "bf16"' in artifact.tile_ir
+
+
+@pytest.mark.parametrize("shape,panel", [
+    # shapes are (m, k, n): K alignment is irrelevant to the panel, M and N are not
+    ((1024, 1024, 1024), (32, 64)), ((2048, 2048, 2048), (32, 64)), ((1024, 1040, 1024), (32, 64)),
+    ((512, 512, 512), (16, 16)), ((1024, 1024, 1000), (16, 16)), ((1000, 1024, 1024), (16, 16)),
+    ((1024, 1024, 1024), (16, 16)),
+])
+def test_rocm_gfx1201_panel_follows_the_measured_gap_packet(shape, panel):
+    """The gfx1201 f16 macro tile: the 2x4 register panel for a static, fully
+    tiled problem at 1024 and above, else 1x1 (typed-route gap packet,
+    2026-09-18). The Python contract row mirrors the C++ selection; the last
+    row is the dynamic-shape case, which stays 1x1."""
+    if scheduled_matmul.find_tessera_opt() is None:
+        pytest.skip("production tessera-opt unavailable")
+    m, k, n = shape
+    dynamic = panel == (16, 16) and shape == (1024, 1024, 1024)
+    assert scheduled_matmul.rocm_gfx1201_panel(m, n, dynamic=dynamic) == panel
+    if dynamic:
+        return
+    artifact = scheduled_matmul.lower_scheduled_matmul(_module(target="rocm", shape=shape), target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
+    assert f"tessera.macro_tile_m = {panel[0]} : i64" in artifact.tile_ir
 
 
 def _integer_operands(shape, storage, seed):

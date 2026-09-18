@@ -1616,12 +1616,14 @@ struct GenerateWMMAGemmKernelPass
 
       OpBuilder bodyB(gpuFunc.getContext());
       // The typed via-tile path carries the fused bias/activation epilogue
-      // since 2026-09-17 (applied by the architecture consumer at the store);
-      // int4 nibble packing and a reduced output type remain untyped-only.
-      if (viaTile && (T.pack == 2 || outputTy != T.accElem)) {
+      // since 2026-09-17 (applied by the architecture consumer at the store)
+      // and, since 2026-09-18, int4: the typed producer hands TileToROCM an
+      // i8 tile view and its fragment materializer compacts the nibbles per
+      // chip (slice 1b). A reduced output type remains untyped-only.
+      if (viaTile && outputTy != T.accElem) {
         op->emitError(
-            "generate-wmma-gemm-kernel: typed via-tile pilot requires an "
-            "f16/bf16/int8 GEMM stored in its accumulator type");
+            "generate-wmma-gemm-kernel: typed via-tile pilot requires a GEMM "
+            "stored in its accumulator type");
         return signalPassFailure();
       }
       if (request.canonicalKLoop && canonicalStaging == "lds") {

@@ -76,6 +76,16 @@ GFX_MATMUL_F16_F32_FUSED_ABI = "tessera.rocm.matmul.a_b_bias_o_m_n_k.f16_f32.fus
 #: FP8 WMMA). Same A, B, D, M, N, K launch order; one-byte operands.
 GFX_MATMUL_E4M3_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1"
 GFX_MATMUL_E5M2_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1"
+#: bf16 storage, f32 accumulate, on the same typed route as f16 (both chips;
+#: GFX1201-PARITY slice 1b, 2026-09-18), plain and with the fused epilogue.
+GFX_MATMUL_BF16_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.bf16_f32.v1"
+GFX_MATMUL_BF16_F32_FUSED_ABI = "tessera.rocm.matmul.a_b_bias_o_m_n_k.bf16_f32.fused.v1"
+#: Integer WMMA storage with i32 accumulation (V_WMMA_I32_16X16X16_IU8 / IU4)
+#: on both chips; no fused epilogue (it is float-only). The i4 ABI takes int4
+#: values in int8 containers, ONE logical value per byte (range [-8, 7]), the
+#: same numpy boundary as the directive lane; the kernel packs the nibbles.
+GFX_MATMUL_I8_I32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.i8_i32.v1"
+GFX_MATMUL_I4_I32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.i4_i32.v1"
 GFX_DEPTH_ATTN_F32_ABI = (
     "tessera.rocm.depth_attention.query_sources_o.f32.v1"
 )
@@ -1450,15 +1460,17 @@ def package_scheduled_matmul(
     verify_matmul_projection(artifact)
     dtypes = (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
     fp8 = dtypes in {("fp8_e4m3", "fp8_e4m3", "fp32"), ("fp8_e5m2", "fp8_e5m2", "fp32")}
+    integer = dtypes in {("int8", "int8", "int32"), ("int4", "int4", "int32")}
     if (
         artifact.target != "rocm"
         or artifact.architecture not in {"gfx1151", "gfx1201"}
-        or not (dtypes == ("fp16", "fp16", "fp32")
+        or not (dtypes in {("fp16", "fp16", "fp32"), ("bf16", "bf16", "fp32")}
+                or integer
                 or (fp8 and artifact.architecture == "gfx1201"))
     ):
         raise ValueError(
-            "ROCm scheduled matmul requires an exact gfx1151/gfx1201 f16/f32 "
-            "contract (or OCP FP8 e4m3/e5m2 to f32 on gfx1201)")
+            "ROCm scheduled matmul requires an exact gfx1151/gfx1201 f16/bf16-to-f32 "
+            "or int8/int4-to-i32 contract (or OCP FP8 e4m3/e5m2 to f32 on gfx1201)")
     arch = artifact.architecture
     (
         target_ir,
@@ -1477,8 +1489,14 @@ def package_scheduled_matmul(
     fused = artifact.bias_name is not None or artifact.activation != "none"
     if fp8 and fused:
         raise ValueError("ROCm FP8 scheduled matmul carries no fused epilogue yet")
+    if integer and fused:
+        raise ValueError("ROCm integer scheduled matmul carries no fused epilogue (it is float-only)")
     abi_id = (GFX_MATMUL_E4M3_F32_ABI if artifact.a_dtype == "fp8_e4m3" else
               GFX_MATMUL_E5M2_F32_ABI if artifact.a_dtype == "fp8_e5m2" else
+              GFX_MATMUL_I8_I32_ABI if artifact.a_dtype == "int8" else
+              GFX_MATMUL_I4_I32_ABI if artifact.a_dtype == "int4" else
+              (GFX_MATMUL_BF16_F32_FUSED_ABI if fused else GFX_MATMUL_BF16_F32_ABI)
+              if artifact.a_dtype == "bf16" else
               GFX_MATMUL_F16_F32_FUSED_ABI if fused else GFX_MATMUL_F16_F32_ABI)
     image = NativeImageArtifact(
         target=f"rocm_{arch}",
@@ -1494,15 +1512,18 @@ def package_scheduled_matmul(
         device_libraries=device_libraries,
     )
     dynamic = artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k
-    storage_align = 1 if fp8 else 2
+    storage_align = 1 if (fp8 or integer) else 2
+    # int4 binds as its int8 container (one logical value per byte).
+    operand_dtype = "int8" if integer else artifact.a_dtype
+    output_dtype = "int32" if integer else "fp32"
     bindings = [
-        BufferBinding(0, artifact.a_name, "input", artifact.a_dtype, 2, "row_major", storage_align),
-        BufferBinding(1, artifact.b_name, "input", artifact.b_dtype, 2, "row_major", storage_align),
+        BufferBinding(0, artifact.a_name, "input", operand_dtype, 2, "row_major", storage_align),
+        BufferBinding(1, artifact.b_name, "input", operand_dtype, 2, "row_major", storage_align),
     ]
     if artifact.bias_name is not None:
         bindings.append(BufferBinding(2, artifact.bias_name, "input", "fp32", 1, "row_major", 4))
     output_ordinal = len(bindings)
-    bindings.append(BufferBinding(output_ordinal, artifact.output_name, "output", "fp32", 2, "row_major", 4))
+    bindings.append(BufferBinding(output_ordinal, artifact.output_name, "output", output_dtype, 2, "row_major", 4))
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
@@ -1538,6 +1559,7 @@ def package_scheduled_matmul(
             "activation": artifact.activation,
             "a_storage": artifact.storage,
             "b_storage": artifact.storage,
+            "storage_container": "int8" if integer else artifact.storage,
             "output_storage": artifact.accum,
             "accum": artifact.accum,
             "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
@@ -2911,6 +2933,10 @@ __all__ = [
     "GFX_MOE_DISPATCH_F32_ABI",
     "GFX_MATMUL_E4M3_F32_ABI",
     "GFX_MATMUL_E5M2_F32_ABI",
+    "GFX_MATMUL_BF16_F32_ABI",
+    "GFX_MATMUL_BF16_F32_FUSED_ABI",
+    "GFX_MATMUL_I8_I32_ABI",
+    "GFX_MATMUL_I4_I32_ABI",
     "GFX_MATMUL_F16_F32_ABI",
     "GFX_MATMUL_F16_F32_FUSED_ABI",
     "GFX_PAGED_KV_F32_ABI",

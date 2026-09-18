@@ -2940,15 +2940,21 @@ struct LowerTileToROCMPass
         auto parent = op->getParentOfType<func::FuncOp>();
         const bool fp8Storage =
             desc && (desc.getAType() == "e4m3" || desc.getAType() == "e5m2");
+        // Integer storage (V_WMMA_I32_16X16X16_IU8 / IU4) accumulates in i32
+        // on both RDNA families; int4 rides i8 containers, one logical value
+        // per byte, and the fragment materializer packs the nibbles per chip
+        // (GFX1201-PARITY slice 1b, 2026-09-18).
+        const bool intStorage =
+            desc && (desc.getAType() == "int8" || desc.getAType() == "int4");
         if (!desc || !epilogue || !parent || desc.getFamily() != "wmma" ||
             desc.getM() != 16 || desc.getN() != 16 || desc.getK() != 16 ||
             desc.getAType() != desc.getBType() ||
             (desc.getAType() != "f16" && desc.getAType() != "bf16" &&
-             !(fp8Storage && arch.starts_with("gfx12"))) ||
-            desc.getAccType() != "f32") {
+             !(fp8Storage && arch.starts_with("gfx12")) && !intStorage) ||
+            desc.getAccType() != (intStorage ? "i32" : "f32")) {
           op->emitError("ROCm Target matmul requires the typed 16x16x16 "
-                        "f16/bf16-to-f32 WMMA contract (or OCP FP8 e4m3/e5m2 "
-                        "to f32 on gfx12)");
+                        "f16/bf16-to-f32 WMMA contract, int8/int4-to-i32 "
+                        "(IU8/IU4), or OCP FP8 e4m3/e5m2 to f32 on gfx12");
           signalPassFailure();
           return;
         }

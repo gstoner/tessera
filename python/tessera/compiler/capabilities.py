@@ -754,6 +754,11 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             **_ops(
                 "artifact_only",
                 ("tessera.matmul",),
+                # Declared, not derived: the derivation admits floats only,
+                # and the IU8/IU4 integer WMMA contract (int8/int4 storage,
+                # int32 accumulate) lowers on the typed route since
+                # GFX1201-PARITY slice 1b (2026-09-18).
+                dtypes=("bf16", "fp16", "fp32", "int8", "int32", "int4"),
                 reason=(
                     "ROCm 7.2.4 RDNA 3.5 (Strix Halo APU) WMMA artifact; "
                     "HIP execution gated on real gfx1151 silicon"
@@ -795,8 +800,10 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             ),
         },
         # ISA §7.9 Table 33: F16/BF16/IU8 executable surface; no FP8 WMMA on
-        # RDNA 3.5 (the load-bearing difference from gfx1200).
-        supported_dtypes=("bf16", "fp16", "fp32", "int8", "int4"),
+        # RDNA 3.5 (the load-bearing difference from gfx1200). int32 is the
+        # IU8/IU4 accumulator (GFX1201-PARITY slice 1b: the integer matmul
+        # contract lowers for this chip too).
+        supported_dtypes=("bf16", "fp16", "fp32", "int8", "int32", "int4"),
         features=("wmma_f16", "wmma_bf16", "buffer_load_lds", "rocm_7_2_3"),
     ),
     "rocm_gfx1200": TargetCapability(
@@ -834,6 +841,10 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         supported_ops={
             **_ops(
                 "artifact_only", ("tessera.matmul",),
+                # Declared, not derived (see gfx1151): the RDNA4 WMMA audit's
+                # float forms plus the IU8/IU4 integer contract.
+                dtypes=("bf16", "fp16", "fp32", "fp8_e4m3", "fp8_e5m2",
+                        "int8", "int32", "int4"),
                 reason=(
                     "ROCm RDNA 4 gfx1201 / Radeon AI PRO R9700 WMMA artifact; "
                     "exact-device compile and execution proof remains gated"

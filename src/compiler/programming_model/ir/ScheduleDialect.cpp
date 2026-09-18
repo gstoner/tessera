@@ -129,9 +129,14 @@ LogicalResult MatmulOp::verify() {
               (getArch().contains("avx512") || getArch().contains("zen5"));
   if (getStorage() == "u8" && !u8s8)
     return emitOpError("u8s8 requires the x86 i32 accumulator/output contract");
-  if (getOutput() != "f32" && getOutput() != "f16" && !f64 && !u8s8 &&
+  // Integer WMMA on the ROCm chips (int8/int4 storage, i32 accumulate and
+  // output; GFX1201-PARITY slice 1b) beside sm_120's int4 contract.
+  bool rocmInt = (getStorage() == "int8" || getStorage() == "int4") &&
+                 getOutput() == "i32" && getAccum() == "i32" &&
+                 (getArch().contains("gfx1151") || getArch().contains("gfx1201"));
+  if (getOutput() != "f32" && getOutput() != "f16" && !f64 && !u8s8 && !rocmInt &&
       !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
-    return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, or int4 with i32 accumulation/output");
+    return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, int4 with i32 accumulation/output, or ROCm int8/int4 with i32 accumulation/output");
   if (getALayout() != "row_major" || getBLayout() != "col_major")
     return emitOpError("initial matmul contract requires row/col layouts");
   if (getRasterOrder() != "row_major")

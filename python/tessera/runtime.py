@@ -4097,6 +4097,8 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
         rn.GFX_MATMUL_F16_F32_ABI, rn.GFX_MATMUL_F16_F32_FUSED_ABI,
         rn.GFX_MATMUL_E4M3_F32_ABI, rn.GFX_MATMUL_E5M2_F32_ABI,
+        rn.GFX_MATMUL_BF16_F32_ABI, rn.GFX_MATMUL_BF16_F32_FUSED_ABI,
+        rn.GFX_MATMUL_I8_I32_ABI, rn.GFX_MATMUL_I4_I32_ABI,
         rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
         rn.GFX_PAGED_KV_F32_ABI,
     })
@@ -4117,10 +4119,14 @@ def _submit_rocm_gfx1151_native(
         GFX_ATTN_BF16_ABI,
         GFX_ATTN_F16_ABI,
         GFX_DEPTH_ATTN_F32_ABI,
+        GFX_MATMUL_BF16_F32_ABI,
+        GFX_MATMUL_BF16_F32_FUSED_ABI,
         GFX_MATMUL_E4M3_F32_ABI,
         GFX_MATMUL_E5M2_F32_ABI,
         GFX_MATMUL_F16_F32_ABI,
         GFX_MATMUL_F16_F32_FUSED_ABI,
+        GFX_MATMUL_I4_I32_ABI,
+        GFX_MATMUL_I8_I32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
         GFX_REDUCE_BF16_ABI,
@@ -4148,8 +4154,12 @@ def _submit_rocm_gfx1151_native(
         GFX_ATTN_BF16_ABI,
         GFX_MATMUL_F16_F32_ABI,
         GFX_MATMUL_F16_F32_FUSED_ABI,
+        GFX_MATMUL_BF16_F32_ABI,
+        GFX_MATMUL_BF16_F32_FUSED_ABI,
         GFX_MATMUL_E4M3_F32_ABI,
         GFX_MATMUL_E5M2_F32_ABI,
+        GFX_MATMUL_I8_I32_ABI,
+        GFX_MATMUL_I4_I32_ABI,
         GFX_DEPTH_ATTN_F32_ABI,
     }:
         raise RuntimeError(f"unsupported ROCm descriptor ABI {descriptor.abi_id!r}")
@@ -4161,7 +4171,10 @@ def _submit_rocm_gfx1151_native(
         GFX_ATTN_BF16_ABI,
     }
     matmul = descriptor.abi_id in {GFX_MATMUL_F16_F32_ABI, GFX_MATMUL_F16_F32_FUSED_ABI,
-                                   GFX_MATMUL_E4M3_F32_ABI, GFX_MATMUL_E5M2_F32_ABI}
+                                   GFX_MATMUL_BF16_F32_ABI, GFX_MATMUL_BF16_F32_FUSED_ABI,
+                                   GFX_MATMUL_E4M3_F32_ABI, GFX_MATMUL_E5M2_F32_ABI,
+                                   GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
+    matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
     depth_attention = descriptor.abi_id == GFX_DEPTH_ATTN_F32_ABI
     attention_bias = attention and bool(descriptor.provenance["bias"])
@@ -4214,6 +4227,7 @@ def _submit_rocm_gfx1151_native(
         n = int(cast(int, scalars["N"]))
         k = int(cast(int, scalars["K"]))
         expected_ab = _scheduled_storage_numpy_dtype(ordered[0].dtype)
+        expected_out = np.int32 if matmul_integer else np.float32
         if (
             tuple(a.shape) != (m, k)
             or tuple(b_matrix.shape) != (k, n)
@@ -4221,9 +4235,14 @@ def _submit_rocm_gfx1151_native(
             or expected_ab is None
             or a.dtype != expected_ab
             or b_matrix.dtype != expected_ab
-            or output.dtype != np.float32
+            or output.dtype != expected_out
         ):
             raise RuntimeError("ROCm matmul arrays disagree with M/N/K or descriptor dtype")
+        if descriptor.abi_id == GFX_MATMUL_I4_I32_ABI and (
+            a.size and (int(a.min()) < -8 or int(a.max()) > 7)
+            or b_matrix.size and (int(b_matrix.min()) < -8 or int(b_matrix.max()) > 7)
+        ):
+            raise RuntimeError("ROCm int4 matmul takes int8 containers holding values in [-8, 7]")
         if bias is not None and (tuple(bias.shape) != (n,) or bias.dtype != np.float32):
             raise RuntimeError("gfx1151 matmul bias disagrees with N or is not f32")
         input_arrays = [np.ascontiguousarray(a), np.ascontiguousarray(b_matrix)]
@@ -5292,10 +5311,14 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_ATTN_F16_ABI,
         GFX_ATTN_BF16_ABI,
         GFX_DEPTH_ATTN_F32_ABI,
+        GFX_MATMUL_BF16_F32_ABI,
+        GFX_MATMUL_BF16_F32_FUSED_ABI,
         GFX_MATMUL_E4M3_F32_ABI,
         GFX_MATMUL_E5M2_F32_ABI,
         GFX_MATMUL_F16_F32_ABI,
         GFX_MATMUL_F16_F32_FUSED_ABI,
+        GFX_MATMUL_I4_I32_ABI,
+        GFX_MATMUL_I8_I32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
         GFX_REDUCE_BF16_ABI,
@@ -5319,8 +5342,12 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_MOE_DISPATCH_F32_ABI,
             GFX_MATMUL_F16_F32_ABI,
             GFX_MATMUL_F16_F32_FUSED_ABI,
+            GFX_MATMUL_BF16_F32_ABI,
+            GFX_MATMUL_BF16_F32_FUSED_ABI,
             GFX_MATMUL_E4M3_F32_ABI,
             GFX_MATMUL_E5M2_F32_ABI,
+            GFX_MATMUL_I8_I32_ABI,
+            GFX_MATMUL_I4_I32_ABI,
             GFX_DEPTH_ATTN_F32_ABI,
             GFX_ATTN_F16_ABI,
             GFX_ATTN_BF16_ABI,
@@ -7293,6 +7320,10 @@ def _scheduled_storage_numpy_dtype(name: str):
         except ImportError:
             return None
         return np.dtype(ml_dtypes.float8_e4m3fn if name == "fp8_e4m3" else ml_dtypes.float8_e5m2)
+    if name == "int8":
+        return np.dtype(np.int8)
+    if name == "int32":
+        return np.dtype(np.int32)
     return None
 
 
@@ -7481,17 +7512,27 @@ def _rocm_compiled_gemm_via_scheduled_package(
     from .compiler.scheduled_matmul import lower_scheduled_matmul
 
     has_bias = bias is not None
-    ir_elem, ir_dtype = {"f16": ("f16", "fp16"), "e4m3": ("f8E4M3FN", "fp8_e4m3"),
-                         "e5m2": ("f8E5M2", "fp8_e5m2")}[dtype_tag]
-    store_dtype = _scheduled_storage_numpy_dtype(ir_dtype)
+    ir_elem, ir_dtype = {"f16": ("f16", "fp16"), "bf16": ("bf16", "bf16"),
+                         "e4m3": ("f8E4M3FN", "fp8_e4m3"), "e5m2": ("f8E5M2", "fp8_e5m2"),
+                         "int8": ("i8", "int8"), "int4": ("i4", "int4")}[dtype_tag]
+    integer = dtype_tag in ("int8", "int4")
+    # int4 values travel in int8 containers, one logical value per byte.
+    store_dtype = _scheduled_storage_numpy_dtype("int8" if integer else ir_dtype)
     if store_dtype is None:
         raise _RocmCompiledUnavailable(f"{ir_dtype} storage needs ml_dtypes on this host")
+    if integer and (has_bias or activation != "none"):
+        raise ValueError("rocm_compiled fused epilogue (bias/activation) is float-only")
+    if dtype_tag == "int4":
+        for name, arr in (("a", np.asarray(a)), ("b", np.asarray(b))):
+            if arr.dtype != np.int8 or (arr.size and (int(arr.min()) < -8 or int(arr.max()) > 7)):
+                raise ValueError(f"rocm_compiled int4 lane needs logical int8 {name} values in [-8,7]")
+    out_elem, out_dtype_name, out_np = ("i32", "int32", np.int32) if integer else ("f32", "fp32", np.float32)
     key = (chip, int(m), int(n), int(k), has_bias, activation, dtype_tag)
     package = _rocm_scheduled_gemm_packages.get(key)
     if package is None:
         a_type = IRType(f"tensor<{m}x{k}x{ir_elem}>", (str(m), str(k)), ir_dtype)
         b_type = IRType(f"tensor<{k}x{n}x{ir_elem}>", (str(k), str(n)), ir_dtype)
-        out_type = IRType(f"tensor<{m}x{n}xf32>", (str(m), str(n)), "fp32")
+        out_type = IRType(f"tensor<{m}x{n}x{out_elem}>", (str(m), str(n)), out_dtype_name)
         ir_args = [IRArg("a", a_type), IRArg("b", b_type)]
         operands, operand_types = ["%a", "%b"], [str(a_type), str(b_type)]
         kwargs: dict[str, object] = {"activation": activation}
@@ -7509,7 +7550,7 @@ def _rocm_compiled_gemm_via_scheduled_package(
         artifact = lower_scheduled_matmul(module, target=f"rocm_{chip}")
         package = package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
         _rocm_scheduled_gemm_packages[key] = package
-    out = np.zeros((m, n), np.float32)
+    out = np.zeros((m, n), out_np)
     buffers: dict[str, Any] = {"a": np.ascontiguousarray(a, store_dtype),
                                "b": np.ascontiguousarray(b, store_dtype), "o": out}
     if has_bias:
@@ -7621,7 +7662,8 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
         raise _RocmCompiledUnavailable(
             f"rocm_compiled: OCP FP8 storage ({dtype_tag}) is an RDNA4 (gfx12) WMMA contract "
             f"without a fused epilogue; chip {chip}, bias={has_bias}, activation={activation}")
-    if not chip.startswith("gfx11") and dtype_tag in ("f16", "e4m3", "e5m2") and not packed_inputs:
+    if (not chip.startswith("gfx11") and not packed_inputs
+            and dtype_tag in ("f16", "bf16", "e4m3", "e5m2", "int8", "int4")):
         # RDNA4 (gfx12): the directive lane's generator emits the gfx11 16x16x16
         # fragment layout and refuses here by design. The typed Tile route --
         # the same route the gfx1201 scheduled packages take -- carries the
@@ -7744,15 +7786,12 @@ def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
     if not chip.startswith("gfx11"):
         # gfx12: the legacy directive generator is gfx11-only by construction;
         # the scheduled package IS the compiled route there (the same product
-        # `_rocm_compiled_gemm_impl` serves), f16 storage with f32 accumulation.
-        if dtype_tag != "f16":
-            raise _RocmCompiledUnavailable(
-                f"rocm matmul-family: {dtype_tag} storage on the typed route is "
-                f"hardware-verified on gfx1151 only; target '{chip}' is arch-gated on its "
-                "own evidence (GFX1201-PARITY slice 1b)")
+        # `_rocm_compiled_gemm_impl` serves): f16/bf16 -> f32, int8 -> i32 and
+        # OCP FP8 -> f32 storage (GFX1201-PARITY slices 1, 1b and 5).
         return _rocm_compiled_gemm_via_scheduled_package(
-            np.ascontiguousarray(a, dtype=np.float16),
-            np.ascontiguousarray(b, dtype=np.float16), None, "none", m, n, k, chip)
+            np.ascontiguousarray(a, dtype=store),
+            np.ascontiguousarray(b, dtype=store), None, "none", m, n, k, chip,
+            dtype_tag=dtype_tag)
     from .compiler.rocm_schedule import select_rocm_gemm_schedule
 
     schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag, arch=chip)
@@ -8023,16 +8062,17 @@ def _rocm_wmma_fused_2d(
         # Raster order and the device timer are directive-lane options the
         # typed route does not carry yet: a timing request answers None rather
         # than a wall-clock number dressed as a device latency.
-        if dtype_tag != "f16":
+        if dtype_tag not in ("f16", "bf16"):
             raise _RocmCompiledUnavailable(
-                f"rocm WMMA fused: {dtype_tag} storage on the typed route is "
-                f"hardware-verified on gfx1151 only; target '{chip}' is arch-gated on its "
-                "own evidence (GFX1201-PARITY slice 1b)")
+                f"rocm WMMA fused: the fused epilogue is an f16/bf16 storage contract; "
+                f"{dtype_tag} storage carries no fused epilogue on target '{chip}' "
+                "(OCP FP8 has none yet; integer storage is float-only by contract)")
         if time_iters is not None:
             return None
         return _rocm_compiled_gemm_via_scheduled_package(
-            np.ascontiguousarray(a, dtype=np.float16),
-            np.ascontiguousarray(b, dtype=np.float16), bias_arr, activation, m, n, k, chip)
+            np.ascontiguousarray(a, dtype=store),
+            np.ascontiguousarray(b, dtype=store), bias_arr, activation, m, n, k, chip,
+            dtype_tag=dtype_tag)
     from .compiler.rocm_schedule import select_rocm_gemm_schedule
 
     schedule = select_rocm_gemm_schedule(

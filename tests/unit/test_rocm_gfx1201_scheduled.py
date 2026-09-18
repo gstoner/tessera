@@ -535,3 +535,66 @@ def test_gfx1201_scheduled_paged_kv_package_executes(start, end):
         "P": 4, "LP": 4, "PageSize": 4, "H": 3, "D": 8, "Start": start, "Tokens": tokens})
     assert result["ok"] is True and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
     np.testing.assert_array_equal(output, logical[start:end])
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("storage", ["int8", "int4"])
+@pytest.mark.parametrize("shape", [(16, 16, 16), (17, 19, 23), (65, 48, 37)])
+def test_gfx1201_scheduled_matmul_package_executes_integer_storage(shape, storage):
+    """GFX1201-PARITY slice 1b: int8/int4 storage with i32 accumulation on the
+    typed route, RDNA4 (V_WMMA_I32_16X16X16_IU8 / IU4 through rdna4_wmma
+    fragments: 8 int8 per lane in two i32 words, 8 int4 nibbles in one).
+    Exact against the int32 numpy product; int4 values ride int8 containers."""
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _integer_operands, _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=shape, dtype=storage, output_dtype="int32"), target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.image.architecture == "gfx1201"
+    assert package.descriptor.abi_id == (rocm_native.GFX_MATMUL_I8_I32_ABI if storage == "int8" else rocm_native.GFX_MATMUL_I4_I32_ABI)
+    a, b, expected = _integer_operands(shape, storage, 97 + len(storage))
+    output = np.zeros((m, n), np.int32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    np.testing.assert_array_equal(output, expected)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("activation,bias", [("none", False), ("gelu", True)])
+@pytest.mark.parametrize("shape", [(16, 16, 16), (65, 48, 37)])
+def test_gfx1201_scheduled_matmul_package_executes_bf16(shape, activation, bias):
+    """bf16 storage on the typed route, RDNA4 (slice 1b), plain and fused."""
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module, _epilogue_reference
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=shape, dtype="bf16", activation=activation, bias=bias), target="rocm_gfx1201")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.abi_id == (rocm_native.GFX_MATMUL_BF16_F32_FUSED_ABI if bias else rocm_native.GFX_MATMUL_BF16_F32_ABI)
+    rng = np.random.default_rng(311 + len(activation))
+    a = (rng.normal(size=(m, k)) * 0.4).astype(ml_dtypes.bfloat16)
+    b = (rng.normal(size=(k, n)) * 0.4).astype(ml_dtypes.bfloat16)
+    bias_arr = (rng.normal(size=(n,)) * 0.5).astype(np.float32) if bias else None
+    output = np.zeros((m, n), np.float32)
+    buffers = {"a": a, "b": b, "o": output}
+    if bias:
+        buffers["bias"] = bias_arr
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    np.testing.assert_allclose(output, _epilogue_reference(a.astype(np.float32), b.astype(np.float32), bias_arr, activation), rtol=0, atol=8e-2)

@@ -439,6 +439,27 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       schedule.arch = "apple7";
     return schedule;
   }
+  const bool rocmWmmaChip = schedule.target == "rocm" &&
+                            (schedule.arch.contains("gfx1151") ||
+                             schedule.arch.contains("gfx1201"));
+  if (rocmWmmaChip && lhsElement == rhsElement &&
+      (lhsElement.isInteger(8) || lhsElement.isInteger(4)) &&
+      !lhsElement.isUnsignedInteger() && outElement.isInteger(32) &&
+      !schedule.bias && !schedule.residual && schedule.activation == "none") {
+    // Integer WMMA storage on both RDNA chips (V_WMMA_I32_16X16X16_IU8 /
+    // IU4; RDNA3 ISA 7.9, RDNA4 ISA 7.12), i32 accumulate, no fused epilogue
+    // (the epilogue is float-only). int4 rides int8 containers with one
+    // logical value per byte, the directive lane's runtime contract.
+    // gfx1151 keeps its 2x4 panel, gfx1201 its conservative 1x1
+    // (GFX1201-PARITY slice 1b, 2026-09-18).
+    schedule.storage = lhsElement.isInteger(8) ? "int8" : "int4";
+    schedule.accum = "i32";
+    schedule.output = "i32";
+    const bool rdna4 = schedule.arch.contains("gfx1201");
+    schedule.macroTileM = rdna4 ? 16 : 32;
+    schedule.macroTileN = rdna4 ? 16 : 64;
+    return schedule;
+  }
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
       lhsElement == rhsElement &&
       isa<Float8E4M3FNType, Float8E5M2Type>(lhsElement) && outElement.isF32() &&
@@ -453,16 +474,20 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     return schedule;
   }
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
-      lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
+      lhsElement == rhsElement && (lhsElement.isF16() || lhsElement.isBF16()) &&
+      outElement.isF32()) {
     // Independent conservative RDNA4 profile; no gfx11 panel inheritance.
-    schedule.storage = "f16";
+    // bf16 storage joined f16 on 2026-09-18 (slice 1b): same fragment
+    // family, V_WMMA_F32_16X16X16_BF16.
+    schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
     schedule.macroTileM = 16;
     schedule.macroTileN = 16;
     return schedule;
   }
-  if (rocm && lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
-    schedule.storage = "f16";
+  if (rocm && lhsElement == rhsElement &&
+      (lhsElement.isF16() || lhsElement.isBF16()) && outElement.isF32()) {
+    schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
     // gfx1151's committed production GEMM is a 2x4 register-blocked WMMA
     // macro-tile.  Schedule IR carries logical element extents, not the

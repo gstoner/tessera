@@ -8535,37 +8535,46 @@ there is the K unroll rather than the panel (int8 1024³: 9.94 at the 2x4,
 18.36 at 4x4 with k=2; 2048³: 20.79 at 2x4 k=1 against 22.61 at 2x4 k=2),
 and that rule is owed a clean re-run before it ships — see below.
 
-**`ROCM-OCCUPANCY-1` — open, and deliberately not concluded.** The 2026-09-18
+**`ROCM-OCCUPANCY-1` — CLOSED the same day, against the ISA.** The 2026-09-18
 packet recorded the panel axis as "exhausted" because 4x8 and 8x8 fell off a
-VGPR cliff. Compile-only measurement on gfx1201 (2026-09-19) shows what that
-cliff is made of: **every panel compiles to `vgpr_count` 256**, and the
-shipped 4x4 panel **already spills 126**, with 1433 at 4x8 and 4247 at 8x8.
-The generators set no occupancy attribute anywhere, so the backend targets its
-default.
+VGPR cliff, and a compile-only measurement on gfx1201 showed what that cliff
+is made of: **every panel compiles to `vgpr_count` 256**, and the shipped 4x4
+panel **already spills 126**, with 1433 at 4x8 and 4247 at 8x8. The generators
+set no occupancy attribute anywhere, and an external RDNA4/FP8 recipe
+attributes exactly this pattern to occupancy policy — constrain to one wave
+per SIMD and the wave gets the full register file rather than a split one.
 
-An external RDNA4/FP8 optimization recipe attributes exactly this to occupancy
-policy: constrain to one wave per SIMD and the wave gets the full 512-VGPR
-file instead of a split one. A `waves-per-eu` option now stamps
-`rocdl.waves_per_eu` on the generated kernel, plumbed through
-`ROCMExecutablePipeline` and its cache key, defaulting to 0 (backend default)
-so nothing changes until it is measured.
+That hypothesis is **wrong for RDNA4**, and the owner's copy of the ISA on
+Princess-Luna (`~/AMD_GPU_ISA_DOCS/rdna4-instruction-set-architecture.pdf`)
+says so directly. §3.3.2.1: *"VGPRs are allocated in blocks of 16 for wave32
+or 8 for wave64, and a shader may have up to 256 VGPRs."* Dynamic VGPR mode
+(§3.3.3) does not raise it — the block size is a chip-wide config of either 16
+VGPRs with a 128 maximum per wave or 32 VGPRs with a 256 maximum, and
+`S_ALLOC_VGPR` fails with `SCC=0` for any request above that maximum. The
+768 KiB VGPR file is **per CU**, shared across wave slots; no occupancy
+request hands a single wave more than 256.
 
-**It changed nothing** — `vgpr_count` and the spill counts are identical at 0,
-1 and 2. Two hypotheses remain, and this loop did **not** separate them:
+So **256 is the hardware ceiling, the 2026-09-18 "panel axis is exhausted"
+reading was right after all**, and CDNA's one-wave-per-SIMD / 512-VGPR recipe
+is a CDNA result that does not transfer — the usual rule, in the usual
+direction. The panel docstring now states the cliff as a hardware fact and
+cites the ISA section.
 
-1. 256 is RDNA4's architectural wave32 VGPR limit, in which case the 512-VGPR
-   recipe is a CDNA result that does not transfer here — the usual rule, in
-   the usual direction.
-2. The attribute is not reaching the LLVM function. The emitted `backend_ir`
-   is already a serialized `gpu.binary` and the Target IR dump carries no
-   `gpu.func`, so neither artifact could confirm the attribute survives
-   lowering, and our extracted RDNA4 archive holds section titles only — it
-   has no VGPR-allocation text to settle the limit.
+Two process notes worth keeping. The `waves-per-eu` knob added to test the
+hypothesis **is deleted**: the attribute demonstrably reached the `llvm.func`
+and changed nothing at 0, 1 or 2, and keeping a knob whose hypothesis is
+excluded is Decision #29's unconsumed declaration. And our own extracted RDNA
+archive could not answer this — `docs/reference/isa/rdna/*/sections.json`
+holds section *titles* only, with no VGPR-allocation text — which is why the
+first pass could not settle it and recorded the question instead of a guess.
+The PDFs on Princess-Luna are the source when the archive cannot answer;
+`~/AMD_GPU_ISA_DOCS` also holds RDNA3.5 and CDNA5.
 
-Until one is excluded, **do not cite the cliff as a hardware fact**; the panel
-docstring no longer does. The next step is to dump the module between
-`gpu.func` and `llvm.func` and read the attribute directly, then check the
-RDNA4 ISA guide's VGPR allocation section rather than our archive.
+**What is still actionable from it.** The shipped 4x4 panel spilling 126
+VGPRs is a real cost with no ceiling left to raise, so the only lever is
+needing fewer live registers — a smaller accumulator footprint, better
+scheduling, or fewer simultaneously staged operands. That is a new item, not
+this one.
 
 **`ROCM-GLOBAL-LOAD-TR-1` — a better answer for the B operand than LDS.**
 `amdgpu.global_transpose_load` exists in our MLIR 23 and wraps RDNA4's
@@ -8587,7 +8596,9 @@ rather than staging through shared memory at all.
 **Still owed.** The low-precision K unroll on gfx1201 (its sweep was
 contaminated — a build ran concurrently with the timing, so those numbers are
 discarded rather than recorded); the gfx1151 integer K-unroll rule, whose
-clean sweep exists but which has no device row yet; `ROCM-OCCUPANCY-1` above;
+clean sweep exists but which has no device row yet; the 126-VGPR spill at the
+shipped 4x4 panel, whose only lever is now fewer live registers
+(`ROCM-OCCUPANCY-1` is closed and the ceiling cannot be raised);
 `ROCM-GLOBAL-LOAD-TR-1` above; and raster-order selection, still blocked on
 counters neither WSL2 ROCm box can produce.
 

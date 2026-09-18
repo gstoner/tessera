@@ -221,12 +221,6 @@ class ROCMExecutablePipeline:
     #: Full 16-wide K slabs the typed matmul body issues per loop iteration
     #: (latency hiding; 1 is the established one-slab loop).
     k_unroll: int = 1
-    #: `rocdl.waves_per_eu` stamped on the generated kernel, or 0 for the
-    #: backend default. RDNA4 wave32 hands one wave the full 512-VGPR file
-    #: only when occupancy is constrained to one wave per SIMD; under the
-    #: default every panel of the typed body is capped at 256 and the large
-    #: ones spill (measured gfx1201, 2026-09-19).
-    waves_per_eu: int = 0
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -261,8 +255,6 @@ class ROCMExecutablePipeline:
             raise ValueError("ROCm LDS staging takes a positive (waves_m, waves_n) pair of at most 8 each")
         if type(self.k_unroll) is not int or not 1 <= self.k_unroll <= 8:
             raise ValueError("ROCm matmul k_unroll must be an integer in [1, 8]")
-        if type(self.waves_per_eu) is not int or not 0 <= self.waves_per_eu <= 8:
-            raise ValueError("ROCm matmul waves_per_eu must be an integer in [0, 8] (0 = backend default)")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -276,7 +268,7 @@ class ROCMExecutablePipeline:
             f"family={self.family} input={self.input_level.value} "
             f"output={terminal.value} arch={self.arch} staging={self.staging} "
             f"lds-waves-m={self.lds_waves[0]} lds-waves-n={self.lds_waves[1]} "
-            f"k-unroll={self.k_unroll} waves-per-eu={self.waves_per_eu} "
+            f"k-unroll={self.k_unroll} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"
@@ -291,7 +283,6 @@ class ROCMExecutablePipeline:
             self.staging,
             f"{self.lds_waves[0]}x{self.lds_waves[1]}",
             str(self.k_unroll),
-            str(self.waves_per_eu),
             str(self.tile_q),
             str(self.tile_kv),
             str(self.depth_cooperative),

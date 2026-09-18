@@ -131,13 +131,19 @@ def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
     integer rows are *exact* against the i32 reference at every panel, so this
     was a selection omission and never a codegen limit.
 
-    The panel axis stops at 4x4 for all of them: 4x8 and 8x8 compile but the
-    body spills (126 VGPRs already at 4x4, 1433 at 4x8, 4247 at 8x8, against a
-    compiled `vgpr_count` of 256 in every case). Whether that 256 is RDNA4's
-    architectural wave32 limit or our own occupancy policy is **not yet
-    established** -- see `ROCM-OCCUPANCY-1` in the backend queue; do not cite
-    the cliff as a hardware fact until it is. Above the panel, latency hiding
-    is the lever -- see `rocm_k_unroll`."""
+    The panel axis stops at 4x4 for all of them, and the reason is
+    **architectural**: RDNA4 ISA 3.3.2.1 -- "VGPRs are allocated in blocks of
+    16 for wave32 or 8 for wave64, and a shader may have up to 256 VGPRs" --
+    and dynamic VGPR mode (3.3.3) caps at the same 256 with a 32-VGPR block
+    size. The 768 KiB VGPR file is per CU and shared across wave slots; no
+    occupancy request hands one wave more. So 4x8 and 8x8 compile and spill
+    (1433 and 4247 VGPRs) with no ceiling left to raise, and CDNA's
+    one-wave-per-SIMD/512-VGPR recipe does not transfer here.
+
+    What remains actionable is that the **shipped** 4x4 panel already spills
+    126 VGPRs. That is a real cost, and the only lever on it is needing fewer
+    live registers -- not a larger tile and not an occupancy attribute. Above
+    the panel, latency hiding is the other lever -- see `rocm_k_unroll`."""
     if not dynamic and m >= 1024 and n >= 1024 and m % 64 == 0 and n % 64 == 0:
         return 64, 64
     return 16, 16

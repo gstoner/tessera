@@ -139,8 +139,13 @@ LogicalResult MatmulOp::verify() {
     return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, int4 with i32 accumulation/output, or ROCm int8/int4 with i32 accumulation/output");
   if (getALayout() != "row_major" || getBLayout() != "col_major")
     return emitOpError("initial matmul contract requires row/col layouts");
-  if (getRasterOrder() != "row_major")
-    return emitOpError("initial matmul contract requires row-major raster order");
+  // The shared block-rasterization contract (ROCM-RASTER-1): a permutation of
+  // block ids onto the tile grid. The selection stays row-major until device
+  // timing and counters exist; the contract may name any of the four orders
+  // so a measured decision can be carried without a dialect change.
+  if (!llvm::is_contained({"row_major", "column_major", "grouped_m", "grouped_n"},
+                          getRasterOrder()))
+    return emitOpError("raster_order must be row_major, column_major, grouped_m or grouped_n");
   if (getRasterGroup() <= 0)
     return emitOpError("raster_group must be positive");
   return success();

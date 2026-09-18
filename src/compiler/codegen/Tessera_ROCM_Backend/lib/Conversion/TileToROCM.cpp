@@ -2992,6 +2992,17 @@ struct LowerTileToROCMPass
                                    "tessera.raster_group", "numeric_policy"})
           if (Attribute attr = op->getAttr(attrName))
             state.addAttribute(attrName, attr);
+        // The generator reads the raster contract under the directive lane's
+        // spelling (`schedule_raster_order` / `schedule_raster_group`, the
+        // same fields `rocm_schedule.ROCmScheduleDescriptor` stamps). Until
+        // 2026-09-18 the typed route carried the Schedule's decision only
+        // under the `tessera.` names, so the kernel always rasterized
+        // row-major whatever the Schedule said (ROCM-RASTER-1 reaches the
+        // typed route; the selection stays row-major pending device timing).
+        if (Attribute order = op->getAttr("tessera.raster_order"))
+          state.addAttribute("schedule_raster_order", order);
+        if (Attribute group = op->getAttr("tessera.raster_group"))
+          state.addAttribute("schedule_raster_group", group);
         builder.create(state);
         op->erase();
         continue;

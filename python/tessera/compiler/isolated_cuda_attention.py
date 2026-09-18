@@ -133,7 +133,7 @@ class _DeviceArray:
 
     @property
     def __cuda_array_interface__(self):
-        return {'version': 3, 'shape': self.shape, 'typestr': '<f4', 'data': (int(self.pointer.value), False)}
+        return {'version': 3, 'shape': self.shape, 'typestr': '<f4', 'data': (int(self.pointer.value or 0), False)}
 
 
 def _download(driver, view):

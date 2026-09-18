@@ -4100,7 +4100,7 @@ def _submit_rocm_sparse_2to4(image: NativeImageArtifact, descriptor: LaunchDescr
     m, n, k = (int(v) for v in cast(list[int], descriptor.provenance["shape"]))
     storage = _scheduled_storage_numpy_dtype({"f16": "fp16", "bf16": "bf16"}[str(descriptor.provenance["storage"])])
     out_dtype = _scheduled_storage_numpy_dtype({"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[str(descriptor.provenance["output"])])
-    words = int(descriptor.provenance["validity_words"])
+    words = int(cast(int, descriptor.provenance["validity_words"]))
     if storage is None or out_dtype is None:
         raise RuntimeError("sparse 2:4 launch needs ml_dtypes for bf16 storage")
     if (tuple(a.shape) != (m, k) or tuple(b_matrix.shape) != (k, n) or tuple(output.shape) != (m, n)

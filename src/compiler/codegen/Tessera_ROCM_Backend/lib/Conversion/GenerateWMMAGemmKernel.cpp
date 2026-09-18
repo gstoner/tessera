@@ -1397,6 +1397,16 @@ struct GenerateWMMAGemmKernelPass
                                      "per loop iteration (latency hiding; 1 = "
                                      "the established one-slab loop)"),
                       llvm::cl::init(1)};
+  Option<int> wavesPerEu{
+      *this, "waves-per-eu",
+      llvm::cl::desc("occupancy request stamped on the kernel as "
+                     "rocdl.waves_per_eu (0 = leave the backend default). "
+                     "RDNA4 wave32 gives one wave the full 512-VGPR file only "
+                     "when occupancy is constrained to one wave per SIMD; the "
+                     "default target splits it, so a large register panel "
+                     "spills against a 256-VGPR cap rather than using the "
+                     "hardware"),
+      llvm::cl::init(0)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged typed body: waves along M "
                                        "per workgroup"),
@@ -1906,6 +1916,17 @@ struct GenerateWMMAGemmKernelPass
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernel(true);
+      // An occupancy request, when one is asked for. Measured on gfx1201
+      // 2026-09-19: with the backend default, EVERY panel of this body is
+      // capped at 256 VGPRs, and the shipped 4x4 panel already spills 126
+      // (4x8 spills 1433, 8x8 spills 4247). That cap is the "VGPR cliff" the
+      // 2026-09-18 packet recorded as the panel axis being exhausted -- it is
+      // our occupancy policy, not the register file, which holds 512 per wave
+      // when one wave has the SIMD to itself. Left at the default unless
+      // asked, so the knob is measured before it is a rule.
+      if (wavesPerEu > 0)
+        gpuFunc->setAttr("rocdl.waves_per_eu",
+                         b.getI32IntegerAttr(wavesPerEu));
       // The typed 2x4 f16/bf16 body carries gfx1151's performance-closure
       // digest (TileToROCM refuses it on any other arch). Stamp it only when
       // the request is gfx11's: the op's `arch`/`schedule_arch`, else the

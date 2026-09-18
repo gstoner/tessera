@@ -54,6 +54,11 @@ struct ROCMExecutablePipelineOptions
   Option<int> kUnroll{*this, "k-unroll",
                       llvm::cl::desc("typed matmul: K slabs per loop iteration"),
                       llvm::cl::init(1)};
+  Option<int> wavesPerEu{
+      *this, "waves-per-eu",
+      llvm::cl::desc("typed matmul: rocdl.waves_per_eu occupancy request "
+                     "(0 = backend default)"),
+      llvm::cl::init(0)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged matmul: waves along M"),
                         llvm::cl::init(2)};
@@ -329,7 +334,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " canonical-staging=" + staging +
                                   " lds-waves-m=" + Twine(ldsWavesM) +
                                   " lds-waves-n=" + Twine(ldsWavesN) +
-                                  " k-unroll=" + Twine(kUnroll)));
+                                  " k-unroll=" + Twine(kUnroll) +
+                                  " waves-per-eu=" + Twine(wavesPerEu)));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {

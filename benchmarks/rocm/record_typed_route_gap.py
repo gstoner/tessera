@@ -106,6 +106,13 @@ class _Storage:
         self.low, self.high = low, high  # integer operand range, when integral
 
     @property
+    def output_dtype(self):
+        """The Graph result dtype. An integer WMMA accumulates in i32 and its
+        contract is rejected outright with an f32 result, so this rides the
+        storage rather than defaulting."""
+        return "int32" if self.integral else "fp32"
+
+    @property
     def integral(self):
         return self.low is not None
 
@@ -228,7 +235,8 @@ def _typed_variants(chip, shape, storage):
 
     m, n, k = shape
     artifact = scheduled_matmul.lower_scheduled_matmul(
-        _module(target="rocm", shape=(m, k, n), dtype=storage.name),
+        _module(target="rocm", shape=(m, k, n), dtype=storage.name,
+                output_dtype=storage.output_dtype),
         target=f"rocm_{chip}")
     for macro_m, macro_n in PANELS:
         tile_ir = re.sub(r"tessera\.macro_tile_m = \d+ : i64", f"tessera.macro_tile_m = {macro_m} : i64",

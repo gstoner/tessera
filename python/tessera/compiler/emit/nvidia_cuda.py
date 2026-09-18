@@ -42,6 +42,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from typing import Any
 
 from tessera.compiler.emit._fused_scalar_body import row_compute_body
@@ -54,6 +55,7 @@ from tessera.compiler.emit.candidate import (
     Candidate,
     Tier,
     register_candidate,
+    register_op_kind,
 )
 from tessera.compiler.emit.delegate_contract import (
     DelegateContract,
@@ -5452,6 +5454,157 @@ register_emitter(NvidiaCudaEmitter())
 register_compiler(_TARGET, _nvidia_cuda_compile_fn)
 register_runner(NvidiaCudaRunner(), default=False)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# NVFP4 block-scale GEMM — its own op-kind (2026-09-18)
+#
+# The operands are packed E2M1 bytes plus UE4M3 block scales, not a dtype the
+# f32 `MatmulRegion` oracle can round to, so this rides the arbiter's op-kind
+# seam (`register_op_kind`): the region carries its own exact numpy reference
+# and the F4 gate diffs against it. Two lanes race: the compiler-EMITTED
+# general-shape PTX GEMM (Tier 2) and the shipped NVRTC kernel (Tier 3).
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Op-kind tag for the block-scaled NVFP4 GEMM.
+OP_NVFP4_MATMUL = "nvfp4_matmul"
+
+
+@dataclass(frozen=True)
+class Nvfp4MatmulRegion:
+    """``D[M,N] f32 = A[M,K] * B[K,N]`` over packed E2M1 operands with one UE4M3
+    scale per 16-wide K block. Inputs are the launch ABI's arrays:
+    ``A[M, ceil(K/2)]``, ``B[ceil(K/2), N]``, ``SFa[M, ceil(K/16)]``,
+    ``SFb[ceil(K/16), N]``, all ``uint8``."""
+
+    m: int
+    n: int
+    k: int
+    dtype: str = "nvfp4"
+
+    def reference(self, a_packed, b_packed, scale_a, scale_b):
+        """The exact product — every fp4 value and ue4m3 scale is a binary
+        fraction, so both kernels must match this bit for bit."""
+        from tessera.compiler.nvfp4_fragments import (nvfp4_gemm_reference,
+                                                      unpack_e2m1_codes)
+        a = unpack_e2m1_codes(a_packed, axis=1, extent=self.k)
+        b = unpack_e2m1_codes(b_packed, axis=0, extent=self.k)
+        return nvfp4_gemm_reference(a, b, scale_a, scale_b)
+
+
+def _verify_nvfp4_matmul(candidate, region, *, atol, seed):
+    """F4 gate for the NVFP4 op-kind: a small deterministic probe diffed against
+    the region's own reference (`verify_by_reference` also refuses a candidate
+    that declined to the reference instead of running a kernel)."""
+    import numpy as np
+    from tessera.compiler.emit.candidate import verify_by_reference
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+
+    rng = np.random.default_rng(seed)
+    m, n, k = region.m, region.n, region.k
+    a = rng.integers(0, 16, size=(m, k), dtype=np.uint8)
+    b = rng.integers(0, 16, size=(k, n), dtype=np.uint8)
+    blocks = (k + 15) // 16
+    sa = rng.integers(0x28, 0x48, size=(m, blocks), dtype=np.uint8)
+    sb = rng.integers(0x28, 0x48, size=(blocks, n), dtype=np.uint8)
+    inputs = (pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0), sa, sb)
+    return verify_by_reference(candidate, region, inputs,
+                               region.reference(*inputs), atol=atol)
+
+
+register_op_kind(OP_NVFP4_MATMUL, _verify_nvfp4_matmul)
+
+
+class _Nvfp4Candidate(Candidate):
+    """Shared shape/availability rules for the two NVFP4 GEMM lanes."""
+
+    target = _TARGET
+    op = OP_NVFP4_MATMUL
+    #: Exact: fp4 products and ue4m3 scales are binary fractions and the K sums
+    #: at these magnitudes fit an f32 mantissa.
+    accuracy_atol = 0.0
+    mma_target = "nvidia"
+    mma_arch = "sm_120"
+
+    def applies_to(self, region) -> bool:
+        return isinstance(region, Nvfp4MatmulRegion)
+
+    def applies_to_inputs(self, region, *inputs) -> bool:
+        import numpy as np
+        if len(inputs) != 4:
+            return False
+        try:
+            shapes = [np.asarray(x).shape for x in inputs]
+            dtypes = [np.asarray(x).dtype for x in inputs]
+        except Exception:
+            return False
+        packed_k, scale_k = (region.k + 1) // 2, (region.k + 15) // 16
+        return (all(d == np.uint8 for d in dtypes) and
+                shapes == [(region.m, packed_k), (packed_k, region.n),
+                           (region.m, scale_k), (scale_k, region.n)])
+
+
+class NvidiaNvfp4GemmEmittedCandidate(_Nvfp4Candidate):
+    """Tier 2: the compiler-emitted general-shape sm_120a PTX GEMM
+    (`ptx_emit.emit_nvfp4_gemm_ptx`) on the launch bridge."""
+
+    name = "nvidia_nvfp4_gemm_emitted"
+    tier = Tier.EMITTED
+
+    def available(self) -> bool:
+        from tessera import runtime as rt
+        return rt._load_nvidia_ptx_launch() is not None
+
+    def run(self, region, *inputs, **kwargs):
+        from tessera import runtime as rt
+        a_packed, b_packed, scale_a, scale_b = inputs
+        try:
+            out = rt._nvidia_nvfp4_gemm_emitted_2d(a_packed, b_packed, scale_a, scale_b,
+                                                   region.m, region.n, region.k)
+        except Exception:
+            return region.reference(*inputs), "reference"
+        return out, "nvidia_ptx_nvfp4_gemm"
+
+    def measure_device_latency(self, region, *inputs, reps: int = 100, warmup: int = 10):
+        from tessera import runtime as rt
+        from tessera.compiler import ptx_emit as pe
+        a_packed, b_packed, scale_a, scale_b = inputs
+        try:
+            return rt._nvidia_nvfp4_gemm_device_latency(
+                pe.TESSERA_NVFP4_GEMM_ENTRY, a_packed, b_packed, scale_a, scale_b,
+                region.m, region.n, region.k, reps=reps, warmup=warmup)
+        except Exception:
+            return None
+
+
+class NvidiaNvfp4GemmShippedCandidate(_Nvfp4Candidate):
+    """Tier 3: the shipped NVRTC kernel in ``libtessera_nvidia_gemm``.
+
+    It has no device timer: the shipped GEMM runtime owns its own module and is
+    not registered with the PTX launch bridge, so `measure_device_latency`
+    stays ``None`` and this lane races end-to-end only. That asymmetry is the
+    mirror image of the one the sm_120 corpus recorded in 2026-08-30 (the
+    EMITTED GEMM was the untimed one and was excluded from every device row);
+    it is a missing timer on this side, never a verdict. The bridge's
+    `benchmarkNvfp4` case does time the Tile NVFP4 kernel for whoever packages
+    that lane as a third candidate."""
+
+    name = "nvidia_nvfp4_gemm_shipped"
+    tier = Tier.HAND_TUNED
+
+    def available(self) -> bool:
+        from tessera import runtime as rt
+        return rt._load_nvidia_gemm_runtime() is not None
+
+    def run(self, region, *inputs, **kwargs):
+        from tessera import runtime as rt
+        a_packed, b_packed, scale_a, scale_b = inputs
+        try:
+            out = rt._nvidia_nvfp4_gemm_2d(a_packed, b_packed, scale_a, scale_b,
+                                           region.m, region.n, region.k)
+        except Exception:
+            return region.reference(*inputs), "reference"
+        return out, "nvidia_shipped_nvfp4_gemm"
+
+
 register_candidate(NvidiaGenericCudaCandidate())
 register_candidate(NvidiaMmaFusedCandidate("f16"))   # tensor-core fused GEMM+epi
 register_candidate(NvidiaMmaFusedCandidate("bf16"))
@@ -5483,5 +5636,8 @@ register_candidate(NvidiaPointwiseCandidate())        # C5: pointwise DAG
 # Bare-GEMM lanes: hand-tuned shipped (Tier 3) + compiler-emitted (Tier 2).
 register_candidate(NvidiaMmaGemmShippedCandidate())
 register_candidate(NvidiaMmaGemmEmittedCandidate())
+# Block-scaled NVFP4: emitted general-shape PTX (Tier 2) vs shipped NVRTC (Tier 3).
+register_candidate(NvidiaNvfp4GemmEmittedCandidate())
+register_candidate(NvidiaNvfp4GemmShippedCandidate())
 register_candidate(NvidiaTileMatmulCandidate("direct"))
 register_candidate(NvidiaTileMatmulCandidate("shared"))

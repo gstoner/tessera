@@ -8348,7 +8348,7 @@ tuple, and the device-marker location gate — the touched files 250 passed at
 (the same four; 195 passed at `a9a158e0`; ROCm lit 74/74; core lit 489 / 4
 unsupported); the sm_120 and Mac rows are in the log entry.
 
-**Still owed after this loop.** An LDS-staged *typed* body (the "LDS staging
+**Still owed after that loop (all but raster-order and packed-int4 closed by the 2026-09-18 typed-route branch below).** An LDS-staged *typed* body (the "LDS staging
 through `package_scheduled_matmul`" the queue named was a knob that did
 nothing; the real work is a multi-wave typed panel with shared-memory reuse,
 and the fork-A wave-LDS pipeline is where it starts); per-shape panel
@@ -8357,6 +8357,135 @@ lane's 4x4 at 1024³ and the typed 4x4 recovers it; gfx1201's 4x4 is 18% ahead
 at 1024³ only) — a selection rule with a device row per branch, as the gfx1201
 2x4 got; raster-order selection (counters); the packed-int4 input route on the typed path; `auto_2to4`
 device rows through the public package.
+
+**The owed typed-route items, worked — 2026-09-18 (branch
+`claude/typed-route-lds-nvfp4-dispatch`).** Each item is one the 2026-09-18
+"still owed" paragraph above named. Two landed as selection rules with a
+device row per branch, one landed as a *negative* result, and one is still
+blocked on counters.
+
+* **The LDS-staged typed body — built, correct, and selected nowhere.** The
+  "LDS staging through `package_scheduled_matmul`" knob that did nothing is
+  now a real multi-wave body (`emitTypedLdsBody`): WM x WN waves per
+  workgroup, both operands staged per 16-wide K slab with B transposed into
+  shared memory so every fragment pack becomes a contiguous vector load
+  instead of the 16 guarded scalar loads the strided-K path needs. It is
+  correct on device on both chips at 256³, 1024³ and 511x513x509 with 2x2 and
+  4x2 waves (128 and 256 threads) — which is also the standing proof that
+  `computeLaneCoordsFromThread`'s intra-wave lane holds up in a multi-wave
+  workgroup. **It never wins a selection**, and the precise shape of that
+  matters. On gfx1201 it is 0.23x-0.83x of the register body at the same
+  panel, at every panel and wave count measured. On gfx1151 it *does* beat
+  the register body at the same panel -- up to 1.26x, and mostly at the 1x1
+  panel where the register body is weakest -- but it never beats the best
+  register configuration at any shape: at 1024³ its best is 12.57 against the
+  selected 4x4 k=2 body's 15.75. So staging B transposed really does remove
+  the strided gather, and the barriers still cost more than the stride does
+  wherever the register body is already competent. It ships as a
+  packaging *option* carried in the descriptor (`staging`, `workgroup`,
+  `macro_tile`, route suffix), not a selection; `rocm_k_unroll` is derived
+  only for register staging, because the two knobs conflict.
+
+* **Per-shape panel selection on the typed route, both chips.** gfx1201 takes
+  the 4x4 panel for every static fully tiled problem at 1024 and above and the
+  1x1 otherwise; gfx1151 keeps its committed 2x4 except in the [1024, 2048)
+  band. The panel axis is *exhausted*, which is the useful part: in the packet
+  gfx1201's 4096³ single-slab row climbs 14.5 → 57.2 → 65.2 TFLOP/s across
+  1x1, 2x4 and 4x4 and stops there, and an exploratory sweep beyond the
+  packet's panels (64x128, 128x128) fell off a VGPR cliff rather than
+  continuing. The C++ rule in `PMPasses.cpp` and the Python row in
+  `scheduled_matmul.py` are the same rule and a test asserts both.
+
+* **The K unroll is the lever the macro tile was not.** The typed body is
+  memory-latency bound, so issuing the next K slab's fragment loads while the
+  current slab's MMAs retire is what moves it. Measured per chip on the panel
+  it actually selects, TFLOP/s at k = 1 / 2 / 4: gfx1201 1024³
+  46.4 / 58.7 / 57.5, 2048³ 51.6 / 88.2 / 73.7, 4096³ 65.2 / 90.3 / 77.8;
+  gfx1151 1024³ 10.8 / 15.8 / 11.0 against the directive lane's 11.6, 2048³
+  21.2 / 20.3 / 9.8 against 23.3. **Both chips take 2, and only where they
+  also take the larger panel** — 1.4x-1.7x over the single-slab body, and on
+  gfx1151 it is what **puts the typed route ahead of the directive lane in
+  the [1024, 2048) band** (15.8 vs 11.6). Above 2048 on gfx1151 the directive
+  lane still leads and the unroll does not close it, so the knob stays off.
+
+  **An earlier cut of this rule took 4 below 2048 on gfx1201; it is
+  withdrawn.** It rested on a single row — 1024³ reading 61.5 for k=4 against
+  56.0 for k=2 — which the re-record reversed to 58.7 against 57.5. Two runs
+  disagreeing on the sign of a 2% margin means the margin is noise, while k=2
+  wins 2048³ and 4096³ decisively in both runs. The rule follows the
+  reproducible result and loses a branch. Neither chip's number is evidence
+  for the other.
+
+* **`auto_2to4` device rows through the public package** landed with the
+  general-shape work; **raster-order selection is still blocked on counters**
+  — neither WSL2 ROCm box exposes `/dev/kfd`, so `rocprofv3` returns no
+  records and a raster claim would have no measurement behind it. That is
+  unchanged and is a host problem, not a compiler one.
+
+Two correctness guards came out of the same work, both of the "silently wrong
+memory" class. A `tile.view` claiming the `lds` space over a default-space
+buffer used to be accepted and would lower to *global* loads reading the wrong
+memory; the materializer now requires the attribute and the memref's address
+space to agree, and the negative fixture keeps its job with a sharper reason.
+And the gfx11 2x4 contract stamp is no longer applied to bodies that are not
+that shape — an LDS-staged or K-unrolled body does not claim the register-panel
+topology, which had made every unrolled 2x4 row on gfx1151 unmeasurable.
+
+**The normative fragment-layout contract is now written down**
+(`docs/backends/rocm/wmma-fragment-layout.md`). Four mappings whose failure
+mode is a few silently wrong tiles rather than an error: `lane` always means
+the intra-wave lane and never a flat thread index (correct by accident in a
+single-wave block, wrong for every wave above the first once the workgroup
+grows); the gfx12 wave32 accumulator is **column-distributed**,
+`VGPR[lane][j] = C[(lane/16)*8 + j][lane%16]`, where RDNA3 uses row
+`2j + lane/16`; A and B both want K contiguous per lane; and the double-K int4
+shape packs logical element `i` into nibble `i % 8` of word `i / 8`, low
+nibble first, which is not derivable from the intrinsic signature. Each claim
+carries its device evidence. The column-distributed accumulator was
+independently confirmed on a second stack (Radeon AI PRO R9700, gfx1201,
+ROCm 7.14 nightly) at 256/256 elements against a CPU reference, with the
+row-major misreading matching 16/256 — the diagonal, which is why it looks
+nearly right on a symmetric probe.
+
+**The page also now carries the ceilings, and they reorder what is worth
+doing next.** AMD's published RDNA4 dense WMMA throughput for gfx1201 is 191
+TFLOP/s for fp16/bf16, 383 for fp8 e4m3/e5m2, 383 TOP/s for int8, 766 TOP/s
+for int4, each doubling under 2:4 structured sparsity — and **there is no FP4
+form at all**, dense or sparse. Two consequences:
+
+* **The typed f16 GEMM's best row is 90.3 TFLOP/s, which is 47% of its
+  ceiling.** The K unroll was worth 1.4x-1.7x; the remaining 2x is still
+  there, and the panel axis is already exhausted, so the next lever is
+  neither of the two this loop pulled.
+* **The storages with the highest ceilings are the ones on the smallest macro
+  tile.** `lower_scheduled_matmul` consults `rocm_gfx1201_panel` only in the
+  f16/bf16 branch; the fp8 branch hardcodes 16x16 and the integer branch does
+  too. Measured on Tajasarus 2026-09-18, an fp8 matmul at 1024³/2048³/4096³
+  packages as `gfx1201_register_wmma_1x1_k{4,2,2}` while the f16 twin gets
+  `..._4x4_k{4,2,2}`. This is a selection omission, not a generator limit:
+  rewriting the fp8 Tile IR to a 64x64 panel **compiles**. So fp8 (2x ceiling)
+  and int4 (4x, and it composes with the `V_SWMMAC_*` 2:4 stack that already
+  ships here) are both being handed the worst tile. Extending the panel and
+  the K unroll to those branches is the next loop's top ROCm item — with a
+  device row per dtype per branch, as the f16 rule got, and it needs the gap
+  recorder's timing harness to accept a non-f16 storage first (today it
+  allocates f16 buffers, and `rt.launch` per call is host-bound enough to
+  swamp the kernel: the same 4096³ f16 kernel reads 65.0 TFLOP/s through the
+  recorder and 7.5 through `rt.launch`).
+* **Tessera refuses FP4 on gfx1201 rather than pretending**, and that is now
+  pinned by a test. The common workaround elsewhere is to dequantize an
+  FP4-stored weight to fp16 before the MMA, which returns the *fp16* ceiling
+  under an FP4 label — a 2x-wrong throughput claim with nothing red anywhere.
+  `_ROCM_DTYPES[GFX_1201]` omits `fp4_e2m1` and `wmma_dtype_forms` enumerates
+  no FP4 row, so storage dtype fails closed here as a Decision #21a semantic
+  key. gfx950 (CDNA 4) is the arch that does have native FP4/FP6.
+
+**Still owed after this loop.** The panel and K unroll on the fp8 and integer
+branches (above, with the recorder work it needs); raster-order selection
+(counters, host-blocked); the packed-int4 *input* route on the typed path,
+which is now the highest-ceiling item on this chip; and closing the remaining
+2x to the f16 ceiling, for which neither the macro tile nor the K unroll is
+the remaining lever.
 
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 

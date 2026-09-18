@@ -51,6 +51,15 @@ struct ROCMExecutablePipelineOptions
       *this, "staging",
       llvm::cl::desc("matmul staging policy: register or lds"),
       llvm::cl::init("register")};
+  Option<int> kUnroll{*this, "k-unroll",
+                      llvm::cl::desc("typed matmul: K slabs per loop iteration"),
+                      llvm::cl::init(1)};
+  Option<int> ldsWavesM{*this, "lds-waves-m",
+                        llvm::cl::desc("LDS-staged matmul: waves along M"),
+                        llvm::cl::init(2)};
+  Option<int> ldsWavesN{*this, "lds-waves-n",
+                        llvm::cl::desc("LDS-staged matmul: waves along N"),
+                        llvm::cl::init(2)};
   Option<bool> depthCooperative{*this, "depth-cooperative",
       llvm::cl::desc("experimental depth-attention cooperative width reduction"),
       llvm::cl::init(false)};
@@ -248,7 +257,8 @@ static std::unique_ptr<Pass> configuredPass(std::unique_ptr<Pass> pass,
 }
 
 static void addFamilyGenerator(OpPassManager &pm, StringRef family,
-                               bool viaTile, StringRef staging, bool depthCooperative = false) {
+                               bool viaTile, StringRef staging, bool depthCooperative = false,
+                               int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -316,7 +326,10 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
   } else if (family == "matmul") {
     pm.addPass(configuredPass(createGenerateWMMAGemmKernelPass(),
                               Twine("via-tile=") + (viaTile ? "true" : "false") +
-                                  " canonical-staging=" + staging));
+                                  " canonical-staging=" + staging +
+                                  " lds-waves-m=" + Twine(ldsWavesM) +
+                                  " lds-waves-n=" + Twine(ldsWavesN) +
+                                  " k-unroll=" + Twine(kUnroll)));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -414,7 +427,8 @@ static void buildROCMExecutablePipeline(
   // plugin runs after the Target-IR consumer.
   bool matmulPlugin = family == "matmul";
   if (matmulPlugin && input != "graph" && output == "binary")
-    addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative);
+    addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
+                       opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

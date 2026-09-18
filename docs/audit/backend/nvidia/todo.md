@@ -7765,6 +7765,64 @@ sweep pinned only by the device gate — they now discover the tools and skip
 by name, and pass by discovery (13 passed at `f93dfabe`); both trees built;
 the three new files' device rows and the sphere rows pass at the head.
 
+## General-shape NVFP4 dispatch, and the driver JIT ceiling that hid under it — 2026-09-18
+
+Sync `GFX1201-PARITY-2026-09-17` (branch `claude/typed-route-lds-nvfp4-dispatch`,
+shared with the ROCm typed-route work); owner COMPILER-DEVEX-1.
+
+**The NVFP4 tile is an arbiter candidate now, because it has a general shape
+and a device timer.** The previous loop left the emitted sm_120a NVFP4 kernel
+as one fixed m16n8k64 warp tile with host transfers per call — correct, and
+ineligible for promotion by construction. It now emits a general-shape GEMM
+(`ptx_emit.emit_nvfp4_gemm_ptx`, entry `TESSERA_NVFP4_GEMM_ENTRY`, with a
+structural validator), reaches the device through a launcher entry and a
+benchmark entry of its own, and registers with the arbiter through
+`register_op_kind(OP_NVFP4_MATMUL, ...)` — the additive seam for an op with its
+own numpy reference, so NVFP4 is verified against `nvfp4_gemm_reference` rather
+than against a dense-matmul oracle that cannot express block scales. Two
+candidates are registered: the emitted kernel at `Tier.EMITTED` **with** a
+device timer, and the shipped path at `Tier.HAND_TUNED` whose
+`measure_device_latency` returns `None`. That asymmetry is deliberate and is
+the recorded lesson from the sm_120 PTX GEMM, where a corpus that excluded the
+untimed candidate hid the fastest kernel in the registry: a candidate without a
+timer must be visible as untimed, never absent.
+
+Its grid convention differs from the f16 emitter on purpose — `ctaid.y` maps M
+and `ctaid.x` maps N — and that is stated where the kernel is emitted, because
+a silently transposed grid is a wrong-answer bug, not a slow one.
+
+**Root-caused while doing it: every NVRTC-compiled kernel on The-Super-Bear was
+dead, and the error message blamed the hardware.** A probe showed NVRTC 13.4
+emitting `.version 9.4` while the loaded driver reports API version 13030 —
+CUDA 13.3 — whose JIT accepts PTX 9.3 at most. `cuModuleLoadData` returned 222
+(`CUDA_ERROR_UNSUPPORTED_PTX_VERSION`) for both `compute_120` and
+`compute_120a`, and the runtime surfaced that as "requires an sm_120a-capable
+CUDA device/toolchain" — an accurate-sounding sentence about the *device* for a
+failure that was entirely about the toolkit/driver skew. This is the same trap
+already recorded for the 09-15 pin bump, reaching a second lane: the toolkit's
+PTX ISA number is not the driver's JIT capability. `compileKernel` now retries
+`cuModuleLoadData` with a progressively lowered `.version`, so a toolkit ahead
+of the driver degrades to the highest ISA the driver will actually take instead
+of failing opaquely. 47 NVFP4 tests pass on Super-Bear with zero skips.
+
+**Not claimed.** No NVFP4 performance row is promoted. The candidate is
+*eligible* — it has a general shape and a device timer — and a promotion still
+needs its corpus rows on the owning box, which remains owed. WSL2 timings do
+not promote without bare-metal calibration either way.
+
+**Pre-existing red on this box, now correctly a skip.** A full sweep with
+`/usr/lib/llvm-23/bin` on `PATH` produced seven failures in
+`test_automatic_ad_public_results.py`. They are **not** branch damage: clean
+`main` fails the same seven when a compiler is available (measured 2026-09-18).
+The cause is a gate that answers the wrong question —
+`require_rocm_hsaco_toolkit` mirrored the runtime's detector, which accepts any
+root holding an `ld.lld`, and a plain LLVM install has one. So on a CUDA box
+with LLVM on `PATH` the gate admitted eight ROCm packaging tests on a host with
+no ROCm at all. The ROCDL target links device bitcode as well as calling lld,
+so the gate now also requires `<root>/amdgcn/bitcode/ocml.bc`: present under
+both ROCm roots on Princess-Luna, absent everywhere on The-Super-Bear. Those
+rows are skips again, with a reason.
+
 ## The sm_120 Lion stop-sign lane returns rc=3 on main — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1.

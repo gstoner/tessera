@@ -73,6 +73,10 @@ constexpr const char* kTileNvfp4 = "tessera_tile_matmul_nvfp4";
 // the layout; this entry only moves the words. Before 2026-09-18 the entry
 // had no ABI case here, so registering the emitted kernel answered rc=5.
 constexpr const char* kNvfp4Emitted = "tessera_nvfp4_mma_m16n8k64";
+// The compiler-EMITTED general-shape NVFP4 GEMM (ptx_emit.emit_nvfp4_gemm_ptx)
+// on the same buffer/dim contract as the Tile NVFP4 kernel, so `invokeNvfp4`
+// launches it and `benchmarkNvfp4` times both under one ABI (2026-09-18).
+constexpr const char* kNvfp4GemmEmitted = "tessera_nvfp4_gemm_emitted";
 constexpr const char* kTileMxE2m3 = "tessera_tile_matmul_mx_e2m3";
 constexpr const char* kTileMxE3m2 = "tessera_tile_matmul_mx_e3m2";
 constexpr const char* kTileMxFp4 = "tessera_tile_matmul_mx_fp4_e2m1";
@@ -1322,6 +1326,75 @@ int benchmarkMx(CUfunction fn, const char* name, void** buffers,
     return rc;
 }
 
+// Device-event timing for the general NVFP4 ABI (the Tile kernel and the
+// emitted GEMM share it): packed E2M1 A[M,ceil(K/2)] / B[ceil(K/2),N], UE4M3
+// SFa[M,ceil(K/16)] / SFb[ceil(K/16),N], f32 D, grid ceil(N/8) x ceil(M/16).
+int benchmarkNvfp4(CUfunction fn, void** buffers, size_t nbuf,
+                   const int64_t* dims, size_t ndim, int warmup,
+                   int repetitions, float* latencyMs) {
+    if (nbuf != 5 || ndim != 3 || !latencyMs || warmup < 0 || repetitions <= 0)
+        return 5;
+    const long long M = dims[0], N = dims[1], K = dims[2];
+    if (M <= 0 || N <= 0 || K <= 0 || M >= (1LL << 31) ||
+        N >= (1LL << 31) || K >= (1LL << 31)) return 5;
+    const size_t packedK = ((size_t)K + 1) / 2;
+    const size_t scaleK = ((size_t)K + 15) / 16;
+    if ((size_t)M > SIZE_MAX / packedK || packedK > SIZE_MAX / (size_t)N ||
+        (size_t)M > SIZE_MAX / scaleK || scaleK > SIZE_MAX / (size_t)N ||
+        (size_t)M > SIZE_MAX / (size_t)N / sizeof(float)) return 5;
+    const size_t sizes[] = {
+        (size_t)M * packedK, packedK * (size_t)N,
+        (size_t)M * scaleK, scaleK * (size_t)N,
+        (size_t)M * (size_t)N * sizeof(float),
+    };
+    CUdeviceptr device[5] = {};
+    CUevent start = nullptr, stop = nullptr;
+    int rc = 0;
+    for (int i = 0; i < 5; ++i) {
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) {
+            rc = 3;
+            break;
+        }
+    }
+    if (!rc) {
+        for (int i = 0; i < 4; ++i)
+            if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) {
+                rc = 3;
+                break;
+            }
+    }
+    if (!rc) {
+        long long MArg = M, NArg = N, KArg = K;
+        void* args[] = {&device[0], &device[1], &device[2], &device[3],
+                        &device[4], &MArg, &NArg, &KArg};
+        const unsigned gx = (unsigned)((N + 7) / 8);
+        const unsigned gy = (unsigned)((M + 15) / 16);
+        auto launch = [&]() {
+            return cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0);
+        };
+        for (int i = 0; i < warmup; ++i)
+            if (!cuOk(launch(), "cuLaunchKernel")) { rc = 3; break; }
+        if (!rc && (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+                    !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                    !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate")))
+            rc = 3;
+        if (!rc && !cuOk(cuEventRecord(start, 0), "cuEventRecord")) rc = 3;
+        for (int i = 0; !rc && i < repetitions; ++i)
+            if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+        if (!rc && (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+                    !cuOk(cuEventSynchronize(stop), "cuEventSynchronize"))) rc = 3;
+        float totalMs = 0.0f;
+        if (!rc && !cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime"))
+            rc = 3;
+        if (!rc) *latencyMs = totalMs / (float)repetitions;
+    }
+    if (start) cuEventDestroy(start);
+    if (stop) cuEventDestroy(stop);
+    for (CUdeviceptr ptr : device)
+        if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
 int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
                    size_t nbuf, const int64_t* dims, size_t ndim,
                    int warmup, int repetitions, float* latencyMs) {
@@ -2214,7 +2287,8 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
     }
     if (std::strncmp(kernel_name, "tessera_tile_matmul_fused_", 26) == 0)
         return invokeFusedMatmul16(fn, kernel_name, buffers, nbuf, dims, ndim);
-    if (std::strcmp(kernel_name, kTileNvfp4) == 0)
+    if (std::strcmp(kernel_name, kTileNvfp4) == 0 ||
+        std::strcmp(kernel_name, kNvfp4GemmEmitted) == 0)
         return invokeNvfp4(fn, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTileInt4) == 0)
         return invokeInt4(fn, buffers, nbuf, dims, ndim);
@@ -2354,6 +2428,10 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
         std::strcmp(kernel_name, kTileMxFp4) == 0)
         return benchmarkMx(fn, kernel_name, buffers, num_buffers, dims,
                            num_dims, warmup, repetitions, latency_ms);
+    if (std::strcmp(kernel_name, kTileNvfp4) == 0 ||
+        std::strcmp(kernel_name, kNvfp4GemmEmitted) == 0)
+        return benchmarkNvfp4(fn, buffers, num_buffers, dims, num_dims,
+                              warmup, repetitions, latency_ms);
     if (std::strncmp(kernel_name, "tessera_tile_softmax_", 21) == 0 ||
         std::strncmp(kernel_name, "tessera_tile_reduce_", 20) == 0 ||
         std::strncmp(kernel_name, kTileNormPrefix,

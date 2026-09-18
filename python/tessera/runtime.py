@@ -4554,7 +4554,8 @@ def _submit_rocm_gfx1151_native(
             grid_x,
             grid_y if attention or matmul or depth_attention else 1,
             1,
-            32 if attention or matmul else _SOFTMAX_BLOCKDIM,
+            (int(cast(list[int], descriptor.provenance.get("workgroup", [32]))[0]) if matmul
+             else 32 if attention else _SOFTMAX_BLOCKDIM),
             1,
             1,
             0,
@@ -6509,6 +6510,80 @@ def _nvidia_nvfp4_emitted_mma(a_codes: Any, b_codes: Any, scale_a: Any, scale_b:
     if rc != 0:
         raise RuntimeError(f"emitted NVFP4 tile invoke: {_nvidia_ptx_failure(lib, rc)}")
     return nf.unpack_nvfp4_mma_accumulator(d_words)
+
+
+def _nvidia_nvfp4_general_operands(A_packed: Any, B_packed: Any, scale_a: Any, scale_b: Any,
+                                   M: int, N: int, K: int) -> tuple[Any, Any, Any, Any]:
+    """Validate the general NVFP4 launch ABI's operands (shared by the shipped
+    Tile kernel's descriptor path and the emitted GEMM)."""
+    import numpy as np
+
+    if M <= 0 or N <= 0 or K <= 0:
+        raise ValueError(f"NVFP4 GEMM dimensions must be positive; got {M}x{N}x{K}")
+    packed_k, scale_k = (K + 1) // 2, (K + 15) // 16
+
+    def operand(value: Any, shape: tuple[int, int], name: str) -> Any:
+        arr = np.asarray(value)
+        if arr.dtype != np.uint8 or arr.shape != shape:
+            raise ValueError(f"NVFP4 {name} must be uint8{shape}; got {arr.dtype}{arr.shape}")
+        return np.ascontiguousarray(arr)
+    return (operand(A_packed, (M, packed_k), "A_packed"), operand(B_packed, (packed_k, N), "B_packed"),
+            operand(scale_a, (M, scale_k), "scale_a"), operand(scale_b, (scale_k, N), "scale_b"))
+
+
+def _nvidia_nvfp4_gemm_emitted_2d(A_packed: Any, B_packed: Any, scale_a: Any, scale_b: Any,
+                                  M: int, N: int, K: int) -> Any:
+    """The compiler-EMITTED general-shape sm_120a NVFP4 block-scale GEMM
+    (`ptx_emit.emit_nvfp4_gemm_ptx`) on the launch bridge's general NVFP4 ABI:
+    packed E2M1 A[M,ceil(K/2)] / B[ceil(K/2),N], raw UE4M3 SFa[M,ceil(K/16)] /
+    SFb[ceil(K/16),N] -> f32 D[M,N]. Registers the PTX once; any M/N/K."""
+    import numpy as np
+    from tessera.compiler import ptx_emit as pe
+
+    M, N, K = int(M), int(N), int(K)
+    ap, bp, sa, sb = _nvidia_nvfp4_general_operands(A_packed, B_packed, scale_a, scale_b, M, N, K)
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    entry = pe.TESSERA_NVFP4_GEMM_ENTRY
+    if entry not in _nvidia_ptx_registered:
+        if _register_nvidia_ptx(lib, entry, pe.emit_nvfp4_gemm_ptx()) != 0:
+            raise RuntimeError(f"ptx register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    out = np.zeros((M, N), np.float32)
+    bufs = (ctypes.c_void_p * 5)(ap.ctypes.data, bp.ctypes.data, sa.ctypes.data, sb.ctypes.data, out.ctypes.data)
+    dims = (ctypes.c_int64 * 3)(M, N, K)
+    rc = lib.tessera_nvidia_ptx_invoke(entry.encode(), bufs, 5, dims, 3)
+    if rc != 0:
+        raise RuntimeError(f"emitted NVFP4 GEMM invoke: {_nvidia_ptx_failure(lib, rc)}")
+    return out
+
+
+def _nvidia_nvfp4_gemm_device_latency(entry: str, A_packed: Any, B_packed: Any, scale_a: Any, scale_b: Any,
+                                      M: int, N: int, K: int, *, reps: int = 100, warmup: int = 10) -> float:
+    """CUDA-event latency (ms per launch) of a registered kernel on the general
+    NVFP4 ABI (`benchmarkNvfp4` in the bridge): the emitted GEMM or the Tile
+    kernel, whichever `entry` names -- the same clock for both sides of the race."""
+    from tessera.compiler import ptx_emit as pe
+
+    M, N, K = int(M), int(N), int(K)
+    ap, bp, sa, sb = _nvidia_nvfp4_general_operands(A_packed, B_packed, scale_a, scale_b, M, N, K)
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    if entry == pe.TESSERA_NVFP4_GEMM_ENTRY and entry not in _nvidia_ptx_registered:
+        if _register_nvidia_ptx(lib, entry, pe.emit_nvfp4_gemm_ptx()) != 0:
+            raise RuntimeError(f"ptx register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    import numpy as np
+    out = np.zeros((M, N), np.float32)
+    bufs = (ctypes.c_void_p * 5)(ap.ctypes.data, bp.ctypes.data, sa.ctypes.data, sb.ctypes.data, out.ctypes.data)
+    dims = (ctypes.c_int64 * 3)(M, N, K)
+    latency = ctypes.c_float(0.0)
+    rc = lib.tessera_nvidia_ptx_benchmark(entry.encode(), bufs, 5, dims, 3, int(warmup), int(reps), ctypes.byref(latency))
+    if rc != 0:
+        raise RuntimeError(f"NVFP4 device timing ({entry}): {_nvidia_ptx_failure(lib, rc)}")
+    return float(latency.value)
 
 
 def _nvidia_ptx_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,

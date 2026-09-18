@@ -57,11 +57,26 @@ def tessera_runtime_lib_path() -> Path | None:
 
 
 def rocm_hsaco_toolkit_root():
-    """ROCm toolkit root whose ``ld.lld`` MLIR's ROCDL ``gpu-module-to-binary``
-    serializer links with, or ``None``. Mirrors the runtime's own detector so a
-    test and the lane it exercises agree about the host."""
+    """ROCm toolkit root that can actually serialize HSACO, or ``None``.
+
+    Starts from the runtime's own detector so a test and the lane it exercises
+    agree about the host, then applies the check the detector does not: the
+    ROCDL target links the **device bitcode** (``<root>/amdgcn/bitcode``, ocml
+    and friends) as well as calling ``ld.lld``. The runtime detector accepts any
+    root holding an ``ld.lld``, which a plain LLVM install has -- so on a CUDA
+    box with ``/usr/lib/llvm-23/bin`` on ``PATH`` it returns an LLVM prefix and
+    every gate built on it admits ROCm packaging tests that cannot pass. That is
+    how a host with no ROCm at all produced seven red rows instead of seven
+    skips (measured on The-Super-Bear 2026-09-18, identical on clean ``main``).
+    Requiring the bitcode makes the gate answer the question it is asked.
+    """
     from tessera.runtime import _rocm_toolkit_root
-    return _rocm_toolkit_root()
+    root = _rocm_toolkit_root()
+    if root is None:
+        return None
+    if not (Path(root) / "amdgcn" / "bitcode" / "ocml.bc").is_file():
+        return None
+    return root
 
 
 def require_rocm_hsaco_toolkit():
@@ -77,7 +92,7 @@ def require_rocm_hsaco_toolkit():
     root = rocm_hsaco_toolkit_root()
     if root is None:
         pytest.skip("ROCDL hsaco serialization needs a ROCm toolkit with ld.lld "
-                    "(ROCM_PATH); none on this host")
+                    "and amdgcn device bitcode (ROCM_PATH); none on this host")
     return root
 
 

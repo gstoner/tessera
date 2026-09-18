@@ -854,28 +854,187 @@ def test_rocm_bf16_matmul_contract_lowers_on_both_chips(target, bias):
     assert 'a = "bf16"' in artifact.tile_ir
 
 
-@pytest.mark.parametrize("shape,panel", [
-    # shapes are (m, k, n): K alignment is irrelevant to the panel, M and N are not
-    ((1024, 1024, 1024), (32, 64)), ((2048, 2048, 2048), (32, 64)), ((1024, 1040, 1024), (32, 64)),
-    ((512, 512, 512), (16, 16)), ((1024, 1024, 1000), (16, 16)), ((1000, 1024, 1024), (16, 16)),
-    ((1024, 1024, 1024), (16, 16)),
+@pytest.mark.parametrize("target,shape,panel", [
+    # shapes are (m, k, n): K alignment is irrelevant to the panel, M and N are not.
+    ("rocm_gfx1201", (1024, 1024, 1024), (64, 64)), ("rocm_gfx1201", (1536, 1024, 1024), (64, 64)),
+    ("rocm_gfx1201", (2048, 2048, 2048), (64, 64)), ("rocm_gfx1201", (1024, 1040, 1024), (64, 64)),
+    ("rocm_gfx1201", (1056, 1024, 1024), (16, 16)), ("rocm_gfx1201", (512, 512, 512), (16, 16)),
+    ("rocm_gfx1201", (1024, 1024, 1000), (16, 16)), ("rocm_gfx1201", (1000, 1024, 1024), (16, 16)),
+    ("rocm_gfx1151", (1024, 1024, 1024), (64, 64)), ("rocm_gfx1151", (2048, 2048, 2048), (32, 64)),
+    ("rocm_gfx1151", (512, 512, 512), (32, 64)), ("rocm_gfx1151", (1024, 1024, 1000), (32, 64)),
 ])
-def test_rocm_gfx1201_panel_follows_the_measured_gap_packet(shape, panel):
-    """The gfx1201 f16 macro tile: the 2x4 register panel for a static, fully
-    tiled problem at 1024 and above, else 1x1 (typed-route gap packet,
-    2026-09-18). The Python contract row mirrors the C++ selection; the last
-    row is the dynamic-shape case, which stays 1x1."""
+def test_rocm_panel_follows_the_measured_gap_packets(target, shape, panel):
+    """Per-shape macro tile on both chips (typed-route gap packets,
+    2026-09-18): gfx1201 takes the 4x4 panel for every static fully tiled
+    problem at 1024 and above and the 1x1 otherwise; gfx1151 keeps its 2x4
+    except in the [1024, 2048) band. The Python row mirrors the C++ rule."""
     if scheduled_matmul.find_tessera_opt() is None:
         pytest.skip("production tessera-opt unavailable")
     m, k, n = shape
-    dynamic = panel == (16, 16) and shape == (1024, 1024, 1024)
-    assert scheduled_matmul.rocm_gfx1201_panel(m, n, dynamic=dynamic) == panel
-    if dynamic:
-        return
-    artifact = scheduled_matmul.lower_scheduled_matmul(_module(target="rocm", shape=shape), target="rocm_gfx1201")
+    rule = scheduled_matmul.rocm_gfx1201_panel if target == "rocm_gfx1201" else scheduled_matmul.rocm_gfx1151_panel
+    assert rule(m, n, dynamic=False) == panel
+    assert rule(m, n, dynamic=True) == ((16, 16) if target == "rocm_gfx1201" else (32, 64))
+    artifact = scheduled_matmul.lower_scheduled_matmul(_module(target="rocm", shape=shape), target=target)
     scheduled_matmul.verify_matmul_projection(artifact)
     assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
     assert f"tessera.macro_tile_m = {panel[0]} : i64" in artifact.tile_ir
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("shape,panel", [((1024, 1024, 1024), (64, 64)), ((1024, 1024, 1000), (32, 64))])
+@pytest.mark.skipif(not rocm_native.native_packaging_available(), reason="ROCm compiler/device libraries unavailable")
+def test_gfx1151_scheduled_matmul_executes_the_selected_panel(shape, panel) -> None:
+    """The typed 4x4 panel gfx1151 selects in the fully tiled [1024, 2048)
+    band executes exactly like the 2x4 it replaces there; a ragged neighbour
+    keeps the 2x4 (typed-route gap packet, 2026-09-18). The K unroll rides the
+    same band, so the route is asserted against the shipped rule rather than a
+    literal -- a hard-coded route name turns a selection change into a red row
+    that says nothing about the device. Correctness only."""
+    from tests._support.rocm_build import rocm_host_arch
+    if (rocm_host_arch() or "") != "gfx1151":
+        pytest.skip("gfx1151 owning-device proof")
+    from tessera import runtime as rt
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(_module(target="rocm", shape=shape), target="rocm_gfx1151")
+    scheduled_matmul.verify_matmul_projection(artifact)
+    assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    unroll = scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1151", dynamic=False)
+    suffix = "" if unroll <= 1 else f"_k{unroll}"
+    assert package.descriptor.provenance["physical_route"] == (
+        f"gfx1151_register_wmma_{panel[0] // 16}x{panel[1] // 16}{suffix}")
+    assert package.descriptor.provenance["k_unroll"] == unroll
+    rng = np.random.default_rng(1151)
+    a = (rng.normal(size=(m, k)) * 0.25).astype(np.float16)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(np.float16)
+    output = np.zeros((m, n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target}, native_image=package.image,
+                                 launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", result
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=0, atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
+
+
+@pytest.mark.parametrize("target", ["rocm_gfx1151", "rocm_gfx1201"])
+@pytest.mark.parametrize("waves", [(2, 2), (4, 2)])
+def test_rocm_lds_staged_package_carries_its_workgroup_and_block_tile(target, waves):
+    """The LDS-staged typed body is a packaging option, not a selection: the
+    descriptor names the workgroup it needs (32 threads per wave) and the block
+    tile the launch grid divides by (the panel times the wave shape), and the
+    route says lds rather than register (2026-09-18)."""
+    if scheduled_matmul.find_tessera_opt() is None or not rocm_native.native_packaging_available():
+        pytest.skip("production tessera-opt / ROCm device libraries unavailable")
+    from tests._support.rocm_build import rocm_host_arch
+    if (rocm_host_arch() or "") != target.removeprefix("rocm_"):
+        pytest.skip(f"{target} packaging needs its own ROCm toolchain/arch")
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        _module(target="rocm", shape=(256, 256, 256)), target=target)
+    package = rocm_native.package_scheduled_matmul(
+        artifact, pipeline_name="tessera-lower-to-rocm", staging="lds", lds_waves=waves)
+    provenance = package.descriptor.provenance
+    assert provenance["staging"] == "lds"
+    assert provenance["workgroup"] == [32 * waves[0] * waves[1], 1, 1]
+    assert provenance["macro_tile"] == [artifact.macro_tile_m * waves[0],
+                                        artifact.macro_tile_n * waves[1]]
+    assert provenance["physical_route"].endswith(
+        f"lds_wmma_{waves[0]}x{waves[1]}waves_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}")
+    # The register package is unchanged and still names one wave.
+    register = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert register.descriptor.provenance["workgroup"] == [32, 1, 1]
+    assert register.descriptor.provenance["macro_tile"] == [artifact.macro_tile_m, artifact.macro_tile_n]
+    with pytest.raises(ValueError, match="register or lds"):
+        rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm", staging="pipe")
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("waves", [(2, 2), (4, 2)])
+@pytest.mark.parametrize("shape", [(256, 256, 256), (1024, 1024, 1024), (511, 513, 509)])
+@pytest.mark.skipif(not rocm_native.native_packaging_available(),
+                    reason="ROCm compiler/device libraries unavailable")
+def test_rocm_lds_staged_package_executes(waves, shape) -> None:
+    """The LDS-staged multi-wave typed body executes on the owning chip and
+    agrees with the numpy product, including a ragged shape (the K tail and
+    both edges are zero-filled at the staging loads)."""
+    from tests._support.rocm_build import rocm_host_arch
+    from tessera import runtime as rt
+    arch = rocm_host_arch() or ""
+    if arch not in ("gfx1151", "gfx1201"):
+        pytest.skip("needs an owning ROCm device")
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        _module(target="rocm", shape=shape), target=f"rocm_{arch}")
+    package = rocm_native.package_scheduled_matmul(
+        artifact, pipeline_name="tessera-lower-to-rocm", staging="lds", lds_waves=waves)
+    rng = np.random.default_rng(sum(shape) + waves[0])
+    a = (rng.normal(size=(m, k)) * 0.25).astype(np.float16)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(np.float16)
+    output = np.zeros((m, n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+                                 native_image=package.image, launch_descriptor=package.descriptor,
+                                 tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", result
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=0,
+                               atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
+
+
+@pytest.mark.parametrize("shape,gfx1201,gfx1151", [
+    ((512, 512, 512), 1, 1), ((1024, 1024, 1024), 2, 2), ((2048, 2048, 2048), 2, 1),
+    ((4096, 4096, 4096), 2, 1), ((1024, 1024, 1000), 1, 1), ((1536, 1024, 1024), 2, 2),
+])
+def test_rocm_k_unroll_follows_each_chips_own_measurement(shape, gfx1201, gfx1151):
+    """K unrolling is a physical performance key derived from each chip's own
+    sweep. Both chips take 2, and only where they also take the larger panel:
+    gfx1201 from 1024 up on a fully tiled shape, gfx1151 in the [1024, 2048)
+    band alone, because at 2048 and above the directive lane still leads
+    there. A dynamic shape takes neither.
+
+    gfx1201's 1024-band answer used to be 4. That rested on one row the
+    re-record reversed inside a 2% margin, so it is the noise-level
+    difference, not the rule -- see `rocm_k_unroll`. Pinning it here is what
+    keeps an unreproduced measurement from surviving as a shipped branch."""
+    m, k, n = shape
+    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=False) == gfx1201
+    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1151", dynamic=False) == gfx1151
+    for arch in ("gfx1201", "gfx1151"):
+        assert scheduled_matmul.rocm_k_unroll(m, n, k, arch=arch, dynamic=True) == 1
+    # An arch with no sweep of its own gets the established loop, never another
+    # chip's answer.
+    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1200", dynamic=False) == 1
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("shape", [(1024, 1024, 1024), (2048, 2048, 2048)])
+@pytest.mark.skipif(not rocm_native.native_packaging_available(),
+                    reason="ROCm compiler/device libraries unavailable")
+def test_gfx1201_k_unrolled_package_executes(shape) -> None:
+    """The K-unrolled body the packager now selects on gfx1201 executes and
+    agrees with the numpy product; its route names the unroll."""
+    from tests._support.rocm_build import rocm_host_arch
+    from tessera import runtime as rt
+    if (rocm_host_arch() or "") != "gfx1201":
+        pytest.skip("gfx1201 owning-device proof")
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        _module(target="rocm", shape=shape), target="rocm_gfx1201")
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    unroll = scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=False)
+    assert package.descriptor.provenance["k_unroll"] == unroll
+    assert package.descriptor.provenance["physical_route"] == f"gfx1201_register_wmma_4x4_k{unroll}"
+    rng = np.random.default_rng(m)
+    a = (rng.normal(size=(m, k)) * 0.25).astype(np.float16)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(np.float16)
+    output = np.zeros((m, n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+                                 native_image=package.image, launch_descriptor=package.descriptor,
+                                 tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output}, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", result
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=0,
+                               atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
 
 
 def _integer_operands(shape, storage, seed):

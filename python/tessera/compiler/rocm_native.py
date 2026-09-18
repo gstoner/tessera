@@ -1263,6 +1263,8 @@ def _compile_native_tile_ir(
     depth_cooperative: bool = False,
     architecture: str = "gfx1151",
     schedule_kernel: bool = False,
+    lds_waves: tuple[int, int] = (2, 2),
+    k_unroll: int = 1,
 ) -> tuple[
     str,
     str,
@@ -1286,7 +1288,7 @@ def _compile_native_tile_ir(
     key = hashlib.sha256(
         (
             f"{architecture}|{tile_ir}|{directive}|{family}|{input_level.value}|"
-            f"{tile_q}|{tile_kv}|{staging}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
+            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|k{k_unroll}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
         ).encode()
     ).hexdigest()
     cached = _cache.get(key)
@@ -1309,6 +1311,8 @@ def _compile_native_tile_ir(
         tile_q=tile_q,
         tile_kv=tile_kv,
         staging=staging,
+        lds_waves=(int(lds_waves[0]), int(lds_waves[1])),
+        k_unroll=int(k_unroll),
         depth_cooperative=depth_cooperative,
     )
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
@@ -1538,8 +1542,20 @@ def package_scheduled_matmul(
     artifact: ScheduledMatmulArtifact,
     *,
     pipeline_name: str,
+    staging: str = "register",
+    lds_waves: tuple[int, int] = (2, 2),
+    k_unroll: int | None = None,
 ) -> ROCMNativePackage:
-    """Package the exact Schedule-to-Tile artifact without re-entering Graph IR."""
+    """Package the exact Schedule-to-Tile artifact without re-entering Graph IR.
+
+    ``staging="register"`` is the production body: one wave per macro tile,
+    fragments packed straight from global memory. ``staging="lds"`` is the
+    LDS-staged typed body (2026-09-18): ``lds_waves = (WM, WN)`` waves per
+    workgroup, each owning the Schedule's macro tile, so the block tile is
+    ``(WM * macro_m, WN * macro_n)`` and the launch geometry follows; it is a
+    measured variant, selected nowhere until the gap recorder says so."""
+    if staging not in ("register", "lds"):
+        raise ValueError("ROCm scheduled matmul staging must be register or lds")
 
     artifact.validate()
     from .scheduled_matmul import verify_matmul_projection
@@ -1558,6 +1574,17 @@ def package_scheduled_matmul(
             "ROCm scheduled matmul requires an exact gfx1151/gfx1201 f16/bf16-to-f32 "
             "or int8/int4-to-i32 contract (or OCP FP8 e4m3/e5m2 to f32 on gfx1201)")
     arch = artifact.architecture
+    if k_unroll is None:
+        # A performance key: derived from the measured rule unless the caller
+        # pins one (the gap recorder does). Recorded in provenance either way.
+        # The measured rule is the REGISTER body's; LDS staging is a separate
+        # physical schedule and keeps the single-slab loop unless asked.
+        from .scheduled_matmul import rocm_k_unroll
+        k_unroll = 1 if staging != "register" else rocm_k_unroll(
+            artifact.m, artifact.n, artifact.k, arch=arch,
+            dynamic=artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k)
+    if staging == "lds" and k_unroll != 1:
+        raise ValueError("ROCm LDS staging and K unrolling are separate physical schedules")
     (
         target_ir,
         backend_ir,
@@ -1566,9 +1593,12 @@ def package_scheduled_matmul(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = (_compile_scheduled_matmul_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
+    ) = (_compile_scheduled_matmul_tile_ir(artifact.tile_ir)
+         if arch == "gfx1151" and staging == "register" and k_unroll == 1 else
          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.wmma",
-                                 family="matmul", architecture=arch, staging="register"))
+                                 family="matmul", architecture=arch, staging=staging,
+                                 lds_waves=(int(lds_waves[0]), int(lds_waves[1])),
+                                 k_unroll=int(k_unroll)))
     entry = artifact.function_name
     if artifact.residual_name is not None:
         raise ValueError("ROCm scheduled matmul does not carry a residual epilogue")
@@ -1638,9 +1668,16 @@ def package_scheduled_matmul(
             "work_item": "E2E-REAL-3",
             "sync_key": "E2E-REAL-2026-08-05",
             "route": "canonical_scheduled_tile_consumer",
-            # One wave per macro tile, register-staged fragments on both chips;
-            # the panel is the Schedule's macro tile (typed-route gap, 2026-09-18).
-            "physical_route": f"{arch}_register_wmma_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}",
+            # Register: one wave per macro tile, fragments from global memory.
+            # LDS: WM x WN waves per workgroup staging the block tile through
+            # shared memory (typed-route gap, 2026-09-18).
+            "physical_route": (f"{arch}_register_wmma_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}"
+                               + (f"_k{k_unroll}" if k_unroll > 1 else "")
+                               if staging == "register" else
+                               f"{arch}_lds_wmma_{lds_waves[0]}x{lds_waves[1]}waves_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}"),
+            "staging": staging,
+            "k_unroll": int(k_unroll),
+            "workgroup": [32 if staging == "register" else 32 * lds_waves[0] * lds_waves[1], 1, 1],
             "shape_policy": "bounded_dynamic" if dynamic else "static",
             "shape": [artifact.m, artifact.n, artifact.k],
             "bias": artifact.bias_name is not None,
@@ -1650,7 +1687,10 @@ def package_scheduled_matmul(
             "storage_container": "int8" if integer else artifact.storage,
             "output_storage": artifact.accum,
             "accum": artifact.accum,
-            "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
+            # The block tile the launch grid divides by: the wave panel under
+            # register staging, the whole workgroup's tile under LDS staging.
+            "macro_tile": ([artifact.macro_tile_m, artifact.macro_tile_n] if staging == "register" else
+                           [artifact.macro_tile_m * lds_waves[0], artifact.macro_tile_n * lds_waves[1]]),
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },

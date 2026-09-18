@@ -222,7 +222,47 @@ bool compileKernel(const char* src_tmpl, const char* type, CUfunction* out,
   nvrtcGetPTX(prog, ptx.data());
   nvrtcDestroyProgram(&prog);
   CUmodule mod;
-  if (cuModuleLoadData(&mod, ptx.data()) != CUDA_SUCCESS) return false;
+  CUresult load = cuModuleLoadData(&mod, ptx.data());
+  // The driver's JIT is one release behind the toolkit on this fleet: NVRTC
+  // 13.4 stamps `.version 9.4` on every module whatever the kernel uses, and
+  // driver 610.88 (CUDA 13.3 API) refuses any header newer than 9.3 before
+  // reading an instruction -- CUDA_ERROR_UNSUPPORTED_PTX_VERSION, which this
+  // function then reported as "no sm_120a-capable device". Measured
+  // 2026-09-18 on The-Super-Bear: compute_120 and compute_120a alike.
+  //
+  // `.version` is a language-level claim, so lowering it is sound exactly when
+  // the body needs nothing newer -- and when it does, the driver rejects the
+  // INSTRUCTION, by name, with a different error, which stops this loop. The
+  // driver is therefore the authority and no version table is needed here
+  // (Python's `gpu_target.ptx_for_driver_jit` does the same for the emitted
+  // lane, against a table it must keep in sync with the pins).
+  if (load == CUDA_ERROR_UNSUPPORTED_PTX_VERSION) {
+    const std::string text(ptx.data(), psz ? psz - 1 : 0);
+    const size_t at = text.find(".version ");
+    int major = 0, minor = 0;
+    if (at != std::string::npos &&
+        std::sscanf(text.c_str() + at, ".version %d.%d", &major, &minor) == 2) {
+      for (int step = 0; step < 16 && load == CUDA_ERROR_UNSUPPORTED_PTX_VERSION;
+           ++step) {
+        if (minor > 0) {
+          --minor;
+        } else if (major > 1) {
+          --major;
+          minor = 9;
+        } else {
+          break;
+        }
+        char stamp[32];
+        std::snprintf(stamp, sizeof(stamp), ".version %d.%d", major, minor);
+        std::string lowered = text;
+        const size_t end = lowered.find('\n', at);
+        lowered.replace(at, (end == std::string::npos ? lowered.size() : end) - at,
+                        stamp);
+        load = cuModuleLoadData(&mod, lowered.c_str());
+      }
+    }
+  }
+  if (load != CUDA_SUCCESS) return false;
   return cuModuleGetFunction(out, mod, "gemm") == CUDA_SUCCESS;
 }
 

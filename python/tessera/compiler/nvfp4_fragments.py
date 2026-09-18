@@ -162,9 +162,57 @@ def unpack_nvfp4_mma_fragments(a_words: Any, b_words: Any) -> tuple[np.ndarray, 
     return a, b
 
 
+def pack_e2m1_codes(codes: Any, *, axis: int) -> np.ndarray:
+    """Pack 4-bit codes pairwise along ``axis`` (the contraction axis): element
+    ``2i`` lands in the low nibble of byte ``i``, ``2i+1`` in the high one; an
+    odd extent is zero-padded. This is the general NVFP4 launch ABI's layout
+    (``A[M, ceil(K/2)]`` packs along axis 1, ``B[ceil(K/2), N]`` along axis 0)."""
+    c = np.asarray(codes, dtype=np.uint8)
+    if c.size and int(c.max()) > 15:
+        raise ValueError("e2m1 codes are 4-bit values")
+    c = np.moveaxis(c, axis, -1)
+    if c.shape[-1] % 2:
+        c = np.concatenate([c, np.zeros(c.shape[:-1] + (1,), np.uint8)], axis=-1)
+    packed = (c[..., 0::2] | (c[..., 1::2] << 4)).astype(np.uint8)
+    return np.ascontiguousarray(np.moveaxis(packed, -1, axis))
+
+
+def unpack_e2m1_codes(packed: Any, *, axis: int, extent: int) -> np.ndarray:
+    """Inverse of :func:`pack_e2m1_codes`: recover ``extent`` 4-bit codes along
+    ``axis`` from the byte pairs (low nibble first), dropping the pad."""
+    b = np.asarray(packed, dtype=np.uint8)
+    b = np.moveaxis(b, axis, -1)
+    codes = np.empty(b.shape[:-1] + (2 * b.shape[-1],), np.uint8)
+    codes[..., 0::2] = b & 0xF
+    codes[..., 1::2] = b >> 4
+    return np.ascontiguousarray(np.moveaxis(codes[..., :extent], -1, axis))
+
+
+def nvfp4_gemm_reference(a_codes: Any, b_codes: Any, scale_a: Any, scale_b: Any) -> np.ndarray:
+    """The exact general-shape product ``D[M,N]`` for logical (unpacked) e2m1
+    code matrices ``A[M,K]``/``B[K,N]`` and raw ue4m3 scales ``SFa[M,ceil(K/16)]``
+    / ``SFb[ceil(K/16),N]``: one scale per 16-wide K block, f64 accumulation,
+    returned as f32 (every product is an exact binary fraction; the sums the
+    device tests use fit an f32 mantissa, so the comparison is bit-exact)."""
+    a = e2m1_decode(np.asarray(a_codes, np.uint8)).astype(np.float64)
+    b = e2m1_decode(np.asarray(b_codes, np.uint8)).astype(np.float64)
+    m, k = a.shape
+    n = b.shape[1]
+    blocks = (k + 15) // 16
+    sa = ue4m3_decode(np.asarray(scale_a, np.uint8)).astype(np.float64)
+    sb = ue4m3_decode(np.asarray(scale_b, np.uint8)).astype(np.float64)
+    if sa.shape != (m, blocks) or sb.shape != (blocks, n) or b.shape[0] != k:
+        raise ValueError("nvfp4 reference shapes disagree")
+    out = np.zeros((m, n), np.float64)
+    for block in range(blocks):
+        ks = slice(block * 16, min((block + 1) * 16, k))
+        out += (a[:, ks] * sa[:, block:block + 1]) @ (b[ks, :] * sb[block:block + 1, :])
+    return out.astype(np.float32)
+
+
 __all__ = [
     "M", "N", "K", "LANES", "SCALE_BLOCK", "SCALE_BLOCKS", "UE4M3_ONE",
     "e2m1_decode", "e2m1_encode", "ue4m3_decode", "nvfp4_tile_reference",
     "pack_nvfp4_mma_fragments", "unpack_nvfp4_mma_accumulator",
-    "unpack_nvfp4_mma_fragments",
+    "unpack_nvfp4_mma_fragments", "pack_e2m1_codes", "unpack_e2m1_codes", "nvfp4_gemm_reference",
 ]

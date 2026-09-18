@@ -183,3 +183,188 @@ def test_sm120_emitted_nvfp4_entry_is_registered_and_reused():
     second = rt._nvidia_nvfp4_emitted_mma(a, b, sa, sb)
     np.testing.assert_array_equal(first, second)
     np.testing.assert_array_equal(first, nf.nvfp4_tile_reference(a, b, sa, sb))
+
+
+# ── the general-shape emitted GEMM (2026-09-18) ──────────────────────────────
+
+def _general_case(m, n, k, seed):
+    rng = np.random.default_rng(seed)
+    a = rng.integers(0, 16, size=(m, k), dtype=np.uint8)
+    b = rng.integers(0, 16, size=(k, n), dtype=np.uint8)
+    blocks = (k + 15) // 16
+    sa = rng.integers(0x28, 0x48, size=(m, blocks), dtype=np.uint8)
+    sb = rng.integers(0x28, 0x48, size=(blocks, n), dtype=np.uint8)
+    return a, b, sa, sb
+
+
+GENERAL_SHAPES = [(16, 8, 64), (16, 8, 128), (32, 16, 64), (33, 17, 100), (64, 40, 192), (5, 3, 20), (17, 9, 65)]
+
+
+def test_pack_e2m1_codes_matches_the_launch_abi_layout():
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+    codes = np.arange(2 * 5, dtype=np.uint8).reshape(2, 5) & 15
+    packed = pack_e2m1_codes(codes, axis=1)
+    assert packed.shape == (2, 3) and packed.dtype == np.uint8
+    assert packed[0, 0] == (0 | (1 << 4)) and packed[0, 2] == 4  # odd extent zero-padded
+    along0 = pack_e2m1_codes(codes.T, axis=0)
+    assert along0.shape == (3, 2)
+    np.testing.assert_array_equal(along0, packed.T)
+
+
+def test_general_gemm_ptx_is_well_formed():
+    from tessera.compiler import ptx_emit as pe
+    ptx = pe.emit_nvfp4_gemm_ptx()
+    assert pe.validate_nvfp4_gemm_ptx_structure(ptx) == []
+    assert ptx.isascii() and "kind::mxf4nvf4.block_scale.scale_vec::4X" in ptx
+    assert ptx.count("ld.global.u8") == 36  # 6 operand words x 4 bytes + 3 scale words x 4 bytes
+
+
+def test_general_gemm_ptx_assembles_for_sm120a(tmp_path):
+    import shutil
+    import subprocess
+    from tessera.compiler import ptx_emit as pe
+    ptxas = shutil.which("ptxas")
+    if ptxas is None:
+        pytest.skip("ptxas not on PATH")
+    source = tmp_path / "nvfp4_gemm.ptx"
+    source.write_text(pe.emit_nvfp4_gemm_ptx())
+    proc = subprocess.run([ptxas, "--gpu-name=sm_120a", "-o", str(tmp_path / "out.cubin"), str(source)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+def test_general_gemm_reference_reduces_to_the_tile_reference_on_one_tile(shape):
+    from tessera.compiler.nvfp4_fragments import nvfp4_gemm_reference
+    m, n, k = shape
+    a, b, sa, sb = _general_case(m, n, k, 7)
+    ref = nvfp4_gemm_reference(a, b, sa, sb)
+    assert ref.shape == (m, n) and ref.dtype == np.float32
+    if shape == (16, 8, 64):
+        np.testing.assert_array_equal(ref, nf.nvfp4_tile_reference(a, b, sa, sb))
+
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+def test_sm120_emitted_general_gemm_is_exact(shape):
+    """Exact-device row: any M/N/K through the general NVFP4 launch ABI, bit-exact
+    against the numpy reference (ragged M, N and K included)."""
+    rt = _sm120_or_skip()
+    from tessera.compiler.nvfp4_fragments import nvfp4_gemm_reference, pack_e2m1_codes
+    m, n, k = shape
+    a, b, sa, sb = _general_case(m, n, k, 11 + m)
+    ap, bp = pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0)
+    out = rt._nvidia_nvfp4_gemm_emitted_2d(ap, bp, sa, sb, m, n, k)
+    np.testing.assert_array_equal(out, nvfp4_gemm_reference(a, b, sa, sb))
+
+
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+def test_sm120_emitted_general_gemm_equals_the_shipped_kernel(shape):
+    """The emitted kernel and the shipped NVRTC one compute the same product.
+
+    The shipped lane returned rc=2 ("requires an sm_120a-capable CUDA
+    device/toolchain") on Super-Bear until 2026-09-18: NVRTC 13.4 stamps
+    `.version 9.4` on its PTX and driver 610.88 (CUDA 13.3 API) refuses that
+    header outright, for compute_120 as well as compute_120a. The device is
+    capable; the message was not. `compileKernel` now lowers the version the
+    way the emitted lane always has, so this cross-check runs."""
+    rt = _sm120_or_skip()
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+    m, n, k = shape
+    a, b, sa, sb = _general_case(m, n, k, 11 + m)
+    ap, bp = pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0)
+    emitted = rt._nvidia_nvfp4_gemm_emitted_2d(ap, bp, sa, sb, m, n, k)
+    shipped = rt._nvidia_nvfp4_gemm_2d(ap, bp, sa, sb, m, n, k)
+    np.testing.assert_array_equal(emitted, shipped)
+
+
+def test_nvfp4_region_reference_decodes_the_packed_launch_abi():
+    from tessera.compiler.emit.nvidia_cuda import Nvfp4MatmulRegion
+    from tessera.compiler.nvfp4_fragments import (nvfp4_gemm_reference, pack_e2m1_codes,
+                                                  unpack_e2m1_codes)
+    m, n, k = 33, 17, 100
+    a, b, sa, sb = _general_case(m, n, k, 3)
+    ap, bp = pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0)
+    np.testing.assert_array_equal(unpack_e2m1_codes(ap, axis=1, extent=k), a)
+    np.testing.assert_array_equal(unpack_e2m1_codes(bp, axis=0, extent=k), b)
+    region = Nvfp4MatmulRegion(m=m, n=n, k=k)
+    np.testing.assert_array_equal(region.reference(ap, bp, sa, sb),
+                                  nvfp4_gemm_reference(a, b, sa, sb))
+
+
+def test_nvfp4_candidates_are_registered_and_narrow_by_region_and_shape():
+    from tessera.compiler.emit import nvidia_cuda as nc
+    from tessera.compiler.emit.candidate import candidates_for
+    from tessera.compiler.fusion_core import MatmulRegion
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+    names = {c.name: c for c in candidates_for("nvidia", nc.OP_NVFP4_MATMUL)}
+    assert set(names) == {"nvidia_nvfp4_gemm_emitted", "nvidia_nvfp4_gemm_shipped"}
+    assert names["nvidia_nvfp4_gemm_emitted"].tier < names["nvidia_nvfp4_gemm_shipped"].tier
+    region = nc.Nvfp4MatmulRegion(m=16, n=8, k=64)
+    a, b, sa, sb = _general_case(16, 8, 64, 1)
+    ok = (pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0), sa, sb)
+    for candidate in names.values():
+        assert candidate.applies_to(region) and not candidate.applies_to(MatmulRegion())
+        assert candidate.applies_to_inputs(region, *ok)
+        # A shape that does not match the region's packed ABI is declined here,
+        # not discovered inside run().
+        assert not candidate.applies_to_inputs(region, ok[0][:8], *ok[1:])
+        assert not candidate.applies_to_inputs(region, *ok[:3])
+    # The op-kind carries its own F4 verifier (no f32 region oracle exists for
+    # packed fp4 operands).
+    from tessera.compiler.emit.candidate import _OP_KIND_VERIFY
+    assert nc.OP_NVFP4_MATMUL in _OP_KIND_VERIFY
+
+
+@pytest.mark.parametrize("shape", [(16, 8, 64), (33, 17, 100)])
+def test_sm120_nvfp4_arbiter_picks_a_kernel_and_it_is_exact(shape):
+    """The arbiter races both NVFP4 lanes through the op-kind seam: the winner
+    ran a real kernel (never the reference) and matched the exact oracle."""
+    _sm120_or_skip()
+    from tessera.compiler.emit import nvidia_cuda as nc
+    from tessera.compiler.emit.candidate import (arbiter_dispatch_log, run_arbitrated,
+                                                 reset_arbiter_dispatch_log)
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+    m, n, k = shape
+    a, b, sa, sb = _general_case(m, n, k, 23)
+    inputs = (pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0), sa, sb)
+    region = nc.Nvfp4MatmulRegion(m=m, n=n, k=k)
+    reset_arbiter_dispatch_log()
+    out, tag = run_arbitrated(region, nc.OP_NVFP4_MATMUL, "nvidia", *inputs, use_corpus=False)
+    assert tag in ("nvidia_ptx_nvfp4_gemm", "nvidia_shipped_nvfp4_gemm"), tag
+    np.testing.assert_array_equal(out, region.reference(*inputs))
+    assert arbiter_dispatch_log()[-1][2] in ("nvidia_nvfp4_gemm_emitted", "nvidia_nvfp4_gemm_shipped")
+    # Forcing each lane in turn proves both execute and agree.
+    for name in ("nvidia_nvfp4_gemm_emitted", "nvidia_nvfp4_gemm_shipped"):
+        forced, tag = run_arbitrated(region, nc.OP_NVFP4_MATMUL, "nvidia", *inputs,
+                                     force=name, use_corpus=False)
+        assert tag != "reference", f"{name} declined"
+        np.testing.assert_array_equal(forced, out)
+
+
+def test_sm120_nvfp4_emitted_lane_reports_a_device_latency():
+    """The emitted lane carries a device timer (the bridge's `benchmarkNvfp4`);
+    the shipped NVRTC lane has none and says so with None rather than a
+    wall-clock number dressed as a device latency."""
+    _sm120_or_skip()
+    from tessera.compiler.emit import nvidia_cuda as nc
+    from tessera.compiler.emit.candidate import candidates_for
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+    m, n, k = 64, 40, 192
+    a, b, sa, sb = _general_case(m, n, k, 31)
+    inputs = (pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0), sa, sb)
+    region = nc.Nvfp4MatmulRegion(m=m, n=n, k=k)
+    lanes = {c.name: c for c in candidates_for("nvidia", nc.OP_NVFP4_MATMUL)}
+    emitted = lanes["nvidia_nvfp4_gemm_emitted"].measure_device_latency(region, *inputs, reps=20, warmup=5)
+    assert emitted is not None and emitted > 0.0
+    assert lanes["nvidia_nvfp4_gemm_shipped"].measure_device_latency(region, *inputs) is None
+
+
+def test_sm120_nvfp4_benchmark_times_both_entries():
+    rt = _sm120_or_skip()
+    from tessera.compiler.nvfp4_fragments import pack_e2m1_codes
+    from tessera.compiler import ptx_emit as pe
+    m, n, k = 64, 40, 192
+    a, b, sa, sb = _general_case(m, n, k, 5)
+    ap, bp = pack_e2m1_codes(a, axis=1), pack_e2m1_codes(b, axis=0)
+    ms = rt._nvidia_nvfp4_gemm_device_latency(pe.TESSERA_NVFP4_GEMM_ENTRY, ap, bp, sa, sb, m, n, k, reps=20, warmup=5)
+    assert ms > 0.0

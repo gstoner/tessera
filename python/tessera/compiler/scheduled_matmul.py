@@ -107,14 +107,70 @@ class ScheduledMatmulArtifact:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
 
+def _band_4x4(m: int, n: int, *, dynamic: bool) -> bool:
+    """The fully tiled [1024, 2048) band where the 4x4 panel wins on both chips."""
+    return not dynamic and 1024 <= m < 2048 and 1024 <= n < 2048 and m % 64 == 0 and n % 64 == 0
+
+
 def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
     """The gfx1201 f16/bf16 macro tile, mirroring `getInferredMatmulSchedule`
-    in PMPasses.cpp: the 2x4 register panel only for a static, fully tiled
-    problem at 1024 and above (typed-route gap packet, 2026-09-18: 2.1x at
-    1024^3, 3.3x at 2048^3, a wash at 512^3, slower on ragged shapes)."""
-    if not dynamic and m >= 1024 and n >= 1024 and m % 32 == 0 and n % 64 == 0:
-        return 32, 64
+    in PMPasses.cpp (typed-route gap packets, 2026-09-18): the 4x4 panel for
+    every static, fully tiled problem at 1024 and above, the 1x1 otherwise.
+
+    The panel axis stops at 4x4: 4x8, 8x4 and 8x8 fall off a VGPR cliff
+    (measured at 4096^3: 64.1 TFLOP/s at 4x4, 15.6 at 4x8, 7.4 at 8x8, with
+    six accumulator fragments per lane already at 4x4). Above it, latency
+    hiding is the lever -- see `rocm_k_unroll`."""
+    if not dynamic and m >= 1024 and n >= 1024 and m % 64 == 0 and n % 64 == 0:
+        return 64, 64
     return 16, 16
+
+
+def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool) -> int:
+    """Full 16-wide K slabs the typed matmul body issues per loop iteration.
+
+    A physical (performance) knob, not a Schedule-IR decision: the body is
+    memory-latency bound, so issuing the next slab's fragment loads while the
+    current slab's MMAs retire is the lever that the macro tile and LDS
+    staging are not. Measured 2026-09-18 on the panel each chip actually
+    selects, TFLOP/s at k = 1 / 2 / 4
+    (`benchmarks/baselines/typed_route_gap_20260918/`):
+
+        gfx1201  1024^3   46.4 / 58.7 / 57.5   (4x4 panel)
+                 2048^3   51.6 / 88.2 / 73.7
+                 4096^3   65.2 / 90.3 / 77.8
+        gfx1151  1024^3   10.8 / 15.8 / 11.0   (4x4; directive lane 11.6)
+                 2048^3   21.2 / 20.3 /  9.8   (2x4; directive lane 23.3)
+
+    Both chips take 2, and only where they also take the larger panel. That
+    is 1.4x-1.7x over the single-slab body it replaces, and on gfx1151 it is
+    what puts the typed route ahead of the directive lane in the [1024, 2048)
+    band (15.8 vs 11.6); at 2048 and above the directive lane still leads
+    there and the unroll does not close it, so the knob stays off.
+
+    **An earlier sweep took 4 below 2048 on gfx1201 and that is withdrawn.**
+    It rested on one row -- 1024^3 reading 61.5 for k=4 against 56.0 for k=2 --
+    which the re-record reversed to 58.7 against 57.5. Two runs disagreeing on
+    the sign of a 2% margin means the margin is noise, and k=2 wins 2048^3 and
+    4096^3 decisively in both runs, so the rule follows the reproducible
+    result and loses a branch. Neither chip's number is evidence for the other.
+    """
+    if dynamic or k < 64:
+        return 1
+    if arch.startswith("gfx1201"):
+        if min(m, n) < 1024 or m % 64 or n % 64:
+            return 1
+        return 2
+    if arch.startswith("gfx1151"):
+        return 2 if _band_4x4(m, n, dynamic=dynamic) else 1
+    return 1
+
+
+def rocm_gfx1151_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
+    """The gfx1151 f16/bf16 macro tile: the committed 2x4 panel, except the
+    typed 4x4 in the fully tiled [1024, 2048) band (10.8 vs 9.9 TFLOP/s at
+    1024^3, losing again at 2048^3: 18.7 vs 21.2)."""
+    return (64, 64) if _band_4x4(m, n, dynamic=dynamic) else (32, 64)
 
 
 def lower_scheduled_matmul(
@@ -396,13 +452,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             "rocm", "gfx1201", "e4m3" if a_dtype == "fp8_e4m3" else "e5m2", "f32", 16, 16,
         )
     elif target == "rocm_gfx1151" and a_dtype == b_dtype and a_dtype in {"fp16", "bf16"} and output_dtype == "fp32":
+        panel_m, panel_n = rocm_gfx1151_panel(m, n, dynamic=dynamic_m or dynamic_n or dynamic_k)
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
-            "rocm",
-            "gfx1151",
-            "bf16" if a_dtype == "bf16" else "f16",
-            "f32",
-            32,
-            64,
+            "rocm", "gfx1151", "bf16" if a_dtype == "bf16" else "f16", "f32", panel_m, panel_n,
         )
     elif target == "nvidia_sm120" and (a_dtype, b_dtype, output_dtype) == ("int4", "int4", "int32"):
         if not op.result or function.return_values != ["%" + op.result] or len(function.args) != 2:

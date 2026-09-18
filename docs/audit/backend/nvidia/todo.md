@@ -7750,11 +7750,20 @@ with the ROCm owed items); owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
   scalars fold on the host so the kernel carries none), packaged behind
   `energy._try_cuda_gpu_sphere_langevin_step_f32`, tried after the Apple
   lane and before the x86/ROCm affine lanes, with a failed compile remembered
-  per feature width. Device: TBD-SPHERE.
+  per feature width. Device: d = 16, 33 and 1024 against the numpy formula
+  (rtol 2e-5), a zero update re-normalizing the state, and a 12-step chain
+  spied to fire on the device every step and agreeing with the numpy chain
+  under the same key — `tests/unit/test_cuda_ebm_geo_langevin_compiled.py`.
 * **Toolchain.** Driver 610.88 unchanged (CUDA 13.3 API, PTX ≤ 9.3); the
   emitted NVFP4 packet records the `.version` the driver JIT was handed.
 
-Fleet at the head: TBD-SWEEP-NVIDIA.
+Fleet at the head: Super-Bear **16148 passed, 8 failed** at `a5474704`: four
+were the host-side gates every box tripped (fixed at `a9a158e0`, 80 passed
+there), four were the sm_120 HVP rows reading `TESSERA_OPT` /
+`TESSERA_LLVM_BIN` out of the environment and raising a bare KeyError in a
+sweep pinned only by the device gate — they now discover the tools and skip
+by name, and pass by discovery (13 passed at `f93dfabe`); both trees built;
+the three new files' device rows and the sphere rows pass at the head.
 
 ## The sm_120 Lion stop-sign lane returns rc=3 on main — 2026-09-17
 

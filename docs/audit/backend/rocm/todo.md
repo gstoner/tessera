@@ -8338,7 +8338,15 @@ disposition on the owning box; the sm_120 items are in the NVIDIA queue.
   16/16/32-tiled); `auto_2to4` lowers on the public route but its device rows
   stay on the isolated worker's tests.
 
-Fleet at the head: TBD-SWEEP-ROCM.
+Fleet at the head: Tajasarus **18955 passed, 4 failed** at `a5474704` (the four
+were host-side gates broken by this branch and fixed at `a9a158e0`: the
+staging-arena gate reading the new launcher entry inside the gemm handler's
+body, the sparse family missing from the pipeline registry, gfx1151's dtype
+tuple, and the device-marker location gate — the touched files 250 passed at
+`a9a158e0`; ROCm lit 74/74 in both trees; core lit 431 passed / 62 unsupported,
+0 failed, in both trees, run from the venv's `lit`); Princess-Luna **19545 passed, 4 failed** at `a5474704`
+(the same four; 195 passed at `a9a158e0`; ROCm lit 74/74; core lit 489 / 4
+unsupported); the sm_120 and Mac rows are in the log entry.
 
 **Still owed after this loop.** An LDS-staged *typed* body (the "LDS staging
 through `package_scheduled_matmul`" the queue named was a knob that did

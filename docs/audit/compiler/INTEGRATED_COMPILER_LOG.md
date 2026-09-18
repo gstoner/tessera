@@ -4412,10 +4412,10 @@ Outcome: **gfx1201 has every family, the typed ROCm matmul route carries int8, i
 
 | Host | Full `-m "not slow"` sweep | Lit |
 |---|---|---|
-| Tajasarus (gfx1201, assertions LLVM) | TBD-SWEEP-TAJ | `check-tessera-rocm` 74/74 in `build` and `build-assertions` (two new fixtures: `typed_matmul_int_storage.mlir`, `typed_matmul_raster_order.mlir`); `tests/tessera-ir` TBD-LIT-TAJ |
-| Princess-Luna (gfx1151) | TBD-SWEEP-LUNA | `check-tessera-rocm` 74/74; `tests/tessera-ir` TBD-LIT-LUNA |
-| Super-Bear (sm_120) | TBD-SWEEP-BEAR | both trees built |
-| Mac (M1 Max) | TBD-SWEEP-MAC | doc, plan, generated-doc and registry gates clean |
+| Tajasarus (gfx1201, assertions LLVM) | **18955 passed, 4 failed, 3230 skipped** at `a5474704`; the four were host gates this branch tripped everywhere (staging-arena body slice, pipeline registry, gfx1151 dtype tuple, device-marker location), fixed at `a9a158e0` where the touched files 250 passed | `check-tessera-rocm` 74/74 in `build` and `build-assertions` (two new fixtures: `typed_matmul_int_storage.mlir`, `typed_matmul_raster_order.mlir`); `tests/tessera-ir` 431 passed / 62 unsupported / 0 failed in both trees |
+| Princess-Luna (gfx1151) | **19545 passed, 4 failed, 2640 skipped** at `a5474704` (the same four; 195 passed at `a9a158e0`) | `check-tessera-rocm` 74/74; `tests/tessera-ir` 489 passed / 4 unsupported / 0 failed |
+| Super-Bear (sm_120) | **16148 passed, 8 failed, 6033 skipped** at `a5474704`: the same four gates plus the four sm_120 HVP rows, which read `TESSERA_OPT`/`TESSERA_LLVM_BIN` from the environment and raised a bare KeyError under the device gate alone — they discover the tools now and pass by discovery (13 passed at `f93dfabe`); the gates 80 passed at `a9a158e0` | both trees built; the NVFP4, isolated-attention and sphere device rows pass at the head |
+| Mac (M1 Max) | **18453 passed, 0 failed, 3736 skipped** at `a9a158e0` (18449 / 4 at `00cd822b`, the same four gates) | `tests/tessera-ir` 452 passed / 41 unsupported; doc, plan, generated-doc and registry gates clean. `tests/MEMORY_AND_PERFORMANCE.md`'s full-count table is stale on `main` independent of this branch (the tree collects 22974 on `main`, outside the doc's ±15% band; this branch adds 87), which its drift gate reports only after a full local run |
 
 Remaining: an LDS-staged typed body (the real work behind the "LDS staging" the queue named); gfx1151's 4x4 typed panel at 1024³ (10% behind the directive lane there); raster-order selection needs counters (ROCM-RASTER-1B); the packed-int4 input route on the typed path; `auto_2to4` device rows through the public package; the NVFP4 tile's general-shape dispatch before it can be an arbiter candidate. Performance promotion on both GPU boxes still needs a counter-capable native-Linux host.
 

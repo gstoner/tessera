@@ -143,10 +143,11 @@ def require_rocm_compiled_lane_host() -> str:
     """Skip unless this host's arch has *every* family plugin promoted.
 
     For a compiled-family test that does not name its family. The generic
-    compiled lane is gfx1151-only by the pipeline's rule; only the five families
-    with gfx1201 proof may run there, and they must say which one they are
-    through `require_rocm_compiled_family`. Anything else on a non-gfx1151 arch
-    is asserting a gfx1151 proof on a host that cannot have one.
+    compiled lane exists on an arch only when the pipeline's rule promotes
+    every family there (gfx1151 since commissioning; gfx1201 since 2026-09-18,
+    the last family being `paged_kv`). A test that names its family should
+    prefer `require_rocm_compiled_family`. Anything else on a partially
+    promoted arch is asserting a proof the host cannot have.
     """
     import pytest
     from tessera.compiler.rocm_pipeline import FAMILY_PLUGINS, promoted_families
@@ -155,8 +156,8 @@ def require_rocm_compiled_lane_host() -> str:
     if arch is None:
         pytest.skip("no ROCm device arch resolved on this host (no pin, no live device)")
     if promoted_families(arch) != frozenset(FAMILY_PLUGINS):
-        pytest.skip(f"the generic ROCm compiled lane has proof on gfx1151 only; "
-                    f"this host launches on {arch}")
+        pytest.skip(f"the generic ROCm compiled lane needs every family promoted; "
+                    f"{arch} has no promoted family profile for some of them")
     return arch
 
 

@@ -2023,8 +2023,9 @@ def _rocm_wmma_runtime_available() -> bool:
 
 def _rocm_compiled_flash_attn_available() -> bool:
     """Cached host probe: True iff the compiler-generated ROCm WMMA flash_attn
-    forward can actually run — i.e. ``tessera-opt`` is built AND a live gfx1151
-    executes the tiny probe attention without raising ``_RocmCompiledUnavailable``.
+    forward can actually run — i.e. ``tessera-opt`` is built AND the live chip
+    (gfx1151 or gfx1201; the directive names it) executes the tiny probe
+    attention without raising ``_RocmCompiledUnavailable``.
     Separate from ``_rocm_wmma_runtime_available`` because the flash lane shells
     out to the compiler rather than the shipped GEMM symbol. Never fabricates:
     on a host without the compiler/GPU it returns False, so the perf recorder
@@ -4083,6 +4084,24 @@ def _bind_rocm_attention_backward_program(
             raise RuntimeError("attention teardown is uncertain; resources retained for isolated recovery")
 
 
+def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
+    """The scheduled-package ABIs with exact gfx1201 (RX 9070 XT) device proof.
+
+    One spelling for the launcher registration and the submit-time admission;
+    an ABI joins on a `test_rocm_gfx1201_scheduled.py` device row, never by
+    analogy with gfx1151 (proofs do not transfer between the two RDNA parts).
+    """
+    from tessera.compiler import rocm_native as rn
+
+    return frozenset({
+        rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
+        rn.GFX_MATMUL_F16_F32_ABI, rn.GFX_MATMUL_F16_F32_FUSED_ABI,
+        rn.GFX_MATMUL_E4M3_F32_ABI, rn.GFX_MATMUL_E5M2_F32_ABI,
+        rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
+        rn.GFX_PAGED_KV_F32_ABI,
+    })
+
+
 def _submit_rocm_gfx1151_native(
     image: NativeImageArtifact,
     descriptor: LaunchDescriptor,
@@ -4113,9 +4132,9 @@ def _submit_rocm_gfx1151_native(
 
     if image.target == "rocm_gfx1201" and (
         image.architecture != "gfx1201"
-        or descriptor.abi_id not in {GFX_SOFTMAX_F32_ABI, GFX_REDUCE_F32_ABI, GFX_MATMUL_F16_F32_ABI, GFX_MATMUL_F16_F32_FUSED_ABI, GFX_MATMUL_E4M3_F32_ABI, GFX_MATMUL_E5M2_F32_ABI, GFX_DEPTH_ATTN_F32_ABI, GFX_ATTN_F16_ABI, GFX_ATTN_BF16_ABI}
+        or descriptor.abi_id not in _gfx1201_proved_scheduled_abis()
     ):
-        raise ValueError("gfx1201 scheduled launch requires a proved unary, matmul, attention or depth-attention ABI")
+        raise ValueError("gfx1201 scheduled launch requires a proved unary, matmul, attention, depth-attention or paged-KV ABI")
 
     if descriptor.abi_id not in {
         GFX_SOFTMAX_F16_ABI,
@@ -5287,11 +5306,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     )
 
     if (
-        (target == "rocm_gfx1151" or (target == "rocm_gfx1201" and abi_id in {
-            GFX_SOFTMAX_F32_ABI, GFX_REDUCE_F32_ABI,
-            GFX_MATMUL_F16_F32_ABI, GFX_MATMUL_F16_F32_FUSED_ABI,
-            GFX_MATMUL_E4M3_F32_ABI, GFX_MATMUL_E5M2_F32_ABI,
-            GFX_ATTN_F16_ABI, GFX_ATTN_BF16_ABI, GFX_DEPTH_ATTN_F32_ABI}))
+        (target == "rocm_gfx1151"
+         or (target == "rocm_gfx1201" and abi_id in _gfx1201_proved_scheduled_abis()))
         and abi_id
         in {
             GFX_SOFTMAX_F16_ABI,
@@ -8337,10 +8353,14 @@ def _build_compiled_flash_attn_hsaco(
     bias_attr = ", attn_bias = true" if attn_bias else ""
     dropout_attr = ", dropout = true" if dropout else ""
     wave_attr = ", two_wave = true" if two_wave else ""
+    # The generator selects its fragment layout from the directive's `arch`
+    # and defaults to gfx1151 when it is absent; an unstamped directive on a
+    # gfx12 host produced a gfx11 kernel that died in ISel ("Cannot select:
+    # intrinsic %llvm.amdgcn.wmma.f32.16x16x16.f16"). Name the launch chip.
     directive = (
         "module {\n"
         '  "tessera_rocm.flash_attn"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"'
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}", arch = "{chip}"'
         f"{gqa_attr}{win_attr}{cap_attr}{bias_attr}{dropout_attr}{wave_attr}}} "
         ": () -> ()\n"
         "}\n"
@@ -8662,7 +8682,7 @@ def _build_compiled_flash_attn_bwd_hsaco(
     directive = (
         "module {\n"
         '  "tessera_rocm.flash_attn_bwd"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{attrs}}} '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}", arch = "{chip}"{attrs}}} '
         ": () -> ()\n"
         "}\n"
     )

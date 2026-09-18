@@ -73,14 +73,17 @@ def test_gfx1201_scheduled_package_executes(family):
 
 @pytest.mark.parametrize(
     "architecture,abi",
-    [("gfx1151", rocm_native.GFX_REDUCE_F32_ABI), ("gfx1201", rocm_native.GFX_PAGED_KV_F32_ABI)],
+    [("gfx1151", rocm_native.GFX_REDUCE_F32_ABI), ("gfx1201", rocm_native.GFX_SOFTMAX_F16_ABI)],
 )
 def test_gfx1201_cached_launcher_keeps_architecture_and_family_gate(architecture, abi):
+    """A gfx1151 image is never launched as gfx1201, and an ABI without a
+    gfx1201 device row (f16 softmax: only the f32 rows are proved here) is
+    refused by name rather than run on gfx1151's evidence."""
     from tessera import runtime as rt
 
     image = SimpleNamespace(target="rocm_gfx1201", architecture=architecture)
     descriptor = SimpleNamespace(abi_id=abi)
-    with pytest.raises(ValueError, match="proved unary, matmul, attention or depth-attention ABI"):
+    with pytest.raises(ValueError, match="proved unary, matmul, attention, depth-attention or paged-KV ABI"):
         rt._submit_rocm_gfx1151_native(image, descriptor, {}, {}, None)
 
 

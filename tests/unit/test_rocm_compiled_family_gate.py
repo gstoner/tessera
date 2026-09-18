@@ -29,7 +29,8 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
         "quant_int4_pack", "reduction_arg", "scan", "optimizer",
         "fused_silu_mul",
         # Engineering loops (2026-09-17): slices 3-5, measured per family on
-        # Tajasarus; paged_kv is the one family without gfx1201 evidence.
+        # Tajasarus; paged_kv followed on 2026-09-18 once the directive
+        # flash-attention build named the chip (its tests gate on that probe).
         "algebra_clifford",
         "attention_mla_decode",
         "depth_attention",
@@ -44,6 +45,7 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
         "matmul_f32",
         "moe_dispatch",
         "ordering_sort",
+        "paged_kv",
         "sequence_deltanet",
         "sequence_linear_attention",
         "sequence_recurrent_cell",
@@ -62,7 +64,9 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
         "spectral_backward",
         "spectral_dft",
     }
-    assert promoted_families("gfx1201") < frozenset(FAMILY_PLUGINS)
+    # Every family now has gfx1201 evidence; the two profiles are the same
+    # set, and the generic-lane guard admits both hosts.
+    assert promoted_families("gfx1201") == frozenset(FAMILY_PLUGINS)
     for arch in ("gfx1200", "gfx1250", "gfx1100", "gfx942", ""):
         assert promoted_families(arch) == frozenset()
 
@@ -70,8 +74,9 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
 @pytest.mark.parametrize("arch,family,accepted", [
     ("gfx1151", "scalar_unary", True),
     ("gfx1201", "softmax", True),
-    ("gfx1201", "paged_kv", False),
+    ("gfx1201", "paged_kv", True),
     ("gfx1200", "softmax", False),
+    ("gfx1200", "paged_kv", False),
 ])
 def test_the_config_refuses_exactly_what_the_rule_says(arch, family, accepted):
     kwargs = dict(family=family, arch=arch)
@@ -84,10 +89,12 @@ def test_the_config_refuses_exactly_what_the_rule_says(arch, family, accepted):
 
 def test_guards_skip_where_the_rule_refuses(monkeypatch):
     monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1201")
-    assert rocm_build.require_rocm_compiled_family("softmax", "matmul") == "gfx1201"
-    with pytest.raises(pytest.skip.Exception, match="paged_kv.*gfx1201"):
+    assert rocm_build.require_rocm_compiled_family("softmax", "matmul", "paged_kv") == "gfx1201"
+    assert rocm_build.require_rocm_compiled_lane_host() == "gfx1201"
+    monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1200")
+    with pytest.raises(pytest.skip.Exception, match="paged_kv.*gfx1200"):
         rocm_build.require_rocm_compiled_family("softmax", "paged_kv")
-    with pytest.raises(pytest.skip.Exception, match="gfx1151 only"):
+    with pytest.raises(pytest.skip.Exception, match="no promoted family"):
         rocm_build.require_rocm_compiled_lane_host()
     monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1151")
     assert rocm_build.require_rocm_compiled_lane_host() == "gfx1151"

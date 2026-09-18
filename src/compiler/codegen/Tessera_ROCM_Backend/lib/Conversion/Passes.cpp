@@ -142,12 +142,13 @@ struct DeclareROCMPipelineContractPass
         "quant_int4_pack", "reduction_arg", "scan", "optimizer",
         "fused_silu_mul",
         // Slices 3-5 (engineering loops, 2026-09-17), measured on Tajasarus;
-        // paged_kv stays out (no gfx1201 device evidence). Mirror of Python.
+        // paged_kv joined 2026-09-18 (a scalar gather whose tests had gated
+        // on the gfx11 flash-attention probe). Mirror of Python.
         "algebra_clifford", "attention_mla_decode", "depth_attention",
         "draft_dspark", "ebm_decode_init", "ebm_ebt_tiny",
         "ebm_energy_quadratic", "ebm_langevin", "ebm_partition",
         "es_low_rank_correction", "matmul_batched_f32", "matmul_f32",
-        "moe_dispatch", "ordering_sort", "sequence_deltanet",
+        "moe_dispatch", "ordering_sort", "paged_kv", "sequence_deltanet",
         "sequence_linear_attention", "sequence_recurrent_cell",
         "sequence_selective_ssm", "sequence_selective_ssm_backward",
         "solver_cholesky", "solver_ift", "solver_lu", "solver_qr",

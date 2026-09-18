@@ -52,9 +52,7 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
     # Slices 3-5 of the same program (engineering loops, 2026-09-17): the
     # attention tail, the spectral/solver/EBM/f32-matmul families and the
     # RDNA4-only FP8 matmul contract, each measured on Tajasarus (the per-test
-    # diff, then the family files at the loop's head). `paged_kv` is the one
-    # family left out: its device tests are gated on the gfx11 flash-attention
-    # directive lane and produced no gfx1201 evidence (owed).
+    # diff, then the family files at the loop's head).
     "algebra_clifford",
     "attention_mla_decode",
     "depth_attention",
@@ -69,6 +67,12 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
     "matmul_f32",
     "moe_dispatch",
     "ordering_sort",
+    # paged_kv (2026-09-18): the last family. Its generator is a scalar
+    # per-thread gather with no WMMA fragment; it had no gfx1201 evidence
+    # only because its device tests gated on a probe of the gfx11 WMMA
+    # flash-attention kernel, which the runtime built without an `arch`
+    # stamp. Measured on Tajasarus once the directive carried the chip.
+    "paged_kv",
     "sequence_deltanet",
     "sequence_linear_attention",
     "sequence_recurrent_cell",

@@ -155,6 +155,8 @@ struct DeclareROCMPipelineContractPass
         "solver_svd", "solver_triangular_solve",
         "sparse_block_attention", "sparse_block_topk", "sparse_sddmm",
         "sparse_spmm", "spectral_backward", "spectral_dft",
+        // RDNA4-only (SWMMAC): public 2:4 admission, 2026-09-18.
+        "sparse_matmul_2to4",
     };
     const bool gfx1201Promoted =
         arch == "gfx1201" &&
@@ -163,6 +165,14 @@ struct DeclareROCMPipelineContractPass
       getOperation().emitError(kExecutablePipeline)
           << ": architecture '" << arch
           << "' has no promoted family-plugin profile";
+      return signalPassFailure();
+    }
+    if (arch == "gfx1151" && family == "sparse_matmul_2to4") {
+      // gfx11 has no SWMMAC; the family is RDNA4-only by ISA, not by proof.
+      getOperation().emitError(kExecutablePipeline)
+          << ": family 'sparse_matmul_2to4' is an RDNA4 (SWMMAC) contract; "
+             "architecture '" << arch << "' has no promoted family-plugin "
+             "profile for it";
       return signalPassFailure();
     }
     if (cooperative && family != "depth_attention") {
@@ -373,6 +383,10 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
     pm.addPass(createGenerateROCMSddmmKernelPass());
   } else if (family == "sparse_spmm") {
     pm.addPass(createGenerateROCMSpmmKernelPass());
+  } else if (family == "sparse_matmul_2to4") {
+    // No generator: Graph->Schedule already built the checked 2:4 kernel
+    // (NativeSparse.h) and Schedule->Tile carried it as `tile.sparse_mma`;
+    // the Target consumer lowers that to `tessera_rocm.swmmac`.
   }
 }
 

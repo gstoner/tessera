@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import pytest
 
-from tessera.compiler.rocm_pipeline import FAMILY_PLUGINS, ROCMExecutablePipeline, promoted_families
+from tessera.compiler.rocm_pipeline import (
+    FAMILY_PLUGINS, RDNA4_ONLY_FAMILIES, ROCMExecutablePipeline, generic_lane_families, promoted_families)
 from tests._support import rocm_build
 
 
 def test_gfx1151_has_every_family_and_unknown_archs_have_none():
-    assert promoted_families("gfx1151") == frozenset(FAMILY_PLUGINS)
+    # gfx1151 has every family with a gfx11 form; the RDNA4-only SWMMAC family
+    # (public 2:4 admission, 2026-09-18) never joins it.
+    assert RDNA4_ONLY_FAMILIES == {"sparse_matmul_2to4"}
+    assert promoted_families("gfx1151") == frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES
+    assert generic_lane_families() == promoted_families("gfx1151")
     assert promoted_families("gfx1201") == {
         "softmax", "reduction", "matmul", "attention", "attention_backward",
         "control_state_machine", "ebm_affine_langevin",
@@ -63,9 +68,11 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
         "sparse_spmm",
         "spectral_backward",
         "spectral_dft",
+        # Public 2:4 admission (2026-09-18): RDNA4-only.
+        "sparse_matmul_2to4",
     }
-    # Every family now has gfx1201 evidence; the two profiles are the same
-    # set, and the generic-lane guard admits both hosts.
+    # Every family has gfx1201 evidence, the RDNA4-only one included; the
+    # generic-lane guard admits both hosts.
     assert promoted_families("gfx1201") == frozenset(FAMILY_PLUGINS)
     for arch in ("gfx1200", "gfx1250", "gfx1100", "gfx942", ""):
         assert promoted_families(arch) == frozenset()
@@ -75,6 +82,8 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
     ("gfx1151", "scalar_unary", True),
     ("gfx1201", "softmax", True),
     ("gfx1201", "paged_kv", True),
+    ("gfx1201", "sparse_matmul_2to4", True),
+    ("gfx1151", "sparse_matmul_2to4", False),
     ("gfx1200", "softmax", False),
     ("gfx1200", "paged_kv", False),
 ])

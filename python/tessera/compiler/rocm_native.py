@@ -86,6 +86,13 @@ GFX_MATMUL_BF16_F32_FUSED_ABI = "tessera.rocm.matmul.a_b_bias_o_m_n_k.bf16_f32.f
 #: same numpy boundary as the directive lane; the kernel packs the nibbles.
 GFX_MATMUL_I8_I32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.i8_i32.v1"
 GFX_MATMUL_I4_I32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.i4_i32.v1"
+#: The checked 2:4 sparse half matmul on gfx1201's SWMMAC (public admission,
+#: 2026-09-18): logical row-major A[M,K] and B[K,N] in f16/bf16, the output in
+#: f16/bf16/f32, and one validity word per lane per 16x16 tile that the launch
+#: consumes -- a tile whose A block is not 2:4 sparse refuses the launch.
+#: No scalars: the kernel is specialized to its static shape. gfx11 has no
+#: SWMMAC and receives no admission.
+GFX_SPARSE_MATMUL_2TO4_ABI = "tessera.rocm.sparse_matmul_2to4.a_b_o_status.half.v1"
 GFX_DEPTH_ATTN_F32_ABI = (
     "tessera.rocm.depth_attention.query_sources_o.f32.v1"
 )
@@ -1255,6 +1262,7 @@ def _compile_native_tile_ir(
     staging: str = "register",
     depth_cooperative: bool = False,
     architecture: str = "gfx1151",
+    schedule_kernel: bool = False,
 ) -> tuple[
     str,
     str,
@@ -1264,6 +1272,10 @@ def _compile_native_tile_ir(
     tuple[DeviceLibraryRecord, ...],
     str,
 ]:
+    """``schedule_kernel``: the Tile artifact already IS a ``gpu.module`` kernel
+    the Schedule level built (the 2:4 sparse route), so its Target IR is a
+    kernel too; the "crossed into backend codegen" check then asks only for
+    no ``gpu.binary``."""
     tool = _tessera_opt()
     if tool is None:
         raise RuntimeError("tessera-opt is required for ROCm native packaging")
@@ -1313,7 +1325,7 @@ def _compile_native_tile_ir(
         raise RuntimeError(
             f"ROCm native packaging did not materialize Target IR directive {directive}"
         )
-    if "gpu.module" in target_ir or "gpu.binary" in target_ir:
+    if ("gpu.module" in target_ir and not schedule_kernel) or "gpu.binary" in target_ir:
         raise RuntimeError(
             "ROCm Target IR crossed into backend GPU/binary codegen"
         )
@@ -1452,6 +1464,74 @@ def _compile_scheduled_matmul_tile_ir(tile_ir: str):
         family="matmul",
         staging="register",
     )
+
+
+def package_sparse_matmul(artifact, *, pipeline_name: str) -> ROCMNativePackage:
+    """Package the checked 2:4 sparse Tile artifact (`scheduled_sparse`) for
+    gfx1201 without re-entering Graph IR: the kernel the Schedule level built
+    goes through the executable pipeline's sparse family (no generator; the
+    Tile->ROCm consumer lowers `tile.sparse_mma` to `tessera_rocm.swmmac`)."""
+    from .scheduled_sparse import ScheduledSparseMatmulArtifact
+
+    if not isinstance(artifact, ScheduledSparseMatmulArtifact):
+        raise ValueError("ROCm sparse packaging takes a ScheduledSparseMatmulArtifact")
+    artifact.validate()
+    if artifact.target != "rocm" or artifact.architecture != "gfx1201":
+        raise ValueError("ROCm 2:4 sparse matmul is a gfx1201 (SWMMAC) contract")
+    (target_ir, backend_ir, payload, compiler_fp, toolchain_fp, device_libraries, compile_state) = (
+        _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.swmmac",
+                                family="sparse_matmul_2to4", architecture="gfx1201",
+                                schedule_kernel=True))
+    dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}
+    image = NativeImageArtifact(
+        target="rocm_gfx1201",
+        architecture="gfx1201",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="hsaco",
+        payload=payload,
+        entry_points=(NativeEntryPoint(artifact.function_name, GFX_SPARSE_MATMUL_2TO4_ABI),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+    )
+    m, n, k = artifact.shape
+    bindings = (
+        BufferBinding(0, artifact.a_name, "input", dtype[artifact.storage], 2, "row_major", 2),
+        BufferBinding(1, artifact.b_name, "input", dtype[artifact.storage], 2, "row_major", 2),
+        BufferBinding(2, artifact.output_name, "output", dtype[artifact.output], 2, "row_major", 4 if artifact.output == "f32" else 2),
+        BufferBinding(3, "status", "output", "int32", 1, "row_major", 4),
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=artifact.function_name,
+        abi_id=GFX_SPARSE_MATMUL_2TO4_ABI,
+        buffers=bindings,
+        scalars=(),
+        shape_guards=(
+            ShapeGuard(artifact.a_name, 0, "eq", m), ShapeGuard(artifact.a_name, 1, "eq", k),
+            ShapeGuard(artifact.b_name, 0, "eq", k), ShapeGuard(artifact.b_name, 1, "eq", n),
+            ShapeGuard(artifact.output_name, 0, "eq", m), ShapeGuard(artifact.output_name, 1, "eq", n),
+            ShapeGuard("status", 0, "eq", artifact.tiles * 32),
+        ),
+        geometry=LaunchGeometry(policy="rocm_sparse_2to4_tile_grid"),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
+        provenance={
+            "work_item": "GFX1201-PARITY-2026-09-17",
+            "sync_key": "GFX1201-PARITY-2026-09-17",
+            "route": "canonical_scheduled_tile_consumer",
+            "physical_route": "gfx1201_swmmac_16x16x32_one_wave_per_tile",
+            "selection": artifact.selection,
+            "shape": [m, n, k],
+            "storage": artifact.storage,
+            "output": artifact.output,
+            "validity_words": artifact.tiles * 32,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return ROCMNativePackage(artifact.tile_ir, target_ir, backend_ir, image, descriptor)
 
 
 def package_scheduled_matmul(
@@ -2945,6 +3025,8 @@ __all__ = [
     "GFX_MATMUL_BF16_F32_FUSED_ABI",
     "GFX_MATMUL_I8_I32_ABI",
     "GFX_MATMUL_I4_I32_ABI",
+    "GFX_SPARSE_MATMUL_2TO4_ABI",
+    "package_sparse_matmul",
     "GFX_MATMUL_F16_F32_ABI",
     "GFX_MATMUL_F16_F32_FUSED_ABI",
     "GFX_PAGED_KV_F32_ABI",

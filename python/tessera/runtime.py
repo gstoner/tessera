@@ -4084,6 +4084,84 @@ def _bind_rocm_attention_backward_program(
             raise RuntimeError("attention teardown is uncertain; resources retained for isolated recovery")
 
 
+def _submit_rocm_sparse_2to4(image: NativeImageArtifact, descriptor: LaunchDescriptor,
+                             buffers: Mapping[str, Any]) -> Any:
+    """Launch the checked 2:4 sparse half matmul (gfx1201 SWMMAC) and consume its
+    validity words: every lane of every 16x16 tile must report 1, else the
+    launch refuses and the output is never copied back (a tile whose A block
+    is not 2:4 sparse would otherwise return numbers computed from the wrong
+    elements). One wave per tile, no scalars (the kernel is shape-specialized)."""
+    import numpy as np
+
+    ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    if len(ordered) != 4 or ordered[3].name != "status":
+        raise RuntimeError("sparse 2:4 launch descriptor must bind a, b, the output and status")
+    a, b_matrix, output, status = (buffers[item.name] for item in ordered)
+    m, n, k = (int(v) for v in cast(list[int], descriptor.provenance["shape"]))
+    storage = _scheduled_storage_numpy_dtype({"f16": "fp16", "bf16": "bf16"}[str(descriptor.provenance["storage"])])
+    out_dtype = _scheduled_storage_numpy_dtype({"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[str(descriptor.provenance["output"])])
+    words = int(descriptor.provenance["validity_words"])
+    if storage is None or out_dtype is None:
+        raise RuntimeError("sparse 2:4 launch needs ml_dtypes for bf16 storage")
+    if (tuple(a.shape) != (m, k) or tuple(b_matrix.shape) != (k, n) or tuple(output.shape) != (m, n)
+            or tuple(status.shape) != (words,) or a.dtype != storage or b_matrix.dtype != storage
+            or output.dtype != out_dtype or status.dtype != np.int32):
+        raise RuntimeError("sparse 2:4 arrays disagree with the descriptor's shape or dtype")
+    if not output.flags.c_contiguous or not status.flags.c_contiguous:
+        raise RuntimeError("sparse 2:4 outputs must be contiguous")
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise RuntimeError("libamdhip64.so or a usable gfx1201 device is unavailable")
+    module = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(module), image.payload) != 0:
+        raise RuntimeError("gfx1201 native HSACO module load failed")
+    device: list[ctypes.c_void_p] = []
+    try:
+        function = ctypes.c_void_p()
+        if hip.hipModuleGetFunction(ctypes.byref(function), module, descriptor.entry_symbol.encode()) != 0:
+            raise RuntimeError(f"gfx1201 native symbol {descriptor.entry_symbol!r} not found")
+        hosts = [np.ascontiguousarray(a), np.ascontiguousarray(b_matrix), output, status]
+        for host in hosts:
+            pointer = ctypes.c_void_p()
+            if hip.hipMalloc(ctypes.byref(pointer), int(host.nbytes)) != 0:
+                raise RuntimeError("gfx1201 native hipMalloc failed")
+            device.append(pointer)
+        for pointer, host in zip(device[:2], hosts[:2], strict=True):
+            if hip.hipMemcpy(pointer, host.ctypes.data_as(ctypes.c_void_p), int(host.nbytes), 1) != 0:
+                raise RuntimeError("gfx1201 native host-to-device copy failed")
+        # Validity words start at zero so a tile the kernel never reached
+        # cannot inherit a stale 1 from a previous allocation.
+        if hip.hipMemset(device[3], 0, int(status.nbytes)) != 0:
+            raise RuntimeError("gfx1201 native status memset failed")
+        values: list[Any] = []
+        for pointer, host in zip(device, hosts, strict=True):
+            values.extend((ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value), ctypes.c_int64(0),
+                           ctypes.c_int64(int(host.size)), ctypes.c_int64(1)))
+        arguments = (ctypes.c_void_p * len(values))(*[ctypes.cast(ctypes.byref(v), ctypes.c_void_p) for v in values])
+        tiles = words // 32
+        rc = hip.hipModuleLaunchKernel(function, tiles, 1, 1, 32, 1, 1, 0, None, arguments, None)
+        if rc != 0:
+            raise RuntimeError(f"gfx1201 sparse kernel launch failed rc={rc}")
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("gfx1201 native device synchronization failed")
+        if hip.hipMemcpy(status.ctypes.data_as(ctypes.c_void_p), device[3], int(status.nbytes), 2) != 0:
+            raise RuntimeError("gfx1201 native device-to-host copy failed")
+        bad = int(np.count_nonzero(status.reshape(tiles, 32).min(axis=1) != 1))
+        if bad:
+            raise RuntimeError(
+                f"sparse 2:4 validity: {bad} of {tiles} 16x16 tiles hold an A block that is not "
+                "2:4 sparse (checked_2to4 refuses the launch; the output was not copied back)")
+        if hip.hipMemcpy(output.ctypes.data_as(ctypes.c_void_p), device[2], int(output.nbytes), 2) != 0:
+            raise RuntimeError("gfx1201 native device-to-host copy failed")
+        return output
+    finally:
+        for pointer in reversed(device):
+            hip.hipFree(pointer)
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and module.value:
+            unload(module)
+
+
 def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
     """The scheduled-package ABIs with exact gfx1201 (RX 9070 XT) device proof.
 
@@ -4100,7 +4178,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         rn.GFX_MATMUL_BF16_F32_ABI, rn.GFX_MATMUL_BF16_F32_FUSED_ABI,
         rn.GFX_MATMUL_I8_I32_ABI, rn.GFX_MATMUL_I4_I32_ABI,
         rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
-        rn.GFX_PAGED_KV_F32_ABI,
+        rn.GFX_PAGED_KV_F32_ABI, rn.GFX_SPARSE_MATMUL_2TO4_ABI,
     })
 
 
@@ -4134,7 +4212,13 @@ def _submit_rocm_gfx1151_native(
         GFX_REDUCE_F32_ABI,
         GFX_SOFTMAX_F16_ABI,
         GFX_SOFTMAX_F32_ABI,
+        GFX_SPARSE_MATMUL_2TO4_ABI,
     )
+
+    if descriptor.abi_id == GFX_SPARSE_MATMUL_2TO4_ABI:
+        if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
+            raise ValueError("the checked 2:4 sparse matmul is a gfx1201 (SWMMAC) launch")
+        return _submit_rocm_sparse_2to4(image, descriptor, buffers)
 
     if image.target == "rocm_gfx1201" and (
         image.architecture != "gfx1201"
@@ -4161,6 +4245,7 @@ def _submit_rocm_gfx1151_native(
         GFX_MATMUL_I8_I32_ABI,
         GFX_MATMUL_I4_I32_ABI,
         GFX_DEPTH_ATTN_F32_ABI,
+        GFX_SPARSE_MATMUL_2TO4_ABI,
     }:
         raise RuntimeError(f"unsupported ROCm descriptor ABI {descriptor.abi_id!r}")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
@@ -5326,6 +5411,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_REDUCE_F32_ABI,
         GFX_SOFTMAX_F16_ABI,
         GFX_SOFTMAX_F32_ABI,
+        GFX_SPARSE_MATMUL_2TO4_ABI,
     )
 
     if (
@@ -5351,6 +5437,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_DEPTH_ATTN_F32_ABI,
             GFX_ATTN_F16_ABI,
             GFX_ATTN_BF16_ABI,
+            GFX_SPARSE_MATMUL_2TO4_ABI,
         }
         and target not in _native_launchers
     ):

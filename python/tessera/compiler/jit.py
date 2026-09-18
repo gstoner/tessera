@@ -1544,6 +1544,28 @@ class JitFn:
         module = self._traced_autodiff_module(args, kwargs)
         return compile_sparse_graph(module, compiler=compiler, llvm_bin=llvm_bin, toolkit=toolkit)
 
+    def package_sparse_2to4(self, *args, selection="checked_2to4", **kwargs):
+        """Trace one half matmul and package its checked gfx1201 2:4 specialization
+        as a native `RuntimeArtifact` for `runtime.launch` (public admission,
+        2026-09-18): Graph -> Schedule (the compiler-built SWMMAC kernel with its
+        validity words) -> Tile -> tessera_rocm -> HSACO, on the same boundaries
+        as the dense scheduled families. The launch refuses any tile whose A
+        block is not 2:4 sparse. AD stays on this logical function."""
+        from tessera.runtime import RuntimeArtifact
+        from .rocm_native import package_sparse_matmul
+        from .scheduled_sparse import lower_scheduled_sparse_matmul
+        if normalize_target_kind(self.target) != "rocm":
+            raise TesseraJitError("sparse packaging requires a ROCm function")
+        module = self._traced_autodiff_module(args, kwargs)
+        artifact = lower_scheduled_sparse_matmul(module, selection=selection)
+        package = package_sparse_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+        return RuntimeArtifact(
+            graph_ir=artifact.graph_ir, tile_ir=package.tile_ir, target_ir=package.target_ir,
+            metadata={"target": "rocm_gfx1201", "compiler_path": "rocm_sparse_2to4_scheduled",
+                      "arg_names": [artifact.a_name, artifact.b_name], "output_name": artifact.output_name,
+                      "sparse_selection": selection, "shape": list(artifact.shape)},
+            native_image=package.image, launch_descriptor=package.descriptor)
+
     def compile_sparse_auto(self, *args, compiler=None, llvm_bin=None, toolkit=None, **kwargs):
         """Compile native per-K-tile sparse/dense selection for one half matmul.
 

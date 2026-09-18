@@ -150,12 +150,12 @@ def require_rocm_compiled_lane_host() -> str:
     promoted arch is asserting a proof the host cannot have.
     """
     import pytest
-    from tessera.compiler.rocm_pipeline import FAMILY_PLUGINS, promoted_families
+    from tessera.compiler.rocm_pipeline import generic_lane_families, promoted_families
 
     arch = rocm_host_arch()
     if arch is None:
         pytest.skip("no ROCm device arch resolved on this host (no pin, no live device)")
-    if promoted_families(arch) != frozenset(FAMILY_PLUGINS):
+    if not generic_lane_families() <= promoted_families(arch):
         pytest.skip(f"the generic ROCm compiled lane needs every family promoted; "
                     f"{arch} has no promoted family profile for some of them")
     return arch

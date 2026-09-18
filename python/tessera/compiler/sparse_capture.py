@@ -23,12 +23,13 @@ class CapturedSparseMatmul:
         return self.package.run(a,b,**options)
 
 
-def compile_sparse_graph(module, *, selection="checked_2to4", **compiler_options):
-    """Frontend-only admission; the runtime receives the serialized package."""
+def native_sparse_source(module, selection="checked_2to4"):
+    """Frontend admission of one logical half matmul for the checked 2:4 route;
+    returns the Graph IR text carrying the target, arch and sparse policy the
+    native lowering consumes. Shared by the isolated-worker capture and the
+    scheduled package (public admission, 2026-09-18)."""
     if selection not in {"checked_2to4", "auto_2to4"}:
         raise ValueError("unknown sparse selection policy")
-    if set(compiler_options) - {"compiler", "llvm_bin", "toolkit"}:
-        raise ValueError("sparse capture cannot override the captured arithmetic policy")
     if module.module_attrs.get("tessera.target") not in (None, '"rocm"') or module.module_attrs.get("tessera.arch") not in (None, '"gfx1201"'):
         raise ValueError("sparse capture requires its owning gfx1201 target")
     if len(module.functions) != 1:
@@ -74,17 +75,26 @@ def compile_sparse_graph(module, *, selection="checked_2to4", **compiler_options
             raise ValueError('sparse capture cannot discard effect/shard/model contracts')
         if arg.layout not in (None,'row_major') or arg.ir_type.layout not in (None,'row_major'):
             raise ValueError('sparse capture requires row-major input layout')
-    source = module.to_mlir(target='rocm',canonical=True)
-    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
-    compiler = compiler_options.get('compiler') or find_tessera_opt()
-    if compiler is None:
-        raise RuntimeError('sparse capture requires native Graph verification')
     # Native Graph lowering owns all physical packing and projects its ABI.
     import copy
     native_module = copy.deepcopy(module)
     native_module.module_attrs.update({"tessera.target": '"rocm"',
         "tessera.arch": '"gfx1201"', "tessera.sparse_policy": f'"{selection}"'})
     source = native_module.to_mlir(target='rocm',canonical=True)
+    return source
+
+
+def compile_sparse_graph(module, *, selection="checked_2to4", **compiler_options):
+    """Frontend-only admission; the runtime receives the serialized package."""
+    if selection not in {"checked_2to4", "auto_2to4"}:
+        raise ValueError("unknown sparse selection policy")
+    if set(compiler_options) - {"compiler", "llvm_bin", "toolkit"}:
+        raise ValueError("sparse capture cannot override the captured arithmetic policy")
+    source = native_sparse_source(module, selection)
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+    compiler = compiler_options.get('compiler') or find_tessera_opt()
+    if compiler is None:
+        raise RuntimeError('sparse capture requires native Graph verification')
     schedule = run_tessera_opt(compiler,source,'--tessera-graph-to-schedule')
     shape_match = re.search(r'tessera.sparse_shape = array<i64: (\d+), (\d+), (\d+)>',schedule)
     storage = re.search(r'tessera.sparse_storage = "(f16|bf16)"',schedule)

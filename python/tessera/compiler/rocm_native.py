@@ -1577,9 +1577,12 @@ def package_scheduled_matmul(
     if k_unroll is None:
         # A performance key: derived from the measured rule unless the caller
         # pins one (the gap recorder does). Recorded in provenance either way.
+        # The measured rule is the REGISTER body's; LDS staging is a separate
+        # physical schedule and keeps the single-slab loop unless asked.
         from .scheduled_matmul import rocm_k_unroll
-        k_unroll = rocm_k_unroll(artifact.m, artifact.n, artifact.k, arch=arch,
-                                 dynamic=artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k)
+        k_unroll = 1 if staging != "register" else rocm_k_unroll(
+            artifact.m, artifact.n, artifact.k, arch=arch,
+            dynamic=artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k)
     if staging == "lds" and k_unroll != 1:
         raise ValueError("ROCm LDS staging and K unrolling are separate physical schedules")
     (

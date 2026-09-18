@@ -602,12 +602,12 @@ def test_gfx1201_scheduled_matmul_package_executes_bf16(shape, activation, bias)
 
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
-@pytest.mark.parametrize("shape,panel", [((1024, 1024, 1024), (64, 64)), ((2048, 2048, 2048), (32, 64)), ((1024, 1024, 1000), (16, 16))])
+@pytest.mark.parametrize("shape,panel", [((1024, 1024, 1024), (64, 64)), ((2048, 2048, 2048), (64, 64)), ((1024, 1024, 1000), (16, 16))])
 def test_gfx1201_scheduled_matmul_package_executes_the_selected_panel(shape, panel):
-    """The panels gfx1201 selects per shape (typed-route gap packets: the
-    4x4 in the fully tiled [1024, 2048) band, the 2x4 from 2048 up) execute
-    exactly like the 1x1 they replace; a ragged neighbour keeps the 1x1.
-    Correctness only."""
+    """The panel and K unroll gfx1201 selects per shape (typed-route gap
+    packets: the 4x4 panel from 1024 up, with four K slabs per iteration below
+    2048 and two above) execute exactly like the 1x1 single-slab body they
+    replace; a ragged neighbour keeps both defaults. Correctness only."""
     from tessera import runtime as rt
     from tessera.compiler import scheduled_matmul
     from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
@@ -617,7 +617,9 @@ def test_gfx1201_scheduled_matmul_package_executes_the_selected_panel(shape, pan
     scheduled_matmul.verify_matmul_projection(artifact)
     assert (artifact.macro_tile_m, artifact.macro_tile_n) == panel
     package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.provenance["physical_route"] == f"gfx1201_register_wmma_{panel[0] // 16}x{panel[1] // 16}"
+    unroll = scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=False)
+    suffix = f"_k{unroll}" if unroll > 1 else ""
+    assert package.descriptor.provenance["physical_route"] == f"gfx1201_register_wmma_{panel[0] // 16}x{panel[1] // 16}{suffix}"
     rng = np.random.default_rng(1024)
     a = (rng.normal(size=(m, k)) * 0.25).astype(np.float16)
     b = (rng.normal(size=(k, n)) * 0.25).astype(np.float16)

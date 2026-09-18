@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import numpy as np
+
+from tests._support import rocm_build
 import pytest
 
 import tessera as ts
@@ -215,6 +217,7 @@ def test_rocm_adafactor_topologies_record_exact_gfx1151_certificates(
 
     if find_tessera_opt() is None or not rt._rocm_wmma_runtime_available():
         pytest.skip("ROCm compiler/gfx1151 runtime unavailable")
+    rocm_build.require_rocm_host_arch("gfx1151", "the optimizer VJP lanes stamp rocm_gfx1151 as their evidence target and consumer name (GFX1201-PARITY slice 2b)")
     rng = np.random.default_rng(20260830 + int(topology == "factored"))
     shape = (3, 5) if topology == "factored" else (17,)
     p = rng.normal(size=shape).astype(np.float32)

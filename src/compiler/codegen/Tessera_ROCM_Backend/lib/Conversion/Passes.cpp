@@ -128,8 +128,9 @@ struct DeclareROCMPipelineContractPass
     // Mirror of `rocm_pipeline._GFX1201_PROMOTED_FAMILIES`; the two scalar
     // per-thread families (state machine, affine Langevin) were promoted on
     // exact gfx1201 evidence 2026-09-17.
-    // Slice 2 (2026-09-17) adds the scalar and row-program families measured
-    // on Tajasarus; keep this list identical to the Python one.
+    // Slice 2 (2026-09-17) added the scalar and row-program families on the
+    // full-sweep measurement on Tajasarus; keep this list identical to the
+    // Python one.
     static constexpr llvm::StringRef kGfx1201PromotedFamilies[] = {
         "softmax", "reduction", "matmul", "attention", "attention_backward",
         "control_state_machine", "ebm_affine_langevin",

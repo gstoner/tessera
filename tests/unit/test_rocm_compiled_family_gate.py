@@ -17,7 +17,17 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
     assert promoted_families("gfx1151") == frozenset(FAMILY_PLUGINS)
     assert promoted_families("gfx1201") == {
         "softmax", "reduction", "matmul", "attention", "attention_backward",
-        "control_state_machine", "ebm_affine_langevin"}
+        "control_state_machine", "ebm_affine_langevin",
+        # GFX1201-PARITY slice 2 (2026-09-17): the scalar and row-program
+        # families, measured on Tajasarus (972 tests skip -> pass, 0 kernel
+        # failures).
+        "scalar_unary", "scalar_binary", "scalar_compare", "scalar_logical",
+        "scalar_bitwise", "scalar_predicate", "scalar_where",
+        "scalar_activation", "loss_binary", "loss_pointwise", "loss_policy",
+        "normalization", "rng_philox", "indexing_gather", "indexing_scatter",
+        "position_alibi", "position_rope", "quant_dequant_gemm", "quant_fp",
+        "quant_int4_pack", "reduction_arg", "scan", "optimizer",
+        "fused_silu_mul"}
     assert promoted_families("gfx1201") < frozenset(FAMILY_PLUGINS)
     for arch in ("gfx1200", "gfx1250", "gfx1100", "gfx942", ""):
         assert promoted_families(arch) == frozenset()
@@ -26,7 +36,7 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
 @pytest.mark.parametrize("arch,family,accepted", [
     ("gfx1151", "scalar_unary", True),
     ("gfx1201", "softmax", True),
-    ("gfx1201", "scalar_unary", False),
+    ("gfx1201", "spectral_dft", False),
     ("gfx1200", "softmax", False),
 ])
 def test_the_config_refuses_exactly_what_the_rule_says(arch, family, accepted):
@@ -41,8 +51,8 @@ def test_the_config_refuses_exactly_what_the_rule_says(arch, family, accepted):
 def test_guards_skip_where_the_rule_refuses(monkeypatch):
     monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1201")
     assert rocm_build.require_rocm_compiled_family("softmax", "matmul") == "gfx1201"
-    with pytest.raises(pytest.skip.Exception, match="scalar_unary.*gfx1201"):
-        rocm_build.require_rocm_compiled_family("softmax", "scalar_unary")
+    with pytest.raises(pytest.skip.Exception, match="spectral_dft.*gfx1201"):
+        rocm_build.require_rocm_compiled_family("softmax", "spectral_dft")
     with pytest.raises(pytest.skip.Exception, match="gfx1151 only"):
         rocm_build.require_rocm_compiled_lane_host()
     monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1151")

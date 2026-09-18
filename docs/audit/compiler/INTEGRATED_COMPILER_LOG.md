@@ -4353,3 +4353,21 @@ Remaining: slice 1b — int8/int4 storage on the typed route (the typed generato
 Evidence: `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/typed_matmul_fused_epilogue_store.mlir`, `tests/unit/test_rocm_gfx1201_scheduled.py`, `tests/unit/test_scheduled_matmul_consumers.py`, `tests/unit/test_rocm_fused_epilogue_launch_execute.py`, `docs/audit/backend/rocm/todo.md` §`GFX1201-PARITY-2026-09-17` slice 1.
 
 <!-- entry-fields:end -->
+
+### 2026-09-17 — GFX1201-PARITY slice 2: twenty-four scalar and row-program families promoted on measurement
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: GFX1201-PARITY slice 2 (sync `GFX1201-PARITY-2026-09-17`, ROCm queue); co-owner [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+Outcome: **gfx1201 goes from 7 to 31 promoted families, and the promotion is a measurement, not a list.** Both promotion tables (Python `promoted_families`, the C++ `tessera-rocm-executable` gate, now a shared `StringRef` array) gained the 24 families with no WMMA fragment in them. A per-test `pytest -v` sweep on Tajasarus at `main` was diffed against the same sweep with the candidates promoted: **972 tests skip → pass, zero kernel failures**, from `test_rocm_unary_compiled` (273) and `test_rocm_norm_compiled` (109) down through 50 files. Every family that was promoted has its own tests passing on the RX 9070 XT; the queue entry lists the blocks.
+
+**The eight that failed were a record, not a result.** The optimizer VJP plugin lanes stamp `rocm_gfx1151` as their evidence target and name their consumer for that chip, so the certificate validator reported `runtime_unattested` on gfx1201 after the numerics had already matched. That is the validator doing its job (Decision #26: a claim about gfx1151 does not become gfx1201 evidence by running there). Those eight tests are now pinned explicitly to gfx1151 with a helper whose skip reason names both archs and the owning item; slice 2b makes `rocm_gfx1201` a first-class target name on the stateful/optimizer lanes.
+
+FLEET_TABLE
+
+Remaining: slice 2b (the `rocm_gfx1151` target-name key in `stateful_training.py`, `native_vjp_plugins.py`, `jit.py`, `gpu_target_map.py`); slice 1b (int8/int4 storage on the typed route); slices 3–5 as listed in the ROCm queue.
+
+Evidence: `tests/unit/test_rocm_compiled_family_gate.py` (pins the 31), `tests/_support/rocm_build.require_rocm_host_arch`, the per-file diff in the ROCm queue's slice-2 entry.
+
+<!-- entry-fields:end -->

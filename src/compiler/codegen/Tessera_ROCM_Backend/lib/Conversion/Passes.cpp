@@ -99,7 +99,7 @@ struct DeclareROCMPipelineContractPass
         "sequence_selective_ssm", "sequence_selective_ssm_backward",
         "solver_cholesky", "solver_lu", "solver_qr", "solver_svd",
         "solver_triangular_solve", "solver_ift", "sparse_block_attention", "sparse_block_topk",
-        "sparse_sddmm", "sparse_spmm"};
+        "sparse_sddmm", "sparse_spmm", "sparse_matmul_2to4"};
     if (llvm::find(families, family) == std::end(families)) {
       getOperation().emitError("unknown ROCm family plugin '") << family << "'";
       return signalPassFailure();

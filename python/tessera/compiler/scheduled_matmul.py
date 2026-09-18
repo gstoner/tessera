@@ -114,16 +114,40 @@ def _band_4x4(m: int, n: int, *, dynamic: bool) -> bool:
 
 def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
     """The gfx1201 f16/bf16 macro tile, mirroring `getInferredMatmulSchedule`
-    in PMPasses.cpp (typed-route gap packets, 2026-09-18): the 4x4 panel in
-    the fully tiled [1024, 2048) band (44.7 vs 37.9 TFLOP/s at 1024^3), the
-    2x4 register panel for a static fully tiled problem from 2048 up (a wash
-    against 4x4 there, 3.3x the 1x1), the 1x1 otherwise (a wash at 512^3,
-    faster on ragged shapes)."""
-    if _band_4x4(m, n, dynamic=dynamic):
+    in PMPasses.cpp (typed-route gap packets, 2026-09-18): the 4x4 panel for
+    every static, fully tiled problem at 1024 and above, the 1x1 otherwise.
+
+    The panel axis stops at 4x4: 4x8, 8x4 and 8x8 fall off a VGPR cliff
+    (measured at 4096^3: 64.1 TFLOP/s at 4x4, 15.6 at 4x8, 7.4 at 8x8, with
+    six accumulator fragments per lane already at 4x4). Above it, latency
+    hiding is the lever -- see `rocm_k_unroll`."""
+    if not dynamic and m >= 1024 and n >= 1024 and m % 64 == 0 and n % 64 == 0:
         return 64, 64
-    if not dynamic and m >= 1024 and n >= 1024 and m % 32 == 0 and n % 64 == 0:
-        return 32, 64
     return 16, 16
+
+
+def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool) -> int:
+    """Full 16-wide K slabs the typed matmul body issues per loop iteration.
+
+    A physical (performance) knob, not a Schedule-IR decision: the body is
+    memory-latency bound on RDNA4, so issuing the next slab's fragment loads
+    while the current slab's MMAs retire is the lever that the macro tile and
+    LDS staging are not. Measured on Tajasarus 2026-09-18 with the 4x4 panel
+    (`benchmarks/baselines/typed_route_gap_20260918/gfx1201_kunroll.json`),
+    TFLOP/s at k = 1 / 2 / 4:
+
+        1024^3   42.1 / 56.0 / 61.5
+        2048^3   43.3 / 86.4 / 74.1
+        4096^3   65.5 / 92.5 / 77.4
+
+    so 4 below 2048 and 2 from 2048 up, against a production 32x64 k=1 body
+    that reached 36.8 / 46.4 / 57.6 -- 1.6x to 1.9x. gfx1151 keeps the
+    established single-slab loop: its own sweep put every unrolled variant at
+    or below k = 1, and evidence does not transfer between the two RDNA parts.
+    """
+    if dynamic or not arch.startswith("gfx1201") or min(m, n) < 1024 or k < 64:
+        return 1
+    return 2 if min(m, n) >= 2048 else 4
 
 
 def rocm_gfx1151_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:

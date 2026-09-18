@@ -485,23 +485,21 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     // at 512^3 and slower on ragged shapes, so it is selected only for a
     // static, fully tiled problem at 1024 and above. Wall clock on a WSL2
     // host, no counters: a selection input, not a promotion.
-    // Per-shape panel (typed-route gap packets, 2026-09-18, both chips):
-    // the 4x4 panel wins only in the fully tiled [1024, 2048) band (gfx1201
-    // 44.7 vs 37.9 TFLOP/s at 1024^3; a wash or worse at 2048^3 and slower
-    // on ragged shapes); the 2x4 panel from 2048 up; the 1x1 elsewhere.
+    // Per-shape panel (typed-route gap packets, 2026-09-18): the 4x4 panel for
+    // every static, fully tiled problem at 1024 and above, the 1x1 otherwise
+    // (a wash at 512^3, faster on ragged shapes). The panel axis stops here --
+    // 4x8 and 8x8 fall off a VGPR cliff (64.1 -> 15.6 -> 7.4 TFLOP/s at
+    // 4096^3) -- so latency hiding, not tile size, carries the rest; the
+    // packager picks the K unroll (`scheduled_matmul.rocm_k_unroll`).
     schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
     const bool staticShape =
         !schedule.dynamicM && !schedule.dynamicN && !schedule.dynamicK;
-    const bool band4x4 = staticShape && schedule.m >= 1024 &&
-                         schedule.n >= 1024 && schedule.m < 2048 &&
-                         schedule.n < 2048 && schedule.m % 64 == 0 &&
-                         schedule.n % 64 == 0;
-    const bool panel2x4 = staticShape && schedule.m >= 1024 &&
-                          schedule.n >= 1024 && schedule.m % 32 == 0 &&
+    const bool panel4x4 = staticShape && schedule.m >= 1024 &&
+                          schedule.n >= 1024 && schedule.m % 64 == 0 &&
                           schedule.n % 64 == 0;
-    schedule.macroTileM = band4x4 ? 64 : panel2x4 ? 32 : 16;
-    schedule.macroTileN = band4x4 ? 64 : panel2x4 ? 64 : 16;
+    schedule.macroTileM = panel4x4 ? 64 : 16;
+    schedule.macroTileN = panel4x4 ? 64 : 16;
     return schedule;
   }
   if (rocm && lhsElement == rhsElement &&

@@ -1544,7 +1544,7 @@ def package_scheduled_matmul(
     pipeline_name: str,
     staging: str = "register",
     lds_waves: tuple[int, int] = (2, 2),
-    k_unroll: int = 1,
+    k_unroll: int | None = None,
 ) -> ROCMNativePackage:
     """Package the exact Schedule-to-Tile artifact without re-entering Graph IR.
 
@@ -1574,6 +1574,14 @@ def package_scheduled_matmul(
             "ROCm scheduled matmul requires an exact gfx1151/gfx1201 f16/bf16-to-f32 "
             "or int8/int4-to-i32 contract (or OCP FP8 e4m3/e5m2 to f32 on gfx1201)")
     arch = artifact.architecture
+    if k_unroll is None:
+        # A performance key: derived from the measured rule unless the caller
+        # pins one (the gap recorder does). Recorded in provenance either way.
+        from .scheduled_matmul import rocm_k_unroll
+        k_unroll = rocm_k_unroll(artifact.m, artifact.n, artifact.k, arch=arch,
+                                 dynamic=artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k)
+    if staging == "lds" and k_unroll != 1:
+        raise ValueError("ROCm LDS staging and K unrolling are separate physical schedules")
     (
         target_ir,
         backend_ir,
@@ -1661,6 +1669,7 @@ def package_scheduled_matmul(
             # LDS: WM x WN waves per workgroup staging the block tile through
             # shared memory (typed-route gap, 2026-09-18).
             "physical_route": (f"{arch}_register_wmma_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}"
+                               + (f"_k{k_unroll}" if k_unroll > 1 else "")
                                if staging == "register" else
                                f"{arch}_lds_wmma_{lds_waves[0]}x{lds_waves[1]}waves_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}"),
             "staging": staging,

@@ -499,3 +499,39 @@ def test_gfx1201_external_reader_orders_reuse_and_retirement(checkpoint, asynchr
         assert hip.hipStreamSynchronize(consumer)==0
         for ptr in copies: assert hip.hipFree(ptr)==0
         assert hip.hipStreamDestroy(consumer)==0
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("start,end", [(0, 1), (3, 10), (7, 9), (0, 16)])
+def test_gfx1201_scheduled_paged_kv_package_executes(start, end):
+    """GFX1201-PARITY, the last family: the paged-KV read package on RDNA4.
+
+    The generator is a scalar per-thread gather (no WMMA fragment). This is
+    the gfx1201 row the family's promotion rests on; the gfx1151 twin is
+    `test_rocm_e2e_spine.py::test_exact_gfx1151_paged_kv_descriptor_matches_permuted_page_oracle`."""
+    from tessera import runtime as rt
+    from tests.unit.test_rocm_e2e_spine import _paged_kv_module
+
+    assert rt._rocm_live_arch() == "gfx1201"
+    package = rocm_native.package_paged_kv_read(
+        _paged_kv_module(start=start, end=end), pipeline_name="tessera-lower-to-rocm",
+        architecture="gfx1201")
+    assert package.image.architecture == "gfx1201"
+    assert package.image.target == "rocm_gfx1201"
+    assert package.descriptor.abi_id == rocm_native.GFX_PAGED_KV_F32_ABI
+    artifact = rt.RuntimeArtifact(
+        graph_ir="graph", tile_ir=package.tile_ir, target_ir=package.target_ir,
+        metadata={"target": "rocm_gfx1201"}, native_image=package.image,
+        launch_descriptor=package.descriptor)
+    rng = np.random.default_rng(2203 + start)
+    pages = np.ascontiguousarray(rng.standard_normal((4, 4, 3, 8)), dtype=np.float32)
+    table = np.array([2, 0, 3, 1], dtype=np.int32)
+    logical = pages[table].reshape(16, 3, 8)
+    tokens = end - start
+    output = np.zeros((tokens, 3, 8), dtype=np.float32)
+    result = rt.launch(artifact, {
+        "pages": pages, "page_table": table, "slice": output,
+        "P": 4, "LP": 4, "PageSize": 4, "H": 3, "D": 8, "Start": start, "Tokens": tokens})
+    assert result["ok"] is True and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    np.testing.assert_array_equal(output, logical[start:end])

@@ -442,6 +442,16 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   const bool rocmWmmaChip = schedule.target == "rocm" &&
                             (schedule.arch.contains("gfx1151") ||
                              schedule.arch.contains("gfx1201"));
+  // gfx1201's shape-selected macro tile. Derived on f16 (typed-route gap
+  // packet, 2026-09-18) and, since 2026-09-19, applied to every storage the
+  // chip admits: fp8 and the integer pair were left on a hardcoded 1x1 while
+  // carrying 2x and 4x f16's ceiling, which measured 3.3x-4.5x slower than
+  // this panel on Tajasarus. Mirrored by `scheduled_matmul.rocm_gfx1201_panel`
+  // and checked against it by the artifact projection.
+  const bool gfx1201StaticPanel =
+      !schedule.dynamicM && !schedule.dynamicN && !schedule.dynamicK &&
+      schedule.m >= 1024 && schedule.n >= 1024 && schedule.m % 64 == 0 &&
+      schedule.n % 64 == 0;
   if (rocmWmmaChip && lhsElement == rhsElement &&
       (lhsElement.isInteger(8) || lhsElement.isInteger(4)) &&
       !lhsElement.isUnsignedInteger() && outElement.isInteger(32) &&
@@ -456,8 +466,10 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.accum = "i32";
     schedule.output = "i32";
     const bool rdna4 = schedule.arch.contains("gfx1201");
-    schedule.macroTileM = rdna4 ? 16 : 32;
-    schedule.macroTileN = rdna4 ? 16 : 64;
+    // gfx1151 keeps its committed 2x4 until its own sweep says otherwise;
+    // evidence never transfers between the two chips.
+    schedule.macroTileM = rdna4 ? (gfx1201StaticPanel ? 64 : 16) : 32;
+    schedule.macroTileN = rdna4 ? (gfx1201StaticPanel ? 64 : 16) : 64;
     return schedule;
   }
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
@@ -469,8 +481,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     // epilogue yet (GFX1201-PARITY slice 5).
     schedule.storage = isa<Float8E4M3FNType>(lhsElement) ? "e4m3" : "e5m2";
     schedule.accum = "f32";
-    schedule.macroTileM = 16;
-    schedule.macroTileN = 16;
+    schedule.macroTileM = gfx1201StaticPanel ? 64 : 16;
+    schedule.macroTileN = gfx1201StaticPanel ? 64 : 16;
     return schedule;
   }
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
@@ -493,13 +505,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     // packager picks the K unroll (`scheduled_matmul.rocm_k_unroll`).
     schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
-    const bool staticShape =
-        !schedule.dynamicM && !schedule.dynamicN && !schedule.dynamicK;
-    const bool panel4x4 = staticShape && schedule.m >= 1024 &&
-                          schedule.n >= 1024 && schedule.m % 64 == 0 &&
-                          schedule.n % 64 == 0;
-    schedule.macroTileM = panel4x4 ? 64 : 16;
-    schedule.macroTileN = panel4x4 ? 64 : 16;
+    schedule.macroTileM = gfx1201StaticPanel ? 64 : 16;
+    schedule.macroTileN = gfx1201StaticPanel ? 64 : 16;
     return schedule;
   }
   if (rocm && lhsElement == rhsElement &&

@@ -1906,6 +1906,19 @@ struct GenerateWMMAGemmKernelPass
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernel(true);
+      // The 256-VGPR ceiling this body hits at the 4x4 panel is ARCHITECTURAL,
+      // not an occupancy default: RDNA4 ISA 3.3.2.1 -- "VGPRs are allocated in
+      // blocks of 16 for wave32 or 8 for wave64, and a shader may have up to
+      // 256 VGPRs" -- and dynamic VGPR mode (3.3.3) caps at the same 256 with
+      // a 32-VGPR block size, 128 with 16. The 768 KiB file is per CU and
+      // shared across wave slots; no occupancy request hands one wave more
+      // than 256. A `waves-per-eu` knob briefly lived here to test the
+      // opposite hypothesis (that constraining to one wave per SIMD would
+      // lift the cap, as it does on CDNA); the attribute reached the llvm.func
+      // and changed nothing, and the ISA says why. It is deleted rather than
+      // left as an unconsumed declaration (Decision #29). Reducing the panel's
+      // live-register footprint is the lever; raising the ceiling is not
+      // available.
       // The typed 2x4 f16/bf16 body carries gfx1151's performance-closure
       // digest (TileToROCM refuses it on any other arch). Stamp it only when
       // the request is gfx11's: the op's `arch`/`schedule_arch`, else the

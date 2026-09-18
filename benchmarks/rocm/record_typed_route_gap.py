@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
-"""The typed Tile route's f16 GEMM against the lanes it competes with, on the
+"""The typed Tile route's GEMM against the lanes it competes with, on the
 host chip: a measured gap, never an admission.
+
+`--dtype` selects the operand storage (fp16 by default; also bf16, fp8_e4m3,
+fp8_e5m2, int8, int4). This exists because the panel and K-unroll rules were
+derived on f16 and applied to f16 alone, while the fp8 and integer branches
+of `lower_scheduled_matmul` still hardcode the 1x1 tile -- and on RDNA4 those
+storages carry 2x and 4x the f16 ceiling, so they are the rows most worth
+tiling. Each storage brings its own reference and error budget: an integer
+product is exact in i32, so an integer row with any error at all is a wrong
+kernel rather than a tolerance question. The directive and shipped HIP lanes
+are f16 kernels with no counterpart at another storage, so they appear only
+in the fp16 packet instead of being compared against a different program.
 
 Variants, per shape, each in a fresh process (three runs, medians):
 
@@ -73,7 +84,69 @@ LDS_WAVES = [(2, 2), (4, 2)]
 #: established loop). Latency hiding without registers for a bigger tile.
 K_UNROLL = [1]
 ROUNDS = 3
-ERROR_BUDGET = 2e-2  # relative to max |reference|, f16 storage / f32 accumulate
+
+
+class _Storage:
+    """What one operand storage needs from the harness.
+
+    The typed route admits five storages on these chips and they do not share
+    a reference: an integer product is *exact* in i32, so an integer row with
+    any relative error at all is a wrong kernel rather than a tolerance
+    question, while f16 accumulates in f32 and earns a budget. Keeping the
+    budget beside the dtype is what stops an f16 tolerance from being applied
+    to an int4 row, which would hide exactly the packing defects the nibble
+    order can produce.
+    """
+
+    def __init__(self, name, operand, out, budget, low=None, high=None):
+        self.name = name        # the `dtype=` the Graph module is built with
+        self.operand = operand  # numpy dtype the host buffers carry
+        self.out = out          # numpy dtype of the device result
+        self.budget = budget    # max relative error against the reference
+        self.low, self.high = low, high  # integer operand range, when integral
+
+    @property
+    def output_dtype(self):
+        """The Graph result dtype. An integer WMMA accumulates in i32 and its
+        contract is rejected outright with an f32 result, so this rides the
+        storage rather than defaulting."""
+        return "int32" if self.integral else "fp32"
+
+    @property
+    def integral(self):
+        return self.low is not None
+
+    def operands(self, rng, m, n, k):
+        if self.integral:
+            a = rng.integers(self.low, self.high + 1, size=(m, k), dtype=np.int8)
+            b = rng.integers(self.low, self.high + 1, size=(k, n), dtype=np.int8)
+            return a, b
+        a = (rng.standard_normal((m, k)) * 0.25).astype(self.operand)
+        b = (rng.standard_normal((k, n)) * 0.25).astype(self.operand)
+        return a, b
+
+    def reference(self, a, b):
+        if self.integral:
+            return a.astype(np.int32) @ b.astype(np.int32)
+        return a.astype(np.float32) @ b.astype(np.float32)
+
+
+def _storages():
+    """Built lazily: ml_dtypes is not needed for the f16 lane."""
+    import ml_dtypes
+    return {
+        "fp16": _Storage("fp16", np.float16, np.float32, 2e-2),
+        "bf16": _Storage("bf16", ml_dtypes.bfloat16, np.float32, 6e-2),
+        # An fp8 product is exact in f32; only the accumulation order moves it.
+        "fp8_e4m3": _Storage("fp8_e4m3", ml_dtypes.float8_e4m3fn, np.float32, 2e-3),
+        "fp8_e5m2": _Storage("fp8_e5m2", ml_dtypes.float8_e5m2, np.float32, 2e-3),
+        # int4 rides an int8 container, one logical value per byte, [-8, 7].
+        "int8": _Storage("int8", np.int8, np.int32, 0.0, -8, 7),
+        "int4": _Storage("int4", np.int8, np.int32, 0.0, -8, 7),
+    }
+
+
+DTYPE = "fp16"
 
 
 def _hip():
@@ -92,8 +165,10 @@ def _memref(pointer, size):
 class _Loaded:
     """A loaded module variant with its device buffers, timed in rounds."""
 
-    def __init__(self, hip, hsaco, symbol, a, b, m, n, k, macro, threads=32):
+    def __init__(self, hip, hsaco, symbol, a, b, m, n, k, macro, threads=32,
+                 storage=None):
         self.hip = hip
+        self.storage = storage
         self.mod = ct.c_void_p()
         if hip.hipModuleLoadData(ct.byref(self.mod), hsaco) != 0:
             raise RuntimeError("hipModuleLoadData refused the image")
@@ -101,6 +176,8 @@ class _Loaded:
         if hip.hipModuleGetFunction(ct.byref(self.fn), self.mod, symbol.encode()) != 0:
             raise RuntimeError(f"kernel symbol {symbol!r} not found")
         self.dev = [ct.c_void_p(), ct.c_void_p(), ct.c_void_p()]
+        # Every admitted accumulator is 4 bytes wide (f32 or i32), so the
+        # output allocation does not vary with the operand storage.
         for dev, nbytes in zip(self.dev, (a.nbytes, b.nbytes, 4 * m * n)):
             if hip.hipMalloc(ct.byref(dev), nbytes) != 0:
                 raise RuntimeError("hipMalloc failed")
@@ -125,12 +202,15 @@ class _Loaded:
             if self.launch() != 0:
                 raise RuntimeError("warm-up launch failed")
         self.hip.hipDeviceSynchronize()
-        out = np.zeros((self.m, self.n), np.float32)
+        out = np.zeros((self.m, self.n), self.storage.out)
         self.hip.hipMemcpy(out.ctypes.data_as(ct.c_void_p), self.dev[2], 4 * self.m * self.n, 2)
-        ref = a.astype(np.float32) @ b.astype(np.float32)
-        rel = float(np.max(np.abs(out - ref)) / (np.max(np.abs(ref)) + 1e-6))
-        if not math.isfinite(rel) or rel > ERROR_BUDGET:
-            raise RuntimeError(f"numerical budget failed: relative error {rel:.3e}")
+        ref = self.storage.reference(a, b)
+        scale = float(np.max(np.abs(ref.astype(np.float64)))) + 1e-6
+        rel = float(np.max(np.abs(out.astype(np.float64) - ref.astype(np.float64))) / scale)
+        if not math.isfinite(rel) or rel > self.storage.budget:
+            raise RuntimeError(
+                f"numerical budget failed for {self.storage.name}: "
+                f"relative error {rel:.3e} > {self.storage.budget:.3e}")
         return rel
 
     def time_batch(self, iters):
@@ -148,14 +228,16 @@ class _Loaded:
         self.hip.hipModuleUnload(self.mod)
 
 
-def _typed_variants(chip, shape):
-    """The production Tile IR for this shape, re-panelled."""
+def _typed_variants(chip, shape, storage):
+    """The production Tile IR for this shape and storage, re-panelled."""
     from tessera.compiler import rocm_native, scheduled_matmul
     from tests.unit.test_scheduled_matmul_consumers import _module
 
     m, n, k = shape
     artifact = scheduled_matmul.lower_scheduled_matmul(
-        _module(target="rocm", shape=(m, k, n)), target=f"rocm_{chip}")
+        _module(target="rocm", shape=(m, k, n), dtype=storage.name,
+                output_dtype=storage.output_dtype),
+        target=f"rocm_{chip}")
     for macro_m, macro_n in PANELS:
         tile_ir = re.sub(r"tessera\.macro_tile_m = \d+ : i64", f"tessera.macro_tile_m = {macro_m} : i64",
                          artifact.tile_ir)
@@ -232,15 +314,19 @@ def worker(iters):
     chip = rt._rocm_chip()
     if rt._rocm_live_arch() != chip:
         raise RuntimeError(f"pinned chip {chip} is not the live device {rt._rocm_live_arch()}")
+    storage = _storages()[DTYPE]
     hip = _hip()
     rows = []
     for shape in SHAPES:
         m, n, k = shape
         rng = np.random.default_rng(1201)
-        a = (rng.standard_normal((m, k)) * 0.25).astype(np.float16)
-        b = (rng.standard_normal((k, n)) * 0.25).astype(np.float16)
-        variants = list(_typed_variants(chip, shape))
-        if chip.startswith("gfx11"):
+        a, b = storage.operands(rng, m, n, k)
+        variants = list(_typed_variants(chip, shape, storage))
+        # The directive lane and the shipped HIP library are f16 kernels. They
+        # are competitors for the f16 row and have no counterpart at another
+        # storage, so they are absent rather than silently compared against a
+        # different program.
+        if chip.startswith("gfx11") and storage.name == "fp16":
             name, (hsaco, symbol, macro) = _directive_variant(chip, shape)
             variants.append((name, (hsaco, symbol, macro, 32), {}))
         loaded = []
@@ -252,7 +338,8 @@ def worker(iters):
                 continue
             hsaco, symbol, macro, threads = spec
             try:
-                module = _Loaded(hip, hsaco, symbol, a, b, m, n, k, macro, threads)
+                module = _Loaded(hip, hsaco, symbol, a, b, m, n, k, macro, threads,
+                                 storage=storage)
                 row["relative_error"] = module.check(a, b)
                 loaded.append((row, module))
             except Exception as exc:
@@ -273,8 +360,9 @@ def worker(iters):
                        batch_ms=batches[id(row)], timing_source="host_wall_launch_and_sync")
             module.close()
         rows.extend(shape_rows)
-        rows.extend(_shipped_rows(shape, iters))
-    return dict(chip=chip, pid=os.getpid(), rows=rows)
+        if storage.name == "fp16":
+            rows.extend(_shipped_rows(shape, iters))
+    return dict(chip=chip, pid=os.getpid(), dtype=storage.name, rows=rows)
 
 
 def record(output, runs, iters):
@@ -287,11 +375,15 @@ def record(output, runs, iters):
             command += ["--panels", ",".join(f"{m}x{n}" for m, n in PANELS)]
             command += ["--shapes", ",".join("x".join(str(v) for v in s) for s in SHAPES)]
             command += ["--k-unroll", ",".join(str(u) for u in K_UNROLL)]
+            command += ["--dtype", DTYPE]
             if not LDS_WAVES:
                 command.append("--register-only")
             subprocess.run(command, check=True)
             results.append(json.loads(child.read_text()))
     chip = results[0]["chip"]
+    dtype = results[0].get("dtype", "fp16")
+    if any(run.get("dtype", "fp16") != dtype for run in results):
+        raise RuntimeError("cross-process storage differs")
     summary = []
     for index, row in enumerate(results[0]["rows"]):
         matches = [run["rows"][index] for run in results]
@@ -314,7 +406,8 @@ def record(output, runs, iters):
         summary.append(entry)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(dict(
-        schema="tessera.typed_route_gap.v1", chip=chip, host=platform.platform(),
+        schema="tessera.typed_route_gap.v1", chip=chip, dtype=dtype,
+        host=platform.platform(),
         iters=iters, runs=runs, summary=summary, raw=results,
         evidence_scope="measured_gap",
         promotion=dict(correctness_eligible=False, performance_eligible=False,
@@ -340,14 +433,23 @@ def main():
                         help="skip the LDS-staged variants (a register panel sweep)")
     parser.add_argument("--shapes", type=str, default=None,
                         help="comma-separated MxNxK shapes")
+    parser.add_argument("--dtype", type=str, default=None,
+                        help="operand storage: fp16 (default), bf16, fp8_e4m3, "
+                             "fp8_e5m2, int8, int4. The directive and shipped "
+                             "lanes are f16 kernels and appear only for fp16.")
     args = parser.parse_args()
-    global PANELS, LDS_WAVES, SHAPES, K_UNROLL
+    global PANELS, LDS_WAVES, SHAPES, K_UNROLL, DTYPE
     if args.panels:
         PANELS = [tuple(int(v) for v in p.split("x")) for p in args.panels.split(",")]
     if args.register_only:
         LDS_WAVES = []
     if args.shapes:
         SHAPES = [tuple(int(v) for v in s.split("x")) for s in args.shapes.split(",")]
+    if args.dtype:
+        if args.dtype not in _storages():
+            raise SystemExit(f"unknown storage {args.dtype!r}; "
+                             f"expected one of {', '.join(sorted(_storages()))}")
+        DTYPE = args.dtype
     if args.k_unroll:
         K_UNROLL = [int(v) for v in args.k_unroll.split(",")]
     if args.worker:

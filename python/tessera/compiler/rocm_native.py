@@ -1349,19 +1349,21 @@ def _compile_reduction_tile_ir(tile_ir: str):
     )
 
 
-def _compile_paged_kv_tile_ir(tile_ir: str):
+def _compile_paged_kv_tile_ir(tile_ir: str, *, architecture: str = "gfx1151"):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.paged_kv_read",
         family="paged_kv",
+        architecture=architecture,
     )
 
 
-def _compile_moe_dispatch_tile_ir(tile_ir: str):
+def _compile_moe_dispatch_tile_ir(tile_ir: str, *, architecture: str = "gfx1151"):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.moe_dispatch",
         family="moe_dispatch",
+        architecture=architecture,
     )
 
 
@@ -1381,12 +1383,15 @@ def _compile_scheduled_attention_tile_ir(tile_ir: str):
     )
 
 
-def _compile_scheduled_depth_attention_tile_ir(tile_ir: str, *, cooperative_width: bool = False):
+def _compile_scheduled_depth_attention_tile_ir(
+    tile_ir: str, *, cooperative_width: bool = False, architecture: str = "gfx1151"
+):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.depth_attention",
         family="depth_attention",
         depth_cooperative=cooperative_width,
+        architecture=architecture,
     )
 
 
@@ -1804,14 +1809,14 @@ def package_scheduled_depth_attention(
     artifact.validate()
     if (
         artifact.target != "rocm"
-        or artifact.architecture != "gfx1151"
+        or artifact.architecture not in {"gfx1151", "gfx1201"}
         or artifact.storage != "f32"
         or artifact.softmax != "f32"
         or artifact.accum != "f32"
         or artifact.statistics_recurrence != "rms_key_online_softmax_stats_v1"
         or artifact.merge_recurrence != "max_shifted_pairwise_merge_v1"
     ):
-        raise ValueError("ROCm depth attention requires the exact gfx1151 f32 contract")
+        raise ValueError("ROCm depth attention requires the exact gfx1151/gfx1201 f32 contract")
     (
         target_ir,
         backend_ir,
@@ -1820,11 +1825,13 @@ def package_scheduled_depth_attention(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = (_compile_scheduled_depth_attention_tile_ir(artifact.tile_ir,cooperative_width=True) if cooperative_width else _compile_scheduled_depth_attention_tile_ir(artifact.tile_ir))
+    ) = _compile_scheduled_depth_attention_tile_ir(
+        artifact.tile_ir, cooperative_width=cooperative_width,
+        architecture=artifact.architecture)
     entry = artifact.function_name
     image = NativeImageArtifact(
-        target="rocm_gfx1151",
-        architecture="gfx1151",
+        target=f"rocm_{artifact.architecture}",
+        architecture=artifact.architecture,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
         toolchain_fingerprint=toolchain_fp,
@@ -2078,7 +2085,7 @@ def package_reduction(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
     return ROCMNativePackage(tile_ir, target_ir, backend_ir, image, descriptor)
 
 
-def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativePackage:
+def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151") -> ROCMNativePackage:
     contract = _paged_kv_contract(module)
     if contract is None:
         raise ValueError(
@@ -2097,10 +2104,10 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str) -> ROCMN
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_paged_kv_tile_ir(tile_ir)
+    ) = _compile_paged_kv_tile_ir(tile_ir, architecture=architecture)
     image = NativeImageArtifact(
-        target="rocm_gfx1151",
-        architecture="gfx1151",
+        target=f"rocm_{architecture}",
+        architecture=architecture,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
         toolchain_fingerprint=toolchain_fp,
@@ -2811,7 +2818,7 @@ def package_scheduled_attention_backward(
     )
 
 
-def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativePackage:
+def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151") -> ROCMNativePackage:
     contract = _moe_dispatch_contract(module)
     if contract is None:
         raise ValueError(
@@ -2830,10 +2837,10 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str) -> ROCMNa
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_moe_dispatch_tile_ir(tile_ir)
+    ) = _compile_moe_dispatch_tile_ir(tile_ir, architecture=architecture)
     image = NativeImageArtifact(
-        target="rocm_gfx1151",
-        architecture="gfx1151",
+        target=f"rocm_{architecture}",
+        architecture=architecture,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
         toolchain_fingerprint=toolchain_fp,

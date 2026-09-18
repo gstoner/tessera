@@ -46,11 +46,15 @@ namespace {
 
 void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                         Type storeTy, StringRef featureMap, bool decay,
-                        bool viaTile) {
+                        bool viaTile, bool rdna4) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
-  auto fragTy = VectorType::get({16}, storeTy);
+  // gfx11 replicates each 16-element A/B fragment across both half-waves;
+  // RDNA4 (gfx12) hands each half-wave its own 8 elements and lays the 8
+  // accumulator rows out as `e + 8*half` instead of `2e + half`. Same
+  // switch as the flash-attention generator (GFX1201-PARITY 2026-09-17).
+  auto fragTy = VectorType::get({rdna4 ? 8 : 16}, storeTy);
   auto accTy = VectorType::get({8}, f32);
   StringRef fragmentElem = storeTy.isF16() ? "f16" : "bf16";
   auto aFragmentTy = tessera::tile::FragmentType::get(
@@ -139,12 +143,21 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   lastKt = b.create<arith::SelectOp>(loc, over, nKVm1, lastKt);
   Value upper = add(lastKt, c1);
 
+  Value upperHalf = b.create<arith::CmpIOp>(loc, ne, half, c0);
   auto buildFrag = [&](OpBuilder &bb, Location l,
                        function_ref<Value(int64_t)> elt) {
     Value fr = fragZero;
-    for (int64_t i = 0; i < 16; ++i)
-      fr = bb.create<vector::InsertOp>(l, elt(i), fr, ArrayRef<int64_t>{i});
+    for (int64_t i = 0; i < (rdna4 ? 8 : 16); ++i) {
+      Value element = elt(i);
+      if (rdna4)
+        element = bb.create<arith::SelectOp>(l, upperHalf, elt(i + 8), element);
+      fr = bb.create<vector::InsertOp>(l, element, fr, ArrayRef<int64_t>{i});
+    }
     return fr;
+  };
+  // Accumulator row owned by lane element `e` on this half-wave.
+  auto accRow = [&](int64_t e) -> Value {
+    return rdna4 ? add(ci(e), mul(half, ci(8))) : add(ci(2 * e), half);
   };
   auto wmma = [&](OpBuilder &bb, Location l, Value a, Value bb2,
                   Value acc) -> Value {
@@ -206,10 +219,10 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       });
       cs = wmma(b, loc, aFrag, bFrag, cs);
     }
-    // mask -> sS[qi*16 + ki], qi = 2e+half, ki = l15. MULTIPLICATIVE: a masked
+    // mask -> sS[qi*16 + ki], qi = accRow(e), ki = l15. MULTIPLICATIVE: a masked
     // entry becomes 0 (vs −∞ for softmax). Mask = ragged key OR (causal future).
     for (int64_t e = 0; e < 8; ++e) {
-      Value qi = add(ci(2 * e), half);
+      Value qi = accRow(e);
       Value gk = add(k0, l15);
       Value csv = b.create<vector::ExtractOp>(loc, cs, ArrayRef<int64_t>{e});
       Value gkOOB = b.create<arith::CmpIOp>(loc, sge, gk, Sk);
@@ -253,7 +266,7 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       });
       Value cpv = wmma(b, loc, apFrag, bvFrag, accZero);
       for (int64_t e = 0; e < 8; ++e) {
-        Value qi = add(ci(2 * e), half);
+        Value qi = accRow(e);
         Value d = add(dc16, l15);
         Value cpe = b.create<vector::ExtractOp>(loc, cpv, ArrayRef<int64_t>{e});
         Value idx = add(mul(qi, cD), d);
@@ -366,6 +379,17 @@ struct GenerateWMMALinearAttnKernelPass
       bool decay = false;
       if (auto a = op->getAttrOfType<BoolAttr>("decay"))
         decay = a.getValue();
+      // The fragment layout is an arch fact: gfx11 (16-element replicated
+      // fragments, rows 2e+half) or RDNA4 (8-element half-wave fragments,
+      // rows e+8*half). An absent attribute keeps the gfx1151 contract.
+      auto archAttr = op->getAttrOfType<StringAttr>("arch");
+      StringRef arch = archAttr ? archAttr.getValue() : "gfx1151";
+      if (arch != "gfx1151" && arch != "gfx1201") {
+        op->emitError("generate-wmma-linear-attn-kernel: fragment architecture "
+                      "must be gfx1151 or gfx1201 (got '")
+            << arch << "')";
+        return signalPassFailure();
+      }
 
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -383,7 +407,7 @@ struct GenerateWMMALinearAttnKernelPass
       gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitLinearAttnBody(body, loc, gpuFunc, D, storeTy, featureMap, decay,
-                         viaTile);
+                         viaTile, arch == "gfx1201");
       op->erase();
     }
   }

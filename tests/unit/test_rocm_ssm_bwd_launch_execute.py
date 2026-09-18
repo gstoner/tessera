@@ -13,6 +13,8 @@ test runs on real gfx1151 and matches the numpy VJP oracle.
 from __future__ import annotations
 
 import numpy as np
+
+from tests._support import rocm_build
 import pytest
 
 import tessera as ts
@@ -112,6 +114,7 @@ def test_launch_rocm_ssm_bwd_matches_vjp(n, a_1d, gated):
 
 def test_public_selective_ssm_records_exact_gfx1151_certificate() -> None:
     _ssm_or_skip()
+    rocm_build.require_rocm_host_arch("gfx1151", "the selective-SSM VJP lane stamps rocm_gfx1151 as its evidence target (GFX1201-PARITY slice 2b)")
     from tessera.compiler.native_vjp_plugins import (
         native_vjp_exact_execution_coverage,
         validate_native_vjp_execution_certificate,

@@ -206,6 +206,9 @@ def _reject_bodyless_image(image: bytes, backend: str, entry: str, llvm_bin: Pat
     an equivalent silent loss there would still ship. That gap is named in
     `docs/audit/backend/nvidia/todo.md` rather than papered over.
     """
+    if backend == 'nvidia':
+        _reject_bodyless_cuda_image(image, entry)
+        return
     if backend != 'rocm':
         return
     objdump = _resolve_tool(llvm_bin / 'llvm-objdump')
@@ -225,6 +228,64 @@ def _reject_bodyless_image(image: bytes, backend: str, entry: str, llvm_bin: Pat
             'read back whatever was in the buffer. A device-library call whose body the binary '
             'serialization drops produces exactly this image; serialize the same module with '
             'gpu-module-to-binary{format=isa} to see whether the implementation survives there.')
+
+
+def _cuda_disassembler() -> Path | None:
+    """`cuobjdump` from the CUDA toolkit, if this host has one.
+
+    Not a matched-LLVM tool, so it is looked up where the toolkit lives
+    (`CUDA_HOME`, `CUDA_PATH`, `/usr/local/cuda`) and on PATH, and its absence
+    is a documented gap rather than a refusal: a host that cannot disassemble
+    the cubin cannot falsify this claim, and says so through
+    `cuda_store_check_available()`.
+    """
+    import os
+    import shutil
+    candidates = []
+    for env in ('CUDA_HOME', 'CUDA_PATH'):
+        root = os.environ.get(env)
+        if root:
+            candidates.append(Path(root) / 'bin' / 'cuobjdump')
+    candidates.append(Path('/usr/local/cuda/bin/cuobjdump'))
+    found = shutil.which('cuobjdump')
+    if found:
+        candidates.append(Path(found))
+    for path in candidates:
+        if path.is_file() and os.access(path, os.X_OK):
+            return path
+    return None
+
+
+def cuda_store_check_available() -> bool:
+    return _cuda_disassembler() is not None
+
+
+def _reject_bodyless_cuda_image(image: bytes, entry: str) -> None:
+    """The cubin-side twin of the AMDGPU store check (NVIDIA queue, 2026-09-16).
+
+    `gpu-module-to-binary` on the NVVM route hands back a fatbin; `cuobjdump
+    --dump-sass` lists its SASS, and every kernel in this ABI writes at least
+    one output buffer, so a kernel body with no global store (`STG`) is the
+    same silent body loss the ROCm guard refuses. Without the toolkit's
+    disassembler the check is skipped, never faked.
+    """
+    tool = _cuda_disassembler()
+    if tool is None:
+        return
+    with tempfile.TemporaryDirectory(prefix='tessera-native-cuda-image-') as tmp:
+        path = Path(tmp) / 'kernel.fatbin'
+        path.write_bytes(image)
+        result = subprocess.run([str(tool), '--dump-sass', str(path)],
+                                capture_output=True, text=True)
+    if result.returncode != 0:
+        raise ValueError('native storage package: the CUDA image could not be disassembled for validation: '
+                         + (result.stderr or result.stdout).strip()[:400])
+    body = [line for line in result.stdout.splitlines() if line.lstrip().startswith('/*')]
+    if not any(' STG' in line or ' ST.E' in line or ' ST ' in line for line in body):
+        raise ValueError(
+            f'native storage package: the packaged CUDA kernel @{entry} stores nothing ('
+            f'{len(body)} SASS instructions), so a launch would write no output and the caller '
+            'would read back whatever was in the buffer.')
 
 
 def _binary_pass(toolkit: Path | None) -> str:

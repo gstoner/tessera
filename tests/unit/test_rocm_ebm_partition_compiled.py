@@ -10,6 +10,8 @@ import shutil
 import numpy as np
 import pytest
 
+from tests._support.rocm_build import runtime_for_host
+
 from tessera.ebm.partition import partition_exact_from_energies
 
 
@@ -18,8 +20,8 @@ def _rocm_or_skip():
     if not (shutil.which("hipcc") or os.path.exists("/opt/rocm/bin/hipcc")):
         pytest.skip("no hipcc")
     if not rt._rocm_wmma_runtime_available():
-        pytest.skip("no live gfx1151")
-    return rt
+        pytest.skip("no usable AMD GPU")
+    return runtime_for_host(rt)  # unpromoted-family refusals for this host skip
 
 
 def _ref(E, T):

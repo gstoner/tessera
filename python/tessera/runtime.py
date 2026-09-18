@@ -9890,7 +9890,7 @@ def _build_compiled_linear_attn_hsaco(
     directive = (
         "module {\n"
         '  "tessera_rocm.linear_attn"() {name = "la", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{fm_attr}{decay_attr}}} '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}", arch = "{chip}"{fm_attr}{decay_attr}}} '
         ": () -> ()\n"
         "}\n"
     )
@@ -32391,11 +32391,10 @@ def _execute_rocm_solver_ift(artifact: RuntimeArtifact, args: Any) -> Any:
         'linear_solver = "diagonal_matrix_free_v1", dtype = "f32"} '
         ': () -> ()\n}\n'
     )
+    # The per-arch proof rule lives in rocm_pipeline.promoted_families (the
+    # family gate below refuses an unpromoted arch by name); a second chip
+    # check here pinned the family to gfx1151 after gfx1201 had its evidence.
     chip = _rocm_chip()
-    if chip != "gfx1151":
-        raise ValueError(
-            f"solver IFT package is verified for gfx1151, not {chip or 'unknown'}"
-        )
     hsaco = _build_rocm_family_hsaco(
         "solver_ift",
         directive,

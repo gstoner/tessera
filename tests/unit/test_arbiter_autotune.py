@@ -146,6 +146,39 @@ def test_device_timing_is_separate_and_can_choose_a_different_winner():
     assert tag == "device_real"
 
 
+def test_default_dispatch_consults_the_device_timed_row_first():
+    # The production entry point (`run_arbitrated` with its default wall-clock
+    # timing) must read a device-timed verdict when one exists: the sm_120
+    # corpus held device rows proving the emitted GEMM 1.5-1.7x faster than
+    # the delegate, and nothing in production consulted them -- dispatch fell
+    # back to tier priority and ranked the fastest kernel last.
+    wall_fast = _FakeCand("fake_dflt_wall_fast", "dflt_wall_real", delay=0.0,
+                          device_ms=2.0)
+    device_fast = _FakeCand("fake_dflt_device_fast", "dflt_device_real",
+                            delay=0.003, device_ms=0.25)
+    wall_fast.target = device_fast.target = "d2_default_faketarget"
+    register_candidate(wall_fast)
+    register_candidate(device_fast)
+    region, cache = _FakeRegion(), AT.MeasureCache()
+    A, B = _mm()
+    AT.measured_arbitrate(
+        region, OP_MATMUL, wall_fast.target, A, B, dims=(4, 4, 4), dtype="bfloat16",
+        cache=cache, reps=3, warmup=1, device="fakedev", timing="end_to_end")
+    # Only the wall-clock row exists: the default dispatch serves it.
+    _, tag = run_arbitrated(
+        region, OP_MATMUL, wall_fast.target, A, B, verify=False,
+        autotune_cache=cache, device="fakedev")
+    assert tag == "dflt_wall_real"
+    AT.measured_arbitrate(
+        region, OP_MATMUL, wall_fast.target, A, B, dims=(4, 4, 4), dtype="bfloat16",
+        cache=cache, reps=3, warmup=1, device="fakedev", timing="device")
+    # Both rows exist: the device-timed verdict wins the default dispatch.
+    _, tag = run_arbitrated(
+        region, OP_MATMUL, wall_fast.target, A, B, verify=False,
+        autotune_cache=cache, device="fakedev")
+    assert tag == "dflt_device_real"
+
+
 def test_persisted_corpus_drives_normal_arbitrated_dispatch():
     # A private target. A verdict is now only served when every live candidate
     # appears in its timed field, and `_TGT` accumulates candidates from other

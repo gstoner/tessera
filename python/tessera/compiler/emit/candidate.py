@@ -538,10 +538,24 @@ def run_arbitrated(region: Any, op: str, target: str, *inputs: Any,
     # module dependency becoming an import cycle.
     preferred = force
     if preferred is None and measure is None and use_corpus:
-        from tessera.compiler.emit.autotune import corpus_winner
-        preferred = corpus_winner(
-            region, op, target, *inputs, dims=dims, dtype=dtype,
-            cache=autotune_cache, device=device, timing=timing)
+        from tessera.compiler.emit.autotune import TIMING_DEVICE, corpus_winner
+        # A device-timed verdict (CUDA/HIP events, operands resident) ranks the
+        # kernels; the wall-clock one ranks the kernels plus their host
+        # overhead. When both exist the device row is consulted first: the
+        # sm_120 corpus proved the emitted PTX GEMM 1.5-1.7x faster than the
+        # shipped delegate on every shape, and until 2026-09-17 nothing in
+        # production read that row -- dispatch fell back to tier priority and
+        # ranked the fastest kernel last (NVIDIA queue,
+        # `NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30`). Either row is
+        # still only a hint: `arbitrate` re-runs availability and the F4 gate.
+        if timing != TIMING_DEVICE:
+            preferred = corpus_winner(
+                region, op, target, *inputs, dims=dims, dtype=dtype,
+                cache=autotune_cache, device=device, timing=TIMING_DEVICE)
+        if preferred is None:
+            preferred = corpus_winner(
+                region, op, target, *inputs, dims=dims, dtype=dtype,
+                cache=autotune_cache, device=device, timing=timing)
     winner = arbitrate(region, op, target, verify=verify, force=preferred,
                        measure=measure, inputs=inputs)
     if winner is None:

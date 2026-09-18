@@ -32212,7 +32212,9 @@ def _solver_ift_inputs(artifact: RuntimeArtifact, args: Any) -> tuple[Any, Any, 
         raise ValueError(f"solver IFT runtime rejects target {runtime_target!r}")
     target = {
         "x86": "x86",
-        "rocm": "rocm_gfx1151",
+        # The ROCm lineage names the chip this process launches on; the
+        # family gate has already refused an unpromoted one by name.
+        "rocm": f"rocm_{_rocm_chip()}",
         "nvidia_sm120": "nvidia_sm120",
     }[runtime_target]
     product_mode = str(contract.get("product_mode", "vjp"))
@@ -32829,7 +32831,7 @@ def _execute_physical_general_solver(
         raise ValueError("general solver rejected stale parent lineage")
     expected_target = {
         "x86": "x86",
-        "rocm": "rocm_gfx1151",
+        "rocm": f"rocm_{_rocm_chip()}",
         "nvidia_sm120": "nvidia_sm120",
     }[target]
     if contract.get("target") != expected_target:

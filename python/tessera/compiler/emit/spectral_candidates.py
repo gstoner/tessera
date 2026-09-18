@@ -763,7 +763,7 @@ def run_rocm_spectral_composite(
         raise RuntimeError("ROCm spectral composite package ABI mismatch")
     if (
         not hasattr(lib, "ts_spectral_composite_arch_amd")
-        or lib.ts_spectral_composite_arch_amd() != b"gfx1151"
+        or lib.ts_spectral_composite_arch_amd() != _composite_host_arch().encode()
     ):
         raise RuntimeError("ROCm spectral composite architecture mismatch")
     if not hasattr(lib, "ts_spectral_composite_plan_create_amd"):

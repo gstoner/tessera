@@ -635,7 +635,7 @@ def build_solver_ift_contract(
     if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
         raise ValueError(
             "solver IFT physical packages support x86, rocm_gfx1151, "
-            "rocm_gfx1201 and nvidia_sm120; unmeasured architectures fail closed"
+            f"rocm_gfx1201 and nvidia_sm120; {target!r} is unmeasured and fails closed"
         )
     normalized = tuple(int(dim) for dim in shape)
     if not normalized or any(dim <= 0 for dim in normalized):
@@ -702,7 +702,7 @@ def build_general_solver_product_contract(
     if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
         raise ValueError(
             "general solver products support x86, rocm_gfx1151, rocm_gfx1201 "
-            "and nvidia_sm120 contracts"
+            f"and nvidia_sm120 contracts; {target!r} is unmeasured and fails closed"
         )
     normalized = tuple(int(dim) for dim in shape)
     if not normalized or any(dim <= 0 for dim in normalized):
@@ -881,7 +881,7 @@ def compile_physical_general_solver_from_graph(
     if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
         raise ValueError(
             "automatic residual packaging supports x86, rocm_gfx1151, "
-            "rocm_gfx1201 and nvidia_sm120"
+            f"rocm_gfx1201 and nvidia_sm120; {target!r} is unmeasured and fails closed"
         )
     if len(module.functions) != 1:
         raise ValueError("automatic residual packaging requires exactly one Graph function")

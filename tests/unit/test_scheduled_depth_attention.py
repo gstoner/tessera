@@ -167,15 +167,22 @@ def test_driver_records_depth_attention_schedule_tile_target_lineage(monkeypatch
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(
     os.environ.get("TESSERA_ROCM_E2E_DEVICE_TEST") != "1",
-    reason="set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host",
+    reason="set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact ROCm host",
 )
-def test_gfx1151_depth_attention_matches_reference() -> None:
+def test_rocm_depth_attention_matches_reference() -> None:
     from tessera._block_attnres_ops import depth_attn
+    from tests._support.rocm_build import rocm_host_arch
 
+    # One test, two proofs: the artifact and package name the host's own chip
+    # (gfx1151 on Princess-Luna, gfx1201 on Tajasarus); evidence never transfers.
+    arch = rocm_host_arch()
+    if arch not in {"gfx1151", "gfx1201"}:
+        pytest.skip(f"no owned ROCm depth-attention profile for host arch {arch!r}")
+    target = f"rocm_{arch}"
     bundle = compile_graph_module(
         _module(sources=7),
         source_origin="block-attnres-phase5-exact-device",
-        target="rocm_gfx1151",
+        target=target,
         options={"package_native": True},
         enable_tool_validation=False,
     )
@@ -186,7 +193,7 @@ def test_gfx1151_depth_attention_matches_reference() -> None:
     output = np.zeros((3, 8), dtype=np.float32)
     result = rt.launch(
         rt.RuntimeArtifact(
-            metadata={"target": "rocm_gfx1151"},
+            metadata={"target": target},
             native_image=bundle.native_image,
             launch_descriptor=bundle.launch_descriptor,
             tile_ir=bundle.tile.text,

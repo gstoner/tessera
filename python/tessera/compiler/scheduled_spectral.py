@@ -229,9 +229,23 @@ _ARCHITECTURE_PROFILES = {
 }
 
 
+def _resolve_rocm_alias(target: str) -> str:
+    """``"rocm"`` names the chip this process launches on (the runtime's pin).
+
+    The alias used to be a second spelling of ``rocm_gfx1151``; on the gfx1201
+    box that stamped every composite package for a chip the host does not have
+    (GFX1201-PARITY 2026-09-17).
+    """
+    if target != "rocm":
+        return target
+    from tessera import runtime as _rt
+
+    return f"rocm_{_rt._rocm_chip()}"
+
+
 def spectral_architecture_profile(target: str) -> SpectralArchitectureProfile:
     try:
-        return _ARCHITECTURE_PROFILES[target]
+        return _ARCHITECTURE_PROFILES[_resolve_rocm_alias(target)]
     except KeyError as error:
         raise ValueError(f"unsupported scheduled TSOL target {target!r}") from error
 

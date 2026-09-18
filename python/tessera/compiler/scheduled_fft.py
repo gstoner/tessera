@@ -16,6 +16,13 @@ _FFT_OPS = ("tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft")
 _HASH_RE = re.compile(r'tessera\.schedule_hash = "([0-9a-f]{64})"')
 
 
+def _rocm_alias_chip() -> str:
+    """The chip ``target="rocm"`` names: the runtime's pin, never a literal."""
+    from tessera import runtime as _rt
+
+    return _rt._rocm_chip()
+
+
 def _prefer_x86_mixed_radix(length: int, radices: tuple[int, ...] | None) -> bool:
     """Evidence-derived work gate for the Zen 5 mixed-radix candidate.
 
@@ -203,7 +210,7 @@ def lower_scheduled_fft(
         raise ValueError("scheduled FFT axis is out of range")
     target_profiles = {
         "x86": ("x86", "zen5-avx512"),
-        "rocm": ("rocm", "gfx1151"),
+        "rocm": ("rocm", _rocm_alias_chip()),
         "rocm_gfx1151": ("rocm", "gfx1151"),
         "rocm_gfx1201": ("rocm", "gfx1201"),
         "nvidia_sm120": ("nvidia_sm120", "sm120"),
@@ -426,7 +433,7 @@ def validate_scheduled_fft_metadata(
 ) -> Mapping[str, Any]:
     target_profiles = {
         "x86": ("x86", "zen5-avx512"),
-        "rocm": ("rocm", "gfx1151"),
+        "rocm": ("rocm", _rocm_alias_chip()),
         "rocm_gfx1151": ("rocm", "gfx1151"),
         "rocm_gfx1201": ("rocm", "gfx1201"),
         "nvidia_sm120": ("nvidia_sm120", "sm120"),

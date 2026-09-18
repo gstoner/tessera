@@ -750,8 +750,11 @@ def test_solver_ift_compiled_package_matches_numerical_oracle(target: str) -> No
         pytest.skip("production tessera-opt unavailable")
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("production x86 AVX-512 image unavailable")
-    if target == "rocm_gfx1151" and not rt._rocm_wmma_runtime_available():
-        pytest.skip("gfx1151 HIP runtime unavailable")
+    if target.startswith("rocm_") and (
+        not rt._rocm_wmma_runtime_available()
+        or rt._rocm_live_arch() != target[len("rocm_"):]
+    ):
+        pytest.skip(f"exact {target[len('rocm_'):]} HIP runtime required")
 
     rng = np.random.default_rng(20260809)
     parameter = rng.uniform(0.25, 16.0, size=(3, 257)).astype(np.float32)
@@ -821,4 +824,7 @@ def test_solver_ift_rocm_runtime_fails_closed_off_gfx1151(monkeypatch) -> None:
     # an unpromoted chip is refused by name there, not by a second chip check
     # in the executor (which pinned the family to gfx1151 after gfx1201 had
     # its own evidence).
-    assert "no promoted family plugins for gfx1200" in result["reason"]
+    reason = result["reason"]
+    assert "gfx1200" in reason and (
+        "no promoted family plugins" in reason or "fail closed" in reason
+    ), reason

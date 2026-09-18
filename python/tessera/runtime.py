@@ -6390,6 +6390,40 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     return D
 
 
+def _nvidia_nvfp4_emitted_mma(a_codes: Any, b_codes: Any, scale_a: Any, scale_b: Any) -> Any:
+    """The compiler-EMITTED sm_120a NVFP4 block-scale warp tile
+    (`ptx_emit.emit_nvfp4_block_scale_mma_ptx`) on the launch bridge:
+    D[16,8] f32 = A[16,64] e2m1 * B[64,8] e2m1 with ue4m3 per-block scales.
+    Operands are logical code arrays; `nvfp4_fragments` lays them out per lane
+    and folds the accumulator back. One fixed tile -- the emitted kernel has no
+    general-shape dispatch, so this is a consumer, not an arbiter candidate."""
+    import numpy as np
+    from tessera.compiler import nvfp4_fragments as nf
+    from tessera.compiler import ptx_emit as pe
+
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    entry = pe.TESSERA_NVFP4_MMA_ENTRY
+    if entry not in _nvidia_ptx_registered:
+        if _register_nvidia_ptx(lib, entry, pe.emit_nvfp4_block_scale_mma_ptx()) != 0:
+            raise RuntimeError(f"ptx register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    a_words, b_words, sfa, sfb = nf.pack_nvfp4_mma_fragments(a_codes, b_codes, scale_a, scale_b)
+    a_words = np.ascontiguousarray(a_words, np.uint32)
+    b_words = np.ascontiguousarray(b_words, np.uint32)
+    sfa = np.ascontiguousarray(sfa, np.uint32)
+    sfb = np.ascontiguousarray(sfb, np.uint32)
+    d_words = np.zeros((nf.LANES, 4), np.float32)
+    bufs = (ctypes.c_void_p * 5)(a_words.ctypes.data, b_words.ctypes.data,
+                                 sfa.ctypes.data, sfb.ctypes.data, d_words.ctypes.data)
+    dims = (ctypes.c_int64 * 1)(0)
+    rc = lib.tessera_nvidia_ptx_invoke(entry.encode(), bufs, 5, dims, 0)
+    if rc != 0:
+        raise RuntimeError(f"emitted NVFP4 tile invoke: {_nvidia_ptx_failure(lib, rc)}")
+    return nf.unpack_nvfp4_mma_accumulator(d_words)
+
+
 def _nvidia_ptx_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
                                     reps: int = 100, warmup: int = 10) -> float:
     """CUDA-event kernel latency of the compiler-EMITTED GEMM, operands resident.

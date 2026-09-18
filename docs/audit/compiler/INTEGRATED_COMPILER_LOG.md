@@ -4364,7 +4364,12 @@ Outcome: **gfx1201 goes from 7 to 31 promoted families, and the promotion is a m
 
 **The eight that failed were a record, not a result.** The optimizer VJP plugin lanes stamp `rocm_gfx1151` as their evidence target and name their consumer for that chip, so the certificate validator reported `runtime_unattested` on gfx1201 after the numerics had already matched. That is the validator doing its job (Decision #26: a claim about gfx1151 does not become gfx1201 evidence by running there). Those eight tests are now pinned explicitly to gfx1151 with a helper whose skip reason names both archs and the owning item; slice 2b makes `rocm_gfx1201` a first-class target name on the stateful/optimizer lanes.
 
-FLEET_TABLE
+| Host | Full `-m "not slow"` sweep at `8251b9e5` |
+|---|---|
+| Tajasarus (gfx1201, assertions LLVM) | **18538 passed, 3539 skipped** (was 17566 / 4519 at `main`); 8 failed = the new pin helper raising `NameError` instead of skipping (fixed in `58fb7dcd`, re-run: 35 passed, 8 skipped with the named reason); `check-tessera-rocm` 69/69 in both trees; `tests/tessera-ir` 493/493 both trees |
+| Princess-Luna (gfx1151) | **19501 passed, 0 failed, 2584 skipped**; `check-tessera-rocm` 69/69; `tests/tessera-ir` 493/493 |
+| Super-Bear (sm_120) | **16093 passed, 0 failed, 5992 skipped**; both trees built |
+| Mac (M1 Max) | **18406 passed, 0 failed, 3678 skipped**; `tests/tessera-ir` 493/493; doc, plan and generated-doc gates clean |
 
 Remaining: slice 2b (the `rocm_gfx1151` target-name key in `stateful_training.py`, `native_vjp_plugins.py`, `jit.py`, `gpu_target_map.py`); slice 1b (int8/int4 storage on the typed route); slices 3–5 as listed in the ROCm queue.
 

@@ -73,7 +73,7 @@ def test_gfx1201_scheduled_package_executes(family):
 
 @pytest.mark.parametrize(
     "architecture,abi",
-    [("gfx1151", rocm_native.GFX1151_REDUCE_F32_ABI), ("gfx1201", rocm_native.GFX1151_PAGED_KV_F32_ABI)],
+    [("gfx1151", rocm_native.GFX_REDUCE_F32_ABI), ("gfx1201", rocm_native.GFX_PAGED_KV_F32_ABI)],
 )
 def test_gfx1201_cached_launcher_keeps_architecture_and_family_gate(architecture, abi):
     from tessera import runtime as rt

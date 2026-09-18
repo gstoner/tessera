@@ -122,7 +122,7 @@ def test_rocm_package_consumes_exact_depth_attention_artifact(monkeypatch) -> No
         artifact, pipeline_name="tessera-lower-to-rocm"
     )
     assert package.tile_ir == artifact.tile_ir
-    assert package.descriptor.abi_id == rocm_native.GFX1151_DEPTH_ATTN_F32_ABI
+    assert package.descriptor.abi_id == rocm_native.GFX_DEPTH_ATTN_F32_ABI
     assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
     assert package.descriptor.provenance["algorithm"] == (
         "rms_key_online_softmax_stats_v1"

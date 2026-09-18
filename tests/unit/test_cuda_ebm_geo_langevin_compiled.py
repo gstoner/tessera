@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from tessera.rng import RNGKey
-from tessera.ebm import energy
+import tessera.ebm.energy as energy
 from tessera.ebm.geo_sampling import sphere_langevin_step
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 

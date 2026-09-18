@@ -215,6 +215,9 @@ class ROCMExecutablePipeline:
     output_level: ROCMOutputLevel = ROCMOutputLevel.BINARY
     arch: str = "gfx1151"
     staging: str = "register"
+    #: Waves per workgroup (rows x cols of per-wave panels) for the LDS-staged
+    #: typed matmul body; ignored under register staging.
+    lds_waves: tuple[int, int] = (2, 2)
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -245,6 +248,8 @@ class ROCMExecutablePipeline:
             )
         if self.staging not in {"register", "lds"}:
             raise ValueError("ROCm matmul staging must be register or lds")
+        if (len(self.lds_waves) != 2 or any(type(w) is not int or w <= 0 or w > 8 for w in self.lds_waves)):
+            raise ValueError("ROCm LDS staging takes a positive (waves_m, waves_n) pair of at most 8 each")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -257,6 +262,7 @@ class ROCMExecutablePipeline:
         options = (
             f"family={self.family} input={self.input_level.value} "
             f"output={terminal.value} arch={self.arch} staging={self.staging} "
+            f"lds-waves-m={self.lds_waves[0]} lds-waves-n={self.lds_waves[1]} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"
@@ -269,6 +275,7 @@ class ROCMExecutablePipeline:
             self.output_level.value,
             self.arch,
             self.staging,
+            f"{self.lds_waves[0]}x{self.lds_waves[1]}",
             str(self.tile_q),
             str(self.tile_kv),
             str(self.depth_cooperative),

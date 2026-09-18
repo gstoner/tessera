@@ -4554,7 +4554,8 @@ def _submit_rocm_gfx1151_native(
             grid_x,
             grid_y if attention or matmul or depth_attention else 1,
             1,
-            32 if attention or matmul else _SOFTMAX_BLOCKDIM,
+            (int(cast(list[int], descriptor.provenance.get("workgroup", [32]))[0]) if matmul
+             else 32 if attention else _SOFTMAX_BLOCKDIM),
             1,
             1,
             0,

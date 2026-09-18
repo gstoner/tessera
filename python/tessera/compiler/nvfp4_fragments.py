@@ -177,6 +177,17 @@ def pack_e2m1_codes(codes: Any, *, axis: int) -> np.ndarray:
     return np.ascontiguousarray(np.moveaxis(packed, -1, axis))
 
 
+def unpack_e2m1_codes(packed: Any, *, axis: int, extent: int) -> np.ndarray:
+    """Inverse of :func:`pack_e2m1_codes`: recover ``extent`` 4-bit codes along
+    ``axis`` from the byte pairs (low nibble first), dropping the pad."""
+    b = np.asarray(packed, dtype=np.uint8)
+    b = np.moveaxis(b, axis, -1)
+    codes = np.empty(b.shape[:-1] + (2 * b.shape[-1],), np.uint8)
+    codes[..., 0::2] = b & 0xF
+    codes[..., 1::2] = b >> 4
+    return np.ascontiguousarray(np.moveaxis(codes[..., :extent], -1, axis))
+
+
 def nvfp4_gemm_reference(a_codes: Any, b_codes: Any, scale_a: Any, scale_b: Any) -> np.ndarray:
     """The exact general-shape product ``D[M,N]`` for logical (unpacked) e2m1
     code matrices ``A[M,K]``/``B[K,N]`` and raw ue4m3 scales ``SFa[M,ceil(K/16)]``
@@ -203,5 +214,5 @@ __all__ = [
     "M", "N", "K", "LANES", "SCALE_BLOCK", "SCALE_BLOCKS", "UE4M3_ONE",
     "e2m1_decode", "e2m1_encode", "ue4m3_decode", "nvfp4_tile_reference",
     "pack_nvfp4_mma_fragments", "unpack_nvfp4_mma_accumulator",
-    "unpack_nvfp4_mma_fragments", "pack_e2m1_codes", "nvfp4_gemm_reference",
+    "unpack_nvfp4_mma_fragments", "pack_e2m1_codes", "unpack_e2m1_codes", "nvfp4_gemm_reference",
 ]

@@ -1263,6 +1263,7 @@ def _compile_native_tile_ir(
     depth_cooperative: bool = False,
     architecture: str = "gfx1151",
     schedule_kernel: bool = False,
+    lds_waves: tuple[int, int] = (2, 2),
 ) -> tuple[
     str,
     str,
@@ -1286,7 +1287,7 @@ def _compile_native_tile_ir(
     key = hashlib.sha256(
         (
             f"{architecture}|{tile_ir}|{directive}|{family}|{input_level.value}|"
-            f"{tile_q}|{tile_kv}|{staging}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
+            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
         ).encode()
     ).hexdigest()
     cached = _cache.get(key)
@@ -1309,6 +1310,7 @@ def _compile_native_tile_ir(
         tile_q=tile_q,
         tile_kv=tile_kv,
         staging=staging,
+        lds_waves=(int(lds_waves[0]), int(lds_waves[1])),
         depth_cooperative=depth_cooperative,
     )
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
@@ -1538,8 +1540,19 @@ def package_scheduled_matmul(
     artifact: ScheduledMatmulArtifact,
     *,
     pipeline_name: str,
+    staging: str = "register",
+    lds_waves: tuple[int, int] = (2, 2),
 ) -> ROCMNativePackage:
-    """Package the exact Schedule-to-Tile artifact without re-entering Graph IR."""
+    """Package the exact Schedule-to-Tile artifact without re-entering Graph IR.
+
+    ``staging="register"`` is the production body: one wave per macro tile,
+    fragments packed straight from global memory. ``staging="lds"`` is the
+    LDS-staged typed body (2026-09-18): ``lds_waves = (WM, WN)`` waves per
+    workgroup, each owning the Schedule's macro tile, so the block tile is
+    ``(WM * macro_m, WN * macro_n)`` and the launch geometry follows; it is a
+    measured variant, selected nowhere until the gap recorder says so."""
+    if staging not in ("register", "lds"):
+        raise ValueError("ROCm scheduled matmul staging must be register or lds")
 
     artifact.validate()
     from .scheduled_matmul import verify_matmul_projection
@@ -1566,9 +1579,11 @@ def package_scheduled_matmul(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = (_compile_scheduled_matmul_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
+    ) = (_compile_scheduled_matmul_tile_ir(artifact.tile_ir)
+         if arch == "gfx1151" and staging == "register" else
          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.wmma",
-                                 family="matmul", architecture=arch, staging="register"))
+                                 family="matmul", architecture=arch, staging=staging,
+                                 lds_waves=(int(lds_waves[0]), int(lds_waves[1]))))
     entry = artifact.function_name
     if artifact.residual_name is not None:
         raise ValueError("ROCm scheduled matmul does not carry a residual epilogue")
@@ -1638,9 +1653,14 @@ def package_scheduled_matmul(
             "work_item": "E2E-REAL-3",
             "sync_key": "E2E-REAL-2026-08-05",
             "route": "canonical_scheduled_tile_consumer",
-            # One wave per macro tile, register-staged fragments on both chips;
-            # the panel is the Schedule's macro tile (typed-route gap, 2026-09-18).
-            "physical_route": f"{arch}_register_wmma_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}",
+            # Register: one wave per macro tile, fragments from global memory.
+            # LDS: WM x WN waves per workgroup staging the block tile through
+            # shared memory (typed-route gap, 2026-09-18).
+            "physical_route": (f"{arch}_register_wmma_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}"
+                               if staging == "register" else
+                               f"{arch}_lds_wmma_{lds_waves[0]}x{lds_waves[1]}waves_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}"),
+            "staging": staging,
+            "workgroup": [32 if staging == "register" else 32 * lds_waves[0] * lds_waves[1], 1, 1],
             "shape_policy": "bounded_dynamic" if dynamic else "static",
             "shape": [artifact.m, artifact.n, artifact.k],
             "bias": artifact.bias_name is not None,
@@ -1650,7 +1670,10 @@ def package_scheduled_matmul(
             "storage_container": "int8" if integer else artifact.storage,
             "output_storage": artifact.accum,
             "accum": artifact.accum,
-            "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
+            # The block tile the launch grid divides by: the wave panel under
+            # register staging, the whole workgroup's tile under LDS staging.
+            "macro_tile": ([artifact.macro_tile_m, artifact.macro_tile_n] if staging == "register" else
+                           [artifact.macro_tile_m * lds_waves[0], artifact.macro_tile_n * lds_waves[1]]),
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },

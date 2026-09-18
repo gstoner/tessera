@@ -119,9 +119,12 @@ static FailureOr<Value> materializeFragmentPack(
                                  viewInputs == 6 + linearBaseOffset)
                               : (viewInputs == 3 + linearBaseOffset ||
                                  viewInputs == 5 + linearBaseOffset);
+  // A view may name global memory or the workgroup's LDS (the LDS-staged
+  // typed body packs its fragments from shared memory, 2026-09-18); the
+  // address space is the memref's, the load path is the same.
   if ((role != "a" && role != "b") || !memory ||
       !layout || !validArity ||
-      memory.getSpace() != "gmem" ||
+      (memory.getSpace() != "gmem" && memory.getSpace() != "lds") ||
       (memory.getOrder() != "row_major" && memory.getOrder() != "col_major") ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
       layout.getSwizzle()) {

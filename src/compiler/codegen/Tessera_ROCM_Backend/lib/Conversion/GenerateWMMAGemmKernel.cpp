@@ -860,6 +860,278 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   b.create<gpu::ReturnOp>(loc);
 }
 
+// The LDS-staged TYPED body (typed-route gap, 2026-09-18). WM x WN waves per
+// workgroup, each owning an mt x nt panel of 16x16 fragments, so the block
+// tile is (WM*mt*16) x (WN*nt*16). Every 16-wide K slab is staged
+// cooperatively: A as [WG_M][16] (K contiguous per row) and B TRANSPOSED as
+// [WG_N][16] (K contiguous per column), so both fragment packs are contiguous
+// vector loads from LDS rather than the hand-written kernels' 16 strided
+// scalar gathers per B fragment (the reason those lose to the register panel
+// in the gap packets). Zero-fill past every edge makes the K tail and the
+// ragged M/N edges free at the loads; the stores are masked. The typed
+// fragment ops are the same ones the register body emits; only the source
+// views name the `lds` space, which the Tile->ROCm materializer admits.
+// A measured variant: selected nowhere until the recorder says where it wins.
+void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
+                      int64_t mt, int64_t nt, int64_t wavesM, int64_t wavesN,
+                      const WmmaTypes &T, Type outputType, bool hasBias,
+                      StringRef activation, StringRef rasterOrder,
+                      int64_t rasterGroup) {
+  MLIRContext *ctx = b.getContext();
+  const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
+  const int64_t nthreads = wavesM * wavesN * 32;
+  auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+  Value ldsA = gpuFunc.addWorkgroupAttribution(
+      MemRefType::get({wgM * 16}, T.store, MemRefLayoutAttrInterface(), ws),
+      loc);
+  Value ldsB = gpuFunc.addWorkgroupAttribution(
+      MemRefType::get({wgN * 16}, T.store, MemRefLayoutAttrInterface(), ws),
+      loc);
+  // `known_block_size` is an INHERENT property of gpu.func: set it through the
+  // accessor, never by raw name. A raw `setAttr` leaves the op holding the
+  // attribute twice, which the NDEBUG build prints and the assertions build
+  // aborts on ("DictionaryAttr element names must be unique") -- the exact
+  // defect 72 ROCm generators carried for `gpu.kernel` until 2026-09-17.
+  gpuFunc.setKnownBlockSize(
+      ArrayRef<int32_t>{int32_t(nthreads), 1, 1});
+  gpuFunc->setAttr("tessera.rocm.lds_bytes",
+                   b.getI64IntegerAttr((wgM + wgN) * 16 *
+                                       T.store.getIntOrFloatBitWidth() / 8));
+  gpuFunc->setAttr("tessera.rocm.lds_waves",
+                   b.getDenseI64ArrayAttr({wavesM, wavesN}));
+
+  b.setInsertionPointToStart(&gpuFunc.getBody().front());
+  Value A = gpuFunc.getArgument(0);
+  Value B = gpuFunc.getArgument(1);
+  unsigned dIndex = hasBias ? 3 : 2;
+  Value D = gpuFunc.getArgument(dIndex);
+  Value M = gpuFunc.getArgument(dIndex + 1);
+  Value N = gpuFunc.getArgument(dIndex + 2);
+  Value K = gpuFunc.getArgument(dIndex + 3);
+  Value bias = hasBias ? gpuFunc.getArgument(2) : Value();
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  auto slt = arith::CmpIPredicate::slt;
+  Value c0 = ci(0), c16 = ci(16), c15 = ci(15), c32 = ci(32);
+  Value cWavesN = ci(wavesN), cThreads = ci(nthreads);
+  Value cWgM = ci(wgM), cWgN = ci(wgN), cWgM16 = ci(wgM * 16),
+        cWgN16 = ci(wgN * 16);
+
+  Value scalarZero =
+      T.isInt ? b.create<arith::ConstantOp>(loc, T.store,
+                                            b.getIntegerAttr(T.store, 0))
+              : b.create<arith::ConstantOp>(loc, T.store,
+                                            b.getFloatAttr(T.store, 0.0));
+
+  Value tx = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value waveId = b.create<arith::DivUIOp>(loc, tx, c32);
+  Value waveRow = b.create<arith::DivUIOp>(loc, waveId, cWavesN);
+  Value waveCol = b.create<arith::RemUIOp>(loc, waveId, cWavesN);
+
+  // Block-tile origin with the shared raster contract (row-major identity,
+  // or the column-major / grouped remaps the register body also honours).
+  Value bidX = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value bidY = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
+  Value tileM = bidY, tileN = bidX;
+  if (rasterOrder != "row_major") {
+    Value gridM = b.create<arith::DivUIOp>(
+        loc, b.create<arith::AddIOp>(loc, M, ci(wgM - 1)), cWgM);
+    Value gridN = b.create<arith::DivUIOp>(
+        loc, b.create<arith::AddIOp>(loc, N, ci(wgN - 1)), cWgN);
+    Value flat = b.create<arith::AddIOp>(
+        loc, b.create<arith::MulIOp>(loc, bidY, gridN), bidX);
+    if (rasterOrder == "column_major") {
+      tileM = b.create<arith::RemUIOp>(loc, flat, gridM);
+      tileN = b.create<arith::DivUIOp>(loc, flat, gridM);
+    } else {
+      bool groupM = rasterOrder == "grouped_m";
+      Value gridMajor = groupM ? gridM : gridN;
+      Value gridMinor = groupM ? gridN : gridM;
+      Value group = ci(rasterGroup);
+      Value perPanel = b.create<arith::MulIOp>(loc, group, gridMinor);
+      Value panel = b.create<arith::DivUIOp>(loc, flat, perPanel);
+      Value firstMajor = b.create<arith::MulIOp>(loc, panel, group);
+      Value remaining = b.create<arith::SubIOp>(loc, gridMajor, firstMajor);
+      Value shortPanel = b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::ult, remaining, group);
+      Value panelRows =
+          b.create<arith::SelectOp>(loc, shortPanel, remaining, group);
+      Value within = b.create<arith::RemUIOp>(loc, flat, perPanel);
+      Value major = b.create<arith::AddIOp>(
+          loc, firstMajor, b.create<arith::RemUIOp>(loc, within, panelRows));
+      Value minor = b.create<arith::DivUIOp>(loc, within, panelRows);
+      tileM = groupM ? major : minor;
+      tileN = groupM ? minor : major;
+    }
+  }
+  Value baseRow = b.create<arith::MulIOp>(loc, tileM, cWgM);
+  Value baseCol = b.create<arith::MulIOp>(loc, tileN, cWgN);
+  Value waveRowOff = b.create<arith::MulIOp>(loc, waveRow, ci(mt * 16));
+  Value waveColOff = b.create<arith::MulIOp>(loc, waveCol, ci(nt * 16));
+
+  // Per-fragment origins: global (for the store) and LDS-local (for the packs).
+  SmallVector<Value> rowOrigin(mt), lrow(mt), colOrigin(nt), lcol(nt);
+  for (int64_t mi = 0; mi < mt; ++mi) {
+    lrow[mi] = b.create<arith::AddIOp>(loc, waveRowOff, ci(mi * 16));
+    rowOrigin[mi] = b.create<arith::AddIOp>(loc, baseRow, lrow[mi]);
+  }
+  for (int64_t ni = 0; ni < nt; ++ni) {
+    lcol[ni] = b.create<arith::AddIOp>(loc, waveColOff, ci(ni * 16));
+    colOrigin[ni] = b.create<arith::AddIOp>(loc, baseCol, lcol[ni]);
+  }
+
+  SmallVector<StringAttr> tileAxes{b.getStringAttr("tlane"),
+                                   b.getStringAttr("reg")};
+  auto tileLayout = tessera::tile::TileLayoutAttr::get(
+      ctx, {16, 16}, {16, 1}, tileAxes, {}, {}, {}, 0,
+      tessera::tile::TileSwizzleAttr());
+  auto gmemRowMajor =
+      tessera::tile::TileMemoryLayoutAttr::get(ctx, "gmem", "row_major", 0);
+  auto ldsRowMajor =
+      tessera::tile::TileMemoryLayoutAttr::get(ctx, "lds", "row_major", 0);
+  auto ldsColMajor =
+      tessera::tile::TileMemoryLayoutAttr::get(ctx, "lds", "col_major", 0);
+  auto tileValueTy = tessera::tile::TileValueType::get(ctx);
+  StringRef fragmentElem = T.store.isF16()                 ? "f16"
+                           : T.store.isBF16()                ? "bf16"
+                           : isa<Float8E4M3FNType>(T.store)  ? "e4m3"
+                           : isa<Float8E5M2Type>(T.store)    ? "e5m2"
+                           : T.pack == 1                     ? "int8"
+                                                             : "int4";
+  StringRef fragmentAcc = T.isInt ? "i32" : "f32";
+  auto aFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
+  auto bFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
+  auto accFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
+  auto ldsView = [&](OpBuilder &bb, Location l, Value base, Value row,
+                     Value col, Attribute memory) -> Value {
+    OperationState state(l, "tile.view");
+    state.addOperands({base, row, col, c16});
+    state.addTypes(tileValueTy);
+    state.addAttribute("tile.layout", tileLayout);
+    state.addAttribute("tile.memory", memory);
+    return bb.create(state)->getResult(0);
+  };
+  auto packFragment = [&](OpBuilder &bb, Location l, Value view, Type type) {
+    OperationState state(l, "tile.fragment_pack");
+    state.addOperands(view);
+    state.addTypes(type);
+    return bb.create(state)->getResult(0);
+  };
+
+  SmallVector<Value> initAccs;
+  for (int64_t i = 0; i < mt * nt; ++i) {
+    OperationState zero(loc, "tile.fragment_zero");
+    zero.addTypes(accFragmentTy);
+    initAccs.push_back(b.create(zero)->getResult(0));
+  }
+
+  // kEnd = K rounded up to a multiple of 16: the last slab zero-fills past K.
+  Value kEnd = b.create<arith::MulIOp>(
+      loc,
+      b.create<arith::DivUIOp>(loc, b.create<arith::AddIOp>(loc, K, c15), c16),
+      c16);
+  auto kLoop = b.create<scf::ForOp>(
+      loc, c0, kEnd, c16, initAccs,
+      [&](OpBuilder &kb, Location l, Value k0, ValueRange accs) {
+        // Every wave finished reading the previous slab before it is overwritten.
+        kb.create<gpu::BarrierOp>(l);
+        auto copyA = kb.create<scf::ForOp>(l, tx, cWgM16, cThreads);
+        {
+          OpBuilder::InsertionGuard g(kb);
+          kb.setInsertionPointToStart(copyA.getBody());
+          Value e = copyA.getInductionVar();
+          Value row = kb.create<arith::DivUIOp>(l, e, c16);
+          Value kk = kb.create<arith::RemUIOp>(l, e, c16);
+          Value gr = kb.create<arith::AddIOp>(l, baseRow, row);
+          Value gk = kb.create<arith::AddIOp>(l, k0, kk);
+          Value in = kb.create<arith::AndIOp>(
+              l, kb.create<arith::CmpIOp>(l, slt, gr, M),
+              kb.create<arith::CmpIOp>(l, slt, gk, K));
+          Value logical = kb.create<arith::AddIOp>(
+              l, kb.create<arith::MulIOp>(l, gr, K), gk);
+          Value safe = kb.create<arith::SelectOp>(l, in, logical, c0);
+          Value v = kb.create<memref::LoadOp>(l, A, ValueRange{safe});
+          v = kb.create<arith::SelectOp>(l, in, v, scalarZero);
+          kb.create<memref::StoreOp>(l, v, ldsA, ValueRange{e});
+        }
+        // B: read along N (coalesced), write transposed so K is contiguous
+        // per column in LDS.
+        auto copyB = kb.create<scf::ForOp>(l, tx, cWgN16, cThreads);
+        {
+          OpBuilder::InsertionGuard g(kb);
+          kb.setInsertionPointToStart(copyB.getBody());
+          Value e = copyB.getInductionVar();
+          Value kk = kb.create<arith::DivUIOp>(l, e, cWgN);
+          Value col = kb.create<arith::RemUIOp>(l, e, cWgN);
+          Value gk = kb.create<arith::AddIOp>(l, k0, kk);
+          Value gc = kb.create<arith::AddIOp>(l, baseCol, col);
+          Value in = kb.create<arith::AndIOp>(
+              l, kb.create<arith::CmpIOp>(l, slt, gk, K),
+              kb.create<arith::CmpIOp>(l, slt, gc, N));
+          Value logical = kb.create<arith::AddIOp>(
+              l, kb.create<arith::MulIOp>(l, gk, N), gc);
+          Value safe = kb.create<arith::SelectOp>(l, in, logical, c0);
+          Value v = kb.create<memref::LoadOp>(l, B, ValueRange{safe});
+          v = kb.create<arith::SelectOp>(l, in, v, scalarZero);
+          Value dst = kb.create<arith::AddIOp>(
+              l, kb.create<arith::MulIOp>(l, col, c16), kk);
+          kb.create<memref::StoreOp>(l, v, ldsB, ValueRange{dst});
+        }
+        kb.create<gpu::BarrierOp>(l);
+        SmallVector<Value> af(mt), bf(nt);
+        for (int64_t mi = 0; mi < mt; ++mi)
+          af[mi] = packFragment(
+              kb, l, ldsView(kb, l, ldsA, lrow[mi], c0, ldsRowMajor),
+              aFragmentTy);
+        for (int64_t ni = 0; ni < nt; ++ni)
+          bf[ni] = packFragment(
+              kb, l, ldsView(kb, l, ldsB, c0, lcol[ni], ldsColMajor),
+              bFragmentTy);
+        SmallVector<Value> next(mt * nt);
+        for (int64_t mi = 0; mi < mt; ++mi)
+          for (int64_t ni = 0; ni < nt; ++ni) {
+            OperationState mma(l, "tile.mma");
+            mma.addOperands({af[mi], bf[ni], accs[mi * nt + ni]});
+            mma.addTypes(accFragmentTy);
+            next[mi * nt + ni] = kb.create(mma)->getResult(0);
+          }
+        kb.create<scf::YieldOp>(l, next);
+      });
+
+  // Masked typed stores with the fused epilogue handed to the consumer.
+  Attribute epilogueAttr;
+  if (hasBias || activation != "none") {
+    StringRef outputName = outputType.isF16()   ? "f16"
+                           : outputType.isBF16() ? "bf16"
+                           : outputType.isF32()  ? "f32"
+                                                 : "i32";
+    epilogueAttr = tessera::tile::TileEpilogueAttr::get(ctx, hasBias,
+                                                        activation, outputName);
+  }
+  ValueRange accs = kLoop.getResults();
+  for (int64_t ni = 0; ni < nt; ++ni)
+    for (int64_t mi = 0; mi < mt; ++mi) {
+      OperationState unpack(loc, "tile.fragment_unpack");
+      unpack.addOperands(accs[mi * nt + ni]);
+      unpack.addTypes(tileValueTy);
+      unpack.addAttribute("tile.layout", tileLayout);
+      Value tile = b.create(unpack)->getResult(0);
+      OperationState store(loc, "tile.store");
+      store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], M, N, N});
+      if (epilogueAttr) {
+        if (hasBias)
+          store.addOperands({bias});
+        store.addAttribute("tile.epilogue", epilogueAttr);
+      }
+      store.addAttribute("tile.layout", tileLayout);
+      store.addAttribute("tile.memory", gmemRowMajor);
+      b.create(store);
+    }
+  b.create<gpu::ReturnOp>(loc);
+}
+
 // Materialize the canonical K loop as a one-wave LDS-staged schedule. The
 // shared Tile loop has already proven allocation, completion, and phase
 // ownership before it reaches this re-former; this body is the AMD physical
@@ -1082,8 +1354,18 @@ struct GenerateWMMAGemmKernelPass
   Option<std::string> canonicalStaging{
       *this, "canonical-staging",
       llvm::cl::desc("physical schedule for a canonical M/N/K loop: "
-                     "register (gfx1151 incumbent) or lds (comparison lane)"),
+                     "register (gfx1151 incumbent) or lds (comparison lane); "
+                     "with via-tile, lds selects the multi-wave LDS-staged "
+                     "typed body"),
       llvm::cl::init("register")};
+  Option<int> ldsWavesM{*this, "lds-waves-m",
+                        llvm::cl::desc("LDS-staged typed body: waves along M "
+                                       "per workgroup"),
+                        llvm::cl::init(2)};
+  Option<int> ldsWavesN{*this, "lds-waves-n",
+                        llvm::cl::desc("LDS-staged typed body: waves along N "
+                                       "per workgroup"),
+                        llvm::cl::init(2)};
 
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
@@ -1657,7 +1939,22 @@ struct GenerateWMMAGemmKernelPass
             "stored in its accumulator type");
         return signalPassFailure();
       }
-      if (request.canonicalKLoop && canonicalStaging == "lds") {
+      if (viaTile && canonicalStaging == "lds") {
+        if (T.halfAccumulator || !portableContract) {
+          op->emitError("generate-wmma-gemm-kernel: the LDS-staged typed body "
+                        "takes the portable Tile ABI with a full-width "
+                        "accumulator");
+          return signalPassFailure();
+        }
+        if (ldsWavesM <= 0 || ldsWavesN <= 0 || ldsWavesM * ldsWavesN > 16) {
+          op->emitError("generate-wmma-gemm-kernel: lds-waves-m/n must be "
+                        "positive with at most 16 waves per workgroup");
+          return signalPassFailure();
+        }
+        emitTypedLdsBody(bodyB, loc, gpuFunc, mt, nt, ldsWavesM, ldsWavesN, T,
+                         outputTy, hasBias, activation, request.rasterOrder,
+                         request.rasterGroup);
+      } else if (request.canonicalKLoop && canonicalStaging == "lds") {
         if (T.halfAccumulator) {
           op->emitError(
               "ROCM_WMMA_ACCUM_UNSUPPORTED: f16 accumulation is admitted "

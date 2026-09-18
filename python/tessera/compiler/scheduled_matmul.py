@@ -604,7 +604,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError('matmul native boolean field disagrees: '+key)
         return values[0] == 'true'
     def tensor(text):
-        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32|f64|ui8|si8|i8|i32)>', text)
+        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32|f64|ui8|si8|i8|i32|f8E4M3FN|f8E5M2)>', text)
         if match is None:
             raise ValueError('matmul native tensor contract is unsupported')
         return tuple(None if d == '?' else int(d) for d in match[1].split('x')[:-1]), match[2]
@@ -626,7 +626,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
         entry = entries[0]
     expected = dict(function_name=entry, m=m, n=n, k=k, storage=storage,
         a_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32','f8E4M3FN':'fp8_e4m3','f8E5M2':'fp8_e5m2'}[a[1]],
-        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[b[1]],
+        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32','f8E4M3FN':'fp8_e4m3','f8E5M2':'fp8_e5m2'}[b[1]],
         output_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[out_storage],
         accum=string('accum'), activation=string('activation'),
         dynamic_m=a[0][0] is None or out_shape[0] is None,

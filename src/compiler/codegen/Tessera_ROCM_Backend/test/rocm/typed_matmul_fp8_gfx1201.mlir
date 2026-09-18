@@ -29,5 +29,5 @@ module {
 // CHECK-SAME: fragment_family = "rdna4_wmma"
 // CHECK: memref.store
 
-// GFX11: OCP FP8 e4m3/e5m2 to f32 on gfx12
+// GFX11: ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: no exact gfx1151 fragment layout accepts the typed fragment
 // DIRECT: FP8 storage ('e4m3') is a typed-route contract

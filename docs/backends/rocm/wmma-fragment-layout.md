@@ -461,6 +461,56 @@ macro tile is 16 output tiles, so **16 of 32 WGPs** have work. The weight read
 dominates A by 16x (1.05 MB against 65.5 KB), so the MMA unit is not the scarce
 resource there and the fix is occupancy, not a bigger tile.
 
+## 10b. MXFP4 on a chip with no FP4: the W4A8 fold, and what it says about our results
+
+RDNA4 has **no FP4 WMMA form** (§5), and the ecosystem's answer on gfx1201 is
+not to give up but to **fold MXFP4 into the fp8 WMMA**. Read from an
+independent hand-written gfx1201 kernel (vllm-radiance `radiance_mxfp4_fp8.hip`,
+2026-09-19) and its tuned configs. Four things there bear directly on results
+recorded in this file.
+
+**The fold is exact, which is why it is not a compromise.** E2M1's sixteen
+values are all exactly representable in e4m3, so the weight upconvert is a
+lossless table lookup, and the MX block scale is E8M0 — a power of two — so
+applying it to the fp32 accumulator is exact. The block exponent is folded into
+the *weight* through a per-binade magnitude table, which removes the per-32-block
+rescale from the inner loop and leaves one per-row factor for the epilogue. The
+result is W4A8 rather than the checkpoint's declared W4A4: strictly *more*
+precise than calibration, but no longer bit-identical to the emulated path, so
+it is opt-in rather than default. That is a numeric-policy decision of exactly
+the kind Decision #15a says belongs in the contract, not in a kernel flag.
+
+**gfx12's fp8 WMMA honours e4m3 subnormals rather than flushing them**, verified
+on hardware there. The fold depends on it: stopping at the smallest e4m3 normal
+(2⁻⁶) is exact only to d ≤ 5, and a real checkpoint reached d = 10.
+
+**Our contiguous-eight fragment convention is independently corroborated — and
+so is §3's warning about how it was checked.** That kernel records its layout
+as `A: lane l holds A[l%16][(l/16)*8+j]`, `B: B[(l/16)*8+j][l%16]`,
+`C: C[(l/16)*8+j][l%16]` — identical to ours, "confirmed empirically (0/256
+elements wrong on a 16x16x16 tile)". Note *what that check can see*: comparing
+the computed C cannot distinguish our relabeling from the machine's runs-of-four
+mapping, because the permutation cancels across both operands (§3). Two
+independent implementations agreeing on contiguous-eight is evidence the
+convention is sound; it is not evidence about which mapping the hardware uses.
+
+**The LDS result in §3 and §11 is contradicted, not merely qualified.** That
+kernel reports reading fragments straight from global at **9.5 TFLOP/s**, and
+states that staging through LDS "is what makes this fast at all" — against 325.2
+TFLOP/s register-resident for the fp8 WMMA on the same card. The stated cause is
+the one §3 names from the other side: lanes sixteen rows apart touch sixteen
+cache lines per operand. Their LDS rows are **padded 8 bytes**, without which
+sixteen lanes reading rows 64 B apart collide eight ways on the 32 × 4 B banks —
+and `rocm_tiling` already models exactly that as `bank_padding_required`, also
+unwired (Decision #29a). Our "the LDS body loses at every shape" was measured
+without padding-aware staging and under the drained default schedule (§10).
+**Treat it as unsafe to cite until re-measured**; `ROCM-SCHED-GROUP-1` and this
+are the same experiment.
+
+**Achieved throughput corroborates §5's ceilings.** 325.2 TFLOP/s fp8 against
+our 383 ceiling (85%) and 160.2 f16 against 191 (84%), register-resident on the
+same part.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no

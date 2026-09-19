@@ -134,6 +134,16 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Start: device
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
 
+### ROCM-MXFP4-W4A8-1
+
+**MXFP4 on gfx1201 is reachable through the fp8 WMMA, and we refuse it instead**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: RDNA4 has no FP4 WMMA form, and `select_fragment_layout` therefore refuses `fp4_e2m1` outright. That is correct about the hardware and wrong about the opportunity: the ecosystem answer on this exact chip (vllm-radiance `radiance_mxfp4_fp8.hip`, `mxfp4-configs/gfx1201-GEMM-AFP4WFP4*`) folds MXFP4 into `v_wmma_f32_16x16x16_fp8_fp8` — **the instruction ROCM-MIXED-FP8-1 just proved** — and the fold is *exact*: E2M1's sixteen values are all representable in e4m3 (lossless table lookup) and the E8M0 block scale is a power of two (exact on the fp32 accumulator). Result is W4A8, strictly more precise than the W4A4 the checkpoint was calibrated for, hence opt-in rather than default — a `numeric_policy` decision under Decision #15a, not a kernel flag. Soundness depends on gfx12's fp8 WMMA honouring e4m3 **subnormals**, verified on hardware there, because a real checkpoint reaches block exponent d=10 while stopping at the smallest normal is exact only to d≤5. Gate: MXFP4 storage (packed e2m1, low nibble = even k) with E8M0 scales at 32-element granularity, the block-exponent fold into a per-binade magnitude table, per-token activation scales in the epilogue, and a measured comparison on Tajasarus. Depends on the scale contract from [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1); shares its M-bucketed config axis (`M_LEQ_16`, `M_LEQ_32`) and needs `NUM_KSPLIT` from [ROCM-SPLIT-K-1](#rocm-split-k-1) — those configs use 16-way split-K at M≤16. Also: our tuning surface is 6 axes against their 10, with no analogue for SPLIT_K, GROUP_SIZE_M (raster), num_stages, waves_per_eu or cache_modifier — and `waves_per_eu` was *removed* from `package_scheduled_matmul` earlier in this branch, which those configs tune (0 and 3); re-check that removal.
+- Depends on: [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1)
+- Start: device
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
 ### EVIDENCE-PACKET-1
 
 **Evidence packet consumers**
@@ -470,6 +480,7 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | DIAG-PY-BACKLOG-1 | [DIAG-PY-BACKLOG-1](#diag-py-backlog-1) | owner |
 | DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
 | ROCM-FP8-BLOCKSCALE-1 | [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) | owner |
+| ROCM-MXFP4-W4A8-1 | [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1) | owner |
 | ROCM-SCHED-GROUP-1 | [ROCM-SCHED-GROUP-1](#rocm-sched-group-1) | owner |
 | ROCM-SPLIT-K-1 | [ROCM-SPLIT-K-1](#rocm-split-k-1) | owner |
 | E2E-REAL-6 | [E2E-REAL-6](#e2e-real-6) | owner |

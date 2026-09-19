@@ -76,6 +76,12 @@ GFX_MATMUL_F16_F32_FUSED_ABI = "tessera.rocm.matmul.a_b_bias_o_m_n_k.f16_f32.fus
 #: FP8 WMMA). Same A, B, D, M, N, K launch order; one-byte operands.
 GFX_MATMUL_E4M3_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1"
 GFX_MATMUL_E5M2_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1"
+#: The MIXED OCP FP8 pairs. RDNA4 has V_WMMA_F32_16X16X16_FP8_BF8 and its
+#: mirror, and the two operands carry different storages, so the launch ABI has
+#: to name both -- keying it on A alone would hand the runtime a B buffer it
+#: would read as A's format, which is a wrong answer rather than a refusal.
+GFX_MATMUL_E4M3_E5M2_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1"
+GFX_MATMUL_E5M2_E4M3_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1"
 #: bf16 storage, f32 accumulate, on the same typed route as f16 (both chips;
 #: GFX1201-PARITY slice 1b, 2026-09-18), plain and with the fused epilogue.
 GFX_MATMUL_BF16_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.bf16_f32.v1"
@@ -1613,7 +1619,11 @@ def package_scheduled_matmul(
         raise ValueError("ROCm FP8 scheduled matmul carries no fused epilogue yet")
     if integer and fused:
         raise ValueError("ROCm integer scheduled matmul carries no fused epilogue (it is float-only)")
-    abi_id = (GFX_MATMUL_E4M3_F32_ABI if artifact.a_dtype == "fp8_e4m3" else
+    abi_id = (GFX_MATMUL_E4M3_E5M2_F32_ABI
+              if (artifact.a_dtype, artifact.b_dtype) == ("fp8_e4m3", "fp8_e5m2") else
+              GFX_MATMUL_E5M2_E4M3_F32_ABI
+              if (artifact.a_dtype, artifact.b_dtype) == ("fp8_e5m2", "fp8_e4m3") else
+              GFX_MATMUL_E4M3_F32_ABI if artifact.a_dtype == "fp8_e4m3" else
               GFX_MATMUL_E5M2_F32_ABI if artifact.a_dtype == "fp8_e5m2" else
               GFX_MATMUL_I8_I32_ABI if artifact.a_dtype == "int8" else
               GFX_MATMUL_I4_I32_ABI if artifact.a_dtype == "int4" else
@@ -3067,6 +3077,8 @@ __all__ = [
     "GFX_MOE_DISPATCH_F32_ABI",
     "GFX_MATMUL_E4M3_F32_ABI",
     "GFX_MATMUL_E5M2_F32_ABI",
+    "GFX_MATMUL_E4M3_E5M2_F32_ABI",
+    "GFX_MATMUL_E5M2_E4M3_F32_ABI",
     "GFX_MATMUL_BF16_F32_ABI",
     "GFX_MATMUL_BF16_F32_FUSED_ABI",
     "GFX_MATMUL_I8_I32_ABI",

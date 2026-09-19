@@ -308,10 +308,14 @@ static FailureOr<Value> materializeFragmentPack(
   //   * gfx12. The instruction is gfx1200+; RDNA3 has nothing like it.
   //   * 8 elements per lane at 8 or 16 bits. int4 is excluded at both K widths:
   //     `tr4` is gfx1250+, and the 8-bit form transposes at the wrong quantum.
-  //   * an address this code computes itself, so not the precomputed base.
+  //
+  // The producer's precomputed linear base is deliberately NOT used here even
+  // when present: it already folds in the lane offset, and this path needs the
+  // tile origin by itself. `rowOrigin` and `colOrigin` are available either
+  // way, so the address is rebuilt from them.
   const unsigned elementBits = elementTy.getIntOrFloatBitWidth();
   const bool useTransposeLoad =
-      role == "b" && !kIsContiguous && !haveBounds && !precomputedLinearBase &&
+      role == "b" && !kIsContiguous && !haveBounds &&
       memory.getOrder() == "row_major" &&
       physical.familyName == "rdna4_wmma" &&
       physical.inputElementsPerLane == 8 &&

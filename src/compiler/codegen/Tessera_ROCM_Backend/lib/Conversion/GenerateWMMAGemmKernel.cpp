@@ -1979,9 +1979,20 @@ struct GenerateWMMAGemmKernelPass
 
       Type idxTy = b.getIndexType();
       auto abTy = MemRefType::get({ShapedType::kDynamic}, T.store);
+      // B's buffer carries B's own element type. It is the same as A's in every
+      // case but RDNA4's mixed OCP FP8 pairs, and giving them one type made the
+      // fragment materializer reject the pair: it derives the expected source
+      // element from the descriptor's `b`, which then disagreed with a memref
+      // typed from A.
+      Type bStoreTy = T.store;
+      if (!T.bElem.empty())
+        bStoreTy = T.bElem == "e4m3"
+                       ? static_cast<Type>(Float8E4M3FNType::get(b.getContext()))
+                       : static_cast<Type>(Float8E5M2Type::get(b.getContext()));
+      auto bAbTy = MemRefType::get({ShapedType::kDynamic}, bStoreTy);
       auto dTy = MemRefType::get({ShapedType::kDynamic}, outputTy);
       auto biasTy = MemRefType::get({ShapedType::kDynamic}, T.accElem);
-      SmallVector<Type> argTys{abTy, abTy};
+      SmallVector<Type> argTys{abTy, bAbTy};
       if (hasBias && portableContract)
         argTys.push_back(biasTy);
       argTys.append({dTy, idxTy, idxTy, idxTy});

@@ -695,3 +695,94 @@ def test_gfx1201_low_precision_takes_the_selected_panel_and_executes(storage, ou
     else:
         np.testing.assert_allclose(output, expected, rtol=0,
                                    atol=2e-3 * float(np.abs(expected).max()))
+
+
+def _launch_raw(payload, symbol, a, b, out, macro_m, macro_n):
+    """Launch a raw hsaco on the live device: one wave, grid over the macro tile.
+
+    The double-K row needs this because it compiles Tile IR the production
+    packager will not emit -- there is no descriptor to hand `rt.launch`, only
+    an image.
+    """
+    import ctypes as ct
+    from tessera import runtime as rt
+
+    hip = rt._load_hip_for_launch()
+    assert hip is not None and hip.hipInit(0) == 0
+    module, fn = ct.c_void_p(), ct.c_void_p()
+    if hip.hipModuleLoadData(ct.byref(module), payload) != 0:
+        raise RuntimeError("hipModuleLoadData refused the image")
+    if hip.hipModuleGetFunction(ct.byref(fn), module, symbol.encode()) != 0:
+        raise RuntimeError(f"kernel symbol {symbol!r} not found")
+    dev = [ct.c_void_p(), ct.c_void_p(), ct.c_void_p()]
+    try:
+        for d, nbytes in zip(dev, (a.nbytes, b.nbytes, out.nbytes)):
+            if hip.hipMalloc(ct.byref(d), nbytes) != 0:
+                raise RuntimeError("hipMalloc failed")
+        hip.hipMemcpy(dev[0], a.ctypes.data_as(ct.c_void_p), a.nbytes, 1)
+        hip.hipMemcpy(dev[1], b.ctypes.data_as(ct.c_void_p), b.nbytes, 1)
+        m, n = out.shape
+        k = a.shape[1]
+        memref = lambda p, size: [ct.c_void_p(p.value), ct.c_void_p(p.value),
+                                  ct.c_int64(0), ct.c_int64(size), ct.c_int64(1)]
+        args = (memref(dev[0], m * k) + memref(dev[1], k * n) + memref(dev[2], m * n)
+                + [ct.c_int64(m), ct.c_int64(n), ct.c_int64(k)])
+        arr = (ct.c_void_p * len(args))()
+        for i, value in enumerate(args):
+            arr[i] = ct.cast(ct.byref(value), ct.c_void_p)
+        rc = hip.hipModuleLaunchKernel(fn, (n + macro_n - 1) // macro_n,
+                                       (m + macro_m - 1) // macro_m, 1,
+                                       32, 1, 1, 0, None, arr, None)
+        hip.hipDeviceSynchronize()
+        hip.hipMemcpy(out.ctypes.data_as(ct.c_void_p), dev[2], out.nbytes, 2)
+        return rc
+    finally:
+        for d in dev:
+            if d:
+                hip.hipFree(d)
+        hip.hipModuleUnload(module)
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("shape", [(64, 64, 64), (256, 256, 256)])
+def test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact(shape):
+    """RDNA4's native double-K int4 (`V_WMMA_I32_16X16X32_IU4`) is reachable.
+
+    ROCM-EXTENDED-K-1. The typed route pinned every fragment to K=16, so this
+    shape was enumerated in `wmma_dtype_forms` and emitted by nothing --
+    Decision #29's unconsumed declaration. It is a supported capability now,
+    NOT a selection: measured 2026-09-19 it *loses* to the K-unroll it was
+    expected to replace (106.9 vs 100.8 TOP/s at 4096³), because the unroll
+    keeps two independent MMAs in flight while the double-K is one dependent
+    instruction moving the same bytes. `rocm_k_unroll` therefore still picks
+    the unroll; this row keeps the capability honest.
+
+    Asserted EXACTLY against the i32 reference: an integer product has no
+    rounding, so a nibble-order or K-stride error cannot hide behind a
+    tolerance -- which is what makes int4 the right carrier for a new K shape.
+    """
+    import re
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=shape, dtype="int4", output_dtype="int32"),
+        target="rocm_gfx1201")
+    # The production rule keeps K=16; this asks the generator for the double-K
+    # shape directly, which is the capability under test.
+    double_k = re.sub(r"tessera\.tile_k = 16", "tessera.tile_k = 32",
+                      re.sub(r"(mma_desc<[^>]*?)k = 16", r"\g<1>k = 32", artifact.tile_ir))
+    assert "k = 32" in double_k and "tessera.tile_k = 32" in double_k
+    _, _, payload, *_ = rocm_native._compile_native_tile_ir(
+        double_k, directive="tessera_rocm.wmma", family="matmul",
+        architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)
+    rng = np.random.default_rng(32 + m)
+    a = rng.integers(-8, 8, size=(m, k), dtype=np.int8)
+    b = rng.integers(-8, 8, size=(k, n), dtype=np.int8)
+    output = np.zeros((m, n), np.int32)
+    result = _launch_raw(payload, artifact.function_name, a, b, output,
+                         artifact.macro_tile_m, artifact.macro_tile_n)
+    assert result == 0
+    np.testing.assert_array_equal(output, a.astype(np.int32) @ b.astype(np.int32))

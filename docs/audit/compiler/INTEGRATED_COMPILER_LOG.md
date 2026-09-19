@@ -4496,5 +4496,28 @@ A GEMM layout audit prompted by the same material **found a silent-wrong-tiles p
 Remaining: `ROCM-EXTENDED-K-1`, now the highest-ceiling ROCm item; `ROCM-GLOBAL-LOAD-TR-1` with its two candidates; the 126-VGPR spill at the shipped 4x4 panel, whose only lever is fewer live registers; raster-order selection, still blocked on counters neither WSL2 ROCm box can produce.
 
 Evidence: `docs/audit/backend/rocm/todo.md` §"The K unroll follows the storage, and three AMD sources that reframe it — 2026-09-19", `benchmarks/baselines/lowp_k_unroll_20260919/`, `docs/backends/rocm/wmma-fragment-layout.md` §§6-7, `tests/unit/test_scheduled_matmul_consumers.py`, `tests/unit/test_rocm_gfx1201_scheduled.py`.
+<!-- entry-fields:end -->
+
+### 2026-09-19 — ROCM-EXTENDED-K-1: the double-K int4 instruction is reachable, and it loses to the unroll
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: branch `claude/rocm-extended-k`, sync `GFX1201-PARITY-2026-09-17`; co-owner [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+Outcome: **RDNA4's native `V_WMMA_I32_16X16X32_IU4` is emitted by the typed route for the first time, it is exact, and it is slower than the K unroll it was expected to replace.** The item was opened on an assumption worth stating because it was half right: a fragment load is 8 elements per lane whatever the storage, so int4 moves 32 of 128 bits at K=16, the unroll reaches the bandwidth by issuing *more* loads, and the double-K instruction fetches 16 elements in one. The first two clauses hold; the conclusion does not. Measured on Tajasarus in TOP/s, shipped k16-unroll-4 against k32-unroll-1: 47.5 vs 42.8 at 1024³, 98.5 vs 91.5 at 2048³, 106.9 vs 100.8 at 4096³, every row exact against the i32 reference with `v_wmma_i32_16x16x32_iu4` confirmed in the disassembly. Unrolling the double-K form collapses it to 34.0 and 20.8, which is register pressure. Both forms move the same bytes per lane; the unroll keeps two **independent** MMAs in flight while the double-K is one dependent instruction, and on a memory-latency-bound body the instruction-level parallelism beats the instruction density. Load width explains which storages want a deeper unroll; it does not imply the widest instruction wins. So it ships as a **capability, not a selection** — `rocm_k_unroll` is unchanged and a device row pins the instruction and the exact result.
+
+Five independent gates pinned K to 16, and the one the queue named was a red herring: `materializeMma`'s `kBlocks = 1` is not the lever, the descriptor's K is. The real five were the generator's descriptor gate, the typed body's four K-width constants, the emitted fragment types, the Target matmul contract check, and the view layout. Two layers needed nothing: `resolveFragmentLayout` already selects the K=32 instruction and the nibble packer already emits two words in the documented order.
+
+One gate was an architectural defect in its own right. The generator attached a single `tile.layout` of `{16, 16}` to three different tiles — the A view `{M, K}`, the B view `{K, N}`, and the accumulator `{M, N}` — which coincide only at K=16. Each is now built from what it describes, byte-identical at K=16. And the arch check stays in one place: the generator does not know the target, so it admits the shape and the lowering adjudicates, verified by a K=32 int4 fragment aimed at gfx1151 refusing with `ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR`.
+
+| Host | Suites at `dbe37ab5` | Lit |
+|---|---|---|
+| Tajasarus (gfx1201) | **175 passed, 0 failed**; the double-K rows pass on the device | ROCm 75/75 in both trees |
+| Princess-Luna (gfx1151) | **141 passed, 0 failed** | ROCm 75/75 |
+| Mac (M1 Max) | **18487 passed, 0 failed**, full `-m "not slow"` | doc, plan and registry gates clean |
+
+Remaining: `ROCM-GLOBAL-LOAD-TR-1` with its two candidates; the 126-VGPR spill at the shipped 4x4 panel, whose only lever is fewer live registers; raster-order selection, still blocked on counters; the sparse twin `V_SWMMAC_I32_16X16X64_IU4`, now reachable by the same route and unmeasured.
+
+Evidence: `docs/audit/backend/rocm/todo.md` §"ROCM-EXTENDED-K-1 closed: the instruction exists, works, and loses — 2026-09-19", `tests/unit/test_rocm_gfx1201_scheduled.py`, `python/tessera/compiler/scheduled_matmul.py`.
 
 <!-- entry-fields:end -->

@@ -207,9 +207,32 @@ everywhere — because issuing more slabs is how a narrow operand keeps the
 
 RDNA4 has **no shared-memory transpose load** (`ds_read_tr` is gfx950/CDNA4)
 and no in-register transpose instruction. It does have **`global_load_tr`**,
-wrapped upstream as `amdgpu.global_transpose_load` on gfx1200+, valid at
-(8 bits, 8 elements) and (16 bits, 8 elements) — so f16, bf16, fp8 and int8,
-but not int4, which needs gfx1250+.
+wrapped upstream as `amdgpu.global_transpose_load` on gfx1200+.
+
+**Its shapes are exactly our B fragment's, which is the reason to use it.**
+The ISA defines two forms, each loading a 16x16 matrix and transposing between
+row- and column-major on the way into the VGPRs:
+
+| Instruction | Element | wave32 destination | bits per lane |
+|---|---|---:|---:|
+| `GLOBAL_LOAD_TR_B128` | 16-bit | 4 consecutive VGPRs | 128 |
+| `GLOBAL_LOAD_TR_B64` | 8-bit | 2 consecutive VGPRs | 64 |
+
+Our B fragment holds `16 * K / 32` elements per lane, which at K=16 is 8:
+
+| storage | elements/lane | bits/lane | instruction |
+|---|---:|---:|---|
+| f16, bf16 | 8 | **128** | `GLOBAL_LOAD_TR_B128` |
+| fp8 e4m3/e5m2, int8 | 8 | **64** | `GLOBAL_LOAD_TR_B64` |
+| int4 (K=16) | 8 | 32 | none — `tr4` is gfx1250+ |
+| int4 (K=32) | 16 | 64 | none — TR_B64 transposes 8-bit elements, wrong granularity |
+
+So one transpose load replaces the whole strided gather for four of the six
+storages, exactly, with no leftover. The ISA's selection table is by *memory*
+order: a column-major read with a row-major VGPR layout takes the TR form,
+and the note that the table reverses when the VGPR layout is column-major is
+what makes it apply here — B is stored row-major `[K][N]` and each lane wants
+a column, which is the reversed reading.
 
 AMD's guide gives a second remedy that needs no special load at all: build an
 identity matrix in the B fragment, put the source in A, and issue one WMMA —

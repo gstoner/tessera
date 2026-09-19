@@ -240,10 +240,55 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         "sram_ecc":            "ready",
     },
     AMDArch.GFX_950: {
-        # MI325X — CDNA 4; adds MX-format MFMA + cluster mode.
+        # MI350 / MI355X — CDNA 4; adds MX-format MFMA + cluster mode.
+        # (This said "MI325X", which is CDNA 3 / gfx942. Corrected 2026-09-19.)
         "mfma":                "ready",
         "mfma_f8":             "ready",
-        "mfma_xf32":           "ready",
+        # CDNA 4 REMOVED the native TF32 matrix unit. AMD spent that area on
+        # the denser MXFP4/MXFP6 pipelines instead, on the reasoning that TF32
+        # is little used in current training and inference next to FP8 and FP4.
+        # TF32 still works on MI350-series parts, but as an application-
+        # transparent EMULATION, and one that happens ABOVE this compiler:
+        # hipBLASLt dispatches Tensile/CK templates that feed the native bf16
+        # matrix cores (`v_mfma_f32_16x16x32_b16`) with the downcast fused
+        # into the global-memory fetch, and accumulate in fp32 to hold
+        # convergence. Reported at up to 1.79x strict fp32.
+        #
+        # The mechanism is a two-term SPLIT per operand, not a truncation.
+        # Each fp32 value becomes hi + lo with hi = bf16(x) and
+        # lo = bf16(x - hi), and the product expands to
+        #
+        #     a*b = a_hi*b_hi + a_hi*b_lo + a_lo*b_hi   (+ a_lo*b_lo, dropped)
+        #
+        # so THREE bf16 MFMAs per emulated TF32 one, which is where the 1.79x
+        # over fp32 comes from -- a single bf16 MFMA would beat fp32 by far
+        # more. Two bf16 terms carry roughly 14-16 mantissa bits between them,
+        # which covers TF32's 10; that is also why "truncate to one bf16"
+        # cannot be the scheme, since bf16 alone keeps 7.
+        #
+        # Confirmed in hipBLASLt's own source, not just from a summary.
+        # `tensilelite/Tensile/KernelWriter.py` gates on the assembler
+        # capability `HasMFMA_xf32`: absent it warns "XF32 MatrixInstruction
+        # not supported for {version}, using emulation" when
+        # `UseF32XEmulation` is set, and RAISES when it is not. The operand
+        # preparation in `Components/LocalRead.py` splits each fp32 into its
+        # WORD_1 and WORD_0 halves -- the hi and lo bf16 terms -- which is the
+        # split above. So this key means exactly what hipBLASLt's capability
+        # means, and both say gfx950 lacks the instruction.
+        #
+        # None of that changes THIS key, which asks whether the instruction
+        # exists: on CDNA 4 it does not. And whichever is
+        # right, the direction holds -- faster than fp32, slower than the bf16
+        # it is built from, so it is the one reduced-precision selection that
+        # buys compatibility rather than speed.
+        #
+        # So this key is "is there a native xf32 MFMA", and on CDNA 4 there is
+        # not. Marking it "ready" asserted an instruction that does not exist;
+        # the vocabulary here is only ready/not_supported, and an emulation is
+        # not the instruction. CDNA 3 (gfx940/gfx942) keeps "ready" because
+        # V_MFMA_*_XF32 is real there. Corroborating: the CDNA 5 ISA document
+        # contains no occurrence of "xf32" at all.
+        "mfma_xf32":           "not_supported",
         "mfma_f4":             "ready",
         "mfma_f6":             "ready",
         "wmma_f16":            "not_supported",

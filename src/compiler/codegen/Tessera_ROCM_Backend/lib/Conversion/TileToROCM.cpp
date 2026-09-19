@@ -2124,7 +2124,13 @@ struct LowerTileToROCMPass
     return "Lower Tessera Tile IR matmul movement contracts to ROCm Target IR";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, gpu::GPUDialect,
+    // amdgpu is declared because the B fragment path CREATES
+    // `amdgpu.global_transpose_load`. Loading a dialect during pass execution
+    // is a hard error on an assertions build and silent UB otherwise -- the
+    // failure this repo already hit twice, most recently with the tile and
+    // tessera dialects on the EBM route.
+    registry.insert<amdgpu::AMDGPUDialect, arith::ArithDialect,
+                    gpu::GPUDialect,
                     LLVM::LLVMDialect,
                     math::MathDialect, scf::SCFDialect,
                     memref::MemRefDialect, vector::VectorDialect,

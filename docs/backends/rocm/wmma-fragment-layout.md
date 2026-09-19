@@ -444,6 +444,23 @@ intrinsic at all**, so every gfx1201 measurement recorded in this file and in
 the ROCm queue was taken under the default schedule — drained, single-buffered.
 See §11 for which results that qualifies.
 
+## 10a. WGP, not CU, is the occupancy denominator
+
+Each **WGP maps to two Compute Units**, which share execution resources and
+execute the scheduled waves; GL0 and GL1 implement the per-SE vector cache
+hierarchy feeding them. A workgroup dispatches to a WGP, so the count that
+decides whether a launch fills the machine is the WGP count, not the CU count.
+
+Measured on Tajasarus: `rocminfo` reports **64 Compute Units** for gfx1201
+(RX 9070 XT) — i.e. **32 WGPs**. Reading that 64 as the occupancy denominator
+is a 2x error in exactly the direction that hides an under-filled launch, and
+`ROCmTargetProfile` currently carries **neither** number.
+
+Worked consequence: the MoE router gate (M<=16, K=2048, N=256) at our 16x16
+macro tile is 16 output tiles, so **16 of 32 WGPs** have work. The weight read
+dominates A by 16x (1.05 MB against 65.5 KB), so the MMA unit is not the scarce
+resource there and the fix is occupancy, not a bigger tile.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no

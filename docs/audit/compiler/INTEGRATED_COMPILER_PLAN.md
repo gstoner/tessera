@@ -124,6 +124,16 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Start: device
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
 
+### ROCM-FP8-BLOCKSCALE-1
+
+**FP8 executes but cannot be scaled, so it is not an inference path**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: `ROCM-MIXED-FP8-1` proved all four OCP pairings select the right instruction and compute exactly on gfx1201. That is the *instruction*, not a usable FP8 GEMM. Measured 2026-09-19 against the 20 tuned vLLM configs for the AMD Radeon R9700 (gfx1201, `dtype=fp8_w8a8`, `block_shape=[128,128]`): Tessera has **no FP8 scale concept at all** — no `block_shape`, `weight_scale` or `scale_inv` anywhere in `python/tessera/` — while `quantization.py` carries group-wise scales for int4 and none for FP8. e4m3 saturates near ±448, so unscaled FP8 has no usable range for real weights; the contract those configs need is `C = (A·B) · s_a · s_b` with a scale per 128×128 block, and it cannot be *expressed*, which makes this the same shape as the mixed-pair gap: a reachability gap, not a correctness bug. **The coverage is worse than a refusal**: all 20 shapes × M ∈ {1,16,64} are accepted, and the route picks a 16×16 macro tile for all 60 — against a tuned `BLOCK_SIZE_M/N/K` of 64/128/128 — so it compiles, runs, and is silently far from the configuration the hardware wants. Gate: a block-scale operand carried from Graph IR through the Schedule into the descriptor (Decisions #15a/#32 — the scale is part of the numeric contract, not a side input), the M-keyed config axis those files encode (M = 1, 8, 16, 32, 64, …), and a measured comparison against the tuned config on Tajasarus. `GROUP_SIZE_M` is raster order and `num_stages` is pipeline depth, so this shares levers with the raster item and ROCM-SCHED-GROUP-1.
+- Depends on: —
+- Start: device
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
 ### EVIDENCE-PACKET-1
 
 **Evidence packet consumers**
@@ -459,6 +469,7 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | DISPATCH-BREAKER | [DISPATCH-BREAKER](#dispatch-breaker) | owner |
 | DIAG-PY-BACKLOG-1 | [DIAG-PY-BACKLOG-1](#diag-py-backlog-1) | owner |
 | DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
+| ROCM-FP8-BLOCKSCALE-1 | [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) | owner |
 | ROCM-SCHED-GROUP-1 | [ROCM-SCHED-GROUP-1](#rocm-sched-group-1) | owner |
 | ROCM-SPLIT-K-1 | [ROCM-SPLIT-K-1](#rocm-split-k-1) | owner |
 | E2E-REAL-6 | [E2E-REAL-6](#e2e-real-6) | owner |

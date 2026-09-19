@@ -13,6 +13,42 @@ last_updated: 2026-09-15
 
 Owner E2E-REAL-6; sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`. Both frontends now mark the bound `bias`/`residual` operands of `tessera.matmul` the way the C++ verifier reads them, and `tessera-tiling` materializes `activation` once after the reduction (bias → activation → residual). Apple outcome: parity validated host-free — a traced `ops.matmul(..., bias=, activation=)` now reaches the tiled form the `gpu.matmul2d_epilogue` fusion consumes. No device or performance claim.
 
+## Five Apple diagnostics are raised and unregistered — 2026-09-19
+
+Sync `GFX1201-PARITY-2026-09-17` (found there); owner DIAG-PY-BACKLOG-1.
+
+**Follow-up required.** The diagnostic-code registry's Python scanner was a
+prefix allowlist (`E_*`, `JIT_*`, `TS_ERR_*`, `GRAPH_IR_*`), so no
+domain-prefixed code raised from Python was ever checked. Widening it to match
+the code *shape*, as the C++ scan always has, surfaced five Apple codes that
+are emitted and unregistered:
+
+| Code | Emitted by |
+|---|---|
+| `APPLE_FRAGMENT_UNSUPPORTED_ARCH` | `apple_fragment.py` — the target has no `simdgroup_matrix` |
+| `APPLE_FRAGMENT_UNSUPPORTED_DTYPE` | `apple_fragment.py` — storage is not fp16/bf16 |
+| `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR` | `apple_fragment.py` — simdgroup Tile fragments require fp32 |
+| `APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED` | `msl_gemm_emit.py` |
+| `APPLE_COUNTER_EVIDENCE_UNSUPPORTED` | `apple_counter_evidence.py` — two sites |
+
+They are held in a **shrink-only ratchet** in
+`tests/unit/test_diagnostic_code_registry.py` rather than registered by the
+ROCm-side work that found them, because one of them cannot be written honestly
+from outside this backend: **`APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR`'s fix
+hint has to say whether fp32-only accumulation is permanent or pending the
+Metal 4 cooperative-tensor lane**, and `matmul2d` takes a storage *pair* with
+fp32 accumulate, so the answer is not obvious from the refusal site. An
+invented fix hint is worse than a missing entry — it reads as settled and sends
+the next caller the wrong way.
+
+The ratchet fails if the set grows and fails again when one of the five is
+registered without being deleted from the list, so this can only shrink. Note
+the nine ROCm siblings found in the same sweep were registered the same day;
+only Apple's are outstanding.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed).
+
+
 ## bf16 matmul2d arbiter bucket — measured, retained — 2026-09-15
 
 Owner E2E-REAL-6; sync `APPLE-MATMUL2D-BUCKET-2026-09-15`. `retune_matmul2d_bf16`

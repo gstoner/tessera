@@ -8877,6 +8877,42 @@ assertions-only trap this repo has hit twice), `convert-gpu-to-rocdl` lowers
 the op to `rocdl.global.load.tr.b128` with no additional pass, and the
 generic kernel argument is cast to the global address space the op requires.
 
+**`ROCM-MIXED-FP8-1`: every layer below the Schedule is ready, and the
+blocker turned out to be one field.** The item was recorded as "the Graph
+matmul contract requires `a_dtype == b_dtype`". That is true and it is not the
+bottom. Working down: `resolveFragmentLayout` **already** selected
+`V_WMMA_F32_16X16X16_FP8_BF8` and its mirror from the descriptor's two types,
+before any of this. The fragment types now carry B's own storage rather than
+inheriting A's (both are 8 bits, so the register format and the packing are
+untouched; only the selected instruction differs). The generator's descriptor
+gate and the Target matmul gate in `TileToROCM.cpp` both admit an fp8/fp8
+pair now, each restricted to that pairing.
+
+What is left is **`MatmulSchedule` in `PMPasses.cpp`, which carries a single
+`StringRef storage`** — so the Tile IR it emits necessarily writes the same
+name into the descriptor's `a` and `b`, and no mixed descriptor can be
+produced no matter what the layers below accept. That is a Schedule-IR
+contract change, not a codegen one, which is why it is recorded rather than
+rushed: the Schedule is the level that says what the program computes, and
+widening it to two operand storages touches every consumer of that field.
+
+The reachability gate's entry now names that blocker instead of the Graph
+contract, so the next person starts at the right layer. 186 device rows pass
+with the readiness in place; nothing regressed.
+
+**`ROCM-VGPR-PRESSURE-1`, scoped.** The 4x4 panel's spill was recorded as the
+largest lever and the least specified. Measured on gfx1201 (f16, compile-only,
+kernel metadata): the 2x4 panel allocates 198 VGPRs and spills none; the 4x4
+allocates 256 and spills 133, at both k=1 and k=2. Accumulators are
+`mt*nt*8` = 128 at the 4x4 panel and fragments are `(mt+nt)*4` per slab, so
+**roughly 200 VGPRs — about half the demand, and more than the accumulators —
+are neither**. That overhead roughly doubles from the 2x4 panel to the 4x4
+(110 to 229), tracking `mt*nt`, which points at per-tile addressing and index
+state held live across the loop, sixteen tiles' worth at 4x4. The K unroll is
+**not** the cause: spill is identical at k=1 and k=2, so the unroll and the
+spill are independent problems. Target and candidate approaches recorded in
+`docs/backends/rocm/wmma-fragment-layout.md` §9.
+
 **Still owed.** The 8-bit mapping for `TR_B64`, measured the same way, which
 would extend this to fp8 and int8; the 2048³ anomaly, which needs counters;
 AMD's identity-matrix in-register transpose as the int4 fallback; the

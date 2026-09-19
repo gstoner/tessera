@@ -26,9 +26,17 @@ from tessera.compiler.rocm_target import AMDArch, wmma_dtype_forms
 #: (a, b, accum, k) -> why the typed route cannot emit it, and who owns that.
 #: A reason here is a debt, not a dismissal.
 UNREACHABLE: dict[tuple[str, str, str, int], str] = {
+    # Everything BELOW the Schedule is ready as of 2026-09-19: the fragment
+    # types carry B's own storage, both the generator gate and the Target
+    # matmul gate admit an fp8/fp8 pair, and `resolveFragmentLayout` already
+    # selected FP8_BF8 / BF8_FP8 from the descriptor's two types before any of
+    # that. What is left is one field: `MatmulSchedule` in PMPasses.cpp carries
+    # a single `StringRef storage`, so the Tile IR it emits necessarily writes
+    # the same name into the descriptor's `a` and `b`. Until the Schedule can
+    # name two, no mixed descriptor can be produced.
     ("fp8_e4m3", "fp8_e5m2", "fp32", 16):
-        "mixed FP8 operands: the Graph matmul contract requires a_dtype == "
-        "b_dtype, so the pair cannot be expressed at all (ROCM-MIXED-FP8-1)",
+        "mixed FP8 operands: the Schedule carries one storage, so the emitted "
+        "descriptor writes the same name to a and b (ROCM-MIXED-FP8-1)",
     ("fp8_e5m2", "fp8_e4m3", "fp32", 16):
         "mixed FP8 operands, mirror of the above (ROCM-MIXED-FP8-1)",
     ("fp16", "fp16", "fp16", 16):

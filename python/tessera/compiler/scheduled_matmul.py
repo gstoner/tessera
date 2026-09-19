@@ -192,12 +192,25 @@ def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool,
     gains 7% from k=2 and keeps k=1, and gfx1201 int4 at 1024^3 spans 6%
     across all three and keeps k=1.
 
-    **This is a workaround for a missing instruction, not the instrument.**
-    A deeper unroll issues *more* loads to reach the bandwidth; AMD's
-    extended-K technique fuses two WMMAs so one load fetches 16 elements and
-    fills 128 bits, bit-identically. For int4 the hardware already has it as
-    `V_WMMA_I32_16X16X32_IU4`, which `TileToROCM.cpp` cannot yet emit because
-    `materializeMma` pins `kBlocks = 1`. Prefer that when it lands.
+    **The unroll was assumed to be a workaround for a missing instruction. It
+    is not -- measured 2026-09-19 and the assumption is withdrawn.** The
+    reasoning was that a deeper unroll reaches the 128-bit load width by
+    issuing *more* loads, where RDNA4's native double-K int4
+    (`V_WMMA_I32_16X16X32_IU4`) fetches 16 elements in one, so the instruction
+    should win. The typed route can emit it now, it is exact against the i32
+    reference at 64^3, 256^3 and 512^3, and `v_wmma_i32_16x16x32_iu4` appears
+    in the disassembly -- and it **loses** to the unroll at every shape
+    (TOP/s, k16-unroll-4 vs k32-unroll-1): 47.5 vs 42.8 at 1024^3, 98.5 vs
+    91.5 at 2048^3, 106.9 vs 100.8 at 4096^3. Unrolling the double-K form on
+    top of that collapses (34.0 and 20.8), which is the register pressure.
+
+    The load width was the right mechanism and the wrong conclusion. Both
+    forms move the same bytes per lane; what differs is that the unroll has
+    two INDEPENDENT MMAs in flight while the double-K is one dependent
+    instruction. On a memory-latency-bound body the instruction-level
+    parallelism is worth more than the instruction density. So the unroll
+    stays the rule, and the double-K shape is a supported capability rather
+    than a selection.
 
     Neither chip's number is evidence for the other.
     """

@@ -3048,7 +3048,11 @@ struct LowerTileToROCMPass
         if (!desc || !epilogue || !parent || desc.getFamily() != "wmma" ||
             desc.getM() != 16 || desc.getN() != 16 ||
             desc.getK() != expectedK ||
-            desc.getAType() != desc.getBType() ||
+            // A and B may differ only for the mixed OCP FP8 pairs, which the
+            // hardware has and `resolveFragmentLayout` already selects.
+            (desc.getAType() != desc.getBType() &&
+             !(isAnyOf(desc.getAType(), {"e4m3", "e5m2"}) &&
+               isAnyOf(desc.getBType(), {"e4m3", "e5m2"}))) ||
             (desc.getAType() != "f16" && desc.getAType() != "bf16" &&
              !(fp8Storage && arch.starts_with("gfx12")) && !intStorage) ||
             desc.getAccType() != (intStorage ? "i32" : "f32")) {

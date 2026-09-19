@@ -423,10 +423,22 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                            : T.pack == 1                     ? "int8"
                                                              : "int4";
   StringRef fragmentAcc = T.isInt ? "i32" : "f32";
+  // B may name a DIFFERENT storage from A. RDNA4 has the mixed OCP FP8 pairs
+  // (`V_WMMA_F32_16X16X16_FP8_BF8` and its mirror) and
+  // `resolveFragmentLayout` already selects them from the descriptor's two
+  // types -- the fragment types are what carry the request down to it, so B
+  // takes the descriptor's own `b` rather than inheriting A's. Both are 8-bit,
+  // so nothing about the register format or the packing changes; only the
+  // instruction the pair selects does.
+  StringRef bFragmentElem = fragmentElem;
+  if (auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"))
+    if (mma.getAType() != mma.getBType() &&
+        (mma.getBType() == "e4m3" || mma.getBType() == "e5m2"))
+      bFragmentElem = mma.getBType();
   auto aFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, fragK, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
   auto bFragmentTy = tessera::tile::FragmentType::get(
-      ctx, 16, 16, fragK, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
+      ctx, 16, 16, fragK, bFragmentElem, fragmentAcc, "b", "col_major", "wmma");
   auto accFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, fragK, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
 
@@ -1506,6 +1518,12 @@ struct GenerateWMMAGemmKernelPass
       // lowering is where it belongs, and it already fails closed -- the
       // gfx1100/gfx1151 branch of `resolveFragmentLayout` admits `k == 16`
       // only, so a K=32 int4 fragment aimed at RDNA3 resolves to nothing.
+      // RDNA4 has the mixed OCP FP8 pairs, so A and B may name different
+      // storages -- but only that pairing, and only fp8 with fp8.
+      auto isFp8 = [](llvm::StringRef t) { return t == "e4m3" || t == "e5m2"; };
+      const bool mixedFp8Pair = desc && isFp8(desc.getAType()) &&
+                                isFp8(desc.getBType()) &&
+                                desc.getAType() != desc.getBType();
       const int64_t expectedK =
           (desc && desc.getAType() == "int4" && desc.getK() == 32) ? 32 : 16;
       auto epilogue =
@@ -1513,7 +1531,8 @@ struct GenerateWMMAGemmKernelPass
       bool common = desc && epilogue &&
           (desc.getFamily() == "auto" || desc.getFamily() == "wmma") &&
           desc.getM() == 16 && desc.getN() == 16 && desc.getK() == expectedK &&
-          desc.getAType() == desc.getBType() && desc.getALayout() == "row_major" &&
+          (desc.getAType() == desc.getBType() || mixedFp8Pair) &&
+          desc.getALayout() == "row_major" &&
           desc.getBLayout() == "col_major" && desc.getKBlocks() == 1;
       bool floatContract = common &&
           (desc.getAType() == "f16" || desc.getAType() == "bf16") &&
@@ -1523,9 +1542,8 @@ struct GenerateWMMAGemmKernelPass
           (desc.getAccType() == "i32" || desc.getAccType() == "int32");
       // OCP FP8 storage (RDNA4 WMMA, k=16 per fragment) accumulates in f32;
       // the typed route packs it per chip (GFX1201-PARITY slice 5).
-      bool fp8Contract = common &&
-          (desc.getAType() == "e4m3" || desc.getAType() == "e5m2") &&
-          desc.getAccType() == "f32";
+      bool fp8Contract = common && isFp8(desc.getAType()) &&
+          isFp8(desc.getBType()) && desc.getAccType() == "f32";
       bool canonical = floatContract || integerContract || fp8Contract;
       if (!canonical) {
         op->emitError("ROCm tile.matmul_kernel requires an m16n16k16 row/col "

@@ -263,20 +263,42 @@ B[(L / 8) * 4 + j / 2][(L % 8) + 8 * (j % 2)]        // j = 0..7
 Spot checks from the run: lane 0 gets columns {0, 8} of rows 0-3; lane 15 gets
 columns {7, 15} of rows 4-7; lane 31 gets columns {7, 15} of rows 12-15.
 
-**This is not the B fragment layout.** §3 says the fragment wants
-`b[h] = B[lane % 16][8 * (lane / 16) + h]`: one lane, one `n`, eight
-consecutive `k`. What the instruction hands back under this addressing is
-eight elements spanning four rows and two columns. The transpose pattern
-across the wave is fixed in hardware; the only free choice is the address each
-lane supplies, so **using this instruction for the B operand requires deriving
-the address assignment that lands the fragment layout, and that derivation is
-not done.** Do not wire it in on the strength of the shape match alone.
+That addressing was arbitrary, and what it returns is not the fragment. But it
+is enough to recover the permutation, which is the part the ISA does not
+state. Writing lane `L`'s eight contiguous reads as `R(L)[0..7]`, the measured
+result is exactly
 
-What *is* established: the `amdgpu` dialect is registered in both drivers,
-`amdgpu.global_transpose_load` parses over a memref, `convert-gpu-to-rocdl`
-lowers it to `rocdl.global.load.tr.b128` with no additional pass, and the
-resulting kernel builds and runs on gfx1201. The integration path is clear;
-the layout derivation is the open work.
+```
+received(L, j) = R(8 * (L / 8) + j)[L % 8]
+```
+
+an **8x8 transpose inside each group of 8 lanes**: the group collectively
+reads eight runs of eight elements and transposes that tile. Every row of the
+probe follows from it, including the ones that look least like a transpose.
+
+### The address each lane must supply
+
+§3 says the fragment wants `b(L)[h] = B_logical[L % 16][8 * (L / 16) + h]`,
+one lane holding one `n` and eight consecutive `k`. With B stored row-major
+`[K][N]` so that `B_logical[n][k] = mem[k * ldb + n]`, substituting the
+permutation above and solving for the address gives
+
+```
+A(L) = (8 * (L / 16) + (L % 8)) * ldb + ((L / 8) % 2) * 8
+```
+
+*Evidence*: on gfx1201 with `B[k][n] = k * 16 + n` — asymmetric, every element
+distinct — this reproduces the fragment on **256/256 elements**. The
+arbitrary `A(L) = 8L` addressing does not, which is the control.
+
+So the instrument and the layout both check out, and the remaining work is
+plumbing: the materializer computes one linear per-lane index for its scalar
+gather, and the transpose load needs the tile origin and `A(L)` separately.
+
+Everything else is in place: the `amdgpu` dialect is registered in both
+drivers, `amdgpu.global_transpose_load` parses over a memref,
+`convert-gpu-to-rocdl` lowers it to `rocdl.global.load.tr.b128` with no
+additional pass, and the kernel builds and runs on gfx1201.
 
 ## Where the machine truth lives
 

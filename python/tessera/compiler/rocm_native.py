@@ -1561,7 +1561,11 @@ def package_scheduled_matmul(
     from .scheduled_matmul import verify_matmul_projection
     verify_matmul_projection(artifact)
     dtypes = (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
-    fp8 = dtypes in {("fp8_e4m3", "fp8_e4m3", "fp32"), ("fp8_e5m2", "fp8_e5m2", "fp32")}
+    # Any fp8 pairing, including the MIXED ones: RDNA4 has
+    # V_WMMA_F32_16X16X16_FP8_BF8 and its mirror, and the Schedule names both
+    # operand storages now (ROCM-MIXED-FP8-1).
+    _fp8 = {"fp8_e4m3", "fp8_e5m2"}
+    fp8 = (dtypes[0] in _fp8 and dtypes[1] in _fp8 and dtypes[2] == "fp32")
     integer = dtypes in {("int8", "int8", "int32"), ("int4", "int4", "int32")}
     if (
         artifact.target != "rocm"
@@ -1572,7 +1576,8 @@ def package_scheduled_matmul(
     ):
         raise ValueError(
             "ROCm scheduled matmul requires an exact gfx1151/gfx1201 f16/bf16-to-f32 "
-            "or int8/int4-to-i32 contract (or OCP FP8 e4m3/e5m2 to f32 on gfx1201)")
+            "or int8/int4-to-i32 contract (or any OCP FP8 e4m3/e5m2 pairing, "
+            "including mixed, to f32 on gfx1201)")
     arch = artifact.architecture
     if k_unroll is None:
         # A performance key: derived from the measured rule unless the caller

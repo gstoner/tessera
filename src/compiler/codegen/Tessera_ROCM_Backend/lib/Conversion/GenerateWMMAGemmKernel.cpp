@@ -145,6 +145,10 @@ struct WmmaGemmRequest {
   std::string accumulate;
   std::string rasterOrder = "row_major";
   int64_t rasterGroup = 1;
+  // ROCM-MACRO-K-TILE-1: the descriptor's `k_blocks`. Arrives here rather than
+  // being read from `desc` at the emission site, because the descriptor is only
+  // in scope in the adapters that populate this request.
+  int64_t kBlocks = 1;
   tessera::tile::TilePackedFormatAttr storagePack;
 };
 
@@ -1691,6 +1695,11 @@ struct GenerateWMMAGemmKernelPass
       request.mt = mt;
       request.nt = nt;
       request.dtype = desc.getAType().str();
+      // ROCM-MACRO-K-TILE-1: the descriptor's K block reaches the generator.
+      // Until 2026-09-19 `k_blocks` was stated by the Schedule, verified >= 1,
+      // and read by nobody except three gates that refused anything but 1 -- so
+      // a macro K tile was expressible and unreachable. This is the consumer.
+      request.kBlocks = std::max<int64_t>(desc.getKBlocks(), 1);
       request.bias = epilogue.getBias();
       request.activation = epilogue.getActivation().str();
       request.output = epilogue.getOutputType().str();
@@ -1966,8 +1975,7 @@ struct GenerateWMMAGemmKernelPass
       // 2026-09-19 `k_blocks` was stated by the Schedule, verified >= 1, and
       // read by nobody except three gates that refused anything but 1 -- so a
       // macro K tile was expressible and unreachable. This is the consumer.
-      if (desc)
-        T.kBlocks = std::max<int64_t>(desc.getKBlocks(), 1);
+      T.kBlocks = std::max<int64_t>(request.kBlocks, 1);
 
       // ── NUMPOL-CARRIER-1: the declared accumulator gets a CONSUMER ──
       //

@@ -783,9 +783,24 @@ across v0–v7; on gfx1201 it reports **4 GPRs for A** with lane 0 holding eight
 and lane 16 the other eight. The register count is the tell, and the comment is
 correct.
 
-**Where it lives on the fleet.** Cloned at
-`~/programming/amd_matrix_instruction_calculator` on **Tajasarus** and
-**Princess-Luna**; it needs `tabulate`, installed into each box's tessera venv.
+**Where it lives on the fleet.** Absolute paths, because the two boxes have
+different users and a non-interactive `ssh` expands `~` to whichever account it
+logged in as:
+
+| host | path |
+|---|---|
+| Tajasarus (gfx1201) | `/home/angstorms/programming/amd_matrix_instruction_calculator` |
+| Princess-Luna (gfx1151) | `/home/gstoner/programming/amd_matrix_instruction_calculator` |
+
+It needs `tabulate`, installed into each box's tessera venv.
+
+Running `-L` on each arch corroborates the RDNA3.5-vs-RDNA4 split this repo
+asserts in several places. gfx1151 lists **exactly six** matrix instructions —
+`v_wmma_{f32,f16}_16x16x16_f16`, `v_wmma_{f32,bf16}_16x16x16_bf16`,
+`v_wmma_i32_16x16x16_{iu8,iu4}` — with **no FP8/BF8 form and no SWMMAC at all**,
+while gfx1201 adds the four fp8 pairings, the double-K int4 and the sparse
+family. "FP8 and sparse are RDNA4-only" is therefore a vendor-checkable fact,
+not an inference from our own tables.
 It is pure Python and needs no GPU, so a layout question does not need device
 time — but note the two boxes answer for different chips by argument, not by
 which box you are on (`-a gfx1151` works on Tajasarus and vice versa).

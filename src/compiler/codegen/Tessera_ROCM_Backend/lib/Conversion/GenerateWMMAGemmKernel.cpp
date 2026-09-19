@@ -94,6 +94,16 @@ struct WmmaTypes {
   // cannot silently break the contract check — verify against `packFactor`.
   int pack;
   int packFactor;
+  // K elements ONE fragment consumes. 16 everywhere except RDNA4 int4, which
+  // has a native double-K form (`V_WMMA_I32_16X16X32_IU4`). That matters
+  // because a fragment load is 8 elements per lane whatever the storage, so
+  // int4 moves only 32 of the 128 available bits at K=16; the double-K shape
+  // fetches 16 elements and fills the interface (AMD's RDNA4 WMMA guide,
+  // part 2). It is the instrument the K-unroll workaround stands in for.
+  //
+  // Only the K axis scales. The 16s that build the M/N macro tile are fragment
+  // geometry and are untouched.
+  int64_t fragK = 16;
 };
 
 /// Backend-neutral input to the one gfx11 WMMA kernel generator. Portable
@@ -395,12 +405,16 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                            : T.pack == 1                     ? "int8"
                                                              : "int4";
   StringRef fragmentAcc = T.isInt ? "i32" : "f32";
+  // M and N are fragment geometry and stay 16. K follows the storage: RDNA4
+  // int4 has a native double-K form, and the fragment type is what carries
+  // that request to `resolveFragmentLayout`.
+  const int64_t fragK = T.fragK;
   auto aFragmentTy = tessera::tile::FragmentType::get(
-      ctx, 16, 16, 16, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
+      ctx, 16, 16, fragK, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
   auto bFragmentTy = tessera::tile::FragmentType::get(
-      ctx, 16, 16, 16, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
+      ctx, 16, 16, fragK, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
   auto accFragmentTy = tessera::tile::FragmentType::get(
-      ctx, 16, 16, 16, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
+      ctx, 16, 16, fragK, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
 
   auto makeTileView = [&](OpBuilder &bb, Location l, Value base, Value row,
                           Value col, Value linearBase, Value rowBound,
@@ -813,7 +827,10 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   }
 
   // kMain = largest multiple of 16 <= K; the tail panel covers [kMain, K).
-  Value kRem = b.create<arith::RemUIOp>(loc, K, c16);
+  // K-width constants follow the fragment, not the 16 that builds the M/N
+  // macro tile. RDNA4 int4 consumes 32 K elements per fragment.
+  Value cFragK = b.create<arith::ConstantIndexOp>(loc, T.fragK);
+  Value kRem = b.create<arith::RemUIOp>(loc, K, cFragK);
   Value kMain = b.create<arith::SubIOp>(loc, K, kRem);
   Value needTail =
       b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, kRem, c0);
@@ -832,7 +849,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     // axis tops out at 4x4 fragments before the VGPR cliff), so this is the
     // remaining lever. `kUnroll = 1` is exactly the established loop.
     const int64_t unroll = masked ? 1 : std::max<int64_t>(kUnroll, 1);
-    Value kStep = rb.create<arith::ConstantIndexOp>(loc, 16 * unroll);
+    Value kStep = rb.create<arith::ConstantIndexOp>(loc, T.fragK * unroll);
     Value kMainU = kMain;
     if (unroll > 1) {
       Value remU = rb.create<arith::RemUIOp>(loc, kMain, kStep);
@@ -846,7 +863,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
             Value ku = u == 0 ? k0
                               : bb.create<arith::AddIOp>(
                                     l, k0,
-                                    bb.create<arith::ConstantIndexOp>(l, 16 * u));
+                                    bb.create<arith::ConstantIndexOp>(l, T.fragK * u));
             accs = mainPanel(bb, l, ku, accs);
           }
           bb.create<scf::YieldOp>(l, accs);
@@ -855,7 +872,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     scf::ForOp remainder;
     if (unroll > 1) {
       remainder = rb.create<scf::ForOp>(
-          loc, kMainU, kMain, c16, kLoop.getResults(),
+          loc, kMainU, kMain, cFragK, kLoop.getResults(),
           [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
             bb.create<scf::YieldOp>(l, mainPanel(bb, l, k0, iter));
           });
@@ -1459,11 +1476,27 @@ struct GenerateWMMAGemmKernelPass
     for (tessera::tile::MatmulKernelOp kernel : portableKernels) {
       Operation *op = kernel.getOperation();
       auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+      // K is 16 for every form except the native double-K int4
+      // (`V_WMMA_I32_16X16X32_IU4`). `resolveFragmentLayout` already selects
+      // that shape and the nibble packer in TileToROCM already emits it -- it
+      // loops over `inputElementsPerLane` with `shift = 4 * (i % 8)` into word
+      // `i / 8`, so at K=32 it produces two words in the documented order with
+      // no change. This gate was the only thing refusing it.
+      //
+      // The ARCH is deliberately not checked here. This pass does not know it:
+      // the target arrives as a `lower-tile-to-rocm` option one pass later,
+      // and the IR need not carry it. Duplicating the check from a default
+      // would refuse the shape on a request that never named an arch. The
+      // lowering is where it belongs, and it already fails closed -- the
+      // gfx1100/gfx1151 branch of `resolveFragmentLayout` admits `k == 16`
+      // only, so a K=32 int4 fragment aimed at RDNA3 resolves to nothing.
+      const int64_t expectedK =
+          (desc && desc.getAType() == "int4" && desc.getK() == 32) ? 32 : 16;
       auto epilogue =
           op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
       bool common = desc && epilogue &&
           (desc.getFamily() == "auto" || desc.getFamily() == "wmma") &&
-          desc.getM() == 16 && desc.getN() == 16 && desc.getK() == 16 &&
+          desc.getM() == 16 && desc.getN() == 16 && desc.getK() == expectedK &&
           desc.getAType() == desc.getBType() && desc.getALayout() == "row_major" &&
           desc.getBLayout() == "col_major" && desc.getKBlocks() == 1;
       bool floatContract = common &&
@@ -1480,6 +1513,7 @@ struct GenerateWMMAGemmKernelPass
       bool canonical = floatContract || integerContract || fp8Contract;
       if (!canonical) {
         op->emitError("ROCm tile.matmul_kernel requires an m16n16k16 row/col "
+                      "(m16n16k32 for int4 on gfx12) "
                       "WMMA descriptor: f16/bf16/e4m3/e5m2 with f32 "
                       "accumulation or int8/int4 with i32 accumulation");
         return signalPassFailure();
@@ -1752,6 +1786,13 @@ struct GenerateWMMAGemmKernelPass
         T = {i8Ty, v16i8, VectorType::get({2}, i32Ty), v8i32, i32Ty,
              /*isInt=*/true, /*halfAccumulator=*/false, /*pack=*/2,
              /*packFactor=*/2};
+        // RDNA4's native double-K int4 consumes 32 K elements per fragment.
+        // Only the K loop's stride changes here; the fragment types above are
+        // the gfx11 shapes for the directive path, and the typed route
+        // re-derives its own per arch from the descriptor.
+        if (auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"))
+          if (mma.getK() == 32)
+            T.fragK = 32;
       } else if (dt == "e4m3" || dt == "fp8" || dt == "fp8_e4m3" ||
                  dt == "e5m2" || dt == "bf8" || dt == "fp8_e5m2") {
         // OCP FP8 storage, f32 accumulate. Only the typed route carries it:

@@ -457,6 +457,65 @@ static LogicalResult verifyQuantWeightDtype(Operation *op, StringRef dt) {
   return success();
 }
 
+LogicalResult ScaledMatmulOp::verify() {
+  auto aType = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto bType = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto rType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (aType && aType.getRank() != 2)
+    return emitOpError("lhs must be a rank-2 (M, K) tensor");
+  if (bType && bType.getRank() != 2)
+    return emitOpError("rhs must be a rank-2 (K, N) tensor");
+  if (rType && rType.getRank() != 2)
+    return emitOpError("result must be a rank-2 (M, N) tensor");
+  auto agree = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  const int64_t kA = aType ? aType.getDimSize(getTransposeA() ? 0 : 1)
+                           : ShapedType::kDynamic;
+  const int64_t kB = bType ? bType.getDimSize(getTransposeB() ? 1 : 0)
+                           : ShapedType::kDynamic;
+  if (!agree(kA, kB))
+    return emitOpError("lhs K (") << kA << ") and rhs K (" << kB
+                                  << ") must agree";
+
+  // The scale operands are the point of this op, so their extent along the
+  // contraction is checked against the declared block size rather than taken
+  // on trust: a scale tensor with the wrong number of blocks is the failure
+  // this op exists to make impossible, and it is numerically silent otherwise
+  // -- the GEMM still runs, with the wrong factor on every block but one.
+  auto sl = getScaleLayoutAttr();
+  if (!sl)
+    return success();
+  auto blockAttr = dyn_cast_or_null<ArrayAttr>(sl.get("block"));
+  if (!blockAttr || blockAttr.size() != 2)
+    return success(); // granularity other than an (M, K)-style block pair
+  auto kBlockAttr = dyn_cast<IntegerAttr>(blockAttr[1]);
+  if (!kBlockAttr)
+    return success();
+  const int64_t kBlock = kBlockAttr.getInt();
+  if (kBlock <= 0)
+    return emitOpError("scale_layout block K must be positive; got ") << kBlock;
+  if (ShapedType::isDynamic(kA))
+    return success();
+  const int64_t wantBlocks = (kA + kBlock - 1) / kBlock;
+  auto checkScale = [&](Value scale, StringRef name) -> LogicalResult {
+    auto t = dyn_cast<RankedTensorType>(scale.getType());
+    if (!t || t.getRank() != 2)
+      return success();
+    // Whichever axis carries the block count must match; the other is the
+    // free (M or N) axis, which this check deliberately leaves alone.
+    if (agree(t.getDimSize(0), wantBlocks) || agree(t.getDimSize(1), wantBlocks))
+      return success();
+    return emitOpError(name)
+           << " has no axis of extent " << wantBlocks << " (K=" << kA
+           << " over blocks of " << kBlock
+           << "), so it cannot carry one scale per K block";
+  };
+  if (failed(checkScale(getLhsScale(), "lhs_scale")))
+    return failure();
+  return checkScale(getRhsScale(), "rhs_scale");
+}
+
 LogicalResult DequantMatmulOp::verify() {
   if (failed(verifyQuantWeightDtype(getOperation(), getWeightDtype())))
     return failure();

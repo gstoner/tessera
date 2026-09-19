@@ -2015,6 +2015,31 @@ struct GenerateWMMAGemmKernelPass
                          outputTy, hasBias, activation, request.rasterOrder,
                          request.rasterGroup);
       } else if (request.canonicalKLoop && canonicalStaging == "lds") {
+        // This body writes its accumulator back at row `2*e + lhi`, which is
+        // RDNA3's wave32 distribution. gfx12 distributes the same accumulator
+        // by COLUMN (`(lane/16)*8 + j`, see
+        // docs/backends/rocm/wmma-fragment-layout.md section 2), and the
+        // `tessera_rocm.wmma` this body emits is the arch-resolving Target IR
+        // op -- so on gfx12 it would lower to the RDNA4 instruction and then
+        // scatter the result to RDNA3 rows. That is the silent-wrong-tiles
+        // failure the layout contract exists to prevent: no verifier catches
+        // it and the kernel runs to completion.
+        //
+        // Unlike the control-for-WMMA generators, which emit the gfx11 rocdl
+        // intrinsic directly and therefore die at instruction selection on
+        // gfx12, this one has nothing to fail on. It is a gfx11-only
+        // comparison lane whose evidence is gfx1151-only, so it refuses by
+        // name instead (Decision #21). Found 2026-09-19 by a structural
+        // search for accumulator index math with no arch branch; a substring
+        // audit the same week had cleared this file.
+        if (!gfx11Request) {
+          op->emitError(
+              "ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED: the canonical LDS "
+              "comparison body stores its accumulator in the RDNA3 row "
+              "distribution and is admitted on gfx11 only; this request is ")
+              << requestArch;
+          return signalPassFailure();
+        }
         if (T.halfAccumulator) {
           op->emitError(
               "ROCM_WMMA_ACCUM_UNSUPPORTED: f16 accumulation is admitted "

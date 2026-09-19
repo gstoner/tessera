@@ -1171,6 +1171,28 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="NUMPOL-CARRIER-1",
     ),
     DiagnosticCode(
+        code="ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED",
+        pass_origin="GenerateWMMAGemmKernel",
+        severity="error",
+        summary=(
+            "the canonical LDS comparison body was requested for an "
+            "architecture whose accumulator distribution it does not write."
+        ),
+        fix_hint=(
+            "That body stores its accumulator at row `2*e + lhi`, RDNA3's "
+            "wave32 distribution. gfx12 distributes the same accumulator by "
+            "column, and the `tessera_rocm.wmma` it emits resolves per arch -- "
+            "so on gfx12 the kernel would run to completion and scatter its "
+            "result to the wrong rows, with no verifier to catch it. It is a "
+            "gfx11-only comparison lane with gfx1151-only evidence. Use the "
+            "typed LDS body (`via-tile=true canonical-staging=lds`), which "
+            "resolves row and column from the fragment family, or the "
+            "register body."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="GFX1201-PARITY-2026-09-17",
+    ),
+    DiagnosticCode(
         code="ROCM_WMMA_ACCUM_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",
         severity="error",

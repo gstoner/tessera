@@ -392,9 +392,27 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   MLIRContext *ctx = b.getContext();
   SmallVector<StringAttr> tileAxes{b.getStringAttr("tlane"),
                                    b.getStringAttr("reg")};
-  auto tileLayout = tessera::tile::TileLayoutAttr::get(
-      ctx, {16, 16}, {16, 1}, tileAxes, {}, {}, {}, 0,
-      tessera::tile::TileSwizzleAttr());
+  // M and N are fragment geometry and stay 16. K follows the storage: RDNA4
+  // int4 has a native double-K form, and the fragment type and the operand
+  // view layouts are what carry that request to `resolveFragmentLayout`.
+  const int64_t fragK = T.fragK;
+  // Three DIFFERENT tiles shared one literal here, and they coincide only at
+  // K = 16: the A view is {M, K}, the B view is {K, N}, and the accumulator
+  // the epilogue unpacks and stores is {M, N}. `materializeFragmentPack`
+  // checks the view's shard extents against {M, K} / {K, N} derived from the
+  // descriptor, so at RDNA4's double-K int4 (K = 32) a shared {16, 16} is
+  // wrong for both operands and right for the accumulator. Each is now built
+  // from what it actually describes; every one of them is exactly {16, 16}
+  // with stride {16, 1} again when fragK is 16, so the K = 16 route emits
+  // byte-identical IR.
+  auto layoutFor = [&](int64_t rows, int64_t cols) {
+    return tessera::tile::TileLayoutAttr::get(
+        ctx, {rows, cols}, {cols, 1}, tileAxes, {}, {}, {}, 0,
+        tessera::tile::TileSwizzleAttr());
+  };
+  auto aTileLayout = layoutFor(16, fragK);    // {M, K}
+  auto bTileLayout = layoutFor(fragK, 16);    // {K, N}
+  auto accTileLayout = layoutFor(16, 16);     // {M, N}, independent of K
   auto dynamicRowMajor = tessera::tile::TileMemoryLayoutAttr::get(
       ctx, "gmem", "row_major", 0);
   auto tileValueTy = tessera::tile::TileValueType::get(ctx);
@@ -405,10 +423,6 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                            : T.pack == 1                     ? "int8"
                                                              : "int4";
   StringRef fragmentAcc = T.isInt ? "i32" : "f32";
-  // M and N are fragment geometry and stay 16. K follows the storage: RDNA4
-  // int4 has a native double-K form, and the fragment type is what carries
-  // that request to `resolveFragmentLayout`.
-  const int64_t fragK = T.fragK;
   auto aFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, fragK, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
   auto bFragmentTy = tessera::tile::FragmentType::get(
@@ -416,10 +430,12 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto accFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, fragK, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
 
+  // `layout` is the operand's own shard shape; passing it in is what keeps the
+  // A and B views from silently sharing one.
   auto makeTileView = [&](OpBuilder &bb, Location l, Value base, Value row,
                           Value col, Value linearBase, Value rowBound,
-                          Value colBound, Value leadingDim,
-                          bool bounded) -> Value {
+                          Value colBound, Value leadingDim, bool bounded,
+                          tessera::tile::TileLayoutAttr layout) -> Value {
     OperationState state(l, "tile.view");
     if (bounded)
       state.addOperands(
@@ -427,7 +443,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     else
       state.addOperands({base, linearBase, row, col, leadingDim});
     state.addTypes(tileValueTy);
-    state.addAttribute("tile.layout", tileLayout);
+    state.addAttribute("tile.layout", layout);
     state.addAttribute("tile.memory", dynamicRowMajor);
     state.addAttribute("tile.linear_base", bb.getUnitAttr());
     return bb.create(state)->getResult(0);
@@ -592,7 +608,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                              : bb.create<arith::AddIOp>(l, arK[mi], k0);
       Value view =
           makeTileView(bb, l, A, rowOrigin[mi], k0, linearBase, M, K, K,
-                       bounded);
+                       bounded, aTileLayout);
       af[mi] = packFragment(bb, l, view, aFragmentTy);
     }
     for (int64_t ni = 0; ni < nt; ++ni) {
@@ -602,7 +618,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                                    bb, l, k0, colN[ni], N, "row_major");
       Value view =
           makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, N,
-                       bounded);
+                       bounded, bTileLayout);
       bf[ni] = packFragment(bb, l, view, bFragmentTy);
     }
     SmallVector<Value> next(mt * nt);
@@ -756,7 +772,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           OperationState unpack(loc, "tile.fragment_unpack");
           unpack.addOperands(accs[mi * nt + ni]);
           unpack.addTypes(tileValueTy);
-          unpack.addAttribute("tile.layout", tileLayout);
+          unpack.addAttribute("tile.layout", accTileLayout);
           Value tile = sb.create(unpack)->getResult(0);
           OperationState store(loc, "tile.store");
           if (masked)
@@ -769,7 +785,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
               store.addOperands({bias});
             store.addAttribute("tile.epilogue", typedEpilogueAttr);
           }
-          store.addAttribute("tile.layout", tileLayout);
+          store.addAttribute("tile.layout", accTileLayout);
           store.addAttribute("tile.memory", dynamicRowMajor);
           sb.create(store);
         }

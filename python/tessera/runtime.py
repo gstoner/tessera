@@ -5442,6 +5442,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_MATMUL_BF16_F32_FUSED_ABI,
             GFX_MATMUL_E4M3_F32_ABI,
             GFX_MATMUL_E5M2_F32_ABI,
+            GFX_MATMUL_E4M3_E5M2_F32_ABI,
+            GFX_MATMUL_E5M2_E4M3_F32_ABI,
             GFX_MATMUL_I8_I32_ABI,
             GFX_MATMUL_I4_I32_ABI,
             GFX_DEPTH_ATTN_F32_ABI,

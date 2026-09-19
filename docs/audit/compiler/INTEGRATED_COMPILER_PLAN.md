@@ -166,6 +166,22 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Start: device
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
 
+### ROCM-MACRO-K-TILE-1
+
+**There is no macro K tile, and four other items are downstream of that**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: Measured 2026-09-19 on gfx1201 — our tile geometry has **M and N but not K**. The macro tile is 16×16 at M≤64 and 64×64 at large shapes, and the K tile is **16 at every shape**, because it is the WMMA's own K rather than a blocking parameter; the K loop walks 16 (or 32 under `kUnroll`). The tuned reference is **64×128 with BLOCK_SIZE_K=128**. This was found by stepping back from threading a scale field through the descriptor and asking what the whole path needs, which is the right order and was not the order I was working in.
+  **Four separately-tracked items are downstream of this one gap:**
+  (1) [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) — the reference asserts `GROUP_K == BLOCK_SIZE_K`, so a 128-element scale block needs a 128-wide K block to hang on. Expressing it via `kUnroll` instead would make one knob serve two jobs (latency hiding *and* blocking), which is how a tuning parameter becomes a semantic one.
+  (2) [ROCM-SPLIT-K-1](#rocm-split-k-1) — a split partitions a K block; with no K block there is nothing to partition, which is a better explanation of why `split_k_required` was keyed on raw `k` than "someone chose a bad threshold".
+  (3) [ROCM-LDS-STAGE-VECTOR-1](#rocm-lds-stage-vector-1) — LDS stages *a K block*; the copy width and the block extent are chosen together (CK sets `BLOCK_SIZE_K` and `SrcScalarPerVector` in the same instance).
+  (4) The M-bucketed configs tune `BLOCK_SIZE_M/N/K`; we model two of three, so a per-shape selection built on M and N alone cannot reach those rows however well it is tuned.
+  Gate: a macro K tile in the schedule and the descriptor, distinct from the instruction K and from `kUnroll`, with the K loop blocked on it; then the scale contract, split-K and staging width all have a defined extent to attach to. **Not claimed:** that the 4×4 panel's 133-VGPR spill is downstream of this. §9 attributes that to per-tile addressing state tracking `mt*nt`, and K blocking does not obviously change it — that stays as recorded until measured.
+- Depends on: —
+- Start: device
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
 ### GOV-ODS-CONSUMER-1
 
 **Decision #29's op-level clause has no gate**
@@ -541,6 +557,7 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | DISPATCH-BREAKER | [DISPATCH-BREAKER](#dispatch-breaker) | owner |
 | DIAG-PY-BACKLOG-1 | [DIAG-PY-BACKLOG-1](#diag-py-backlog-1) | owner |
 | DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
+| ROCM-MACRO-K-TILE-1 | [ROCM-MACRO-K-TILE-1](#rocm-macro-k-tile-1) | owner |
 | GOV-ODS-CONSUMER-1 | [GOV-ODS-CONSUMER-1](#gov-ods-consumer-1) | owner |
 | ROCM-FP8-BLOCKSCALE-1 | [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) | owner |
 | ROCM-MXFP4-W4A8-1 | [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1) | owner |

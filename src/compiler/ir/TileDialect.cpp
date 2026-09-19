@@ -485,7 +485,7 @@ LogicalResult TileMmaDescAttr::verify(
     llvm::function_ref<InFlightDiagnostic()> emitError, StringRef family,
     int64_t m, int64_t n, int64_t k, StringRef aType, StringRef bType,
     StringRef accType, StringRef aLayout, StringRef bLayout,
-    int64_t kBlocks) {
+    int64_t kBlocks, int64_t scaleBlockK, StringRef scaleFormat) {
   static const llvm::StringSet<> kFamilies = {
       "auto", "mma_sync", "wgmma", "tcgen05", "wmma", "mfma"};
   if (!kFamilies.contains(family))
@@ -494,6 +494,30 @@ LogicalResult TileMmaDescAttr::verify(
                           "wmma, mfma}";
   if (m <= 0 || n <= 0 || k <= 0)
     return emitError() << "TILE_MMA_DESC_NONPOSITIVE_SHAPE: m/n/k must be > 0";
+  // A scale block that is not a whole number of K tiles cannot be applied once
+  // per block: the accumulate boundary and the scale boundary would disagree,
+  // and the kernel would scale a partial product. Refused here rather than
+  // discovered as wrong numbers (Decision #21a).
+  if (scaleBlockK < 0)
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k must be >= 0 "
+                          "(0 means unscaled); got "
+                       << scaleBlockK;
+  if (scaleBlockK > 0 && scaleBlockK % k != 0)
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k ("
+                       << scaleBlockK << ") must be a whole multiple of the "
+                                         "instruction K ("
+                       << k
+                       << "), or the scale boundary and the accumulate boundary "
+                          "disagree and a partial product gets scaled";
+  if (scaleBlockK == 0 && !scaleFormat.empty())
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_fmt \""
+                       << scaleFormat
+                       << "\" is set but scale_k is 0, so nothing carries it";
+  if (scaleBlockK > 0 && scaleFormat.empty())
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k is "
+                       << scaleBlockK
+                       << " but scale_fmt is empty; the scale's element format "
+                          "is part of the contract, not a default";
   if (kBlocks < 1)
     return emitError() << "TILE_MMA_DESC_BAD_K_BLOCKS: k_blocks must be >= 1";
   if (aType.empty() || bType.empty() || accType.empty())

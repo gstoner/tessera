@@ -243,6 +243,13 @@ struct MatmulSchedule {
   //: V_WMMA_F32_16X16X16_FP8_BF8 and its mirror, and the descriptor is where
   //: that pairing has to be expressible or nothing below it can select it.
   StringRef storageB;
+  //: The block-scale contract, when the Graph op carried one. `scaleBlockK`
+  //: is the contraction extent sharing a scale (0 = unscaled) and
+  //: `scaleFormat` its element form. The Schedule is where this has to live:
+  //: it decides what the program computes, and a scale dropped here is
+  //: Decision #32 loss on the attribute that picks the instruction.
+  int64_t scaleBlockK = 0;
+  StringRef scaleFormat;
   StringRef accum;
   int64_t m;
   int64_t n;
@@ -3288,7 +3295,8 @@ struct ScheduleToTilePass
             &getContext(), "auto", selected->tileM, selected->tileN,
             selected->tileK, selected->storage,
             selected->storageB.empty() ? selected->storage : selected->storageB,
-            selected->accum, "row_major", "col_major", 1);
+            selected->accum, "row_major", "col_major", 1,
+            selected->scaleBlockK, selected->scaleFormat);
         auto epilogue = tile::TileEpilogueAttr::get(
             &getContext(), selected->bias, selected->activation,
             selected->output);
@@ -3359,7 +3367,8 @@ struct ScheduleToTilePass
               &getContext(), "mma_sync", selected->tileM, selected->tileN,
               selected->tileK, selected->storage,
             selected->storageB.empty() ? selected->storage : selected->storageB,
-              selected->accum, "row_major", "col_major", 1);
+              selected->accum, "row_major", "col_major", 1,
+            selected->scaleBlockK, selected->scaleFormat);
           SmallVector<StringAttr> laneReg{kernelBuilder.getStringAttr("laneid"),
                                           kernelBuilder.getStringAttr("reg")};
           auto aLayout = tile::TileLayoutAttr::get(
@@ -3687,7 +3696,8 @@ struct ScheduleToTilePass
           selected->storage == "u8" ? "i8"
           : selected->storageB.empty() ? selected->storage
                                        : selected->storageB,
-          selected->accum, "row_major", "col_major", 1);
+          selected->accum, "row_major", "col_major", 1,
+          selected->scaleBlockK, selected->scaleFormat);
       auto epilogue = tile::TileEpilogueAttr::get(
           &getContext(), selected->bias, selected->activation, selected->accum);
 

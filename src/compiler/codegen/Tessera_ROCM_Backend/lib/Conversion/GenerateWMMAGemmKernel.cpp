@@ -105,6 +105,16 @@ struct WmmaTypes {
   // Only the K axis scales. The 16s that build the M/N macro tile are fragment
   // geometry and are untouched.
   int64_t fragK = 16;
+  // ROCM-MACRO-K-TILE-1. The descriptor's `k_blocks`: how many fragment-K
+  // steps one K BLOCK spans, so the block's contraction extent is
+  // `fragK * kBlocks`. Distinct from `kUnroll`, which is a measured latency
+  // knob: `kBlocks` is a contract the Schedule stated and a block scale must
+  // align to exactly (the descriptor verifier enforces
+  // `scale_k == k * k_blocks`), while `kUnroll` may be retuned freely without
+  // changing what the program computes. They shape the loop the same way and
+  // must not be conflated -- that is how a tuning parameter becomes a
+  // semantic one.
+  int64_t kBlocks = 1;
   // B's storage name when it differs from A's. RDNA4 has the mixed OCP FP8
   // pairs (`V_WMMA_F32_16X16X16_FP8_BF8` and its mirror), and empty means
   // "same as A", which is every other case.
@@ -914,7 +924,12 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     // memory-latency bound (LDS staging measured 0.39-0.65x, and the panel
     // axis tops out at 4x4 fragments before the VGPR cliff), so this is the
     // remaining lever. `kUnroll = 1` is exactly the established loop.
-    const int64_t unroll = masked ? 1 : std::max<int64_t>(kUnroll, 1);
+    // Panels issued per loop iteration = the descriptor's K block times the
+    // unroll. With `kBlocks == 1` this is exactly the established loop, so the
+    // generalisation is inert until a schedule states a wider block.
+    const int64_t blocks = std::max<int64_t>(T.kBlocks, 1);
+    const int64_t unroll =
+        masked ? 1 : std::max<int64_t>(kUnroll, 1) * blocks;
     Value kStep = rb.create<arith::ConstantIndexOp>(loc, T.fragK * unroll);
     Value kMainU = kMain;
     if (unroll > 1) {
@@ -1619,7 +1634,7 @@ struct GenerateWMMAGemmKernelPass
           desc.getM() == 16 && desc.getN() == 16 && desc.getK() == expectedK &&
           (desc.getAType() == desc.getBType() || mixedFp8Pair) &&
           desc.getALayout() == "row_major" &&
-          desc.getBLayout() == "col_major" && desc.getKBlocks() == 1;
+          desc.getBLayout() == "col_major" && desc.getKBlocks() >= 1;
       bool floatContract = common &&
           (desc.getAType() == "f16" || desc.getAType() == "bf16") &&
           desc.getAccType() == "f32";
@@ -1946,6 +1961,13 @@ struct GenerateWMMAGemmKernelPass
             << dt << "')";
         return signalPassFailure();
       }
+
+      // ROCM-MACRO-K-TILE-1: the descriptor's K block reaches the loop. Until
+      // 2026-09-19 `k_blocks` was stated by the Schedule, verified >= 1, and
+      // read by nobody except three gates that refused anything but 1 -- so a
+      // macro K tile was expressible and unreachable. This is the consumer.
+      if (desc)
+        T.kBlocks = std::max<int64_t>(desc.getKBlocks(), 1);
 
       // ── NUMPOL-CARRIER-1: the declared accumulator gets a CONSUMER ──
       //

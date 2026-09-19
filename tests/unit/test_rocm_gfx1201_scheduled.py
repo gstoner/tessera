@@ -786,3 +786,68 @@ def test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact(shape):
                          artifact.macro_tile_m, artifact.macro_tile_n)
     assert result == 0
     np.testing.assert_array_equal(output, a.astype(np.int32) @ b.astype(np.int32))
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("storage,expect_tr", [
+    ("fp16", True), ("bf16", True),
+    # 8-bit takes GLOBAL_LOAD_TR_B64, a DIFFERENT permutation whose address
+    # derivation is not done. Enabling it on the matching width alone produced
+    # wrong results on every 8-bit storage, so it must stay on the gather.
+    ("fp8_e4m3", False), ("int8", False), ("int4", False),
+])
+def test_gfx1201_b_fragment_uses_the_transpose_load_only_where_derived(storage, expect_tr):
+    """ROCM-GLOBAL-LOAD-TR-1: `GLOBAL_LOAD_TR_B128` replaces the strided B gather.
+
+    B is stored row-major `[K][N]` and each lane wants a column, so the B
+    fragment was eight guarded scalar loads where A took one `vector.load`.
+    The transpose load reads a 16x16 tile and transposes it into the registers,
+    which is the fragment -- but only once the per-lane address is right, and
+    the ISA does not state the permutation. Measured on device
+    (`docs/backends/rocm/wmma-fragment-layout.md` section 8):
+
+        received(L, j) = R(8*(L/8) + j)[L % 8]
+        A(L)           = (kBase + lane%8)*ldb + (lane/8)*8
+
+    This asserts the instruction reaches the kernel for the storages the
+    derivation covers and stays out of the others. The numbers are checked by
+    the exact device rows elsewhere in this file; what a disassembly check adds
+    is that a silent fallback to the gather cannot pass for a win.
+    """
+    import re, subprocess, tempfile, collections
+    from pathlib import Path
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    objdump = None
+    for candidate in (Path.home() / ".local/share/tessera-toolchains/llvm-23.1.1/bin/llvm-objdump",
+                      Path("/usr/lib/llvm-23/bin/llvm-objdump")):
+        if candidate.is_file():
+            objdump = str(candidate)
+            break
+    if objdump is None:
+        pytest.skip("llvm-objdump unavailable; cannot inspect the emitted ISA")
+    out_dtype = "int32" if storage.startswith("int") else "fp32"
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=(1024, 1024, 1024), dtype=storage,
+                      output_dtype=out_dtype),
+        target="rocm_gfx1201")
+    _, _, payload, *_ = rocm_native._compile_native_tile_ir(
+        artifact.tile_ir, directive="tessera_rocm.wmma", family="matmul",
+        architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)
+    with tempfile.NamedTemporaryFile(suffix=".hsaco", delete=False) as handle:
+        handle.write(payload)
+        path = handle.name
+    try:
+        text = subprocess.run([objdump, "-d", "--mcpu=gfx1201", path],
+                              capture_output=True, text=True).stdout
+    finally:
+        os.unlink(path)
+    seen = collections.Counter(re.findall(r"global_load_tr\S*", text))
+    if expect_tr:
+        assert seen, f"{storage} should use the transpose load; found none"
+        assert all(name.startswith("global_load_tr_b128") for name in seen), seen
+    else:
+        assert not seen, f"{storage} must stay on the guarded gather; found {dict(seen)}"

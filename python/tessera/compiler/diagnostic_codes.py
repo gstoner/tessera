@@ -1216,6 +1216,195 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         language="python",
     ),
     DiagnosticCode(
+        code="ROCM_FRAGMENT_UNSUPPORTED_DTYPE",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "The requested storage dtype has no physical WMMA/MFMA fragment "
+            "on any AMD architecture this table models, so no fragment ABI "
+            "can be resolved."
+        ),
+        fix_hint=(
+            "Name a storage the matrix hardware has. There is deliberately no "
+            "generic gfx-prefix fallback: guessing a fragment ABI from an "
+            "architecture prefix is the miscompile ROCM-5 removed, and it "
+            "fails silently with wrong tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_UNSUPPORTED_SHAPE",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "Portable fragment materialization accepts only the m16n16 tile "
+            "shared by every modelled family, plus CDNA5's m32n16; the "
+            "requested M/N is neither."
+        ),
+        fix_hint=(
+            "Use m16n16, or m32n16 on gfx125x. A shape outside the table has "
+            "no lane mapping defined, so materializing one anyway would "
+            "scatter the result. There is deliberately no generic gfx-prefix "
+            "fallback: guessing a fragment ABI from an architecture prefix is "
+            "the miscompile ROCM-5 removed, and it fails silently with wrong "
+            "tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_ILLEGAL_RDNA3_WMMA",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "gfx11 (RDNA3 / RDNA3.5) WMMA takes m16n16k16 with fp16, bf16, "
+            "int8 or int4 only, and the request is outside that table -- most "
+            "often an FP8 or BF8 storage, which RDNA3.5 has in no WMMA form "
+            "at all."
+        ),
+        fix_hint=(
+            "Use fp16/bf16/int8/int4 at k=16 on gfx11. FP8/BF8 WMMA and the "
+            "sparse SWMMAC family are RDNA4-only, so a gfx1151 request for "
+            "them is a routing error, and no gfx1201 evidence transfers to "
+            "it. There is deliberately no generic gfx-prefix fallback: "
+            "guessing a fragment ABI from an architecture prefix is the "
+            "miscompile ROCM-5 removed, and it fails silently with wrong "
+            "tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_ILLEGAL_RDNA4_WMMA",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "gfx120x (RDNA4) WMMA takes fp16, bf16, fp8_e4m3, fp8_e5m2 and "
+            "int8 at k=16 and int4 at k=32, and the request is outside that "
+            "table."
+        ),
+        fix_hint=(
+            "int4 is the one storage whose native K is 32 on RDNA4 "
+            "(V_WMMA_I32_16X16X32_IU4); every other storage is k=16. RDNA4 "
+            "has no FP4 WMMA form, so fp4_e2m1 is refused here rather than "
+            "emulated. There is deliberately no generic gfx-prefix fallback: "
+            "guessing a fragment ABI from an architecture prefix is the "
+            "miscompile ROCM-5 removed, and it fails silently with wrong "
+            "tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_ILLEGAL_CDNA5_WMMA",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "gfx125x (CDNA5) wave32 WMMA has a per-dtype shape table -- fp32 "
+            "k=4, fp16/bf16 k=32, fp8 k=64 or 128, int8 k=64, fp4_e2m1 k=128 "
+            "-- and the requested (dtype, shape) pair is not in it."
+        ),
+        fix_hint=(
+            "Match the dtype's own K; CDNA5 does not share one K across "
+            "storages the way RDNA does. Only fp16 and bf16 are "
+            "materialization-ready today, so a legal shape here can still be "
+            "unimplemented further down. There is deliberately no generic "
+            "gfx-prefix fallback: guessing a fragment ABI from an "
+            "architecture prefix is the miscompile ROCM-5 removed, and it "
+            "fails silently with wrong tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_ILLEGAL_CDNA_MFMA",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "CDNA1-4 MFMA has a per-dtype K table -- fp16/bf16/int8 k=16, "
+            "fp32 k=8, fp8 k=32, fp4_e2m1 k=64 -- and the requested (dtype, "
+            "shape) pair is not in it."
+        ),
+        fix_hint=(
+            "Match the dtype's own K. MFMA is wave64 with a different "
+            "accumulator distribution from every WMMA family, so an RDNA "
+            "fragment descriptor is not a valid substitute even at the same "
+            "logical shape. There is deliberately no generic gfx-prefix "
+            "fallback: guessing a fragment ABI from an architecture prefix is "
+            "the miscompile ROCM-5 removed, and it fails silently with wrong "
+            "tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_UNSUPPORTED_CDNA2_DTYPE",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "gfx90a (CDNA2) has no FP8 or FP4 MFMA instruction, so an "
+            "fp8_e4m3, fp8_e5m2 or fp4_e2m1 fragment cannot be built for it."
+        ),
+        fix_hint=(
+            "Low-precision MFMA starts at CDNA3 for FP8 and CDNA4 for FP4. "
+            "Use fp16, bf16, int8 or fp32 on gfx90a, or route the work to a "
+            "chip that has the instruction. There is deliberately no generic "
+            "gfx-prefix fallback: guessing a fragment ABI from an "
+            "architecture prefix is the miscompile ROCM-5 removed, and it "
+            "fails silently with wrong tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_UNSUPPORTED_CDNA3_DTYPE",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "gfx94x (CDNA3) has FP8 MFMA but no FP4 MFMA, so an fp4_e2m1 "
+            "fragment cannot be built for it."
+        ),
+        fix_hint=(
+            "FP4 MFMA starts at CDNA4. Use fp8_e4m3 or fp8_e5m2 on gfx94x, or "
+            "route FP4 work to gfx95x. There is deliberately no generic "
+            "gfx-prefix fallback: guessing a fragment ABI from an "
+            "architecture prefix is the miscompile ROCM-5 removed, and it "
+            "fails silently with wrong tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_UNSUPPORTED_ARCH",
+        pass_origin="tessera.compiler.rocm_fragment.select_fragment_layout",
+        severity="error",
+        summary=(
+            "The architecture belongs to no modelled fragment family, so "
+            "there is no matrix ABI to select: the arch is either unknown to "
+            "the registry or has no matrix unit."
+        ),
+        fix_hint=(
+            "Add the architecture to the family sets in rocm_fragment.py "
+            "together with its measured fragment descriptor, never to a "
+            "prefix match. There is deliberately no generic gfx-prefix "
+            "fallback: guessing a fragment ABI from an architecture prefix is "
+            "the miscompile ROCM-5 removed, and it fails silently with wrong "
+            "tiles rather than loudly."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-5",
+        language="python",
+    ),
+    DiagnosticCode(
         code="ROCM_WMMA_ACCUM_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",
         severity="error",

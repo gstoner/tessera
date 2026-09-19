@@ -812,6 +812,59 @@ gfx125x row flagged UNCORROBORATED in §10f, which stays open pending a CDNA5
 ISA source. Absence from a tool that does not model the chip is not evidence
 about the chip.
 
+## 10h. What AMD's own shipping gfx1201 FP8 GEMM actually does
+
+hipBLASLt installs 144 Tensile code objects for gfx1201 at
+`$ROCM_PATH/lib/hipblaslt/library/gfx1201`. They are **CCOB compressed offload
+bundles**, not bare ELFs — `clang-offload-bundler --type=o --unbundle
+--targets=hipv4-amdgcn-amd-amdhsa--gfx1201` extracts the ELF, which then
+disassembles normally. Counts below are **static, across every kernel variant
+inside one library file** (5.2M lines), not one kernel's mix.
+
+From `TensileLibrary_B8F8_SB8F8_..._Ailk_Bjlk_gfx1201`:
+
+| instruction | count | what it says |
+|---|---|---|
+| `v_wmma_f32_16x16x16_bf8_fp8` | 23854 | the **mixed pairs**, in shipping vendor code |
+| `v_wmma_f32_16x16x16_fp8_bf8` | 13596 | |
+| `global_load_tr_b64` | 14780 | **the 8-bit transpose load we excluded** |
+| `buffer_load_b128` | — | the other operand, wide, untransposed |
+| `ds_load_b32` / `ds_load_b128` | 55408 / 21656 | LDS staging is central, and the reads are wide |
+| `ds_store_b32` | 6708 | stores are far fewer than loads |
+| `s_barrier_signal`/`_wait` | 7224 each | |
+
+**Three of our open items move on this.**
+
+*`ROCM-GLOBAL-LOAD-TR-1`'s owed 8-bit extension is viable, and no longer needs a
+blind measurement.* §8 records that enabling `TR_B128` for 8-bit storages on the
+matching per-lane width alone produced wrong results on every one of them, so
+the item was parked pending a measured `TR_B64` mapping. **AMD uses
+`global_load_tr_b64` for the 8-bit B operand**, 14780 times in this one library,
+alongside `buffer_load_b128` for the untransposed side — the same A/B asymmetry
+our register body has. The addressing is a scalar 64-bit base (`s[52:53]`) with
+per-lane VGPR offsets, the same shape as the address derived in §8. So the
+mapping can be *read* out of this disassembly rather than measured from scratch.
+
+*`ROCM-LDS-STAGE-VECTOR-1` is confirmed from the other side.* AMD's kernel is
+LDS-heavy — tens of thousands of `ds_load_b32` and `ds_load_b128`, 7224 barrier
+pairs — and its LDS reads are **wide**. Our typed LDS body stages with
+`ds_store_b16` and `global_load_d16_b16`, sixteen bits per thread per iteration
+(§10e). The vendor kernel is not avoiding LDS; it is staging it properly. That
+is the third independent line pointing at the copy loop rather than at LDS
+staging as a strategy.
+
+*`ROCM-MIXED-FP8-1` is vendor-confirmed in shipping binaries*, not merely in the
+rocWMMA headers (§10f).
+
+**And the block-scale gap is confirmed here too.** Of those 144 gfx1201
+libraries, **zero** carry MX or block-scale in their type tags — they are
+combinations of B8/F8/H/S/D/BB with scalar and vector scales (`SAB`, `SAV`,
+`SCD`). Together with rocMLIR's scaled path being MFMA-oriented and Triton
+upconverting on gfx1201, that is three independent sources agreeing that
+**block-scaled low precision on the RDNA4 WMMA is unserved across AMD's own
+stack** — which is what `ROCM-FP8-BLOCKSCALE-1` and `ROCM-MXFP4-W4A8-1` are for,
+and why the hand-written kernel in §10b exists.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no

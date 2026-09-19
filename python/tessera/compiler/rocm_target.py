@@ -254,15 +254,17 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         # into the global-memory fetch, and accumulate in fp32 to hold
         # convergence. Reported at up to 1.79x strict fp32.
         #
-        # The exact numerics are NOT settled here and this comment will not
-        # pretend otherwise. Two accounts circulate: a 3-term bf16
-        # decomposition, and a single truncation to a 16-bit type. They differ
-        # in accuracy, and the second is hard to read literally -- TF32 keeps a
-        # 10-bit mantissa while bf16 keeps 7, so one bf16 operand cannot hold
-        # a TF32 value. The 1.79x figure also fits several bf16 operations
-        # better than one, since a single bf16 MFMA would beat fp32 by far
-        # more. Resolve it against hipBLASLt's own gfx950 templates before
-        # anyone writes an accuracy claim on top of it.
+        # The mechanism is a two-term SPLIT per operand, not a truncation.
+        # Each fp32 value becomes hi + lo with hi = bf16(x) and
+        # lo = bf16(x - hi), and the product expands to
+        #
+        #     a*b = a_hi*b_hi + a_hi*b_lo + a_lo*b_hi   (+ a_lo*b_lo, dropped)
+        #
+        # so THREE bf16 MFMAs per emulated TF32 one, which is where the 1.79x
+        # over fp32 comes from -- a single bf16 MFMA would beat fp32 by far
+        # more. Two bf16 terms carry roughly 14-16 mantissa bits between them,
+        # which covers TF32's 10; that is also why "truncate to one bf16"
+        # cannot be the scheme, since bf16 alone keeps 7.
         #
         # None of that changes THIS key, which asks whether the instruction
         # exists: on CDNA 4 it does not, by either account. And whichever is

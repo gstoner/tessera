@@ -434,6 +434,22 @@ Per-phase deliverables and the open-work priority queue live in
     falsifier" clause above is history. Route MLIR promise/contract claims to
     Tajasarus (or any assertions build) before recording "does not reproduce".
 
+    **A fourth class, and the Mac owns this one (2026-09-19): a host that
+    FORKS cannot falsify a claim about a host that SPAWNS.** macOS starts
+    multiprocessing children with `spawn`; both WSL2 Linux boxes use
+    `forkserver`. A spawned child **re-imports the test module** to unpickle
+    its target, so a module-level import that the child's `sys.path` cannot
+    resolve kills the worker at startup — and the parent sees `EOFError`
+    instead of the refusal under test. Hoisting
+    `from tests._support import rocm_isa` to module scope in
+    `tests/unit/test_rocm_sparse_runtime.py` did exactly that. It passed in
+    isolation, passed with all 541 ROCm unit tests together, passed with
+    full-directory collection, and **passed every CI lane**; it failed only in
+    a complete macOS `tests/unit/` sweep, 1 of 18,493. Keep a helper import
+    function-local in any test module whose functions are pickled into a
+    worker, and read a full-sweep failure's *captured stderr* — the child's
+    traceback is the evidence, and a summary line is not.
+
     **Third instance (2026-09-16): the EBM row-program chain ran green on every
     NDEBUG driver in the fleet and aborted twice on Tajasarus's assertions-ON
     driver** — `--inline` builds its interface collection over every loaded

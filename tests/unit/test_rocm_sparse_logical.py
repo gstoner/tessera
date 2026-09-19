@@ -14,6 +14,14 @@ import pytest
 from tessera.compiler.rocm_sparse_logical import sparse_logical_schedule_ir
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 
+# `rocm_isa` is imported inside each test on purpose. `rocm_sparse_runtime`
+# runs its kernels in a multiprocessing worker, and under spawn/forkserver the
+# child RE-IMPORTS this module to unpickle the target. The child's sys.path does
+# not resolve `tests._support`, so a module-level import kills the worker at
+# startup and the parent sees EOFError instead of the refusal under test.
+# Hoisting this to module scope for tidiness cost a full-sweep failure on macOS
+# that passed in isolation, in the whole ROCm subset, and in CI (2026-09-19).
+
 
 @pytest.mark.parametrize('shape', [(0,16,32), (16,17,32), (16,16,31), (True,16,32)])
 def test_sparse_logical_refuses_unsupported_envelope(shape):
@@ -51,10 +59,12 @@ def test_sparse_logical_device_packing_and_k_accumulation(shape,dtype,tmp_path):
     pipeline = 'builtin.module(gpu.module(convert-vector-to-llvm,convert-scf-to-cf,convert-gpu-to-rocdl,reconcile-unrealized-casts),rocdl-attach-target{chip=gfx1201},gpu-module-to-binary{toolkit='+os.environ['ROCM_PATH']+'})'
     binary = subprocess.check_output([str(llvm/'mlir-opt'),'--pass-pipeline='+pipeline],input=lowered,text=True,env=env)
     image = _decode_image(re.findall(r'"((?:\\.|[^"\\])*)"',binary)[-1])
-    image_path = tmp_path/'sparse.hsaco'
-    image_path.write_bytes(image)
-    asm = subprocess.check_output([str(llvm/'llvm-objdump'),'--disassemble',str(image_path)],text=True,env=env)
-    assert 'v_swmmac_f32_16x16x32_' + ('f16' if dtype == np.float16 else 'bf16') in asm
+    from tests._support import rocm_isa  # deliberately local -- see note below
+    storage = 'f16' if dtype == np.float16 else 'bf16'
+    rocm_isa.assert_selected(image, chip='gfx1201', pattern=r'v_swmmac_\w+',
+        require='v_swmmac_f32_16x16x32_' + storage,
+        forbid='v_swmmac_f32_16x16x32_' + ('bf16' if storage == 'f16' else 'f16'),
+        what=f'logical sparse {np.dtype(dtype).name}')
     hip = rt._load_hip_for_launch()
     P = ct.c_void_p
     def check(status):

@@ -38,6 +38,7 @@ def _module(
     target: str,
     shape: tuple[int, int, int] = (17, 19, 23),
     dtype: str | None = None,
+    b_dtype: str | None = None,
     output_dtype: str = "fp32",
     activation: str = "none",
     bias: bool = False,
@@ -53,9 +54,21 @@ def _module(
     element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32", "fp64": "f64",
                "fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2",
                "int8": "i8", "int4": "i4"}[dtype]
+    # `b_dtype` exists for the mixed OCP FP8 pairs: RDNA4 has
+    # V_WMMA_F32_16X16X16_FP8_BF8 and its mirror, so a matmul whose operands
+    # name different fp8 storages is a real program, not a malformed one.
+    b_name = b_dtype or dtype
+    b_element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32", "fp64": "f64",
+                 "fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2",
+                 "int8": "i8", "int4": "i4"}[b_name]
     a = IRType(f"tensor<{m}x{k}x{element}>", (str(m), str(k)), dtype)
-    b = IRType(f"tensor<{k}x{n}x{element}>", (str(k), str(n)), dtype)
-    output_element = {"fp16": "f16", "fp32": "f32", "fp64": "f64", "int32": "i32"}[output_dtype]
+    b = IRType(f"tensor<{k}x{n}x{b_element}>", (str(k), str(n)), b_name)
+    # bf16 is here so a reduced-precision ACCUMULATOR can be asked for. Without
+    # it, `test_rocm_wmma_form_reachability` proved the bf16-accumulate WMMA
+    # unreachable by raising KeyError inside this helper -- the fixture's own
+    # missing key reading as a compiler refusal.
+    output_element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32",
+                      "fp64": "f64", "int32": "i32"}[output_dtype]
     output = IRType(
         f"tensor<{m}x{n}x{output_element}>", (str(m), str(n)), output_dtype
     )

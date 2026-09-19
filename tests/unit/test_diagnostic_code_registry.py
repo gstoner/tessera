@@ -105,12 +105,50 @@ _PYTHON_CODE_PATTERNS = (
     # reported green. A drift gate that cannot see a family does not report a
     # gap in it; it reports nothing, which reads identically to compliance.
     re.compile(r'"(GRAPH_IR_[A-Z][A-Z0-9_]{2,})"'),
+    # 2026-09-19: the prefix allowlist above is the SAME defect twice. The
+    # GRAPH_IR_ note records it happening once; it then happened again to every
+    # domain-prefixed code a Python module raises (ROCM_FRAGMENT_*,
+    # APPLE_FRAGMENT_*, ...), because none of them starts with a known prefix.
+    # The C++ side never had this problem: it matches the SHAPE of a code
+    # ("NAME:" in a string literal) rather than an enumeration of families. Use
+    # that pattern here too, so the next family is covered on the day it is
+    # written instead of on the day someone notices.
+    _CODE_PATTERN,
 )
 
 #: Identifiers that share a diagnostic prefix but are not diagnostics.
 #: `GRAPH_IR_SCHEMA_VERSION` is the IR schema version constant; it is quoted in
 #: `__all__`, which is enough for a prefix regex to mistake it for a code.
-_NOT_DIAGNOSTICS = frozenset({"GRAPH_IR_SCHEMA_VERSION"})
+#: `DESIL` and `DRIFT` are prose labels in a message, matched by the shape
+#: pattern because they are all-caps and followed by a colon.
+_NOT_DIAGNOSTICS = frozenset({"GRAPH_IR_SCHEMA_VERSION", "DESIL", "DRIFT"})
+
+#: Codes the widened scan above found already unregistered on 2026-09-19, the
+#: day it could see them. They are a **ratchet, not an allowlist**: the gate
+#: fails if the set grows, and fails again when one of these is registered
+#: without being deleted from here, so the backlog can only shrink. They are
+#: listed rather than fixed in place because each belongs to another
+#: subsystem's registry entry (ROCm fragment legality, Apple fragment
+#: legality, x86 timing evidence) and authoring those inside an unrelated
+#: change is how a focused PR becomes an unreviewable one.
+#: Owner: `docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md` -- DIAG-PY-BACKLOG-1.
+_UNREGISTERED_ON_2026_09_19 = frozenset({
+    "APPLE_COUNTER_EVIDENCE_UNSUPPORTED",
+    "APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED",
+    "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR",
+    "APPLE_FRAGMENT_UNSUPPORTED_ARCH",
+    "APPLE_FRAGMENT_UNSUPPORTED_DTYPE",
+    "ROCM_FRAGMENT_ILLEGAL_CDNA5_WMMA",
+    "ROCM_FRAGMENT_ILLEGAL_CDNA_MFMA",
+    "ROCM_FRAGMENT_ILLEGAL_RDNA3_WMMA",
+    "ROCM_FRAGMENT_ILLEGAL_RDNA4_WMMA",
+    "ROCM_FRAGMENT_UNSUPPORTED_ARCH",
+    "ROCM_FRAGMENT_UNSUPPORTED_CDNA2_DTYPE",
+    "ROCM_FRAGMENT_UNSUPPORTED_CDNA3_DTYPE",
+    "ROCM_FRAGMENT_UNSUPPORTED_DTYPE",
+    "ROCM_FRAGMENT_UNSUPPORTED_SHAPE",
+    "TIMING_PROOF_INCOMPLETE",
+})
 
 
 def _scan_codes_in_python() -> dict[str, set[Path]]:
@@ -270,7 +308,7 @@ def test_every_python_code_is_registered() -> None:
     registered = set(all_codes())
     unregistered = {
         code: paths for code, paths in py_codes.items()
-        if code not in registered
+        if code not in registered and code not in _UNREGISTERED_ON_2026_09_19
     }
     if unregistered:
         msg_lines = ["Unregistered Python diagnostic codes found:"]
@@ -282,6 +320,27 @@ def test_every_python_code_is_registered() -> None:
             "`python/tessera/compiler/diagnostic_codes.py`."
         )
         pytest.fail("\n".join(msg_lines))
+
+
+def test_the_unregistered_python_backlog_only_shrinks() -> None:
+    """The 2026-09-19 backlog is a ratchet in both directions.
+
+    A code that has since been registered must leave the list, or the list
+    starts granting exemptions to codes that do not need one -- and the next
+    reader cannot tell which entries are real debt. A code that no longer
+    appears in Python source must leave too, for the same reason a stale
+    registry entry is worse than a missing one.
+    """
+    registered = set(all_codes())
+    emitted = set(_scan_codes_in_python())
+    now_registered = sorted(_UNREGISTERED_ON_2026_09_19 & registered)
+    assert not now_registered, (
+        "these codes are registered now and must be deleted from "
+        f"_UNREGISTERED_ON_2026_09_19: {now_registered}")
+    gone = sorted(_UNREGISTERED_ON_2026_09_19 - emitted)
+    assert not gone, (
+        "these codes are no longer emitted from python/tessera and must be "
+        f"deleted from _UNREGISTERED_ON_2026_09_19: {gone}")
 
 
 def _python_source_texts() -> list[str]:

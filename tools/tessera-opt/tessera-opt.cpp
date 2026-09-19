@@ -1,5 +1,6 @@
 
 #include "mlir/IR/DialectRegistry.h"
+#include "mlir/Dialect/AMDGPU/IR/AMDGPUDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -389,7 +390,7 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   tessera::registerPMPipelinesV11(registry);
-  registry.insert<mlir::nvgpu::NVGPUDialect, mlir::DLTIDialect, mlir::arith::ArithDialect, mlir::func::FuncDialect,
+  registry.insert<mlir::amdgpu::AMDGPUDialect, mlir::nvgpu::NVGPUDialect, mlir::DLTIDialect, mlir::arith::ArithDialect, mlir::func::FuncDialect,
                   mlir::gpu::GPUDialect, mlir::memref::MemRefDialect,
                   mlir::LLVM::LLVMDialect, mlir::NVVM::NVVMDialect,
                   mlir::ROCDL::ROCDLDialect, mlir::scf::SCFDialect,
@@ -516,7 +517,7 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   tessera::registerPMPipelinesV11(registry);
-  registry.insert<mlir::nvgpu::NVGPUDialect, mlir::DLTIDialect, mlir::arith::ArithDialect,
+  registry.insert<mlir::amdgpu::AMDGPUDialect, mlir::nvgpu::NVGPUDialect, mlir::DLTIDialect, mlir::arith::ArithDialect,
                   mlir::bufferization::BufferizationDialect,
                   mlir::func::FuncDialect,
                   mlir::gpu::GPUDialect,

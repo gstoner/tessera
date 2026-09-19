@@ -4175,6 +4175,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
         rn.GFX_MATMUL_F16_F32_ABI, rn.GFX_MATMUL_F16_F32_FUSED_ABI,
         rn.GFX_MATMUL_E4M3_F32_ABI, rn.GFX_MATMUL_E5M2_F32_ABI,
+        rn.GFX_MATMUL_E4M3_E5M2_F32_ABI, rn.GFX_MATMUL_E5M2_E4M3_F32_ABI,
         rn.GFX_MATMUL_BF16_F32_ABI, rn.GFX_MATMUL_BF16_F32_FUSED_ABI,
         rn.GFX_MATMUL_I8_I32_ABI, rn.GFX_MATMUL_I4_I32_ABI,
         rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
@@ -4199,7 +4200,9 @@ def _submit_rocm_gfx1151_native(
         GFX_DEPTH_ATTN_F32_ABI,
         GFX_MATMUL_BF16_F32_ABI,
         GFX_MATMUL_BF16_F32_FUSED_ABI,
+        GFX_MATMUL_E4M3_E5M2_F32_ABI,
         GFX_MATMUL_E4M3_F32_ABI,
+        GFX_MATMUL_E5M2_E4M3_F32_ABI,
         GFX_MATMUL_E5M2_F32_ABI,
         GFX_MATMUL_F16_F32_ABI,
         GFX_MATMUL_F16_F32_FUSED_ABI,
@@ -4240,7 +4243,9 @@ def _submit_rocm_gfx1151_native(
         GFX_MATMUL_F16_F32_FUSED_ABI,
         GFX_MATMUL_BF16_F32_ABI,
         GFX_MATMUL_BF16_F32_FUSED_ABI,
+        GFX_MATMUL_E4M3_E5M2_F32_ABI,
         GFX_MATMUL_E4M3_F32_ABI,
+        GFX_MATMUL_E5M2_E4M3_F32_ABI,
         GFX_MATMUL_E5M2_F32_ABI,
         GFX_MATMUL_I8_I32_ABI,
         GFX_MATMUL_I4_I32_ABI,
@@ -4258,6 +4263,8 @@ def _submit_rocm_gfx1151_native(
     matmul = descriptor.abi_id in {GFX_MATMUL_F16_F32_ABI, GFX_MATMUL_F16_F32_FUSED_ABI,
                                    GFX_MATMUL_BF16_F32_ABI, GFX_MATMUL_BF16_F32_FUSED_ABI,
                                    GFX_MATMUL_E4M3_F32_ABI, GFX_MATMUL_E5M2_F32_ABI,
+                                   GFX_MATMUL_E4M3_E5M2_F32_ABI,
+                                   GFX_MATMUL_E5M2_E4M3_F32_ABI,
                                    GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
@@ -4311,15 +4318,21 @@ def _submit_rocm_gfx1151_native(
         m = int(cast(int, scalars["M"]))
         n = int(cast(int, scalars["N"]))
         k = int(cast(int, scalars["K"]))
-        expected_ab = _scheduled_storage_numpy_dtype(ordered[0].dtype)
+        # Each operand is checked against ITS OWN binding. They agree for every
+        # pairing but RDNA4's mixed OCP FP8 ones, and checking B against A's
+        # dtype is what refused them here -- which was the check working, since
+        # accepting an e5m2 buffer as e4m3 would return wrong numbers instead.
+        expected_a = _scheduled_storage_numpy_dtype(ordered[0].dtype)
+        expected_b = _scheduled_storage_numpy_dtype(ordered[1].dtype)
         expected_out = np.int32 if matmul_integer else np.float32
         if (
             tuple(a.shape) != (m, k)
             or tuple(b_matrix.shape) != (k, n)
             or tuple(output.shape) != (m, n)
-            or expected_ab is None
-            or a.dtype != expected_ab
-            or b_matrix.dtype != expected_ab
+            or expected_a is None
+            or expected_b is None
+            or a.dtype != expected_a
+            or b_matrix.dtype != expected_b
             or output.dtype != expected_out
         ):
             raise RuntimeError("ROCm matmul arrays disagree with M/N/K or descriptor dtype")
@@ -5399,7 +5412,9 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_DEPTH_ATTN_F32_ABI,
         GFX_MATMUL_BF16_F32_ABI,
         GFX_MATMUL_BF16_F32_FUSED_ABI,
+        GFX_MATMUL_E4M3_E5M2_F32_ABI,
         GFX_MATMUL_E4M3_F32_ABI,
+        GFX_MATMUL_E5M2_E4M3_F32_ABI,
         GFX_MATMUL_E5M2_F32_ABI,
         GFX_MATMUL_F16_F32_ABI,
         GFX_MATMUL_F16_F32_FUSED_ABI,
@@ -5433,6 +5448,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_MATMUL_BF16_F32_FUSED_ABI,
             GFX_MATMUL_E4M3_F32_ABI,
             GFX_MATMUL_E5M2_F32_ABI,
+            GFX_MATMUL_E4M3_E5M2_F32_ABI,
+            GFX_MATMUL_E5M2_E4M3_F32_ABI,
             GFX_MATMUL_I8_I32_ABI,
             GFX_MATMUL_I4_I32_ABI,
             GFX_DEPTH_ATTN_F32_ABI,

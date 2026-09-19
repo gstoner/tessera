@@ -104,6 +104,10 @@ struct WmmaTypes {
   // Only the K axis scales. The 16s that build the M/N macro tile are fragment
   // geometry and are untouched.
   int64_t fragK = 16;
+  // B's storage name when it differs from A's. RDNA4 has the mixed OCP FP8
+  // pairs (`V_WMMA_F32_16X16X16_FP8_BF8` and its mirror), and empty means
+  // "same as A", which is every other case.
+  std::string bElem;
 };
 
 /// Backend-neutral input to the one gfx11 WMMA kernel generator. Portable
@@ -423,10 +427,18 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                            : T.pack == 1                     ? "int8"
                                                              : "int4";
   StringRef fragmentAcc = T.isInt ? "i32" : "f32";
+  // B may name a DIFFERENT storage from A. RDNA4 has the mixed OCP FP8 pairs
+  // (`V_WMMA_F32_16X16X16_FP8_BF8` and its mirror) and
+  // `resolveFragmentLayout` already selects them from the descriptor's two
+  // types -- the fragment types are what carry the request down to it, so B
+  // takes the descriptor's own `b` rather than inheriting A's. Both are 8-bit,
+  // so nothing about the register format or the packing changes; only the
+  // instruction the pair selects does.
+  StringRef bFragmentElem = T.bElem.empty() ? fragmentElem : StringRef(T.bElem);
   auto aFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, fragK, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
   auto bFragmentTy = tessera::tile::FragmentType::get(
-      ctx, 16, 16, fragK, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
+      ctx, 16, 16, fragK, bFragmentElem, fragmentAcc, "b", "col_major", "wmma");
   auto accFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, fragK, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
 
@@ -1506,6 +1518,12 @@ struct GenerateWMMAGemmKernelPass
       // lowering is where it belongs, and it already fails closed -- the
       // gfx1100/gfx1151 branch of `resolveFragmentLayout` admits `k == 16`
       // only, so a K=32 int4 fragment aimed at RDNA3 resolves to nothing.
+      // RDNA4 has the mixed OCP FP8 pairs, so A and B may name different
+      // storages -- but only that pairing, and only fp8 with fp8.
+      auto isFp8 = [](llvm::StringRef t) { return t == "e4m3" || t == "e5m2"; };
+      const bool mixedFp8Pair = desc && isFp8(desc.getAType()) &&
+                                isFp8(desc.getBType()) &&
+                                desc.getAType() != desc.getBType();
       const int64_t expectedK =
           (desc && desc.getAType() == "int4" && desc.getK() == 32) ? 32 : 16;
       auto epilogue =
@@ -1513,7 +1531,8 @@ struct GenerateWMMAGemmKernelPass
       bool common = desc && epilogue &&
           (desc.getFamily() == "auto" || desc.getFamily() == "wmma") &&
           desc.getM() == 16 && desc.getN() == 16 && desc.getK() == expectedK &&
-          desc.getAType() == desc.getBType() && desc.getALayout() == "row_major" &&
+          (desc.getAType() == desc.getBType() || mixedFp8Pair) &&
+          desc.getALayout() == "row_major" &&
           desc.getBLayout() == "col_major" && desc.getKBlocks() == 1;
       bool floatContract = common &&
           (desc.getAType() == "f16" || desc.getAType() == "bf16") &&
@@ -1523,9 +1542,8 @@ struct GenerateWMMAGemmKernelPass
           (desc.getAccType() == "i32" || desc.getAccType() == "int32");
       // OCP FP8 storage (RDNA4 WMMA, k=16 per fragment) accumulates in f32;
       // the typed route packs it per chip (GFX1201-PARITY slice 5).
-      bool fp8Contract = common &&
-          (desc.getAType() == "e4m3" || desc.getAType() == "e5m2") &&
-          desc.getAccType() == "f32";
+      bool fp8Contract = common && isFp8(desc.getAType()) &&
+          isFp8(desc.getBType()) && desc.getAccType() == "f32";
       bool canonical = floatContract || integerContract || fp8Contract;
       if (!canonical) {
         op->emitError("ROCm tile.matmul_kernel requires an m16n16k16 row/col "
@@ -1821,6 +1839,15 @@ struct GenerateWMMAGemmKernelPass
         T = {f8Ty, VectorType::get({16}, f8Ty), VectorType::get({2}, i32Ty),
              v8f32, f32Ty, /*isInt=*/false, /*halfAccumulator=*/false,
              /*pack=*/0, /*packFactor=*/1};
+        // The mixed pair: A and B may name different FP8 storages, and the
+        // fragment types are what carry that to `resolveFragmentLayout`, which
+        // already selects FP8_BF8 / BF8_FP8 from them. Both are 8 bits, so the
+        // register format and the packing are unchanged -- only the selected
+        // instruction differs.
+        if (auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"))
+          if (mma.getAType() != mma.getBType() &&
+              (mma.getBType() == "e4m3" || mma.getBType() == "e5m2"))
+            T.bElem = mma.getBType().str();
         if (!viaTile) {
           op->emitError("generate-wmma-gemm-kernel: FP8 storage ('")
               << dt << "') is a typed-route contract (via-tile=true); the "
@@ -1952,9 +1979,20 @@ struct GenerateWMMAGemmKernelPass
 
       Type idxTy = b.getIndexType();
       auto abTy = MemRefType::get({ShapedType::kDynamic}, T.store);
+      // B's buffer carries B's own element type. It is the same as A's in every
+      // case but RDNA4's mixed OCP FP8 pairs, and giving them one type made the
+      // fragment materializer reject the pair: it derives the expected source
+      // element from the descriptor's `b`, which then disagreed with a memref
+      // typed from A.
+      Type bStoreTy = T.store;
+      if (!T.bElem.empty())
+        bStoreTy = T.bElem == "e4m3"
+                       ? static_cast<Type>(Float8E4M3FNType::get(b.getContext()))
+                       : static_cast<Type>(Float8E5M2Type::get(b.getContext()));
+      auto bAbTy = MemRefType::get({ShapedType::kDynamic}, bStoreTy);
       auto dTy = MemRefType::get({ShapedType::kDynamic}, outputTy);
       auto biasTy = MemRefType::get({ShapedType::kDynamic}, T.accElem);
-      SmallVector<Type> argTys{abTy, abTy};
+      SmallVector<Type> argTys{abTy, bAbTy};
       if (hasBias && portableContract)
         argTys.push_back(biasTy);
       argTys.append({dTy, idxTy, idxTy, idxTy});

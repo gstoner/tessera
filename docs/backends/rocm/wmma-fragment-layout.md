@@ -244,6 +244,139 @@ Both are candidates for the standing asymmetry in §3, where A takes a single
 `vector.load` and B scalarizes into 16 guarded loads. Neither is implemented
 here yet.
 
+## 8. `GLOBAL_LOAD_TR_B128`: the measured lane mapping
+
+The instruction's shapes match our B fragment exactly (§7), so the remaining
+question is the *addressing*: which address each lane supplies, and which
+elements it gets back. That is not in the ISA text, and guessing it is the
+silently-wrong-tiles failure this page exists to prevent. Measured on gfx1201
+(2026-09-19) with `B[r][c] = r*16 + c`, every element distinct, each lane
+dumping all eight values it received.
+
+With lane `L` supplying the address of element `L*8` — so lane `L` reads row
+`L/2`, columns `(L%2)*8 .. +7` — each lane receives:
+
+```
+B[(L / 8) * 4 + j / 2][(L % 8) + 8 * (j % 2)]        // j = 0..7
+```
+
+Spot checks from the run: lane 0 gets columns {0, 8} of rows 0-3; lane 15 gets
+columns {7, 15} of rows 4-7; lane 31 gets columns {7, 15} of rows 12-15.
+
+That addressing was arbitrary, and what it returns is not the fragment. But it
+is enough to recover the permutation, which is the part the ISA does not
+state. Writing lane `L`'s eight contiguous reads as `R(L)[0..7]`, the measured
+result is exactly
+
+```
+received(L, j) = R(8 * (L / 8) + j)[L % 8]
+```
+
+an **8x8 transpose inside each group of 8 lanes**: the group collectively
+reads eight runs of eight elements and transposes that tile. Every row of the
+probe follows from it, including the ones that look least like a transpose.
+
+### The address each lane must supply
+
+§3 says the fragment wants `b(L)[h] = B_logical[L % 16][8 * (L / 16) + h]`,
+one lane holding one `n` and eight consecutive `k`. With B stored row-major
+`[K][N]` so that `B_logical[n][k] = mem[k * ldb + n]`, substituting the
+permutation above and solving for the address gives
+
+```
+A(L) = (8 * (L / 16) + (L % 8)) * ldb + ((L / 8) % 2) * 8
+```
+
+*Evidence*: on gfx1201 with `B[k][n] = k * 16 + n` — asymmetric, every element
+distinct — this reproduces the fragment on **256/256 elements**. The
+arbitrary `A(L) = 8L` addressing does not, which is the control.
+
+In the materializer the wave lane is `lane + 2*kBase` (kBase is 0 or 8), under
+which `A` collapses to the form the code emits:
+
+```
+A = (kBase + lane % 8) * ldb + (lane / 8) * 8      // plus the tile origin
+```
+
+### What it is worth, and the one shape where it is not
+
+Shipped for f16 and bf16. TFLOP/s at the 4x4 panel with K unroll 2, against
+the scalar gather it replaces:
+
+| shape | transpose load | gather | |
+|---|---:|---:|---|
+| 1024³ | **65.9** | 54.2 | +21.6% |
+| 1536³ | **79.2** | 74.3 | +6.6% |
+| 2048³ | 75.4 | **80.5** | **-6.3%** |
+| 2560³ | **94.3** | 89.5 | +5.4% |
+| 3072³ | **92.8** | 89.4 | +3.9% |
+| 4096³ | **93.9** | 89.4 | +5.0% |
+
+Five of six shapes win, and 2048³ is the sole reversal. It reproduces at five
+runs (75.8 against 81.3), so it is not sampling noise. A leading dimension of
+exactly 2048 is the obvious suspect -- that stride is where channel or
+partition aliasing usually shows -- but that is a **hypothesis, not a
+measurement**: no counters exist on either WSL2 ROCm box to confirm it. The
+instruction stays on for every shape rather than being special-cased around
+one anomaly from one point.
+
+**8-bit storages are excluded and that is a measured decision.** `TR_B64` is a
+different permutation and the derivation above does not carry to it. Enabling
+it on the strength of the matching width produced wrong results on device for
+every 8-bit storage -- 16 failing rows across fp8 and both integer widths,
+while f16 and bf16 were untouched. It stays out until its own mapping is
+measured the same way.
+
+Everything else is in place: the `amdgpu` dialect is registered in both
+drivers, `amdgpu.global_transpose_load` parses over a memref,
+`convert-gpu-to-rocdl` lowers it to `rocdl.global.load.tr.b128` with no
+additional pass, and the kernel builds and runs on gfx1201.
+
+## 9. Where the 4x4 panel's registers actually go
+
+The panel spills against a ceiling the ISA fixes at 256 (§5), so the only
+lever is needing fewer live values. That was recorded as unscoped; this is the
+measurement. Compile-only on gfx1201, f16, `vgpr_count` and `vgpr_spill_count`
+from the kernel metadata:
+
+| panel | K unroll | allocated | spilled | accumulators | fragments | everything else |
+|---|---:|---:|---:|---:|---:|---:|
+| 1x1 | 1 | 59 | 0 | 8 | 8 | ~43 |
+| 2x4 | 1 | 198 | 0 | 64 | 24 | ~110 |
+| 2x4 | 2 | 198 | 0 | 64 | 48 | ~86 |
+| 4x4 | 1 | 256 | **133** | 128 | 32 | **~229** |
+| 4x4 | 2 | 256 | **133** | 128 | 64 | **~197** |
+
+Accumulators are `mt * nt * 8` VGPRs; fragments are `(mt + nt) * 4` per K slab
+in flight. Three things fall out, and they redirect the work.
+
+**About half the demand is neither.** At the 4x4 panel roughly 200 VGPRs are
+something other than the accumulator tile and the operands feeding it — more
+than the accumulators themselves. The tile is not too big for its data; the
+surrounding state is too big.
+
+**That overhead scales with the panel, not with K.** It roughly doubles from
+the 2x4 panel to the 4x4 (110 to 229) while the accumulators also double, so
+it tracks `mt * nt`: per-tile addressing and index state held live across the
+loop, sixteen tiles' worth at 4x4.
+
+**The K unroll is not the cause.** Spill is identical at k=1 and k=2 (133
+either way), so issuing a second slab costs fragments and nothing structural.
+That also means the unroll and the spill are independent problems, and fixing
+one will not move the other.
+
+So the target is the ~200 VGPRs of per-tile addressing, and halving it would
+fit the 4x4 panel with no spill at all. Candidates, in the order they look
+worth trying: recompute tile origins from the loop index instead of holding
+sixteen of them; share the row and column origin arithmetic across a panel row
+or column rather than per tile; and sink the fragment address computation into
+the loop body so it does not stay live across the MMAs.
+
+*Caveat on the numbers*: `vgpr_count` is the allocation and `vgpr_spill_count`
+counts spill slots, so "allocated + spilled" is an estimate of demand rather
+than an exact live-range count. The ratios are what the argument rests on, and
+they are stable across the panels above.
+
 ## Where the machine truth lives
 
 Opcode tables, pseudocode and the VGPR-usage tables come from

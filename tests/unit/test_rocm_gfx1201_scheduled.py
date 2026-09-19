@@ -760,10 +760,17 @@ def test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact(shape):
     Asserted EXACTLY against the i32 reference: an integer product has no
     rounding, so a nibble-order or K-stride error cannot hide behind a
     tolerance -- which is what makes int4 the right carrier for a new K shape.
+
+    **Exactness alone cannot prove this form was emitted.** The double-K
+    instruction and two K=16 int4 WMMAs compute the identical integer product,
+    so a generator that quietly kept K=16 would satisfy every numeric
+    assertion here -- and this row is the only owner of the capability. The
+    mnemonic is therefore checked too, and the K=16 form forbidden.
     """
     import re
     from tessera import runtime as rt
     from tessera.compiler import scheduled_matmul
+    from tests._support import rocm_isa
     from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
     assert rt._rocm_live_arch() == "gfx1201"
     m, k, n = shape
@@ -778,6 +785,10 @@ def test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact(shape):
     _, _, payload, *_ = rocm_native._compile_native_tile_ir(
         double_k, directive="tessera_rocm.wmma", family="matmul",
         architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)
+    rocm_isa.assert_selected(
+        payload, chip="gfx1201", pattern=r"v_wmma_i32_16x16x\d+_iu4",
+        require="v_wmma_i32_16x16x32_iu4", forbid="v_wmma_i32_16x16x16_iu4",
+        what=f"double-K int4 {shape}")
     rng = np.random.default_rng(32 + m)
     a = rng.integers(-8, 8, size=(m, k), dtype=np.int8)
     b = rng.integers(-8, 8, size=(k, n), dtype=np.int8)
@@ -786,3 +797,126 @@ def test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact(shape):
                          artifact.macro_tile_m, artifact.macro_tile_n)
     assert result == 0
     np.testing.assert_array_equal(output, a.astype(np.int32) @ b.astype(np.int32))
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("storage,expect_tr", [
+    ("fp16", True), ("bf16", True),
+    # 8-bit takes GLOBAL_LOAD_TR_B64, a DIFFERENT permutation whose address
+    # derivation is not done. Enabling it on the matching width alone produced
+    # wrong results on every 8-bit storage, so it must stay on the gather.
+    ("fp8_e4m3", False), ("int8", False), ("int4", False),
+])
+def test_gfx1201_b_fragment_uses_the_transpose_load_only_where_derived(storage, expect_tr):
+    """ROCM-GLOBAL-LOAD-TR-1: `GLOBAL_LOAD_TR_B128` replaces the strided B gather.
+
+    B is stored row-major `[K][N]` and each lane wants a column, so the B
+    fragment was eight guarded scalar loads where A took one `vector.load`.
+    The transpose load reads a 16x16 tile and transposes it into the registers,
+    which is the fragment -- but only once the per-lane address is right, and
+    the ISA does not state the permutation. Measured on device
+    (`docs/backends/rocm/wmma-fragment-layout.md` section 8):
+
+        received(L, j) = R(8*(L/8) + j)[L % 8]
+        A(L)           = (kBase + lane%8)*ldb + (lane/8)*8
+
+    This asserts the instruction reaches the kernel for the storages the
+    derivation covers and stays out of the others. The numbers are checked by
+    the exact device rows elsewhere in this file; what a disassembly check adds
+    is that a silent fallback to the gather cannot pass for a win.
+    """
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests._support import rocm_isa
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    out_dtype = "int32" if storage.startswith("int") else "fp32"
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=(1024, 1024, 1024), dtype=storage,
+                      output_dtype=out_dtype),
+        target="rocm_gfx1201")
+    _, _, payload, *_ = rocm_native._compile_native_tile_ir(
+        artifact.tile_ir, directive="tessera_rocm.wmma", family="matmul",
+        architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)
+    text = rocm_isa.disassemble(payload, chip="gfx1201")
+    seen = rocm_isa.mnemonics(text, r"global_load_tr\S*")
+    if expect_tr:
+        assert seen, f"{storage} should use the transpose load; found none"
+        # B64 is the 8-bit form, whose permutation is not derived; emitting it
+        # here would be the wrong width reaching a 16-bit fragment.
+        assert all(name.startswith("global_load_tr_b128") for name in seen), seen
+    else:
+        assert not seen, f"{storage} must stay on the guarded gather; found {dict(seen)}"
+
+
+#: The four OCP FP8 pairings and the instruction each one must select. Kept as
+#: one table so each row can forbid the other three.
+_MIXED_FP8_PAIRS = (
+    ("fp8_e4m3", "fp8_e4m3", "v_wmma_f32_16x16x16_fp8_fp8"),
+    ("fp8_e4m3", "fp8_e5m2", "v_wmma_f32_16x16x16_fp8_bf8"),
+    ("fp8_e5m2", "fp8_e4m3", "v_wmma_f32_16x16x16_bf8_fp8"),
+    ("fp8_e5m2", "fp8_e5m2", "v_wmma_f32_16x16x16_bf8_bf8"),
+)
+_MIXED_FP8_INSTRUCTIONS = tuple(row[2] for row in _MIXED_FP8_PAIRS)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("a_dt,b_dt,instruction", _MIXED_FP8_PAIRS)
+def test_gfx1201_mixed_fp8_pairs_select_their_instruction_and_execute(a_dt, b_dt, instruction):
+    """ROCM-MIXED-FP8-1: all four OCP FP8 pairings, including the mixed ones.
+
+    The hardware has `V_WMMA_F32_16X16X16_FP8_BF8` and its mirror, and
+    `wmma_dtype_forms` declared both while nothing could emit them, because the
+    single-storage assumption ran the whole depth of the stack: the Schedule
+    carried one `storage`, the generated kernel typed both operand buffers from
+    A, the fragment types inherited A's element, two C++ gates and the packager
+    required `a == b`, the launch ABI was keyed on A alone, and the submit path
+    validated B against A's dtype. Each of those refused rather than computing
+    wrong numbers, which is why this was a reachability gap and never a
+    correctness bug.
+
+    Asserting the INSTRUCTION as well as the result matters here: a mixed pair
+    that silently fell back to `FP8_FP8` would read one operand in the wrong
+    format, and with fp8's narrow range the error can look like ordinary
+    accumulation noise.
+    """
+    import ml_dtypes
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests._support import rocm_isa
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    m = k = n = 256
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=(m, k, n), dtype=a_dt, b_dtype=b_dt,
+                      output_dtype="fp32"),
+        target="rocm_gfx1201")
+    assert artifact.a_dtype == a_dt and artifact.b_dtype == b_dt
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    # Every other pairing is forbidden, not merely unmentioned: finding
+    # `fp8_bf8` does not establish that the mirror `bf8_fp8` is absent, and an
+    # operand swap anywhere in the stack would emit the mirror while still
+    # satisfying a presence-only check.
+    others = tuple(name for name in _MIXED_FP8_INSTRUCTIONS if name != instruction)
+    rocm_isa.assert_selected(
+        package.image.payload, chip="gfx1201",
+        pattern=r"v_wmma_f32_16x16x16_\w+",
+        require=instruction, forbid=others, what=f"{a_dt} x {b_dt}")
+    np_a = ml_dtypes.float8_e4m3fn if a_dt == "fp8_e4m3" else ml_dtypes.float8_e5m2
+    np_b = ml_dtypes.float8_e4m3fn if b_dt == "fp8_e4m3" else ml_dtypes.float8_e5m2
+    rng = np.random.default_rng(88)
+    a = (rng.normal(size=(m, k)) * 0.25).astype(np_a)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(np_b)
+    output = np.zeros((m, n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+                                 native_image=package.image, launch_descriptor=package.descriptor,
+                                 tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output},
+                                 "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    # An fp8 product is exact in f32, so only the accumulation order moves this.
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=0,
+                               atol=1e-6 * float(np.abs(expected).max()))

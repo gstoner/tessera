@@ -8,6 +8,7 @@
 #include "TesseraROCMDialect.h.inc"
 #define GET_TYPEDEF_CLASSES
 #include "TesseraROCMTypes.h.inc"
+#include "mlir/Dialect/AMDGPU/IR/AMDGPUDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -294,7 +295,73 @@ static FailureOr<Value> materializeFragmentPack(
     linear = arith::AddIOp::create(builder, loc, linear, partitionOffset);
   }
 
-  if (!kIsContiguous || haveBounds) {
+  // RDNA4's GLOBAL_LOAD_TR_B128/B64 read a 16x16 tile and transpose it on the
+  // way into the registers, which is exactly the B fragment -- one instruction
+  // where the strided path below issues eight guarded scalar loads. It applies
+  // only where the derivation holds (docs/backends/rocm/wmma-fragment-layout.md
+  // section 8):
+  //
+  //   * role b reading a row-major buffer along K, i.e. the strided case that
+  //     is slow. A contiguous read already takes one `vector.load`.
+  //   * no bounds. The instruction has no masking and every lane's address is
+  //     dereferenced, so a ragged tile must keep the guarded gather.
+  //   * gfx12. The instruction is gfx1200+; RDNA3 has nothing like it.
+  //   * 8 elements per lane at **16 bits**, i.e. f16 and bf16. The 8-bit form
+  //     `TR_B64` is a DIFFERENT permutation and the address derivation below
+  //     does not carry over to it: enabling it on the strength of the matching
+  //     width produced wrong results for every 8-bit storage on device (16
+  //     failing rows, fp8 and both integer widths; f16 and bf16 were untouched)
+  //     and it stays out until its own mapping is measured. int4 is excluded
+  //     regardless -- `tr4` is gfx1250+.
+  //
+  // The producer's precomputed linear base is deliberately NOT used here even
+  // when present: it already folds in the lane offset, and this path needs the
+  // tile origin by itself. `rowOrigin` and `colOrigin` are available either
+  // way, so the address is rebuilt from them.
+  const unsigned elementBits = elementTy.getIntOrFloatBitWidth();
+  const bool useTransposeLoad =
+      role == "b" && !kIsContiguous && !haveBounds &&
+      memory.getOrder() == "row_major" &&
+      physical.familyName == "rdna4_wmma" &&
+      physical.inputElementsPerLane == 8 && elementBits == 16;
+  if (useTransposeLoad) {
+    // Measured on gfx1201: the wave performs an 8x8 transpose inside each group
+    // of 8 lanes, `received(L, j) = R(8*(L/8) + j)[L % 8]`. Solving that for the
+    // fragment gives, relative to the tile origin and in raw wave lanes,
+    //   A(L) = (8*(L/16) + (L%8))*ldb + ((L/8)%2)*8
+    // and here the wave lane is `lane + 2*kBase` (kBase is 0 or 8), under which
+    // it collapses to the form below. 256/256 elements against an asymmetric
+    // reference; a symmetric one cannot tell this from its transpose.
+    auto ci = [&](int64_t v) {
+      return Value(arith::ConstantIndexOp::create(builder, loc, v));
+    };
+    Value origin = arith::AddIOp::create(
+        builder, loc,
+        arith::MulIOp::create(builder, loc, rowOrigin, leadingDim), colOrigin);
+    Value laneMod8 = arith::RemUIOp::create(builder, loc, lane, ci(8));
+    Value laneDiv8 = arith::DivUIOp::create(builder, loc, lane, ci(8));
+    Value kRow = arith::AddIOp::create(builder, loc, kBase, laneMod8);
+    Value addr = arith::AddIOp::create(
+        builder, loc,
+        arith::AddIOp::create(
+            builder, loc, origin,
+            arith::MulIOp::create(builder, loc, kRow, leadingDim)),
+        arith::MulIOp::create(builder, loc, laneDiv8, ci(8)));
+    // The op requires a global-address-space source. The kernel argument is
+    // generic, so cast it: these buffers really are global (they arrive from
+    // hipMalloc), and the cast is what says so to the verifier rather than
+    // widening the op's contract.
+    auto baseTy = cast<MemRefType>(base.getType());
+    auto globalTy = MemRefType::get(
+        baseTy.getShape(), baseTy.getElementType(), baseTy.getLayout(),
+        gpu::AddressSpaceAttr::get(builder.getContext(),
+                                   gpu::AddressSpace::Global));
+    Value globalBase =
+        memref::MemorySpaceCastOp::create(builder, loc, globalTy, base);
+    fragment = amdgpu::GlobalTransposeLoadOp::create(builder, loc, vectorTy,
+                                                     globalBase,
+                                                     ValueRange{addr});
+  } else if (!kIsContiguous || haveBounds) {
     // A bounded fragment is scalarized even when K is contiguous. The ROCm
     // GPU-to-LLVM pipeline does not legalize vector.create_mask/maskedload;
     // emitting them left an index cast and vector op at LLVM translation.
@@ -2077,7 +2144,13 @@ struct LowerTileToROCMPass
     return "Lower Tessera Tile IR matmul movement contracts to ROCm Target IR";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, gpu::GPUDialect,
+    // amdgpu is declared because the B fragment path CREATES
+    // `amdgpu.global_transpose_load`. Loading a dialect during pass execution
+    // is a hard error on an assertions build and silent UB otherwise -- the
+    // failure this repo already hit twice, most recently with the tile and
+    // tessera dialects on the EBM route.
+    registry.insert<amdgpu::AMDGPUDialect, arith::ArithDialect,
+                    gpu::GPUDialect,
                     LLVM::LLVMDialect,
                     math::MathDialect, scf::SCFDialect,
                     memref::MemRefDialect, vector::VectorDialect,
@@ -2975,7 +3048,11 @@ struct LowerTileToROCMPass
         if (!desc || !epilogue || !parent || desc.getFamily() != "wmma" ||
             desc.getM() != 16 || desc.getN() != 16 ||
             desc.getK() != expectedK ||
-            desc.getAType() != desc.getBType() ||
+            // A and B may differ only for the mixed OCP FP8 pairs, which the
+            // hardware has and `resolveFragmentLayout` already selects.
+            (desc.getAType() != desc.getBType() &&
+             !(tessera_rocm::isAnyOf(desc.getAType(), {"e4m3", "e5m2"}) &&
+               tessera_rocm::isAnyOf(desc.getBType(), {"e4m3", "e5m2"}))) ||
             (desc.getAType() != "f16" && desc.getAType() != "bf16" &&
              !(fp8Storage && arch.starts_with("gfx12")) && !intStorage) ||
             desc.getAccType() != (intStorage ? "i32" : "f32")) {

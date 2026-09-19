@@ -92,7 +92,17 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: Tajasarus now has an assertions-enabled LLVM/MLIR 23.1.1 ROCm build; RX 9070 XT gfx1201 correctness commissioning is tracked under ROCM-2 in the backend queue. Bounded gfx1201 scheduled f32 unary and standalone backward now have owning-device proof; general matrix/attention packaging, paired AD and native-Linux profiler evidence remain separate. Assertions-enabled LLVM/MLIR 23.1.1 and a hardware-free all-target Tessera compiler now pass all 475 active lit fixtures on Super-Bear. Backend-owned fixtures declare their feature requirements, the data-only x86 execution input is outside lit discovery, and the union gate requires every active fixture to pass in at least one lane. The opt-in CI lit lane requests the same full portable target matrix. Installed drivers now pass relocated-prefix smoke on Super-Bear with loader overrides removed; the CI lane runs this check after installation. Preserve these regression gates; owning-device correctness and performance remain separate backend gates. A full unit sweep on Princess-Luna (2026-09-17) found 31 failures present on main and invisible to CI, whose unit lane has neither device toolchain: 28 are now fixed — a legality gate that asked the capability registry about the generic `rocm` name for a request the rest of the stack compiles for gfx1151, a link requirement the runtime archive never published to out-of-CMake consumers, one Python-driven data file failing `check-tessera-rocm` for the whole repository, `arith.select` with no transpose, and index arithmetic refused as non-differentiable. Owed: `AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17`, a pre-existing crash inside JIT-compiled code that the AD gate had been masking, and the fact that the x86 JIT AD lane those tests exercise has no host in any automated check.
 - Depends on: —
 - Start: host-free
-- Latest: [ROCM-EXTENDED-K-1: the double-K int4 instruction is reachable, and it loses to the unroll](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-extended-k-1-the-double-k-int4-instruction-is-reachable-and-it-loses-to-the-unroll)
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
+### DIAG-PY-BACKLOG-1
+
+**Python-raised diagnostics that were never registered**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: `tests/unit/test_diagnostic_code_registry.py` scanned Python source with a **prefix allowlist** (`E_*`, `JIT_*`, `TS_ERR_*`, `GRAPH_IR_*`), so every domain-prefixed code a Python module raises was invisible to it — the failure the scanner's own `GRAPH_IR_` comment records happening once already for a whole family, while the gate reported green. The scan now matches the code *shape*, as the C++ scan always has, which surfaced 15 codes unregistered on 2026-09-19: nine `ROCM_FRAGMENT_*` (arch/dtype/shape legality in `rocm_fragment.py`), five `APPLE_*` (`apple_fragment.py`, `msl_gemm_emit.py`, `apple_counter_evidence.py`) and `TIMING_PROOF_INCOMPLETE` (`profiler_x86_evidence.py`). They are held as a shrink-only ratchet (`_UNREGISTERED_ON_2026_09_19`), which fails if the set grows and fails again when one is registered without leaving the list. Gate: each code gains a `DiagnosticCode` entry with a real summary, fix hint and spec pointer, and the ratchet empties. A registry entry naming no consumer is Decision #29's unconsumed declaration, so the entry must describe what actually refuses.
+- Depends on: —
+- Start: host-free
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
 
 ### EVIDENCE-PACKET-1
 
@@ -427,6 +437,7 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | AD-SOLVER-IFT-1 | [AD-SOLVER-IFT-1](#ad-solver-ift-1) | owner |
 | COMPILER-DEVEX-1 | [COMPILER-DEVEX-1](#compiler-devex-1) | owner |
 | DISPATCH-BREAKER | [DISPATCH-BREAKER](#dispatch-breaker) | owner |
+| DIAG-PY-BACKLOG-1 | [DIAG-PY-BACKLOG-1](#diag-py-backlog-1) | owner |
 | DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
 | E2E-REAL-6 | [E2E-REAL-6](#e2e-real-6) | owner |
 | E2E-REAL-6F | [E2E-REAL-6F](#e2e-real-6f) | owner |

@@ -86,7 +86,7 @@ add_mlir_library(TesseraROCMConversion
   LowerROCMAsyncCopyToLoop.cpp
   Passes.cpp
   LINK_LIBS PUBLIC
-    MLIRIR MLIRLLVMDialect MLIRROCDLDialect MLIRFuncDialect MLIRTransformUtils
+    MLIRIR MLIRLLVMDialect MLIRROCDLDialect MLIRAMDGPUDialect MLIRFuncDialect MLIRTransformUtils
     MLIRGPUDialect MLIRSCFDialect MLIRVectorDialect MLIRArithDialect
     MLIRGPUTransforms MLIRGPUToROCDLTransforms MLIRSCFToControlFlow
     MLIRReconcileUnrealizedCasts

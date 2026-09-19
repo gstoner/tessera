@@ -121,33 +121,44 @@ _PYTHON_CODE_PATTERNS = (
 #: `__all__`, which is enough for a prefix regex to mistake it for a code.
 #: `DESIL` and `DRIFT` are prose labels in a message, matched by the shape
 #: pattern because they are all-caps and followed by a colon.
-_NOT_DIAGNOSTICS = frozenset({"GRAPH_IR_SCHEMA_VERSION", "DESIL", "DRIFT"})
+#: `TIMING_PROOF_INCOMPLETE` is the instructive one. It is not a diagnostic: it
+#: is one of ELEVEN promotion-ineligibility reason tags appended to a `reasons`
+#: list in an x86 evidence record (`profiler_x86_evidence.py`), alongside
+#: `CPU_NOT_EXACT_ZEN5`, `WSL_CLOCK_DOMAIN`, `SYMBOL_SAMPLING_MISSING`,
+#: `EVENT_MAP_NOT_PROMOTABLE` and the rest. It is the only one of the eleven the
+#: shape pattern can see, purely because it concatenates its detail after a
+#: colon (`"TIMING_PROOF_INCOMPLETE:" + ...`) while the others are bare tokens.
+#: Registering it would assert that a diagnostic path emits it when none does --
+#: Decision #29's unconsumed declaration, inside the registry itself -- and it
+#: would imply the other ten need entries too, which they do not.
+#:
+#: That vocabulary does need an owner, just not this one: eleven tags gate x86
+#: performance promotion, nothing enumerates them, and a consumer reading
+#: `reasons` cannot know when a twelfth is added. Tracked as X86-EVIDENCE-VOCAB-1.
+_NOT_DIAGNOSTICS = frozenset({
+    "GRAPH_IR_SCHEMA_VERSION", "DESIL", "DRIFT", "TIMING_PROOF_INCOMPLETE",
+})
 
-#: Codes the widened scan above found already unregistered on 2026-09-19, the
-#: day it could see them. They are a **ratchet, not an allowlist**: the gate
-#: fails if the set grows, and fails again when one of these is registered
-#: without being deleted from here, so the backlog can only shrink. They are
-#: listed rather than fixed in place because each belongs to another
-#: subsystem's registry entry (ROCm fragment legality, Apple fragment
-#: legality, x86 timing evidence) and authoring those inside an unrelated
-#: change is how a focused PR becomes an unreviewable one.
-#: Owner: `docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md` -- DIAG-PY-BACKLOG-1.
+#: Codes the widened scan found unregistered on 2026-09-19, the day it could
+#: first see them. They are a **ratchet, not an allowlist**: the gate fails if
+#: the set grows, and fails again when one is registered without being deleted
+#: from here, so the backlog can only shrink.
+#:
+#: Opened at 15; ten closed the same day. The nine `ROCM_FRAGMENT_*` codes are
+#: registered -- one file, one exception type, one fail-closed story -- and
+#: `TIMING_PROOF_INCOMPLETE` turned out not to be a diagnostic at all (see
+#: `_NOT_DIAGNOSTICS`). What remains is Apple's five, held rather than guessed:
+#: `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR`'s fix hint has to say whether
+#: fp32-only accumulation is permanent or pending the Metal 4 cooperative-tensor
+#: lane, and an invented answer there is worse than a missing entry.
+#: Owner: `docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md` DIAG-PY-BACKLOG-1,
+#: with `docs/audit/backend/apple/todo.md`.
 _UNREGISTERED_ON_2026_09_19 = frozenset({
     "APPLE_COUNTER_EVIDENCE_UNSUPPORTED",
     "APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED",
     "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR",
     "APPLE_FRAGMENT_UNSUPPORTED_ARCH",
     "APPLE_FRAGMENT_UNSUPPORTED_DTYPE",
-    "ROCM_FRAGMENT_ILLEGAL_CDNA5_WMMA",
-    "ROCM_FRAGMENT_ILLEGAL_CDNA_MFMA",
-    "ROCM_FRAGMENT_ILLEGAL_RDNA3_WMMA",
-    "ROCM_FRAGMENT_ILLEGAL_RDNA4_WMMA",
-    "ROCM_FRAGMENT_UNSUPPORTED_ARCH",
-    "ROCM_FRAGMENT_UNSUPPORTED_CDNA2_DTYPE",
-    "ROCM_FRAGMENT_UNSUPPORTED_CDNA3_DTYPE",
-    "ROCM_FRAGMENT_UNSUPPORTED_DTYPE",
-    "ROCM_FRAGMENT_UNSUPPORTED_SHAPE",
-    "TIMING_PROOF_INCOMPLETE",
 })
 
 
@@ -210,18 +221,8 @@ def test_registered_codes_group_by_language_and_prefix() -> None:
     LAYOUT_LEGALITY_*).  We don't enforce strict alphabetisation
     across the registry (low-value churn when adding new prefixes);
     we do verify the prefix-to-language mapping stays sensible."""
-    # Each prefix maps to exactly one language.
-    prefix_to_lang: dict[str, str] = {}
-    for c in REGISTERED_CODES:
-        prefix = c.code.split("_", 1)[0]
-        if prefix in prefix_to_lang:
-            assert prefix_to_lang[prefix] == c.language, (
-                f"prefix {prefix!r} declared in both "
-                f"{prefix_to_lang[prefix]!r} and {c.language!r} languages"
-            )
-        else:
-            prefix_to_lang[prefix] = c.language
-    # Canonical mapping (locked sentinels).
+    # Canonical mapping (locked sentinels). These five are tied to one
+    # language each because each names a single emitter.
     expected = {
         "E": "python",
         "JIT": "python",
@@ -229,11 +230,32 @@ def test_registered_codes_group_by_language_and_prefix() -> None:
         "SYMDIM": "mlir",
         "LAYOUT": "mlir",         # LAYOUT_LEGALITY_*
     }
+    prefix_to_lang: dict[str, set[str]] = {}
+    for c in REGISTERED_CODES:
+        prefix_to_lang.setdefault(c.code.split("_", 1)[0], set()).add(c.language)
     for prefix, lang in expected.items():
-        assert prefix_to_lang.get(prefix) == lang, (
+        assert prefix_to_lang.get(prefix) == {lang}, (
             f"prefix {prefix!r} expected to be {lang!r} language, got "
             f"{prefix_to_lang.get(prefix)!r}"
         )
+    # A DOMAIN prefix legitimately spans both languages, and the blanket
+    # "each prefix maps to exactly one language" rule that used to stand here
+    # forbade that. `ROCM_FRAGMENT_*` is the worked case, and it is not
+    # hypothetical: `LowerTileToROCMPass` emits ROCM_FRAGMENT_TYPE_DISAGREES
+    # and its siblings from C++, while `rocm_fragment.select_fragment_layout`
+    # emits ROCM_FRAGMENT_UNSUPPORTED_DTYPE and its siblings from Python. One
+    # naming family, two emitters, both correct -- and the old rule would have
+    # forced one of them to be declared in a language it is not written in,
+    # which is the opposite of what this file exists to enforce.
+    #
+    # That rule was a PROXY for "does the declared language match the emitter",
+    # and the question is answered directly, and more strictly, by TWO checks
+    # that name the offending code individually rather than its prefix:
+    # `test_every_mlir_registered_code_appears_in_cpp` (a code declared mlir
+    # that appears in no C++ file) and `test_registered_codes_have_required_
+    # fields`, which rejects an mlir code carrying a Python `pass_origin`.
+    # Verified by flipping one of the nine Python ROCM_FRAGMENT_* codes to
+    # `language="mlir"` before narrowing this: both fired, by name.
 
 
 def test_lookup_helpers_work() -> None:

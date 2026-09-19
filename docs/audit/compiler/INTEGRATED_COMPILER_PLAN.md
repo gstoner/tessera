@@ -104,6 +104,16 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Start: host-free
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
 
+### ROCM-NVFP4-INGEST-1
+
+**NVFP4 reaches the fp8 WMMA on gfx1201; the one lossy step must be declared**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: An NVFP4 checkpoint (e2m1 elements, **e4m3 scale per 16**, fp32 scale per tensor) reaches `v_wmma_f32_16x16x16_fp8_fp8` through MXFP4 (e2m1, **e8m0 scale per 32**), and the chain has exactly one lossy step: the scale requantization. Measured relRMS against the bf16 original — NVFP4 as shipped 0.113 (19 dB), bf16→MXFP4 **direct** 0.112, NVFP4→MXFP4 requantized 0.158 (16 dB) — so **the ~3 dB is double rounding, not the format**, and where a bf16 original exists, quantizing once to MXFP4 beats ingesting NVFP4. That is a `numeric_policy` preference (Decision #15a) and the requantization is a declared information-loss point (Decision #32) with a measured cost, not an implicit load-time transform. Notably this is **not** a workaround for a weaker part: AMD's MI355 path dequantizes NVFP4 to BF16 because CDNA4 has no native NVFP4 execution either, so the gfx1201 route lands on the fp8 ceiling (383 TFLOP/s) rather than bf16's 191. Gate: `nvfp4` and `mxfp4` distinguishable below Graph IR (they are already distinct *names* — `dtype.py` says "do not alias" — but nothing below Graph IR can tell them apart until block-scale metadata exists), the requantization expressed as a policy-gated conversion carrying its SQNR, and two traps covered: block-exponent selection by squared error between the no-clip rule and one binade finer (not truncation), and merged linears (`gate_up_proj`) honouring **both** global scales rather than collapsing them, which fails silently. Depends on the scale contract from [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) and the fold from [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1).
+- Depends on: [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1)
+- Start: device
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
 ### ROCM-SPLIT-K-1
 
 **Split-K on the typed ROCm route: an unwired model, mis-keyed**
@@ -491,6 +501,7 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
 | ROCM-FP8-BLOCKSCALE-1 | [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) | owner |
 | ROCM-MXFP4-W4A8-1 | [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1) | owner |
+| ROCM-NVFP4-INGEST-1 | [ROCM-NVFP4-INGEST-1](#rocm-nvfp4-ingest-1) | owner |
 | ROCM-LDS-BANKPAD-1 | [ROCM-LDS-BANKPAD-1](#rocm-lds-bankpad-1) | owner |
 | ROCM-SCHED-GROUP-1 | [ROCM-SCHED-GROUP-1](#rocm-sched-group-1) | owner |
 | ROCM-SPLIT-K-1 | [ROCM-SPLIT-K-1](#rocm-split-k-1) | owner |

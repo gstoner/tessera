@@ -575,6 +575,60 @@ kernel fast. Ours pads nothing. `rocm_tiling` already models this as
 not scheduling, is the candidate that fits the number** — and it is what
 ROCM-LDS-BANKPAD-1 should test before the LDS body is judged again.
 
+## 10d. NVFP4 on gfx1201: one lossy step, and it is the scale format
+
+An NVFP4 checkpoint can reach the fp8 WMMA on gfx1201, and the whole chain has
+**exactly one lossy step**. Recorded 2026-09-19 from the vLLM MXFP4 work on
+R9700 (`GGZ14/vllm-mxfp4`, `ggz14/radiance-vllm-mxfp4`).
+
+```
+NVFP4      e2m1 elements + e4m3 scale per 16 + fp32 scale per tensor
+   |  LOSSY  requantize: e4m3/16 scales -> e8m0/32 scales
+   v         (elements are already e2m1; only the scale contract changes)
+MXFP4      e2m1 elements + e8m0 scale per 32
+   |  EXACT  lossless e2m1->e4m3 lookup, power-of-two block exponent folded
+   v         into the weight (section 10b)
+fp8 e4m3 -> v_wmma_f32_16x16x16_fp8_fp8
+```
+
+**The loss is double rounding, not the format** — which is the part worth
+keeping, because it tells you where the fix is. Measured against the bf16
+original as relative RMS:
+
+| path | relRMS | SQNR |
+|---|---|---|
+| NVFP4 (as shipped) | 0.113 | 19 dB |
+| bf16 → MXFP4 **direct** | 0.112 | ~19 dB |
+| NVFP4 → MXFP4 (requantized) | 0.158 | 16 dB |
+
+MXFP4 is as faithful as NVFP4 when quantized *once* from bf16; going through
+NVFP4 first costs ~3 dB. So where the bf16 original is available, quantizing
+directly to MXFP4 is strictly better than ingesting NVFP4 and requantizing, and
+that is a `numeric_policy` preference rather than a kernel detail. Reported
+task accuracy is unaffected at this size (GSM8K 97.40%), on 2x R9700 with
+decode 22.2–24.7 ms/step and prefill 3900–5072 tok/s.
+
+**Two traps in the conversion.** Block-exponent selection is not truncation —
+it picks by squared error between the no-clip rule and one binade finer. And a
+merged linear (`gate_up_proj`) carries *two* global scales that must be honoured
+separately rather than collapsed; collapsing them is silent.
+
+**This is not RDNA4 catching up.** AMD's own MI355 path dequantizes NVFP4 to
+**BF16** at GEMM time, because CDNA4 has no native NVFP4 execution path either
+(`rocm.blogs.amd.com/.../nvfp4-mi355`). The gfx1201 route lands on the fp8 WMMA
+instead, whose ceiling is 383 TFLOP/s against bf16's 191 (section 5) — so on
+this axis the RDNA4 part has the better landing spot, not a worse one.
+
+**What Tessera already has, and what it does not.** `dtype.py` and
+`docs/reference/tessera_tensor_attributes.md` already name `nvfp4`,
+`fp4_e2m1` and `mxfp4` as *distinct*, with an explicit "do not alias to OCP FP4
+or AMD MXFP4" — the naming is ahead of the compiler here, which is the reverse
+of the usual direction. What is missing is the block-scale metadata `mxfp4`'s
+own planned/gated entry already says it needs, which is
+`ROCM-FP8-BLOCKSCALE-1`. Until that exists none of these three names can be
+told apart by anything below Graph IR, and the conversion above has nowhere to
+declare its 3 dB.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no

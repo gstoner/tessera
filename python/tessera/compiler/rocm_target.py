@@ -266,8 +266,18 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         # which covers TF32's 10; that is also why "truncate to one bf16"
         # cannot be the scheme, since bf16 alone keeps 7.
         #
+        # Confirmed in hipBLASLt's own source, not just from a summary.
+        # `tensilelite/Tensile/KernelWriter.py` gates on the assembler
+        # capability `HasMFMA_xf32`: absent it warns "XF32 MatrixInstruction
+        # not supported for {version}, using emulation" when
+        # `UseF32XEmulation` is set, and RAISES when it is not. The operand
+        # preparation in `Components/LocalRead.py` splits each fp32 into its
+        # WORD_1 and WORD_0 halves -- the hi and lo bf16 terms -- which is the
+        # split above. So this key means exactly what hipBLASLt's capability
+        # means, and both say gfx950 lacks the instruction.
+        #
         # None of that changes THIS key, which asks whether the instruction
-        # exists: on CDNA 4 it does not, by either account. And whichever is
+        # exists: on CDNA 4 it does not. And whichever is
         # right, the direction holds -- faster than fp32, slower than the bf16
         # it is built from, so it is the one reduced-precision selection that
         # buys compatibility rather than speed.

@@ -8824,6 +8824,65 @@ registers; raster-order selection, still blocked on counters neither WSL2 ROCm
 box can produce. The sparse twin `V_SWMMAC_I32_16X16X64_IU4` is now reachable
 by the same route but remains unmeasured.
 
+## ROCM-GLOBAL-LOAD-TR-1 closed: the B gather becomes one instruction — 2026-09-19
+
+Sync `GFX1201-PARITY-2026-09-17` (branch `claude/rocm-b-transpose`); owner
+COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+**The standing asymmetry is gone for f16 and bf16.** B is stored row-major
+`[K][N]` and each lane wants a column, so `materializeFragmentPack` issued
+eight guarded scalar loads for B where A took a single `vector.load`.
+RDNA4's `GLOBAL_LOAD_TR_B128` reads a 16x16 tile and transposes it into the
+registers, and the typed route now emits it: four per K slab at the 4x4 panel,
+confirmed in the disassembly.
+
+**The ISA does not state the permutation, so it was measured.** With `B[r][c]
+= r*16 + c` — asymmetric, every element distinct, because a symmetric probe
+cannot tell a row reading from a column one — the wave performs an 8x8
+transpose inside each group of 8 lanes:
+
+    received(L, j) = R(8*(L/8) + j)[L % 8]
+
+Solving that for the fragment gives the address each lane must supply, which
+in the materializer's own terms is
+
+    A = (kBase + lane % 8) * ldb + (lane / 8) * 8      // plus the tile origin
+
+verified at **256/256 elements** against the asymmetric reference, with the
+arbitrary `A(L) = 8L` addressing failing the same check as the control.
+
+**What it is worth**, TFLOP/s at the 4x4 panel with K unroll 2, against the
+gather: 1024³ **65.9 vs 54.2** (+21.6%), 1536³ 79.2 vs 74.3, 2048³ 75.4 vs
+80.5 (**-6.3%**), 2560³ 94.3 vs 89.5, 3072³ 92.8 vs 89.4, 4096³ **93.9 vs
+89.4** (+5.0%). Five of six shapes win.
+
+**2048³ is the sole reversal and it reproduces** at five runs (75.8 against
+81.3), so it is not sampling noise. A leading dimension of exactly 2048 is the
+obvious suspect for channel or partition aliasing, but that is a hypothesis
+and no counters exist on either WSL2 ROCm box to confirm it. The instruction
+stays on for every shape rather than being special-cased around one anomaly
+from one point; special-casing it would be fitting a rule to a single
+unexplained sample.
+
+**8-bit storages are excluded, and that is measured rather than assumed.**
+`TR_B64` is a different permutation and the derivation does not carry to it.
+Enabling it on the strength of the matching per-lane width produced wrong
+results on device for **every** 8-bit storage — 16 failing rows across fp8 and
+both integer widths, with f16 and bf16 untouched, which is also what localised
+the fault. int4 is excluded regardless: `tr4` is gfx1250+.
+
+Infrastructure that outlives this item: the `amdgpu` dialect is registered in
+both drivers and declared in `TileToROCM`'s `getDependentDialects` (the
+assertions-only trap this repo has hit twice), `convert-gpu-to-rocdl` lowers
+the op to `rocdl.global.load.tr.b128` with no additional pass, and the
+generic kernel argument is cast to the global address space the op requires.
+
+**Still owed.** The 8-bit mapping for `TR_B64`, measured the same way, which
+would extend this to fp8 and int8; the 2048³ anomaly, which needs counters;
+AMD's identity-matrix in-register transpose as the int4 fallback; the
+126-VGPR spill at the shipped 4x4 panel; `ROCM-MIXED-FP8-1`; raster-order
+selection.
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

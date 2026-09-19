@@ -1520,8 +1520,10 @@ struct GenerateWMMAGemmKernelPass
       llvm::cl::desc("LDS-staged typed body: dwords of padding added to each "
                      "tile row so the stride is an odd dword count and the "
                      "fragment read stops colliding on the 32 x 4 B banks. "
-                     "0 is the unpadded historical layout (ROCM-LDS-BANKPAD-1)"),
-      llvm::cl::init(0)};
+                     "0 is the unpadded historical layout. Default 1: "
+                     "measured +12% on the LDS body at 1024 cubed f16, net of "
+                     "the narrower ds_load it forces (ROCM-LDS-BANKPAD-1)"),
+      llvm::cl::init(1)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged typed body: waves along M "
                                        "per workgroup"),

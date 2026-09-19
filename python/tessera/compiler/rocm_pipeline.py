@@ -227,10 +227,13 @@ class ROCMExecutablePipeline:
     #: under. Stays 0 until a measurement says otherwise
     #: (ROCM-SCHED-GROUP-1).
     sched_groups: int = 0
-    #: Dwords of LDS row padding. 0 is the unpadded historical
-    #: layout whose fragment read collides 4 ways on the banks
-    #: (ROCM-LDS-BANKPAD-1).
-    lds_pad_dwords: int = 0
+    #: Dwords of LDS row padding. 0 is the unpadded historical layout,
+    #: whose fragment read collides 4 ways on the 32 x 4 B banks. Default
+    #: 1 -- measured +12% on the LDS body, and that is NET of the narrower
+    #: ds_load the unaligned stride forces, so the conflict cost more than
+    #: the headline. It does NOT explain the body's 9x gap to the register
+    #: path; see ROCM-LDS-STAGE-VECTOR-1 for what does.
+    lds_pad_dwords: int = 1
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False

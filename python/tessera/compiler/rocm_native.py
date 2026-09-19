@@ -1272,7 +1272,7 @@ def _compile_native_tile_ir(
     lds_waves: tuple[int, int] = (2, 2),
     k_unroll: int = 1,
     sched_groups: int = 0,
-    lds_pad_dwords: int = 0,
+    lds_pad_dwords: int = 1,
 ) -> tuple[
     str,
     str,

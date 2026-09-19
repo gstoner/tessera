@@ -6,7 +6,14 @@ import numpy as np
 import pytest
 
 from tessera.compiler.rocm_sparse_runtime import compile_sparse_matmul
-from tests._support import rocm_isa
+
+# `rocm_isa` is imported inside each test on purpose. `rocm_sparse_runtime`
+# runs its kernels in a multiprocessing worker, and under spawn/forkserver the
+# child RE-IMPORTS this module to unpickle the target. The child's sys.path does
+# not resolve `tests._support`, so a module-level import kills the worker at
+# startup and the parent sees EOFError instead of the refusal under test.
+# Hoisting this to module scope for tidiness cost a full-sweep failure on macOS
+# that passed in isolation, in the whole ROCm subset, and in CI (2026-09-19).
 
 #: The SWMMAC mnemonic each FP8 pairing must select. A mixed pair asserts the
 #: mirror is ABSENT as well: an operand swap would emit `bf8_fp8` where
@@ -33,6 +40,7 @@ def test_logical_byte_sparse_device(dtype,rhs_dtype,mnemonic,shape,tmp_path):
     m,n,k = shape
     package = compile_sparse_matmul(m,n,k,dtype=np.dtype(dtype).name,rhs_dtype=np.dtype(rhs_dtype).name,
                                    accum='i32' if dtype in (np.int8,np.uint8) else 'f32')
+    from tests._support import rocm_isa  # deliberately local -- see note above
     forbid = tuple('v_swmmac_' + name for name in _SWMMAC_FP8 if name != mnemonic) \
         if mnemonic in _SWMMAC_FP8 else ()
     rocm_isa.assert_selected(package.image, chip='gfx1201',
@@ -63,6 +71,7 @@ def test_int4_logical_packing_device(dtype,rhs_dtype,tmp_path,monkeypatch):
     assert rt._rocm_live_arch() == 'gfx1201'
     package = compile_sparse_matmul(32,48,64,dtype=np.dtype(dtype).name,
         rhs_dtype=np.dtype(rhs_dtype).name,accum='i32',integer_bits=4)
+    from tests._support import rocm_isa  # deliberately local -- see note above
     rocm_isa.assert_selected(package.image, chip='gfx1201',
         pattern=r'v_swmmac_\w+', require='v_swmmac_i32_16x16x32_iu4',
         forbid='v_swmmac_i32_16x16x32_iu8',

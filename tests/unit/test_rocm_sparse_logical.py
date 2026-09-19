@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from tessera.compiler.rocm_sparse_logical import sparse_logical_schedule_ir
+from tests._support import rocm_isa
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
@@ -51,10 +52,11 @@ def test_sparse_logical_device_packing_and_k_accumulation(shape,dtype,tmp_path):
     pipeline = 'builtin.module(gpu.module(convert-vector-to-llvm,convert-scf-to-cf,convert-gpu-to-rocdl,reconcile-unrealized-casts),rocdl-attach-target{chip=gfx1201},gpu-module-to-binary{toolkit='+os.environ['ROCM_PATH']+'})'
     binary = subprocess.check_output([str(llvm/'mlir-opt'),'--pass-pipeline='+pipeline],input=lowered,text=True,env=env)
     image = _decode_image(re.findall(r'"((?:\\.|[^"\\])*)"',binary)[-1])
-    image_path = tmp_path/'sparse.hsaco'
-    image_path.write_bytes(image)
-    asm = subprocess.check_output([str(llvm/'llvm-objdump'),'--disassemble',str(image_path)],text=True,env=env)
-    assert 'v_swmmac_f32_16x16x32_' + ('f16' if dtype == np.float16 else 'bf16') in asm
+    storage = 'f16' if dtype == np.float16 else 'bf16'
+    rocm_isa.assert_selected(image, chip='gfx1201', pattern=r'v_swmmac_\w+',
+        require='v_swmmac_f32_16x16x32_' + storage,
+        forbid='v_swmmac_f32_16x16x32_' + ('bf16' if storage == 'f16' else 'f16'),
+        what=f'logical sparse {np.dtype(dtype).name}')
     hip = rt._load_hip_for_launch()
     P = ct.c_void_p
     def check(status):

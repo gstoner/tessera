@@ -63,7 +63,12 @@ def _module(
                  "int8": "i8", "int4": "i4"}[b_name]
     a = IRType(f"tensor<{m}x{k}x{element}>", (str(m), str(k)), dtype)
     b = IRType(f"tensor<{k}x{n}x{b_element}>", (str(k), str(n)), b_name)
-    output_element = {"fp16": "f16", "fp32": "f32", "fp64": "f64", "int32": "i32"}[output_dtype]
+    # bf16 is here so a reduced-precision ACCUMULATOR can be asked for. Without
+    # it, `test_rocm_wmma_form_reachability` proved the bf16-accumulate WMMA
+    # unreachable by raising KeyError inside this helper -- the fixture's own
+    # missing key reading as a compiler refusal.
+    output_element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32",
+                      "fp64": "f64", "int32": "i32"}[output_dtype]
     output = IRType(
         f"tensor<{m}x{n}x{output_element}>", (str(m), str(n)), output_dtype
     )

@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from tessera.compiler.rocm_sparse_logical import sparse_logical_schedule_ir
+from tests._support import rocm_isa
 from tessera.compiler.rocm_sparse_runtime import SparseMatmulPackage, compile_sparse_matmul
 
 
@@ -77,13 +78,17 @@ def test_sparse_public_runtime_binding(dtype,shape,low_acc,tmp_path):
     m,n,k = shape
     compiled = compile_sparse_matmul(m,n,k,dtype=np.dtype(dtype).name,
         accum=("f16" if dtype == np.float16 else "bf16") if low_acc else "f32")
-    import subprocess
-    from pathlib import Path
-    image = tmp_path / "sparse.hsaco"
-    image.write_bytes(compiled.image)
-    disassembly = subprocess.check_output([str(Path(os.environ["TESSERA_LLVM_BIN"])/"llvm-objdump"),"-d",str(image)],text=True)
     output_type = ("f16" if dtype == np.float16 else "bf16") if low_acc else "f32"
-    assert "v_swmmac_" + output_type + "_16x16x32_" in disassembly.lower()
+    storage = "f16" if dtype == np.float16 else "bf16"
+    # The accumulator is what this row selects, so the other two accumulator
+    # widths are forbidden: `in` alone would pass on an f32-accumulating kernel
+    # when a reduced-precision one was asked for.
+    rocm_isa.assert_selected(compiled.image, chip="gfx1201",
+        pattern=r"v_swmmac_\w+",
+        require=f"v_swmmac_{output_type}_16x16x32_{storage}",
+        forbid=tuple(f"v_swmmac_{other}_16x16x32_{storage}"
+                     for other in ("f32", "f16", "bf16") if other != output_type),
+        what=f"{np.dtype(dtype).name} accum={output_type}")
     rng = np.random.default_rng(16)
     a = (rng.integers(-4,5,size=(m,k))/4).astype(dtype)
     a.reshape(m,k//4,4)[:,:,2:] = 0

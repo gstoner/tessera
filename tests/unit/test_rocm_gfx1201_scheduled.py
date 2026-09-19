@@ -760,10 +760,17 @@ def test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact(shape):
     Asserted EXACTLY against the i32 reference: an integer product has no
     rounding, so a nibble-order or K-stride error cannot hide behind a
     tolerance -- which is what makes int4 the right carrier for a new K shape.
+
+    **Exactness alone cannot prove this form was emitted.** The double-K
+    instruction and two K=16 int4 WMMAs compute the identical integer product,
+    so a generator that quietly kept K=16 would satisfy every numeric
+    assertion here -- and this row is the only owner of the capability. The
+    mnemonic is therefore checked too, and the K=16 form forbidden.
     """
     import re
     from tessera import runtime as rt
     from tessera.compiler import scheduled_matmul
+    from tests._support import rocm_isa
     from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
     assert rt._rocm_live_arch() == "gfx1201"
     m, k, n = shape
@@ -778,6 +785,10 @@ def test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact(shape):
     _, _, payload, *_ = rocm_native._compile_native_tile_ir(
         double_k, directive="tessera_rocm.wmma", family="matmul",
         architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)
+    rocm_isa.assert_selected(
+        payload, chip="gfx1201", pattern=r"v_wmma_i32_16x16x\d+_iu4",
+        require="v_wmma_i32_16x16x32_iu4", forbid="v_wmma_i32_16x16x16_iu4",
+        what=f"double-K int4 {shape}")
     rng = np.random.default_rng(32 + m)
     a = rng.integers(-8, 8, size=(m, k), dtype=np.int8)
     b = rng.integers(-8, 8, size=(k, n), dtype=np.int8)
@@ -815,20 +826,11 @@ def test_gfx1201_b_fragment_uses_the_transpose_load_only_where_derived(storage, 
     the exact device rows elsewhere in this file; what a disassembly check adds
     is that a silent fallback to the gather cannot pass for a win.
     """
-    import re, subprocess, tempfile, collections
-    from pathlib import Path
     from tessera import runtime as rt
     from tessera.compiler import scheduled_matmul
+    from tests._support import rocm_isa
     from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
     assert rt._rocm_live_arch() == "gfx1201"
-    objdump = None
-    for candidate in (Path.home() / ".local/share/tessera-toolchains/llvm-23.1.1/bin/llvm-objdump",
-                      Path("/usr/lib/llvm-23/bin/llvm-objdump")):
-        if candidate.is_file():
-            objdump = str(candidate)
-            break
-    if objdump is None:
-        pytest.skip("llvm-objdump unavailable; cannot inspect the emitted ISA")
     out_dtype = "int32" if storage.startswith("int") else "fp32"
     artifact = scheduled_matmul.lower_scheduled_matmul(
         matmul_module(target="rocm", shape=(1024, 1024, 1024), dtype=storage,
@@ -837,30 +839,31 @@ def test_gfx1201_b_fragment_uses_the_transpose_load_only_where_derived(storage, 
     _, _, payload, *_ = rocm_native._compile_native_tile_ir(
         artifact.tile_ir, directive="tessera_rocm.wmma", family="matmul",
         architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)
-    with tempfile.NamedTemporaryFile(suffix=".hsaco", delete=False) as handle:
-        handle.write(payload)
-        path = handle.name
-    try:
-        text = subprocess.run([objdump, "-d", "--mcpu=gfx1201", path],
-                              capture_output=True, text=True).stdout
-    finally:
-        os.unlink(path)
-    seen = collections.Counter(re.findall(r"global_load_tr\S*", text))
+    text = rocm_isa.disassemble(payload, chip="gfx1201")
+    seen = rocm_isa.mnemonics(text, r"global_load_tr\S*")
     if expect_tr:
         assert seen, f"{storage} should use the transpose load; found none"
+        # B64 is the 8-bit form, whose permutation is not derived; emitting it
+        # here would be the wrong width reaching a 16-bit fragment.
         assert all(name.startswith("global_load_tr_b128") for name in seen), seen
     else:
         assert not seen, f"{storage} must stay on the guarded gather; found {dict(seen)}"
 
 
-@pytest.mark.hardware_rocm
-@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
-@pytest.mark.parametrize("a_dt,b_dt,instruction", [
+#: The four OCP FP8 pairings and the instruction each one must select. Kept as
+#: one table so each row can forbid the other three.
+_MIXED_FP8_PAIRS = (
     ("fp8_e4m3", "fp8_e4m3", "v_wmma_f32_16x16x16_fp8_fp8"),
     ("fp8_e4m3", "fp8_e5m2", "v_wmma_f32_16x16x16_fp8_bf8"),
     ("fp8_e5m2", "fp8_e4m3", "v_wmma_f32_16x16x16_bf8_fp8"),
     ("fp8_e5m2", "fp8_e5m2", "v_wmma_f32_16x16x16_bf8_bf8"),
-])
+)
+_MIXED_FP8_INSTRUCTIONS = tuple(row[2] for row in _MIXED_FP8_PAIRS)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("a_dt,b_dt,instruction", _MIXED_FP8_PAIRS)
 def test_gfx1201_mixed_fp8_pairs_select_their_instruction_and_execute(a_dt, b_dt, instruction):
     """ROCM-MIXED-FP8-1: all four OCP FP8 pairings, including the mixed ones.
 
@@ -879,19 +882,12 @@ def test_gfx1201_mixed_fp8_pairs_select_their_instruction_and_execute(a_dt, b_dt
     format, and with fp8's narrow range the error can look like ordinary
     accumulation noise.
     """
-    import collections
-    import re
-    import subprocess
-    import tempfile
-    from pathlib import Path
     import ml_dtypes
     from tessera import runtime as rt
     from tessera.compiler import scheduled_matmul
+    from tests._support import rocm_isa
     from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
     assert rt._rocm_live_arch() == "gfx1201"
-    objdump = next((str(c) for c in (
-        Path.home() / ".local/share/tessera-toolchains/llvm-23.1.1/bin/llvm-objdump",
-        Path("/usr/lib/llvm-23/bin/llvm-objdump")) if c.is_file()), None)
     m = k = n = 256
     artifact = scheduled_matmul.lower_scheduled_matmul(
         matmul_module(target="rocm", shape=(m, k, n), dtype=a_dt, b_dtype=b_dt,
@@ -899,17 +895,15 @@ def test_gfx1201_mixed_fp8_pairs_select_their_instruction_and_execute(a_dt, b_dt
         target="rocm_gfx1201")
     assert artifact.a_dtype == a_dt and artifact.b_dtype == b_dt
     package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
-    if objdump is not None:
-        with tempfile.NamedTemporaryFile(suffix=".hsaco", delete=False) as handle:
-            handle.write(package.image.payload)
-            path = handle.name
-        try:
-            text = subprocess.run([objdump, "-d", "--mcpu=gfx1201", path],
-                                  capture_output=True, text=True).stdout
-        finally:
-            os.unlink(path)
-        seen = collections.Counter(re.findall(r"v_wmma_f32_16x16x16_\w+", text))
-        assert instruction in seen, f"expected {instruction}, saw {dict(seen)}"
+    # Every other pairing is forbidden, not merely unmentioned: finding
+    # `fp8_bf8` does not establish that the mirror `bf8_fp8` is absent, and an
+    # operand swap anywhere in the stack would emit the mirror while still
+    # satisfying a presence-only check.
+    others = tuple(name for name in _MIXED_FP8_INSTRUCTIONS if name != instruction)
+    rocm_isa.assert_selected(
+        package.image.payload, chip="gfx1201",
+        pattern=r"v_wmma_f32_16x16x16_\w+",
+        require=instruction, forbid=others, what=f"{a_dt} x {b_dt}")
     np_a = ml_dtypes.float8_e4m3fn if a_dt == "fp8_e4m3" else ml_dtypes.float8_e5m2
     np_b = ml_dtypes.float8_e4m3fn if b_dt == "fp8_e4m3" else ml_dtypes.float8_e5m2
     rng = np.random.default_rng(88)

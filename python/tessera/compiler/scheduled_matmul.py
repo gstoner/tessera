@@ -640,7 +640,21 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             32,
         )
     else:
-        raise ValueError("unsupported target dtype contract for scheduled matmul")
+        # Name what was rejected (Decision #21): this branch is reached by a
+        # reduced-precision accumulator, an unsupported storage, and a target
+        # that has no GEMM for the pair -- and the old message, identical for
+        # all three, told a caller nothing about which. It is also the marker
+        # `test_rocm_wmma_form_reachability` matches a declared-unreachable
+        # form against, so a form that starts failing for a DIFFERENT reason
+        # can no longer read as the same known gap.
+        raise ValueError(
+            "SCHEDULED_MATMUL_DTYPE_CONTRACT_UNSUPPORTED: target "
+            f"{target!r} has no scheduled-matmul contract for "
+            f"a={a_dtype} b={b_dtype} -> out={output_dtype}. Storage and "
+            "accumulator are separate (Decision #15a): an accumulator narrower "
+            "than fp32/int32 is an opt-in accuracy class, not a contract the "
+            "default route selects."
+        )
     return (
         compiler_target,
         architecture,

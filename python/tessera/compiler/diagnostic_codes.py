@@ -1193,6 +1193,29 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="GFX1201-PARITY-2026-09-17",
     ),
     DiagnosticCode(
+        code="SCHEDULED_MATMUL_DTYPE_CONTRACT_UNSUPPORTED",
+        pass_origin="tessera.compiler.scheduled_matmul",
+        severity="error",
+        summary=(
+            "No scheduled-matmul contract exists for this (a, b, output) dtype "
+            "triple on this target, so the typed route refuses rather than "
+            "substituting a contract that computes something else."
+        ),
+        fix_hint=(
+            "Storage and accumulator are separate (Decision #15a): name the "
+            "storage on the tensors and the accumulator in numeric_policy. An "
+            "accumulator narrower than fp32/int32 is an opt-in accuracy class "
+            "(tessera.rocm.reduced_precision_accumulation on ROCm), not a "
+            "contract the default route selects; declare out=fp32 (or int32 "
+            "for integer storage). A mixed pair is legal where the hardware "
+            "has the instruction -- the four OCP FP8 pairings are admitted on "
+            "gfx1201."
+        ),
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="GFX1201-PARITY-2026-09-19",
+        language="python",
+    ),
+    DiagnosticCode(
         code="ROCM_WMMA_ACCUM_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",
         severity="error",

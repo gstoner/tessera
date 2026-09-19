@@ -221,6 +221,19 @@ class ROCMExecutablePipeline:
     #: Full 16-wide K slabs the typed matmul body issues per loop iteration
     #: (latency hiding; 1 is the established one-slab loop).
     k_unroll: int = 1
+    #: rocdl.sched.group.barrier granularity for the WMMA panel.
+    #: 0 keeps LLVM's default drained, single-buffered schedule --
+    #: the schedule every recorded gfx1201 number was measured
+    #: under. Stays 0 until a measurement says otherwise
+    #: (ROCM-SCHED-GROUP-1).
+    sched_groups: int = 0
+    #: Dwords of LDS row padding. 0 is the unpadded historical layout,
+    #: whose fragment read collides 4 ways on the 32 x 4 B banks. Default
+    #: 1 -- measured +12% on the LDS body, and that is NET of the narrower
+    #: ds_load the unaligned stride forces, so the conflict cost more than
+    #: the headline. It does NOT explain the body's 9x gap to the register
+    #: path; see ROCM-LDS-STAGE-VECTOR-1 for what does.
+    lds_pad_dwords: int = 1
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -255,6 +268,14 @@ class ROCMExecutablePipeline:
             raise ValueError("ROCm LDS staging takes a positive (waves_m, waves_n) pair of at most 8 each")
         if type(self.k_unroll) is not int or not 1 <= self.k_unroll <= 8:
             raise ValueError("ROCm matmul k_unroll must be an integer in [1, 8]")
+        if type(self.sched_groups) is not int or not 0 <= self.sched_groups <= 16:
+            raise ValueError(
+                "ROCm sched_groups must be an integer in [0, 16]; it is a "
+                "scheduling-granularity knob, and past the point where the "
+                "pattern asks for more outstanding loads than the hardware "
+                "holds it spills rather than overlapping")
+        if type(self.lds_pad_dwords) is not int or not 0 <= self.lds_pad_dwords <= 4:
+            raise ValueError("ROCm lds_pad_dwords must be an integer in [0, 4]")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -269,6 +290,8 @@ class ROCMExecutablePipeline:
             f"output={terminal.value} arch={self.arch} staging={self.staging} "
             f"lds-waves-m={self.lds_waves[0]} lds-waves-n={self.lds_waves[1]} "
             f"k-unroll={self.k_unroll} "
+            f"sched-groups={self.sched_groups} "
+            f"lds-pad-dwords={self.lds_pad_dwords} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"

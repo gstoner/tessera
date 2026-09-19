@@ -190,6 +190,12 @@ class RankedTileCandidate:
     lds_margin: int
     bank_padding_required: bool
     register_macro_tile: tuple[int, int]
+    #: UNWIRED (Decision #29a condition 1). Nothing in the production lowering
+    #: reads this: `scheduled_matmul.py` never imports this module, so the
+    #: emitted gfx1201 kernel has no split-K regardless of what is ranked here.
+    #: Owned by ROCM-SPLIT-K-1. Do not read its presence as "the compiler models
+    #: split-K" -- and note the model itself is known wrong for the shape that
+    #: needs it most (see `rank_candidates`).
     split_k_required: bool
     pipeline_depth: int
     score: float
@@ -348,6 +354,13 @@ def rank_candidates(
         lds_with_padding = lds + padding
         lds_margin = profile.lds_capacity_bytes - lds_with_padding
         macro_tile = _register_macro_tile(cand)
+        # KNOWN WRONG, and unwired so nothing catches it (Decision #29a): the
+        # real trigger for split-K is OCCUPANCY, not K magnitude. The gfx1201
+        # MoE router gate (M<=16, K=2048, N=256) needs split-K because 16 output
+        # tiles leave half of a 32-CU chip idle and the weight read dominates A
+        # by 16x -- and `k > 4096` answers False for it. Re-keying this on
+        # tiles-vs-CUs is the first half of ROCM-SPLIT-K-1; the second is giving
+        # it a consumer.
         split_k_required = cand.tile.k > split_k_threshold or lds_margin < 0
         bank_padding = padding > 0
 

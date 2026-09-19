@@ -25,11 +25,23 @@ module {
 }
 
 // 2x2 waves over a 32x64 panel: a 64x128 block tile, 128 threads, and one
-// 16-wide K slab of each operand in LDS (64*16 + 128*16 halves = 6144 bytes).
+// 16-wide K slab of each operand in LDS.
+//
+// The rows are PADDED (ROCM-LDS-BANKPAD-1, default `lds-pad-dwords=1`), so the
+// stride is 18 f16 rather than 16: an unpadded 16-element row is 8 dwords and
+// `gcd(8, 32) = 8`, which puts sixteen lanes on four banks -- a 4-way conflict
+// on every fragment read. One dword of padding makes the stride 9 dwords, and
+// `gcd(9, 32) = 1` makes `(9L) mod 32` a bijection over the lanes.
+//
+// So 64*18 + 128*18 halves = 6912 bytes, not 64*16 + 128*16 = 6144. Measured
+// worth +10-12% on the LDS body; if these numbers ever go back to 1024/2048/6144
+// the padding has been lost, which is silent at runtime and only shows as a
+// throughput regression.
 // GEN: gpu.func @gemm
-// GEN-SAME: workgroup(%{{.*}}: memref<1024xf16, #gpu.address_space<workgroup>>, %{{.*}}: memref<2048xf16, #gpu.address_space<workgroup>>)
+// GEN-SAME: workgroup(%{{.*}}: memref<1152xf16, #gpu.address_space<workgroup>>, %{{.*}}: memref<2304xf16, #gpu.address_space<workgroup>>)
 // GEN-SAME: known_block_size = array<i32: 128, 1, 1>
-// GEN-DAG: tessera.rocm.lds_bytes = 6144
+// GEN-DAG: tessera.rocm.lds_bytes = 6912
+// GEN-DAG: tessera.rocm.lds_pad_dwords = 1
 // GEN-DAG: tessera.rocm.lds_waves = array<i64: 2, 2>
 // An LDS body never claims the gfx11 register-panel contract.
 // GEN-NOT: tessera.rocm.typed_gfx11_gemm_contract

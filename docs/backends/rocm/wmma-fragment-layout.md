@@ -77,10 +77,62 @@ reason to trust it.
 
 ## 3. A/B operand layout — K-major per lane
 
+**Corrected 2026-09-19, then verified against AMD's own tool.** This section
+previously stated the mapping below as the architecture's fragment layout. It is
+that for some storage widths and not for others, and the difference matters.
+Printed by `amd_matrix_instruction_calculator` (`-a gfx1201 -R -A -w 32`), the
+**K distribution depends on the storage width**:
+
+| storage | per-lane mapping | runs |
+|---|---|---|
+| 16-bit (f16, bf16) | `k = 8*(e>>2) + 4*(lane>>4) + (e&3)` | **four** |
+| 8-bit (fp8, bf8, int8) | `k = 8*(lane>>4) + e` | **eight** |
+| 4-bit (int4) | `k = 8*(lane>>4) + e` | **eight** |
+
+For f16, lane 0 holds `k = 0,1,2,3,8,9,10,11` across four VGPRs at two elements
+each, and lane 16 holds `4,5,6,7,12,13,14,15`. For fp8/int8 lane 0 holds
+`k = 0..7` packed in two VGPRs and lane 16 holds `8..15`; for int4 the same eight
+k values fit one VGPR as eight nibbles.
+
+**So contiguous-eight — what `materializeFragmentPack` emits — IS the machine's
+mapping at 8 and 4 bits, and is a relabeling only at 16 bits.** The
+permutation-cancellation argument below is therefore load-bearing for exactly
+one case, f16/bf16, and is not needed for the low-precision storages at all.
+
+What `materializeFragmentPack` emits, at every width, is contiguous-eight:
+
 ```
 a[h] = A[lane % 16][8 * (lane / 16) + h]        // A row-major [M][K]: row = lane % 16
 b[h] = B[lane % 16][8 * (lane / 16) + h]        // B K-major   [N][K]: col = lane % 16
 ```
+
+**This is legal, and deliberately better, for one reason that must not be
+forgotten: the WMMA sums over K.** `C[i][j] = Σ_k A[i][k]·B[k][j]` is invariant
+under any permutation of the K axis applied to *both* fragments, and the
+instruction pairs slot with slot regardless of which k each slot is believed to
+hold. Our loader applies one convention to A and B alike, so the permutation
+cancels exactly. Contiguous-eight is then strictly cheaper to load: one 128-bit
+`vector.load` per lane, where the machine's runs-of-four needs two loads or a
+cross-lane shuffle.
+
+**The hazard this creates, and it is live — at 16 bits.** A third fragment
+source must adopt *our* convention where it differs from the machine's, and
+nothing in the type system says so. The
+one place they already collide is `GLOBAL_LOAD_TR_B128`, which delivers the
+hardware's native permutation: the per-lane address derived in §8 is what
+reconciles the two, and it was solved empirically against a measured mapping
+rather than derived from this contract. That reconciliation is load-bearing.
+Anything that changes either side — a new staging path, an LDS-resident
+fragment, a pre-packed weight format — must be checked against both, because a
+mismatch is numerically silent in exactly the cases where K happens to be
+symmetric.
+
+**The free transpose.** Because our A and B fragments share one layout,
+`wmma(B_frag, A_frag)` computes `Cᵀ` at no instruction cost. That is an
+unexploited alternative to the entire B-gather problem in §7: rather than
+transposing B on the way in, swap the operands and transpose in the epilogue,
+where the accumulator is already in registers and the store address math exists.
+Not yet measured against §8's load-transpose.
 
 Both operands want **K contiguous per lane**. A row of A in a row-major
 `A[M][K]` already is; a column of B in a row-major `B[K][N]` is not — it is
@@ -376,6 +428,489 @@ the loop body so it does not stay live across the MMAs.
 counts spill slots, so "allocated + spilled" is an estimate of demand rather
 than an exact live-range count. The ratios are what the argument rests on, and
 they are stable across the panels above.
+
+## 10. Three gfx1201 constraints that shape every schedule here
+
+Recorded 2026-09-19 (owner-supplied, and they explain results elsewhere in this
+file rather than merely adding to them).
+
+**No `v_cvt_pk_bf16_f32`.** Packing bf16 is software on gfx1201. The cheapest
+form is two adds — the round-to-nearest-even bias on each half — followed by one
+`v_perm_b32` to gather the high halves. Any bf16 epilogue that reaches for a
+pack instruction is reaching for something the ISA does not have.
+
+**No direct-to-LDS, and no `ds_read_b64_tr_b16`.** Global memory cannot be
+staged into LDS without a round trip through VGPRs, and LDS has no
+transposing read. **This is the mechanism behind the LDS result in §3**, which
+until now was recorded as a bare measurement: staging costs a register round
+trip that the register body never pays, and the LDS-side transpose that would
+justify the trip does not exist. `GLOBAL_LOAD_TR_B128` is a *global* transpose
+for exactly this reason — it is the only transposing load the chip has.
+
+**FP8 conversion IS hardware, unlike bf16 packing.** `__builtin_amdgcn_cvt_pk_fp8_f32`
+and `__builtin_amdgcn_cvt_f32_fp8` compile and run on gfx1201 (owner-confirmed
+2026-09-19), and both are reachable from MLIR without a builtin escape:
+`rocdl.cvt.pk.fp8.f32` packs two f32 into fp8 with a word select, and
+`rocdl.cvt.f32.fp8` unpacks with a byte select. Note the asymmetry with the
+bf16 note above — bf16 packing costs two adds and a `v_perm_b32`, while the fp8
+round trip is one instruction each way. That matters wherever a scale has to be
+applied: the block-scaled FP8 path (`ROCM-FP8-BLOCKSCALE-1`) and the MXFP4
+W4A8 fold (§10b) both need fp8 to f32 and back, and neither has to pay for it
+in software. The wider `rocdl.cvt.scalef32.pk8.*` family exists in the dialect
+but is a CDNA4/gfx950 form — do not reach for it here without checking §5.
+
+**LLVM single-buffers LDS and drains before every WMMA unless told otherwise.**
+The fix is `__builtin_amdgcn_sched_group_barrier`, and the *granularity* of the
+groups matters far more than their contents: coarser is better, up to the point
+where the pattern asks for more outstanding loads than the hardware can hold.
+
+That last one is not a tuning note. **This backend emits no scheduling
+intrinsic at all**, so every gfx1201 measurement recorded in this file and in
+the ROCm queue was taken under the default schedule — drained, single-buffered.
+See §11 for which results that qualifies.
+
+## 10a. WGP, not CU, is the occupancy denominator
+
+Each **WGP maps to two Compute Units**, which share execution resources and
+execute the scheduled waves; GL0 and GL1 implement the per-SE vector cache
+hierarchy feeding them. A workgroup dispatches to a WGP, so the count that
+decides whether a launch fills the machine is the WGP count, not the CU count.
+
+Measured on Tajasarus: `rocminfo` reports **64 Compute Units** for gfx1201
+(RX 9070 XT) — i.e. **32 WGPs**. Reading that 64 as the occupancy denominator
+is a 2x error in exactly the direction that hides an under-filled launch, and
+`ROCmTargetProfile` currently carries **neither** number.
+
+Worked consequence: the MoE router gate (M<=16, K=2048, N=256) at our 16x16
+macro tile is 16 output tiles, so **16 of 32 WGPs** have work. The weight read
+dominates A by 16x (1.05 MB against 65.5 KB), so the MMA unit is not the scarce
+resource there and the fix is occupancy, not a bigger tile.
+
+## 10b. MXFP4 on a chip with no FP4: the W4A8 fold, and what it says about our results
+
+RDNA4 has **no FP4 WMMA form** (§5), and the ecosystem's answer on gfx1201 is
+not to give up but to **fold MXFP4 into the fp8 WMMA**. Read from an
+independent hand-written gfx1201 kernel (vllm-radiance `radiance_mxfp4_fp8.hip`,
+2026-09-19) and its tuned configs. Four things there bear directly on results
+recorded in this file.
+
+**The fold is exact, which is why it is not a compromise.** E2M1's sixteen
+values are all exactly representable in e4m3, so the weight upconvert is a
+lossless table lookup, and the MX block scale is E8M0 — a power of two — so
+applying it to the fp32 accumulator is exact. The block exponent is folded into
+the *weight* through a per-binade magnitude table, which removes the per-32-block
+rescale from the inner loop and leaves one per-row factor for the epilogue. The
+result is W4A8 rather than the checkpoint's declared W4A4: strictly *more*
+precise than calibration, but no longer bit-identical to the emulated path, so
+it is opt-in rather than default. That is a numeric-policy decision of exactly
+the kind Decision #15a says belongs in the contract, not in a kernel flag.
+
+**gfx12's fp8 WMMA honours e4m3 subnormals rather than flushing them**, verified
+on hardware there. The fold depends on it: stopping at the smallest e4m3 normal
+(2⁻⁶) is exact only to d ≤ 5, and a real checkpoint reached d = 10.
+
+**Our contiguous-eight fragment convention is independently corroborated — and
+so is §3's warning about how it was checked.** That kernel records its layout
+as `A: lane l holds A[l%16][(l/16)*8+j]`, `B: B[(l/16)*8+j][l%16]`,
+`C: C[(l/16)*8+j][l%16]` — identical to ours, "confirmed empirically (0/256
+elements wrong on a 16x16x16 tile)". Note *what that check can see*: comparing
+the computed C cannot distinguish our relabeling from the machine's runs-of-four
+mapping, because the permutation cancels across both operands (§3). Two
+independent implementations agreeing on contiguous-eight is evidence the
+convention is sound; it is not evidence about which mapping the hardware uses.
+
+**The LDS result in §3 and §11 is contradicted, not merely qualified.** That
+kernel reports reading fragments straight from global at **9.5 TFLOP/s**, and
+states that staging through LDS "is what makes this fast at all" — against 325.2
+TFLOP/s register-resident for the fp8 WMMA on the same card. The stated cause is
+the one §3 names from the other side: lanes sixteen rows apart touch sixteen
+cache lines per operand. Their LDS rows are **padded 8 bytes**, without which
+sixteen lanes reading rows 64 B apart collide eight ways on the 32 × 4 B banks —
+and `rocm_tiling` already models exactly that as `bank_padding_required`, also
+unwired (Decision #29a). Our "the LDS body loses at every shape" was measured
+without padding-aware staging and under the drained default schedule (§10).
+**Treat it as unsafe to cite until re-measured**; `ROCM-SCHED-GROUP-1` and this
+are the same experiment.
+
+**Achieved throughput corroborates §5's ceilings.** 325.2 TFLOP/s fp8 against
+our 383 ceiling (85%) and 160.2 f16 against 191 (84%), register-resident on the
+same part.
+
+## 10c. ROCM-SCHED-GROUP-1, measured: the barriers work and they lose
+
+The lever is now implemented (`sched-groups=N` emits N alternating
+`rocdl.sched.group.barrier vmem_read` / `mfma_wmma` groups describing the
+panel) and measured on Tajasarus, f16, 1024³, repeated-median over 7 trials of
+50 launches. **Every setting is slower than LLVM's default.**
+
+| sched_groups | register body | LDS body (2x2 waves) | VGPR spill |
+|---|---|---|---|
+| 0 (default) | **70.5 TFLOP/s** | **7.8 TFLOP/s** | 133 |
+| 1 | 53.8 (0.76x) | 7.8 (1.00x) | 133 |
+| 2 | 46.6 (0.66x) | 5.5 (0.70x) | **123** |
+| 4 | 46.0 (0.65x) | 5.8 (0.74x) | 127 |
+| 8 | 46.0 (0.65x) | 5.5 (0.70x) | **163** |
+
+All arms agree numerically at 1.95e-06, so this is a schedule difference and
+nothing else. **The barriers demonstrably took effect** — between `sg=0`, `2`
+and `8` the emitted instruction order differs, the instruction count moves
+(7017 / 6897 / 6984) and `s_wait*` falls monotonically (1360 / 1283 / 1261).
+The scheduler did what it was told; being told was the problem.
+
+**Three things this settles, and one it does not.**
+
+*The spill is not a scheduling artifact.* §11 put §9's per-tile-addressing
+diagnosis in doubt because outstanding-load state also scales with `mt*nt`.
+It does move the spill — 133 to 123 at `sg=2` — but only by 7%, and that arm is
+34% *slower*. Register pressure at the 4x4 panel is not what the scheduler is
+holding. **§9's diagnosis stands; withdraw §11's doubt on that row.**
+
+*The other three qualified rows are not overturned.* For the register body the
+default schedule beats all four described patterns, so the LDS/K-unroll/double-K
+comparisons were not measured against a handicapped baseline.
+
+*The knob stays at 0.* It is retained rather than deleted because a measured
+negative is worth more than the absence of one — but read the table before
+re-running this experiment, not after.
+
+*What it does not settle:* one pattern was tested. `vmem_read`/`mfma_wmma`
+alternation at panel granularity is not the space — `ds_read` groups,
+`sched.barrier`, `iglp.opt`, and placement outside the K loop are all untried.
+This is evidence against *this* description, and weak evidence about the lever.
+
+**The redirect is the real result.** The LDS body runs at 7.8 TFLOP/s against
+the register body's 70.5 — **9x slower**, which is close to what an 8-way LDS
+bank conflict costs. §10b records that the vllm-radiance gfx1201 kernel pads
+its LDS rows 8 bytes precisely because sixteen lanes reading rows 64 B apart
+collide eight ways on the 32 x 4 B banks, and that staging is what makes *their*
+kernel fast. Ours pads nothing. `rocm_tiling` already models this as
+`bank_padding_required` and does not wire it (Decision #29a). **Bank padding,
+not scheduling, is the candidate that fits the number** — and it is what
+ROCM-LDS-BANKPAD-1 should test before the LDS body is judged again.
+
+## 10d. NVFP4 on gfx1201: one lossy step, and it is the scale format
+
+An NVFP4 checkpoint can reach the fp8 WMMA on gfx1201, and the whole chain has
+**exactly one lossy step**. Recorded 2026-09-19 from the vLLM MXFP4 work on
+R9700 (`GGZ14/vllm-mxfp4`, `ggz14/radiance-vllm-mxfp4`).
+
+```
+NVFP4      e2m1 elements + e4m3 scale per 16 + fp32 scale per tensor
+   |  LOSSY  requantize: e4m3/16 scales -> e8m0/32 scales
+   v         (elements are already e2m1; only the scale contract changes)
+MXFP4      e2m1 elements + e8m0 scale per 32
+   |  EXACT  lossless e2m1->e4m3 lookup, power-of-two block exponent folded
+   v         into the weight (section 10b)
+fp8 e4m3 -> v_wmma_f32_16x16x16_fp8_fp8
+```
+
+**The loss is double rounding, not the format** — which is the part worth
+keeping, because it tells you where the fix is. Measured against the bf16
+original as relative RMS:
+
+| path | relRMS | SQNR |
+|---|---|---|
+| NVFP4 (as shipped) | 0.113 | 19 dB |
+| bf16 → MXFP4 **direct** | 0.112 | ~19 dB |
+| NVFP4 → MXFP4 (requantized) | 0.158 | 16 dB |
+
+MXFP4 is as faithful as NVFP4 when quantized *once* from bf16; going through
+NVFP4 first costs ~3 dB. So where the bf16 original is available, quantizing
+directly to MXFP4 is strictly better than ingesting NVFP4 and requantizing, and
+that is a `numeric_policy` preference rather than a kernel detail. Reported
+task accuracy is unaffected at this size (GSM8K 97.40%), on 2x R9700 with
+decode 22.2–24.7 ms/step and prefill 3900–5072 tok/s.
+
+**Two traps in the conversion.** Block-exponent selection is not truncation —
+it picks by squared error between the no-clip rule and one binade finer. And a
+merged linear (`gate_up_proj`) carries *two* global scales that must be honoured
+separately rather than collapsed; collapsing them is silent.
+
+**This is not RDNA4 catching up.** AMD's own MI355 path dequantizes NVFP4 to
+**BF16** at GEMM time, because CDNA4 has no native NVFP4 execution path either
+(`rocm.blogs.amd.com/.../nvfp4-mi355`). The gfx1201 route lands on the fp8 WMMA
+instead, whose ceiling is 383 TFLOP/s against bf16's 191 (section 5) — so on
+this axis the RDNA4 part has the better landing spot, not a worse one.
+
+**What Tessera already has, and what it does not — corrected 2026-09-19.**
+An earlier draft of this section said the block-scale metadata was missing
+outright. It is not. `microscaling.ScaleLayout` models exactly this contract —
+`block_size` elements along an axis sharing one scale of dtype `e8m0` (MX),
+`fp8_e4m3` (**its docstring names NVFP4**) or `fp32`, with `block_size == 0`
+meaning a per-tensor scale — and `Tessera_ScaleLayoutAttr` carries it in IR on
+four grouped-GEMM ops beside optional `x_scale`/`w_scale` operands, with
+consumers on the Apple path, the runtime, the manifest and the capability
+tables. `dtype.py` separately names `nvfp4`, `fp4_e2m1` and `mxfp4` as distinct
+with an explicit "do not alias".
+
+What is actually missing is narrower: the **plain `tessera.matmul` carries no
+scale operands at all**, and the **ROCm typed route never consults the model**.
+So the requantization above has a vocabulary to be declared in — it simply has
+no path from a Graph matmul to a gfx1201 kernel that reads it. That is
+`ROCM-FP8-BLOCKSCALE-1`, and it is an extension of an existing contract rather
+than a new one.
+
+## 10e. ROCM-LDS-BANKPAD-1, measured: padding is real and it is not the 9x
+
+The LDS tiles store a 16-element row — A by row, B transposed by column — which
+for f16 is 32 B = **8 dwords**, and `gcd(8, 32) = 8`, so sixteen lanes reading
+one element per row land on four banks: a **4-way conflict** on every fragment
+read. Making the stride an odd dword count fixes that by construction, and one
+dword of padding does it at every storage width (8→9 f16, 4→5 fp8/int8, 2→3
+int4), which is why the knob counts dwords and the element count follows
+(`32/bitwidth`).
+
+Measured on Tajasarus, 1024³ f16, 2x2 waves, all arms exact at 1.95e-06:
+
+| | TFLOP/s | vs pad=0 |
+|---|---|---|
+| pad=0 | 7.8 / 7.9 | — |
+| **pad=1** | **8.8 / 8.7** | **1.12x / 1.10x** |
+| pad=2 | 8.1 | 1.04x |
+| pad=3 | 8.9 | 1.13x |
+| register body | **70.7** | **8.0x the padded LDS** |
+
+**The padding is a real win and the hypothesis behind it was still wrong.** It
+takes the gap from 9.1x to 8.0x. A prediction recorded before the run said that
+if padding barely moved the number the conflict theory was wrong; it barely
+moved, so it is wrong. Bank conflicts are a ~10% tax here, not the story.
+
+Two things the ISA census showed, once counted correctly. (**gfx12 renamed the
+LDS mnemonics**: `ds_read_*`/`ds_write_*` became `ds_load_*`/`ds_store_*` in
+RDNA3, and a census regex carrying the old names reports *zero* LDS traffic in a
+kernel full of it — which reads exactly like a finding and is not one.)
+
+*The staging copy is scalar in both directions.* The LDS body emits
+`global_load_d16_b16` in and `ds_store_b16` / `ds_store_b16_d16_hi` out — sixteen
+bits per thread per iteration — where the register body gets
+`global_load_b128` x12 and `global_load_tr_b128` x12. The copy loop walks one
+element per thread. **That is the shape that fits an 8x gap**, and it is
+`ROCM-LDS-STAGE-VECTOR-1`.
+
+*Padding wins despite narrowing the read.* At pad=1 the fragment read degrades
+from `ds_load_b128` to `ds_load_2addr_b32`, because an 18-element row is not
+128-bit aligned. So the +10-12% is **net of a regression** — the conflict cost
+more than the headline — and it explains why pad=2 (+4%) trails pad=1 and pad=3
+(+10-13%), which the dword-gcd argument alone does not predict. Alignment and
+load width interact; the simple model is necessary and not sufficient.
+
+Default is now `pad=1`: free, numerically identical, and it does not touch
+production selection because the register body still wins by 8x.
+
+## 10f. rocWMMA as an independent check on these tables
+
+Read from the raw headers 2026-09-19 (`rocwmma/internal/wmma_impl.hpp`, 3310
+lines, plus `types.hpp` / `vector.hpp` / `vector_util.hpp`). rocWMMA is AMD's
+own WMMA wrapper, so where it agrees with a table of ours that nobody had
+checked against a vendor source, that is real corroboration.
+
+**Architecture grouping, and where we deliberately differ.** rocWMMA has
+`enable_gfx11_t` = gfx1100–1103 / 1150–1153 and `enable_gfx12_t` = **gfx1200,
+gfx1201 and gfx1250 together**. `rocm_fragment.py` instead splits `_RDNA4`
+(gfx120x) from `_GFX125X`. Keep the split: the two share the *builtin family*
+and nothing else — gfx120x is K=16 with a `_w32_gfx12` suffix, gfx1250 is
+K=32/64/128 with neither `_w32` nor `_gfx12` — and a fragment-ABI table keyed on
+shape has to separate them. Do not "correct" our sets to match rocWMMA's.
+
+**Our gfx125x shape table is corroborated six rows out of seven.** Every one of
+fp32 K=4, fp16 K=32, bf16 K=32, fp8 K=64 *and* K=128, int8 K=64 appears as a
+rocWMMA builtin. The seventh — `fp4_e2m1` at (16,16,128) and (32,16,128) — has
+**no rocWMMA builtin at all**, and neither does any other fp4 form. That is not
+a refutation (rocWMMA need not wrap everything) but it is the one row of that
+table with no independent support, and it is load-bearing for any MXFP4 story
+on gfx125x. Treat it as unverified until an ISA source confirms it.
+
+**The mixed FP8 pairs are the vendor position, not ours alone.** rocWMMA
+exposes `f32_16x16x16_fp8_bf8_w32_gfx12` and its mirror on gfx12, and all four
+pairings at K=64/128 on gfx1250 (including f16-output variants). So
+`ROCM-MIXED-FP8-1` lands on the same capability rocWMMA already wraps. **This
+is recorded because a summary of that header omitted the mixed builtins and
+nearly produced the opposite claim** — the third instance this session of
+reading silence as absence, and the second caught before it was written down.
+The raw file is the source; a summary of it is not.
+
+**int4 is genuinely ours.** There are **zero** `iu4` references in the entire
+header — not gfx11, not gfx12, not gfx1250. We emit
+`v_wmma_i32_16x16x16_iu4` and the double-K `v_wmma_i32_16x16x32_iu4` on
+gfx1201, both proven exact on device (§4, and the double-K row in
+`test_rocm_gfx1201_scheduled.py`). The hardware has it and rocWMMA does not
+wrap it, so this is a vendor-library coverage gap rather than a hardware
+question — and it means there is no rocWMMA source to crib for int4.
+
+**The fragment layout is not in the headers, which is the point.** `wmma_impl`
+names register aliases without saying how K distributes across the wave;
+`types.hpp` is a 127-line scalar typedef facade and `vector.hpp` a HIP vector
+wrapper. Neither documents the per-lane mapping. That is why §3's contract had
+to be measured, why the independent gfx1201 kernel in §10b measured it too, and
+why both converged on contiguous-eight without either being the machine's own
+mapping — the permutation cancels, so nothing forces the issue.
+
+## 10g. AMD's matrix instruction calculator: what it settles and what it cannot
+
+`ROCm/amd_matrix_instruction_calculator` prints the authoritative per-lane
+register layout for VOP3P matrix instructions. Run 2026-09-19 against gfx1201
+(the tool reports it as RDNA4). It replaces several things here that were
+measured or taken on report with a vendor source.
+
+**Settled — the A/B mapping.** `-R -A -w 32` prints the table in §3, and it
+confirms the 16-bit runs-of-four mapping exactly, element for element. It also
+shows the 8-bit and 4-bit storages using contiguous-eight, which is our own
+convention — so §3's permutation argument is needed for f16/bf16 and nowhere
+else.
+
+**Settled — the accumulator.** `-R -D -w 32` prints `D[7][n] = v7{n}` and
+`D[8][n] = v0{n+16}`, i.e. VGPR `j` at lane `L` holds `D[(L/16)*8 + j][L%16]`.
+That is §2's recorded layout, now vendor-confirmed rather than derived.
+
+**Settled — the int4 nibble order (§4).** `A[0][k]` for k = 0..7 is
+`v0{0}.[3:0]`, `[7:4]`, `[11:8]` … `[31:28]`: the low nibble is the lowest k and
+k ascends with nibble position, eight nibbles per VGPR, with k = 8 starting at
+lane 16.
+
+**Settled — what gfx1201 actually has.** `-L` lists
+`v_wmma_i32_16x16x16_iu4` **and** `v_wmma_i32_16x16x32_iu4`, all four fp8
+pairings (`fp8_fp8`, `fp8_bf8`, `bf8_fp8`, `bf8_bf8`), and the sparse
+`v_swmmac_i32_16x16x32_iu4` / `v_swmmac_i32_16x16x64_iu4`. So the int4 forms we
+emit and proved exact are vendor-listed hardware, and §10f's reading — that
+rocWMMA's omission of int4 is a wrapper gap rather than a hardware fact — is
+confirmed. **No fp4 form appears on RDNA4**, again.
+
+**Settled — gfx11 replicates where gfx12 splits.** `TileToROCM.cpp` carries the
+comment "GFX11 replicates operands (kBase=0); GFX12's upper half-wave must
+advance by eight K elements", which was an assertion until now. On gfx1151 the
+tool reports **8 GPRs for A** and prints lane 0 holding *all sixteen* k values
+across v0–v7; on gfx1201 it reports **4 GPRs for A** with lane 0 holding eight
+and lane 16 the other eight. The register count is the tell, and the comment is
+correct.
+
+**Where it lives on the fleet.** Absolute paths, because the two boxes have
+different users and a non-interactive `ssh` expands `~` to whichever account it
+logged in as:
+
+| host | path |
+|---|---|
+| Tajasarus (gfx1201) | `/home/angstorms/programming/amd_matrix_instruction_calculator` |
+| Princess-Luna (gfx1151) | `/home/gstoner/programming/amd_matrix_instruction_calculator` |
+
+It needs `tabulate`, installed into each box's tessera venv.
+
+Running `-L` on each arch corroborates the RDNA3.5-vs-RDNA4 split this repo
+asserts in several places. gfx1151 lists **exactly six** matrix instructions —
+`v_wmma_{f32,f16}_16x16x16_f16`, `v_wmma_{f32,bf16}_16x16x16_bf16`,
+`v_wmma_i32_16x16x16_{iu8,iu4}` — with **no FP8/BF8 form and no SWMMAC at all**,
+while gfx1201 adds the four fp8 pairings, the double-K int4 and the sparse
+family. "FP8 and sparse are RDNA4-only" is therefore a vendor-checkable fact,
+not an inference from our own tables.
+It is pure Python and needs no GPU, so a layout question does not need device
+time — but note the two boxes answer for different chips by argument, not by
+which box you are on (`-a gfx1151` works on Tajasarus and vice versa).
+
+**NOT settled, and the silence must not be read as refutation.** The tool
+supports **CDNA1, CDNA2, CDNA3, RDNA3 and RDNA4 only** — `gfx950` and `gfx1250`
+are both rejected outright. It therefore says nothing about the `fp4_e2m1`
+gfx125x row flagged UNCORROBORATED in §10f, which stays open pending a CDNA5
+ISA source. Absence from a tool that does not model the chip is not evidence
+about the chip.
+
+## 10h. What AMD's own shipping gfx1201 FP8 GEMM actually does
+
+hipBLASLt installs 144 Tensile code objects for gfx1201 at
+`$ROCM_PATH/lib/hipblaslt/library/gfx1201`. They are **CCOB compressed offload
+bundles**, not bare ELFs — `clang-offload-bundler --type=o --unbundle
+--targets=hipv4-amdgcn-amd-amdhsa--gfx1201` extracts the ELF, which then
+disassembles normally. Counts below are **static, across every kernel variant
+inside one library file** (5.2M lines), not one kernel's mix.
+
+From `TensileLibrary_B8F8_SB8F8_..._Ailk_Bjlk_gfx1201`:
+
+| instruction | count | what it says |
+|---|---|---|
+| `v_wmma_f32_16x16x16_bf8_fp8` | 23854 | the **mixed pairs**, in shipping vendor code |
+| `v_wmma_f32_16x16x16_fp8_bf8` | 13596 | |
+| `global_load_tr_b64` | 14780 | **the 8-bit transpose load we excluded** |
+| `buffer_load_b128` | — | the other operand, wide, untransposed |
+| `ds_load_b32` / `ds_load_b128` | 55408 / 21656 | LDS staging is central, and the reads are wide |
+| `ds_store_b32` | 6708 | stores are far fewer than loads |
+| `s_barrier_signal`/`_wait` | 7224 each | |
+
+**Three of our open items move on this.**
+
+*`ROCM-GLOBAL-LOAD-TR-1`'s owed 8-bit extension is viable, and no longer needs a
+blind measurement.* §8 records that enabling `TR_B128` for 8-bit storages on the
+matching per-lane width alone produced wrong results on every one of them, so
+the item was parked pending a measured `TR_B64` mapping. **AMD uses
+`global_load_tr_b64` for the 8-bit B operand**, 14780 times in this one library,
+alongside `buffer_load_b128` for the untransposed side — the same A/B asymmetry
+our register body has. The addressing is a scalar 64-bit base (`s[52:53]`) with
+per-lane VGPR offsets, the same shape as the address derived in §8. So the
+mapping can be *read* out of this disassembly rather than measured from scratch.
+
+*`ROCM-LDS-STAGE-VECTOR-1` is confirmed from the other side.* AMD's kernel is
+LDS-heavy — tens of thousands of `ds_load_b32` and `ds_load_b128`, 7224 barrier
+pairs — and its LDS reads are **wide**. Our typed LDS body stages with
+`ds_store_b16` and `global_load_d16_b16`, sixteen bits per thread per iteration
+(§10e). The vendor kernel is not avoiding LDS; it is staging it properly. That
+is the third independent line pointing at the copy loop rather than at LDS
+staging as a strategy.
+
+*`ROCM-MIXED-FP8-1` is vendor-confirmed in shipping binaries*, not merely in the
+rocWMMA headers (§10f).
+
+**On the block-scale gap this file previously overstated — corrected
+2026-09-19.** Of those 144 gfx1201 libraries, **zero** carry MX or block-scale
+in their type tags (they are B8/F8/H/S/D/BB with scalar and vector scales:
+`SAB`, `SAV`, `SCD`), and rocMLIR's scaled path is MFMA-oriented. From those two
+I wrote that block-scaled low precision on the RDNA4 WMMA is "unserved across
+AMD's own stack". **That is wrong, and it conflated two different Triton
+paths.** Split them:
+
+| path | on gfx1201 | served? |
+|---|---|---|
+| **FP8 W8A8, block-scaled** | Triton emits the **native fp8 WMMA** — AITER's `gemm_a8w8_blockscale` at `block_shape=[128,128]`, which is what the 20 tuned configs in `ROCM-FP8-BLOCKSCALE-1` actually are | **yes** |
+| **MXFP4 / e2m1** (`tl.dot_scaled`) | upconverts e2m1 to bf16 and uses the 16-bit WMMA | **no** |
+
+So the FP8 blockscale case *is* served on this chip, by Triton rather than by a
+library: reported 25% faster decode on Qwen3-0.6B and 63% on Qwen3-30B on an
+R9700, with AITER's C++/ASM kernels disabled because they do not run on RDNA4,
+**M ≥ 16 required**, 11 shapes tuned, and no upstream merge. The `M ≥ 16`
+constraint and the M-bucketed config keys are the same skinny-M axis §10b and
+the split-K item keep running into. Only the **MXFP4 fold** (§10b) is genuinely
+unserved, which is exactly why the hand-written kernel exists — and why
+`ROCM-MXFP4-W4A8-1` is the item with no prior art to lean on while
+`ROCM-FP8-BLOCKSCALE-1` has a working reference to measure against.
+
+**The hardware reason for the split, and it is verified.** AMD's MXFP4/MXFP6
+guidance describes native FP4/FP6 on MI355 "through **Matrix Fused Multiply Add
+(MFMA) scale instructions**" — CDNA4 has scale-*carrying* matrix instructions.
+gfx1201 has **none** (§10c's method: zero `scale` hits in the calculator's
+instruction list), so on RDNA4 a block scale is necessarily software, whoever
+writes it. That is the same constraint recorded for our own schedule.
+
+**And it sharpens the MI355 NVFP4 story in §10d.** MI355 natively supports
+**MXFP4** — block 32, E8M0 — while having *no* native **NVFP4** path (block 16,
+E4M3) and dequantizing it to BF16. The two are not interchangeable: same e2m1
+elements, different scale contract, and only one of them has silicon behind it
+on that part.
+
+## 11. Which recorded results the default schedule qualifies
+
+Every gfx1201 number in this file and in the ROCm queue was measured with **no
+scheduling intrinsic emitted anywhere in this backend**, i.e. under the drained,
+single-buffered default §10 describes. That does not invalidate a comparison
+between two configurations measured the same way, but it does bound what any of
+them can claim about the *approach*:
+
+| Result | Status under §10 |
+|---|---|
+| The LDS-staged body loses at every shape | **Still qualified, but scheduling is ruled out as the explanation (§10c).** Barriers make it *slower*, not faster. Measured 7.8 against the register body's 70.5 — 9x, which is what an 8-way LDS bank conflict costs, and our rows are unpadded while the kernel that reports LDS staging as essential pads 8 bytes. Re-judge after ROCM-LDS-BANKPAD-1, not after a scheduling change. |
+| The 4×4 panel spills 133 VGPRs, ~200 of them neither accumulator nor fragment | **Doubt withdrawn 2026-09-19, measured (§10c).** Group barriers move the spill by 7% at best (133→123) and cost 34% throughput doing it. Outstanding-load state is not what the 4×4 panel is holding; §9's per-tile-addressing diagnosis stands. |
+| K unroll 2 beats 4 | **Qualified.** Unroll depth changes how many loads are in flight, which §10 says the scheduler owns. The k=4 rule was already withdrawn once for an unreproduced row; this supplies a mechanism for why it was unstable. |
+| The double-K int4 instruction loses to the K unroll | **Qualified.** The recorded explanation was that the unroll "keeps two independent MMAs in flight" — in-flight-ness is precisely what §10 says is not ours today. |
+| `GLOBAL_LOAD_TR_B128` is worth +21.6% at 1024³ | **Stands as a comparison.** Both arms are register-path kernels measured identically, so the relative figure holds. The absolute ceiling may move. |
+| The 2048³ transpose-load reversal | **Stands as an anomaly, unexplained.** Still needs counters neither WSL2 ROCm box can produce. |
+
+Closing this is `ROCM-SCHED-GROUP-1`: emit `sched_group_barrier`, then re-measure
+the four qualified rows before any of them is treated as settled.
 
 ## Where the machine truth lives
 

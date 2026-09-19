@@ -8913,6 +8913,17 @@ state held live across the loop, sixteen tiles' worth at 4x4. The K unroll is
 spill are independent problems. Target and candidate approaches recorded in
 `docs/backends/rocm/wmma-fragment-layout.md` §9.
 
+**The owed 8-bit `TR_B64` mapping no longer needs a blind measurement
+(2026-09-19).** AMD's shipping gfx1201 FP8 GEMM uses `global_load_tr_b64` for
+the 8-bit B operand — 14780 times in one hipBLASLt Tensile library — beside
+`buffer_load_b128` for the untransposed side, which is the same A/B asymmetry
+our register body has, with a scalar 64-bit base and per-lane VGPR offsets like
+the address derived for `TR_B128`. So the permutation can be *read* out of that
+disassembly rather than measured from scratch. The libraries are CCOB
+compressed offload bundles; `clang-offload-bundler --type=o --unbundle
+--targets=hipv4-amdgcn-amd-amdhsa--gfx1201` yields an ELF that disassembles
+normally (`docs/backends/rocm/wmma-fragment-layout.md` §10h).
+
 **Still owed.** The 8-bit mapping for `TR_B64`, measured the same way, which
 would extend this to fp8 and int8; the 2048³ anomaly, which needs counters;
 AMD's identity-matrix in-register transpose as the int4 fallback; the

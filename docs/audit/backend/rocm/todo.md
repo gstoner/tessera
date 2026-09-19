@@ -8781,8 +8781,44 @@ the target -- it arrives as a `lower-tile-to-rocm` option one pass later -- so
 it admits the shape and the lowering adjudicates. Verified: a K=32 int4
 fragment aimed at gfx1151 refuses with `ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR`.
 
-**Still owed.** `ROCM-GLOBAL-LOAD-TR-1` with its two candidates
-(`global_load_tr` and AMD's identity-matrix in-register transpose); the
+**`ROCM-GLOBAL-LOAD-TR-1` is now sized, not just named (2026-09-19).** The
+gfx1200 ISA gives `GLOBAL_LOAD_TR_B128` (16-bit elements, 4 consecutive VGPRs
+in wave32) and `GLOBAL_LOAD_TR_B64` (8-bit, 2 VGPRs), each loading a 16x16
+matrix and transposing between row- and column-major on the way into
+registers. Our B fragment holds `16 * K / 32` elements per lane, so at K=16:
+f16 and bf16 are **128 bits per lane** and fp8/int8 are **64** — exactly what
+the two instructions write. One transpose load replaces the entire strided
+gather for four of the six storages with nothing left over. int4 is excluded
+at both K widths: `tr4` is gfx1250+, and TR_B64 would transpose at 8-bit
+granularity. The selection table is by *memory* order and reverses when the
+VGPR layout is column-major, which is the reading that applies here, since B
+is stored row-major `[K][N]` and each lane wants a column. Sizing recorded in
+`docs/backends/rocm/wmma-fragment-layout.md` §7.
+
+**`ROCM-MIXED-FP8-1`, opened 2026-09-19 by the dtype-path audit.** The
+hardware has `V_WMMA_F32_16X16X16_FP8_BF8` and its mirror, and
+`wmma_dtype_forms` declares both — and the Graph matmul contract requires
+`a_dtype == b_dtype`, so a mixed pair cannot be *expressed*, let alone
+lowered. Same unconsumed-declaration class as the double-K int4 shape. It is
+now held by `tests/unit/test_rocm_wmma_form_reachability.py`, which requires
+every declared form to be reachable or listed with its reason and owner, and
+fails if a listed form becomes reachable without the list being updated.
+
+**The rest of the dtype audit came back clean** (gfx1201, 2026-09-19): fp16,
+bf16, fp8 e4m3, fp8 e5m2, int8 and int4 all execute natively and correctly,
+the fp8 and integer results exactly; fp32 is correctly refused because no
+RDNA WMMA form takes it; MXFP8 refuses by name as planned/gated; and TF32 is
+a `math_mode` rather than a storage, with AMD's `mfma_xf32` analogue reported
+`not_supported` on both RDNA chips. That last one is pinned rather than
+assumed, because the failure it guards already happened on the other backend:
+NUMPOL-CARRIER-1 found NVIDIA dispatching fp32 storage to a TF32 kernel
+unconditionally, up to 1783x the relative error with no diagnostic.
+`math_mode` still has **no consumer anywhere in the ROCm path**, so the same
+shape is available the day a CDNA fp32 lane is built — CDNA is where
+`mfma_xf32` is "ready".
+
+**Still owed.** `ROCM-GLOBAL-LOAD-TR-1` (sized above, with AMD's
+identity-matrix in-register transpose as the fallback for int4); the
 126-VGPR spill at the shipped 4x4 panel, whose only lever is fewer live
 registers; raster-order selection, still blocked on counters neither WSL2 ROCm
 box can produce. The sparse twin `V_SWMMAC_I32_16X16X64_IU4` is now reachable

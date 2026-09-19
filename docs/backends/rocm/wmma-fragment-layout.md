@@ -77,17 +77,29 @@ reason to trust it.
 
 ## 3. A/B operand layout — K-major per lane
 
-**Corrected 2026-09-19: what follows is OUR convention, not the machine's.**
-This section previously stated the mapping below as the architecture's fragment
-layout. It is not. The hardware's wave32 mapping is
+**Corrected 2026-09-19, then verified against AMD's own tool.** This section
+previously stated the mapping below as the architecture's fragment layout. It is
+that for some storage widths and not for others, and the difference matters.
+Printed by `amd_matrix_instruction_calculator` (`-a gfx1201 -R -A -w 32`), the
+**K distribution depends on the storage width**:
 
-```
-idx = lane % 16                                 // row of A, column of B
-k   = 8 * (e >> 2) + 4 * (lane >> 4) + (e & 3)  // runs of FOUR, not eight
-```
+| storage | per-lane mapping | runs |
+|---|---|---|
+| 16-bit (f16, bf16) | `k = 8*(e>>2) + 4*(lane>>4) + (e&3)` | **four** |
+| 8-bit (fp8, bf8, int8) | `k = 8*(lane>>4) + e` | **eight** |
+| 4-bit (int4) | `k = 8*(lane>>4) + e` | **eight** |
 
-so lane 0 holds `k = 0,1,2,3,8,9,10,11` and lane 16 holds `k = 4,5,6,7,12,13,14,15`.
-What `materializeFragmentPack` actually emits is contiguous-eight:
+For f16, lane 0 holds `k = 0,1,2,3,8,9,10,11` across four VGPRs at two elements
+each, and lane 16 holds `4,5,6,7,12,13,14,15`. For fp8/int8 lane 0 holds
+`k = 0..7` packed in two VGPRs and lane 16 holds `8..15`; for int4 the same eight
+k values fit one VGPR as eight nibbles.
+
+**So contiguous-eight — what `materializeFragmentPack` emits — IS the machine's
+mapping at 8 and 4 bits, and is a relabeling only at 16 bits.** The
+permutation-cancellation argument below is therefore load-bearing for exactly
+one case, f16/bf16, and is not needed for the low-precision storages at all.
+
+What `materializeFragmentPack` emits, at every width, is contiguous-eight:
 
 ```
 a[h] = A[lane % 16][8 * (lane / 16) + h]        // A row-major [M][K]: row = lane % 16
@@ -103,8 +115,9 @@ cancels exactly. Contiguous-eight is then strictly cheaper to load: one 128-bit
 `vector.load` per lane, where the machine's runs-of-four needs two loads or a
 cross-lane shuffle.
 
-**The hazard this creates, and it is live.** A third fragment source must adopt
-*our* convention, not the machine's, and nothing in the type system says so. The
+**The hazard this creates, and it is live — at 16 bits.** A third fragment
+source must adopt *our* convention where it differs from the machine's, and
+nothing in the type system says so. The
 one place they already collide is `GLOBAL_LOAD_TR_B128`, which delivers the
 hardware's native permutation: the per-lane address derived in §8 is what
 reconciles the two, and it was solved empirically against a measured mapping
@@ -731,6 +744,58 @@ wrapper. Neither documents the per-lane mapping. That is why §3's contract had
 to be measured, why the independent gfx1201 kernel in §10b measured it too, and
 why both converged on contiguous-eight without either being the machine's own
 mapping — the permutation cancels, so nothing forces the issue.
+
+## 10g. AMD's matrix instruction calculator: what it settles and what it cannot
+
+`ROCm/amd_matrix_instruction_calculator` prints the authoritative per-lane
+register layout for VOP3P matrix instructions. Run 2026-09-19 against gfx1201
+(the tool reports it as RDNA4). It replaces several things here that were
+measured or taken on report with a vendor source.
+
+**Settled — the A/B mapping.** `-R -A -w 32` prints the table in §3, and it
+confirms the 16-bit runs-of-four mapping exactly, element for element. It also
+shows the 8-bit and 4-bit storages using contiguous-eight, which is our own
+convention — so §3's permutation argument is needed for f16/bf16 and nowhere
+else.
+
+**Settled — the accumulator.** `-R -D -w 32` prints `D[7][n] = v7{n}` and
+`D[8][n] = v0{n+16}`, i.e. VGPR `j` at lane `L` holds `D[(L/16)*8 + j][L%16]`.
+That is §2's recorded layout, now vendor-confirmed rather than derived.
+
+**Settled — the int4 nibble order (§4).** `A[0][k]` for k = 0..7 is
+`v0{0}.[3:0]`, `[7:4]`, `[11:8]` … `[31:28]`: the low nibble is the lowest k and
+k ascends with nibble position, eight nibbles per VGPR, with k = 8 starting at
+lane 16.
+
+**Settled — what gfx1201 actually has.** `-L` lists
+`v_wmma_i32_16x16x16_iu4` **and** `v_wmma_i32_16x16x32_iu4`, all four fp8
+pairings (`fp8_fp8`, `fp8_bf8`, `bf8_fp8`, `bf8_bf8`), and the sparse
+`v_swmmac_i32_16x16x32_iu4` / `v_swmmac_i32_16x16x64_iu4`. So the int4 forms we
+emit and proved exact are vendor-listed hardware, and §10f's reading — that
+rocWMMA's omission of int4 is a wrapper gap rather than a hardware fact — is
+confirmed. **No fp4 form appears on RDNA4**, again.
+
+**Settled — gfx11 replicates where gfx12 splits.** `TileToROCM.cpp` carries the
+comment "GFX11 replicates operands (kBase=0); GFX12's upper half-wave must
+advance by eight K elements", which was an assertion until now. On gfx1151 the
+tool reports **8 GPRs for A** and prints lane 0 holding *all sixteen* k values
+across v0–v7; on gfx1201 it reports **4 GPRs for A** with lane 0 holding eight
+and lane 16 the other eight. The register count is the tell, and the comment is
+correct.
+
+**Where it lives on the fleet.** Cloned at
+`~/programming/amd_matrix_instruction_calculator` on **Tajasarus** and
+**Princess-Luna**; it needs `tabulate`, installed into each box's tessera venv.
+It is pure Python and needs no GPU, so a layout question does not need device
+time — but note the two boxes answer for different chips by argument, not by
+which box you are on (`-a gfx1151` works on Tajasarus and vice versa).
+
+**NOT settled, and the silence must not be read as refutation.** The tool
+supports **CDNA1, CDNA2, CDNA3, RDNA3 and RDNA4 only** — `gfx950` and `gfx1250`
+are both rejected outright. It therefore says nothing about the `fp4_e2m1`
+gfx125x row flagged UNCORROBORATED in §10f, which stays open pending a CDNA5
+ISA source. Absence from a tool that does not model the chip is not evidence
+about the chip.
 
 ## 11. Which recorded results the default schedule qualifies
 

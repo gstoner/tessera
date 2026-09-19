@@ -104,6 +104,10 @@ struct WmmaTypes {
   // Only the K axis scales. The 16s that build the M/N macro tile are fragment
   // geometry and are untouched.
   int64_t fragK = 16;
+  // B's storage name when it differs from A's. RDNA4 has the mixed OCP FP8
+  // pairs (`V_WMMA_F32_16X16X16_FP8_BF8` and its mirror), and empty means
+  // "same as A", which is every other case.
+  std::string bElem;
 };
 
 /// Backend-neutral input to the one gfx11 WMMA kernel generator. Portable
@@ -430,11 +434,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // takes the descriptor's own `b` rather than inheriting A's. Both are 8-bit,
   // so nothing about the register format or the packing changes; only the
   // instruction the pair selects does.
-  StringRef bFragmentElem = fragmentElem;
-  if (auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"))
-    if (mma.getAType() != mma.getBType() &&
-        (mma.getBType() == "e4m3" || mma.getBType() == "e5m2"))
-      bFragmentElem = mma.getBType();
+  StringRef bFragmentElem = T.bElem.empty() ? fragmentElem : StringRef(T.bElem);
   auto aFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, fragK, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
   auto bFragmentTy = tessera::tile::FragmentType::get(
@@ -1839,6 +1839,15 @@ struct GenerateWMMAGemmKernelPass
         T = {f8Ty, VectorType::get({16}, f8Ty), VectorType::get({2}, i32Ty),
              v8f32, f32Ty, /*isInt=*/false, /*halfAccumulator=*/false,
              /*pack=*/0, /*packFactor=*/1};
+        // The mixed pair: A and B may name different FP8 storages, and the
+        // fragment types are what carry that to `resolveFragmentLayout`, which
+        // already selects FP8_BF8 / BF8_FP8 from them. Both are 8 bits, so the
+        // register format and the packing are unchanged -- only the selected
+        // instruction differs.
+        if (auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"))
+          if (mma.getAType() != mma.getBType() &&
+              (mma.getBType() == "e4m3" || mma.getBType() == "e5m2"))
+            T.bElem = mma.getBType().str();
         if (!viaTile) {
           op->emitError("generate-wmma-gemm-kernel: FP8 storage ('")
               << dt << "') is a typed-route contract (via-tile=true); the "

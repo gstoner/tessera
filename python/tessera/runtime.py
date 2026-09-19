@@ -4318,15 +4318,21 @@ def _submit_rocm_gfx1151_native(
         m = int(cast(int, scalars["M"]))
         n = int(cast(int, scalars["N"]))
         k = int(cast(int, scalars["K"]))
-        expected_ab = _scheduled_storage_numpy_dtype(ordered[0].dtype)
+        # Each operand is checked against ITS OWN binding. They agree for every
+        # pairing but RDNA4's mixed OCP FP8 ones, and checking B against A's
+        # dtype is what refused them here -- which was the check working, since
+        # accepting an e5m2 buffer as e4m3 would return wrong numbers instead.
+        expected_a = _scheduled_storage_numpy_dtype(ordered[0].dtype)
+        expected_b = _scheduled_storage_numpy_dtype(ordered[1].dtype)
         expected_out = np.int32 if matmul_integer else np.float32
         if (
             tuple(a.shape) != (m, k)
             or tuple(b_matrix.shape) != (k, n)
             or tuple(output.shape) != (m, n)
-            or expected_ab is None
-            or a.dtype != expected_ab
-            or b_matrix.dtype != expected_ab
+            or expected_a is None
+            or expected_b is None
+            or a.dtype != expected_a
+            or b_matrix.dtype != expected_b
             or output.dtype != expected_out
         ):
             raise RuntimeError("ROCm matmul arrays disagree with M/N/K or descriptor dtype")

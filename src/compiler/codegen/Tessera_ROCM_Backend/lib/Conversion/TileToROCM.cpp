@@ -306,8 +306,13 @@ static FailureOr<Value> materializeFragmentPack(
   //   * no bounds. The instruction has no masking and every lane's address is
   //     dereferenced, so a ragged tile must keep the guarded gather.
   //   * gfx12. The instruction is gfx1200+; RDNA3 has nothing like it.
-  //   * 8 elements per lane at 8 or 16 bits. int4 is excluded at both K widths:
-  //     `tr4` is gfx1250+, and the 8-bit form transposes at the wrong quantum.
+  //   * 8 elements per lane at **16 bits**, i.e. f16 and bf16. The 8-bit form
+  //     `TR_B64` is a DIFFERENT permutation and the address derivation below
+  //     does not carry over to it: enabling it on the strength of the matching
+  //     width produced wrong results for every 8-bit storage on device (16
+  //     failing rows, fp8 and both integer widths; f16 and bf16 were untouched)
+  //     and it stays out until its own mapping is measured. int4 is excluded
+  //     regardless -- `tr4` is gfx1250+.
   //
   // The producer's precomputed linear base is deliberately NOT used here even
   // when present: it already folds in the lane offset, and this path needs the
@@ -318,8 +323,7 @@ static FailureOr<Value> materializeFragmentPack(
       role == "b" && !kIsContiguous && !haveBounds &&
       memory.getOrder() == "row_major" &&
       physical.familyName == "rdna4_wmma" &&
-      physical.inputElementsPerLane == 8 &&
-      (elementBits == 16 || elementBits == 8);
+      physical.inputElementsPerLane == 8 && elementBits == 16;
   if (useTransposeLoad) {
     // Measured on gfx1201: the wave performs an 8x8 transpose inside each group
     // of 8 lanes, `received(L, j) = R(8*(L/8) + j)[L % 8]`. Solving that for the

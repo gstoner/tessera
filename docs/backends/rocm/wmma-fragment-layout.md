@@ -244,6 +244,40 @@ Both are candidates for the standing asymmetry in §3, where A takes a single
 `vector.load` and B scalarizes into 16 guarded loads. Neither is implemented
 here yet.
 
+## 8. `GLOBAL_LOAD_TR_B128`: the measured lane mapping
+
+The instruction's shapes match our B fragment exactly (§7), so the remaining
+question is the *addressing*: which address each lane supplies, and which
+elements it gets back. That is not in the ISA text, and guessing it is the
+silently-wrong-tiles failure this page exists to prevent. Measured on gfx1201
+(2026-09-19) with `B[r][c] = r*16 + c`, every element distinct, each lane
+dumping all eight values it received.
+
+With lane `L` supplying the address of element `L*8` — so lane `L` reads row
+`L/2`, columns `(L%2)*8 .. +7` — each lane receives:
+
+```
+B[(L / 8) * 4 + j / 2][(L % 8) + 8 * (j % 2)]        // j = 0..7
+```
+
+Spot checks from the run: lane 0 gets columns {0, 8} of rows 0-3; lane 15 gets
+columns {7, 15} of rows 4-7; lane 31 gets columns {7, 15} of rows 12-15.
+
+**This is not the B fragment layout.** §3 says the fragment wants
+`b[h] = B[lane % 16][8 * (lane / 16) + h]`: one lane, one `n`, eight
+consecutive `k`. What the instruction hands back under this addressing is
+eight elements spanning four rows and two columns. The transpose pattern
+across the wave is fixed in hardware; the only free choice is the address each
+lane supplies, so **using this instruction for the B operand requires deriving
+the address assignment that lands the fragment layout, and that derivation is
+not done.** Do not wire it in on the strength of the shape match alone.
+
+What *is* established: the `amdgpu` dialect is registered in both drivers,
+`amdgpu.global_transpose_load` parses over a memref, `convert-gpu-to-rocdl`
+lowers it to `rocdl.global.load.tr.b128` with no additional pass, and the
+resulting kernel builds and runs on gfx1201. The integration path is clear;
+the layout derivation is the open work.
+
 ## Where the machine truth lives
 
 Opcode tables, pseudocode and the VGPR-usage tables come from

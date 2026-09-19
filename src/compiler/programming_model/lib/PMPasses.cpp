@@ -3680,7 +3680,13 @@ struct ScheduleToTilePass
       auto mma = tile::TileMmaDescAttr::get(
           &getContext(), family, selected->tileM, selected->tileN,
           selected->tileK, selected->storage == "u8" ? "u8" : selected->storage,
-          selected->storage == "u8" ? "i8" : selected->storage,
+          // B's own storage when the schedule named one. The x86 u8 x i8
+          // recipe was already a mixed pair here; RDNA4's FP8 pairs are the
+          // second, and now they come from the schedule rather than a special
+          // case.
+          selected->storage == "u8" ? "i8"
+          : selected->storageB.empty() ? selected->storage
+                                       : selected->storageB,
           selected->accum, "row_major", "col_major", 1);
       auto epilogue = tile::TileEpilogueAttr::get(
           &getContext(), selected->bias, selected->activation, selected->accum);

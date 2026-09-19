@@ -248,15 +248,27 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         # the denser MXFP4/MXFP6 pipelines instead, on the reasoning that TF32
         # is little used in current training and inference next to FP8 and FP4.
         # TF32 still works on MI350-series parts, but as an application-
-        # transparent EMULATION handled in the driver and compiler: operands
-        # are down-cast to bf16, the GEMM runs on the bf16 matrix cores, and
-        # the accumulation stays fp32 to hold convergence. Reported as THREE
-        # bf16 operations per emulated TF32 one, which is the cost model that
-        # makes the rest consistent -- roughly a third of bf16 throughput, so
-        # up to 1.79x strict fp32 and a SLOWDOWN against the bf16 it is built
-        # from. Keep that direction straight: this is the one "reduced
-        # precision" selection that does not buy speed over the format below
-        # it, only compatibility and convergence.
+        # transparent EMULATION, and one that happens ABOVE this compiler:
+        # hipBLASLt dispatches Tensile/CK templates that feed the native bf16
+        # matrix cores (`v_mfma_f32_16x16x32_b16`) with the downcast fused
+        # into the global-memory fetch, and accumulate in fp32 to hold
+        # convergence. Reported at up to 1.79x strict fp32.
+        #
+        # The exact numerics are NOT settled here and this comment will not
+        # pretend otherwise. Two accounts circulate: a 3-term bf16
+        # decomposition, and a single truncation to a 16-bit type. They differ
+        # in accuracy, and the second is hard to read literally -- TF32 keeps a
+        # 10-bit mantissa while bf16 keeps 7, so one bf16 operand cannot hold
+        # a TF32 value. The 1.79x figure also fits several bf16 operations
+        # better than one, since a single bf16 MFMA would beat fp32 by far
+        # more. Resolve it against hipBLASLt's own gfx950 templates before
+        # anyone writes an accuracy claim on top of it.
+        #
+        # None of that changes THIS key, which asks whether the instruction
+        # exists: on CDNA 4 it does not, by either account. And whichever is
+        # right, the direction holds -- faster than fp32, slower than the bf16
+        # it is built from, so it is the one reduced-precision selection that
+        # buys compatibility rather than speed.
         #
         # So this key is "is there a native xf32 MFMA", and on CDNA 4 there is
         # not. Marking it "ready" asserted an instruction that does not exist;

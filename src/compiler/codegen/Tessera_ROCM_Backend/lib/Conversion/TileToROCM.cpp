@@ -343,8 +343,20 @@ static FailureOr<Value> materializeFragmentPack(
             builder, loc, origin,
             arith::MulIOp::create(builder, loc, kRow, leadingDim)),
         arith::MulIOp::create(builder, loc, laneDiv8, ci(8)));
+    // The op requires a global-address-space source. The kernel argument is
+    // generic, so cast it: these buffers really are global (they arrive from
+    // hipMalloc), and the cast is what says so to the verifier rather than
+    // widening the op's contract.
+    auto baseTy = cast<MemRefType>(base.getType());
+    auto globalTy = MemRefType::get(
+        baseTy.getShape(), baseTy.getElementType(), baseTy.getLayout(),
+        gpu::AddressSpaceAttr::get(builder.getContext(),
+                                   gpu::AddressSpace::Global));
+    Value globalBase =
+        memref::MemorySpaceCastOp::create(builder, loc, globalTy, base);
     fragment = amdgpu::GlobalTransposeLoadOp::create(builder, loc, vectorTy,
-                                                     base, ValueRange{addr});
+                                                     globalBase,
+                                                     ValueRange{addr});
   } else if (!kIsContiguous || haveBounds) {
     // A bounded fragment is scalarized even when K is contiguous. The ROCm
     // GPU-to-LLVM pipeline does not legalize vector.create_mask/maskedload;

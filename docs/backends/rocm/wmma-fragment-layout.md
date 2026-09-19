@@ -332,6 +332,51 @@ drivers, `amdgpu.global_transpose_load` parses over a memref,
 `convert-gpu-to-rocdl` lowers it to `rocdl.global.load.tr.b128` with no
 additional pass, and the kernel builds and runs on gfx1201.
 
+## 9. Where the 4x4 panel's registers actually go
+
+The panel spills against a ceiling the ISA fixes at 256 (§5), so the only
+lever is needing fewer live values. That was recorded as unscoped; this is the
+measurement. Compile-only on gfx1201, f16, `vgpr_count` and `vgpr_spill_count`
+from the kernel metadata:
+
+| panel | K unroll | allocated | spilled | accumulators | fragments | everything else |
+|---|---:|---:|---:|---:|---:|---:|
+| 1x1 | 1 | 59 | 0 | 8 | 8 | ~43 |
+| 2x4 | 1 | 198 | 0 | 64 | 24 | ~110 |
+| 2x4 | 2 | 198 | 0 | 64 | 48 | ~86 |
+| 4x4 | 1 | 256 | **133** | 128 | 32 | **~229** |
+| 4x4 | 2 | 256 | **133** | 128 | 64 | **~197** |
+
+Accumulators are `mt * nt * 8` VGPRs; fragments are `(mt + nt) * 4` per K slab
+in flight. Three things fall out, and they redirect the work.
+
+**About half the demand is neither.** At the 4x4 panel roughly 200 VGPRs are
+something other than the accumulator tile and the operands feeding it — more
+than the accumulators themselves. The tile is not too big for its data; the
+surrounding state is too big.
+
+**That overhead scales with the panel, not with K.** It roughly doubles from
+the 2x4 panel to the 4x4 (110 to 229) while the accumulators also double, so
+it tracks `mt * nt`: per-tile addressing and index state held live across the
+loop, sixteen tiles' worth at 4x4.
+
+**The K unroll is not the cause.** Spill is identical at k=1 and k=2 (133
+either way), so issuing a second slab costs fragments and nothing structural.
+That also means the unroll and the spill are independent problems, and fixing
+one will not move the other.
+
+So the target is the ~200 VGPRs of per-tile addressing, and halving it would
+fit the 4x4 panel with no spill at all. Candidates, in the order they look
+worth trying: recompute tile origins from the loop index instead of holding
+sixteen of them; share the row and column origin arithmetic across a panel row
+or column rather than per tile; and sink the fragment address computation into
+the loop body so it does not stay live across the MMAs.
+
+*Caveat on the numbers*: `vgpr_count` is the allocation and `vgpr_spill_count`
+counts spill slots, so "allocated + spilled" is an estimate of demand rather
+than an exact live-range count. The ratios are what the argument rests on, and
+they are stable across the panels above.
+
 ## Where the machine truth lives
 
 Opcode tables, pseudocode and the VGPR-usage tables come from

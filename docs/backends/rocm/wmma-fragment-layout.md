@@ -619,15 +619,23 @@ separately rather than collapsed; collapsing them is silent.
 instead, whose ceiling is 383 TFLOP/s against bf16's 191 (section 5) — so on
 this axis the RDNA4 part has the better landing spot, not a worse one.
 
-**What Tessera already has, and what it does not.** `dtype.py` and
-`docs/reference/tessera_tensor_attributes.md` already name `nvfp4`,
-`fp4_e2m1` and `mxfp4` as *distinct*, with an explicit "do not alias to OCP FP4
-or AMD MXFP4" — the naming is ahead of the compiler here, which is the reverse
-of the usual direction. What is missing is the block-scale metadata `mxfp4`'s
-own planned/gated entry already says it needs, which is
-`ROCM-FP8-BLOCKSCALE-1`. Until that exists none of these three names can be
-told apart by anything below Graph IR, and the conversion above has nowhere to
-declare its 3 dB.
+**What Tessera already has, and what it does not — corrected 2026-09-19.**
+An earlier draft of this section said the block-scale metadata was missing
+outright. It is not. `microscaling.ScaleLayout` models exactly this contract —
+`block_size` elements along an axis sharing one scale of dtype `e8m0` (MX),
+`fp8_e4m3` (**its docstring names NVFP4**) or `fp32`, with `block_size == 0`
+meaning a per-tensor scale — and `Tessera_ScaleLayoutAttr` carries it in IR on
+four grouped-GEMM ops beside optional `x_scale`/`w_scale` operands, with
+consumers on the Apple path, the runtime, the manifest and the capability
+tables. `dtype.py` separately names `nvfp4`, `fp4_e2m1` and `mxfp4` as distinct
+with an explicit "do not alias".
+
+What is actually missing is narrower: the **plain `tessera.matmul` carries no
+scale operands at all**, and the **ROCm typed route never consults the model**.
+So the requantization above has a vocabulary to be declared in — it simply has
+no path from a Graph matmul to a gfx1201 kernel that reads it. That is
+`ROCM-FP8-BLOCKSCALE-1`, and it is an extension of an existing contract rather
+than a new one.
 
 ## 10e. ROCM-LDS-BANKPAD-1, measured: padding is real and it is not the 9x
 

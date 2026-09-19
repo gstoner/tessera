@@ -26,19 +26,13 @@ from tessera.compiler.rocm_target import AMDArch, wmma_dtype_forms
 #: (a, b, accum, k) -> why the typed route cannot emit it, and who owns that.
 #: A reason here is a debt, not a dismissal.
 UNREACHABLE: dict[tuple[str, str, str, int], str] = {
-    # Everything BELOW the Schedule is ready as of 2026-09-19: the fragment
-    # types carry B's own storage, both the generator gate and the Target
-    # matmul gate admit an fp8/fp8 pair, and `resolveFragmentLayout` already
-    # selected FP8_BF8 / BF8_FP8 from the descriptor's two types before any of
-    # that. What is left is one field: `MatmulSchedule` in PMPasses.cpp carries
-    # a single `StringRef storage`, so the Tile IR it emits necessarily writes
-    # the same name into the descriptor's `a` and `b`. Until the Schedule can
-    # name two, no mixed descriptor can be produced.
-    ("fp8_e4m3", "fp8_e5m2", "fp32", 16):
-        "mixed FP8 operands: the Schedule carries one storage, so the emitted "
-        "descriptor writes the same name to a and b (ROCM-MIXED-FP8-1)",
-    ("fp8_e5m2", "fp8_e4m3", "fp32", 16):
-        "mixed FP8 operands, mirror of the above (ROCM-MIXED-FP8-1)",
+    # The mixed OCP FP8 pairs were here until 2026-09-19 and are now REACHABLE:
+    # the Schedule carries both operand storages, the fragment and buffer types
+    # carry B's own, both C++ gates and the packager admit the pairing, the two
+    # launch ABIs are registered, and each operand is validated against its own
+    # binding. All four pairings execute natively on gfx1201 with the right
+    # instruction. Removing them from this list is the gate doing its job --
+    # it fails if a listed form becomes reachable without the list moving.
     ("fp16", "fp16", "fp16", 16):
         "f16 accumulation is an opt-in accuracy class behind "
         "tessera.rocm.reduced_precision_accumulation, not a storage the "
@@ -55,16 +49,18 @@ def _reachable(form, arch_name: str) -> bool:
     """Does `lower_scheduled_matmul` accept a same-dtype matmul in this form?"""
     from tests.unit.test_scheduled_matmul_consumers import _module
 
-    if form.a != form.b:
-        return False  # the contract cannot express a mixed pair at all
+    # A mixed pair is expressible since 2026-09-19: the Schedule carries both
+    # operand storages, so this asks the route rather than assuming.
     dtype = _GRAPH_DTYPE.get(form.a, form.a)
+    b_dtype = _GRAPH_DTYPE.get(form.b, form.b)
     output = "int32" if form.accum in ("int32", "i32") else "fp32"
     if form.accum in ("fp16", "bf16"):
         return False  # a reduced-precision accumulator, not an output dtype
     shape = (64, 64, 64) if form.k == 16 else (64, 64, 64)
     try:
         artifact = scheduled_matmul.lower_scheduled_matmul(
-            _module(target="rocm", shape=shape, dtype=dtype, output_dtype=output),
+            _module(target="rocm", shape=shape, dtype=dtype, b_dtype=b_dtype,
+                    output_dtype=output),
             target=f"rocm_{arch_name}")
     except Exception:
         return False

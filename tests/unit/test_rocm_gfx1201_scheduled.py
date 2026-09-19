@@ -851,3 +851,78 @@ def test_gfx1201_b_fragment_uses_the_transpose_load_only_where_derived(storage, 
         assert all(name.startswith("global_load_tr_b128") for name in seen), seen
     else:
         assert not seen, f"{storage} must stay on the guarded gather; found {dict(seen)}"
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("a_dt,b_dt,instruction", [
+    ("fp8_e4m3", "fp8_e4m3", "v_wmma_f32_16x16x16_fp8_fp8"),
+    ("fp8_e4m3", "fp8_e5m2", "v_wmma_f32_16x16x16_fp8_bf8"),
+    ("fp8_e5m2", "fp8_e4m3", "v_wmma_f32_16x16x16_bf8_fp8"),
+    ("fp8_e5m2", "fp8_e5m2", "v_wmma_f32_16x16x16_bf8_bf8"),
+])
+def test_gfx1201_mixed_fp8_pairs_select_their_instruction_and_execute(a_dt, b_dt, instruction):
+    """ROCM-MIXED-FP8-1: all four OCP FP8 pairings, including the mixed ones.
+
+    The hardware has `V_WMMA_F32_16X16X16_FP8_BF8` and its mirror, and
+    `wmma_dtype_forms` declared both while nothing could emit them, because the
+    single-storage assumption ran the whole depth of the stack: the Schedule
+    carried one `storage`, the generated kernel typed both operand buffers from
+    A, the fragment types inherited A's element, two C++ gates and the packager
+    required `a == b`, the launch ABI was keyed on A alone, and the submit path
+    validated B against A's dtype. Each of those refused rather than computing
+    wrong numbers, which is why this was a reachability gap and never a
+    correctness bug.
+
+    Asserting the INSTRUCTION as well as the result matters here: a mixed pair
+    that silently fell back to `FP8_FP8` would read one operand in the wrong
+    format, and with fp8's narrow range the error can look like ordinary
+    accumulation noise.
+    """
+    import collections
+    import re
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    import ml_dtypes
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    objdump = next((str(c) for c in (
+        Path.home() / ".local/share/tessera-toolchains/llvm-23.1.1/bin/llvm-objdump",
+        Path("/usr/lib/llvm-23/bin/llvm-objdump")) if c.is_file()), None)
+    m = k = n = 256
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=(m, k, n), dtype=a_dt, b_dtype=b_dt,
+                      output_dtype="fp32"),
+        target="rocm_gfx1201")
+    assert artifact.a_dtype == a_dt and artifact.b_dtype == b_dt
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    if objdump is not None:
+        with tempfile.NamedTemporaryFile(suffix=".hsaco", delete=False) as handle:
+            handle.write(package.image.payload)
+            path = handle.name
+        try:
+            text = subprocess.run([objdump, "-d", "--mcpu=gfx1201", path],
+                                  capture_output=True, text=True).stdout
+        finally:
+            os.unlink(path)
+        seen = collections.Counter(re.findall(r"v_wmma_f32_16x16x16_\w+", text))
+        assert instruction in seen, f"expected {instruction}, saw {dict(seen)}"
+    np_a = ml_dtypes.float8_e4m3fn if a_dt == "fp8_e4m3" else ml_dtypes.float8_e5m2
+    np_b = ml_dtypes.float8_e4m3fn if b_dt == "fp8_e4m3" else ml_dtypes.float8_e5m2
+    rng = np.random.default_rng(88)
+    a = (rng.normal(size=(m, k)) * 0.25).astype(np_a)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(np_b)
+    output = np.zeros((m, n), np.float32)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+                                 native_image=package.image, launch_descriptor=package.descriptor,
+                                 tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": output},
+                                 "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    # An fp8 product is exact in f32, so only the accumulation order moves this.
+    expected = a.astype(np.float32) @ b.astype(np.float32)
+    np.testing.assert_allclose(output, expected, rtol=0,
+                               atol=1e-6 * float(np.abs(expected).max()))

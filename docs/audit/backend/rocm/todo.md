@@ -8919,6 +8919,128 @@ AMD's identity-matrix in-register transpose as the int4 fallback; the
 126-VGPR spill at the shipped 4x4 panel; `ROCM-MIXED-FP8-1`; raster-order
 selection.
 
+## ROCM-MIXED-FP8-1 closed: the pair was a Schedule field, and two gates were not checking their own claim — 2026-09-19
+
+Sync `GFX1201-PARITY-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+**All four OCP FP8 pairings execute natively on gfx1201, each selecting its own
+instruction.** `fp8_fp8` rel 0.00e+00, `fp8_bf8` 2.60e-08, `bf8_fp8` 2.59e-08,
+`bf8_bf8` 5.21e-08 — the mixed figures are accumulation order alone, since an
+fp8 product is exact in f32.
+
+The blocker recorded on 2026-09-19 was `MatmulSchedule`'s single `StringRef
+storage`, and that was right as far as it went. Widening it exposed **eight more
+layers holding the same assumption**, each of which refused rather than
+computing wrong numbers — which is why this was a reachability gap and never a
+correctness bug:
+
+| Layer | What it assumed |
+|---|---|
+| `MatmulSchedule` (`PMPasses.cpp`) | one `storage`, written to both descriptor slots |
+| `GenerateWMMAGemmKernel` | both operand buffers typed from A |
+| fragment materialization | B's fragment element inherited from A |
+| generator descriptor gate | `a == b` |
+| Target matmul gate (`TileToROCM.cpp`) | `a == b` |
+| `package_scheduled_matmul` | `a == b` |
+| launch ABI selection | keyed on A alone; no id named a pair |
+| launcher bindings | B given A's dtype |
+| submit-time validation | B checked against A's dtype |
+
+`resolveFragmentLayout` already selected `V_WMMA_F32_16X16X16_FP8_BF8` and its
+mirror from the descriptor's two types before any of this, so the instruction
+selection was never the missing piece — expressing the pair was.
+
+**Then two gates turned out not to be checking what their names claimed, and
+both had been green since they were written.**
+
+*The instruction claim.* Six device rows across four files assert which matrix
+instruction was emitted, each with its own copy of finding `llvm-objdump` and
+**three different policies for not finding it** — one of which (`if objdump is
+not None:`) dropped the assertion and still reported a pass, in a row named
+`..._select_their_instruction_...`. They now share `tests/_support/rocm_isa.py`,
+where a missing disassembler is a **failure and not a skip**: the caller has
+already asserted it is the owning device, and every ROCm install ships
+`llvm-objdump` under `$ROCM_PATH/llvm/bin`, so absence is a broken fixture
+rather than an honest capability gap. Confirmed on Tajasarus, where the resolver
+picks the assertions toolchain's copy.
+
+Two claims were weaker than their names:
+
+* `test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact` asserted only
+  the numbers — and **the numbers cannot distinguish the form.** The double-K
+  int4 WMMA and two K=16 int4 WMMAs compute the identical exact integer
+  product, so the sole owner of RDNA4's double-K capability would have passed on
+  a generator that quietly kept K=16. It now requires
+  `v_wmma_i32_16x16x32_iu4` and forbids `v_wmma_i32_16x16x16_iu4`; the device
+  shows the double-K form and no K=16 one, which is the first time that
+  capability had the right witness.
+* Every row required a mnemonic and forbade none, so **none could see a swap.**
+  Finding `fp8_bf8` does not establish that `bf8_fp8` is absent, and an operand
+  exchange anywhere in the stack emits the mirror while satisfying a presence
+  check. Falsified on device: asking the `e4m3 x e5m2` row for the mirror fails
+  with `expected v_wmma_f32_16x16x16_bf8_fp8 ... saw
+  {'v_wmma_f32_16x16x16_fp8_bf8': 4}` — one mnemonic, four times, no mirror.
+
+*The reachability list.* It checked one direction: a listed form that became
+reachable failed. **Two of its own entries were self-fulfilling** — the helper
+returned `False` for the reduced-precision accumulators from the same hardwired
+rule that had written the entries, without asking the route. Probing them found
+the f16 entry naming `ROCM_WMMA_ACCUM_UNSUPPORTED`, a C++ diagnostic that never
+fires on this path (the route refuses earlier, in Python), and the bf16 entry
+"proved" by a `KeyError` in the test fixture's own output-dtype map — evidence
+about the fixture, not the compiler. This is the same shape that had already
+bitten once, when the helper assumed a mixed fp8 pair was inexpressible and had
+to be taught otherwise before the pairs could be retired from the list.
+
+Entries now carry the **marker the actual refusal must contain**, every answer
+comes from the route, and a form still refused *for a different reason than
+recorded* fails. A form with K != 16 is delegated to a named device row whose
+existence is asserted, so a rename cannot orphan it. All directions were
+falsified before being recorded.
+
+**Two adjacent defects that the marker required.** The typed route's
+fall-through refusal named neither the dtypes nor the target, and was identical
+for a reduced-precision accumulator, an unsupported storage, and a target with
+no GEMM for the pair; it now names all three
+(`SCHEDULED_MATMUL_DTYPE_CONTRACT_UNSUPPORTED`, Decision #21). Registering that
+code exposed the same class once more: the **Python diagnostic scanner is a
+prefix allowlist**, so 16 code-shaped diagnostics raised from Python — nine
+`ROCM_FRAGMENT_*`, five `APPLE_*`, plus two others — were invisible to their own
+registry gate. Its own `GRAPH_IR_` comment records that failure happening
+before, for a whole family, while the gate reported green. It now matches the
+code *shape*, as the C++ scan always has. The 15 pre-existing codes are a
+**shrink-only ratchet** (`DIAG-PY-BACKLOG-1`), failing if the set grows and
+failing again when one is registered without leaving the list, because
+authoring three other subsystems' registry entries inside this change is how a
+focused diff stops being reviewable.
+
+**The route was confirmed, not assumed.** Tile IR (`tile.matmul_kernel`,
+`tile.mma_desc`, `tile.epilogue`) → `tessera_rocm.wmma_gemm` with the consumer
+stamped and **zero unconsumed `tile.*`** → upstream
+`createConvertGpuOpsToROCDLOps` → `createGpuROCDLAttachTarget` →
+`createGpuModuleToBinaryPass` → gfx1201 ISA. `_compile_native_tile_ir` hard-fails
+without `tessera-opt`, its cache key includes that binary's hash, and there is
+no HIPRTC lane in `rocm_native.py`, so the scheduled route cannot degrade into
+the Python bootstrap packager. `amdgpu.global_load_tr` is the sharpest witness:
+no lowering for it was written here — upstream `convert-gpu-to-rocdl` produces
+`rocdl.global.load.tr.b128` and LLVM's AMDGPU backend emits the instruction.
+
+| Host | Suites | Lit (lane, not suite) |
+|---|---|---|
+| Tajasarus (gfx1201) | **95 passed** (scheduled + reachability), **46 passed** (sparse), 0 failed | 433/495, 62 unsupported; `check-tessera-rocm` 75/75 |
+| Princess-Luna (gfx1151) | 168 passed, 103 skipped — regression lane; RDNA3.5 has no FP8 WMMA at all, so it is no evidence for this item | 491/495, 4 unsupported; `check-tessera-rocm` 75/75 |
+| Mac (M1 Max) | 129 passed, 162 skipped — host portability; the ROCm backend is not configured there, so a green Mac build is no evidence for this C++ | 452/495, 43 unsupported |
+
+**Still owed.** The 8-bit `TR_B64` mapping, measured the same way, which would
+extend the transpose load to fp8 and int8; the 2048³ transpose-load reversal,
+which needs counters neither WSL2 ROCm box can produce; AMD's identity-matrix
+in-register transpose as the int4 fallback; implementing the register-pressure
+reduction now that `ROCM-VGPR-PRESSURE-1` is scoped to per-tile addressing;
+raster-order selection; the sparse `V_SWMMAC_I32_16X16X64_IU4`, reachable and
+unmeasured; `DIAG-PY-BACKLOG-1`.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed).
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

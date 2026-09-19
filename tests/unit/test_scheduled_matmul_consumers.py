@@ -980,29 +980,55 @@ def test_rocm_lds_staged_package_executes(waves, shape) -> None:
                                atol=5e-2 * float(np.abs(expected).max()) / 10 + 2e-2)
 
 
-@pytest.mark.parametrize("shape,gfx1201,gfx1151", [
-    ((512, 512, 512), 1, 1), ((1024, 1024, 1024), 2, 2), ((2048, 2048, 2048), 2, 1),
-    ((4096, 4096, 4096), 2, 1), ((1024, 1024, 1000), 1, 1), ((1536, 1024, 1024), 2, 2),
+@pytest.mark.parametrize("storage,shape,gfx1201,gfx1151", [
+    # f16/bf16 fill the 128-bit load, so 2 is where they stop.
+    ("fp16", (512, 512, 512), 1, 1), ("fp16", (1024, 1024, 1024), 2, 2),
+    ("fp16", (2048, 2048, 2048), 2, 1), ("fp16", (4096, 4096, 4096), 2, 1),
+    ("fp16", (1024, 1024, 1000), 1, 1), ("fp16", (1536, 1024, 1024), 2, 2),
+    # 8-bit moves half a load, and takes 4 once the problem is big enough to
+    # pay for it. fp8 and int8 are the same width and the same rule.
+    ("fp8_e4m3", (1024, 1024, 1024), 2, 1), ("fp8_e4m3", (2048, 2048, 2048), 4, 1),
+    ("int8", (1024, 1024, 1024), 2, 2), ("int8", (2048, 2048, 2048), 4, 1),
+    ("int8", (4096, 4096, 4096), 4, 1),
+    # 4-bit moves a quarter. gfx1201 finds nothing at 1024 (6% across all
+    # three) and takes 4 above; gfx1151 takes 4 throughout, its own sweep.
+    ("int4", (1024, 1024, 1024), 1, 4), ("int4", (2048, 2048, 2048), 4, 4),
+    ("int4", (4096, 4096, 4096), 4, 4), ("int4", (1024, 1024, 1000), 1, 1),
+    # An unmeasured storage keeps the established loop rather than inheriting
+    # the rule of whichever width it resembles.
+    ("fp6_e2m3", (2048, 2048, 2048), 1, 1),
 ])
-def test_rocm_k_unroll_follows_each_chips_own_measurement(shape, gfx1201, gfx1151):
+def test_rocm_k_unroll_follows_each_chips_own_measurement(storage, shape, gfx1201, gfx1151):
     """K unrolling is a physical performance key derived from each chip's own
-    sweep. Both chips take 2, and only where they also take the larger panel:
-    gfx1201 from 1024 up on a fully tiled shape, gfx1151 in the [1024, 2048)
-    band alone, because at 2048 and above the directive lane still leads
-    there. A dynamic shape takes neither.
+    sweep, and it depends on the **storage** as well as the chip.
 
-    gfx1201's 1024-band answer used to be 4. That rested on one row the
-    re-record reversed inside a 2% margin, so it is the noise-level
-    difference, not the rule -- see `rocm_k_unroll`. Pinning it here is what
-    keeps an unreproduced measurement from surviving as a shipped branch."""
+    The mechanism is load width: a fragment load is 8 elements per lane
+    whatever the storage, so fp16 fills the 128-bit interface, fp8 and int8
+    use 64 bits and int4 uses 32. A narrower operand therefore needs more
+    slabs in flight to keep that path busy, and the measured rule follows the
+    width -- fp8 and int8 landing on the same answer is the check, since they
+    are unrelated storages of equal width.
+
+    gfx1201's f16 1024-band answer used to be 4. That rested on one row a
+    re-record reversed inside a 2% margin. Pinning these here is what keeps an
+    unreproduced measurement from surviving as a shipped branch, and the same
+    discipline drops the two gains this sweep found inside spread (gfx1151
+    int8 at 2048^3, gfx1201 int4 at 1024^3)."""
     m, k, n = shape
-    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=False) == gfx1201
-    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1151", dynamic=False) == gfx1151
+    unroll = scheduled_matmul.rocm_k_unroll
+    assert unroll(m, n, k, arch="gfx1201", dynamic=False, storage=storage) == gfx1201
+    assert unroll(m, n, k, arch="gfx1151", dynamic=False, storage=storage) == gfx1151
     for arch in ("gfx1201", "gfx1151"):
-        assert scheduled_matmul.rocm_k_unroll(m, n, k, arch=arch, dynamic=True) == 1
+        assert unroll(m, n, k, arch=arch, dynamic=True, storage=storage) == 1
     # An arch with no sweep of its own gets the established loop, never another
     # chip's answer.
-    assert scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1200", dynamic=False) == 1
+    assert unroll(m, n, k, arch="gfx1200", dynamic=False, storage=storage) == 1
+    # The artifact spelling and the Graph dtype spelling must agree: both reach
+    # this rule, and a storage that answered differently by name would make the
+    # packaged kernel disagree with the rule that chose it.
+    alias = {"fp16": "f16", "fp8_e4m3": "e4m3"}.get(storage)
+    if alias:
+        assert unroll(m, n, k, arch="gfx1201", dynamic=False, storage=alias) == gfx1201
 
 
 @pytest.mark.hardware_rocm

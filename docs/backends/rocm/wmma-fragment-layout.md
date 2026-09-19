@@ -64,10 +64,16 @@ generators that still compute rows themselves use
 `GenerateWMMALinearAttnKernel.cpp`).
 
 *Evidence*: the typed matmul, attention and linear-attention device rows on
-gfx1201. Independently confirmed by an external probe on a second stack
-(Radeon AI PRO R9700, gfx1201, ROCm 7.14 nightly) against a CPU reference of
-`A·Bᵀ`: 256/256 elements match the column-distributed mapping across three
-cases, and the row-major reading matches 16/256, as expected.
+gfx1201. Independently confirmed twice outside this repo. A probe on a second
+stack (Radeon AI PRO R9700, gfx1201, ROCm 7.14 nightly) against a CPU
+reference of `A·Bᵀ` matched the column-distributed mapping on 256/256
+elements across three cases, with the row-major reading matching 16/256 — the
+diagonal, as expected. And a public RDNA4 WMMA guide states the same mapping
+in the same form, `VGPR[lane][j] = matrix[(lane / 16) * 8 + j][lane % 16]`,
+together with the same warning this page gives: a symmetric test matrix cannot
+distinguish the two readings, so a probe must use asymmetric data. Three
+independent statements of a contract whose failure mode is silent is the
+reason to trust it.
 
 ## 3. A/B operand layout — K-major per lane
 
@@ -110,7 +116,9 @@ is not derivable from the intrinsic signature. It is: **logical element `i`
 `i / 8`, low nibble first.** Signedness rides the instruction's `NEG` field:
 `NEG[0]` for A, `NEG[1]` for B, `0 = unsigned, 1 = signed`; the destination is
 always signed, and Tessera pins `clamp` false (wrap), matching a numpy int32
-accumulate.
+accumulate. The builtin's signature carries both explicitly —
+`__builtin_amdgcn_wmma_i32_16x16x16_iu4_w32_gfx12(int neg_a, int a, int neg_b,
+int b, v8i acc, int clamp)` — so neither rides a default.
 
 **In Tessera**: `materializeFragmentPack` compacts nibbles with exactly that
 rule (`shift = 4 * (i % 8)`, word `i / 8`), and int4 values ride int8
@@ -168,6 +176,50 @@ one does not — evidence never transfers.)
 `docs/reference/isa/rdna/rdna4/`. The Tessera-side table is
 `rocm_target.wmma_dtype_forms`, which lists exactly these families and no
 others.
+
+## 6. Load width is the reason low precision wants a deeper K unroll
+
+A fragment load is 8 elements per lane whatever the storage, so the *bits* it
+moves shrink as the storage does. AMD's RDNA4 WMMA guide states it directly:
+fp16 saturates the 128-bit interface (8 x 16 bits), fp8 and int8 use only
+64-bit loads (8 x 8 bits), and int4 drops to 32-bit loads (8 x 4 bits).
+
+That is the mechanism behind a rule Tessera arrived at by measurement alone.
+The typed body's K unroll is worth the most exactly where the storage is
+narrowest — f16 wants 2, fp8 wants 4 from 2048 up, and int4 on gfx1151 wants 4
+everywhere — because issuing more slabs is how a narrow operand keeps the
+128-bit path busy. Two ways to read that matter:
+
+* **Deeper unroll is a workaround, not the instrument.** It reaches the same
+  bandwidth by issuing *more* loads. AMD's technique instead fuses two WMMAs
+  over an extended K so one load fetches 16 elements and fills 128 bits, and
+  notes the result is bit-identical because matrix multiplication is
+  associative — a reordering of the FMAs, not a different program.
+* **For int4 the hardware already has it.** `V_WMMA_I32_16X16X32_IU4` is the
+  native double-K form, and `V_SWMMAC_I32_16X16X64_IU4` its sparse twin. Both
+  are in the table above. **Neither is reachable from the typed route today**:
+  `materializeMma` in `TileToROCM.cpp` pins `kBlocks = 1`, so every emitted
+  fragment is the K=16 shape. That is a Decision #29 gap — the registry
+  declares a form nothing can select — and it is the principled version of
+  int4's measured k=4 win.
+
+## 7. Transposing B: what RDNA4 does and does not have
+
+RDNA4 has **no shared-memory transpose load** (`ds_read_tr` is gfx950/CDNA4)
+and no in-register transpose instruction. It does have **`global_load_tr`**,
+wrapped upstream as `amdgpu.global_transpose_load` on gfx1200+, valid at
+(8 bits, 8 elements) and (16 bits, 8 elements) — so f16, bf16, fp8 and int8,
+but not int4, which needs gfx1250+.
+
+AMD's guide gives a second remedy that needs no special load at all: build an
+identity matrix in the B fragment, put the source in A, and issue one WMMA —
+the instruction's own layout does the transpose in registers. It is the RDNA4
+answer to CUDA's `ldmatrix.trans`, and it is reported in production use for
+flash attention.
+
+Both are candidates for the standing asymmetry in §3, where A takes a single
+`vector.load` and B scalarizes into 16 guarded loads. Neither is implemented
+here yet.
 
 ## Where the machine truth lives
 

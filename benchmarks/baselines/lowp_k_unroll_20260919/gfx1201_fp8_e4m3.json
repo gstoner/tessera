@@ -1,0 +1,833 @@
+{
+  "chip": "gfx1201",
+  "dtype": "fp8_e4m3",
+  "evidence_scope": "measured_gap",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "iters": 30,
+  "promotion": {
+    "correctness_eligible": false,
+    "performance_eligible": false,
+    "reason": "host wall clock on a WSL2 /dev/dxg host; no /dev/kfd, no counters; a selection input only where the gap dwarfs run-to-run spread"
+  },
+  "raw": [
+    {
+      "chip": "gfx1201",
+      "dtype": "fp8_e4m3",
+      "pid": 993290,
+      "rows": [
+        {
+          "backend_ir_sha256": "54f5cfd15142bd5c74fc0118cec348e94efc4d026b70c581412b33129b3e3090",
+          "batch_ms": [
+            0.034552965856467686,
+            0.03301506512798369,
+            0.03241756736921767
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 1,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.03301506512798369,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64"
+        },
+        {
+          "backend_ir_sha256": "80b03209a90c2bd0f1c1895c6f8391ea823d1effae79de8ede7c2af77a0af5d9",
+          "batch_ms": [
+            0.02838983394516011,
+            0.02815303353903194,
+            0.02816406583103041
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 2,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.02816406583103041,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k2"
+        },
+        {
+          "backend_ir_sha256": "fc0dbe8c3dfb7d874dcd02ad6d97f5ec848034d0ae7ed19b77b31f553fd02e61",
+          "batch_ms": [
+            0.03982043320623537,
+            0.03962639990883569,
+            0.03785263397730887
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 4,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.03962639990883569,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k4"
+        },
+        {
+          "backend_ir_sha256": "5d29736c159920221dd098450ef6843b84d02cfacfaf269207cf802562335d3e",
+          "batch_ms": [
+            0.2241669319725285,
+            0.2232839004136622,
+            0.2239013983247181
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 1,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.2239013983247181,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64"
+        },
+        {
+          "backend_ir_sha256": "1b5c04b6f0b04b6251c083d3bf200d9b0b384a0707809925dc77f9ad71d7e3a8",
+          "batch_ms": [
+            0.1990240009035915,
+            0.19609636704747876,
+            0.1974289344313244
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 2,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.1974289344313244,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k2"
+        },
+        {
+          "backend_ir_sha256": "610c24cb68589db5debf2b29836f065083153bfdc1d23dda7ab983544c2ee55e",
+          "batch_ms": [
+            0.14762769957693914,
+            0.14808856649324298,
+            0.14787316710377732
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 4,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.14787316710377732,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k4"
+        },
+        {
+          "backend_ir_sha256": "dfe7772817e7748185e587068c0180ea08f264fa8a58d3f2346d6b20789b0098",
+          "batch_ms": [
+            1.9539583338579785,
+            2.006440698945274,
+            2.004483666193361
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 1,
+          "lds_bytes": 0,
+          "per_launch_ms": 2.004483666193361,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            4096,
+            4096,
+            4096
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64"
+        },
+        {
+          "backend_ir_sha256": "a7a2e07c3bda6ae428d8fe4d9dddceee38fe0c67e4425b0a084e4415c2f79f26",
+          "batch_ms": [
+            1.7723464329416554,
+            1.775359899814551,
+            1.774122800755625
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 2,
+          "lds_bytes": 0,
+          "per_launch_ms": 1.774122800755625,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            4096,
+            4096,
+            4096
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k2"
+        },
+        {
+          "backend_ir_sha256": "ce253c947f54e34235d9991de5f3f4b2f3cb4acce52cfb7b66c3839ff83fc01a",
+          "batch_ms": [
+            1.0686764668207616,
+            1.0673262334118288,
+            1.0674805341598887
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 4,
+          "lds_bytes": 0,
+          "per_launch_ms": 1.0674805341598887,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            4096,
+            4096,
+            4096
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k4"
+        }
+      ]
+    },
+    {
+      "chip": "gfx1201",
+      "dtype": "fp8_e4m3",
+      "pid": 993544,
+      "rows": [
+        {
+          "backend_ir_sha256": "54f5cfd15142bd5c74fc0118cec348e94efc4d026b70c581412b33129b3e3090",
+          "batch_ms": [
+            0.03584176690007249,
+            0.03323476606359085,
+            0.032686733175069094
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 1,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.03323476606359085,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64"
+        },
+        {
+          "backend_ir_sha256": "80b03209a90c2bd0f1c1895c6f8391ea823d1effae79de8ede7c2af77a0af5d9",
+          "batch_ms": [
+            0.028284967023258407,
+            0.028794934041798115,
+            0.02829463337548077
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 2,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.02829463337548077,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k2"
+        },
+        {
+          "backend_ir_sha256": "fc0dbe8c3dfb7d874dcd02ad6d97f5ec848034d0ae7ed19b77b31f553fd02e61",
+          "batch_ms": [
+            0.0397579666847984,
+            0.03853930005182823,
+            0.038337267081563674
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 4,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.03853930005182823,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k4"
+        },
+        {
+          "backend_ir_sha256": "5d29736c159920221dd098450ef6843b84d02cfacfaf269207cf802562335d3e",
+          "batch_ms": [
+            0.2247343654744327,
+            0.22394233383238316,
+            0.22858806769363582
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 1,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.2247343654744327,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64"
+        },
+        {
+          "backend_ir_sha256": "1b5c04b6f0b04b6251c083d3bf200d9b0b384a0707809925dc77f9ad71d7e3a8",
+          "batch_ms": [
+            0.20266966700243452,
+            0.19687353439318636,
+            0.19920400033394495
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 2,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.19920400033394495,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k2"
+        },
+        {
+          "backend_ir_sha256": "610c24cb68589db5debf2b29836f065083153bfdc1d23dda7ab983544c2ee55e",
+          "batch_ms": [
+            0.15058526575254896,
+            0.1491802337113768,
+            0.1512782667608311
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 4,
+          "lds_bytes": 0,
+          "per_launch_ms": 0.15058526575254896,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k4"
+        },
+        {
+          "backend_ir_sha256": "dfe7772817e7748185e587068c0180ea08f264fa8a58d3f2346d6b20789b0098",
+          "batch_ms": [
+            1.9607947673648596,
+            2.0098455677119396,
+            2.006509834124396
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 1,
+          "lds_bytes": 0,
+          "per_launch_ms": 2.006509834124396,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            4096,
+            4096,
+            4096
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64"
+        },
+        {
+          "backend_ir_sha256": "a7a2e07c3bda6ae428d8fe4d9dddceee38fe0c67e4425b0a084e4415c2f79f26",
+          "batch_ms": [
+            1.7792129326456536,
+            1.7840057999516528,
+            1.7862978333141655
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 2,
+          "lds_bytes": 0,
+          "per_launch_ms": 1.7840057999516528,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            4096,
+            4096,
+            4096
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k2"
+        },
+        {
+          "backend_ir_sha256": "ce253c947f54e34235d9991de5f3f4b2f3cb4acce52cfb7b66c3839ff83fc01a",
+          "batch_ms": [
+            1.0736874343516927,
+            1.0720857011619955,
+            1.0723391994057845
+          ],
+          "block_tile": [
+            64,
+            64
+          ],
+          "k_unroll": 4,
+          "lds_bytes": 0,
+          "per_launch_ms": 1.0723391994057845,
+          "production_panel": [
+            64,
+            64
+          ],
+          "relative_error": 0.0,
+          "shape": [
+            4096,
+            4096,
+            4096
+          ],
+          "threads": 32,
+          "timing_source": "host_wall_launch_and_sync",
+          "variant": "typed:64x64:k4"
+        }
+      ]
+    }
+  ],
+  "runs": 2,
+  "schema": "tessera.typed_route_gap.v1",
+  "summary": [
+    {
+      "backend_ir_sha256": "54f5cfd15142bd5c74fc0118cec348e94efc4d026b70c581412b33129b3e3090",
+      "batch_ms": [
+        0.034552965856467686,
+        0.03301506512798369,
+        0.03241756736921767
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 1,
+      "lds_bytes": 0,
+      "median_ms": 0.03312491559578727,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        0.03301506512798369,
+        0.03323476606359085
+      ],
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tflops": 64.82986022379814,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64"
+    },
+    {
+      "backend_ir_sha256": "80b03209a90c2bd0f1c1895c6f8391ea823d1effae79de8ede7c2af77a0af5d9",
+      "batch_ms": [
+        0.02838983394516011,
+        0.02815303353903194,
+        0.02816406583103041
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 2,
+      "lds_bytes": 0,
+      "median_ms": 0.028229349603255592,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        0.02816406583103041,
+        0.02829463337548077
+      ],
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tflops": 76.07272849645598,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64:k2"
+    },
+    {
+      "backend_ir_sha256": "fc0dbe8c3dfb7d874dcd02ad6d97f5ec848034d0ae7ed19b77b31f553fd02e61",
+      "batch_ms": [
+        0.03982043320623537,
+        0.03962639990883569,
+        0.03785263397730887
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 4,
+      "lds_bytes": 0,
+      "median_ms": 0.03908284998033196,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        0.03962639990883569,
+        0.03853930005182823
+      ],
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tflops": 54.94695625013783,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64:k4"
+    },
+    {
+      "backend_ir_sha256": "5d29736c159920221dd098450ef6843b84d02cfacfaf269207cf802562335d3e",
+      "batch_ms": [
+        0.2241669319725285,
+        0.2232839004136622,
+        0.2239013983247181
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 1,
+      "lds_bytes": 0,
+      "median_ms": 0.2243178818995754,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        0.2239013983247181,
+        0.2247343654744327
+      ],
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "tflops": 76.58715853821779,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64"
+    },
+    {
+      "backend_ir_sha256": "1b5c04b6f0b04b6251c083d3bf200d9b0b384a0707809925dc77f9ad71d7e3a8",
+      "batch_ms": [
+        0.1990240009035915,
+        0.19609636704747876,
+        0.1974289344313244
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 2,
+      "lds_bytes": 0,
+      "median_ms": 0.19831646738263467,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        0.1974289344313244,
+        0.19920400033394495
+      ],
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "tflops": 86.62855591741108,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64:k2"
+    },
+    {
+      "backend_ir_sha256": "610c24cb68589db5debf2b29836f065083153bfdc1d23dda7ab983544c2ee55e",
+      "batch_ms": [
+        0.14762769957693914,
+        0.14808856649324298,
+        0.14787316710377732
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 4,
+      "lds_bytes": 0,
+      "median_ms": 0.14922921642816314,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        0.14787316710377732,
+        0.15058526575254896
+      ],
+      "shape": [
+        2048,
+        2048,
+        2048
+      ],
+      "tflops": 115.1240326472541,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64:k4"
+    },
+    {
+      "backend_ir_sha256": "dfe7772817e7748185e587068c0180ea08f264fa8a58d3f2346d6b20789b0098",
+      "batch_ms": [
+        1.9539583338579785,
+        2.006440698945274,
+        2.004483666193361
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 1,
+      "lds_bytes": 0,
+      "median_ms": 2.0054967501588785,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        2.004483666193361,
+        2.006509834124396
+      ],
+      "shape": [
+        4096,
+        4096,
+        4096
+      ],
+      "tflops": 68.53112749303229,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64"
+    },
+    {
+      "backend_ir_sha256": "a7a2e07c3bda6ae428d8fe4d9dddceee38fe0c67e4425b0a084e4415c2f79f26",
+      "batch_ms": [
+        1.7723464329416554,
+        1.775359899814551,
+        1.774122800755625
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 2,
+      "lds_bytes": 0,
+      "median_ms": 1.7790643003536388,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        1.774122800755625,
+        1.7840057999516528
+      ],
+      "shape": [
+        4096,
+        4096,
+        4096
+      ],
+      "tflops": 77.253505364972,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64:k2"
+    },
+    {
+      "backend_ir_sha256": "ce253c947f54e34235d9991de5f3f4b2f3cb4acce52cfb7b66c3839ff83fc01a",
+      "batch_ms": [
+        1.0686764668207616,
+        1.0673262334118288,
+        1.0674805341598887
+      ],
+      "block_tile": [
+        64,
+        64
+      ],
+      "k_unroll": 4,
+      "lds_bytes": 0,
+      "median_ms": 1.0699098667828366,
+      "production_panel": [
+        64,
+        64
+      ],
+      "relative_error": 0.0,
+      "run_ms": [
+        1.0674805341598887,
+        1.0723391994057845
+      ],
+      "shape": [
+        4096,
+        4096,
+        4096
+      ],
+      "tflops": 128.45844097622148,
+      "threads": 32,
+      "timing_source": "host_wall_launch_and_sync",
+      "variant": "typed:64x64:k4"
+    }
+  ]
+}

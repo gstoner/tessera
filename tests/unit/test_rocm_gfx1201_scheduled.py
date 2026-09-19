@@ -663,7 +663,14 @@ def test_gfx1201_low_precision_takes_the_selected_panel_and_executes(storage, ou
     assert (artifact.macro_tile_m, artifact.macro_tile_n) == scheduled_matmul.rocm_gfx1201_panel(
         m, n, dynamic=False)
     package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.provenance["physical_route"].startswith("gfx1201_register_wmma_4x4")
+    # The route carries the K unroll the storage-aware rule picked, so a rule
+    # change and a device row move together (2026-09-19). 8-bit takes 2 here
+    # and 4 from 2048 up; int4 takes neither at this shape.
+    unroll = scheduled_matmul.rocm_k_unroll(m, n, k, arch="gfx1201", dynamic=False,
+                                            storage=artifact.storage)
+    suffix = "" if unroll <= 1 else f"_k{unroll}"
+    assert package.descriptor.provenance["physical_route"] == f"gfx1201_register_wmma_4x4{suffix}"
+    assert package.descriptor.provenance["k_unroll"] == unroll
     integral = storage.startswith("int")
     rng = np.random.default_rng(1201 + len(storage))
     if integral:

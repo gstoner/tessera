@@ -502,13 +502,20 @@ LogicalResult TileMmaDescAttr::verify(
     return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k must be >= 0 "
                           "(0 means unscaled); got "
                        << scaleBlockK;
-  if (scaleBlockK > 0 && scaleBlockK % k != 0)
+  // The scale group along K must be EXACTLY the descriptor's K block, not
+  // merely a multiple of the instruction K. That is the invariant AITER's
+  // reference kernel asserts twice as `GROUP_K == BLOCK_SIZE_K`, and it is what
+  // makes `acc += dot(a, b) * outer(sa, sb)` apply to a whole block: a scale
+  // group larger than the block would span two accumulate boundaries, and one
+  // smaller would scale a partial product. Expressing it here means the
+  // descriptor cannot state an unimplementable pairing.
+  if (scaleBlockK > 0 && scaleBlockK != k * kBlocks)
     return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k ("
-                       << scaleBlockK << ") must be a whole multiple of the "
-                                         "instruction K ("
-                       << k
-                       << "), or the scale boundary and the accumulate boundary "
-                          "disagree and a partial product gets scaled";
+                       << scaleBlockK << ") must equal the K block, k * k_blocks ("
+                       << k << " * " << kBlocks << " = " << (k * kBlocks)
+                       << "). A scale group that is not exactly one K block "
+                          "either spans two accumulate boundaries or scales a "
+                          "partial product";
   if (scaleBlockK == 0 && !scaleFormat.empty())
     return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_fmt \""
                        << scaleFormat

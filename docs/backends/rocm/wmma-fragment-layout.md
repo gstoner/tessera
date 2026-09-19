@@ -856,14 +856,41 @@ staging as a strategy.
 *`ROCM-MIXED-FP8-1` is vendor-confirmed in shipping binaries*, not merely in the
 rocWMMA headers (§10f).
 
-**And the block-scale gap is confirmed here too.** Of those 144 gfx1201
-libraries, **zero** carry MX or block-scale in their type tags — they are
-combinations of B8/F8/H/S/D/BB with scalar and vector scales (`SAB`, `SAV`,
-`SCD`). Together with rocMLIR's scaled path being MFMA-oriented and Triton
-upconverting on gfx1201, that is three independent sources agreeing that
-**block-scaled low precision on the RDNA4 WMMA is unserved across AMD's own
-stack** — which is what `ROCM-FP8-BLOCKSCALE-1` and `ROCM-MXFP4-W4A8-1` are for,
-and why the hand-written kernel in §10b exists.
+**On the block-scale gap this file previously overstated — corrected
+2026-09-19.** Of those 144 gfx1201 libraries, **zero** carry MX or block-scale
+in their type tags (they are B8/F8/H/S/D/BB with scalar and vector scales:
+`SAB`, `SAV`, `SCD`), and rocMLIR's scaled path is MFMA-oriented. From those two
+I wrote that block-scaled low precision on the RDNA4 WMMA is "unserved across
+AMD's own stack". **That is wrong, and it conflated two different Triton
+paths.** Split them:
+
+| path | on gfx1201 | served? |
+|---|---|---|
+| **FP8 W8A8, block-scaled** | Triton emits the **native fp8 WMMA** — AITER's `gemm_a8w8_blockscale` at `block_shape=[128,128]`, which is what the 20 tuned configs in `ROCM-FP8-BLOCKSCALE-1` actually are | **yes** |
+| **MXFP4 / e2m1** (`tl.dot_scaled`) | upconverts e2m1 to bf16 and uses the 16-bit WMMA | **no** |
+
+So the FP8 blockscale case *is* served on this chip, by Triton rather than by a
+library: reported 25% faster decode on Qwen3-0.6B and 63% on Qwen3-30B on an
+R9700, with AITER's C++/ASM kernels disabled because they do not run on RDNA4,
+**M ≥ 16 required**, 11 shapes tuned, and no upstream merge. The `M ≥ 16`
+constraint and the M-bucketed config keys are the same skinny-M axis §10b and
+the split-K item keep running into. Only the **MXFP4 fold** (§10b) is genuinely
+unserved, which is exactly why the hand-written kernel exists — and why
+`ROCM-MXFP4-W4A8-1` is the item with no prior art to lean on while
+`ROCM-FP8-BLOCKSCALE-1` has a working reference to measure against.
+
+**The hardware reason for the split, and it is verified.** AMD's MXFP4/MXFP6
+guidance describes native FP4/FP6 on MI355 "through **Matrix Fused Multiply Add
+(MFMA) scale instructions**" — CDNA4 has scale-*carrying* matrix instructions.
+gfx1201 has **none** (§10c's method: zero `scale` hits in the calculator's
+instruction list), so on RDNA4 a block scale is necessarily software, whoever
+writes it. That is the same constraint recorded for our own schedule.
+
+**And it sharpens the MI355 NVFP4 story in §10d.** MI355 natively supports
+**MXFP4** — block 32, E8M0 — while having *no* native **NVFP4** path (block 16,
+E4M3) and dequantizing it to BF16. The two are not interchangeable: same e2m1
+elements, different scale contract, and only one of them has silicon behind it
+on that part.
 
 ## 11. Which recorded results the default schedule qualifies
 

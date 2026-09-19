@@ -395,10 +395,26 @@ def Tessera_MoeSwigluBlockOp : Op<
 // with the scale group along K equal to the K tile. `scale_layout` describes
 // block size, axis and scale element format (e8m0 for MX, fp8_e4m3 for NVFP4,
 // fp32 for the [128,128] fp8_w8a8 form the tuned R9700 configs use).
+// UNCONSUMED as of 2026-09-19, and marked under Decision #29a condition 1: no
+// pass or route reads this op yet. The lowering is owned by
+// ROCM-FP8-BLOCKSCALE-1 (Graph -> Schedule -> descriptor, then the ROCm K loop
+// with a zeroed start and a scaled combine at `unroll = GROUP_K / fragK`).
+//
+// Do not read its presence as "Tessera compiles block-scaled matmuls". It
+// parses, verifies, and reaches nothing. Its behavioural test is the pair
+// `tests/tessera-ir/phase2/scaled_matmul{,_invalid}.mlir`, whose negative case
+// is the load-bearing half -- a scale with the wrong K-block count is
+// numerically silent otherwise.
+//
+// Recorded because #29's OP-level clause turns out to be ungated:
+// `test_governance_declarations.py` checks coverage axes and duplicate dialect
+// names, not op-to-consumer, which is why every instance #29 cites was found by
+// hand. Tracked as GOV-ODS-CONSUMER-1.
 def Tessera_ScaledMatmulOp : Op<
   Tessera_Dialect, "scaled_matmul", [Pure]
 > {
-  let summary = "Block-scaled matmul: D = (A @ B) scaled per block, fp32 accum";
+  let summary = "Block-scaled matmul: D = (A @ B) scaled per block, fp32 accum "
+                "(UNCONSUMED -- see ROCM-FP8-BLOCKSCALE-1)";
   let description = [{
     `d = scale(a @ b, lhs_scale, rhs_scale)` with an fp32 accumulator, where the
     operands keep their low-precision storage into the matrix instruction and

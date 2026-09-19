@@ -166,6 +166,16 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Start: device
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
 
+### GOV-ODS-CONSUMER-1
+
+**Decision #29's op-level clause has no gate**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: #29 says a declared ODS op must have a named consumer or be deleted, and cites `tests/unit/test_governance_declarations.py` as its drift gate. Measured 2026-09-19: that file checks **coverage axes** (`test_every_contract_axis_names_a_consumer`) and **duplicate dialect names** across ODS files (the Queue.td/Attn.td trap), and **nothing maps an ODS op to a consumer**. Confirmed the hard way — `tessera.scaled_matmul` was committed with no consumer and all 14 governance tests passed. That also explains #29's own history: every instance it cites (`manifold` reaching no backend, `MultivectorSpec.grades`, nine `!tile.*` types, `numeric_policy` with no carrier, `TilingInterface`) was found **by hand**, which is what an ungated rule produces. Gate: a check that each op in the Tessera ODS files is referenced by at least one pass, lowering or verifier beyond its own declaration, with a shrink-only waiver list for declarations held under Decision #29a — the same ratchet shape as `DIAG-PY-BACKLOG-1`, and it should seed from whatever the first scan finds rather than assuming the count is small.
+- Depends on: —
+- Start: host-free
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
 ### ROCM-FP8-BLOCKSCALE-1
 
 **Block-scaled FP8 is a different contract from dequant, and that is the gap**
@@ -531,6 +541,7 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | DISPATCH-BREAKER | [DISPATCH-BREAKER](#dispatch-breaker) | owner |
 | DIAG-PY-BACKLOG-1 | [DIAG-PY-BACKLOG-1](#diag-py-backlog-1) | owner |
 | DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
+| GOV-ODS-CONSUMER-1 | [GOV-ODS-CONSUMER-1](#gov-ods-consumer-1) | owner |
 | ROCM-FP8-BLOCKSCALE-1 | [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) | owner |
 | ROCM-MXFP4-W4A8-1 | [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1) | owner |
 | ROCM-NVFP4-INGEST-1 | [ROCM-NVFP4-INGEST-1](#rocm-nvfp4-ingest-1) | owner |

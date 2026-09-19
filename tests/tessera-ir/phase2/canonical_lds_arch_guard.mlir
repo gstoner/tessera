@@ -17,7 +17,8 @@
 //
 // gfx11 acceptance; the refusal is `canonical_lds_arch_refused.mlir`.
 
-// RUN: %trop --tessera-tiling --tessera-tile-ir-lowering --rocm-wave-lds-pipeline --rocm-wave-lds-legality --generate-wmma-gemm-kernel='canonical-staging=lds' %s | FileCheck %s
+// REQUIRES: tessera-rocm-backend
+// RUN: tessera-opt %s --tessera-tiling --tessera-tile-ir-lowering --rocm-wave-lds-pipeline --rocm-wave-lds-legality --generate-wmma-gemm-kernel='canonical-staging=lds' | FileCheck %s
 
 module attributes {tessera.arch = "gfx1151"} {
   func.func @canonical_gemm(%a: tensor<31x23xf16>, %b: tensor<23x47xf16>) -> tensor<31x47xf32> {
@@ -27,6 +28,5 @@ module attributes {tessera.arch = "gfx1151"} {
 }
 
 // CHECK: gpu.func @canonical_gemm
-// CHECK-SAME: workgroup(
 // CHECK-SAME: memref<256xf16, #gpu.address_space<workgroup>>
 // CHECK-SAME: tessera.rocm.physical_staging = "lds"

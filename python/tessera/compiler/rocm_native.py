@@ -1582,7 +1582,8 @@ def package_scheduled_matmul(
         from .scheduled_matmul import rocm_k_unroll
         k_unroll = 1 if staging != "register" else rocm_k_unroll(
             artifact.m, artifact.n, artifact.k, arch=arch,
-            dynamic=artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k)
+            dynamic=artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k,
+            storage=artifact.storage)
     if staging == "lds" and k_unroll != 1:
         raise ValueError("ROCm LDS staging and K unrolling are separate physical schedules")
     (

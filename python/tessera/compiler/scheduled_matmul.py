@@ -149,43 +149,85 @@ def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
     return 16, 16
 
 
-def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool) -> int:
+#: Bits one lane's 8-element fragment load actually moves, by storage. The
+#: load is 8 elements whatever the storage, so a narrower operand leaves the
+#: 128-bit interface idle -- 16-bit fills it, 8-bit uses half, 4-bit a quarter
+#: (AMD's RDNA4 WMMA guide, part 2). This is the mechanism behind
+#: `rocm_k_unroll`'s storage split, not a curve fit.
+#: Keyed by BOTH spellings, because the Graph dtype name ("fp16", "fp8_e4m3")
+#: and the artifact's storage name ("f16", "e4m3") both reach this rule and an
+#: unlisted key must not quietly pick someone else's answer.
+_STORAGE_LOAD_BITS = {
+    "fp16": 128, "f16": 128, "bf16": 128,
+    "fp8_e4m3": 64, "fp8_e5m2": 64, "e4m3": 64, "e5m2": 64, "int8": 64,
+    "int4": 32,
+}
+
+
+def rocm_k_unroll(m: int, n: int, k: int, *, arch: str, dynamic: bool,
+                  storage: str = "fp16") -> int:
     """Full 16-wide K slabs the typed matmul body issues per loop iteration.
 
-    A physical (performance) knob, not a Schedule-IR decision: the body is
-    memory-latency bound, so issuing the next slab's fragment loads while the
-    current slab's MMAs retire is the lever that the macro tile and LDS
-    staging are not. Measured 2026-09-18 on the panel each chip actually
-    selects, TFLOP/s at k = 1 / 2 / 4
-    (`benchmarks/baselines/typed_route_gap_20260918/`):
+    A physical (performance) knob, not a Schedule-IR decision, and it depends
+    on the **storage** as well as the chip. A fragment load is 8 elements per
+    lane whatever the storage, so the bits it moves shrink as the storage
+    does: fp16 saturates the 128-bit interface, fp8 and int8 use 64 bits, int4
+    uses 32. Issuing more slabs is how a narrow operand keeps that path busy,
+    which is why the narrower the storage the deeper the unroll it wants.
+    Measured 2026-09-19 on the panel each chip selects, TFLOP/s at k = 1/2/4
+    (`benchmarks/baselines/`):
 
-        gfx1201  1024^3   46.4 / 58.7 / 57.5   (4x4 panel)
-                 2048^3   51.6 / 88.2 / 73.7
-                 4096^3   65.2 / 90.3 / 77.8
-        gfx1151  1024^3   10.8 / 15.8 / 11.0   (4x4; directive lane 11.6)
-                 2048^3   21.2 / 20.3 /  9.8   (2x4; directive lane 23.3)
+        gfx1201, 4x4 panel
+          fp16      1024^3  46.4 / 58.7 / 57.5   2048^3  51.6 / 88.2 / 73.7
+          fp8/int8  1024^3  64.8 / 76.1 / 55.0   2048^3  76.6 / 86.6 / 115.1
+                                                 4096^3  68.5 / 77.3 / 128.5
+          int4      1024^3  54.1 / 53.5 / 51.2   2048^3  77.5 / 65.4 /  96.0
+        gfx1151, the panel its integer branch ships (2x4)
+          int8      1024^3   9.6 / 17.0 / 15.2   2048^3  21.0 / 22.6 / 14.3
+          int4      1024^3   9.6 / 15.0 / 20.9   2048^3  14.7 / 17.8 / 27.3
 
-    Both chips take 2, and only where they also take the larger panel. That
-    is 1.4x-1.7x over the single-slab body it replaces, and on gfx1151 it is
-    what puts the typed route ahead of the directive lane in the [1024, 2048)
-    band (15.8 vs 11.6); at 2048 and above the directive lane still leads
-    there and the unroll does not close it, so the knob stays off.
+    fp8 and int8 are the same rule because they are the same load width; that
+    agreement across two unrelated storages is the check on the mechanism.
+    Margins inside run-to-run spread are not taken: gfx1151 int8 at 2048^3
+    gains 7% from k=2 and keeps k=1, and gfx1201 int4 at 1024^3 spans 6%
+    across all three and keeps k=1.
 
-    **An earlier sweep took 4 below 2048 on gfx1201 and that is withdrawn.**
-    It rested on one row -- 1024^3 reading 61.5 for k=4 against 56.0 for k=2 --
-    which the re-record reversed to 58.7 against 57.5. Two runs disagreeing on
-    the sign of a 2% margin means the margin is noise, and k=2 wins 2048^3 and
-    4096^3 decisively in both runs, so the rule follows the reproducible
-    result and loses a branch. Neither chip's number is evidence for the other.
+    **This is a workaround for a missing instruction, not the instrument.**
+    A deeper unroll issues *more* loads to reach the bandwidth; AMD's
+    extended-K technique fuses two WMMAs so one load fetches 16 elements and
+    fills 128 bits, bit-identically. For int4 the hardware already has it as
+    `V_WMMA_I32_16X16X32_IU4`, which `TileToROCM.cpp` cannot yet emit because
+    `materializeMma` pins `kBlocks = 1`. Prefer that when it lands.
+
+    Neither chip's number is evidence for the other.
     """
     if dynamic or k < 64:
         return 1
+    bits = _STORAGE_LOAD_BITS.get(storage)
+    if bits is None:
+        # An unmeasured storage takes the established single-slab loop rather
+        # than inheriting the rule of whichever width it resembles.
+        return 1
+    wide = min(m, n) >= 2048
     if arch.startswith("gfx1201"):
         if min(m, n) < 1024 or m % 64 or n % 64:
             return 1
-        return 2
+        if bits >= 128:
+            return 2                      # f16/bf16: already saturating
+        if bits == 64:
+            return 4 if wide else 2       # fp8, int8
+        return 4 if wide else 1           # int4: nothing wins below 2048
     if arch.startswith("gfx1151"):
-        return 2 if _band_4x4(m, n, dynamic=dynamic) else 1
+        # Enumerated, not width-derived: this chip has no fp8 WMMA at all, so
+        # an 8-bit float here is a storage it cannot execute and certainly has
+        # not swept. Falling through on width would hand it int8's rule.
+        if storage == "int4":
+            if not dynamic and min(m, n) >= 1024 and m % 64 == 0 and n % 64 == 0:
+                return 4
+            return 1
+        if storage in ("fp16", "f16", "bf16", "int8"):
+            return 2 if _band_4x4(m, n, dynamic=dynamic) else 1
+        return 1
     return 1
 
 

@@ -884,9 +884,31 @@ def test_gfx1201_macro_k_block_walks_the_whole_contraction(k_blocks, shape):
         target="rocm_gfx1201")
     blocked = re.sub(r"k_blocks = 1", f"k_blocks = {k_blocks}", artifact.tile_ir)
     assert f"k_blocks = {k_blocks}" in blocked, "the descriptor rewrite did not take"
-    _, _, payload, *_ = rocm_native._compile_native_tile_ir(
-        blocked, directive="tessera_rocm.wmma", family="matmul",
-        architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)
+    compile_one = lambda ir: rocm_native._compile_native_tile_ir(
+        ir, directive="tessera_rocm.wmma", family="matmul",
+        architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)[2]
+    payload = compile_one(blocked)
+
+    # Exactness alone CANNOT prove the blocking happened: a generator that
+    # ignored `k_blocks` would emit the old loop and still be exact. So the
+    # structure is asserted against a self-calibrating baseline -- the same
+    # k_blocks=1 artifact -- rather than an absolute count that unrelated
+    # changes to the edge/masked/tail variants would break.
+    #
+    # Blocking by N adds N-1 panels to the main loop body and one more to the
+    # remainder loop the unrolled loop cannot take, so the delta is exactly N.
+    from tests._support import rocm_isa
+    mnemonic = r"v_wmma_i32_16x16x16_iu8"
+    panels = lambda img: sum(rocm_isa.mnemonics(
+        rocm_isa.disassemble(img, chip="gfx1201"), mnemonic).values())
+    base = panels(compile_one(artifact.tile_ir))
+    got = panels(payload)
+    assert got - base == k_blocks, (
+        f"k_blocks={k_blocks} should add exactly {k_blocks} panels "
+        f"({k_blocks} - 1 in the main body, 1 in the remainder loop); "
+        f"saw {base} -> {got}. An unchanged count means k_blocks reached "
+        f"nothing and the exactness below proves only the old loop.")
+
     rng = np.random.default_rng(700 + k_blocks + m)
     a = rng.integers(-8, 8, size=(m, k), dtype=np.int8)
     b = rng.integers(-8, 8, size=(k, n), dtype=np.int8)

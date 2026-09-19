@@ -240,10 +240,31 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         "sram_ecc":            "ready",
     },
     AMDArch.GFX_950: {
-        # MI325X — CDNA 4; adds MX-format MFMA + cluster mode.
+        # MI350 / MI355X — CDNA 4; adds MX-format MFMA + cluster mode.
+        # (This said "MI325X", which is CDNA 3 / gfx942. Corrected 2026-09-19.)
         "mfma":                "ready",
         "mfma_f8":             "ready",
-        "mfma_xf32":           "ready",
+        # CDNA 4 REMOVED the native TF32 matrix unit. AMD spent that area on
+        # the denser MXFP4/MXFP6 pipelines instead, on the reasoning that TF32
+        # is little used in current training and inference next to FP8 and FP4.
+        # TF32 still works on MI350-series parts, but as an application-
+        # transparent EMULATION handled in the driver and compiler: operands
+        # are down-cast to bf16, the GEMM runs on the bf16 matrix cores, and
+        # the accumulation stays fp32 to hold convergence. Reported as THREE
+        # bf16 operations per emulated TF32 one, which is the cost model that
+        # makes the rest consistent -- roughly a third of bf16 throughput, so
+        # up to 1.79x strict fp32 and a SLOWDOWN against the bf16 it is built
+        # from. Keep that direction straight: this is the one "reduced
+        # precision" selection that does not buy speed over the format below
+        # it, only compatibility and convergence.
+        #
+        # So this key is "is there a native xf32 MFMA", and on CDNA 4 there is
+        # not. Marking it "ready" asserted an instruction that does not exist;
+        # the vocabulary here is only ready/not_supported, and an emulation is
+        # not the instruction. CDNA 3 (gfx940/gfx942) keeps "ready" because
+        # V_MFMA_*_XF32 is real there. Corroborating: the CDNA 5 ISA document
+        # contains no occurrence of "xf32" at all.
+        "mfma_xf32":           "not_supported",
         "mfma_f4":             "ready",
         "mfma_f6":             "ready",
         "wmma_f16":            "not_supported",

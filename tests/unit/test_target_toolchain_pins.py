@@ -210,14 +210,32 @@ class TestROCmFeatureMatrix:
         assert not p.supports_mfma_f6
         assert not p.supports_cluster_mode
 
-    def test_gfx950_mi325x_full_cdna4(self):
+    def test_gfx950_mi350_cdna4_has_no_native_tf32(self):
+        """gfx950 is MI350 / MI355X, and CDNA 4 REMOVED the native TF32 unit.
+
+        AMD spent that area on the denser MXFP4/MXFP6 pipelines. TF32 still
+        runs on these parts, but as an application-transparent emulation: the
+        operands are down-cast to bf16, the GEMM uses the bf16 matrix cores,
+        and the accumulation stays fp32 to hold convergence, reported at up to
+        1.79x strict fp32. That is a speedup over FP32 and a slowdown against
+        the bf16 it is built from, so it is not the instruction this key names.
+
+        `mfma_xf32` asks whether a native xf32 MFMA exists. On CDNA 3 it does
+        and stays "ready"; on CDNA 4 it does not. The vocabulary here is only
+        ready/not_supported, and an emulation is not the instruction -- saying
+        "ready" would put a nonexistent instruction in front of whoever builds
+        the CDNA lane. (The test name also said MI325X, which is CDNA 3 /
+        gfx942. Corrected 2026-09-19.)
+        """
         from tessera.compiler.rocm_target import ROCmTargetProfile, AMDArch
         p = ROCmTargetProfile(arch=AMDArch.GFX_950)
-        for prop in ("supports_mfma", "supports_mfma_f8",
-                     "supports_mfma_xf32", "supports_mfma_f4",
+        for prop in ("supports_mfma", "supports_mfma_f8", "supports_mfma_f4",
                      "supports_mfma_f6", "supports_lds_async_copy",
                      "supports_cluster_mode"):
             assert getattr(p, prop), f"{prop} expected True on gfx950"
+        assert not p.supports_mfma_xf32
+        # CDNA 3 kept the real instruction; the two must not be conflated.
+        assert ROCmTargetProfile(arch=AMDArch.GFX_942).supports_mfma_xf32
 
     def test_gfx1100_rdna3_wmma_only(self):
         from tessera.compiler.rocm_target import ROCmTargetProfile, AMDArch

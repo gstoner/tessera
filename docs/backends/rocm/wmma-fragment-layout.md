@@ -291,9 +291,41 @@ A(L) = (8 * (L / 16) + (L % 8)) * ldb + ((L / 8) % 2) * 8
 distinct — this reproduces the fragment on **256/256 elements**. The
 arbitrary `A(L) = 8L` addressing does not, which is the control.
 
-So the instrument and the layout both check out, and the remaining work is
-plumbing: the materializer computes one linear per-lane index for its scalar
-gather, and the transpose load needs the tile origin and `A(L)` separately.
+In the materializer the wave lane is `lane + 2*kBase` (kBase is 0 or 8), under
+which `A` collapses to the form the code emits:
+
+```
+A = (kBase + lane % 8) * ldb + (lane / 8) * 8      // plus the tile origin
+```
+
+### What it is worth, and the one shape where it is not
+
+Shipped for f16 and bf16. TFLOP/s at the 4x4 panel with K unroll 2, against
+the scalar gather it replaces:
+
+| shape | transpose load | gather | |
+|---|---:|---:|---|
+| 1024³ | **65.9** | 54.2 | +21.6% |
+| 1536³ | **79.2** | 74.3 | +6.6% |
+| 2048³ | 75.4 | **80.5** | **-6.3%** |
+| 2560³ | **94.3** | 89.5 | +5.4% |
+| 3072³ | **92.8** | 89.4 | +3.9% |
+| 4096³ | **93.9** | 89.4 | +5.0% |
+
+Five of six shapes win, and 2048³ is the sole reversal. It reproduces at five
+runs (75.8 against 81.3), so it is not sampling noise. A leading dimension of
+exactly 2048 is the obvious suspect -- that stride is where channel or
+partition aliasing usually shows -- but that is a **hypothesis, not a
+measurement**: no counters exist on either WSL2 ROCm box to confirm it. The
+instruction stays on for every shape rather than being special-cased around
+one anomaly from one point.
+
+**8-bit storages are excluded and that is a measured decision.** `TR_B64` is a
+different permutation and the derivation above does not carry to it. Enabling
+it on the strength of the matching width produced wrong results on device for
+every 8-bit storage -- 16 failing rows across fp8 and both integer widths,
+while f16 and bf16 were untouched. It stays out until its own mapping is
+measured the same way.
 
 Everything else is in place: the `amdgpu` dialect is registered in both
 drivers, `amdgpu.global_transpose_load` parses over a memref,

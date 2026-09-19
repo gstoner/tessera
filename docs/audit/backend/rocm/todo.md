@@ -8602,6 +8602,124 @@ shipped 4x4 panel, whose only lever is now fewer live registers
 `ROCM-GLOBAL-LOAD-TR-1` above; and raster-order selection, still blocked on
 counters neither WSL2 ROCm box can produce.
 
+## The K unroll follows the storage, and three AMD sources that reframe it — 2026-09-19
+
+Sync `GFX1201-PARITY-2026-09-17` (branch `claude/lowp-k-unroll`); owner
+COMPILER-DEVEX-1 with W4-PRODUCT-1. Closes two of the four items the
+2026-09-19 low-precision-panel entry left owed.
+
+**`rocm_k_unroll` takes the storage now, and the mechanism is load width.** A
+fragment load is 8 elements per lane whatever the storage, so fp16 saturates
+the 128-bit interface, fp8 and int8 use 64 bits and int4 uses 32 (AMD's RDNA4
+WMMA guide, part 2). A narrower operand needs more slabs in flight to keep
+that path busy. Measured on the panel each chip selects, TFLOP/s at
+k = 1 / 2 / 4 (`benchmarks/baselines/lowp_k_unroll_20260919/`):
+
+| chip | storage | 1024³ | 2048³ | 4096³ |
+|---|---|---|---|---|
+| gfx1201 | fp8_e4m3 | 64.8 / **76.1** / 55.0 | 76.6 / 86.6 / **115.1** | 68.5 / 77.3 / **128.5** |
+| gfx1201 | int8 | 63.3 / **73.5** / 54.5 | 76.1 / 85.9 / **115.2** | 68.5 / 77.3 / **129.1** |
+| gfx1201 | int4 | **54.1** / 53.5 / 51.2 | 77.5 / 65.4 / **96.0** | 68.6 / 61.5 / **106.8** |
+| gfx1151 | int8 | 9.6 / **17.0** / 15.2 | **21.0** / 22.6 / 14.3 | — |
+| gfx1151 | int4 | 9.6 / 15.0 / **20.9** | 14.7 / 17.8 / **27.3** | — |
+
+**fp8 and int8 landing on the same rule at every shape is the check on the
+mechanism** — unrelated storages of equal width, same answer. The rule is
+therefore width-derived on gfx1201 (16-bit takes 2, 8-bit takes 2 then 4 from
+2048, 4-bit takes 1 then 4) and **enumerated** on gfx1151, because that chip
+has no fp8 WMMA at all and falling through on width would hand a storage it
+cannot execute the rule measured for int8. An unlisted storage takes the
+single-slab loop on either chip rather than inheriting a neighbour's answer.
+
+Two margins were **not** taken, both inside the run-to-run spread these hosts
+show: gfx1151 int8 at 2048³ gains 7% from k=2, and gfx1201 int4 at 1024³
+spans 6% across all three. The device rows assert the route's `_k{n}` suffix
+against the rule, so a rule change and its evidence move together.
+
+The headline number: **fp8 reaches 128.5 TFLOP/s at 4096³**, against f16's
+best of 90.3 and a 383 TFLOP/s fp8 ceiling.
+
+**Three AMD sources were read against the contract page, and all three
+confirm it rather than change it.** The gpuopen RDNA4 WMMA guide (parts 1-3),
+a community RDNA4 guide, and the rocWMMA docs. The accumulator mapping now
+has three independent statements, including the same warning this repo gives
+that a symmetric probe cannot distinguish the two readings; the int4
+signedness and clamp contract is confirmed by the builtin's own signature,
+which carries `neg_a`, `neg_b` and `clamp` explicitly; and part 1's "both
+operands K-major, 8 contiguous elements, 128-bit vectorized loads" is what
+§3 already says.
+
+**What they add is three items, recorded in `docs/backends/rocm/wmma-fragment-layout.md`
+§§6-7.**
+
+* **`ROCM-EXTENDED-K-1`.** The deeper unroll is a workaround for an
+  instruction we cannot emit. AMD's extended-K technique fuses two WMMAs so
+  one load fetches 16 elements and fills 128 bits, bit-identically (the FMA
+  reordering is associative). For int4 the hardware already has that shape as
+  `V_WMMA_I32_16X16X32_IU4`, with `V_SWMMAC_I32_16X16X64_IU4` its sparse
+  twin. **Both are in our own enumerated table and neither is reachable**:
+  `materializeMma` in `TileToROCM.cpp` pins `kBlocks = 1`. That is a Decision
+  #29 gap — a registry declaring a form nothing can select — and it is the
+  principled version of int4's measured k=4 win.
+* **`ROCM-GLOBAL-LOAD-TR-1` gains a second candidate.** RDNA4 has no
+  shared-memory transpose load and no in-register transpose instruction, which
+  matches what this queue already recorded. Besides `global_load_tr`, AMD
+  gives a trick needing no special load: build an identity matrix in the B
+  fragment, put the source in A, and let one WMMA transpose in registers. It
+  is the RDNA4 answer to CUDA's `ldmatrix.trans` and is reported in production
+  use for flash attention.
+* **rocWMMA does not list gfx1151.** Its RDNA support is gfx1100/1101/1102 and
+  gfx1200/1201. Strix Halo is absent, so rocWMMA is not an available Tier-3
+  delegate on Princess-Luna even though it would be on Tajasarus — an
+  asymmetry Decision #28 tiering had not recorded. Its type surface is also
+  narrower than the ISA (no int4 entry for gfx11), which is the library not
+  exposing a form rather than the hardware lacking one.
+
+**A GEMM layout audit, prompted by the same material, found one defect — and
+the first pass of it was wrong.** Searched with substrings, the audit reported
+every generator clean: the attention family branches correctly on
+`rdna4 ? e + 8*half : 2*e + half`, the typed route resolves row and column
+from the fragment family rather than hand-rolling, and the two
+control-for-WMMA generators hardcode the RDNA3 formula but **fail closed** on
+gfx1201 — one at instruction selection, since
+`llvm.amdgcn.wmma.f32.16x16x16.f16` is a gfx11 intrinsic gfx12 cannot select,
+the other by explicit skip. That much holds.
+
+Re-run structurally with `ast-grep` (installed on the fleet 2026-09-19 — the
+Mac via brew, the boxes via `pip install ast-grep-cli`; the npm
+`@ast-grep/napi` package is the Node binding and ships no CLI), the same
+audit asked the complementary question a substring search answers badly:
+which accumulator index math carries **no** arch branch at all. That found
+`emitCanonicalLdsBody` in `GenerateWMMAGemmKernel.cpp`, storing its
+accumulator at row `2*e + lhi` in a file whose only `rdna4` mention is an
+unrelated comment about 8-bit packing.
+
+**It was the dangerous kind.** The op it emits is `tessera_rocm.wmma`, the
+arch-resolving Target IR op, so on gfx12 it lowers to the RDNA4 instruction
+and then writes the result to RDNA3 rows: the kernel runs to completion and a
+few tiles are silently wrong. That is precisely what separates it from the
+control-for-WMMA generators, which cannot produce a wrong answer because they
+cannot produce anything. Its dispatch had no arch guard, and it was confirmed
+on Tajasarus to accept `arch=gfx1201` and emit a kernel with zero errors.
+
+It is an explicitly gfx11-only comparison lane with gfx1151-only evidence, so
+it now refuses by name (`ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED`, registered)
+rather than being taught the RDNA4 layout — the typed LDS body already
+resolves row and column from the fragment family and is the arch-correct
+route. Two fixtures, one acceptance and one refusal.
+
+**The lesson is about the audit, not the tool.** The first pass searched for
+one spelling of the formula, found the sites that had it, and called the file
+clean because the dangerous site used a different expression shape. A
+"which sites lack a guard" question is not answerable by searching for the
+guard's presence, and reporting clean from it put a false claim into this
+queue for several hours.
+
+**Still owed.** `ROCM-EXTENDED-K-1` above, now the highest-ceiling ROCm item;
+`ROCM-GLOBAL-LOAD-TR-1` with its two candidates; the 126-VGPR spill at the
+shipped 4x4 panel, whose only lever is fewer live registers; and raster-order
+selection, still blocked on counters neither WSL2 ROCm box can produce.
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

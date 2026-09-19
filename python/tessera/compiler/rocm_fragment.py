@@ -207,6 +207,12 @@ def select_fragment_layout(
             "fp8_e4m3": {(16, 16, 64), (16, 16, 128)},
             "fp8_e5m2": {(16, 16, 64), (16, 16, 128)},
             "int8": {(16, 16, 64)},
+            # UNCORROBORATED (2026-09-19). rocWMMA's wmma_impl.hpp wraps every
+            # other row of this table as a builtin and has NO fp4 form at all,
+            # on any architecture. Not a refutation -- rocWMMA need not wrap
+            # everything -- but this is the one gfx125x row with no independent
+            # source, and it is load-bearing for MXFP4 there. Confirm against
+            # the CDNA5 ISA before relying on it.
             "fp4_e2m1": {(16, 16, 128), (32, 16, 128)},
         }
         if shape not in legal_shapes.get(dtype, set()):

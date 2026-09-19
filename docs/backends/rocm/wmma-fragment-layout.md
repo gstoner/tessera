@@ -684,6 +684,54 @@ load width interact; the simple model is necessary and not sufficient.
 Default is now `pad=1`: free, numerically identical, and it does not touch
 production selection because the register body still wins by 8x.
 
+## 10f. rocWMMA as an independent check on these tables
+
+Read from the raw headers 2026-09-19 (`rocwmma/internal/wmma_impl.hpp`, 3310
+lines, plus `types.hpp` / `vector.hpp` / `vector_util.hpp`). rocWMMA is AMD's
+own WMMA wrapper, so where it agrees with a table of ours that nobody had
+checked against a vendor source, that is real corroboration.
+
+**Architecture grouping, and where we deliberately differ.** rocWMMA has
+`enable_gfx11_t` = gfx1100–1103 / 1150–1153 and `enable_gfx12_t` = **gfx1200,
+gfx1201 and gfx1250 together**. `rocm_fragment.py` instead splits `_RDNA4`
+(gfx120x) from `_GFX125X`. Keep the split: the two share the *builtin family*
+and nothing else — gfx120x is K=16 with a `_w32_gfx12` suffix, gfx1250 is
+K=32/64/128 with neither `_w32` nor `_gfx12` — and a fragment-ABI table keyed on
+shape has to separate them. Do not "correct" our sets to match rocWMMA's.
+
+**Our gfx125x shape table is corroborated six rows out of seven.** Every one of
+fp32 K=4, fp16 K=32, bf16 K=32, fp8 K=64 *and* K=128, int8 K=64 appears as a
+rocWMMA builtin. The seventh — `fp4_e2m1` at (16,16,128) and (32,16,128) — has
+**no rocWMMA builtin at all**, and neither does any other fp4 form. That is not
+a refutation (rocWMMA need not wrap everything) but it is the one row of that
+table with no independent support, and it is load-bearing for any MXFP4 story
+on gfx125x. Treat it as unverified until an ISA source confirms it.
+
+**The mixed FP8 pairs are the vendor position, not ours alone.** rocWMMA
+exposes `f32_16x16x16_fp8_bf8_w32_gfx12` and its mirror on gfx12, and all four
+pairings at K=64/128 on gfx1250 (including f16-output variants). So
+`ROCM-MIXED-FP8-1` lands on the same capability rocWMMA already wraps. **This
+is recorded because a summary of that header omitted the mixed builtins and
+nearly produced the opposite claim** — the third instance this session of
+reading silence as absence, and the second caught before it was written down.
+The raw file is the source; a summary of it is not.
+
+**int4 is genuinely ours.** There are **zero** `iu4` references in the entire
+header — not gfx11, not gfx12, not gfx1250. We emit
+`v_wmma_i32_16x16x16_iu4` and the double-K `v_wmma_i32_16x16x32_iu4` on
+gfx1201, both proven exact on device (§4, and the double-K row in
+`test_rocm_gfx1201_scheduled.py`). The hardware has it and rocWMMA does not
+wrap it, so this is a vendor-library coverage gap rather than a hardware
+question — and it means there is no rocWMMA source to crib for int4.
+
+**The fragment layout is not in the headers, which is the point.** `wmma_impl`
+names register aliases without saying how K distributes across the wave;
+`types.hpp` is a 127-line scalar typedef facade and `vector.hpp` a HIP vector
+wrapper. Neither documents the per-lane mapping. That is why §3's contract had
+to be measured, why the independent gfx1201 kernel in §10b measured it too, and
+why both converged on contiguous-eight without either being the machine's own
+mapping — the permutation cancels, so nothing forces the issue.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no

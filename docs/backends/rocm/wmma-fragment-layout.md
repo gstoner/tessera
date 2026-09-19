@@ -629,6 +629,53 @@ own planned/gated entry already says it needs, which is
 told apart by anything below Graph IR, and the conversion above has nowhere to
 declare its 3 dB.
 
+## 10e. ROCM-LDS-BANKPAD-1, measured: padding is real and it is not the 9x
+
+The LDS tiles store a 16-element row — A by row, B transposed by column — which
+for f16 is 32 B = **8 dwords**, and `gcd(8, 32) = 8`, so sixteen lanes reading
+one element per row land on four banks: a **4-way conflict** on every fragment
+read. Making the stride an odd dword count fixes that by construction, and one
+dword of padding does it at every storage width (8→9 f16, 4→5 fp8/int8, 2→3
+int4), which is why the knob counts dwords and the element count follows
+(`32/bitwidth`).
+
+Measured on Tajasarus, 1024³ f16, 2x2 waves, all arms exact at 1.95e-06:
+
+| | TFLOP/s | vs pad=0 |
+|---|---|---|
+| pad=0 | 7.8 / 7.9 | — |
+| **pad=1** | **8.8 / 8.7** | **1.12x / 1.10x** |
+| pad=2 | 8.1 | 1.04x |
+| pad=3 | 8.9 | 1.13x |
+| register body | **70.7** | **8.0x the padded LDS** |
+
+**The padding is a real win and the hypothesis behind it was still wrong.** It
+takes the gap from 9.1x to 8.0x. A prediction recorded before the run said that
+if padding barely moved the number the conflict theory was wrong; it barely
+moved, so it is wrong. Bank conflicts are a ~10% tax here, not the story.
+
+Two things the ISA census showed, once counted correctly. (**gfx12 renamed the
+LDS mnemonics**: `ds_read_*`/`ds_write_*` became `ds_load_*`/`ds_store_*` in
+RDNA3, and a census regex carrying the old names reports *zero* LDS traffic in a
+kernel full of it — which reads exactly like a finding and is not one.)
+
+*The staging copy is scalar in both directions.* The LDS body emits
+`global_load_d16_b16` in and `ds_store_b16` / `ds_store_b16_d16_hi` out — sixteen
+bits per thread per iteration — where the register body gets
+`global_load_b128` x12 and `global_load_tr_b128` x12. The copy loop walks one
+element per thread. **That is the shape that fits an 8x gap**, and it is
+`ROCM-LDS-STAGE-VECTOR-1`.
+
+*Padding wins despite narrowing the read.* At pad=1 the fragment read degrades
+from `ds_load_b128` to `ds_load_2addr_b32`, because an 18-element row is not
+128-bit aligned. So the +10-12% is **net of a regression** — the conflict cost
+more than the headline — and it explains why pad=2 (+4%) trails pad=1 and pad=3
+(+10-13%), which the dword-gcd argument alone does not predict. Alignment and
+load width interact; the simple model is necessary and not sufficient.
+
+Default is now `pad=1`: free, numerically identical, and it does not touch
+production selection because the register body still wins by 8x.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no

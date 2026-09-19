@@ -146,10 +146,20 @@ the next action's host requirement; it is not a live fleet-availability claim.
 
 ### ROCM-LDS-BANKPAD-1
 
-**The LDS body is 9x slower and unpadded; an 8-way bank conflict fits**
+**Measured: padding is a real +10-12% and it is not the 9x**
 
 - Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
-- Gate: Measured on gfx1201 at 1024³ f16, the LDS-staged body runs **7.8 TFLOP/s against the register body's 70.5** — 9x, which is close to what an 8-way LDS bank conflict costs. The independent vllm-radiance gfx1201 kernel pads its LDS rows **8 bytes** precisely because sixteen lanes reading rows 64 B apart collide eight ways on the 32 × 4 B banks, and reports that staging is what makes *that* kernel fast at all; ours pads nothing. `rocm_tiling` already models this as `bank_padding_required` and never wires it (Decision #29a, same shape as `split_k_required`). Scheduling is ruled out as the explanation — [ROCM-SCHED-GROUP-1](#rocm-sched-group-1) measured barriers making the LDS body *slower*. Gate: emit the row padding the model already computes, re-measure the LDS body against the register body at the same shapes, and only then re-judge "the LDS body loses at every shape" — which until now has been recorded against an unpadded, unscheduled staging path.
+- Gate: **Closed by measurement 2026-09-19.** The LDS tiles use a 16-element row (8 dwords for f16, `gcd(8,32)=8`), so sixteen lanes hit four banks — a 4-way conflict on every fragment read. `lds-pad-dwords` makes the stride an odd dword count (8→9 f16, 4→5 fp8/int8, 2→3 int4) and is now **default 1**. Measured 1024³ f16: 7.8→8.8 and 7.9→8.7 TFLOP/s on two runs, exact at 1.95e-06 throughout. **But the register body is 70.7**, so this moves the gap from 9.1x to 8.0x and the bank-conflict hypothesis for that gap is refuted — a prediction recorded before the run said a small movement would refute it. The ISA census found the real shape: the staging copy is **scalar in both directions** (`global_load_d16_b16` in, `ds_store_b16` out) where the register body gets `global_load_b128`/`global_load_tr_b128`. Superseded by [ROCM-LDS-STAGE-VECTOR-1](#rocm-lds-stage-vector-1). Also recorded: pad=1 *narrows* the read (`ds_load_b128` → `ds_load_2addr_b32`) because an 18-element row is not 128-bit aligned, so the win is net of a regression and alignment interacts with width in a way the gcd argument alone does not predict.
+- Depends on: —
+- Start: device
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
+### ROCM-LDS-STAGE-VECTOR-1
+
+**The LDS staging copy moves 16 bits per thread; that is the 8x**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: `emitTypedLdsBody`'s global→LDS copy loops walk one element per thread per iteration, and the ISA shows it: `global_load_d16_b16` on the way in, `ds_store_b16` / `ds_store_b16_d16_hi` on the way out, against the register body's `global_load_b128` x12 and `global_load_tr_b128` x12. Measured 8.8 against 70.7 TFLOP/s at 1024³ f16 after [ROCM-LDS-BANKPAD-1](#rocm-lds-bankpad-1) removed the bank conflict, which accounted for ~10% of the gap and not the rest. Gate: each thread stages 8 contiguous elements (`global_load_b128` → `ds_store_b128`), which also restores the wide `ds_load_b128` the padding currently costs — the two interact, so re-measure the padding sweep after vectorizing rather than assuming pad=1 stays the right default. Only then is "the LDS body loses at every shape" a statement about LDS staging rather than about this copy loop.
 - Depends on: —
 - Start: device
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
@@ -513,6 +523,7 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | ROCM-MXFP4-W4A8-1 | [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1) | owner |
 | ROCM-NVFP4-INGEST-1 | [ROCM-NVFP4-INGEST-1](#rocm-nvfp4-ingest-1) | owner |
 | ROCM-LDS-BANKPAD-1 | [ROCM-LDS-BANKPAD-1](#rocm-lds-bankpad-1) | owner |
+| ROCM-LDS-STAGE-VECTOR-1 | [ROCM-LDS-STAGE-VECTOR-1](#rocm-lds-stage-vector-1) | owner |
 | ROCM-SCHED-GROUP-1 | [ROCM-SCHED-GROUP-1](#rocm-sched-group-1) | owner |
 | ROCM-SPLIT-K-1 | [ROCM-SPLIT-K-1](#rocm-split-k-1) | owner |
 | E2E-REAL-6 | [E2E-REAL-6](#e2e-real-6) | owner |

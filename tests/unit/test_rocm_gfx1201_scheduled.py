@@ -850,6 +850,53 @@ def test_gfx1201_b_fragment_uses_the_transpose_load_only_where_derived(storage, 
         assert not seen, f"{storage} must stay on the guarded gather; found {dict(seen)}"
 
 
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("k_blocks,shape", [(2, (256, 1024, 256)), (8, (256, 1024, 256)),
+                                            (8, (64, 2048, 128)), (4, (128, 768, 128))])
+def test_gfx1201_macro_k_block_walks_the_whole_contraction(k_blocks, shape):
+    """ROCM-MACRO-K-TILE-1: `k_blocks > 1` blocks the K loop and stays exact.
+
+    The descriptor has carried `k_blocks` all along -- the verifier admitted
+    `>= 1` and three consumers refused anything but 1, so a macro K tile was
+    expressible and unreachable. With the gates relaxed and the generator
+    reading it, the K loop issues `k_blocks * kUnroll` panels per iteration at a
+    stride of `fragK * k_blocks * kUnroll`.
+
+    **Why int8 and why exact.** An integer product has no rounding, so a
+    mis-stepped K loop cannot hide inside a tolerance: skipping or repeating
+    even one 16-wide slab changes the sum. That is the whole risk here -- the
+    generalisation is bit-identical at `k_blocks == 1`, so nothing in the
+    existing suites exercises the blocked stride, and an off-by-one would
+    compute a wrong K range and run happily. Shapes are chosen so K divides the
+    block (1024 = 8*128) and so it does not (768 = 4*64*3, and 2048 with
+    k_blocks=8 leaves a remainder path), because the remainder and tail loops
+    are exactly where a blocked stride goes wrong.
+    """
+    import re
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=shape, dtype="int8", output_dtype="int32"),
+        target="rocm_gfx1201")
+    blocked = re.sub(r"k_blocks = 1", f"k_blocks = {k_blocks}", artifact.tile_ir)
+    assert f"k_blocks = {k_blocks}" in blocked, "the descriptor rewrite did not take"
+    _, _, payload, *_ = rocm_native._compile_native_tile_ir(
+        blocked, directive="tessera_rocm.wmma", family="matmul",
+        architecture="gfx1201", staging="register", lds_waves=(1, 1), k_unroll=1)
+    rng = np.random.default_rng(700 + k_blocks + m)
+    a = rng.integers(-8, 8, size=(m, k), dtype=np.int8)
+    b = rng.integers(-8, 8, size=(k, n), dtype=np.int8)
+    output = np.zeros((m, n), np.int32)
+    result = _launch_raw(payload, artifact.function_name, a, b, output,
+                         artifact.macro_tile_m, artifact.macro_tile_n)
+    assert result == 0
+    np.testing.assert_array_equal(output, a.astype(np.int32) @ b.astype(np.int32))
+
+
 #: The four OCP FP8 pairings and the instruction each one must select. Kept as
 #: one table so each row can forbid the other three.
 _MIXED_FP8_PAIRS = (

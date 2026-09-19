@@ -77,10 +77,49 @@ reason to trust it.
 
 ## 3. A/B operand layout — K-major per lane
 
+**Corrected 2026-09-19: what follows is OUR convention, not the machine's.**
+This section previously stated the mapping below as the architecture's fragment
+layout. It is not. The hardware's wave32 mapping is
+
+```
+idx = lane % 16                                 // row of A, column of B
+k   = 8 * (e >> 2) + 4 * (lane >> 4) + (e & 3)  // runs of FOUR, not eight
+```
+
+so lane 0 holds `k = 0,1,2,3,8,9,10,11` and lane 16 holds `k = 4,5,6,7,12,13,14,15`.
+What `materializeFragmentPack` actually emits is contiguous-eight:
+
 ```
 a[h] = A[lane % 16][8 * (lane / 16) + h]        // A row-major [M][K]: row = lane % 16
 b[h] = B[lane % 16][8 * (lane / 16) + h]        // B K-major   [N][K]: col = lane % 16
 ```
+
+**This is legal, and deliberately better, for one reason that must not be
+forgotten: the WMMA sums over K.** `C[i][j] = Σ_k A[i][k]·B[k][j]` is invariant
+under any permutation of the K axis applied to *both* fragments, and the
+instruction pairs slot with slot regardless of which k each slot is believed to
+hold. Our loader applies one convention to A and B alike, so the permutation
+cancels exactly. Contiguous-eight is then strictly cheaper to load: one 128-bit
+`vector.load` per lane, where the machine's runs-of-four needs two loads or a
+cross-lane shuffle.
+
+**The hazard this creates, and it is live.** A third fragment source must adopt
+*our* convention, not the machine's, and nothing in the type system says so. The
+one place they already collide is `GLOBAL_LOAD_TR_B128`, which delivers the
+hardware's native permutation: the per-lane address derived in §8 is what
+reconciles the two, and it was solved empirically against a measured mapping
+rather than derived from this contract. That reconciliation is load-bearing.
+Anything that changes either side — a new staging path, an LDS-resident
+fragment, a pre-packed weight format — must be checked against both, because a
+mismatch is numerically silent in exactly the cases where K happens to be
+symmetric.
+
+**The free transpose.** Because our A and B fragments share one layout,
+`wmma(B_frag, A_frag)` computes `Cᵀ` at no instruction cost. That is an
+unexploited alternative to the entire B-gather problem in §7: rather than
+transposing B on the way in, swap the operands and transpose in the epilogue,
+where the accumulator is already in registers and the store address math exists.
+Not yet measured against §8's load-transpose.
 
 Both operands want **K contiguous per lane**. A row of A in a row-major
 `A[M][K]` already is; a column of B in a row-major `B[K][N]` is not — it is
@@ -376,6 +415,54 @@ the loop body so it does not stay live across the MMAs.
 counts spill slots, so "allocated + spilled" is an estimate of demand rather
 than an exact live-range count. The ratios are what the argument rests on, and
 they are stable across the panels above.
+
+## 10. Three gfx1201 constraints that shape every schedule here
+
+Recorded 2026-09-19 (owner-supplied, and they explain results elsewhere in this
+file rather than merely adding to them).
+
+**No `v_cvt_pk_bf16_f32`.** Packing bf16 is software on gfx1201. The cheapest
+form is two adds — the round-to-nearest-even bias on each half — followed by one
+`v_perm_b32` to gather the high halves. Any bf16 epilogue that reaches for a
+pack instruction is reaching for something the ISA does not have.
+
+**No direct-to-LDS, and no `ds_read_b64_tr_b16`.** Global memory cannot be
+staged into LDS without a round trip through VGPRs, and LDS has no
+transposing read. **This is the mechanism behind the LDS result in §3**, which
+until now was recorded as a bare measurement: staging costs a register round
+trip that the register body never pays, and the LDS-side transpose that would
+justify the trip does not exist. `GLOBAL_LOAD_TR_B128` is a *global* transpose
+for exactly this reason — it is the only transposing load the chip has.
+
+**LLVM single-buffers LDS and drains before every WMMA unless told otherwise.**
+The fix is `__builtin_amdgcn_sched_group_barrier`, and the *granularity* of the
+groups matters far more than their contents: coarser is better, up to the point
+where the pattern asks for more outstanding loads than the hardware can hold.
+
+That last one is not a tuning note. **This backend emits no scheduling
+intrinsic at all**, so every gfx1201 measurement recorded in this file and in
+the ROCm queue was taken under the default schedule — drained, single-buffered.
+See §11 for which results that qualifies.
+
+## 11. Which recorded results the default schedule qualifies
+
+Every gfx1201 number in this file and in the ROCm queue was measured with **no
+scheduling intrinsic emitted anywhere in this backend**, i.e. under the drained,
+single-buffered default §10 describes. That does not invalidate a comparison
+between two configurations measured the same way, but it does bound what any of
+them can claim about the *approach*:
+
+| Result | Status under §10 |
+|---|---|
+| The LDS-staged body loses at every shape | **Qualified.** It was measured in its worst form: drained before every WMMA, single-buffered, and paying a VGPR round trip (§10) for staging LDS has no transposing read to justify. "Loses under the default schedule" is what the packets support; "LDS staging loses on gfx1201" is not. |
+| The 4×4 panel spills 133 VGPRs, ~200 of them neither accumulator nor fragment | **Qualified, and the diagnosis is now in doubt.** §9 concluded per-tile addressing from the way overhead tracks `mt*nt`. Outstanding-load state is the other thing that scales that way, and §10 names it as scheduler-controlled. Re-measure with group barriers before acting on the addressing hypothesis. |
+| K unroll 2 beats 4 | **Qualified.** Unroll depth changes how many loads are in flight, which §10 says the scheduler owns. The k=4 rule was already withdrawn once for an unreproduced row; this supplies a mechanism for why it was unstable. |
+| The double-K int4 instruction loses to the K unroll | **Qualified.** The recorded explanation was that the unroll "keeps two independent MMAs in flight" — in-flight-ness is precisely what §10 says is not ours today. |
+| `GLOBAL_LOAD_TR_B128` is worth +21.6% at 1024³ | **Stands as a comparison.** Both arms are register-path kernels measured identically, so the relative figure holds. The absolute ceiling may move. |
+| The 2048³ transpose-load reversal | **Stands as an anomaly, unexplained.** Still needs counters neither WSL2 ROCm box can produce. |
+
+Closing this is `ROCM-SCHED-GROUP-1`: emit `sched_group_barrier`, then re-measure
+the four qualified rows before any of them is treated as settled.
 
 ## Where the machine truth lives
 

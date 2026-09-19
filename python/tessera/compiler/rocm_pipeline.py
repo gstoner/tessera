@@ -227,6 +227,10 @@ class ROCMExecutablePipeline:
     #: under. Stays 0 until a measurement says otherwise
     #: (ROCM-SCHED-GROUP-1).
     sched_groups: int = 0
+    #: Dwords of LDS row padding. 0 is the unpadded historical
+    #: layout whose fragment read collides 4 ways on the banks
+    #: (ROCM-LDS-BANKPAD-1).
+    lds_pad_dwords: int = 0
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -267,6 +271,8 @@ class ROCMExecutablePipeline:
                 "scheduling-granularity knob, and past the point where the "
                 "pattern asks for more outstanding loads than the hardware "
                 "holds it spills rather than overlapping")
+        if type(self.lds_pad_dwords) is not int or not 0 <= self.lds_pad_dwords <= 4:
+            raise ValueError("ROCm lds_pad_dwords must be an integer in [0, 4]")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -282,6 +288,7 @@ class ROCMExecutablePipeline:
             f"lds-waves-m={self.lds_waves[0]} lds-waves-n={self.lds_waves[1]} "
             f"k-unroll={self.k_unroll} "
             f"sched-groups={self.sched_groups} "
+            f"lds-pad-dwords={self.lds_pad_dwords} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"

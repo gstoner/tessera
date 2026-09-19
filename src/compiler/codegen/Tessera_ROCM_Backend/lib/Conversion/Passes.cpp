@@ -51,6 +51,11 @@ struct ROCMExecutablePipelineOptions
       *this, "staging",
       llvm::cl::desc("matmul staging policy: register or lds"),
       llvm::cl::init("register")};
+  Option<int> ldsPadDwords{
+      *this, "lds-pad-dwords",
+      llvm::cl::desc("LDS-staged body: dwords of row padding to break the "
+                     "bank conflict on the fragment read (ROCM-LDS-BANKPAD-1)"),
+      llvm::cl::init(0)};
   Option<int> schedGroups{
       *this, "sched-groups",
       llvm::cl::desc("rocdl.sched.group.barrier granularity for the WMMA "
@@ -265,7 +270,7 @@ static std::unique_ptr<Pass> configuredPass(std::unique_ptr<Pass> pass,
 static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool viaTile, StringRef staging, bool depthCooperative = false,
                                int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
-                               int schedGroups = 0) {
+                               int schedGroups = 0, int ldsPadDwords = 0) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -337,7 +342,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " lds-waves-m=" + Twine(ldsWavesM) +
                                   " lds-waves-n=" + Twine(ldsWavesN) +
                                   " k-unroll=" + Twine(kUnroll) +
-                                  " sched-groups=" + Twine(schedGroups)));
+                                  " sched-groups=" + Twine(schedGroups) +
+                                  " lds-pad-dwords=" + Twine(ldsPadDwords)));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -437,7 +443,7 @@ static void buildROCMExecutablePipeline(
   if (matmulPlugin && input != "graph" && output == "binary")
     addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
-                       opts.schedGroups);
+                       opts.schedGroups, opts.ldsPadDwords);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

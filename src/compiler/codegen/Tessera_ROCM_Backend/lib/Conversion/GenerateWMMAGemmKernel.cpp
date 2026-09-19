@@ -993,16 +993,32 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                       int64_t mt, int64_t nt, int64_t wavesM, int64_t wavesN,
                       const WmmaTypes &T, Type outputType, bool hasBias,
                       StringRef activation, StringRef rasterOrder,
-                      int64_t rasterGroup) {
+                      int64_t rasterGroup, int64_t ldsPadDwords) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
+  // ROCM-LDS-BANKPAD-1. Both tiles are stored with a 16-element row (A by row,
+  // B transposed by column), and LDS banks are 32 x 4 B. An f16 row is 32 B =
+  // 8 dwords, so sixteen lanes reading one element per row land on banks
+  // {0,8,16,24}: four banks, a 4-WAY CONFLICT on every fragment read. The fix
+  // is to make the row stride an ODD number of dwords, after which (stride*L)
+  // mod 32 is a bijection over the lanes because gcd(odd, 32) = 1.
+  //
+  // One dword of padding does it for every storage width: 8->9 dwords for f16,
+  // 4->5 for fp8/int8, 2->3 for int4. Expressed in ELEMENTS that is
+  // 32/bitwidth -- 2 f16, 4 fp8, 8 int4 -- so the knob counts dwords and the
+  // element count follows the storage.
+  const int64_t bits = T.store.getIntOrFloatBitWidth();
+  const int64_t padElems = ldsPadDwords * 32 / bits;
+  const int64_t ldsStride = 16 + padElems;
   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
   Value ldsA = gpuFunc.addWorkgroupAttribution(
-      MemRefType::get({wgM * 16}, T.store, MemRefLayoutAttrInterface(), ws),
+      MemRefType::get({wgM * ldsStride}, T.store, MemRefLayoutAttrInterface(),
+                      ws),
       loc);
   Value ldsB = gpuFunc.addWorkgroupAttribution(
-      MemRefType::get({wgN * 16}, T.store, MemRefLayoutAttrInterface(), ws),
+      MemRefType::get({wgN * ldsStride}, T.store, MemRefLayoutAttrInterface(),
+                      ws),
       loc);
   // `known_block_size` is an INHERENT property of gpu.func: set it through the
   // accessor, never by raw name. A raw `setAttr` leaves the op holding the
@@ -1012,8 +1028,9 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   gpuFunc.setKnownBlockSize(
       ArrayRef<int32_t>{int32_t(nthreads), 1, 1});
   gpuFunc->setAttr("tessera.rocm.lds_bytes",
-                   b.getI64IntegerAttr((wgM + wgN) * 16 *
-                                       T.store.getIntOrFloatBitWidth() / 8));
+                   b.getI64IntegerAttr((wgM + wgN) * ldsStride * bits / 8));
+  gpuFunc->setAttr("tessera.rocm.lds_pad_dwords",
+                   b.getI64IntegerAttr(ldsPadDwords));
   gpuFunc->setAttr("tessera.rocm.lds_waves",
                    b.getDenseI64ArrayAttr({wavesM, wavesN}));
 
@@ -1032,6 +1049,10 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value cWavesN = ci(wavesN), cThreads = ci(nthreads);
   Value cWgM = ci(wgM), cWgN = ci(wgN), cWgM16 = ci(wgM * 16),
         cWgN16 = ci(wgN * 16);
+  // The LDS row stride, padded to an odd dword count (see above). The copy
+  // loops still walk wgM*16 / wgN*16 logical elements; only the destination
+  // and the fragment view's leading dimension carry the padding.
+  Value cLdsStride = ci(ldsStride);
 
   Value scalarZero =
       T.isInt ? b.create<arith::ConstantOp>(loc, T.store,
@@ -1124,7 +1145,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto ldsView = [&](OpBuilder &bb, Location l, Value base, Value row,
                      Value col, Attribute memory) -> Value {
     OperationState state(l, "tile.view");
-    state.addOperands({base, row, col, c16});
+    state.addOperands({base, row, col, cLdsStride});
     state.addTypes(tileValueTy);
     state.addAttribute("tile.layout", tileLayout);
     state.addAttribute("tile.memory", memory);
@@ -1171,7 +1192,14 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value safe = kb.create<arith::SelectOp>(l, in, logical, c0);
           Value v = kb.create<memref::LoadOp>(l, A, ValueRange{safe});
           v = kb.create<arith::SelectOp>(l, in, v, scalarZero);
-          kb.create<memref::StoreOp>(l, v, ldsA, ValueRange{e});
+          // `e` indexes the UNPADDED tile; the destination row is strided.
+          Value dstA = padElems == 0
+                           ? e
+                           : Value(kb.create<arith::AddIOp>(
+                                 l,
+                                 kb.create<arith::MulIOp>(l, row, cLdsStride),
+                                 kk));
+          kb.create<memref::StoreOp>(l, v, ldsA, ValueRange{dstA});
         }
         // B: read along N (coalesced), write transposed so K is contiguous
         // per column in LDS.
@@ -1193,7 +1221,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value v = kb.create<memref::LoadOp>(l, B, ValueRange{safe});
           v = kb.create<arith::SelectOp>(l, in, v, scalarZero);
           Value dst = kb.create<arith::AddIOp>(
-              l, kb.create<arith::MulIOp>(l, col, c16), kk);
+              l, kb.create<arith::MulIOp>(l, col, cLdsStride), kk);
           kb.create<memref::StoreOp>(l, v, ldsB, ValueRange{dst});
         }
         kb.create<gpu::BarrierOp>(l);
@@ -1486,6 +1514,13 @@ struct GenerateWMMAGemmKernelPass
                      "how many (vmem_read, mfma_wmma) groups the body is "
                      "described as. 0 emits nothing and keeps LLVM's default "
                      "drained schedule (ROCM-SCHED-GROUP-1)"),
+      llvm::cl::init(0)};
+  Option<int> ldsPadDwords{
+      *this, "lds-pad-dwords",
+      llvm::cl::desc("LDS-staged typed body: dwords of padding added to each "
+                     "tile row so the stride is an odd dword count and the "
+                     "fragment read stops colliding on the 32 x 4 B banks. "
+                     "0 is the unpadded historical layout (ROCM-LDS-BANKPAD-1)"),
       llvm::cl::init(0)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged typed body: waves along M "
@@ -2157,7 +2192,7 @@ struct GenerateWMMAGemmKernelPass
         }
         emitTypedLdsBody(bodyB, loc, gpuFunc, mt, nt, ldsWavesM, ldsWavesN, T,
                          outputTy, hasBias, activation, request.rasterOrder,
-                         request.rasterGroup);
+                         request.rasterGroup, ldsPadDwords);
       } else if (request.canonicalKLoop && canonicalStaging == "lds") {
         // This body writes its accumulator back at row `2*e + lhi`, which is
         // RDNA3's wave32 distribution. gfx12 distributes the same accumulator

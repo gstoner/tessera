@@ -1647,10 +1647,16 @@ def package_scheduled_matmul(
     storage_align = 1 if (fp8 or integer) else 2
     # int4 binds as its int8 container (one logical value per byte).
     operand_dtype = "int8" if integer else artifact.a_dtype
+    # B binds ITS OWN dtype. It equals A's for every pairing but RDNA4's mixed
+    # OCP FP8 ones, and binding B as A's format is the failure mode to avoid:
+    # the launch would accept an e5m2 buffer, read it as e4m3, and return wrong
+    # numbers instead of refusing (it refused here, as E_LAUNCH_BINDING_MISMATCH,
+    # which is the binding check doing its job).
+    b_operand_dtype = "int8" if integer else artifact.b_dtype
     output_dtype = "int32" if integer else "fp32"
     bindings = [
         BufferBinding(0, artifact.a_name, "input", operand_dtype, 2, "row_major", storage_align),
-        BufferBinding(1, artifact.b_name, "input", operand_dtype, 2, "row_major", storage_align),
+        BufferBinding(1, artifact.b_name, "input", b_operand_dtype, 2, "row_major", storage_align),
     ]
     if artifact.bias_name is not None:
         bindings.append(BufferBinding(2, artifact.bias_name, "input", "fp32", 1, "row_major", 4))

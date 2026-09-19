@@ -4519,5 +4519,30 @@ One gate was an architectural defect in its own right. The generator attached a 
 Remaining: `ROCM-GLOBAL-LOAD-TR-1` with its two candidates; the 126-VGPR spill at the shipped 4x4 panel, whose only lever is fewer live registers; raster-order selection, still blocked on counters; the sparse twin `V_SWMMAC_I32_16X16X64_IU4`, now reachable by the same route and unmeasured.
 
 Evidence: `docs/audit/backend/rocm/todo.md` §"ROCM-EXTENDED-K-1 closed: the instruction exists, works, and loses — 2026-09-19", `tests/unit/test_rocm_gfx1201_scheduled.py`, `python/tessera/compiler/scheduled_matmul.py`.
+<!-- entry-fields:end -->
+
+### 2026-09-19 — ROCM-GLOBAL-LOAD-TR-1: the strided B gather becomes one instruction
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: branch `claude/rocm-b-transpose`, sync `GFX1201-PARITY-2026-09-17`; co-owner [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+Outcome: **the A/B asymmetry is closed for f16 and bf16.** B is stored row-major `[K][N]` and each lane wants a column, so the B fragment was eight guarded scalar loads where A took a single `vector.load`. RDNA4's `GLOBAL_LOAD_TR_B128` reads a 16x16 tile and transposes it into the registers, and the typed route emits it now — four per K slab at the 4x4 panel, confirmed in the disassembly. Worth, at the 4x4 panel with K unroll 2: 1024³ **65.9 against 54.2** TFLOP/s (+21.6%), 1536³ 79.2/74.3, 2048³ 75.4/80.5, 2560³ 94.3/89.5, 3072³ 92.8/89.4, 4096³ **93.9/89.4** (+5.0%) — five of six shapes.
+
+The ISA does not state the permutation, so it was measured rather than guessed, with `B[r][c] = r*16 + c` because a symmetric probe cannot tell a row reading from a column one. The wave does an 8x8 transpose inside each group of 8 lanes, `received(L, j) = R(8*(L/8) + j)[L % 8]`, and solving that for the fragment gives the per-lane address, verified at 256/256 elements with the arbitrary addressing failing the same check as a control.
+
+Two results kept because they are the ones that could mislead later. **2048³ is a genuine reversal**, −6.3%, reproducing at five runs, so it is not sampling noise; a leading dimension of exactly 2048 is the obvious aliasing suspect but no counters exist on either WSL2 ROCm box to confirm it, so the instruction stays on everywhere rather than being special-cased around one unexplained point. And **8-bit storages are excluded by measurement**: `TR_B64` is a different permutation, and enabling it on the strength of the matching per-lane width produced wrong results on device for every 8-bit storage — 16 failing rows across fp8 and both integer widths, with f16 and bf16 untouched, which is also what localised it.
+
+Infrastructure that outlives the item: the `amdgpu` dialect is registered in both drivers and declared in `TileToROCM`'s `getDependentDialects`, `convert-gpu-to-rocdl` lowers the op to `rocdl.global.load.tr.b128` with no additional pass, and the generic kernel argument is cast to the global address space the op requires.
+
+| Host | Suites | Lit |
+|---|---|---|
+| Tajasarus (gfx1201) | **177 passed, 0 failed**, plus five rows pinning which storages take the instruction | FLEET_LIT |
+| Princess-Luna (gfx1151) | LUNA_ROW | |
+| Mac (M1 Max) | MAC_ROW | |
+
+Remaining: the 8-bit `TR_B64` mapping, measured the same way, which would extend this to fp8 and int8; the 2048³ anomaly, which needs counters; AMD's identity-matrix in-register transpose as the int4 fallback; the 126-VGPR spill at the shipped panel; `ROCM-MIXED-FP8-1`; raster-order selection.
+
+Evidence: `docs/audit/backend/rocm/todo.md` §"ROCM-GLOBAL-LOAD-TR-1 closed: the B gather becomes one instruction — 2026-09-19", `docs/backends/rocm/wmma-fragment-layout.md` §8, `tests/unit/test_rocm_gfx1201_scheduled.py`.
 
 <!-- entry-fields:end -->

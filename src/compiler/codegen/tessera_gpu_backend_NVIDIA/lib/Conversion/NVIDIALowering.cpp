@@ -4980,7 +4980,8 @@ struct LowerTileToNVIDIAPass
         StringRef storage = macro.getStorage();
         auto mma = tessera::tile::TileMmaDescAttr::get(
             ctx, "mma_sync", 16, 8, 16, storage, storage, "f32",
-            "row_major", "col_major", 1);
+            "row_major", "col_major", 1, /*scaleBlockK=*/0,
+            /*scaleFormat=*/"");
         auto epilogue = tessera::tile::TileEpilogueAttr::get(
             ctx, /*bias=*/false, "none", "f32");
         OperationState state(loc, "tile.matmul_kernel");

@@ -23,6 +23,7 @@ target_link_libraries(tessera-opt PRIVATE
   MLIRNVVMDialect
   MLIRNVGPUDialect
   MLIRROCDLDialect
+  MLIRAMDGPUDialect
   MLIRLinalgDialect
   MLIRLinalgTransforms
   MLIRMemRefDialect

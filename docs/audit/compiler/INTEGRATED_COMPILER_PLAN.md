@@ -109,17 +109,27 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Split-K on the typed ROCm route: an unwired model, mis-keyed**
 
 - Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
-- Gate: `rocm_tiling.rank_candidates` computes `split_k_required` and **no production path reads it** — `scheduled_matmul.py` never imports the module, so the emitted gfx1201 kernel has no split-K whatever is ranked. Retained under Decision #29a rather than deleted, because the gfx1201 MoE router gate (M≤16, K=2048, N=256) shows split-K is genuinely needed: 16 output tiles leave half of a 32-CU chip idle, and the weight read dominates A by 16×, so the MMA unit is not the scarce resource. **The model is also wrong for that shape**: `split_k_required = k > 4096` answers `False` at K=2048, because the real trigger is occupancy (tiles < CUs), not K magnitude. Gate: re-key the predicate on occupancy, give it a consumer on the typed route, and prove the router-gate shape on Tajasarus against a measured baseline — with the reduction's determinism carried as a semantic key (Decision #21a), since a split-K reduction is exactly where a reproducible router→top-k is lost. Until all three land, the declaration stays marked unwired at its site per #29a condition 1.
+- Gate: `rocm_tiling.rank_candidates` computes `split_k_required` and **no production path reads it** — `scheduled_matmul.py` never imports the module, so the emitted gfx1201 kernel has no split-K whatever is ranked. Retained under Decision #29a rather than deleted, because the gfx1201 MoE router gate (M≤16, K=2048, N=256) shows split-K is genuinely needed: 16 output tiles leave half the machine idle (the part measures 64 CUs = **32 WGPs**, and a workgroup dispatches to a WGP), and the weight read dominates A by 16×, so the MMA unit is not the scarce resource. **The model is also wrong for that shape**: `split_k_required = k > 4096` answers `False` at K=2048, because the real trigger is occupancy (tiles < WGPs), not K magnitude. Gate: re-key the predicate on occupancy, give it a consumer on the typed route, and prove the router-gate shape on Tajasarus against a measured baseline — with the reduction's determinism carried as a semantic key (Decision #21a), since a split-K reduction is exactly where a reproducible router→top-k is lost. Until all three land, the declaration stays marked unwired at its site per #29a condition 1.
 - Depends on: —
 - Start: device
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
 
 ### ROCM-SCHED-GROUP-1
 
-**No scheduling intrinsic is emitted, so four gfx1201 results are provisional**
+**Measured and rejected: describing the panel to the scheduler loses**
 
 - Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
-- Gate: LLVM single-buffers LDS and drains before every WMMA unless told otherwise, and this backend emits **no** `sched_group_barrier` anywhere — so every gfx1201 measurement was taken under the drained, single-buffered default. Four recorded results rest on in-flight behaviour that is therefore not ours: the LDS-staged body losing at every shape (measured in its worst form), the 4×4 panel's 133-VGPR spill (whose per-tile-addressing diagnosis is in doubt, since outstanding-load state also scales with `mt*nt`), K unroll 2 beating 4, and the double-K int4 instruction losing to that unroll. Gate: emit `__builtin_amdgcn_sched_group_barrier` with group granularity as the tuned axis — coarser is better up to the point where the pattern asks for more outstanding loads than the hardware can hold — then re-measure all four rows on Tajasarus before any is treated as settled. `docs/backends/rocm/wmma-fragment-layout.md` §11 holds the qualification table.
+- Gate: **Closed by measurement 2026-09-19, negative.** `sched-groups=N` now emits N alternating `rocdl.sched.group.barrier vmem_read`/`mfma_wmma` groups over the panel, and on gfx1201 at 1024³ f16 every setting is slower than LLVM's default: register body 70.5 → 53.8/46.6/46.0/46.0 TFLOP/s at N=1/2/4/8, LDS body 7.8 → 7.8/5.5/5.8/5.5, all arms agreeing numerically at 1.95e-06. The barriers demonstrably took effect (instruction order, count 7017/6897/6984 and `s_wait*` 1360/1283/1261 all move), so this is a real verdict on the description and not a no-op. Consequences: the 4×4 panel's spill is **not** a scheduling artifact — barriers move it 133→123 at best while costing 34% throughput — so §9's per-tile-addressing diagnosis stands and §11's doubt on that row is withdrawn; and the K-unroll and double-K comparisons were not measured against a handicapped baseline. The knob is retained at default 0 as a recorded negative. **Not settled:** one pattern was tested; `ds_read` groups, `sched.barrier`, `iglp.opt` and placement outside the K loop are untried, so this is evidence against this description rather than against the lever. Remaining gate: none — superseded by [ROCM-LDS-BANKPAD-1](#rocm-lds-bankpad-1), which the measurement points at instead.
+- Depends on: —
+- Start: device
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
+### ROCM-LDS-BANKPAD-1
+
+**The LDS body is 9x slower and unpadded; an 8-way bank conflict fits**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: Measured on gfx1201 at 1024³ f16, the LDS-staged body runs **7.8 TFLOP/s against the register body's 70.5** — 9x, which is close to what an 8-way LDS bank conflict costs. The independent vllm-radiance gfx1201 kernel pads its LDS rows **8 bytes** precisely because sixteen lanes reading rows 64 B apart collide eight ways on the 32 × 4 B banks, and reports that staging is what makes *that* kernel fast at all; ours pads nothing. `rocm_tiling` already models this as `bank_padding_required` and never wires it (Decision #29a, same shape as `split_k_required`). Scheduling is ruled out as the explanation — [ROCM-SCHED-GROUP-1](#rocm-sched-group-1) measured barriers making the LDS body *slower*. Gate: emit the row padding the model already computes, re-measure the LDS body against the register body at the same shapes, and only then re-judge "the LDS body loses at every shape" — which until now has been recorded against an unpadded, unscheduled staging path.
 - Depends on: —
 - Start: device
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
@@ -481,6 +491,7 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
 | ROCM-FP8-BLOCKSCALE-1 | [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) | owner |
 | ROCM-MXFP4-W4A8-1 | [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1) | owner |
+| ROCM-LDS-BANKPAD-1 | [ROCM-LDS-BANKPAD-1](#rocm-lds-bankpad-1) | owner |
 | ROCM-SCHED-GROUP-1 | [ROCM-SCHED-GROUP-1](#rocm-sched-group-1) | owner |
 | ROCM-SPLIT-K-1 | [ROCM-SPLIT-K-1](#rocm-split-k-1) | owner |
 | E2E-REAL-6 | [E2E-REAL-6](#e2e-real-6) | owner |

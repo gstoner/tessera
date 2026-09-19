@@ -434,6 +434,18 @@ trip that the register body never pays, and the LDS-side transpose that would
 justify the trip does not exist. `GLOBAL_LOAD_TR_B128` is a *global* transpose
 for exactly this reason — it is the only transposing load the chip has.
 
+**FP8 conversion IS hardware, unlike bf16 packing.** `__builtin_amdgcn_cvt_pk_fp8_f32`
+and `__builtin_amdgcn_cvt_f32_fp8` compile and run on gfx1201 (owner-confirmed
+2026-09-19), and both are reachable from MLIR without a builtin escape:
+`rocdl.cvt.pk.fp8.f32` packs two f32 into fp8 with a word select, and
+`rocdl.cvt.f32.fp8` unpacks with a byte select. Note the asymmetry with the
+bf16 note above — bf16 packing costs two adds and a `v_perm_b32`, while the fp8
+round trip is one instruction each way. That matters wherever a scale has to be
+applied: the block-scaled FP8 path (`ROCM-FP8-BLOCKSCALE-1`) and the MXFP4
+W4A8 fold (§10b) both need fp8 to f32 and back, and neither has to pay for it
+in software. The wider `rocdl.cvt.scalef32.pk8.*` family exists in the dialect
+but is a CDNA4/gfx950 form — do not reach for it here without checking §5.
+
 **LLVM single-buffers LDS and drains before every WMMA unless told otherwise.**
 The fix is `__builtin_amdgcn_sched_group_barrier`, and the *granularity* of the
 groups matters far more than their contents: coarser is better, up to the point
@@ -511,6 +523,58 @@ are the same experiment.
 our 383 ceiling (85%) and 160.2 f16 against 191 (84%), register-resident on the
 same part.
 
+## 10c. ROCM-SCHED-GROUP-1, measured: the barriers work and they lose
+
+The lever is now implemented (`sched-groups=N` emits N alternating
+`rocdl.sched.group.barrier vmem_read` / `mfma_wmma` groups describing the
+panel) and measured on Tajasarus, f16, 1024³, repeated-median over 7 trials of
+50 launches. **Every setting is slower than LLVM's default.**
+
+| sched_groups | register body | LDS body (2x2 waves) | VGPR spill |
+|---|---|---|---|
+| 0 (default) | **70.5 TFLOP/s** | **7.8 TFLOP/s** | 133 |
+| 1 | 53.8 (0.76x) | 7.8 (1.00x) | 133 |
+| 2 | 46.6 (0.66x) | 5.5 (0.70x) | **123** |
+| 4 | 46.0 (0.65x) | 5.8 (0.74x) | 127 |
+| 8 | 46.0 (0.65x) | 5.5 (0.70x) | **163** |
+
+All arms agree numerically at 1.95e-06, so this is a schedule difference and
+nothing else. **The barriers demonstrably took effect** — between `sg=0`, `2`
+and `8` the emitted instruction order differs, the instruction count moves
+(7017 / 6897 / 6984) and `s_wait*` falls monotonically (1360 / 1283 / 1261).
+The scheduler did what it was told; being told was the problem.
+
+**Three things this settles, and one it does not.**
+
+*The spill is not a scheduling artifact.* §11 put §9's per-tile-addressing
+diagnosis in doubt because outstanding-load state also scales with `mt*nt`.
+It does move the spill — 133 to 123 at `sg=2` — but only by 7%, and that arm is
+34% *slower*. Register pressure at the 4x4 panel is not what the scheduler is
+holding. **§9's diagnosis stands; withdraw §11's doubt on that row.**
+
+*The other three qualified rows are not overturned.* For the register body the
+default schedule beats all four described patterns, so the LDS/K-unroll/double-K
+comparisons were not measured against a handicapped baseline.
+
+*The knob stays at 0.* It is retained rather than deleted because a measured
+negative is worth more than the absence of one — but read the table before
+re-running this experiment, not after.
+
+*What it does not settle:* one pattern was tested. `vmem_read`/`mfma_wmma`
+alternation at panel granularity is not the space — `ds_read` groups,
+`sched.barrier`, `iglp.opt`, and placement outside the K loop are all untried.
+This is evidence against *this* description, and weak evidence about the lever.
+
+**The redirect is the real result.** The LDS body runs at 7.8 TFLOP/s against
+the register body's 70.5 — **9x slower**, which is close to what an 8-way LDS
+bank conflict costs. §10b records that the vllm-radiance gfx1201 kernel pads
+its LDS rows 8 bytes precisely because sixteen lanes reading rows 64 B apart
+collide eight ways on the 32 x 4 B banks, and that staging is what makes *their*
+kernel fast. Ours pads nothing. `rocm_tiling` already models this as
+`bank_padding_required` and does not wire it (Decision #29a). **Bank padding,
+not scheduling, is the candidate that fits the number** — and it is what
+ROCM-LDS-BANKPAD-1 should test before the LDS body is judged again.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no
@@ -521,8 +585,8 @@ them can claim about the *approach*:
 
 | Result | Status under §10 |
 |---|---|
-| The LDS-staged body loses at every shape | **Qualified.** It was measured in its worst form: drained before every WMMA, single-buffered, and paying a VGPR round trip (§10) for staging LDS has no transposing read to justify. "Loses under the default schedule" is what the packets support; "LDS staging loses on gfx1201" is not. |
-| The 4×4 panel spills 133 VGPRs, ~200 of them neither accumulator nor fragment | **Qualified, and the diagnosis is now in doubt.** §9 concluded per-tile addressing from the way overhead tracks `mt*nt`. Outstanding-load state is the other thing that scales that way, and §10 names it as scheduler-controlled. Re-measure with group barriers before acting on the addressing hypothesis. |
+| The LDS-staged body loses at every shape | **Still qualified, but scheduling is ruled out as the explanation (§10c).** Barriers make it *slower*, not faster. Measured 7.8 against the register body's 70.5 — 9x, which is what an 8-way LDS bank conflict costs, and our rows are unpadded while the kernel that reports LDS staging as essential pads 8 bytes. Re-judge after ROCM-LDS-BANKPAD-1, not after a scheduling change. |
+| The 4×4 panel spills 133 VGPRs, ~200 of them neither accumulator nor fragment | **Doubt withdrawn 2026-09-19, measured (§10c).** Group barriers move the spill by 7% at best (133→123) and cost 34% throughput doing it. Outstanding-load state is not what the 4×4 panel is holding; §9's per-tile-addressing diagnosis stands. |
 | K unroll 2 beats 4 | **Qualified.** Unroll depth changes how many loads are in flight, which §10 says the scheduler owns. The k=4 rule was already withdrawn once for an unreproduced row; this supplies a mechanism for why it was unstable. |
 | The double-K int4 instruction loses to the K unroll | **Qualified.** The recorded explanation was that the unroll "keeps two independent MMAs in flight" — in-flight-ness is precisely what §10 says is not ours today. |
 | `GLOBAL_LOAD_TR_B128` is worth +21.6% at 1024³ | **Stands as a comparison.** Both arms are register-path kernels measured identically, so the relative figure holds. The absolute ceiling may move. |

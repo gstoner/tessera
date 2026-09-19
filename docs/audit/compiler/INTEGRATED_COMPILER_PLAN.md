@@ -104,6 +104,26 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Start: host-free
 - Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
 
+### ROCM-SPLIT-K-1
+
+**Split-K on the typed ROCm route: an unwired model, mis-keyed**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: `rocm_tiling.rank_candidates` computes `split_k_required` and **no production path reads it** — `scheduled_matmul.py` never imports the module, so the emitted gfx1201 kernel has no split-K whatever is ranked. Retained under Decision #29a rather than deleted, because the gfx1201 MoE router gate (M≤16, K=2048, N=256) shows split-K is genuinely needed: 16 output tiles leave half of a 32-CU chip idle, and the weight read dominates A by 16×, so the MMA unit is not the scarce resource. **The model is also wrong for that shape**: `split_k_required = k > 4096` answers `False` at K=2048, because the real trigger is occupancy (tiles < CUs), not K magnitude. Gate: re-key the predicate on occupancy, give it a consumer on the typed route, and prove the router-gate shape on Tajasarus against a measured baseline — with the reduction's determinism carried as a semantic key (Decision #21a), since a split-K reduction is exactly where a reproducible router→top-k is lost. Until all three land, the declaration stays marked unwired at its site per #29a condition 1.
+- Depends on: —
+- Start: device
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
+### ROCM-SCHED-GROUP-1
+
+**No scheduling intrinsic is emitted, so four gfx1201 results are provisional**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: LLVM single-buffers LDS and drains before every WMMA unless told otherwise, and this backend emits **no** `sched_group_barrier` anywhere — so every gfx1201 measurement was taken under the drained, single-buffered default. Four recorded results rest on in-flight behaviour that is therefore not ours: the LDS-staged body losing at every shape (measured in its worst form), the 4×4 panel's 133-VGPR spill (whose per-tile-addressing diagnosis is in doubt, since outstanding-load state also scales with `mt*nt`), K unroll 2 beating 4, and the double-K int4 instruction losing to that unroll. Gate: emit `__builtin_amdgcn_sched_group_barrier` with group granularity as the tuned axis — coarser is better up to the point where the pattern asks for more outstanding loads than the hardware can hold — then re-measure all four rows on Tajasarus before any is treated as settled. `docs/backends/rocm/wmma-fragment-layout.md` §11 holds the qualification table.
+- Depends on: —
+- Start: device
+- Latest: [ROCM-MIXED-FP8-1: the mixed OCP FP8 pairs execute, and two gates that were not checking what they claimed](INTEGRATED_COMPILER_LOG.md#2026-09-19--rocm-mixed-fp8-1-the-mixed-ocp-fp8-pairs-execute-and-two-gates-that-were-not-checking-what-they-claimed)
+
 ### EVIDENCE-PACKET-1
 
 **Evidence packet consumers**
@@ -439,6 +459,8 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | DISPATCH-BREAKER | [DISPATCH-BREAKER](#dispatch-breaker) | owner |
 | DIAG-PY-BACKLOG-1 | [DIAG-PY-BACKLOG-1](#diag-py-backlog-1) | owner |
 | DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
+| ROCM-SCHED-GROUP-1 | [ROCM-SCHED-GROUP-1](#rocm-sched-group-1) | owner |
+| ROCM-SPLIT-K-1 | [ROCM-SPLIT-K-1](#rocm-split-k-1) | owner |
 | E2E-REAL-6 | [E2E-REAL-6](#e2e-real-6) | owner |
 | E2E-REAL-6F | [E2E-REAL-6F](#e2e-real-6f) | owner |
 | EVIDENCE-PACKET-1 | [EVIDENCE-PACKET-1](#evidence-packet-1) | owner |

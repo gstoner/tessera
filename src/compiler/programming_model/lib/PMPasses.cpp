@@ -238,6 +238,11 @@ struct MatmulSchedule {
   StringRef target;
   StringRef arch;
   StringRef storage;
+  //: B's storage when it differs from A's. Empty means "same as A", which is
+  //: every case but RDNA4's mixed OCP FP8 pairs -- the hardware has
+  //: V_WMMA_F32_16X16X16_FP8_BF8 and its mirror, and the descriptor is where
+  //: that pairing has to be expressible or nothing below it can select it.
+  StringRef storageB;
   StringRef accum;
   int64_t m;
   int64_t n;
@@ -472,14 +477,17 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.macroTileN = rdna4 ? (gfx1201StaticPanel ? 64 : 16) : 64;
     return schedule;
   }
+  // A and B may name different FP8 storages: RDNA4 has the mixed pairs and
+  // `resolveFragmentLayout` selects them from the descriptor's two types.
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
-      lhsElement == rhsElement &&
-      isa<Float8E4M3FNType, Float8E5M2Type>(lhsElement) && outElement.isF32() &&
+      isa<Float8E4M3FNType, Float8E5M2Type>(lhsElement) &&
+      isa<Float8E4M3FNType, Float8E5M2Type>(rhsElement) && outElement.isF32() &&
       !schedule.bias && !schedule.residual && schedule.activation == "none") {
     // OCP FP8 storage on RDNA4 (V_WMMA_F32_16X16X16_{FP8,BF8}_{FP8,BF8},
     // device-audited 2026-09-13); f32 accumulate, 1x1 register tile, no fused
     // epilogue yet (GFX1201-PARITY slice 5).
     schedule.storage = isa<Float8E4M3FNType>(lhsElement) ? "e4m3" : "e5m2";
+    schedule.storageB = isa<Float8E4M3FNType>(rhsElement) ? "e4m3" : "e5m2";
     schedule.accum = "f32";
     schedule.macroTileM = gfx1201StaticPanel ? 64 : 16;
     schedule.macroTileN = gfx1201StaticPanel ? 64 : 16;
@@ -3278,7 +3286,8 @@ struct ScheduleToTilePass
         OpBuilder kernelBuilder(entry, entry->begin());
         auto mma = tile::TileMmaDescAttr::get(
             &getContext(), "auto", selected->tileM, selected->tileN,
-            selected->tileK, selected->storage, selected->storage,
+            selected->tileK, selected->storage,
+            selected->storageB.empty() ? selected->storage : selected->storageB,
             selected->accum, "row_major", "col_major", 1);
         auto epilogue = tile::TileEpilogueAttr::get(
             &getContext(), selected->bias, selected->activation,
@@ -3348,7 +3357,8 @@ struct ScheduleToTilePass
           auto tileType = tile::TileValueType::get(&getContext());
           auto typedMma = tile::TileMmaDescAttr::get(
               &getContext(), "mma_sync", selected->tileM, selected->tileN,
-              selected->tileK, selected->storage, selected->storage,
+              selected->tileK, selected->storage,
+            selected->storageB.empty() ? selected->storage : selected->storageB,
               selected->accum, "row_major", "col_major", 1);
           SmallVector<StringAttr> laneReg{kernelBuilder.getStringAttr("laneid"),
                                           kernelBuilder.getStringAttr("reg")};

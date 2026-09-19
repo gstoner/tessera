@@ -522,12 +522,15 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         )
     elif (
         target == "rocm_gfx1201"
-        and a_dtype == b_dtype
         and a_dtype in {"fp8_e4m3", "fp8_e5m2"}
+        and b_dtype in {"fp8_e4m3", "fp8_e5m2"}
         and output_dtype == "fp32"
     ):
         # OCP FP8 on RDNA4 (device-audited WMMA forms, GFX1201-PARITY slice 5):
-        # f32 accumulate, no fused epilogue yet.
+        # f32 accumulate, no fused epilogue yet. A and B may name DIFFERENT fp8
+        # storages -- the hardware has V_WMMA_F32_16X16X16_FP8_BF8 and its
+        # mirror, and every layer below selects the pair from the descriptor's
+        # two types (ROCM-MIXED-FP8-1).
         if bias_name is not None or activation != "none":
             raise ValueError(
                 "rocm_gfx1201 FP8 scheduled matmul carries no fused epilogue yet")

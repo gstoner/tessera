@@ -2966,13 +2966,21 @@ struct LowerTileToROCMPass
         // (GFX1201-PARITY slice 1b, 2026-09-18).
         const bool intStorage =
             desc && (desc.getAType() == "int8" || desc.getAType() == "int4");
+        // K is 16 except for the native double-K int4 shape
+        // (`V_WMMA_I32_16X16X32_IU4`). `resolveFragmentLayout` owns whether
+        // the launch arch actually has it and fails closed on RDNA3, so this
+        // check only has to admit the shape, not adjudicate the target.
+        const int64_t expectedK =
+            (desc && desc.getAType() == "int4" && desc.getK() == 32) ? 32 : 16;
         if (!desc || !epilogue || !parent || desc.getFamily() != "wmma" ||
-            desc.getM() != 16 || desc.getN() != 16 || desc.getK() != 16 ||
+            desc.getM() != 16 || desc.getN() != 16 ||
+            desc.getK() != expectedK ||
             desc.getAType() != desc.getBType() ||
             (desc.getAType() != "f16" && desc.getAType() != "bf16" &&
              !(fp8Storage && arch.starts_with("gfx12")) && !intStorage) ||
             desc.getAccType() != (intStorage ? "i32" : "f32")) {
           op->emitError("ROCm Target matmul requires the typed 16x16x16 "
+                        "(16x16x32 for int4) "
                         "f16/bf16-to-f32 WMMA contract, int8/int4-to-i32 "
                         "(IU8/IU4), or OCP FP8 e4m3/e5m2 to f32 on gfx12");
           signalPassFailure();

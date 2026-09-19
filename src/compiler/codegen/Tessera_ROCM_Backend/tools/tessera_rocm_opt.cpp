@@ -9,6 +9,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/InitAllExtensions.h"
+#include "mlir/Dialect/AMDGPU/IR/AMDGPUDialect.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Target/LLVM/ROCDL/Target.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
@@ -29,7 +30,12 @@ int main(int argc, char **argv){
   // setting; without it scf.for cannot even be parsed in custom form. gpu +
   // memref let the runnable async_copy lowering (-lower-rocm-async-copy) parse
   // gpu.func kernels with workgroup (LDS) attributions + memref copy loops.
-  registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
+  // amdgpu carries `global_transpose_load`, the memref-level wrapper around
+  // RDNA4's GLOBAL_LOAD_TR_B128/B64. ROCDL has the same instructions but only
+  // over `!llvm.ptr<1>`, which the fragment materializer does not have -- it
+  // works in memrefs, so the amdgpu level is the one it can actually emit.
+  registry.insert<mlir::amdgpu::AMDGPUDialect, mlir::arith::ArithDialect,
+                  mlir::func::FuncDialect,
                   mlir::gpu::GPUDialect, mlir::memref::MemRefDialect,
                   mlir::LLVM::LLVMDialect, mlir::ROCDL::ROCDLDialect,
                   mlir::scf::SCFDialect, mlir::vector::VectorDialect,

@@ -67,13 +67,25 @@ function(tessera_pin_cuda_toolkit required_version)
             "CUDAToolkit version was reported by find_package.")
     endif()
 
-    # CUDAToolkit_VERSION has format like "13.3.0"
-    if(CUDAToolkit_VERSION VERSION_LESS ${required_version})
+    # EXACT major.minor, not a floor (changed 2026-09-20).
+    #
+    # A floor reads as safe and is not: the sm_120 Lion lane lost a week to
+    # exactly this. nvcc 13.4 emits PTX 9.4 while driver 610.88 JITs only
+    # <= 9.3, so a "newer toolkit is fine" assumption produced opaque rc=3 at
+    # every driver-JIT'd launch. A newer vendor toolkit is a DIFFERENT
+    # toolchain, and Decision #11 says a measurement is only valid for the code
+    # that produced it -- a benchmark taken under 13.4 is not evidence about
+    # 13.6. The patch level is deliberately ignored: nvcc 13.4.59 vs 13.4.62 is
+    # the same pinned toolkit.
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _tessera_cuda_found "${CUDAToolkit_VERSION}")
+    if(NOT _tessera_cuda_found VERSION_EQUAL ${required_version})
         message(FATAL_ERROR
-            "Tessera requires CUDA Toolkit >= ${required_version} (matching the "
-            "TESSERA_TARGET_CUDA_TOOLKIT pin in gpu_target.py), but found "
-            "${CUDAToolkit_VERSION}.  Set -DTESSERA_SKIP_TOOLCHAIN_PIN=ON to "
-            "override (development only).")
+            "Tessera pins CUDA Toolkit ${required_version} but this box has "
+            "${_tessera_cuda_found} (${CUDAToolkit_VERSION}).\n"
+            "  Moving the fleet? Run: python scripts/bump_toolchain_pins.py --check\n"
+            "  on the box that HAS this toolkit, then --write, then re-measure "
+            "every performance row taken under the old pin.\n"
+            "  One-off override: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
     endif()
 
     # Locate nvcc explicitly so the compile-only validator can find it.
@@ -140,11 +152,24 @@ function(tessera_pin_rocm required_version)
             "was reported by find_package(hip).")
     endif()
 
-    if(hip_VERSION VERSION_LESS ${required_version})
+    # EXACT major.minor, for the same reason as CUDA above.
+    #
+    # NOTE the argument: this function takes the **HIP** version (7.15), not the
+    # ROCm version (10.0), while the file defines BOTH
+    # TESSERA_REQUIRED_HIP_VERSION and TESSERA_REQUIRED_ROCM_VERSION. Passing
+    # the ROCm one -- which is what the function's name invites -- demands
+    # hip >= 10.0 and fails on every AMD box in the fleet.
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _tessera_hip_found "${hip_VERSION}")
+    if(NOT _tessera_hip_found VERSION_EQUAL ${required_version})
         message(FATAL_ERROR
-            "Tessera requires HIP >= ${required_version} (matching the "
-            "TESSERA_TARGET_HIP pin in rocm_target.py), but found ${hip_VERSION}. "
-            "Set -DTESSERA_SKIP_TOOLCHAIN_PIN=ON to override.")
+            "Tessera pins HIP ${required_version} but this box has "
+            "${_tessera_hip_found} (${hip_VERSION}).\n"
+            "  Moving the fleet? Run: python scripts/bump_toolchain_pins.py --check\n"
+            "  on the box that HAS this toolkit, then --write, then re-measure "
+            "every performance row taken under the old pin.\n"
+            "  Wiring this in? Pass TESSERA_REQUIRED_HIP_VERSION, not "
+            "TESSERA_REQUIRED_ROCM_VERSION.\n"
+            "  One-off override: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
     endif()
 
     find_program(TESSERA_HIPCC_EXECUTABLE NAMES hipcc

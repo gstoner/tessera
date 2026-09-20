@@ -144,6 +144,23 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/TesseraToolchainPins.cmake)
 tessera_pin_llvm(${TESSERA_REQUIRED_LLVM_VERSION})
 
+# The vendor pins, each guarded by the flag that says this build wants that
+# toolkit. Unguarded they would hard-fail configure on every box without it --
+# `find_package(CUDAToolkit REQUIRED)` on the Mac, Princess-Luna and Tajasarus
+# is three of four boxes -- which is why they sat unwired rather than wrong.
+#
+# tessera_pin_rocm() takes the HIP version, NOT the ROCm one. Both variables
+# exist; passing TESSERA_REQUIRED_ROCM_VERSION demands hip >= 10.0 and fails on
+# every AMD box in the fleet.
+if(TESSERA_ENABLE_CUDA)
+  tessera_pin_cuda_toolkit(${TESSERA_REQUIRED_CUDA_VERSION})
+  tessera_add_nvcc_compile_check(NAME tessera-nvcc-instruction-probes)
+endif()
+if(TESSERA_ENABLE_HIP)
+  tessera_pin_rocm(${TESSERA_REQUIRED_HIP_VERSION})
+  tessera_add_hipcc_compile_check(NAME tessera-hipcc-instruction-probes)
+endif()
+
 if(NOT DEFINED MLIR_VERSION_MAJOR OR NOT DEFINED MLIR_VERSION_MINOR OR
    NOT MLIR_VERSION_MAJOR EQUAL 23 OR NOT MLIR_VERSION_MINOR EQUAL 1)
   message(FATAL_ERROR

@@ -1038,6 +1038,22 @@ which both sides widen and the copy width becomes the tunable CK treats it as.
 A wider copy over the current layout is measured-negative twice and should not
 be attempted a third time.
 
+**But first, an unmeasured question this raises, which should be answered
+before the layout work starts.** Two attempts at the copy have now failed to
+move the LDS body, which is weak evidence that the copy is not where the time
+goes. The register body reaches ~84 TFLOP/s at 2048³ against the LDS body's
+40.4 while moving **the same global bytes** — so global traffic cannot be the
+difference. What the LDS body adds is the LDS round trip and **two barriers per
+K step** (256 of them at 2048³), and barriers are already on record as
+unhelpful to schedule around: `ROCM-SCHED-GROUP-1` closed measured-negative.
+
+If the cost is the barrier-bounded round trip rather than the copy, then the
+K1-blocked layout is another copy optimisation and will disappoint the same
+way. **Measure the split before building the layout** — the cheapest version is
+a deliberately-wrong ceiling probe that fills LDS from a constant and never
+touches global, whose throughput bounds what any copy improvement can buy.
+This paragraph is reasoning, not a result; do not cite it as one.
+
 ## 10k. The padding default, settled on the shape where it converges
 
 §10e chose `lds_pad_dwords=1` from the broken harness; §10i withdrew that

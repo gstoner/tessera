@@ -1073,6 +1073,29 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // and the fragment view's leading dimension carry the padding.
   Value cLdsStride = ci(ldsStride);
 
+  // ROCM-LDS-STAGE-VECTOR-1. The staging copy moved SIXTEEN BITS per thread per
+  // iteration -- `global_load_d16_b16` in, `ds_store_b16` out -- against the
+  // register body's `global_load_b128`. Measured 8.8 against 70.7 TFLOP/s at
+  // 1024^3 f16, and that copy is the 8x, not the bank conflict the padding
+  // already fixed (which was worth ~10%).
+  //
+  // The width is DERIVED from the padded stride, not chosen: a V-wide vector
+  // needs every LDS row start V-aligned, so V must divide `ldsStride`. That
+  // couples this to ROCM-LDS-BANKPAD-1 exactly as predicted there --
+  //
+  //   pad=0 stride 16: V=8 but FOUR banks (the conflict the padding removed)
+  //   pad=1 stride 18: conflict-free, V=2   <- optimal when copies were scalar
+  //   pad=2 stride 20: conflict-free, V=4   <- the only wide conflict-free pair
+  //   pad=4 stride 24: V=8 but eight banks
+  //
+  // so the padding that was right for a scalar copy is nearly the worst for a
+  // vectorised one. The default moves with the measurement, not with this
+  // comment.
+  int64_t vecW = 1;
+  for (int64_t v : {8, 4, 2})
+    if (ldsStride % v == 0 && 16 % v == 0) { vecW = v; break; }
+  auto vecTy = VectorType::get({vecW}, T.store);
+
   Value scalarZero =
       T.isInt ? b.create<arith::ConstantOp>(loc, T.store,
                                             b.getIntegerAttr(T.store, 0))
@@ -1194,7 +1217,13 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       [&](OpBuilder &kb, Location l, Value k0, ValueRange accs) {
         // Every wave finished reading the previous slab before it is overwritten.
         kb.create<gpu::BarrierOp>(l);
-        auto copyA = kb.create<scf::ForOp>(l, tx, cWgM16, cThreads);
+        // A: `vecW` contiguous K per thread per step. K is the fast axis of a
+        // row-major A, so the global side is contiguous too; the ragged tail is
+        // a masked load rather than a scalar fallback, which keeps one path.
+        Value cVec = ci(vecW);
+        Value txV = kb.create<arith::MulIOp>(l, tx, cVec);
+        Value stepV = kb.create<arith::MulIOp>(l, cThreads, cVec);
+        auto copyA = kb.create<scf::ForOp>(l, txV, cWgM16, stepV);
         {
           OpBuilder::InsertionGuard g(kb);
           kb.setInsertionPointToStart(copyA.getBody());
@@ -1203,22 +1232,33 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value kk = kb.create<arith::RemUIOp>(l, e, c16);
           Value gr = kb.create<arith::AddIOp>(l, baseRow, row);
           Value gk = kb.create<arith::AddIOp>(l, k0, kk);
-          Value in = kb.create<arith::AndIOp>(
-              l, kb.create<arith::CmpIOp>(l, slt, gr, M),
-              kb.create<arith::CmpIOp>(l, slt, gk, K));
+          Value rowIn = kb.create<arith::CmpIOp>(l, slt, gr, M);
+          // How many of the `vecW` lanes are inside K, clamped to [0, vecW],
+          // and zero entirely when the row itself is out of bounds.
+          Value remK = kb.create<arith::SubIOp>(l, K, gk);
+          Value avail = kb.create<arith::MaxSIOp>(l, remK, c0);
+          Value take = kb.create<arith::MinSIOp>(l, avail, cVec);
+          take = kb.create<arith::SelectOp>(l, rowIn, take, c0);
           Value logical = kb.create<arith::AddIOp>(
               l, kb.create<arith::MulIOp>(l, gr, K), gk);
-          Value safe = kb.create<arith::SelectOp>(l, in, logical, c0);
-          Value v = kb.create<memref::LoadOp>(l, A, ValueRange{safe});
-          v = kb.create<arith::SelectOp>(l, in, v, scalarZero);
-          // `e` indexes the UNPADDED tile; the destination row is strided.
+          Value safe = kb.create<arith::SelectOp>(l, rowIn, logical, c0);
+          Value mask = kb.create<vector::CreateMaskOp>(
+              l, VectorType::get({vecW}, kb.getI1Type()), ValueRange{take});
+          Value zeroVec = kb.create<arith::ConstantOp>(
+              l, vecTy, kb.getZeroAttr(vecTy));
+          Value v = kb.create<vector::MaskedLoadOp>(l, vecTy, A,
+                                                    ValueRange{safe}, mask,
+                                                    zeroVec);
+          // `e` indexes the UNPADDED tile; the destination row is strided. The
+          // whole vector is stored -- LDS is the tile buffer and always in
+          // bounds, and the masked-off lanes carry the zero the tail wants.
           Value dstA = padElems == 0
                            ? e
                            : Value(kb.create<arith::AddIOp>(
                                  l,
                                  kb.create<arith::MulIOp>(l, row, cLdsStride),
                                  kk));
-          kb.create<memref::StoreOp>(l, v, ldsA, ValueRange{dstA});
+          kb.create<vector::StoreOp>(l, v, ldsA, ValueRange{dstA});
         }
         // B: read along N (coalesced), write transposed so K is contiguous
         // per column in LDS.

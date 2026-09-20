@@ -1359,6 +1359,39 @@ def supports_attention_backward(module: GraphIRModule) -> bool:
     return _attention_backward_contract(module) is not None
 
 
+def _native_cache_key(
+    config: ROCMExecutablePipeline,
+    *,
+    tile_ir: str,
+    directive: str,
+    library_identity: str,
+    tool_digest: str,
+) -> str:
+    """Identity of one ROCm native compilation.
+
+    Three independent halves, and each is taken from the thing that owns it
+    rather than re-spelled here:
+
+      * what is compiled -- the source Tile IR and the directive it must
+        materialize;
+      * how it is compiled -- ``config.cache_key()``, the single authority for
+        pipeline-config identity (ROCM-PIPELINE-KEY-1). Listing the config's
+        fields here a second time is what previously let `sched_groups`,
+        `lds_pad_dwords`, `lds_copy_width` and `lds_copy_elide` diverge
+        between the two spellings;
+      * what compiles it -- the ``tessera-opt`` binary digest and the
+        driver-selected device libraries, so a toolchain change misses rather
+        than serving a kernel built by different code (Decision #11).
+    """
+    return hashlib.sha256(
+        "\x1f".join(
+            ("tessera.rocm_native_cache.v2", tile_ir, directive)
+            + config.cache_key()
+            + (library_identity, tool_digest)
+        ).encode()
+    ).hexdigest()
+
+
 def _compile_native_tile_ir(
     tile_ir: str,
     *,
@@ -1401,25 +1434,10 @@ def _compile_native_tile_ir(
     library_identity = "|".join(
         f"{item.logical_name}:{item.content_digest}:{item.link_mode}" for item in device_libraries
     )
-    key = hashlib.sha256(
-        (
-            f"{architecture}|{tile_ir}|{directive}|{family}|{input_level.value}|"
-            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|k{k_unroll}|sg{sched_groups}|pad{lds_pad_dwords}|cw{lds_copy_width}|elide{lds_copy_elide}|d{lds_copy_depth}|db{lds_double_buffer}|sv{lds_sched_valu_per_mma}|brm{lds_b_row_major}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
-        ).encode()
-    ).hexdigest()
-    cached = _cache.get(key)
-    if cached is not None:
-        target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries = cached
-        return (
-            target_ir,
-            backend_ir,
-            payload,
-            compiler_fp,
-            toolchain_fp,
-            libraries,
-            "warm_cache",
-        )
-
+    # The config is built before the cache is probed, not after, so that an
+    # illegal knob combination is rejected by `__post_init__` on every call
+    # rather than only on a cold one -- and so the cache key can be the
+    # config's own identity instead of a second spelling of its fields.
     config = ROCMExecutablePipeline(
         family=family,
         arch=architecture,
@@ -1439,6 +1457,26 @@ def _compile_native_tile_ir(
         lds_b_row_major=bool(lds_b_row_major),
         depth_cooperative=depth_cooperative,
     )
+    key = _native_cache_key(
+        config,
+        tile_ir=tile_ir,
+        directive=directive,
+        library_identity=library_identity,
+        tool_digest=hashlib.sha256(tool.read_bytes()).hexdigest(),
+    )
+    cached = _cache.get(key)
+    if cached is not None:
+        target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries = cached
+        return (
+            target_ir,
+            backend_ir,
+            payload,
+            compiler_fp,
+            toolchain_fp,
+            libraries,
+            "warm_cache",
+        )
+
     warn_if_generator_is_stale(tool)
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
     native_pipeline = config.pass_pipeline(output=ROCMOutputLevel.BINARY)

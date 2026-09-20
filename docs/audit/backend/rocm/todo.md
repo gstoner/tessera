@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-14
+last_updated: 2026-09-20
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -156,6 +156,242 @@ LDS/pipelined schedules; resident saved-LSE and broader mask/backward proofs. Ge
 matrix formats, sparse matrix instructions and selector-grade timings remain
 open. WSL profiler API receipts are not kernel/counter attribution.
 Evidence: [commissioning packet](../../../../benchmarks/baselines/gfx1201_foundation_20260913/README.md).
+
+## ROCM-PIPELINE-KEY-1: one authority for compile-cache identity — 2026-09-20
+
+**Closed 2026-09-20.** Owner ROCM-2; sync `ROCM-PIPELINE-KEY-1`.
+Host-independent (Mac); no device evidence claimed or needed — this is a
+key-derivation contract, and no kernel changed.
+
+`ROCMExecutablePipeline.cache_key()` was a Decision #29 unconsumed
+declaration: no caller in `python/`, `src/` or `tests/`. It listed ten of the
+config's fourteen fields by hand and omitted `sched_groups`,
+`lds_pad_dwords`, `lds_copy_width` and `lds_copy_elide` — all four of which
+change the generated kernel, and the last of which selects the **ceiling-probe
+kernel that deliberately computes all zeros** (its staging copy writes a
+constant instead of reading global memory). A consumer wired to the old key
+could have served that kernel for a real request.
+
+It is explicitly **not** exempt under Decision #29a: no queue item owned it,
+and no test asserted its behaviour. This entry and
+`tests/unit/test_rocm_pipeline_cache_key.py` are what #29a would have required
+had the exemption been claimed; they exist now because the remedy taken was
+#29's first one — give it a consumer — not the exemption.
+
+**Rebased onto PR #787 (2026-09-20), which is itself the argument.** #787
+found the same gap while adding `lds_copy_depth`, completed the four missing
+fields by hand, and left a docstring naming this item as the owner. It then
+added four *more* knobs (`lds_copy_depth`, `lds_double_buffer`,
+`lds_sched_valu_per_mma`, `lds_b_row_major`), each of which had to be written
+into three places: the field, `pass_pipeline`, and both key spellings. On the
+rebase the derived key picked all four up with **no code change** — the only
+thing that needed touching was the test's alternatives table, and the
+completeness guard is what said so, naming all four. That is the difference
+between a list that must be maintained and a key that cannot be incomplete.
+
+**Resolution (option b): wired as the single authority, and derived rather
+than listed.** Adding the four missing fields would have fixed one instance of
+a class. The key is now computed from `pass_pipeline()`, the option string
+every knob already flows through to `tessera-rocm-executable`, so a field the
+string does not carry cannot change codegen and a field it does carry is keyed
+by construction. `output_level` is carried alongside it, because a caller that
+asks `pass_pipeline()` for no particular level gets the one that field names;
+that keeps the invariant total — *every* field of the config changes the key.
+
+`rocm_native._compile_native_tile_ir`'s ad-hoc key string is deleted. Its
+replacement, `rocm_native._native_cache_key`, is a named function taking three
+independent halves, each from the thing that owns it: what is compiled (Tile
+IR + directive), how (`config.cache_key()`), and what compiles it
+(`tessera-opt` digest + driver-selected device libraries, Decision #11). The
+config is now built *before* the cache is probed, so an illegal knob
+combination is rejected by `__post_init__` on every call rather than only a
+cold one. `_cache` is an in-process dict, so the key-format change costs one
+cold compile and nothing else.
+
+**Gate — `tests/unit/test_rocm_pipeline_cache_key.py` (36 cases, host-free).**
+Field-by-field, both on `cache_key()` and on the native key, against a table
+this file also proves complete against `dataclasses.fields`, so a *new* knob
+that forgets the key fails here rather than on a device. Plus: the ceiling
+probe never shares a key with production; the non-config halves separate; and,
+with `cache_key` monkeypatched to a constant, two configs differing in every
+knob must collide — which is only true if nothing re-spells a config field,
+making Decision #31's one-authority rule checkable rather than aspirational.
+
+Verified by reverting `cache_key()` to its pre-fix body: 9 of the 36 fail,
+naming exactly `sched_groups`, `lds_pad_dwords`, `lds_copy_width`,
+`lds_copy_elide` and the ceiling-probe collision. A test that cannot fail on
+the defect it describes is not evidence.
+
+**The six `runtime.py` consumers — converted 2026-09-20, same entry.** All
+six construction sites hand-spelled a key tuple beside the config they built,
+and all six built the config *after* the key, so none could call
+`cache_key()`. Each now builds the config first and keys on
+`(what is compiled) + config.cache_key()`. All six were complete when audited
+— including the `staging` knob at the canonical GEMM — so this fixes no live
+defect; it removes the shape that produced one.
+
+What "what is compiled" means per site, because it differs and the difference
+matters:
+
+| Site | Keyed on | Note |
+|---|---|---|
+| `_build_compiled_gemm_hsaco` | directive, dtype/bias/activation, schedule key | mt/nt dropped — the directive carries them. The schedule stays: it reaches the directive through `target_ir_attrs()` and nothing proves that projection injective |
+| `_build_canonical_gemm_hsaco` | Graph-IR source text, `canonical_dtype` | the only problem-size-*specific* lane; m/n/k are in the source. `canonical_dtype` stays because `i8` and `int8` spell the source identically |
+| `_build_compiled_flash_attn_hsaco` | directive | nine fields dropped; the directive stamps `arch` itself |
+| `_build_compiled_flash_attn_bwd_hsaco` | directive | eight fields dropped, same reason |
+| `_build_compiled_softmax_hsaco` | directive | its directive does *not* stamp `arch`; the architecture reaches the key only through `config.cache_key()` |
+| `_build_rocm_family_hsaco` | caller key **+** config key **+** directive | shared helper, 73 callers |
+
+The helper is the leverage. Its 73 callers each maintain a key tuple that
+must remember `chip` on its own; all 73 do (audited by AST walk, 2026-09-20 —
+ten pass a local `key` variable and every one of those includes it), but
+nothing enforced it, and the cost of one forgetting is a kernel for another
+ISA served from cache. It now *augments* the caller key rather than replacing
+it, so cache granularity is unchanged: the derived part can only split an
+entry two different compiler inputs were sharing, never merge two a caller
+distinguishes. That matters because several tests assert
+`len(cache) == 1` to prove a kernel is shape-generic, and a merge would have
+made those pass vacuously while a split would have failed them loudly.
+
+**Those `len(cache) == 1` tests are device-gated. Bounded statically first,
+then confirmed on gfx1201.** A split can only happen when a value reaches the
+directive without reaching the caller key. For all seven caches carrying such
+an assertion — `_rocm_softmax`, `_rocm_norm`, `_rocm_norm_bwd`,
+`_rocm_reduce`, `_rocm_pointwise_loss`, `_rocm_training_loss_sgd`,
+`_rocm_training_loss_adamw` — every builder parameter that reaches the
+directive is already in the key, checked parameter by parameter, and none of
+those builders takes a shape argument at all. The static bound is now backed
+by execution: `test_norm_hsaco_cache_identity_is_shape_and_affine_independent`,
+`test_norm_activation_cache_identity_keeps_shapes_dynamic` and
+`test_rocm_backward_cache_is_shape_and_affine_independent` all **PASSED on
+Tajasarus (RX 9070 XT, gfx1201)** under this change, with
+`_rocm_wmma_runtime_available()` True and `_rocm_live_arch()` reporting
+gfx1201 — not skipped.
+
+Cache dict annotations that described the old tuple shapes were corrected
+rather than left stale (`dict[tuple[str, str], bytes]` → `tuple[object, ...]`);
+`mypy python/tessera/` clean across 565 files.
+
+**A cache-key change must not move a raise — learned the hard way here.**
+The first version of this built the config eagerly so the key could use it.
+That pulled `__post_init__` in front of each lane's own tool and arch checks,
+and `test_rocm_wmma_gemm_arch_guard` caught it: `_build_compiled_gemm_hsaco`
+admits the **whole gfx11 family**, while `promoted_families` promotes only
+gfx1151 among them, so on gfx1100/gfx1101/gfx1150 the refusal changed from
+`_RocmCompiledUnavailable("tessera-opt not built")` to a `ValueError` raised
+one check earlier — a different exception type, from a different layer, for a
+reason unrelated to the caching being fixed.
+
+The fix is `runtime._rocm_lane_config(**spec) -> (config | None, identity)`.
+It returns `None` instead of raising when `__post_init__` rejects the spec,
+with a stable `("unbuildable", family, arch)` stand-in for the key; the lane
+re-builds with the same spec **after** its own checks, which raises exactly
+where it always did. An unbuildable spec never compiles, so nothing can be
+cached under the stand-in. Covered by
+`test_an_unbuildable_config_does_not_move_the_raise`.
+
+Two things worth keeping from that detour. The narrower one: the two arch
+gates disagree — a lane-local `chip.startswith("gfx11")` guard against
+`promoted_families`, which is the authority. That is pre-existing and not
+touched here; it is only visible because gfx1100/1101/1150 hit the second gate
+after clearing the first. The wider one: the same over-reach reasoning was
+applied in `rocm_native._compile_native_tile_ir`, where it is *correct* —
+there the config is the lane's only gate, nothing precedes it, so eager
+validation adds a check rather than moving one. The rule is not "never build
+early"; it is "never let keying change what refuses first."
+
+`test_rocm_hsaco_negative_cache` was also updated, for a different reason: it
+seeded `cache[("family", "k")]` by hand, which worked only while the caller's
+key *was* the storage key. It now drives a real failure and a real reuse and
+counts `tessera-opt` forks, which tests the claim its own docstring makes
+("only the subprocess is skipped") more directly than seeding did. Its
+`_rocm_compiled_failed` stub was also made to raise, as the real funnel always
+does — a returning stub let the helper fall through into `cache.pop`, a path
+the product does not have.
+
+**Gate — four more cases in the same file.** Two are static, over `runtime.py`
+itself: every function building a `ROCMExecutablePipeline` must call
+`cache_key()`, and none may re-spell `chip` in a key tuple beside the config.
+Two are behavioural on the shared helper, run with no device and no
+`tessera-opt` (a fake compiler; a cache hit never reaches the subprocess, so
+the recorded directives are a direct readout of what the key separated): a
+caller key that omits `chip` must still separate gfx1151 from gfx1201, two
+directives under one caller key must not share an entry, and identical
+requests must still compile once.
+
+Falsified in both directions: reverting the helper's augmentation fails the
+two behavioural cases; putting `chip` back into one site's tuple fails the
+re-spelling guard.
+
+**Mac (M1 Max, full build: 331 targets, rc=0).** `tests/unit/ -m "not slow"`
+— **19871 passed, 3795 skipped, 0 failed** (19:45). `lit tests/tessera-ir/`
+499 fixtures, rc=0. `mypy python/tessera/` clean (565 files); generated docs
+in sync. An earlier sweep on this branch showed six Apple failures; those were
+a missing `TesseraAppleRuntimeShared` (no `build/` existed in the worktree),
+reproduced on a clean detached `HEAD` worktree and gone once the dylib was
+built — not this change.
+
+**gfx1201 device A/B (Tajasarus, RX 9070 XT).** Two arms in one detached
+worktree at the base commit `9b11d369`, patched vs unpatched, same command,
+`TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1`:
+**base 6047 passed / 0 failed, patched 6091 passed / 0 failed**, 822 skipped
+in both, failure sets identical (both empty). The +44 is exactly accounted:
+42 from the new test file, plus 2 from `test_foreign_target_host_claims.py`,
+which parametrizes over every test module and picked up the new one (and
+passes it). No test moved.
+
+**Read the skip count, not just the pass count.** The first attempt at this
+A/B ran with `TESSERA_OPT` alone and reported 4100/4144 passed with 2749
+skipped and identical failure sets — which looked like a clean result and was
+not one. Every compiled ROCm lane had skipped as `no usable AMD GPU`, because
+`_rocm_wmma_runtime_available()` needs the box's built
+`libtessera_rocm_gemm.so`, not just the `tessera-opt` driver. Pointing
+`TESSERA_BUILD_DIR` at the box's build tree moved 1927 tests from skipped to
+executed (2749 → 822 skipped) and is what makes the numbers above device
+evidence. A `-q` run does not record skip *reasons*, so grepping its output
+for a reason finds nothing and proves nothing; use `-rs`.
+
+**gfx1151 device A/B (Princess-Luna, Strix Halo) — the stronger of the two.**
+Its `tessera-opt` was stale (built 2026-09-19: it knew `k-unroll` but not
+`sched-groups`, `lds-pad-dwords` or `lds-copy-width`, while the Python in its
+own checkout passed all three), so every compiled ROCm lane there died with
+``failed to add `tessera-rocm-executable` with options ...`` and skipped as
+`no usable AMD GPU`. Rather than borrow a binary, a **matched** tree was built
+in the worktree at the base commit `9b11d369` (545 targets, ROCm backend ON,
+rc=0), so `tessera-opt` and `libtessera_rocm_gemm.so` both resolve from the
+tree under test with no `TESSERA_OPT` / `TESSERA_BUILD_DIR` override and no
+binary-vintage gap — strictly better provenance than the gfx1201 arm, which
+borrowed a binary from another branch.
+
+**base 6104 passed / 0 failed, patched 6148 passed / 0 failed**, 765 skipped
+in both, failure sets identical (both empty), **zero** `no usable AMD GPU`
+skips in either arm. Same +44 accounting. The three cache-identity assertions
+PASSED here too, and the opt-in `TESSERA_ROCM_E2E_DEVICE_TEST=1` gate adds
+97 passed. So the shape-genericity claim now has execution on **both** AMD
+architectures, each measured on its own silicon; nothing was transferred
+between them.
+
+Princess-Luna's own `build/` was rebuilt in place afterwards (66 targets
+incremental, rc=0) and its tree recovered: `test_rocm_norm_compiled.py` goes
+from 109 `no usable AMD GPU` skips to **113 passed, 0 such skips**. That
+staleness was pre-existing and unrelated to this change; it is recorded here
+because a ROCm sweep on that box before 2026-09-20 was hollow.
+
+**Still open.** The 73 caller key tuples are now redundant — the directive
+plus the config identity is the whole compiler input, so nothing the callers
+pass adds information. Deleting the parameter would remove 73 hand-maintained
+tuples and 70 near-identical cache dicts. Not done here: it is a 73-site
+mechanical edit whose only host-free check is the one above, and several of
+the `len(cache) == 1` assertions that would police it are device-gated
+(`gfx1151`/`gfx1201`), so it wants a box, not a Mac.
+
+**Adjacent, noted not fixed.** `_compile_native_tile_ir`'s `schedule_kernel`
+argument is not in the key and never was. It does not change the compiled
+kernel — it only relaxes the "crossed into backend codegen" check on the
+Target IR — but a warm hit skips that check, so two callers disagreeing about
+it would not both be validated. Not reachable today: the one caller that
+passes `schedule_kernel=True` is the sparse route, whose `family`
+(`sparse_matmul_2to4`) already separates the key. Latent, not live.
 
 ## Host-assumption cleanup sibling assessment — 2026-09-20
 

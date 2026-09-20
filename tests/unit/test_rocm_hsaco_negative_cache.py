@@ -57,21 +57,55 @@ def test_the_fingerprint_does_no_filesystem_work(monkeypatch):
 def test_a_cached_failure_reraises_rather_than_returning_none(monkeypatch):
     """The refusal must keep flowing through `_rocm_compiled_failed`, so the
     dispatch fallback is still recorded and TESSERA_STRICT_DISPATCH still
-    raises. Only the subprocess is skipped."""
+    raises. Only the subprocess is skipped.
+
+    This drives a real failure and then a real reuse rather than seeding the
+    cache by hand. It used to insert `cache[("family", "k")]` directly, which
+    worked only while the caller's key *was* the storage key. Since
+    ROCM-PIPELINE-KEY-1 the helper augments it with the pipeline config's
+    identity and the directive, so a hand-built entry is unreachable -- and a
+    test that reaches into a cache's key layout would have to be rewritten
+    every time that layout is made safer. Counting forks tests the claim the
+    docstring actually makes ("only the subprocess is skipped") more directly
+    than seeding did.
+    """
+    import subprocess
+    import types
+    from pathlib import Path
+
     cache: dict = {}
-    key = ("family", "k")
-    cache[key] = rt._HsacoBuildFailure("cached reason")
-    seen = []
-    monkeypatch.setattr(rt, "_rocm_compiled_failed",
-                        lambda reason: seen.append(reason))
-    monkeypatch.setattr(rt, "_tessera_opt_path", lambda: None)
-    try:
-        rt._build_rocm_family_hsaco("family", "directive", cache, key)
-    except Exception:
-        pass
-    assert seen == ["cached reason"], (
-        "a cache hit must route through the fallback funnel, not silently "
-        f"return or raise a different error; saw {seen}")
+    seen: list[str] = []
+    forks: list[str] = []
+
+    def fake_run(_cmd, **kwargs):
+        forks.append(kwargs["input"])
+        return types.SimpleNamespace(returncode=1, stdout="", stderr="no serializer")
+
+    def fake_failed(reason: str):
+        # The real funnel always raises (it records the fallback first, and
+        # raises even when TESSERA_STRICT_DISPATCH is unset). A stub that
+        # returns would let the helper fall through into `cache.pop`, which is
+        # a path the product does not have.
+        seen.append(reason)
+        raise rt._RocmCompiledUnavailable(reason)
+
+    monkeypatch.setattr(rt, "_rocm_compiled_failed", fake_failed)
+    monkeypatch.setattr(rt, "_tessera_opt_path", lambda: Path("/nonexistent/tessera-opt"))
+    monkeypatch.setattr(rt, "_rocm_serializer_env", dict)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    for _ in range(2):
+        try:
+            rt._build_rocm_family_hsaco("softmax", "directive", cache, ("k",))
+        except Exception:
+            pass
+
+    assert len(forks) == 1, (
+        "the remembered refusal did not prevent the second fork; the cache "
+        f"bought nothing (forks={len(forks)})")
+    assert len(seen) == 2 and seen[0] == seen[1], (
+        "a cache hit must route through the fallback funnel with the original "
+        f"message, not silently return or raise a different error; saw {seen}")
 
 
 # --------------------------------------------------------------------------

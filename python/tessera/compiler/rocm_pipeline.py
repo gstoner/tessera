@@ -331,40 +331,40 @@ class ROCMExecutablePipeline:
         return f"builtin.module(tessera-rocm-executable{{{options}}})"
 
     def cache_key(self) -> tuple[str, ...]:
-        """UNWIRED -- nothing calls this (Decision #29; owner: ROCM-PIPELINE-KEY-1).
+        """Compilation identity of this config: the pipeline strings themselves.
 
-        Found 2026-09-20 while adding `lds_copy_depth`. As written it omitted
-        `lds_copy_width`, `lds_pad_dwords` and `lds_copy_elide`, all of which
-        change the generated kernel -- and `lds_copy_elide` produces a
-        DELIBERATELY WRONG all-zero kernel, so a consumer wired to the old key
-        could have served that for a real request. The compile cache in
-        `rocm_native` keys on its own string and does include them, which is the
-        only reason this never fired.
+        This is the single authority for "do two configs compile to the same
+        kernel" (ROCM-PIPELINE-KEY-1). `rocm_native._native_cache_key` is its
+        consumer; nothing else may re-spell the config half of a ROCm compile
+        cache key.
 
-        That is Decision #29a's failure mode: an unwired model can be wrong, and
-        its wrongness is invisible precisely because nothing runs it. The fields
-        are completed here rather than left inconsistent, but the method still
-        has no consumer and #29's remedy still applies -- give it one or delete
-        it. It is NOT exempt under #29a: no queue item owns it yet and no test
-        asserts its behaviour.
+        It is *derived* from `pass_pipeline` rather than listing fields,
+        because the hand-listed tuple this replaces is precisely what drifted:
+        `sched_groups`, `lds_pad_dwords`, `lds_copy_width` and `lds_copy_elide`
+        were all added to the config and to `pass_pipeline` without reaching
+        the key, and `lds_copy_elide` selects a deliberately wrong all-zero
+        ceiling-probe kernel. A consumer on the old key could have served that
+        kernel for a real request. PR #787 then completed those four by hand
+        *and* added four more (`lds_copy_depth`, `lds_double_buffer`,
+        `lds_sched_valu_per_mma`, `lds_b_row_major`), each of which had to be
+        written into three places -- the field, `pass_pipeline`, and both key
+        spellings. That is the cost this removes, and the reason to remove it
+        is that the hand-maintained list had already been wrong once.
+
+        Derivation closes that class rather than fixing one instance. Every
+        knob reaches the generated kernel through the option string this
+        pipeline hands `tessera-rocm-executable`, so a field the string does
+        not carry cannot change codegen, and a field it carries is keyed here
+        by construction -- the eight fields above are keyed by this method
+        without being named in it. Both output levels are covered because a
+        single compile runs both (`target` for the Target-IR boundary check,
+        `binary` for the hsaco) and caches both results together;
+        `output_level` is still carried on its own, because a caller that asks
+        `pass_pipeline()` for no particular level gets the one this field
+        names. Keying it therefore keeps the invariant total -- every field of
+        this config changes the key -- which is what
+        `test_rocm_pipeline_cache_key.py` checks field by field.
         """
-        return (
-            self.family,
-            self.input_level.value,
-            self.output_level.value,
-            self.arch,
-            self.staging,
-            f"{self.lds_waves[0]}x{self.lds_waves[1]}",
-            str(self.k_unroll),
-            str(self.sched_groups),
-            str(self.lds_pad_dwords),
-            str(self.lds_copy_width),
-            str(self.lds_copy_elide),
-            str(self.lds_copy_depth),
-            str(self.lds_double_buffer),
-            str(self.lds_sched_valu_per_mma),
-            str(self.lds_b_row_major),
-            str(self.tile_q),
-            str(self.tile_kv),
-            str(self.depth_cooperative),
+        return (self.output_level.value,) + tuple(
+            self.pass_pipeline(output=level) for level in ROCMOutputLevel
         )

@@ -1646,12 +1646,17 @@ struct GenerateWMMAGemmKernelPass
   Option<int> ldsPadDwords{
       *this, "lds-pad-dwords",
       llvm::cl::desc("LDS-staged typed body: dwords of padding added to each "
-                     "tile row so the stride is an odd dword count and the "
-                     "fragment read stops colliding on the 32 x 4 B banks. "
-                     "0 is the unpadded historical layout. Default 1: "
-                     "measured +12% on the LDS body at 1024 cubed f16, net of "
-                     "the narrower ds_load it forces (ROCM-LDS-BANKPAD-1)"),
-      llvm::cl::init(1)};
+                     "tile row so the fragment read stops colliding on the "
+                     "32 x 4 B banks. 0 is the unpadded historical layout. "
+                     "Default 4, from the only shape where the measurement "
+                     "CONVERGES: at 2048 cubed f16 padding helps monotonically "
+                     "and 4 wins by 15% with tight dispersion, while at 1024 "
+                     "cubed the same configuration remeasures 16% apart in one "
+                     "process and separates nothing. The earlier default of 1 "
+                     "came from a harness that launched 4x the workgroups and "
+                     "is withdrawn (ROCM-LDS-BANKPAD-1, "
+                     "docs/backends/rocm/wmma-fragment-layout.md 10i/10j)"),
+      llvm::cl::init(4)};
   Option<int> ldsCopyWidth{
       *this, "lds-copy-width",
       llvm::cl::desc("LDS staging copy: elements per thread per step. 1 is "

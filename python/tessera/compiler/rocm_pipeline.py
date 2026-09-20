@@ -233,7 +233,7 @@ class ROCMExecutablePipeline:
     #: ds_load the unaligned stride forces, so the conflict cost more than
     #: the headline. It does NOT explain the body's 9x gap to the register
     #: path; see ROCM-LDS-STAGE-VECTOR-1 for what does.
-    lds_pad_dwords: int = 1
+    lds_pad_dwords: int = 4
     #: LDS staging copy width; 0 derives it from the stride, 1
     #: forces the scalar copy so the vectorisation is measurable.
     lds_copy_width: int = 1

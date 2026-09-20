@@ -60,8 +60,9 @@ struct ROCMExecutablePipelineOptions
   Option<int> ldsPadDwords{
       *this, "lds-pad-dwords",
       llvm::cl::desc("LDS-staged body: dwords of row padding to break the "
-                     "bank conflict on the fragment read (ROCM-LDS-BANKPAD-1)"),
-      llvm::cl::init(1)};
+                     "bank conflict on the fragment read. Default 4, measured "
+                     "at 2048 cubed (ROCM-LDS-BANKPAD-1)"),
+      llvm::cl::init(4)};
   Option<int> schedGroups{
       *this, "sched-groups",
       llvm::cl::desc("rocdl.sched.group.barrier granularity for the WMMA "
@@ -276,7 +277,7 @@ static std::unique_ptr<Pass> configuredPass(std::unique_ptr<Pass> pass,
 static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool viaTile, StringRef staging, bool depthCooperative = false,
                                int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
-                               int schedGroups = 0, int ldsPadDwords = 1,
+                               int schedGroups = 0, int ldsPadDwords = 4,
                                int ldsCopyWidth = 1) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());

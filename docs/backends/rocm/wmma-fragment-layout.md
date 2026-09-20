@@ -1888,3 +1888,80 @@ One convergence and two contradictions, all measured on this body:
   one holding staged values across the whole MMA chain. Register pressure is not
   currently binding in this body, so this would be an optimisation against a
   constraint we cannot observe.
+
+## 10q. Three RDNA4 levers checked against the machine before building anything
+
+A proposed MLIR-level VOPD packing pass, plus split barriers and scalar offload.
+Each checked on the gfx1201 body first, because two of the three turn out to be
+either already done or not expressible.
+
+### VOPD cannot contain a matrix op, so "pack WMMA with an elementwise op" is not a thing
+
+The attraction is real -- `v_wmma` occupies V and leaves U idle (§10o) -- but
+VOPD is a 64-bit **encoding** with a restricted opcode allowlist, and `v_wmma`
+is VOP3P. Counted over all 145 bundles this body already emits:
+
+| half | count |
+|---|---|
+| `v_dual_mov_b32` | 266 |
+| `v_dual_lshlrev_b32` | 9 |
+| `v_dual_add_nc_u32` | 7 |
+| `v_dual_cndmask_b32` | 6 |
+| `v_dual_and_b32` | 2 |
+
+290 halves over 145 bundles, and **not one matrix op among them**. Matrix/VALU
+co-execution, where it happens, is an issue-pipeline effect, not a bundle. An
+MLIR pass that emits a "VOPD bundle containing a wmma" would be describing
+something the ISA cannot encode.
+
+Two further reasons not to build the pass as proposed: LLVM already forms those
+145 bundles, so a Tessera packer is a second authority over a decision the
+backend owns (Decision #31); and VOPD formation is post-register-allocation,
+below the level MLIR can see -- an MLIR-level "bundle" op would lower back to
+two separate LLVM ops and the backend would re-decide anyway. **What is missing
+is not packing but independent VALU positioned near the chain**, which is a
+scheduling problem, and §10p is the handle on it.
+
+### Split barriers are already emitted -- the lever is placement
+
+RDNA4 replaces `s_barrier` with `s_barrier_signal` / `s_barrier_wait` so a wave
+can publish and then do independent work before waiting. Measured: `gpu.barrier`
+already lowers to **`s_barrier_signal` x2 + `s_barrier_wait` x2** on gfx1201.
+LLVM does the split for us.
+
+So the instruction is not the gap. The gap is that signal and wait sit adjacent,
+which captures none of the benefit -- that requires work placed *between* them.
+Unexploited, not unavailable, and worth recording because "use split barriers"
+reads like a missing feature and is not one.
+
+### The connectivity check that nearly produced a wrong retraction
+
+§10p recorded that `sched.group.barrier` helps 1.12x while the ISA shows zero
+VALU in the chain, and the obvious worry is that the pathway is disconnected and
+the gain mis-attributed. Checking that, a search of the compiled artefacts found
+**0** occurrences of the intrinsic, which reads as confirmation.
+
+It was not. The artefact searched is the **post-serialization** module: it holds
+a `gpu.binary` blob and module attributes, and the kernel body has already been
+compiled away. That module could not have contained the intrinsic whatever the
+truth was. The check could not fail.
+
+**The pathway is connected, and the evidence was already in §10p's own table:**
+at N=8 the count of VALU between the first and last `wmma` moves **0 -> 17**.
+Only the IGroupLP mutation consuming that intrinsic can reorder instructions
+that way. The intrinsic reaches the backend; what it does not do is produce the
+alternation at the larger N values that help most, which remains unexplained.
+
+Standing lesson, and the third instance this session: **a verification that
+cannot distinguish the two outcomes is not evidence for either.** The earlier
+two were a probe measuring a stale binary and an elide arm reading uninitialised
+LDS. Check that the instrument can see the thing before believing what it says.
+
+### Scalar offload
+
+RDNA4 runs FP32 add/multiply on the scalar unit at 4-cycle latency against the
+vector unit's 5, and integer offload saves more. Not yet measured here. The
+relevant question for this body is how much of its 1600-2000 VALU ops are
+wave-invariant -- tile origins, base addresses and strides are, per-lane element
+offsets are not -- and that is a count nobody has taken. Recorded as an open
+measurement rather than an estimate.

@@ -144,7 +144,17 @@ _NOT_DIAGNOSTICS = frozenset({
 #: the set grows, and fails again when one is registered without being deleted
 #: from here, so the backlog can only shrink.
 #:
-#: Opened at 15; ten closed the same day. The nine `ROCM_FRAGMENT_*` codes are
+#: **Emptied 2026-09-20.** Opened at 15; ten closed 2026-09-19, the last five
+#: the next day. The blocker was real and is now answered from the source
+#: Decision #27 names: `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR`'s hint had to
+#: say whether fp32-only accumulation is permanent or pending the Metal 4
+#: cooperative-tensor lane, and the macOS 27 SDK settles it --
+#: MPPTensorOpsMatMul2d.h templates matmul2d on `DestinationOperandType` with
+#: only a tensor/cooperative-tensor constraint plus `relaxed_precision`, so
+#: fp32 is the SIMDGROUP path's contract and not an Apple-wide one. The hint
+#: says exactly that, and says not to assume the other lane shares it.
+#:
+#: History, kept because the shape recurs: opened at 15; ten closed the same day. The nine `ROCM_FRAGMENT_*` codes are
 #: registered -- one file, one exception type, one fail-closed story -- and
 #: `TIMING_PROOF_INCOMPLETE` turned out not to be a diagnostic at all (see
 #: `_NOT_DIAGNOSTICS`). What remains is Apple's five, held rather than guessed:
@@ -153,13 +163,7 @@ _NOT_DIAGNOSTICS = frozenset({
 #: lane, and an invented answer there is worse than a missing entry.
 #: Owner: `docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md` DIAG-PY-BACKLOG-1,
 #: with `docs/audit/backend/apple/todo.md`.
-_UNREGISTERED_ON_2026_09_19 = frozenset({
-    "APPLE_COUNTER_EVIDENCE_UNSUPPORTED",
-    "APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED",
-    "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR",
-    "APPLE_FRAGMENT_UNSUPPORTED_ARCH",
-    "APPLE_FRAGMENT_UNSUPPORTED_DTYPE",
-})
+_UNREGISTERED_ON_2026_09_19: frozenset[str] = frozenset()
 
 
 def _scan_codes_in_python() -> dict[str, set[Path]]:

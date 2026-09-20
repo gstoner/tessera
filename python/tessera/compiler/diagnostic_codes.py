@@ -2801,6 +2801,94 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="Portable Tile fragment ABI",
     ),
     DiagnosticCode(
+        code="APPLE_FRAGMENT_UNSUPPORTED_ARCH",
+        language="python",
+        pass_origin="apple_fragment.select_apple_simdgroup_fragment",
+        severity="error",
+        summary="The Apple GPU arch has no simdgroup_matrix, so no Tile fragment exists.",
+        fix_hint=(
+            "simdgroup_matrix is Apple7 (M1) and later. Select a different "
+            "lowering for an older arch rather than widening this check -- a "
+            "fragment ABI describes one instruction, and there is no fallback "
+            "shape that is still that instruction."
+        ),
+        spec="docs/audit/backend/apple/todo.md",
+        sprint="Apple simdgroup fragment ABI",
+    ),
+    DiagnosticCode(
+        code="APPLE_FRAGMENT_UNSUPPORTED_DTYPE",
+        language="python",
+        pass_origin="apple_fragment.select_apple_simdgroup_fragment",
+        severity="error",
+        summary="Apple simdgroup Tile fragments take fp16 or bf16 storage only.",
+        fix_hint=(
+            "Use fp16 or bf16 storage on the simdgroup path. Low-precision "
+            "storage (FP8 E4M3/E5M2, FP4 E2M1) is a Metal 4 matmul2d operand, "
+            "not a simdgroup one -- route it to the cooperative-tensor lane "
+            "rather than relaxing this."
+        ),
+        spec="docs/audit/backend/apple/todo.md",
+        sprint="Apple simdgroup fragment ABI",
+    ),
+    DiagnosticCode(
+        code="APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR",
+        language="python",
+        pass_origin="apple_fragment.select_apple_simdgroup_fragment",
+        severity="error",
+        summary="Apple simdgroup Tile fragments accumulate in fp32 only.",
+        fix_hint=(
+            "Set accum=fp32 (Decision #15a: the accumulator is numeric_policy, "
+            "not the storage dtype). This is the SIMDGROUP path's contract and "
+            "not an Apple-wide limit -- checked against the macOS 27 SDK on "
+            "2026-09-20, MPPTensorOpsMatMul2d.h templates matmul2d on "
+            "DestinationOperandType with only a tensor/cooperative-tensor "
+            "constraint plus a relaxed_precision flag, so the cooperative-"
+            "tensor lane is NOT known to require fp32. Do not restate this "
+            "limit as architectural, and do not assume the other lane shares "
+            "it without reading that header."
+        ),
+        spec="docs/audit/backend/apple/todo.md",
+        sprint="Apple simdgroup fragment ABI",
+    ),
+    DiagnosticCode(
+        code="APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED",
+        language="python",
+        pass_origin="msl_gemm_emit",
+        severity="error",
+        summary=(
+            "The staged A/B tiles plus edge scratch exceed the arch's "
+            "threadgroup memory."
+        ),
+        fix_hint=(
+            "Reduce the staged tile or the edge scratch until "
+            "total_threadgroup_bytes fits threadgroup_memory_capacity_bytes for "
+            "this arch. Failing closed is deliberate: an over-committed "
+            "threadgroup allocation is rejected by the Metal compiler later and "
+            "far less legibly."
+        ),
+        spec="docs/audit/backend/apple/todo.md",
+        sprint="Apple simdgroup fragment ABI",
+    ),
+    DiagnosticCode(
+        code="APPLE_COUNTER_EVIDENCE_UNSUPPORTED",
+        language="python",
+        pass_origin="apple_counter_evidence",
+        severity="error",
+        summary=(
+            "Counter or pipeline-limit evidence was supplied for a device whose "
+            "capability bits do not report it."
+        ),
+        fix_hint=(
+            "Omit the field rather than supplying a value the device cannot "
+            "produce. This fails closed on purpose: a corpus claiming a counter "
+            "delta on a device without timestamp counter sampling is corrupt "
+            "evidence, not optimistic evidence, and a silent downgrade would "
+            "publish it as measured."
+        ),
+        spec="docs/audit/backend/apple/todo.md",
+        sprint="Apple counter evidence",
+    ),
+    DiagnosticCode(
         code="TILE_MMA_DESC_BAD_SCALE_BLOCK", pass_origin="TileMmaDescAttr",
         severity="error",
         summary=(

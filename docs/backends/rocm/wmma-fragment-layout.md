@@ -1038,21 +1038,42 @@ which both sides widen and the copy width becomes the tunable CK treats it as.
 A wider copy over the current layout is measured-negative twice and should not
 be attempted a third time.
 
-**But first, an unmeasured question this raises, which should be answered
-before the layout work starts.** Two attempts at the copy have now failed to
-move the LDS body, which is weak evidence that the copy is not where the time
-goes. The register body reaches ~84 TFLOP/s at 2048³ against the LDS body's
-40.4 while moving **the same global bytes** — so global traffic cannot be the
-difference. What the LDS body adds is the LDS round trip and **two barriers per
-K step** (256 of them at 2048³), and barriers are already on record as
-unhelpful to schedule around: `ROCM-SCHED-GROUP-1` closed measured-negative.
+### 10j.2 The ceiling probe, and the speculation it refutes
 
-If the cost is the barrier-bounded round trip rather than the copy, then the
-K1-blocked layout is another copy optimisation and will disappoint the same
-way. **Measure the split before building the layout** — the cheapest version is
-a deliberately-wrong ceiling probe that fills LDS from a constant and never
-touches global, whose throughput bounds what any copy improvement can buy.
-This paragraph is reasoning, not a result; do not cite it as one.
+§10j.1 closed with an explicitly-flagged guess: that two failed copy attempts
+were weak evidence the copy is *not* where the time goes, and that the
+K1-blocked layout might therefore disappoint the same way. It said to measure
+the split before building the layout, and to treat the paragraph as reasoning
+rather than a result.
+
+**Measured 2026-09-20 on gfx1201, and the guess was wrong.** The probe
+(`lds-copy-elide`) emits a deliberately WRONG kernel whose staging copy writes
+a constant instead of reading global — every output is zero, which the harness
+asserts — while barriers, loop structure, LDS traffic and the MMA chain stay
+identical. So the delta is the copy's entire cost:
+
+| shape | real | copy elided | ceiling |
+|---|---|---|---|
+| 1024³ | 19.0 | 31.3 | **1.65x** |
+| 2048³ | 40.4 | **120.1** | **2.97x** |
+
+At 2048³ a free copy would reach **120 TFLOP/s, above the register body's
+~84** — so the LDS body's compute structure is not the problem, and the copy
+is worth up to 3x. The K1-blocked layout is worth building.
+
+**Why the guess failed is worth more than the guess.** Two copy optimisations
+had failed to move the body, and I read that as evidence about where the time
+goes. It was not: both failures were about *how* the copy was expressed — a
+masked load that cannot widen (§10j), then a widened load whose transposed
+store cost more than it saved (§10j.1). A mechanism that fails twice for
+reasons specific to the mechanism says nothing about the size of the prize.
+Measuring the prize directly took one option and one afternoon; inferring it
+from failures would have cancelled a 3x.
+
+**What the ceiling does not say.** It is an upper bound on a copy that cannot
+actually be free. It does not rank K1-blocking against other ways to spend the
+headroom, and the 1024³ figure sits at the shape where §10k found the
+measurement does not converge — treat 1.65x as the softer of the two.
 
 ## 10k. The padding default, settled on the shape where it converges
 

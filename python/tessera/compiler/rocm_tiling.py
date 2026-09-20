@@ -368,6 +368,76 @@ def _split_k_required(
     return tiles < slots
 
 
+
+#: Panels each RDNA chip admits, largest first. The macro tile is a panel of
+#: 16x16 WMMA fragments, so (64, 64) is the 4x4 panel and (16, 16) the 1x1.
+_RDNA_PANELS: tuple[tuple[int, int], ...] = ((64, 64), (32, 64), (16, 16))
+
+
+def select_macro_tile(
+    m: int,
+    n: int,
+    *,
+    profile: ROCmTargetProfile,
+    dynamic: bool,
+    dtype: str = "fp16",
+    measured_large_panel: tuple[int, int] | None = None,
+    measured_small_panel: tuple[int, int] = (16, 16),
+    measured_band: tuple[int, int] | None = None,
+) -> tuple[int, int]:
+    """The macro tile for one problem, chosen THROUGH the ranking model.
+
+    This is the one caller of `rank_candidates`, which had none: the ranking
+    modelled register fit, LDS footprint, bank padding and pipeline depth while
+    the shipped panels were picked by a separate hardcoded band, so the model
+    could not be wrong in a way anyone noticed (Decision #29, and the reason
+    ROCM-SPLIT-K-1's predicate was wrong for the shape that needed it most).
+
+    **The measured facts stay measured.** Which panel wins in which band came
+    from Tajasarus and Princess-Luna, not from theory, and it is passed in
+    rather than derived -- the ranking's job is to say a panel is *feasible*
+    (registers, LDS), the measurement's job is to say which feasible one is
+    *fastest*. That split is Decision #28's arbiter in miniature: analysis
+    filters, measurement picks. Inventing the preference here would replace a
+    measured answer with a plausible one.
+
+    The selection must stay identical to what the C++ authority in
+    `PMPasses.cpp` emits, because `verify_matmul_projection` compares them --
+    this is the Decision #31 oracle half, not a second authority.
+    """
+    large = measured_large_panel or _RDNA_PANELS[0]
+    in_band = (
+        measured_band is not None
+        and not dynamic
+        and measured_band[0] <= m < measured_band[1]
+        and measured_band[0] <= n < measured_band[1]
+        and m % 64 == 0
+        and n % 64 == 0
+    )
+    if measured_band is None:
+        # No band: the large panel applies from the floor upward.
+        in_band = (
+            not dynamic and m >= _PANEL_FLOOR and n >= _PANEL_FLOOR
+            and m % 64 == 0 and n % 64 == 0
+        )
+    wanted = large if in_band else measured_small_panel
+
+    # Feasibility, through the ranking model. A panel the chip cannot hold is
+    # not a choice however well it measured; `fits_register_budget` is what the
+    # ranking already computes and nothing consulted.
+    candidate = TileCandidate(
+        tile=TileShape(m=wanted[0], n=wanted[1], k=16), dtype=dtype)
+    ranked = rank_candidates([candidate], profile, problem=(m, n))[0]
+    if not ranked.fits_register_budget and wanted != measured_small_panel:
+        return measured_small_panel
+    return wanted
+
+
+#: Smallest problem edge at which the large panel is measured to win when no
+#: explicit band is given (gfx1201).
+_PANEL_FLOOR = 1024
+
+
 def rank_candidates(
     candidates: list[TileCandidate],
     profile: ROCmTargetProfile,
@@ -545,6 +615,7 @@ __all__ = [
     "estimate_lds_footprint_bytes",
     "fits_budget",
     "rank_candidates",
+    "select_macro_tile",
     "prune_candidates",
     "requires_lds_bank_padding",
     "quad_slice",

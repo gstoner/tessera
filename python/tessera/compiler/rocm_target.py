@@ -81,6 +81,42 @@ TESSERA_TARGET_MIOPEN_MIN: str = "3.5.0"
 
 
 # Shared (LDS) memory budgets in bytes per CU.
+#: Independent units a workgroup can be dispatched to -- the denominator for
+#: any occupancy question, and therefore the thing split-K must key on.
+#:
+#: On RDNA a workgroup occupies a **WGP** (2 CUs), so the count is CUs/2; on
+#: CDNA it occupies a CU. Getting that factor wrong halves or doubles every
+#: occupancy conclusion, which is why the unit is in the name rather than left
+#: to the caller.
+#:
+#: **Only measured parts appear here.** gfx1201 = 64 CUs / 32 WGPs (Tajasarus)
+#: and gfx1151 = 40 CUs / 20 WGPs (Princess-Luna), both read from the GPU
+#: agent's `Compute Unit:` in rocminfo on 2026-09-20. Every other arch is
+#: deliberately ABSENT: a guessed denominator would silently produce a wrong
+#: occupancy verdict, and a missing one makes the consumer fail closed. Add an
+#: entry only from the box that has the part.
+#:
+#: Measuring trap, hit while collecting these: rocminfo lists the **CPU** agent
+#: first, so the first `Compute Unit:` in its output is the host's thread count
+#: (16 on Tajasarus, 32 on Princess-Luna) -- plausible CU counts, and wrong.
+#: Parse the block whose `Name:` is a gfx target.
+_DISPATCH_SLOTS: dict[AMDArch, int] = {
+    AMDArch.GFX_1151: 20,   # 40 CUs / 2 -- Radeon 8060S (Strix Halo)
+    AMDArch.GFX_1201: 32,   # 64 CUs / 2 -- RX 9070 XT
+}
+
+
+def dispatch_slots(arch: AMDArch) -> int | None:
+    """WGPs (RDNA) or CUs (CDNA) a workgroup can land on, or None if unmeasured.
+
+    None means "this fleet has never measured that part", not "zero". A caller
+    deciding occupancy must treat None as unknown and decline to conclude --
+    never substitute a default, which is how an unmeasured part acquires a
+    confident wrong answer.
+    """
+    return _DISPATCH_SLOTS.get(arch)
+
+
 _LDS_BYTES: dict[AMDArch, int] = {
     AMDArch.GFX_90A:  65536,
     AMDArch.GFX_940:  65536,
@@ -1084,6 +1120,7 @@ __all__ = [
     "TesseraROCmTargetError",
     "TESSERA_TARGET_ROCM",
     "TESSERA_TARGET_HIP",
+    "dispatch_slots",
     "TESSERA_TARGET_RCCL_MIN",
     "TESSERA_TARGET_ROCBLAS_MIN",
     "TESSERA_TARGET_MIOPEN_MIN",

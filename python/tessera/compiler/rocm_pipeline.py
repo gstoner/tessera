@@ -304,7 +304,7 @@ class ROCMExecutablePipeline:
             f"sched-groups={self.sched_groups} "
             f"lds-pad-dwords={self.lds_pad_dwords} "
             f"lds-copy-width={self.lds_copy_width} "
-            + (f"lds-copy-elide={'true' if self.lds_copy_elide else 'false'} ")
+            f"lds-copy-elide={str(self.lds_copy_elide).lower()} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"

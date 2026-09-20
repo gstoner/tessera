@@ -1262,7 +1262,19 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         }
         // B: read along N (coalesced), write transposed so K is contiguous
         // per column in LDS.
-        auto copyB = kb.create<scf::ForOp>(l, tx, cWgN16, cThreads);
+        // B CANNOT be vectorised on both sides, and the reason is structural:
+        // the global read is contiguous in N while the LDS write is contiguous
+        // in K per column, so one side is always strided. That is the same A/B
+        // asymmetry `GLOBAL_LOAD_TR` exists for.
+        //
+        // So the GLOBAL side is vectorised and the LDS side stays scalar: a
+        // global miss costs hundreds of cycles against LDS's tens, so
+        // coalescing the read is worth far more than widening the store. If the
+        // scalar `ds_store` later shows up as the bottleneck, the fix is
+        // `global_load_tr_b64/b128` here -- AMD's own gfx1201 GEMM uses exactly
+        // that for its 8-bit B operand -- not a wider store into a transposed
+        // layout, which does not exist.
+        auto copyB = kb.create<scf::ForOp>(l, txV, cWgN16, stepV);
         {
           OpBuilder::InsertionGuard g(kb);
           kb.setInsertionPointToStart(copyB.getBody());
@@ -1271,17 +1283,31 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value col = kb.create<arith::RemUIOp>(l, e, cWgN);
           Value gk = kb.create<arith::AddIOp>(l, k0, kk);
           Value gc = kb.create<arith::AddIOp>(l, baseCol, col);
-          Value in = kb.create<arith::AndIOp>(
-              l, kb.create<arith::CmpIOp>(l, slt, gk, K),
-              kb.create<arith::CmpIOp>(l, slt, gc, N));
+          Value kIn = kb.create<arith::CmpIOp>(l, slt, gk, K);
+          Value remN = kb.create<arith::SubIOp>(l, N, gc);
+          Value availN = kb.create<arith::MaxSIOp>(l, remN, c0);
+          Value takeN = kb.create<arith::MinSIOp>(l, availN, cVec);
+          takeN = kb.create<arith::SelectOp>(l, kIn, takeN, c0);
           Value logical = kb.create<arith::AddIOp>(
               l, kb.create<arith::MulIOp>(l, gk, N), gc);
-          Value safe = kb.create<arith::SelectOp>(l, in, logical, c0);
-          Value v = kb.create<memref::LoadOp>(l, B, ValueRange{safe});
-          v = kb.create<arith::SelectOp>(l, in, v, scalarZero);
-          Value dst = kb.create<arith::AddIOp>(
-              l, kb.create<arith::MulIOp>(l, col, cLdsStride), kk);
-          kb.create<memref::StoreOp>(l, v, ldsB, ValueRange{dst});
+          Value safe = kb.create<arith::SelectOp>(l, kIn, logical, c0);
+          Value maskB = kb.create<vector::CreateMaskOp>(
+              l, VectorType::get({vecW}, kb.getI1Type()), ValueRange{takeN});
+          Value zeroVecB = kb.create<arith::ConstantOp>(
+              l, vecTy, kb.getZeroAttr(vecTy));
+          Value vb = kb.create<vector::MaskedLoadOp>(l, vecTy, B,
+                                                     ValueRange{safe}, maskB,
+                                                     zeroVecB);
+          // One scalar store per lane: consecutive `e` are consecutive COLUMNS,
+          // which land a full LDS row apart in the transposed layout.
+          for (int64_t i = 0; i < vecW; ++i) {
+            Value lane = kb.create<vector::ExtractOp>(l, vb,
+                                                      ArrayRef<int64_t>{i});
+            Value colI = kb.create<arith::AddIOp>(l, col, ci(i));
+            Value dst = kb.create<arith::AddIOp>(
+                l, kb.create<arith::MulIOp>(l, colI, cLdsStride), kk);
+            kb.create<memref::StoreOp>(l, lane, ldsB, ValueRange{dst});
+          }
         }
         kb.create<gpu::BarrierOp>(l);
         SmallVector<Value> af(mt), bf(nt);

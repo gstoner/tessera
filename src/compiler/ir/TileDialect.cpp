@@ -485,7 +485,7 @@ LogicalResult TileMmaDescAttr::verify(
     llvm::function_ref<InFlightDiagnostic()> emitError, StringRef family,
     int64_t m, int64_t n, int64_t k, StringRef aType, StringRef bType,
     StringRef accType, StringRef aLayout, StringRef bLayout,
-    int64_t kBlocks) {
+    int64_t kBlocks, int64_t scaleBlockK, StringRef scaleFormat) {
   static const llvm::StringSet<> kFamilies = {
       "auto", "mma_sync", "wgmma", "tcgen05", "wmma", "mfma"};
   if (!kFamilies.contains(family))
@@ -494,6 +494,37 @@ LogicalResult TileMmaDescAttr::verify(
                           "wmma, mfma}";
   if (m <= 0 || n <= 0 || k <= 0)
     return emitError() << "TILE_MMA_DESC_NONPOSITIVE_SHAPE: m/n/k must be > 0";
+  // A scale block that is not a whole number of K tiles cannot be applied once
+  // per block: the accumulate boundary and the scale boundary would disagree,
+  // and the kernel would scale a partial product. Refused here rather than
+  // discovered as wrong numbers (Decision #21a).
+  if (scaleBlockK < 0)
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k must be >= 0 "
+                          "(0 means unscaled); got "
+                       << scaleBlockK;
+  // The scale group along K must be EXACTLY the descriptor's K block, not
+  // merely a multiple of the instruction K. That is the invariant AITER's
+  // reference kernel asserts twice as `GROUP_K == BLOCK_SIZE_K`, and it is what
+  // makes `acc += dot(a, b) * outer(sa, sb)` apply to a whole block: a scale
+  // group larger than the block would span two accumulate boundaries, and one
+  // smaller would scale a partial product. Expressing it here means the
+  // descriptor cannot state an unimplementable pairing.
+  if (scaleBlockK > 0 && scaleBlockK != k * kBlocks)
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k ("
+                       << scaleBlockK << ") must equal the K block, k * k_blocks ("
+                       << k << " * " << kBlocks << " = " << (k * kBlocks)
+                       << "). A scale group that is not exactly one K block "
+                          "either spans two accumulate boundaries or scales a "
+                          "partial product";
+  if (scaleBlockK == 0 && !scaleFormat.empty())
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_fmt \""
+                       << scaleFormat
+                       << "\" is set but scale_k is 0, so nothing carries it";
+  if (scaleBlockK > 0 && scaleFormat.empty())
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k is "
+                       << scaleBlockK
+                       << " but scale_fmt is empty; the scale's element format "
+                          "is part of the contract, not a default";
   if (kBlocks < 1)
     return emitError() << "TILE_MMA_DESC_BAD_K_BLOCKS: k_blocks must be >= 1";
   if (aType.empty() || bType.empty() || accType.empty())

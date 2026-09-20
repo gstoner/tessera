@@ -190,6 +190,7 @@ src/compiler/ir/TesseraOps.td,SGDBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,SGDOp,1,1,real
 src/compiler/ir/TesseraOps.td,STFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,SVDOp,1,1,real
+src/compiler/ir/TesseraOps.td,ScaledMatmulOp,1,1,real
 src/compiler/ir/TesseraOps.td,ScoreCombineOp,1,1,real
 src/compiler/ir/TesseraOps.td,SelectOp,1,1,real
 src/compiler/ir/TesseraOps.td,SelectiveSsmOp,1,1,real

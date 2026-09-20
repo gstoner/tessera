@@ -2801,6 +2801,22 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="Portable Tile fragment ABI",
     ),
     DiagnosticCode(
+        code="TILE_MMA_DESC_BAD_SCALE_BLOCK", pass_origin="TileMmaDescAttr",
+        severity="error",
+        summary=(
+            "A #tile.mma_desc block-scale group is negative, is not exactly one "
+            "K block (k * k_blocks), or names a scale format with no block."
+        ),
+        fix_hint=(
+            "Set scale_k = k * k_blocks, or 0 for unscaled. A group that is not "
+            "exactly one K block either spans two accumulate boundaries or "
+            "scales a partial product, so it is refused rather than discovered "
+            "as wrong numbers (Decision #21a)."
+        ),
+        spec="docs/architecture/proposals/tile_fragment_abi.md",
+        sprint="Portable Tile fragment ABI",
+    ),
+    DiagnosticCode(
         code="TILE_MMA_DESC_BAD_LAYOUT", pass_origin="TileMmaDescAttr",
         severity="error",
         summary="A #tile.mma_desc A or B layout is not row_major or col_major.",

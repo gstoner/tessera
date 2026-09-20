@@ -243,6 +243,16 @@ struct MatmulSchedule {
   //: V_WMMA_F32_16X16X16_FP8_BF8 and its mirror, and the descriptor is where
   //: that pairing has to be expressible or nothing below it can select it.
   StringRef storageB;
+  //: The block-scale contract, when the Graph op carried one. `scaleBlockK`
+  //: is the contraction extent sharing a scale (0 = unscaled) and
+  //: `scaleFormat` its element form. The Schedule is where this has to live:
+  //: it decides what the program computes, and a scale dropped here is
+  //: Decision #32 loss on the attribute that picks the instruction.
+  int64_t scaleBlockK = 0;
+  StringRef scaleFormat;
+  //: The macro K tile (ROCM-MACRO-K-TILE-1). 0 means "one instruction K per
+  //: block", i.e. the historical unblocked loop. `kBlocks = blockK / tileK`.
+  int64_t blockK = 0;
   StringRef accum;
   int64_t m;
   int64_t n;
@@ -457,6 +467,37 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       !schedule.dynamicM && !schedule.dynamicN && !schedule.dynamicK &&
       schedule.m >= 1024 && schedule.n >= 1024 && schedule.m % 64 == 0 &&
       schedule.n % 64 == 0;
+
+  // ROCM-MACRO-K-TILE-1: the macro K tile, selected from measurement.
+  //
+  // `k_blocks` had been stated as 1 by every schedule while the descriptor
+  // could always carry more and three consumers refused it. Measured on
+  // Tajasarus 2026-09-19, register body, kUnroll=1, all arms exact
+  // (integer-valued inputs make the fp16 arms exact too, so this sweep needed
+  // no tolerance):
+  //
+  //   blockK=32 vs 16 -- fp16 1024^3 1.21x, fp16 2048^3 1.65x,
+  //   fp16 256x4096x256 1.53x, int8 1024^3 1.17x, int8 2048^3 1.14x,
+  //   int8 256x4096x256 1.79x. Positive at EVERY measured point.
+  //
+  // 64 has the higher peaks (fp16 2048^3 1.81x, int8 2048^3 1.54x, int8
+  // 256x4096x256 2.56x) and LOSES at int8 1024^3 (0.85x); 128 is a reproduced
+  // cliff for int8 at the skinny shape (0.37x, 2.0 TFLOP/s on both runs). So 32
+  // is the only value that is a win everywhere with no cliff, and it is the
+  // default until a per-shape rule has more than three shapes behind it.
+  //
+  // Two measurement notes kept because they would otherwise mislead: a 0.60x
+  // int8 1024^3 reading at blockK=32 did NOT reproduce (1.17x over nine
+  // trials) and is withdrawn; and the 256x4096x256 baseline itself moved
+  // 3.3 -> 5.4 TFLOP/s between runs, because ~0.5 GFLOP of work is launch-
+  // overhead dominated -- the absolutes at 64 and 128 are stable, the RATIOS at
+  // that shape are not.
+  //
+  // Distinct from `kUnroll`, which stays a measured latency knob: this is the
+  // contract a block scale must align to exactly (ROCM-FP8-BLOCKSCALE-1).
+  const bool gfx1201 = schedule.arch.contains("gfx1201");
+  if (gfx1201 && !schedule.dynamicK && schedule.k >= 64)
+    schedule.blockK = 32;
   if (rocmWmmaChip && lhsElement == rhsElement &&
       (lhsElement.isInteger(8) || lhsElement.isInteger(4)) &&
       !lhsElement.isUnsignedInteger() && outElement.isInteger(32) &&
@@ -3288,7 +3329,14 @@ struct ScheduleToTilePass
             &getContext(), "auto", selected->tileM, selected->tileN,
             selected->tileK, selected->storage,
             selected->storageB.empty() ? selected->storage : selected->storageB,
-            selected->accum, "row_major", "col_major", 1);
+            selected->accum, "row_major", "col_major",
+            // ROCM-MACRO-K-TILE-1: kBlocks = blockK / instruction K. The
+            // schedule states the K block; this is where it becomes the
+            // descriptor field the generator reads.
+            selected->blockK > 0 && selected->tileK > 0
+                ? std::max<int64_t>(selected->blockK / selected->tileK, 1)
+                : 1,
+            selected->scaleBlockK, selected->scaleFormat);
         auto epilogue = tile::TileEpilogueAttr::get(
             &getContext(), selected->bias, selected->activation,
             selected->output);
@@ -3359,7 +3407,14 @@ struct ScheduleToTilePass
               &getContext(), "mma_sync", selected->tileM, selected->tileN,
               selected->tileK, selected->storage,
             selected->storageB.empty() ? selected->storage : selected->storageB,
-              selected->accum, "row_major", "col_major", 1);
+              selected->accum, "row_major", "col_major",
+            // ROCM-MACRO-K-TILE-1: kBlocks = blockK / instruction K. The
+            // schedule states the K block; this is where it becomes the
+            // descriptor field the generator reads.
+            selected->blockK > 0 && selected->tileK > 0
+                ? std::max<int64_t>(selected->blockK / selected->tileK, 1)
+                : 1,
+            selected->scaleBlockK, selected->scaleFormat);
           SmallVector<StringAttr> laneReg{kernelBuilder.getStringAttr("laneid"),
                                           kernelBuilder.getStringAttr("reg")};
           auto aLayout = tile::TileLayoutAttr::get(
@@ -3687,7 +3742,14 @@ struct ScheduleToTilePass
           selected->storage == "u8" ? "i8"
           : selected->storageB.empty() ? selected->storage
                                        : selected->storageB,
-          selected->accum, "row_major", "col_major", 1);
+          selected->accum, "row_major", "col_major",
+          // ROCM-MACRO-K-TILE-1: kBlocks = blockK / instruction K. The
+          // schedule states the K block; this is where it becomes the
+          // descriptor field the generator reads.
+          selected->blockK > 0 && selected->tileK > 0
+              ? std::max<int64_t>(selected->blockK / selected->tileK, 1)
+              : 1,
+          selected->scaleBlockK, selected->scaleFormat);
       auto epilogue = tile::TileEpilogueAttr::get(
           &getContext(), selected->bias, selected->activation, selected->accum);
 

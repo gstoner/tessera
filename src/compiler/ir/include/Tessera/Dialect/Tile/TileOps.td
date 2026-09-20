@@ -1411,12 +1411,26 @@ def Tile_MmaDescAttr : Tile_Attr<"TileMmaDesc", "mma_desc"> {
                         StringRefParameter<"">:$accType,
                         StringRefParameter<"">:$aLayout,
                         StringRefParameter<"">:$bLayout,
-                        "int64_t":$kBlocks);
+                        "int64_t":$kBlocks,
+                        // ROCM-FP8-BLOCKSCALE-1. Without these the block scale
+                        // is stated at Graph IR and gone by the Tile level --
+                        // Decision #32's information loss, on the one attribute
+                        // that decides which matrix instruction runs.
+                        //
+                        // `scaleBlockK` is the contraction extent sharing one
+                        // scale (0 = unscaled), `scaleFormat` its element form
+                        // ("e8m0" MX, "fp8_e4m3" NVFP4, "fp32" for the
+                        // [128,128] fp8_w8a8 configs). Defaulted and printed
+                        // only when set, so the 45 fixtures that print an
+                        // mma_desc are unaffected.
+                        DefaultValuedParameter<"int64_t", "0">:$scaleBlockK,
+                        StringRefParameter<"", "\"\"">:$scaleFormat);
   let assemblyFormat =
       "`<` `family` `=` $family `,` `m` `=` $m `,` `n` `=` $n `,` `k` `=` $k `,` "
       "`a` `=` $aType `,` `b` `=` $bType `,` `acc` `=` $accType `,` "
       "`a_layout` `=` $aLayout `,` `b_layout` `=` $bLayout `,` "
-      "`k_blocks` `=` $kBlocks `>`";
+      "`k_blocks` `=` $kBlocks "
+      "(`,` `scale_k` `=` $scaleBlockK^ `,` `scale_fmt` `=` $scaleFormat)? `>`";
   let genVerifyDecl = 1;
 }
 

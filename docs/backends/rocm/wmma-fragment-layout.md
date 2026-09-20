@@ -892,6 +892,232 @@ E4M3) and dequantizing it to BF16. The two are not interchangeable: same e2m1
 elements, different scale contract, and only one of them has silicon behind it
 on that part.
 
+## 10i. WITHDRAWN: every LDS throughput figure in §10e, and the padding default
+
+**A harness bug inflated every LDS number recorded on 2026-09-19, including the
+ones §10e used to pick a default.** The LDS body computes
+`gridM = ceil(M / wgM)` where `wgM = wavesM * macroTileM` — a **128x128**
+workgroup tile at 2x2 waves and a 4x4 panel — and indexes with `bidY`/`bidX`
+directly. The measurement harness launched a grid sized for the artifact's
+**64x64** macro tile, so it ran **four times too many workgroups**, each
+computing a full tile. Results stayed correct (every arm at 1.95e-06, because
+the redundant groups recompute the same values), which is exactly why it went
+unnoticed: the numbers were wrong and nothing was.
+
+Corrected grid, same kernel, 1024³ f16, two runs:
+
+| pad | vector width | §10e claimed | corrected run 1 | run 2 | 2048³ |
+|---|---|---|---|---|---|
+| 0 | 8 | 7.9 | 17.7 | 17.7 | 34.8 |
+| **1 (the shipped default)** | 2 | **8.8 "best"** | 14.5 | 16.4 | 37.6 |
+| 2 | 4 | 8.1 | 16.6 | 16.6 | 37.9 |
+| 4 | 8 | — | 18.5 | 17.4 | **38.5** |
+
+**What this withdraws.** §10e's "+10–12% for pad=1" is withdrawn: corrected, the
+whole 1024³ spread is 16.4–17.7 and the ordering changed between runs, so the
+padding choice is **within noise at that shape**. `lds_pad_dwords=1` was
+selected from the broken measurement and is not supported by the corrected one.
+2048³ shows a mild monotonic preference for more padding (pad=4, +10.7% over
+pad=0), which is the only clean signal in the set.
+
+**What this withdraws about the gap.** The LDS body is **2.2–4.0x** off the
+register body (71.4 at 1024³, ~83.8 at 2048³), not the 8–9x recorded in §10e and
+cited in `ROCM-LDS-STAGE-VECTOR-1` as "the 8x". Three of the four independent
+lines that pointed at the staging copy — the radiance kernel's ungated-global
+result, AMD's LDS-heavy Tensile library, CK's `ScalarPerVector=8` — are external
+and unaffected; the fourth, our own 8x, was this harness.
+
+**And what was UNMEASURED — now closed by §10j, and worse than this section
+assumed.** The vectorised copy's benefit had no valid baseline here. It now
+does, and it is **negative**: 0.51-0.87x of the scalar copy. Worse, the
+"corrected" table above is itself **mislabeled** — it was produced by a stale
+`tessera-opt` that contained no vector ops, so it is the **scalar** pad sweep,
+not the vectorised one. Its numbers stand; its column heading did not. See
+§10j.
+
+**The lesson is not "check the grid".** It is that a redundant-work bug is
+invisible to a correctness check by construction — every arm agreed to
+1.95e-06 — so a throughput harness needs its own proof that it computed each
+output once. A cheap one: assert `gridM * wgM >= M` and `gridM * wgM < M + wgM`,
+which the broken harness would have failed on its first run.
+
+## 10j. The vectorised staging copy is a regression, and it never compiled
+
+**Closes the "UNMEASURED" clause above, in the opposite direction from the one
+it was written expecting.** Measured 2026-09-19 on `Tajasarus` (gfx1201, ROCm
+10.0), 1024³ f16, LDS body, 2x2 waves, 4x4 panel, behind the corrected grid,
+median of 7 trials:
+
+| pad | derived width | **scalar copy** | vectorised copy | ratio |
+|---|---|---|---|---|
+| 0 | 8 | **17.6** | 13.5 | 0.77x |
+| 1 | 2 | **14.4** | 7.4 | **0.51x** |
+| 2 | 4 | **14.6** | 11.4 | 0.78x |
+| 4 | 8 | **15.7** | 13.7 | 0.87x |
+
+The scalar column reproduces §10i's corrected table (17.7 / 14.5 / 16.6 / 18.5)
+to within its noise — which is the tell for the second defect below.
+
+**The ISA says why, and it is not subtle: neither arm emits a wide load.**
+Disassembled through `tests/_support/rocm_isa.py`:
+
+| | `global_load_d16_b16` | `global_load_d16_hi_b16` | `global_load_b128` | `s_cbranch_execz` |
+|---|---|---|---|---|
+| scalar | 18 | 14 | **0** | 128 |
+| vectorised | 8 | 8 | **0** | **146** |
+
+`llvm.intr.masked.load` expands on AMDGCN into a per-element branch plus a
+narrow load. A runtime-masked load therefore **cannot** become
+`global_load_b128` — so the vector width bought no bandwidth and paid 18 extra
+branches. That is the whole of the 0.77x.
+
+**The defect was a comment, and it was load-bearing.** From the code it
+describes: *"the ragged tail is a masked load rather than a scalar fallback,
+which keeps one path."* Keeping one path is exactly what prevents the wide
+load. `global_load_b128` needs an **unmasked** `vector.load` on the in-bounds
+common path with the ragged tail split off into its own branch — the two-path
+shape that sentence rejected on tidiness grounds. Tidiness was the wrong axis.
+
+**A second defect hid the first, and it is the more dangerous one.** Every
+"vectorised" figure ever recorded — including §10i's corrected table — came
+from a `tessera-opt` that had no vector ops in it. `TESSERA_OPT` on Tajasarus
+resolves to `build-assertions`, and the rebuilds went to `build`. The run
+succeeded and measured the old kernel.
+
+It surfaced only because the next change added a pass **option**
+(`lds-copy-width`), which fails loudly at the option parser. A change to a pass
+**body** has no such tripwire: it compiles, runs, and silently measures code
+that is no longer in the tree. `rocm_native.warn_if_generator_is_stale` now
+compares the resolved binary against the generator sources and says so.
+
+**Two defects, one measurement, opposite signs.** The harness bug inflated the
+LDS numbers ~4x; the stale binary meant the arm under test was never running.
+Either alone would have produced a plausible-looking table. The reason to
+record both is that they compose: the 2026-09-19 vectorisation was
+"measured" four times, and all four measurements were of the code it replaced.
+
+**Status.** `lds_copy_width` defaults to `1` (scalar) — the measured-faster
+arm. The vector path stays reachable behind the knob as the measured-negative
+arm, the same disposition `ROCM-SCHED-GROUP-1` got.
+
+### 10j.1 The split path was built, and it loses too — for a different reason
+
+The unmasked fast path plus a split ragged tail was implemented the same day.
+It **does** produce the wide load the masked version could not (`wide=2`, one
+per copy loop) — and it is still slower. 2048³ f16, corrected grid, median of
+9, with a static ISA census beside each number:
+
+| arm | TFLOP/s | wide loads | `global_load_d16` | `ds_store` | max VGPR |
+|---|---|---|---|---|---|
+| **scalar, pad 4** | **40.4** | 0 | 20 | **6** | 184 |
+| split-vec, pad 0 | 34.1 | 2 | 16 | 17 | 193 |
+| split-vec, pad 1 | 18.8 | 0 | 4 | 5 | 175 |
+| split-vec, pad 2 | 30.7 | 2 | 8 | 9 | 183 |
+| split-vec, pad 4 | 34.5 | 2 | 16 | 17 | 189 |
+
+Neither arm spills (`scratch_ops = 0` both ways), so register pressure is not
+it — the 126-spill figure on record belongs to the **register** body, not this
+one.
+
+**`ds_store` 6 → 17 is the finding.** The global read widened and the LDS write
+got three times worse, because **B's write cannot widen at all**: the global
+side is contiguous in N while the LDS side is contiguous in K per column, so
+the fast path loads 8 elements in one instruction and then stores them with
+eight separate `ds_store`s. The unrolled tail adds its own. The load saves less
+than the store side costs.
+
+**So the target was mis-stated, and CK says so explicitly.** The tuned CK
+instance this item cites sets `SrcScalarPerVector=8` **and**
+`DstScalarPerVector_K1=8` — both sides, 128 bits each way — and it can only
+set the second because its LDS layout is **K1-blocked** (`K1=8`), not a plain
+transpose. Widening the copy into our layout is therefore not a smaller version
+of CK's configuration; it is the half of it that does not work alone.
+
+**Re-specified gate:** the deliverable is the **K1-blocked LDS layout**, after
+which both sides widen and the copy width becomes the tunable CK treats it as.
+A wider copy over the current layout is measured-negative twice and should not
+be attempted a third time.
+
+**But first, an unmeasured question this raises, which should be answered
+before the layout work starts.** Two attempts at the copy have now failed to
+move the LDS body, which is weak evidence that the copy is not where the time
+goes. The register body reaches ~84 TFLOP/s at 2048³ against the LDS body's
+40.4 while moving **the same global bytes** — so global traffic cannot be the
+difference. What the LDS body adds is the LDS round trip and **two barriers per
+K step** (256 of them at 2048³), and barriers are already on record as
+unhelpful to schedule around: `ROCM-SCHED-GROUP-1` closed measured-negative.
+
+If the cost is the barrier-bounded round trip rather than the copy, then the
+K1-blocked layout is another copy optimisation and will disappoint the same
+way. **Measure the split before building the layout** — the cheapest version is
+a deliberately-wrong ceiling probe that fills LDS from a constant and never
+touches global, whose throughput bounds what any copy improvement can buy.
+This paragraph is reasoning, not a result; do not cite it as one.
+
+## 10k. The padding default, settled on the shape where it converges
+
+§10e chose `lds_pad_dwords=1` from the broken harness; §10i withdrew that
+without replacing it. Measured 2026-09-19 on `Tajasarus`, corrected grid,
+scalar copy (the §10j default), f16, median of 9 trials:
+
+| pad | LDS row stride (f16) | 1024³ | 2048³ |
+|---|---|---|---|
+| 0 | 16 | 17.4 | 35.0 |
+| 1 (old default) | 18 | 15.7 | 39.5 |
+| 2 | 20 | 14.3 | 39.7 |
+| **4 (new default)** | 24 | 15.0 | **40.3** |
+
+**The two shapes disagree, and only one of them is measuring anything.** At
+2048³ padding helps monotonically, pad=4 wins by **15%**, and median equals
+best to 0.1 — the dispersion is nil. At 1024³ the ordering inverts, and it is
+noise: interleaving pad 0 and pad 4 over 21 trials **in one process** gave
+
+```
+pad 0 -> 17.6   (IQR 0.3)
+pad 4 -> 17.7   (IQR 1.5)
+pad 0 -> 15.2   (IQR 0.3)      <- same configuration, 16% lower
+pad 4 -> 17.6   (IQR 1.7)
+```
+
+so pad=0 remeasures 16% apart against itself while its own IQR says 0.3. A
+tight IQR around a drifting median is not precision — it is a run-to-run shift
+inside a run-length the harness never spans. At 1024³ the LDS body is ~120 us
+over 64 workgroups on 32 WGPs, short enough for clock behaviour to dominate;
+2048³ is 8x the work over 256 workgroups and is stable.
+
+**So the default comes from 2048³ and the 1024³ column decides nothing.** The
+cost is 1.5x the LDS footprint (8 KiB → 12 KiB per workgroup at the 2x2-wave
+128x128 tile), which is far inside gfx1201's 128 KiB per WGP and does not
+change occupancy at this tile.
+
+**And §10e's mechanism does not predict the winner.** Bank behaviour depends on
+`gcd(stride_in_dwords, 32)`:
+
+| pad | stride (dwords) | `gcd(.,32)` | model says | 2048³ measured |
+|---|---|---|---|---|
+| 0 | 8 | 8 | worst | 35.0 (worst ✓) |
+| 1 | 9 | **1** | **best** | 39.5 |
+| 2 | 10 | 2 | middling | 39.7 |
+| 4 | 12 | **4** | bad | **40.3 (best ✗)** |
+
+pad=4 reinstates a 4-way conflict and still wins. What the data actually shows
+is a **+13% step from pad=0 to any padding at all**, and then a 2% monotonic
+drift with stride that the conflict model has no term for. So the conflict
+model explains the step and nothing else; the residual is probably `ds_load`
+width or address alignment, and it is unexplained rather than explained-away.
+
+The default is **4** because it is the pooled winner — best at 2048³, and at
+1024³ it spans 15.0-17.8 against pad=1's 14.4-16.5 — not because the model
+endorses it. pad=1 is within 2% at 2048³ on 25% less LDS and is a defensible
+alternative the moment the residual is explained.
+
+**What is still open** is that a padding default exists at all: the right
+answer is shape-dependent and the mechanism (bank conflicts on the fragment
+read vs. the wider `ds_load` a small stride allows) is shape-independent, which
+means the disagreement is really the *measurement* failing at small shapes.
+The per-shape selection item downstream of `ROCM-MACRO-K-TILE-1` owns it, and
+its first job is a 1024³ measurement that converges, not a better default.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no

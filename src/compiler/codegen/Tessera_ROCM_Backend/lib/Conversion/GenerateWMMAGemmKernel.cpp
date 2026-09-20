@@ -105,6 +105,16 @@ struct WmmaTypes {
   // Only the K axis scales. The 16s that build the M/N macro tile are fragment
   // geometry and are untouched.
   int64_t fragK = 16;
+  // ROCM-MACRO-K-TILE-1. The descriptor's `k_blocks`: how many fragment-K
+  // steps one K BLOCK spans, so the block's contraction extent is
+  // `fragK * kBlocks`. Distinct from `kUnroll`, which is a measured latency
+  // knob: `kBlocks` is a contract the Schedule stated and a block scale must
+  // align to exactly (the descriptor verifier enforces
+  // `scale_k == k * k_blocks`), while `kUnroll` may be retuned freely without
+  // changing what the program computes. They shape the loop the same way and
+  // must not be conflated -- that is how a tuning parameter becomes a
+  // semantic one.
+  int64_t kBlocks = 1;
   // B's storage name when it differs from A's. RDNA4 has the mixed OCP FP8
   // pairs (`V_WMMA_F32_16X16X16_FP8_BF8` and its mirror), and empty means
   // "same as A", which is every other case.
@@ -135,6 +145,10 @@ struct WmmaGemmRequest {
   std::string accumulate;
   std::string rasterOrder = "row_major";
   int64_t rasterGroup = 1;
+  // ROCM-MACRO-K-TILE-1: the descriptor's `k_blocks`. Arrives here rather than
+  // being read from `desc` at the emission site, because the descriptor is only
+  // in scope in the adapters that populate this request.
+  int64_t kBlocks = 1;
   tessera::tile::TilePackedFormatAttr storagePack;
 };
 
@@ -914,7 +928,12 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     // memory-latency bound (LDS staging measured 0.39-0.65x, and the panel
     // axis tops out at 4x4 fragments before the VGPR cliff), so this is the
     // remaining lever. `kUnroll = 1` is exactly the established loop.
-    const int64_t unroll = masked ? 1 : std::max<int64_t>(kUnroll, 1);
+    // Panels issued per loop iteration = the descriptor's K block times the
+    // unroll. With `kBlocks == 1` this is exactly the established loop, so the
+    // generalisation is inert until a schedule states a wider block.
+    const int64_t blocks = std::max<int64_t>(T.kBlocks, 1);
+    const int64_t unroll =
+        masked ? 1 : std::max<int64_t>(kUnroll, 1) * blocks;
     Value kStep = rb.create<arith::ConstantIndexOp>(loc, T.fragK * unroll);
     Value kMainU = kMain;
     if (unroll > 1) {
@@ -993,7 +1012,8 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                       int64_t mt, int64_t nt, int64_t wavesM, int64_t wavesN,
                       const WmmaTypes &T, Type outputType, bool hasBias,
                       StringRef activation, StringRef rasterOrder,
-                      int64_t rasterGroup, int64_t ldsPadDwords) {
+                      int64_t rasterGroup, int64_t ldsPadDwords,
+                      int64_t ldsCopyWidth) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -1053,6 +1073,40 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // loops still walk wgM*16 / wgN*16 logical elements; only the destination
   // and the fragment view's leading dimension carry the padding.
   Value cLdsStride = ci(ldsStride);
+
+  // ROCM-LDS-STAGE-VECTOR-1. The staging copy moved SIXTEEN BITS per thread per
+  // iteration -- `global_load_d16_b16` in, `ds_store_b16` out -- against the
+  // register body's `global_load_b128`. Measured 8.8 against 70.7 TFLOP/s at
+  // 1024^3 f16, and that copy is the 8x, not the bank conflict the padding
+  // already fixed (which was worth ~10%).
+  //
+  // The width is DERIVED from the padded stride, not chosen: a V-wide vector
+  // needs every LDS row start V-aligned, so V must divide `ldsStride`. That
+  // couples this to ROCM-LDS-BANKPAD-1 exactly as predicted there --
+  //
+  //   pad=0 stride 16: V=8 but FOUR banks (the conflict the padding removed)
+  //   pad=1 stride 18: conflict-free, V=2   <- optimal when copies were scalar
+  //   pad=2 stride 20: conflict-free, V=4   <- the only wide conflict-free pair
+  //   pad=4 stride 24: V=8 but eight banks
+  //
+  // so the padding that was right for a scalar copy is nearly the worst for a
+  // vectorised one. The default moves with the measurement, not with this
+  // comment.
+  // `ldsCopyWidth` 0 derives the width; 1 forces the historical scalar copy.
+  // The forced value exists so the vectorisation can be MEASURED against a
+  // scalar baseline at the same grid -- without it the only scalar figures
+  // available came from a harness that launched 4x too many workgroups, and
+  // the vectorisation's benefit was unmeasurable (section 10i).
+  int64_t vecW = 1;
+  if (ldsCopyWidth <= 0) {
+    for (int64_t v : {8, 4, 2})
+      if (ldsStride % v == 0 && 16 % v == 0) { vecW = v; break; }
+  } else {
+    vecW = ldsCopyWidth;
+    if (ldsStride % vecW != 0 || 16 % vecW != 0)
+      vecW = 1;  // an unaligned forced width would scatter across rows
+  }
+  auto vecTy = VectorType::get({vecW}, T.store);
 
   Value scalarZero =
       T.isInt ? b.create<arith::ConstantOp>(loc, T.store,
@@ -1175,7 +1229,13 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       [&](OpBuilder &kb, Location l, Value k0, ValueRange accs) {
         // Every wave finished reading the previous slab before it is overwritten.
         kb.create<gpu::BarrierOp>(l);
-        auto copyA = kb.create<scf::ForOp>(l, tx, cWgM16, cThreads);
+        // A: `vecW` contiguous K per thread per step. K is the fast axis of a
+        // row-major A, so the global side is contiguous too; the ragged tail is
+        // a masked load rather than a scalar fallback, which keeps one path.
+        Value cVec = ci(vecW);
+        Value txV = kb.create<arith::MulIOp>(l, tx, cVec);
+        Value stepV = kb.create<arith::MulIOp>(l, cThreads, cVec);
+        auto copyA = kb.create<scf::ForOp>(l, txV, cWgM16, stepV);
         {
           OpBuilder::InsertionGuard g(kb);
           kb.setInsertionPointToStart(copyA.getBody());
@@ -1184,14 +1244,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value kk = kb.create<arith::RemUIOp>(l, e, c16);
           Value gr = kb.create<arith::AddIOp>(l, baseRow, row);
           Value gk = kb.create<arith::AddIOp>(l, k0, kk);
-          Value in = kb.create<arith::AndIOp>(
-              l, kb.create<arith::CmpIOp>(l, slt, gr, M),
-              kb.create<arith::CmpIOp>(l, slt, gk, K));
-          Value logical = kb.create<arith::AddIOp>(
-              l, kb.create<arith::MulIOp>(l, gr, K), gk);
-          Value safe = kb.create<arith::SelectOp>(l, in, logical, c0);
-          Value v = kb.create<memref::LoadOp>(l, A, ValueRange{safe});
-          v = kb.create<arith::SelectOp>(l, in, v, scalarZero);
+          Value rowIn = kb.create<arith::CmpIOp>(l, slt, gr, M);
           // `e` indexes the UNPADDED tile; the destination row is strided.
           Value dstA = padElems == 0
                            ? e
@@ -1199,11 +1252,81 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                                  l,
                                  kb.create<arith::MulIOp>(l, row, cLdsStride),
                                  kk));
-          kb.create<memref::StoreOp>(l, v, ldsA, ValueRange{dstA});
+          if (vecW == 1) {
+            // The historical scalar copy, kept reachable so the vectorised one
+            // has a baseline to be measured against. It is NOT `vector<1xT>`:
+            // a width-1 masked load is a scalar load wearing a mask, it costs
+            // an `llvm.intr.masked.load` the scalar path does not pay, and
+            // `vector.create_mask` has no LLVM lowering at that width -- so
+            // emulating the baseline through the vector path would neither
+            // compile nor measure the thing it claims to.
+            Value in = kb.create<arith::AndIOp>(
+                l, rowIn, kb.create<arith::CmpIOp>(l, slt, gk, K));
+            Value logical1 = kb.create<arith::AddIOp>(
+                l, kb.create<arith::MulIOp>(l, gr, K), gk);
+            Value safe1 = kb.create<arith::SelectOp>(l, in, logical1, c0);
+            Value v1 = kb.create<memref::LoadOp>(l, A, ValueRange{safe1});
+            v1 = kb.create<arith::SelectOp>(l, in, v1, scalarZero);
+            kb.create<memref::StoreOp>(l, v1, ldsA, ValueRange{dstA});
+          } else {
+          // TWO PATHS, deliberately. A `vector.maskedload` reaches AMDGCN as
+          // `llvm.intr.masked.load`, which expands into a per-element branch
+          // plus a NARROW load -- measured on gfx1201: no `global_load_b128`
+          // at any width, and 18 more branches than the scalar copy. So a
+          // runtime mask forecloses the wide load it was meant to enable. The
+          // in-bounds case must be an UNMASKED `vector.load`, and the ragged
+          // tail gets its own branch (see wmma-fragment-layout.md 10j).
+          Value logical = kb.create<arith::AddIOp>(
+              l, kb.create<arith::MulIOp>(l, gr, K), gk);
+          Value kWhole = kb.create<arith::CmpIOp>(
+              l, arith::CmpIPredicate::sle,
+              kb.create<arith::AddIOp>(l, gk, cVec), K);
+          Value wholeA = kb.create<arith::AndIOp>(l, rowIn, kWhole);
+          kb.create<scf::IfOp>(
+              l, wholeA,
+              [&](OpBuilder &tb, Location tl) {
+                Value v = tb.create<vector::LoadOp>(tl, vecTy, A,
+                                                    ValueRange{logical});
+                tb.create<vector::StoreOp>(tl, v, ldsA, ValueRange{dstA});
+                tb.create<scf::YieldOp>(tl);
+              },
+              [&](OpBuilder &eb, Location el) {
+                // The tail, unrolled: LDS is always in bounds, so an
+                // out-of-range source contributes the zero the MMA needs.
+                for (int64_t i = 0; i < vecW; ++i) {
+                  Value off = ci(i);
+                  Value gki = eb.create<arith::AddIOp>(el, gk, off);
+                  Value in = eb.create<arith::AndIOp>(
+                      el, rowIn,
+                      eb.create<arith::CmpIOp>(el, slt, gki, K));
+                  Value addr = eb.create<arith::AddIOp>(el, logical, off);
+                  Value safe = eb.create<arith::SelectOp>(el, in, addr, c0);
+                  Value e1 = eb.create<memref::LoadOp>(el, A,
+                                                       ValueRange{safe});
+                  e1 = eb.create<arith::SelectOp>(el, in, e1, scalarZero);
+                  eb.create<memref::StoreOp>(
+                      el, e1, ldsA,
+                      ValueRange{eb.create<arith::AddIOp>(el, dstA, off)});
+                }
+                eb.create<scf::YieldOp>(el);
+              });
+          }
         }
         // B: read along N (coalesced), write transposed so K is contiguous
         // per column in LDS.
-        auto copyB = kb.create<scf::ForOp>(l, tx, cWgN16, cThreads);
+        // B CANNOT be vectorised on both sides, and the reason is structural:
+        // the global read is contiguous in N while the LDS write is contiguous
+        // in K per column, so one side is always strided. That is the same A/B
+        // asymmetry `GLOBAL_LOAD_TR` exists for.
+        //
+        // So the GLOBAL side is vectorised and the LDS side stays scalar: a
+        // global miss costs hundreds of cycles against LDS's tens, so
+        // coalescing the read is worth far more than widening the store. If the
+        // scalar `ds_store` later shows up as the bottleneck, the fix is
+        // `global_load_tr_b64/b128` here -- AMD's own gfx1201 GEMM uses exactly
+        // that for its 8-bit B operand -- not a wider store into a transposed
+        // layout, which does not exist.
+        auto copyB = kb.create<scf::ForOp>(l, txV, cWgN16, stepV);
         {
           OpBuilder::InsertionGuard g(kb);
           kb.setInsertionPointToStart(copyB.getBody());
@@ -1212,17 +1335,67 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value col = kb.create<arith::RemUIOp>(l, e, cWgN);
           Value gk = kb.create<arith::AddIOp>(l, k0, kk);
           Value gc = kb.create<arith::AddIOp>(l, baseCol, col);
-          Value in = kb.create<arith::AndIOp>(
-              l, kb.create<arith::CmpIOp>(l, slt, gk, K),
-              kb.create<arith::CmpIOp>(l, slt, gc, N));
+          Value kIn = kb.create<arith::CmpIOp>(l, slt, gk, K);
+          if (vecW == 1) {
+            Value in = kb.create<arith::AndIOp>(
+                l, kIn, kb.create<arith::CmpIOp>(l, slt, gc, N));
+            Value logical1 = kb.create<arith::AddIOp>(
+                l, kb.create<arith::MulIOp>(l, gk, N), gc);
+            Value safe1 = kb.create<arith::SelectOp>(l, in, logical1, c0);
+            Value v1 = kb.create<memref::LoadOp>(l, B, ValueRange{safe1});
+            v1 = kb.create<arith::SelectOp>(l, in, v1, scalarZero);
+            Value dst1 = kb.create<arith::AddIOp>(
+                l, kb.create<arith::MulIOp>(l, col, cLdsStride), kk);
+            kb.create<memref::StoreOp>(l, v1, ldsB, ValueRange{dst1});
+          } else {
+          Value remN = kb.create<arith::SubIOp>(l, N, gc);
+          // Same two-path shape as A: only an UNMASKED load widens. The LDS
+          // side stays scalar either way -- consecutive `e` are consecutive
+          // COLUMNS, a full LDS row apart in the transposed layout -- so what
+          // the fast path buys here is the coalesced wide GLOBAL read, which
+          // is the expensive side.
           Value logical = kb.create<arith::AddIOp>(
               l, kb.create<arith::MulIOp>(l, gk, N), gc);
-          Value safe = kb.create<arith::SelectOp>(l, in, logical, c0);
-          Value v = kb.create<memref::LoadOp>(l, B, ValueRange{safe});
-          v = kb.create<arith::SelectOp>(l, in, v, scalarZero);
-          Value dst = kb.create<arith::AddIOp>(
-              l, kb.create<arith::MulIOp>(l, col, cLdsStride), kk);
-          kb.create<memref::StoreOp>(l, v, ldsB, ValueRange{dst});
+          Value nWhole = kb.create<arith::CmpIOp>(
+              l, arith::CmpIPredicate::sle,
+              kb.create<arith::AddIOp>(l, gc, cVec), N);
+          Value wholeB = kb.create<arith::AndIOp>(l, kIn, nWhole);
+          auto storeLane = [&](OpBuilder &ob, Location ol, Value lane,
+                               int64_t i) {
+            Value colI = ob.create<arith::AddIOp>(ol, col, ci(i));
+            Value dst = ob.create<arith::AddIOp>(
+                ol, ob.create<arith::MulIOp>(ol, colI, cLdsStride), kk);
+            ob.create<memref::StoreOp>(ol, lane, ldsB, ValueRange{dst});
+          };
+          kb.create<scf::IfOp>(
+              l, wholeB,
+              [&](OpBuilder &tb, Location tl) {
+                Value vb = tb.create<vector::LoadOp>(tl, vecTy, B,
+                                                     ValueRange{logical});
+                for (int64_t i = 0; i < vecW; ++i)
+                  storeLane(tb, tl,
+                            tb.create<vector::ExtractOp>(
+                                tl, vb, ArrayRef<int64_t>{i}),
+                            i);
+                tb.create<scf::YieldOp>(tl);
+              },
+              [&](OpBuilder &eb, Location el) {
+                for (int64_t i = 0; i < vecW; ++i) {
+                  Value off = ci(i);
+                  Value in = eb.create<arith::AndIOp>(
+                      el, kIn,
+                      eb.create<arith::CmpIOp>(
+                          el, slt, eb.create<arith::AddIOp>(el, gc, off), N));
+                  Value addr = eb.create<arith::AddIOp>(el, logical, off);
+                  Value safe = eb.create<arith::SelectOp>(el, in, addr, c0);
+                  Value e1 = eb.create<memref::LoadOp>(el, B,
+                                                       ValueRange{safe});
+                  e1 = eb.create<arith::SelectOp>(el, in, e1, scalarZero);
+                  storeLane(eb, el, e1, i);
+                }
+                eb.create<scf::YieldOp>(el);
+              });
+          }
         }
         kb.create<gpu::BarrierOp>(l);
         SmallVector<Value> af(mt), bf(nt);
@@ -1518,11 +1691,25 @@ struct GenerateWMMAGemmKernelPass
   Option<int> ldsPadDwords{
       *this, "lds-pad-dwords",
       llvm::cl::desc("LDS-staged typed body: dwords of padding added to each "
-                     "tile row so the stride is an odd dword count and the "
-                     "fragment read stops colliding on the 32 x 4 B banks. "
-                     "0 is the unpadded historical layout. Default 1: "
-                     "measured +12% on the LDS body at 1024 cubed f16, net of "
-                     "the narrower ds_load it forces (ROCM-LDS-BANKPAD-1)"),
+                     "tile row so the fragment read stops colliding on the "
+                     "32 x 4 B banks. 0 is the unpadded historical layout. "
+                     "Default 4, from the only shape where the measurement "
+                     "converges: at 2048 cubed f16 padding helps monotonically "
+                     "and 4 wins by 15% with tight dispersion, while at 1024 "
+                     "cubed the same configuration remeasures 16% apart in one "
+                     "process and separates nothing. The earlier default of 1 "
+                     "came from a harness that launched 4x the workgroups and "
+                     "is withdrawn (ROCM-LDS-BANKPAD-1, "
+                     "docs/backends/rocm/wmma-fragment-layout.md 10i/10j)"),
+      llvm::cl::init(4)};
+  Option<int> ldsCopyWidth{
+      *this, "lds-copy-width",
+      llvm::cl::desc("LDS staging copy: elements per thread per step. 1 is "
+                     "the default and the MEASURED FASTER arm; 0 derives the "
+                     "widest the padded stride allows, which is currently a "
+                     "13-49% REGRESSION because vector.maskedload expands to "
+                     "per-element branches rather than a wide load "
+                     "(ROCM-LDS-STAGE-VECTOR-1)"),
       llvm::cl::init(1)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged typed body: waves along M "
@@ -1619,7 +1806,7 @@ struct GenerateWMMAGemmKernelPass
           desc.getM() == 16 && desc.getN() == 16 && desc.getK() == expectedK &&
           (desc.getAType() == desc.getBType() || mixedFp8Pair) &&
           desc.getALayout() == "row_major" &&
-          desc.getBLayout() == "col_major" && desc.getKBlocks() == 1;
+          desc.getBLayout() == "col_major" && desc.getKBlocks() >= 1;
       bool floatContract = common &&
           (desc.getAType() == "f16" || desc.getAType() == "bf16") &&
           desc.getAccType() == "f32";
@@ -1676,6 +1863,11 @@ struct GenerateWMMAGemmKernelPass
       request.mt = mt;
       request.nt = nt;
       request.dtype = desc.getAType().str();
+      // ROCM-MACRO-K-TILE-1: the descriptor's K block reaches the generator.
+      // Until 2026-09-19 `k_blocks` was stated by the Schedule, verified >= 1,
+      // and read by nobody except three gates that refused anything but 1 -- so
+      // a macro K tile was expressible and unreachable. This is the consumer.
+      request.kBlocks = std::max<int64_t>(desc.getKBlocks(), 1);
       request.bias = epilogue.getBias();
       request.activation = epilogue.getActivation().str();
       request.output = epilogue.getOutputType().str();
@@ -1947,6 +2139,12 @@ struct GenerateWMMAGemmKernelPass
         return signalPassFailure();
       }
 
+      // ROCM-MACRO-K-TILE-1: the descriptor's K block reaches the loop. Until
+      // 2026-09-19 `k_blocks` was stated by the Schedule, verified >= 1, and
+      // read by nobody except three gates that refused anything but 1 -- so a
+      // macro K tile was expressible and unreachable. This is the consumer.
+      T.kBlocks = std::max<int64_t>(request.kBlocks, 1);
+
       // ── NUMPOL-CARRIER-1: the declared accumulator gets a CONSUMER ──
       //
       // Measured 2026-08-25: `numeric_policy` was carried faithfully all the
@@ -2194,7 +2392,8 @@ struct GenerateWMMAGemmKernelPass
         }
         emitTypedLdsBody(bodyB, loc, gpuFunc, mt, nt, ldsWavesM, ldsWavesN, T,
                          outputTy, hasBias, activation, request.rasterOrder,
-                         request.rasterGroup, ldsPadDwords);
+                         request.rasterGroup, ldsPadDwords,
+                         ldsCopyWidth);
       } else if (request.canonicalKLoop && canonicalStaging == "lds") {
         // This body writes its accumulator back at row `2*e + lhi`, which is
         // RDNA3's wave32 distribution. gfx12 distributes the same accumulator

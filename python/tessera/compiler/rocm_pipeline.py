@@ -233,7 +233,10 @@ class ROCMExecutablePipeline:
     #: ds_load the unaligned stride forces, so the conflict cost more than
     #: the headline. It does NOT explain the body's 9x gap to the register
     #: path; see ROCM-LDS-STAGE-VECTOR-1 for what does.
-    lds_pad_dwords: int = 1
+    lds_pad_dwords: int = 4
+    #: LDS staging copy width; 0 derives it from the stride, 1
+    #: forces the scalar copy so the vectorisation is measurable.
+    lds_copy_width: int = 1
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -276,6 +279,8 @@ class ROCMExecutablePipeline:
                 "holds it spills rather than overlapping")
         if type(self.lds_pad_dwords) is not int or not 0 <= self.lds_pad_dwords <= 4:
             raise ValueError("ROCm lds_pad_dwords must be an integer in [0, 4]")
+        if type(self.lds_copy_width) is not int or self.lds_copy_width not in (0, 1, 2, 4, 8):
+            raise ValueError("ROCm lds_copy_width must be 0 (derive) or 1/2/4/8")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -292,6 +297,7 @@ class ROCMExecutablePipeline:
             f"k-unroll={self.k_unroll} "
             f"sched-groups={self.sched_groups} "
             f"lds-pad-dwords={self.lds_pad_dwords} "
+            f"lds-copy-width={self.lds_copy_width} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"

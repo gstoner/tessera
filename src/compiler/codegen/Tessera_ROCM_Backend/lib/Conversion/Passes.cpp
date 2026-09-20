@@ -51,11 +51,18 @@ struct ROCMExecutablePipelineOptions
       *this, "staging",
       llvm::cl::desc("matmul staging policy: register or lds"),
       llvm::cl::init("register")};
+  Option<int> ldsCopyWidth{
+      *this, "lds-copy-width",
+      llvm::cl::desc("LDS staging copy width; 1 (default) is the scalar copy "
+                     "and the measured faster arm, 0 derives a vector width "
+                     "that currently regresses (ROCM-LDS-STAGE-VECTOR-1)"),
+      llvm::cl::init(1)};
   Option<int> ldsPadDwords{
       *this, "lds-pad-dwords",
       llvm::cl::desc("LDS-staged body: dwords of row padding to break the "
-                     "bank conflict on the fragment read (ROCM-LDS-BANKPAD-1)"),
-      llvm::cl::init(1)};
+                     "bank conflict on the fragment read. Default 4, measured "
+                     "at 2048 cubed (ROCM-LDS-BANKPAD-1)"),
+      llvm::cl::init(4)};
   Option<int> schedGroups{
       *this, "sched-groups",
       llvm::cl::desc("rocdl.sched.group.barrier granularity for the WMMA "
@@ -270,7 +277,8 @@ static std::unique_ptr<Pass> configuredPass(std::unique_ptr<Pass> pass,
 static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool viaTile, StringRef staging, bool depthCooperative = false,
                                int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
-                               int schedGroups = 0, int ldsPadDwords = 1) {
+                               int schedGroups = 0, int ldsPadDwords = 4,
+                               int ldsCopyWidth = 1) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -343,7 +351,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " lds-waves-n=" + Twine(ldsWavesN) +
                                   " k-unroll=" + Twine(kUnroll) +
                                   " sched-groups=" + Twine(schedGroups) +
-                                  " lds-pad-dwords=" + Twine(ldsPadDwords)));
+                                  " lds-pad-dwords=" + Twine(ldsPadDwords) +
+                                  " lds-copy-width=" + Twine(ldsCopyWidth)));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -443,7 +452,8 @@ static void buildROCMExecutablePipeline(
   if (matmulPlugin && input != "graph" && output == "binary")
     addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
-                       opts.schedGroups, opts.ldsPadDwords);
+                       opts.schedGroups, opts.ldsPadDwords,
+                       opts.ldsCopyWidth);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
@@ -468,6 +478,14 @@ static void buildROCMExecutablePipeline(
   pm.addPass(createLowerROCMAsyncCopyToLoopPass());
   pm.addPass(createLowerTesseraTargetToROCDLPass());
   pm.addPass(std::make_unique<VerifyROCMExecutablePass>());
+  // `convert-gpu-to-rocdl` calls `populateVectorToLLVMConversionPatterns`, but
+  // a fixed-length `vector.create_mask` is materialized by
+  // `populateVectorMaskMaterializationPatterns`, which only the standalone
+  // pass adds. Without this the staging copy's masked load lowers while its
+  // mask does not, and the module dies at translation with a surviving
+  // `unrealized_conversion_cast`. `rocm_sparse_runtime.py` already runs the
+  // pass here for the same reason; this is the same pipeline, spelled once.
+  pm.addNestedPass<gpu::GPUModuleOp>(createConvertVectorToLLVMPass());
   pm.addNestedPass<gpu::GPUModuleOp>(createSCFToControlFlowPass());
   ConvertGpuOpsToROCDLOpsOptions conversion;
   conversion.chipset = arch.str();

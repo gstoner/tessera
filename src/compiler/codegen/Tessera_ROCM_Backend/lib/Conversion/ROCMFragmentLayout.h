@@ -138,9 +138,16 @@ inline llvm::StringRef denseMatrixInstruction(llvm::StringRef arch,
 inline std::optional<FragmentLayoutDescriptor>
 resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
                       llvm::StringRef arch) {
+  // `kBlocks` is deliberately NOT gated here. A fragment ABI describes one
+  // instruction's register layout -- lanes, elements per lane, packing -- and
+  // that is identical whether the enclosing K block holds one instruction or
+  // eight. Refusing kBlocks > 1 at this level conflated "which fragment" with
+  // "how many", and it is what made the macro K tile unreachable even though
+  // the descriptor could always state it (ROCM-MACRO-K-TILE-1). The generator
+  // still gates on what it can actually emit.
   if (!desc || desc.getM() != 16 || desc.getN() != 16 ||
       desc.getALayout() != "row_major" ||
-      desc.getBLayout() != "col_major" || desc.getKBlocks() != 1)
+      desc.getBLayout() != "col_major" || desc.getKBlocks() < 1)
     return std::nullopt;
 
   bool mixedFp8 = (arch == "gfx1200" || arch == "gfx1201") &&

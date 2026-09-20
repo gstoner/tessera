@@ -691,7 +691,14 @@ descriptorFromFragment(tessera::tile::FragmentType f, StringRef input) {
   return tessera::tile::TileMmaDescAttr::get(ctx, f.getFamily(), f.getM(),
                                              f.getN(), f.getK(), input, input,
                                              f.getAcc(), aLayout, bLayout,
-                                             /*kBlocks=*/1);
+                                             /*kBlocks=*/1,
+                                             // Unscaled on purpose: this
+                                             // descriptor is synthesised from a
+                                             // FRAGMENT type only to resolve the
+                                             // register ABI, which does not
+                                             // depend on the block scale.
+                                             /*scaleBlockK=*/0,
+                                             /*scaleFormat=*/"");
 }
 
 /// Input dtypes to try when resolving an `acc` fragment, which names none.
@@ -1187,7 +1194,8 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
       return emitUnresolvableFragment(op, aTy, converter->getArch());
     auto pairDesc = tessera::tile::TileMmaDescAttr::get(
         op.getContext(), aTy.getFamily(), aTy.getM(), aTy.getN(), aTy.getK(),
-        aTy.getElem(), bTy.getElem(), aTy.getAcc(), aTy.getLayout(), bTy.getLayout(), 1);
+        aTy.getElem(), bTy.getElem(), aTy.getAcc(), aTy.getLayout(),
+        bTy.getLayout(), 1, /*scaleBlockK=*/0, /*scaleFormat=*/"");
     auto pairPhysical = tessera_rocm::resolveFragmentLayout(pairDesc, converter->getArch());
     if (!pairPhysical) {
       // Name both operand dtypes: the #517 fixture checks the MESSAGE, not the

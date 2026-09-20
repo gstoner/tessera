@@ -370,6 +370,77 @@ def Tessera_MoeSwigluBlockOp : Op<
 // `w_scale` is a load-bearing per-group scale operand whose layout rides on
 // `scale_layout`. `weight_dtype` names the packed code format. The reference +
 // Apple GPU composed lane lives in python/tessera/stdlib/quant.py.
+// ROCM-FP8-BLOCKSCALE-1. A block-scaled matmul is a DIFFERENT PROGRAM SHAPE
+// from `tessera.matmul`, not a matmul with extra operands, and it is a separate
+// op for three converging reasons:
+//
+//  * It is what the vendor does. rocMLIR picks between `triton::DotOp` and
+//    `triton::DotScaledOp` -- two ops, chosen by whether scales are present --
+//    rather than overloading one (`RockToTTIR.cpp`).
+//  * Tessera already does it: `tessera.dequant_matmul` is its own op rather
+//    than a mode of `tessera.matmul`.
+//  * Adding optional operands to `tessera.matmul` forces
+//    `AttrSizedOperandSegments`, and the generic form `"tessera.matmul"(%a, %b)`
+//    then requires an explicit `operandSegmentSizes`. Measured: that breaks 62
+//    of 495 lit fixtures for no behavioural gain.
+//
+// It is NOT a dequantize-then-multiply (that is `dequant_matmul`, which widens
+// the operands before the product and is why a low-precision GEMM taking that
+// route is capped at the wide instruction's ceiling). Here the operands stay in
+// their storage, the matrix instruction sees them, and the scale is applied to
+// the fp32 accumulator once per K block:
+//
+//     acc += dot(a, b) * outer(lhs_scale, rhs_scale)
+//
+// with the scale group along K equal to the K tile. `scale_layout` describes
+// block size, axis and scale element format (e8m0 for MX, fp8_e4m3 for NVFP4,
+// fp32 for the [128,128] fp8_w8a8 form the tuned R9700 configs use).
+// UNCONSUMED as of 2026-09-19, and marked under Decision #29a condition 1: no
+// pass or route reads this op yet. The lowering is owned by
+// ROCM-FP8-BLOCKSCALE-1 (Graph -> Schedule -> descriptor, then the ROCm K loop
+// with a zeroed start and a scaled combine at `unroll = GROUP_K / fragK`).
+//
+// Do not read its presence as "Tessera compiles block-scaled matmuls". It
+// parses, verifies, and reaches nothing. Its behavioural test is the pair
+// `tests/tessera-ir/phase2/scaled_matmul{,_invalid}.mlir`, whose negative case
+// is the load-bearing half -- a scale with the wrong K-block count is
+// numerically silent otherwise.
+//
+// Recorded because #29's OP-level clause turns out to be ungated:
+// `test_governance_declarations.py` checks coverage axes and duplicate dialect
+// names, not op-to-consumer, which is why every instance #29 cites was found by
+// hand. Tracked as GOV-ODS-CONSUMER-1.
+def Tessera_ScaledMatmulOp : Op<
+  Tessera_Dialect, "scaled_matmul", [Pure]
+> {
+  let summary = "Block-scaled matmul: D = (A @ B) scaled per block, fp32 accum "
+                "(UNCONSUMED -- see ROCM-FP8-BLOCKSCALE-1)";
+  let description = [{
+    `d = scale(a @ b, lhs_scale, rhs_scale)` with an fp32 accumulator, where the
+    operands keep their low-precision storage into the matrix instruction and
+    the scales are applied to the accumulator per K block rather than to the
+    operands. `scale_layout` carries the block size, axis and scale element
+    format; `numeric_policy` records the storage/accum coupling.
+
+    A consumer that cannot honour the scales must refuse this op rather than
+    treating it as a plain matmul (Decision #21a) -- dropping a block scale is
+    numerically silent at the IR level and catastrophic at the model level.
+  }];
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs,
+                        TensorType:$lhs_scale, TensorType:$rhs_scale,
+                        OptionalAttr<I64Attr>:$tile_k,
+                        OptionalAttr<Tessera_ScaleLayoutAttr>:$scale_layout,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
+                        DefaultValuedAttr<BoolAttr, "false">:$transposeA,
+                        DefaultValuedAttr<BoolAttr, "false">:$transposeB);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs `scales` `(` $lhs_scale `,` $rhs_scale `)`
+    attr-dict `:` functional-type(operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
 def Tessera_DequantMatmulOp : Op<
   Tessera_Dialect, "dequant_matmul",
   [Pure]

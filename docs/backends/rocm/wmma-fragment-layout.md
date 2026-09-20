@@ -1322,3 +1322,157 @@ is truth, markdown is a mirror; do not hand-edit it). This page is the
 *consumer-facing contract* Tessera's generators are written against, with the
 device evidence attached; when the two disagree, the archive wins on what the
 hardware does and this page is the bug.
+
+## 10l. Chapters 9, 11 and 12 of the ISA, checked against what we emit
+
+A sweep of the addressing, alignment and LDS chapters against our two gfx1201
+bodies. Most of it does not reach us, but the reasons are worth recording
+because three of them were things I had *asserted* rather than checked, and one
+of those assertions was about to be used to dismiss a section that does apply.
+
+### What we emit, measured
+
+Disassembling both bodies and counting instruction families:
+
+```
+register   global_*=472, scratch_*=145,  ds_*=0     buffer/tbuffer: NONE
+lds        global_*=150, ds_*=14                    buffer/tbuffer: NONE
+```
+
+Zero `BUFFER_*`/`TBUFFER_*`. ROCDL lowers everything to flat/global addressing,
+so §9.2's buffer-VGPR layout rules and §9.3's `dfmt`/`nfmt` mismatch table --
+which describe what happens when a typed buffer op's format disagrees with the
+resource descriptor -- are unreachable from this pipeline. That was already my
+belief; it is now a measurement, and the distinction mattered: I dismissed §9.3
+from belief first, and the same reasoning would have dismissed §9.5, which does
+apply.
+
+### §9.5 / §11.3: two silent-wrong-address modes, neither of which we control
+
+`SH_MEM_CONFIG.alignment_mode` governs **non-formatted** ops -- that is, the
+`global_load_*` our staging copy issues:
+
+| mode | misaligned DWORD+ access |
+|---|---|
+| 0 DWORD | **the two LSBs are ignored** -- reads a different address, no fault |
+| 1 DWORD_STRICT | must be aligned |
+| 2 STRICT | must be aligned to the data size |
+| 3 UNALIGNED | any alignment |
+
+This is the global-memory twin of the LDS hazard in §3.3.5.1, where a B128
+access below 16-byte alignment has its low address bits zeroed. Mode 0 turns a
+misaligned wide load into a wrong-address read that neither faults nor differs
+in timing. It is a config register set by the driver, so we cannot select it and
+must not depend on it.
+
+§11.3 adds a third: LDS address arithmetic is **truncated and may wrap without
+being detected**. The only range check is `LDS_ADDR.U17 < LDS_SIZE`, zero-extended.
+Inside the allocation, a wrapped address is simply a different valid address.
+Out-of-range is caught -- reads return zero, stores are dropped, MEMVIOL traps --
+but wrap-around inside the wave's own LDS is not.
+
+All three are silent-wrong-answer modes reachable by an address-arithmetic bug,
+which is precisely what the K1-blocked layout work will be writing. Our current
+vector-width derivation (`ldsStride % v == 0` in elements) prevents the LDS one
+by construction, because element count and byte count scale together. It does
+not prevent the other two, and neither has a test.
+
+### §11.5 `GLOBAL_LOAD_BLOCK`: a fifth lever, and ROCDL cannot reach it
+
+§10j.4 listed four levers for the staging copy. There is a fifth, and on paper
+it is aimed exactly at §10j.3's finding that the cost is unhidden load latency
+rather than transfer width:
+
+> The entire block load/store is tracked with LOADcnt: increments 1 for the
+> entire block transfer, and decrements when the block transfer has completed.
+
+Up to 32 consecutive VGPRs per thread, one counter. §10j.3 measured 137 partial
+waits in the register body because every narrow load carries its own counter;
+this instruction collapses that to one.
+
+ROCDL has no `load_block` intrinsic -- grepping `ROCDLOps.td` finds only
+`workgroup.id.*` under that name. Same class as DPP8 in §10j.4: an ISA lever the
+compiler cannot reach through this lowering. Reaching it would mean inline asm,
+which is a Decision #31 question, not a scheduling one.
+
+### There is no LDS-side transpose read on gfx1201
+
+ROCDL declares two transposing-read families, and neither is ours:
+
+```
+// LDS transpose intrinsics (available in GFX950)
+def ROCDL_ds_read_tr16_b64 ...
+// Glb/DS load-transpose intrinsics (available in GFX1250+)
+def ... ds.load.tr16.b128 ...
+```
+
+`ds.read.tr*` is gfx950 (CDNA); `ds.load.tr*` is gfx1250+. gfx1201 has only the
+**global**-side transpose, which we already emit through the `amdgpu` dialect
+(§8) because ROCDL's form takes `!llvm.ptr<1>` and the fragment materializer
+works in memrefs.
+
+This closes a door rather than opening one. §10j.5 recorded that sparse needs
+column-major B and currently gets it only by accident of the dense staging
+layout; a transpose on the read *out* of LDS would have been the clean escape
+hatch, and this chip does not have one. The K1-blocked layout must therefore
+satisfy sparse's major order directly.
+
+### §12.1: "64 banks" does not falsify our 32-bank model
+
+The ISA says 128 kB per WGP in **64** banks, which read naively makes every
+bank-conflict figure in §10e and §10k wrong by 2x. It does not:
+
+> These 64 banks are further sub-divided into two sets of 32-banks each where 32
+> of the banks are affiliated with a pair of SIMD32's, and the other 32 with the
+> other pair.
+
+A wave sees 32. The `32 x 4 B` model in `GenerateWMMAGemmKernel.cpp` is the
+per-wave view and is correct; the 64 is the per-WGP total. Recorded because the
+two numbers are one sentence apart and only one of them is the one a conflict
+calculation wants.
+
+### CU-mode-only instructions are unreachable, and we measured the mode
+
+`DS_DIRECT_LOAD` (§12.1.2) and `DS_PARAM_LOAD` (§12.2) are both documented
+"available only in CU mode, not WGP mode". Both our bodies dispatch in WGP mode
+(`rsrc1` WGP_MODE=1, measured -- the same reading §10a used to settle the
+occupancy denominator), so neither is reachable without changing the dispatch
+mode. `DS_PARAM_LOAD` would not be wanted anyway: it reads pixel-attribute
+triples for interpolation. `DS_DIRECT_LOAD`'s broadcast-a-DWORD-to-all-lanes
+behaviour has a compute use, but `s_load` into an SGPR already covers it without
+giving up the WGP-mode occupancy.
+
+### §12.5: three more levers, and the same ROCDL wall -- except for one
+
+The LDS indexed-access chapter offers three instructions that look aimed at the
+staging copy. Checked against `ROCDLOps.td` the same way `GLOBAL_LOAD_BLOCK`
+was:
+
+| ISA instruction | what it would buy | ROCDL |
+|---|---|---|
+| `DS_STORE_2ADDR_{B32,B64}` | two stores at unique addresses, **one DScnt** | absent |
+| `DS_STORE_ADDTID_B32` | address from thread-ID, **no ADDR VGPR** | absent |
+| `DS_PERMUTE/BPERMUTE_B32`, `DS_SWIZZLE_B32` | cross-lane with no LDS storage | **present** |
+
+The first two are the ones that fit our problem best and neither is reachable.
+`2ADDR` is a particularly close fit: it takes one ADDR VGPR plus two immediate
+offsets, and the two elements a lane stores in our staging layout are separated
+by exactly `ldsStride`, a compile-time constant -- the precise shape the
+instruction wants, and §10j.1's "B's store cannot widen" is exactly the problem
+it would sidestep, since 2ADDR needs no contiguity. `ADDTID` would free the
+address VGPR in a kernel that already spills 126. Both would need inline asm.
+
+The third is a correction to §10j.4, which recorded that DPP8 is not in ROCDL
+and left the impression that cross-lane movement is unreachable. It is not:
+`rocdl.ds_bpermute` and `rocdl.ds_swizzle` are both declared. But they are not
+DPP8 by another name -- DPP is a VALU operand modifier, while these run through
+the LDS hardware (using no LDS storage) and are tracked with DScnt. So the
+capability exists at a cost, rather than being absent. Anything built on it must
+be measured against that cost, not assumed free because the crossbar is
+arbitrary.
+
+Two semantics worth carrying if we ever use them: index values are **bytes**
+(multiply the lane by 4) with `offset0` added before use, out-of-range indices
+**wrap** rather than fault (wave32 uses only index bits [6:2]), and reading a
+disabled lane returns zero. The wrap is the same silent-wrong-answer shape as
+the LDS address truncation above.

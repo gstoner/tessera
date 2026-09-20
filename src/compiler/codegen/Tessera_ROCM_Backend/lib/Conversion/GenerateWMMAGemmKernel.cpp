@@ -1269,25 +1269,47 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
             v1 = kb.create<arith::SelectOp>(l, in, v1, scalarZero);
             kb.create<memref::StoreOp>(l, v1, ldsA, ValueRange{dstA});
           } else {
-          // How many of the `vecW` lanes are inside K, clamped to [0, vecW],
-          // and zero entirely when the row itself is out of bounds.
-          Value remK = kb.create<arith::SubIOp>(l, K, gk);
-          Value avail = kb.create<arith::MaxSIOp>(l, remK, c0);
-          Value take = kb.create<arith::MinSIOp>(l, avail, cVec);
-          take = kb.create<arith::SelectOp>(l, rowIn, take, c0);
+          // TWO PATHS, deliberately. A `vector.maskedload` reaches AMDGCN as
+          // `llvm.intr.masked.load`, which expands into a per-element branch
+          // plus a NARROW load -- measured on gfx1201: no `global_load_b128`
+          // at any width, and 18 more branches than the scalar copy. So a
+          // runtime mask forecloses the wide load it was meant to enable. The
+          // in-bounds case must be an UNMASKED `vector.load`, and the ragged
+          // tail gets its own branch (see wmma-fragment-layout.md 10j).
           Value logical = kb.create<arith::AddIOp>(
               l, kb.create<arith::MulIOp>(l, gr, K), gk);
-          Value safe = kb.create<arith::SelectOp>(l, rowIn, logical, c0);
-          Value mask = kb.create<vector::CreateMaskOp>(
-              l, VectorType::get({vecW}, kb.getI1Type()), ValueRange{take});
-          Value zeroVec = kb.create<arith::ConstantOp>(
-              l, vecTy, kb.getZeroAttr(vecTy));
-          Value v = kb.create<vector::MaskedLoadOp>(l, vecTy, A,
-                                                    ValueRange{safe}, mask,
-                                                    zeroVec);
-          // The whole vector is stored -- LDS is the tile buffer and always in
-          // bounds, and the masked-off lanes carry the zero the tail wants.
-          kb.create<vector::StoreOp>(l, v, ldsA, ValueRange{dstA});
+          Value kWhole = kb.create<arith::CmpIOp>(
+              l, arith::CmpIPredicate::sle,
+              kb.create<arith::AddIOp>(l, gk, cVec), K);
+          Value wholeA = kb.create<arith::AndIOp>(l, rowIn, kWhole);
+          kb.create<scf::IfOp>(
+              l, wholeA,
+              [&](OpBuilder &tb, Location tl) {
+                Value v = tb.create<vector::LoadOp>(tl, vecTy, A,
+                                                    ValueRange{logical});
+                tb.create<vector::StoreOp>(tl, v, ldsA, ValueRange{dstA});
+                tb.create<scf::YieldOp>(tl);
+              },
+              [&](OpBuilder &eb, Location el) {
+                // The tail, unrolled: LDS is always in bounds, so an
+                // out-of-range source contributes the zero the MMA needs.
+                for (int64_t i = 0; i < vecW; ++i) {
+                  Value off = ci(i);
+                  Value gki = eb.create<arith::AddIOp>(el, gk, off);
+                  Value in = eb.create<arith::AndIOp>(
+                      el, rowIn,
+                      eb.create<arith::CmpIOp>(el, slt, gki, K));
+                  Value addr = eb.create<arith::AddIOp>(el, logical, off);
+                  Value safe = eb.create<arith::SelectOp>(el, in, addr, c0);
+                  Value e1 = eb.create<memref::LoadOp>(el, A,
+                                                       ValueRange{safe});
+                  e1 = eb.create<arith::SelectOp>(el, in, e1, scalarZero);
+                  eb.create<memref::StoreOp>(
+                      el, e1, ldsA,
+                      ValueRange{eb.create<arith::AddIOp>(el, dstA, off)});
+                }
+                eb.create<scf::YieldOp>(el);
+              });
           }
         }
         // B: read along N (coalesced), write transposed so K is contiguous
@@ -1327,29 +1349,52 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
             kb.create<memref::StoreOp>(l, v1, ldsB, ValueRange{dst1});
           } else {
           Value remN = kb.create<arith::SubIOp>(l, N, gc);
-          Value availN = kb.create<arith::MaxSIOp>(l, remN, c0);
-          Value takeN = kb.create<arith::MinSIOp>(l, availN, cVec);
-          takeN = kb.create<arith::SelectOp>(l, kIn, takeN, c0);
+          // Same two-path shape as A: only an UNMASKED load widens. The LDS
+          // side stays scalar either way -- consecutive `e` are consecutive
+          // COLUMNS, a full LDS row apart in the transposed layout -- so what
+          // the fast path buys here is the coalesced wide GLOBAL read, which
+          // is the expensive side.
           Value logical = kb.create<arith::AddIOp>(
               l, kb.create<arith::MulIOp>(l, gk, N), gc);
-          Value safe = kb.create<arith::SelectOp>(l, kIn, logical, c0);
-          Value maskB = kb.create<vector::CreateMaskOp>(
-              l, VectorType::get({vecW}, kb.getI1Type()), ValueRange{takeN});
-          Value zeroVecB = kb.create<arith::ConstantOp>(
-              l, vecTy, kb.getZeroAttr(vecTy));
-          Value vb = kb.create<vector::MaskedLoadOp>(l, vecTy, B,
-                                                     ValueRange{safe}, maskB,
-                                                     zeroVecB);
-          // One scalar store per lane: consecutive `e` are consecutive COLUMNS,
-          // which land a full LDS row apart in the transposed layout.
-          for (int64_t i = 0; i < vecW; ++i) {
-            Value lane = kb.create<vector::ExtractOp>(l, vb,
-                                                      ArrayRef<int64_t>{i});
-            Value colI = kb.create<arith::AddIOp>(l, col, ci(i));
-            Value dst = kb.create<arith::AddIOp>(
-                l, kb.create<arith::MulIOp>(l, colI, cLdsStride), kk);
-            kb.create<memref::StoreOp>(l, lane, ldsB, ValueRange{dst});
-          }
+          Value nWhole = kb.create<arith::CmpIOp>(
+              l, arith::CmpIPredicate::sle,
+              kb.create<arith::AddIOp>(l, gc, cVec), N);
+          Value wholeB = kb.create<arith::AndIOp>(l, kIn, nWhole);
+          auto storeLane = [&](OpBuilder &ob, Location ol, Value lane,
+                               int64_t i) {
+            Value colI = ob.create<arith::AddIOp>(ol, col, ci(i));
+            Value dst = ob.create<arith::AddIOp>(
+                ol, ob.create<arith::MulIOp>(ol, colI, cLdsStride), kk);
+            ob.create<memref::StoreOp>(ol, lane, ldsB, ValueRange{dst});
+          };
+          kb.create<scf::IfOp>(
+              l, wholeB,
+              [&](OpBuilder &tb, Location tl) {
+                Value vb = tb.create<vector::LoadOp>(tl, vecTy, B,
+                                                     ValueRange{logical});
+                for (int64_t i = 0; i < vecW; ++i)
+                  storeLane(tb, tl,
+                            tb.create<vector::ExtractOp>(
+                                tl, vb, ArrayRef<int64_t>{i}),
+                            i);
+                tb.create<scf::YieldOp>(tl);
+              },
+              [&](OpBuilder &eb, Location el) {
+                for (int64_t i = 0; i < vecW; ++i) {
+                  Value off = ci(i);
+                  Value in = eb.create<arith::AndIOp>(
+                      el, kIn,
+                      eb.create<arith::CmpIOp>(
+                          el, slt, eb.create<arith::AddIOp>(el, gc, off), N));
+                  Value addr = eb.create<arith::AddIOp>(el, logical, off);
+                  Value safe = eb.create<arith::SelectOp>(el, in, addr, c0);
+                  Value e1 = eb.create<memref::LoadOp>(el, B,
+                                                       ValueRange{safe});
+                  e1 = eb.create<arith::SelectOp>(el, in, e1, scalarZero);
+                  storeLane(eb, el, e1, i);
+                }
+                eb.create<scf::YieldOp>(el);
+              });
           }
         }
         kb.create<gpu::BarrierOp>(l);

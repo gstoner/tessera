@@ -104,6 +104,33 @@ GFX_DEPTH_ATTN_F32_ABI = (
 )
 
 
+def workgroup_tile(
+    macro_m: int,
+    macro_n: int,
+    *,
+    staging: str,
+    lds_waves: tuple[int, int] = (1, 1),
+) -> tuple[int, int]:
+    """The output extent one workgroup of a scheduled matmul covers.
+
+    The register body gives each workgroup one wave panel; the LDS body gives
+    each WAVE a panel and the workgroup the product, because it computes
+    ``gridM = ceil(M / (wavesM * macroM))`` itself before indexing with
+    ``bidY``/``bidX``. A launcher that divides by the wave panel under LDS
+    staging therefore dispatches ``wavesM * wavesN`` times too many
+    workgroups -- and every one of them recomputes a value that is already
+    correct, so results stay exact and only the measured throughput is wrong
+    by that factor. That is why this is a function rather than two lines at
+    each call site: it has no correctness signal of its own, so the only
+    defence is that nobody re-derives it.
+    """
+    if macro_m <= 0 or macro_n <= 0:
+        raise ValueError(f"non-positive macro tile {macro_m}x{macro_n}")
+    if staging == "lds":
+        return macro_m * int(lds_waves[0]), macro_n * int(lds_waves[1])
+    return macro_m, macro_n
+
+
 @dataclass(frozen=True)
 class ROCMNativePackage:
     tile_ir: str

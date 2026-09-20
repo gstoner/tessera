@@ -21,13 +21,11 @@ coverage** -- each output computed once, none missed.
 
 from __future__ import annotations
 
-
-def workgroup_tile(macro_m: int, macro_n: int, *, staging: str,
-                   lds_waves: tuple[int, int] = (1, 1)) -> tuple[int, int]:
-    """Output extent one workgroup covers."""
-    if staging == "lds":
-        return macro_m * lds_waves[0], macro_n * lds_waves[1]
-    return macro_m, macro_n
+# One rule, one place. `workgroup_tile` lives beside the packager that stamps
+# the launch tile into descriptor provenance, so a harness and the production
+# launcher cannot disagree about it -- the disagreement is exactly what went
+# wrong, and it is invisible in every correctness check.
+from tessera.compiler.rocm_native import workgroup_tile  # noqa: F401
 
 
 def launch_grid(m: int, n: int, macro_m: int, macro_n: int, *, staging: str,

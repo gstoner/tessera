@@ -57,6 +57,12 @@ struct ROCMExecutablePipelineOptions
                      "whose staging copy writes a constant instead of reading "
                      "global, to bound the copy's cost (ROCM-LDS-STAGE-VECTOR-1)"),
       llvm::cl::init(false)};
+  Option<int> ldsCopyDepth{
+      *this, "lds-copy-depth",
+      llvm::cl::desc("forwarded to the WMMA GEMM generator: how many "
+                     "staging groups are ISSUED before any is consumed "
+                     "(1 = the historical one-load-in-flight loop)"),
+      llvm::cl::init(1)};
   Option<int> ldsCopyWidth{
       *this, "lds-copy-width",
       llvm::cl::desc("LDS staging copy width; 1 (default) is the scalar copy "
@@ -285,7 +291,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
                                int schedGroups = 0, int ldsPadDwords = 4,
                                int ldsCopyWidth = 1,
-                               bool ldsCopyElide = false) {
+                               bool ldsCopyElide = false,
+                               int ldsCopyDepth = 1) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -361,7 +368,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " lds-pad-dwords=" + Twine(ldsPadDwords) +
                                   " lds-copy-width=" + Twine(ldsCopyWidth) +
                                   " lds-copy-elide=" +
-                                      (ldsCopyElide ? "true" : "false")));
+                                      (ldsCopyElide ? "true" : "false") +
+                                  " lds-copy-depth=" + Twine(ldsCopyDepth)));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -462,7 +470,8 @@ static void buildROCMExecutablePipeline(
     addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
                        opts.schedGroups, opts.ldsPadDwords,
-                       opts.ldsCopyWidth, opts.ldsCopyElide);
+                       opts.ldsCopyWidth, opts.ldsCopyElide,
+                       opts.ldsCopyDepth);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

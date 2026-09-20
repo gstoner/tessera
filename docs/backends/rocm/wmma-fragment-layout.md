@@ -1635,3 +1635,89 @@ Against the ceiling: §10j.2 put the 2048^3 copy at 3.13x (40.4 -> 126.2 if
 free). Going 40.3 -> 56.1 captures about **18%** of that headroom, so most of it
 remains, and double-buffering across K-tiles -- which hides the copy behind the
 MMA chain rather than making it cheaper -- is still the larger unclaimed lever.
+
+## 10n. Double-buffering across K-tiles: correct, ordered as intended, and worth 4%
+
+§10j.2's ceiling probe put the 2048^3 staging copy at 3.13x, and §10m captured
+about 18% of that with issue depth. Double-buffering was the named next lever:
+stage slab k+1 into a second LDS buffer while the MMA chain consumes slab k, so
+the load latency hides behind compute instead of sitting in front of it.
+
+`lds-double-buffer=true`. Default **off**.
+
+### The ordering constraint, which is the whole design
+
+Emitting `load; store; mma` leaves the loads' waitcnt ahead of the MMA and
+overlaps nothing, however many buffers exist. The loop must ISSUE the loads, run
+the MMA chain, and DRAIN to LDS afterwards.
+
+That forces a structural requirement that is easy to miss: while the staging is
+an `scf.for`, the loaded values and their destination addresses are SSA values
+inside that region, and **the store cannot leave the loop**. Double-buffering
+therefore requires `depth == trip` -- one straight-line batch covering the tile
+-- which `flatStage` emits without the loop. A first implementation that kept
+the loop compiled, ran, and would have measured nothing.
+
+One barrier per iteration instead of two: a buffer's reads in step k-1 precede
+the barrier and its writes in step k follow it, so the two never alias.
+
+### It works, and the ISA confirms the intent reached the machine
+
+2048^3, static counts:
+
+| | total ops | spill | wmma | global_load | **loads before 1st wmma** |
+|---|---|---|---|---|---|
+| w2/d8 | 3695 | 0 | 16 | 48 | **0** |
+| w2/d8 + dbuf | 4439 | 0 | 16 | 96 | **48** |
+
+48 loads now issue ahead of the MMA chain where none did. **Zero spills in
+both**, which refutes the register-pressure concern raised in §10m -- the staged
+values live across the MMA chain without forcing a spill. (The doubled static
+counts are the prologue, emitted once outside the loop.)
+
+### The result
+
+Correctness first: exact (max|err| = 0) at all five shapes tested, including
+three ragged ones, where the tail arm now assembles vectors it previously stored
+element by element.
+
+Performance, **paired and interleaved in one process** -- the first two attempts
+disagreed on the *sign* because each measured one arm at a time and the 2048^3
+baseline moves ~13% between processes:
+
+| shape | no-dbuf | dbuf | verdict |
+|---|---|---|---|
+| 2048^3 | med 48.8 | med 50.8 | **1.040x, wins 8/8** |
+| 1024^3 | med 22.6, range 7.8-23.0 | med 15.9, range 8.3-24.2 | **both arms bimodal -- no conclusion** |
+| 768x1536x520 (ragged) | 14.0 | 7.1 | **0.51x regression** |
+
+`k-unroll=2`, which lengthens the compute per staging, did not improve it
+either (54.0 vs 56.9 without dbuf), which argues against "the MMA chain is too
+short to cover the latency".
+
+### What this says
+
+The intended overlap was achieved and verified in the ISA, there are no spills,
+and it is worth **4%**. The honest reading is that **once issue depth is fixed,
+the remaining staging cost is not mostly hideable load latency.** §10m's
+16-requests-in-flight already captured the accessible part; a second buffer adds
+LDS pressure, code size and a prologue for very little.
+
+So the 3.13x ceiling's remaining headroom is probably not load latency at all.
+The elide probe removes the loads *and their address arithmetic*; what is left
+in the real copy is that arithmetic and the LDS stores themselves, and neither
+is addressed by overlapping with compute. That is the next thing to measure, and
+it is a different question from the one §10j.3 set up.
+
+### Two cautions this run produced
+
+**The 1024^3 figures in §10m are weaker than they looked.** That shape is
+bimodal here (7.8-23.0 in one arm), where the §10m dispersion check -- five
+back-to-back reps of one payload -- reported 8.7%. Alternating between two
+payloads exposes a mode the repeated measurement did not. Treat §10m's +15% at
+1024^3 as provisional; its +39% at 2048^3 is unaffected, that shape stayed tight
+under both protocols.
+
+**Measure paired arms interleaved, in one process.** Two sequential runs here
+produced opposite signs (50.2 vs 51.6, then 56.9 vs 52.3) purely from
+process-to-process drift landing on whichever arm ran second.

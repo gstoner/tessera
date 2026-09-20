@@ -1821,3 +1821,70 @@ overlapped. The arithmetic half never did.
    former is bandwidth-bound and unreachable, and at small shapes the latter is
    a pipe-occupancy problem rather than a memory one. The probe bounds the copy's
    cost correctly and says nothing about which part is recoverable.
+
+## 10p. Describing the pipeline to the scheduler: it pays, for a reason we cannot yet name
+
+§10o found the U pipe idle through the entire matrix chain -- zero VALU between
+the first and last `wmma` -- while 1600-2000 address-arithmetic ops queued around
+it. `lds-sched-valu-per-mma=N` describes the loop through
+`rocdl.sched.group.barrier` as `[all loads][N VALU, 1 wmma] x mmas [all LDS
+stores]`.
+
+**This requires double-buffering and that is not incidental.** Without it the
+staging for slab k must finish before the barrier the MMA reads through, so
+there is no independent VALU to interleave. §10n's direct value was 4%; its real
+value is the independence it creates here.
+
+### It pays
+
+Paired and interleaved in one process, 6 reps, alternating order:
+
+| | w2/d8 | +dbuf | +dbuf+memgrp | +dbuf+sched32 |
+|---|---|---|---|---|
+| 2048^3 | 49.0 | 50.9 (1.038x) | 53.4 (1.089x) | **54.9 (1.120x)**, 5/6 |
+| 4096^3 | 65.6 | 63.9 (0.974x) | 65.5 (0.998x) | **67.5 (1.030x)**, 6/6 |
+
+`memgrp` is the control arm (`N < 0`): the same description **without** the
+(VALU, wmma) alternation, so only "all loads first, all LDS stores last".
+
+### The mechanism is NOT the one the option is named for
+
+`VALU-in-chain` stays **0** at N = 32, 64 and 128. Only N=8 puts any (17) between
+the matrix ops, and it is not the fastest. The alternation we asked for does not
+appear in the ISA, yet at 4096^3 it is the *entire* gain -- memory grouping alone
+is worth 0.998x there, and adding the alternation request takes it to 1.030x.
+
+So the request changes the schedule without producing the pattern it describes.
+**Do not record this as U-pipe interleaving.** What is established: the option is
+worth 1.12x / 1.03x, paired and repeatable, and the split between its two halves
+inverts with shape (memory grouping is ~74% of the gain at 2048^3 and none at
+4096^3). What is not established is why.
+
+### It also corrects §10o
+
+§10o called ~1030 GB/s a bandwidth roofline. The sched arm reaches **1055 GB/s**
+at 4096^3. The plateau was therefore schedule-dependent, not a hard limit --
+close to one, but the roofline language was too strong and is withdrawn. The
+AI-based reasoning still holds (AI is pinned at 64 FLOP/byte by the macro tile,
+and bigger tiles remain the large lever); what was wrong was treating a measured
+plateau as a ceiling rather than as the best any schedule had reached so far.
+
+### Against AMD's RDNA4 guidance
+
+One convergence and two contradictions, all measured on this body:
+
+* **"Organize workloads into 2-component vector structures."** Independently
+  confirmed: §10m's width sweep picked `w=2` -- one dword, i.e. `half2` -- as the
+  optimum, and §10o confirmed it in the bandwidth-saturated regime too. This was
+  measured before the guidance was read, from the opposite direction (request
+  count, not bundle formation).
+* **"Write a VOPD packing pass."** Measured: LLVM already emits 134-146 `v_dual`
+  bundles in this body. A Tessera packing pass would be a second authority over
+  the same decision (Decision #31) for a job the backend is already doing. What
+  is missing is not packing but pairing *near the matrix chain*, and that is a
+  scheduling question, not a packing one.
+* **"Integrate dynamic register blocks to avoid static worst-case limits."**
+  Measured: **zero** `scratch_*` ops in every configuration here, including the
+  one holding staged values across the whole MMA chain. Register pressure is not
+  currently binding in this body, so this would be an optimisation against a
+  constraint we cannot observe.

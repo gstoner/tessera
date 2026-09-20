@@ -34,7 +34,7 @@ F16<-F16, BF16<-BF16, I32<-IU8, I32<-IU4 — **no FP8/FP4 WMMA on RDNA 3.5**
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import Optional
 
 
@@ -81,6 +81,95 @@ TESSERA_TARGET_MIOPEN_MIN: str = "3.5.0"
 
 
 # Shared (LDS) memory budgets in bytes per CU.
+#: Independent units a workgroup can be dispatched to -- the denominator for
+#: any occupancy question, and therefore the thing split-K must key on.
+#:
+#: On RDNA a workgroup occupies a **WGP** (2 CUs), so the count is CUs/2; on
+#: CDNA it occupies a CU. Getting that factor wrong halves or doubles every
+#: occupancy conclusion, which is why the unit is in the name rather than left
+#: to the caller.
+#:
+#: **Only measured parts appear here.** gfx1201 = 64 CUs / 32 WGPs (Tajasarus)
+#: and gfx1151 = 40 CUs / 20 WGPs (Princess-Luna), both read from the GPU
+#: agent's `Compute Unit:` in rocminfo on 2026-09-20. Every other arch is
+#: deliberately ABSENT: a guessed denominator would silently produce a wrong
+#: occupancy verdict, and a missing one makes the consumer fail closed. Add an
+#: entry only from the box that has the part.
+#:
+#: Measuring trap, hit while collecting these: rocminfo lists the **CPU** agent
+#: first, so the first `Compute Unit:` in its output is the host's thread count
+#: (16 on Tajasarus, 32 on Princess-Luna) -- plausible CU counts, and wrong.
+#: Parse the block whose `Name:` is a gfx target.
+_DISPATCH_SLOTS: dict[AMDArch, int] = {
+    AMDArch.GFX_1151: 20,   # 40 CUs / 2 -- Radeon 8060S (Strix Halo)
+    #: RX 9070 XT. Three independent sources agree, and the arithmetic closes:
+    #: vendor spec 32 WGPs / 64 CUs / 4096 stream processors; rocminfo's GPU
+    #: agent reports 64 CUs; and RDNA4 Figure 2 puts 4 SIMD32s in a WGP (2 per
+    #: CU), so 32 WGPs x 4 SIMDs x 32 lanes = 4096. Any two of those three
+    #: would have caught the CPU-agent misread that produced "16 CUs".
+    AMDArch.GFX_1201: 32,
+}
+
+
+class WorkgroupProcessorMode(str, Enum):
+    """RDNA4 ISA 2.3: selectable per draw/dispatch at wave-create time."""
+
+    #: Waves of a work-group may be distributed across both CUs of the WGP, so
+    #: a work-group occupies a WGP.
+    WGP = "wgp"
+    #: "all waves in the work-group are resident within the same CU", and LDS
+    #: is split into an upper and lower half each serving two SIMD32s -- so a
+    #: work-group occupies a CU, and there are twice as many of them.
+    CU = "cu"
+
+
+def dispatch_slots(arch: AMDArch, mode: WorkgroupProcessorMode) -> int | None:
+    """Units a work-group can land on, or None when this fleet has not measured it.
+
+    **The mode is required, not defaulted.** On RDNA the denominator is WGPs in
+    WGP mode and CUs -- twice as many -- in CU mode, so a single number would
+    embed an assumption its signature does not state. Measured 2026-09-20 on
+    gfx1201: our register and LDS matmul bodies both carry `WGP_MODE=1` in
+    COMPUTE_PGM_RSRC1 bit 29, so WGP is right for them *today*; the ISA lets
+    any dispatch choose otherwise, and an occupancy verdict computed against
+    the wrong mode is wrong by exactly 2x.
+
+    None means "never measured", not "zero". A caller must decline to conclude
+    rather than substitute a default -- substituting one is how the predicate
+    this feeds was wrong in the first place.
+    """
+    slots = _DISPATCH_SLOTS.get(arch)
+    if slots is None:
+        return None
+    if _IS_RDNA.get(arch, False) and mode is WorkgroupProcessorMode.CU:
+        return slots * 2   # a WGP is 2 CUs; in CU mode each hosts its own group
+    return slots
+
+
+#: RDNA parts pair CUs into WGPs; CDNA does not, so its slot count is CUs and
+#: the mode does not apply.
+_IS_RDNA: dict[AMDArch, bool] = {
+    AMDArch.GFX_1151: True,
+    AMDArch.GFX_1201: True,
+}
+
+
+#: Maximum LDS a single work-group may allocate -- NOT the physical LDS a WGP
+#: has. On RDNA4 a WGP holds 128 KiB, allocated as 64 KiB per CU (byte
+#: addresses 0-65535 with CU0, 65536-131071 with CU1), and a work-group may
+#: allocate at most 64 KiB of it (ISA 2.3, 3.3.5). The two numbers coincide,
+#: which makes the table easy to misread in either direction.
+#:
+#: Three properties this table does not carry, and consumers need:
+#:   * allocation is quantised to **1024-byte blocks**, so a 6912-byte tile
+#:     actually costs 7168 and the padding sweep's LDS cost is a step function,
+#:     not a line;
+#:   * in CU mode an allocation may not cross to the other CU's side, so the
+#:     usable maximum is the CU's 64 KiB; in WGP mode it may straddle;
+#:   * a B128 access needs 16-byte alignment or the hardware SILENTLY zeroes
+#:     the low address bits (3.3.5.1) -- a wrong-address bug with no
+#:     diagnostic, which is why the staging copy derives its vector width from
+#:     the padded stride rather than taking one.
 _LDS_BYTES: dict[AMDArch, int] = {
     AMDArch.GFX_90A:  65536,
     AMDArch.GFX_940:  65536,
@@ -1084,6 +1173,7 @@ __all__ = [
     "TesseraROCmTargetError",
     "TESSERA_TARGET_ROCM",
     "TESSERA_TARGET_HIP",
+    "dispatch_slots",
     "TESSERA_TARGET_RCCL_MIN",
     "TESSERA_TARGET_ROCBLAS_MIN",
     "TESSERA_TARGET_MIOPEN_MIN",

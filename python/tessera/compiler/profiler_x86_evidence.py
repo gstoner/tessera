@@ -18,6 +18,54 @@ class X86ProfilerPacketError(ValueError):
     """Raised when a Zen 5 evidence packet is incomplete or contradictory."""
 
 
+#: The x86 promotion-ineligibility vocabulary, declared in ONE place.
+#:
+#: These are not diagnostic codes and must never be registered in
+#: `diagnostic_codes.py` -- they are the reasons a measured x86 result may not
+#: be promoted, and they decide `eligible_for_promotion`. That makes them
+#: semantic keys under Decision #21a, and an unknown one must fail CLOSED.
+#:
+#: Before 2026-09-20 nothing enumerated them: the producer appended eleven bare
+#: string literals, the validator checked only that each was a `str`, and no
+#: consumer could know the vocabulary was eleven items or that a twelfth had
+#: appeared. A reader handling a subset silently treated an unknown reason as
+#: NO reason -- which promotes a result that something declined to vouch for.
+#: They were found only because the diagnostic-code shape scan happened to see
+#: exactly one of them, by the accident of a concatenated colon.
+#:
+#: A tag may carry a `:detail` suffix (`TIMING_PROOF_INCOMPLETE:a,b`); the part
+#: before the colon is the tag and must appear here.
+X86_INELIGIBILITY_REASONS: dict[str, str] = {
+    "CPU_NOT_EXACT_ZEN5":
+        "host CPU is not the exact Zen 5 part the x86 lane is calibrated on",
+    "VIRTUALIZED_HOST":
+        "running under a hypervisor, so cycle counts are not the bare-metal ones",
+    "WSL_CLOCK_DOMAIN":
+        "WSL2 clock domain; wall-clock and device-clock latencies are not comparable",
+    "SOURCE_WORKTREE_DIRTY":
+        "the measured tree has uncommitted changes, so the result names no revision",
+    "TIMING_PROOF_INCOMPLETE":
+        "one or more required timing proofs are missing; the detail lists which",
+    "SYMBOL_SAMPLING_MISSING":
+        "no symbol-sampling artifact accompanies the measurement",
+    "SYMBOL_SAMPLING_INVALID":
+        "the symbol-sampling artifact failed its own validation",
+    "IMAGE_BUILD_ID_MISSING":
+        "the sampled image carries no build id, so samples cannot be attributed",
+    "EVENT_MAP_MISSING":
+        "no PMU event map, so counter names cannot be resolved",
+    "EVENT_MAP_NOT_PROMOTABLE":
+        "the PMU event map is present but not one promotion accepts",
+    "SAMPLING_AFFINITY_NOT_PINNED":
+        "sampling ran without pinned affinity, so samples may cross cores",
+}
+
+
+def x86_reason_tag(reason: str) -> str:
+    """The tag half of a reason, discarding any `:detail` suffix."""
+    return reason.split(":", 1)[0]
+
+
 def digest_json(payload: Mapping[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -139,6 +187,16 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
     reasons = payload.get("ineligibility_reasons")
     if not isinstance(reasons, list) or not all(isinstance(reason, str) for reason in reasons):
         raise X86ProfilerPacketError("invalid ineligibility reasons")
+    # Fail CLOSED on an unknown tag (Decision #21a). A reason decides whether a
+    # measurement may be promoted, so a tag no consumer knows must stop the
+    # packet rather than be carried past readers that will ignore it.
+    unknown = sorted({x86_reason_tag(r) for r in reasons} - set(X86_INELIGIBILITY_REASONS))
+    if unknown:
+        raise X86ProfilerPacketError(
+            f"unknown x86 ineligibility reason(s) {unknown}; declare them in "
+            f"X86_INELIGIBILITY_REASONS with a meaning, or the packet's readers "
+            f"will treat an unknown reason as no reason and promote a result "
+            f"something declined to vouch for")
     if payload.get("eligible_for_promotion") and reasons:
         raise X86ProfilerPacketError("promotion-eligible packet has blockers")
     if payload.get("eligible_for_promotion") and payload.get("verdict") != "promote":

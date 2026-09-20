@@ -1038,21 +1038,197 @@ which both sides widen and the copy width becomes the tunable CK treats it as.
 A wider copy over the current layout is measured-negative twice and should not
 be attempted a third time.
 
-**But first, an unmeasured question this raises, which should be answered
-before the layout work starts.** Two attempts at the copy have now failed to
-move the LDS body, which is weak evidence that the copy is not where the time
-goes. The register body reaches ~84 TFLOP/s at 2048³ against the LDS body's
-40.4 while moving **the same global bytes** — so global traffic cannot be the
-difference. What the LDS body adds is the LDS round trip and **two barriers per
-K step** (256 of them at 2048³), and barriers are already on record as
-unhelpful to schedule around: `ROCM-SCHED-GROUP-1` closed measured-negative.
+### 10j.2 The ceiling probe, and the speculation it refutes
 
-If the cost is the barrier-bounded round trip rather than the copy, then the
-K1-blocked layout is another copy optimisation and will disappoint the same
-way. **Measure the split before building the layout** — the cheapest version is
-a deliberately-wrong ceiling probe that fills LDS from a constant and never
-touches global, whose throughput bounds what any copy improvement can buy.
-This paragraph is reasoning, not a result; do not cite it as one.
+§10j.1 closed with an explicitly-flagged guess: that two failed copy attempts
+were weak evidence the copy is *not* where the time goes, and that the
+K1-blocked layout might therefore disappoint the same way. It said to measure
+the split before building the layout, and to treat the paragraph as reasoning
+rather than a result.
+
+**Measured 2026-09-20 on gfx1201, and the guess was wrong.** The probe
+(`lds-copy-elide`) emits a deliberately WRONG kernel whose staging copy writes
+a constant instead of reading global — every output is zero, which the harness
+asserts — while barriers, loop structure, LDS traffic and the MMA chain stay
+identical. So the delta is the copy's entire cost:
+
+| shape | real | copy elided | ceiling |
+|---|---|---|---|
+| 1024³ | 19.0 | 31.3 | **1.65x** |
+| 2048³ | 40.4 | **120.1** | **2.97x** |
+
+At 2048³ a free copy would reach **120 TFLOP/s, above the register body's
+~84** — so the LDS body's compute structure is not the problem, and the copy
+is worth up to 3x. The K1-blocked layout is worth building.
+
+**Why the guess failed is worth more than the guess.** Two copy optimisations
+had failed to move the body, and I read that as evidence about where the time
+goes. It was not: both failures were about *how* the copy was expressed — a
+masked load that cannot widen (§10j), then a widened load whose transposed
+store cost more than it saved (§10j.1). A mechanism that fails twice for
+reasons specific to the mechanism says nothing about the size of the prize.
+Measuring the prize directly took one option and one afternoon; inferring it
+from failures would have cancelled a 3x.
+
+**Swept across five shapes, and a second hypothesis died.** Given the RX 9070
+XT's hierarchy (L2 8 MB, Infinity Cache 64 MB), the two original shapes straddle
+the L2 line exactly — 4 MiB of f16 operands at 1024³, 16 MiB at 2048³ — so the
+obvious reading was that the copy is cheap while the operands fit L2 and dear
+once they spill. That predicts a STEP between 1280 and 1536. Measured:
+
+| N | A+B | resident | real | elided | ceiling |
+|---|---|---|---|---|---|
+| 1024 | 4.0 MiB | L2 | 18.9 | 31.4 | 1.66x |
+| 1280 | 6.2 MiB | **L2** | 25.4 | 61.3 | **2.41x** |
+| 1536 | 9.0 MiB | L3 | 32.5 | 97.4 | 3.00x |
+| 1792 | 12.2 MiB | L3 | 32.5 | 127.3 | 3.91x |
+| 2048 | 16.0 MiB | L3 | 40.4 | 126.2 | 3.13x |
+
+No step. A smooth rise, and the largest single jump (1.66 → 2.41) happens
+entirely **inside** L2. Cache residency is not the driver.
+
+**What is:** the elided arm converts problem size into throughput (31 → 127,
+plateauing near its roofline) while the real arm barely moves (18.9 → 40.4).
+The ratio grows because the copy-free kernel uses the extra parallelism and the
+copy-bound one cannot. The copy is the bottleneck at *every* shape here.
+
+**So the 1024³ figure understates the prize, for a reason worth naming.** At
+1024³ there are 64 work-groups over 32 WGPs — two each — so even the copy-free
+kernel is occupancy-starved. 1.66x is not "the copy is cheap here"; it is
+"nothing is fast here". An earlier draft blamed §10k's non-convergence at that
+shape, which is a different effect and was the wrong attribution.
+
+**Consequence for the layout work:** judge it across the occupancy range, not
+at one shape. 1792³ carries the most headroom (3.91x) and 1024³ the least, and
+a single-shape benchmark will over- or under-state the result by roughly 2.4x
+depending only on which one is chosen.
+
+**What the ceiling still does not say.** It is an upper bound on a copy that
+cannot actually be free, and it does not rank K1-blocking against other ways
+to spend the headroom.
+
+### 10j.3 Where the 3.91x actually is: the staging loop does not pipeline
+
+The ceiling says the copy is worth up to 3.91x. The ISA says what a copy is
+supposed to look like, and our two bodies disagree completely. Counting memory
+waits in the emitted gfx1201 ISA at 2048³:
+
+| body | demand-zero waits | partial waits | distribution |
+|---|---|---|---|
+| register | 57 | **137** | `loadcnt<=1` x50, `<=2` x10, `<=4` x8, `<=6` x8 |
+| **lds** | **134** | 15 | `loadcnt<=0` x2, `dscnt<=0` x2 |
+
+RDNA4 5.7 is explicit that `S_WAIT_LOADCNT` takes a bound, not just zero, so a
+shader can "schedule long-latency instructions, execute unrelated work and
+specify when results are needed". The **register body does exactly that** --
+six global loads in flight, waits on partial counts. The **LDS staging loop
+does not**: it issues a load and waits for `LOADcnt<=0` before storing to LDS.
+
+**Barriers are not the cost, and the elided arm proves it.** The copy-elided
+kernel keeps every barrier and removes only the global reads; it runs at 127
+TFLOP/s, near roofline. If the two barriers per K step were dominant it could
+not. So the 3.91x is unhidden **load latency**, not synchronisation.
+
+**Barriers are, however, the likely reason it cannot be hidden** -- and this
+part is inference, flagged as such. The loop is `barrier -> load -> wait(0) ->
+ds_store -> barrier -> MMA`, and a load for the next K step cannot be hoisted
+above the trailing barrier without changing what the barrier means. The
+register body has **no barriers at all**, which is precisely why its scheduler
+is free to keep six loads in flight. Testing this needs a double-buffered
+variant, not more counting.
+
+**Both levers the ISA offers are unused.** The barrier is split into
+`S_BARRIER_SIGNAL` (arrive) and `S_BARRIER_WAIT` (5.6), which is what lets a
+wave signal after its stores and wait only before reading someone else's slab.
+We emit **2 signal and 2 wait, both pairs adjacent** -- every barrier a full
+stop. `gpu.barrier` lowers that way and nothing asks for more.
+
+**So the next move is probably not the K1-blocked layout.** K1-blocking widens
+each transfer; double-buffering hides its latency. The measurement says latency
+is what is exposed, and the register body -- same chip, same loads, no barriers
+-- already demonstrates the hiding. A double-buffered LDS slab with a split
+barrier is a smaller change than a layout rewrite and attacks what was actually
+measured. The layout may still be wanted afterwards for the store-side width
+(§10j.1), but it should be judged after the latency is hidden, not before.
+
+### 10j.4 Four levers for the staging copy, and which the compiler can reach
+
+The ceiling (§10j.2) says up to 3.91x is available; the wait census
+(§10j.3) says it is sitting in unhidden load latency. The RDNA4 ISA offers
+four ways at it, and they are not equally reachable from our pipeline:
+
+| lever | fixes | reachable from MLIR? |
+|---|---|---|
+| **double-buffer + split barrier** | exposed load latency | partly — `gpu.barrier` emits `signal`+`wait` adjacent; the split needs a producer |
+| **`global_load_tr_b64/b128`** | B's transpose at load time | not checked yet |
+| **cross-lane transpose** | B's store width | **yes**, via `permlane16.var` |
+| K1-blocked LDS layout | both sides widen | yes (it is our own layout) |
+
+**On the cross-lane option, a correction worth recording.** The transpose B
+needs is 8 lanes x 8 elements — each lane reads 8 contiguous N and must end
+holding 8 contiguous K — which is exactly DPP8's granularity (7.9: "arbitrary
+cross-lane swizzling within groups of 8 lanes"). But **ROCDL does not expose
+DPP8**: `ROCDL_DPPUpdateOp` is `update.dpp`, the DPP16 intrinsic with its
+predefined menu, and there is no `mov.dpp8`. Checked against the LLVM 23.1.1
+`ROCDLOps.td` on 2026-09-20.
+
+What is exposed, and is more general for this: `permlane16.var` and
+`permlanex16.var` — arbitrary gather with a **per-lane** select within (or
+across) 16-lane groups. An 8x8 transpose fits inside a 16-lane group. Also
+`ds_swizzle` (fixed menu, 32 lanes) and `permlane32.swap`.
+
+So "use DPP8" would be an ISA-correct plan the compiler cannot express, which
+is the Decision #19 question in miniature: the architecture having an
+instruction is not the same as our pipeline being able to emit it.
+
+**One correctness note if this is built.** DPP8 has two forms and the
+distinction survives into any lane-shuffle design: normal reads **zero** from
+EXEC-masked lanes, `DPP8FI` fetches the inactive lanes' actual data. For the
+ragged K tail the zero behaviour is the one that is *wanted*; fetching
+inactive lanes would carry stale values into the fragment silently. Whichever
+primitive is used, check which of the two semantics it has before trusting the
+tail.
+
+**WMMA itself takes no DPP** (Table 38), so all of this has to happen before
+the matrix op — there is no swizzle-on-the-way-in.
+
+### 10j.5 A constraint the layout work must not break: sparse needs column-major B
+
+Verified against the RDNA4 ISA text 2026-09-20, independently of the matrix
+calculator this file's tables came from. Two results and one warning.
+
+**Our fragment formulas are confirmed.** Deriving from 7.12's own tables --
+A 16-bit wave32 is `lane = {col[2], row[3:0]}`, `vgpr = {col[3], col[1]}`,
+`startPosn = col[0]`, which gives `k = 8*(e>>2) + 4*(lane>>4) + (e&3)`; A 8-bit
+is `lane = {col[3], row[3:0]}`, `vgpr = col[2]`, `startPosn = col[1:0]`, giving
+`k = 8*(lane>>4) + e`. Both match §3 exactly. The C/D map
+`VGPR j at lane L = D[(L/16)*8 + j][L%16]` matches too. Two independent sources
+now agree on all three.
+
+**Our departure at 16 bits is the known one.** `materializeFragmentPack` uses
+`kBase = laneGroup * inputElementsPerLane`, i.e. contiguous-eight at every
+width. That IS the machine layout at 8/4 bits and a permutation of it at 16,
+legal only because K reduction is permutation-invariant when the same
+permutation reaches BOTH operands. Recorded here because the ISA text makes the
+departure visible for the first time.
+
+**The warning, and it lands on the K1-blocked layout.** 7.12's sparse section
+says: "When the A-matrix is a 4:2 sparse matrix, the corresponding B-matrix
+must be (K x N), and loaded in **column-major** order." Nothing in
+`rocm_sparse_{logical,packing,runtime}.py` or the ROCm conversion states that
+constraint. It is satisfied today only **by accident of the staging layout** --
+§10j.1 established that our LDS B is written contiguous in K per column, which
+is column-major.
+
+So the 2:4 sparse stack depends on a property of the dense staging layout that
+nobody wrote down, and the K1-blocked layout under consideration changes
+exactly that property. Before any B-layout change: state the constraint at the
+sparse site, and give it a test that fails when B stops being column-major.
+Otherwise the failure mode is wrong sparse results from a change made for dense
+performance, with nothing connecting the two.
+
+(Also confirmed while reading: our packer satisfies the `idx0 < idx1` rule,
+though via a `sorted()` call rather than a stated invariant.)
 
 ## 10k. The padding default, settled on the shape where it converges
 
@@ -1146,3 +1322,233 @@ is truth, markdown is a mirror; do not hand-edit it). This page is the
 *consumer-facing contract* Tessera's generators are written against, with the
 device evidence attached; when the two disagree, the archive wins on what the
 hardware does and this page is the bug.
+
+## 10l. Chapters 9, 11 and 12 of the ISA, checked against what we emit
+
+A sweep of the addressing, alignment and LDS chapters against our two gfx1201
+bodies. Most of it does not reach us, but the reasons are worth recording
+because three of them were things I had *asserted* rather than checked, and one
+of those assertions was about to be used to dismiss a section that does apply.
+
+### What we emit, measured
+
+Disassembling both bodies and counting instruction families:
+
+```
+register   global_*=472, scratch_*=145,  ds_*=0     buffer/tbuffer: NONE
+lds        global_*=150, ds_*=14                    buffer/tbuffer: NONE
+```
+
+Zero `BUFFER_*`/`TBUFFER_*`. ROCDL lowers everything to flat/global addressing,
+so §9.2's buffer-VGPR layout rules and §9.3's `dfmt`/`nfmt` mismatch table --
+which describe what happens when a typed buffer op's format disagrees with the
+resource descriptor -- are unreachable from this pipeline. That was already my
+belief; it is now a measurement, and the distinction mattered: I dismissed §9.3
+from belief first, and the same reasoning would have dismissed §9.5, which does
+apply.
+
+### §9.5 / §11.3: two silent-wrong-address modes, neither of which we control
+
+`SH_MEM_CONFIG.alignment_mode` governs **non-formatted** ops -- that is, the
+`global_load_*` our staging copy issues:
+
+| mode | misaligned DWORD+ access |
+|---|---|
+| 0 DWORD | **the two LSBs are ignored** -- reads a different address, no fault |
+| 1 DWORD_STRICT | must be aligned |
+| 2 STRICT | must be aligned to the data size |
+| 3 UNALIGNED | any alignment |
+
+This is the global-memory twin of the LDS hazard in §3.3.5.1, where a B128
+access below 16-byte alignment has its low address bits zeroed. Mode 0 turns a
+misaligned wide load into a wrong-address read that neither faults nor differs
+in timing. It is a config register set by the driver, so we cannot select it and
+must not depend on it.
+
+§11.3 adds a third: LDS address arithmetic is **truncated and may wrap without
+being detected**. The only range check is `LDS_ADDR.U17 < LDS_SIZE`, zero-extended.
+Inside the allocation, a wrapped address is simply a different valid address.
+Out-of-range is caught -- reads return zero, stores are dropped, MEMVIOL traps --
+but wrap-around inside the wave's own LDS is not.
+
+All three are silent-wrong-answer modes reachable by an address-arithmetic bug,
+which is precisely what the K1-blocked layout work will be writing. Our current
+vector-width derivation (`ldsStride % v == 0` in elements) prevents the LDS one
+by construction, because element count and byte count scale together. It does
+not prevent the other two, and neither has a test.
+
+### §11.5 `GLOBAL_LOAD_BLOCK`: a fifth lever, and ROCDL cannot reach it
+
+§10j.4 listed four levers for the staging copy. There is a fifth, and on paper
+it is aimed exactly at §10j.3's finding that the cost is unhidden load latency
+rather than transfer width:
+
+> The entire block load/store is tracked with LOADcnt: increments 1 for the
+> entire block transfer, and decrements when the block transfer has completed.
+
+Up to 32 consecutive VGPRs per thread, one counter. §10j.3 measured 137 partial
+waits in the register body because every narrow load carries its own counter;
+this instruction collapses that to one.
+
+ROCDL has no `load_block` intrinsic -- grepping `ROCDLOps.td` finds only
+`workgroup.id.*` under that name. Same class as DPP8 in §10j.4: an ISA lever the
+compiler cannot reach through this lowering. Reaching it would mean inline asm,
+which is a Decision #31 question, not a scheduling one.
+
+### There is no LDS-side transpose read on gfx1201
+
+ROCDL declares two transposing-read families, and neither is ours:
+
+```
+// LDS transpose intrinsics (available in GFX950)
+def ROCDL_ds_read_tr16_b64 ...
+// Glb/DS load-transpose intrinsics (available in GFX1250+)
+def ... ds.load.tr16.b128 ...
+```
+
+`ds.read.tr*` is gfx950 (CDNA); `ds.load.tr*` is gfx1250+. gfx1201 has only the
+**global**-side transpose, which we already emit through the `amdgpu` dialect
+(§8) because ROCDL's form takes `!llvm.ptr<1>` and the fragment materializer
+works in memrefs.
+
+This closes a door rather than opening one. §10j.5 recorded that sparse needs
+column-major B and currently gets it only by accident of the dense staging
+layout; a transpose on the read *out* of LDS would have been the clean escape
+hatch, and this chip does not have one. The K1-blocked layout must therefore
+satisfy sparse's major order directly.
+
+### §12.1: "64 banks" does not falsify our 32-bank model
+
+The ISA says 128 kB per WGP in **64** banks, which read naively makes every
+bank-conflict figure in §10e and §10k wrong by 2x. It does not:
+
+> These 64 banks are further sub-divided into two sets of 32-banks each where 32
+> of the banks are affiliated with a pair of SIMD32's, and the other 32 with the
+> other pair.
+
+A wave sees 32. The `32 x 4 B` model in `GenerateWMMAGemmKernel.cpp` is the
+per-wave view and is correct; the 64 is the per-WGP total. Recorded because the
+two numbers are one sentence apart and only one of them is the one a conflict
+calculation wants.
+
+### CU-mode-only instructions are unreachable, and we measured the mode
+
+`DS_DIRECT_LOAD` (§12.1.2) and `DS_PARAM_LOAD` (§12.2) are both documented
+"available only in CU mode, not WGP mode". Both our bodies dispatch in WGP mode
+(`rsrc1` WGP_MODE=1, measured -- the same reading §10a used to settle the
+occupancy denominator), so neither is reachable without changing the dispatch
+mode. `DS_PARAM_LOAD` would not be wanted anyway: it reads pixel-attribute
+triples for interpolation. `DS_DIRECT_LOAD`'s broadcast-a-DWORD-to-all-lanes
+behaviour has a compute use, but `s_load` into an SGPR already covers it without
+giving up the WGP-mode occupancy.
+
+### §12.5: three more levers, and the same ROCDL wall -- except for one
+
+The LDS indexed-access chapter offers three instructions that look aimed at the
+staging copy. Checked against `ROCDLOps.td` the same way `GLOBAL_LOAD_BLOCK`
+was:
+
+| ISA instruction | what it would buy | ROCDL |
+|---|---|---|
+| `DS_STORE_2ADDR_{B32,B64}` | two stores at unique addresses, **one DScnt** | absent |
+| `DS_STORE_ADDTID_B32` | address from thread-ID, **no ADDR VGPR** | absent |
+| `DS_PERMUTE/BPERMUTE_B32`, `DS_SWIZZLE_B32` | cross-lane with no LDS storage | **present** |
+
+The first two are the ones that fit our problem best and neither is reachable.
+`2ADDR` is a particularly close fit: it takes one ADDR VGPR plus two immediate
+offsets, and the two elements a lane stores in our staging layout are separated
+by exactly `ldsStride`, a compile-time constant -- the precise shape the
+instruction wants, and §10j.1's "B's store cannot widen" is exactly the problem
+it would sidestep, since 2ADDR needs no contiguity. `ADDTID` would free the
+address VGPR in a kernel that already spills 126. Both would need inline asm.
+
+The third is a correction to §10j.4, which recorded that DPP8 is not in ROCDL
+and left the impression that cross-lane movement is unreachable. It is not:
+`rocdl.ds_bpermute` and `rocdl.ds_swizzle` are both declared. But they are not
+DPP8 by another name -- DPP is a VALU operand modifier, while these run through
+the LDS hardware (using no LDS storage) and are tracked with DScnt. So the
+capability exists at a cost, rather than being absent. Anything built on it must
+be measured against that cost, not assumed free because the crossbar is
+arbitrary.
+
+Two semantics worth carrying if we ever use them: index values are **bytes**
+(multiply the lane by 4) with `offset0` added before use, out-of-range indices
+**wrap** rather than fault (wave32 uses only index bits [6:2]), and reading a
+disabled lane returns zero. The wrap is the same silent-wrong-answer shape as
+the LDS address truncation above.
+
+### 10j.6 The vectorised path's penalty is not the global load
+
+Fixing the ceiling probe to write every destination at every width (it had been
+storing one scalar per `vecW` group, so above width 1 it read stale LDS and
+under-counted its own LDS traffic -- review finding, 2026-09-20) made it usable
+at vector widths for the first time. Running it there answers a question §10j
+left open.
+
+gfx1201, 1024^3 f16, pad=4, **elided arm only** -- no global reads at all:
+
+| `lds-copy-width` | TFLOP/s | all-zero |
+|---|---|---|
+| 1 | 30.4 | True |
+| 2 | 12.5 | True |
+| 4 | 11.9 | True |
+| 8 | 12.0 | True |
+
+The elided arm has no global load, no `scf.if`, and no ragged tail -- the elide
+branch sits above that split. Total LDS elements written is identical at every
+width (A's one vector store replaces `vecW` scalars; B stays scalar either way),
+and the loop runs `vecW` times fewer iterations. The vector arm should therefore
+be **faster**, and it is 2.5x slower.
+
+So the regression §10j measured is not, or not mainly, about the load side.
+Something in the vectorised staging path costs ~2.5x with the global read
+already removed. The mechanism is not established -- candidates are the LDS
+store pattern under the padded stride, VGPR pressure in a body that already
+spills 126 (§10j / the RDNA4 VGPR ceiling), or the wider loop body's scheduling
+-- and this is one shape on one arm, so it is a signal, not a conclusion.
+
+**CORRECTED 2026-09-20, same day, on review: the last sentence of this section
+originally read "argues against reviving vectorisation". That is backwards, and
+it is the wrong conclusion from the right measurement.**
+
+What the measurement shows is that vectorisation *as implemented here* loses.
+The staging loop is `load; store; load; store` -- one dependency chain, nothing
+in flight. Widening from 1 to 8 does not add overlap, it **removes** it: the
+loop now has 8x fewer independent iterations, and iteration count was the only
+source of memory-level parallelism in that body. Eight independent narrow
+operations became one wide one with nothing to fill the gap.
+
+That also re-reads §10j.3. Its census found the register body at `loadcnt<=6`
+and the staging loop at `loadcnt<=0`, which was recorded as "unhidden load
+latency" and sent us looking for a *faster instruction* -- the search in §10l
+that found four unreachable ones. The correct reading is that the loop has no
+issue depth, and no instruction fixes that. A static census of the two real arms
+is consistent: the scalar path reaches 20 memory ops between waits, the vector
+path 10 (suggestive only -- the count spans the whole kernel, not just the
+staging loop).
+
+**A wide operation only pays if enough of them are in flight.** Three sources of
+overlap exist here and the current loop uses none:
+
+1. **Issue depth inside the copy.** Issue every load for a tile before waiting
+   on any (`for i: v[i]=load(i)` then `for i: store(v[i])`), not load-wait-
+   store-repeat. This is what moves the staging loop off `loadcnt<=0`. It
+   competes for registers: at width 8 each in-flight value is 4 VGPRs, and
+   RDNA4 caps a wave at 256 architecturally, in a body already spilling 126 --
+   so wide x deep may lose to narrow x deep, which is untested.
+2. **Double-buffering across K-tiles.** Stage into LDS[1] while the MMA chain
+   consumes LDS[0], hiding global latency behind compute. Needs 2x LDS (there is
+   room under the 64 KB workgroup cap) and the split `S_BARRIER_SIGNAL` /
+   `S_BARRIER_WAIT` pair.
+3. **Prefetch depth > 2** if the MMA window proves shorter than memory latency.
+
+(1) fills the pipe within the copy; (2) hides the copy behind compute. They are
+orthogonal and vectorisation multiplies both, so it is worth nothing without
+either. The right next experiment is (1) measured against the current loop at
+each width -- it is the smaller change and it directly tests the diagnosis. Until
+that runs, **nothing here licenses a claim about vectorisation on this chip**,
+only about this loop structure.
+
+It also would not have been visible before the probe was corrected: at widths
+2-8 the old probe returned `nan` and a non-zero output, so any timing from it
+was measuring a kernel whose LDS was partly uninitialised.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import cache
 import copy
 import hashlib
 import os
@@ -9,9 +10,13 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from pathlib import Path
 
 from .graph_ir import GraphIRModule
+
+if TYPE_CHECKING:  # deferred at runtime -- rocm_target imports late
+    from .rocm_target import ROCmTargetProfile
 
 
 _HASH_RE = re.compile(r'tessera\.schedule_hash = "([0-9a-f]{64})"')
@@ -107,6 +112,22 @@ class ScheduledMatmulArtifact:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
 
+@cache
+def _rocm_profile(arch: str) -> "ROCmTargetProfile":
+    """The target profile the ranking needs, built once per arch."""
+    from .rocm_target import AMDArch, ROCmTargetProfile, rocm_arch_string
+    for member in AMDArch:
+        if rocm_arch_string(member) == arch:
+            return ROCmTargetProfile(arch=member)
+    raise ValueError(f"no AMDArch spells {arch!r}")
+
+
+def _select_macro_tile(*args, **kwargs):
+    """Deferred import: rocm_tiling pulls rocm_target, which imports late."""
+    from .rocm_tiling import select_macro_tile
+    return select_macro_tile(*args, **kwargs)
+
+
 def _band_4x4(m: int, n: int, *, dynamic: bool) -> bool:
     """The fully tiled [1024, 2048) band where the 4x4 panel wins on both chips."""
     return not dynamic and 1024 <= m < 2048 and 1024 <= n < 2048 and m % 64 == 0 and n % 64 == 0
@@ -144,9 +165,9 @@ def rocm_gfx1201_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
     126 VGPRs. That is a real cost, and the only lever on it is needing fewer
     live registers -- not a larger tile and not an occupancy attribute. Above
     the panel, latency hiding is the other lever -- see `rocm_k_unroll`."""
-    if not dynamic and m >= 1024 and n >= 1024 and m % 64 == 0 and n % 64 == 0:
-        return 64, 64
-    return 16, 16
+    return _select_macro_tile(
+        m, n, profile=_rocm_profile("gfx1201"), dynamic=dynamic,
+        measured_large_panel=(64, 64), measured_small_panel=(16, 16))
 
 
 #: Bits one lane's 8-element fragment load actually moves, by storage. The
@@ -248,7 +269,10 @@ def rocm_gfx1151_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
     """The gfx1151 f16/bf16 macro tile: the committed 2x4 panel, except the
     typed 4x4 in the fully tiled [1024, 2048) band (10.8 vs 9.9 TFLOP/s at
     1024^3, losing again at 2048^3: 18.7 vs 21.2)."""
-    return (64, 64) if _band_4x4(m, n, dynamic=dynamic) else (32, 64)
+    return _select_macro_tile(
+        m, n, profile=_rocm_profile("gfx1151"), dynamic=dynamic,
+        measured_large_panel=(64, 64), measured_small_panel=(32, 64),
+        measured_band=(1024, 2048))
 
 
 def lower_scheduled_matmul(

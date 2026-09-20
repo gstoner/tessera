@@ -1013,7 +1013,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                       const WmmaTypes &T, Type outputType, bool hasBias,
                       StringRef activation, StringRef rasterOrder,
                       int64_t rasterGroup, int64_t ldsPadDwords,
-                      int64_t ldsCopyWidth) {
+                      int64_t ldsCopyWidth, bool ldsCopyElide) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -1252,7 +1252,31 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                                  l,
                                  kb.create<arith::MulIOp>(l, row, cLdsStride),
                                  kk));
-          if (vecW == 1) {
+          if (ldsCopyElide) {
+            // CEILING PROBE. Writes a constant instead of reading global, so
+            // the kernel is DELIBERATELY WRONG -- every output is zero. It
+            // exists to bound what any copy optimisation can possibly buy:
+            // barriers, loop structure, LDS traffic and the MMA chain are all
+            // unchanged, so (real - elided) is the staging copy's entire cost.
+            // Two copy optimisations in a row failed to move this body, and
+            // that is a reason to measure the split before designing a third.
+            //
+            // It must write EXACTLY the destinations the real copy writes. The
+            // loop steps by `cThreads * vecW`, so at vecW > 1 a single scalar
+            // store would leave vecW-1 elements of each group uninitialised --
+            // the probe would then read stale LDS (its output no longer
+            // provably zero) AND issue less LDS traffic than the path it is
+            // being differenced against, which is precisely the quantity it
+            // exists to hold constant.
+            if (vecW == 1) {
+              kb.create<memref::StoreOp>(l, scalarZero, ldsA,
+                                         ValueRange{dstA});
+            } else {
+              Value zeroVec =
+                  kb.create<vector::BroadcastOp>(l, vecTy, scalarZero);
+              kb.create<vector::StoreOp>(l, zeroVec, ldsA, ValueRange{dstA});
+            }
+          } else if (vecW == 1) {
             // The historical scalar copy, kept reachable so the vectorised one
             // has a baseline to be measured against. It is NOT `vector<1xT>`:
             // a width-1 masked load is a scalar load wearing a mask, it costs
@@ -1336,7 +1360,19 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value gk = kb.create<arith::AddIOp>(l, k0, kk);
           Value gc = kb.create<arith::AddIOp>(l, baseCol, col);
           Value kIn = kb.create<arith::CmpIOp>(l, slt, gk, K);
-          if (vecW == 1) {
+          if (ldsCopyElide) {
+            // Same requirement as A, but B's LDS side is scalar at every
+            // width: consecutive `e` are consecutive COLUMNS, one full LDS row
+            // apart. So the probe issues vecW scalar stores at exactly the
+            // addresses `storeLane` below uses.
+            for (int64_t i = 0; i < vecW; ++i) {
+              Value colI = kb.create<arith::AddIOp>(l, col, ci(i));
+              Value dst0 = kb.create<arith::AddIOp>(
+                  l, kb.create<arith::MulIOp>(l, colI, cLdsStride), kk);
+              kb.create<memref::StoreOp>(l, scalarZero, ldsB,
+                                         ValueRange{dst0});
+            }
+          } else if (vecW == 1) {
             Value in = kb.create<arith::AndIOp>(
                 l, kIn, kb.create<arith::CmpIOp>(l, slt, gc, N));
             Value logical1 = kb.create<arith::AddIOp>(
@@ -1702,6 +1738,17 @@ struct GenerateWMMAGemmKernelPass
                      "is withdrawn (ROCM-LDS-BANKPAD-1, "
                      "docs/backends/rocm/wmma-fragment-layout.md 10i/10j)"),
       llvm::cl::init(4)};
+  Option<bool> ldsCopyElide{
+      *this, "lds-copy-elide",
+      llvm::cl::desc("CEILING PROBE ONLY -- emits a DELIBERATELY WRONG kernel. "
+                     "The LDS staging copy writes a constant instead of reading "
+                     "global, so every output is zero. Keeps barriers, loop "
+                     "structure and the MMA chain identical, so (real - elided) "
+                     "bounds the staging copy's entire cost and therefore what "
+                     "any copy optimisation can buy. Never a production path: "
+                     "its own test asserts the result is WRONG "
+                     "(ROCM-LDS-STAGE-VECTOR-1, wmma-fragment-layout.md 10j.1)"),
+      llvm::cl::init(false)};
   Option<int> ldsCopyWidth{
       *this, "lds-copy-width",
       llvm::cl::desc("LDS staging copy: elements per thread per step. 1 is "
@@ -2393,7 +2440,7 @@ struct GenerateWMMAGemmKernelPass
         emitTypedLdsBody(bodyB, loc, gpuFunc, mt, nt, ldsWavesM, ldsWavesN, T,
                          outputTy, hasBias, activation, request.rasterOrder,
                          request.rasterGroup, ldsPadDwords,
-                         ldsCopyWidth);
+                         ldsCopyWidth, ldsCopyElide);
       } else if (request.canonicalKLoop && canonicalStaging == "lds") {
         // This body writes its accumulator back at row `2*e + lhi`, which is
         // RDNA3's wave32 distribution. gfx12 distributes the same accumulator

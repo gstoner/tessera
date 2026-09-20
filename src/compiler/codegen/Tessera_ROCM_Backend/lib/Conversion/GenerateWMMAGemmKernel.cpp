@@ -1245,6 +1245,30 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value gr = kb.create<arith::AddIOp>(l, baseRow, row);
           Value gk = kb.create<arith::AddIOp>(l, k0, kk);
           Value rowIn = kb.create<arith::CmpIOp>(l, slt, gr, M);
+          // `e` indexes the UNPADDED tile; the destination row is strided.
+          Value dstA = padElems == 0
+                           ? e
+                           : Value(kb.create<arith::AddIOp>(
+                                 l,
+                                 kb.create<arith::MulIOp>(l, row, cLdsStride),
+                                 kk));
+          if (vecW == 1) {
+            // The historical scalar copy, kept reachable so the vectorised one
+            // has a baseline to be measured against. It is NOT `vector<1xT>`:
+            // a width-1 masked load is a scalar load wearing a mask, it costs
+            // an `llvm.intr.masked.load` the scalar path does not pay, and
+            // `vector.create_mask` has no LLVM lowering at that width -- so
+            // emulating the baseline through the vector path would neither
+            // compile nor measure the thing it claims to.
+            Value in = kb.create<arith::AndIOp>(
+                l, rowIn, kb.create<arith::CmpIOp>(l, slt, gk, K));
+            Value logical1 = kb.create<arith::AddIOp>(
+                l, kb.create<arith::MulIOp>(l, gr, K), gk);
+            Value safe1 = kb.create<arith::SelectOp>(l, in, logical1, c0);
+            Value v1 = kb.create<memref::LoadOp>(l, A, ValueRange{safe1});
+            v1 = kb.create<arith::SelectOp>(l, in, v1, scalarZero);
+            kb.create<memref::StoreOp>(l, v1, ldsA, ValueRange{dstA});
+          } else {
           // How many of the `vecW` lanes are inside K, clamped to [0, vecW],
           // and zero entirely when the row itself is out of bounds.
           Value remK = kb.create<arith::SubIOp>(l, K, gk);
@@ -1261,16 +1285,10 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value v = kb.create<vector::MaskedLoadOp>(l, vecTy, A,
                                                     ValueRange{safe}, mask,
                                                     zeroVec);
-          // `e` indexes the UNPADDED tile; the destination row is strided. The
-          // whole vector is stored -- LDS is the tile buffer and always in
+          // The whole vector is stored -- LDS is the tile buffer and always in
           // bounds, and the masked-off lanes carry the zero the tail wants.
-          Value dstA = padElems == 0
-                           ? e
-                           : Value(kb.create<arith::AddIOp>(
-                                 l,
-                                 kb.create<arith::MulIOp>(l, row, cLdsStride),
-                                 kk));
           kb.create<vector::StoreOp>(l, v, ldsA, ValueRange{dstA});
+          }
         }
         // B: read along N (coalesced), write transposed so K is contiguous
         // per column in LDS.
@@ -1296,6 +1314,18 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value gk = kb.create<arith::AddIOp>(l, k0, kk);
           Value gc = kb.create<arith::AddIOp>(l, baseCol, col);
           Value kIn = kb.create<arith::CmpIOp>(l, slt, gk, K);
+          if (vecW == 1) {
+            Value in = kb.create<arith::AndIOp>(
+                l, kIn, kb.create<arith::CmpIOp>(l, slt, gc, N));
+            Value logical1 = kb.create<arith::AddIOp>(
+                l, kb.create<arith::MulIOp>(l, gk, N), gc);
+            Value safe1 = kb.create<arith::SelectOp>(l, in, logical1, c0);
+            Value v1 = kb.create<memref::LoadOp>(l, B, ValueRange{safe1});
+            v1 = kb.create<arith::SelectOp>(l, in, v1, scalarZero);
+            Value dst1 = kb.create<arith::AddIOp>(
+                l, kb.create<arith::MulIOp>(l, col, cLdsStride), kk);
+            kb.create<memref::StoreOp>(l, v1, ldsB, ValueRange{dst1});
+          } else {
           Value remN = kb.create<arith::SubIOp>(l, N, gc);
           Value availN = kb.create<arith::MaxSIOp>(l, remN, c0);
           Value takeN = kb.create<arith::MinSIOp>(l, availN, cVec);
@@ -1319,6 +1349,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
             Value dst = kb.create<arith::AddIOp>(
                 l, kb.create<arith::MulIOp>(l, colI, cLdsStride), kk);
             kb.create<memref::StoreOp>(l, lane, ldsB, ValueRange{dst});
+          }
           }
         }
         kb.create<gpu::BarrierOp>(l);

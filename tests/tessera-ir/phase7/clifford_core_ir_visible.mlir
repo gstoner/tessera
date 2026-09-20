@@ -1,4 +1,5 @@
 // RUN: tessera-opt %s | FileCheck %s
+// REQUIRES: tessera-clifford
 
 // Clifford-core IR-visible fixture.
 //

@@ -57,6 +57,12 @@ struct ROCMExecutablePipelineOptions
                      "whose staging copy writes a constant instead of reading "
                      "global, to bound the copy's cost (ROCM-LDS-STAGE-VECTOR-1)"),
       llvm::cl::init(false)};
+  Option<bool> ldsDoubleBuffer{
+      *this, "lds-double-buffer",
+      llvm::cl::desc("forwarded to the WMMA GEMM generator: stage slab k+1 "
+                     "into a second LDS buffer while the MMA chain consumes "
+                     "slab k"),
+      llvm::cl::init(false)};
   Option<int> ldsCopyDepth{
       *this, "lds-copy-depth",
       llvm::cl::desc("forwarded to the WMMA GEMM generator: how many "
@@ -292,7 +298,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                int schedGroups = 0, int ldsPadDwords = 4,
                                int ldsCopyWidth = 1,
                                bool ldsCopyElide = false,
-                               int ldsCopyDepth = 1) {
+                               int ldsCopyDepth = 1,
+                               bool ldsDoubleBuffer = false) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -369,7 +376,9 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " lds-copy-width=" + Twine(ldsCopyWidth) +
                                   " lds-copy-elide=" +
                                       (ldsCopyElide ? "true" : "false") +
-                                  " lds-copy-depth=" + Twine(ldsCopyDepth)));
+                                  " lds-copy-depth=" + Twine(ldsCopyDepth) +
+                                  " lds-double-buffer=" +
+                                      (ldsDoubleBuffer ? "true" : "false")));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -471,7 +480,7 @@ static void buildROCMExecutablePipeline(
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
                        opts.schedGroups, opts.ldsPadDwords,
                        opts.ldsCopyWidth, opts.ldsCopyElide,
-                       opts.ldsCopyDepth);
+                       opts.ldsCopyDepth, opts.ldsDoubleBuffer);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

@@ -242,6 +242,7 @@ class ROCMExecutablePipeline:
     #: Bounds what any copy optimisation can buy; never a production path.
     lds_copy_elide: bool = False
     lds_copy_depth: int = 1
+    lds_double_buffer: bool = False
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -293,6 +294,8 @@ class ROCMExecutablePipeline:
         # but a non-positive one is a caller error, not a policy.
         if type(self.lds_copy_depth) is not int or self.lds_copy_depth < 1:
             raise ValueError("ROCm lds_copy_depth must be a positive int")
+        if type(self.lds_double_buffer) is not bool:
+            raise ValueError("ROCm lds_double_buffer must be a bool")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -312,6 +315,7 @@ class ROCMExecutablePipeline:
             f"lds-copy-width={self.lds_copy_width} "
             f"lds-copy-elide={str(self.lds_copy_elide).lower()} "
             f"lds-copy-depth={self.lds_copy_depth} "
+            f"lds-double-buffer={str(self.lds_double_buffer).lower()} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"
@@ -348,6 +352,7 @@ class ROCMExecutablePipeline:
             str(self.lds_copy_width),
             str(self.lds_copy_elide),
             str(self.lds_copy_depth),
+            str(self.lds_double_buffer),
             str(self.tile_q),
             str(self.tile_kv),
             str(self.depth_cooperative),

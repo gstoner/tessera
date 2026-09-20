@@ -157,6 +157,37 @@ matrix formats, sparse matrix instructions and selector-grade timings remain
 open. WSL profiler API receipts are not kernel/counter attribution.
 Evidence: [commissioning packet](../../../../benchmarks/baselines/gfx1201_foundation_20260913/README.md).
 
+## Host-assumption cleanup sibling assessment — 2026-09-20
+
+Cross-backend sync `HOST-ASSUMPTION-CLEANUP-2026-09-20` (PR #785, follow-on to #784). Shared surfaces
+changed: `scripts/_rocm_env.sh` (arch detection), `cmake/TesseraToolchainPins.cmake`
++ top-level `CMakeLists.txt` (LLVM/CUDA/HIP pins made EXACT and wired for the
+first time), `scripts/bump_toolchain_pins.py` (new), `scripts/install_test_deps.sh`
+(interpreter default), `tests/tessera-ir/lit.cfg.py` (new `tessera-clifford`
+feature), and `tests/unit/test_foreign_target_host_claims.py` (new drift gate
+over every backend's tests). No IR, ABI, dtype/op registration, diagnostic
+code, or numerical-policy change on any backend.
+
+**ROCm outcome: parity validated on gfx1201; gfx1151 follow-up required.**
+`TESSERA_ROCM_CHIP` is now detected from the device instead of defaulting to
+gfx1151 — the defect that made a full Tajasarus sweep report ~1444 failures
+reading `no usable AMD GPU for cached module (..., 'gfx1151')`, which the
+conftest hook correctly refuses to soften because the refusal names an arch
+that is not the host's. Verified: Tajasarus → `gfx1201`, Princess-Luna →
+`gfx1151`, non-ROCm hosts → unset (no fabrication).
+
+`tessera_pin_rocm()` is wired behind `TESSERA_ENABLE_HIP` and takes the **HIP**
+version, not the ROCm one; passing `TESSERA_REQUIRED_ROCM_VERSION` would demand
+hip >= 10.0 and fail on both AMD boxes. Verified both directions on Tajasarus:
+accept at 7.15 (rc=0), reject at a forced 7.99 (rc=1).
+
+Gates on Tajasarus at the branch head: build + assertions build clean, ROCm
+fixtures 75/75, lit 437 passed / 62 unsupported / 0 failed, unit suite 19628
+passed / 3465 skipped / 0 failed.
+
+**Follow-up:** Princess-Luna has only the arch-detection probe and a configure
+against the pin; no gfx1151 sweep was re-run there under this branch. No new
+device proof is claimed for gfx1151, and none transfers from gfx1201.
 ## Current integrated-plan handoff
 
 [The integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md) owns

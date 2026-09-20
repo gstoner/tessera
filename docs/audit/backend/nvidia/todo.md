@@ -95,6 +95,40 @@ NVIDIA remains SM120 in this package envelope. RDNA4 accumulator and HIPRTC
 changes are not applicable to NVVM/PTX. Follow-up: preserve CUDA 13.4.1 owning-
 device validation; no NVIDIA performance or execution evidence is transferred.
 
+## Host-assumption cleanup sibling assessment — 2026-09-20
+
+Cross-backend sync `HOST-ASSUMPTION-CLEANUP-2026-09-20` (PR #785, follow-on to #784). Shared surfaces
+changed: `scripts/_rocm_env.sh` (arch detection), `cmake/TesseraToolchainPins.cmake`
++ top-level `CMakeLists.txt` (LLVM/CUDA/HIP pins made EXACT and wired for the
+first time), `scripts/bump_toolchain_pins.py` (new), `scripts/install_test_deps.sh`
+(interpreter default), `tests/tessera-ir/lit.cfg.py` (new `tessera-clifford`
+feature), and `tests/unit/test_foreign_target_host_claims.py` (new drift gate
+over every backend's tests). No IR, ABI, dtype/op registration, diagnostic
+code, or numerical-policy change on any backend.
+
+**NVIDIA outcome: follow-up required (two pre-existing findings).**
+`tessera_pin_cuda_toolkit()` is wired behind `TESSERA_ENABLE_CUDA` and verified
+both directions on The-Super-Bear: accept reporting `pinned CUDA Toolkit
+13.4.59`, reject at a forced 13.9. The pin is now EXACT rather than a floor,
+and the sm_120 Lion lane is the argument recorded in the code — nvcc 13.4 emits
+PTX 9.4 while driver 610.88 JITs only <= 9.3, so "a newer toolkit is fine" cost
+a week of opaque `rc=3`.
+
+Two pre-existing issues found on that box and **not fixed here**:
+
+1. `build-nvidia-cuda/` (configured 2026-09-17) caches
+   `CMAKE_CUDA_COMPILER=/usr/local/cuda-13.3/bin/nvcc` while the fleet pin is
+   13.4 and `/usr/local/cuda → 13.4`. That tree is what the NVIDIA native
+   runtime loads `tessera-nvidia-opt` and the PTX launcher from, so results
+   from it are CUDA 13.3 results recorded under a 13.4 pin (Decision #11). The
+   new pin refuses that configure until it is reconfigured or the pin moves
+   deliberately.
+2. `CMAKE_CUDA_ARCHITECTURES=75` in the same tree — sm_75 is Turing, the box is
+   sm_120. Flagged, not asserted: what it affects in an NVRTC-at-load lane is
+   not established.
+
+The-Super-Bear went down for maintenance during this work, so neither is
+re-verified and no new sm_120 device proof is claimed.
 ## Current integrated-plan handoff
 
 [The integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md) owns

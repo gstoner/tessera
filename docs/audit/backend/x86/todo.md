@@ -95,6 +95,32 @@ RDNA4 register maps/HIPRTC are not applicable to x86 code generation.
 Assertions-enabled LLVM on Tajasarus adds a compiler validation host; CPU
 package migration and native performance still require their own evidence.
 
+## Host-assumption cleanup sibling assessment — 2026-09-20
+
+Cross-backend sync `HOST-ASSUMPTION-CLEANUP-2026-09-20` (PR #785, follow-on to #784). Shared surfaces
+changed: `scripts/_rocm_env.sh` (arch detection), `cmake/TesseraToolchainPins.cmake`
++ top-level `CMakeLists.txt` (LLVM/CUDA/HIP pins made EXACT and wired for the
+first time), `scripts/bump_toolchain_pins.py` (new), `scripts/install_test_deps.sh`
+(interpreter default), `tests/tessera-ir/lit.cfg.py` (new `tessera-clifford`
+feature), and `tests/unit/test_foreign_target_host_claims.py` (new drift gate
+over every backend's tests). No IR, ABI, dtype/op registration, diagnostic
+code, or numerical-policy change on any backend.
+
+**x86 outcome: parity validated; no execution change.**
+`tests/unit/test_x86_fft_benchmark.py` asserted `max_abs_error == 0.0` while
+monkeypatching `rt._x86_fft_c2c_rows` to *be* `scipy.fft` — i.e.
+`|scipy - scipy| == 0`, which would pass with the real kernel arbitrarily
+wrong because the real kernel never ran. It was also the one x86 FFT test with
+no hardware gate, so it ran on the arm64 Mac, which does not execute x86 at any
+macOS version. Replaced with a test that proves the harness's numerical gate
+FIRES on a deliberately wrong stand-in.
+
+No change to the AVX-512 kernels, the `tessera_x86` Target IR dialect, or any
+x86 lowering. `test_x86_fft_compiled.py` continues to gate correctly (40
+skipped on arm64, `libtessera_x86_elementwise.so not built/loadable`).
+
+**Not applicable:** x86 exact-device proof belongs on the Zen 5 hosts and none
+was taken or needed for this change. AMX remains closed by direction.
 ## Current integrated-plan handoff
 
 [The integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md) owns

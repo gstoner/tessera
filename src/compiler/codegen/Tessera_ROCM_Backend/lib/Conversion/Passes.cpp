@@ -51,6 +51,12 @@ struct ROCMExecutablePipelineOptions
       *this, "staging",
       llvm::cl::desc("matmul staging policy: register or lds"),
       llvm::cl::init("register")};
+  Option<bool> ldsCopyElide{
+      *this, "lds-copy-elide",
+      llvm::cl::desc("CEILING PROBE ONLY: emit a DELIBERATELY WRONG kernel "
+                     "whose staging copy writes a constant instead of reading "
+                     "global, to bound the copy's cost (ROCM-LDS-STAGE-VECTOR-1)"),
+      llvm::cl::init(false)};
   Option<int> ldsCopyWidth{
       *this, "lds-copy-width",
       llvm::cl::desc("LDS staging copy width; 1 (default) is the scalar copy "
@@ -278,7 +284,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool viaTile, StringRef staging, bool depthCooperative = false,
                                int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
                                int schedGroups = 0, int ldsPadDwords = 4,
-                               int ldsCopyWidth = 1) {
+                               int ldsCopyWidth = 1,
+                               bool ldsCopyElide = false) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -352,7 +359,9 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " k-unroll=" + Twine(kUnroll) +
                                   " sched-groups=" + Twine(schedGroups) +
                                   " lds-pad-dwords=" + Twine(ldsPadDwords) +
-                                  " lds-copy-width=" + Twine(ldsCopyWidth)));
+                                  " lds-copy-width=" + Twine(ldsCopyWidth) +
+                                  " lds-copy-elide=" +
+                                      (ldsCopyElide ? "true" : "false")));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -453,7 +462,7 @@ static void buildROCMExecutablePipeline(
     addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
                        opts.schedGroups, opts.ldsPadDwords,
-                       opts.ldsCopyWidth);
+                       opts.ldsCopyWidth, opts.ldsCopyElide);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

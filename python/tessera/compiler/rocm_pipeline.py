@@ -237,6 +237,10 @@ class ROCMExecutablePipeline:
     #: LDS staging copy width; 0 derives it from the stride, 1
     #: forces the scalar copy so the vectorisation is measurable.
     lds_copy_width: int = 1
+    #: CEILING PROBE ONLY. Emits a DELIBERATELY WRONG kernel whose staging copy
+    #: writes a constant instead of reading global, so every output is zero.
+    #: Bounds what any copy optimisation can buy; never a production path.
+    lds_copy_elide: bool = False
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -281,6 +285,8 @@ class ROCMExecutablePipeline:
             raise ValueError("ROCm lds_pad_dwords must be an integer in [0, 4]")
         if type(self.lds_copy_width) is not int or self.lds_copy_width not in (0, 1, 2, 4, 8):
             raise ValueError("ROCm lds_copy_width must be 0 (derive) or 1/2/4/8")
+        if type(self.lds_copy_elide) is not bool:
+            raise ValueError("ROCm lds_copy_elide must be a bool")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -298,6 +304,7 @@ class ROCMExecutablePipeline:
             f"sched-groups={self.sched_groups} "
             f"lds-pad-dwords={self.lds_pad_dwords} "
             f"lds-copy-width={self.lds_copy_width} "
+            + (f"lds-copy-elide={'true' if self.lds_copy_elide else 'false'} ")
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"

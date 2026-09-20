@@ -57,6 +57,11 @@ struct ROCMExecutablePipelineOptions
                      "whose staging copy writes a constant instead of reading "
                      "global, to bound the copy's cost (ROCM-LDS-STAGE-VECTOR-1)"),
       llvm::cl::init(false)};
+  Option<bool> ldsBRowMajor{
+      *this, "lds-b-row-major",
+      llvm::cl::desc("forwarded to the WMMA GEMM generator: stage B row-major "
+                     "and transpose the fragment in-register"),
+      llvm::cl::init(false)};
   Option<int> ldsSchedValuPerMma{
       *this, "lds-sched-valu-per-mma",
       llvm::cl::desc("forwarded to the WMMA GEMM generator: VALU instructions "
@@ -306,7 +311,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool ldsCopyElide = false,
                                int ldsCopyDepth = 1,
                                bool ldsDoubleBuffer = false,
-                               int ldsSchedValuPerMma = 0) {
+                               int ldsSchedValuPerMma = 0,
+                               bool ldsBRowMajor = false) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -387,7 +393,9 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " lds-double-buffer=" +
                                       (ldsDoubleBuffer ? "true" : "false") +
                                   " lds-sched-valu-per-mma=" +
-                                      Twine(ldsSchedValuPerMma)));
+                                      Twine(ldsSchedValuPerMma) +
+                                  " lds-b-row-major=" +
+                                      (ldsBRowMajor ? "true" : "false")));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -490,7 +498,7 @@ static void buildROCMExecutablePipeline(
                        opts.schedGroups, opts.ldsPadDwords,
                        opts.ldsCopyWidth, opts.ldsCopyElide,
                        opts.ldsCopyDepth, opts.ldsDoubleBuffer,
-                       opts.ldsSchedValuPerMma);
+                       opts.ldsSchedValuPerMma, opts.ldsBRowMajor);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

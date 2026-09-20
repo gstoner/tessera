@@ -244,6 +244,7 @@ class ROCMExecutablePipeline:
     lds_copy_depth: int = 1
     lds_double_buffer: bool = False
     lds_sched_valu_per_mma: int = 0
+    lds_b_row_major: bool = False
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -300,6 +301,8 @@ class ROCMExecutablePipeline:
         if type(self.lds_sched_valu_per_mma) is not int:
             raise ValueError("ROCm lds_sched_valu_per_mma must be an int "
                              "(negative = memory-grouping control arm)")
+        if type(self.lds_b_row_major) is not bool:
+            raise ValueError("ROCm lds_b_row_major must be a bool")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -321,6 +324,7 @@ class ROCMExecutablePipeline:
             f"lds-copy-depth={self.lds_copy_depth} "
             f"lds-double-buffer={str(self.lds_double_buffer).lower()} "
             f"lds-sched-valu-per-mma={self.lds_sched_valu_per_mma} "
+            f"lds-b-row-major={str(self.lds_b_row_major).lower()} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"
@@ -359,6 +363,7 @@ class ROCMExecutablePipeline:
             str(self.lds_copy_depth),
             str(self.lds_double_buffer),
             str(self.lds_sched_valu_per_mma),
+            str(self.lds_b_row_major),
             str(self.tile_q),
             str(self.tile_kv),
             str(self.depth_cooperative),

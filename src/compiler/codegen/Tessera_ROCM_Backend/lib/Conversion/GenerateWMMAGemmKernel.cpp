@@ -1015,7 +1015,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                       int64_t rasterGroup, int64_t ldsPadDwords,
                       int64_t ldsCopyWidth, bool ldsCopyElide,
                       int64_t ldsCopyDepth, bool ldsDoubleBuffer,
-                      int64_t ldsSchedValuPerMma) {
+                      int64_t ldsSchedValuPerMma, bool ldsBRowMajor) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -1041,8 +1041,11 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       MemRefType::get({nbuf * wgM * ldsStride}, T.store,
                       MemRefLayoutAttrInterface(), ws),
       loc);
+  // Row-major B is [K=16][wgN] and needs no padding: the strided column read
+  // that the padding existed for (10e) is exactly what it removes.
+  const int64_t ldsBElems = ldsBRowMajor ? 16 * wgN : wgN * ldsStride;
   Value ldsB = gpuFunc.addWorkgroupAttribution(
-      MemRefType::get({nbuf * wgN * ldsStride}, T.store,
+      MemRefType::get({nbuf * ldsBElems}, T.store,
                       MemRefLayoutAttrInterface(), ws),
       loc);
   // `known_block_size` is an INHERENT property of gpu.func: set it through the
@@ -1201,19 +1204,29 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       ctx, 16, 16, 16, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
   auto accFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, 16, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
-  auto ldsView = [&](OpBuilder &bb, Location l, Value base, Value row,
-                     Value col, Attribute memory) -> Value {
+  auto ldsViewStrided = [&](OpBuilder &bb, Location l, Value base, Value row,
+                            Value col, Value stride,
+                            Attribute memory) -> Value {
     OperationState state(l, "tile.view");
-    state.addOperands({base, row, col, cLdsStride});
+    state.addOperands({base, row, col, stride});
     state.addTypes(tileValueTy);
     state.addAttribute("tile.layout", tileLayout);
     state.addAttribute("tile.memory", memory);
     return bb.create(state)->getResult(0);
   };
-  auto packFragment = [&](OpBuilder &bb, Location l, Value view, Type type) {
+  auto ldsView = [&](OpBuilder &bb, Location l, Value base, Value row,
+                     Value col, Attribute memory) -> Value {
+    return ldsViewStrided(bb, l, base, row, col, cLdsStride, memory);
+  };
+  auto packFragment = [&](OpBuilder &bb, Location l, Value view, Type type,
+                          bool transpose = false) {
     OperationState state(l, "tile.fragment_pack");
     state.addOperands(view);
     state.addTypes(type);
+    // Semantic key (Decision #21a): the source arrives in the opposite major
+    // order and the lowering owes the transpose. Never a hint.
+    if (transpose)
+      state.addAttribute("transpose", bb.getUnitAttr());
     return bb.create(state)->getResult(0);
   };
 
@@ -1242,6 +1255,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   struct Staged {
     SmallVector<Value> aVals, aDsts;   // aVals are vecTy when vecW > 1
     SmallVector<Value> bVals, bDsts;   // bDsts: depth * vecW scalar addresses
+    SmallVector<Value> bVecVals, bVecDsts;  // row-major B: one store per group
   };
 
   Value cVec = ci(vecW);
@@ -1448,8 +1462,17 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         Value colI = lane == 0 ? q.col
                                : Value(ob.create<arith::AddIOp>(ol, q.col,
                                                                 ci(lane)));
-        Value flat = ob.create<arith::AddIOp>(
-            ol, ob.create<arith::MulIOp>(ol, colI, cLdsStride), q.kk);
+        // Row-major [K][N]: consecutive `e` are consecutive COLUMNS at one k,
+        // so consecutive destinations are adjacent and the store widens --
+        // which is the entire point. Column-major puts a full padded row
+        // between them, which is why it cannot.
+        Value flat =
+            ldsBRowMajor
+                ? Value(ob.create<arith::AddIOp>(
+                      ol, ob.create<arith::MulIOp>(ol, q.kk, cWgN), colI))
+                : Value(ob.create<arith::AddIOp>(
+                      ol, ob.create<arith::MulIOp>(ol, colI, cLdsStride),
+                      q.kk));
         return bOff ? Value(ob.create<arith::AddIOp>(ol, flat, bOff)) : flat;
       };
       if (ldsCopyElide) {
@@ -1518,7 +1541,19 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           }
           kb.create<scf::YieldOp>(l, v);
         }
-        for (int64_t q = 0; q < depthB; ++q)
+        for (int64_t q = 0; q < depthB; ++q) {
+          if (ldsBRowMajor) {
+            // The destinations are adjacent, so the whole group is one store.
+            Value d = dstOf(kb, l, gb[q], 0);
+            if (out) {
+              out->bVecVals.push_back(ifOp.getResult(q));
+              out->bVecDsts.push_back(d);
+            } else {
+              kb.create<vector::StoreOp>(l, ifOp.getResult(q), ldsB,
+                                         ValueRange{d});
+            }
+            continue;
+          }
           for (int64_t i = 0; i < vecW; ++i) {
             Value v = kb.create<vector::ExtractOp>(l, ifOp.getResult(q),
                                                    ArrayRef<int64_t>{i});
@@ -1526,6 +1561,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
             if (out) { out->bVals.push_back(v); out->bDsts.push_back(d); }
             else kb.create<memref::StoreOp>(l, v, ldsB, ValueRange{d});
           }
+        }
       }
     }
   };
@@ -1544,6 +1580,9 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     for (size_t i = 0; i < st.bVals.size(); ++i)
       kb.create<memref::StoreOp>(l, st.bVals[i], ldsB,
                                  ValueRange{st.bDsts[i]});
+    for (size_t i = 0; i < st.bVecVals.size(); ++i)
+      kb.create<vector::StoreOp>(l, st.bVecVals[i], ldsB,
+                                 ValueRange{st.bVecDsts[i]});
   };
 
   auto emitCompute = [&](OpBuilder &kb, Location l, ValueRange accs,
@@ -1556,6 +1595,17 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                             aFragmentTy);
     }
     for (int64_t ni = 0; ni < nt; ++ni) {
+      if (ldsBRowMajor) {
+        // [K=16][wgN], so the sub-tile origin is (k=0, n=lcol[ni]) and the
+        // buffer selector moves whole K-blocks. The A-role read pattern is
+        // contiguous here; `transpose` owes the major-order fix.
+        Value br = bCol ? bCol : c0;
+        bf[ni] = packFragment(
+            kb, l,
+            ldsViewStrided(kb, l, ldsB, br, lcol[ni], cWgN, ldsRowMajor),
+            bFragmentTy, /*transpose=*/true);
+        continue;
+      }
       Value cc = bCol ? Value(kb.create<arith::AddIOp>(l, lcol[ni], bCol))
                       : lcol[ni];
       bf[ni] = packFragment(kb, l, ldsView(kb, l, ldsB, c0, cc, ldsColMajor),
@@ -1590,8 +1640,12 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     // compute on and only ever writes the other one.
     emitStage(b, loc, c0, Value(), Value(), nullptr);
     b.create<gpu::BarrierOp>(loc);
-    Value cAOff = ci(wgM * ldsStride), cBOff = ci(wgN * ldsStride);
-    Value cWgMv = ci(wgM), cWgNv = ci(wgN);
+    Value cAOff = ci(wgM * ldsStride), cBOff = ci(ldsBElems);
+    Value cWgMv = ci(wgM);
+    // A's fragment view is indexed by ROW, so its buffer selector counts rows.
+    // Row-major B is indexed by k-row too, so its selector counts the 16 rows
+    // of a K-slab; column-major B is indexed by column and counts wgN.
+    Value cWgNv = ci(ldsBRowMajor ? 16 : wgN);
     kLoop = b.create<scf::ForOp>(
         loc, c0, kEnd, c16, initAccs,
         [&](OpBuilder &kb, Location l, Value k0, ValueRange accs) {
@@ -1951,6 +2005,20 @@ struct GenerateWMMAGemmKernelPass
                      "is withdrawn (ROCM-LDS-BANKPAD-1, "
                      "docs/backends/rocm/wmma-fragment-layout.md 10i/10j)"),
       llvm::cl::init(4)};
+  Option<bool> ldsBRowMajor{
+      *this, "lds-b-row-major",
+      llvm::cl::desc(
+          "LDS-staged typed body: stage B ROW-major [K, N] and transpose the "
+          "fragment in-register instead of transposing during the LDS write. "
+          "B's global read is contiguous in N while a b-role fragment needs 8 "
+          "contiguous K, so exactly one of the three sides is always strided "
+          "-- today it is the LDS write, which stays scalar at every copy "
+          "width (10j.1). Row-major makes the global read, the LDS write AND "
+          "the fragment read contiguous, and pays one WMMA per B fragment for "
+          "the transpose. Also drops B's padding, since the strided column "
+          "read that needed it is gone. See "
+          "docs/backends/rocm/wmma-fragment-layout.md 10s"),
+      llvm::cl::init(false)};
   Option<int> ldsSchedValuPerMma{
       *this, "lds-sched-valu-per-mma",
       llvm::cl::desc(
@@ -2693,7 +2761,8 @@ struct GenerateWMMAGemmKernelPass
                          outputTy, hasBias, activation, request.rasterOrder,
                          request.rasterGroup, ldsPadDwords,
                          ldsCopyWidth, ldsCopyElide, ldsCopyDepth,
-                         ldsDoubleBuffer, ldsSchedValuPerMma);
+                         ldsDoubleBuffer, ldsSchedValuPerMma,
+                         ldsBRowMajor);
       } else if (request.canonicalKLoop && canonicalStaging == "lds") {
         // This body writes its accumulator back at row `2*e + lhi`, which is
         // RDNA3's wave32 distribution. gfx12 distributes the same accumulator

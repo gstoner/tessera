@@ -892,6 +892,54 @@ E4M3) and dequantizing it to BF16. The two are not interchangeable: same e2m1
 elements, different scale contract, and only one of them has silicon behind it
 on that part.
 
+## 10i. WITHDRAWN: every LDS throughput figure in §10e, and the padding default
+
+**A harness bug inflated every LDS number recorded on 2026-09-19, including the
+ones §10e used to pick a default.** The LDS body computes
+`gridM = ceil(M / wgM)` where `wgM = wavesM * macroTileM` — a **128x128**
+workgroup tile at 2x2 waves and a 4x4 panel — and indexes with `bidY`/`bidX`
+directly. The measurement harness launched a grid sized for the artifact's
+**64x64** macro tile, so it ran **four times too many workgroups**, each
+computing a full tile. Results stayed correct (every arm at 1.95e-06, because
+the redundant groups recompute the same values), which is exactly why it went
+unnoticed: the numbers were wrong and nothing was.
+
+Corrected grid, same kernel, 1024³ f16, two runs:
+
+| pad | vector width | §10e claimed | corrected run 1 | run 2 | 2048³ |
+|---|---|---|---|---|---|
+| 0 | 8 | 7.9 | 17.7 | 17.7 | 34.8 |
+| **1 (the shipped default)** | 2 | **8.8 "best"** | 14.5 | 16.4 | 37.6 |
+| 2 | 4 | 8.1 | 16.6 | 16.6 | 37.9 |
+| 4 | 8 | — | 18.5 | 17.4 | **38.5** |
+
+**What this withdraws.** §10e's "+10–12% for pad=1" is withdrawn: corrected, the
+whole 1024³ spread is 16.4–17.7 and the ordering changed between runs, so the
+padding choice is **within noise at that shape**. `lds_pad_dwords=1` was
+selected from the broken measurement and is not supported by the corrected one.
+2048³ shows a mild monotonic preference for more padding (pad=4, +10.7% over
+pad=0), which is the only clean signal in the set.
+
+**What this withdraws about the gap.** The LDS body is **2.2–4.0x** off the
+register body (71.4 at 1024³, ~83.8 at 2048³), not the 8–9x recorded in §10e and
+cited in `ROCM-LDS-STAGE-VECTOR-1` as "the 8x". Three of the four independent
+lines that pointed at the staging copy — the radiance kernel's ungated-global
+result, AMD's LDS-heavy Tensile library, CK's `ScalarPerVector=8` — are external
+and unaffected; the fourth, our own 8x, was this harness.
+
+**And what is now UNMEASURED.** The vectorised copy's own benefit has no valid
+baseline: the corrected grid was only ever run against the vectorised code, and
+every scalar-copy figure came from the broken harness. The vectorisation may be
+worth a lot, a little, or nothing. Measuring it needs the scalar copy restored
+behind the corrected grid, and until that is done no claim about it belongs
+anywhere.
+
+**The lesson is not "check the grid".** It is that a redundant-work bug is
+invisible to a correctness check by construction — every arm agreed to
+1.95e-06 — so a throughput harness needs its own proof that it computed each
+output once. A cheap one: assert `gridM * wgM >= M` and `gridM * wgM < M + wgM`,
+which the broken harness would have failed on its first run.
+
 ## 11. Which recorded results the default schedule qualifies
 
 Every gfx1201 number in this file and in the ROCm queue was measured with **no

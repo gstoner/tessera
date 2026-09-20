@@ -7062,9 +7062,13 @@ def _nvidia_device_name() -> str | None:
 # per (mt,nt,chip,dtype) serves every shape — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_hip_launch_lib: ctypes.CDLL | None = None
-#: hsaco bytes keyed by (mt, nt, chip, dtype) — the kernel is shape-generic.
-_rocm_compiled_hsaco_cache: dict[tuple[int, int, str, str, bool, str, object], bytes] = {}
-_rocm_canonical_gemm_hsaco_cache: dict[tuple[int, int, int, str, str, str], bytes] = {}
+#: hsaco bytes, keyed on the compiler's own inputs: the directive text and the
+#: pipeline config's `cache_key()` (ROCM-PIPELINE-KEY-1), plus the identity of
+#: anything that reaches the directive by a projection (the schedule). mt/nt/
+#: chip are not listed: they are carried by the directive and by `arch`. The
+#: kernel remains shape-generic — shape never enters the directive.
+_rocm_compiled_hsaco_cache: dict[tuple[object, ...], bytes] = {}
+_rocm_canonical_gemm_hsaco_cache: dict[tuple[object, ...], bytes] = {}
 
 
 class _RocmCompiledUnavailable(RuntimeError):
@@ -7372,15 +7376,6 @@ def _build_compiled_gemm_hsaco(
             )
         if (mt, nt) != schedule.macro_tile:
             raise ValueError("compiled GEMM mt/nt must come from its schedule")
-    key = (mt, nt, chip, dtype, bias, activation, None if schedule is None else schedule.cache_key())
-    cached = _rocm_compiled_hsaco_cache.get(key)
-    if cached is not None:
-        return cached
-    opt = _tessera_opt_path()
-    if opt is None:
-        raise _RocmCompiledUnavailable(
-            "tessera-opt not built — no compiled ROCm lane (build: ninja -C build tessera-opt)"
-        )
     epi = ""
     if bias:
         epi += ", bias = true"
@@ -7418,9 +7413,29 @@ def _build_compiled_gemm_hsaco(
     )
     from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
 
-    pipeline = ROCMExecutablePipeline(
-        family="matmul", input_level=ROCMInputLevel.DIRECTIVE, arch=chip
-    ).pass_pipeline()
+    spec: dict[str, Any] = dict(family="matmul", input_level=ROCMInputLevel.DIRECTIVE, arch=chip)
+    config, identity = _rocm_lane_config(**spec)
+    # Keyed on what is actually compiled -- the directive text and the pipeline
+    # config's own identity (ROCM-PIPELINE-KEY-1) -- rather than on a parallel
+    # list of the values they were built from. mt/nt, dtype, bias and the
+    # activation are all in the directive; `chip` is in the config as `arch`.
+    # The schedule is listed because it reaches the directive only through
+    # `target_ir_attrs()`, and nothing proves that projection injective.
+    key = (
+        None if schedule is None else schedule.cache_key(),
+        directive,
+    ) + identity
+    cached = _rocm_compiled_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt not built — no compiled ROCm lane (build: ninja -C build tessera-opt)"
+        )
+    if config is None:
+        ROCMExecutablePipeline(**spec)  # raises the family/arch refusal, here
+    pipeline = config.pass_pipeline()  # type: ignore[union-attr]
     import subprocess
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True, env=_rocm_serializer_env())
@@ -7472,13 +7487,6 @@ def _build_canonical_gemm_hsaco(
         raise ValueError("canonical ROCm GEMM dtype must be f16, bf16, or int8")
     storage, accum = spellings[dtype]
     canonical_dtype = "int8" if dtype == "i8" else dtype
-    key = (m, n, k, canonical_dtype, chip, staging)
-    cached = _rocm_canonical_gemm_hsaco_cache.get(key)
-    if cached is not None:
-        return cached
-    opt = _tessera_opt_path()
-    if opt is None:
-        raise _RocmCompiledUnavailable("tessera-opt not built — no canonical ROCm GEMM compiler")
     source = f"""module {{
   func.func @gemm(%a: tensor<{m}x{k}x{storage}>,
                   %b: tensor<{k}x{n}x{storage}>)
@@ -7492,12 +7500,30 @@ def _build_canonical_gemm_hsaco(
 """
     from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
 
-    pipeline = ROCMExecutablePipeline(
+    spec: dict[str, Any] = dict(
         family="matmul",
         input_level=ROCMInputLevel.GRAPH,
         arch=chip,
         staging=staging,
-    ).pass_pipeline()
+    )
+    config, identity = _rocm_lane_config(**spec)
+    # Unlike the directive lanes this one is problem-size-specific: m/n/k are
+    # in the Graph IR source, so the source text is the whole "what". `chip`
+    # and `staging` are not listed separately -- the config carries both, and
+    # listing them again is the drift this keying exists to remove
+    # (ROCM-PIPELINE-KEY-1). `canonical_dtype` stays: `f16`/`bf16` spell the
+    # source identically to their aliases, but `i8` and `int8` both map to the
+    # same `i8` storage, so the source does not distinguish the request.
+    key = (canonical_dtype, source) + identity
+    cached = _rocm_canonical_gemm_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable("tessera-opt not built — no canonical ROCm GEMM compiler")
+    if config is None:
+        ROCMExecutablePipeline(**spec)  # raises the family/arch refusal, here
+    pipeline = config.pass_pipeline()  # type: ignore[union-attr]
     import subprocess
 
     result = subprocess.run(
@@ -8560,7 +8586,7 @@ def _execute_rocm_compiled_matmul_family(artifact: RuntimeArtifact, args: Any) -
 # dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 #: hsaco bytes keyed by schedule and semantic variant.
-_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool, bool, bool, bool, bool], bytes] = {}
+_rocm_fa_hsaco_cache: dict[tuple[object, ...], bytes] = {}
 
 
 def _build_compiled_flash_attn_hsaco(
@@ -8583,23 +8609,6 @@ def _build_compiled_flash_attn_hsaco(
     attn_bias=True emits the additive-bias variant (a trailing f32 `[bh,Sq,Sk]`
     memref arg, `softmax(scale·Q@K^T + bias)·V`)."""
     chip = _rocm_chip()
-    key = (
-        head_dim,
-        chip,
-        dtype,
-        gqa,
-        sliding_window,
-        logit_softcap,
-        attn_bias,
-        dropout,
-        two_wave,
-    )
-    cached = _rocm_fa_hsaco_cache.get(key)
-    if cached is not None:
-        return cached
-    opt = _tessera_opt_path()
-    if opt is None:
-        raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm flash_attn lane")
     gqa_attr = ", gqa = true" if gqa else ""
     win_attr = ", sliding_window = true" if sliding_window else ""
     cap_attr = ", logit_softcap = true" if logit_softcap else ""
@@ -8620,9 +8629,23 @@ def _build_compiled_flash_attn_hsaco(
     )
     from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
 
-    pipeline = ROCMExecutablePipeline(
-        family="attention", input_level=ROCMInputLevel.DIRECTIVE, arch=chip
-    ).pass_pipeline()
+    spec: dict[str, Any] = dict(family="attention", input_level=ROCMInputLevel.DIRECTIVE, arch=chip)
+    config, identity = _rocm_lane_config(**spec)
+    # Every variant flag reaches the compiler only as directive text, and the
+    # directive stamps `arch` too -- the omission that once built a gfx11
+    # kernel on a gfx12 host, noted above. So the directive plus the config's
+    # own identity IS the key (ROCM-PIPELINE-KEY-1); the nine-field tuple this
+    # replaces had to be extended by hand for each new variant.
+    key = (directive,) + identity
+    cached = _rocm_fa_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm flash_attn lane")
+    if config is None:
+        ROCMExecutablePipeline(**spec)  # raises the family/arch refusal, here
+    pipeline = config.pass_pipeline()  # type: ignore[union-attr]
     import subprocess
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True, env=_rocm_serializer_env())
@@ -8893,8 +8916,8 @@ def _execute_rocm_compiled_flash_attn(
 # logit-softcap / attn_bias backward are a follow-up (the C++ kernel already
 # carries the GQA variant; the runtime lane forwards only the core here).
 # ─────────────────────────────────────────────────────────────────────────────
-#: hsaco bytes keyed by (head_dim, chip, dtype, gqa, bias).
-_rocm_fa_bwd_hsaco_cache: dict[tuple[int, str, str, bool, bool, bool, bool, bool], bytes] = {}
+#: hsaco bytes keyed by the directive text plus the pipeline config identity.
+_rocm_fa_bwd_hsaco_cache: dict[tuple[object, ...], bytes] = {}
 
 
 def _build_compiled_flash_attn_bwd_hsaco(
@@ -8916,13 +8939,6 @@ def _build_compiled_flash_attn_bwd_hsaco(
     softcap=True the Gemma-2 soft-cap (S=cap*tanh(scale*QK/cap), backward scales
     dS by 1-tanh^2); bias=True the additive-bias variant."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, gqa, bias, window, softcap, split_reduced)
-    cached = _rocm_fa_bwd_hsaco_cache.get(key)
-    if cached is not None:
-        return cached
-    opt = _tessera_opt_path()
-    if opt is None:
-        raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm flash_attn backward lane")
     attrs = "".join(
         [
             ", gqa = true" if gqa else "",
@@ -8941,9 +8957,20 @@ def _build_compiled_flash_attn_bwd_hsaco(
     )
     from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
 
-    pipeline = ROCMExecutablePipeline(
+    spec: dict[str, Any] = dict(
         family="attention_backward", input_level=ROCMInputLevel.DIRECTIVE, arch=chip
-    ).pass_pipeline()
+    )
+    config, identity = _rocm_lane_config(**spec)
+    key = (directive,) + identity
+    cached = _rocm_fa_bwd_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm flash_attn backward lane")
+    if config is None:
+        ROCMExecutablePipeline(**spec)  # raises the family/arch refusal, here
+    pipeline = config.pass_pipeline()  # type: ignore[union-attr]
     import subprocess
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True, env=_rocm_serializer_env())
@@ -11968,8 +11995,8 @@ def _execute_nvidia_mla_decode_fused_compiled(artifact: RuntimeArtifact, args: A
 # (chip, dtype) — the kernel is (M,K)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 _SOFTMAX_BLOCKDIM = 256  # must match BD in GenerateROCMSoftmaxKernel.cpp
-#: hsaco bytes keyed by (chip, dtype).
-_rocm_softmax_hsaco_cache: dict[tuple[str, str], bytes] = {}
+#: hsaco bytes keyed by the directive text plus the pipeline config identity.
+_rocm_softmax_hsaco_cache: dict[tuple[object, ...], bytes] = {}
 
 
 def _build_compiled_softmax_hsaco(dtype: str = "f32") -> bytes:
@@ -11977,19 +12004,25 @@ def _build_compiled_softmax_hsaco(dtype: str = "f32") -> bytes:
     hsaco, in-process via tessera-opt. Cached per (chip, dtype). The registered
     executable pipeline owns generator, ROCDL, and packaging order."""
     chip = _rocm_chip()
-    key = (chip, dtype)
+    directive = f'module {{\n  "tessera_rocm.softmax"() {{name = "sm", dtype = "{dtype}"}} : () -> ()\n}}\n'
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
+
+    spec: dict[str, Any] = dict(family="softmax", input_level=ROCMInputLevel.DIRECTIVE, arch=chip)
+    config, identity = _rocm_lane_config(**spec)
+    # This directive does not stamp `arch` -- unlike the flash-attention one --
+    # so the architecture reaches the key only through the config's identity
+    # (ROCM-PIPELINE-KEY-1). That is the half a hand-written tuple has to
+    # remember, and the half this keying stops it having to.
+    key = (directive,) + identity
     cached = _rocm_softmax_hsaco_cache.get(key)
     if cached is not None:
         return cached
     opt = _tessera_opt_path()
     if opt is None:
         raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm softmax lane")
-    directive = f'module {{\n  "tessera_rocm.softmax"() {{name = "sm", dtype = "{dtype}"}} : () -> ()\n}}\n'
-    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
-
-    pipeline = ROCMExecutablePipeline(
-        family="softmax", input_level=ROCMInputLevel.DIRECTIVE, arch=chip
-    ).pass_pipeline()
+    if config is None:
+        ROCMExecutablePipeline(**spec)  # raises the family/arch refusal, here
+    pipeline = config.pass_pipeline()  # type: ignore[union-attr]
     import subprocess
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True, env=_rocm_serializer_env())
@@ -24246,12 +24279,63 @@ class _HsacoBuildFailure:
         self.env = _rocm_build_env_fingerprint()
 
 
+def _rocm_lane_config(**spec: object) -> "tuple[object | None, tuple]":
+    """`(config, identity)` for one ROCm lane's executable pipeline.
+
+    `identity` is `ROCMExecutablePipeline.cache_key()` -- the single authority
+    for "do two configs compile to the same kernel" (ROCM-PIPELINE-KEY-1) --
+    so a lane can key its cache on the config instead of on a parallel list of
+    the values it was built from.
+
+    `config` is `None` when `__post_init__` rejects the spec, and the identity
+    is then a stable stand-in. That branch exists because **a cache-key
+    refactor must not move a raise.** Several lanes have an arch guard wider
+    than `promoted_families`: `_build_compiled_gemm_hsaco` admits the whole
+    gfx11 family, but only gfx1151 is promoted, so building the config eagerly
+    to key on it would turn the gfx1100 refusal from "tessera-opt not built"
+    into a `ValueError` raised one check earlier. The lane re-builds with the
+    same spec after its own tool and arch checks, which raises exactly where it
+    always did. An unbuildable spec never compiles, so nothing can be cached
+    under the stand-in.
+    """
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline
+
+    try:
+        config = ROCMExecutablePipeline(**spec)  # type: ignore[arg-type]
+    except ValueError:
+        return None, ("unbuildable", spec.get("family"), spec.get("arch"))
+    return config, config.cache_key()
+
+
 def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tuple) -> bytes:
     """Build a promoted ROCm family through the typed executable pipeline.
 
     Callers select a closed semantic family; the registered C++ pipeline owns
     generator, Target-IR, wait, ROCDL, and packaging order.
+
+    `key` is the caller's op-specific identity and is **not** the whole
+    identity. This function additionally pins the two things the compilation
+    is actually a function of, because it is the only place that knows them:
+    the `directive` text handed to `tessera-opt` on stdin, and the pipeline
+    configuration handed to it as `--pass-pipeline`, via the single authority
+    for config identity (`ROCMExecutablePipeline.cache_key`,
+    ROCM-PIPELINE-KEY-1).
+
+    That is a safety net over 70-odd caller-maintained key tuples, each of
+    which must remember `chip` on its own today. All of them do -- audited
+    2026-09-20 -- but "every caller remembers" is not a property anything
+    enforces, and the cost of one forgetting is a kernel compiled for another
+    architecture served from cache. Augmenting rather than replacing the
+    caller key keeps cache granularity exactly as it was: the derived part can
+    only ever *split* an entry that two different compiler inputs were sharing,
+    never merge two the caller distinguishes.
     """
+    chip = _rocm_chip()
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
+
+    spec: dict[str, Any] = dict(family=family, input_level=ROCMInputLevel.DIRECTIVE, arch=chip)
+    config, identity = _rocm_lane_config(**spec)
+    key = key + identity + (directive,)
     cached = cache.get(key)
     if isinstance(cached, _HsacoBuildFailure):
         if cached.env == _rocm_build_env_fingerprint():
@@ -24269,12 +24353,9 @@ def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tupl
     opt = _tessera_opt_path()
     if opt is None:
         raise _RocmCompiledUnavailable("tessera-opt not built — no compiled lane")
-    chip = _rocm_chip()
-    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
-
-    pipeline = ROCMExecutablePipeline(
-        family=family, input_level=ROCMInputLevel.DIRECTIVE, arch=chip
-    ).pass_pipeline()
+    if config is None:
+        ROCMExecutablePipeline(**spec)  # raises the family/arch refusal, here
+    pipeline = config.pass_pipeline()  # type: ignore[union-attr]
     import subprocess
 
     result = subprocess.run(

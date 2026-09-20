@@ -241,6 +241,7 @@ class ROCMExecutablePipeline:
     #: writes a constant instead of reading global, so every output is zero.
     #: Bounds what any copy optimisation can buy; never a production path.
     lds_copy_elide: bool = False
+    lds_copy_depth: int = 1
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -287,6 +288,11 @@ class ROCMExecutablePipeline:
             raise ValueError("ROCm lds_copy_width must be 0 (derive) or 1/2/4/8")
         if type(self.lds_copy_elide) is not bool:
             raise ValueError("ROCm lds_copy_elide must be a bool")
+        # The generator clamps depth to a divisor of the per-thread trip
+        # count, so an over-large value degrades rather than misbehaves --
+        # but a non-positive one is a caller error, not a policy.
+        if type(self.lds_copy_depth) is not int or self.lds_copy_depth < 1:
+            raise ValueError("ROCm lds_copy_depth must be a positive int")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -305,12 +311,30 @@ class ROCMExecutablePipeline:
             f"lds-pad-dwords={self.lds_pad_dwords} "
             f"lds-copy-width={self.lds_copy_width} "
             f"lds-copy-elide={str(self.lds_copy_elide).lower()} "
+            f"lds-copy-depth={self.lds_copy_depth} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"
         return f"builtin.module(tessera-rocm-executable{{{options}}})"
 
     def cache_key(self) -> tuple[str, ...]:
+        """UNWIRED -- nothing calls this (Decision #29; owner: ROCM-PIPELINE-KEY-1).
+
+        Found 2026-09-20 while adding `lds_copy_depth`. As written it omitted
+        `lds_copy_width`, `lds_pad_dwords` and `lds_copy_elide`, all of which
+        change the generated kernel -- and `lds_copy_elide` produces a
+        DELIBERATELY WRONG all-zero kernel, so a consumer wired to the old key
+        could have served that for a real request. The compile cache in
+        `rocm_native` keys on its own string and does include them, which is the
+        only reason this never fired.
+
+        That is Decision #29a's failure mode: an unwired model can be wrong, and
+        its wrongness is invisible precisely because nothing runs it. The fields
+        are completed here rather than left inconsistent, but the method still
+        has no consumer and #29's remedy still applies -- give it one or delete
+        it. It is NOT exempt under #29a: no queue item owns it yet and no test
+        asserts its behaviour.
+        """
         return (
             self.family,
             self.input_level.value,
@@ -319,6 +343,11 @@ class ROCMExecutablePipeline:
             self.staging,
             f"{self.lds_waves[0]}x{self.lds_waves[1]}",
             str(self.k_unroll),
+            str(self.sched_groups),
+            str(self.lds_pad_dwords),
+            str(self.lds_copy_width),
+            str(self.lds_copy_elide),
+            str(self.lds_copy_depth),
             str(self.tile_q),
             str(self.tile_kv),
             str(self.depth_cooperative),

@@ -1014,7 +1014,8 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                       StringRef activation, StringRef rasterOrder,
                       int64_t rasterGroup, int64_t ldsPadDwords,
                       int64_t ldsCopyWidth, bool ldsCopyElide,
-                      int64_t ldsCopyDepth, bool ldsDoubleBuffer) {
+                      int64_t ldsCopyDepth, bool ldsDoubleBuffer,
+                      int64_t ldsSchedValuPerMma) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -1614,6 +1615,24 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           emitCompute(kb, l, accs, sel(cur, cWgMv), sel(cur, cWgNv), next);
           // DRAIN: only now does anything wait on the loads.
           emitDrain(kb, l, st);
+          // Describe the pipeline: issue the loads, then alternate staging
+          // VALU with single matrix ops so the U pipe is busy through the
+          // chain, then drain to LDS. The independence this relies on is
+          // exactly what double-buffering bought.
+          if (ldsSchedValuPerMma > 0) {
+            auto i32 = kb.getI32Type();
+            auto grp = [&](ROCDL::SchedGroupMask m, int64_t n) {
+              kb.create<ROCDL::SchedGroupBarrier>(
+                  l, ROCDL::SchedGroupMaskAttr::get(kb.getContext(), m),
+                  IntegerAttr::get(i32, n), IntegerAttr::get(i32, 0));
+            };
+            grp(ROCDL::SchedGroupMask::vmem_read, depthA + depthB);
+            for (int64_t g = 0; g < mt * nt; ++g) {
+              grp(ROCDL::SchedGroupMask::valu, ldsSchedValuPerMma);
+              grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
+            }
+            grp(ROCDL::SchedGroupMask::ds_write, depthA + depthB * vecW);
+          }
           kb.create<gpu::BarrierOp>(l);
           kb.create<scf::YieldOp>(l, next);
         });
@@ -1903,6 +1922,20 @@ struct GenerateWMMAGemmKernelPass
                      "is withdrawn (ROCM-LDS-BANKPAD-1, "
                      "docs/backends/rocm/wmma-fragment-layout.md 10i/10j)"),
       llvm::cl::init(4)};
+  Option<int> ldsSchedValuPerMma{
+      *this, "lds-sched-valu-per-mma",
+      llvm::cl::desc(
+          "LDS-staged typed body: describe the loop to the scheduler as "
+          "[all loads][N VALU, 1 wmma] x mmas [all LDS stores] via "
+          "rocdl.sched.group.barrier, so the staging address arithmetic runs "
+          "on the U pipe while the matrix core occupies V. Measured 2026-09-20: "
+          "the body emits ZERO VALU between the first and last wmma, i.e. the U "
+          "pipe is idle for the whole matrix chain. Only meaningful with "
+          "lds-double-buffer, which is what makes the staging VALU independent "
+          "of the current step's MMA -- without it the staging must complete "
+          "before the barrier the MMA reads through. 0 = emit nothing. "
+          "See docs/backends/rocm/wmma-fragment-layout.md 10o"),
+      llvm::cl::init(0)};
   Option<bool> ldsDoubleBuffer{
       *this, "lds-double-buffer",
       llvm::cl::desc(
@@ -2631,7 +2664,7 @@ struct GenerateWMMAGemmKernelPass
                          outputTy, hasBias, activation, request.rasterOrder,
                          request.rasterGroup, ldsPadDwords,
                          ldsCopyWidth, ldsCopyElide, ldsCopyDepth,
-                         ldsDoubleBuffer);
+                         ldsDoubleBuffer, ldsSchedValuPerMma);
       } else if (request.canonicalKLoop && canonicalStaging == "lds") {
         // This body writes its accumulator back at row `2*e + lhi`, which is
         // RDNA3's wave32 distribution. gfx12 distributes the same accumulator

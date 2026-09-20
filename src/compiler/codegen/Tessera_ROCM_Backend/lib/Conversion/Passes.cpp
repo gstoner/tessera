@@ -57,6 +57,12 @@ struct ROCMExecutablePipelineOptions
                      "whose staging copy writes a constant instead of reading "
                      "global, to bound the copy's cost (ROCM-LDS-STAGE-VECTOR-1)"),
       llvm::cl::init(false)};
+  Option<int> ldsSchedValuPerMma{
+      *this, "lds-sched-valu-per-mma",
+      llvm::cl::desc("forwarded to the WMMA GEMM generator: VALU instructions "
+                     "to interleave per matrix op so the U pipe is not idle "
+                     "through the chain"),
+      llvm::cl::init(0)};
   Option<bool> ldsDoubleBuffer{
       *this, "lds-double-buffer",
       llvm::cl::desc("forwarded to the WMMA GEMM generator: stage slab k+1 "
@@ -299,7 +305,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                int ldsCopyWidth = 1,
                                bool ldsCopyElide = false,
                                int ldsCopyDepth = 1,
-                               bool ldsDoubleBuffer = false) {
+                               bool ldsDoubleBuffer = false,
+                               int ldsSchedValuPerMma = 0) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -378,7 +385,9 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                       (ldsCopyElide ? "true" : "false") +
                                   " lds-copy-depth=" + Twine(ldsCopyDepth) +
                                   " lds-double-buffer=" +
-                                      (ldsDoubleBuffer ? "true" : "false")));
+                                      (ldsDoubleBuffer ? "true" : "false") +
+                                  " lds-sched-valu-per-mma=" +
+                                      Twine(ldsSchedValuPerMma)));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -480,7 +489,8 @@ static void buildROCMExecutablePipeline(
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
                        opts.schedGroups, opts.ldsPadDwords,
                        opts.ldsCopyWidth, opts.ldsCopyElide,
-                       opts.ldsCopyDepth, opts.ldsDoubleBuffer);
+                       opts.ldsCopyDepth, opts.ldsDoubleBuffer,
+                       opts.ldsSchedValuPerMma);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

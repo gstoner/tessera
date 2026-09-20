@@ -1633,11 +1633,20 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
             // at every positive N -- while the option still helped. Without
             // this arm the gain would be credited to a mechanism that is not
             // running.
+            // N == -2 is the MECHANISM arm: the matrix groups WITHOUT any
+            // valu groups. The schedule diff says the alternation's VALU half
+            // places nothing (zero VALU in the chain at every N) while its
+            // mfma half clusters the matrix ops ahead of the ds_write group,
+            // which is what lifts the global-load waits out of the chain. If
+            // that reading is right this arm reproduces the whole gain.
             if (ldsSchedValuPerMma > 0)
               for (int64_t g = 0; g < mt * nt; ++g) {
                 grp(ROCDL::SchedGroupMask::valu, ldsSchedValuPerMma);
                 grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
               }
+            else if (ldsSchedValuPerMma == -2)
+              for (int64_t g = 0; g < mt * nt; ++g)
+                grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
             grp(ROCDL::SchedGroupMask::ds_write, depthA + depthB * vecW);
           }
           kb.create<gpu::BarrierOp>(l);

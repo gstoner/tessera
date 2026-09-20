@@ -202,6 +202,10 @@ PINS: tuple[Pin, ...] = (
     Pin("metal", "Metal / MSL", detect_metal, [
         Site("python/tessera/compiler/apple_target.py",
              r'(?m)^(TESSERA_TARGET_METAL: str = ")([0-9.]+)(")'),
+    ], note="moves with `macos` below -- Metal 4.0 shipped in macOS 26, 4.1 in 27"),
+    Pin("macos", "macOS carrying that Metal", detect_macos, [
+        Site("python/tessera/compiler/apple_target.py",
+             r'(?m)^(TESSERA_TARGET_MACOS_FOR_MTL4: str = ")([0-9.]+)(")'),
     ]),
 )
 

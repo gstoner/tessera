@@ -20,6 +20,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+if str(ROOT / "python") not in sys.path:
+    sys.path.insert(0, str(ROOT / "python"))
+
+from tessera.compiler.llvm_tools import (  # noqa: E402
+    REQUIRED_MAJOR,
+    find_llvm_tool,
+)
 from tests._support.compiler_ownership import (  # noqa: E402
     COMPILER_TEST_PLATFORM_ENV,
     CompilerBuildCapabilities,
@@ -106,6 +113,33 @@ def _tool_version(command: list[str]) -> dict[str, object]:
         "returncode": result.returncode,
         "output": "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip()),
     }
+
+
+def _resolved_tool_version(name: str, env: str | None = None) -> dict[str, object]:
+    """Record the version of the tool this host would actually run.
+
+    This block is PROVENANCE: it says which toolchain produced the result, so
+    Decision #11's rule that a measurement is only valid for the code that
+    produced it has something to key on. A hard-coded path breaks that twice
+    over -- it raised ``FileNotFoundError`` and killed the whole validate run on
+    the host whose LLVM is not at the apt location (Tajasarus, 2026-09-19), and
+    on the hosts where the path happens to exist it would keep reporting that
+    path even if the lane ran a different toolchain. Swallowing the error
+    without resolving would be the worse of the two: a provenance field naming
+    a tool that was never used.
+    """
+    tool = find_llvm_tool(name, env=env)
+    if tool is None:
+        return {
+            "command": None,
+            "returncode": None,
+            "output": "",
+            "unresolved": (
+                f"no {name} from a matched LLVM {REQUIRED_MAJOR} prefix on this host; "
+                "set TESSERA_LLVM_BIN or the per-tool override"
+            ),
+        }
+    return _tool_version([str(tool), "--version"])
 
 
 def _rocm_only_capability_error(
@@ -212,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         "probes": probes,
         "tool_versions": {
             "tessera_opt": _tool_version([str(args.tool), "--version"]),
-            "mlir_opt": _tool_version(["/usr/lib/llvm-23/bin/mlir-opt", "--version"]),
+            "mlir_opt": _resolved_tool_version("mlir-opt", env="MLIR_OPT"),
         },
         "marker_expression": marker,
         "selected_platform": "ROCm",

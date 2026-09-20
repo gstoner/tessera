@@ -18,7 +18,28 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PY="${PYTHON:-python3}"
+
+# Default to the repo venv when one exists, NOT to system python3.
+#
+# This is the difference between a check that answers about the interpreter the
+# box actually runs tests with and one that answers about a different
+# interpreter entirely. Measured 2026-09-20: `--check` on all three WSL boxes
+# reported numpy, scipy, ml_dtypes, pytest, pytest-{cov,timeout,xdist} and lit
+# ALL missing, on machines that had just run 18763 tests green -- because the
+# deps live in ./.venv and the default was python3. A checker whose default
+# answer is about the wrong thing is worse than no checker: it invents a
+# fleet-wide outage.
+#
+# PYTHON= still wins, so checking a specific interpreter on purpose (the Mac
+# has two: Homebrew off-venv, and the ~/venv that scripts/validate.sh prefers)
+# is exactly as easy as before.
+if [[ -n "${PYTHON:-}" ]]; then
+  PY="${PYTHON}"
+elif [[ -x "${REPO_ROOT}/.venv/bin/python" ]]; then
+  PY="${REPO_ROOT}/.venv/bin/python"
+else
+  PY="python3"
+fi
 USE_VENV=0
 CHECK_ONLY=0
 for arg in "$@"; do

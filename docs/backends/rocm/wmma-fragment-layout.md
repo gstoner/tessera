@@ -1192,6 +1192,44 @@ tail.
 **WMMA itself takes no DPP** (Table 38), so all of this has to happen before
 the matrix op — there is no swizzle-on-the-way-in.
 
+### 10j.5 A constraint the layout work must not break: sparse needs column-major B
+
+Verified against the RDNA4 ISA text 2026-09-20, independently of the matrix
+calculator this file's tables came from. Two results and one warning.
+
+**Our fragment formulas are confirmed.** Deriving from 7.12's own tables --
+A 16-bit wave32 is `lane = {col[2], row[3:0]}`, `vgpr = {col[3], col[1]}`,
+`startPosn = col[0]`, which gives `k = 8*(e>>2) + 4*(lane>>4) + (e&3)`; A 8-bit
+is `lane = {col[3], row[3:0]}`, `vgpr = col[2]`, `startPosn = col[1:0]`, giving
+`k = 8*(lane>>4) + e`. Both match §3 exactly. The C/D map
+`VGPR j at lane L = D[(L/16)*8 + j][L%16]` matches too. Two independent sources
+now agree on all three.
+
+**Our departure at 16 bits is the known one.** `materializeFragmentPack` uses
+`kBase = laneGroup * inputElementsPerLane`, i.e. contiguous-eight at every
+width. That IS the machine layout at 8/4 bits and a permutation of it at 16,
+legal only because K reduction is permutation-invariant when the same
+permutation reaches BOTH operands. Recorded here because the ISA text makes the
+departure visible for the first time.
+
+**The warning, and it lands on the K1-blocked layout.** 7.12's sparse section
+says: "When the A-matrix is a 4:2 sparse matrix, the corresponding B-matrix
+must be (K x N), and loaded in **column-major** order." Nothing in
+`rocm_sparse_{logical,packing,runtime}.py` or the ROCm conversion states that
+constraint. It is satisfied today only **by accident of the staging layout** --
+§10j.1 established that our LDS B is written contiguous in K per column, which
+is column-major.
+
+So the 2:4 sparse stack depends on a property of the dense staging layout that
+nobody wrote down, and the K1-blocked layout under consideration changes
+exactly that property. Before any B-layout change: state the constraint at the
+sparse site, and give it a test that fails when B stops being column-major.
+Otherwise the failure mode is wrong sparse results from a change made for dense
+performance, with nothing connecting the two.
+
+(Also confirmed while reading: our packer satisfies the `idx0 < idx1` rule,
+though via a `sorted()` call rather than a stated invariant.)
+
 ## 10k. The padding default, settled on the shape where it converges
 
 §10e chose `lds_pad_dwords=1` from the broken harness; §10i withdrew that

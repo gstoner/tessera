@@ -2381,3 +2381,67 @@ reason -- but the dense constraint was real and is now lifted.
 The honest summary: this is infrastructure that costs 3% to use today. Whether
 it pays depends entirely on what the layout freedom is spent on, and that is
 the K1 work, not this option.
+
+## 10u. The K1 loop: refuted before building, and a 1.10x default error found instead
+
+The K1-blocked layout was the standing deliverable from §10j.1. The opening move
+was to measure the thing it improves rather than build it.
+
+### What K1 could buy, and why that is nothing
+
+K1-blocking A as `[k0][m][k1]` removes A's padding while preserving bank
+behaviour -- both layouts give a 2-way conflict on the fragment read (`m*4 mod
+32` against `m*12 mod 32`, both period 8). So its entire benefit is a smaller
+LDS footprint: A 3072 -> 2048 elements.
+
+That is worth something only if occupancy is LDS-limited. Measured on gfx1201
+at 4096^3, via `hipFuncGetAttribute`:
+
+| pad | LDS bytes | VGPRs | wg/WGP from LDS | waves/SIMD from VGPR | TFLOP/s |
+|---|---|---|---|---|---|
+| 1 | 18432 | 244 | 7 | **6** | 74.4 |
+| 2 | 20480 | 244 | **6** | **6** | 74.3 |
+| 4 | 24576 | 244 | **5** | 6 | 67.7 |
+
+**LDS binds only at pad=4.** At pad<=2 the 244-VGPR ceiling takes over at 6
+workgroups, and throughput tracks occupancy exactly: 67.7 -> 74.3 as workgroups
+go 5 -> 6. K1 would shrink LDS further on an axis that has already stopped
+constraining, so **it cannot pay and was not built.**
+
+### The default it exposed instead
+
+Paired and interleaved, 6 reps, alternating order:
+
+| | pad=1 | pad=2 | pad=4 (shipped) |
+|---|---|---|---|
+| 4096^3 | **1.100x**, 6/6 | 1.098x, 6/6 | 1.000x |
+| 2048^3, double-buffered | **1.111x**, 6/6 | 1.114x, 6/6 | 1.000x |
+| 2048^3, single-buffered | **1.185x**, 6/6 | 1.123x, 5/6 | 1.000x |
+
+**§10k's pad=4 default is wrong by 10-19%** across both shapes and with
+double-buffering on or off.
+
+### And the obvious explanation for it is also wrong
+
+The tempting story is that §10n's double-buffering doubled the LDS footprint and
+pushed pad=4 below the VGPR ceiling -- i.e. that a change made here created the
+problem. **Measured false.** Single-buffered, pad=4 loses by the largest margin
+of the three (1.185x), and there *both* arms are VGPR-bound at 7 workgroups with
+identical occupancy. Same occupancy, 18% apart, so that gap is bank behaviour,
+not residency.
+
+So padding acts on both axes: bank conflicts on the fragment read at every
+configuration, and occupancy only once the footprint is large enough to bind.
+§10k measured the first and set a default that happened to be wrong on both.
+
+### Status of the default
+
+Not changed here. `lds-pad-dwords` is not arch-gated, so it reaches gfx1151,
+and every number above is gfx1201 f16. §10k's 4 rests on a single shape in a
+configuration that predates issue depth, double-buffering and the schedule
+description; this evidence is broader but not yet broad enough to move a knob
+that touches another part's proof lane. It needs a gfx1151 run first
+(Princess-Luna), which is the next item, not this one.
+
+**The loop's result is that the queued deliverable is refuted and a 1.10x
+regression in the current default is the thing actually worth taking.**

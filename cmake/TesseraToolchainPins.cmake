@@ -30,6 +30,22 @@ set(TESSERA_REQUIRED_CUDA_DRIVER    "610.88"    CACHE STRING "Required minimum C
 set(TESSERA_REQUIRED_PTX_ISA        "9.4"       CACHE STRING "Required minimum PTX ISA version (nvcc 13.4.59 emits .version 9.4)")
 set(TESSERA_REQUIRED_NCCL_VERSION   "2.22"      CACHE STRING "Required minimum NCCL version (floor; 13.3 bundled 2.30.7, 13.4 bundle not measured)")
 
+# LLVM/MLIR is the one toolchain the whole compiler is built ON, and it was the
+# one with no pin here. It is an EXACT match, not a floor, unlike CUDA/ROCm
+# below: the others are vendor runtimes where a newer version is normally
+# compatible, while MLIR's C++ API changes between patch releases and every
+# fleet box must agree for a lit/contract result on one to mean anything on
+# another. Measured 2026-09-20: all four boxes on 23.1.1 (Homebrew keg on the
+# Mac, apt.llvm.org on Princess-Luna and The-Super-Bear, from-source prefixes
+# incl. the assertions build on Tajasarus).
+#
+# The live hazard is DRIFT UPWARD, not a stale box: apt.llvm.org already offers
+# 23.1.2 snapshots on both Ubuntu boxes, so a routine `apt upgrade` moves them
+# off the pin silently. Hold the packages there (`sudo apt-mark hold llvm-23
+# llvm-23-dev libmlir-23-dev mlir-23-tools clang-23 lld-23`) and raise this pin
+# deliberately when the fleet moves together.
+set(TESSERA_REQUIRED_LLVM_VERSION   "23.1.1" CACHE STRING "Exact LLVM/MLIR version every fleet box must match (measured on all four, 2026-09-20)")
+
 set(TESSERA_REQUIRED_ROCM_VERSION   "10.0"   CACHE STRING "Required minimum ROCm version (measured 10.0.0 on Princess-Luna + Tajasarus, 2026-09-15)")
 set(TESSERA_REQUIRED_HIP_VERSION    "7.15"   CACHE STRING "Required minimum HIP version (measured 7.15.26333)")
 set(TESSERA_REQUIRED_RCCL_VERSION   "2.22"   CACHE STRING "Required minimum RCCL version")
@@ -72,6 +88,41 @@ function(tessera_pin_cuda_toolkit required_version)
     set(TESSERA_NVCC_EXECUTABLE "${TESSERA_NVCC_EXECUTABLE}"   PARENT_SCOPE)
 endfunction()
 
+
+function(tessera_pin_llvm required_version)
+    if(DEFINED TESSERA_SKIP_TOOLCHAIN_PIN AND TESSERA_SKIP_TOOLCHAIN_PIN)
+        message(STATUS "Tessera LLVM pin skipped (TESSERA_SKIP_TOOLCHAIN_PIN=ON)")
+        return()
+    endif()
+
+    if(NOT DEFINED LLVM_PACKAGE_VERSION)
+        message(FATAL_ERROR
+            "Tessera pins LLVM/MLIR ${required_version} but no LLVM_PACKAGE_VERSION "
+            "is defined -- call this after find_package(LLVM CONFIG).")
+    endif()
+
+    # Compare major.minor.patch only: apt.llvm.org appends a snapshot suffix
+    # (`23.1.2~++2026...`) that is not part of the version identity.
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _tessera_llvm_found "${LLVM_PACKAGE_VERSION}")
+
+    # EXACT, not a floor. A newer MLIR is not "at least as good": its C++ API
+    # moves between patch releases, and two boxes on different patches cannot
+    # be compared -- which is the whole reason a fleet result means anything.
+    if(NOT _tessera_llvm_found VERSION_EQUAL ${required_version})
+        message(FATAL_ERROR
+            "Tessera pins LLVM/MLIR ${required_version} but this box has "
+            "${_tessera_llvm_found} (${LLVM_PACKAGE_VERSION}) at ${LLVM_DIR}.\n"
+            "  If the fleet is moving, raise TESSERA_REQUIRED_LLVM_VERSION and move "
+            "EVERY box together -- a lit or contract result is only comparable "
+            "across boxes on the same MLIR.\n"
+            "  If this box drifted (apt.llvm.org ships 23.1.2 snapshots), pin it back "
+            "and hold it: sudo apt-mark hold llvm-23 llvm-23-dev libmlir-23-dev "
+            "mlir-23-tools clang-23 lld-23\n"
+            "  To override for a one-off: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
+    endif()
+
+    message(STATUS "Tessera LLVM/MLIR pin satisfied: ${_tessera_llvm_found}")
+endfunction()
 
 function(tessera_pin_rocm required_version)
     if(DEFINED TESSERA_SKIP_TOOLCHAIN_PIN AND TESSERA_SKIP_TOOLCHAIN_PIN)

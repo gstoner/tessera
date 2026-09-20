@@ -1507,10 +1507,47 @@ store pattern under the padded stride, VGPR pressure in a body that already
 spills 126 (§10j / the RDNA4 VGPR ceiling), or the wider loop body's scheduling
 -- and this is one shape on one arm, so it is a signal, not a conclusion.
 
-**It does not change the recommendation.** Double-buffering targets the scalar
-path, which is the shipped default (`lds-copy-width=1`) and the arm every
-recorded ceiling number was taken on. This finding argues against reviving
-vectorisation, not against the next step.
+**CORRECTED 2026-09-20, same day, on review: the last sentence of this section
+originally read "argues against reviving vectorisation". That is backwards, and
+it is the wrong conclusion from the right measurement.**
+
+What the measurement shows is that vectorisation *as implemented here* loses.
+The staging loop is `load; store; load; store` -- one dependency chain, nothing
+in flight. Widening from 1 to 8 does not add overlap, it **removes** it: the
+loop now has 8x fewer independent iterations, and iteration count was the only
+source of memory-level parallelism in that body. Eight independent narrow
+operations became one wide one with nothing to fill the gap.
+
+That also re-reads §10j.3. Its census found the register body at `loadcnt<=6`
+and the staging loop at `loadcnt<=0`, which was recorded as "unhidden load
+latency" and sent us looking for a *faster instruction* -- the search in §10l
+that found four unreachable ones. The correct reading is that the loop has no
+issue depth, and no instruction fixes that. A static census of the two real arms
+is consistent: the scalar path reaches 20 memory ops between waits, the vector
+path 10 (suggestive only -- the count spans the whole kernel, not just the
+staging loop).
+
+**A wide operation only pays if enough of them are in flight.** Three sources of
+overlap exist here and the current loop uses none:
+
+1. **Issue depth inside the copy.** Issue every load for a tile before waiting
+   on any (`for i: v[i]=load(i)` then `for i: store(v[i])`), not load-wait-
+   store-repeat. This is what moves the staging loop off `loadcnt<=0`. It
+   competes for registers: at width 8 each in-flight value is 4 VGPRs, and
+   RDNA4 caps a wave at 256 architecturally, in a body already spilling 126 --
+   so wide x deep may lose to narrow x deep, which is untested.
+2. **Double-buffering across K-tiles.** Stage into LDS[1] while the MMA chain
+   consumes LDS[0], hiding global latency behind compute. Needs 2x LDS (there is
+   room under the 64 KB workgroup cap) and the split `S_BARRIER_SIGNAL` /
+   `S_BARRIER_WAIT` pair.
+3. **Prefetch depth > 2** if the MMA window proves shorter than memory latency.
+
+(1) fills the pipe within the copy; (2) hides the copy behind compute. They are
+orthogonal and vectorisation multiplies both, so it is worth nothing without
+either. The right next experiment is (1) measured against the current loop at
+each width -- it is the smaller change and it directly tests the diagnosis. Until
+that runs, **nothing here licenses a claim about vectorisation on this chip**,
+only about this loop structure.
 
 It also would not have been visible before the probe was corrected: at widths
 2-8 the old probe returned `nan` and a non-zero output, so any timing from it

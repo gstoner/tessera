@@ -2316,3 +2316,68 @@ Remaining implementation, all of it real: emit `wmma_f16_16x16x16_f16` for an
 f16-accumulate `tile.mma`, add a row-major B staging layout, switch the B
 fragment view, and insert the transpose. The risk that mattered -- does the
 primitive behave on this hardware -- is retired.
+
+## 10t. Row-major B with the in-register transpose: built, correct, and 3% slower
+
+§10s validated the transpose primitive and predicted the standalone change would
+be marginal. It is built end to end and the prediction held, in the unwelcome
+direction.
+
+### What was built
+
+`lds-b-row-major` stages B as `[K=16][wgN]` instead of transposing during the
+LDS write. The chain is:
+
+* **`tile.fragment_pack {transpose}`** -- a unit attribute stating that the
+  source tile arrives in the opposite major order and the lowering owes the
+  transpose. Verifier admits it only on a b-role fragment; negative fixture per
+  Decision #10a. It reuses the existing op rather than adding one, so the result
+  stays a properly typed b-role fragment and no fragment-role cast is needed.
+* **Consumer**: reads with the A-role (contiguous) pattern, then emits
+  `WMMA(A, identity, 0)`. The identity needs no dynamic vector index -- element
+  `j` of a lane is 1.0 exactly when `lane == packGroup * 8 + j`, so eight
+  compares and eight static inserts. Fails closed on any family whose fragment
+  is not an 8-element f16 vector.
+* **Producer**: B's destination becomes `kk * wgN + col`, which makes
+  consecutive `e` adjacent, so the store widens to one vector op per group --
+  the thing §10j.1 established column-major cannot do at any copy width. The
+  fragment read becomes contiguous, and B's padding is dropped because the
+  strided column read §10e added it for is gone.
+
+All three sides -- global read, LDS write, fragment read -- are contiguous
+simultaneously for the first time.
+
+### Correct
+
+Exact (max|err| = 0) at all five shapes, including three ragged ones. The
+layout change, the widened store, the contiguous read and the inserted matrix
+op all compose without a numerical defect.
+
+### And 3% slower
+
+Paired and interleaved, 6 reps, alternating order:
+
+| shape | col-major (shipped) | row-major + transpose | |
+|---|---|---|---|
+| 2048^3 | 54.5 | 52.8 | **0.967x**, row-major wins 1/6 |
+| 4096^3 | 67.6 | 67.0 | **0.991x**, wins 0/6 |
+
+One ragged shape (768x1536x520) is worse in the single-run sweep, 10.0 -> 7.0.
+
+The +4 WMMA per K-slab costs slightly more than the widened stores and the
+dropped padding return. §10s predicted "about -1.5% ... marginal ... the
+larger and less certain upside is the padding"; the padding upside is real
+(24 KB -> 20 KB per workgroup, 5 -> 6 per WGP) and still does not cover the
+matrix ops.
+
+### What it is for
+
+Default **off**, and it should stay off as a performance option. Its value is
+that **B's LDS major order is now a free variable**. Until this, the K1-blocked
+layout work was constrained by a B layout it could not change; §10j.5 framed
+that as a sparse constraint, which §10j.5's own correction shows was the wrong
+reason -- but the dense constraint was real and is now lifted.
+
+The honest summary: this is infrastructure that costs 3% to use today. Whether
+it pays depends entirely on what the layout freedom is spent on, and that is
+the K1 work, not this option.

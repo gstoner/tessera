@@ -323,8 +323,18 @@ Falsified in both directions: reverting the helper's augmentation fails the
 two behavioural cases; putting `chip` back into one site's tuple fails the
 re-spelling guard.
 
-**Mac (M1 Max, full build: 331 targets, rc=0).** `tests/unit/ -m "not slow"`
-— **19871 passed, 3795 skipped, 0 failed** (19:45). `lit tests/tessera-ir/`
+**Re-measured after the #787 rebase, because the base moved under the
+evidence.** Mac: **19880 passed, 3795 skipped, 0 failed**. gfx1201 A/B
+against post-#787 main (`48531dc5`): **base 6048 / patched 6100 passed, 0
+failed both arms**, identical (empty) failure sets, zero `no usable AMD GPU`
+skips. The delta is +52 — the test file grew from 42 to 50 cases when #787's
+four knobs were added to the alternatives table (two parametrized tests each),
+plus the same 2 from `test_foreign_target_host_claims.py`. The gfx1151 numbers
+below were taken at the pre-#787 base `9b11d369` and are left as recorded;
+they are not restated for post-#787 main.
+
+**Mac (M1 Max, full build: 331 targets, rc=0), at the pre-#787 base.**
+`tests/unit/ -m "not slow"` — **19871 passed, 3795 skipped, 0 failed** (19:45). `lit tests/tessera-ir/`
 499 fixtures, rc=0. `mypy python/tessera/` clean (565 files); generated docs
 in sync. An earlier sweep on this branch showed six Apple failures; those were
 a missing `TesseraAppleRuntimeShared` (no `build/` existed in the worktree),

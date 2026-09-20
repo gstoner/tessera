@@ -3490,6 +3490,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     # paths today.
 
     _FP8_FORMATS = {
+        # bias 7 / max 448 is OCP E4M3, and on RDNA4 it is a HARDWARE MODE, not
+        # the only encoding. ISA 7.5 gives each 8-bit format two biases
+        # selected by F8_Mode: E4M3 is bias 7 / max 448 (mode 0, OCP) or bias 8
+        # / max 240 (mode 1), and BF8 likewise 15 or 16. The two also differ in
+        # NaN encoding, and mode 1 E4M3 has no INF.
+        #
+        # We never set F8_Mode; we rely on the default matching this table.
+        # What actually verifies it is the exactness of the gfx1201 FP8 device
+        # rows: the biases differ by one, so every nonzero value differs by 2x
+        # per operand and a matmul would come out 4x wrong -- impossible to
+        # pass an exact check. Those rows are the guard, which is worth knowing
+        # before anyone relaxes them to a tolerance.
+        #
+        # A second hardware knob, FP16_OVFL (ISA 7.6.2), decides what an
+        # F32->FP8 overflow yields: saturate to +/-max_E4M3 when 1, NaN when 0.
+        # It does not affect us TODAY only because nothing converts on the
+        # device -- checked 2026-09-20, no cvt_pk_fp8 / cvt_sr_fp8 / cvt_f32_fp8
+        # in any emitter; FP8 arrives packed from the host. That is a
+        # precondition, not a property: the first device-side quantise or FP8
+        # epilogue inherits this question, and host and device must agree on
+        # overflow or the disagreement shows up only on out-of-range data.
         "e4m3": {"max_normal": 448.0, "mantissa_bits": 3, "exp_bias": 7},
         "e5m2": {"max_normal": 57344.0, "mantissa_bits": 2, "exp_bias": 15},
     }

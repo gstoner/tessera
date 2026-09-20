@@ -1220,12 +1220,29 @@ constraint. It is satisfied today only **by accident of the staging layout** --
 §10j.1 established that our LDS B is written contiguous in K per column, which
 is column-major.
 
-So the 2:4 sparse stack depends on a property of the dense staging layout that
-nobody wrote down, and the K1-blocked layout under consideration changes
-exactly that property. Before any B-layout change: state the constraint at the
-sparse site, and give it a test that fails when B stops being column-major.
-Otherwise the failure mode is wrong sparse results from a change made for dense
-performance, with nothing connecting the two.
+So the 2:4 sparse stack depends on a property nobody wrote down. Before any
+B-layout change: state the constraint at the sparse site, and give it a test
+that fails when B stops being column-major.
+
+**Both done 2026-09-20** -- `rocm_sparse_logical.sparse_logical_schedule_ir`
+now states the ISA rule and points at the addressing that satisfies it, and
+`test_sparse_b_gather_is_column_major` asserts the shape of the emitted index
+arithmetic (every gathered element shares one per-lane column and differs only
+in k). The gate was mutation-checked: rewriting the row term's stride from N to
+1 makes it fail.
+
+**The coupling claim above is CORRECTED, though.** This section said the
+constraint is satisfied "by accident of the dense staging layout", implying a
+dense B-layout change would break sparse. Measured: `emitTypedLdsBody` has
+exactly one caller and the sparse path is not it -- `swmmac` appears nowhere in
+`GenerateWMMAGemmKernel.cpp`, and the sparse lowering in `TileToROCM.cpp`
+allocates no LDS. Sparse gathers B from global directly, element by element,
+with its own column-major addressing.
+
+So the two are independent and a dense B-layout change cannot reach sparse. The
+constraint was still real, still unstated and still untested -- that half of the
+finding stands, and is now closed -- but it is **not** a precondition for the
+dense work, and treating it as one would have blocked that work for no reason.
 
 (Also confirmed while reading: our packer satisfies the `idx0 < idx1` rule,
 though via a `sorted()` call rather than a stated invariant.)

@@ -13,6 +13,22 @@ def sparse_logical_schedule_ir(m: int, n: int, k: int, dtype: str, *, accum: str
     A and B use ordinary contiguous row-major storage. Packing and sparse index
     selection execute in the compiled kernel. Each wave owns one 16x16 tile and
     loops over K in steps of 32; no register payload is supplied by Python.
+
+    **B MUST BE GATHERED COLUMN-MAJOR. This is an ISA requirement, not a
+    preference.** RDNA4 ISA 7.12, sparse matrices: "When the A-matrix is a 4:2
+    sparse matrix, the corresponding B-matrix must be (K x N), and loaded in
+    column-major order."
+
+    It is satisfied here by the addressing below: `%bcol` is a per-lane COLUMN
+    (`col0 + low`) held fixed across the gather, while the row term walks K, so
+    every one of the 16 elements in `%bv` shares a column and differs in k --
+    `bi = (k-varying) * n + bcol`. A change that made the gather contiguous
+    (stride 1, walking N) would be faster and WRONG, and would produce silently
+    incorrect sparse results rather than an error.
+
+    Stated 2026-09-20 because it was previously implicit in the index
+    arithmetic and nothing tested it (docs/backends/rocm/wmma-fragment-layout.md
+    10j.5). Gated by `test_sparse_b_gather_is_column_major`.
     """
     if any(type(x) is not int or x <= 0 for x in (m, n, k)) or m % 16 or n % 16 or k % 32:
         raise ValueError("sparse logical matrices require positive M/N multiples of 16 and K of 32")

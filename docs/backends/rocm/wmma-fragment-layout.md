@@ -2136,9 +2136,34 @@ show:
   `v_add_co_ci_u32_e64` carry pairs, plus 225 `v_lshlrev_b64`). That is half the
   VALU in the body, and it dwarfs every quantity §10m-§10r has been tuning.
 
-Both are open. Neither is a claim that shrinking them is easy -- 64-bit
-addressing may be what the memref lowering requires -- but they are measured,
-they are large, and nothing above accounted for them.
+**CORRECTED within the hour, before either was acted on: these are STATIC
+counts and both sit outside the hot loop.** Locating them:
+
+| | total | inside the K-loop body |
+|---|---|---|
+| `s_wait_alu` | 834 | **15** |
+| 64-bit address adds | 1008 | **0** |
+
+The body is 278 instructions and executes K/16 = 128 times at 2048^3, so it
+contributes ~35,600 dynamic instructions against ~4,100 for the
+prologue/epilogue that runs once. What the histogram made look like half the
+kernel is roughly **10% of the dynamic instruction stream, shrinking as K
+grows**.
+
+So LLVM already hoisted the address arithmetic out of the K loop -- which is
+what it should do, and is why the loop body carries none of it. The dependency
+stalls are in the setup, not the steady state.
+
+**The error is the one this section was written to expose, committed one
+paragraph later.** §10r had used the K-loop body as the unit of analysis
+correctly -- that is where its 278-instruction schedule diff came from -- and the
+histogram above reverted to whole-kernel static counting and read dynamic
+importance off it. A static count over a kernel with a 128-iteration loop says
+almost nothing about where time goes.
+
+What survives: the histogram is still the right *first* measurement, because it
+is the only one not shaped by a hypothesis. It just has to be taken over the hot
+loop, and weighted by trip count, before any quantity in it means anything.
 
 **Two checks that closed rather than opened:**
 

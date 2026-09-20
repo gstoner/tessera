@@ -2224,3 +2224,78 @@ also running at half or a quarter of the available width. Not attempted here,
 and the bit-identity claim is demonstrated for integer -- an fp8 lane with fp32
 accumulate reorders floating-point accumulation and would need its own numeric
 check, not an inherited one.
+
+## 10s. In-register transpose: primitive validated on gfx1201, and where it would go
+
+§10r.2 corrected §10l -- the transpose hatch exists as a matrix op rather than a
+load. Before restructuring anything around it, the primitive was checked on the
+device.
+
+### It works, exactly
+
+A standalone HIP kernel on gfx1201: load a 16x16 f16 matrix as an A fragment,
+build an identity in B, one `__builtin_amdgcn_wmma_f16_16x16x16_f16_w32_gfx12`,
+store D.
+
+```
+TRANSPOSE EXACT  (0 of 256 elements wrong)
+row0 of result: 0 16 32 48 64 80 96 112     <- column 0 of the input
+```
+
+The lane mapping the article assumes holds on our part. (The gfx12 f16 builtin
+takes three arguments; the gfx11 opsel operand is gone.)
+
+### It is reachable from our pipeline, on the newer of two lowering paths
+
+`wmma_f16_16x16x16_f16` **is** declared in ROCDL, so this is an emission change
+and not inline asm. But the backend emits only `wmma.f32.16x16x16.f16` today,
+and the transpose needs the f16-accumulate form so its output is an f16 fragment
+usable as an operand.
+
+The path matters. `TileToROCM.cpp` documents two, and the legacy one forbids
+exactly what this needs:
+
+> The legacy typed path ... is a single-shot WHOLE-CHAIN pattern match ... Three
+> things are therefore inexpressible *by construction*: ... **an `tile.mma` whose
+> result feeds another `tile.mma`** ...
+> This replaces chasing with composition. ... each op lowers against its ALREADY
+> CONVERTED operands and never looks at its producer; SSA does the rest.
+
+The typed LDS body builds `tessera::tile::FragmentType` values, so it is on the
+composition route and mma-feeding-mma is expressible. Further, `bFragmentTy`
+already carries **`"col_major"`** in the type itself -- the fragment system
+models major order, so a transpose has a natural place to attach rather than
+needing a bolted-on concept.
+
+### What it would buy, honestly
+
+The target is B's staging asymmetry (§10j.1): B's global read is contiguous in N
+while its LDS write must be contiguous in K per column, so one side is always
+strided and the LDS store stays scalar at every width. With the transpose, B
+could be staged **row-major** -- vectorised on both sides, like A -- and
+transposed after the fragment read.
+
+Per K-slab, at the shipped w=2/d=8:
+
+| | change |
+|---|---|
+| B LDS stores | 16 scalar -> 8 vector (**-8 instructions**) |
+| B fragment read | strided column -> contiguous |
+| matrix ops | 16 -> 20 (**+4**, one transpose per B fragment) |
+
+Net roughly **-1.5% of a 278-instruction body**, which is marginal on its own.
+The larger and less certain upside is the padding: B's column read is why
+`lds-pad-dwords=4` exists (§10e), and a contiguous read may not need it --
+saving 2 KB of LDS per buffer, 4 KB double-buffered, which at 24 KB per
+workgroup is the difference between 5 and 6 workgroups per WGP.
+
+**So its real value is as an enabler, not a win.** §10j.5 recorded that sparse
+needs column-major B and gets it only by accident of the dense staging layout,
+which is what blocks the K1-blocked layout work. The transpose removes that
+block. Anyone scoping this should do it *with* the K1 work, not before it, and
+should not expect the standalone number to justify the change.
+
+Remaining implementation, all of it real: emit `wmma_f16_16x16x16_f16` for an
+f16-accumulate `tile.mma`, add a row-major B staging layout, switch the B
+fragment view, and insert the transpose. The risk that mattered -- does the
+primitive behave on this hardware -- is retired.

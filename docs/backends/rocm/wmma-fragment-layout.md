@@ -2007,3 +2007,102 @@ Two further observations:
 
 Recorded as measured-and-closed. A scalar-offload pass here would be an
 optimisation against a constraint that LLVM has already removed.
+
+## 10r. Why sched32 helps with zero VALU in the chain: displacement, found on the third hypothesis
+
+§10p recorded the gain as real and the mechanism as unknown. It is now known,
+and getting there took two refuted hypotheses, both refuted by a built arm
+rather than by argument.
+
+### What the schedules actually differ by
+
+Both loop bodies are **278 instructions** -- same count, different order -- and
+identical up to `ds_ldx8`. Then:
+
+```
+control : ds_ldx8  WAIT_load(7) ds_st  WAIT_load(6) ds_st  WAIT_ds WMMA
+                   WAIT_ds WMMA  WAIT_ds WMMA  valux4 WAIT_ds WMMA
+                   WAIT_load(5) ds_st  ...  WMMAx3 ... WMMAx4 ...
+
+sched32 : ds_ldx8  valux3 salu valux2 wait_alu valux8
+                   WAIT_ds WMMA  WAIT_ds WMMA  ...  WAIT_ds WMMAx4
+                   salu  WAIT_load(7) ds_st ... WAIT_load(0) ds_stx17
+```
+
+In the control the LDS-store drain is **interleaved into the matrix chain**, and
+every `ds_st` there is preceded by a `WAIT_load` -- a stall on a global memory
+return, in the middle of the matrix work. Under sched32 the chain runs
+uninterrupted on `WAIT_ds` (LDS, tens of cycles) and every `WAIT_load` is
+deferred past it.
+
+### Hypothesis 1: the mfma groups cluster the chain. REFUTED.
+
+If the mfma half of `(valu,N),(mfma,1)` were doing the work, emitting the mfma
+groups alone should reproduce it. Built as `N == -2`:
+
+| | 2048^3 | 4096^3 |
+|---|---|---|
+| memory grouping only | 1.000x | 1.000x |
+| **mfma groups alone** | **0.973x** | **0.976x** |
+| valu + mfma (sched32) | 1.031x | 1.032x |
+
+Worse than no description at all. The VALU half is load-bearing.
+
+### Hypothesis 2: the VALU groups are an unfillable RESERVATION. REFUTED.
+
+Next reading: the groups reserve the slots between matrix ops, and an *empty*
+reserved slot still excludes a `WAIT_load`. That predicts any unfillable spacer
+works. Built as `N == -3`, an salu spacer:
+
+| | 2048^3 | 4096^3 |
+|---|---|---|
+| **salu spacer** | **1.000x** | **0.983x** |
+| valu spacer | 1.030x | 1.031x |
+
+Reverts to the control. It is VALU specifically, not spacing.
+
+### Hypothesis 3: DISPLACEMENT. Supported.
+
+The difference between the two spacers is whether the group **can be filled**.
+The body has ~2051 VALU and ~642 SALU, and in-region far fewer of the latter. So
+the first VALU group fills -- with the 13 ops visible above -- and occupying
+that position **displaces the `WAIT_load`/`ds_st` pair the control puts there**.
+Once the head of the chain is memory-independent, the mfma groups carry the rest
+of the matrix ops forward and the `ds_write` group collects every store at the
+end. The salu group cannot fill, nothing is displaced, and the stores flow back
+in.
+
+This fits every measurement, including the two that looked anomalous: at N=8 the
+smaller group fills differently (17 VALU land *inside* the chain) and is worth
+less (52.6 vs 54.4); at N=32/64/128 the first group takes what is available and
+the rest sit empty, which is why those three are indistinguishable.
+
+**The benefit is displacement of memory-waiting work from the head of the matrix
+chain. It is not U-pipe co-issue**, which is what the option is named for and
+what §10p assumed.
+
+### The metric that hid it
+
+`VALU-in-chain` counted VALU *between the first and last* `wmma`. The displacing
+VALU sits **immediately before the first one**, so the metric read 0 while the
+mechanism was working -- and 0 is exactly what "no interleaving happened" also
+looks like. The window was chosen to test U-pipe interleaving and could not see
+displacement.
+
+Fourth instance this session of a measurement that could not distinguish its
+outcomes, and the first where the instrument was not broken but simply aimed at
+a different question than the one that mattered.
+
+### Consequence
+
+`lds-sched-valu-per-mma` is misnamed: the number is not "VALU per matrix op",
+it is the size of a group whose only job is to be fillable enough to push the
+store drain past the chain head. Any N from 32 up behaves the same. The
+mechanism suggests a cheaper formulation -- place the drain after the chain
+directly rather than asking a scheduler heuristic to do it -- which is the next
+thing to try.
+
+**On the VBUFFER/TBUFFER ISA section:** inapplicable here. §10l measured zero
+`BUFFER_*`/`TBUFFER_*` ops in both gfx1201 bodies; ROCDL lowers everything to
+flat/global addressing, so the format-conversion and D16 buffer forms are
+unreachable from this pipeline.

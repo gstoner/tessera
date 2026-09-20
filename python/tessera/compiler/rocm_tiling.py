@@ -30,7 +30,12 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .rocm_target import ROCmTargetProfile, TesseraROCmTargetError
+from .rocm_target import (
+    dispatch_slots,
+    ROCmTargetProfile,
+    TesseraROCmTargetError,
+    WorkgroupProcessorMode,
+)
 
 # ── Accumulator word counts per canonical dtype ─────────────────────────────
 # Number of 32-bit register words a single accumulator element occupies.  The
@@ -196,7 +201,7 @@ class RankedTileCandidate:
     #: Owned by ROCM-SPLIT-K-1. Do not read its presence as "the compiler models
     #: split-K" -- and note the model itself is known wrong for the shape that
     #: needs it most (see `rank_candidates`).
-    split_k_required: bool
+    split_k_required: bool | None
     pipeline_depth: int
     score: float
     reasons: tuple[str, ...]
@@ -326,12 +331,49 @@ def _register_macro_tile(candidate: TileCandidate) -> tuple[int, int]:
     )
 
 
+def _split_k_required(
+    candidate: TileCandidate,
+    profile: ROCmTargetProfile,
+    *,
+    problem: tuple[int, int] | None,
+    lds_margin: int,
+) -> bool | None:
+    """Whether split-K is needed, keyed on occupancy. None when undeterminable.
+
+    Split-K exists to put work on units that would otherwise idle, so the
+    question is how many output tiles the problem produces against how many
+    units can run one. On RDNA a workgroup occupies a WGP, so the denominator
+    is WGPs -- `rocm_target.dispatch_slots` carries that, measured, and returns
+    None for a part nobody has measured.
+
+    An LDS overflow still forces it regardless of occupancy: the tile does not
+    fit as configured and K must be cut.
+    """
+    if lds_margin < 0:
+        return True
+    if problem is None:
+        return None
+    # WGP mode is what our kernels emit -- measured 2026-09-20, both the
+    # register and LDS gfx1201 matmul bodies carry WGP_MODE=1 in
+    # COMPUTE_PGM_RSRC1 bit 29. Stated rather than defaulted: the ISA makes the
+    # mode a per-dispatch choice (RDNA4 2.3) and CU mode doubles the
+    # denominator, so a silent assumption here is a 2x error in every verdict.
+    slots = dispatch_slots(profile.arch, WorkgroupProcessorMode.WGP)
+    if slots is None:
+        return None
+    m, n = problem
+    if m <= 0 or n <= 0:
+        return None
+    tiles = _ceil_div(m, candidate.tile.m) * _ceil_div(n, candidate.tile.n)
+    return tiles < slots
+
+
 def rank_candidates(
     candidates: list[TileCandidate],
     profile: ROCmTargetProfile,
     *,
     pipeline_depth: int | None = None,
-    split_k_threshold: int = 4096,
+    problem: tuple[int, int] | None = None,
 ) -> tuple[RankedTileCandidate, ...]:
     """Rank ROCm tiling candidates without claiming measured performance.
 
@@ -355,13 +397,22 @@ def rank_candidates(
         lds_margin = profile.lds_capacity_bytes - lds_with_padding
         macro_tile = _register_macro_tile(cand)
         # KNOWN WRONG, and unwired so nothing catches it (Decision #29a): the
-        # real trigger for split-K is OCCUPANCY, not K magnitude. The gfx1201
-        # MoE router gate (M<=16, K=2048, N=256) needs split-K because 16 output
-        # tiles leave half of a 32-CU chip idle and the weight read dominates A
-        # by 16x -- and `k > 4096` answers False for it. Re-keying this on
-        # tiles-vs-CUs is the first half of ROCM-SPLIT-K-1; the second is giving
-        # it a consumer.
-        split_k_required = cand.tile.k > split_k_threshold or lds_margin < 0
+        # Re-keyed on OCCUPANCY 2026-09-20 (first half of ROCM-SPLIT-K-1).
+        #
+        # The old predicate was `k > 4096`, which answers False for the shape
+        # that needs split-K most: the gfx1201 MoE router gate (M<=16, K=2048,
+        # N=256) produces 16 output tiles on a part with 32 WGPs, so half the
+        # machine idles while the weight read dominates A by 16x. K magnitude
+        # was never the trigger; too few tiles to fill the machine is.
+        #
+        # It returns None when it cannot be determined -- no problem shape, or
+        # an arch whose dispatch-slot count this fleet has never measured. A
+        # bool there would be a confident answer derived from nothing, which is
+        # how the old model was wrong in the first place; None makes a consumer
+        # decide, and `split_k_required is True` keeps working for the ones
+        # that only care about the positive case.
+        split_k_required = _split_k_required(
+            cand, profile, problem=problem, lds_margin=lds_margin)
         bank_padding = padding > 0
 
         reasons: list[str] = []

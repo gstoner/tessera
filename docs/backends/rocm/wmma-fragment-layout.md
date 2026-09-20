@@ -1070,10 +1070,42 @@ reasons specific to the mechanism says nothing about the size of the prize.
 Measuring the prize directly took one option and one afternoon; inferring it
 from failures would have cancelled a 3x.
 
-**What the ceiling does not say.** It is an upper bound on a copy that cannot
-actually be free. It does not rank K1-blocking against other ways to spend the
-headroom, and the 1024³ figure sits at the shape where §10k found the
-measurement does not converge — treat 1.65x as the softer of the two.
+**Swept across five shapes, and a second hypothesis died.** Given the RX 9070
+XT's hierarchy (L2 8 MB, Infinity Cache 64 MB), the two original shapes straddle
+the L2 line exactly — 4 MiB of f16 operands at 1024³, 16 MiB at 2048³ — so the
+obvious reading was that the copy is cheap while the operands fit L2 and dear
+once they spill. That predicts a STEP between 1280 and 1536. Measured:
+
+| N | A+B | resident | real | elided | ceiling |
+|---|---|---|---|---|---|
+| 1024 | 4.0 MiB | L2 | 18.9 | 31.4 | 1.66x |
+| 1280 | 6.2 MiB | **L2** | 25.4 | 61.3 | **2.41x** |
+| 1536 | 9.0 MiB | L3 | 32.5 | 97.4 | 3.00x |
+| 1792 | 12.2 MiB | L3 | 32.5 | 127.3 | 3.91x |
+| 2048 | 16.0 MiB | L3 | 40.4 | 126.2 | 3.13x |
+
+No step. A smooth rise, and the largest single jump (1.66 → 2.41) happens
+entirely **inside** L2. Cache residency is not the driver.
+
+**What is:** the elided arm converts problem size into throughput (31 → 127,
+plateauing near its roofline) while the real arm barely moves (18.9 → 40.4).
+The ratio grows because the copy-free kernel uses the extra parallelism and the
+copy-bound one cannot. The copy is the bottleneck at *every* shape here.
+
+**So the 1024³ figure understates the prize, for a reason worth naming.** At
+1024³ there are 64 work-groups over 32 WGPs — two each — so even the copy-free
+kernel is occupancy-starved. 1.66x is not "the copy is cheap here"; it is
+"nothing is fast here". An earlier draft blamed §10k's non-convergence at that
+shape, which is a different effect and was the wrong attribution.
+
+**Consequence for the layout work:** judge it across the occupancy range, not
+at one shape. 1792³ carries the most headroom (3.91x) and 1024³ the least, and
+a single-shape benchmark will over- or under-state the result by roughly 2.4x
+depending only on which one is chosen.
+
+**What the ceiling still does not say.** It is an upper bound on a copy that
+cannot actually be free, and it does not rank K1-blocking against other ways
+to spend the headroom.
 
 ## 10k. The padding default, settled on the shape where it converges
 

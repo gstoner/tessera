@@ -1012,7 +1012,8 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                       int64_t mt, int64_t nt, int64_t wavesM, int64_t wavesN,
                       const WmmaTypes &T, Type outputType, bool hasBias,
                       StringRef activation, StringRef rasterOrder,
-                      int64_t rasterGroup, int64_t ldsPadDwords) {
+                      int64_t rasterGroup, int64_t ldsPadDwords,
+                      int64_t ldsCopyWidth) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -1091,9 +1092,20 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // so the padding that was right for a scalar copy is nearly the worst for a
   // vectorised one. The default moves with the measurement, not with this
   // comment.
+  // `ldsCopyWidth` 0 derives the width; 1 forces the historical scalar copy.
+  // The forced value exists so the vectorisation can be MEASURED against a
+  // scalar baseline at the same grid -- without it the only scalar figures
+  // available came from a harness that launched 4x too many workgroups, and
+  // the vectorisation's benefit was unmeasurable (section 10i).
   int64_t vecW = 1;
-  for (int64_t v : {8, 4, 2})
-    if (ldsStride % v == 0 && 16 % v == 0) { vecW = v; break; }
+  if (ldsCopyWidth <= 0) {
+    for (int64_t v : {8, 4, 2})
+      if (ldsStride % v == 0 && 16 % v == 0) { vecW = v; break; }
+  } else {
+    vecW = ldsCopyWidth;
+    if (ldsStride % vecW != 0 || 16 % vecW != 0)
+      vecW = 1;  // an unaligned forced width would scatter across rows
+  }
   auto vecTy = VectorType::get({vecW}, T.store);
 
   Value scalarZero =
@@ -1609,6 +1621,13 @@ struct GenerateWMMAGemmKernelPass
                      "measured +12% on the LDS body at 1024 cubed f16, net of "
                      "the narrower ds_load it forces (ROCM-LDS-BANKPAD-1)"),
       llvm::cl::init(1)};
+  Option<int> ldsCopyWidth{
+      *this, "lds-copy-width",
+      llvm::cl::desc("LDS staging copy: elements per thread per step. 0 "
+                     "derives the widest the padded stride allows; 1 forces "
+                     "the historical scalar copy, which exists so the "
+                     "vectorisation can be measured (ROCM-LDS-STAGE-VECTOR-1)"),
+      llvm::cl::init(0)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged typed body: waves along M "
                                        "per workgroup"),
@@ -2290,7 +2309,8 @@ struct GenerateWMMAGemmKernelPass
         }
         emitTypedLdsBody(bodyB, loc, gpuFunc, mt, nt, ldsWavesM, ldsWavesN, T,
                          outputTy, hasBias, activation, request.rasterOrder,
-                         request.rasterGroup, ldsPadDwords);
+                         request.rasterGroup, ldsPadDwords,
+                         ldsCopyWidth);
       } else if (request.canonicalKLoop && canonicalStaging == "lds") {
         // This body writes its accumulator back at row `2*e + lhi`, which is
         // RDNA3's wave32 distribution. gfx12 distributes the same accumulator

@@ -1273,6 +1273,7 @@ def _compile_native_tile_ir(
     k_unroll: int = 1,
     sched_groups: int = 0,
     lds_pad_dwords: int = 1,
+    lds_copy_width: int = 0,
 ) -> tuple[
     str,
     str,
@@ -1296,7 +1297,7 @@ def _compile_native_tile_ir(
     key = hashlib.sha256(
         (
             f"{architecture}|{tile_ir}|{directive}|{family}|{input_level.value}|"
-            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|k{k_unroll}|sg{sched_groups}|pad{lds_pad_dwords}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
+            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|k{k_unroll}|sg{sched_groups}|pad{lds_pad_dwords}|cw{lds_copy_width}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
         ).encode()
     ).hexdigest()
     cached = _cache.get(key)
@@ -1323,6 +1324,7 @@ def _compile_native_tile_ir(
         k_unroll=int(k_unroll),
         sched_groups=int(sched_groups),
         lds_pad_dwords=int(lds_pad_dwords),
+        lds_copy_width=int(lds_copy_width),
         depth_cooperative=depth_cooperative,
     )
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)

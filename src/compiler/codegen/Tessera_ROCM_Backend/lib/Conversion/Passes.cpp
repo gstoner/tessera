@@ -51,6 +51,11 @@ struct ROCMExecutablePipelineOptions
       *this, "staging",
       llvm::cl::desc("matmul staging policy: register or lds"),
       llvm::cl::init("register")};
+  Option<int> ldsCopyWidth{
+      *this, "lds-copy-width",
+      llvm::cl::desc("LDS staging copy width; 0 derives it, 1 forces scalar "
+                     "(ROCM-LDS-STAGE-VECTOR-1)"),
+      llvm::cl::init(0)};
   Option<int> ldsPadDwords{
       *this, "lds-pad-dwords",
       llvm::cl::desc("LDS-staged body: dwords of row padding to break the "
@@ -270,7 +275,8 @@ static std::unique_ptr<Pass> configuredPass(std::unique_ptr<Pass> pass,
 static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool viaTile, StringRef staging, bool depthCooperative = false,
                                int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
-                               int schedGroups = 0, int ldsPadDwords = 1) {
+                               int schedGroups = 0, int ldsPadDwords = 1,
+                               int ldsCopyWidth = 0) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -343,7 +349,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " lds-waves-n=" + Twine(ldsWavesN) +
                                   " k-unroll=" + Twine(kUnroll) +
                                   " sched-groups=" + Twine(schedGroups) +
-                                  " lds-pad-dwords=" + Twine(ldsPadDwords)));
+                                  " lds-pad-dwords=" + Twine(ldsPadDwords) +
+                                  " lds-copy-width=" + Twine(ldsCopyWidth)));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
@@ -443,7 +450,8 @@ static void buildROCMExecutablePipeline(
   if (matmulPlugin && input != "graph" && output == "binary")
     addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
-                       opts.schedGroups, opts.ldsPadDwords);
+                       opts.schedGroups, opts.ldsPadDwords,
+                       opts.ldsCopyWidth);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

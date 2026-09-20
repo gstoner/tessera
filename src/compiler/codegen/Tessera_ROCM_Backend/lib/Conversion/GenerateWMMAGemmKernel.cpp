@@ -1260,7 +1260,22 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
             // unchanged, so (real - elided) is the staging copy's entire cost.
             // Two copy optimisations in a row failed to move this body, and
             // that is a reason to measure the split before designing a third.
-            kb.create<memref::StoreOp>(l, scalarZero, ldsA, ValueRange{dstA});
+            //
+            // It must write EXACTLY the destinations the real copy writes. The
+            // loop steps by `cThreads * vecW`, so at vecW > 1 a single scalar
+            // store would leave vecW-1 elements of each group uninitialised --
+            // the probe would then read stale LDS (its output no longer
+            // provably zero) AND issue less LDS traffic than the path it is
+            // being differenced against, which is precisely the quantity it
+            // exists to hold constant.
+            if (vecW == 1) {
+              kb.create<memref::StoreOp>(l, scalarZero, ldsA,
+                                         ValueRange{dstA});
+            } else {
+              Value zeroVec =
+                  kb.create<vector::BroadcastOp>(l, vecTy, scalarZero);
+              kb.create<vector::StoreOp>(l, zeroVec, ldsA, ValueRange{dstA});
+            }
           } else if (vecW == 1) {
             // The historical scalar copy, kept reachable so the vectorised one
             // has a baseline to be measured against. It is NOT `vector<1xT>`:
@@ -1346,9 +1361,17 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value gc = kb.create<arith::AddIOp>(l, baseCol, col);
           Value kIn = kb.create<arith::CmpIOp>(l, slt, gk, K);
           if (ldsCopyElide) {
-            Value dst0 = kb.create<arith::AddIOp>(
-                l, kb.create<arith::MulIOp>(l, col, cLdsStride), kk);
-            kb.create<memref::StoreOp>(l, scalarZero, ldsB, ValueRange{dst0});
+            // Same requirement as A, but B's LDS side is scalar at every
+            // width: consecutive `e` are consecutive COLUMNS, one full LDS row
+            // apart. So the probe issues vecW scalar stores at exactly the
+            // addresses `storeLane` below uses.
+            for (int64_t i = 0; i < vecW; ++i) {
+              Value colI = kb.create<arith::AddIOp>(l, col, ci(i));
+              Value dst0 = kb.create<arith::AddIOp>(
+                  l, kb.create<arith::MulIOp>(l, colI, cLdsStride), kk);
+              kb.create<memref::StoreOp>(l, scalarZero, ldsB,
+                                         ValueRange{dst0});
+            }
           } else if (vecW == 1) {
             Value in = kb.create<arith::AndIOp>(
                 l, kIn, kb.create<arith::CmpIOp>(l, slt, gc, N));

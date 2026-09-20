@@ -77,7 +77,10 @@ _SELF = Path(__file__).resolve()
 
 
 def _has_consumer(td: Path, cpp_class: str, full_name: str) -> bool:
-    for needle in (cpp_class, full_name):
+    # A colliding class name belongs to more than one dialect; see
+    # `_AMBIGUOUS_CPP`. Fall back to the fully qualified mnemonic alone.
+    needles = (full_name,) if cpp_class in _AMBIGUOUS_CPP else (cpp_class, full_name)
+    for needle in needles:
         result = subprocess.run(
             ["grep", "-rlF", "--include=*.cpp", "--include=*.h", "--include=*.py",
              "--include=*.td", "--include=*.mlir", needle,
@@ -91,6 +94,21 @@ def _has_consumer(td: Path, cpp_class: str, full_name: str) -> bool:
 
 
 _OPS = _declared_ops()
+
+#: ODS strips the record's dialect prefix to name the generated C++ class, so
+#: `Cache_RingCreateOp` and `Tessera_RingCreateOp` BOTH generate `RingCreateOp`
+#: (in different namespaces). Searching the bare class name therefore lets one
+#: dialect's consumer vouch for another dialect's op. Measured 2026-09-20: 11
+#: stripped names collide across 22 ops, and exactly one op -- `cache.ring.create`
+#: -- was passing this gate solely on a hit belonging to `tessera.ring.create`.
+#: For a colliding name the bare class is not evidence, so only the unambiguous
+#: `dialect.mnemonic` counts. That fails closed, which is the right direction
+#: for a governance gate: it can call a consumed op unconsumed, never the
+#: reverse.
+_AMBIGUOUS_CPP: frozenset[str] = frozenset(
+    cpp for cpp in {c for _, _, c, _ in _OPS}
+    if len({f for _, _, c2, f in _OPS if c2 == cpp}) > 1
+)
 
 
 def test_ods_scan_finds_ops_at_all() -> None:
@@ -142,6 +160,11 @@ _UNCONSUMED_ON_2026_09_20: frozenset[str] = frozenset({
     "cache.page.read",
     "cache.page.write",
     "cache.pt.create",
+    # Added 2026-09-20 when the ambiguity fix above stopped
+    # `tessera.ring.create`'s consumer from vouching for this op. Its two
+    # siblings were already here; this completes the family rather than
+    # recording new debt.
+    "cache.ring.create",
     "cache.ring.pop",
     "cache.ring.push",
     "tessera_collective.pack_cast",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 import copy
 import hashlib
 import os
@@ -10,9 +10,13 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from pathlib import Path
 
 from .graph_ir import GraphIRModule
+
+if TYPE_CHECKING:  # deferred at runtime -- rocm_target imports late
+    from .rocm_target import ROCmTargetProfile
 
 
 _HASH_RE = re.compile(r'tessera\.schedule_hash = "([0-9a-f]{64})"')
@@ -108,7 +112,7 @@ class ScheduledMatmulArtifact:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
 
-@lru_cache(maxsize=None)
+@cache
 def _rocm_profile(arch: str) -> "ROCmTargetProfile":
     """The target profile the ranking needs, built once per arch."""
     from .rocm_target import AMDArch, ROCmTargetProfile, rocm_arch_string

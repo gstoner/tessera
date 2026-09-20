@@ -1,4 +1,11 @@
-"""Independent timing evidence retains raw samples and rejects fabricated summaries."""
+"""Independent timing evidence retains raw samples and rejects fabricated summaries.
+
+Host-free: this module's name reads like a device lane, and it is not one.
+Nothing here loads a module onto a GPU or launches a kernel, so it runs and
+means the same on every fleet host. Exact-device proof for this area lives in
+the gated lanes that skip when the hardware is absent; if you add a device
+call here, move it there instead of deleting this line.
+"""
 from copy import deepcopy
 import pytest
 from benchmarks.repeat_rocm_prefetch import summarize

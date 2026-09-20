@@ -21,6 +21,12 @@ the correct 0.3227 ms event and falls back to the 63.33 ms wall: a **196x
 overstatement**. A cross-check added without the drain is therefore strictly
 worse than no cross-check, which is not how it reads in review, so it is
 pinned here.
+
+Host-free: this module's name reads like a device lane, and it is not one.
+Nothing here loads a module onto a GPU or launches a kernel, so it runs and
+means the same on every fleet host. Exact-device proof for this area lives in
+the gated lanes that skip when the hardware is absent; if you add a device
+call here, move it there instead of deleting this line.
 """
 from __future__ import annotations
 

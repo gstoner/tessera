@@ -236,7 +236,7 @@ class ROCMExecutablePipeline:
     lds_pad_dwords: int = 1
     #: LDS staging copy width; 0 derives it from the stride, 1
     #: forces the scalar copy so the vectorisation is measurable.
-    lds_copy_width: int = 0
+    lds_copy_width: int = 1
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False

@@ -1654,11 +1654,13 @@ struct GenerateWMMAGemmKernelPass
       llvm::cl::init(1)};
   Option<int> ldsCopyWidth{
       *this, "lds-copy-width",
-      llvm::cl::desc("LDS staging copy: elements per thread per step. 0 "
-                     "derives the widest the padded stride allows; 1 forces "
-                     "the historical scalar copy, which exists so the "
-                     "vectorisation can be measured (ROCM-LDS-STAGE-VECTOR-1)"),
-      llvm::cl::init(0)};
+      llvm::cl::desc("LDS staging copy: elements per thread per step. 1 is "
+                     "the default and the MEASURED FASTER arm; 0 derives the "
+                     "widest the padded stride allows, which is currently a "
+                     "13-49% REGRESSION because vector.maskedload expands to "
+                     "per-element branches rather than a wide load "
+                     "(ROCM-LDS-STAGE-VECTOR-1)"),
+      llvm::cl::init(1)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged typed body: waves along M "
                                        "per workgroup"),

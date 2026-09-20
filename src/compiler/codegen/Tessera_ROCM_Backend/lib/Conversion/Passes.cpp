@@ -53,9 +53,10 @@ struct ROCMExecutablePipelineOptions
       llvm::cl::init("register")};
   Option<int> ldsCopyWidth{
       *this, "lds-copy-width",
-      llvm::cl::desc("LDS staging copy width; 0 derives it, 1 forces scalar "
-                     "(ROCM-LDS-STAGE-VECTOR-1)"),
-      llvm::cl::init(0)};
+      llvm::cl::desc("LDS staging copy width; 1 (default) is the scalar copy "
+                     "and the measured faster arm, 0 derives a vector width "
+                     "that currently regresses (ROCM-LDS-STAGE-VECTOR-1)"),
+      llvm::cl::init(1)};
   Option<int> ldsPadDwords{
       *this, "lds-pad-dwords",
       llvm::cl::desc("LDS-staged body: dwords of row padding to break the "
@@ -276,7 +277,7 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool viaTile, StringRef staging, bool depthCooperative = false,
                                int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
                                int schedGroups = 0, int ldsPadDwords = 1,
-                               int ldsCopyWidth = 0) {
+                               int ldsCopyWidth = 1) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {

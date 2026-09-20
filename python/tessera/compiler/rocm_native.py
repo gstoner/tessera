@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import warnings
 import os
 import re
 import shutil
@@ -230,6 +231,80 @@ def _tessera_opt() -> Path | None:
             return path
     found = shutil.which("tessera-opt")
     return Path(found) if found else None
+
+
+#: Source trees whose contents decide what `tessera-opt` emits for a ROCm
+#: native package. A binary older than these is compiling code that is no
+#: longer in the tree -- and unlike a missing pass OPTION, which fails loudly
+#: at the option parser, a changed pass BODY has no tripwire at all: the run
+#: succeeds and silently measures the old kernel. That is how the vectorised
+#: staging copy was "measured" four times before anyone noticed it had never
+#: been compiled.
+_GENERATOR_SOURCES = (
+    "src/compiler/codegen/Tessera_ROCM_Backend",
+    "src/compiler/programming_model/lib",
+    "src/transforms/lib",
+)
+
+
+def stale_generator_sources(tool: Path | None = None) -> list[Path]:
+    """Source files newer than the resolved `tessera-opt`, newest first.
+
+    Empty when the binary is current, when it cannot be resolved, or when the
+    sources are not present (an installed package). Compares two file mtimes on
+    one filesystem -- never a mtime against a wall clock, which is a different
+    clock on Linux.
+    """
+    tool = tool or _tessera_opt()
+    if tool is None or not tool.is_file():
+        return []
+    try:
+        built = tool.stat().st_mtime
+    except OSError:
+        return []
+    root = _repo_root()
+    newer: list[tuple[float, Path]] = []
+    for relative in _GENERATOR_SOURCES:
+        base = root / relative
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if path.suffix not in (".cpp", ".h", ".td", ".inc"):
+                continue
+            try:
+                stamp = path.stat().st_mtime
+            except OSError:
+                continue
+            if stamp > built:
+                newer.append((stamp, path))
+    newer.sort(reverse=True)
+    return [path for _, path in newer]
+
+
+def warn_if_generator_is_stale(tool: Path | None = None) -> None:
+    """Say so, once, when the binary predates the generator sources."""
+    tool = tool or _tessera_opt()
+    if tool is None:
+        return
+    key = str(tool)
+    if key in _STALENESS_REPORTED:
+        return
+    _STALENESS_REPORTED.add(key)
+    newer = stale_generator_sources(tool)
+    if not newer:
+        return
+    warnings.warn(
+        f"{tool} is older than {len(newer)} generator source(s) -- newest "
+        f"{newer[0].relative_to(_repo_root())}. It will compile the code that "
+        f"was in the tree when it was built, and the run will SUCCEED while "
+        f"measuring it. Rebuild every tree that resolves here (on Tajasarus "
+        f"TESSERA_OPT points at build-assertions, not build).",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+
+
+_STALENESS_REPORTED: set[str] = set()
 
 
 def tools_available() -> bool:
@@ -1300,7 +1375,7 @@ def _compile_native_tile_ir(
     k_unroll: int = 1,
     sched_groups: int = 0,
     lds_pad_dwords: int = 1,
-    lds_copy_width: int = 0,
+    lds_copy_width: int = 1,
 ) -> tuple[
     str,
     str,
@@ -1354,6 +1429,7 @@ def _compile_native_tile_ir(
         lds_copy_width=int(lds_copy_width),
         depth_cooperative=depth_cooperative,
     )
+    warn_if_generator_is_stale(tool)
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
     native_pipeline = config.pass_pipeline(output=ROCMOutputLevel.BINARY)
     target_ir = _run_opt(tool, tile_ir, target_pipeline)

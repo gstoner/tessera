@@ -1965,3 +1965,45 @@ relevant question for this body is how much of its 1600-2000 VALU ops are
 wave-invariant -- tile origins, base addresses and strides are, per-lane element
 offsets are not -- and that is a count nobody has taken. Recorded as an open
 measurement rather than an estimate.
+
+### 10q.1 Scalar offload, counted: already done, no gap worth taking
+
+§10q left scalar offload as an open measurement rather than an estimate. Taken
+by taint analysis on the gfx1201 disassembly: `v0` holds the workitem id at
+entry, so a VALU op whose sources are all SGPRs, literals or untainted VGPRs
+computes the same value in every lane and could run on the scalar unit.
+Iterated to a fixed point, cross-lane ops (`permlane`, `bpermute`, `dpp`,
+`readlane`) treated as tainting.
+
+| | VALU total | SALU already offloaded | wave-invariant VALU remaining |
+|---|---|---|---|
+| shipped w2/d8 | 1653 | **566** | 131 (7.9%) |
+| w2/d8 + dbuf + sched32 | 2051 | **642** | **34 (1.7%)** |
+
+**LLVM's uniformity analysis already offloads ~600 ops.** What remains in the
+best-performing configuration is 34 instructions, 1.7% of VALU, each saving one
+cycle of latency out of five (RDNA4 scalar FP32 add/multiply is 4 cycles against
+the vector unit's 5). Against a body that §10o shows is bandwidth-bound at scale
+and VALU-serialisation-bound below it, that is not a lever.
+
+**The intuition this refutes is worth stating, because it is the natural one.**
+"Most of the staging address arithmetic must be wave-invariant" is false here:
+every lane stages a *different* element, so `row`, `kk`, `gr`, `gk`, the
+addresses derived from them and their masks are all genuinely per-lane. The
+parts that are uniform -- tile origins, base pointers, the K-slab index, strides
+-- are already in SGPRs, which is exactly what the 566-642 count is.
+
+Two further observations:
+
+* **The faster configuration has *fewer* wave-invariant VALU left** (34 vs 131),
+  not more. Double-buffering plus the schedule description let LLVM scalarise
+  more, most visibly the 98 `v_add_co_ci_u32_e64` 64-bit address adds in the
+  shipped body, which drop to 3. Offload improved as a side effect of work aimed
+  at something else.
+* **Caveat on the 131.** The analysis tracks VGPR taint but not VCC, so a
+  carry-in arriving through a per-lane condition would be missed and those
+  `v_add_co_ci_u32_e64` counts may be optimistic. The conclusion does not turn
+  on it -- the best configuration has 34 candidates under the *generous* rule.
+
+Recorded as measured-and-closed. A scalar-offload pass here would be an
+optimisation against a constraint that LLVM has already removed.

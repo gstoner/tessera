@@ -882,7 +882,15 @@ def test_gfx1201_macro_k_block_walks_the_whole_contraction(k_blocks, shape):
     artifact = scheduled_matmul.lower_scheduled_matmul(
         matmul_module(target="rocm", shape=shape, dtype="int8", output_dtype="int32"),
         target="rocm_gfx1201")
-    blocked = re.sub(r"k_blocks = 1", f"k_blocks = {k_blocks}", artifact.tile_ir)
+    # Rewrite from WHATEVER the schedule selected, not from a hardcoded 1. This
+    # row originally substituted `k_blocks = 1` and silently stopped rewriting
+    # the moment `blockK = 32` became the default and the artifact started
+    # emitting 2 -- a test that was correct when written and wrong once the
+    # thing it measured acquired a default.
+    emitted = re.search(r"k_blocks = (\d+)", artifact.tile_ir)
+    assert emitted, "the artifact carries no k_blocks to rewrite"
+    retune = lambda n: re.sub(r"k_blocks = \d+", f"k_blocks = {n}", artifact.tile_ir)
+    blocked = retune(k_blocks)
     assert f"k_blocks = {k_blocks}" in blocked, "the descriptor rewrite did not take"
     compile_one = lambda ir: rocm_native._compile_native_tile_ir(
         ir, directive="tessera_rocm.wmma", family="matmul",
@@ -901,7 +909,9 @@ def test_gfx1201_macro_k_block_walks_the_whole_contraction(k_blocks, shape):
     mnemonic = r"v_wmma_i32_16x16x16_iu8"
     panels = lambda img: sum(rocm_isa.mnemonics(
         rocm_isa.disassemble(img, chip="gfx1201"), mnemonic).values())
-    base = panels(compile_one(artifact.tile_ir))
+    # The baseline is k_blocks = 1 explicitly, not "the artifact as emitted" --
+    # which is now 2 for every shape this row uses.
+    base = panels(compile_one(retune(1)))
     got = panels(payload)
     assert got - base == k_blocks, (
         f"k_blocks={k_blocks} should add exactly {k_blocks} panels "

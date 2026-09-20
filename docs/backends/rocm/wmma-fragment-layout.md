@@ -1476,3 +1476,42 @@ Two semantics worth carrying if we ever use them: index values are **bytes**
 **wrap** rather than fault (wave32 uses only index bits [6:2]), and reading a
 disabled lane returns zero. The wrap is the same silent-wrong-answer shape as
 the LDS address truncation above.
+
+### 10j.6 The vectorised path's penalty is not the global load
+
+Fixing the ceiling probe to write every destination at every width (it had been
+storing one scalar per `vecW` group, so above width 1 it read stale LDS and
+under-counted its own LDS traffic -- review finding, 2026-09-20) made it usable
+at vector widths for the first time. Running it there answers a question §10j
+left open.
+
+gfx1201, 1024^3 f16, pad=4, **elided arm only** -- no global reads at all:
+
+| `lds-copy-width` | TFLOP/s | all-zero |
+|---|---|---|
+| 1 | 30.4 | True |
+| 2 | 12.5 | True |
+| 4 | 11.9 | True |
+| 8 | 12.0 | True |
+
+The elided arm has no global load, no `scf.if`, and no ragged tail -- the elide
+branch sits above that split. Total LDS elements written is identical at every
+width (A's one vector store replaces `vecW` scalars; B stays scalar either way),
+and the loop runs `vecW` times fewer iterations. The vector arm should therefore
+be **faster**, and it is 2.5x slower.
+
+So the regression §10j measured is not, or not mainly, about the load side.
+Something in the vectorised staging path costs ~2.5x with the global read
+already removed. The mechanism is not established -- candidates are the LDS
+store pattern under the padded stride, VGPR pressure in a body that already
+spills 126 (§10j / the RDNA4 VGPR ceiling), or the wider loop body's scheduling
+-- and this is one shape on one arm, so it is a signal, not a conclusion.
+
+**It does not change the recommendation.** Double-buffering targets the scalar
+path, which is the shipped default (`lds-copy-width=1`) and the arm every
+recorded ceiling number was taken on. This finding argues against reviving
+vectorisation, not against the next step.
+
+It also would not have been visible before the probe was corrected: at widths
+2-8 the old probe returned `nan` and a non-zero output, so any timing from it
+was measuring a kernel whose LDS was partly uninitialised.

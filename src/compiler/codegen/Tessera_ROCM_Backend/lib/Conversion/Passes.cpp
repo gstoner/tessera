@@ -476,6 +476,14 @@ static void buildROCMExecutablePipeline(
   pm.addPass(createLowerROCMAsyncCopyToLoopPass());
   pm.addPass(createLowerTesseraTargetToROCDLPass());
   pm.addPass(std::make_unique<VerifyROCMExecutablePass>());
+  // `convert-gpu-to-rocdl` calls `populateVectorToLLVMConversionPatterns`, but
+  // a fixed-length `vector.create_mask` is materialized by
+  // `populateVectorMaskMaterializationPatterns`, which only the standalone
+  // pass adds. Without this the staging copy's masked load lowers while its
+  // mask does not, and the module dies at translation with a surviving
+  // `unrealized_conversion_cast`. `rocm_sparse_runtime.py` already runs the
+  // pass here for the same reason; this is the same pipeline, spelled once.
+  pm.addNestedPass<gpu::GPUModuleOp>(createConvertVectorToLLVMPass());
   pm.addNestedPass<gpu::GPUModuleOp>(createSCFToControlFlowPass());
   ConvertGpuOpsToROCDLOpsOptions conversion;
   conversion.chipset = arch.str();

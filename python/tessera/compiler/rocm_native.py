@@ -1715,10 +1715,12 @@ def package_scheduled_matmul(
             "storage_container": "int8" if integer else artifact.storage,
             "output_storage": artifact.accum,
             "accum": artifact.accum,
-            # The block tile the launch grid divides by: the wave panel under
-            # register staging, the whole workgroup's tile under LDS staging.
-            "macro_tile": ([artifact.macro_tile_m, artifact.macro_tile_n] if staging == "register" else
-                           [artifact.macro_tile_m * lds_waves[0], artifact.macro_tile_n * lds_waves[1]]),
+            # The block tile the launch grid divides by. One rule, one place:
+            # `workgroup_tile` is what every launcher and every harness must
+            # ask, because getting it wrong stays CORRECT and only the
+            # throughput is wrong (see its docstring).
+            "macro_tile": list(workgroup_tile(artifact.macro_tile_m, artifact.macro_tile_n,
+                                              staging=staging, lds_waves=lds_waves)),
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },

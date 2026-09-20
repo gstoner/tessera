@@ -1151,6 +1151,47 @@ barrier is a smaller change than a layout rewrite and attacks what was actually
 measured. The layout may still be wanted afterwards for the store-side width
 (§10j.1), but it should be judged after the latency is hidden, not before.
 
+### 10j.4 Four levers for the staging copy, and which the compiler can reach
+
+The ceiling (§10j.2) says up to 3.91x is available; the wait census
+(§10j.3) says it is sitting in unhidden load latency. The RDNA4 ISA offers
+four ways at it, and they are not equally reachable from our pipeline:
+
+| lever | fixes | reachable from MLIR? |
+|---|---|---|
+| **double-buffer + split barrier** | exposed load latency | partly — `gpu.barrier` emits `signal`+`wait` adjacent; the split needs a producer |
+| **`global_load_tr_b64/b128`** | B's transpose at load time | not checked yet |
+| **cross-lane transpose** | B's store width | **yes**, via `permlane16.var` |
+| K1-blocked LDS layout | both sides widen | yes (it is our own layout) |
+
+**On the cross-lane option, a correction worth recording.** The transpose B
+needs is 8 lanes x 8 elements — each lane reads 8 contiguous N and must end
+holding 8 contiguous K — which is exactly DPP8's granularity (7.9: "arbitrary
+cross-lane swizzling within groups of 8 lanes"). But **ROCDL does not expose
+DPP8**: `ROCDL_DPPUpdateOp` is `update.dpp`, the DPP16 intrinsic with its
+predefined menu, and there is no `mov.dpp8`. Checked against the LLVM 23.1.1
+`ROCDLOps.td` on 2026-09-20.
+
+What is exposed, and is more general for this: `permlane16.var` and
+`permlanex16.var` — arbitrary gather with a **per-lane** select within (or
+across) 16-lane groups. An 8x8 transpose fits inside a 16-lane group. Also
+`ds_swizzle` (fixed menu, 32 lanes) and `permlane32.swap`.
+
+So "use DPP8" would be an ISA-correct plan the compiler cannot express, which
+is the Decision #19 question in miniature: the architecture having an
+instruction is not the same as our pipeline being able to emit it.
+
+**One correctness note if this is built.** DPP8 has two forms and the
+distinction survives into any lane-shuffle design: normal reads **zero** from
+EXEC-masked lanes, `DPP8FI` fetches the inactive lanes' actual data. For the
+ragged K tail the zero behaviour is the one that is *wanted*; fetching
+inactive lanes would carry stale values into the fragment silently. Whichever
+primitive is used, check which of the two semantics it has before trusting the
+tail.
+
+**WMMA itself takes no DPP** (Table 38), so all of this has to happen before
+the matrix op — there is no swizzle-on-the-way-in.
+
 ## 10k. The padding default, settled on the shape where it converges
 
 §10e chose `lds_pad_dwords=1` from the broken harness; §10i withdrew that

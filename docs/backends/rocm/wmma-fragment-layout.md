@@ -1552,3 +1552,86 @@ only about this loop structure.
 It also would not have been visible before the probe was corrected: at widths
 2-8 the old probe returned `nan` and a non-zero output, so any timing from it
 was measuring a kernel whose LDS was partly uninitialised.
+
+## 10m. Issue depth, measured: the copy was latency-bound on request COUNT
+
+§10j.6 argued the staging loop's defect is structural -- `load; store; load;
+store` keeps exactly one global load in flight -- and named issue-then-wait as
+the experiment. `lds-copy-depth=N` splits each batch into an issue phase and a
+drain phase so N loads are outstanding. Measured on gfx1201, f16, 4x4 panel,
+2x2 waves, pad=4. Every cell below is numerically exact; a wrong result fails
+the harness rather than appearing as a number.
+
+|  | 1024^3 | 2048^3 |
+|---|---|---|
+| w=1 (trip 16) | d1 **18.3** / d2 7.8 / d4 11.6 / d8 11.6 / d16 14.9 | d1 **40.3** / d2 26.9 / d4 32.3 / d8 32.6 / d16 34.5 |
+| w=2 (trip 8) | d1 7.6 / d2 11.8 / d4 15.1 / d8 **21.0** | d1 18.3 / d2 43.4 / d4 48.4 / d8 **56.1** |
+| w=4 (trip 4) | d1 12.4 / d2 16.1 / d4 **19.4** | d1 25.7 / d2 32.4 / d4 **40.4** |
+| w=8 (trip 2) | d1 16.3 / d2 **20.1** | d1 34.2 / d2 **39.2** |
+
+TFLOP/s. `w=1 d=1` is the shipped default. Best is **w=2 d=8**: **+15%** at
+1024^3 and **+39%** at 2048^3.
+
+### The prediction this refutes
+
+It was recorded before the run: *depth is capped by trip count (16/width), so
+w=1/d=16 can hold 16 requests where w=8/d=2 holds 2; therefore w=1/d=16 wins
+outright.* **It does not.** `w=1 d=16` is worse than `w=1 d=1` at both shapes,
+and width 1 is the only width that does not improve with depth.
+
+The diagnosis was right and the prediction from it was wrong, because it counted
+requests and ignored their size. **A width-1 f16 load is a 2-byte request** --
+sub-dword, so half of every transaction is discarded. Sixteen of those in flight
+is sixteen wasted half-transactions. `w=2` is exactly one dword, the natural
+granularity, and it is the narrowest request that wastes nothing.
+
+### Two costs, and why the optimum is interior
+
+The three configurations that consume the whole trip in one batch move
+identical bytes and hold identical value registers (16 f16 = 8 dwords):
+
+| config | 1024^3 | 2048^3 |
+|---|---|---|
+| w=1 d=16 | 14.9 | 34.5 |
+| **w=2 d=8** | **21.0** | **56.1** |
+| w=8 d=2 | 20.1 | 39.2 |
+
+What separates them is that **depth costs address and predicate registers while
+width does not**: d=16 keeps sixteen address computations live in a body already
+spilling 126 against RDNA4's 256-per-wave architectural ceiling. So the curve
+has a genuine interior optimum -- enough outstanding requests, each at least a
+dword, without paying for more live addresses than the register file has room
+for. Neither axis alone finds it, which is why every previous single-axis
+attempt (§10j, §10j.1) was a wash or a regression.
+
+### Dispersion
+
+Five independent remeasurements per cell:
+
+| shape | w1/d1 | w2/d8 |
+|---|---|---|
+| 1024^3 | 9.1 - 18.2, spread **56.5%** | 20.7 - 22.6, spread 8.7% |
+| 2048^3 | 40.1 - 40.3, spread 0.4% | 55.8 - 56.0, spread 0.4% |
+
+The ranges do not overlap at either shape: at 1024^3 the new configuration's
+*minimum* exceeds the old one's *maximum*. This matters because 1024^3 is the
+shape §10k recorded as remeasuring 16% apart and which swings 56% here.
+
+That swing is itself corroboration rather than noise to be averaged away. A
+latency-bound body with **one** request in flight is at the mercy of memory
+timing; with eight it is not, and the spread falls from 56.5% to 8.7%. The
+mechanism predicts the variance reduction as well as the mean, which a
+bank-conflict or instruction-count explanation would not.
+
+### What this does and does not license
+
+Measured on **gfx1201 only**, **f16 only**, one panel and one wave shape. It
+does not transfer to gfx1151 (`ROCM_AUDIT.md`), to other dtypes -- where the
+dword argument shifts, since w=1 at fp32 is already a full dword and w=4 at fp8
+is -- or to other panels, whose trip counts differ and therefore whose available
+depths do too. The default is unchanged pending that coverage.
+
+Against the ceiling: §10j.2 put the 2048^3 copy at 3.13x (40.4 -> 126.2 if
+free). Going 40.3 -> 56.1 captures about **18%** of that headroom, so most of it
+remains, and double-buffering across K-tiles -- which hides the copy behind the
+MMA chain rather than making it cheaper -- is still the larger unclaimed lever.

@@ -1649,7 +1649,7 @@ struct GenerateWMMAGemmKernelPass
                      "tile row so the fragment read stops colliding on the "
                      "32 x 4 B banks. 0 is the unpadded historical layout. "
                      "Default 4, from the only shape where the measurement "
-                     "CONVERGES: at 2048 cubed f16 padding helps monotonically "
+                     "converges: at 2048 cubed f16 padding helps monotonically "
                      "and 4 wins by 15% with tight dispersion, while at 1024 "
                      "cubed the same configuration remeasures 16% apart in one "
                      "process and separates nothing. The earlier default of 1 "

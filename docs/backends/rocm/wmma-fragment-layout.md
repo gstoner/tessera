@@ -1220,12 +1220,29 @@ constraint. It is satisfied today only **by accident of the staging layout** --
 §10j.1 established that our LDS B is written contiguous in K per column, which
 is column-major.
 
-So the 2:4 sparse stack depends on a property of the dense staging layout that
-nobody wrote down, and the K1-blocked layout under consideration changes
-exactly that property. Before any B-layout change: state the constraint at the
-sparse site, and give it a test that fails when B stops being column-major.
-Otherwise the failure mode is wrong sparse results from a change made for dense
-performance, with nothing connecting the two.
+So the 2:4 sparse stack depends on a property nobody wrote down. Before any
+B-layout change: state the constraint at the sparse site, and give it a test
+that fails when B stops being column-major.
+
+**Both done 2026-09-20** -- `rocm_sparse_logical.sparse_logical_schedule_ir`
+now states the ISA rule and points at the addressing that satisfies it, and
+`test_sparse_b_gather_is_column_major` asserts the shape of the emitted index
+arithmetic (every gathered element shares one per-lane column and differs only
+in k). The gate was mutation-checked: rewriting the row term's stride from N to
+1 makes it fail.
+
+**The coupling claim above is CORRECTED, though.** This section said the
+constraint is satisfied "by accident of the dense staging layout", implying a
+dense B-layout change would break sparse. Measured: `emitTypedLdsBody` has
+exactly one caller and the sparse path is not it -- `swmmac` appears nowhere in
+`GenerateWMMAGemmKernel.cpp`, and the sparse lowering in `TileToROCM.cpp`
+allocates no LDS. Sparse gathers B from global directly, element by element,
+with its own column-major addressing.
+
+So the two are independent and a dense B-layout change cannot reach sparse. The
+constraint was still real, still unstated and still untested -- that half of the
+finding stands, and is now closed -- but it is **not** a precondition for the
+dense work, and treating it as one would have blocked that work for no reason.
 
 (Also confirmed while reading: our packer satisfies the `idx0 < idx1` rule,
 though via a `sorted()` call rather than a stated invariant.)
@@ -1552,3 +1569,1005 @@ only about this loop structure.
 It also would not have been visible before the probe was corrected: at widths
 2-8 the old probe returned `nan` and a non-zero output, so any timing from it
 was measuring a kernel whose LDS was partly uninitialised.
+
+## 10m. Issue depth, measured: the copy was latency-bound on request COUNT
+
+§10j.6 argued the staging loop's defect is structural -- `load; store; load;
+store` keeps exactly one global load in flight -- and named issue-then-wait as
+the experiment. `lds-copy-depth=N` splits each batch into an issue phase and a
+drain phase so N loads are outstanding. Measured on gfx1201, f16, 4x4 panel,
+2x2 waves, pad=4. Every cell below is numerically exact; a wrong result fails
+the harness rather than appearing as a number.
+
+|  | 1024^3 | 2048^3 |
+|---|---|---|
+| w=1 (trip 16) | d1 **18.3** / d2 7.8 / d4 11.6 / d8 11.6 / d16 14.9 | d1 **40.3** / d2 26.9 / d4 32.3 / d8 32.6 / d16 34.5 |
+| w=2 (trip 8) | d1 7.6 / d2 11.8 / d4 15.1 / d8 **21.0** | d1 18.3 / d2 43.4 / d4 48.4 / d8 **56.1** |
+| w=4 (trip 4) | d1 12.4 / d2 16.1 / d4 **19.4** | d1 25.7 / d2 32.4 / d4 **40.4** |
+| w=8 (trip 2) | d1 16.3 / d2 **20.1** | d1 34.2 / d2 **39.2** |
+
+TFLOP/s. `w=1 d=1` is the shipped default. Best is **w=2 d=8**: **+15%** at
+1024^3 and **+39%** at 2048^3.
+
+### The prediction this refutes
+
+It was recorded before the run: *depth is capped by trip count (16/width), so
+w=1/d=16 can hold 16 requests where w=8/d=2 holds 2; therefore w=1/d=16 wins
+outright.* **It does not.** `w=1 d=16` is worse than `w=1 d=1` at both shapes,
+and width 1 is the only width that does not improve with depth.
+
+The diagnosis was right and the prediction from it was wrong, because it counted
+requests and ignored their size. **A width-1 f16 load is a 2-byte request** --
+sub-dword, so half of every transaction is discarded. Sixteen of those in flight
+is sixteen wasted half-transactions. `w=2` is exactly one dword, the natural
+granularity, and it is the narrowest request that wastes nothing.
+
+### Two costs, and why the optimum is interior
+
+The three configurations that consume the whole trip in one batch move
+identical bytes and hold identical value registers (16 f16 = 8 dwords):
+
+| config | 1024^3 | 2048^3 |
+|---|---|---|
+| w=1 d=16 | 14.9 | 34.5 |
+| **w=2 d=8** | **21.0** | **56.1** |
+| w=8 d=2 | 20.1 | 39.2 |
+
+What separates them is that **depth costs address and predicate registers while
+width does not**: d=16 keeps sixteen address computations live in a body already
+spilling 126 against RDNA4's 256-per-wave architectural ceiling. So the curve
+has a genuine interior optimum -- enough outstanding requests, each at least a
+dword, without paying for more live addresses than the register file has room
+for. Neither axis alone finds it, which is why every previous single-axis
+attempt (§10j, §10j.1) was a wash or a regression.
+
+### Dispersion
+
+Five independent remeasurements per cell:
+
+| shape | w1/d1 | w2/d8 |
+|---|---|---|
+| 1024^3 | 9.1 - 18.2, spread **56.5%** | 20.7 - 22.6, spread 8.7% |
+| 2048^3 | 40.1 - 40.3, spread 0.4% | 55.8 - 56.0, spread 0.4% |
+
+The ranges do not overlap at either shape: at 1024^3 the new configuration's
+*minimum* exceeds the old one's *maximum*. This matters because 1024^3 is the
+shape §10k recorded as remeasuring 16% apart and which swings 56% here.
+
+That swing is itself corroboration rather than noise to be averaged away. A
+latency-bound body with **one** request in flight is at the mercy of memory
+timing; with eight it is not, and the spread falls from 56.5% to 8.7%. The
+mechanism predicts the variance reduction as well as the mean, which a
+bank-conflict or instruction-count explanation would not.
+
+### What this does and does not license
+
+Measured on **gfx1201 only**, **f16 only**, one panel and one wave shape. It
+does not transfer to gfx1151 (`ROCM_AUDIT.md`), to other dtypes -- where the
+dword argument shifts, since w=1 at fp32 is already a full dword and w=4 at fp8
+is -- or to other panels, whose trip counts differ and therefore whose available
+depths do too. The default is unchanged pending that coverage.
+
+Against the ceiling: §10j.2 put the 2048^3 copy at 3.13x (40.4 -> 126.2 if
+free). Going 40.3 -> 56.1 captures about **18%** of that headroom, so most of it
+remains, and double-buffering across K-tiles -- which hides the copy behind the
+MMA chain rather than making it cheaper -- is still the larger unclaimed lever.
+
+## 10n. Double-buffering across K-tiles: correct, ordered as intended, and worth 4%
+
+§10j.2's ceiling probe put the 2048^3 staging copy at 3.13x, and §10m captured
+about 18% of that with issue depth. Double-buffering was the named next lever:
+stage slab k+1 into a second LDS buffer while the MMA chain consumes slab k, so
+the load latency hides behind compute instead of sitting in front of it.
+
+`lds-double-buffer=true`. Default **off**.
+
+### The ordering constraint, which is the whole design
+
+Emitting `load; store; mma` leaves the loads' waitcnt ahead of the MMA and
+overlaps nothing, however many buffers exist. The loop must ISSUE the loads, run
+the MMA chain, and DRAIN to LDS afterwards.
+
+That forces a structural requirement that is easy to miss: while the staging is
+an `scf.for`, the loaded values and their destination addresses are SSA values
+inside that region, and **the store cannot leave the loop**. Double-buffering
+therefore requires `depth == trip` -- one straight-line batch covering the tile
+-- which `flatStage` emits without the loop. A first implementation that kept
+the loop compiled, ran, and would have measured nothing.
+
+One barrier per iteration instead of two: a buffer's reads in step k-1 precede
+the barrier and its writes in step k follow it, so the two never alias.
+
+### It works, and the ISA confirms the intent reached the machine
+
+2048^3, static counts:
+
+| | total ops | spill | wmma | global_load | **loads before 1st wmma** |
+|---|---|---|---|---|---|
+| w2/d8 | 3695 | 0 | 16 | 48 | **0** |
+| w2/d8 + dbuf | 4439 | 0 | 16 | 96 | **48** |
+
+48 loads now issue ahead of the MMA chain where none did. **Zero spills in
+both**, which refutes the register-pressure concern raised in §10m -- the staged
+values live across the MMA chain without forcing a spill. (The doubled static
+counts are the prologue, emitted once outside the loop.)
+
+### The result
+
+Correctness first: exact (max|err| = 0) at all five shapes tested, including
+three ragged ones, where the tail arm now assembles vectors it previously stored
+element by element.
+
+Performance, **paired and interleaved in one process** -- the first two attempts
+disagreed on the *sign* because each measured one arm at a time and the 2048^3
+baseline moves ~13% between processes:
+
+| shape | no-dbuf | dbuf | verdict |
+|---|---|---|---|
+| 2048^3 | med 48.8 | med 50.8 | **1.040x, wins 8/8** |
+| 1024^3 | med 22.6, range 7.8-23.0 | med 15.9, range 8.3-24.2 | **both arms bimodal -- no conclusion** |
+| 768x1536x520 (ragged) | 14.0 | 7.1 | **0.51x regression** |
+
+`k-unroll=2`, which lengthens the compute per staging, did not improve it
+either (54.0 vs 56.9 without dbuf), which argues against "the MMA chain is too
+short to cover the latency".
+
+### What this says
+
+The intended overlap was achieved and verified in the ISA, there are no spills,
+and it is worth **4%**. The honest reading is that **once issue depth is fixed,
+the remaining staging cost is not mostly hideable load latency.** §10m's
+16-requests-in-flight already captured the accessible part; a second buffer adds
+LDS pressure, code size and a prologue for very little.
+
+So the 3.13x ceiling's remaining headroom is probably not load latency at all.
+The elide probe removes the loads *and their address arithmetic*; what is left
+in the real copy is that arithmetic and the LDS stores themselves, and neither
+is addressed by overlapping with compute. That is the next thing to measure, and
+it is a different question from the one §10j.3 set up.
+
+### Two cautions this run produced
+
+**The 1024^3 figures in §10m are weaker than they looked.** That shape is
+bimodal here (7.8-23.0 in one arm), where the §10m dispersion check -- five
+back-to-back reps of one payload -- reported 8.7%. Alternating between two
+payloads exposes a mode the repeated measurement did not. Treat §10m's +15% at
+1024^3 as provisional; its +39% at 2048^3 is unaffected, that shape stayed tight
+under both protocols.
+
+**Measure paired arms interleaved, in one process.** Two sequential runs here
+produced opposite signs (50.2 vs 51.6, then 56.9 vs 52.3) purely from
+process-to-process drift landing on whichever arm ran second.
+
+## 10o. Where the remaining copy cost actually is: two regimes, two limiters
+
+§10j.2 put the 2048^3 staging copy at 3.13x. §10m's issue depth took ~18% of
+that and §10n's double-buffering 4%. Both attack LATENCY. This section measures
+what is left, and the answer is that latency stopped being the constraint and
+two different things took over depending on shape.
+
+### At scale it is bytes, and we are already at the roofline
+
+Arithmetic intensity is pinned by the macro tile, not the problem:
+`AI = wgM*wgN/(wgM+wgN)` = 128*128/256 = **64 FLOP/byte** at every shape, because
+each workgroup re-reads its own A panel and B panel over the whole K.
+
+Measured (w=2, d=8, gfx1201, f16):
+
+| shape | grid | TFLOP/s | achieved read GB/s |
+|---|---|---|---|
+| 1024 | 8x8 | 22.7 | 354 |
+| 1536 | 12x12 | 41.3 | 645 |
+| 2048 | 16x16 | 54.8 | 857 |
+| 3072 | 24x24 | 64.7 | **1011** |
+| 4096 | 32x32 | 65.8 | **1027** |
+
+Bandwidth plateaus at ~**1030 GB/s** and throughput plateaus with it. The
+product closes exactly: 64 FLOP/byte x 1027 GB/s = **65.7 TFLOP/s** against 65.8
+measured. **At >= 3072 the body is on its bandwidth roofline**, and no amount of
+copy scheduling moves a roofline.
+
+The only lever there is raising AI, which means a bigger macro tile: 256x256
+would give 128 FLOP/byte and double the ceiling. That is an LDS and register
+question, not a copy question.
+
+**Cache locality is NOT the lever.** Grouped rasterization already exists
+(`schedule_raster_order` = `grouped_m`, with a group size). At 4096^3 every
+variant lands within noise of the same number:
+
+| raster | row_major | grouped_m/4 | grouped_m/8 | grouped_m/16 | column_major |
+|---|---|---|---|---|---|
+| GB/s | 1025 | 1024 | 1027 | 1026 | 1024 |
+
+So 1030 GB/s is a hard limit of this access pattern, not a miss-rate artifact
+that reordering can recover.
+
+### The plateau is reachable only at dword requests
+
+It is not pure byte-bandwidth either, or width would not matter. w x d is pinned
+at 16 by the trip count, so width and depth trade directly:
+
+| | 2048^3 GB/s | 4096^3 GB/s |
+|---|---|---|
+| w=1 d=16 | 532 | 835 |
+| **w=2 d=8** | **760** | **1031** |
+| w=4 d=4 | 626 | 697 |
+| w=8 d=2 | 607 | 700 |
+
+Wider requests deliver **less** bandwidth because they starve request count.
+`w=2` wins in both regimes, which means §10m's result is not a small-shape
+artifact -- it is the same optimum where the body is bandwidth-saturated.
+
+### Below the plateau the limiter is a completely idle U-pipe
+
+At 1024-2048 the body is NOT bandwidth-bound (354-857 GB/s against a 1030
+plateau). There the cost is the copy's own serialized work, and the ISA says
+where it goes.
+
+RDNA4 splits each SIMD32 into a U and a V pipe. `v_wmma` occupies V and its
+matrix core; U is free. The staging's address arithmetic is `v_add` / `v_mul` /
+`v_mov` -- precisely the VOPD-eligible shapes -- so it could ride alongside the
+matrix chain for nothing. Counted on the 2048^3 body:
+
+| | VALU ops | VOPD bundles | wmma | **VALU between 1st and last wmma** |
+|---|---|---|---|---|
+| w2/d8 | 1637 | 134 | 16 | **0** |
+| w2/d8 + dbuf | 2034 | 146 | 16 | **0** |
+
+**Zero.** The sixteen matrix ops run as an uninterrupted block and the U-pipe is
+idle for the whole of it, while 1600-2000 VALU instructions sit before and after
+waiting their turn. The compiler packs VOPD elsewhere (134 bundles) but not
+here.
+
+That also explains §10n's disappointing 4%. Double-buffering did move the loads
+ahead of the MMA -- 48 of them, confirmed in the ISA -- but the emitted shape is
+`[address math + loads] [wmma x 16] [stores]`, so only the memory half
+overlapped. The arithmetic half never did.
+
+### Consequences for the queue
+
+1. **>= 3072: raise arithmetic intensity.** Bigger macro tiles. Copy scheduling
+   is finished as a lever there; we are on the roofline.
+2. **1024-2048: interleave the staging VALU with the matrix chain** so the U
+   pipe is not idle through it. This is a scheduling question the generator
+   controls and has never attempted. Note §10c measured
+   `rocdl.sched.group.barrier` and found it lost -- but that was grouping
+   (vmem_read, mfma), not (VALU, wmma), so it does not settle this.
+3. **Stop treating the 3.13x ceiling as headroom for copy optimisation.** The
+   elide probe removes the loads *and* their address arithmetic; at scale the
+   former is bandwidth-bound and unreachable, and at small shapes the latter is
+   a pipe-occupancy problem rather than a memory one. The probe bounds the copy's
+   cost correctly and says nothing about which part is recoverable.
+
+## 10p. Describing the pipeline to the scheduler: it pays, for a reason we cannot yet name
+
+§10o found the U pipe idle through the entire matrix chain -- zero VALU between
+the first and last `wmma` -- while 1600-2000 address-arithmetic ops queued around
+it. `lds-sched-valu-per-mma=N` describes the loop through
+`rocdl.sched.group.barrier` as `[all loads][N VALU, 1 wmma] x mmas [all LDS
+stores]`.
+
+**This requires double-buffering and that is not incidental.** Without it the
+staging for slab k must finish before the barrier the MMA reads through, so
+there is no independent VALU to interleave. §10n's direct value was 4%; its real
+value is the independence it creates here.
+
+### It pays
+
+Paired and interleaved in one process, 6 reps, alternating order:
+
+| | w2/d8 | +dbuf | +dbuf+memgrp | +dbuf+sched32 |
+|---|---|---|---|---|
+| 2048^3 | 49.0 | 50.9 (1.038x) | 53.4 (1.089x) | **54.9 (1.120x)**, 5/6 |
+| 4096^3 | 65.6 | 63.9 (0.974x) | 65.5 (0.998x) | **67.5 (1.030x)**, 6/6 |
+
+`memgrp` is the control arm (`N < 0`): the same description **without** the
+(VALU, wmma) alternation, so only "all loads first, all LDS stores last".
+
+### The mechanism is NOT the one the option is named for
+
+`VALU-in-chain` stays **0** at N = 32, 64 and 128. Only N=8 puts any (17) between
+the matrix ops, and it is not the fastest. The alternation we asked for does not
+appear in the ISA, yet at 4096^3 it is the *entire* gain -- memory grouping alone
+is worth 0.998x there, and adding the alternation request takes it to 1.030x.
+
+So the request changes the schedule without producing the pattern it describes.
+**Do not record this as U-pipe interleaving.** What is established: the option is
+worth 1.12x / 1.03x, paired and repeatable, and the split between its two halves
+inverts with shape (memory grouping is ~74% of the gain at 2048^3 and none at
+4096^3). What is not established is why.
+
+### It also corrects §10o
+
+§10o called ~1030 GB/s a bandwidth roofline. The sched arm reaches **1055 GB/s**
+at 4096^3. The plateau was therefore schedule-dependent, not a hard limit --
+close to one, but the roofline language was too strong and is withdrawn. The
+AI-based reasoning still holds (AI is pinned at 64 FLOP/byte by the macro tile,
+and bigger tiles remain the large lever); what was wrong was treating a measured
+plateau as a ceiling rather than as the best any schedule had reached so far.
+
+### Against AMD's RDNA4 guidance
+
+One convergence and two contradictions, all measured on this body:
+
+* **"Organize workloads into 2-component vector structures."** Independently
+  confirmed: §10m's width sweep picked `w=2` -- one dword, i.e. `half2` -- as the
+  optimum, and §10o confirmed it in the bandwidth-saturated regime too. This was
+  measured before the guidance was read, from the opposite direction (request
+  count, not bundle formation).
+* **"Write a VOPD packing pass."** Measured: LLVM already emits 134-146 `v_dual`
+  bundles in this body. A Tessera packing pass would be a second authority over
+  the same decision (Decision #31) for a job the backend is already doing. What
+  is missing is not packing but pairing *near the matrix chain*, and that is a
+  scheduling question, not a packing one.
+* **"Integrate dynamic register blocks to avoid static worst-case limits."**
+  Measured: **zero** `scratch_*` ops in every configuration here, including the
+  one holding staged values across the whole MMA chain. Register pressure is not
+  currently binding in this body, so this would be an optimisation against a
+  constraint we cannot observe.
+
+## 10q. Three RDNA4 levers checked against the machine before building anything
+
+A proposed MLIR-level VOPD packing pass, plus split barriers and scalar offload.
+Each checked on the gfx1201 body first, because two of the three turn out to be
+either already done or not expressible.
+
+### VOPD cannot contain a matrix op, so "pack WMMA with an elementwise op" is not a thing
+
+The attraction is real -- `v_wmma` occupies V and leaves U idle (§10o) -- but
+VOPD is a 64-bit **encoding** with a restricted opcode allowlist, and `v_wmma`
+is VOP3P. Counted over all 145 bundles this body already emits:
+
+| half | count |
+|---|---|
+| `v_dual_mov_b32` | 266 |
+| `v_dual_lshlrev_b32` | 9 |
+| `v_dual_add_nc_u32` | 7 |
+| `v_dual_cndmask_b32` | 6 |
+| `v_dual_and_b32` | 2 |
+
+290 halves over 145 bundles, and **not one matrix op among them**. Matrix/VALU
+co-execution, where it happens, is an issue-pipeline effect, not a bundle. An
+MLIR pass that emits a "VOPD bundle containing a wmma" would be describing
+something the ISA cannot encode.
+
+Two further reasons not to build the pass as proposed: LLVM already forms those
+145 bundles, so a Tessera packer is a second authority over a decision the
+backend owns (Decision #31); and VOPD formation is post-register-allocation,
+below the level MLIR can see -- an MLIR-level "bundle" op would lower back to
+two separate LLVM ops and the backend would re-decide anyway. **What is missing
+is not packing but independent VALU positioned near the chain**, which is a
+scheduling problem, and §10p is the handle on it.
+
+### Split barriers are already emitted -- the lever is placement
+
+RDNA4 replaces `s_barrier` with `s_barrier_signal` / `s_barrier_wait` so a wave
+can publish and then do independent work before waiting. Measured: `gpu.barrier`
+already lowers to **`s_barrier_signal` x2 + `s_barrier_wait` x2** on gfx1201.
+LLVM does the split for us.
+
+So the instruction is not the gap. The gap is that signal and wait sit adjacent,
+which captures none of the benefit -- that requires work placed *between* them.
+Unexploited, not unavailable, and worth recording because "use split barriers"
+reads like a missing feature and is not one.
+
+### The connectivity check that nearly produced a wrong retraction
+
+§10p recorded that `sched.group.barrier` helps 1.12x while the ISA shows zero
+VALU in the chain, and the obvious worry is that the pathway is disconnected and
+the gain mis-attributed. Checking that, a search of the compiled artefacts found
+**0** occurrences of the intrinsic, which reads as confirmation.
+
+It was not. The artefact searched is the **post-serialization** module: it holds
+a `gpu.binary` blob and module attributes, and the kernel body has already been
+compiled away. That module could not have contained the intrinsic whatever the
+truth was. The check could not fail.
+
+**The pathway is connected, and the evidence was already in §10p's own table:**
+at N=8 the count of VALU between the first and last `wmma` moves **0 -> 17**.
+Only the IGroupLP mutation consuming that intrinsic can reorder instructions
+that way. The intrinsic reaches the backend; what it does not do is produce the
+alternation at the larger N values that help most, which remains unexplained.
+
+Standing lesson, and the third instance this session: **a verification that
+cannot distinguish the two outcomes is not evidence for either.** The earlier
+two were a probe measuring a stale binary and an elide arm reading uninitialised
+LDS. Check that the instrument can see the thing before believing what it says.
+
+### Scalar offload
+
+RDNA4 runs FP32 add/multiply on the scalar unit at 4-cycle latency against the
+vector unit's 5, and integer offload saves more. Not yet measured here. The
+relevant question for this body is how much of its 1600-2000 VALU ops are
+wave-invariant -- tile origins, base addresses and strides are, per-lane element
+offsets are not -- and that is a count nobody has taken. Recorded as an open
+measurement rather than an estimate.
+
+### 10q.1 Scalar offload, counted: already done, no gap worth taking
+
+§10q left scalar offload as an open measurement rather than an estimate. Taken
+by taint analysis on the gfx1201 disassembly: `v0` holds the workitem id at
+entry, so a VALU op whose sources are all SGPRs, literals or untainted VGPRs
+computes the same value in every lane and could run on the scalar unit.
+Iterated to a fixed point, cross-lane ops (`permlane`, `bpermute`, `dpp`,
+`readlane`) treated as tainting.
+
+| | VALU total | SALU already offloaded | wave-invariant VALU remaining |
+|---|---|---|---|
+| shipped w2/d8 | 1653 | **566** | 131 (7.9%) |
+| w2/d8 + dbuf + sched32 | 2051 | **642** | **34 (1.7%)** |
+
+**LLVM's uniformity analysis already offloads ~600 ops.** What remains in the
+best-performing configuration is 34 instructions, 1.7% of VALU, each saving one
+cycle of latency out of five (RDNA4 scalar FP32 add/multiply is 4 cycles against
+the vector unit's 5). Against a body that §10o shows is bandwidth-bound at scale
+and VALU-serialisation-bound below it, that is not a lever.
+
+**The intuition this refutes is worth stating, because it is the natural one.**
+"Most of the staging address arithmetic must be wave-invariant" is false here:
+every lane stages a *different* element, so `row`, `kk`, `gr`, `gk`, the
+addresses derived from them and their masks are all genuinely per-lane. The
+parts that are uniform -- tile origins, base pointers, the K-slab index, strides
+-- are already in SGPRs, which is exactly what the 566-642 count is.
+
+Two further observations:
+
+* **The faster configuration has *fewer* wave-invariant VALU left** (34 vs 131),
+  not more. Double-buffering plus the schedule description let LLVM scalarise
+  more, most visibly the 98 `v_add_co_ci_u32_e64` 64-bit address adds in the
+  shipped body, which drop to 3. Offload improved as a side effect of work aimed
+  at something else.
+* **Caveat on the 131.** The analysis tracks VGPR taint but not VCC, so a
+  carry-in arriving through a per-lane condition would be missed and those
+  `v_add_co_ci_u32_e64` counts may be optimistic. The conclusion does not turn
+  on it -- the best configuration has 34 candidates under the *generous* rule.
+
+Recorded as measured-and-closed. A scalar-offload pass here would be an
+optimisation against a constraint that LLVM has already removed.
+
+## 10r. Why sched32 helps with zero VALU in the chain: displacement, found on the third hypothesis
+
+§10p recorded the gain as real and the mechanism as unknown. It is now known,
+and getting there took two refuted hypotheses, both refuted by a built arm
+rather than by argument.
+
+### What the schedules actually differ by
+
+Both loop bodies are **278 instructions** -- same count, different order -- and
+identical up to `ds_ldx8`. Then:
+
+```
+control : ds_ldx8  WAIT_load(7) ds_st  WAIT_load(6) ds_st  WAIT_ds WMMA
+                   WAIT_ds WMMA  WAIT_ds WMMA  valux4 WAIT_ds WMMA
+                   WAIT_load(5) ds_st  ...  WMMAx3 ... WMMAx4 ...
+
+sched32 : ds_ldx8  valux3 salu valux2 wait_alu valux8
+                   WAIT_ds WMMA  WAIT_ds WMMA  ...  WAIT_ds WMMAx4
+                   salu  WAIT_load(7) ds_st ... WAIT_load(0) ds_stx17
+```
+
+In the control the LDS-store drain is **interleaved into the matrix chain**, and
+every `ds_st` there is preceded by a `WAIT_load` -- a stall on a global memory
+return, in the middle of the matrix work. Under sched32 the chain runs
+uninterrupted on `WAIT_ds` (LDS, tens of cycles) and every `WAIT_load` is
+deferred past it.
+
+### Hypothesis 1: the mfma groups cluster the chain. REFUTED.
+
+If the mfma half of `(valu,N),(mfma,1)` were doing the work, emitting the mfma
+groups alone should reproduce it. Built as `N == -2`:
+
+| | 2048^3 | 4096^3 |
+|---|---|---|
+| memory grouping only | 1.000x | 1.000x |
+| **mfma groups alone** | **0.973x** | **0.976x** |
+| valu + mfma (sched32) | 1.031x | 1.032x |
+
+Worse than no description at all. The VALU half is load-bearing.
+
+### Hypothesis 2: the VALU groups are an unfillable RESERVATION. REFUTED.
+
+Next reading: the groups reserve the slots between matrix ops, and an *empty*
+reserved slot still excludes a `WAIT_load`. That predicts any unfillable spacer
+works. Built as `N == -3`, an salu spacer:
+
+| | 2048^3 | 4096^3 |
+|---|---|---|
+| **salu spacer** | **1.000x** | **0.983x** |
+| valu spacer | 1.030x | 1.031x |
+
+Reverts to the control. It is VALU specifically, not spacing.
+
+### Hypothesis 3: DISPLACEMENT. Supported.
+
+The difference between the two spacers is whether the group **can be filled**.
+The body has ~2051 VALU and ~642 SALU, and in-region far fewer of the latter. So
+the first VALU group fills -- with the 13 ops visible above -- and occupying
+that position **displaces the `WAIT_load`/`ds_st` pair the control puts there**.
+Once the head of the chain is memory-independent, the mfma groups carry the rest
+of the matrix ops forward and the `ds_write` group collects every store at the
+end. The salu group cannot fill, nothing is displaced, and the stores flow back
+in.
+
+This fits every measurement, including the two that looked anomalous: at N=8 the
+smaller group fills differently (17 VALU land *inside* the chain) and is worth
+less (52.6 vs 54.4); at N=32/64/128 the first group takes what is available and
+the rest sit empty, which is why those three are indistinguishable.
+
+**The benefit is displacement of memory-waiting work from the head of the matrix
+chain. It is not U-pipe co-issue**, which is what the option is named for and
+what §10p assumed.
+
+### The metric that hid it
+
+`VALU-in-chain` counted VALU *between the first and last* `wmma`. The displacing
+VALU sits **immediately before the first one**, so the metric read 0 while the
+mechanism was working -- and 0 is exactly what "no interleaving happened" also
+looks like. The window was chosen to test U-pipe interleaving and could not see
+displacement.
+
+Fourth instance this session of a measurement that could not distinguish its
+outcomes, and the first where the instrument was not broken but simply aimed at
+a different question than the one that mattered.
+
+### Consequence
+
+`lds-sched-valu-per-mma` is misnamed: the number is not "VALU per matrix op",
+it is the size of a group whose only job is to be fillable enough to push the
+store drain past the chain head. Any N from 32 up behaves the same. The
+mechanism suggests a cheaper formulation -- place the drain after the chain
+directly rather than asking a scheduler heuristic to do it -- which is the next
+thing to try.
+
+**On the VBUFFER/TBUFFER ISA section:** inapplicable here. §10l measured zero
+`BUFFER_*`/`TBUFFER_*` ops in both gfx1201 bodies; ROCDL lowers everything to
+flat/global addressing, so the format-conversion and D16 buffer forms are
+unreachable from this pipeline.
+
+### 10r.1 What an opcode census finds that every previous census hid
+
+Every census in §10j-§10r bucketed instructions by the class it was looking for
+and dropped the rest into `wait_alu` / `salu` / `other`. A plain histogram of the
+2048^3 body (w2/d8 + dbuf + sched32):
+
+| opcode | count | |
+|---|---|---|
+| `s_wait_alu` | **834** | the single most common instruction in the kernel |
+| `v_add_co_u32` | 504 | 64-bit address add, low half |
+| `v_add_co_ci_u32_e64` | 504 | 64-bit address add, high half + carry |
+| `s_delay_alu` | 261 | |
+| `v_lshlrev_b64` | 225 | |
+| `v_mul_*` | 76 | |
+| `v_pk_*` | **0** | |
+
+Two things neither the VALU-vs-SALU split nor the wave-invariance count could
+show:
+
+* **`s_wait_alu` is ~19% of the kernel.** These are ALU dependency stalls the
+  hardware does not interlock. Every earlier census classified them as
+  `wait_alu` and moved on; §10j.3's first pass explicitly *excluded* them as
+  "SGPR guards" after they swamped a memory-wait count. That exclusion was right
+  for that question and has been carried, unexamined, through every census
+  since.
+* **~1008 VALU ops are 64-bit pointer arithmetic** (the `v_add_co_u32` /
+  `v_add_co_ci_u32_e64` carry pairs, plus 225 `v_lshlrev_b64`). That is half the
+  VALU in the body, and it dwarfs every quantity §10m-§10r has been tuning.
+
+**CORRECTED within the hour, before either was acted on: these are STATIC
+counts and both sit outside the hot loop.** Locating them:
+
+| | total | inside the K-loop body |
+|---|---|---|
+| `s_wait_alu` | 834 | **15** |
+| 64-bit address adds | 1008 | **0** |
+
+The body is 278 instructions and executes K/16 = 128 times at 2048^3, so it
+contributes ~35,600 dynamic instructions against ~4,100 for the
+prologue/epilogue that runs once. What the histogram made look like half the
+kernel is roughly **10% of the dynamic instruction stream, shrinking as K
+grows**.
+
+So LLVM already hoisted the address arithmetic out of the K loop -- which is
+what it should do, and is why the loop body carries none of it. The dependency
+stalls are in the setup, not the steady state.
+
+**The error is the one this section was written to expose, committed one
+paragraph later.** §10r had used the K-loop body as the unit of analysis
+correctly -- that is where its 278-instruction schedule diff came from -- and the
+histogram above reverted to whole-kernel static counting and read dynamic
+importance off it. A static count over a kernel with a 128-iteration loop says
+almost nothing about where time goes.
+
+What survives: the histogram is still the right *first* measurement, because it
+is the only one not shaped by a hypothesis. It just has to be taken over the hot
+loop, and weighted by trip count, before any quantity in it means anything.
+
+**Two checks that closed rather than opened:**
+
+* **INT32 multiply** is the largest vector/scalar latency gap on RDNA4 (8 cycles
+  vs 3), so scalar offload should target it. Measured: 76 `v_mul_*` survive,
+  most multiplies having been strength-reduced to the 246 `v_lshl*`, and
+  §10q.1's wave-invariance census found **no multiplies** among the 34 remaining
+  candidates -- they are per-lane and unreachable. §10q.1's conclusion holds, but
+  it was reached without weighting by latency and is only accidentally right.
+* **Packed math** (`v_pk_add_f16` and friends) is **absent**, and correctly so:
+  the staging path moves data rather than computing on it, and the arithmetic is
+  `wmma`. Recorded as verified rather than assumed.
+
+### 10r.2 AMD's own WMMA guides: one confirmation, one correction, one unused technique
+
+Three GPUOpen articles (Hui Zhang, 2026-06-02) were supplied early and read
+late. All three techniques are deployed in llama.cpp, so they are validated
+outside AMD.
+
+**Confirms §7.12.2 and §10m.** "Both matrix A and B are K-major, with each thread
+holding 8 contiguous elements. This layout enables efficient 128-bit vectorized
+loads." That is the fragment layout this document derived independently and
+verified twice against the ISA tables.
+
+**Corrects §10l.** That section concluded, from ROCDL having no `ds.read.tr*`
+for gfx1201, that sparse's column-major-B requirement (§10j.5) has no escape
+hatch on this chip and the K1-blocked layout must satisfy the major order
+directly. AMD states the same hardware fact -- "RDNA 4 architecture GPUs lack
+both shared-memory transpose loading and in-register matrix transpose
+capabilities" -- and then supplies a workaround:
+
+> Matrix D is M-major. So, matrix D is the transposed version of matrix A.
+> ... construct an identity matrix in register B while loading the source matrix
+> into register A. A single WMMA operation then performs the transpose entirely
+> in-register -- no additional memory operations required.
+
+So the hatch exists; it is a matrix op, not a load. **§10l's "this chip does not
+have one" was right about the instruction and wrong about the capability**, and
+the sentence sending the K1 work to satisfy sparse's major order directly is
+withdrawn pending a cost measurement. The cost is one WMMA per 16x16 tile --
+spent on the matrix core, which §10o shows is *not* the constraint here (we are
+bandwidth-bound at scale and VALU-bound below it), so it is plausibly cheap
+exactly where we are.
+
+Part 1 gives a second form of the same idea: swapping the A and B operands
+transposes D without any extra op at all, which is how llama.cpp implements
+RDNA4 flash attention.
+
+**An unused technique for the low-precision lanes.** Part 2: FP16 fragments
+saturate the 128-bit interface (8 x 16 bits) but **FP8/INT8 reach only 64-bit and
+INT4 only 32-bit**, because the fragment is 8 elements regardless of width.
+Fusing two WMMA into a double-K operation restores 128-bit loads, and for the
+integer case the result is bit-identical since only the FMA order changes.
+
+That bears directly on the recorded gfx1201 state: the fp8 and integer branches
+select the 1x1 panel where f16 gets 4x4, and this says their fragment loads are
+also running at half or a quarter of the available width. Not attempted here,
+and the bit-identity claim is demonstrated for integer -- an fp8 lane with fp32
+accumulate reorders floating-point accumulation and would need its own numeric
+check, not an inherited one.
+
+## 10s. In-register transpose: primitive validated on gfx1201, and where it would go
+
+§10r.2 corrected §10l -- the transpose hatch exists as a matrix op rather than a
+load. Before restructuring anything around it, the primitive was checked on the
+device.
+
+### It works, exactly
+
+A standalone HIP kernel on gfx1201: load a 16x16 f16 matrix as an A fragment,
+build an identity in B, one `__builtin_amdgcn_wmma_f16_16x16x16_f16_w32_gfx12`,
+store D.
+
+```
+TRANSPOSE EXACT  (0 of 256 elements wrong)
+row0 of result: 0 16 32 48 64 80 96 112     <- column 0 of the input
+```
+
+The lane mapping the article assumes holds on our part. (The gfx12 f16 builtin
+takes three arguments; the gfx11 opsel operand is gone.)
+
+### It is reachable from our pipeline, on the newer of two lowering paths
+
+`wmma_f16_16x16x16_f16` **is** declared in ROCDL, so this is an emission change
+and not inline asm. But the backend emits only `wmma.f32.16x16x16.f16` today,
+and the transpose needs the f16-accumulate form so its output is an f16 fragment
+usable as an operand.
+
+The path matters. `TileToROCM.cpp` documents two, and the legacy one forbids
+exactly what this needs:
+
+> The legacy typed path ... is a single-shot WHOLE-CHAIN pattern match ... Three
+> things are therefore inexpressible *by construction*: ... **an `tile.mma` whose
+> result feeds another `tile.mma`** ...
+> This replaces chasing with composition. ... each op lowers against its ALREADY
+> CONVERTED operands and never looks at its producer; SSA does the rest.
+
+The typed LDS body builds `tessera::tile::FragmentType` values, so it is on the
+composition route and mma-feeding-mma is expressible. Further, `bFragmentTy`
+already carries **`"col_major"`** in the type itself -- the fragment system
+models major order, so a transpose has a natural place to attach rather than
+needing a bolted-on concept.
+
+### What it would buy, honestly
+
+The target is B's staging asymmetry (§10j.1): B's global read is contiguous in N
+while its LDS write must be contiguous in K per column, so one side is always
+strided and the LDS store stays scalar at every width. With the transpose, B
+could be staged **row-major** -- vectorised on both sides, like A -- and
+transposed after the fragment read.
+
+Per K-slab, at the shipped w=2/d=8:
+
+| | change |
+|---|---|
+| B LDS stores | 16 scalar -> 8 vector (**-8 instructions**) |
+| B fragment read | strided column -> contiguous |
+| matrix ops | 16 -> 20 (**+4**, one transpose per B fragment) |
+
+Net roughly **-1.5% of a 278-instruction body**, which is marginal on its own.
+The larger and less certain upside is the padding: B's column read is why
+`lds-pad-dwords=4` exists (§10e), and a contiguous read may not need it --
+saving 2 KB of LDS per buffer, 4 KB double-buffered, which at 24 KB per
+workgroup is the difference between 5 and 6 workgroups per WGP.
+
+**So its real value is as an enabler, not a win.** §10j.5 recorded that sparse
+needs column-major B and gets it only by accident of the dense staging layout,
+which is what blocks the K1-blocked layout work. The transpose removes that
+block. Anyone scoping this should do it *with* the K1 work, not before it, and
+should not expect the standalone number to justify the change.
+
+Remaining implementation, all of it real: emit `wmma_f16_16x16x16_f16` for an
+f16-accumulate `tile.mma`, add a row-major B staging layout, switch the B
+fragment view, and insert the transpose. The risk that mattered -- does the
+primitive behave on this hardware -- is retired.
+
+## 10t. Row-major B with the in-register transpose: built, correct, and 3% slower
+
+§10s validated the transpose primitive and predicted the standalone change would
+be marginal. It is built end to end and the prediction held, in the unwelcome
+direction.
+
+### What was built
+
+`lds-b-row-major` stages B as `[K=16][wgN]` instead of transposing during the
+LDS write. The chain is:
+
+* **`tile.fragment_pack {transpose}`** -- a unit attribute stating that the
+  source tile arrives in the opposite major order and the lowering owes the
+  transpose. Verifier admits it only on a b-role fragment; negative fixture per
+  Decision #10a. It reuses the existing op rather than adding one, so the result
+  stays a properly typed b-role fragment and no fragment-role cast is needed.
+* **Consumer**: reads with the A-role (contiguous) pattern, then emits
+  `WMMA(A, identity, 0)`. The identity needs no dynamic vector index -- element
+  `j` of a lane is 1.0 exactly when `lane == packGroup * 8 + j`, so eight
+  compares and eight static inserts. Fails closed on any family whose fragment
+  is not an 8-element f16 vector.
+* **Producer**: B's destination becomes `kk * wgN + col`, which makes
+  consecutive `e` adjacent, so the store widens to one vector op per group --
+  the thing §10j.1 established column-major cannot do at any copy width. The
+  fragment read becomes contiguous, and B's padding is dropped because the
+  strided column read §10e added it for is gone.
+
+All three sides -- global read, LDS write, fragment read -- are contiguous
+simultaneously for the first time.
+
+### Correct
+
+Exact (max|err| = 0) at all five shapes, including three ragged ones. The
+layout change, the widened store, the contiguous read and the inserted matrix
+op all compose without a numerical defect.
+
+### And 3% slower
+
+Paired and interleaved, 6 reps, alternating order:
+
+| shape | col-major (shipped) | row-major + transpose | |
+|---|---|---|---|
+| 2048^3 | 54.5 | 52.8 | **0.967x**, row-major wins 1/6 |
+| 4096^3 | 67.6 | 67.0 | **0.991x**, wins 0/6 |
+
+One ragged shape (768x1536x520) is worse in the single-run sweep, 10.0 -> 7.0.
+
+The +4 WMMA per K-slab costs slightly more than the widened stores and the
+dropped padding return. §10s predicted "about -1.5% ... marginal ... the
+larger and less certain upside is the padding"; the padding upside is real
+(24 KB -> 20 KB per workgroup, 5 -> 6 per WGP) and still does not cover the
+matrix ops.
+
+### What it is for
+
+Default **off**, and it should stay off as a performance option. Its value is
+that **B's LDS major order is now a free variable**. Until this, the K1-blocked
+layout work was constrained by a B layout it could not change; §10j.5 framed
+that as a sparse constraint, which §10j.5's own correction shows was the wrong
+reason -- but the dense constraint was real and is now lifted.
+
+The honest summary: this is infrastructure that costs 3% to use today. Whether
+it pays depends entirely on what the layout freedom is spent on, and that is
+the K1 work, not this option.
+
+## 10u. The K1 loop: refuted before building, and a 1.10x default error found instead
+
+The K1-blocked layout was the standing deliverable from §10j.1. The opening move
+was to measure the thing it improves rather than build it.
+
+### What K1 could buy, and why that is nothing
+
+K1-blocking A as `[k0][m][k1]` removes A's padding while preserving bank
+behaviour -- both layouts give a 2-way conflict on the fragment read (`m*4 mod
+32` against `m*12 mod 32`, both period 8). So its entire benefit is a smaller
+LDS footprint: A 3072 -> 2048 elements.
+
+That is worth something only if occupancy is LDS-limited. Measured on gfx1201
+at 4096^3, via `hipFuncGetAttribute`:
+
+| pad | LDS bytes | VGPRs | wg/WGP from LDS | waves/SIMD from VGPR | TFLOP/s |
+|---|---|---|---|---|---|
+| 1 | 18432 | 244 | 7 | **6** | 74.4 |
+| 2 | 20480 | 244 | **6** | **6** | 74.3 |
+| 4 | 24576 | 244 | **5** | 6 | 67.7 |
+
+**LDS binds only at pad=4.** At pad<=2 the 244-VGPR ceiling takes over at 6
+workgroups, and throughput tracks occupancy exactly: 67.7 -> 74.3 as workgroups
+go 5 -> 6. K1 would shrink LDS further on an axis that has already stopped
+constraining, so **it cannot pay and was not built.**
+
+### The default it exposed instead
+
+Paired and interleaved, 6 reps, alternating order:
+
+| | pad=1 | pad=2 | pad=4 (shipped) |
+|---|---|---|---|
+| 4096^3 | **1.100x**, 6/6 | 1.098x, 6/6 | 1.000x |
+| 2048^3, double-buffered | **1.111x**, 6/6 | 1.114x, 6/6 | 1.000x |
+| 2048^3, single-buffered | **1.185x**, 6/6 | 1.123x, 5/6 | 1.000x |
+
+**§10k's pad=4 default is wrong by 10-19%** across both shapes and with
+double-buffering on or off.
+
+### And the obvious explanation for it is also wrong
+
+The tempting story is that §10n's double-buffering doubled the LDS footprint and
+pushed pad=4 below the VGPR ceiling -- i.e. that a change made here created the
+problem. **Measured false.** Single-buffered, pad=4 loses by the largest margin
+of the three (1.185x), and there *both* arms are VGPR-bound at 7 workgroups with
+identical occupancy. Same occupancy, 18% apart, so that gap is bank behaviour,
+not residency.
+
+So padding acts on both axes: bank conflicts on the fragment read at every
+configuration, and occupancy only once the footprint is large enough to bind.
+§10k measured the first and set a default that happened to be wrong on both.
+
+### Status of the default
+
+Not changed here. `lds-pad-dwords` is not arch-gated, so it reaches gfx1151,
+and every number above is gfx1201 f16. §10k's 4 rests on a single shape in a
+configuration that predates issue depth, double-buffering and the schedule
+description; this evidence is broader but not yet broad enough to move a knob
+that touches another part's proof lane. It needs a gfx1151 run first
+(Princess-Luna), which is the next item, not this one.
+
+**The loop's result is that the queued deliverable is refuted and a 1.10x
+regression in the current default is the thing actually worth taking.**
+
+## 10v. gfx1151 confirms the padding result, and surfaces a pre-existing numerical one
+
+§10u found the `lds-pad-dwords=4` default costs 10-19% on gfx1201 and did not
+move it, because the knob is not arch-gated. Run on Princess-Luna (gfx1151,
+RDNA 3.5), paired and interleaved, 6 reps:
+
+| | pad=1 | pad=2 | pad=4 (was default) |
+|---|---|---|---|
+| 2048^3 | **1.208x**, 6/6 | 1.199x, 6/6 | 1.000x |
+| 4096^3 | **1.293x**, 6/6 | 1.216x, 6/6 | 1.000x |
+
+Worse on gfx1151 than on gfx1201, and unambiguous: 6/6 on every cell.
+
+**It is not occupancy there.** gfx1151 at pad=4 fits 14 workgroups per WGP by
+LDS against a 10-wave VGPR ceiling, so LDS never binds -- and pad=1 still wins
+by 21-29%. That matches §10u's single-buffered gfx1201 arm, where the two
+configurations had identical occupancy and were 18% apart. **Padding's dominant
+effect is bank behaviour on the fragment read, not residency**; residency is a
+second effect that appears only once the footprint is large enough to bind.
+
+### Default moved 4 -> 1
+
+Both parts, two shapes each, double-buffering on and off, 6/6 everywhere. §10k
+set 4 from a single shape in a configuration that predates issue depth,
+double-buffering and the schedule description. Worth noting what this restores:
+§10i withdrew an *earlier* default of 1 because it came from a harness
+launching 4x the workgroups. That withdrawal was correct -- the value was right
+for the wrong reason -- and 1 is now right for a measured one.
+
+### A pre-existing gfx1151 result that is NOT padding, and NOT from this work
+
+Every gfx1151 cell above reports `max|err| = 1.221e-04` against an f32
+reference, where gfx1201 reports exactly 0. Inputs are integers in [-4, 4] and
+K <= 4096, so every partial sum is an exact integer far inside f32's 2^24
+range: **the correct answer is integral and the error should be 0.**
+
+It is not padding -- identical at 1, 2 and 4 -- and it is not this session's
+work, being identical at `depth=1, width=1`, the loop shape that predates the
+issue-depth change. It grows with K:
+
+| K | max abs error |
+|---|---|
+| 64 | 3.05e-05 (2^-15) |
+| 256 | 3.15e-05 |
+| 2048 | 1.22e-04 (2^-13) |
+
+A fractional, K-growing error in an integer-valued result means the gfx1151
+accumulation is not the exact f32 the contract claims. Candidates worth
+separating: the gfx11 fragment ABI packs 16-element A/B with opsel selecting
+register halves (see `TesseraTargetToROCDL.cpp`), so a stale unselected half
+would show up exactly like this; or the lane is not using the f32-accumulate
+intrinsic it is assumed to.
+
+Recorded, not chased -- it is orthogonal to everything above, and it is the kind
+of claim-integrity question that deserves its own investigation rather than a
+tired paragraph at the end of a long one. **Anything asserting bit-exactness for
+gfx1151 dense f16 matmul should be re-read against this.**
+
+## 10w. The gfx1151 non-exactness is the hardware, and both stated candidates were wrong
+
+§10v recorded that gfx1151 dense f16 matmul is not bit-exact against an f32
+reference where gfx1201 is, and named two candidates. Neither survived.
+
+### Candidate 2 -- wrong intrinsic -- excluded
+
+Disassembly of the gfx1151 hsaco emits `v_wmma_f32_16x16x16_f16` with
+destination `v[2:9]` and sources `v[96:103]`, `v[104:111]`: eight b32 for the
+f32 accumulator, eight VGPRs each holding 16 f16 for A and B. That is the
+correct gfx11 f32-accumulate ABI. The lane reaches the intended instruction.
+
+### Candidate 1 -- fragment ABI / opsel -- excluded
+
+The opsel concern belongs to the f16-ACCUMULATE family, which this lane does
+not use. More directly: a raw HIP kernel with **no Tessera in the path**,
+using AMD's own documented register layout, reproduces the same error.
+
+### Root cause
+
+A **single** `v_wmma_f32_16x16x16_f16` on gfx1151, integer f16 inputs in
+[-4, 4] whose products and sums are exactly representable:
+
+```
+non-integer outputs : 110 / 256
+differ from exact   : 110 / 256   max 5.72e-06
+worst [14][5]: got 0.9999943  exact 1
+```
+
+Compare Tessera's worst at K=64: `got 69.999985, exact 70`. Same character,
+same direction. **The instruction is not exact for exactly-representable
+integer inputs, and Tessera reproduces the hardware faithfully.**
+
+Every deviation observed, in both the raw and the Tessera path, is **toward
+zero** -- 0.9999943 below 1, 69.999985 below 70, -2.9999685 above -3.0. That is
+a truncation signature rather than round-to-nearest. Per-instruction it is 1-2
+ULP; across a K-loop it accumulates as sqrt(K), which is the 3.05e-05 at K=64
+to 1.22e-04 at K=2048 recorded in §10v.
+
+gfx1201 returns exactly 0 on the same test, so this is an RDNA3.5 property and
+**gfx1201 evidence does not clear gfx1151**, as usual.
+
+### What this does NOT invalidate
+
+Checked: no test, packet or audit row asserts bit-exactness for gfx1151 **dense
+f16 matmul**. The bit-exact claims that do exist for gfx1151 -- the EBM Langevin
+row program and the row-normalization fold -- are scalar/vector f32 lanes with
+no WMMA in them, and are unaffected.
+
+**What it does mean:** a gfx1151 f16 matmul test must carry a tolerance, and a
+tolerance that scales with sqrt(K). An exact comparison will pass at small K on
+friendly data and fail later, which is the worst way to learn this.
+
+### A methodology note, because the first control was worthless
+
+The first raw-HIP control reported "differ from exact 235/256, max 9.3e+01,
+got 44 exact -49" and printed a VERDICT line saying the hardware was inexact.
+That verdict was unsupported: errors of 93 on values of order 50 are a wrong
+*layout*, not a rounding effect, and the test could not distinguish "hardware
+inexact" from "my hand-written lane mapping is wrong". It was the latter -- the
+D matrix maps as `v{m/2}` lane `{(m%2)*16 + n}`, and the store had been written
+as `half*8 + i` instead of `2*i + half`.
+
+The tell was available before the fix: **Tessera was off by 2 ULP and the
+hand-rolled control by 93.** Two orders of magnitude apart is not two views of
+one defect. AMD's matrix instruction calculator settled the layout in one query,
+which is what it is on the box for.

@@ -1026,6 +1026,25 @@ static LogicalResult verifyFragmentProducerAgainstType(Operation *op,
 LogicalResult FragmentPackOp::verify() {
   if (getInputs().size() != 1 || !isa<TileValueType>(getInputs().front().getType()))
     return emitOpError("expects exactly one !tile.tile input");
+  // `transpose` says the source tile arrives in the opposite major order and
+  // the lowering owes the transpose. Only a b-role fragment can need it: it is
+  // the only role whose required major order disagrees with a row-major
+  // staging buffer. Allowing it elsewhere would let a producer ask for a
+  // transpose nobody has a reason to perform, which a backend would then have
+  // to guess at.
+  if (getTranspose()) {
+    FragmentType typed = typedFragment(getOperation()->getResult(0));
+    StringRef role =
+        typed ? typed.getRole()
+              : [&] {
+                  auto a = getOperation()->getAttrOfType<StringAttr>("role");
+                  return a ? a.getValue() : StringRef();
+                }();
+    if (role != "b")
+      return emitOpError("transpose is only meaningful for a b-role fragment; "
+                         "got role '")
+             << role << "'";
+  }
   if (getOperation()->getNumResults() == 1)
     if (FragmentType typed = typedFragment(getOperation()->getResult(0))) {
       if (failed(verifyFragmentProducerAgainstType(getOperation(), typed)))

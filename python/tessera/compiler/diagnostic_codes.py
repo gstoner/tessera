@@ -3408,6 +3408,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/backend/rocm/todo.md §GFX1201-PARITY-2026-09-17", sprint="GFX1201-PARITY-1",
     ),
     DiagnosticCode(
+        code="ROCM_FRAGMENT_TRANSPOSE_UNSUPPORTED", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="tile.fragment_pack carries `transpose`, but this architecture's fragment for the requested family is not the 8-element f16 vector the identity-WMMA transpose needs.",
+        fix_hint="`transpose` states the source tile arrives in the opposite major order and the lowering owes the transpose, so it selects semantics and fails closed (Decision #21a): ignoring it would silently compute a different matrix. Either supply the B tile already K-major and drop the attribute, or keep the pack on an f16 family whose fragment is a vector<8xf16> -- the in-register WMMA(A, identity, 0) transpose is currently proven only for that fragment shape.",
+        spec="docs/backends/rocm/wmma-fragment-layout.md §10j.1", sprint="GFX1201-PARITY-1",
+    ),
+    DiagnosticCode(
         code="ROCM_FRAGMENT_TYPE_DISAGREES", pass_origin="LowerTileToROCMPass",
         severity="error",
         summary="The materialized fragment value's type differs from the type the Tile fragment type converter promised.",

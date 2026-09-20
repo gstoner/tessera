@@ -125,3 +125,47 @@ def test_sparse_logical_device_packing_and_k_accumulation(shape,dtype,tmp_path):
         for ptr in reversed(ptrs):
             check(hip.hipFree(ptr))
         check(hip.hipModuleUnload(module))
+
+
+def test_sparse_b_gather_is_column_major() -> None:
+    """RDNA4 ISA 7.12: a 4:2 sparse A requires B loaded COLUMN-major.
+
+    Behavioural, not a spelling check: it asserts the shape of the emitted index
+    arithmetic. Every element gathered into the B fragment must share one
+    per-lane column and differ only in k, i.e. `bi = (k-varying) * n + bcol`.
+    Rewriting the gather to walk N contiguously would be faster and would
+    produce silently wrong sparse results -- there is no diagnostic for it,
+    which is why this test exists.
+
+    See docs/backends/rocm/wmma-fragment-layout.md 10j.5.
+    """
+    import re
+
+    from tessera.compiler.rocm_sparse_logical import sparse_logical_schedule_ir
+
+    m, n, k = 32, 64, 64
+    ir = sparse_logical_schedule_ir(m, n, k, "float16")
+
+    # Each of the 16 gathered B elements: row term scaled by N, then the
+    # per-lane column added. Both halves must be present for every element.
+    scaled = re.findall(r"%bi(\d+)a = arith\.muli %br\1, %c(\d+) : index", ir)
+    assert len(scaled) == 16, (
+        f"expected 16 B row terms scaled by a stride, found {len(scaled)}; the "
+        f"gather shape changed"
+    )
+    assert {stride for _, stride in scaled} == {str(n)}, (
+        f"B row term must be scaled by N={n} -- a stride of 1 would mean the "
+        f"gather walks N contiguously, i.e. ROW-major B, which the ISA forbids "
+        f"for sparse A"
+    )
+    added = re.findall(r"%bi(\d+) = arith\.addi %bi\1a, %bcol : index", ir)
+    assert len(added) == 16, (
+        f"expected all 16 B elements offset by the per-lane column %bcol, "
+        f"found {len(added)}; if the column varies per element the gather is "
+        f"no longer column-major"
+    )
+    # And the column itself is per-lane, fixed across the gather.
+    assert "%bcol = arith.addi %col0, %low : index" in ir, (
+        "%bcol must be the per-lane column (col0 + lane), held fixed while the "
+        "row term walks K"
+    )

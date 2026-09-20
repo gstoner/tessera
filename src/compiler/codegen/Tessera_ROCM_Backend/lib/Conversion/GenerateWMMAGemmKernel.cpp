@@ -1013,7 +1013,9 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                       const WmmaTypes &T, Type outputType, bool hasBias,
                       StringRef activation, StringRef rasterOrder,
                       int64_t rasterGroup, int64_t ldsPadDwords,
-                      int64_t ldsCopyWidth, bool ldsCopyElide) {
+                      int64_t ldsCopyWidth, bool ldsCopyElide,
+                      int64_t ldsCopyDepth, bool ldsDoubleBuffer,
+                      int64_t ldsSchedValuPerMma, bool ldsBRowMajor) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -1032,13 +1034,19 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   const int64_t padElems = ldsPadDwords * 32 / bits;
   const int64_t ldsStride = 16 + padElems;
   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+  // Double-buffering needs two slabs live at once: one being read by the MMA
+  // chain, one being written by the staging copy for the next K step.
+  const int64_t nbuf = ldsDoubleBuffer ? 2 : 1;
   Value ldsA = gpuFunc.addWorkgroupAttribution(
-      MemRefType::get({wgM * ldsStride}, T.store, MemRefLayoutAttrInterface(),
-                      ws),
+      MemRefType::get({nbuf * wgM * ldsStride}, T.store,
+                      MemRefLayoutAttrInterface(), ws),
       loc);
+  // Row-major B is [K=16][wgN] and needs no padding: the strided column read
+  // that the padding existed for (10e) is exactly what it removes.
+  const int64_t ldsBElems = ldsBRowMajor ? 16 * wgN : wgN * ldsStride;
   Value ldsB = gpuFunc.addWorkgroupAttribution(
-      MemRefType::get({wgN * ldsStride}, T.store, MemRefLayoutAttrInterface(),
-                      ws),
+      MemRefType::get({nbuf * ldsBElems}, T.store,
+                      MemRefLayoutAttrInterface(), ws),
       loc);
   // `known_block_size` is an INHERENT property of gpu.func: set it through the
   // accessor, never by raw name. A raw `setAttr` leaves the op holding the
@@ -1196,19 +1204,29 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       ctx, 16, 16, 16, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
   auto accFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, 16, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
-  auto ldsView = [&](OpBuilder &bb, Location l, Value base, Value row,
-                     Value col, Attribute memory) -> Value {
+  auto ldsViewStrided = [&](OpBuilder &bb, Location l, Value base, Value row,
+                            Value col, Value stride,
+                            Attribute memory) -> Value {
     OperationState state(l, "tile.view");
-    state.addOperands({base, row, col, cLdsStride});
+    state.addOperands({base, row, col, stride});
     state.addTypes(tileValueTy);
     state.addAttribute("tile.layout", tileLayout);
     state.addAttribute("tile.memory", memory);
     return bb.create(state)->getResult(0);
   };
-  auto packFragment = [&](OpBuilder &bb, Location l, Value view, Type type) {
+  auto ldsView = [&](OpBuilder &bb, Location l, Value base, Value row,
+                     Value col, Attribute memory) -> Value {
+    return ldsViewStrided(bb, l, base, row, col, cLdsStride, memory);
+  };
+  auto packFragment = [&](OpBuilder &bb, Location l, Value view, Type type,
+                          bool transpose = false) {
     OperationState state(l, "tile.fragment_pack");
     state.addOperands(view);
     state.addTypes(type);
+    // Semantic key (Decision #21a): the source arrives in the opposite major
+    // order and the lowering owes the transpose. Never a hint.
+    if (transpose)
+      state.addAttribute("transpose", bb.getUnitAttr());
     return bb.create(state)->getResult(0);
   };
 
@@ -1224,235 +1242,484 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       loc,
       b.create<arith::DivUIOp>(loc, b.create<arith::AddIOp>(loc, K, c15), c16),
       c16);
-  auto kLoop = b.create<scf::ForOp>(
-      loc, c0, kEnd, c16, initAccs,
-      [&](OpBuilder &kb, Location l, Value k0, ValueRange accs) {
-        // Every wave finished reading the previous slab before it is overwritten.
-        kb.create<gpu::BarrierOp>(l);
-        // A: `vecW` contiguous K per thread per step. K is the fast axis of a
-        // row-major A, so the global side is contiguous too; the ragged tail is
-        // a masked load rather than a scalar fallback, which keeps one path.
-        Value cVec = ci(vecW);
-        Value txV = kb.create<arith::MulIOp>(l, tx, cVec);
-        Value stepV = kb.create<arith::MulIOp>(l, cThreads, cVec);
-        auto copyA = kb.create<scf::ForOp>(l, txV, cWgM16, stepV);
-        {
-          OpBuilder::InsertionGuard g(kb);
-          kb.setInsertionPointToStart(copyA.getBody());
-          Value e = copyA.getInductionVar();
-          Value row = kb.create<arith::DivUIOp>(l, e, c16);
-          Value kk = kb.create<arith::RemUIOp>(l, e, c16);
-          Value gr = kb.create<arith::AddIOp>(l, baseRow, row);
-          Value gk = kb.create<arith::AddIOp>(l, k0, kk);
-          Value rowIn = kb.create<arith::CmpIOp>(l, slt, gr, M);
-          // `e` indexes the UNPADDED tile; the destination row is strided.
-          Value dstA = padElems == 0
-                           ? e
-                           : Value(kb.create<arith::AddIOp>(
-                                 l,
-                                 kb.create<arith::MulIOp>(l, row, cLdsStride),
-                                 kk));
-          if (ldsCopyElide) {
-            // CEILING PROBE. Writes a constant instead of reading global, so
-            // the kernel is DELIBERATELY WRONG -- every output is zero. It
-            // exists to bound what any copy optimisation can possibly buy:
-            // barriers, loop structure, LDS traffic and the MMA chain are all
-            // unchanged, so (real - elided) is the staging copy's entire cost.
-            // Two copy optimisations in a row failed to move this body, and
-            // that is a reason to measure the split before designing a third.
-            //
-            // It must write EXACTLY the destinations the real copy writes. The
-            // loop steps by `cThreads * vecW`, so at vecW > 1 a single scalar
-            // store would leave vecW-1 elements of each group uninitialised --
-            // the probe would then read stale LDS (its output no longer
-            // provably zero) AND issue less LDS traffic than the path it is
-            // being differenced against, which is precisely the quantity it
-            // exists to hold constant.
-            if (vecW == 1) {
-              kb.create<memref::StoreOp>(l, scalarZero, ldsA,
-                                         ValueRange{dstA});
-            } else {
-              Value zeroVec =
-                  kb.create<vector::BroadcastOp>(l, vecTy, scalarZero);
-              kb.create<vector::StoreOp>(l, zeroVec, ldsA, ValueRange{dstA});
-            }
-          } else if (vecW == 1) {
-            // The historical scalar copy, kept reachable so the vectorised one
-            // has a baseline to be measured against. It is NOT `vector<1xT>`:
-            // a width-1 masked load is a scalar load wearing a mask, it costs
-            // an `llvm.intr.masked.load` the scalar path does not pay, and
-            // `vector.create_mask` has no LLVM lowering at that width -- so
-            // emulating the baseline through the vector path would neither
-            // compile nor measure the thing it claims to.
-            Value in = kb.create<arith::AndIOp>(
-                l, rowIn, kb.create<arith::CmpIOp>(l, slt, gk, K));
-            Value logical1 = kb.create<arith::AddIOp>(
-                l, kb.create<arith::MulIOp>(l, gr, K), gk);
-            Value safe1 = kb.create<arith::SelectOp>(l, in, logical1, c0);
-            Value v1 = kb.create<memref::LoadOp>(l, A, ValueRange{safe1});
-            v1 = kb.create<arith::SelectOp>(l, in, v1, scalarZero);
-            kb.create<memref::StoreOp>(l, v1, ldsA, ValueRange{dstA});
-          } else {
-          // TWO PATHS, deliberately. A `vector.maskedload` reaches AMDGCN as
-          // `llvm.intr.masked.load`, which expands into a per-element branch
-          // plus a NARROW load -- measured on gfx1201: no `global_load_b128`
-          // at any width, and 18 more branches than the scalar copy. So a
-          // runtime mask forecloses the wide load it was meant to enable. The
-          // in-bounds case must be an UNMASKED `vector.load`, and the ragged
-          // tail gets its own branch (see wmma-fragment-layout.md 10j).
-          Value logical = kb.create<arith::AddIOp>(
-              l, kb.create<arith::MulIOp>(l, gr, K), gk);
-          Value kWhole = kb.create<arith::CmpIOp>(
-              l, arith::CmpIPredicate::sle,
-              kb.create<arith::AddIOp>(l, gk, cVec), K);
-          Value wholeA = kb.create<arith::AndIOp>(l, rowIn, kWhole);
-          kb.create<scf::IfOp>(
-              l, wholeA,
-              [&](OpBuilder &tb, Location tl) {
-                Value v = tb.create<vector::LoadOp>(tl, vecTy, A,
-                                                    ValueRange{logical});
-                tb.create<vector::StoreOp>(tl, v, ldsA, ValueRange{dstA});
-                tb.create<scf::YieldOp>(tl);
-              },
-              [&](OpBuilder &eb, Location el) {
-                // The tail, unrolled: LDS is always in bounds, so an
-                // out-of-range source contributes the zero the MMA needs.
-                for (int64_t i = 0; i < vecW; ++i) {
-                  Value off = ci(i);
-                  Value gki = eb.create<arith::AddIOp>(el, gk, off);
-                  Value in = eb.create<arith::AndIOp>(
-                      el, rowIn,
-                      eb.create<arith::CmpIOp>(el, slt, gki, K));
-                  Value addr = eb.create<arith::AddIOp>(el, logical, off);
-                  Value safe = eb.create<arith::SelectOp>(el, in, addr, c0);
-                  Value e1 = eb.create<memref::LoadOp>(el, A,
-                                                       ValueRange{safe});
-                  e1 = eb.create<arith::SelectOp>(el, in, e1, scalarZero);
-                  eb.create<memref::StoreOp>(
-                      el, e1, ldsA,
-                      ValueRange{eb.create<arith::AddIOp>(el, dstA, off)});
-                }
-                eb.create<scf::YieldOp>(el);
-              });
-          }
+  // ------------------------------------------------------------------
+  // Staging, factored so it can be called three ways: as a whole copy (the
+  // single-buffered loop and the double-buffered prologue), or split into an
+  // ISSUE phase and a DRAIN phase with the MMA chain between them.
+  //
+  // The split is the entire point of double-buffering. Emitting
+  // `load; store; mma` puts the waitcnt for the load in FRONT of the MMA and
+  // overlaps nothing, however many buffers there are. `load; mma; store` puts
+  // it behind, so the MMA chain runs while the loads are outstanding.
+  // ------------------------------------------------------------------
+  struct Staged {
+    SmallVector<Value> aVals, aDsts;   // aVals are vecTy when vecW > 1
+    SmallVector<Value> bVals, bDsts;   // bDsts: depth * vecW scalar addresses
+    SmallVector<Value> bVecVals, bVecDsts;  // row-major B: one store per group
+  };
+
+  Value cVec = ci(vecW);
+  Value txV = b.create<arith::MulIOp>(loc, tx, cVec);
+  const int64_t tripA = (wgM * 16) / (nthreads * vecW);
+  const int64_t tripB = (wgN * 16) / (nthreads * vecW);
+  auto clampDepth = [&](int64_t trip) {
+    int64_t d = std::max<int64_t>(1, std::min<int64_t>(ldsCopyDepth, trip));
+    while (d > 1 && trip % d) --d;
+    return d;
+  };
+  // Double-buffering REQUIRES a single flat batch (depth == trip), because the
+  // drain has to be movable past the MMA chain. While the staging is an
+  // `scf.for`, the loaded values and their destination addresses are SSA
+  // values inside that loop's region and the store cannot leave it -- which
+  // would put the load's waitcnt back in front of the MMA and overlap nothing.
+  // At depth == trip the batch covers the whole tile, so it is emitted as
+  // straight-line code in the enclosing block and the drain can be placed
+  // wherever the caller wants it.
+  const bool flatStage = ldsDoubleBuffer;
+  const int64_t depthA = flatStage ? tripA : clampDepth(tripA);
+  const int64_t depthB = flatStage ? tripB : clampDepth(tripB);
+
+  // `aOff`/`bOff` are element offsets selecting the LDS buffer; zero when
+  // single-buffered. `out` non-null means ISSUE only.
+  auto emitStage = [&](OpBuilder &kb, Location l, Value k0, Value aOff,
+                       Value bOff, Staged *out) {
+    auto withOff = [&](Value idx, Value off) {
+      return off ? Value(kb.create<arith::AddIOp>(l, idx, off)) : idx;
+    };
+    // ---------------- A ----------------
+    {
+      OpBuilder::InsertionGuard g(kb);
+      Value e0 = txV;
+      if (!flatStage) {
+        auto copyA = kb.create<scf::ForOp>(
+            l, txV, cWgM16, ci(nthreads * vecW * depthA));
+        kb.setInsertionPointToStart(copyA.getBody());
+        e0 = copyA.getInductionVar();
+      }
+      struct GrpA { Value e, gr, gk, rowIn, dst, logical, whole; };
+      SmallVector<GrpA> ga(depthA);
+      for (int64_t i = 0; i < depthA; ++i) {
+        GrpA &q = ga[i];
+        q.e = i == 0 ? e0
+                     : Value(kb.create<arith::AddIOp>(
+                           l, e0, ci(i * nthreads * vecW)));
+        Value row = kb.create<arith::DivUIOp>(l, q.e, c16);
+        Value kk = kb.create<arith::RemUIOp>(l, q.e, c16);
+        q.gr = kb.create<arith::AddIOp>(l, baseRow, row);
+        q.gk = kb.create<arith::AddIOp>(l, k0, kk);
+        q.rowIn = kb.create<arith::CmpIOp>(l, slt, q.gr, M);
+        Value flat = padElems == 0
+                         ? q.e
+                         : Value(kb.create<arith::AddIOp>(
+                               l, kb.create<arith::MulIOp>(l, row, cLdsStride),
+                               kk));
+        q.dst = withOff(flat, aOff);
+        q.logical = kb.create<arith::AddIOp>(
+            l, kb.create<arith::MulIOp>(l, q.gr, K), q.gk);
+        q.whole = kb.create<arith::AndIOp>(
+            l, q.rowIn,
+            kb.create<arith::CmpIOp>(l, arith::CmpIPredicate::sle,
+                                     kb.create<arith::AddIOp>(l, q.gk, cVec),
+                                     K));
+      }
+      SmallVector<Value> vals(depthA);
+      if (ldsCopyElide) {
+        // CEILING PROBE -- writes a constant instead of reading global, so the
+        // kernel is DELIBERATELY WRONG. It must still write exactly the
+        // destinations the real copy writes, at every width and depth.
+        for (int64_t i = 0; i < depthA; ++i) {
+          if (vecW == 1)
+            kb.create<memref::StoreOp>(l, scalarZero, ldsA,
+                                       ValueRange{ga[i].dst});
+          else
+            kb.create<vector::StoreOp>(
+                l, kb.create<vector::BroadcastOp>(l, vecTy, scalarZero), ldsA,
+                ValueRange{ga[i].dst});
         }
-        // B: read along N (coalesced), write transposed so K is contiguous
-        // per column in LDS.
-        // B CANNOT be vectorised on both sides, and the reason is structural:
-        // the global read is contiguous in N while the LDS write is contiguous
-        // in K per column, so one side is always strided. That is the same A/B
-        // asymmetry `GLOBAL_LOAD_TR` exists for.
-        //
-        // So the GLOBAL side is vectorised and the LDS side stays scalar: a
-        // global miss costs hundreds of cycles against LDS's tens, so
-        // coalescing the read is worth far more than widening the store. If the
-        // scalar `ds_store` later shows up as the bottleneck, the fix is
-        // `global_load_tr_b64/b128` here -- AMD's own gfx1201 GEMM uses exactly
-        // that for its 8-bit B operand -- not a wider store into a transposed
-        // layout, which does not exist.
-        auto copyB = kb.create<scf::ForOp>(l, txV, cWgN16, stepV);
+        return;
+      }
+      if (vecW == 1) {
+        // Branchless: masks with `select` on a clamped address, not control
+        // flow, so nothing separates the loads in the issue phase.
+        SmallVector<Value> in(depthA), raw(depthA);
+        for (int64_t i = 0; i < depthA; ++i) {   // ISSUE
+          in[i] = kb.create<arith::AndIOp>(
+              l, ga[i].rowIn, kb.create<arith::CmpIOp>(l, slt, ga[i].gk, K));
+          raw[i] = kb.create<memref::LoadOp>(
+              l, A,
+              ValueRange{kb.create<arith::SelectOp>(l, in[i], ga[i].logical,
+                                                    c0)});
+        }
+        for (int64_t i = 0; i < depthA; ++i)
+          vals[i] =
+              kb.create<arith::SelectOp>(l, in[i], raw[i], scalarZero);
+      } else {
+        // TWO PATHS. A `vector.maskedload` reaches AMDGCN as a per-element
+        // branch plus a NARROW load, so the in-bounds case must be an UNMASKED
+        // `vector.load`. The guard covers the WHOLE batch: a per-group
+        // `scf.if` would put a block boundary between two loads and cap the
+        // depth at one. Both arms YIELD the staged vectors so the store can be
+        // moved past the MMA; the ragged arm assembles its vector from the
+        // per-element masked loads it already had to do.
+        Value allWhole = ga[0].whole;
+        for (int64_t i = 1; i < depthA; ++i)
+          allWhole = kb.create<arith::AndIOp>(l, allWhole, ga[i].whole);
+        // scf::IfOp has no result-typed builder that takes body callbacks
+        // (only bool add*Block forms), so the regions are filled by hand.
+        SmallVector<Type> vtys(depthA, vecTy);
+        auto ifOp = kb.create<scf::IfOp>(l, TypeRange(vtys), allWhole,
+                                         /*addThenBlock=*/true,
+                                         /*addElseBlock=*/true);
         {
-          OpBuilder::InsertionGuard g(kb);
-          kb.setInsertionPointToStart(copyB.getBody());
-          Value e = copyB.getInductionVar();
-          Value kk = kb.create<arith::DivUIOp>(l, e, cWgN);
-          Value col = kb.create<arith::RemUIOp>(l, e, cWgN);
-          Value gk = kb.create<arith::AddIOp>(l, k0, kk);
-          Value gc = kb.create<arith::AddIOp>(l, baseCol, col);
-          Value kIn = kb.create<arith::CmpIOp>(l, slt, gk, K);
-          if (ldsCopyElide) {
-            // Same requirement as A, but B's LDS side is scalar at every
-            // width: consecutive `e` are consecutive COLUMNS, one full LDS row
-            // apart. So the probe issues vecW scalar stores at exactly the
-            // addresses `storeLane` below uses.
+          OpBuilder::InsertionGuard ig(kb);
+          kb.setInsertionPointToStart(ifOp.thenBlock());
+          SmallVector<Value> v(depthA);
+          for (int64_t i = 0; i < depthA; ++i)
+            v[i] = kb.create<vector::LoadOp>(l, vecTy, A,
+                                             ValueRange{ga[i].logical});
+          kb.create<scf::YieldOp>(l, v);
+        }
+        {
+          OpBuilder::InsertionGuard ig(kb);
+          kb.setInsertionPointToStart(ifOp.elseBlock());
+          SmallVector<Value> v(depthA);
+          for (int64_t q = 0; q < depthA; ++q) {
+            Value acc = kb.create<vector::BroadcastOp>(l, vecTy, scalarZero);
             for (int64_t i = 0; i < vecW; ++i) {
-              Value colI = kb.create<arith::AddIOp>(l, col, ci(i));
-              Value dst0 = kb.create<arith::AddIOp>(
-                  l, kb.create<arith::MulIOp>(l, colI, cLdsStride), kk);
-              kb.create<memref::StoreOp>(l, scalarZero, ldsB,
-                                         ValueRange{dst0});
+              Value off = ci(i);
+              Value in = kb.create<arith::AndIOp>(
+                  l, ga[q].rowIn,
+                  kb.create<arith::CmpIOp>(
+                      l, slt, kb.create<arith::AddIOp>(l, ga[q].gk, off), K));
+              Value e1 = kb.create<memref::LoadOp>(
+                  l, A,
+                  ValueRange{kb.create<arith::SelectOp>(
+                      l, in, kb.create<arith::AddIOp>(l, ga[q].logical, off),
+                      c0)});
+              e1 = kb.create<arith::SelectOp>(l, in, e1, scalarZero);
+              acc = kb.create<vector::InsertOp>(l, e1, acc,
+                                                ArrayRef<int64_t>{i});
             }
-          } else if (vecW == 1) {
-            Value in = kb.create<arith::AndIOp>(
-                l, kIn, kb.create<arith::CmpIOp>(l, slt, gc, N));
-            Value logical1 = kb.create<arith::AddIOp>(
-                l, kb.create<arith::MulIOp>(l, gk, N), gc);
-            Value safe1 = kb.create<arith::SelectOp>(l, in, logical1, c0);
-            Value v1 = kb.create<memref::LoadOp>(l, B, ValueRange{safe1});
-            v1 = kb.create<arith::SelectOp>(l, in, v1, scalarZero);
-            Value dst1 = kb.create<arith::AddIOp>(
-                l, kb.create<arith::MulIOp>(l, col, cLdsStride), kk);
-            kb.create<memref::StoreOp>(l, v1, ldsB, ValueRange{dst1});
-          } else {
-          Value remN = kb.create<arith::SubIOp>(l, N, gc);
-          // Same two-path shape as A: only an UNMASKED load widens. The LDS
-          // side stays scalar either way -- consecutive `e` are consecutive
-          // COLUMNS, a full LDS row apart in the transposed layout -- so what
-          // the fast path buys here is the coalesced wide GLOBAL read, which
-          // is the expensive side.
-          Value logical = kb.create<arith::AddIOp>(
-              l, kb.create<arith::MulIOp>(l, gk, N), gc);
-          Value nWhole = kb.create<arith::CmpIOp>(
-              l, arith::CmpIPredicate::sle,
-              kb.create<arith::AddIOp>(l, gc, cVec), N);
-          Value wholeB = kb.create<arith::AndIOp>(l, kIn, nWhole);
-          auto storeLane = [&](OpBuilder &ob, Location ol, Value lane,
-                               int64_t i) {
-            Value colI = ob.create<arith::AddIOp>(ol, col, ci(i));
-            Value dst = ob.create<arith::AddIOp>(
-                ol, ob.create<arith::MulIOp>(ol, colI, cLdsStride), kk);
-            ob.create<memref::StoreOp>(ol, lane, ldsB, ValueRange{dst});
-          };
-          kb.create<scf::IfOp>(
-              l, wholeB,
-              [&](OpBuilder &tb, Location tl) {
-                Value vb = tb.create<vector::LoadOp>(tl, vecTy, B,
-                                                     ValueRange{logical});
-                for (int64_t i = 0; i < vecW; ++i)
-                  storeLane(tb, tl,
-                            tb.create<vector::ExtractOp>(
-                                tl, vb, ArrayRef<int64_t>{i}),
-                            i);
-                tb.create<scf::YieldOp>(tl);
-              },
-              [&](OpBuilder &eb, Location el) {
-                for (int64_t i = 0; i < vecW; ++i) {
-                  Value off = ci(i);
-                  Value in = eb.create<arith::AndIOp>(
-                      el, kIn,
-                      eb.create<arith::CmpIOp>(
-                          el, slt, eb.create<arith::AddIOp>(el, gc, off), N));
-                  Value addr = eb.create<arith::AddIOp>(el, logical, off);
-                  Value safe = eb.create<arith::SelectOp>(el, in, addr, c0);
-                  Value e1 = eb.create<memref::LoadOp>(el, B,
-                                                       ValueRange{safe});
-                  e1 = eb.create<arith::SelectOp>(el, in, e1, scalarZero);
-                  storeLane(eb, el, e1, i);
-                }
-                eb.create<scf::YieldOp>(el);
-              });
+            v[q] = acc;
+          }
+          kb.create<scf::YieldOp>(l, v);
+        }
+        for (int64_t i = 0; i < depthA; ++i) vals[i] = ifOp.getResult(i);
+      }
+      auto drainA = [&](OpBuilder &ob, Location ol) {
+        for (int64_t i = 0; i < depthA; ++i) {
+          if (vecW == 1)
+            ob.create<memref::StoreOp>(ol, vals[i], ldsA,
+                                       ValueRange{ga[i].dst});
+          else
+            ob.create<vector::StoreOp>(ol, vals[i], ldsA,
+                                       ValueRange{ga[i].dst});
+        }
+      };
+      if (!out) {
+        drainA(kb, l);
+      } else {
+        // ISSUE only. Straight-line (flatStage), so these values outlive this
+        // scope and the caller drains them after the MMA chain.
+        out->aVals.assign(vals.begin(), vals.end());
+        for (int64_t i = 0; i < depthA; ++i) out->aDsts.push_back(ga[i].dst);
+      }
+    }
+    // ---------------- B ----------------
+    {
+      OpBuilder::InsertionGuard g(kb);
+      Value e0 = txV;
+      if (!flatStage) {
+        auto copyB = kb.create<scf::ForOp>(
+            l, txV, cWgN16, ci(nthreads * vecW * depthB));
+        kb.setInsertionPointToStart(copyB.getBody());
+        e0 = copyB.getInductionVar();
+      }
+      struct GrpB { Value e, col, kk, gk, gc, kIn, logical, whole; };
+      SmallVector<GrpB> gb(depthB);
+      for (int64_t i = 0; i < depthB; ++i) {
+        GrpB &q = gb[i];
+        q.e = i == 0 ? e0
+                     : Value(kb.create<arith::AddIOp>(
+                           l, e0, ci(i * nthreads * vecW)));
+        q.kk = kb.create<arith::DivUIOp>(l, q.e, cWgN);
+        q.col = kb.create<arith::RemUIOp>(l, q.e, cWgN);
+        q.gk = kb.create<arith::AddIOp>(l, k0, q.kk);
+        q.gc = kb.create<arith::AddIOp>(l, baseCol, q.col);
+        q.kIn = kb.create<arith::CmpIOp>(l, slt, q.gk, K);
+        q.logical = kb.create<arith::AddIOp>(
+            l, kb.create<arith::MulIOp>(l, q.gk, N), q.gc);
+        q.whole = kb.create<arith::AndIOp>(
+            l, q.kIn,
+            kb.create<arith::CmpIOp>(l, arith::CmpIPredicate::sle,
+                                     kb.create<arith::AddIOp>(l, q.gc, cVec),
+                                     N));
+      }
+      // B's LDS side is scalar at EVERY width: consecutive `e` are consecutive
+      // COLUMNS, one full LDS row apart in the transposed layout (10j.1).
+      auto dstOf = [&](OpBuilder &ob, Location ol, const GrpB &q,
+                       int64_t lane) {
+        Value colI = lane == 0 ? q.col
+                               : Value(ob.create<arith::AddIOp>(ol, q.col,
+                                                                ci(lane)));
+        // Row-major [K][N]: consecutive `e` are consecutive COLUMNS at one k,
+        // so consecutive destinations are adjacent and the store widens --
+        // which is the entire point. Column-major puts a full padded row
+        // between them, which is why it cannot.
+        Value flat =
+            ldsBRowMajor
+                ? Value(ob.create<arith::AddIOp>(
+                      ol, ob.create<arith::MulIOp>(ol, q.kk, cWgN), colI))
+                : Value(ob.create<arith::AddIOp>(
+                      ol, ob.create<arith::MulIOp>(ol, colI, cLdsStride),
+                      q.kk));
+        return bOff ? Value(ob.create<arith::AddIOp>(ol, flat, bOff)) : flat;
+      };
+      if (ldsCopyElide) {
+        for (int64_t q = 0; q < depthB; ++q)
+          for (int64_t i = 0; i < vecW; ++i)
+            kb.create<memref::StoreOp>(l, scalarZero, ldsB,
+                                       ValueRange{dstOf(kb, l, gb[q], i)});
+        return;
+      }
+      if (vecW == 1) {
+        SmallVector<Value> in(depthB), raw(depthB);
+        for (int64_t i = 0; i < depthB; ++i) {   // ISSUE
+          in[i] = kb.create<arith::AndIOp>(
+              l, gb[i].kIn, kb.create<arith::CmpIOp>(l, slt, gb[i].gc, N));
+          raw[i] = kb.create<memref::LoadOp>(
+              l, B,
+              ValueRange{kb.create<arith::SelectOp>(l, in[i], gb[i].logical,
+                                                    c0)});
+        }
+        for (int64_t i = 0; i < depthB; ++i) {
+          Value v =
+              kb.create<arith::SelectOp>(l, in[i], raw[i], scalarZero);
+          Value d = dstOf(kb, l, gb[i], 0);
+          if (out) { out->bVals.push_back(v); out->bDsts.push_back(d); }
+          else kb.create<memref::StoreOp>(l, v, ldsB, ValueRange{d});
+        }
+      } else {
+        Value allWhole = gb[0].whole;
+        for (int64_t i = 1; i < depthB; ++i)
+          allWhole = kb.create<arith::AndIOp>(l, allWhole, gb[i].whole);
+        SmallVector<Type> vtys(depthB, vecTy);
+        auto ifOp = kb.create<scf::IfOp>(l, TypeRange(vtys), allWhole,
+                                         /*addThenBlock=*/true,
+                                         /*addElseBlock=*/true);
+        {
+          OpBuilder::InsertionGuard ig(kb);
+          kb.setInsertionPointToStart(ifOp.thenBlock());
+          SmallVector<Value> v(depthB);
+          for (int64_t i = 0; i < depthB; ++i)
+            v[i] = kb.create<vector::LoadOp>(l, vecTy, B,
+                                             ValueRange{gb[i].logical});
+          kb.create<scf::YieldOp>(l, v);
+        }
+        {
+          OpBuilder::InsertionGuard ig(kb);
+          kb.setInsertionPointToStart(ifOp.elseBlock());
+          SmallVector<Value> v(depthB);
+          for (int64_t q = 0; q < depthB; ++q) {
+            Value acc = kb.create<vector::BroadcastOp>(l, vecTy, scalarZero);
+            for (int64_t i = 0; i < vecW; ++i) {
+              Value off = ci(i);
+              Value in = kb.create<arith::AndIOp>(
+                  l, gb[q].kIn,
+                  kb.create<arith::CmpIOp>(
+                      l, slt, kb.create<arith::AddIOp>(l, gb[q].gc, off), N));
+              Value e1 = kb.create<memref::LoadOp>(
+                  l, B,
+                  ValueRange{kb.create<arith::SelectOp>(
+                      l, in, kb.create<arith::AddIOp>(l, gb[q].logical, off),
+                      c0)});
+              e1 = kb.create<arith::SelectOp>(l, in, e1, scalarZero);
+              acc = kb.create<vector::InsertOp>(l, e1, acc,
+                                                ArrayRef<int64_t>{i});
+            }
+            v[q] = acc;
+          }
+          kb.create<scf::YieldOp>(l, v);
+        }
+        for (int64_t q = 0; q < depthB; ++q) {
+          if (ldsBRowMajor) {
+            // The destinations are adjacent, so the whole group is one store.
+            Value d = dstOf(kb, l, gb[q], 0);
+            if (out) {
+              out->bVecVals.push_back(ifOp.getResult(q));
+              out->bVecDsts.push_back(d);
+            } else {
+              kb.create<vector::StoreOp>(l, ifOp.getResult(q), ldsB,
+                                         ValueRange{d});
+            }
+            continue;
+          }
+          for (int64_t i = 0; i < vecW; ++i) {
+            Value v = kb.create<vector::ExtractOp>(l, ifOp.getResult(q),
+                                                   ArrayRef<int64_t>{i});
+            Value d = dstOf(kb, l, gb[q], i);
+            if (out) { out->bVals.push_back(v); out->bDsts.push_back(d); }
+            else kb.create<memref::StoreOp>(l, v, ldsB, ValueRange{d});
           }
         }
-        kb.create<gpu::BarrierOp>(l);
-        SmallVector<Value> af(mt), bf(nt);
-        for (int64_t mi = 0; mi < mt; ++mi)
-          af[mi] = packFragment(
-              kb, l, ldsView(kb, l, ldsA, lrow[mi], c0, ldsRowMajor),
-              aFragmentTy);
-        for (int64_t ni = 0; ni < nt; ++ni)
-          bf[ni] = packFragment(
-              kb, l, ldsView(kb, l, ldsB, c0, lcol[ni], ldsColMajor),
-              bFragmentTy);
-        SmallVector<Value> next(mt * nt);
-        for (int64_t mi = 0; mi < mt; ++mi)
-          for (int64_t ni = 0; ni < nt; ++ni) {
-            OperationState mma(l, "tile.mma");
-            mma.addOperands({af[mi], bf[ni], accs[mi * nt + ni]});
-            mma.addTypes(accFragmentTy);
-            next[mi * nt + ni] = kb.create(mma)->getResult(0);
+      }
+    }
+  };
+
+  // The DRAIN. Placed after the MMA chain by the double-buffered loop, which
+  // is what puts the loads' waitcnt behind the compute instead of in front.
+  auto emitDrain = [&](OpBuilder &kb, Location l, const Staged &st) {
+    for (size_t i = 0; i < st.aVals.size(); ++i) {
+      if (vecW == 1)
+        kb.create<memref::StoreOp>(l, st.aVals[i], ldsA,
+                                   ValueRange{st.aDsts[i]});
+      else
+        kb.create<vector::StoreOp>(l, st.aVals[i], ldsA,
+                                   ValueRange{st.aDsts[i]});
+    }
+    for (size_t i = 0; i < st.bVals.size(); ++i)
+      kb.create<memref::StoreOp>(l, st.bVals[i], ldsB,
+                                 ValueRange{st.bDsts[i]});
+    for (size_t i = 0; i < st.bVecVals.size(); ++i)
+      kb.create<vector::StoreOp>(l, st.bVecVals[i], ldsB,
+                                 ValueRange{st.bVecDsts[i]});
+  };
+
+  auto emitCompute = [&](OpBuilder &kb, Location l, ValueRange accs,
+                         Value aRow, Value bCol, SmallVectorImpl<Value> &next) {
+    SmallVector<Value> af(mt), bf(nt);
+    for (int64_t mi = 0; mi < mt; ++mi) {
+      Value r = aRow ? Value(kb.create<arith::AddIOp>(l, lrow[mi], aRow))
+                     : lrow[mi];
+      af[mi] = packFragment(kb, l, ldsView(kb, l, ldsA, r, c0, ldsRowMajor),
+                            aFragmentTy);
+    }
+    for (int64_t ni = 0; ni < nt; ++ni) {
+      if (ldsBRowMajor) {
+        // [K=16][wgN], so the sub-tile origin is (k=0, n=lcol[ni]) and the
+        // buffer selector moves whole K-blocks. The A-role read pattern is
+        // contiguous here; `transpose` owes the major-order fix.
+        Value br = bCol ? bCol : c0;
+        bf[ni] = packFragment(
+            kb, l,
+            ldsViewStrided(kb, l, ldsB, br, lcol[ni], cWgN, ldsRowMajor),
+            bFragmentTy, /*transpose=*/true);
+        continue;
+      }
+      Value cc = bCol ? Value(kb.create<arith::AddIOp>(l, lcol[ni], bCol))
+                      : lcol[ni];
+      bf[ni] = packFragment(kb, l, ldsView(kb, l, ldsB, c0, cc, ldsColMajor),
+                            bFragmentTy);
+    }
+    next.assign(mt * nt, Value());
+    for (int64_t mi = 0; mi < mt; ++mi)
+      for (int64_t ni = 0; ni < nt; ++ni) {
+        OperationState mma(l, "tile.mma");
+        mma.addOperands({af[mi], bf[ni], accs[mi * nt + ni]});
+        mma.addTypes(accFragmentTy);
+        next[mi * nt + ni] = kb.create(mma)->getResult(0);
+      }
+  };
+
+  scf::ForOp kLoop;
+  if (!ldsDoubleBuffer) {
+    kLoop = b.create<scf::ForOp>(
+        loc, c0, kEnd, c16, initAccs,
+        [&](OpBuilder &kb, Location l, Value k0, ValueRange accs) {
+          // Every wave finished reading the previous slab before it is
+          // overwritten.
+          kb.create<gpu::BarrierOp>(l);
+          emitStage(kb, l, k0, Value(), Value(), nullptr);
+          kb.create<gpu::BarrierOp>(l);
+          SmallVector<Value> next;
+          emitCompute(kb, l, accs, Value(), Value(), next);
+          kb.create<scf::YieldOp>(l, next);
+        });
+  } else {
+    // PROLOGUE: slab 0 into buffer 0, so the loop always has a full buffer to
+    // compute on and only ever writes the other one.
+    emitStage(b, loc, c0, Value(), Value(), nullptr);
+    b.create<gpu::BarrierOp>(loc);
+    Value cAOff = ci(wgM * ldsStride), cBOff = ci(ldsBElems);
+    Value cWgMv = ci(wgM);
+    // A's fragment view is indexed by ROW, so its buffer selector counts rows.
+    // Row-major B is indexed by k-row too, so its selector counts the 16 rows
+    // of a K-slab; column-major B is indexed by column and counts wgN.
+    Value cWgNv = ci(ldsBRowMajor ? 16 : wgN);
+    kLoop = b.create<scf::ForOp>(
+        loc, c0, kEnd, c16, initAccs,
+        [&](OpBuilder &kb, Location l, Value k0, ValueRange accs) {
+          // cur = (k0/16) & 1. The staging writes the OTHER buffer, so the two
+          // never alias within a step and ONE barrier per iteration suffices:
+          // reads of a buffer in step k-1 precede that barrier, writes of the
+          // same buffer in step k follow it.
+          Value step = kb.create<arith::DivUIOp>(l, k0, c16);
+          Value cur = kb.create<arith::RemUIOp>(l, step, ci(2));
+          Value nxt = kb.create<arith::SubIOp>(l, ci(1), cur);
+          auto sel = [&](Value which, Value unit) {
+            return Value(kb.create<arith::MulIOp>(l, which, unit));
+          };
+          // ISSUE: slab k0+16 into `nxt`. Past the end its loads mask to zero
+          // and nothing ever reads the result, so no guard is needed.
+          Staged st;
+          emitStage(kb, l, kb.create<arith::AddIOp>(l, k0, c16),
+                    sel(nxt, cAOff), sel(nxt, cBOff), &st);
+          // COMPUTE on `cur` while those loads are outstanding.
+          SmallVector<Value> next;
+          emitCompute(kb, l, accs, sel(cur, cWgMv), sel(cur, cWgNv), next);
+          // DRAIN: only now does anything wait on the loads.
+          emitDrain(kb, l, st);
+          // Describe the pipeline: issue the loads, then alternate staging
+          // VALU with single matrix ops so the U pipe is busy through the
+          // chain, then drain to LDS. The independence this relies on is
+          // exactly what double-buffering bought.
+          if (ldsSchedValuPerMma != 0) {
+            auto i32 = kb.getI32Type();
+            auto grp = [&](ROCDL::SchedGroupMask m, int64_t n) {
+              kb.create<ROCDL::SchedGroupBarrier>(
+                  l, ROCDL::SchedGroupMaskAttr::get(kb.getContext(), m),
+                  IntegerAttr::get(i32, n), IntegerAttr::get(i32, 0));
+            };
+            grp(ROCDL::SchedGroupMask::vmem_read, depthA + depthB);
+            // N < 0 is the CONTROL arm: memory grouping only, no (VALU, wmma)
+            // alternation. It exists because the alternation measurably did not
+            // happen -- the ISA shows zero VALU between the first and last wmma
+            // at every positive N -- while the option still helped. Without
+            // this arm the gain would be credited to a mechanism that is not
+            // running.
+            // N == -2 is the MECHANISM arm: the matrix groups WITHOUT any
+            // valu groups. The schedule diff says the alternation's VALU half
+            // places nothing (zero VALU in the chain at every N) while its
+            // mfma half clusters the matrix ops ahead of the ds_write group,
+            // which is what lifts the global-load waits out of the chain. If
+            // that reading is right this arm reproduces the whole gain.
+            if (ldsSchedValuPerMma > 0)
+              for (int64_t g = 0; g < mt * nt; ++g) {
+                grp(ROCDL::SchedGroupMask::valu, ldsSchedValuPerMma);
+                grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
+              }
+            else if (ldsSchedValuPerMma == -2)
+              for (int64_t g = 0; g < mt * nt; ++g)
+                grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
+            // N == -3 discriminates the remaining reading. Measured: the mfma
+            // groups ALONE are worse than no description at all (0.973x), so
+            // the valu groups are load-bearing even though they place no VALU
+            // in the chain -- they act as a RESERVATION that keeps the
+            // ds_st/WAIT_load pairs out of it. If that is right, any spacer the
+            // scheduler cannot fill should do, and an salu spacer must behave
+            // like the valu one. If instead it reverts, something about VALU
+            // specifically matters and the reading is still incomplete.
+            else if (ldsSchedValuPerMma == -3)
+              for (int64_t g = 0; g < mt * nt; ++g) {
+                grp(ROCDL::SchedGroupMask::salu, 32);
+                grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
+              }
+            grp(ROCDL::SchedGroupMask::ds_write, depthA + depthB * vecW);
           }
-        kb.create<scf::YieldOp>(l, next);
-      });
+          kb.create<gpu::BarrierOp>(l);
+          kb.create<scf::YieldOp>(l, next);
+        });
+  }
 
   // Masked typed stores with the fused epilogue handed to the consumer.
   Attribute epilogueAttr;
@@ -1736,8 +2003,69 @@ struct GenerateWMMAGemmKernelPass
                      "process and separates nothing. The earlier default of 1 "
                      "came from a harness that launched 4x the workgroups and "
                      "is withdrawn (ROCM-LDS-BANKPAD-1, "
-                     "docs/backends/rocm/wmma-fragment-layout.md 10i/10j)"),
-      llvm::cl::init(4)};
+                     "docs/backends/rocm/wmma-fragment-layout.md 10i/10j). "
+                     "DEFAULT MOVED 4 -> 1 on 2026-09-20: measured paired and "
+                     "interleaved on BOTH ROCm parts, 1 beats 4 by 1.10-1.19x "
+                     "on gfx1201 and 1.21-1.29x on gfx1151, winning 6/6 at "
+                     "2048 and 4096 cubed with double-buffering on and off. "
+                     "4 was set from one shape in a configuration predating "
+                     "issue depth; the value it replaces was right for the "
+                     "wrong reason and is now right for a measured one (10u, "
+                     "10v)"),
+      llvm::cl::init(1)};
+  Option<bool> ldsBRowMajor{
+      *this, "lds-b-row-major",
+      llvm::cl::desc(
+          "LDS-staged typed body: stage B ROW-major [K, N] and transpose the "
+          "fragment in-register instead of transposing during the LDS write. "
+          "B's global read is contiguous in N while a b-role fragment needs 8 "
+          "contiguous K, so exactly one of the three sides is always strided "
+          "-- today it is the LDS write, which stays scalar at every copy "
+          "width (10j.1). Row-major makes the global read, the LDS write AND "
+          "the fragment read contiguous, and pays one WMMA per B fragment for "
+          "the transpose. Also drops B's padding, since the strided column "
+          "read that needed it is gone. See "
+          "docs/backends/rocm/wmma-fragment-layout.md 10s"),
+      llvm::cl::init(false)};
+  Option<int> ldsSchedValuPerMma{
+      *this, "lds-sched-valu-per-mma",
+      llvm::cl::desc(
+          "LDS-staged typed body: describe the loop to the scheduler as "
+          "[all loads][N VALU, 1 wmma] x mmas [all LDS stores] via "
+          "rocdl.sched.group.barrier, so the staging address arithmetic runs "
+          "on the U pipe while the matrix core occupies V. Measured 2026-09-20: "
+          "the body emits ZERO VALU between the first and last wmma, i.e. the U "
+          "pipe is idle for the whole matrix chain. Only meaningful with "
+          "lds-double-buffer, which is what makes the staging VALU independent "
+          "of the current step's MMA -- without it the staging must complete "
+          "before the barrier the MMA reads through. 0 = emit nothing. "
+          "See docs/backends/rocm/wmma-fragment-layout.md 10o"),
+      llvm::cl::init(0)};
+  Option<bool> ldsDoubleBuffer{
+      *this, "lds-double-buffer",
+      llvm::cl::desc(
+          "LDS-staged typed body: stage slab k+1 into a second LDS buffer while "
+          "the MMA chain consumes slab k, so the global load latency hides "
+          "behind compute instead of in front of it. Issues the loads BEFORE "
+          "the MMA and drains them to LDS AFTER, which is the whole point -- "
+          "emitting load;store;mma leaves the waitcnt in front of the MMA and "
+          "overlaps nothing. Costs 2x LDS and saves one barrier per iteration "
+          "(the two buffers are never read and written in the same step). "
+          "See docs/backends/rocm/wmma-fragment-layout.md 10n"),
+      llvm::cl::init(false)};
+  Option<int> ldsCopyDepth{
+      *this, "lds-copy-depth",
+      llvm::cl::desc(
+          "LDS-staged typed body: how many staging groups are ISSUED before "
+          "any is consumed. 1 is the historical load-store-load-store loop, "
+          "which keeps exactly one global load in flight and is why the copy "
+          "sits at loadcnt<=0 while the register body reaches loadcnt<=6. "
+          "Depth N splits the batch into an issue phase and a drain phase, so "
+          "N loads are outstanding. Clamped to a divisor of the per-thread "
+          "trip count (16/width here), which is compile-time, so no remainder "
+          "loop is needed. See docs/backends/rocm/wmma-fragment-layout.md "
+          "10j.6"),
+      llvm::cl::init(1)};
   Option<bool> ldsCopyElide{
       *this, "lds-copy-elide",
       llvm::cl::desc("CEILING PROBE ONLY -- emits a DELIBERATELY WRONG kernel. "
@@ -2440,7 +2768,9 @@ struct GenerateWMMAGemmKernelPass
         emitTypedLdsBody(bodyB, loc, gpuFunc, mt, nt, ldsWavesM, ldsWavesN, T,
                          outputTy, hasBias, activation, request.rasterOrder,
                          request.rasterGroup, ldsPadDwords,
-                         ldsCopyWidth, ldsCopyElide);
+                         ldsCopyWidth, ldsCopyElide, ldsCopyDepth,
+                         ldsDoubleBuffer, ldsSchedValuPerMma,
+                         ldsBRowMajor);
       } else if (request.canonicalKLoop && canonicalStaging == "lds") {
         // This body writes its accumulator back at row `2*e + lhi`, which is
         // RDNA3's wave32 distribution. gfx12 distributes the same accumulator

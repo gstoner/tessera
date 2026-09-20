@@ -876,6 +876,42 @@ private:
 
 /// Shared failure path: a stated fragment contract this target cannot realize
 /// is an ERROR, not a quiet non-match. Returning `notifyMatchFailure` here
+
+/// Build the per-lane identity B fragment for the in-register transpose.
+///
+/// RDNA4 spreads a 16x16 matrix across a wave32 as 8 elements per lane. For the
+/// identity, element `j` of a lane is 1.0 exactly when that lane/element pair
+/// addresses a diagonal entry, which reduces to `lane == packGroup * 8 + j` --
+/// so this needs eight compares and eight STATIC inserts, no dynamic index.
+///
+/// (`coords.lane` is the column within the 16-wide row and `coords.packGroup`
+/// is the half-wave selector, i.e. AMD's `lIdx % 16` and `lIdx / 16`.)
+static Value buildIdentityFragment(OpBuilder &builder, Location loc,
+                                   VectorType vecTy, Value lane,
+                                   Value packGroup) {
+  Type elemTy = vecTy.getElementType();
+  Value zeroElem = arith::ConstantOp::create(
+      builder, loc, elemTy, builder.getFloatAttr(elemTy, 0.0));
+  Value oneElem = arith::ConstantOp::create(
+      builder, loc, elemTy, builder.getFloatAttr(elemTy, 1.0));
+  Value fragment = arith::ConstantOp::create(
+      builder, loc, vecTy,
+      DenseElementsAttr::get(vecTy, builder.getFloatAttr(elemTy, 0.0)));
+  Value eight = arith::ConstantIndexOp::create(builder, loc, 8);
+  Value base = arith::MulIOp::create(builder, loc, packGroup, eight);
+  for (int64_t j = 0; j < vecTy.getNumElements(); ++j) {
+    Value jv = arith::ConstantIndexOp::create(builder, loc, j);
+    Value diag = arith::AddIOp::create(builder, loc, base, jv);
+    Value on = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
+                                     lane, diag);
+    Value element =
+        arith::SelectOp::create(builder, loc, on, oneElem, zeroElem);
+    fragment = vector::InsertOp::create(builder, loc, element, fragment,
+                                        ArrayRef<int64_t>{j});
+  }
+  return fragment;
+}
+
 /// would surface as an unexplained "failed to legalize operation".
 static LogicalResult emitUnresolvableFragment(Operation *op,
                                               tessera::tile::FragmentType f,
@@ -964,11 +1000,53 @@ struct ConvertFragmentPack
     // without a `role` attribute once the result is typed, so requiring the
     // attribute here rejected valid IR -- and it is precisely the shape a
     // migrated producer emits.
+    // `transpose` says the source tile arrives in the opposite major order.
+    // Read it with the A-role pattern -- contiguous, which is the whole point,
+    // since a row-major [K, N] staging buffer offers 8 contiguous N -- and owe
+    // the transpose below.
     FailureOr<Value> packed = materializeFragmentPack(
-        op, f.getRole(), converter->descriptorFor(f), rewriter, coords.lane,
-        coords.packGroup, *physical);
+        op, op.getTranspose() ? StringRef("a") : f.getRole(),
+        converter->descriptorFor(f), rewriter, coords.lane, coords.packGroup,
+        *physical);
     if (failed(packed))
       return failure();
+
+    if (op.getTranspose()) {
+      // WMMA(A, identity, 0) transposes in-register: D is M-major while A and
+      // B are K-major, so the same registers read back as a b-role fragment
+      // are A-transposed. Validated exactly on gfx1201 -- see
+      // docs/backends/rocm/wmma-fragment-layout.md 10s.
+      //
+      // Decision #21a: this fails CLOSED. A family whose fragment is not an
+      // 8-element f16 vector cannot perform this and must say so, because
+      // silently packing without the transpose computes a different matrix.
+      Location loc = op.getLoc();
+      auto vecTy = dyn_cast<VectorType>(packed->getType());
+      if (!vecTy || vecTy.getNumElements() != 8 ||
+          !vecTy.getElementType().isF16())
+        return op->emitError(
+                   "ROCM_FRAGMENT_TRANSPOSE_UNSUPPORTED: the identity-WMMA "
+                   "transpose needs an 8-element f16 fragment on ")
+               << physical->familyName << ", got " << packed->getType();
+      Value ident = buildIdentityFragment(rewriter, loc, vecTy, coords.lane,
+                                          coords.packGroup);
+      Value zero = arith::ConstantOp::create(
+          rewriter, loc, vecTy,
+          DenseElementsAttr::get(vecTy,
+                                 rewriter.getFloatAttr(vecTy.getElementType(),
+                                                       0.0)));
+      OperationState st(loc, "tessera_rocm.wmma");
+      st.addOperands({*packed, ident, zero});
+      st.addTypes({vecTy});
+      st.addAttribute("arch", rewriter.getStringAttr(converter->getArch()));
+      st.addAttribute("shape", rewriter.getStringAttr("m16n16k16"));
+      st.addAttribute("accum", rewriter.getStringAttr("f16"));
+      st.addAttribute("input_dtype", rewriter.getStringAttr("f16"));
+      st.addAttribute("input_b_dtype", rewriter.getStringAttr("f16"));
+      st.addAttribute("fragment_family",
+                      rewriter.getStringAttr(physical->familyName));
+      packed = rewriter.create(st)->getResult(0);
+    }
     Type expected = getTypeConverter()->convertType(f);
     if (packed->getType() != expected)
       return op->emitError(

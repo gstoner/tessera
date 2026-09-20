@@ -764,9 +764,21 @@ def Tile_PackedStoreOp : Tile_Op<"packed_store"> {
 // portable contract consumed by NVIDIA/ROCm pack lowerings. Block-scaled
 // descriptors may carry additional logical scale_a/scale_b fragments without
 // exposing either backend's physical scale-selector registers.
+// The optional `transpose` unit attribute states that the SOURCE TILE IS
+// SUPPLIED IN THE OPPOSITE MAJOR ORDER to the one the result role requires,
+// and that the lowering owes the transpose. It exists because a b-role fragment
+// needs 8 contiguous K per lane, while a row-major [K, N] staging buffer offers
+// 8 contiguous N -- so without it, one of the global read, the LDS write and
+// the fragment read is always strided
+// (docs/backends/rocm/wmma-fragment-layout.md 10j.1).
+//
+// This is a CONTRACT, not a hint: a backend that cannot transpose must reject
+// the op rather than ignore the attribute, because ignoring it silently
+// computes a different matrix. Decision #21a -- it selects semantics, so it
+// fails closed.
 def Tile_FragmentPackOp : Tile_Op<"fragment_pack"> {
   let summary = "Pack a logical tile into an opaque MMA fragment";
-  let arguments = (ins Variadic<AnyType>:$inputs);
+  let arguments = (ins Variadic<AnyType>:$inputs, UnitAttr:$transpose);
   let results = (outs Tile_FragmentType:$result);
   let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
   let hasVerifier = 1;

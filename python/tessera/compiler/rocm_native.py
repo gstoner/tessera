@@ -1374,9 +1374,13 @@ def _compile_native_tile_ir(
     lds_waves: tuple[int, int] = (2, 2),
     k_unroll: int = 1,
     sched_groups: int = 0,
-    lds_pad_dwords: int = 4,
+    lds_pad_dwords: int = 1,
     lds_copy_width: int = 1,
     lds_copy_elide: bool = False,
+    lds_copy_depth: int = 1,
+    lds_double_buffer: bool = False,
+    lds_sched_valu_per_mma: int = 0,
+    lds_b_row_major: bool = False,
 ) -> tuple[
     str,
     str,
@@ -1400,7 +1404,7 @@ def _compile_native_tile_ir(
     key = hashlib.sha256(
         (
             f"{architecture}|{tile_ir}|{directive}|{family}|{input_level.value}|"
-            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|k{k_unroll}|sg{sched_groups}|pad{lds_pad_dwords}|cw{lds_copy_width}|elide{lds_copy_elide}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
+            f"{tile_q}|{tile_kv}|{staging}|{lds_waves[0]}x{lds_waves[1]}|k{k_unroll}|sg{sched_groups}|pad{lds_pad_dwords}|cw{lds_copy_width}|elide{lds_copy_elide}|d{lds_copy_depth}|db{lds_double_buffer}|sv{lds_sched_valu_per_mma}|brm{lds_b_row_major}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
         ).encode()
     ).hexdigest()
     cached = _cache.get(key)
@@ -1429,6 +1433,10 @@ def _compile_native_tile_ir(
         lds_pad_dwords=int(lds_pad_dwords),
         lds_copy_width=int(lds_copy_width),
         lds_copy_elide=bool(lds_copy_elide),
+        lds_copy_depth=int(lds_copy_depth),
+        lds_double_buffer=bool(lds_double_buffer),
+        lds_sched_valu_per_mma=int(lds_sched_valu_per_mma),
+        lds_b_row_major=bool(lds_b_row_major),
         depth_cooperative=depth_cooperative,
     )
     warn_if_generator_is_stale(tool)

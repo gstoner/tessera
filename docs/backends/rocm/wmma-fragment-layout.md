@@ -998,9 +998,45 @@ record both is that they compose: the 2026-09-19 vectorisation was
 
 **Status.** `lds_copy_width` defaults to `1` (scalar) — the measured-faster
 arm. The vector path stays reachable behind the knob as the measured-negative
-arm, the same disposition `ROCM-SCHED-GROUP-1` got. `ROCM-LDS-STAGE-VECTOR-1`
-stays open, and its remaining work is the split in-bounds/tail path, not a
-wider mask.
+arm, the same disposition `ROCM-SCHED-GROUP-1` got.
+
+### 10j.1 The split path was built, and it loses too — for a different reason
+
+The unmasked fast path plus a split ragged tail was implemented the same day.
+It **does** produce the wide load the masked version could not (`wide=2`, one
+per copy loop) — and it is still slower. 2048³ f16, corrected grid, median of
+9, with a static ISA census beside each number:
+
+| arm | TFLOP/s | wide loads | `global_load_d16` | `ds_store` | max VGPR |
+|---|---|---|---|---|---|
+| **scalar, pad 4** | **40.4** | 0 | 20 | **6** | 184 |
+| split-vec, pad 0 | 34.1 | 2 | 16 | 17 | 193 |
+| split-vec, pad 1 | 18.8 | 0 | 4 | 5 | 175 |
+| split-vec, pad 2 | 30.7 | 2 | 8 | 9 | 183 |
+| split-vec, pad 4 | 34.5 | 2 | 16 | 17 | 189 |
+
+Neither arm spills (`scratch_ops = 0` both ways), so register pressure is not
+it — the 126-spill figure on record belongs to the **register** body, not this
+one.
+
+**`ds_store` 6 → 17 is the finding.** The global read widened and the LDS write
+got three times worse, because **B's write cannot widen at all**: the global
+side is contiguous in N while the LDS side is contiguous in K per column, so
+the fast path loads 8 elements in one instruction and then stores them with
+eight separate `ds_store`s. The unrolled tail adds its own. The load saves less
+than the store side costs.
+
+**So the target was mis-stated, and CK says so explicitly.** The tuned CK
+instance this item cites sets `SrcScalarPerVector=8` **and**
+`DstScalarPerVector_K1=8` — both sides, 128 bits each way — and it can only
+set the second because its LDS layout is **K1-blocked** (`K1=8`), not a plain
+transpose. Widening the copy into our layout is therefore not a smaller version
+of CK's configuration; it is the half of it that does not work alone.
+
+**Re-specified gate:** the deliverable is the **K1-blocked LDS layout**, after
+which both sides widen and the copy width becomes the tunable CK treats it as.
+A wider copy over the current layout is measured-negative twice and should not
+be attempted a third time.
 
 ## 10k. The padding default, settled on the shape where it converges
 

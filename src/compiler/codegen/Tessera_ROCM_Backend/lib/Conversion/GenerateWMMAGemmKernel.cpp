@@ -1619,7 +1619,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           // VALU with single matrix ops so the U pipe is busy through the
           // chain, then drain to LDS. The independence this relies on is
           // exactly what double-buffering bought.
-          if (ldsSchedValuPerMma > 0) {
+          if (ldsSchedValuPerMma != 0) {
             auto i32 = kb.getI32Type();
             auto grp = [&](ROCDL::SchedGroupMask m, int64_t n) {
               kb.create<ROCDL::SchedGroupBarrier>(
@@ -1627,10 +1627,17 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                   IntegerAttr::get(i32, n), IntegerAttr::get(i32, 0));
             };
             grp(ROCDL::SchedGroupMask::vmem_read, depthA + depthB);
-            for (int64_t g = 0; g < mt * nt; ++g) {
-              grp(ROCDL::SchedGroupMask::valu, ldsSchedValuPerMma);
-              grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
-            }
+            // N < 0 is the CONTROL arm: memory grouping only, no (VALU, wmma)
+            // alternation. It exists because the alternation measurably did not
+            // happen -- the ISA shows zero VALU between the first and last wmma
+            // at every positive N -- while the option still helped. Without
+            // this arm the gain would be credited to a mechanism that is not
+            // running.
+            if (ldsSchedValuPerMma > 0)
+              for (int64_t g = 0; g < mt * nt; ++g) {
+                grp(ROCDL::SchedGroupMask::valu, ldsSchedValuPerMma);
+                grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
+              }
             grp(ROCDL::SchedGroupMask::ds_write, depthA + depthB * vecW);
           }
           kb.create<gpu::BarrierOp>(l);

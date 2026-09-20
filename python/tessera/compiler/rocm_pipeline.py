@@ -297,8 +297,9 @@ class ROCMExecutablePipeline:
             raise ValueError("ROCm lds_copy_depth must be a positive int")
         if type(self.lds_double_buffer) is not bool:
             raise ValueError("ROCm lds_double_buffer must be a bool")
-        if type(self.lds_sched_valu_per_mma) is not int or self.lds_sched_valu_per_mma < 0:
-            raise ValueError("ROCm lds_sched_valu_per_mma must be a non-negative int")
+        if type(self.lds_sched_valu_per_mma) is not int:
+            raise ValueError("ROCm lds_sched_valu_per_mma must be an int "
+                             "(negative = memory-grouping control arm)")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 

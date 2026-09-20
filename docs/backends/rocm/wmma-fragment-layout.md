@@ -1107,6 +1107,50 @@ depending only on which one is chosen.
 cannot actually be free, and it does not rank K1-blocking against other ways
 to spend the headroom.
 
+### 10j.3 Where the 3.91x actually is: the staging loop does not pipeline
+
+The ceiling says the copy is worth up to 3.91x. The ISA says what a copy is
+supposed to look like, and our two bodies disagree completely. Counting memory
+waits in the emitted gfx1201 ISA at 2048³:
+
+| body | demand-zero waits | partial waits | distribution |
+|---|---|---|---|
+| register | 57 | **137** | `loadcnt<=1` x50, `<=2` x10, `<=4` x8, `<=6` x8 |
+| **lds** | **134** | 15 | `loadcnt<=0` x2, `dscnt<=0` x2 |
+
+RDNA4 5.7 is explicit that `S_WAIT_LOADCNT` takes a bound, not just zero, so a
+shader can "schedule long-latency instructions, execute unrelated work and
+specify when results are needed". The **register body does exactly that** --
+six global loads in flight, waits on partial counts. The **LDS staging loop
+does not**: it issues a load and waits for `LOADcnt<=0` before storing to LDS.
+
+**Barriers are not the cost, and the elided arm proves it.** The copy-elided
+kernel keeps every barrier and removes only the global reads; it runs at 127
+TFLOP/s, near roofline. If the two barriers per K step were dominant it could
+not. So the 3.91x is unhidden **load latency**, not synchronisation.
+
+**Barriers are, however, the likely reason it cannot be hidden** -- and this
+part is inference, flagged as such. The loop is `barrier -> load -> wait(0) ->
+ds_store -> barrier -> MMA`, and a load for the next K step cannot be hoisted
+above the trailing barrier without changing what the barrier means. The
+register body has **no barriers at all**, which is precisely why its scheduler
+is free to keep six loads in flight. Testing this needs a double-buffered
+variant, not more counting.
+
+**Both levers the ISA offers are unused.** The barrier is split into
+`S_BARRIER_SIGNAL` (arrive) and `S_BARRIER_WAIT` (5.6), which is what lets a
+wave signal after its stores and wait only before reading someone else's slab.
+We emit **2 signal and 2 wait, both pairs adjacent** -- every barrier a full
+stop. `gpu.barrier` lowers that way and nothing asks for more.
+
+**So the next move is probably not the K1-blocked layout.** K1-blocking widens
+each transfer; double-buffering hides its latency. The measurement says latency
+is what is exposed, and the register body -- same chip, same loads, no barriers
+-- already demonstrates the hiding. A double-buffered LDS slab with a split
+barrier is a smaller change than a layout rewrite and attacks what was actually
+measured. The layout may still be wanted afterwards for the store-side width
+(§10j.1), but it should be judged after the latency is hidden, not before.
+
 ## 10k. The padding default, settled on the shape where it converges
 
 §10e chose `lds_pad_dwords=1` from the broken harness; §10i withdrew that

@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -115,8 +116,20 @@ def _tool_version(command: list[str]) -> dict[str, object]:
     }
 
 
-def _resolved_tool_version(name: str, env: str | None = None) -> dict[str, object]:
-    """Record the version of the tool this host would actually run.
+def _resolved_tool_version(name: str, env: dict[str, str]) -> dict[str, object]:
+    """Record the version of the tool THE TEST SUBPROCESS will actually run.
+
+    Resolution must follow the subprocess's environment, not this process's.
+    The subprocess gets a PATH with the build's own bin directory prepended, so
+    on a box where a custom LLVM 23 build sits beside an apt or Homebrew one --
+    Tajasarus and The-Super-Bear both do -- the tests can use the custom
+    `mlir-opt` while a parent-environment lookup reports the canonical one.
+    That is the same wrong-provenance defect this function was written to
+    remove, just relocated, so the search order here is:
+
+      1. the per-tool override in the subprocess env (MLIR_OPT, ...),
+      2. the subprocess's own PATH, whose first entry is the build's bin,
+      3. the canonical fleet prefixes, as a last resort.
 
     This block is PROVENANCE: it says which toolchain produced the result, so
     Decision #11's rule that a measurement is only valid for the code that
@@ -128,18 +141,26 @@ def _resolved_tool_version(name: str, env: str | None = None) -> dict[str, objec
     without resolving would be the worse of the two: a provenance field naming
     a tool that was never used.
     """
-    tool = find_llvm_tool(name, env=env)
-    if tool is None:
+    override = env.get(name.replace("-", "_").upper())
+    resolved = Path(override) if override and Path(override).is_file() else None
+    if resolved is None:
+        found = shutil.which(name, path=env.get("PATH"))
+        resolved = Path(found) if found else None
+    if resolved is None:
+        fallback = find_llvm_tool(name)
+        resolved = fallback if fallback is not None else None
+    if resolved is None:
         return {
             "command": None,
             "returncode": None,
             "output": "",
             "unresolved": (
-                f"no {name} from a matched LLVM {REQUIRED_MAJOR} prefix on this host; "
-                "set TESSERA_LLVM_BIN or the per-tool override"
+                f"no {name} on the test subprocess PATH, in its per-tool override, "
+                f"or in a matched LLVM {REQUIRED_MAJOR} prefix; set TESSERA_LLVM_BIN"
             ),
         }
-    return _tool_version([str(tool), "--version"])
+    return {**_tool_version([str(resolved), "--version"]),
+            "resolved_from": "subprocess environment"}
 
 
 def _rocm_only_capability_error(
@@ -246,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
         "probes": probes,
         "tool_versions": {
             "tessera_opt": _tool_version([str(args.tool), "--version"]),
-            "mlir_opt": _resolved_tool_version("mlir-opt", env="MLIR_OPT"),
+            "mlir_opt": _resolved_tool_version("mlir-opt", env),
         },
         "marker_expression": marker,
         "selected_platform": "ROCm",

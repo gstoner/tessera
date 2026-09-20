@@ -230,7 +230,7 @@ def main() -> int:
         print(f"unknown pin {args.only!r}", file=sys.stderr)
         return 2
 
-    drift, absent, edits = [], [], []
+    drift, absent, edits, inconsistent = [], [], [], []
     print(f"{'pin':<10} {'pinned':>10} {'this host':>12}   status")
     print("-" * 78)
     for pin in pins:
@@ -240,8 +240,21 @@ def main() -> int:
         pinned = next(iter(distinct)) if len(distinct) == 1 else "/".join(sorted(distinct)) or "?"
 
         if len(distinct) > 1:
+            # The sites for one pin already hold DIFFERENT versions -- a
+            # half-applied bump. `--write` must refuse this rather than sail
+            # past: there are no edits queued for it (there is no single "old"
+            # to replace), so without this the run would reach the "nothing to
+            # write" branch and report success while the tree stayed
+            # inconsistent. Reconciling needs a detected value from a host that
+            # HAS the toolchain, which is the same rule as everywhere else.
             status = "DECLARATIONS DISAGREE"
             drift.append(pin)
+            inconsistent.append(pin)
+            if found is not None:
+                for s_ in pin.sites:
+                    cur = currents[s_.path]
+                    if cur is not None and cur != found:
+                        edits.append((s_, cur, found))
         elif found is None:
             status = "not on this host -- not checked"
             absent.append(pin)
@@ -265,6 +278,17 @@ def main() -> int:
         return 2
 
     if args.write:
+        unfixable = [p for p in inconsistent if p.detect() is None]
+        if unfixable:
+            print("\nREFUSING TO WRITE. These pins have declarations that disagree "
+                  "with each other, and this host cannot measure them to say which "
+                  "is right:")
+            for p in unfixable:
+                for s_ in p.sites:
+                    print(f"  {p.key}: {s_.path} = {_current(s_)}")
+            print("Run --write on the box that HAS that toolchain; it will "
+                  "reconcile every site to the measured value.")
+            return 2
         if not edits:
             print("\nnothing to write: every pin this host can measure already matches")
             return 0

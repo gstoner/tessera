@@ -133,7 +133,51 @@ function(tessera_pin_llvm required_version)
             "  To override for a one-off: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
     endif()
 
-    message(STATUS "Tessera LLVM/MLIR pin satisfied: ${_tessera_llvm_found}")
+    # MLIR must match too, and it is a SEPARATE package. An apt-style install
+    # can present LLVM 23.1.1 alongside an MLIR 23.1.2 prefix, and the
+    # major/minor checks elsewhere in CMakeLists.txt accept that pair -- so
+    # pinning only LLVM would let through exactly the mixed-patch toolchain
+    # this pin exists to reject. MLIR is the half whose C++ API our passes
+    # compile against, so if either is going to be checked it is this one.
+    #
+    # MLIR_PACKAGE_VERSION is not always defined (minimal apt packaging). When
+    # it is absent we cannot verify the patch, and saying nothing would be a
+    # silent hole, so say so out loud instead of implying a check happened.
+    # Prefer MLIR_VERSION over MLIR_PACKAGE_VERSION. Measured 2026-09-20 on the
+    # Homebrew keg: MLIR_PACKAGE_VERSION is UNSET while MLIR_VERSION is 23.1.1
+    # and MLIR_VERSION_PATCH is 1 -- so keying on the package variable alone
+    # would leave the Mac permanently unverified, which is the hole being
+    # closed rather than a second copy of it.
+    set(_tessera_mlir_raw "")
+    if(DEFINED MLIR_VERSION)
+        set(_tessera_mlir_raw "${MLIR_VERSION}")
+    elseif(DEFINED MLIR_PACKAGE_VERSION)
+        set(_tessera_mlir_raw "${MLIR_PACKAGE_VERSION}")
+    elseif(DEFINED MLIR_VERSION_MAJOR AND DEFINED MLIR_VERSION_MINOR AND
+           DEFINED MLIR_VERSION_PATCH)
+        set(_tessera_mlir_raw "${MLIR_VERSION_MAJOR}.${MLIR_VERSION_MINOR}.${MLIR_VERSION_PATCH}")
+    endif()
+
+    if(_tessera_mlir_raw)
+        string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _tessera_mlir_found "${_tessera_mlir_raw}")
+        if(NOT _tessera_mlir_found VERSION_EQUAL ${required_version})
+            message(FATAL_ERROR
+                "Tessera pins LLVM/MLIR ${required_version}: LLVM is "
+                "${_tessera_llvm_found} but MLIR is ${_tessera_mlir_found} "
+                "(${_tessera_mlir_raw}) at ${MLIR_DIR}.\n"
+                "  A mixed-patch LLVM/MLIR pair is the case this pin exists to "
+                "catch -- MLIR's C++ API moves between patch releases, so the "
+                "passes are compiled against a different MLIR than the tools "
+                "report.\n"
+                "  One-off override: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
+        endif()
+        message(STATUS "Tessera LLVM/MLIR pin satisfied: LLVM ${_tessera_llvm_found}, MLIR ${_tessera_mlir_found}")
+    else()
+        message(WARNING
+            "Tessera LLVM pin satisfied at ${_tessera_llvm_found}, but this "
+            "MLIR package reports NO version variable at all, so its patch level "
+            "is unverified. A mixed-patch pair would pass here.")
+    endif()
 endfunction()
 
 function(tessera_pin_rocm required_version)

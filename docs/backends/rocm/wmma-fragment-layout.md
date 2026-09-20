@@ -1721,3 +1721,103 @@ under both protocols.
 **Measure paired arms interleaved, in one process.** Two sequential runs here
 produced opposite signs (50.2 vs 51.6, then 56.9 vs 52.3) purely from
 process-to-process drift landing on whichever arm ran second.
+
+## 10o. Where the remaining copy cost actually is: two regimes, two limiters
+
+§10j.2 put the 2048^3 staging copy at 3.13x. §10m's issue depth took ~18% of
+that and §10n's double-buffering 4%. Both attack LATENCY. This section measures
+what is left, and the answer is that latency stopped being the constraint and
+two different things took over depending on shape.
+
+### At scale it is bytes, and we are already at the roofline
+
+Arithmetic intensity is pinned by the macro tile, not the problem:
+`AI = wgM*wgN/(wgM+wgN)` = 128*128/256 = **64 FLOP/byte** at every shape, because
+each workgroup re-reads its own A panel and B panel over the whole K.
+
+Measured (w=2, d=8, gfx1201, f16):
+
+| shape | grid | TFLOP/s | achieved read GB/s |
+|---|---|---|---|
+| 1024 | 8x8 | 22.7 | 354 |
+| 1536 | 12x12 | 41.3 | 645 |
+| 2048 | 16x16 | 54.8 | 857 |
+| 3072 | 24x24 | 64.7 | **1011** |
+| 4096 | 32x32 | 65.8 | **1027** |
+
+Bandwidth plateaus at ~**1030 GB/s** and throughput plateaus with it. The
+product closes exactly: 64 FLOP/byte x 1027 GB/s = **65.7 TFLOP/s** against 65.8
+measured. **At >= 3072 the body is on its bandwidth roofline**, and no amount of
+copy scheduling moves a roofline.
+
+The only lever there is raising AI, which means a bigger macro tile: 256x256
+would give 128 FLOP/byte and double the ceiling. That is an LDS and register
+question, not a copy question.
+
+**Cache locality is NOT the lever.** Grouped rasterization already exists
+(`schedule_raster_order` = `grouped_m`, with a group size). At 4096^3 every
+variant lands within noise of the same number:
+
+| raster | row_major | grouped_m/4 | grouped_m/8 | grouped_m/16 | column_major |
+|---|---|---|---|---|---|
+| GB/s | 1025 | 1024 | 1027 | 1026 | 1024 |
+
+So 1030 GB/s is a hard limit of this access pattern, not a miss-rate artifact
+that reordering can recover.
+
+### The plateau is reachable only at dword requests
+
+It is not pure byte-bandwidth either, or width would not matter. w x d is pinned
+at 16 by the trip count, so width and depth trade directly:
+
+| | 2048^3 GB/s | 4096^3 GB/s |
+|---|---|---|
+| w=1 d=16 | 532 | 835 |
+| **w=2 d=8** | **760** | **1031** |
+| w=4 d=4 | 626 | 697 |
+| w=8 d=2 | 607 | 700 |
+
+Wider requests deliver **less** bandwidth because they starve request count.
+`w=2` wins in both regimes, which means §10m's result is not a small-shape
+artifact -- it is the same optimum where the body is bandwidth-saturated.
+
+### Below the plateau the limiter is a completely idle U-pipe
+
+At 1024-2048 the body is NOT bandwidth-bound (354-857 GB/s against a 1030
+plateau). There the cost is the copy's own serialized work, and the ISA says
+where it goes.
+
+RDNA4 splits each SIMD32 into a U and a V pipe. `v_wmma` occupies V and its
+matrix core; U is free. The staging's address arithmetic is `v_add` / `v_mul` /
+`v_mov` -- precisely the VOPD-eligible shapes -- so it could ride alongside the
+matrix chain for nothing. Counted on the 2048^3 body:
+
+| | VALU ops | VOPD bundles | wmma | **VALU between 1st and last wmma** |
+|---|---|---|---|---|
+| w2/d8 | 1637 | 134 | 16 | **0** |
+| w2/d8 + dbuf | 2034 | 146 | 16 | **0** |
+
+**Zero.** The sixteen matrix ops run as an uninterrupted block and the U-pipe is
+idle for the whole of it, while 1600-2000 VALU instructions sit before and after
+waiting their turn. The compiler packs VOPD elsewhere (134 bundles) but not
+here.
+
+That also explains §10n's disappointing 4%. Double-buffering did move the loads
+ahead of the MMA -- 48 of them, confirmed in the ISA -- but the emitted shape is
+`[address math + loads] [wmma x 16] [stores]`, so only the memory half
+overlapped. The arithmetic half never did.
+
+### Consequences for the queue
+
+1. **>= 3072: raise arithmetic intensity.** Bigger macro tiles. Copy scheduling
+   is finished as a lever there; we are on the roofline.
+2. **1024-2048: interleave the staging VALU with the matrix chain** so the U
+   pipe is not idle through it. This is a scheduling question the generator
+   controls and has never attempted. Note §10c measured
+   `rocdl.sched.group.barrier` and found it lost -- but that was grouping
+   (vmem_read, mfma), not (VALU, wmma), so it does not settle this.
+3. **Stop treating the 3.13x ceiling as headroom for copy optimisation.** The
+   elide probe removes the loads *and* their address arithmetic; at scale the
+   former is bandwidth-bound and unreachable, and at small shapes the latter is
+   a pipe-occupancy problem rather than a memory one. The probe bounds the copy's
+   cost correctly and says nothing about which part is recoverable.

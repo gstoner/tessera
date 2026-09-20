@@ -1349,42 +1349,46 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         Value allWhole = ga[0].whole;
         for (int64_t i = 1; i < depthA; ++i)
           allWhole = kb.create<arith::AndIOp>(l, allWhole, ga[i].whole);
+        // scf::IfOp has no result-typed builder that takes body callbacks
+        // (only bool add*Block forms), so the regions are filled by hand.
         SmallVector<Type> vtys(depthA, vecTy);
-        auto ifOp = kb.create<scf::IfOp>(
-            l, vtys, allWhole,
-            [&](OpBuilder &tb, Location tl) {
-              SmallVector<Value> v(depthA);
-              for (int64_t i = 0; i < depthA; ++i)
-                v[i] = tb.create<vector::LoadOp>(tl, vecTy, A,
-                                                 ValueRange{ga[i].logical});
-              tb.create<scf::YieldOp>(tl, v);
-            },
-            [&](OpBuilder &eb, Location el) {
-              SmallVector<Value> v(depthA);
-              for (int64_t q = 0; q < depthA; ++q) {
-                Value acc = eb.create<vector::BroadcastOp>(el, vecTy,
-                                                           scalarZero);
-                for (int64_t i = 0; i < vecW; ++i) {
-                  Value off = ci(i);
-                  Value in = eb.create<arith::AndIOp>(
-                      el, ga[q].rowIn,
-                      eb.create<arith::CmpIOp>(
-                          el, slt,
-                          eb.create<arith::AddIOp>(el, ga[q].gk, off), K));
-                  Value e1 = eb.create<memref::LoadOp>(
-                      el, A,
-                      ValueRange{eb.create<arith::SelectOp>(
-                          el, in, eb.create<arith::AddIOp>(el, ga[q].logical,
-                                                           off),
-                          c0)});
-                  e1 = eb.create<arith::SelectOp>(el, in, e1, scalarZero);
-                  acc = eb.create<vector::InsertOp>(el, e1, acc,
-                                                    ArrayRef<int64_t>{i});
-                }
-                v[q] = acc;
-              }
-              eb.create<scf::YieldOp>(el, v);
-            });
+        auto ifOp = kb.create<scf::IfOp>(l, TypeRange(vtys), allWhole,
+                                         /*addThenBlock=*/true,
+                                         /*addElseBlock=*/true);
+        {
+          OpBuilder::InsertionGuard ig(kb);
+          kb.setInsertionPointToStart(ifOp.thenBlock());
+          SmallVector<Value> v(depthA);
+          for (int64_t i = 0; i < depthA; ++i)
+            v[i] = kb.create<vector::LoadOp>(l, vecTy, A,
+                                             ValueRange{ga[i].logical});
+          kb.create<scf::YieldOp>(l, v);
+        }
+        {
+          OpBuilder::InsertionGuard ig(kb);
+          kb.setInsertionPointToStart(ifOp.elseBlock());
+          SmallVector<Value> v(depthA);
+          for (int64_t q = 0; q < depthA; ++q) {
+            Value acc = kb.create<vector::BroadcastOp>(l, vecTy, scalarZero);
+            for (int64_t i = 0; i < vecW; ++i) {
+              Value off = ci(i);
+              Value in = kb.create<arith::AndIOp>(
+                  l, ga[q].rowIn,
+                  kb.create<arith::CmpIOp>(
+                      l, slt, kb.create<arith::AddIOp>(l, ga[q].gk, off), K));
+              Value e1 = kb.create<memref::LoadOp>(
+                  l, A,
+                  ValueRange{kb.create<arith::SelectOp>(
+                      l, in, kb.create<arith::AddIOp>(l, ga[q].logical, off),
+                      c0)});
+              e1 = kb.create<arith::SelectOp>(l, in, e1, scalarZero);
+              acc = kb.create<vector::InsertOp>(l, e1, acc,
+                                                ArrayRef<int64_t>{i});
+            }
+            v[q] = acc;
+          }
+          kb.create<scf::YieldOp>(l, v);
+        }
         for (int64_t i = 0; i < depthA; ++i) vals[i] = ifOp.getResult(i);
       }
       auto drainA = [&](OpBuilder &ob, Location ol) {
@@ -1476,41 +1480,43 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         for (int64_t i = 1; i < depthB; ++i)
           allWhole = kb.create<arith::AndIOp>(l, allWhole, gb[i].whole);
         SmallVector<Type> vtys(depthB, vecTy);
-        auto ifOp = kb.create<scf::IfOp>(
-            l, vtys, allWhole,
-            [&](OpBuilder &tb, Location tl) {
-              SmallVector<Value> v(depthB);
-              for (int64_t i = 0; i < depthB; ++i)
-                v[i] = tb.create<vector::LoadOp>(tl, vecTy, B,
-                                                 ValueRange{gb[i].logical});
-              tb.create<scf::YieldOp>(tl, v);
-            },
-            [&](OpBuilder &eb, Location el) {
-              SmallVector<Value> v(depthB);
-              for (int64_t q = 0; q < depthB; ++q) {
-                Value acc = eb.create<vector::BroadcastOp>(el, vecTy,
-                                                           scalarZero);
-                for (int64_t i = 0; i < vecW; ++i) {
-                  Value off = ci(i);
-                  Value in = eb.create<arith::AndIOp>(
-                      el, gb[q].kIn,
-                      eb.create<arith::CmpIOp>(
-                          el, slt,
-                          eb.create<arith::AddIOp>(el, gb[q].gc, off), N));
-                  Value e1 = eb.create<memref::LoadOp>(
-                      el, B,
-                      ValueRange{eb.create<arith::SelectOp>(
-                          el, in,
-                          eb.create<arith::AddIOp>(el, gb[q].logical, off),
-                          c0)});
-                  e1 = eb.create<arith::SelectOp>(el, in, e1, scalarZero);
-                  acc = eb.create<vector::InsertOp>(el, e1, acc,
-                                                    ArrayRef<int64_t>{i});
-                }
-                v[q] = acc;
-              }
-              eb.create<scf::YieldOp>(el, v);
-            });
+        auto ifOp = kb.create<scf::IfOp>(l, TypeRange(vtys), allWhole,
+                                         /*addThenBlock=*/true,
+                                         /*addElseBlock=*/true);
+        {
+          OpBuilder::InsertionGuard ig(kb);
+          kb.setInsertionPointToStart(ifOp.thenBlock());
+          SmallVector<Value> v(depthB);
+          for (int64_t i = 0; i < depthB; ++i)
+            v[i] = kb.create<vector::LoadOp>(l, vecTy, B,
+                                             ValueRange{gb[i].logical});
+          kb.create<scf::YieldOp>(l, v);
+        }
+        {
+          OpBuilder::InsertionGuard ig(kb);
+          kb.setInsertionPointToStart(ifOp.elseBlock());
+          SmallVector<Value> v(depthB);
+          for (int64_t q = 0; q < depthB; ++q) {
+            Value acc = kb.create<vector::BroadcastOp>(l, vecTy, scalarZero);
+            for (int64_t i = 0; i < vecW; ++i) {
+              Value off = ci(i);
+              Value in = kb.create<arith::AndIOp>(
+                  l, gb[q].kIn,
+                  kb.create<arith::CmpIOp>(
+                      l, slt, kb.create<arith::AddIOp>(l, gb[q].gc, off), N));
+              Value e1 = kb.create<memref::LoadOp>(
+                  l, B,
+                  ValueRange{kb.create<arith::SelectOp>(
+                      l, in, kb.create<arith::AddIOp>(l, gb[q].logical, off),
+                      c0)});
+              e1 = kb.create<arith::SelectOp>(l, in, e1, scalarZero);
+              acc = kb.create<vector::InsertOp>(l, e1, acc,
+                                                ArrayRef<int64_t>{i});
+            }
+            v[q] = acc;
+          }
+          kb.create<scf::YieldOp>(l, v);
+        }
         for (int64_t q = 0; q < depthB; ++q)
           for (int64_t i = 0; i < vecW; ++i) {
             Value v = kb.create<vector::ExtractOp>(l, ifOp.getResult(q),

@@ -2503,3 +2503,71 @@ Recorded, not chased -- it is orthogonal to everything above, and it is the kind
 of claim-integrity question that deserves its own investigation rather than a
 tired paragraph at the end of a long one. **Anything asserting bit-exactness for
 gfx1151 dense f16 matmul should be re-read against this.**
+
+## 10w. The gfx1151 non-exactness is the hardware, and both stated candidates were wrong
+
+§10v recorded that gfx1151 dense f16 matmul is not bit-exact against an f32
+reference where gfx1201 is, and named two candidates. Neither survived.
+
+### Candidate 2 -- wrong intrinsic -- excluded
+
+Disassembly of the gfx1151 hsaco emits `v_wmma_f32_16x16x16_f16` with
+destination `v[2:9]` and sources `v[96:103]`, `v[104:111]`: eight b32 for the
+f32 accumulator, eight VGPRs each holding 16 f16 for A and B. That is the
+correct gfx11 f32-accumulate ABI. The lane reaches the intended instruction.
+
+### Candidate 1 -- fragment ABI / opsel -- excluded
+
+The opsel concern belongs to the f16-ACCUMULATE family, which this lane does
+not use. More directly: a raw HIP kernel with **no Tessera in the path**,
+using AMD's own documented register layout, reproduces the same error.
+
+### Root cause
+
+A **single** `v_wmma_f32_16x16x16_f16` on gfx1151, integer f16 inputs in
+[-4, 4] whose products and sums are exactly representable:
+
+```
+non-integer outputs : 110 / 256
+differ from exact   : 110 / 256   max 5.72e-06
+worst [14][5]: got 0.9999943  exact 1
+```
+
+Compare Tessera's worst at K=64: `got 69.999985, exact 70`. Same character,
+same direction. **The instruction is not exact for exactly-representable
+integer inputs, and Tessera reproduces the hardware faithfully.**
+
+Every deviation observed, in both the raw and the Tessera path, is **toward
+zero** -- 0.9999943 below 1, 69.999985 below 70, -2.9999685 above -3.0. That is
+a truncation signature rather than round-to-nearest. Per-instruction it is 1-2
+ULP; across a K-loop it accumulates as sqrt(K), which is the 3.05e-05 at K=64
+to 1.22e-04 at K=2048 recorded in §10v.
+
+gfx1201 returns exactly 0 on the same test, so this is an RDNA3.5 property and
+**gfx1201 evidence does not clear gfx1151**, as usual.
+
+### What this does NOT invalidate
+
+Checked: no test, packet or audit row asserts bit-exactness for gfx1151 **dense
+f16 matmul**. The bit-exact claims that do exist for gfx1151 -- the EBM Langevin
+row program and the row-normalization fold -- are scalar/vector f32 lanes with
+no WMMA in them, and are unaffected.
+
+**What it does mean:** a gfx1151 f16 matmul test must carry a tolerance, and a
+tolerance that scales with sqrt(K). An exact comparison will pass at small K on
+friendly data and fail later, which is the worst way to learn this.
+
+### A methodology note, because the first control was worthless
+
+The first raw-HIP control reported "differ from exact 235/256, max 9.3e+01,
+got 44 exact -49" and printed a VERDICT line saying the hardware was inexact.
+That verdict was unsupported: errors of 93 on values of order 50 are a wrong
+*layout*, not a rounding effect, and the test could not distinguish "hardware
+inexact" from "my hand-written lane mapping is wrong". It was the latter -- the
+D matrix maps as `v{m/2}` lane `{(m%2)*16 + n}`, and the store had been written
+as `half*8 + i` instead of `2*i + half`.
+
+The tell was available before the fix: **Tessera was off by 2 ULP and the
+hand-rolled control by 93.** Two orders of magnitude apart is not two views of
+one defect. AMD's matrix instruction calculator settled the layout in one query,
+which is what it is on the box for.

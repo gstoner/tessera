@@ -2106,3 +2106,48 @@ thing to try.
 `BUFFER_*`/`TBUFFER_*` ops in both gfx1201 bodies; ROCDL lowers everything to
 flat/global addressing, so the format-conversion and D16 buffer forms are
 unreachable from this pipeline.
+
+### 10r.1 What an opcode census finds that every previous census hid
+
+Every census in §10j-§10r bucketed instructions by the class it was looking for
+and dropped the rest into `wait_alu` / `salu` / `other`. A plain histogram of the
+2048^3 body (w2/d8 + dbuf + sched32):
+
+| opcode | count | |
+|---|---|---|
+| `s_wait_alu` | **834** | the single most common instruction in the kernel |
+| `v_add_co_u32` | 504 | 64-bit address add, low half |
+| `v_add_co_ci_u32_e64` | 504 | 64-bit address add, high half + carry |
+| `s_delay_alu` | 261 | |
+| `v_lshlrev_b64` | 225 | |
+| `v_mul_*` | 76 | |
+| `v_pk_*` | **0** | |
+
+Two things neither the VALU-vs-SALU split nor the wave-invariance count could
+show:
+
+* **`s_wait_alu` is ~19% of the kernel.** These are ALU dependency stalls the
+  hardware does not interlock. Every earlier census classified them as
+  `wait_alu` and moved on; §10j.3's first pass explicitly *excluded* them as
+  "SGPR guards" after they swamped a memory-wait count. That exclusion was right
+  for that question and has been carried, unexamined, through every census
+  since.
+* **~1008 VALU ops are 64-bit pointer arithmetic** (the `v_add_co_u32` /
+  `v_add_co_ci_u32_e64` carry pairs, plus 225 `v_lshlrev_b64`). That is half the
+  VALU in the body, and it dwarfs every quantity §10m-§10r has been tuning.
+
+Both are open. Neither is a claim that shrinking them is easy -- 64-bit
+addressing may be what the memref lowering requires -- but they are measured,
+they are large, and nothing above accounted for them.
+
+**Two checks that closed rather than opened:**
+
+* **INT32 multiply** is the largest vector/scalar latency gap on RDNA4 (8 cycles
+  vs 3), so scalar offload should target it. Measured: 76 `v_mul_*` survive,
+  most multiplies having been strength-reduced to the 246 `v_lshl*`, and
+  §10q.1's wave-invariance census found **no multiplies** among the 34 remaining
+  candidates -- they are per-lane and unreachable. §10q.1's conclusion holds, but
+  it was reached without weighting by latency and is only accidentally right.
+* **Packed math** (`v_pk_add_f16` and friends) is **absent**, and correctly so:
+  the staging path moves data rather than computing on it, and the arithmetic is
+  `wmma`. Recorded as verified rather than assumed.

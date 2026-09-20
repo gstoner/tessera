@@ -1,4 +1,11 @@
-"""Schema and analytical checks for the NVIDIA serving benchmark."""
+"""Schema and analytical checks for the NVIDIA serving benchmark.
+
+Host-free: this module's name reads like a device lane, and it is not one.
+Nothing here loads a module onto a GPU or launches a kernel, so it runs and
+means the same on every fleet host. Exact-device proof for this area lives in
+the gated lanes that skip when the hardware is absent; if you add a device
+call here, move it there instead of deleting this line.
+"""
 from __future__ import annotations
 
 import importlib.util

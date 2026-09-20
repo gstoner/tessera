@@ -47,10 +47,18 @@ class AppleGPUArch(IntEnum):
     APPLE10 = 10  # M5-series (2025 — GPU neural accelerators + Metal 4 packaged ML)
 
 
-#: Target Metal release that Tessera's Apple GPU backend is built
-#: against. MSL 4.0 (Metal 4) shipped with macOS 26 (~2025).
-TESSERA_TARGET_METAL: str = "4.0"
-TESSERA_TARGET_MACOS_FOR_MTL4: str = "26.0"
+#: Target Metal release that Tessera's Apple GPU backend is built against, and
+#: the macOS that carries it. Metal 4.0 shipped with macOS 26; **Metal 4.1 with
+#: macOS 27**, and 4.1 is what the fleet Mac compiles by default since
+#: 2026-09-14. Moved 4.0 -> 4.1 on 2026-09-20 because the backend genuinely
+#: depends on 4.1 now: the FP8 E4M3/E5M2 and FP4 E2M1 `matmul2d` operands are a
+#: 4.1 feature, so a pin at 4.0 understated what the shipped lane requires.
+#:
+#: These two move TOGETHER -- a Metal release and the macOS carrying it are one
+#: fact -- which is why `scripts/bump_toolchain_pins.py` owns both sites. It
+#: found this drift on its first run.
+TESSERA_TARGET_METAL: str = "4.1"
+TESSERA_TARGET_MACOS_FOR_MTL4: str = "27.0"
 
 
 # ---------------------------------------------------------------------

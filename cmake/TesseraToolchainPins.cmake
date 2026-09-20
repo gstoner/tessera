@@ -30,6 +30,22 @@ set(TESSERA_REQUIRED_CUDA_DRIVER    "610.88"    CACHE STRING "Required minimum C
 set(TESSERA_REQUIRED_PTX_ISA        "9.4"       CACHE STRING "Required minimum PTX ISA version (nvcc 13.4.59 emits .version 9.4)")
 set(TESSERA_REQUIRED_NCCL_VERSION   "2.22"      CACHE STRING "Required minimum NCCL version (floor; 13.3 bundled 2.30.7, 13.4 bundle not measured)")
 
+# LLVM/MLIR is the one toolchain the whole compiler is built ON, and it was the
+# one with no pin here. It is an EXACT match, not a floor, unlike CUDA/ROCm
+# below: the others are vendor runtimes where a newer version is normally
+# compatible, while MLIR's C++ API changes between patch releases and every
+# fleet box must agree for a lit/contract result on one to mean anything on
+# another. Measured 2026-09-20: all four boxes on 23.1.1 (Homebrew keg on the
+# Mac, apt.llvm.org on Princess-Luna and The-Super-Bear, from-source prefixes
+# incl. the assertions build on Tajasarus).
+#
+# The live hazard is DRIFT UPWARD, not a stale box: apt.llvm.org already offers
+# 23.1.2 snapshots on both Ubuntu boxes, so a routine `apt upgrade` moves them
+# off the pin silently. Hold the packages there (`sudo apt-mark hold llvm-23
+# llvm-23-dev libmlir-23-dev mlir-23-tools clang-23 lld-23`) and raise this pin
+# deliberately when the fleet moves together.
+set(TESSERA_REQUIRED_LLVM_VERSION   "23.1.1" CACHE STRING "Exact LLVM/MLIR version every fleet box must match (measured on all four, 2026-09-20)")
+
 set(TESSERA_REQUIRED_ROCM_VERSION   "10.0"   CACHE STRING "Required minimum ROCm version (measured 10.0.0 on Princess-Luna + Tajasarus, 2026-09-15)")
 set(TESSERA_REQUIRED_HIP_VERSION    "7.15"   CACHE STRING "Required minimum HIP version (measured 7.15.26333)")
 set(TESSERA_REQUIRED_RCCL_VERSION   "2.22"   CACHE STRING "Required minimum RCCL version")
@@ -51,13 +67,25 @@ function(tessera_pin_cuda_toolkit required_version)
             "CUDAToolkit version was reported by find_package.")
     endif()
 
-    # CUDAToolkit_VERSION has format like "13.3.0"
-    if(CUDAToolkit_VERSION VERSION_LESS ${required_version})
+    # EXACT major.minor, not a floor (changed 2026-09-20).
+    #
+    # A floor reads as safe and is not: the sm_120 Lion lane lost a week to
+    # exactly this. nvcc 13.4 emits PTX 9.4 while driver 610.88 JITs only
+    # <= 9.3, so a "newer toolkit is fine" assumption produced opaque rc=3 at
+    # every driver-JIT'd launch. A newer vendor toolkit is a DIFFERENT
+    # toolchain, and Decision #11 says a measurement is only valid for the code
+    # that produced it -- a benchmark taken under 13.4 is not evidence about
+    # 13.6. The patch level is deliberately ignored: nvcc 13.4.59 vs 13.4.62 is
+    # the same pinned toolkit.
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _tessera_cuda_found "${CUDAToolkit_VERSION}")
+    if(NOT _tessera_cuda_found VERSION_EQUAL ${required_version})
         message(FATAL_ERROR
-            "Tessera requires CUDA Toolkit >= ${required_version} (matching the "
-            "TESSERA_TARGET_CUDA_TOOLKIT pin in gpu_target.py), but found "
-            "${CUDAToolkit_VERSION}.  Set -DTESSERA_SKIP_TOOLCHAIN_PIN=ON to "
-            "override (development only).")
+            "Tessera pins CUDA Toolkit ${required_version} but this box has "
+            "${_tessera_cuda_found} (${CUDAToolkit_VERSION}).\n"
+            "  Moving the fleet? Run: python scripts/bump_toolchain_pins.py --check\n"
+            "  on the box that HAS this toolkit, then --write, then re-measure "
+            "every performance row taken under the old pin.\n"
+            "  One-off override: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
     endif()
 
     # Locate nvcc explicitly so the compile-only validator can find it.
@@ -72,6 +100,85 @@ function(tessera_pin_cuda_toolkit required_version)
     set(TESSERA_NVCC_EXECUTABLE "${TESSERA_NVCC_EXECUTABLE}"   PARENT_SCOPE)
 endfunction()
 
+
+function(tessera_pin_llvm required_version)
+    if(DEFINED TESSERA_SKIP_TOOLCHAIN_PIN AND TESSERA_SKIP_TOOLCHAIN_PIN)
+        message(STATUS "Tessera LLVM pin skipped (TESSERA_SKIP_TOOLCHAIN_PIN=ON)")
+        return()
+    endif()
+
+    if(NOT DEFINED LLVM_PACKAGE_VERSION)
+        message(FATAL_ERROR
+            "Tessera pins LLVM/MLIR ${required_version} but no LLVM_PACKAGE_VERSION "
+            "is defined -- call this after find_package(LLVM CONFIG).")
+    endif()
+
+    # Compare major.minor.patch only: apt.llvm.org appends a snapshot suffix
+    # (`23.1.2~++2026...`) that is not part of the version identity.
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _tessera_llvm_found "${LLVM_PACKAGE_VERSION}")
+
+    # EXACT, not a floor. A newer MLIR is not "at least as good": its C++ API
+    # moves between patch releases, and two boxes on different patches cannot
+    # be compared -- which is the whole reason a fleet result means anything.
+    if(NOT _tessera_llvm_found VERSION_EQUAL ${required_version})
+        message(FATAL_ERROR
+            "Tessera pins LLVM/MLIR ${required_version} but this box has "
+            "${_tessera_llvm_found} (${LLVM_PACKAGE_VERSION}) at ${LLVM_DIR}.\n"
+            "  If the fleet is moving, raise TESSERA_REQUIRED_LLVM_VERSION and move "
+            "EVERY box together -- a lit or contract result is only comparable "
+            "across boxes on the same MLIR.\n"
+            "  If this box drifted (apt.llvm.org ships 23.1.2 snapshots), pin it back "
+            "and hold it: sudo apt-mark hold llvm-23 llvm-23-dev libmlir-23-dev "
+            "mlir-23-tools clang-23 lld-23\n"
+            "  To override for a one-off: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
+    endif()
+
+    # MLIR must match too, and it is a SEPARATE package. An apt-style install
+    # can present LLVM 23.1.1 alongside an MLIR 23.1.2 prefix, and the
+    # major/minor checks elsewhere in CMakeLists.txt accept that pair -- so
+    # pinning only LLVM would let through exactly the mixed-patch toolchain
+    # this pin exists to reject. MLIR is the half whose C++ API our passes
+    # compile against, so if either is going to be checked it is this one.
+    #
+    # MLIR_PACKAGE_VERSION is not always defined (minimal apt packaging). When
+    # it is absent we cannot verify the patch, and saying nothing would be a
+    # silent hole, so say so out loud instead of implying a check happened.
+    # Prefer MLIR_VERSION over MLIR_PACKAGE_VERSION. Measured 2026-09-20 on the
+    # Homebrew keg: MLIR_PACKAGE_VERSION is UNSET while MLIR_VERSION is 23.1.1
+    # and MLIR_VERSION_PATCH is 1 -- so keying on the package variable alone
+    # would leave the Mac permanently unverified, which is the hole being
+    # closed rather than a second copy of it.
+    set(_tessera_mlir_raw "")
+    if(DEFINED MLIR_VERSION)
+        set(_tessera_mlir_raw "${MLIR_VERSION}")
+    elseif(DEFINED MLIR_PACKAGE_VERSION)
+        set(_tessera_mlir_raw "${MLIR_PACKAGE_VERSION}")
+    elseif(DEFINED MLIR_VERSION_MAJOR AND DEFINED MLIR_VERSION_MINOR AND
+           DEFINED MLIR_VERSION_PATCH)
+        set(_tessera_mlir_raw "${MLIR_VERSION_MAJOR}.${MLIR_VERSION_MINOR}.${MLIR_VERSION_PATCH}")
+    endif()
+
+    if(_tessera_mlir_raw)
+        string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _tessera_mlir_found "${_tessera_mlir_raw}")
+        if(NOT _tessera_mlir_found VERSION_EQUAL ${required_version})
+            message(FATAL_ERROR
+                "Tessera pins LLVM/MLIR ${required_version}: LLVM is "
+                "${_tessera_llvm_found} but MLIR is ${_tessera_mlir_found} "
+                "(${_tessera_mlir_raw}) at ${MLIR_DIR}.\n"
+                "  A mixed-patch LLVM/MLIR pair is the case this pin exists to "
+                "catch -- MLIR's C++ API moves between patch releases, so the "
+                "passes are compiled against a different MLIR than the tools "
+                "report.\n"
+                "  One-off override: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
+        endif()
+        message(STATUS "Tessera LLVM/MLIR pin satisfied: LLVM ${_tessera_llvm_found}, MLIR ${_tessera_mlir_found}")
+    else()
+        message(WARNING
+            "Tessera LLVM pin satisfied at ${_tessera_llvm_found}, but this "
+            "MLIR package reports NO version variable at all, so its patch level "
+            "is unverified. A mixed-patch pair would pass here.")
+    endif()
+endfunction()
 
 function(tessera_pin_rocm required_version)
     if(DEFINED TESSERA_SKIP_TOOLCHAIN_PIN AND TESSERA_SKIP_TOOLCHAIN_PIN)
@@ -89,11 +196,24 @@ function(tessera_pin_rocm required_version)
             "was reported by find_package(hip).")
     endif()
 
-    if(hip_VERSION VERSION_LESS ${required_version})
+    # EXACT major.minor, for the same reason as CUDA above.
+    #
+    # NOTE the argument: this function takes the **HIP** version (7.15), not the
+    # ROCm version (10.0), while the file defines BOTH
+    # TESSERA_REQUIRED_HIP_VERSION and TESSERA_REQUIRED_ROCM_VERSION. Passing
+    # the ROCm one -- which is what the function's name invites -- demands
+    # hip >= 10.0 and fails on every AMD box in the fleet.
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _tessera_hip_found "${hip_VERSION}")
+    if(NOT _tessera_hip_found VERSION_EQUAL ${required_version})
         message(FATAL_ERROR
-            "Tessera requires HIP >= ${required_version} (matching the "
-            "TESSERA_TARGET_HIP pin in rocm_target.py), but found ${hip_VERSION}. "
-            "Set -DTESSERA_SKIP_TOOLCHAIN_PIN=ON to override.")
+            "Tessera pins HIP ${required_version} but this box has "
+            "${_tessera_hip_found} (${hip_VERSION}).\n"
+            "  Moving the fleet? Run: python scripts/bump_toolchain_pins.py --check\n"
+            "  on the box that HAS this toolkit, then --write, then re-measure "
+            "every performance row taken under the old pin.\n"
+            "  Wiring this in? Pass TESSERA_REQUIRED_HIP_VERSION, not "
+            "TESSERA_REQUIRED_ROCM_VERSION.\n"
+            "  One-off override: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
     endif()
 
     find_program(TESSERA_HIPCC_EXECUTABLE NAMES hipcc

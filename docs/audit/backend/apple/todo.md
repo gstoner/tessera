@@ -324,6 +324,38 @@ not applicable to Apple's MSL/dynamic-threadgroup binding. No Metal ABI or
 numerical-policy change. Apple exact-device policy, AD and performance gates
 remain independent; this host commissioning provides no Apple proof.
 
+## Host-assumption cleanup sibling assessment — 2026-09-20
+
+Cross-backend sync `HOST-ASSUMPTION-CLEANUP-2026-09-20` (PR #785, follow-on to #784). Shared surfaces
+changed: `scripts/_rocm_env.sh` (arch detection), `cmake/TesseraToolchainPins.cmake`
++ top-level `CMakeLists.txt` (LLVM/CUDA/HIP pins made EXACT and wired for the
+first time), `scripts/bump_toolchain_pins.py` (new), `scripts/install_test_deps.sh`
+(interpreter default), `tests/tessera-ir/lit.cfg.py` (new `tessera-clifford`
+feature), and `tests/unit/test_foreign_target_host_claims.py` (new drift gate
+over every backend's tests). No IR, ABI, dtype/op registration, diagnostic
+code, or numerical-policy change on any backend.
+
+**Apple outcome: parity validated; one pin moved, one gap unverifiable.**
+`TESSERA_TARGET_METAL` moved 4.0 → 4.1 and `TESSERA_TARGET_MACOS_FOR_MTL4`
+26.0 → 27.0, together, via `scripts/bump_toolchain_pins.py`. 4.1 is correct
+because the backend depends on it in earnest: FP8 E4M3/E5M2 and FP4 E2M1
+`matmul2d` operands are 4.1 features, so the old pin understated the shipped
+lane. The script found this drift on its first run.
+
+Per-feature `macOS 26+` floors are deliberately NOT raised. macOS 27 is a
+superset so they still pass — which is exactly why the features they gate were
+**retested** rather than re-floored: a passing version check says the code
+runs, not that the feature behaves. Retested on macOS 27 / Metal 4.1 against a
+freshly built dylib: the MTL4 resident-weight MLP session probes AVAILABLE (a
+real session build, not a version compare), Metal 4 suites 238 passed / 1
+structural skip, full Apple sweep 3937 passed / 9 skipped with no arch-gated
+skips. Mac lit at LLVM 23.1.1: 456 passed / 43 unsupported / 0 failed.
+
+**Not applicable / unverifiable:** ROCm arch detection, the HIP/CUDA pins and
+the NVIDIA build-tree findings do not touch Metal. Features gated on **M2+**
+(native bf16 in MPSGraph) cannot be evaluated on any fleet box — the Mac is an
+M1 Max / Apple7 — so they remain proven-under-macOS-26 and are not claimed
+under 27.
 ## Current integrated-plan handoff
 
 [The integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md) owns

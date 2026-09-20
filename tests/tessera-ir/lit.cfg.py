@@ -134,6 +134,21 @@ if _opt_help_contains("tessera-lower-to-apple_gpu"):
 if _opt_help_contains("tessera-ebm-lower-langevin") and _opt_help_contains("tessera-row-program-to-gpu"):
     config.available_features.add("tessera-ebm")
 
+# The Clifford (geometric-algebra) dialect and its passes register in
+# tessera-opt only when TESSERA_BUILD_CLIFFORD_BACKEND=ON, which is OFF by
+# default. Every fleet box configures it ON, so the gap was invisible on the
+# fleet and failed only in CI -- for eleven days, because the fixture had no
+# REQUIRES at all (`phase7/clifford_core_ir_visible.mlir`).
+#
+# The failure mode is worth knowing: without the dialect the ops still print in
+# GENERIC form, so `CHECK-DAG: tessera_clifford.inner` keeps matching as a
+# substring and the fixture gets most of the way through. What breaks is the
+# first check on a custom ATTRIBUTE (`algebra [3, 0, 0]`), because the pretty
+# printer never runs. So the fixture failed at line 39 rather than line 1,
+# which reads like a content regression instead of a missing backend.
+if _opt_help_contains("tessera-clifford-expand-product-table"):
+    config.available_features.add("tessera-clifford")
+
 # The x86 executable pass is always registered so it can fail closed with a
 # useful rebuild diagnostic.  Help-text probing therefore cannot distinguish a
 # build that actually registered TesseraX86Dialect.  Probe the dialect directly

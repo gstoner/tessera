@@ -28,10 +28,22 @@
 # a conftest setting os.environ cannot repair its own already-running process,
 # and re-exec'ing from inside pytest loses the output stream.
 #
-# Detection is by capability (does this root actually have ld.lld?) rather than
-# by hardcoded path, and an already-exported ROCM_PATH is respected. On a host
-# with no ROCm at all (Mac / NVIDIA boxes) this is a silent no-op — it must NOT
-# fabricate a device, so those lanes still skip honestly (repo Decision #26).
+#   3. TESSERA_ROCM_CHIP selects the arch every compiled lane is built FOR, and
+#      it used to default to gfx1151 with nothing on the host correcting it. On
+#      the gfx1201 box a full sweep then compiles gfx1151 images, fails to load
+#      them, and reports ~1444 failures saying `no usable AMD GPU for cached
+#      module (..., 'gfx1151')`. Because that refusal names an arch which is
+#      not the host's, the conftest hook correctly declines to soften it into a
+#      skip — so a label error is indistinguishable from a broken branch until
+#      you read the text. (Cost two full validate runs, 2026-09-19.)
+#
+# Detection is by capability (does this root actually have ld.lld? which arch
+# does the device report?) rather than by hardcoded path or a default, and an
+# already-exported ROCM_PATH / TESSERA_ROCM_CHIP is respected. A fleet with two
+# ROCm architectures cannot have a correct default, and "remember to export it"
+# is documentation, not a mechanism. On a host with no ROCm at all (Mac /
+# NVIDIA boxes) this is a silent no-op — it must NOT fabricate a device, so
+# those lanes still skip honestly (repo Decision #26).
 
 _tessera_rocm_lld_dir() {
   # Echo the directory holding ld.lld under a toolkit root, if any.
@@ -53,6 +65,27 @@ _tessera_rocm_resolve_root() {
     [ -n "${candidate}" ] || continue
     if _tessera_rocm_lld_dir "${candidate}" >/dev/null; then
       printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_tessera_rocm_detect_chip() {
+  # Echo the launch architecture of the first real GPU agent, or fail.
+  # `rocm_agent_enumerator` also lists `gfx000` for the CPU agent; that is not
+  # a launch target and must never be selected.
+  local enum out gfx
+  for enum in "${TESSERA_ROCM_ROOT}/bin/rocm_agent_enumerator" \
+              "${TESSERA_ROCM_ROOT}/bin/rocminfo"; do
+    [ -x "${enum}" ] || continue
+    out="$("${enum}" 2>/dev/null)" || continue
+    gfx="$(printf '%s\n' "${out}" \
+             | grep -oE 'gfx[0-9a-f]+' \
+             | grep -v '^gfx000$' \
+             | head -n 1)"
+    if [ -n "${gfx}" ]; then
+      printf '%s\n' "${gfx}"
       return 0
     fi
   done
@@ -100,4 +133,24 @@ if TESSERA_ROCM_ROOT="$(_tessera_rocm_resolve_root)"; then
   case "$(uname -r)" in
     *microsoft*|*WSL*|*wsl*) export HSA_ENABLE_DXG_DETECTION="${HSA_ENABLE_DXG_DETECTION:-1}" ;;
   esac
+
+  # TESSERA_ROCM_CHIP: the arch every compiled lane is built FOR. It used to
+  # default to gfx1151 with nothing on the host correcting it, so on the
+  # gfx1201 box a full sweep compiled gfx1151 images, failed to load them, and
+  # reported ~1444 failures reading `no usable AMD GPU for cached module
+  # (..., 'gfx1151')` -- a label error that looks exactly like a broken branch.
+  # The refusal names an arch that is not the host's, so the conftest hook
+  # correctly declines to soften it to a skip, and the run is unusable.
+  #
+  # Detect it from the device for the same reason the toolkit root is detected
+  # by capability: a fleet with two ROCm architectures cannot have a correct
+  # default, and "remember to export it" is not a mechanism. An explicit
+  # setting always wins -- a test that pins a foreign arch on purpose must
+  # still be able to.
+  if [ -z "${TESSERA_ROCM_CHIP:-}" ]; then
+    if _tessera_rocm_detected_chip="$(_tessera_rocm_detect_chip)"; then
+      export TESSERA_ROCM_CHIP="${_tessera_rocm_detected_chip}"
+    fi
+    unset _tessera_rocm_detected_chip
+  fi
 fi

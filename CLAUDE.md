@@ -939,7 +939,7 @@ lint / typecheck / lit / unit-test is on Homebrew under `/opt/homebrew/bin/`:
 either.
 
 **LLVM/MLIR 23 is Homebrew's `llvm` keg (canonical since 2026-08-28).**
-`brew`'s `llvm` formula is now the production 23.1.0 release and ships MLIR;
+`brew`'s `llvm` formula is the production release and ships MLIR; it moved **23.1.0 → 23.1.1 on 2026-09-20** with a Homebrew upgrade (`lld` and `lit` tracked it). That bump kept the `libLLVM.23.1.dylib` soname, so the existing `build/` kept running and `tessera-opt` reported the new version without a reconfigure — unlike the 2026-08-28 keg *removal*, which stranded four trees. A patch bump inside one soname is the benign case; a prefix that disappears is not, and only the second needs the sweep in the stale-build-tree notes.
 point CMake at `/opt/homebrew/opt/llvm/lib/cmake/{llvm,mlir}`, and put
 `/opt/homebrew/opt/llvm/bin` on `PATH` for `FileCheck` before running lit. It
 is keg-only, so nothing is on `PATH` by default. **It is an NDEBUG build**
@@ -962,7 +962,7 @@ WSL is up.
 matrix and the measured pins; this section remains the maintained record and
 the two must not drift. **Toolchain versions, one place to look:** CUDA **13.4**
 (nvcc 13.4.59, PTX ISA 9.4, driver 610.88) on Super-Bear; **ROCm 10.0 / HIP
-7.15** on both AMD boxes; Homebrew LLVM/MLIR 23.1.0 (NDEBUG) on the Mac,
+7.15** on both AMD boxes; Homebrew LLVM/MLIR **23.1.1** (NDEBUG) on the Mac,
 apt LLVM/MLIR 23.1 on Princess-Luna and Super-Bear, assertions-ON 23.1.1 on
 Tajasarus. Any doc or packet that says CUDA 13.3, ROCm 7.14 or ROCm 7.2.4 is
 recording the toolchain that produced *that* result at the time, which is

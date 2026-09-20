@@ -128,6 +128,23 @@ if(NOT LLVM_VERSION_MAJOR EQUAL 23 OR NOT LLVM_VERSION_MINOR EQUAL 1)
     "Tessera requires LLVM 23.1.x exactly; found ${LLVM_PACKAGE_VERSION}")
 endif()
 
+# ...and the PATCH matters too, which "any 23.1.x" above does not catch.
+# apt.llvm.org already offers 23.1.2 snapshots on both Ubuntu boxes, so that
+# check would happily accept a box that has drifted off the fleet version --
+# and an MLIR contract or lit result is only comparable across boxes running
+# the same MLIR. The exact pin lives in cmake/TesseraToolchainPins.cmake.
+#
+# That file was DEAD until 2026-09-20: it is referenced by PROJECT_STRUCTURE.md
+# and CLAUDE.md as "pinning the toolchains" while no CMakeLists ever included
+# it -- a Decision #29 unconsumed declaration that read as a closed contract in
+# review. This include is what makes the LLVM half of it real. The CUDA/ROCm
+# pin functions in it are still unconsumed and are NOT switched on here: they
+# have never run against the fleet, and turning them on blind would trade one
+# silent gap for a loud one.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/TesseraToolchainPins.cmake)
+tessera_pin_llvm(${TESSERA_REQUIRED_LLVM_VERSION})
+
+
 if(NOT DEFINED MLIR_VERSION_MAJOR OR NOT DEFINED MLIR_VERSION_MINOR OR
    NOT MLIR_VERSION_MAJOR EQUAL 23 OR NOT MLIR_VERSION_MINOR EQUAL 1)
   message(FATAL_ERROR
@@ -292,6 +309,48 @@ endif()
 # --------------------------------------------------------------------------
 if(TESSERA_BUILD_PYTHON)
     find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+endif()
+
+# --------------------------------------------------------------------------
+# Vendor toolchain pins + the instruction-probe targets that ride on them.
+#
+# POSITION IS LOAD-BEARING, and the first cut of this got it wrong in three
+# ways at once by sitting up beside the LLVM pin:
+#   * before the CUDA_TOOLKIT_ROOT_DIR -> CUDAToolkit_ROOT translation above,
+#     so an explicitly selected toolkit could be ignored and a different one
+#     inspected and rejected;
+#   * before `enable_language(HIP)`, which also made this the FIRST
+#     `if(TESSERA_ENABLE_HIP)` block in the file and broke
+#     tests/unit/test_rocm_hip_full_build_wiring.py, which locates that block
+#     by first occurrence;
+#   * before any find_package(Python3), so ${Python3_EXECUTABLE} expanded
+#     empty into the probe targets and `cmake -E env` would try to exec the
+#     validator script directly.
+# Keep these after the toolkit setup and after the interpreter is resolved.
+#
+# Each pin is guarded by the flag that says this build wants that toolkit:
+# unguarded, `find_package(CUDAToolkit REQUIRED)` hard-fails configure on the
+# three fleet boxes without CUDA. tessera_pin_rocm() takes the HIP version,
+# NOT the ROCm one -- passing TESSERA_REQUIRED_ROCM_VERSION demands hip >= 10.0
+# and fails on every AMD box.
+# --------------------------------------------------------------------------
+if(TESSERA_ENABLE_CUDA OR TESSERA_ENABLE_HIP)
+  # The probe targets shell out to a Python validator, and find_package(Python3)
+  # above is gated on TESSERA_BUILD_PYTHON -- which a CUDA/HIP build need not
+  # set. Resolve the interpreter here rather than emit a target with an empty
+  # program in it.
+  if(NOT Python3_EXECUTABLE)
+    find_package(Python3 COMPONENTS Interpreter)
+  endif()
+endif()
+
+if(TESSERA_ENABLE_CUDA)
+  tessera_pin_cuda_toolkit(${TESSERA_REQUIRED_CUDA_VERSION})
+  tessera_add_nvcc_compile_check(NAME tessera-nvcc-instruction-probes)
+endif()
+if(TESSERA_ENABLE_HIP)
+  tessera_pin_rocm(${TESSERA_REQUIRED_HIP_VERSION})
+  tessera_add_hipcc_compile_check(NAME tessera-hipcc-instruction-probes)
 endif()
 
 # --------------------------------------------------------------------------

@@ -304,10 +304,17 @@ def test_apple_arch_defaults_returns_arch_floor():
     assert d.threadgroup_memory_bytes == 32 * 1024
 
 
-def test_target_metal_version_pin_is_4_0():
-    """Apple GPU backend's compile target is MSL 4.0 / macOS 26."""
-    assert TESSERA_TARGET_METAL == "4.0"
-    assert TESSERA_TARGET_MACOS_FOR_MTL4 == "26.0"
+def test_target_metal_version_pin_is_4_1():
+    """Apple GPU backend's compile target is MSL 4.1 / macOS 27.
+
+    Moved from 4.0 / 26.0 on 2026-09-20. The backend depends on 4.1 in earnest
+    -- FP8 E4M3/E5M2 and FP4 E2M1 `matmul2d` operands are 4.1 features -- so the
+    old pin understated what the shipped lane needs. The pair moves together
+    because a Metal release and the macOS carrying it are one fact; both sites
+    are owned by scripts/bump_toolchain_pins.py, which is what caught the drift.
+    """
+    assert TESSERA_TARGET_METAL == "4.1"
+    assert TESSERA_TARGET_MACOS_FOR_MTL4 == "27.0"
 
 
 # ---- Runtime probe (graceful degradation) ------------------------------

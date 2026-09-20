@@ -1647,6 +1647,19 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
             else if (ldsSchedValuPerMma == -2)
               for (int64_t g = 0; g < mt * nt; ++g)
                 grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
+            // N == -3 discriminates the remaining reading. Measured: the mfma
+            // groups ALONE are worse than no description at all (0.973x), so
+            // the valu groups are load-bearing even though they place no VALU
+            // in the chain -- they act as a RESERVATION that keeps the
+            // ds_st/WAIT_load pairs out of it. If that is right, any spacer the
+            // scheduler cannot fill should do, and an salu spacer must behave
+            // like the valu one. If instead it reverts, something about VALU
+            // specifically matters and the reading is still incomplete.
+            else if (ldsSchedValuPerMma == -3)
+              for (int64_t g = 0; g < mt * nt; ++g) {
+                grp(ROCDL::SchedGroupMask::salu, 32);
+                grp(ROCDL::SchedGroupMask::mfma_wmma, 1);
+              }
             grp(ROCDL::SchedGroupMask::ds_write, depthA + depthB * vecW);
           }
           kb.create<gpu::BarrierOp>(l);

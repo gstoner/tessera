@@ -2151,3 +2151,51 @@ they are large, and nothing above accounted for them.
 * **Packed math** (`v_pk_add_f16` and friends) is **absent**, and correctly so:
   the staging path moves data rather than computing on it, and the arithmetic is
   `wmma`. Recorded as verified rather than assumed.
+
+### 10r.2 AMD's own WMMA guides: one confirmation, one correction, one unused technique
+
+Three GPUOpen articles (Hui Zhang, 2026-06-02) were supplied early and read
+late. All three techniques are deployed in llama.cpp, so they are validated
+outside AMD.
+
+**Confirms §7.12.2 and §10m.** "Both matrix A and B are K-major, with each thread
+holding 8 contiguous elements. This layout enables efficient 128-bit vectorized
+loads." That is the fragment layout this document derived independently and
+verified twice against the ISA tables.
+
+**Corrects §10l.** That section concluded, from ROCDL having no `ds.read.tr*`
+for gfx1201, that sparse's column-major-B requirement (§10j.5) has no escape
+hatch on this chip and the K1-blocked layout must satisfy the major order
+directly. AMD states the same hardware fact -- "RDNA 4 architecture GPUs lack
+both shared-memory transpose loading and in-register matrix transpose
+capabilities" -- and then supplies a workaround:
+
+> Matrix D is M-major. So, matrix D is the transposed version of matrix A.
+> ... construct an identity matrix in register B while loading the source matrix
+> into register A. A single WMMA operation then performs the transpose entirely
+> in-register -- no additional memory operations required.
+
+So the hatch exists; it is a matrix op, not a load. **§10l's "this chip does not
+have one" was right about the instruction and wrong about the capability**, and
+the sentence sending the K1 work to satisfy sparse's major order directly is
+withdrawn pending a cost measurement. The cost is one WMMA per 16x16 tile --
+spent on the matrix core, which §10o shows is *not* the constraint here (we are
+bandwidth-bound at scale and VALU-bound below it), so it is plausibly cheap
+exactly where we are.
+
+Part 1 gives a second form of the same idea: swapping the A and B operands
+transposes D without any extra op at all, which is how llama.cpp implements
+RDNA4 flash attention.
+
+**An unused technique for the low-precision lanes.** Part 2: FP16 fragments
+saturate the 128-bit interface (8 x 16 bits) but **FP8/INT8 reach only 64-bit and
+INT4 only 32-bit**, because the fragment is 8 elements regardless of width.
+Fusing two WMMA into a double-K operation restores 128-bit loads, and for the
+integer case the result is bit-identical since only the FMA order changes.
+
+That bears directly on the recorded gfx1201 state: the fp8 and integer branches
+select the 1x1 panel where f16 gets 4x4, and this says their fragment loads are
+also running at half or a quarter of the available width. Not attempted here,
+and the bit-identity claim is demonstrated for integer -- an fp8 lane with fp32
+accumulate reorders floating-point accumulation and would need its own numeric
+check, not an inherited one.

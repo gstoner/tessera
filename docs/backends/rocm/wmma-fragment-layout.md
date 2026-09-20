@@ -2445,3 +2445,61 @@ that touches another part's proof lane. It needs a gfx1151 run first
 
 **The loop's result is that the queued deliverable is refuted and a 1.10x
 regression in the current default is the thing actually worth taking.**
+
+## 10v. gfx1151 confirms the padding result, and surfaces a pre-existing numerical one
+
+§10u found the `lds-pad-dwords=4` default costs 10-19% on gfx1201 and did not
+move it, because the knob is not arch-gated. Run on Princess-Luna (gfx1151,
+RDNA 3.5), paired and interleaved, 6 reps:
+
+| | pad=1 | pad=2 | pad=4 (was default) |
+|---|---|---|---|
+| 2048^3 | **1.208x**, 6/6 | 1.199x, 6/6 | 1.000x |
+| 4096^3 | **1.293x**, 6/6 | 1.216x, 6/6 | 1.000x |
+
+Worse on gfx1151 than on gfx1201, and unambiguous: 6/6 on every cell.
+
+**It is not occupancy there.** gfx1151 at pad=4 fits 14 workgroups per WGP by
+LDS against a 10-wave VGPR ceiling, so LDS never binds -- and pad=1 still wins
+by 21-29%. That matches §10u's single-buffered gfx1201 arm, where the two
+configurations had identical occupancy and were 18% apart. **Padding's dominant
+effect is bank behaviour on the fragment read, not residency**; residency is a
+second effect that appears only once the footprint is large enough to bind.
+
+### Default moved 4 -> 1
+
+Both parts, two shapes each, double-buffering on and off, 6/6 everywhere. §10k
+set 4 from a single shape in a configuration that predates issue depth,
+double-buffering and the schedule description. Worth noting what this restores:
+§10i withdrew an *earlier* default of 1 because it came from a harness
+launching 4x the workgroups. That withdrawal was correct -- the value was right
+for the wrong reason -- and 1 is now right for a measured one.
+
+### A pre-existing gfx1151 result that is NOT padding, and NOT from this work
+
+Every gfx1151 cell above reports `max|err| = 1.221e-04` against an f32
+reference, where gfx1201 reports exactly 0. Inputs are integers in [-4, 4] and
+K <= 4096, so every partial sum is an exact integer far inside f32's 2^24
+range: **the correct answer is integral and the error should be 0.**
+
+It is not padding -- identical at 1, 2 and 4 -- and it is not this session's
+work, being identical at `depth=1, width=1`, the loop shape that predates the
+issue-depth change. It grows with K:
+
+| K | max abs error |
+|---|---|
+| 64 | 3.05e-05 (2^-15) |
+| 256 | 3.15e-05 |
+| 2048 | 1.22e-04 (2^-13) |
+
+A fractional, K-growing error in an integer-valued result means the gfx1151
+accumulation is not the exact f32 the contract claims. Candidates worth
+separating: the gfx11 fragment ABI packs 16-element A/B with opsel selecting
+register halves (see `TesseraTargetToROCDL.cpp`), so a stale unselected half
+would show up exactly like this; or the lane is not using the f32-accumulate
+intrinsic it is assumed to.
+
+Recorded, not chased -- it is orthogonal to everything above, and it is the kind
+of claim-integrity question that deserves its own investigation rather than a
+tired paragraph at the end of a long one. **Anything asserting bit-exactness for
+gfx1151 dense f16 matmul should be re-read against this.**

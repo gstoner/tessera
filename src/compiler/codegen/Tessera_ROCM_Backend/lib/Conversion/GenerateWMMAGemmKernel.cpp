@@ -2003,8 +2003,16 @@ struct GenerateWMMAGemmKernelPass
                      "process and separates nothing. The earlier default of 1 "
                      "came from a harness that launched 4x the workgroups and "
                      "is withdrawn (ROCM-LDS-BANKPAD-1, "
-                     "docs/backends/rocm/wmma-fragment-layout.md 10i/10j)"),
-      llvm::cl::init(4)};
+                     "docs/backends/rocm/wmma-fragment-layout.md 10i/10j). "
+                     "DEFAULT MOVED 4 -> 1 on 2026-09-20: measured paired and "
+                     "interleaved on BOTH ROCm parts, 1 beats 4 by 1.10-1.19x "
+                     "on gfx1201 and 1.21-1.29x on gfx1151, winning 6/6 at "
+                     "2048 and 4096 cubed with double-buffering on and off. "
+                     "4 was set from one shape in a configuration predating "
+                     "issue depth; the value it replaces was right for the "
+                     "wrong reason and is now right for a measured one (10u, "
+                     "10v)"),
+      llvm::cl::init(1)};
   Option<bool> ldsBRowMajor{
       *this, "lds-b-row-major",
       llvm::cl::desc(

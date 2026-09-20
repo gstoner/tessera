@@ -1374,7 +1374,7 @@ def _compile_native_tile_ir(
     lds_waves: tuple[int, int] = (2, 2),
     k_unroll: int = 1,
     sched_groups: int = 0,
-    lds_pad_dwords: int = 4,
+    lds_pad_dwords: int = 1,
     lds_copy_width: int = 1,
     lds_copy_elide: bool = False,
     lds_copy_depth: int = 1,

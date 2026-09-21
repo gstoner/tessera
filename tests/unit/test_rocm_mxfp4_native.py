@@ -12,9 +12,11 @@ from tessera import runtime
 from tessera.compiler.native_artifact import NativeEntryPoint, NativeImageArtifact
 from tessera.compiler.rocm_mxfp4_native import (
     GFX_MXFP4_W4A8_EXACT_ABI,
+    GFX_MXFP4_W4A8_WMMA_ABI,
     _extract_gfx1201_hsaco,
     _rocm_hipcc,
     emit_mxfp4_w4a8_exact_hip,
+    emit_mxfp4_w4a8_wmma_llvmir,
     mxfp4_w4a8_descriptor,
 )
 
@@ -72,6 +74,30 @@ def test_source_keeps_exact_k32_group_and_physical_decode() -> None:
     assert "exponent == 0u" in source
     assert "tessera_bf16_rne" in source
     assert "wmma" not in source.lower()  # this is the correctness baseline
+
+
+def test_wmma_source_isolates_each_k32_partial_before_scaling() -> None:
+    source = emit_mxfp4_w4a8_wmma_llvmir()
+    assert source.count("call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8") == 2
+    assert "<8 x float> zeroinitializer" in source
+    assert "%scaled_partial = fmul <8 x float> %partial, %scale_vec" in source
+    assert "%running_next = fadd <8 x float> %running, %scaled_partial" in source
+    assert "@tessera_e2m1_to_e4m3" in source
+    assert "@llvm.amdgcn.workgroup.id.x" in source
+
+
+def test_wmma_descriptor_uses_one_wave_and_exact_policy() -> None:
+    descriptor = mxfp4_w4a8_descriptor(
+        _image(), m=17, n=33, k=64,
+        entry="tessera_mxfp4_w4a8_wmma",
+        abi_id=GFX_MXFP4_W4A8_WMMA_ABI,
+        route="exact_per_block_fp8_wmma",
+        workgroup=(32, 1, 1),
+    )
+    assert descriptor.abi_id == GFX_MXFP4_W4A8_WMMA_ABI
+    assert descriptor.geometry.workgroup == (32, 1, 1)
+    assert descriptor.provenance["route"] == "exact_per_block_fp8_wmma"
+    assert descriptor.provenance["numeric_policy"] == "exact_per_block"
 
 
 def test_descriptor_names_every_physical_plane_and_shape() -> None:

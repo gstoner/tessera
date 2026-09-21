@@ -26,6 +26,7 @@ from .native_artifact import (
 from .rocm_native import (
     ROCMNativePackage,
     _driver_selected_device_libraries,
+    _rocm_clang,
     _rocm_path,
     _version_fingerprint,
 )
@@ -34,6 +35,10 @@ from .rocm_native import (
 GFX_MXFP4_W4A8_EXACT_ABI = (
     "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k."
     "e4m3_e2m1_e8m0_bf16.exact.v1"
+)
+GFX_MXFP4_W4A8_WMMA_ABI = (
+    "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k."
+    "e4m3_e2m1_e8m0_bf16.wmma_exact.v1"
 )
 
 
@@ -171,6 +176,210 @@ extern "C" __global__ void {entry}(
 '''
 
 
+def emit_mxfp4_w4a8_wmma_llvmir(
+    *, entry: str = "tessera_mxfp4_w4a8_wmma"
+) -> str:
+    """Emit the exact K32-scaled W4A8 route using two RDNA4 FP8 WMMAs.
+
+    One wave owns one 16x16 output tile.  Each K=32 scale group is isolated in
+    a zeroed FP32 fragment, evaluated as two K=16 WMMAs, multiplied by the
+    activation/weight scale outer product, and only then joined to the running
+    accumulator.  Thus the optimized route preserves the scalar baseline's
+    accumulation boundary rather than approximating it with a final epilogue.
+    """
+
+    if not entry or not entry.replace("_", "a").isalnum():
+        raise ValueError("MXFP4 entry must be a C identifier")
+
+    lines = [
+        '; Exact gfx1201 MXFP4 W4A8: packed E2M1 -> E4M3, two WMMA per K32 group.',
+        'target triple = "amdgcn-amd-amdhsa"',
+        '',
+        '@tessera_e2m1_to_e4m3 = private unnamed_addr addrspace(4) constant '
+        '[8 x i8] [i8 0, i8 48, i8 56, i8 60, i8 64, i8 68, i8 72, i8 76], align 8',
+        '',
+        f'define protected amdgpu_kernel void @{entry}(',
+        '    ptr addrspace(1) %a, ptr addrspace(1) %b,',
+        '    ptr addrspace(1) %a_scale, ptr addrspace(1) %b_scale,',
+        '    ptr addrspace(1) %out, i64 %M, i64 %N, i64 %K) #0 {',
+        'entry:',
+        '  %lane32 = call i32 @llvm.amdgcn.workitem.id.x()',
+        '  %lane16_32 = and i32 %lane32, 15',
+        '  %half32 = lshr i32 %lane32, 4',
+        '  %lane16 = zext i32 %lane16_32 to i64',
+        '  %half = zext i32 %half32 to i64',
+        '  %bidx = call i32 @llvm.amdgcn.workgroup.id.x()',
+        '  %bidy = call i32 @llvm.amdgcn.workgroup.id.y()',
+        '  %bidx64 = zext i32 %bidx to i64',
+        '  %bidy64 = zext i32 %bidy to i64',
+        '  %tile_n = mul i64 %bidx64, 16',
+        '  %tile_m = mul i64 %bidy64, 16',
+        '  %col = add i64 %tile_n, %lane16',
+        '  %col_in = icmp ult i64 %col, %N',
+        '  %col_safe = select i1 %col_in, i64 %col, i64 0',
+        '  %a_row = add i64 %tile_m, %lane16',
+        '  %a_row_in = icmp ult i64 %a_row, %M',
+        '  %a_row_safe = select i1 %a_row_in, i64 %a_row, i64 0',
+        '  %half8 = mul i64 %half, 8',
+        '  %out_row_base = add i64 %tile_m, %half8',
+    ]
+
+    scale_vec = 'poison'
+    for j in range(8):
+        lines += [
+            f'  %row_{j} = add i64 %out_row_base, {j}',
+            f'  %row_in_{j} = icmp ult i64 %row_{j}, %M',
+            f'  %row_safe_{j} = select i1 %row_in_{j}, i64 %row_{j}, i64 0',
+            f'  %as_ptr_{j} = getelementptr float, ptr addrspace(1) %a_scale, i64 %row_safe_{j}',
+            f'  %as_load_{j} = load float, ptr addrspace(1) %as_ptr_{j}, align 4',
+            f'  %as_{j} = select i1 %row_in_{j}, float %as_load_{j}, float 0.000000e+00',
+            f'  %as_vec_{j} = insertelement <8 x float> {scale_vec}, float %as_{j}, i64 {j}',
+        ]
+        scale_vec = f'%as_vec_{j}'
+    lines += [
+        '  %groups = udiv i64 %K, 32',
+        '  br label %group.header',
+        '',
+        'group.header:',
+        '  %group = phi i64 [ 0, %entry ], [ %group_next, %group.body ]',
+        '  %running = phi <8 x float> [ zeroinitializer, %entry ], [ %running_next, %group.body ]',
+        '  %group_done = icmp uge i64 %group, %groups',
+        '  br i1 %group_done, label %store.header, label %group.body',
+        '',
+        'group.body:',
+        '  %kbase = mul i64 %group, 32',
+    ]
+
+    def emit_fragment(kind: str, slab: int) -> str:
+        words: list[str] = []
+        for word in range(2):
+            packed: str | None = None
+            for byte in range(4):
+                h = word * 4 + byte
+                k_off = slab * 16 + h
+                tag = f'{kind}_s{slab}_{h}'
+                lines.append(f'  %{tag}_k = add i64 %kbase, {k_off}')
+                if kind == 'a':
+                    lines.extend([
+                        f'  %{tag}_rowbase = mul i64 %a_row_safe, %K',
+                        f'  %{tag}_idx = add i64 %{tag}_rowbase, %{tag}_k',
+                        f'  %{tag}_ptr = getelementptr i8, ptr addrspace(1) %a, i64 %{tag}_idx',
+                        f'  %{tag}_raw = load i8, ptr addrspace(1) %{tag}_ptr, align 1',
+                        f'  %{tag}_byte = select i1 %a_row_in, i8 %{tag}_raw, i8 0',
+                        f'  %{tag}_z = zext i8 %{tag}_byte to i32',
+                    ])
+                else:
+                    lines.extend([
+                        f'  %{tag}_kh = lshr i64 %{tag}_k, 1',
+                        f'  %{tag}_rowbase = mul i64 %{tag}_kh, %N',
+                        f'  %{tag}_idx = add i64 %{tag}_rowbase, %col_safe',
+                        f'  %{tag}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{tag}_idx',
+                        f'  %{tag}_raw8 = load i8, ptr addrspace(1) %{tag}_ptr, align 1',
+                        f'  %{tag}_raw = zext i8 %{tag}_raw8 to i32',
+                    ])
+                    code = f'%{tag}_raw'
+                    if h & 1:
+                        lines.append(f'  %{tag}_shift = lshr i32 {code}, 4')
+                        code = f'%{tag}_shift'
+                    lines.extend([
+                        f'  %{tag}_code = and i32 {code}, 15',
+                        f'  %{tag}_mag = and i32 %{tag}_code, 7',
+                        f'  %{tag}_mag64 = zext i32 %{tag}_mag to i64',
+                        f'  %{tag}_tab = getelementptr inbounds [8 x i8], ptr addrspace(4) '
+                        f'@tessera_e2m1_to_e4m3, i64 0, i64 %{tag}_mag64',
+                        f'  %{tag}_mag8 = load i8, ptr addrspace(4) %{tag}_tab, align 1',
+                        f'  %{tag}_magz = zext i8 %{tag}_mag8 to i32',
+                        f'  %{tag}_sign = and i32 %{tag}_code, 8',
+                        f'  %{tag}_signbit = shl i32 %{tag}_sign, 4',
+                        f'  %{tag}_e4m3 = or i32 %{tag}_magz, %{tag}_signbit',
+                        f'  %{tag}_z = select i1 %col_in, i32 %{tag}_e4m3, i32 0',
+                    ])
+                value = f'%{tag}_z'
+                if byte:
+                    lines.append(f'  %{tag}_placed = shl i32 {value}, {byte * 8}')
+                    value = f'%{tag}_placed'
+                if packed is None:
+                    packed = value
+                else:
+                    lines.append(f'  %{tag}_or = or i32 {packed}, {value}')
+                    packed = f'%{tag}_or'
+            assert packed is not None
+            words.append(packed)
+        lines.extend([
+            f'  %{kind}_s{slab}_v0 = insertelement <2 x i32> poison, i32 {words[0]}, i64 0',
+            f'  %{kind}_s{slab}_v = insertelement <2 x i32> %{kind}_s{slab}_v0, i32 {words[1]}, i64 1',
+        ])
+        return f'%{kind}_s{slab}_v'
+
+    a0, b0 = emit_fragment('a', 0), emit_fragment('b', 0)
+    a1, b1 = emit_fragment('a', 1), emit_fragment('b', 1)
+    lines += [
+        f'  %partial0 = call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
+        f'<2 x i32> {a0}, <2 x i32> {b0}, <8 x float> zeroinitializer)',
+        f'  %partial = call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
+        f'<2 x i32> {a1}, <2 x i32> {b1}, <8 x float> %partial0)',
+        '  %bs_row = mul i64 %group, %N',
+        '  %bs_idx = add i64 %bs_row, %col_safe',
+        '  %bs_ptr = getelementptr i8, ptr addrspace(1) %b_scale, i64 %bs_idx',
+        '  %bs_raw = load i8, ptr addrspace(1) %bs_ptr, align 1',
+        '  %bs_z = zext i8 %bs_raw to i32',
+        '  %bs_bits = shl i32 %bs_z, 23',
+        '  %bs_pow2 = bitcast i32 %bs_bits to float',
+        '  %bs_is_zero = icmp eq i8 %bs_raw, 0',
+        '  %bs_value0 = select i1 %bs_is_zero, float 0.000000e+00, float %bs_pow2',
+        '  %bs_value = select i1 %col_in, float %bs_value0, float 0.000000e+00',
+        '  %bs_seed = insertelement <8 x float> poison, float %bs_value, i64 0',
+        '  %bs_vec = shufflevector <8 x float> %bs_seed, <8 x float> poison, <8 x i32> zeroinitializer',
+        f'  %scale_vec = fmul <8 x float> {scale_vec}, %bs_vec',
+        '  %scaled_partial = fmul <8 x float> %partial, %scale_vec',
+        '  %running_next = fadd <8 x float> %running, %scaled_partial',
+        '  %group_next = add i64 %group, 1',
+        '  br label %group.header',
+        '',
+        'store.header:',
+    ]
+
+    for j in range(8):
+        next_label = f'store.check.{j + 1}' if j < 7 else 'store.done'
+        lines += [
+            f'  %store_ok_{j} = and i1 %row_in_{j}, %col_in',
+            f'  br i1 %store_ok_{j}, label %store.do.{j}, label %{next_label}',
+            '',
+            f'store.do.{j}:',
+            f'  %out_f_{j} = extractelement <8 x float> %running, i64 {j}',
+            f'  %out_bits_{j} = bitcast float %out_f_{j} to i32',
+            f'  %out_top_{j} = lshr i32 %out_bits_{j}, 16',
+            f'  %out_lsb_{j} = and i32 %out_top_{j}, 1',
+            f'  %out_bias_{j} = add i32 %out_lsb_{j}, 32767',
+            f'  %out_round_{j} = add i32 %out_bits_{j}, %out_bias_{j}',
+            f'  %out_shift_{j} = lshr i32 %out_round_{j}, 16',
+            f'  %out_bf16_{j} = trunc i32 %out_shift_{j} to i16',
+            f'  %out_rowoff_{j} = mul i64 %row_{j}, %N',
+            f'  %out_idx_{j} = add i64 %out_rowoff_{j}, %col',
+            f'  %out_ptr_{j} = getelementptr i16, ptr addrspace(1) %out, i64 %out_idx_{j}',
+            f'  store i16 %out_bf16_{j}, ptr addrspace(1) %out_ptr_{j}, align 2',
+            f'  br label %{next_label}',
+            '',
+        ]
+        if j < 7:
+            lines.append(f'store.check.{j + 1}:')
+    lines += [
+        'store.done:',
+        '  ret void',
+        '}',
+        '',
+        'declare i32 @llvm.amdgcn.workitem.id.x()',
+        'declare i32 @llvm.amdgcn.workgroup.id.x()',
+        'declare i32 @llvm.amdgcn.workgroup.id.y()',
+        'declare <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
+        '<2 x i32>, <2 x i32>, <8 x float>)',
+        '',
+        'attributes #0 = { "amdgpu-flat-work-group-size"="32,32" }',
+        '',
+    ]
+    return '\n'.join(lines)
+
+
 def mxfp4_w4a8_descriptor(
     image: NativeImageArtifact,
     *,
@@ -178,6 +387,9 @@ def mxfp4_w4a8_descriptor(
     n: int,
     k: int,
     entry: str = "tessera_mxfp4_w4a8_exact",
+    abi_id: str = GFX_MXFP4_W4A8_EXACT_ABI,
+    route: str = "exact_per_block_scalar_baseline",
+    workgroup: tuple[int, int, int] = (16, 16, 1),
 ) -> LaunchDescriptor:
     """Build the exact five-buffer W4A8 launch contract."""
 
@@ -188,7 +400,7 @@ def mxfp4_w4a8_descriptor(
     return LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
-        abi_id=GFX_MXFP4_W4A8_EXACT_ABI,
+        abi_id=abi_id,
         buffers=(
             BufferBinding(0, "a", "input", "uint8", 2, "row_major", 1),
             BufferBinding(1, "b_packed", "input", "uint8", 2, "row_major", 1),
@@ -210,7 +422,7 @@ def mxfp4_w4a8_descriptor(
         ),
         geometry=LaunchGeometry(
             grid=((n + 15) // 16, (m + 15) // 16, 1),
-            workgroup=(16, 16, 1),
+            workgroup=workgroup,
         ),
         ordering=OrderingSemantics(
             ordered_submission=True,
@@ -220,7 +432,7 @@ def mxfp4_w4a8_descriptor(
         provenance={
             "work_item": "ROCM-MXFP4-W4A8-1",
             "sync_key": "ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21",
-            "route": "exact_per_block_scalar_baseline",
+            "route": route,
             "architecture": "gfx1201",
             "shape": [m, n, k],
             "activation_storage": "e4m3_raw_uint8",
@@ -293,9 +505,79 @@ def package_mxfp4_w4a8_exact(
     return ROCMNativePackage(semantic_ir, source, " ".join(command[:-2]), image, descriptor)
 
 
+def package_mxfp4_w4a8_wmma(
+    m: int,
+    n: int,
+    k: int,
+    *,
+    pipeline_name: str = "tessera-lower-to-rocm",
+    entry: str = "tessera_mxfp4_w4a8_wmma",
+) -> ROCMNativePackage:
+    """Compile the exact two-WMMA-per-K32 gfx1201 production route."""
+
+    if min(m, n, k) <= 0 or k % 32:
+        raise ValueError("MXFP4 W4A8 requires positive M/N and K divisible by 32")
+    source = emit_mxfp4_w4a8_wmma_llvmir(entry=entry)
+    rocm_path = _rocm_path()
+    compiler = _rocm_clang(rocm_path)
+    if compiler is None:
+        raise RuntimeError("MXFP4 W4A8 WMMA packaging requires AMD clang")
+    with tempfile.TemporaryDirectory(prefix="tessera-mxfp4-wmma-") as directory:
+        source_path = Path(directory) / "kernel.ll"
+        image_path = Path(directory) / "kernel.hsaco"
+        source_path.write_text(source)
+        command = [
+            str(compiler), "--target=amdgcn-amd-amdhsa", "-mcpu=gfx1201",
+            "-x", "ir", "-O3", "-nogpulib", "-shared",
+            str(source_path), "-o", str(image_path),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        if result.returncode or not image_path.is_file():
+            detail = result.stderr.strip() or f"AMD clang exited {result.returncode}"
+            raise RuntimeError(f"MXFP4 W4A8 WMMA HSACO compilation failed: {detail}")
+        payload = image_path.read_bytes()
+    if not payload.startswith(b"\x7fELF"):
+        raise RuntimeError("MXFP4 W4A8 WMMA compiler output is not an ELF HSACO")
+    image = NativeImageArtifact(
+        target="rocm_gfx1201",
+        architecture="gfx1201",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=_version_fingerprint(compiler),
+        toolchain_fingerprint=hashlib.sha256(
+            (str(rocm_path) + "|gfx1201|O3|wmma_exact_k32").encode()
+        ).hexdigest(),
+        target_ir_digest=hashlib.sha256(source.encode()).hexdigest(),
+        binary_format="hsaco",
+        payload=payload,
+        entry_points=(NativeEntryPoint(entry, GFX_MXFP4_W4A8_WMMA_ABI),),
+        compile_state="cold",
+        device_libraries=(),
+    )
+    descriptor = mxfp4_w4a8_descriptor(
+        image,
+        m=m,
+        n=n,
+        k=k,
+        entry=entry,
+        abi_id=GFX_MXFP4_W4A8_WMMA_ABI,
+        route="exact_per_block_fp8_wmma",
+        workgroup=(32, 1, 1),
+    )
+    semantic_ir = (
+        f"rocm.mxfp4_w4a8 wmma_exact_per_block M={m} N={n} K={k} "
+        "activation=e4m3 scale_a=fp32_per_token weight=e2m1_packed "
+        "scale_b=e8m0_k32 instruction=v_wmma_f32_16x16x16_fp8_fp8 "
+        "accum=fp32 output=bf16"
+    )
+    return ROCMNativePackage(semantic_ir, source, " ".join(command[:-2]), image, descriptor)
+
+
 __all__ = [
     "GFX_MXFP4_W4A8_EXACT_ABI",
+    "GFX_MXFP4_W4A8_WMMA_ABI",
     "emit_mxfp4_w4a8_exact_hip",
+    "emit_mxfp4_w4a8_wmma_llvmir",
     "mxfp4_w4a8_descriptor",
     "package_mxfp4_w4a8_exact",
+    "package_mxfp4_w4a8_wmma",
 ]

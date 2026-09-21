@@ -4320,9 +4320,12 @@ def _submit_rocm_gfx1151_native(
         GFX_SOFTMAX_F32_ABI,
         GFX_SPARSE_MATMUL_2TO4_ABI,
     )
-    from tessera.compiler.rocm_mxfp4_native import GFX_MXFP4_W4A8_EXACT_ABI
+    from tessera.compiler.rocm_mxfp4_native import (
+        GFX_MXFP4_W4A8_EXACT_ABI,
+        GFX_MXFP4_W4A8_WMMA_ABI,
+    )
 
-    if descriptor.abi_id == GFX_MXFP4_W4A8_EXACT_ABI:
+    if descriptor.abi_id in {GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI}:
         return _submit_rocm_mxfp4_w4a8(image, descriptor, buffers, scalars)
 
     if descriptor.abi_id == GFX_SPARSE_MATMUL_2TO4_ABI:
@@ -5536,13 +5539,16 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_SOFTMAX_F32_ABI,
         GFX_SPARSE_MATMUL_2TO4_ABI,
     )
-    from tessera.compiler.rocm_mxfp4_native import GFX_MXFP4_W4A8_EXACT_ABI
+    from tessera.compiler.rocm_mxfp4_native import (
+        GFX_MXFP4_W4A8_EXACT_ABI,
+        GFX_MXFP4_W4A8_WMMA_ABI,
+    )
 
     if (
         (target == "rocm_gfx1151"
          or (target == "rocm_gfx1201" and
              (abi_id in _gfx1201_proved_scheduled_abis()
-              or abi_id == GFX_MXFP4_W4A8_EXACT_ABI)))
+              or abi_id in {GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI})))
         and abi_id
         in {
             GFX_SOFTMAX_F16_ABI,
@@ -5567,6 +5573,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_ATTN_BF16_ABI,
             GFX_SPARSE_MATMUL_2TO4_ABI,
             GFX_MXFP4_W4A8_EXACT_ABI,
+            GFX_MXFP4_W4A8_WMMA_ABI,
         }
         and target not in _native_launchers
     ):

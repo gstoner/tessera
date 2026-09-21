@@ -1,4 +1,4 @@
-"""Owning-device proof for the exact gfx1201 MXFP4 W4A8 baseline."""
+"""Owning-device proof for exact scalar and WMMA gfx1201 MXFP4 W4A8."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,11 @@ import pytest
 
 from tessera import runtime as rt
 from tessera.compiler import rocm_mxfp4 as mx
-from tessera.compiler.rocm_mxfp4_native import package_mxfp4_w4a8_exact
+from tessera.compiler.rocm_mxfp4_native import (
+    package_mxfp4_w4a8_exact,
+    package_mxfp4_w4a8_wmma,
+)
+from tests._support import rocm_isa
 
 
 @pytest.mark.hardware_rocm
@@ -19,7 +23,20 @@ from tessera.compiler.rocm_mxfp4_native import package_mxfp4_w4a8_exact
     reason="explicit gfx1201 owning-device gate",
 )
 @pytest.mark.parametrize("shape", [(17, 19, 64), (32, 32, 128)])
-def test_exact_mxfp4_w4a8_package_executes_on_gfx1201(shape: tuple[int, int, int]) -> None:
+@pytest.mark.parametrize(
+    "package_factory,instruction",
+    [
+        pytest.param(package_mxfp4_w4a8_exact, None, id="scalar-oracle"),
+        pytest.param(
+            package_mxfp4_w4a8_wmma,
+            "v_wmma_f32_16x16x16_fp8_fp8",
+            id="wmma-production",
+        ),
+    ],
+)
+def test_exact_mxfp4_w4a8_package_executes_on_gfx1201(
+    shape: tuple[int, int, int], package_factory, instruction: str | None
+) -> None:
     assert rt._rocm_live_arch() == "gfx1201"
     m, n, k = shape
     rng = np.random.default_rng(1201 + m + n + k)
@@ -41,7 +58,15 @@ def test_exact_mxfp4_w4a8_package_executes_on_gfx1201(shape: tuple[int, int, int
     ).astype(ml_dtypes.bfloat16)
     output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
 
-    package = package_mxfp4_w4a8_exact(m, n, k)
+    package = package_factory(m, n, k)
+    if instruction is not None:
+        rocm_isa.assert_selected(
+            package.image.payload,
+            chip="gfx1201",
+            pattern=r"v_wmma_f32_16x16x16_\w+",
+            require=instruction,
+            what="exact MXFP4 W4A8",
+        )
     artifact = rt.RuntimeArtifact(
         metadata={"target": package.image.target},
         native_image=package.image,

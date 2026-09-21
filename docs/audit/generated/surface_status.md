@@ -6,7 +6,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 
 | Surface | Entries | Status breakdown |
 |---|--:|---|
-| examples | 21 | runnable=15, runnable_optional=1, scaffold=5 |
+| examples | 22 | runnable=15, runnable_optional=2, scaffold=5 |
 | benchmarks | 24 | archived=1, compile_only=12, runnable=11 |
 | research | 2 | compile_only=1, runnable=1 |
 | tools | 6 | archived=1, compile_only=2, runnable=3 |
@@ -29,6 +29,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `examples/attention` | runnable | `examples/attention/minimax_sparse_attention.py` |  |
 | `examples/compiler/dnas` | runnable | `examples/compiler/dnas/dnas_schedule_autotune.py` |  |
 | `examples/compiler/ir_pipeline_tutorial` | runnable | `examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py` |  |
+| `examples/compiler/ir_pipeline_tutorial` | runnable_optional | `examples/compiler/ir_pipeline_tutorial/Tessera_IR_Pipeline_Tutorial.ipynb` |  |
 | `examples/conformance` | runnable | `examples/conformance/apple_path_ga_ebm_demos.py` |  |
 | `examples/diffusion_guidance` | runnable | `examples/diffusion_guidance/cgg_benchmark.py` |  |
 | `examples/diffusion_guidance` | runnable | `examples/diffusion_guidance/cgg_diffusion_gemma.py` |  |
@@ -36,7 +37,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `examples/getting_started` | runnable | `examples/getting_started/compile_and_explain.py` |  |
 | `examples/getting_started/tessera_flash_attention_demo` | runnable_optional | `examples/getting_started/tessera_flash_attention_demo/examples/flash_attention_demo.py` |  |
 | `examples/integration/HF_transformer` | scaffold | `examples/integration/HF_transformer/tessera_huggingface_transformers.py` | References non-existent Tessera APIs (``from tessera import function, Module``); needs a rewrite against the canonical surface (``@tessera.jit`` + ``tessera.nn.Module``). |
-| `examples/optimization` | scaffold | `examples/optimization/README.md` | Top-level placeholder directory with only README.md and src/ stubs — no entry-point script exists yet. |
+| `examples/optimization` | scaffold | `examples/optimization/README.md` | Standalone C++/CUDA/MLIR teaching sketches, not a canonical Tessera compiler entry point. CPU sources have CMake targets, but CUDA/MLIR coverage includes non-functional skeletons. |
 
 ## benchmarks
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-17
+last_updated: 2026-09-20
 audit_role: reference
 ---
 
@@ -4583,3 +4583,25 @@ Evidence: `docs/audit/backend/rocm/todo.md` §"ROCM-MIXED-FP8-1 closed: the pair
 
 <!-- entry-fields:end -->
 
+### 2026-09-20 — Examples expose the lost MoE route name
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#792](https://github.com/gstoner/tessera/pull/792)
+
+Outcome: The S8 Qwen3-MoE compiler example became an executable Apple CPU
+oracle and exposed a silent wrong-answer path: Graph IR retained the third
+route tensor, but runtime artifact metadata dropped whether that tail meant
+`scores` or `route`, so Apple CPU/GPU execution selected round-robin routing.
+Both frontends now record the declared optional names in `kwargs["extras"]`;
+all foundation-target artifacts retain `route`, and the portable Apple CPU
+launch matches the public-operation oracle.
+
+Remaining: NVIDIA, ROCm, x86, and Apple GPU native execution remain owned by
+their architecture-specific fixtures and exact-device evidence; this shared
+fix does not transfer Apple results or promote a selector.
+
+Evidence: Focused compiler-example, frontend, examples-audit, generated-doc,
+and audit-plan gates; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`.
+
+<!-- entry-fields:end -->

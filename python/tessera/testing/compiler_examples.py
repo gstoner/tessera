@@ -94,6 +94,18 @@ def _common_artifact_stages(*, runtime: bool = False) -> tuple[str, ...]:
     return stages + (("runtime-executable",) if runtime else ())
 
 
+def _foundation_stages() -> dict[str, tuple[str, ...]]:
+    """Apple CPU is the portable executable rung for compiler examples.
+
+    Accelerator targets remain artifact claims here; their native execution is
+    owned by architecture-specific fixtures and exact-device evidence.
+    """
+    return {
+        target: _common_artifact_stages(runtime=target == "apple_cpu")
+        for target in FOUNDATION_TARGETS
+    }
+
+
 def _build_manifest() -> tuple[CompilerExample, ...]:
     """Construct the manifest on demand.
 
@@ -107,7 +119,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "mlp_matmul_relu",
         mlp_path,
-        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        _foundation_stages(),
         runtime_args=(
             np.arange(6, dtype=np.float32).reshape(2, 3),
             np.arange(12, dtype=np.float32).reshape(3, 4),
@@ -119,7 +131,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
         # Exact Apple GPU and x86 kernel proofs are tracked by architecture-
         # aligned fixtures; this generic artifact manifest carries no device
         # execution provenance and therefore makes no runtime claim.
-        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        _foundation_stages(),
         runtime_args=(
             np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32),
             np.array([[0.5, -1.0], [1.5, 0.25]], dtype=np.float32),
@@ -128,7 +140,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "conv2d_reference",
         conv2d_path,
-        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        _foundation_stages(),
         runtime_args=(
             np.arange(1 * 4 * 4 * 1, dtype=np.float32).reshape(1, 4, 4, 1),
             np.ones((3, 3, 1, 2), dtype=np.float32),
@@ -138,14 +150,14 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
         "rmsnorm_safe",
         rmsnorm_path,
         # Exact Apple GPU and x86 proofs remain op- and architecture-specific.
-        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        _foundation_stages(),
         runtime_args=(np.array([[1.0, 2.0, 4.0]], dtype=np.float32),),
     ),
     CompilerExample(
         "flash_attn_contract",
         flash_attn_path,
         # Exact Apple GPU and x86 proofs remain op- and architecture-specific.
-        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        _foundation_stages(),
         runtime_args=(
             np.ones((1, 2, 4), dtype=np.float32),
             np.ones((1, 2, 4), dtype=np.float32),
@@ -155,7 +167,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "s8_tiny_diffusion_compile_slice",
         s8_compile_mlp_slice,
-        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        _foundation_stages(),
         runtime_args=(
             np.arange(6, dtype=np.float32).reshape(2, 3) / 10.0,
             np.ones((3, 4), dtype=np.float32) * 0.25,
@@ -164,7 +176,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "s8_tiny_attention_compile_slice",
         s8_compile_attention_slice,
-        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        _foundation_stages(),
         runtime_args=(
             np.arange(6, dtype=np.float32).reshape(2, 3) / 10.0,
             np.ones((3, 3), dtype=np.float32) * 0.25,
@@ -173,11 +185,10 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "s8_current_gen_qwen3_moe_compile_slice",
         s8_compile_qwen3_moe_slice,
-        # MoE lowers through the compiler artifact path today, but the
-        # reference launcher cannot yet materialize the symbolic route operand
-        # for runtime execution. Keep this example as an honest artifact-only
-        # current-gen conformance rung until that launcher gap closes.
-        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
+        # The explicit route is a named optional operand. Apple CPU is the
+        # portable executable rung; accelerator execution stays in the owning
+        # backend fixtures and exact-device lanes.
+        _foundation_stages(),
         runtime_args=(
             np.linspace(-0.2, 0.4, 9, dtype=np.float32).reshape(3, 3),
             np.ones((3, 5), dtype=np.float32) * 0.10,

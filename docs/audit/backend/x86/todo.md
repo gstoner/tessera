@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-14
+last_updated: 2026-09-20
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,16 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## Compiler-example MoE optional binding — 2026-09-20
+
+Owner E2E-REAL-6; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`. Shared
+Graph/runtime artifact metadata now names the optional `scores` / `route`
+operands of `tessera.moe`; the AVX-512 executor already consumes that `extras`
+contract. Host-free artifact tests cover the x86 target. No Zen 5 execution or
+performance claim is added; the compiler-example manifest uses Apple CPU as
+its portable runtime rung and leaves x86 exact-device qualification to this
+queue.
 
 ## Logical sparse matrices, reader release and floor migration — 2026-09-13
 

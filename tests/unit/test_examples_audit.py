@@ -18,6 +18,7 @@ into ``scripts/validate.sh``).  They lock the static contracts:
 from __future__ import annotations
 
 import importlib
+import json
 import re
 from pathlib import Path
 
@@ -117,6 +118,61 @@ class TestManifestFilesystem:
 
         for entry in all_entries():
             assert "archive/examples" not in entry.directory, entry
+
+    def test_ir_pipeline_notebook_uses_canonical_compiler_surface(self) -> None:
+        notebook_path = (
+            REPO_ROOT
+            / "examples/compiler/ir_pipeline_tutorial/"
+            "Tessera_IR_Pipeline_Tutorial.ipynb"
+        )
+        notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+        code = "\n".join(
+            "".join(cell.get("source", ()))
+            for cell in notebook["cells"]
+            if cell.get("cell_type") == "code"
+        )
+
+        assert "ts.from_text" in code
+        for artifact_access in (
+            ".ir_text()",
+            ".schedule_ir",
+            ".tile_ir",
+            ".target_ir",
+        ):
+            assert artifact_access in code
+        for legacy_or_fake in (
+            "@ts.function",
+            "@tsr_api.function",
+            "_TSRShim",
+            'kernel_time_ms": 0.42',
+            "Illustrative",
+        ):
+            assert legacy_or_fake not in code
+
+    def test_flash_attention_example_has_no_placeholder_compiler_path(self) -> None:
+        path = (
+            REPO_ROOT
+            / "examples/getting_started/tessera_flash_attention_demo/"
+            "examples/flash_attention_demo.py"
+        )
+        source = path.read_text(encoding="utf-8")
+
+        assert "ts.ops.flash_attn" in source
+        assert "np.testing.assert_allclose" in source
+        for artifact_access in (
+            ".ir_text()",
+            ".schedule_ir",
+            ".tile_ir",
+            ".target_ir",
+        ):
+            assert artifact_access in source
+        for legacy_or_fake in (
+            "tsr.tensor",
+            "DUMP_SPEC",
+            "placeholder IR",
+            "TESSERA_AVAILABLE",
+        ):
+            assert legacy_or_fake not in source
 
 
 class TestGeneratedDashboardDriftGate:

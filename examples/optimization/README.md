@@ -1,15 +1,18 @@
 
-# Tessera `src/` Code Optimization Examples
+# Standalone Optimization Sketches
 
-These examples demonstrate practical, measurable optimization techniques you can adapt in your `src/` tree.
-Each example has a **baseline** and an **optimized** variant, with comments explaining why it’s faster.
+This directory contains standalone C++/CUDA/MLIR teaching sketches. It is not
+part of Tessera's canonical compiler pipeline and does not demonstrate Tessera
+schedule selection, Target IR lowering, or runtime execution. The CPU sources
+build through the local CMake file; the CUDA and MLIR files include illustrative
+or incomplete pieces and are not correctness/performance evidence.
 
 **Contents**
 - `01_loop_tiling_blocking.cpp` — Cache-blocked GEMM (baseline vs blocked + vectorized loads).
 - `02_vectorization_intrinsics.cpp` — SIMD via x86 AVX2/AVX-512 intrinsics (fallback to scalar).
 - `03_cache_friendly_layout.cpp` — SoA vs AoS for better cache/TLB behavior.
 - `04_parallel_reduction_shared_mem.cu` — Warp-synchronous tree reduction with shared memory.
-- `05_async_copy_tma_wgmma.cu` — (SM90) skeleton for `cp.async.bulk` + WGMMA epilogue (guarded by `__CUDA_ARCH__>=900`).
+- `05_async_copy_tma_wgmma.cu` — (SM90) non-functional skeleton for `cp.async.bulk` + WGMMA (guarded by `__CUDA_ARCH__>=900`).
 - `06_branchless_kernels.cu` — Replace branches with predication and math tricks.
 - `07_software_prefetch.cpp` — Software prefetching & double-buffering for streaming transforms.
 - `08_mlir_gemm_tiled.mlir` — MLIR example: tile + vectorize + bufferize for GEMM-like loop nest.
@@ -27,16 +30,16 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DTESSERA_WITH_CUDA=ON -DCMAKE_CU
 cmake --build build -j
 ```
 
-## Run (examples print quick checksums/throughputs)
+## Run the standalone CPU programs
 
 ```bash
 ./build/01_loop_tiling_blocking
 ./build/02_vectorization_intrinsics
 ./build/03_cache_friendly_layout
-# CUDA:
+# CUDA sketches:
 ./build/04_parallel_reduction_shared_mem
 ./build/06_branchless_kernels
-# 05_async_copy_tma_wgmma only compiles on SM90+
+# 05_async_copy_tma_wgmma remains a no-op skeleton even on SM90+
 ```
 
 ## Profiling Tips

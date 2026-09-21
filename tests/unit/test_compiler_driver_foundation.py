@@ -7,6 +7,7 @@ import numpy as np
 import tessera as ts
 from tessera.compiler import CompileRequest, CompileTraceEvent
 from tessera.compiler.driver import PIPELINE_BY_TARGET
+from tessera.compiler.jit import jit
 from tessera.compiler.matmul_pipeline import normalize_target_kind
 from tessera.testing.compiler_examples import COMPILER_EXAMPLE_MANIFEST, FOUNDATION_TARGETS, qualify_compiler_example
 
@@ -161,6 +162,9 @@ def test_compiler_example_manifest_qualifies_each_foundation_target():
                 assert result.launch_result is not None
                 assert result.launch_result["ok"] is True
                 assert result.artifact.metadata["runtime_status"] == "ready"
+                expected = np.asarray(example.fn(*example.runtime_args))
+                actual = np.asarray(result.launch_result["output"])
+                np.testing.assert_allclose(actual, expected, rtol=2e-4, atol=2e-4)
             elif target == "apple_cpu" and result.artifact.metadata["runtime_status"] == "ready":
                 # Manifest examples are matmul-driven and the multi-op
                 # runtime path means they now report runtime_status="ready".
@@ -173,3 +177,14 @@ def test_compiler_example_manifest_qualifies_each_foundation_target():
 
     assert ("mlp_matmul_relu", "x86") in seen
     assert ("flash_attn_contract", "nvidia_sm90") in seen
+
+
+def test_moe_optional_route_name_survives_into_every_backend_artifact():
+    example = next(
+        item
+        for item in COMPILER_EXAMPLE_MANIFEST
+        if item.example_id == "s8_current_gen_qwen3_moe_compile_slice"
+    )
+    for target in FOUNDATION_TARGETS:
+        artifact = jit(example.fn, target=target).runtime_artifact()
+        assert 'extras = ["route"]' in artifact.graph_ir

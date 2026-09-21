@@ -3,10 +3,24 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-15
+last_updated: 2026-09-20
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+
+## Compiler-example MoE optional binding — 2026-09-20
+
+Owner E2E-REAL-6; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`. The shared
+frontends now preserve whether the variadic `tessera.moe` tensor tail is
+`scores`, `route`, or both in the runtime artifact's `extras` contract. The S8
+Qwen3-MoE compiler example exposed the defect: Apple CPU and GPU artifacts
+accepted the explicit route, reported successful execution, then silently used
+round-robin routing. Apple CPU is now the portable runtime-executable example
+rung and compares every launch to the public-operation oracle. Apple GPU parity
+was observed in a fresh host process after the fix, but the committed example
+manifest retains artifact-only ownership for accelerators; no new exact-device
+or performance promotion is claimed here.
 
 
 ## Matmul epilogue markers and activation order — 2026-09-15

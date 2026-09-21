@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-14
+last_updated: 2026-09-20
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## Compiler-example MoE optional binding — 2026-09-20
+
+Owner E2E-REAL-6; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`. Shared
+Graph/runtime artifact metadata now names the optional `scores` / `route`
+operands of `tessera.moe` instead of leaving the existing NVIDIA consumer to
+interpret an unlabeled tensor tail. Host-free artifact tests cover the NVIDIA
+target. No CUDA launch, numerical, or performance claim is added; accelerator
+runtime qualification remains NVIDIA-owned and requires the designated host.
 
 ## Logical sparse matrices, reader release and floor migration — 2026-09-13
 

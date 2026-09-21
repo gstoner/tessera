@@ -5,6 +5,7 @@ This directory contains examples and tutorials for using Tessera.
 ## Getting Started
 
 - [`basic_tensor_ops.py`](getting_started/basic_tensor_ops.py) - Basic tensor operations
+- [`compile_and_explain.py`](getting_started/compile_and_explain.py) - Canonical compiler and diagnostics tour
 - [`tessera_flash_attention_demo/`](getting_started/tessera_flash_attention_demo/) - Flash Attention usage
 - [`matrix_calculus/`](matrix_calculus/) - matrix calculus in Tessera: derivatives as linear operators, forward vs reverse cost, and the adjoint method (companion to arXiv:2501.14787)
 
@@ -32,7 +33,10 @@ This directory contains examples and tutorials for using Tessera.
 
 Archived advanced examples are preserved under [`archive/examples/advanced/`](../archive/examples/advanced/).
 
-## Optimization
+## Standalone Optimization Sketches
+
+These are generic C++/CUDA/MLIR teaching sketches, not canonical Tessera
+compiler examples or backend evidence. See their `STATUS.md` before use.
 
 - [`src/01_loop_tiling_blocking.cpp`](optimization/src/01_loop_tiling_blocking.cpp) - Loop tiling and blocking
 - [`src/02_vectorization_intrinsics.cpp`](optimization/src/02_vectorization_intrinsics.cpp) - Vectorization intrinsics

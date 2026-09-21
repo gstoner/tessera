@@ -7,6 +7,7 @@ from typing import Mapping, Optional
 
 from .nvidia_dtype_contract import sm120_supported_storage_dtypes
 from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, canonical_graph_op_name
+from .rocm_exact_device_proofs import GFX1201_PUBLIC_PROOFS
 from .x86_dtype_contract import x86_ready_storage_dtypes
 
 
@@ -851,19 +852,13 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         runtime_backend="hip",
         default_runtime_status="artifact_only",
         supported_ops={
-            **_ops(
-                "artifact_only", ("tessera.matmul",),
-                # Declared, not derived (see gfx1151): the RDNA4 WMMA audit's
-                # float forms plus the IU8/IU4 integer contract.
-                dtypes=("bf16", "fp16", "fp32", "fp8_e4m3", "fp8_e5m2",
-                        "int8", "int32", "int4"),
-                reason=(
-                    "The public exact-target capability/execution-matrix row "
-                    "remains artifact-only pending registry closure; bounded "
-                    "scheduled gfx1201 matmul ABIs have separate RX 9070 XT "
-                    "exact-device compile, launch, and numerical proof"
-                ),
-            ),
+            **{
+                canonical_op(proof.op_name): OpCapability(
+                    canonical_op(proof.op_name), "ready",
+                    dtypes=proof.dtypes, reason=proof.reason,
+                )
+                for proof in GFX1201_PUBLIC_PROOFS
+            },
             # GFX1201-PARITY slice 4 (2026-09-17): the spectral families on
             # gfx1201 through the same content-addressed packages as gfx1151,
             # with the composite hook compiled for gfx1201 on the box

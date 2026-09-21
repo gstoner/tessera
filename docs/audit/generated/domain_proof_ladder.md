@@ -19,7 +19,7 @@ is deliberately not summarized here.
 |---|---|---|---|---|
 | Geometric algebra / Clifford | 18 (17) | 17 (0 / 0) | apple_gpu=1, cpu=1, nvidia_sm120=1, rocm=2, x86=1 | `W6.4(owner)`, `AD-HIGHER-1(owner)` |
 | Energy-based models | 16 (5) | 4 (0 / 0) | apple_gpu=2, cpu=1, nvidia_sm120=1, rocm=4, x86=3 | `W4-PRODUCT-1(owner)`, `AD-SOLVER-IFT-1(owner)`, `AD-RESIDUAL-EVAL-1(owner)` |
-| Attention / persistent state | 25 (0) | 20 (1 / 7) | apple_gpu=1, nvidia_sm120=8, rocm=8, x86=11 | `W5.2(owner)`, `AD-RESIDUAL-EVAL-1(owner)`, `W2.4a(owner)` |
+| Attention / persistent state | 25 (0) | 20 (1 / 7) | apple_gpu=1, nvidia_sm120=8, rocm=8, rocm_gfx1201=1, x86=11 | `W5.2(owner)`, `AD-RESIDUAL-EVAL-1(owner)`, `W2.4a(owner)` |
 | Matrix/field calculus, PDE and spectral | 13 (0) | 7 (6 / 2) | nvidia_sm120=5, rocm=4, x86=4 | `MSW-9(owner)`, `TSOL-POLICY-PHYS-1(owner)`, `TSOL-PHYS-TAIL-1(owner)`, `PDE-STENCIL-FOUNDATION-1(owner)` |
 | Game theory / structured contractions | 9 (0) | 8 (0 / 0) | rocm=1 | `TSOL-PHYS-TAIL-1(owner)` |
 | Domain sharding and distributed execution | 10 (0) | 5 (4 / 0) | nvidia_sm120=1 | `DIST-NATIVE-1(owner)`, `TSOL-SHARD-1(owner)` |

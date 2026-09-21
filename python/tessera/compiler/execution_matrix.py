@@ -27,6 +27,7 @@ from typing import Callable, Mapping, Optional
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 from .capabilities import TARGET_CAPABILITIES, normalize_target
+from .rocm_exact_device_proofs import GFX1201_PUBLIC_PROOFS
 
 
 # An executor takes (artifact, args) and returns the op output. Resolved lazily
@@ -4402,6 +4403,28 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         proof_build="cuda13.3+sm120"),
 }
 
+# Project only the bounded public gfx1201 proofs.  The broader compiler-family
+# promotion table and scheduled ABI allowlist are not themselves public
+# runtime claims; every row here names the exact target, public compiler path,
+# checked numerical fixture, and owning-device build that justify it.
+for _proof in GFX1201_PUBLIC_PROOFS:
+    _MATRIX[(_proof.target, _proof.compiler_path)] = ExecutionRow(
+        target=_proof.target,
+        compiler_path=_proof.compiler_path,
+        execution_kind="native_gpu",
+        executable=True,
+        executor_id=_proof.executor_id,
+        runtime_status="success",
+        reason=_proof.reason,
+        execution_mode="hip_runtime",
+        direction="forward",
+        op_family=_proof.op_family,
+        device_proof="device_verified_jit",
+        evidence_target=_proof.target,
+        numerical_fixture=_proof.numerical_fixture,
+        proof_build=_proof.proof_build,
+    )
+
 
 # Targets recognized by the capability registry but with NO executable runtime
 # row (yet). `launch()` reports `unimplemented` (target capability present) or
@@ -4425,7 +4448,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
 _UNIMPLEMENTED_TARGETS: tuple[str, ...] = (
     "nvidia_sm80", "nvidia_sm90", "nvidia_sm100",
     "rocm_gfx90a", "rocm_gfx940", "rocm_gfx942", "rocm_gfx950",
-    "rocm_gfx1100", "rocm_gfx1151", "rocm_gfx1200", "rocm_gfx1201",
+    "rocm_gfx1100", "rocm_gfx1151", "rocm_gfx1200",
 )
 
 

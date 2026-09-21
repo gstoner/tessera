@@ -144,6 +144,24 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value upper = add(lastKt, c1);
 
   Value upperHalf = b.create<arith::CmpIOp>(loc, ne, half, c0);
+  // D=128 is the worst-conditioned linear-attention shape in the measured
+  // gfx1151/gfx1201 packet.  Keep all independent loads in flight before any
+  // feature-map/select/fragment use so the backend can place one wait after a
+  // load batch instead of repeatedly draining the VMEM queue.  Other head
+  // dimensions retain their established instruction schedule.
+  bool batchIndependentLoads = D == 128;
+  auto packFrag = [&](OpBuilder &bb, Location l, ArrayRef<Value> elements) {
+    assert(elements.size() == 16 && "WMMA fragment requires 16 source elements");
+    Value fr = fragZero;
+    for (int64_t i = 0; i < (rdna4 ? 8 : 16); ++i) {
+      Value element = elements[i];
+      if (rdna4)
+        element = bb.create<arith::SelectOp>(l, upperHalf, elements[i + 8],
+                                             element);
+      fr = bb.create<vector::InsertOp>(l, element, fr, ArrayRef<int64_t>{i});
+    }
+    return fr;
+  };
   auto buildFrag = [&](OpBuilder &bb, Location l,
                        function_ref<Value(int64_t)> elt) {
     Value fr = fragZero;
@@ -205,18 +223,40 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value dc16 = ci(dc * 16);
       Value aBase = add(add(qbase, mul(qrow_l15, cD)), dc16);
       Value aSafe = b.create<arith::SelectOp>(loc, qrInb, aBase, c0);
-      Value aFrag = buildFrag(b, loc, [&](int64_t i) {
-        Value v = b.create<memref::LoadOp>(loc, Q, ValueRange{add(aSafe, ci(i))});
-        Value pv = phi(v);
-        return b.create<arith::SelectOp>(loc, qrInb, pv, storeZero);
-      });
       Value bBase = add(add(kbase, mul(kr_l15, cD)), dc16);
       Value bSafe = b.create<arith::SelectOp>(loc, krInb, bBase, c0);
-      Value bFrag = buildFrag(b, loc, [&](int64_t i) {
-        Value v = b.create<memref::LoadOp>(loc, Kk, ValueRange{add(bSafe, ci(i))});
-        Value pv = phi(v);
-        return b.create<arith::SelectOp>(loc, krInb, pv, storeZero);
-      });
+      Value aFrag, bFrag;
+      if (batchIndependentLoads) {
+        SmallVector<Value, 16> qLoaded, kLoaded;
+        SmallVector<Value, 16> qValues, kValues;
+        for (int64_t i = 0; i < 16; ++i)
+          qLoaded.push_back(b.create<memref::LoadOp>(
+              loc, Q, ValueRange{add(aSafe, ci(i))}));
+        for (int64_t i = 0; i < 16; ++i)
+          kLoaded.push_back(b.create<memref::LoadOp>(
+              loc, Kk, ValueRange{add(bSafe, ci(i))}));
+        for (int64_t i = 0; i < 16; ++i) {
+          qValues.push_back(b.create<arith::SelectOp>(
+              loc, qrInb, phi(qLoaded[i]), storeZero));
+          kValues.push_back(b.create<arith::SelectOp>(
+              loc, krInb, phi(kLoaded[i]), storeZero));
+        }
+        aFrag = packFrag(b, loc, qValues);
+        bFrag = packFrag(b, loc, kValues);
+      } else {
+        aFrag = buildFrag(b, loc, [&](int64_t i) {
+          Value v = b.create<memref::LoadOp>(
+              loc, Q, ValueRange{add(aSafe, ci(i))});
+          Value pv = phi(v);
+          return b.create<arith::SelectOp>(loc, qrInb, pv, storeZero);
+        });
+        bFrag = buildFrag(b, loc, [&](int64_t i) {
+          Value v = b.create<memref::LoadOp>(
+              loc, Kk, ValueRange{add(bSafe, ci(i))});
+          Value pv = phi(v);
+          return b.create<arith::SelectOp>(loc, krInb, pv, storeZero);
+        });
+      }
       cs = wmma(b, loc, aFrag, bFrag, cs);
     }
     // mask -> sS[qi*16 + ki], qi = accRow(e), ki = l15. MULTIPLICATIVE: a masked
@@ -252,18 +292,48 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     for (int64_t dc = 0; dc < DC; ++dc) {
       Value dc16 = ci(dc * 16);
       Value pRow = mul(l15, c16);
-      Value apFrag = buildFrag(b, loc, [&](int64_t i) {
-        Value s = b.create<memref::LoadOp>(loc, sS, ValueRange{add(pRow, ci(i))});
-        return b.create<arith::TruncFOp>(loc, storeTy, s);
-      });
-      Value bvFrag = buildFrag(b, loc, [&](int64_t i) {
-        Value kr = add(k0, ci(i));
-        Value inb = b.create<arith::CmpIOp>(loc, slt, kr, Sk);
-        Value idx = add(add(kbase, mul(kr, cD)), add(dc16, l15));
-        Value safe = b.create<arith::SelectOp>(loc, inb, idx, c0);
-        Value v = b.create<memref::LoadOp>(loc, V, ValueRange{safe});
-        return b.create<arith::SelectOp>(loc, inb, v, storeZero);
-      });
+      Value apFrag, bvFrag;
+      if (batchIndependentLoads) {
+        SmallVector<Value, 16> scoreLoaded, scoreValues;
+        SmallVector<Value, 16> valueInBounds, valueSafe, valueLoaded,
+            valueValues;
+        for (int64_t i = 0; i < 16; ++i)
+          scoreLoaded.push_back(b.create<memref::LoadOp>(
+              loc, sS, ValueRange{add(pRow, ci(i))}));
+        for (int64_t i = 0; i < 16; ++i) {
+          Value kr = add(k0, ci(i));
+          Value inb = b.create<arith::CmpIOp>(loc, slt, kr, Sk);
+          Value idx = add(add(kbase, mul(kr, cD)), add(dc16, l15));
+          valueInBounds.push_back(inb);
+          valueSafe.push_back(
+              b.create<arith::SelectOp>(loc, inb, idx, c0));
+        }
+        for (Value safe : valueSafe)
+          valueLoaded.push_back(
+              b.create<memref::LoadOp>(loc, V, ValueRange{safe}));
+        for (int64_t i = 0; i < 16; ++i) {
+          scoreValues.push_back(
+              b.create<arith::TruncFOp>(loc, storeTy, scoreLoaded[i]));
+          valueValues.push_back(b.create<arith::SelectOp>(
+              loc, valueInBounds[i], valueLoaded[i], storeZero));
+        }
+        apFrag = packFrag(b, loc, scoreValues);
+        bvFrag = packFrag(b, loc, valueValues);
+      } else {
+        apFrag = buildFrag(b, loc, [&](int64_t i) {
+          Value s = b.create<memref::LoadOp>(
+              loc, sS, ValueRange{add(pRow, ci(i))});
+          return b.create<arith::TruncFOp>(loc, storeTy, s);
+        });
+        bvFrag = buildFrag(b, loc, [&](int64_t i) {
+          Value kr = add(k0, ci(i));
+          Value inb = b.create<arith::CmpIOp>(loc, slt, kr, Sk);
+          Value idx = add(add(kbase, mul(kr, cD)), add(dc16, l15));
+          Value safe = b.create<arith::SelectOp>(loc, inb, idx, c0);
+          Value v = b.create<memref::LoadOp>(loc, V, ValueRange{safe});
+          return b.create<arith::SelectOp>(loc, inb, v, storeZero);
+        });
+      }
       Value cpv = wmma(b, loc, apFrag, bvFrag, accZero);
       for (int64_t e = 0; e < 8; ++e) {
         Value qi = accRow(e);

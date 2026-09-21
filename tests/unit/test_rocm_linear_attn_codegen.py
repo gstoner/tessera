@@ -24,13 +24,15 @@ from tests._support.compiler_tool import run_tessera_opt
 REPO = Path(__file__).resolve().parents[2]
 
 
-def _directive(feature_map="identity", dtype="f16", decay=False):
+def _directive(feature_map="identity", dtype="f16", decay=False,
+               head_dim=64, arch=None):
     fm = (f', feature_map = "{feature_map}"'
           if feature_map != "identity" else "")
     dc = ", decay = true" if decay else ""
+    ar = f', arch = "{arch}"' if arch is not None else ""
     return (
         'module {\n  "tessera_rocm.linear_attn"() {name = "la", '
-        f'head_dim = 64 : i64, dtype = "{dtype}"{fm}{dc}}} : () -> ()\n}}\n')
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{fm}{dc}{ar}}} : () -> ()\n}}\n')
 
 
 def _opt(directive, *passes):
@@ -120,3 +122,22 @@ def test_via_tile_uses_typed_register_owned_fragments_and_preserves_rocdl():
     assert "unrealized_conversion_cast" not in lowered.stdout
     op = re.compile(r"\b[a-z_]+\.[a-z_.]+\b")
     assert Counter(op.findall(direct.stdout)) == Counter(op.findall(lowered.stdout))
+
+
+def test_d128_batches_qk_and_v_loads_before_fragment_use():
+    ir = _gen(_directive(head_dim=128, arch="gfx1201"))
+    # Each D chunk issues 16 Q loads followed by 16 K loads before the first
+    # fragment insert.  The A@V half likewise issues the 16 V loads before its
+    # first insert.  This is the IR-level gate for the wait/drain optimization;
+    # owning-device disassembly remains the physical scheduling proof.
+    loop = ir[ir.index("scf.for") :]
+    first_mma = loop.index("tessera_rocm.wmma")
+    qk_region = loop[:first_mma]
+    first_insert = qk_region.index("vector.insert")
+    before_insert = qk_region[:first_insert]
+    assert before_insert.count("memref.load %arg0") == 16
+    assert before_insert.count("memref.load %arg1") == 16
+
+    first_v_load = loop.index("memref.load %arg2")
+    first_v_insert = loop.index("vector.insert", first_v_load)
+    assert loop[first_v_load:first_v_insert].count("memref.load %arg2") == 16

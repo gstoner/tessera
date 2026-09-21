@@ -515,6 +515,18 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   const bool gfx1201 = schedule.arch.contains("gfx1201");
   if (gfx1201 && !schedule.dynamicK && schedule.k >= 64)
     schedule.blockK = 32;
+  if (gfx1201 && scaledMatmul) {
+    // A Schedule macro K may contain several complete scale groups, but it
+    // may never split one. The measured unscaled default is only 32, while
+    // valid Graph contracts also carry K64/K128 groups. Align the physical
+    // carrier before constructing schedule.matmul; otherwise its verifier
+    // correctly rejects the internally inconsistent decision we just made.
+    if (schedule.scaleBlockK % schedule.tileK != 0)
+      return failure();
+    if (schedule.blockK == 0 ||
+        schedule.blockK % schedule.scaleBlockK != 0)
+      schedule.blockK = schedule.scaleBlockK;
+  }
   if (rocmWmmaChip && lhsElement == rhsElement &&
       (lhsElement.isInteger(8) || lhsElement.isInteger(4)) &&
       !lhsElement.isUnsignedInteger() && outElement.isInteger(32) &&

@@ -85,3 +85,16 @@ def test_zero_codes_remain_exact_even_at_large_exponent_delta() -> None:
     folded = mx.fold_to_row_reference(codes, scales)
     assert folded.lossless
     np.testing.assert_array_equal(mx.folded_weights(folded), 0.0)
+
+
+def test_reserved_zero_scale_block_stays_zero_during_row_fold() -> None:
+    # E8M0 code zero means the whole K32 block is zero, regardless of its E2M1
+    # payload. It must not be treated as exponent zero relative to row_ref=1.
+    codes = np.ones((1, 64), dtype=np.uint8)
+    scales = np.asarray([[0], [1]], dtype=np.uint8)
+    folded = mx.fold_to_row_reference(codes, scales)
+    reconstructed = mx.folded_weights(folded)
+    assert folded.lossless
+    np.testing.assert_array_equal(reconstructed, mx.exact_weights(codes, scales))
+    np.testing.assert_array_equal(reconstructed[:, :32], 0.0)
+    assert np.any(reconstructed[:, 32:] != 0.0)

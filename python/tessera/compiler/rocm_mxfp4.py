@@ -218,6 +218,11 @@ def fold_to_row_reference(codes: np.ndarray,
         raise ValueError("MXFP4 row reference must not be below a block exponent")
     expanded_delta = delta.T.repeat(MXFP4_GROUP_K, axis=1)
     normalized = _E2M1[c] * np.exp2(-expanded_delta.astype(np.float32))
+    # E8M0 code zero is a reserved zero-block marker, not exponent zero.
+    # Preserve that semantic before conversion and losslessness comparison;
+    # otherwise a non-zero E2M1 payload becomes a tiny non-zero folded weight.
+    reserved_zero = (s.T == 0).repeat(MXFP4_GROUP_K, axis=1)
+    normalized = np.where(reserved_zero, np.float32(0.0), normalized)
     folded = normalized.astype(ml_dtypes.float8_e4m3fn)
     folded_f32 = folded.astype(np.float32)
     return FoldedRowReference(

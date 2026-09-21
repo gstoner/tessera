@@ -4620,6 +4620,9 @@ packed E2M1 exactly to E4M3, issues two
 `v_wmma_f32_16x16x16_fp8_fp8` operations per scale group, scales that local
 FP32 partial, and then joins the running accumulator. Tajasarus proved both
 ABIs bit-exact after BF16 rounding at ragged `17x19x64` and `32x32x128`.
+Review follow-through aligns Schedule macro K to each complete scale group
+(`scale_k=128` now carries `block_k=128`) and preserves reserved E8M0 code zero
+as a zero block through folded-row conversion and its losslessness check.
 
 Remaining: The generic `tessera.scaled_matmul` Schedule/Tile path still needs a
 first-class scaled partial-accumulator consumer. The folded route remains an

@@ -27,6 +27,13 @@ HSACO selects only the required FP8 instruction, uses 32 SGPR / 94 VGPR,
 wave32, zero LDS and zero scratch. Both ABIs are now in the exact-device proof
 registry. Evidence: [gfx1201 MXFP4 packet](../../../../benchmarks/baselines/gfx1201_mxfp4_w4a8_20260921/README.md).
 
+PR review closed two contract holes before promotion. Graph-to-Schedule now
+expands macro K to contain a complete scale group, so the existing K128 block
+form carries `block_k = 128` instead of constructing an invalid K32 Schedule
+record. The folded-row reference also masks reserved E8M0 code-zero groups
+before E4M3 conversion and losslessness comparison; non-zero E2M1 payload bits
+inside a zero block can no longer reconstruct as tiny non-zero weights.
+
 Still open: replace the Schedule-to-Tile fail-closed boundary with a first-class
 scaled partial-accumulator carrier; admit the approximate folded-row policy
 only behind its explicit numerical policy; measure decode/prefill throughput on

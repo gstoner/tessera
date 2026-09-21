@@ -42,15 +42,15 @@ There are now two exact-device proof targets with different registry surfaces.
 `rocm_gfx1151` (RDNA 3.5, Ryzen AI Max+ 395) owns the broad generic public
 runtime lanes. `rocm_gfx1201` (RDNA 4, Radeon RX 9070 XT) owns every registered
 content-addressed family plugin and a bounded set of scheduled native ABIs.
-The public capability/execution dashboards have not yet projected those
-scheduled packages, so `gfx1201` operation rows may still read
-`artifact_only`; that is a registry-closure gap, not absence of device proof.
+The public capability/execution dashboards project the bounded proved
+`matmul`, `flash_attn`, and `softmax` subset; broader family promotion and
+scheduled ABI admission do not automatically become public operation claims.
 `rocm_gfx1200` remains compile/artifact-only. Proof never transfers between
 these exact targets.
 
 | Target | Current evidence | Explicit non-claim |
 |---|---|---|
-| `rocm_gfx1201` | RX 9070 XT compile, launch, numerical, fragment-layout, sparse SWMMAC, and measured performance packets for bounded family/package contracts. | No generic per-target executor row; no R9700-specific performance claim; no transfer to gfx1200. |
+| `rocm_gfx1201` | RX 9070 XT compile, launch, numerical, fragment-layout, sparse SWMMAC, bounded public executor rows, and measured performance packets. D=128 linear-attention batching has a 1.284x paired device result with fewer waits/drains. | No R9700-specific performance claim; no transfer to gfx1200. |
 | `rocm_gfx1200` | RDNA 4 ISA/dtype/feature modeling and compile-target plumbing. | No device execution, numerical fixture, topology default, promoted family, or performance evidence. |
 | `rocm_gfx1151` | Broad generic compiler-generated and shipped-ABI execution on Ryzen AI Max+ 395. | No RDNA 4 feature or performance inheritance. |
 
@@ -79,7 +79,7 @@ are maintained in [`todo.md`](todo.md).
 | ID | Priority | Action | Completion evidence |
 |---|---|---|---|
 | ROCM-1 | P0 | Add gfx950 MI350-series exact-device proof for the currently advertised artifact rows. | Matching gfx950 compiler, launch, numerical fixture, and `evidence_arch`; generated rows promote without inheriting gfx1151 data. |
-| ROCM-2 | P0 | Close gfx1201 registry and performance gaps. The ISA target already has RX 9070 XT exact-device proof; project the bounded scheduled packages into public capability/execution rows, batch independent `linear_attn` D=128 loads before the wait, and run R9700-specific validation only for product-specific claims. | Generated rows match the proved family/ABI envelope without broadening it; `linear_attn` D=128 improves with numerical and resource gates; any R9700 claim carries R9700 evidence. |
+| ROCM-2 | P0 | Preserve the closed gfx1201 public-projection and D=128 load-batching gates; run R9700-specific validation only before making product-specific claims. | Generated rows remain bounded by the exact proof registry; the D=128 numerical/resource/timing packet stays green; any R9700 claim carries R9700 evidence. |
 | ROCM-3 | P0 | Add gfx1250 MI455X exact-device proof. | The upstream-LLVM artifact is joined to an exact-device launch and numerical fixture with gfx1250 provenance. |
 | ROCM-4 | P1 | Add gfx1200 consumer-device proof and retain gfx942 as an explicitly tested compatibility target. | Each promoted row carries its own runtime and numerical evidence; unsupported feature forms fail with stable diagnostics. gfx1201 evidence is never accepted for gfx1200. |
 | ROCM-5 | P1 | Finish architecture-specific MMA enablement without reusing proof across targets. | gfx1201 RDNA 4 fragment/layout guards remain exact-device green; gfx1200, Wave32 WMMA v2, and CDNA MFMA gain their own matching-device fixtures before promotion. |

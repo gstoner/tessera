@@ -69,15 +69,15 @@ def test_rocm_map_uses_exact_architecture_grain_and_provenance() -> None:
     assert all(r.target.startswith("rocm_gfx") for r in rows)
     for row in rows:
         if row.runtime_execute == "complete" or row.numerical_check == "complete":
-            assert row.target == "rocm_gfx1151"
-            assert row.evidence_arch == "gfx1151"
+            assert row.target in {"rocm_gfx1151", "rocm_gfx1201"}
+            assert row.evidence_arch == row.target.removeprefix("rocm_")
         if row.status in {"device_verified_jit", "device_verified_abi"}:
             assert row.compiler_path
             assert row.runtime_execute == "complete"
             assert row.numerical_check == "complete"
 
 
-def test_rocm_priority_targets_do_not_inherit_gfx1151_proof() -> None:
+def test_rocm_priority_targets_only_expose_exact_target_proof() -> None:
     from tessera.compiler.gpu_target_map import all_rocm_exact_rows
 
     rows = all_rocm_exact_rows()
@@ -92,12 +92,30 @@ def test_rocm_priority_targets_do_not_inherit_gfx1151_proof() -> None:
         "rocm_gfx1200", "Radeon RX 9060 / RX 9050 families"
     ) in products
     for row in rows:
-        if row.target != "rocm_gfx1151":
+        if row.target not in {"rocm_gfx1151", "rocm_gfx1201"}:
             assert row.status not in {"device_verified_jit", "device_verified_abi"}
             assert row.runtime_execute == "missing"
             assert row.numerical_check == "missing"
             assert not row.evidence_arch
             assert row.expected_mfu is None
+
+
+def test_gfx1201_public_projection_is_bounded_by_exact_proof_registry() -> None:
+    from tessera.compiler.gpu_target_map import all_rocm_exact_rows
+    from tessera.compiler.rocm_exact_device_proofs import GFX1201_PUBLIC_PROOFS
+
+    rows = {r.op_name: r for r in all_rocm_exact_rows()
+            if r.target == "rocm_gfx1201"}
+    expected = {p.op_name.removeprefix("tessera.")
+                for p in GFX1201_PUBLIC_PROOFS}
+    proven = {name for name, row in rows.items()
+              if row.status == "device_verified_jit"}
+    assert proven == expected
+    for name in expected:
+        row = rows[name]
+        assert row.runtime_execute == "complete"
+        assert row.numerical_check == "complete"
+        assert row.evidence_arch == "gfx1201"
 
 
 def test_rocm_csv_separates_isa_toolchain_and_evidence_arch() -> None:

@@ -9,6 +9,15 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX12 public projection and D=128 load batching — 2026-09-21
+
+Owner ROCM-2 / ROCM-4; sync
+`GFX12-PUBLIC-LINEAR-LOAD-BATCH-2026-09-21`. The shared capability/execution
+registries gain only exact `rocm_gfx1201` rows, and load batching changes only
+the ROCm generator. No x86 IR, ABI, runtime, dtype, numerical, or performance
+contract changed. AVX-512 proof is not inferred; `gfx1200` remains separately
+blocked on matching hardware evidence.
+
 ## GFX12 exact-target alias correction — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync `GFX12-EXACT-TARGET-SUPPORT-2026-09-21`. Shared

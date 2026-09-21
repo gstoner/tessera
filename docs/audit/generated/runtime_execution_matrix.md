@@ -194,6 +194,9 @@ Single source of truth for what `runtime.launch()` does with each `(target, comp
 | `rocm` | `rocm_unary_compiled` | `rocm_unary_compiled` | `native_gpu` | `hip_runtime` | ROCm unary artifact runs the COMPILER-GENERATED flat elementwise unary-math kernel (algebraic, transcendental, trig, inverse-trig, hyperbolic, lgamma/digamma, stability, and rounding; one thread per element): tessera-opt generates + serializes the kernel to hsaco in-process, then HIP reuses a process-cached module and launches it. Dispatched by op name; f32/f16/bf16 storage with f32 compute. |
 | `rocm` | `rocm_where_compiled` | `rocm_where_compiled` | `native_gpu` | `hip_runtime` | ROCm where artifact runs the COMPILER-GENERATED flat 3-operand ternary select where(cond,a,b)=cond?a:b (one thread per element): tessera-opt generates + serializes the kernel to hsaco in-process (generate-rocm-where-kernel -> ROCDL), then HIP loads + launches it. cond i8 normalized != 0, a/b/out f16/bf16/f32. |
 | `rocm` | `rocm_wmma` | `rocm_wmma` | `native_gpu` | `hip_runtime` | ROCm matmul via the hand-written RDNA WMMA GEMM (tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol, HIPRTC-compiled for the device arch). Now the reference ORACLE + availability fallback for the compiled lane (rocm_compiled) — still directly selectable by stamping compiler_path="rocm_wmma". |
+| `rocm_gfx1201` | `rocm_compiled` | `rocm_compiled` | `native_gpu` | `hip_runtime` | RX 9070 XT exact-device scheduled matmul packages compile, launch, and match numerical oracles across the registered RDNA4 storage forms |
+| `rocm_gfx1201` | `rocm_flash_attn_compiled` | `rocm_flash_attn_compiled` | `native_gpu` | `hip_runtime` | RX 9070 XT exact-device scheduled fp16/bf16 attention packages compile, launch, and match numerical oracles |
+| `rocm_gfx1201` | `rocm_softmax_compiled` | `rocm_softmax_compiled` | `native_gpu` | `hip_runtime` | RX 9070 XT exact-device scheduled f32 softmax package compiles, launches, and matches its numerical oracle |
 | `x86` | `x86_adafactor_bwd_compiled` | `x86_adafactor_bwd_compiled` | `native_cpu` | `cpu_avx512` | AVX-512 image executes analytic factored/full Adafactor parameter, gradient, and optimizer-state adjoints. |
 | `x86` | `x86_adafactor_compiled` | `x86_adafactor_compiled` | `native_cpu` | `cpu_avx512` | AVX-512 image executes explicit factored row/column state or lower-rank full-moment Adafactor updates. |
 | `x86` | `x86_alibi_compiled` | `x86_alibi_compiled` | `native_cpu` | `cpu_avx512` | x86 alibi artifact runs the ALiBi positional-bias generator bias[h,i,j]=slope[h]*(j-i) over [H,S,S] from libtessera_x86_elementwise.so (tessera_x86_avx512_alibi_f32; default slope ramp 2^(-8k/H), optional slopes operand). The CPU analog of the ROCm alibi lane. f32. |
@@ -287,7 +290,7 @@ Single source of truth for what `runtime.launch()` does with each `(target, comp
 These targets are recognized by the capability registry (so an artifact can carry them and lower correctly) but have no executable runtime row. `launch()` returns `runtime_status = "unimplemented"` when the target capability is present, or `"missing_backend"` otherwise — never silent success, never a fabricated output.
 
 ```
-nvidia_sm80, nvidia_sm90, nvidia_sm100, rocm_gfx90a, rocm_gfx940, rocm_gfx942, rocm_gfx950, rocm_gfx1100, rocm_gfx1151, rocm_gfx1200, rocm_gfx1201
+nvidia_sm80, nvidia_sm90, nvidia_sm100, rocm_gfx90a, rocm_gfx940, rocm_gfx942, rocm_gfx950, rocm_gfx1100, rocm_gfx1151, rocm_gfx1200
 ```
 
 ## Known executor IDs

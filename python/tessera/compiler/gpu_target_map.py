@@ -192,16 +192,51 @@ def _rocm_exact_row(op_full_name: str, target: ROCmExactTarget) -> ROCmExactRow 
             if entry.hipcc_version_min else "", tile, None,
             entry.roofline_target or "", entry.notes or "")
 
-    cap = _cap.TARGET_CAPABILITIES.get(target.target)
-    if cap is None:
+    if target.target == "rocm_gfx1201":
+        from . import execution_matrix as _em
+
+        exact_cap = _cap.TARGET_CAPABILITIES[target.target]
+        op_cap = exact_cap.supported_ops.get(op_full_name)
+        if op_cap is None:
+            return None
+        from .rocm_exact_device_proofs import public_proofs_for
+        proof = next(
+            (item for item in public_proofs_for(target.target)
+             if item.op_name == op_full_name),
+            None,
+        )
+        row = (_em.lookup(target.target, proof.compiler_path)
+               if proof is not None else None)
+        runtime_ok = bool(row is not None and row.executable)
+        fixture = row.numerical_fixture if row is not None else ""
+        numerical_ok = bool(
+            runtime_ok and fixture and (_REPO_ROOT / fixture).is_file())
+        # A capability without the exact public execution join remains a
+        # capability-only claim; do not infer proof from family promotion.
+        status = row.device_proof if numerical_ok and row is not None else op_cap.runtime_status
+        return ROCmExactRow(
+            target.target, target.isa, target.architecture, target.products,
+            target.priority, op_full_name.removeprefix("tessera."),
+            _family_for(op_full_name), status, tuple(op_cap.dtypes),
+            "complete", "complete" if runtime_ok else "missing",
+            "complete" if numerical_ok else "missing",
+            row.compiler_path if row is not None else "",
+            row.execution_mode if row is not None else "",
+            target.isa if runtime_ok else "", row.proof_build if row is not None else "",
+            "", None, "", op_cap.reason,
+        )
+
+    target_cap = _cap.TARGET_CAPABILITIES.get(target.target)
+    if target_cap is None:
         return None
-    op_cap = cap.supported_ops.get(op_full_name)
+    op_cap = target_cap.supported_ops.get(op_full_name)
     if op_cap is None:
         return None
     return ROCmExactRow(
         target.target, target.isa, target.architecture, target.products,
         target.priority, short, _family_for(short), op_cap.runtime_status,
-        tuple(cap.supported_dtypes), "complete" if op_cap.runtime_status == "artifact_only" else "planned",
+        tuple(target_cap.supported_dtypes),
+        "complete" if op_cap.runtime_status == "artifact_only" else "planned",
         "missing", "missing", "", "", "", "ROCm 7.2.4+", "", None, "",
         op_cap.reason)
 
@@ -428,10 +463,9 @@ def _render_rocm_exact_markdown() -> str:
         "",
         "A `device_verified_jit` or `device_verified_abi` row in this dashboard requires a "
         "checked-in numerical fixture joined to a public executable runtime-execution-matrix "
-        "row. That registry join is currently complete only for `gfx1151`. Bounded "
-        "content-addressed scheduled packages have separate exact-device `gfx1201` proof; "
-        "until those packages are projected into the public capability and execution "
-        "registries, their rows remain `artifact_only` here rather than borrowing proof.",
+        "row. Bounded `gfx1201` scheduled packages appear only when their public "
+        "operation, compiler path, ABI allowlist, and owning-device fixture are joined; "
+        "other promoted compiler families do not inherit that proof.",
         "",
         "## Architecture priorities",
         "",

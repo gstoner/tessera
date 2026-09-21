@@ -5,7 +5,7 @@
 
 This dashboard uses one architecture-specific target per proof row. The `rocm` name is a family rollup only and never carries compile, execution, numerical, or performance proof.
 
-A `device_verified_jit` or `device_verified_abi` row in this dashboard requires a checked-in numerical fixture joined to a public executable runtime-execution-matrix row. That registry join is currently complete only for `gfx1151`. Bounded content-addressed scheduled packages have separate exact-device `gfx1201` proof; until those packages are projected into the public capability and execution registries, their rows remain `artifact_only` here rather than borrowing proof.
+A `device_verified_jit` or `device_verified_abi` row in this dashboard requires a checked-in numerical fixture joined to a public executable runtime-execution-matrix row. Bounded `gfx1201` scheduled packages appear only when their public operation, compiler path, ABI allowlist, and owning-device fixture are joined; other promoted compiler families do not inherit that proof.
 
 ## Architecture priorities
 
@@ -13,7 +13,7 @@ A `device_verified_jit` or `device_verified_abi` row in this dashboard requires 
 |---|---|---|---|---|---|---:|
 | `rocm_gfx950` | `gfx950` | CDNA 4 | MI350X / MI355X / MI350P | `current_datacenter` | exact-device proof required | 4 |
 | `rocm_gfx1250` | `gfx1250` | CDNA 5 Wave32 XDL-WMMA | MI455X | `forward_datacenter` | upstream-LLVM artifact; exact-device proof required | 1 |
-| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D | `current_workstation` | exact-device proof required | 11 |
+| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D | `current_workstation` | exact-device proof required | 13 |
 | `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 / RX 9050 families | `current_consumer` | exact-device proof required | 1 |
 | `rocm_gfx1151` | `gfx1151` | RDNA 3.5 Wave32 | Ryzen AI Max+ 395 / Radeon 8060S | `proven_development` | may use checked-in gfx1151 execution evidence | 36 |
 | `rocm_gfx1152` | `gfx1152` | Wave32 development bridge | development ISA | `compiler_bridge` | no execution inheritance | 0 |
@@ -34,7 +34,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | es_low_rank_correction | 1 | - | - |
 | factorized_matmul | 1 | gfx1151 | - |
 | fft | 1 | - | - |
-| flash_attn | 3 | gfx1151 | gfx942, gfx950 |
+| flash_attn | 4 | gfx1151, gfx1201 | gfx942, gfx950 |
 | fused_epilogue | 1 | gfx1151 | - |
 | gated_attention | 1 | gfx1151 | - |
 | gated_deltanet | 1 | gfx1151 | - |
@@ -49,7 +49,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | lightning_attention | 1 | gfx1151 | - |
 | linear_attn | 1 | gfx1151 | - |
 | linear_general | 1 | gfx1151 | - |
-| matmul | 6 | gfx1151 | gfx1200, gfx1201, gfx1250, gfx942, gfx950 |
+| matmul | 6 | gfx1151, gfx1201 | gfx1200, gfx1250, gfx942, gfx950 |
 | memory_index_score | 1 | gfx1151 | - |
 | mla_decode | 1 | gfx1151 | - |
 | mla_decode_fused | 1 | gfx1151 | - |
@@ -65,7 +65,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | score_combine | 1 | gfx1151 | - |
 | silu | 1 | gfx1151 | - |
 | silu_mul | 1 | gfx1151 | - |
-| softmax | 3 | gfx1151 | gfx942, gfx950 |
+| softmax | 4 | gfx1151, gfx1201 | gfx942, gfx950 |
 | softmax_safe | 1 | gfx1151 | - |
 | spectral_conv | 1 | - | - |
 | spectral_filter | 1 | - | - |
@@ -93,17 +93,19 @@ The rollup reports where proof exists; it does not promote the family alias.
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|
-| dct | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| es_low_rank_correction | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| fft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| ifft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| irfft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| istft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| rfft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| spectral_conv | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| spectral_filter | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| stft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
-| matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| softmax | device_verified_jit | complete | complete | complete | rocm_softmax_compiled | gfx1201 | fp32 |
+| flash_attn | device_verified_jit | complete | complete | complete | rocm_flash_attn_compiled | gfx1201 | bf16,fp16 |
+| dct | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
+| es_low_rank_correction | ready | complete | missing | missing | - | - | fp32 |
+| fft | ready | complete | missing | missing | - | - | fp32,complex64 |
+| ifft | ready | complete | missing | missing | - | - | fp32,complex64 |
+| irfft | ready | complete | missing | missing | - | - | fp32,complex64 |
+| istft | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
+| rfft | ready | complete | missing | missing | - | - | fp32,complex64 |
+| spectral_conv | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
+| spectral_filter | ready | complete | missing | missing | - | - | fp32,complex64 |
+| stft | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
+| matmul | device_verified_jit | complete | complete | complete | rocm_compiled | gfx1201 | bf16,fp16,fp8_e4m3,fp8_e5m2,int8,int4 |
 
 ### `rocm_gfx1200` — Radeon RX 9060 / RX 9050 families
 

@@ -8,6 +8,15 @@ last_updated: 2026-09-21
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX12 public projection and D=128 load batching — 2026-09-21
+
+Owner ROCM-2 / ROCM-4; sync
+`GFX12-PUBLIC-LINEAR-LOAD-BATCH-2026-09-21`. The public registry additions are
+exact `rocm_gfx1201` rows backed by ROCm scheduled-package ABIs, and the physical
+generator change is confined to ROCm linear attention. No Apple IR, ABI,
+runtime, dtype, or numerical contract changed. Metal proof is not inferred;
+`gfx1200` remains separately blocked on matching hardware evidence.
+
 ## GFX12 exact-target alias correction — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync `GFX12-EXACT-TARGET-SUPPORT-2026-09-21`. Shared

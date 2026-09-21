@@ -1,32 +1,31 @@
 // RUN: not tessera-opt --split-input-file %s 2>&1 | FileCheck %s
 
-// ROCM-MACRO-K-TILE-1 / ROCM-FP8-BLOCKSCALE-1. `k_blocks` IS the macro K tile:
-// the descriptor could always state it, and every consumer refused anything but
-// 1, which is what made the K tile unreachable. `scale_k` is the contraction
-// extent sharing one scale, and the two are bound together -- the scale group
-// must be EXACTLY one K block, which is the invariant AITER's reference kernel
-// asserts twice as `GROUP_K == BLOCK_SIZE_K`.
+// ROCM-MACRO-K-TILE-1 / ROCM-FP8-BLOCKSCALE-1. `k_blocks` is the macro K tile;
+// `scale_k` is the semantic contraction extent sharing one scale. A scale group
+// must contain whole instruction-K steps and the macro tile must contain whole
+// scale groups. The two extents are intentionally not equal: MXFP4 fixes K=32
+// while the schedule can independently select macro K=64 or 128.
 //
 // Both negative cases below are numerically silent without this check: the GEMM
 // runs, and the scale lands on the wrong span of the contraction.
 
-// A scale group larger than the K block spans two accumulate boundaries.
-// CHECK: scale_k (128) must equal the K block, k * k_blocks (16 * 1 = 16)
+// A scale group that cuts through an instruction cannot be applied exactly.
+// CHECK: scale_k (24) must be a multiple of instruction K (16)
 #mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16,
                       a = "e4m3", b = "e4m3", acc = "f32",
                       a_layout = "row_major", b_layout = "col_major",
-                      k_blocks = 1, scale_k = 128, scale_fmt = "fp32">
-func.func @scale_group_wider_than_block() attributes {mma = #mma} { return }
+                      k_blocks = 4, scale_k = 24, scale_fmt = "fp32">
+func.func @scale_group_cuts_instruction() attributes {mma = #mma} { return }
 
 // -----
 
-// A scale group smaller than the K block scales a partial product.
-// CHECK: scale_k (64) must equal the K block, k * k_blocks (16 * 8 = 128)
+// A macro tile that cuts through a scale group cannot close its accumulator.
+// CHECK: macro K block, k * k_blocks (16 * 3 = 48), must be a multiple of scale_k (32)
 #mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16,
                       a = "e4m3", b = "e4m3", acc = "f32",
                       a_layout = "row_major", b_layout = "col_major",
-                      k_blocks = 8, scale_k = 64, scale_fmt = "fp32">
-func.func @scale_group_narrower_than_block() attributes {mma = #mma} { return }
+                      k_blocks = 3, scale_k = 32, scale_fmt = "fp32">
+func.func @macro_block_cuts_scale_group() attributes {mma = #mma} { return }
 
 // -----
 

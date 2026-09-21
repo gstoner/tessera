@@ -494,28 +494,26 @@ LogicalResult TileMmaDescAttr::verify(
                           "wmma, mfma}";
   if (m <= 0 || n <= 0 || k <= 0)
     return emitError() << "TILE_MMA_DESC_NONPOSITIVE_SHAPE: m/n/k must be > 0";
-  // A scale block that is not a whole number of K tiles cannot be applied once
-  // per block: the accumulate boundary and the scale boundary would disagree,
-  // and the kernel would scale a partial product. Refused here rather than
-  // discovered as wrong numbers (Decision #21a).
+  if (kBlocks < 1)
+    return emitError() << "TILE_MMA_DESC_BAD_K_BLOCKS: k_blocks must be >= 1";
+  // A scale group has to contain whole instruction-K contributions, and the
+  // macro K block has to contain whole scale groups.  It does *not* have to be
+  // the macro K block: OCP MXFP4 fixes the semantic group at K=32 while a
+  // schedule is free to use a 64- or 128-wide macro tile.  Conflating those
+  // two facts makes a format property depend on a tuning choice.
   if (scaleBlockK < 0)
     return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k must be >= 0 "
                           "(0 means unscaled); got "
                        << scaleBlockK;
-  // The scale group along K must be EXACTLY the descriptor's K block, not
-  // merely a multiple of the instruction K. That is the invariant AITER's
-  // reference kernel asserts twice as `GROUP_K == BLOCK_SIZE_K`, and it is what
-  // makes `acc += dot(a, b) * outer(sa, sb)` apply to a whole block: a scale
-  // group larger than the block would span two accumulate boundaries, and one
-  // smaller would scale a partial product. Expressing it here means the
-  // descriptor cannot state an unimplementable pairing.
-  if (scaleBlockK > 0 && scaleBlockK != k * kBlocks)
+  if (scaleBlockK > 0 && scaleBlockK % k != 0)
     return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_k ("
-                       << scaleBlockK << ") must equal the K block, k * k_blocks ("
-                       << k << " * " << kBlocks << " = " << (k * kBlocks)
-                       << "). A scale group that is not exactly one K block "
-                          "either spans two accumulate boundaries or scales a "
-                          "partial product";
+                       << scaleBlockK << ") must be a multiple of instruction "
+                       << "K (" << k << ")";
+  if (scaleBlockK > 0 && (k * kBlocks) % scaleBlockK != 0)
+    return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: macro K block, "
+                       << "k * k_blocks (" << k << " * " << kBlocks << " = "
+                       << (k * kBlocks) << "), must be a multiple of scale_k ("
+                       << scaleBlockK << ")";
   if (scaleBlockK == 0 && !scaleFormat.empty())
     return emitError() << "TILE_MMA_DESC_BAD_SCALE_BLOCK: scale_fmt \""
                        << scaleFormat
@@ -525,8 +523,6 @@ LogicalResult TileMmaDescAttr::verify(
                        << scaleBlockK
                        << " but scale_fmt is empty; the scale's element format "
                           "is part of the contract, not a default";
-  if (kBlocks < 1)
-    return emitError() << "TILE_MMA_DESC_BAD_K_BLOCKS: k_blocks must be >= 1";
   if (aType.empty() || bType.empty() || accType.empty())
     return emitError() << "TILE_MMA_DESC_EMPTY_DTYPE: a/b/acc must be named";
   static const llvm::StringSet<> kLayouts = {"row_major", "col_major"};

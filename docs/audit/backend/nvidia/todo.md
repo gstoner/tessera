@@ -16,6 +16,14 @@ execution: the exact-executor guard and dense dtype-state split are ROCm-only,
 and the shared inventory only attaches existing gfx1201 proof metadata. No
 NVIDIA IR, ABI, dtype, numerical, runtime, or device claim changes.
 
+## ROCm MXFP4 physical-contract sibling assessment — 2026-09-21
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`. The host reference models OCP MXFP4
+with E8M0-per-32 weights for a gfx1201 W4A8 route; it does not change NVIDIA's
+distinct NVFP4 E4M3-per-16 scale ABI, PTX block-scale MMA, canonical dtypes, or
+CUDA execution. No CUDA parity or device proof is inferred.
+
 ## GFX12 public projection and D=128 load batching — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync

@@ -25,6 +25,28 @@ numerical-policy admission remain separate open work.
 Apple, NVIDIA, and x86 are not applicable to physical execution for this sync:
 their IR, ABI, dtype, runtime, and numerical rows are unchanged.
 
+## MXFP4 physical contract and dual numerical routes — 2026-09-21
+
+Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1; sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`.
+
+Source review of vllm-radiance and the canonical StillDeadcode/libr4d tree
+corrected two plan assumptions. MXFP4's E8M0 group is fixed at 32 K elements
+and remains independent of instruction K=16, macro K=64/128, `kUnroll`, and
+split-K. The optimized per-row-reference fold is not unconditionally exact:
+E4M3 subnormals guarantee every non-zero E2M1 value only through exponent
+delta 8; the reviewed checkpoint reaches delta 10.
+
+`python/tessera/compiler/rocm_mxfp4.py` now defines the below-Graph-IR physical
+contract and host reference: low-nibble-even packed E2M1, `[K/32,N]` E8M0
+scales, per-token FP32 activation scales, gfx12 fragment-order permutation,
+an exact per-32-group route, and a separately marked folded-row-reference
+route. Focused tests pass host-free. This does **not** promote the planned
+`mxfp4` dtype or establish execution. Next: carry the ABI through
+`tessera.scaled_matmul` into Schedule/Tile/Target, lower exact per-group FP32
+scaling first, add the fold only behind its numeric policy, and prove both on
+Tajasarus against an FP32 oracle and independent library baselines.
+
 ## GFX12 public projection and D=128 load batching — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync

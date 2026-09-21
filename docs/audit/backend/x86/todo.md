@@ -17,6 +17,14 @@ execution: the exact-executor guard and dense dtype-state split are ROCm-only,
 and the shared inventory only attaches existing gfx1201 proof metadata. No x86
 IR, ABI, dtype, numerical, runtime, or device claim changes.
 
+## ROCm MXFP4 physical-contract sibling assessment — 2026-09-21
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`. The new host reference and layout
+permutation specify a gfx1201 W4A8 physical route below Graph IR. No x86 dtype,
+AVX-512 ABI, numerical policy, candidate, or execution row changes, and no ROCm
+proof transfers to x86.
+
 ## GFX12 public projection and D=128 load batching — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync

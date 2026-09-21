@@ -1015,6 +1015,21 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="NUMPOL-CARRIER-1",
     ),
     DiagnosticCode(
+        code="ROCM_MXFP4_SCALE_ABI_UNIMPLEMENTED",
+        pass_origin="ScheduleToTilePass",
+        severity="error",
+        summary=(
+            "A block-scaled ROCm matmul reached the Tile boundary before the "
+            "kernel ABI can carry its scale operands."
+        ),
+        fix_hint=(
+            "Use the dedicated block-scale package once available. Never erase "
+            "the scale metadata or lower this program as an unscaled matmul."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-FP8-BLOCKSCALE-1",
+    ),
+    DiagnosticCode(
         code="NUMERIC_POLICY_ACCUM_UNREALIZABLE",
         pass_origin="TesseraToLinalgPass",
         severity="error",
@@ -2892,14 +2907,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         code="TILE_MMA_DESC_BAD_SCALE_BLOCK", pass_origin="TileMmaDescAttr",
         severity="error",
         summary=(
-            "A #tile.mma_desc block-scale group is negative, is not exactly one "
-            "K block (k * k_blocks), or names a scale format with no block."
+            "A #tile.mma_desc block-scale group is negative, does not align to "
+            "instruction K and macro K, or names a scale format with no block."
         ),
         fix_hint=(
-            "Set scale_k = k * k_blocks, or 0 for unscaled. A group that is not "
-            "exactly one K block either spans two accumulate boundaries or "
-            "scales a partial product, so it is refused rather than discovered "
-            "as wrong numbers (Decision #21a)."
+            "Use 0 for unscaled, or make scale_k a multiple of instruction K "
+            "and make k * k_blocks a multiple of scale_k. The scale group is a "
+            "format property; k_blocks remains a schedule choice (Decision #21a)."
         ),
         spec="docs/architecture/proposals/tile_fragment_abi.md",
         sprint="Portable Tile fragment ABI",

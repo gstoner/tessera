@@ -109,8 +109,8 @@ struct WmmaTypes {
   // steps one K BLOCK spans, so the block's contraction extent is
   // `fragK * kBlocks`. Distinct from `kUnroll`, which is a measured latency
   // knob: `kBlocks` is a contract the Schedule stated and a block scale must
-  // align to exactly (the descriptor verifier enforces
-  // `scale_k == k * k_blocks`), while `kUnroll` may be retuned freely without
+  // contain as whole groups (the descriptor verifier enforces instruction-K
+  // and macro-K divisibility), while `kUnroll` may be retuned freely without
   // changing what the program computes. They shape the loop the same way and
   // must not be conflated -- that is how a tuning parameter becomes a
   // semantic one.

@@ -118,6 +118,17 @@ LogicalResult MatmulOp::verify() {
     return emitOpError("pipeline_depth must be positive");
   if (getStorage().empty() || getAccum().empty())
     return emitOpError("requires explicit storage and accumulation types");
+  if (getBlockK() < 0 || (getBlockK() > 0 && getBlockK() % getTileK() != 0))
+    return emitOpError("block_k must be 0 or a positive multiple of tile_k");
+  if (getScaleK() < 0)
+    return emitOpError("scale_k must be non-negative");
+  if ((getScaleK() == 0) != getScaleFormat().empty())
+    return emitOpError("scale_k and scale_format must be present together");
+  const int64_t macroK = getBlockK() > 0 ? getBlockK() : getTileK();
+  if (getScaleK() > 0 &&
+      (getScaleK() % getTileK() != 0 || macroK % getScaleK() != 0))
+    return emitOpError(
+        "scale_k must be a multiple of tile_k and divide the macro K block");
   if (!llvm::is_contained({"none", "relu", "gelu", "silu"},
                           getActivation()))
     return emitOpError("requires a supported pointwise activation");

@@ -8,6 +8,8 @@ This directory contains examples and tutorials for using Tessera.
 - [`compile_and_explain.py`](getting_started/compile_and_explain.py) - Canonical compiler and diagnostics tour
 - [`tessera_flash_attention_demo/`](getting_started/tessera_flash_attention_demo/) - Flash Attention usage
 - [`matrix_calculus/`](matrix_calculus/) - matrix calculus in Tessera: derivatives as linear operators, forward vs reverse cost, and the adjoint method (companion to arXiv:2501.14787)
+- [`pde_learning/`](pde_learning/) - bounded PDE-learning correctness examples with exact jet derivatives
+- [`tensor_calculus/`](tensor_calculus/) - tensor contractions and curvilinear-calculus identities
 
 ## Compiler Examples
 
@@ -23,13 +25,13 @@ This directory contains examples and tutorials for using Tessera.
 - [`advanced/Fast_dLLM_v2/`](advanced/Fast_dLLM_v2/) - diffusion LLM inference and parallel decoding
 - [`advanced/Diffusion_LLM/`](advanced/Diffusion_LLM/) - runnable masked-diffusion denoising demo
 - [`advanced/rlvr_reasoning_suite/`](advanced/rlvr_reasoning_suite/) - consolidated GRPO/RLVR reasoning suite
-- [`advanced/Jet_nemotron/`](advanced/Jet_nemotron/) - runnable D=128 linear-attention smoke plus optional PostNAS scaffold
+- [`advanced/Jet_nemotron/`](advanced/Jet_nemotron/) - runnable D=128 linear-attention compiler smoke
 - [`advanced/Nemotron_Nano_12B_v2/`](advanced/Nemotron_Nano_12B_v2/) - hybrid Mamba2/GQA/MLP model port
 - [`advanced/mla/`](advanced/mla/) - Multi-Latent Attention / FlashMLA examples
 - [`advanced/long_context_attention/`](advanced/long_context_attention/) - retrieval-head vs streaming-head planning
 - [`advanced/kv_cache_serving/`](advanced/kv_cache_serving/) - compressed KV-cache and disaggregated serving planner
 - [`advanced/gumiho/`](advanced/gumiho/) - Gumiho (ICML'25) hybrid speculative decoding on the Apple GPU/CPU backend
-- [`advanced/Tessera_Empirical_Software_Agent/`](advanced/Tessera_Empirical_Software_Agent/) - runnable kernel-candidate benchmark plus agent scaffold
+- [`advanced/Tessera_Empirical_Software_Agent/`](advanced/Tessera_Empirical_Software_Agent/) - runnable kernel-candidate benchmark
 
 Archived advanced examples are preserved under [`archive/examples/advanced/`](../archive/examples/advanced/).
 

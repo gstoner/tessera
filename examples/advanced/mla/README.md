@@ -42,7 +42,7 @@ shared rope key vs. explicit per-head K/V.)
 From the repository root:
 
 ```bash
-PYTHONPATH=python /Users/gregorystoner/venv/bin/python \
+PYTHONPATH=python python3 \
   examples/advanced/mla/tests/smoke_random.py
 
 PATH="$PWD/build/tools/tessera-opt:/opt/homebrew/opt/llvm@23/bin:$PATH" \

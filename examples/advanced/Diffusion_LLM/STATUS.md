@@ -25,6 +25,6 @@ denoising step samples, so the Gumbel sampler is on the critical path. Covered b
 
 The obsolete top-level `tessera_diffusion_llm.py` monolith was removed because
 it used deleted decorators and invalid annotations. The supporting
-`tessera_diffusion_llm/` package is retained as optional, torch-dependent
-research material; it is not the manifest entry point and is not runtime
-evidence for Tessera.
+torch-dependent package, tests, and MLIR sketches are preserved under
+`archive/examples/advanced/Diffusion_LLM/`; they are not runtime evidence for
+Tessera.

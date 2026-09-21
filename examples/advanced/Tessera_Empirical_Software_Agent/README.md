@@ -1,42 +1,17 @@
-<!-- ===== MERGE_START Tessera Empirical Software Agent ===== -->
-# Tessera Empirical Software Agent (v0.1)
+# Kernel-autotuning candidate benchmark
 
-This package sketches a **Tessera-native implementation** of the system described in
-*“An AI system to help scientists write expert-level empirical software” (arXiv:2509.06503)*.
-It maps the paper’s **LLM + Tree Search** workflow into the Tessera Programming Model with a
-reproducible runner, scorable task API, and integration points for **Tile IR/Target IR**, the
-**autotuner**, and the **profiler**.
-
-**Key pieces**
-- `docs/` — concise spec (split across files with merge markers)
-- `src/agents/` — Python reference runner (tree search + scoring + sandbox)
-- `mlir/passes/` — C++ pass stubs to register an opt-style driver hook (`-tessera-empirical-search`)
-- `examples/` — task shells you can flesh out (Kaggle playground, scRNA-seq integration, COVID-19 forecasting, integrals)
-- `examples/kernel_autotuning/` — concrete agentic compiler/autotuning task that scores candidate tile configs with correctness and benchmark feedback
-- `tests/` — spot checks / harness notes
-- `src/pipelines/empirical_search_pipeline.yaml` — example pass pipeline wiring
-
-> Drop `Tessera_Empirical_Software_Agent_v0_1/` under `tessera/tools/agents/empirical/` in your repo.
-
-## Quick start
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt  # (generate your own with tessera deps + sandbox deps)
-python3 -m src.agents.tree_search_runner --task examples/integrals_solver --budget 512 --parallel 8
-```
-
-Kernel autotuning loop:
+The maintained example is the deterministic candidate benchmark used by an
+empirical search loop:
 
 ```bash
-python3 -m examples.advanced.Tessera_Empirical_Software_Agent.src.agents.kernel_autotune_loop \
-  --task examples/advanced/Tessera_Empirical_Software_Agent/examples/kernel_autotuning
+python3 examples/advanced/Tessera_Empirical_Software_Agent/examples/kernel_autotuning/benchmark_kernel.py
 ```
 
-## What’s included vs stubbed
-- ✅ Reference **interface** and **skeleton** that mirror the paper’s method
-- ✅ Tessera **integration points** (autotune/profiler/IR hooks) clearly marked
-- ☐ LLM provider: implement in `src/agents/llm_interface.py` (Gemini/OpenAI/self-hosted)
-- ☐ Real sandbox isolation (use your existing runner policy; default subprocess+timeout)
-- ☐ Domain datasets and metrics (plug into `examples/*`)
+It loads an optional tile configuration, runs a tiled matrix multiplication,
+checks it against an independent reference, and reports a bounded score. It
+fails on invalid tile parameters or numerical mismatch.
 
-<!-- ===== MERGE_END Tessera Empirical Software Agent ===== -->
+The earlier LLM/tree-search agent, sandbox stub, placeholder MLIR pass, and
+empty domain-task shells are preserved under
+`archive/examples/advanced/Tessera_Empirical_Software_Agent/`. They are not
+part of the runnable examples contract.

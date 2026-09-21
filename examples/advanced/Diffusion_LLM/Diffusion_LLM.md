@@ -16,10 +16,9 @@ evidence.
 
 ## Optional research package
 
-The `tessera_diffusion_llm/` subdirectory preserves a larger, torch-dependent
-research package covering masked discrete diffusion, continuous embedding
-diffusion, and flow matching. It is not the examples-manifest entry point and
-is not part of Tessera's torch-free runtime contract.
+`archive/examples/advanced/Diffusion_LLM/` preserves the larger,
+torch-dependent research package, its tests, and its MLIR sketches. It is not
+part of Tessera's torch-free runtime contract.
 
 The former top-level monolith was removed because it depended on deleted
 Tessera decorators and invalid annotations. New executable coverage should be

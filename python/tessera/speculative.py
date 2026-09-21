@@ -11,9 +11,9 @@ that builds the tree, runs the verification probability check, computes
 the acceptance mask, and advances a KV cache by the accepted prefix
 length. Per-backend Graph IR control flow ops (so a `@tessera.jit` of
 the whole loop can lower into a single dispatched kernel) are deferred
-to Phase G — the Python surface unblocks
-``examples/advanced/speculative_decoding/`` end-to-end on the CPU
-reference path today.
+to Phase G. The earlier string-only scheduling toy is preserved under
+``archive/examples/advanced/speculative_decoding/``; maintained end-to-end
+coverage now lives in ``examples/advanced/gumiho/``.
 
 API contract:
 
@@ -27,8 +27,8 @@ Design references:
     Leviathan et al. 2023 — "Fast Inference from Transformers via
     Speculative Decoding" (the canonical acceptance rule, eq. 1).
     Cai et al. 2024 — "Medusa: Simple LLM Inference Acceleration".
-    Yggdrasil — multi-branch tree variant (used by `examples/advanced/
-    speculative_decoding/`).
+    Yggdrasil — multi-branch tree variant (represented by the archived
+    ``archive/examples/advanced/speculative_decoding/`` toy).
 """
 
 from __future__ import annotations

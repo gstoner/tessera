@@ -1,19 +1,33 @@
 """RDNA/CDNA occupancy model: VGPR file, LDS pool and wave slots -> waves/SIMD.
 
-No consumer yet
----------------
-**Nothing in the compiler calls this module.**  It is a model plus its device
-measurement, landed ahead of the code that will use it, and it is owned by
-sync ``RDNA-OCCUPANCY-GRANULE-2026-09-20`` in
-``docs/audit/backend/rocm/todo.md``.  Read it as a declared debt under
-Decision #29a, not as a closed contract: the compiler does not yet consult
-occupancy when it selects a tile, and this file does not change any decision
-the compiler makes today.  Its 53 tests assert behaviour -- including 12
-points measured on gfx1201 -- rather than mere presence, which is what keeps
-an unwired model from being silently wrong.
+Reported, never scored
+----------------------
+Three things read this module -- two ROCm benchmarks and
+``rocm_tiling.RankedTileCandidate.occupancy_waves_per_simd`` -- and all three
+only **report** what it computes.  Nothing ranks or selects on it, and that is
+a measured position, not caution.
 
-Wiring it into tile selection is the follow-on and is deliberately not in the
-change that introduced this file.
+On 2026-09-21 the gfx1151 two-wave D=128 attention kernel was moved from 121
+VGPRs (10 waves/SIMD) to 113 (12 waves/SIMD) with zero spills and identical
+memory traffic, and became **2.2x slower** -- 0.734 -> 1.620 ms causal,
+1.364 -> 3.165 ms noncausal, nine interleaved trials against a fixed control.
+The disassembly says why: freeing 8 registers cost 36% more ``s_waitcnt``
+(33 -> 45) while ``ds_``, ``global_``, ``v_wmma`` and scratch were unchanged.
+Shortening live ranges moves loads closer to their uses and destroys
+instruction-level latency hiding, and that kernel is bound by unhidden load
+latency.  So +20% occupancy bought -55% throughput, and a selector maximising
+occupancy would have picked the slower kernel.
+
+This module answers "how many waves fit" -- a *capacity* question.  It does
+not answer "which kernel is faster".  ``matmul_opt_ladder.py`` records the same
+shape from another direction: "Wins despite 67%->17% occupancy -- arithmetic
+intensity beats occupancy".  Evidence:
+``benchmarks/baselines/rdna_occupancy_closure_20260921/``.
+
+What that does *not* show is that occupancy never matters: one kernel family,
+one arch, one rung crossing.  An occupancy-bound kernel could go the other way
+and none has been measured.  Owned by sync
+``RDNA-OCCUPANCY-GRANULE-2026-09-20``.
 
 Why this module exists
 ----------------------
@@ -57,18 +71,23 @@ also the exact shape of the recorded trap that CDNA's "512 VGPRs, one wave per
 SIMD" recipe does not transfer to RDNA.  They are kept in separate tables here
 and the docstrings say which is which.
 
-Open question this module makes precise
----------------------------------------
-The granule for gfx1151/gfx1201 is *contested*, and the contest is decidable.
-RDNA4 ISA 3.3.2.1 prescribes 24 for a 1536-register file; the ROCm queue's two
-recorded figures for one attention kernel (256 VGPRs -> 6 waves/SIMD, 121 ->
-12) are jointly explained by a 1536-register file at granule 4, 8, 16 or 32 --
-and by **no** candidate at granule 24.  So the documented rule and this repo's
-own evidence disagree, and until ``scripts/probe_rdna_vgpr_granule.py`` runs on
-Tajasarus, every consumer should treat a rung boundary as accurate to within
-one block.  :attr:`WorkgroupOccupancy.granule_contested` carries that on the
-result.  The ladder *shape* -- that occupancy is quantised at all, and that
-shedding registers between rungs buys nothing -- does not depend on the answer.
+Measured on both parts, and what it overturned
+---------------------------------------------
+``scripts/probe_rdna_vgpr_granule.py`` resolved gfx1201 (Tajasarus) and
+gfx1151 (Princess-Luna) independently on their own silicon -- proof does not
+transfer between them -- and both give **1536 VGPRs/SIMD, wave32 granule 24,
+16 wave slots/SIMD**.  ``estimate_occupancy`` reproduces all 24 device
+observations with nothing fitted to them.  ``VGPR_GRANULE_CONTESTED`` is empty.
+
+That settled a disagreement in favour of the ISA and against this repo's own
+record.  RDNA4/RDNA3.5 ISA 3.3.2.1 prescribe granule 24 for a 1536-register
+file; the ROCm queue had recorded a split-wave attention kernel at 121 VGPRs
+with 12 waves/SIMD, which requires granule 16.  The device puts the rung
+boundary at **120** -- 111 VGPRs gives 12 waves, 132 gives 10 -- so that kernel
+gets 10.  The recorded figure was wrong, not the ISA.
+
+The ladder *shape* -- that occupancy is quantised at all, and that shedding
+registers between rungs buys nothing -- never depended on the answer.
 
 Fail-closed
 -----------
@@ -230,6 +249,21 @@ _VGPR_REGS_PER_SIMD: dict[AMDArch, tuple[int, Provenance]] = {
 #: measured on 2026-09-20: occupancy plateaus at exactly 16 for every kernel
 #: far below the register ceiling, on gfx1201 (Tajasarus) and gfx1151
 #: (Princess-Luna) independently.
+#:
+#: **Corroborated 2026-09-21 by two sources that are not the compiler remark**,
+#: closing the "rests on one source" caveat PR #789 recorded -- no RDNA4,
+#: RDNA3.5 or CDNA5 manual states a wave-slot count:
+#:
+#: * HSA agent properties (`rocminfo`): both parts report
+#:   `Max Waves Per CU: 32` and `SIMDs per CU: 2` -> 16/SIMD, from the runtime
+#:   rather than the compiler.  The same read independently confirms
+#:   `_SIMDS_PER_CU` and the `_MAX_WAVES` 16->32 unit correction.
+#: * LLVM itself, `AMDGPUBaseInfo.cpp::getMaxWavesPerEU`:
+#:   ``hasGFX10_3Insts(STI) ? 16 : 20`` -- 16 for gfx11/gfx12.  Upstream
+#:   23.1.1 and the ROCm fork are byte-identical here.  Its CDNA branch
+#:   returns 8 when ``isGFX90A``, and a compiler probe confirms gfx90a,
+#:   gfx942 and gfx950 all report 8 -- consistent with this module deriving
+#:   ``32 / 4 SIMDs = 8`` there.
 _WAVE_SLOTS_MEASURED: frozenset[AMDArch] = frozenset(
     {AMDArch.GFX_1151, AMDArch.GFX_1201}
 )

@@ -1,11 +1,75 @@
 ---
-last_updated: 2026-09-20
+last_updated: 2026-09-21
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## RDNA occupancy: all three follow-ups closed — 2026-09-21
+
+Sync: `RDNA-OCCUPANCY-GRANULE-2026-09-20`; owner ROCM-2. The three items PR
+#789 left open are answered. **The headline is a negative result, and it is
+the useful kind.**
+
+**1. Wave slots per SIMD — closed, two further sources.** PR #789 left this on
+one source (the probe's plateau); no RDNA4, RDNA3.5 or CDNA5 manual states a
+wave-slot count. `rocminfo` agent properties report `Max Waves Per CU: 32` and
+`SIMDs per CU: 2` on both parts — 16/SIMD from the **runtime**, not the
+compiler — and LLVM's own `AMDGPUBaseInfo.cpp::getMaxWavesPerEU` returns
+`hasGFX10_3Insts ? 16 : 20`. Three independent sources agree. The same
+`rocminfo` read independently corroborates `_SIMDS_PER_CU` and the
+`_MAX_WAVES` 16→32 unit correction. LLVM's CDNA branch returns 8 under
+`isGFX90A`, and a compiler probe confirms gfx90a/gfx942/gfx950 all report 8 —
+consistent with deriving `32 / 4 SIMDs`. Upstream LLVM 23.1.1 and the ROCm
+fork are byte-identical here.
+
+**2. The G6 kernel at ≤120 VGPRs — measured, and the two waves are not worth
+having.** The rung is reachable and free of spills: stamping ROCDL's
+`waves_per_eu` puts the two-wave D=128 kernel at **113 VGPRs / 12 waves/SIMD /
+0 spills** (the model predicted the boundary at 120; the allocator landed at
+113). It is then **2.2× slower** — 0.734 → 1.620 ms causal and 1.364 → 3.165 ms
+noncausal, nine interleaved trials with `one_wave` as a fixed control whose
+register count did not move (218 → 218, ±2.0%). Correctness held.
+
+The mechanism is in the disassembly, not inferred: `s_waitcnt` **33 → 45
+(+36%)** while `ds_`, `global_`, `v_wmma` and scratch are all unchanged.
+Freeing 8 registers required shortening live ranges, which moves loads closer
+to their uses and destroys instruction-level latency hiding — on a kernel
+already bound by unhidden load latency.
+
+**3. Occupancy binding in tile selection — rejected.** Item 2 *was* the
+exact-device proof item 1 was gated on, and it came back negative: +20%
+occupancy, −55% throughput. A selector maximising occupancy picks the slower
+kernel. `RankedTileCandidate.occupancy_waves_per_simd` stays reported and never
+scored, and that is now a measured position rather than caution. Consistent
+with `matmul_opt_ladder.py`'s existing note — "wins despite 67%→17% occupancy;
+arithmetic intensity beats occupancy".
+
+**Scope of the negative result.** One kernel family, one arch, one rung
+crossing. It does *not* show occupancy never matters — it shows occupancy is
+not **sufficient** to rank, and that a maximising selector is wrong at least
+sometimes. An occupancy-bound rather than latency-bound kernel could go the
+other way; none has been measured.
+
+Also fixed here: two `rocm_occupancy` docstring sections that shipped stale in
+#789 (it still said "nothing calls this module" with three consumers landed,
+and described the granule as contested after it was measured), and a
+`GenerateWMMAGemmKernel.cpp` comment that still called the 768 KiB VGPR file
+per-CU when it is per-WGP.
+
+The `waves_per_eu` scaffold that produced the 113-VGPR build is **deleted**
+(Decision #29) — its hypothesis is answered. Reproducing means re-adding a
+`rocdl.waves_per_eu` stamp to the flash-attention generator; the packet says
+exactly where.
+
+Still open, and now the honest next question: nothing has measured an
+**occupancy-bound** ROCm kernel. Until one exists, occupancy stays a capacity
+answer and not a ranking signal.
+
+Evidence: [closure packet](../../../../benchmarks/baselines/rdna_occupancy_closure_20260921/README.md).
+
 
 ## RDNA occupancy model, measured on both ROCm parts — 2026-09-20
 

@@ -2664,9 +2664,11 @@ struct GenerateWMMAGemmKernelPass
       // not an occupancy default: RDNA4 ISA 3.3.2.1 -- "VGPRs are allocated in
       // blocks of 16 for wave32 or 8 for wave64, and a shader may have up to
       // 256 VGPRs" -- and dynamic VGPR mode (3.3.3) caps at the same 256 with
-      // a 32-VGPR block size, 128 with 16. The 768 KiB file is per CU and
-      // shared across wave slots; no occupancy request hands one wave more
-      // than 256. A `waves-per-eu` knob briefly lived here to test the
+      // a 32-VGPR block size, 128 with 16. The 768 KiB file is per **WGP**,
+      // not per CU (corrected 2026-09-20: 1536 VGPRs/SIMD x 128 B x 4 SIMDs;
+      // read as per-CU it implies 3072/SIMD, which the device measurement
+      // excludes outright). It is shared across wave slots either way; no
+      // occupancy request hands one wave more than 256. A `waves-per-eu` knob briefly lived here to test the
       // opposite hypothesis (that constraining to one wave per SIMD would
       // lift the cap, as it does on CDNA); the attribute reached the llvm.func
       // and changed nothing, and the ISA says why. It is deleted rather than

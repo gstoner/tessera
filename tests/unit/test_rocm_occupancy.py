@@ -822,3 +822,75 @@ def test_residency_never_exceeds_any_single_ceiling():
                     pool = lds_pool_bytes(RDNA4, WorkgroupProcessorMode.WGP)
                     assert pool is not None
                     assert r.groups_per_slot * r.lds_allocated_bytes <= pool
+
+
+# ── Closure evidence, 2026-09-21 ────────────────────────────────────────────
+
+
+def test_wave_slots_match_the_hsa_runtime_report():
+    """`rocminfo` on both parts reports `Max Waves Per CU: 32` and
+    `SIMDs per CU: 2` -- 16 waves/SIMD, from the runtime rather than the
+    compiler.  This is the second of three independent sources; the ISA
+    manuals state no wave-slot count at all."""
+    from tessera.compiler.rocm_target import _MAX_WAVES, simds_per_cu
+
+    for arch in (RDNA4, RDNA35):
+        assert _MAX_WAVES[arch] == 32  # rocminfo: Max Waves Per CU
+        assert simds_per_cu(arch) == 2  # rocminfo: SIMDs per CU
+        assert wave_slots_per_simd(arch) == 16
+
+
+def test_wave_slots_match_llvm_get_max_waves_per_eu():
+    """LLVM's own constant, `AMDGPUBaseInfo.cpp::getMaxWavesPerEU`:
+    ``isGFX90A ? 8 : (!isGFX10Plus ? 10 : (hasGFX10_3Insts ? 16 : 20))``.
+    gfx11/gfx12 take the 16 branch; gfx90a/942/950 take the 8 branch, which a
+    compiler probe confirms for all three.  Third independent source."""
+    llvm_waves_per_eu = {
+        RDNA4: 16,
+        RDNA35: 16,
+        AMDArch.GFX_942: 8,
+        AMDArch.GFX_90A: 8,
+        AMDArch.GFX_950: 8,
+    }
+    for arch, expected in llvm_waves_per_eu.items():
+        assert wave_slots_per_simd(arch) == expected, arch.name
+
+
+def test_occupancy_is_not_claimed_to_predict_performance():
+    """Guard for the finding that closed this sync key: on gfx1151, +20%
+    occupancy cost -55% throughput.  Nothing in this module may present a wave
+    count as a speed, and no consumer may rank on it.
+
+    Asserted structurally rather than in prose: the result object exposes
+    capacity fields only.  A `score`, `rank`, `faster`, `speedup` or `latency`
+    field appearing here would mean someone had started ranking on occupancy,
+    which the device measurement says is wrong.
+    """
+    meta = estimate_occupancy(
+        arch=RDNA4,
+        mode=WorkgroupProcessorMode.WGP,
+        vgprs=121,
+        lds_bytes=16384,
+        workgroup_threads=256,
+    ).as_metadata_dict()
+    forbidden = (
+        "score",
+        "rank",
+        "faster",
+        "speedup",
+        "latency",
+        "ms",
+        "tflops",
+        "throughput",
+    )
+    assert not [k for k in meta if any(f in k.lower() for f in forbidden)]
+
+
+def test_the_measured_g6_rung_crossing_is_representable():
+    """The two points the closure experiment measured, as the model sees them:
+    121 VGPRs is 10 waves/SIMD, 113 is 12, and the step is real.  The device
+    then showed the 12-wave build 2.2x slower -- which is why this is the last
+    test that touches those numbers, and none of them rank anything."""
+    assert allocate_vgprs(121, arch=RDNA35).waves_per_simd == 10
+    assert allocate_vgprs(113, arch=RDNA35).waves_per_simd == 12
+    assert headroom_to_next_rung(121, arch=RDNA35) == (1, 2)

@@ -94,7 +94,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|
 | softmax | device_verified_jit | complete | complete | complete | rocm_softmax_compiled | gfx1201 | fp32 |
-| flash_attn | device_verified_jit | complete | complete | complete | rocm_flash_attn_compiled | gfx1201 | bf16,fp16,fp32 |
+| flash_attn | device_verified_jit | complete | complete | complete | rocm_flash_attn_compiled | gfx1201 | bf16,fp16 |
 | dct | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
 | es_low_rank_correction | ready | complete | missing | missing | - | - | fp32 |
 | fft | ready | complete | missing | missing | - | - | fp32,complex64 |
@@ -105,7 +105,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | spectral_conv | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
 | spectral_filter | ready | complete | missing | missing | - | - | fp32,complex64 |
 | stft | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
-| matmul | device_verified_jit | complete | complete | complete | rocm_compiled | gfx1201 | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| matmul | device_verified_jit | complete | complete | complete | rocm_compiled | gfx1201 | bf16,fp16,fp8_e4m3,fp8_e5m2,int8,int4 |
 
 ### `rocm_gfx1200` — Radeon RX 9060 / RX 9050 families
 

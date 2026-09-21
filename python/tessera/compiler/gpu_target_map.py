@@ -195,8 +195,8 @@ def _rocm_exact_row(op_full_name: str, target: ROCmExactTarget) -> ROCmExactRow 
     if target.target == "rocm_gfx1201":
         from . import execution_matrix as _em
 
-        cap = _cap.TARGET_CAPABILITIES[target.target]
-        op_cap = cap.supported_ops.get(op_full_name)
+        exact_cap = _cap.TARGET_CAPABILITIES[target.target]
+        op_cap = exact_cap.supported_ops.get(op_full_name)
         if op_cap is None:
             return None
         from .rocm_exact_device_proofs import public_proofs_for
@@ -226,16 +226,17 @@ def _rocm_exact_row(op_full_name: str, target: ROCmExactTarget) -> ROCmExactRow 
             "", None, "", op_cap.reason,
         )
 
-    cap = _cap.TARGET_CAPABILITIES.get(target.target)
-    if cap is None:
+    target_cap = _cap.TARGET_CAPABILITIES.get(target.target)
+    if target_cap is None:
         return None
-    op_cap = cap.supported_ops.get(op_full_name)
+    op_cap = target_cap.supported_ops.get(op_full_name)
     if op_cap is None:
         return None
     return ROCmExactRow(
         target.target, target.isa, target.architecture, target.products,
         target.priority, short, _family_for(short), op_cap.runtime_status,
-        tuple(cap.supported_dtypes), "complete" if op_cap.runtime_status == "artifact_only" else "planned",
+        tuple(target_cap.supported_dtypes),
+        "complete" if op_cap.runtime_status == "artifact_only" else "planned",
         "missing", "missing", "", "", "", "ROCm 7.2.4+", "", None, "",
         op_cap.reason)
 

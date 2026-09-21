@@ -7,6 +7,7 @@ import argparse
 import ctypes
 import json
 import math
+import os
 import re
 import statistics
 import subprocess
@@ -20,6 +21,37 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 from tessera import runtime as rt  # noqa: E402
+from tessera.compiler.rocm_occupancy import (  # noqa: E402
+    TesseraOccupancyError,
+    allocate_vgprs,
+)
+from tessera.compiler.rocm_schedule import parse_arch  # noqa: E402
+
+#: Respect the chip override the fleet uses; a gfx1201 run must not be
+#: labelled gfx1151 (CLAUDE.md, "Run device work on the box that has the
+#: device").
+EVIDENCE_ARCH = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+
+
+def _occupancy_waves_per_simd(vgpr_count, arch: str):
+    """VGPR-limited occupancy from the compiler's model, not an inline formula.
+
+    Replaces a hand-rolled ``min(16, 1536 // vgprs)``.  That form omitted the
+    VGPR allocation granule, so it reported 12 waves/SIMD for a 121-VGPR kernel
+    where the device gives 10: 121 rounds up to 144 on a part whose wave32
+    granule is 24 (RDNA4 / RDNA3.5 ISA 3.3.2.1, measured on both fleet parts).
+    It also hardcoded 1536 and 16, which are per-arch constants.
+
+    Returns None rather than an approximation when the arch is unestablished
+    or the VGPR count is unusable.
+    """
+    if not vgpr_count:
+        return None
+    try:
+        return allocate_vgprs(int(vgpr_count), arch=parse_arch(arch)).waves_per_simd
+    except (TesseraOccupancyError, ValueError, KeyError):
+        return None
+
 
 CASES = ((1, 8, 512, 64, False), (1, 8, 1024, 64, False),
          (1, 16, 1024, 128, False), (1, 16, 1009, 128, True))
@@ -30,7 +62,7 @@ def _mr(p, size):
             ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
 
 
-def _resources(blob):
+def _resources(blob, arch: str = EVIDENCE_ARCH):
     tool = next((p for p in (Path("/opt/rocm/llvm/bin/llvm-readobj"),
                               Path("/usr/lib/llvm-23/bin/llvm-readobj"))
                  if p.is_file()), None)
@@ -53,8 +85,8 @@ def _resources(blob):
     result["spills"] = bool((result["scratch_bytes"] or 0)
                             or (result["vgpr_spill_count"] or 0)
                             or (result["sgpr_spill_count"] or 0))
-    result["vgpr_limited_waves_per_simd"] = (
-        min(16, 1536 // result["vgpr_count"]) if result["vgpr_count"] else None)
+    result["vgpr_limited_waves_per_simd"] = _occupancy_waves_per_simd(
+        result["vgpr_count"], arch)
     return result
 
 
@@ -193,7 +225,7 @@ def run(trials, iterations, correctness_only=False):
                   f"{dmed:.3f} ms {row['tflops']:.2f} TF/s", flush=True)
         base.close()
         if candidate: candidate.close()
-    return {"schema": "tessera.rocm.g6b.v1", "evidence_arch": "gfx1151",
+    return {"schema": "tessera.rocm.g6b.v1", "evidence_arch": EVIDENCE_ARCH,
             "trials": trials, "iterations": iterations, "rows": rows,
             "performance_status": ("not_run" if correctness_only else "measured"),
             "all_correct": True}

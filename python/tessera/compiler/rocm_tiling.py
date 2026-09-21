@@ -45,12 +45,12 @@ from .rocm_target import (
 _ACC_WORDS_BY_DTYPE: dict[str, int] = {
     "fp64": 2,
     "fp32": 1,
-    "bf16": 1,   # accumulates in fp32 -> 1 word
-    "fp16": 1,   # accumulates in fp32 -> 1 word
+    "bf16": 1,  # accumulates in fp32 -> 1 word
+    "fp16": 1,  # accumulates in fp32 -> 1 word
     "fp8_e4m3": 1,
     "fp8_e5m2": 1,
     "fp4_e2m1": 1,
-    "int8": 1,   # accumulates in int32 -> 1 word
+    "int8": 1,  # accumulates in int32 -> 1 word
     "int32": 1,
 }
 
@@ -103,8 +103,7 @@ class TileShape:
     def __post_init__(self) -> None:
         for name, val in (("m", self.m), ("n", self.n), ("k", self.k)):
             if val <= 0:
-                raise ValueError(
-                    f"TileShape.{name} must be positive, got {val}")
+                raise ValueError(f"TileShape.{name} must be positive, got {val}")
 
     @property
     def output_area(self) -> int:
@@ -137,8 +136,7 @@ class TileCandidate:
 
     def __post_init__(self) -> None:
         if self.n_slice < 1:
-            raise ValueError(
-                f"n_slice must be >= 1, got {self.n_slice}")
+            raise ValueError(f"n_slice must be >= 1, got {self.n_slice}")
         if not self.dtype:
             raise ValueError("dtype must be a non-empty canonical dtype string")
 
@@ -202,6 +200,20 @@ class RankedTileCandidate:
     #: split-K" -- and note the model itself is known wrong for the shape that
     #: needs it most (see `rank_candidates`).
     split_k_required: bool | None
+    #: VGPR-limited occupancy in waves/SIMD, from `rocm_occupancy`.  None when
+    #: the arch's constants are unestablished.
+    #:
+    #: UNWIRED as a ranking input (Decision #29a condition 1): it is reported,
+    #: not scored.  `score` below is deliberately unchanged, because making
+    #: occupancy binding changes which tile production selects, and that needs
+    #: exact-device proof on the launch arch before it can move a selector.
+    #: Owned by RDNA-OCCUPANCY-GRANULE-2026-09-20.
+    #:
+    #: It is worth reporting now because the register margin next to it cannot
+    #: answer the question occupancy answers: `vgpr_usage` is continuous, and
+    #: occupancy is a step function of it, so two candidates 20 registers apart
+    #: can sit on the same rung while two one register apart do not.
+    occupancy_waves_per_simd: int | None
     pipeline_depth: int
     score: float
     reasons: tuple[str, ...]
@@ -224,6 +236,7 @@ class RankedTileCandidate:
             "bank_padding_required": self.bank_padding_required,
             "register_macro_tile": self.register_macro_tile,
             "split_k_required": self.split_k_required,
+            "occupancy_waves_per_simd": self.occupancy_waves_per_simd,
             "pipeline_depth": self.pipeline_depth,
             "score": self.score,
             "reasons": list(self.reasons),
@@ -321,7 +334,9 @@ def _estimated_bank_padding_bytes(candidate: TileCandidate) -> int:
     bytes_per_element = max(1, _ceil_div(_storage_bits(candidate.dtype), 8))
     # One extra element per row in both panels is enough metadata for the V1
     # cost model; exact padding policy is backend-lowering work.
-    return (candidate.tile.m + _ceil_div(candidate.tile.n, candidate.n_slice)) * bytes_per_element
+    return (
+        candidate.tile.m + _ceil_div(candidate.tile.n, candidate.n_slice)
+    ) * bytes_per_element
 
 
 def _register_macro_tile(candidate: TileCandidate) -> tuple[int, int]:
@@ -366,7 +381,6 @@ def _split_k_required(
         return None
     tiles = _ceil_div(m, candidate.tile.m) * _ceil_div(n, candidate.tile.n)
     return tiles < slots
-
 
 
 #: Panels each RDNA chip admits, largest first. The macro tile is a panel of
@@ -417,8 +431,11 @@ def select_macro_tile(
     if measured_band is None:
         # No band: the large panel applies from the floor upward.
         in_band = (
-            not dynamic and m >= _PANEL_FLOOR and n >= _PANEL_FLOOR
-            and m % 64 == 0 and n % 64 == 0
+            not dynamic
+            and m >= _PANEL_FLOOR
+            and n >= _PANEL_FLOOR
+            and m % 64 == 0
+            and n % 64 == 0
         )
     wanted = large if in_band else measured_small_panel
 
@@ -426,7 +443,8 @@ def select_macro_tile(
     # not a choice however well it measured; `fits_register_budget` is what the
     # ranking already computes and nothing consulted.
     candidate = TileCandidate(
-        tile=TileShape(m=wanted[0], n=wanted[1], k=16), dtype=dtype)
+        tile=TileShape(m=wanted[0], n=wanted[1], k=16), dtype=dtype
+    )
     ranked = rank_candidates([candidate], profile, problem=(m, n))[0]
     if not ranked.fits_register_budget and wanted != measured_small_panel:
         return measured_small_panel
@@ -436,6 +454,26 @@ def select_macro_tile(
 #: Smallest problem edge at which the large panel is measured to win when no
 #: explicit band is given (gfx1201).
 _PANEL_FLOOR = 1024
+
+
+def _occupancy_waves_per_simd(vgprs: int, profile: ROCmTargetProfile) -> int | None:
+    """VGPR-limited occupancy for a candidate, or None when undeterminable.
+
+    Imported lazily so `rocm_tiling` keeps working on an arch whose occupancy
+    constants this fleet has never established: an unmeasured part loses this
+    one reported field rather than failing to rank at all.
+    """
+    from tessera.compiler.rocm_occupancy import (
+        TesseraOccupancyError,
+        allocate_vgprs,
+    )
+
+    try:
+        return allocate_vgprs(
+            vgprs, arch=profile.arch, per_wave_cap=profile.vgpr_budget
+        ).waves_per_simd
+    except TesseraOccupancyError:
+        return None
 
 
 def rank_candidates(
@@ -482,7 +520,9 @@ def rank_candidates(
         # decide, and `split_k_required is True` keeps working for the ones
         # that only care about the positive case.
         split_k_required = _split_k_required(
-            cand, profile, problem=problem, lds_margin=lds_margin)
+            cand, profile, problem=problem, lds_margin=lds_margin
+        )
+        occupancy = _occupancy_waves_per_simd(vgpr, profile)
         bank_padding = padding > 0
 
         reasons: list[str] = []
@@ -518,6 +558,7 @@ def rank_candidates(
                 bank_padding_required=bank_padding,
                 register_macro_tile=macro_tile,
                 split_k_required=split_k_required,
+                occupancy_waves_per_simd=occupancy,
                 pipeline_depth=depth,
                 score=score,
                 reasons=tuple(reasons),
@@ -584,7 +625,8 @@ def quad_slice(tile: TileShape) -> tuple[TileShape, TileShape, TileShape, TileSh
     ``ValueError`` otherwise."""
     if tile.m % 2 != 0 or tile.n % 2 != 0:
         raise ValueError(
-            f"quad_slice requires even m and n, got m={tile.m}, n={tile.n}")
+            f"quad_slice requires even m and n, got m={tile.m}, n={tile.n}"
+        )
     hm, hn = tile.m // 2, tile.n // 2
     quad = TileShape(hm, hn, tile.k)
     return (quad, quad, quad, quad)
@@ -599,8 +641,7 @@ def n_slice(tile: TileShape, parts: int) -> tuple[TileShape, ...]:
     if parts < 1:
         raise ValueError(f"parts must be >= 1, got {parts}")
     if tile.n % parts != 0:
-        raise ValueError(
-            f"n_slice parts={parts} must divide n={tile.n} evenly")
+        raise ValueError(f"n_slice parts={parts} must divide n={tile.n} evenly")
     sub_n = tile.n // parts
     sub = TileShape(tile.m, sub_n, tile.k)
     return tuple(sub for _ in range(parts))

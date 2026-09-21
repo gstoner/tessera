@@ -48,14 +48,14 @@ class AMDArch(IntEnum):
     conveniences only; feature gates below remain architecture-specific.
     """
 
-    GFX_90A = 90       # MI250 — CDNA 2 (kept for completeness)
-    GFX_940 = 940      # MI300A — CDNA 3 unified
-    GFX_942 = 942      # MI300X — CDNA 3 discrete
-    GFX_950 = 950      # MI325X — CDNA 4
-    GFX_1100 = 1100    # RDNA 3 prosumer (RX 7900-series)
-    GFX_1151 = 1151    # RDNA 3.5 APU — Strix Halo (Radeon 8060S / Ryzen AI Max+ 395)
-    GFX_1200 = 1200    # RDNA 4 / GFX12 prosumer
-    GFX_1201 = 1201    # RDNA 4 / Radeon AI PRO R9700
+    GFX_90A = 90  # MI250 — CDNA 2 (kept for completeness)
+    GFX_940 = 940  # MI300A — CDNA 3 unified
+    GFX_942 = 942  # MI300X — CDNA 3 discrete
+    GFX_950 = 950  # MI325X — CDNA 4
+    GFX_1100 = 1100  # RDNA 3 prosumer (RX 7900-series)
+    GFX_1151 = 1151  # RDNA 3.5 APU — Strix Halo (Radeon 8060S / Ryzen AI Max+ 395)
+    GFX_1200 = 1200  # RDNA 4 / GFX12 prosumer
+    GFX_1201 = 1201  # RDNA 4 / Radeon AI PRO R9700
     # CDNA 5: wave32 XDL WMMA/SWMMAC, not legacy wave64 MFMA. gfx1250 is
     # MI455X; gfx1251 is MI430X. They share an instruction ABI but have distinct
     # latency/cost identities and must not share selector evidence.
@@ -65,17 +65,24 @@ class AMDArch(IntEnum):
 
 #: Wave32 architectures. CDNA 5 is deliberately present: architecture family
 #: no longer determines wave size or matrix mnemonic family.
-_WAVE32_ARCHES: frozenset[AMDArch] = frozenset({
-    AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200,
-    AMDArch.GFX_1201,
-    AMDArch.GFX_1250, AMDArch.GFX_1251,
-})
+_WAVE32_ARCHES: frozenset[AMDArch] = frozenset(
+    {
+        AMDArch.GFX_1100,
+        AMDArch.GFX_1151,
+        AMDArch.GFX_1200,
+        AMDArch.GFX_1201,
+        AMDArch.GFX_1250,
+        AMDArch.GFX_1251,
+    }
+)
 
 
 #: Target ROCm release that Tessera's AMD backend is built against.
-TESSERA_TARGET_ROCM: str = "10.0"         # measured 10.0.0 on both ROCm boxes (2026-09-15)
-TESSERA_TARGET_HIP: str = "7.15"          # measured HIP 7.15.26333 (2026-09-15)
-TESSERA_TARGET_RCCL_MIN: str = "2.22"     # floor kept; the bundle under 10.0 was not measured
+TESSERA_TARGET_ROCM: str = "10.0"  # measured 10.0.0 on both ROCm boxes (2026-09-15)
+TESSERA_TARGET_HIP: str = "7.15"  # measured HIP 7.15.26333 (2026-09-15)
+TESSERA_TARGET_RCCL_MIN: str = (
+    "2.22"  # floor kept; the bundle under 10.0 was not measured
+)
 TESSERA_TARGET_ROCBLAS_MIN: str = "5.0.0"
 TESSERA_TARGET_MIOPEN_MIN: str = "3.5.0"
 
@@ -101,7 +108,7 @@ TESSERA_TARGET_MIOPEN_MIN: str = "3.5.0"
 #: (16 on Tajasarus, 32 on Princess-Luna) -- plausible CU counts, and wrong.
 #: Parse the block whose `Name:` is a gfx target.
 _DISPATCH_SLOTS: dict[AMDArch, int] = {
-    AMDArch.GFX_1151: 20,   # 40 CUs / 2 -- Radeon 8060S (Strix Halo)
+    AMDArch.GFX_1151: 20,  # 40 CUs / 2 -- Radeon 8060S (Strix Halo)
     #: RX 9070 XT. Three independent sources agree, and the arithmetic closes:
     #: vendor spec 32 WGPs / 64 CUs / 4096 stream processors; rocminfo's GPU
     #: agent reports 64 CUs; and RDNA4 Figure 2 puts 4 SIMD32s in a WGP (2 per
@@ -142,7 +149,7 @@ def dispatch_slots(arch: AMDArch, mode: WorkgroupProcessorMode) -> int | None:
     if slots is None:
         return None
     if _IS_RDNA.get(arch, False) and mode is WorkgroupProcessorMode.CU:
-        return slots * 2   # a WGP is 2 CUs; in CU mode each hosts its own group
+        return slots * 2  # a WGP is 2 CUs; in CU mode each hosts its own group
     return slots
 
 
@@ -171,12 +178,12 @@ _IS_RDNA: dict[AMDArch, bool] = {
 #:     diagnostic, which is why the staging copy derives its vector width from
 #:     the padded stride rather than taking one.
 _LDS_BYTES: dict[AMDArch, int] = {
-    AMDArch.GFX_90A:  65536,
-    AMDArch.GFX_940:  65536,
-    AMDArch.GFX_942:  65536,
-    AMDArch.GFX_950:  163840,   # CDNA 4 doubles LDS
+    AMDArch.GFX_90A: 65536,
+    AMDArch.GFX_940: 65536,
+    AMDArch.GFX_942: 65536,
+    AMDArch.GFX_950: 163840,  # CDNA 4 doubles LDS
     AMDArch.GFX_1100: 65536,
-    AMDArch.GFX_1151: 65536,    # RDNA 3.5 — 128 KiB per WGP (2 CUs); 64 KiB/CU view
+    AMDArch.GFX_1151: 65536,  # RDNA 3.5 — 128 KiB per WGP (2 CUs); 64 KiB/CU view
     AMDArch.GFX_1200: 65536,
     AMDArch.GFX_1201: 65536,
     # CDNA 5 addressable LDS per WGP. The physical allocation/accounting unit
@@ -186,19 +193,66 @@ _LDS_BYTES: dict[AMDArch, int] = {
 }
 
 
+#: SIMDs per CU.  RDNA pairs two SIMD32s into a CU (and two CUs into a WGP);
+#: CDNA/GCN puts four SIMDs in a CU.  Required to convert between the per-CU
+#: and per-SIMD wave-slot units, which is exactly what this file used to get
+#: wrong.  Absent means "not established" -- a caller must not guess.
+_SIMDS_PER_CU: dict[AMDArch, int] = {
+    AMDArch.GFX_90A: 4,
+    AMDArch.GFX_940: 4,
+    AMDArch.GFX_942: 4,
+    AMDArch.GFX_950: 4,
+    AMDArch.GFX_1100: 2,
+    AMDArch.GFX_1151: 2,
+    AMDArch.GFX_1200: 2,
+    AMDArch.GFX_1201: 2,
+    # CDNA 5 CU geometry not established on this fleet; deliberately absent so
+    # `waves_per_simd` declines rather than derives a number from nothing.
+}
+
+
 # Maximum waves per CU for each architecture.
+#
+# **The unit is per CU, and the RDNA rows were wrong until 2026-09-20.** They
+# carried 16, which is the per-**SIMD** slot count; an RDNA CU is two SIMD32s,
+# so the per-CU figure is 32. The table was internally inconsistent: the CDNA
+# rows are genuinely per-CU (4 SIMDs x 8 slots = 32 on gfx90a) while the RDNA
+# rows were per-SIMD, so the same column meant two different things.
+#
+# Measured, not inferred: the gfx1201 and gfx1151 probes both report occupancy
+# plateauing at exactly 16 waves/SIMD for kernels far below the register
+# ceiling (`benchmarks/baselines/gfx120x_vgpr_granule_20260920/`), and the
+# RDNA4/RDNA3.5 ISA 2.3 both state a work-group's waves "can run on any of the
+# 4 SIMD32's" in a WGP. 16/SIMD x 2 SIMDs = 32/CU.
+#
+# Correcting it *relaxes* the `ROCmTargetProfile.waves_per_cu` validator. That
+# is safe here and was checked rather than assumed: `waves_per_cu` reaches no
+# Target IR attribute and is not in `ROCmScheduleDescriptor.cache_key()`, and
+# the only reader of the `waves_per_simd` property is the property itself.
 _MAX_WAVES: dict[AMDArch, int] = {
-    AMDArch.GFX_90A:  32,
-    AMDArch.GFX_940:  32,
-    AMDArch.GFX_942:  32,
-    AMDArch.GFX_950:  32,
-    AMDArch.GFX_1100: 16,
-    AMDArch.GFX_1151: 16,       # RDNA 3.5 wave32 occupancy (same as RDNA 3)
-    AMDArch.GFX_1200: 16,
-    AMDArch.GFX_1201: 16,
+    AMDArch.GFX_90A: 32,  # 4 SIMD16 x 8 slots
+    AMDArch.GFX_940: 32,
+    AMDArch.GFX_942: 32,
+    AMDArch.GFX_950: 32,
+    AMDArch.GFX_1100: 32,  # RDNA 3: 2 SIMD32 x 16 slots
+    AMDArch.GFX_1151: 32,  # RDNA 3.5, measured 16/SIMD on Princess-Luna
+    AMDArch.GFX_1200: 32,
+    AMDArch.GFX_1201: 32,  # RDNA 4, measured 16/SIMD on Tajasarus
+    # CDNA 5: left at the previously recorded value; its CU geometry is not
+    # established on this fleet, so it is not re-derived here.
     AMDArch.GFX_1250: 16,
     AMDArch.GFX_1251: 16,
 }
+
+
+def simds_per_cu(arch: AMDArch) -> Optional[int]:
+    """SIMDs in one CU, or None when this fleet has not established it."""
+    return _SIMDS_PER_CU.get(arch)
+
+
+def max_waves_per_cu(arch: AMDArch) -> Optional[int]:
+    """Hardware wave slots per CU, or None for an unlisted arch."""
+    return _MAX_WAVES.get(arch)
 
 
 # Per-arch Tessera-registered executable storage matrix accepted by the ROCm
@@ -208,67 +262,126 @@ _MAX_WAVES: dict[AMDArch, int] = {
 # `rocm_dtype_contract.py`. Canonical Tessera dtype spellings only (validated
 # by `tessera.dtype.canonicalize_dtype`).
 _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
-    AMDArch.GFX_90A: frozenset({
-        "fp64", "fp32", "bf16", "fp16", "int8",
-    }),
-    AMDArch.GFX_940: frozenset({
-        "fp64", "fp32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2",
-        "int8",
-    }),
-    AMDArch.GFX_942: frozenset({
-        "fp64", "fp32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2",
-        "int8",
-    }),
-    AMDArch.GFX_950: frozenset({
-        # CDNA 4 adds OCP FP4/FP6 + AMD MX-formats (planned/gated per
-        # tessera.dtype rules — registry entries that reference these
-        # must declare metadata.dtype_status='planned_gated').
-        "fp64", "fp32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2",
-        "fp6_e2m3", "fp6_e3m2",
-        "fp4_e2m1",
-        "int8",
-    }),
-    AMDArch.GFX_1100: frozenset({
-        "fp32", "bf16", "fp16", "int8",
-    }),
-    AMDArch.GFX_1151: frozenset({
-        # RDNA 3.5 (Strix Halo).  WMMA executable surface per the ISA §7.9
-        # Table 33: F16, BF16, IU8 (int8).  IU4 (int4) is architecturally
-        # present with first-class signed two's-complement packed storage:
-        # two logical int4 values per int8 byte container. Notably NO FP8 here.
-        "fp32", "bf16", "fp16", "int8", "int4",
-    }),
-    AMDArch.GFX_1200: frozenset({
-        # GFX12 / RDNA 4 rocWMMA-class surface.  Keep this as an
-        # architecture capability matrix, not a native-execution claim:
-        # Tessera's ROCm backend remains artifact_only until HIP execution
-        # validation lands.
-        "fp32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2",
-        "int8", "int32",
-        "int4",
-    }),
-    AMDArch.GFX_1201: frozenset({
-        "fp32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2",
-        "int8", "int32", "int4",
-    }),
-    AMDArch.GFX_1250: frozenset({
-        # MI455X / CDNA 5 executable storage ABI. FP4/FP6/MX formats are
-        # represented in rocm_isa_contract as planned-gated matrix formats;
-        # they are not promoted to Graph storage by this target row.
-        "fp32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2",
-        "int8",
-    }),
-    AMDArch.GFX_1251: frozenset({
-        "fp32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2",
-        "int8",
-    }),
+    AMDArch.GFX_90A: frozenset(
+        {
+            "fp64",
+            "fp32",
+            "bf16",
+            "fp16",
+            "int8",
+        }
+    ),
+    AMDArch.GFX_940: frozenset(
+        {
+            "fp64",
+            "fp32",
+            "bf16",
+            "fp16",
+            "fp8_e4m3",
+            "fp8_e5m2",
+            "int8",
+        }
+    ),
+    AMDArch.GFX_942: frozenset(
+        {
+            "fp64",
+            "fp32",
+            "bf16",
+            "fp16",
+            "fp8_e4m3",
+            "fp8_e5m2",
+            "int8",
+        }
+    ),
+    AMDArch.GFX_950: frozenset(
+        {
+            # CDNA 4 adds OCP FP4/FP6 + AMD MX-formats (planned/gated per
+            # tessera.dtype rules — registry entries that reference these
+            # must declare metadata.dtype_status='planned_gated').
+            "fp64",
+            "fp32",
+            "bf16",
+            "fp16",
+            "fp8_e4m3",
+            "fp8_e5m2",
+            "fp6_e2m3",
+            "fp6_e3m2",
+            "fp4_e2m1",
+            "int8",
+        }
+    ),
+    AMDArch.GFX_1100: frozenset(
+        {
+            "fp32",
+            "bf16",
+            "fp16",
+            "int8",
+        }
+    ),
+    AMDArch.GFX_1151: frozenset(
+        {
+            # RDNA 3.5 (Strix Halo).  WMMA executable surface per the ISA §7.9
+            # Table 33: F16, BF16, IU8 (int8).  IU4 (int4) is architecturally
+            # present with first-class signed two's-complement packed storage:
+            # two logical int4 values per int8 byte container. Notably NO FP8 here.
+            "fp32",
+            "bf16",
+            "fp16",
+            "int8",
+            "int4",
+        }
+    ),
+    AMDArch.GFX_1200: frozenset(
+        {
+            # GFX12 / RDNA 4 rocWMMA-class surface.  Keep this as an
+            # architecture capability matrix, not a native-execution claim:
+            # Tessera's ROCm backend remains artifact_only until HIP execution
+            # validation lands.
+            "fp32",
+            "bf16",
+            "fp16",
+            "fp8_e4m3",
+            "fp8_e5m2",
+            "int8",
+            "int32",
+            "int4",
+        }
+    ),
+    AMDArch.GFX_1201: frozenset(
+        {
+            "fp32",
+            "bf16",
+            "fp16",
+            "fp8_e4m3",
+            "fp8_e5m2",
+            "int8",
+            "int32",
+            "int4",
+        }
+    ),
+    AMDArch.GFX_1250: frozenset(
+        {
+            # MI455X / CDNA 5 executable storage ABI. FP4/FP6/MX formats are
+            # represented in rocm_isa_contract as planned-gated matrix formats;
+            # they are not promoted to Graph storage by this target row.
+            "fp32",
+            "bf16",
+            "fp16",
+            "fp8_e4m3",
+            "fp8_e5m2",
+            "int8",
+        }
+    ),
+    AMDArch.GFX_1251: frozenset(
+        {
+            "fp32",
+            "bf16",
+            "fp16",
+            "fp8_e4m3",
+            "fp8_e5m2",
+            "int8",
+        }
+    ),
 }
 
 
@@ -279,60 +392,60 @@ _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
 _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
     AMDArch.GFX_90A: {
         # MI250 — CDNA 2; baseline MFMA only.
-        "mfma":                "ready",
-        "mfma_f8":             "not_supported",
-        "mfma_xf32":           "not_supported",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "not_supported",
-        "wmma_bf16":           "not_supported",
-        "wmma_f8":             "not_supported",
-        "lds_async_copy":      "not_supported",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "not_supported",
-        "cluster_mode":        "not_supported",
-        "xnack":               "ready",
-        "sram_ecc":            "ready",
+        "mfma": "ready",
+        "mfma_f8": "not_supported",
+        "mfma_xf32": "not_supported",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "not_supported",
+        "wmma_bf16": "not_supported",
+        "wmma_f8": "not_supported",
+        "lds_async_copy": "not_supported",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "not_supported",
+        "cluster_mode": "not_supported",
+        "xnack": "ready",
+        "sram_ecc": "ready",
     },
     AMDArch.GFX_940: {
         # MI300A — CDNA 3 unified APU.
-        "mfma":                "ready",
-        "mfma_f8":             "ready",
-        "mfma_xf32":           "ready",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "not_supported",
-        "wmma_bf16":           "not_supported",
-        "wmma_f8":             "not_supported",
-        "lds_async_copy":      "ready",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "ready",
-        "cluster_mode":        "not_supported",
-        "xnack":               "ready",
-        "sram_ecc":            "ready",
+        "mfma": "ready",
+        "mfma_f8": "ready",
+        "mfma_xf32": "ready",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "not_supported",
+        "wmma_bf16": "not_supported",
+        "wmma_f8": "not_supported",
+        "lds_async_copy": "ready",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "ready",
+        "cluster_mode": "not_supported",
+        "xnack": "ready",
+        "sram_ecc": "ready",
     },
     AMDArch.GFX_942: {
         # MI300X — CDNA 3 discrete.
-        "mfma":                "ready",
-        "mfma_f8":             "ready",
-        "mfma_xf32":           "ready",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "not_supported",
-        "wmma_bf16":           "not_supported",
-        "wmma_f8":             "not_supported",
-        "lds_async_copy":      "ready",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "ready",
-        "cluster_mode":        "not_supported",
-        "xnack":               "ready",
-        "sram_ecc":            "ready",
+        "mfma": "ready",
+        "mfma_f8": "ready",
+        "mfma_xf32": "ready",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "not_supported",
+        "wmma_bf16": "not_supported",
+        "wmma_f8": "not_supported",
+        "lds_async_copy": "ready",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "ready",
+        "cluster_mode": "not_supported",
+        "xnack": "ready",
+        "sram_ecc": "ready",
     },
     AMDArch.GFX_950: {
         # MI350 / MI355X — CDNA 4; adds MX-format MFMA + cluster mode.
         # (This said "MI325X", which is CDNA 3 / gfx942. Corrected 2026-09-19.)
-        "mfma":                "ready",
-        "mfma_f8":             "ready",
+        "mfma": "ready",
+        "mfma_f8": "ready",
         # CDNA 4 REMOVED the native TF32 matrix unit. AMD spent that area on
         # the denser MXFP4/MXFP6 pipelines instead, on the reasoning that TF32
         # is little used in current training and inference next to FP8 and FP4.
@@ -377,35 +490,35 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         # not the instruction. CDNA 3 (gfx940/gfx942) keeps "ready" because
         # V_MFMA_*_XF32 is real there. Corroborating: the CDNA 5 ISA document
         # contains no occurrence of "xf32" at all.
-        "mfma_xf32":           "not_supported",
-        "mfma_f4":             "ready",
-        "mfma_f6":             "ready",
-        "wmma_f16":            "not_supported",
-        "wmma_bf16":           "not_supported",
-        "wmma_f8":             "not_supported",
-        "lds_async_copy":      "ready",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "ready",
-        "cluster_mode":        "ready",
-        "xnack":               "ready",
-        "sram_ecc":            "ready",
+        "mfma_xf32": "not_supported",
+        "mfma_f4": "ready",
+        "mfma_f6": "ready",
+        "wmma_f16": "not_supported",
+        "wmma_bf16": "not_supported",
+        "wmma_f8": "not_supported",
+        "lds_async_copy": "ready",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "ready",
+        "cluster_mode": "ready",
+        "xnack": "ready",
+        "sram_ecc": "ready",
     },
     AMDArch.GFX_1100: {
         # RDNA 3 — WMMA only; no MFMA on the prosumer line.
-        "mfma":                "not_supported",
-        "mfma_f8":             "not_supported",
-        "mfma_xf32":           "not_supported",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "ready",
-        "wmma_bf16":           "ready",
-        "wmma_f8":             "tba",
-        "lds_async_copy":      "not_supported",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "not_supported",
-        "cluster_mode":        "not_supported",
-        "xnack":               "not_supported",
-        "sram_ecc":            "not_supported",
+        "mfma": "not_supported",
+        "mfma_f8": "not_supported",
+        "mfma_xf32": "not_supported",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "ready",
+        "wmma_bf16": "ready",
+        "wmma_f8": "tba",
+        "lds_async_copy": "not_supported",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "not_supported",
+        "cluster_mode": "not_supported",
+        "xnack": "not_supported",
+        "sram_ecc": "not_supported",
     },
     AMDArch.GFX_1151: {
         # RDNA 3.5 (Strix Halo APU).  WMMA only, no MFMA — same matrix
@@ -413,23 +526,23 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         # Table 33: WMMA combos are F16/BF16/IU8/IU4 — there is **no FP8
         # WMMA instruction** on RDNA 3.5, so wmma_f8 is not_supported
         # (this is the load-bearing distinction from gfx1200, which has it).
-        "mfma":                "not_supported",
-        "mfma_f8":             "not_supported",
-        "mfma_xf32":           "not_supported",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "ready",
-        "wmma_bf16":           "ready",
-        "wmma_f8":             "not_supported",
-        "lds_async_copy":      "not_supported",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "not_supported",
-        "cluster_mode":        "not_supported",
+        "mfma": "not_supported",
+        "mfma_f8": "not_supported",
+        "mfma_xf32": "not_supported",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "ready",
+        "wmma_bf16": "ready",
+        "wmma_f8": "not_supported",
+        "lds_async_copy": "not_supported",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "not_supported",
+        "cluster_mode": "not_supported",
         # APU with truly unified LPDDR5x; xnack/managed-memory behaviour on
         # gfx1151 is left conservative (not asserted ready) until validated
         # on real silicon under a shipping ROCm.
-        "xnack":               "not_supported",
-        "sram_ecc":            "not_supported",
+        "xnack": "not_supported",
+        "sram_ecc": "not_supported",
     },
     AMDArch.GFX_1200: {
         # RDNA 4 / GFX12 — WMMA/rocWMMA-class target.  Public ROCm docs
@@ -440,71 +553,71 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         # unsigned packed-4 remains unregistered. Tessera models the executable
         # compiler surface conservatively: WMMA-class features are ready
         # for artifact planning, MFMA/CDNA features stay unavailable.
-        "mfma":                "not_supported",
-        "mfma_f8":             "not_supported",
-        "mfma_xf32":           "not_supported",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "ready",
-        "wmma_bf16":           "ready",
-        "wmma_f8":             "ready",
-        "lds_async_copy":      "not_supported",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "not_supported",
-        "cluster_mode":        "not_supported",
-        "xnack":               "not_supported",
-        "sram_ecc":            "not_supported",
+        "mfma": "not_supported",
+        "mfma_f8": "not_supported",
+        "mfma_xf32": "not_supported",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "ready",
+        "wmma_bf16": "ready",
+        "wmma_f8": "ready",
+        "lds_async_copy": "not_supported",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "not_supported",
+        "cluster_mode": "not_supported",
+        "xnack": "not_supported",
+        "sram_ecc": "not_supported",
     },
     AMDArch.GFX_1201: {
-        "mfma":                "not_supported",
-        "mfma_f8":             "not_supported",
-        "mfma_xf32":           "not_supported",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "ready",
-        "wmma_bf16":           "ready",
-        "wmma_f8":             "ready",
-        "lds_async_copy":      "not_supported",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "not_supported",
-        "cluster_mode":        "not_supported",
-        "xnack":               "not_supported",
-        "sram_ecc":            "not_supported",
+        "mfma": "not_supported",
+        "mfma_f8": "not_supported",
+        "mfma_xf32": "not_supported",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "ready",
+        "wmma_bf16": "ready",
+        "wmma_f8": "ready",
+        "lds_async_copy": "not_supported",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "not_supported",
+        "cluster_mode": "not_supported",
+        "xnack": "not_supported",
+        "sram_ecc": "not_supported",
     },
     AMDArch.GFX_1250: {
         # MI455X / CDNA 5. Architecture support is grounded in the CDNA5 ISA
         # and LLVM gfx1250 subtarget; execution promotion remains separately
         # gated by the exact-device target capability.
-        "mfma":                "not_supported",
-        "mfma_f8":             "not_supported",
-        "mfma_xf32":           "not_supported",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "ready",
-        "wmma_bf16":           "ready",
-        "wmma_f8":             "ready",
-        "lds_async_copy":      "ready",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "not_supported",
-        "cluster_mode":        "ready",
-        "xnack":               "ready",
-        "sram_ecc":            "ready",
+        "mfma": "not_supported",
+        "mfma_f8": "not_supported",
+        "mfma_xf32": "not_supported",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "ready",
+        "wmma_bf16": "ready",
+        "wmma_f8": "ready",
+        "lds_async_copy": "ready",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "not_supported",
+        "cluster_mode": "ready",
+        "xnack": "ready",
+        "sram_ecc": "ready",
     },
     AMDArch.GFX_1251: {
-        "mfma":                "not_supported",
-        "mfma_f8":             "not_supported",
-        "mfma_xf32":           "not_supported",
-        "mfma_f4":             "not_supported",
-        "mfma_f6":             "not_supported",
-        "wmma_f16":            "ready",
-        "wmma_bf16":           "ready",
-        "wmma_f8":             "ready",
-        "lds_async_copy":      "ready",
-        "buffer_load_lds":     "ready",
-        "global_load_lds":     "not_supported",
-        "cluster_mode":        "ready",
-        "xnack":               "ready",
-        "sram_ecc":            "ready",
+        "mfma": "not_supported",
+        "mfma_f8": "not_supported",
+        "mfma_xf32": "not_supported",
+        "mfma_f4": "not_supported",
+        "mfma_f6": "not_supported",
+        "wmma_f16": "ready",
+        "wmma_bf16": "ready",
+        "wmma_f8": "ready",
+        "lds_async_copy": "ready",
+        "buffer_load_lds": "ready",
+        "global_load_lds": "not_supported",
+        "cluster_mode": "ready",
+        "xnack": "ready",
+        "sram_ecc": "ready",
     },
 }
 
@@ -514,39 +627,47 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
 # expanded matrix lives in `mfma_table.inc` (C++ side); this is the
 # Python summary that capability queries consult.
 _MFMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int, int]]] = {
-    AMDArch.GFX_90A: frozenset({
-        # Classic CDNA 2 shapes
-        (32, 32, 8, 1),
-        (16, 16, 16, 1),
-    }),
-    AMDArch.GFX_940: frozenset({
-        # CDNA 3 — adds f8 + xf32 variants
-        (32, 32, 8, 1),    # bf16/fp16
-        (32, 32, 16, 1),   # fp8 (i_k=16)
-        (16, 16, 16, 1),   # bf16/fp16
-        (16, 16, 32, 1),   # fp8 (i_k=32)
-        (32, 32, 4, 1),    # xf32 (tf32 equivalent on AMD)
-        (16, 16, 8, 1),    # xf32
-    }),
-    AMDArch.GFX_942: frozenset({
-        (32, 32, 8, 1),
-        (32, 32, 16, 1),
-        (16, 16, 16, 1),
-        (16, 16, 32, 1),
-        (32, 32, 4, 1),
-        (16, 16, 8, 1),
-    }),
-    AMDArch.GFX_950: frozenset({
-        # CDNA 4 — adds f4/f6 lanes
-        (32, 32, 8, 1),
-        (32, 32, 16, 1),
-        (32, 32, 32, 1),   # fp4 (i_k=32)
-        (16, 16, 16, 1),
-        (16, 16, 32, 1),
-        (16, 16, 64, 1),   # fp4 (i_k=64)
-        (32, 32, 4, 1),
-        (16, 16, 8, 1),
-    }),
+    AMDArch.GFX_90A: frozenset(
+        {
+            # Classic CDNA 2 shapes
+            (32, 32, 8, 1),
+            (16, 16, 16, 1),
+        }
+    ),
+    AMDArch.GFX_940: frozenset(
+        {
+            # CDNA 3 — adds f8 + xf32 variants
+            (32, 32, 8, 1),  # bf16/fp16
+            (32, 32, 16, 1),  # fp8 (i_k=16)
+            (16, 16, 16, 1),  # bf16/fp16
+            (16, 16, 32, 1),  # fp8 (i_k=32)
+            (32, 32, 4, 1),  # xf32 (tf32 equivalent on AMD)
+            (16, 16, 8, 1),  # xf32
+        }
+    ),
+    AMDArch.GFX_942: frozenset(
+        {
+            (32, 32, 8, 1),
+            (32, 32, 16, 1),
+            (16, 16, 16, 1),
+            (16, 16, 32, 1),
+            (32, 32, 4, 1),
+            (16, 16, 8, 1),
+        }
+    ),
+    AMDArch.GFX_950: frozenset(
+        {
+            # CDNA 4 — adds f4/f6 lanes
+            (32, 32, 8, 1),
+            (32, 32, 16, 1),
+            (32, 32, 32, 1),  # fp4 (i_k=32)
+            (16, 16, 16, 1),
+            (16, 16, 32, 1),
+            (16, 16, 64, 1),  # fp4 (i_k=64)
+            (32, 32, 4, 1),
+            (16, 16, 8, 1),
+        }
+    ),
     AMDArch.GFX_1100: frozenset(),  # RDNA 3 has WMMA, not MFMA
     AMDArch.GFX_1151: frozenset(),  # RDNA 3.5 has WMMA, not MFMA
     AMDArch.GFX_1200: frozenset(),  # RDNA 4 has WMMA, not MFMA
@@ -563,12 +684,12 @@ _MFMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int, int]]] = {
 # WMMA + empty MFMA).  RDNA 3 / 3.5 expose a single 16x16x16 tile across all
 # supported dtype combos (RDNA3.5 ISA §7.9, Table 33).
 _WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
-    AMDArch.GFX_90A:  frozenset(),  # CDNA — MFMA only
-    AMDArch.GFX_940:  frozenset(),
-    AMDArch.GFX_942:  frozenset(),
-    AMDArch.GFX_950:  frozenset(),
-    AMDArch.GFX_1100: frozenset({(16, 16, 16)}),   # RDNA 3 WMMA
-    AMDArch.GFX_1151: frozenset({(16, 16, 16)}),   # RDNA 3.5 WMMA (ISA §7.9)
+    AMDArch.GFX_90A: frozenset(),  # CDNA — MFMA only
+    AMDArch.GFX_940: frozenset(),
+    AMDArch.GFX_942: frozenset(),
+    AMDArch.GFX_950: frozenset(),
+    AMDArch.GFX_1100: frozenset({(16, 16, 16)}),  # RDNA 3 WMMA
+    AMDArch.GFX_1151: frozenset({(16, 16, 16)}),  # RDNA 3.5 WMMA (ISA §7.9)
     # RDNA 4 dense WMMA shapes, grounded in the RDNA4 ISA §7.12 Table 41:
     # 16x16x16 (F16/BF16/FP8/BF8/IU8/IU4) + 16x16x32 (IU4 large-K).  RDNA 4 also
     # adds FP8/BF8 WMMA (the load-bearing gain over RDNA 3.5), a SWMMAC 4:2 sparse
@@ -578,14 +699,24 @@ _WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
     AMDArch.GFX_1201: frozenset({(16, 16, 16), (16, 16, 32)}),
     # CDNA 5 dense WMMA shapes. K=4 is F32, K=32 F16/BF16, K=64/128 FP8/BF8
     # and IU8, and the non-square 32x16x128 form is block-scaled F4.
-    AMDArch.GFX_1250: frozenset({
-        (16, 16, 4), (16, 16, 32), (16, 16, 64), (16, 16, 128),
-        (32, 16, 128),
-    }),
-    AMDArch.GFX_1251: frozenset({
-        (16, 16, 4), (16, 16, 32), (16, 16, 64), (16, 16, 128),
-        (32, 16, 128),
-    }),
+    AMDArch.GFX_1250: frozenset(
+        {
+            (16, 16, 4),
+            (16, 16, 32),
+            (16, 16, 64),
+            (16, 16, 128),
+            (32, 16, 128),
+        }
+    ),
+    AMDArch.GFX_1251: frozenset(
+        {
+            (16, 16, 4),
+            (16, 16, 32),
+            (16, 16, 64),
+            (16, 16, 128),
+            (32, 16, 128),
+        }
+    ),
 }
 
 
@@ -602,10 +733,10 @@ _WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
 #   RDNA wave32 (gfx1100/1151/1200): 256 VGPR + 0 AGPR.
 #   CDNA 5 wave32 (gfx1250/1251): 1024 addressable VGPR + 0 AGPR.
 _VGPR_BUDGET: dict[AMDArch, int] = {
-    AMDArch.GFX_90A:  256,
-    AMDArch.GFX_940:  256,
-    AMDArch.GFX_942:  256,
-    AMDArch.GFX_950:  256,
+    AMDArch.GFX_90A: 256,
+    AMDArch.GFX_940: 256,
+    AMDArch.GFX_942: 256,
+    AMDArch.GFX_950: 256,
     AMDArch.GFX_1100: 256,
     AMDArch.GFX_1151: 256,
     AMDArch.GFX_1200: 256,
@@ -617,10 +748,10 @@ _VGPR_BUDGET: dict[AMDArch, int] = {
 #: Accumulator register budget per lane. Non-zero only on legacy CDNA MFMA
 #: targets. CDNA 5 WMMA accumulates in its 1024-entry VGPR file and has no AGPR.
 _AGPR_BUDGET: dict[AMDArch, int] = {
-    AMDArch.GFX_90A:  256,
-    AMDArch.GFX_940:  256,
-    AMDArch.GFX_942:  256,
-    AMDArch.GFX_950:  256,
+    AMDArch.GFX_90A: 256,
+    AMDArch.GFX_940: 256,
+    AMDArch.GFX_942: 256,
+    AMDArch.GFX_950: 256,
     AMDArch.GFX_1100: 0,
     AMDArch.GFX_1151: 0,
     AMDArch.GFX_1200: 0,
@@ -644,30 +775,30 @@ _AGPR_BUDGET: dict[AMDArch, int] = {
 # are monolithic (1).  These are die-count topology facts, not an execution
 # claim; ``gfx950`` is labeled provisional pending an MI350-class spec check.
 _XCD_COUNT: dict[AMDArch, int] = {
-    AMDArch.GFX_90A:  2,    # MI250 — 2 GCDs
-    AMDArch.GFX_940:  6,    # MI300A
-    AMDArch.GFX_942:  8,    # MI300X
-    AMDArch.GFX_950:  8,    # CDNA 4 (MI350-class) — PROVISIONAL count
-    AMDArch.GFX_1100: 1,    # RDNA — monolithic
+    AMDArch.GFX_90A: 2,  # MI250 — 2 GCDs
+    AMDArch.GFX_940: 6,  # MI300A
+    AMDArch.GFX_942: 8,  # MI300X
+    AMDArch.GFX_950: 8,  # CDNA 4 (MI350-class) — PROVISIONAL count
+    AMDArch.GFX_1100: 1,  # RDNA — monolithic
     AMDArch.GFX_1151: 1,
     AMDArch.GFX_1200: 1,
     AMDArch.GFX_1201: 1,
-    AMDArch.GFX_1250: 8,    # MI455X product topology
-    AMDArch.GFX_1251: 1,    # MI430X topology remains product-evidence gated
+    AMDArch.GFX_1250: 8,  # MI455X product topology
+    AMDArch.GFX_1251: 1,  # MI430X topology remains product-evidence gated
 }
 
 
 # Per-arch HIP/HIPCC compile-target strings under ROCm 7.2.4.
 _ROCM_ARCH_STRINGS: dict[AMDArch, str] = {
-    AMDArch.GFX_90A:  "gfx90a",
-    AMDArch.GFX_940:  "gfx940",
-    AMDArch.GFX_942:  "gfx942",
-    AMDArch.GFX_950:  "gfx950",
+    AMDArch.GFX_90A: "gfx90a",
+    AMDArch.GFX_940: "gfx940",
+    AMDArch.GFX_942: "gfx942",
+    AMDArch.GFX_950: "gfx950",
     AMDArch.GFX_1100: "gfx1100",
     AMDArch.GFX_1151: "gfx1151",
     AMDArch.GFX_1200: "gfx1200",
     AMDArch.GFX_1201: "gfx1201",
-    AMDArch.GFX_1250: "gfx1250",   # `llc`-accepted target string (LLVM 23 AMDGPU)
+    AMDArch.GFX_1250: "gfx1250",  # `llc`-accepted target string (LLVM 23 AMDGPU)
     AMDArch.GFX_1251: "gfx1251",
 }
 
@@ -682,7 +813,8 @@ class ROCmTargetProfile:
 
     Attributes:
         arch              : AMDArch enum (gfx94x / gfx950 / gfx1100 / gfx1200)
-        waves_per_cu      : Wave count per CU (must be in [1, _MAX_WAVES])
+        waves_per_cu      : Wave count per CU -- per CU, not per SIMD
+                            (must be in [1, _MAX_WAVES]; see that table)
         lds_bytes         : Override LDS budget; None = use generation default
         pipeline_stages   : Software pipeline depth (>=1)
         prefer_inline_asm : Emit raw AMDGCN inline asm rather than hip ops
@@ -814,8 +946,22 @@ class ROCmTargetProfile:
         return _XCD_COUNT[self.arch] > 1
 
     @property
-    def waves_per_simd(self) -> int:
-        return self.waves_per_cu
+    def waves_per_simd(self) -> Optional[int]:
+        """``waves_per_cu`` converted to the per-SIMD unit.
+
+        **Corrected 2026-09-20.** This used to ``return self.waves_per_cu``
+        unchanged, serving one number under two names that differ by the SIMD
+        count -- 2x on RDNA, 4x on CDNA. It had no callers, which is why the
+        conflation survived; it is fixed rather than deleted because the
+        per-SIMD unit is the one an occupancy figure is quoted in.
+
+        Returns None when the arch's CU geometry is not established, rather
+        than falling back to the per-CU number and being silently wrong again.
+        """
+        simds = simds_per_cu(self.arch)
+        if simds is None:
+            return None
+        return self.waves_per_cu // simds
 
     @property
     def threads_per_wave(self) -> int:
@@ -855,7 +1001,9 @@ class ROCmTargetProfile:
         the smallest M×N accumulator so registers are free for prefetch + Q."""
         return rank_mfma_shapes_by_footprint(self.arch, k=k)
 
-    def cheapest_mfma_shape(self, *, k: Optional[int] = None) -> tuple[int, int, int, int]:
+    def cheapest_mfma_shape(
+        self, *, k: Optional[int] = None
+    ) -> tuple[int, int, int, int]:
         """The smallest-accumulator-footprint MFMA shape for this arch.
 
         See :func:`cheapest_mfma_shape`."""
@@ -878,8 +1026,10 @@ class ROCmTargetProfile:
         operational question; CDNA 5 is wave32 but is not RDNA.
         """
         return self.arch in {
-            AMDArch.GFX_1100, AMDArch.GFX_1151,
-            AMDArch.GFX_1200, AMDArch.GFX_1201,
+            AMDArch.GFX_1100,
+            AMDArch.GFX_1151,
+            AMDArch.GFX_1200,
+            AMDArch.GFX_1201,
         }
 
 
@@ -891,13 +1041,13 @@ def rocm_feature_status(arch: AMDArch, feature: str) -> str:
     except KeyError as e:
         raise KeyError(
             f"unknown ROCm feature {feature!r} for {arch.name} "
-            f"(known: {sorted(_ROCM_7_2_FEATURES[arch])})") from e
+            f"(known: {sorted(_ROCM_7_2_FEATURES[arch])})"
+        ) from e
 
 
 def rocm_feature_set(arch: AMDArch) -> frozenset[str]:
     return frozenset(
-        name for name, status in _ROCM_7_2_FEATURES[arch].items()
-        if status == "ready"
+        name for name, status in _ROCM_7_2_FEATURES[arch].items() if status == "ready"
     )
 
 
@@ -932,13 +1082,16 @@ def head_first_xcd(batch: int, head: int, *, num_heads: int, num_xcds: int) -> i
     if num_heads <= 0 or num_xcds <= 0:
         raise TesseraROCmTargetError(
             f"head_first_xcd: num_heads ({num_heads}) and num_xcds ({num_xcds}) "
-            f"must be positive")
+            f"must be positive"
+        )
     if batch < 0 or head < 0:
         raise TesseraROCmTargetError(
-            f"head_first_xcd: batch ({batch}) and head ({head}) must be >= 0")
+            f"head_first_xcd: batch ({batch}) and head ({head}) must be >= 0"
+        )
     if head >= num_heads:
         raise TesseraROCmTargetError(
-            f"head_first_xcd: head ({head}) out of range for num_heads={num_heads}")
+            f"head_first_xcd: head ({head}) out of range for num_heads={num_heads}"
+        )
     return (batch * num_heads + head) % num_xcds
 
 
@@ -960,14 +1113,17 @@ def naive_block_xcd(
     """
     if num_heads <= 0 or q_blocks <= 0 or num_xcds <= 0:
         raise TesseraROCmTargetError(
-            "naive_block_xcd: num_heads, q_blocks, num_xcds must be positive")
+            "naive_block_xcd: num_heads, q_blocks, num_xcds must be positive"
+        )
     if batch < 0 or head < 0 or q_block < 0:
         raise TesseraROCmTargetError(
-            "naive_block_xcd: batch, head, q_block must be >= 0")
+            "naive_block_xcd: batch, head, q_block must be >= 0"
+        )
     if head >= num_heads or q_block >= q_blocks:
         raise TesseraROCmTargetError(
             f"naive_block_xcd: head/q_block out of range "
-            f"(head={head}/{num_heads}, q_block={q_block}/{q_blocks})")
+            f"(head={head}/{num_heads}, q_block={q_block}/{q_blocks})"
+        )
     global_block = (batch * num_heads + head) * q_blocks + q_block
     return global_block % num_xcds
 
@@ -979,6 +1135,7 @@ class WMMADtypeForm:
     IU forms use signless byte containers plus independent signed_a/signed_b
     instruction modifiers. They do not register a public uint4 dtype.
     """
+
     a: str
     b: str
     accum: str
@@ -987,32 +1144,51 @@ class WMMADtypeForm:
     sparse: bool = False
 
 
-def wmma_dtype_forms(arch: AMDArch, *, sparse: bool = False) -> tuple[WMMADtypeForm, ...]:
+def wmma_dtype_forms(
+    arch: AMDArch, *, sparse: bool = False
+) -> tuple[WMMADtypeForm, ...]:
     """Exact RDNA ISA signatures; sparse records still require an index producer.
 
     Matrix input eligibility cannot be inferred from dtype_set or a shape alone.
     This table intentionally covers RDNA only; CDNA uses separate contracts.
     """
     rdna4 = arch in {AMDArch.GFX_1200, AMDArch.GFX_1201}
-    if arch not in {AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200, AMDArch.GFX_1201}:
+    if arch not in {
+        AMDArch.GFX_1100,
+        AMDArch.GFX_1151,
+        AMDArch.GFX_1200,
+        AMDArch.GFX_1201,
+    }:
         return ()
     if sparse and not rdna4:
         return ()
-    rows = [("fp16","fp16","fp32",16,"F32","F16"),
-            ("bf16","bf16","fp32",16,"F32","BF16"),
-            ("fp16","fp16","fp16",16,"F16","F16"),
-            ("bf16","bf16","bf16",16,"BF16","BF16"),
-            ("int8","int8","int32",16,"I32","IU8"),
-            ("int4","int4","int32",16,"I32","IU4")]
+    rows = [
+        ("fp16", "fp16", "fp32", 16, "F32", "F16"),
+        ("bf16", "bf16", "fp32", 16, "F32", "BF16"),
+        ("fp16", "fp16", "fp16", 16, "F16", "F16"),
+        ("bf16", "bf16", "bf16", 16, "BF16", "BF16"),
+        ("int8", "int8", "int32", 16, "I32", "IU8"),
+        ("int4", "int4", "int32", 16, "I32", "IU4"),
+    ]
     if rdna4:
-        rows += [("int4","int4","int32",32,"I32","IU4")]
-        rows += [(a,b,"fp32",16,"F32",aa+"_"+bb)
-                 for a,aa in [("fp8_e4m3","FP8"),("fp8_e5m2","BF8")]
-                 for b,bb in [("fp8_e4m3","FP8"),("fp8_e5m2","BF8")]]
+        rows += [("int4", "int4", "int32", 32, "I32", "IU4")]
+        rows += [
+            (a, b, "fp32", 16, "F32", aa + "_" + bb)
+            for a, aa in [("fp8_e4m3", "FP8"), ("fp8_e5m2", "BF8")]
+            for b, bb in [("fp8_e4m3", "FP8"), ("fp8_e5m2", "BF8")]
+        ]
     family = "SWMMAC" if sparse else "WMMA"
-    return tuple(WMMADtypeForm(a,b,c,k*(2 if sparse else 1),
-                 f"V_{family}_{out}_16X16X{k*(2 if sparse else 1)}_{inputs}", sparse)
-                 for a,b,c,k,out,inputs in rows)
+    return tuple(
+        WMMADtypeForm(
+            a,
+            b,
+            c,
+            k * (2 if sparse else 1),
+            f"V_{family}_{out}_16X16X{k*(2 if sparse else 1)}_{inputs}",
+            sparse,
+        )
+        for a, b, c, k, out, inputs in rows
+    )
 
 
 def wmma_variants(arch: AMDArch) -> frozenset[tuple[int, int, int]]:
@@ -1052,18 +1228,22 @@ def mfma_accumulator_regs(shape: tuple[int, ...], *, lanes: int = 64) -> int:
     """
     if len(shape) < 2:
         raise TesseraROCmTargetError(
-            f"mfma_accumulator_regs: shape must be (M, N, ...); got {shape!r}")
+            f"mfma_accumulator_regs: shape must be (M, N, ...); got {shape!r}"
+        )
     m, n = shape[0], shape[1]
     if m <= 0 or n <= 0:
         raise TesseraROCmTargetError(
-            f"mfma_accumulator_regs: M, N must be positive; got M={m}, N={n}")
+            f"mfma_accumulator_regs: M, N must be positive; got M={m}, N={n}"
+        )
     if lanes <= 0:
         raise TesseraROCmTargetError(
-            f"mfma_accumulator_regs: lanes must be positive; got {lanes}")
+            f"mfma_accumulator_regs: lanes must be positive; got {lanes}"
+        )
     if (m * n) % lanes != 0:
         raise TesseraROCmTargetError(
             f"mfma_accumulator_regs: M*N={m * n} does not divide evenly across "
-            f"{lanes} lanes (shape {shape!r})")
+            f"{lanes} lanes (shape {shape!r})"
+        )
     return (m * n) // lanes
 
 
@@ -1104,9 +1284,11 @@ def cheapest_mfma_shape(
     if not ranked:
         if not _MFMA_VARIANTS[arch]:
             raise TesseraROCmTargetError(
-                f"{arch.name} has no MFMA shapes (WMMA arch — see wmma_variants).")
+                f"{arch.name} has no MFMA shapes (WMMA arch — see wmma_variants)."
+            )
         raise TesseraROCmTargetError(
-            f"{arch.name} has no MFMA shape with contraction width k={k}.")
+            f"{arch.name} has no MFMA shape with contraction width k={k}."
+        )
     return ranked[0][0]
 
 
@@ -1122,12 +1304,12 @@ def cheapest_mfma_shape(
 # A registry/manifest "complete FP8 kernel" claim is silently arch-ambiguous
 # without this flag — same op, different bits per target.
 _FP8_SEMANTICS: dict[AMDArch, str] = {
-    AMDArch.GFX_90A:  "none",
-    AMDArch.GFX_940:  "fnuz",
-    AMDArch.GFX_942:  "fnuz",
-    AMDArch.GFX_950:  "ocp",
+    AMDArch.GFX_90A: "none",
+    AMDArch.GFX_940: "fnuz",
+    AMDArch.GFX_942: "fnuz",
+    AMDArch.GFX_950: "ocp",
     AMDArch.GFX_1100: "none",
-    AMDArch.GFX_1151: "none",   # RDNA 3.5 has no FP8 WMMA at all
+    AMDArch.GFX_1151: "none",  # RDNA 3.5 has no FP8 WMMA at all
     AMDArch.GFX_1200: "ocp",
     AMDArch.GFX_1201: "ocp",
     AMDArch.GFX_1250: "ocp",
@@ -1138,8 +1320,8 @@ _FP8_SEMANTICS: dict[AMDArch, str] = {
 _FP8_FLAVOR: dict[tuple[str, str], str] = {
     ("fnuz", "fp8_e4m3"): "e4m3fnuz",
     ("fnuz", "fp8_e5m2"): "e5m2fnuz",
-    ("ocp", "fp8_e4m3"):  "e4m3",
-    ("ocp", "fp8_e5m2"):  "e5m2",
+    ("ocp", "fp8_e4m3"): "e4m3",
+    ("ocp", "fp8_e5m2"): "e5m2",
 }
 
 
@@ -1160,10 +1342,12 @@ def fp8_dtype_flavor(arch: AMDArch, dtype: str) -> str:
     if sem == "none":
         raise TesseraROCmTargetError(
             f"{arch.name} has no FP8 matrix path; there is no fp8 flavor to name "
-            f"(fp8_semantics={sem!r}).")
+            f"(fp8_semantics={sem!r})."
+        )
     if dtype not in ("fp8_e4m3", "fp8_e5m2"):
         raise TesseraROCmTargetError(
-            f"{dtype!r} is not an fp8 dtype (expected fp8_e4m3 / fp8_e5m2).")
+            f"{dtype!r} is not an fp8 dtype (expected fp8_e4m3 / fp8_e5m2)."
+        )
     return _FP8_FLAVOR[(sem, dtype)]
 
 

@@ -4,9 +4,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from benchmarks.rocm.record_gfx1201_scheduled_closure import (
     DEVICE_CASE_FAMILIES,
+    EXPECTED_DEVICE,
     HOST_CONTRACT_FAMILIES,
+    _sha256,
+    _validate_build_versions,
 )
 from tessera.compiler.rocm_exact_device_proofs import GFX1201_SCHEDULED_SUITE_PROOF
 
@@ -30,6 +35,7 @@ def test_gfx1201_committed_closure_packet_matches_registry() -> None:
     assert packet["target"] == proof.target
     assert packet["fixture"] == proof.numerical_fixture
     assert packet["proof_build"] == proof.proof_build
+    assert packet["device"] == EXPECTED_DEVICE
     assert packet["live_architecture"] == "gfx1201"
     assert packet["compiler_target"] == "gfx1201"
     assert packet["compiler"]["stale_generator_sources"] == 0
@@ -41,3 +47,43 @@ def test_gfx1201_committed_closure_packet_matches_registry() -> None:
     assert packet["result"]["skipped"] == proof.required_skipped_cases
     assert packet["device_dependent_cases"]["count"] == proof.device_dependent_cases
     assert packet["host_contract_cases"]["count"] == proof.host_contract_cases
+    assert packet["fixture_sha256"] == _sha256(ROOT / proof.numerical_fixture)
+    assert packet["recorder_sha256"] == _sha256(
+        ROOT / "benchmarks/rocm/record_gfx1201_scheduled_closure.py"
+    )
+
+
+def test_gfx1201_proof_build_versions_are_parsed_and_validated() -> None:
+    versions = _validate_build_versions(
+        "llvm23.1.1+rocm10.0+gfx1201",
+        compiler_output="LLVM version 23.1.1\nOptimized build",
+        hipcc_output="HIP version: 7.15.26333-0000000",
+        rocm_release="10.0.0",
+    )
+    assert versions["llvm"] == "23.1.1"
+    assert versions["rocm"] == "10.0.0"
+    assert versions["hip"] == "7.15.26333"
+
+
+def test_gfx1201_proof_build_rejects_mislabeled_toolchain() -> None:
+    with pytest.raises(RuntimeError, match="requires LLVM 23.1.1; observed 23.0.0"):
+        _validate_build_versions(
+            "llvm23.1.1+rocm10.0+gfx1201",
+            compiler_output="LLVM version 23.0.0",
+            hipcc_output="HIP version: 7.15.26333-0000000",
+            rocm_release="10.0.0",
+        )
+    with pytest.raises(RuntimeError, match="requires ROCm 10.0; observed 9.9.0"):
+        _validate_build_versions(
+            "llvm23.1.1+rocm10.0+gfx1201",
+            compiler_output="LLVM version 23.1.1",
+            hipcc_output="HIP version: 7.15.26333-0000000",
+            rocm_release="9.9.0",
+        )
+    with pytest.raises(RuntimeError, match="requires HIP 7.15; observed 7.14.0"):
+        _validate_build_versions(
+            "llvm23.1.1+rocm10.0+gfx1201",
+            compiler_output="LLVM version 23.1.1",
+            hipcc_output="HIP version: 7.14.0",
+            rocm_release="10.0.0",
+        )

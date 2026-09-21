@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import ctypes
 import hashlib
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import socket
 import subprocess
 import sys
@@ -28,7 +30,17 @@ from tessera.compiler import rocm_native  # noqa: E402
 from tessera.compiler.rocm_exact_device_proofs import (  # noqa: E402
     GFX1201_SCHEDULED_SUITE_PROOF,
 )
+from tessera.compiler.rocm_target import (  # noqa: E402
+    TESSERA_TARGET_HIP,
+    TESSERA_TARGET_ROCM,
+)
 from tessera.compiler.scheduled_matmul import find_tessera_opt  # noqa: E402
+
+
+EXPECTED_DEVICE = "AMD Radeon RX 9070 XT"
+_PROOF_BUILD_RE = re.compile(
+    r"^llvm(?P<llvm>\d+\.\d+\.\d+)\+rocm(?P<rocm>\d+\.\d+)\+gfx1201$"
+)
 
 
 DEVICE_CASE_FAMILIES = {
@@ -72,6 +84,94 @@ def _sha256(path: Path) -> str:
 
 def _command_output(*command: str) -> str:
     return subprocess.check_output(command, text=True, stderr=subprocess.STDOUT).strip()
+
+
+def _version(output: str, pattern: str, label: str) -> str:
+    match = re.search(pattern, output, flags=re.MULTILINE)
+    if match is None:
+        raise RuntimeError(f"cannot parse {label} version")
+    return match.group(1)
+
+
+def _same_release(observed: str, required: str) -> bool:
+    return observed == required or observed.startswith(required + ".")
+
+
+def _validate_build_versions(
+    proof_build: str,
+    *,
+    compiler_output: str,
+    hipcc_output: str,
+    rocm_release: str,
+) -> dict[str, str]:
+    build = _PROOF_BUILD_RE.fullmatch(proof_build)
+    if build is None:
+        raise RuntimeError(f"unparseable gfx1201 proof build: {proof_build}")
+    llvm = _version(compiler_output, r"\bLLVM version\s+(\d+\.\d+\.\d+)", "LLVM")
+    hip = _version(hipcc_output, r"\bHIP version:\s*(\d+\.\d+(?:\.\d+)?)", "HIP")
+    required = {
+        "LLVM": build.group("llvm"),
+        "ROCm": build.group("rocm"),
+        "HIP": TESSERA_TARGET_HIP,
+    }
+    observed = {"LLVM": llvm, "ROCm": rocm_release, "HIP": hip}
+    for label, expected in required.items():
+        if not _same_release(observed[label], expected):
+            raise RuntimeError(
+                f"gfx1201 proof build requires {label} {expected}; "
+                f"observed {observed[label]}"
+            )
+    if build.group("rocm") != TESSERA_TARGET_ROCM:
+        raise RuntimeError(
+            f"proof build ROCm {build.group('rocm')} disagrees with "
+            f"Tessera target ROCm {TESSERA_TARGET_ROCM}"
+        )
+    return {
+        "llvm": llvm,
+        "rocm": rocm_release,
+        "hip": hip,
+        "compiler_output": compiler_output,
+        "hipcc_output": hipcc_output,
+    }
+
+
+def _rocm_release() -> str:
+    roots = []
+    if configured := os.environ.get("ROCM_PATH"):
+        roots.append(Path(configured))
+    roots.extend((Path("/opt/rocm/core"), Path("/opt/rocm")))
+    seen: set[Path] = set()
+    for root in roots:
+        for candidate in (root, root.resolve()):
+            marker = candidate / ".info" / "version"
+            if marker in seen:
+                continue
+            seen.add(marker)
+            if marker.is_file():
+                return _version(marker.read_text(), r"^(\d+\.\d+(?:\.\d+)?)", "ROCm")
+    raise RuntimeError("cannot locate the ROCm release marker under ROCM_PATH")
+
+
+def _selected_hip_device_name() -> str:
+    hip = rt._load_hip_for_launch()
+    if hip is None:
+        raise RuntimeError("cannot load HIP to identify the selected gfx1201 device")
+    get_device = hip.hipGetDevice
+    get_name = hip.hipDeviceGetName
+    get_device.argtypes = [ctypes.POINTER(ctypes.c_int)]
+    get_device.restype = ctypes.c_int
+    get_name.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+    get_name.restype = ctypes.c_int
+    device = ctypes.c_int()
+    name = ctypes.create_string_buffer(256)
+    if get_device(ctypes.byref(device)) != 0:
+        raise RuntimeError("hipGetDevice failed while identifying the proof device")
+    if get_name(name, len(name), device.value) != 0:
+        raise RuntimeError("hipDeviceGetName failed while identifying the proof device")
+    value = name.value.decode("utf-8", errors="strict").strip()
+    if not value:
+        raise RuntimeError("selected HIP device returned an empty model name")
+    return value
 
 
 def _compiler_source_root(tool: Path) -> Path:
@@ -127,6 +227,12 @@ def record(output: Path) -> None:
         raise RuntimeError("set TESSERA_GFX1201_DEVICE_PROOF=1 for this owning-device gate")
     if rt._rocm_live_arch() != "gfx1201" or rt._rocm_chip() != "gfx1201":
         raise RuntimeError("gfx1201 closure evidence requires the selected gfx1201 device and compiler target")
+    selected_device = _selected_hip_device_name()
+    if selected_device != EXPECTED_DEVICE:
+        raise RuntimeError(
+            f"gfx1201 closure evidence requires {EXPECTED_DEVICE}; "
+            f"selected {selected_device}"
+        )
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("set TESSERA_OPT to the freshly rebuilt LLVM/MLIR 23.1.1 tessera-opt")
@@ -135,7 +241,10 @@ def record(output: Path) -> None:
         raise RuntimeError(
             f"refusing stale compiler evidence: {tool} predates {len(stale)} generator sources"
         )
-    source_revision = _command_output("git", "rev-parse", "HEAD")
+    source_revision = _command_output("git", "-C", str(ROOT), "rev-parse", "HEAD")
+    source_dirty = _command_output("git", "-C", str(ROOT), "status", "--porcelain")
+    if source_dirty:
+        raise RuntimeError(f"tested source checkout is dirty: {ROOT}")
     compiler_source = _compiler_source_root(tool)
     compiler_source_revision = _command_output(
         "git", "-C", str(compiler_source), "rev-parse", "HEAD"
@@ -151,6 +260,15 @@ def record(output: Path) -> None:
             f"{compiler_source_revision} != {source_revision}"
         )
 
+    compiler_output = _command_output(str(tool), "--version")
+    hipcc_output = _command_output("hipcc", "--version")
+    versions = _validate_build_versions(
+        proof.proof_build,
+        compiler_output=compiler_output,
+        hipcc_output=hipcc_output,
+        rocm_release=_rocm_release(),
+    )
+
     with tempfile.TemporaryDirectory(prefix="gfx1201-scheduled-closure-") as tmp:
         report = Path(tmp) / "pytest.xml"
         command = [
@@ -162,7 +280,7 @@ def record(output: Path) -> None:
             f"--junitxml={report}",
         ]
         completed = subprocess.run(command, cwd=ROOT, check=False)
-        device, host, summary = _parse_report(report)
+        device_cases, host_cases, summary = _parse_report(report)
         if completed.returncode != 0:
             raise RuntimeError(f"gfx1201 closure suite failed with exit code {completed.returncode}")
 
@@ -175,9 +293,9 @@ def record(output: Path) -> None:
     for key, expected in required.items():
         if summary[key] != expected:
             raise RuntimeError(f"gfx1201 closure requires {key}={expected}; observed {summary[key]}")
-    if sum(device.values()) != proof.device_dependent_cases:
+    if sum(device_cases.values()) != proof.device_dependent_cases:
         raise RuntimeError("gfx1201 device-dependent case total drifted")
-    if sum(host.values()) != proof.host_contract_cases:
+    if sum(host_cases.values()) != proof.host_contract_cases:
         raise RuntimeError("gfx1201 host-contract case total drifted")
 
     fixture = ROOT / proof.numerical_fixture
@@ -188,7 +306,7 @@ def record(output: Path) -> None:
         "sync_key": "GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21",
         "host": socket.gethostname(),
         "platform": platform.platform(),
-        "device": "AMD Radeon RX 9070 XT",
+        "device": selected_device,
         "target": proof.target,
         "live_architecture": rt._rocm_live_arch(),
         "compiler_target": rt._rocm_chip(),
@@ -200,24 +318,27 @@ def record(output: Path) -> None:
         "compiler": {
             "path": str(tool.resolve()),
             "sha256": _sha256(tool),
-            "version": _command_output(str(tool), "--version").splitlines()[:3],
+            "version": compiler_output.splitlines()[:3],
             "stale_generator_sources": 0,
             "source_root": str(compiler_source),
             "source_revision": compiler_source_revision,
             "source_dirty": False,
         },
         "toolchain": {
-            "hipcc": _command_output("hipcc", "--version").splitlines()[0],
+            "llvm_version": versions["llvm"],
+            "rocm_version": versions["rocm"],
+            "hip_version": versions["hip"],
+            "hipcc": hipcc_output.splitlines()[0],
             "rocm_path": os.environ.get("ROCM_PATH", ""),
         },
         "result": summary,
         "device_dependent_cases": {
-            "count": sum(device.values()),
-            "families": device,
+            "count": sum(device_cases.values()),
+            "families": device_cases,
         },
         "host_contract_cases": {
-            "count": sum(host.values()),
-            "families": host,
+            "count": sum(host_cases.values()),
+            "families": host_cases,
         },
         "policy": (
             "ordinary non-owning-host CI keeps the explicit skips; promotion is "

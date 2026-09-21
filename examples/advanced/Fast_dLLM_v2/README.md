@@ -9,15 +9,16 @@ Contents
 - `fast_dllm_v2/` — dependency-light NumPy reference and current Graph IR compiler smoke.
 - `ir/fast_dllm_ops.mlir` — parser-valid current-dialect Graph IR tensor skeleton.
 - `ir/tests/*.mlir` — parser-valid fixtures for current compiler contracts.
-- `runtime/policy_confidence.*` — C++-style pseudocode for the confidence policy + approximate KV block manager.
 - `pipelines/pipelines.md` — recommended `tessera-opt` / `tessera-compile` invocations and pass order.
+- `archive/examples/advanced/Fast_dLLM_v2/` — original placeholder C++
+  source drop and runtime-policy pseudocode, preserved outside the active tree.
 
 ## Quick Start
 
 From the repository root:
 
 ```bash
-PYTHONPATH=python /Users/gregorystoner/venv/bin/python \
+PYTHONPATH=python python3 \
   examples/advanced/Fast_dLLM_v2/tests/smoke_random.py
 
 PATH="$PWD/build/tools/tessera-opt:/opt/homebrew/opt/llvm@23/bin:$PATH" \
@@ -39,7 +40,8 @@ The current smoke intentionally separates two concerns:
 - `ir/fast_dllm_ops.mlir` uses quoted registered `tessera.*` ops so `tessera-opt`
   can parse and verify the checked-in textual fixture.
 
-The full Fast dLLM semantics still live in the docs and runtime policy sketch:
+The full Fast dLLM semantics remain design material:
 branch fork/join, confidence stats, approximate KV pack/read, COW cache pages,
 and validated-prefix merge. Those should become native Graph/Schedule/Tile ops
-as the compiler grows beyond the current straight-line tensor core.
+as the compiler grows beyond the current straight-line tensor core. The old
+placeholder implementation is archived and is not executable evidence.

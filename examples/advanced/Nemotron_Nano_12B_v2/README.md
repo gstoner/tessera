@@ -1,16 +1,12 @@
 # Nemotron-Nano-12B-v2-Base -> Tessera Port (Starter Kit)
 
-> This is a **repo‑ready starter** for porting **NVIDIA‑Nemotron‑Nano‑12B‑v2‑Base** to the **Tessera Programming Model**.
-> It includes: config mirroring, a hybrid (Mamba2/MLP/Attention) graph builder, a HF→Tessera checkpoint
-> converter skeleton, a minimal inference runner, and MLIR Graph‑IR snippets to drive Tessera’s pipelines.
+This active directory contains the maintained, dependency-light NumPy reference
+and current-compiler smoke for the NVIDIA Nemotron Nano hybrid pattern.
 
 **What you get**
 
 - `configs/nemotron_nano_12b_v2_base.yaml` — mirrors HF `config.json` (heads/layers/dims/pattern).
 - `nemotron_nano/` — current-compiler smoke package with a NumPy reference path and Graph IR builder.
-- `tessera/model/nemotron_h/` — optional PyTorch-oriented hybrid block skeletons kept as reference material.
-- `scripts/convert_hf_checkpoint.py` — skeleton to snapshot/download HF weights and export a Tessera‑friendly
-  shard layout (NPZ per layer + manifest).
 - `tessera/graph_examples/nemotron_2L_graph.mlir` — tiny current-dialect graph using registered `tessera.*` ops.
 - `tests/smoke_random.py` — no-PyTorch shape/prog-flow and Apple Target IR smoke test.
 - `LICENSE-THIRD-PARTY-README.md` — license pointers and usage notes (weights not included).
@@ -23,7 +19,7 @@
 
 ```bash
 # From the repository root, use the Tessera venv.
-PYTHONPATH=python /Users/gregorystoner/venv/bin/python \
+PYTHONPATH=python python3 \
   examples/advanced/Nemotron_Nano_12B_v2/tests/smoke_random.py
 
 # Validate the checked-in Graph IR with the current tessera-opt.
@@ -37,14 +33,9 @@ Expected smoke output:
 OK nemotron tiny: (2, 16, 257) apple_cpu cpu_accelerate
 ```
 
-## Optional HF Conversion
-
-The converter path still needs HuggingFace/PyTorch dependencies because it touches real checkpoint formats:
-
-```bash
-pip install torch transformers huggingface_hub safetensors numpy
-python scripts/convert_hf_checkpoint.py --repo nvidia/NVIDIA-Nemotron-Nano-12B-v2-Base --out ./artifacts
-```
+The former PyTorch model skeleton and incomplete Hugging Face converter are
+preserved under `archive/examples/advanced/Nemotron_Nano_12B_v2/`; they are not
+part of the active examples contract.
 
 ## How this maps to Nemotron‑H (v2‑Base)
 

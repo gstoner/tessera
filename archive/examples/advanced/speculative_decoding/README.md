@@ -1,6 +1,8 @@
 # Speculative and Tree Decoding
 
-This example adds a Yggdrasil/Medusa/EAGLE-style decoding scaffold for Tessera.
+This archived example is the former Yggdrasil/Medusa/EAGLE-style string
+scheduling toy. Maintained speculative-decoding coverage lives in
+`examples/advanced/gumiho/`.
 It focuses on the scheduling shape rather than model-specific weights:
 
 - draft tree expansion
@@ -11,7 +13,7 @@ It focuses on the scheduling shape rather than model-specific weights:
 ## Quick Start
 
 ```bash
-python3 examples/advanced/speculative_decoding/demo.py --depth 3 --branching 3
+PYTHONPATH=python python3 archive/examples/advanced/speculative_decoding/demo.py --depth 3 --branching 3
 ```
 
 ## Tessera Mapping

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name        = "tessera-diffusion-llm"
 version     = "0.1.0"
 description = "Three diffusion LM variants (MDLM, Continuous, Flow Matching) with shared Tessera-compiled transformer backbone"
-readme      = "Diffusion_LLM.md"
+readme      = "README.md"
 license     = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 

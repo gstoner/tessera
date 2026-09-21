@@ -177,6 +177,9 @@ class TestManifestFilesystem:
     def test_reworked_scaffolds_use_canonical_entry_points(self) -> None:
         entries = {entry.directory: entry for entry in all_entries()}
         expected = {
+            "examples/matrix_calculus": "matrix_calculus_tutorial.py",
+            "examples/pde_learning": "pde_learning_tutorial.py",
+            "examples/tensor_calculus": "tensor_calculus_tutorial.py",
             "examples/advanced/Diffusion_LLM": "gpu_denoise.py",
             "examples/advanced/Jet_nemotron": "smoke_linear_attention.py",
             "examples/advanced/Tessera_Empirical_Software_Agent": "benchmark_kernel.py",

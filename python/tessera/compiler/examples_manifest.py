@@ -167,6 +167,46 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
             "Surfaces Apple GPU manifest status for GA kernels."
         ),
     ),
+    # ── Mathematical reference tutorials ──────────────────────────────
+    ExampleEntry(
+        directory="examples/matrix_calculus",
+        entry_point="examples/matrix_calculus/matrix_calculus_tutorial.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python "
+            "examples/matrix_calculus/matrix_calculus_tutorial.py"
+        ),
+        notes=(
+            "Matrix-calculus autodiff tour with analytical and finite-"
+            "difference oracles; portable reference execution."
+        ),
+    ),
+    ExampleEntry(
+        directory="examples/pde_learning",
+        entry_point="examples/pde_learning/pde_learning_tutorial.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python "
+            "examples/pde_learning/pde_learning_tutorial.py"
+        ),
+        notes=(
+            "Bounded PDE-learning correctness examples with exact jet "
+            "derivatives and independent numerical oracles."
+        ),
+    ),
+    ExampleEntry(
+        directory="examples/tensor_calculus",
+        entry_point="examples/tensor_calculus/tensor_calculus_tutorial.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python "
+            "examples/tensor_calculus/tensor_calculus_tutorial.py"
+        ),
+        notes=(
+            "Tensor contractions and curvilinear-calculus identities with "
+            "checked reference-lane numerics."
+        ),
+    ),
     # ── Advanced — runnable demos ──────────────────────────────────────
     ExampleEntry(
         directory="examples/advanced/kv_cache_serving",
@@ -289,7 +329,7 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
             "Apple CPU compile (self-bootstraps sys.path)."
         ),
     ),
-    # ── Advanced — maintained slices of larger research examples ──────
+    # ── Advanced — maintained runnable slices ─────────────────────────
     ExampleEntry(
         directory="examples/advanced/Diffusion_LLM",
         entry_point="examples/advanced/Diffusion_LLM/gpu_denoise.py",
@@ -316,8 +356,8 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         ),
         notes=(
             "Canonical D=128 linear-attention numerical + compiler smoke. "
-            "The full optional model still requires the external research "
-            "stdlib and this host-portable run is not ROCm device evidence."
+            "The archived full-model port is outside the active contract; "
+            "this host-portable run is not ROCm device evidence."
         ),
     ),
     ExampleEntry(
@@ -333,8 +373,7 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         ),
         notes=(
             "Deterministic candidate-config benchmark with a numerical "
-            "oracle. The parent LLM/tree-search orchestrator remains an "
-            "integration scaffold."
+            "oracle. The incomplete LLM/tree-search orchestrator is archived."
         ),
     ),
     # ── Integration ────────────────────────────────────────────────────

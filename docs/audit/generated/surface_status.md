@@ -6,7 +6,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 
 | Surface | Entries | Status breakdown |
 |---|--:|---|
-| examples | 22 | runnable=20, runnable_optional=2 |
+| examples | 25 | runnable=23, runnable_optional=2 |
 | benchmarks | 24 | archived=1, compile_only=12, runnable=11 |
 | research | 2 | compile_only=1, runnable=1 |
 | tools | 6 | archived=1, compile_only=2, runnable=3 |
@@ -37,7 +37,10 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `examples/getting_started` | runnable | `examples/getting_started/compile_and_explain.py` |  |
 | `examples/getting_started/tessera_flash_attention_demo` | runnable_optional | `examples/getting_started/tessera_flash_attention_demo/examples/flash_attention_demo.py` |  |
 | `examples/integration/HF_transformer` | runnable | `examples/integration/HF_transformer/tessera_huggingface_transformers.py` |  |
+| `examples/matrix_calculus` | runnable | `examples/matrix_calculus/matrix_calculus_tutorial.py` |  |
 | `examples/optimization` | runnable | `examples/optimization/tessera_schedule_example.py` |  |
+| `examples/pde_learning` | runnable | `examples/pde_learning/pde_learning_tutorial.py` |  |
+| `examples/tensor_calculus` | runnable | `examples/tensor_calculus/tensor_calculus_tutorial.py` |  |
 
 ## benchmarks
 

@@ -85,7 +85,7 @@ This document tracks the capability gaps that block them from running today.
 | mla | 259 | ✅ smoke | ✅ | N/A | Theme 5 ops + `LatentKVCacheHandle` ship today; FlashMLA absorb-K kernel = Phase G |
 | power_retention | 2 | ❌ | ❌ stub | N/A | Out of scope — folder is a CUDA kernel sketch only |
 | rlvr_reasoning_suite | 195 | ✅ | ✅ no ops | N/A | — |
-| gumiho | ~600 | ✅ | ✅ Apple GPU/CPU | numpy-validated | Gumiho (ICML'25) hybrid speculative decoding; draft+FTA-verify run on the Apple backend. The `speculative_decoding` string toy was archived (`examples/archive/`); `tessera.speculative.*` scheduler stays. |
+| gumiho | ~600 | ✅ | ✅ Apple GPU/CPU | numpy-validated | Gumiho (ICML'25) hybrid speculative decoding; draft+FTA-verify run on the Apple backend. The `speculative_decoding` string toy was archived (`archive/examples/advanced/`); `tessera.speculative.*` scheduler stays. |
 
 "Smoke" = builds Graph IR via internal compiler hooks rather than `@tessera.jit`,
 intended as a compile-path test rather than an end-to-end demo.

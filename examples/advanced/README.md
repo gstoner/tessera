@@ -1,12 +1,12 @@
 # Advanced Examples — Honest Status
 
-These subdirectories explore advanced ML techniques (diffusion LLMs, hybrid SSMs,
-speculative decoding, Multi-Latent Attention, RLVR, KV-cache compression). **Most
-were written ahead of compiler capability** — they reference APIs that Tessera does
-not yet expose, or build Graph IR directly to bypass missing Pythonic layers.
+These subdirectories provide maintained, manifest-audited slices of advanced ML
+techniques: diffusion LLMs, hybrid SSMs, speculative decoding, Multi-Latent
+Attention, RLVR, and KV-cache compression. Incomplete source drops are preserved
+under `archive/examples/advanced/`, not mixed into the active examples.
 
-This README tells you exactly what works today and what each blocked example is
-waiting on. The full per-theme tracking plan lives at
+This README tells you exactly what each active example proves. The full
+per-theme tracking plan lives at
 [`docs/audit/coverage/COVERAGE_AUDIT.md`](../../docs/audit/coverage/COVERAGE_AUDIT.md).
 
 If you're new to Tessera, **start with [`examples/getting_started/basic_tensor_ops.py`](../getting_started/basic_tensor_ops.py)** — it uses only the canonical surface (see [`docs/CANONICAL_API.md`](../../docs/CANONICAL_API.md)) and runs on CPU.
@@ -25,9 +25,9 @@ These are useful as design sketches and don't need any compiler features. They r
 | [`long_context_attention/`](long_context_attention/) | Retrieval-head vs. streaming-head specialization classifier. Pure heuristics. |
 | [`rlvr_reasoning_suite/`](rlvr_reasoning_suite/) | GRPO/RLVR rollout batching + reward accounting. No Tessera ops. |
 | [`gumiho/`](gumiho/) | Gumiho (ICML'25) hybrid speculative decoding — serial 2-layer Transformer + 5 parallel MLP heads + Full Tree Attention, draft+verify on the Apple GPU/CPU backend, validated vs numpy. |
-| [`Tessera_Empirical_Software_Agent/`](Tessera_Empirical_Software_Agent/) | Runnable kernel-candidate benchmark; the parent LLM/tree-search orchestrator remains a scaffold. |
+| [`Tessera_Empirical_Software_Agent/`](Tessera_Empirical_Software_Agent/) | Deterministic kernel-candidate benchmark with a numerical oracle. |
 | [`Diffusion_LLM/`](Diffusion_LLM/) | Torch-free masked-diffusion denoising loop with deterministic sampling and a NumPy oracle. |
-| [`Jet_nemotron/`](Jet_nemotron/) | D=128 canonical linear-attention compiler smoke; the optional full-model port still needs the research stdlib. |
+| [`Jet_nemotron/`](Jet_nemotron/) | D=128 canonical linear-attention compiler smoke. |
 
 ### Compiler smoke tests (build Graph IR directly)
 
@@ -35,24 +35,17 @@ These bypass the Python `@tessera.jit` surface and emit Graph IR through interna
 
 | Subdir | What it tests |
 |--------|---------------|
-| [`Fast_dLLM_v2/`](Fast_dLLM_v2/) | Diffusion-LLM Graph IR with confidence-aware parallel decoding scaffolding. |
+| [`Fast_dLLM_v2/`](Fast_dLLM_v2/) | Diffusion-LLM NumPy reference plus current Graph IR compiler smoke. |
 | [`mla/`](mla/) | Multi-Latent Attention / FlashMLA Graph IR sketch. |
-| [`Nemotron_Nano_12B_v2/`](Nemotron_Nano_12B_v2/) | Hybrid Mamba2/GQA/MLP Graph IR (Mamba2 mixer is a placeholder reference). |
+| [`Nemotron_Nano_12B_v2/`](Nemotron_Nano_12B_v2/) | Hybrid Mamba2/GQA/MLP NumPy reference plus current Graph IR compiler smoke. |
 
 ---
 
-## Optional research surfaces
+## Archived research surfaces
 
-Some runnable directories retain larger experimental packages that need extra
-dependencies. Their `STATUS.md` files define the maintained manifest entry and
-the boundary around optional code. A runnable slice is compiler or numerical
-evidence only for the operation and target it actually executes.
-
-### Stubs
-
-None. `power_retention/` (a CUDA kernel sketch with no kernel behind it) was
-retired to `archive/examples/advanced/power_retention/` on 2026-09-17; its op
-lives in the canonical dialect as `tessera.power_attn` / `tessera.retention`.
+Incomplete full-model packages, placeholder passes, optional framework ports,
+and superseded source drops live under `archive/examples/advanced/`. A runnable
+slice is evidence only for the operation and target it actually executes.
 
 ---
 

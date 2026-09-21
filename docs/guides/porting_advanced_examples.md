@@ -2,21 +2,19 @@
 status: Informative
 classification: Guide
 authority: Tier 4 deliverable from `docs/audit/coverage/COVERAGE_AUDIT.md`
-last_updated: 2026-05-09
+last_updated: 2026-09-21
 ---
 
 # Porting Advanced Examples — Phantom API → Today's API
 
-This guide is the canonical reference for translating code in
-`examples/advanced/` (and similar copy-paste templates floating around)
-to the surface that ships in Tessera today.
+This guide is the canonical reference for translating archived advanced source
+drops (and similar copy-paste templates) to the surface that ships in Tessera
+today.
 
-It lives here because the `examples/advanced/` subtree was written
-ahead of compiler capability and references APIs Tessera doesn't
-expose. Most of those phantom APIs are now real (Tier 1.1, Tier 2 v1,
-Themes 3/4/5/6/9/10), so this guide has shrunk to the set of small
-remaining gaps plus the patterns that *changed shape* between the
-example sketches and the canonical surface.
+The active `examples/advanced/` subtree now contains manifest-audited runnable
+slices. Earlier packages written ahead of compiler capability live under
+`archive/examples/advanced/`. Most phantom APIs are now real, so this guide
+focuses on remaining gaps and patterns that changed shape.
 
 If you're new to Tessera, read
 [`docs/CANONICAL_API.md`](../CANONICAL_API.md) first. This guide assumes you
@@ -27,11 +25,11 @@ already know how `@tessera.jit`, `tessera.ops.*`, `tessera.nn.*`, and
 
 | Example | Runs today? | What you can run | What still needs work |
 |---------|-------------|-------------------|------------------------|
-| `Diffusion_LLM` | 🟡 partial | Forward pass with `tessera.nn.{Linear, MLP, MultiHeadAttention, RMSNorm, LayerNorm, Embedding, Dropout, RotaryEmbedding}`; autocast via `tessera.autodiff.autocast("fp16")`; gather/clip/masked_fill/arange now real ops. | Distributions (`Normal`, `Beta`) — replace with `numpy.random` for now. |
+| `Diffusion_LLM` | ✅ runnable | Torch-free MDLM denoising loop with deterministic sampling and NumPy cross-checks. | The older torch package is archived. |
 | `Fast_dLLM_v2` | ✅ smoke | The Graph-IR-builder smoke path. KV-cache state machine via `tessera.cache.KVCacheHandle` + speculative-step orchestration via `tessera.speculative.SpeculativeStep`. | Native KV-cache lowering (Phase G). |
-| `Jet_nemotron` | 🟡 partial | Full forward — JetBlock streaming via `ops.depthwise_conv1d` + `nn.DynamicDepthwiseConv1d` (state buffer); fp8 paths via `tessera.autodiff.autocast("fp8_e4m3")`. | Hopper tcgen05 fp8 mma (Phase G). |
-| `Nemotron_Nano_12B_v2` | ✅ smoke | Selective SSM forward + VJP; the 12B reference path. | Per-backend Mamba2 chunked-scan kernel (Phase G). |
-| `Empirical_Software_Agent` | ✅ | Tree-search agent skeleton; LLM-provider hooks are stubs. | Wire real LLM providers in your fork. |
+| `Jet_nemotron` | ✅ smoke | Canonical D=128 `linear_attn` numerical and compiler-artifact smoke. | ROCm load batching before wait remains backend-owned; the old full-model port is archived. |
+| `Nemotron_Nano_12B_v2` | ✅ smoke | Dependency-light hybrid-pattern NumPy reference and Graph IR compiler smoke. | Per-backend Mamba2 chunked-scan kernel (Phase G); old framework skeletons are archived. |
+| `Tessera_Empirical_Software_Agent` | ✅ benchmark | Deterministic tile-candidate benchmark with a numerical oracle. | The unfinished LLM/tree-search agent is archived. |
 | `kv_cache_serving` | ✅ | Real ops via `tessera.ops.{quantize_kv, dequantize_kv}` + `tessera.cache.KVCacheHandle(quantize_bits=...)` + `auto_evict=True`. | — |
 | `long_context_attention` | ✅ | Sliding-window + retrieval-head pure-Python. | Optional: GPU sliding-window attention kernel (Phase G). |
 | `mla` | ✅ smoke | Latent compress/expand + RoPE split/merge + `tessera.cache.LatentKVCacheHandle`. | FlashMLA absorb-K kernel (Phase G). |

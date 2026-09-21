@@ -4,8 +4,11 @@ Owner: `ROCM-2`. Sync: `GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21`.
 
 The 90 rows that ordinary non-ROCm CI reports as hardware/compiler-dependent
 are closed on their owning device. Tajasarus is an AMD Radeon RX 9070 XT
-(`gfx1201`) running ROCm 10.0. The compiler was rebuilt from merged PR #801
-against assertions-enabled LLVM/MLIR 23.1.1 before the recorded run.
+(`gfx1201`) running ROCm 10.0. The compiler was rebuilt from the
+provenance-hardening follow-up to PR #802 against assertions-enabled LLVM/MLIR
+23.1.1 before the recorded run. The recorder validated ROCm 10.0.0, HIP
+7.15.26333, and the selected HIP device's reported model before assigning the
+proof-build label.
 
 ## Result
 
@@ -21,12 +24,14 @@ The complete `tests/unit/test_rocm_gfx1201_scheduled.py` suite passes with
   architecture/ABI refusal, and unknown-architecture rejection.
 
 The first run found a stale `~/.local/bin/tessera-opt` and was deliberately not
-accepted as evidence even though all tests passed. The compiler was rebuilt
-from `fa93b2e59c0326424c00adfb2865b51765b4cfbb` and the recorder then required
+accepted as evidence even though all tests passed. The hardened rerun was built
+from `5da87e9a9c52bde88ec93e566b31e187954c4c4b`; the recorder required a clean
+tested checkout, the same clean compiler-source revision, and
 `stale_generator_sources == 0`. The committed
 [`evidence.json`](evidence.json) binds the fixture and recorder hashes, exact
 device/target, compiler binary hash, toolchain, family counts, and JUnit
-summary.
+summary. The unit drift gate recomputes both content hashes, so edits to either
+the fixture or recorder invalidate this packet.
 
 ## Policy boundary
 

@@ -77,7 +77,7 @@ def test_rocm_map_uses_exact_architecture_grain_and_provenance() -> None:
             assert row.numerical_check == "complete"
 
 
-def test_rocm_priority_targets_do_not_inherit_gfx1151_proof() -> None:
+def test_rocm_priority_targets_only_expose_exact_target_proof() -> None:
     from tessera.compiler.gpu_target_map import all_rocm_exact_rows
 
     rows = all_rocm_exact_rows()

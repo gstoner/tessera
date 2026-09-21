@@ -111,6 +111,28 @@ def test_launch_linear_attn_matches_numpy(feature_map, causal, D, B, H, S):
         f"maxerr={maxerr}")
 
 
+def test_launch_d128_batched_load_kernel_matches_numpy():
+    """Exact-device guard for the D=128 generator's independent-load batch.
+
+    Keep this as one bounded shape/feature-map contract: the broader parameter
+    matrix above tests family semantics, while this row makes the performance
+    repair impossible to validate only as source ordering.
+    """
+    rt = _la_or_skip()
+    D, B, H, S = 128, 1, 1, 32
+    rng = np.random.default_rng(12832)
+    q = (rng.standard_normal((B, H, S, D)) * 0.20).astype(np.float16)
+    k = (rng.standard_normal((B, H, S, D)) * 0.20).astype(np.float16)
+    v = (rng.standard_normal((B, H, S, D)) * 0.20).astype(np.float16)
+
+    res = rt.launch(_artifact(rt, True, "identity"), (q, k, v))
+    assert res["ok"] is True, res.get("reason")
+    out = res["output"].reshape(B, H, S, D)
+    ref = _linear_attn_ref(q, k, v, True, "identity")
+    maxerr = float(np.max(np.abs(out - ref)))
+    assert maxerr < 3e-2, f"linear_attn D=128 batched-load maxerr={maxerr}"
+
+
 @pytest.mark.parametrize("feature_map,lam", [
     ("identity", 0.9),       # lightning_attention
     ("identity", 0.95),

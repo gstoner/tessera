@@ -32,8 +32,10 @@ GFX1201_PUBLIC_PROOFS: tuple[ROCmExactDeviceProof, ...] = (
         compiler_path="rocm_compiled",
         executor_id="rocm_compiled",
         op_family="matmul",
-        dtypes=("bf16", "fp16", "fp32", "fp8_e4m3", "fp8_e5m2",
-                "int8", "int32", "int4"),
+        # Public input-storage spellings proved by the scheduled packages.
+        # f32/i32 are accumulator/output forms, not independently proved
+        # input contracts, so they must not become supports_op() claims.
+        dtypes=("bf16", "fp16", "fp8_e4m3", "fp8_e5m2", "int8", "int4"),
         numerical_fixture="tests/unit/test_rocm_gfx1201_scheduled.py",
         proof_build="llvm23.1.1+rocm10.0+gfx1201",
         scheduled_abis=(
@@ -59,7 +61,7 @@ GFX1201_PUBLIC_PROOFS: tuple[ROCmExactDeviceProof, ...] = (
         compiler_path="rocm_flash_attn_compiled",
         executor_id="rocm_flash_attn_compiled",
         op_family="attention",
-        dtypes=("bf16", "fp16", "fp32"),
+        dtypes=("bf16", "fp16"),
         numerical_fixture="tests/unit/test_rocm_gfx1201_scheduled.py",
         proof_build="llvm23.1.1+rocm10.0+gfx1201",
         scheduled_abis=(

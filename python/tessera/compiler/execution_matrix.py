@@ -4432,8 +4432,11 @@ for _proof in GFX1201_PUBLIC_PROOFS:
 # test catches accidental status drift.
 #
 # Note: ``rocm`` is NO LONGER here — it has an executable ``rocm_wmma`` row
-# above (RDNA WMMA GEMM). The named ROCm sub-arches — INCLUDING ``rocm_gfx1151``,
-# the Strix Halo box's own arch — stay listed here as "no per-arch executor row":
+# above (RDNA WMMA GEMM). Most named ROCm sub-arches — including
+# ``rocm_gfx1151``, the Strix Halo box's own arch — stay listed here as "no
+# per-arch executor row". ``rocm_gfx1201`` is the bounded exception: its exact
+# scheduled-package proofs are projected above without granting gfx1200 proof.
+# For the remaining targets,
 # the shipped GEMM symbol HIPRTC-compiles for whatever arch the device
 # enumerates, so the generic ``rocm`` lane is what actually executes on gfx1151;
 # the sub-arch aliases earn distinct rows only if a sub-arch needs distinct

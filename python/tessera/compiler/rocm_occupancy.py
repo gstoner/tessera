@@ -1,48 +1,33 @@
 """RDNA/CDNA occupancy model: VGPR file, LDS pool and wave slots -> waves/SIMD.
 
-Reported, never scored -- and measured in both directions
----------------------------------------------------------
-Three things read this module -- two ROCm benchmarks and
-``rocm_tiling.RankedTileCandidate.occupancy_waves_per_simd`` -- and all three
-only **report** what it computes.  Nothing ranks or selects on it.  That is a
-measured position, and it has now been measured both ways.
+Reported, never scored -- and read the launch size, not the maximum
+-------------------------------------------------------------------
+Three things read this module, and all three only **report** what it computes.
+Nothing ranks or selects on it.
 
-**Occupancy can cost 2.2x** (2026-09-21).  The gfx1151 two-wave D=128
-attention kernel moved from 121 VGPRs (10 waves/SIMD) to 113 (12 waves/SIMD)
-with zero spills and identical memory traffic, and became **2.2x slower** --
-0.734 -> 1.620 ms causal.  ``s_waitcnt`` rose 33 -> 45 (+36%) with ``ds_``,
-``global_``, ``v_wmma`` and scratch unchanged.
+**Feed it the launch geometry.**  ``max_flat_workgroup_size`` in the kernel
+metadata is a *maximum*; ``runtime.py`` launches the attention families with
+``block=32`` -- one wave per work-group.  Passing 256 instead of 32 inverted
+which limiter appeared to bind and produced a wrong published claim
+(PR #791, corrected 2026-09-21).  The model was right; its input was not.
 
-**Occupancy can also pay +25%** (2026-09-21).  Backward attention,
-split-reduced, D=128: a spill-free 7 -> 8 wave step on the dominant
-``fa_dkdv`` kernel (209 -> 192 VGPRs) gave **+25.3%, +26.4% and +8.4%** on
-three shapes, against an untouched control that moved at most 0.8%.  So
-occupancy-bound ROCm kernels exist, and the gain can be large.
+**With the real geometry, LDS binds -- not registers.**  On gfx1151 and
+gfx1201 alike, every attention and linear-attention kernel measured is
+LDS-bound, with the register ceiling 2-8x above the LDS ceiling.  A kernel at
+17408 B of LDS gets 7 resident groups per WGP; at <=9362 B it would get 14.
+So a register-pressure change usually moves a ceiling that is not binding.
 
-**The wave count is not the predictor either way.**  What predicts the sign is
-whether the register constraint improves or degrades the *schedule*, which is
-readable from the compiled code:
+**Occupancy is not the predictor of speed, in either direction.**  A register
+constraint on gfx1151 backward attention produced **+25%** with residency
+*unchanged*; the mechanism was memory-level parallelism (mem-ops in flight per
+wait 2.26 -> 4.80, ``vmcnt(0)`` drains 49.8% -> 17.3%, byte-identical memory
+traffic).  The same lever cost 55% on the forward kernel, where that measure
+collapsed.  Residency does matter -- a residency-only LDS sweep on the same
+kernel costs 32/46/63% as groups fall 7 -> 5/3/2 -- it simply is not what a
+register change moves.
 
-=====================  ==========  ============================  ==========
-experiment             regs shed   schedule change               outcome
-=====================  ==========  ============================  ==========
-fwd two_wave D=128     8           ``s_waitcnt``/100 +33%        -55%
-bwd split D=64         62 + 108    instrs +8%, dq wait +17%      -23..-33%
-bwd split D=128        17          instrs -65/-70, wait -12/-9%  **+25%**
-=====================  ==========  ============================  ==========
-
-**Occupancy pays exactly when it is free.**  At D=128 the constraint made the
-schedule strictly better -- both dominant kernels lost instructions *and*
-lost waits.  Everywhere the schedule degraded, occupancy lost despite gaining
-*more* waves.  Two alternative explanations were excluded by measurement: not
-spills (the D=64 loser has zero spills and zero scratch) and not an
-under-filled grid (its regression deepens from -23% to -33% as the grid grows
-32x, control flat).
-
-This module answers "how many waves fit" -- a *capacity* question.  Ranking
-needs the schedule delta, which lives in the compiled code, not here.
-Evidence: ``benchmarks/baselines/rdna_occupancy_closure_20260921/`` and
-``benchmarks/baselines/rocm_occupancy_bound_20260921/``.  Owned by sync
+This module answers "how many waves fit", a *capacity* question.  Evidence:
+``benchmarks/baselines/rocm_mlp_correction_20260921/``.  Owned by sync
 ``RDNA-OCCUPANCY-GRANULE-2026-09-20``.
 
 Why this module exists

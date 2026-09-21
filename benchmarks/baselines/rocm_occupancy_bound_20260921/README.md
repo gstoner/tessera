@@ -1,5 +1,18 @@
 # An occupancy-bound ROCm kernel, found and measured — 2026-09-21
 
+> **CORRECTED 2026-09-21 — the headline below is wrong. The +25% is real; the
+> attribution is not.** Residency never changed: these kernels launch
+> `block=32` (one wave per work-group), so LDS binds at 7 resident groups in
+> *both* arms and the register lever moved a non-binding ceiling. The model was
+> fed `max_flat_workgroup_size` (256, a maximum) instead of the launch size.
+> The actual mechanism is **memory-level parallelism** — mem-ops in flight per
+> wait 2.26 → 4.80, `vmcnt(0)` full drains 49.8% → 17.3%, with byte-identical
+> memory traffic. Raised by the Codex reviewer on PR #791 and confirmed by
+> measurement. Read
+> [`rocm_mlp_correction_20260921/`](../rocm_mlp_correction_20260921/README.md)
+> instead; everything below is retained as the record of what was claimed.
+
+
 Sync `RDNA-OCCUPANCY-GRANULE-2026-09-20`. Answers the question PR #790 left as
 the honest next one: *no occupancy-bound ROCm kernel has been measured*. One
 exists. Device work on **Princess-Luna** (gfx1151, RDNA 3.5, ROCm 10.0).

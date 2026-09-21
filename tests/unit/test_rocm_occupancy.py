@@ -894,3 +894,73 @@ def test_the_measured_g6_rung_crossing_is_representable():
     assert allocate_vgprs(121, arch=RDNA35).waves_per_simd == 10
     assert allocate_vgprs(113, arch=RDNA35).waves_per_simd == 12
     assert headroom_to_next_rung(121, arch=RDNA35) == (1, 2)
+
+
+# ── The input trap that produced a wrong published claim (PR #791) ──────────
+
+
+def test_launch_geometry_not_max_flat_workgroup_size_decides_the_limiter():
+    """Feeding the model a *maximum* where it wants the *launch* size inverts
+    which limiter binds.  This is the exact error behind PR #791's retracted
+    "occupancy-bound" claim.
+
+    `fa_dkdv` carries `max_flat_workgroup_size = 256` in its metadata but
+    `runtime.py` launches it with `block=32` -- one wave per work-group.  With
+    256 the verdict reads `vgpr`-limited and a register change looks like it
+    moves residency; with the real 32 it reads `lds`-limited at 7 groups and
+    the register change moves nothing.
+    """
+    wrong = estimate_occupancy(
+        arch=RDNA35,
+        mode=WorkgroupProcessorMode.WGP,
+        vgprs=209,
+        lds_bytes=17408,
+        workgroup_threads=256,
+    )
+    right = estimate_occupancy(
+        arch=RDNA35,
+        mode=WorkgroupProcessorMode.WGP,
+        vgprs=209,
+        lds_bytes=17408,
+        workgroup_threads=32,
+    )
+    assert wrong.limiter == "vgpr"
+    assert right.limiter == "lds"
+    assert right.groups_per_slot == 7
+
+    # And with the real geometry the register lever cannot move residency.
+    shed = estimate_occupancy(
+        arch=RDNA35,
+        mode=WorkgroupProcessorMode.WGP,
+        vgprs=192,
+        lds_bytes=17408,
+        workgroup_threads=32,
+    )
+    assert shed.groups_per_slot == right.groups_per_slot == 7
+    assert shed.waves_by_vgpr > right.waves_by_vgpr  # ceiling moved...
+    assert shed.limiter == "lds"  # ...but was never binding
+
+
+def test_attention_kernels_are_lds_bound_on_both_parts():
+    """With one wave per work-group the register ceiling sits well above the
+    LDS ceiling for every attention kernel measured, on gfx1151 and gfx1201
+    alike.  Measured VGPR/LDS pairs from
+    `benchmarks/baselines/rocm_mlp_correction_20260921/`."""
+    measured = [
+        (RDNA35, 209, 17408),
+        (RDNA35, 218, 9408),
+        (RDNA35, 122, 9216),
+        (RDNA4, 149, 17408),
+        (RDNA4, 211, 9408),
+        (RDNA4, 94, 9216),
+    ]
+    for arch, vgprs, lds in measured:
+        r = estimate_occupancy(
+            arch=arch,
+            mode=WorkgroupProcessorMode.WGP,
+            vgprs=vgprs,
+            lds_bytes=lds,
+            workgroup_threads=32,
+        )
+        assert r.limiter == "lds", (arch.name, vgprs, lds, r.limiter)
+        assert r.waves_by_vgpr > r.waves_by_lds

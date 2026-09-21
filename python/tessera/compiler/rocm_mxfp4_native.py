@@ -258,7 +258,10 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                 h = word * 4 + byte
                 k_off = slab * 16 + h
                 tag = f'{kind}_s{slab}_{h}'
-                lines.append(f'  %{tag}_k = add i64 %kbase, {k_off}')
+                lines.extend([
+                    f'  %{tag}_k0 = add i64 %kbase, {k_off}',
+                    f'  %{tag}_k = add i64 %{tag}_k0, %half8',
+                ])
                 if kind == 'a':
                     lines.extend([
                         f'  %{tag}_rowbase = mul i64 %a_row_safe, %K',

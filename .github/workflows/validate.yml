@@ -303,8 +303,22 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             llvm-23-dev mlir-23-tools libmlir-23-dev clang-23 lld-23 \
             || echo "::warning ::LLVM/MLIR 23 apt install failed (no ${codename}-23 repo yet)"
+          required_llvm="$(sed -n \
+            's/^set(TESSERA_REQUIRED_LLVM_VERSION[[:space:]]*"\([0-9.]*\)".*/\1/p' \
+            cmake/TesseraToolchainPins.cmake)"
+          test -n "$required_llvm" || {
+            echo "::error ::Could not read TESSERA_REQUIRED_LLVM_VERSION"
+            exit 1
+          }
+          llvm_version="$(/usr/lib/llvm-23/bin/llvm-config --version 2>/dev/null \
+            | sed -n 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' || true)"
+          mlir_version="$(/usr/lib/llvm-23/bin/mlir-opt --version 2>/dev/null \
+            | sed -n 's/.*version \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' \
+            | head -1 || true)"
           if [ -f /usr/lib/llvm-23/lib/cmake/mlir/MLIRConfig.cmake ] \
-             && [ -x /usr/lib/llvm-23/bin/ld.lld ]; then
+             && [ -x /usr/lib/llvm-23/bin/ld.lld ] \
+             && [ "$llvm_version" = "$required_llvm" ] \
+             && [ "$mlir_version" = "$required_llvm" ]; then
             echo "mlir=true" >> "$GITHUB_OUTPUT"
             python -m pip install --upgrade pip
             python -m pip install -e . --no-deps
@@ -312,7 +326,7 @@ jobs:
             python -m pip install $TESSERA_CI_PY_DEPS
           else
             echo "mlir=false" >> "$GITHUB_OUTPUT"
-            echo "::warning ::MLIR 23 or lld-23 absent — skipping the ROCm serialization lane"
+            echo "::warning ::Pinned LLVM/MLIR ${required_llvm} with lld is unavailable (LLVM=${llvm_version:-absent}, MLIR=${mlir_version:-absent}) — skipping the ROCm serialization lane"
           fi
 
       - name: Build tessera-rocm-opt (HIP-less)
@@ -379,11 +393,24 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             llvm-23-dev mlir-23-tools libmlir-23-dev clang-23 \
             || echo "::warning ::LLVM/MLIR 23 apt install failed (no ${codename}-23 repo yet)"
-          # Gate every downstream step on whether the MLIR 23 CMake package
-          # actually landed. apt.llvm.org has no LLVM 23 channel for some
-          # Ubuntu codenames yet, so the install above may soft-fail; when it
-          # does we skip the build/lit steps instead of hard-failing configure.
-          if [ -f /usr/lib/llvm-23/lib/cmake/mlir/MLIRConfig.cmake ]; then
+          # Gate every downstream step on whether the exact repository pin
+          # landed. apt.llvm.org is a rolling snapshot: an available major-23
+          # package may already be a newer, contract-incompatible patch.
+          required_llvm="$(sed -n \
+            's/^set(TESSERA_REQUIRED_LLVM_VERSION[[:space:]]*"\([0-9.]*\)".*/\1/p' \
+            cmake/TesseraToolchainPins.cmake)"
+          test -n "$required_llvm" || {
+            echo "::error ::Could not read TESSERA_REQUIRED_LLVM_VERSION"
+            exit 1
+          }
+          llvm_version="$(/usr/lib/llvm-23/bin/llvm-config --version 2>/dev/null \
+            | sed -n 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' || true)"
+          mlir_version="$(/usr/lib/llvm-23/bin/mlir-opt --version 2>/dev/null \
+            | sed -n 's/.*version \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' \
+            | head -1 || true)"
+          if [ -f /usr/lib/llvm-23/lib/cmake/mlir/MLIRConfig.cmake ] \
+             && [ "$llvm_version" = "$required_llvm" ] \
+             && [ "$mlir_version" = "$required_llvm" ]; then
             echo "mlir=true" >> "$GITHUB_OUTPUT"
             python -m pip install --upgrade pip
             python -m pip install -e . --no-deps
@@ -395,7 +422,7 @@ jobs:
             python -m pip install $TESSERA_CI_PY_DEPS lit FileCheck
           else
             echo "mlir=false" >> "$GITHUB_OUTPUT"
-            echo "::warning ::MLIR 23 CMake package absent — skipping the lit lane build/tests"
+            echo "::warning ::Pinned LLVM/MLIR ${required_llvm} is unavailable (LLVM=${llvm_version:-absent}, MLIR=${mlir_version:-absent}) — skipping the lit lane build/tests"
           fi
 
       - name: Configure + build MLIR tools

@@ -17,7 +17,8 @@ target normalization now maps RX 9070 products to `rocm_gfx1201`, RX 9060/RX
 Not applicable to x86 physical execution: no x86 IR, ABI, dtype, numerical, or
 runtime contract changed, and no ROCm proof transfers to this backend. The
 ROCm-only post-launch selected-HIP-device attestation fix does not affect
-AVX-512 attestation.
+AVX-512 attestation. The shared dtype-flow audit gained only the missing exact
+`rocm_gfx1201` ISA row; x86 rows and generated states are unchanged.
 
 ## Compiler-example MoE optional binding — 2026-09-20
 

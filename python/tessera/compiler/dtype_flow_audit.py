@@ -302,6 +302,7 @@ def _amd_matmul_isa_state(op_name: str, target: str, dtype: str) -> TargetDtypeS
     arch_names = {
         "rocm_gfx1151": "GFX_1151",
         "rocm_gfx1200": "GFX_1200",
+        "rocm_gfx1201": "GFX_1201",
         "rocm_gfx1250": "GFX_1250",
         "rocm_gfx1251": "GFX_1251",
     }

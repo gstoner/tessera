@@ -27,6 +27,10 @@ boundary:
 - Ambiguous family aliases (`gfx12`, `rdna4`, `rx9000`) no longer select an
   exact target. RX 9070 aliases normalize to `rocm_gfx1201`; RX 9060/RX 9050
   aliases normalize to `rocm_gfx1200`.
+- The machine-readable ISA/dtype contract now represents `gfx1200` and
+  `gfx1201` as separate RDNA4 products and cost-model identities. The shared
+  dtype-flow audit consumes the exact `GFX_1201` row rather than omitting it,
+  and MMA/fragment provenance no longer rewrites `gfx1201` to `gfx1200`.
 
 Open work, in order:
 
@@ -43,8 +47,9 @@ Open work, in order:
    product-specific performance or topology claim; ISA-level gfx1201
    correctness is already established on RX 9070 XT.
 
-Sibling assessment: the change corrects shared target-name normalization but
-does not alter Apple, NVIDIA, or x86 IR, ABI, dtype, numerical, or execution
+Sibling assessment: the change corrects shared target-name normalization and
+the ROCm-specific branch of shared dtype-flow audit infrastructure, but does
+not alter Apple, NVIDIA, or x86 IR, ABI, dtype, numerical, or execution
 contracts. Their plans record this as not applicable to physical execution.
 
 Tajasarus validation follow-through found and closed one physical-proof defect:

@@ -8,8 +8,8 @@ conflated:
 * matrix operand, accumulator, sparsity, and scaling legality;
 * Tessera implementation/evidence state.
 
-The three profiles here are the first cross-generation contract: gfx1151
-(RDNA 3.5), gfx1200 (RDNA 4), and gfx1250/gfx1251 (CDNA 5).  CDNA 5 is a
+The profiles here are the first cross-generation contract: gfx1151
+(RDNA 3.5), gfx1200/gfx1201 (RDNA 4), and gfx1250/gfx1251 (CDNA 5).  CDNA 5 is a
 wave32 WMMA/SWMMAC architecture; it must never be routed through the legacy
 ``CDNA => wave64 MFMA`` rule.  MI455X is gfx1250 and MI430X is gfx1251.  The
 two CDNA 5 targets share the low-precision instruction ABI, while gfx1251 adds
@@ -92,8 +92,13 @@ AMD_ARCHITECTURE_CONTRACTS: dict[AMDArch, AMDArchitectureContract] = {
     ),
     AMDArch.GFX_1200: AMDArchitectureContract(
         AMDArch.GFX_1200, "rdna4",
-        "Radeon RX 9060 XT / Radeon RX 9070 XT", 32,
+        "Radeon RX 9050 / RX 9060 series", 32,
         "valu_wmma", 64 * 1024, 256, True, True, False, "gfx1200",
+    ),
+    AMDArch.GFX_1201: AMDArchitectureContract(
+        AMDArch.GFX_1201, "rdna4",
+        "Radeon RX 9070 series / Radeon AI PRO R9000 series", 32,
+        "valu_wmma", 64 * 1024, 256, True, True, False, "gfx1201",
     ),
     AMDArch.GFX_1250: AMDArchitectureContract(
         AMDArch.GFX_1250, "cdna5", "AMD Instinct MI455X", 32,
@@ -129,7 +134,7 @@ def _rows_gfx1151() -> dict[str, AMDMatrixDtypeContract]:
     return rows
 
 
-def _rows_gfx1200() -> dict[str, AMDMatrixDtypeContract]:
+def _rows_rdna4() -> dict[str, AMDMatrixDtypeContract]:
     rows = _empty_dtype_rows()
     rows.update({
         "fp64": AMDMatrixDtypeContract("fp64", "artifact_only", "unsupported", "unsupported", None, (), (), ()),
@@ -179,7 +184,8 @@ def _rows_cdna5_gfx1251() -> dict[str, AMDMatrixDtypeContract]:
 
 AMD_DTYPE_CONTRACTS: dict[AMDArch, dict[str, AMDMatrixDtypeContract]] = {
     AMDArch.GFX_1151: _rows_gfx1151(),
-    AMDArch.GFX_1200: _rows_gfx1200(),
+    AMDArch.GFX_1200: _rows_rdna4(),
+    AMDArch.GFX_1201: _rows_rdna4(),
     AMDArch.GFX_1250: _rows_cdna5(),
     AMDArch.GFX_1251: _rows_cdna5_gfx1251(),
 }

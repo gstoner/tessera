@@ -25,6 +25,40 @@ class ROCmExactDeviceProof:
     reason: str
 
 
+@dataclass(frozen=True)
+class ROCmExactDeviceSuiteProof:
+    """One exact-device suite whose ordinary CI rows remain fail-closed.
+
+    ``device_dependent_cases`` counts the rows that skip away from their owning
+    device or compiler.  ``host_contract_cases`` are the adjacent negative and
+    metadata checks that run everywhere.  Recording both prevents a green
+    owning-device run from silently dropping parameterized rows.
+    """
+
+    target: str
+    numerical_fixture: str
+    evidence_packet: str
+    proof_build: str
+    device_dependent_cases: int
+    host_contract_cases: int
+    required_passed_cases: int
+    required_skipped_cases: int
+
+
+GFX1201_SCHEDULED_SUITE_PROOF = ROCmExactDeviceSuiteProof(
+    target="rocm_gfx1201",
+    numerical_fixture="tests/unit/test_rocm_gfx1201_scheduled.py",
+    evidence_packet=(
+        "benchmarks/baselines/gfx1201_scheduled_closure_20260921/evidence.json"
+    ),
+    proof_build="llvm23.1.1+rocm10.0+gfx1201",
+    device_dependent_cases=90,
+    host_contract_cases=5,
+    required_passed_cases=95,
+    required_skipped_cases=0,
+)
+
+
 GFX1201_PUBLIC_PROOFS: tuple[ROCmExactDeviceProof, ...] = (
     ROCmExactDeviceProof(
         target="rocm_gfx1201",
@@ -96,4 +130,10 @@ def public_proofs_for(target: str) -> tuple[ROCmExactDeviceProof, ...]:
                  if proof.target == target)
 
 
-__all__ = ["GFX1201_PUBLIC_PROOFS", "ROCmExactDeviceProof", "public_proofs_for"]
+__all__ = [
+    "GFX1201_PUBLIC_PROOFS",
+    "GFX1201_SCHEDULED_SUITE_PROOF",
+    "ROCmExactDeviceProof",
+    "ROCmExactDeviceSuiteProof",
+    "public_proofs_for",
+]

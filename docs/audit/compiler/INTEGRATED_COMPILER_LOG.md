@@ -31,6 +31,37 @@ Evidence: Original source, tests and packet references preserved below.
 
 <!-- entry-fields:end -->
 
+### 2026-09-21 — The 90 gfx1201 hardware-dependent skips become one zero-skip owning-device gate
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+PRs: branch `codex/gfx1201-hardware-skip-closure`.
+Sync: `GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21`.
+
+Outcome: the complete scheduled-package fixture now has a machine-readable
+closure contract. Its inventory is 90 exact-device/native-compiler cases and
+five adjacent host-contract cases. Tajasarus (RX 9070 XT, `gfx1201`) passes
+**95/95 with zero skips** across unary, dense/fused/BF16/FP8/integer/mixed-FP8
+matmul, attention forward/backward and ownership, dynamic reuse/retirement,
+paged KV, selected panels, K32 int4, transpose loads, and macro-K traversal.
+
+The first green run was rejected because it found a `tessera-opt` older than
+172 generator sources. After rebuilding the assertions-enabled LLVM/MLIR
+23.1.1 compiler from merged PR #801, the same suite passed again. The recorder
+now makes that evidence rule executable: wrong live/compiler architecture,
+stale sources, family-count drift, or any failed/error/skipped row aborts the
+packet. Ordinary CI retains the skip gates because it cannot inherit an RX
+9070 XT result.
+
+Remaining: preserve this gate as the scheduled ABI set evolves. `gfx1200` and
+R9700-specific performance still require their own exact-device evidence.
+
+Evidence: [closure packet](../../../benchmarks/baselines/gfx1201_scheduled_closure_20260921/README.md),
+`benchmarks/rocm/record_gfx1201_scheduled_closure.py`,
+`python/tessera/compiler/rocm_exact_device_proofs.py`, and
+`tests/unit/test_rocm_gfx1201_closure_evidence.py`.
+
+<!-- entry-fields:end -->
+
 Merged snapshots: [PR #721](https://github.com/gstoner/tessera/pull/721),
 [PR #722](https://github.com/gstoner/tessera/pull/722), and
 [PR #723](https://github.com/gstoner/tessera/pull/723).

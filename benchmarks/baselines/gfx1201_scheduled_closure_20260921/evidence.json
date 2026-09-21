@@ -1,0 +1,77 @@
+{
+  "compiler": {
+    "path": "/home/angstorms/programming/tessera/build-assertions/tools/tessera-opt/tessera-opt",
+    "sha256": "5c96afedb4448b62715957f6c4c877a18802b100f388cf8f96a17e91d962c98d",
+    "source_dirty": false,
+    "source_revision": "fa93b2e59c0326424c00adfb2865b51765b4cfbb",
+    "source_root": "/home/angstorms/programming/tessera",
+    "stale_generator_sources": 0,
+    "version": [
+      "LLVM (http://llvm.org/):",
+      "  LLVM version 23.1.1",
+      "  Optimized build with assertions."
+    ]
+  },
+  "compiler_target": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_dependent_cases": {
+    "count": 90,
+    "families": {
+      "test_gfx1201_b_fragment_uses_the_transpose_load_only_where_derived": 5,
+      "test_gfx1201_backward_program": 4,
+      "test_gfx1201_double_k_int4_emits_its_instruction_and_is_exact": 2,
+      "test_gfx1201_driver_uses_adjacent_scheduled_artifacts": 2,
+      "test_gfx1201_dynamic_matmul_reuses_one_image": 1,
+      "test_gfx1201_external_reader_orders_reuse_and_retirement": 4,
+      "test_gfx1201_low_precision_takes_the_selected_panel_and_executes": 4,
+      "test_gfx1201_macro_k_block_walks_the_whole_contraction": 4,
+      "test_gfx1201_mixed_fp8_pairs_select_their_instruction_and_execute": 4,
+      "test_gfx1201_public_attention_native_backward": 4,
+      "test_gfx1201_public_matmul_row_uses_exact_executor_on_owning_device": 1,
+      "test_gfx1201_reusable_attention_owner": 4,
+      "test_gfx1201_scheduled_attention_package_executes": 8,
+      "test_gfx1201_scheduled_matmul_package_executes": 3,
+      "test_gfx1201_scheduled_matmul_package_executes_bf16": 4,
+      "test_gfx1201_scheduled_matmul_package_executes_fp8": 6,
+      "test_gfx1201_scheduled_matmul_package_executes_fused_epilogue": 15,
+      "test_gfx1201_scheduled_matmul_package_executes_integer_storage": 6,
+      "test_gfx1201_scheduled_matmul_package_executes_the_selected_panel": 3,
+      "test_gfx1201_scheduled_package_executes": 2,
+      "test_gfx1201_scheduled_paged_kv_package_executes": 4
+    }
+  },
+  "fixture": "tests/unit/test_rocm_gfx1201_scheduled.py",
+  "fixture_sha256": "8d9e2c54731aac79d272453100ca6f7d1ed209d7fdc0a79a3b7309d3e1c8b321",
+  "host": "tajasarus",
+  "host_contract_cases": {
+    "count": 5,
+    "families": {
+      "test_gfx1201_cached_launcher_keeps_architecture_and_family_gate": 2,
+      "test_gfx1201_unary_projection_rejects_stale_metadata": 2,
+      "test_public_attention_rejects_unknown_rocm_architecture": 1
+    }
+  },
+  "live_architecture": "gfx1201",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "policy": "ordinary non-owning-host CI keeps the explicit skips; promotion is bound to this exact-device, fresh-compiler, zero-skip packet",
+  "proof_build": "llvm23.1.1+rocm10.0+gfx1201",
+  "recorder_sha256": "25c37282fc00970ef868b588a8f455a81ffd19828bf9768e056d195d54f118b7",
+  "result": {
+    "errors": 0,
+    "failures": 0,
+    "hostname": "tajasarus",
+    "seconds": 56.373,
+    "skipped": 0,
+    "tests": 95,
+    "timestamp": "2026-09-21T16:40:51.081663-05:00"
+  },
+  "schema": "tessera.rocm.gfx1201_scheduled_closure.v1",
+  "source_revision": "fa93b2e59c0326424c00adfb2865b51765b4cfbb",
+  "sync_key": "GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21",
+  "target": "rocm_gfx1201",
+  "toolchain": {
+    "hipcc": "HIP version: 7.15.26333-0000000",
+    "rocm_path": "/opt/rocm/core"
+  },
+  "work_item": "ROCM-2"
+}

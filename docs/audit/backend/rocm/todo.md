@@ -7,6 +7,29 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 scheduled hardware-skip closure — 2026-09-21
+
+Owner ROCM-2; sync `GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21`.
+
+The 90 rows skipped by ordinary compiler-free/non-ROCm CI now have one
+machine-readable owning-device gate. On Tajasarus (RX 9070 XT, `gfx1201`), the
+complete scheduled suite passes **95/95 with zero skips**: 90 exact-device or
+native-compiler rows plus five adjacent host-contract rows. Coverage includes
+public exact-target dispatch, unary, dense/fused/BF16/FP8/integer/mixed-FP8
+matmul, attention forward/backward and ownership, dynamic reuse/retirement,
+paged KV, selected panels, K32 int4, transpose-load selection, and macro-K.
+
+The first all-green run resolved a stale compiler and was rejected. The
+accepted packet uses a freshly rebuilt assertions-enabled LLVM/MLIR 23.1.1
+`tessera-opt`; the recorder hard-fails on stale generator sources, inventory
+count drift, any failed/error/skipped case, a non-gfx1201 selected device, or a
+mismatched compiler target. Evidence:
+[scheduled closure packet](../../../../benchmarks/baselines/gfx1201_scheduled_closure_20260921/README.md).
+
+The skip decorators remain correct on non-owning hosts. This closes the
+hardware-proof debt, not the requirement for exact hardware, and transfers no
+claim to `gfx1200`, R9700-specific performance, Apple, NVIDIA, or x86.
+
 ## Exact MXFP4 W4A8 execution and FP8-WMMA route — 2026-09-21
 
 Owner ROCM-MXFP4-W4A8-1; sync

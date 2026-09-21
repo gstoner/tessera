@@ -36,6 +36,33 @@ def test_live_arch_tracks_selected_device_and_fails_closed(monkeypatch):
     assert rt._rocm_live_arch() is None
 
 
+def test_physical_attestation_uses_the_selected_rocm_device(monkeypatch):
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1201")
+    monkeypatch.setattr(
+        rt,
+        "_rocm_device_name",
+        lambda: pytest.fail("physical attestation must not require the legacy WMMA runtime probe"),
+    )
+    attestation = rt._physical_execution_attestation(
+        target="rocm",
+        execution_kind="native_gpu",
+        execution_mode="hip_runtime",
+        artifact_hash="a" * 64,
+        expected_device_arch="gfx1201",
+    )
+    assert attestation is not None
+    assert attestation["device_arch"] == "gfx1201"
+    assert len(attestation["digest"]) == 64
+
+    assert rt._physical_execution_attestation(
+        target="rocm",
+        execution_kind="native_gpu",
+        execution_mode="hip_runtime",
+        artifact_hash="a" * 64,
+        expected_device_arch="gfx1151",
+    ) is None
+
+
 def test_versioned_hip_property_layout_matches_headers(tmp_path):
     compiler = shutil.which("c++")
     headers = Path("/opt/rocm/include")

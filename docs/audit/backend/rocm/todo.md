@@ -47,6 +47,14 @@ Sibling assessment: the change corrects shared target-name normalization but
 does not alter Apple, NVIDIA, or x86 IR, ABI, dtype, numerical, or execution
 contracts. Their plans record this as not applicable to physical execution.
 
+Tajasarus validation follow-through found and closed one physical-proof defect:
+scheduled attention backward launched and matched its oracle on all four
+fp16/bf16 cotangent variants, but attestation reused the autotune device-name
+helper, whose legacy shipped-WMMA-runtime gate returned no device for this
+independent HIP package path. Post-launch attestation now queries the selected
+HIP device directly. The full scheduled gfx1201 suite passes with exact-device
+certificates; no launch, numerical, or ABI contract changed.
+
 ## Correction: the +25% was memory-level parallelism, not occupancy — 2026-09-21
 
 Sync: `RDNA-OCCUPANCY-GRANULE-2026-09-20`; owner ROCM-2. PR #791 reported a

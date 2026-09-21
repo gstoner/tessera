@@ -33931,7 +33931,14 @@ def _physical_execution_attestation(
         device_arch = "x86_avx512" if _x86_elementwise_available() else None
         expected_arch = "x86_avx512"
     elif target == "rocm" and execution_kind == "native_gpu":
-        device_arch = _rocm_device_name()
+        # This function runs only after a physical launch completed. Query the
+        # selected HIP device directly: `_rocm_device_name()` is an autotune
+        # cache key helper whose legacy availability gate requires the shipped
+        # WMMA runtime library. Scheduled/native programs launch through HIP
+        # without that library, so using the cache helper left successful
+        # gfx1201 attention-backward programs numerically proved but physically
+        # unattested.
+        device_arch = _rocm_live_arch()
         # The chip the launch was compiled for is the runtime pin; defaulting
         # to gfx1151 left every gfx1201 launch unattested (slice 2b).
         expected_arch = expected_device_arch or _rocm_chip()

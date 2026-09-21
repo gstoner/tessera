@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / 'python'))
 from tessera.dtype import canonical_dtypes, planned_gated_dtypes  # noqa: E402
 from tessera.compiler.nvidia_dtype_contract import SM120_DTYPE_CONTRACTS  # noqa: E402
 from tessera.compiler.rocm_isa_contract import AMD_DTYPE_CONTRACTS  # noqa: E402
+from tessera.compiler.rocm_exact_device_proofs import GFX1201_PUBLIC_PROOFS  # noqa: E402
 from tessera.compiler.x86_dtype_contract import X86_DTYPE_CONTRACTS  # noqa: E402
 
 
@@ -25,6 +26,10 @@ def record():
         'apple_gpu': (None, ()),
     }
     rows = []
+    gfx1201_matmul = next(
+        proof for proof in GFX1201_PUBLIC_PROOFS
+        if proof.target == 'rocm_gfx1201' and proof.op_name == 'tessera.matmul'
+    )
     for dtype in sorted(canonical | planned_gated_dtypes()):
         targets = {}
         for target, (source, contracts) in sources.items():
@@ -35,9 +40,19 @@ def record():
                 'coverage': 'declared_contract' if matches else 'no_layered_contract',
                 'execution_proof': 'requires_operation_artifact_and_exact_device_packet',
             }
+            if target == 'rocm_gfx1201' and dtype in gfx1201_matmul.dtypes:
+                targets[target]['exact_device_operations'] = {
+                    'tessera.matmul': {
+                        'compiler_path': gfx1201_matmul.compiler_path,
+                        'executor_id': gfx1201_matmul.executor_id,
+                        'fixture': gfx1201_matmul.numerical_fixture,
+                        'proof_build': gfx1201_matmul.proof_build,
+                    }
+                }
         rows.append({'dtype': dtype, 'vocabulary': 'canonical' if dtype in canonical else 'planned_gated',
                      'targets': targets})
-    return {'schema': 1, 'scope': 'Scalar/vector and matrix contract projection; not code-generation or device proof. '
+    return {'schema': 2, 'scope': 'Scalar/vector and matrix contract projection. Exact-device operation fields are '
+            'joined only from the machine-readable proof registry; a declaration alone is not code-generation or device proof. '
             'Apple operation-specific capabilities are not a layered dtype contract. '
             'Zen 5 vector GEMM and VNNI do not establish AMX or systolic-array support. '
             'TF32 is a fp32 math mode, not a storage dtype.', 'rows': rows}

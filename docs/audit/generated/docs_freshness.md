@@ -8,7 +8,7 @@ Reference date for staleness: **2026-09-21**.
 
 - **158** docs catalogued across the canonical doc tree.
 - **157** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **60** updated within the last 30 days.
+- **61** updated within the last 30 days.
 - **37** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -160,7 +160,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-09-05 | 16 | ✓ |
 | `backend/rocm/todo.md` | - | 2026-09-21 | 0 | ✓ |
 | `backend/x86/todo.md` | - | 2026-09-21 | 0 | ✓ |
-| `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 55 | ✓ |
+| `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-09-21 | 0 | ✓ |
 | `compiler/ANN_CALCULUS_DESIGN_SPIKE.md` | - | 2026-09-04 | 17 | ✓ |
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-09-06 | 15 | ✓ |
 | `compiler/AUTODIFF_EXECUTION_PLAN.md` | - | 2026-09-14 | 7 | ✓ |
@@ -183,7 +183,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 14 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 10 | ✓ |
 | `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-09-20 | 1 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-09-15 | 6 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-09-21 | 0 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-04 | 17 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 50 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 56 | ✓ |

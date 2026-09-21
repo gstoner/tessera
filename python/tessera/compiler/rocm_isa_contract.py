@@ -134,17 +134,26 @@ def _rows_gfx1151() -> dict[str, AMDMatrixDtypeContract]:
     return rows
 
 
-def _rows_rdna4() -> dict[str, AMDMatrixDtypeContract]:
+def _rows_rdna4(
+    *, dense_matrix_state: ContractState = "artifact_only",
+) -> dict[str, AMDMatrixDtypeContract]:
+    """Build RDNA4 rows without transferring proof between exact targets.
+
+    gfx1200 and gfx1201 share instruction forms, but only gfx1201 currently
+    owns exact-device dense-package proof.  Keep the state an input so adding
+    an RDNA4 architecture can never inherit another product's evidence merely
+    by reusing this ISA table.
+    """
     rows = _empty_dtype_rows()
     rows.update({
         "fp64": AMDMatrixDtypeContract("fp64", "artifact_only", "unsupported", "unsupported", None, (), (), ()),
         "fp32": AMDMatrixDtypeContract("fp32", "ready", "unsupported", "unsupported", None, ("fp32",), (), ()),
-        "fp16": AMDMatrixDtypeContract("fp16", "ready", "artifact_only", "artifact_only", "f16", ("fp16", "fp32"), ((16, 16, 16),), ((16, 16, 32),)),
-        "bf16": AMDMatrixDtypeContract("bf16", "ready", "artifact_only", "artifact_only", "bf16", ("bf16", "fp32"), ((16, 16, 16),), ((16, 16, 32),)),
-        "fp8_e4m3": AMDMatrixDtypeContract("fp8_e4m3", "artifact_only", "artifact_only", "artifact_only", "fp8", ("fp32",), ((16, 16, 16),), ((16, 16, 32),)),
-        "fp8_e5m2": AMDMatrixDtypeContract("fp8_e5m2", "artifact_only", "artifact_only", "artifact_only", "bf8", ("fp32",), ((16, 16, 16),), ((16, 16, 32),)),
-        "int8": AMDMatrixDtypeContract("int8", "ready", "artifact_only", "artifact_only", "iu8", ("int32",), ((16, 16, 16),), ((16, 16, 32),)),
-        "int4": AMDMatrixDtypeContract("int4", "ready", "artifact_only", "artifact_only", "iu4", ("int32",), ((16, 16, 16), (16, 16, 32)), ((16, 16, 32), (16, 16, 64))),
+        "fp16": AMDMatrixDtypeContract("fp16", "ready", dense_matrix_state, "artifact_only", "f16", ("fp16", "fp32"), ((16, 16, 16),), ((16, 16, 32),)),
+        "bf16": AMDMatrixDtypeContract("bf16", "ready", dense_matrix_state, "artifact_only", "bf16", ("bf16", "fp32"), ((16, 16, 16),), ((16, 16, 32),)),
+        "fp8_e4m3": AMDMatrixDtypeContract("fp8_e4m3", "artifact_only", dense_matrix_state, "artifact_only", "fp8", ("fp32",), ((16, 16, 16),), ((16, 16, 32),)),
+        "fp8_e5m2": AMDMatrixDtypeContract("fp8_e5m2", "artifact_only", dense_matrix_state, "artifact_only", "bf8", ("fp32",), ((16, 16, 16),), ((16, 16, 32),)),
+        "int8": AMDMatrixDtypeContract("int8", "ready", dense_matrix_state, "artifact_only", "iu8", ("int32",), ((16, 16, 16),), ((16, 16, 32),)),
+        "int4": AMDMatrixDtypeContract("int4", "ready", dense_matrix_state, "artifact_only", "iu4", ("int32",), ((16, 16, 16), (16, 16, 32)), ((16, 16, 32), (16, 16, 64))),
         "int32": AMDMatrixDtypeContract("int32", "ready", "unsupported", "unsupported", None, ("int32",), (), ()),
     })
     return rows
@@ -185,7 +194,7 @@ def _rows_cdna5_gfx1251() -> dict[str, AMDMatrixDtypeContract]:
 AMD_DTYPE_CONTRACTS: dict[AMDArch, dict[str, AMDMatrixDtypeContract]] = {
     AMDArch.GFX_1151: _rows_gfx1151(),
     AMDArch.GFX_1200: _rows_rdna4(),
-    AMDArch.GFX_1201: _rows_rdna4(),
+    AMDArch.GFX_1201: _rows_rdna4(dense_matrix_state="ready"),
     AMDArch.GFX_1250: _rows_cdna5(),
     AMDArch.GFX_1251: _rows_cdna5_gfx1251(),
 }

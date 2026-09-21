@@ -141,3 +141,12 @@ def test_d128_batches_qk_and_v_loads_before_fragment_use():
     first_v_load = loop.index("memref.load %arg2")
     first_v_insert = loop.index("vector.insert", first_v_load)
     assert loop[first_v_load:first_v_insert].count("memref.load %arg2") == 16
+
+
+def test_d128_load_batch_does_not_rewrite_gfx1151_schedule():
+    ir = _gen(_directive(head_dim=128, arch="gfx1151"))
+    loop = ir[ir.index("scf.for") :]
+    qk_region = loop[:loop.index("tessera_rocm.wmma")]
+    before_insert = qk_region[:qk_region.index("vector.insert")]
+    assert before_insert.count("memref.load %arg0") == 1
+    assert "memref.load %arg1" not in before_insert

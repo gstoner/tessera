@@ -7,6 +7,29 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX12 public projection and D=128 load batching — 2026-09-21
+
+Owner ROCM-2 / ROCM-4; sync
+`GFX12-PUBLIC-LINEAR-LOAD-BATCH-2026-09-21`.
+
+The bounded `gfx1201` scheduled proofs now join public capability and execution
+rows for `tessera.matmul`, `tessera.flash_attn`, and `tessera.softmax`. Input
+dtype projection is limited to the storage forms proved by each package;
+accumulator/output types do not become independent input claims.
+
+The D=128 linear-attention generator now batches independent Q/K/V loads before
+their consumers. LLVM/MLIR 23.1.1 + ROCm 10.0 validation on Tajasarus
+(RX 9070 XT) passes the exact-device NumPy comparison. Paired resident-buffer
+timing improved 0.037174 ms to 0.028943 ms (**1.284x**); load waits fell 105 to
+70 and full drains 81 to 16, with constant load count, LDS, and zero scratch.
+The exact trial and HSACO-resource record is in the
+[load-batching packet](../../../../benchmarks/baselines/gfx12_linear_attn_load_batch_20260921/README.md).
+
+`gfx1200` remains the open exact-device action: none of this RX 9070 XT proof
+transfers. It requires its own launch, numerical, resource, and timing evidence
+before any public execution row, family promotion, topology default, or
+performance claim.
+
 ## GFX12 exact-target support audit — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync `GFX12-EXACT-TARGET-SUPPORT-2026-09-21`.
@@ -34,16 +57,9 @@ boundary:
 
 Open work, in order:
 
-1. Project the existing bounded gfx1201 package evidence into public capability
-   and execution-matrix rows. The generated target map intentionally remains
-   conservative until this join exists; do not simply flip `matmul` to ready.
-2. Change the `linear_attn` D=128 generator to issue independent loads in a
-   batch before the wait, mirroring the already proved `lds-copy-depth` GEMM
-   staging structure. Re-run correctness, static resource, wait/drain, and
-   paired timing gates on gfx1201.
-3. Acquire matching gfx1200 hardware evidence before promoting any family or
+1. Acquire matching gfx1200 hardware evidence before promoting any family or
    adding topology/performance defaults. gfx1201 evidence cannot satisfy this.
-4. Run R9700/R9700S/R9600D hardware validation only before making a
+2. Run R9700/R9700S/R9600D hardware validation only before making a
    product-specific performance or topology claim; ISA-level gfx1201
    correctness is already established on RX 9070 XT.
 

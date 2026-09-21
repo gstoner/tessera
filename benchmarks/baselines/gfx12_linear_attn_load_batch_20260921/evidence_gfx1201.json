@@ -1,0 +1,99 @@
+{
+  "baseline_commit": "aacee94ba3cda65e6eec05021965483dfea3f0ac",
+  "candidate_commit": "3a4272d4",
+  "compiler": "LLVM/MLIR 23.1.1 assertions + ROCm 10.0",
+  "device": "Radeon RX 9070 XT",
+  "host": "tajasarus",
+  "arms": {
+    "baseline": {
+      "device_median_ms": 0.037174144744873044,
+      "device_trials_ms": [
+        0.03504276657104492,
+        0.03636865615844727,
+        0.03720896911621094,
+        0.037191638946533205,
+        0.037174144744873044,
+        0.03721020889282227,
+        0.037205726623535156,
+        0.03717618560791015,
+        0.037088462829589844,
+        0.037048263549804686,
+        0.03703545761108398
+      ],
+      "image": "/tmp/la_gfx1201_old.hsaco",
+      "sha256": "7a14194e1448b15826094998b6d2c0a237e5b43c22b96b8d2c31c781bdfdbe0d",
+      "static": {
+        "full_load_drain_count": 81,
+        "full_load_drain_pct": 77.14285714285714,
+        "global_load_count": 160,
+        "group_segment_fixed_size": 9216,
+        "instruction_count": 3189,
+        "load_wait_count": 105,
+        "load_wait_immediates": {
+          "0": 81,
+          "1": 24
+        },
+        "loads_per_wait": 1.5238095238095237,
+        "private_segment_fixed_size": 0,
+        "sgpr_count": 44,
+        "vgpr_count": 94
+      }
+    },
+    "candidate": {
+      "device_median_ms": 0.028942771911621094,
+      "device_trials_ms": [
+        0.023954532623291017,
+        0.025428590774536134,
+        0.029007635116577148,
+        0.029007957458496093,
+        0.02901662063598633,
+        0.031228271484375,
+        0.028970251083374022,
+        0.028942771911621094,
+        0.028929359436035158,
+        0.02890485954284668,
+        0.028881126403808594
+      ],
+      "image": "/tmp/la_gfx1201_new.hsaco",
+      "sha256": "9210b9ba515f6987a885a267a0b9f002e1a4b189fbd208d7370147712766b9ea",
+      "static": {
+        "full_load_drain_count": 16,
+        "full_load_drain_pct": 22.857142857142858,
+        "global_load_count": 160,
+        "group_segment_fixed_size": 9216,
+        "instruction_count": 2903,
+        "load_wait_count": 70,
+        "load_wait_immediates": {
+          "0": 16,
+          "1": 8,
+          "2": 12,
+          "3": 8,
+          "4": 4,
+          "6": 4,
+          "8": 4,
+          "a": 4,
+          "c": 5,
+          "e": 5
+        },
+        "loads_per_wait": 2.2857142857142856,
+        "private_segment_fixed_size": 0,
+        "sgpr_count": 42,
+        "vgpr_count": 114
+      }
+    }
+  },
+  "candidate_speedup": 1.28440167577546,
+  "causal": true,
+  "chip": "gfx1201",
+  "dtype": "fp16",
+  "iterations_per_trial": 1000,
+  "max_abs_candidate_vs_baseline": 0.0,
+  "shape": [
+    1,
+    1,
+    32,
+    128
+  ],
+  "timing": "HIP events; resident buffers; alternating arm order",
+  "trials": 11
+}

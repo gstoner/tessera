@@ -8,6 +8,15 @@ last_updated: 2026-09-21
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX12 public projection and D=128 load batching — 2026-09-21
+
+Owner ROCM-2 / ROCM-4; sync
+`GFX12-PUBLIC-LINEAR-LOAD-BATCH-2026-09-21`. The shared capability/execution
+registries gain only exact `rocm_gfx1201` rows, and load batching changes only
+the ROCm generator. CUDA IR, ABI, runtime, dtype, and numerical contracts are
+unchanged. No CUDA proof is inferred, and RX 9070 XT evidence does not promote
+`gfx1200`.
+
 ## GFX12 exact-target alias correction — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync `GFX12-EXACT-TARGET-SUPPORT-2026-09-21`. Shared

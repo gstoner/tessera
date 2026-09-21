@@ -149,7 +149,9 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   // feature-map/select/fragment use so the backend can place one wait after a
   // load batch instead of repeatedly draining the VMEM queue.  Other head
   // dimensions retain their established instruction schedule.
-  bool batchIndependentLoads = D == 128;
+  // Scope the physical schedule to RDNA4: this loop has owning-device proof on
+  // gfx1201, while gfx1151 keeps its separately validated schedule.
+  bool batchIndependentLoads = D == 128 && rdna4;
   auto packFrag = [&](OpBuilder &bb, Location l, ArrayRef<Value> elements) {
     assert(elements.size() == 16 && "WMMA fragment requires 16 source elements");
     Value fr = fragZero;

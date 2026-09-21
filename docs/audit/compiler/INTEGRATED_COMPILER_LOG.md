@@ -21,7 +21,7 @@ current proof. Current priorities live only in the plan.
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
 
-PRs: pending
+PRs: [#792](https://github.com/gstoner/tessera/pull/792)
 
 Outcome: The S8 Qwen3-MoE compiler example became an executable Apple CPU
 oracle and exposed a silent wrong-answer path: Graph IR retained the third

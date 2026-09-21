@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-28
+last_updated: 2026-09-21
 audit_role: reference
 ---
 
@@ -25,6 +25,37 @@ audit_role: reference
 > Surveyed 2026-07-28 against `ROCm/rocm-libraries@develop`.
 
 ---
+
+## Gfx1201 datatype application checklist
+
+This reference does not own Tessera support status. The live state remains in
+the [integrated compiler plan](INTEGRATED_COMPILER_PLAN.md#numpol-carrier-1),
+the [ROCm queue](../backend/rocm/todo.md), and generated dtype-flow views. A
+2026-09-21 source review nevertheless turns the survey's lessons into a useful
+gfx1201 code-generation checklist:
+
+| Boundary | gfx1201 requirement | Current machine-readable owner |
+|---|---|---|
+| storage | Preserve canonical `fp16`, `bf16`, E4M3, E5M2, signed `int8`, or packed signed `int4`; do not infer an input from an accumulator type. | `python/tessera/dtype.py`, `rocm_exact_device_proofs.py` |
+| architecture | Select the exact `GFX_1201` row. Shared RDNA4 ISA forms do not transfer RX 9070 proof to `gfx1200`. | `rocm_isa_contract.py`, `rocm_target.py` |
+| instruction | Select the operand pair, K shape, accumulator, signedness, and dense/sparse path before emission. Mixed E4M3/E5M2 order is significant. | `select_amd_matrix_instruction`, `wmma_dtype_forms` |
+| physical storage | Carry BF16 packing, FP8 flavor, int4 nibble order, and independent integer signedness into fragments and the launch ABI. | `rocm_fragment.py`, `GenerateWMMAGemmKernel.cpp` |
+| execution | Bind the scheduled ABI to an exact-target executor and require both the selected HIP device and compiler chip to be `gfx1201`. | `execution_matrix.py`, `runtime.py` |
+| proof | Check the emitted mnemonic and numerical result for every admitted storage on the owning device. | `test_rocm_gfx1201_scheduled.py`, Tajasarus packet |
+
+The resulting dense input matrix is deliberately smaller than the target-wide
+dtype vocabulary: f16/bf16 accumulate in f32, FP8/BF8 accumulate in f32, and
+IU8/IU4 accumulate exactly in i32. `fp32` and `int32` are result/accumulator
+forms, not RDNA4 WMMA inputs. FP4, FP6, MX formats, bool, complex, and TF32 are
+not silently widened into these rows: scaled MX/FP4 needs an explicit scale
+lineage and schedule, while TF32 is a math mode rather than storage.
+
+This walk also sharpens the next gaps suggested by the surveyed compilers:
+derive load/packing from the fragment descriptor instead of branching again in
+the emitter; make block-scale operands first-class schedule values; keep sparse
+SWMMAC admission separate from dense WMMA; and key every measured selection or
+cache record by exact architecture, datatype pair, accumulator, and physical
+packing. These are design directions, not promotion claims.
 
 ## 0. Why these four
 

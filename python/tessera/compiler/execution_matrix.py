@@ -127,6 +127,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "gfx1151/gfx1201 kernel from the row-program emitter over the "
                              "compiler-derived gradient (one block per row, lanes per feature, "
                              "K steps and Philox inside the kernel)",
+    "rocm_gfx1201_compiled": "Exact gfx1201 guarded scheduled matmul executor",
+    "rocm_gfx1201_flash_attn_compiled":
+        "Exact gfx1201 guarded compiler-generated flash-attention executor",
+    "rocm_gfx1201_softmax_compiled":
+        "Exact gfx1201 guarded compiler-generated softmax executor",
     "nvidia_ebm_langevin_native_compiled": "The EBM Langevin loop as one cooperative "
                              "sm_120 kernel from the row-program emitter over the "
                              "compiler-derived gradient",

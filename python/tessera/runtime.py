@@ -33407,6 +33407,57 @@ def _execute_nvidia_physical_general_solver(artifact: RuntimeArtifact, args: Any
     return _execute_physical_general_solver(artifact, args, target="nvidia_sm120")
 
 
+def _execute_rocm_gfx1201_exact(
+    artifact: RuntimeArtifact,
+    args: Any,
+    executor: Any,
+) -> Any:
+    """Dispatch one public gfx1201 row without transferring its device proof.
+
+    Generic ROCm executors select code generation through ``_rocm_chip()`` and
+    execute on the calling thread's selected HIP device.  An exact-target row
+    therefore needs both identities pinned before it delegates; otherwise a
+    manually stamped ``rocm_gfx1201`` artifact could execute gfx1151 code and
+    report success under the gfx1201 evidence row.
+    """
+    target = str((artifact.metadata or {}).get("target") or "")
+    if target != "rocm_gfx1201":
+        raise ValueError(
+            f"gfx1201 exact executor requires target='rocm_gfx1201'; got {target!r}"
+        )
+    live = _rocm_live_arch()
+    if live != "gfx1201":
+        raise _RocmCompiledUnavailable(
+            "rocm_gfx1201 exact executor requires selected HIP device gfx1201; "
+            f"live architecture is {live or 'unavailable'}"
+        )
+    selected = _rocm_chip()
+    if selected != "gfx1201":
+        raise _RocmCompiledUnavailable(
+            "rocm_gfx1201 exact executor requires TESSERA_ROCM_CHIP=gfx1201; "
+            f"compiler target is {selected!r}"
+        )
+    return executor(artifact, args)
+
+
+def _execute_rocm_gfx1201_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_rocm_gfx1201_exact(artifact, args, _execute_rocm_compiled_gemm)
+
+
+def _execute_rocm_gfx1201_flash_attn_compiled(
+    artifact: RuntimeArtifact, args: Any,
+) -> Any:
+    return _execute_rocm_gfx1201_exact(
+        artifact, args, _execute_rocm_compiled_flash_attn
+    )
+
+
+def _execute_rocm_gfx1201_softmax_compiled(
+    artifact: RuntimeArtifact, args: Any,
+) -> Any:
+    return _execute_rocm_gfx1201_exact(artifact, args, _execute_rocm_compiled_softmax)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -33446,6 +33497,10 @@ def _executor_table():
         "jit_cpu_numpy": _execute_jit_cpu_artifact,
         "rocm_wmma": _execute_rocm_wmma_artifact,
         "rocm_compiled": _execute_rocm_compiled_gemm,
+        "rocm_gfx1201_compiled": _execute_rocm_gfx1201_compiled,
+        "rocm_gfx1201_flash_attn_compiled":
+            _execute_rocm_gfx1201_flash_attn_compiled,
+        "rocm_gfx1201_softmax_compiled": _execute_rocm_gfx1201_softmax_compiled,
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
         "rocm_flash_attn_bwd_compiled": _execute_rocm_compiled_flash_attn_bwd,
         "rocm_selective_ssm_bwd_compiled": _execute_rocm_compiled_selective_ssm_bwd,

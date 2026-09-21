@@ -15,8 +15,41 @@ from tessera.compiler.rocm_pipeline import ROCMExecutablePipeline
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tests.unit.test_scheduled_kernel_consumers import _module
 
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+def test_gfx1201_public_matmul_row_uses_exact_executor_on_owning_device():
+    """The public row reaches its implementation only on its proved target."""
+    from tessera import runtime as rt
 
-
+    assert rt._rocm_live_arch() == "gfx1201"
+    assert rt._rocm_chip() == "gfx1201"
+    artifact = rt.RuntimeArtifact(metadata={
+        "target": "rocm_gfx1201",
+        "compiler_path": "rocm_compiled",
+        "executable": True,
+        "execution_kind": "native_gpu",
+        "arg_names": ["a", "b"],
+        "output_name": "c",
+        "ops": [{
+            "op_name": "tessera.matmul",
+            "result": "c",
+            "operands": ["a", "b"],
+            "kwargs": {},
+        }],
+    })
+    rng = np.random.default_rng(1201)
+    a = (rng.standard_normal((32, 32)) * 0.25).astype(np.float16)
+    b = (rng.standard_normal((32, 32)) * 0.25).astype(np.float16)
+    result = rt.launch(artifact, (a, b))
+    assert result["ok"] is True, result.get("reason")
+    assert result["execution_kind"] == "native_gpu"
+    np.testing.assert_allclose(
+        result["output"], a.astype(np.float32) @ b.astype(np.float32),
+        rtol=0, atol=5e-2,
+    )
 
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="requires native compiler")

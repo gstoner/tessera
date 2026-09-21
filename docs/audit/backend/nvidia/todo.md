@@ -8,6 +8,14 @@ last_updated: 2026-09-21
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 dtype and exact-executor closure — 2026-09-21
+
+Owner ROCM-2 / NUMPOL-CARRIER-1; sync
+`GFX1201-DTYPE-EXACT-EXECUTOR-2026-09-21`. Not applicable to CUDA physical
+execution: the exact-executor guard and dense dtype-state split are ROCm-only,
+and the shared inventory only attaches existing gfx1201 proof metadata. No
+NVIDIA IR, ABI, dtype, numerical, runtime, or device claim changes.
+
 ## GFX12 public projection and D=128 load batching — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync

@@ -16,6 +16,7 @@ from tessera.compiler.rocm_isa_contract import (
     amd_dtype_contract,
     select_amd_matrix_instruction,
 )
+from tessera.compiler.rocm_exact_device_proofs import GFX1201_PUBLIC_PROOFS
 from tessera.compiler.rocm_target import AMDArch, TesseraROCmTargetError
 
 
@@ -40,8 +41,38 @@ def test_registered_architecture_contracts_are_dtype_total() -> None:
 def test_gfx1201_matmul_dtype_flow_uses_its_exact_isa_contract() -> None:
     state = _amd_matmul_isa_state("matmul", "rocm_gfx1201", "fp16")
     assert state is not None
-    assert state.status == "artifact_only"
+    assert state.status == "ready"
     assert state.source == "rocm_isa_contract[GFX_1201]"
+
+
+def test_rdna4_dense_dtype_state_is_exact_target_scoped() -> None:
+    proved = next(
+        set(proof.dtypes)
+        for proof in GFX1201_PUBLIC_PROOFS
+        if proof.op_name == "tessera.matmul"
+    )
+    assert proved == {"fp16", "bf16", "fp8_e4m3", "fp8_e5m2", "int8", "int4"}
+    for storage in proved:
+        assert amd_dtype_contract(
+            AMDArch.GFX_1201, storage
+        ).dense_matrix == "ready"
+        assert select_amd_matrix_instruction(
+            AMDArch.GFX_1201, storage
+        ).compiler_state == "ready"
+        assert amd_dtype_contract(
+            AMDArch.GFX_1200, storage
+        ).dense_matrix == "artifact_only"
+        assert select_amd_matrix_instruction(
+            AMDArch.GFX_1200, storage
+        ).compiler_state == "artifact_only"
+
+    # Accumulator/result formats do not become input formats merely because
+    # every proved matrix route produces one of them.
+    for storage in ("fp32", "int32"):
+        with pytest.raises(
+            TesseraROCmTargetError, match="ROCM_TILE_UNSUPPORTED_DTYPE"
+        ):
+            select_amd_matrix_instruction(AMDArch.GFX_1201, storage)
 
 
 def test_architecture_identity_does_not_infer_wave_or_matrix_path() -> None:

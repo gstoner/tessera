@@ -7,6 +7,24 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 dtype and exact-executor closure — 2026-09-21
+
+Owner ROCM-2 / NUMPOL-CARRIER-1; sync
+`GFX1201-DTYPE-EXACT-EXECUTOR-2026-09-21`.
+
+The public gfx1201 rows no longer dispatch through architecture-generic ROCm
+executors. Dedicated wrappers require artifact target `rocm_gfx1201`, selected
+HIP device `gfx1201`, and compiler chip `gfx1201` before delegating, so an
+RX 9070 proof cannot be reported by a gfx1151 launch. The dtype inventory now
+joins exact matmul proof for `fp16`, `bf16`, E4M3, E5M2, signed `int8`, and
+packed signed `int4`; the exact gfx1201 dense ISA rows are `ready` for those
+inputs. `fp32`/`int32` remain accumulator or output forms, and gfx1200 remains
+`artifact_only` until its own device proof. Sparse, scaled MX/FP4, and broader
+numerical-policy admission remain separate open work.
+
+Apple, NVIDIA, and x86 are not applicable to physical execution for this sync:
+their IR, ABI, dtype, runtime, and numerical rows are unchanged.
+
 ## GFX12 public projection and D=128 load batching — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync

@@ -30,7 +30,7 @@ GFX1201_PUBLIC_PROOFS: tuple[ROCmExactDeviceProof, ...] = (
         target="rocm_gfx1201",
         op_name="tessera.matmul",
         compiler_path="rocm_compiled",
-        executor_id="rocm_compiled",
+        executor_id="rocm_gfx1201_compiled",
         op_family="matmul",
         # Public input-storage spellings proved by the scheduled packages.
         # f32/i32 are accumulator/output forms, not independently proved
@@ -59,7 +59,7 @@ GFX1201_PUBLIC_PROOFS: tuple[ROCmExactDeviceProof, ...] = (
         target="rocm_gfx1201",
         op_name="tessera.flash_attn",
         compiler_path="rocm_flash_attn_compiled",
-        executor_id="rocm_flash_attn_compiled",
+        executor_id="rocm_gfx1201_flash_attn_compiled",
         op_family="attention",
         dtypes=("bf16", "fp16"),
         numerical_fixture="tests/unit/test_rocm_gfx1201_scheduled.py",
@@ -77,7 +77,7 @@ GFX1201_PUBLIC_PROOFS: tuple[ROCmExactDeviceProof, ...] = (
         target="rocm_gfx1201",
         op_name="tessera.softmax",
         compiler_path="rocm_softmax_compiled",
-        executor_id="rocm_softmax_compiled",
+        executor_id="rocm_gfx1201_softmax_compiled",
         op_family="softmax",
         dtypes=("fp32",),
         numerical_fixture="tests/unit/test_rocm_gfx1201_scheduled.py",

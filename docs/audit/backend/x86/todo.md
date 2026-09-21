@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 dtype and exact-executor closure — 2026-09-21
+
+Owner ROCM-2 / NUMPOL-CARRIER-1; sync
+`GFX1201-DTYPE-EXACT-EXECUTOR-2026-09-21`. Not applicable to x86 physical
+execution: the exact-executor guard and dense dtype-state split are ROCm-only,
+and the shared inventory only attaches existing gfx1201 proof metadata. No x86
+IR, ABI, dtype, numerical, runtime, or device claim changes.
+
 ## GFX12 public projection and D=128 load batching — 2026-09-21
 
 Owner ROCM-2 / ROCM-4; sync

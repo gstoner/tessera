@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 import ml_dtypes
 import numpy as np
@@ -11,9 +12,23 @@ from tessera import runtime
 from tessera.compiler.native_artifact import NativeEntryPoint, NativeImageArtifact
 from tessera.compiler.rocm_mxfp4_native import (
     GFX_MXFP4_W4A8_EXACT_ABI,
+    _rocm_hipcc,
     emit_mxfp4_w4a8_exact_hip,
     mxfp4_w4a8_descriptor,
 )
+
+
+def test_hipcc_selection_handles_split_rocm_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    core = tmp_path / "rocm" / "core"
+    hipcc = tmp_path / "rocm" / "bin" / "hipcc"
+    core.mkdir(parents=True)
+    hipcc.parent.mkdir(parents=True, exist_ok=True)
+    hipcc.write_text("#!/bin/sh\n")
+    monkeypatch.delenv("TESSERA_ROCM_HIPCC", raising=False)
+    monkeypatch.setenv("PATH", "")
+    assert _rocm_hipcc(core) == hipcc
 
 
 def _image() -> NativeImageArtifact:

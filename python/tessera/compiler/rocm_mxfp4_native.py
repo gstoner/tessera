@@ -7,7 +7,9 @@ therefore never uses the lossy row-reference fold.
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 
@@ -24,7 +26,6 @@ from .native_artifact import (
 from .rocm_native import (
     ROCMNativePackage,
     _driver_selected_device_libraries,
-    _rocm_clang,
     _rocm_path,
     _version_fingerprint,
 )
@@ -34,6 +35,30 @@ GFX_MXFP4_W4A8_EXACT_ABI = (
     "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k."
     "e4m3_e2m1_e8m0_bf16.exact.v1"
 )
+
+
+def _rocm_hipcc(rocm_path: Path) -> Path | None:
+    """Return the HIP driver that owns ``--genco`` code-object emission.
+
+    ``amdclang++`` is still used by :func:`_driver_selected_device_libraries`
+    to fingerprint the exact OCML/OCKL/OCLC selection, but it is not a drop-in
+    replacement for the HIP wrapper on split ROCm installations: the raw
+    driver on Tajasarus deliberately rejects the wrapper-only ``--genco``
+    option.
+    """
+
+    configured = os.environ.get("TESSERA_ROCM_HIPCC")
+    if configured:
+        path = Path(configured).expanduser()
+        return path if path.is_file() else None
+    candidates = [rocm_path / "bin" / "hipcc"]
+    if rocm_path.name == "core":
+        candidates.append(rocm_path.parent / "bin" / "hipcc")
+    candidates.append(Path("/opt/rocm/bin/hipcc"))
+    found = shutil.which("hipcc")
+    if found:
+        candidates.append(Path(found))
+    return next((path for path in candidates if path.is_file()), None)
 
 
 def emit_mxfp4_w4a8_exact_hip(*, entry: str = "tessera_mxfp4_w4a8_exact") -> str:
@@ -182,9 +207,9 @@ def package_mxfp4_w4a8_exact(
         raise ValueError("MXFP4 W4A8 requires positive M/N and K divisible by 32")
     source = emit_mxfp4_w4a8_exact_hip(entry=entry)
     rocm_path = _rocm_path()
-    compiler = _rocm_clang(rocm_path)
+    compiler = _rocm_hipcc(rocm_path)
     if compiler is None:
-        raise RuntimeError("MXFP4 W4A8 packaging requires AMD clang")
+        raise RuntimeError("MXFP4 W4A8 packaging requires the HIP compiler driver")
     device_libraries = _driver_selected_device_libraries(arch="gfx1201")
     with tempfile.TemporaryDirectory(prefix="tessera-mxfp4-") as directory:
         source_path = Path(directory) / "kernel.hip"

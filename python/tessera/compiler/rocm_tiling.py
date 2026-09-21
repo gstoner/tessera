@@ -205,10 +205,15 @@ class RankedTileCandidate:
     #: VGPR-limited occupancy in waves/SIMD, from `rocm_occupancy`.  None when
     #: the arch's constants are unestablished.
     #:
-    #: UNWIRED as a ranking input (Decision #29a condition 1): it is reported,
-    #: not scored.  `score` below is deliberately unchanged, because making
-    #: occupancy binding changes which tile production selects, and that needs
-    #: exact-device proof on the launch arch before it can move a selector.
+    #: UNWIRED as a ranking input, and **measured to be the right call** rather
+    #: than caution (Decision #29a condition 1): reported, never scored.  The
+    #: exact-device proof this was gated on came back negative -- on gfx1151
+    #: the two-wave D=128 attention kernel at 113 VGPRs (12 waves/SIMD, zero
+    #: spills) is 2.2x SLOWER than the same kernel at 121 (10 waves/SIMD),
+    #: because freeing those registers cost 36% more `s_waitcnt` with memory
+    #: traffic unchanged.  +20% occupancy, -55% throughput: a selector
+    #: maximising this field picks the slower kernel.  See
+    #: `benchmarks/baselines/rdna_occupancy_closure_20260921/`.
     #: Owned by RDNA-OCCUPANCY-GRANULE-2026-09-20.
     #:
     #: Worth reporting now because the register margin next to it cannot answer

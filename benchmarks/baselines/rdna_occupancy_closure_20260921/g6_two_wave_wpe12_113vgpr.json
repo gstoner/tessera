@@ -1,0 +1,294 @@
+{
+  "schema": "tessera.rocm.g6b.v1",
+  "evidence_arch": "gfx1151",
+  "trials": 9,
+  "iterations": 20,
+  "rows": [
+    {
+      "shape": [
+        1,
+        8,
+        512,
+        64
+      ],
+      "causal": false,
+      "schedule": "one_wave",
+      "device_trials_ms": [
+        0.08459944725036621,
+        0.08377395272254944,
+        0.08381394743919372,
+        0.08385394811630249,
+        0.08385605216026307,
+        0.0837780475616455,
+        0.08388605117797851,
+        0.08389809727668762,
+        0.08392804861068726
+      ],
+      "device_median_ms": 0.08385605216026307,
+      "e2e_trials_ms": [
+        7.432921,
+        6.319006,
+        6.258523,
+        6.570391,
+        6.306976,
+        6.410021,
+        6.123345,
+        6.631585,
+        6.409671
+      ],
+      "e2e_median_ms": 6.409671,
+      "tflops": 6.40229176272154,
+      "resources": {
+        "vgpr_count": 134,
+        "sgpr_count": 61,
+        "lds_bytes": 5312,
+        "scratch_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0,
+        "spills": false,
+        "vgpr_limited_waves_per_simd": 10
+      },
+      "max_abs_vs_one_wave": 0.0
+    },
+    {
+      "shape": [
+        1,
+        8,
+        1024,
+        64
+      ],
+      "causal": false,
+      "schedule": "one_wave",
+      "device_trials_ms": [
+        0.33715314865112306,
+        0.33045639991760256,
+        0.3423367977142334,
+        0.33690414428710935,
+        0.3431848526000977,
+        0.34261469841003417,
+        0.34606873989105225,
+        0.3506568431854248,
+        0.3395266532897949
+      ],
+      "device_median_ms": 0.3423367977142334,
+      "e2e_trials_ms": [
+        8.26678,
+        7.747249,
+        7.481124,
+        7.547967,
+        8.022915,
+        7.442132,
+        7.706026,
+        7.351336,
+        7.621852
+      ],
+      "e2e_median_ms": 7.621852,
+      "tflops": 6.273014359948001,
+      "resources": {
+        "vgpr_count": 134,
+        "sgpr_count": 61,
+        "lds_bytes": 5312,
+        "scratch_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0,
+        "spills": false,
+        "vgpr_limited_waves_per_simd": 10
+      },
+      "max_abs_vs_one_wave": 0.0
+    },
+    {
+      "shape": [
+        1,
+        16,
+        1024,
+        128
+      ],
+      "causal": false,
+      "schedule": "one_wave",
+      "device_trials_ms": [
+        1.3296714782714845,
+        1.303797435760498,
+        1.3011859893798827,
+        1.284783172607422,
+        1.2764643669128417,
+        1.2671270370483398,
+        1.249433994293213,
+        1.2373924255371094,
+        1.2474334716796875
+      ],
+      "device_median_ms": 1.2764643669128417,
+      "e2e_trials_ms": [
+        15.481327,
+        12.858586,
+        13.053607,
+        13.309552,
+        13.138812,
+        13.641871,
+        13.12868,
+        13.28831,
+        13.321572
+      ],
+      "e2e_median_ms": 13.28831,
+      "tflops": 6.729474644697644,
+      "resources": {
+        "vgpr_count": 218,
+        "sgpr_count": 54,
+        "lds_bytes": 9408,
+        "scratch_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0,
+        "spills": false,
+        "vgpr_limited_waves_per_simd": 6
+      },
+      "max_abs_vs_one_wave": 5.597248673439026e-07,
+      "paired_speedup": 1.0,
+      "paired_win_rate": 0.0
+    },
+    {
+      "shape": [
+        1,
+        16,
+        1024,
+        128
+      ],
+      "causal": false,
+      "schedule": "two_wave",
+      "device_trials_ms": [
+        3.149290084838867,
+        3.1667150497436523,
+        3.1627511978149414,
+        3.1612300872802734,
+        3.1576410293579102,
+        3.1759359359741213,
+        3.1649477005004885,
+        3.1756765365600588,
+        3.167795181274414
+      ],
+      "device_median_ms": 3.1649477005004885,
+      "e2e_trials_ms": [
+        15.932104,
+        16.106234,
+        16.096013,
+        15.334858,
+        15.762333,
+        16.234846,
+        15.569583,
+        15.947475,
+        15.120497
+      ],
+      "e2e_median_ms": 15.932104,
+      "tflops": 2.7140842139797865,
+      "resources": {
+        "vgpr_count": 113,
+        "sgpr_count": 50,
+        "lds_bytes": 11456,
+        "scratch_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0,
+        "spills": false,
+        "vgpr_limited_waves_per_simd": 12
+      },
+      "max_abs_vs_one_wave": 5.597248673439026e-07,
+      "paired_speedup": 0.4042461936125792,
+      "paired_win_rate": 0.0
+    },
+    {
+      "shape": [
+        1,
+        16,
+        1009,
+        128
+      ],
+      "causal": true,
+      "schedule": "one_wave",
+      "device_trials_ms": [
+        0.7428952693939209,
+        0.7363308429718017,
+        0.7240643501281738,
+        0.7202101707458496,
+        0.718332576751709,
+        0.7287033557891845,
+        0.7126886367797851,
+        0.7050934791564941,
+        0.7074096202850342
+      ],
+      "device_median_ms": 0.7202101707458496,
+      "e2e_trials_ms": [
+        14.902244,
+        12.532717,
+        12.752668,
+        13.063998,
+        12.591789,
+        12.160255,
+        12.654733,
+        12.796911,
+        12.806962
+      ],
+      "e2e_median_ms": 12.752668,
+      "tflops": 11.580119096850538,
+      "resources": {
+        "vgpr_count": 218,
+        "sgpr_count": 54,
+        "lds_bytes": 9408,
+        "scratch_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0,
+        "spills": false,
+        "vgpr_limited_waves_per_simd": 6
+      },
+      "max_abs_vs_one_wave": 8.357688784599304e-06,
+      "paired_speedup": 1.0,
+      "paired_win_rate": 0.0
+    },
+    {
+      "shape": [
+        1,
+        16,
+        1009,
+        128
+      ],
+      "causal": true,
+      "schedule": "two_wave",
+      "device_trials_ms": [
+        1.6094308853149415,
+        1.6119499206542969,
+        1.6728994369506835,
+        1.6146991729736329,
+        1.668588638305664,
+        1.6478933334350585,
+        1.619530487060547,
+        1.6127296447753907,
+        1.6451631546020509
+      ],
+      "device_median_ms": 1.619530487060547,
+      "e2e_trials_ms": [
+        13.867034,
+        13.059137,
+        13.222146,
+        13.167393,
+        12.541017,
+        13.092209,
+        14.14786,
+        13.507933,
+        13.558716
+      ],
+      "e2e_median_ms": 13.222146,
+      "tflops": 5.1497144503511905,
+      "resources": {
+        "vgpr_count": 113,
+        "sgpr_count": 50,
+        "lds_bytes": 11456,
+        "scratch_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0,
+        "spills": false,
+        "vgpr_limited_waves_per_simd": 12
+      },
+      "max_abs_vs_one_wave": 8.357688784599304e-06,
+      "paired_speedup": 0.4400587963449316,
+      "paired_win_rate": 0.0
+    }
+  ],
+  "performance_status": "measured",
+  "all_correct": true
+}

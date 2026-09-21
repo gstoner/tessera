@@ -212,6 +212,35 @@ class TestWorkflowStructure:
                 f"lit lane must execute {test_name}; current proof step:\n{run_text}"
             )
 
+    @pytest.mark.parametrize("lane", ("lit", "rocm-serialize"))
+    def test_mlir_lanes_enable_only_the_exact_repository_pin(self, lane: str) -> None:
+        """A rolling apt.llvm.org patch must not reach the CMake build.
+
+        These lanes intentionally soft-skip when the hosted runner cannot
+        provide MLIR.  Patch drift is the same unavailable-toolchain case:
+        CMake treats a newer MLIR patch as contract-incompatible, so the
+        dependency step must leave ``mlir=false`` instead of scheduling a
+        configure that is guaranteed to fail.
+        """
+
+        wf = _load_workflow()
+        run_text = "\n".join(
+            step.get("run", "") for step in wf["jobs"][lane].get("steps", [])
+        )
+        for token in (
+            "TESSERA_REQUIRED_LLVM_VERSION",
+            "cmake/TesseraToolchainPins.cmake",
+            "/usr/lib/llvm-23/bin/llvm-config --version",
+            "/usr/lib/llvm-23/bin/mlir-opt --version",
+            '[ "$llvm_version" = "$required_llvm" ]',
+            '[ "$mlir_version" = "$required_llvm" ]',
+            'echo "mlir=false" >> "$GITHUB_OUTPUT"',
+        ):
+            assert token in run_text, (
+                f"{lane} must reject rolling LLVM/MLIR patch drift before "
+                f"configure; missing {token!r}"
+            )
+
     def test_rocm_compiler_suite_is_local_only(self) -> None:
         """The ROCm compiler suite is too heavy for hosted runners.
 

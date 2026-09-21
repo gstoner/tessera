@@ -745,3 +745,80 @@ def test_cdna5_shares_rdna_workgroup_limits():
     those two constants arch-independently is verified, not assumed."""
     assert MAX_WORKGROUPS_PER_WGP == 32
     assert MAX_WORKITEMS_PER_WORKGROUP == 1024
+
+
+# ── Review findings, PR #789 ────────────────────────────────────────────────
+
+
+def test_wave64_registers_cost_twice_the_storage():
+    """A VGPR is one dword per lane, so a wave64 register is 2x a wave32 one.
+    ISA 3.3.2.1 gives the block in dwords -- "16*32 or 8*64 = 512 DWORDs", and
+    24*32 = 12*64 on a 1536-register part -- so the block is the same physical
+    size while the register count filling it differs by 2x.  Dividing the
+    file's wave32 count by a wave64 count overstated occupancy by 2x."""
+    w32 = allocate_vgprs(121, arch=RDNA4, wave_size=WAVE32)
+    w64 = allocate_vgprs(121, arch=RDNA4, wave_size=WAVE64)
+    assert (w32.granule, w32.allocated, w32.waves_per_simd) == (24, 144, 10)
+    assert (w64.granule, w64.allocated) == (12, 132)
+    assert w64.waves_per_simd == 5  # not 1536 // 132 == 11
+
+
+def test_a_block_is_the_same_physical_size_in_either_wave_mode():
+    """The invariant behind the fix: equal dword footprints occupy equally."""
+    for vgprs32 in (24, 48, 96, 240):
+        w32 = allocate_vgprs(vgprs32, arch=RDNA4, wave_size=WAVE32)
+        w64 = allocate_vgprs(vgprs32 // 2, arch=RDNA4, wave_size=WAVE64)
+        assert w32.allocated * WAVE32 == w64.allocated * WAVE64
+        assert w32.waves_per_simd == w64.waves_per_simd
+
+
+def test_wave64_rungs_are_half_the_wave32_register_budgets():
+    w32 = {r.waves_per_simd: r.max_vgprs for r in occupancy_rungs(RDNA4)}
+    w64 = {
+        r.waves_per_simd: r.max_vgprs for r in occupancy_rungs(RDNA4, wave_size=WAVE64)
+    }
+    for waves in (12, 10, 8):
+        assert w64[waves] * 2 == w32[waves]
+
+
+def test_lds_bound_residency_does_not_lose_groups_to_per_simd_rounding():
+    """Three 2-wave groups on four SIMDs is six waves.  Computing a per-SIMD
+    ceiling first and multiplying back floors 6//4 to 1 and reports two
+    groups, discarding a runnable one."""
+    result = estimate_occupancy(
+        arch=RDNA4,
+        mode=WorkgroupProcessorMode.WGP,
+        vgprs=32,
+        lds_bytes=40 * 1024,
+        workgroup_threads=64,
+    )
+    pool = lds_pool_bytes(RDNA4, WorkgroupProcessorMode.WGP)
+    assert pool is not None and pool // (40 * 1024) == 3
+    assert result.groups_per_slot == 3
+    assert result.limiter == "lds"
+    # Waves distribute unevenly (2,2,1,1); the reported per-SIMD figure is the
+    # busiest SIMD's, because that is the register file that binds.
+    assert result.waves_per_simd == 2
+
+
+def test_residency_never_exceeds_any_single_ceiling():
+    """Property check across a grid: groups actually fit."""
+    for threads in (32, 64, 128, 256, 512):
+        for lds in (0, 4096, 16384, 40 * 1024, 64 * 1024):
+            for vgprs in (24, 64, 121, 200):
+                r = estimate_occupancy(
+                    arch=RDNA4,
+                    mode=WorkgroupProcessorMode.WGP,
+                    vgprs=vgprs,
+                    lds_bytes=lds,
+                    workgroup_threads=threads,
+                )
+                waves = r.groups_per_slot * r.waves_per_group
+                slots = wave_slots_per_simd(RDNA4)
+                assert slots is not None
+                assert waves <= slots * 4
+                assert r.waves_per_simd <= min(r.waves_by_vgpr, slots)
+                if lds:
+                    pool = lds_pool_bytes(RDNA4, WorkgroupProcessorMode.WGP)
+                    assert pool is not None
+                    assert r.groups_per_slot * r.lds_allocated_bytes <= pool

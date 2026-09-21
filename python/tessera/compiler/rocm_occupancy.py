@@ -515,10 +515,22 @@ def allocate_vgprs(
         )
     blocks = -(-vgprs // granule)  # ceil
     allocated = min(blocks * granule, per_wave_cap)
-    if allocated > regs:
+
+    # A VGPR is one dword per lane, so a wave64 register costs twice the
+    # storage of a wave32 one.  ISA 3.3.2.1 makes this explicit by giving the
+    # block size in dwords -- "16*32 or 8*64 = 512 DWORDs", and 24*32 = 12*64
+    # on a 1536-register part -- i.e. a block is the same physical size either
+    # way, while the *register count* that fills it differs by 2x.  Dividing
+    # the file's wave32 register count by a wave64 register count overstates
+    # wave64 occupancy by exactly 2x, so both sides are normalised to dwords.
+    lanes = wave_size
+    pool_dwords = regs * WAVE32
+    wave_dwords = allocated * lanes
+    if wave_dwords > pool_dwords:
         raise TesseraOccupancyError(
-            f"{vgprs} VGPRs rounds to {allocated}, which exceeds the "
-            f"{regs}-register file on {arch.name}: no wave can be created"
+            f"{vgprs} wave{wave_size} VGPRs round to {allocated} "
+            f"({wave_dwords} dwords), which exceeds the {pool_dwords}-dword "
+            f"register file on {arch.name}: no wave can be created"
         )
     return VgprAllocation(
         requested=vgprs,
@@ -526,7 +538,7 @@ def allocate_vgprs(
         blocks=blocks,
         allocated=allocated,
         wasted=allocated - vgprs,
-        waves_per_simd=regs // allocated,
+        waves_per_simd=pool_dwords // wave_dwords,
     )
 
 
@@ -583,9 +595,10 @@ def occupancy_rungs(
     n_blocks = -(-per_wave_cap // granule)
     sizes = sorted({min(b * granule, per_wave_cap) for b in range(1, n_blocks + 1)})
 
+    pool_dwords = regs * WAVE32
     best: dict[int, int] = {}
     for size in sizes:
-        waves = regs // size
+        waves = pool_dwords // (size * wave_size)
         if waves < 1:
             continue
         # Largest request reaching this wave count wins the rung.
@@ -815,24 +828,65 @@ def estimate_occupancy(
         arch,
         "add the arch to rocm_target._LDS_BYTES",
     )
-    # ISA 3.3.5: allocation is quantised to 1 KiB blocks.
-    lds_allocated = -(-lds_bytes // LDS_ALLOC_GRANULE_BYTES) * LDS_ALLOC_GRANULE_BYTES
+    # Allocation is quantised to a per-family block: 1 KiB on RDNA3.5/4,
+    # 2 KiB on CDNA5.  A module-wide constant would be 2x wrong on gfx125x.
+    lds_granule = _require(
+        lds_alloc_granule(arch),
+        "LDS allocation block size",
+        arch,
+        "read it from that family's ISA 3.3.4/3.3.5 and add it to "
+        "_LDS_ALLOC_GRANULE",
+    )
+    lds_allocated = -(-lds_bytes // lds_granule) * lds_granule
     if lds_bytes == 0:
         groups_by_lds = None  # unconstrained
-        waves_by_lds = slots_per_simd
     else:
         groups_by_lds = pool // lds_allocated
         if groups_by_lds < 1:
             raise TesseraOccupancyError(
                 f"one work-group needs {lds_bytes} B of LDS (allocated as "
-                f"{lds_allocated} B in 1 KiB blocks) but the {mode.value} pool "
-                f"is {pool} B on {arch.name}: not even one group is resident"
+                f"{lds_allocated} B in {lds_granule}-byte blocks) but the "
+                f"{mode.value} pool is {pool} B on {arch.name}: not even one "
+                f"group is resident"
             )
-        # Groups spread their waves across the slot's SIMDs.
-        waves_by_lds = max(1, (groups_by_lds * waves_per_group) // simds)
 
     waves_by_slots = slots_per_simd
 
+    # Residency is a count of *work-groups*, so derive it from group-level
+    # capacity and only then express it per SIMD.  Computing a per-SIMD wave
+    # ceiling from LDS first and multiplying back discards runnable waves
+    # whenever the wave count does not divide evenly across the SIMDs: three
+    # 2-wave groups on four SIMDs is six waves, which floors to one per SIMD
+    # and loses a whole group on the way back.
+    per_simd_cap = min(waves_by_vgpr, waves_by_slots)
+    groups_per_slot = (per_simd_cap * simds) // waves_per_group
+    if groups_by_lds is not None:
+        groups_per_slot = min(groups_per_slot, groups_by_lds)
+    # ISA 2.3 work-group ceiling; single-wave groups are exempt.
+    if waves_per_group > 1 and mode is WorkgroupProcessorMode.WGP:
+        groups_per_slot = min(groups_per_slot, MAX_WORKGROUPS_PER_WGP)
+    if groups_per_slot < 1:
+        raise TesseraOccupancyError(
+            f"no work-group of {workgroup_threads} threads is resident on "
+            f"{arch.name} in {mode.value} mode at {vgprs} VGPRs"
+        )
+
+    # An LDS ceiling is expressed in groups; convert to the per-SIMD unit for
+    # comparison, rounding *up* because waves need not distribute evenly --
+    # three 2-wave groups on four SIMDs is 2,2,1,1, and the busiest SIMD is
+    # what a register file has to hold.
+    waves_by_lds = (
+        waves_by_slots
+        if groups_by_lds is None
+        else min(waves_by_slots, -(-(groups_by_lds * waves_per_group) // simds))
+    )
+
+    # ``waves_per_simd`` is the per-SIMD *ceiling* -- the quantity the
+    # compiler's `Occupancy [waves/SIMD]` remark reports and the device
+    # measurements pin.  It is deliberately NOT achieved residency for one
+    # launch shape: a 8-wave group against a 9-wave ceiling fits four groups
+    # and leaves the ninth slot idle, which says something about that grid,
+    # not about the kernel's occupancy.  Residency is `groups_per_slot`.
     waves_per_simd = min(waves_by_vgpr, waves_by_lds, waves_by_slots)
     binding = [
         name
@@ -842,15 +896,7 @@ def estimate_occupancy(
             ("slots", waves_by_slots),
         )
         if value == waves_per_simd
-    ]
-
-    resident_waves = waves_per_simd * simds
-    groups_per_slot = resident_waves // waves_per_group
-    if groups_by_lds is not None:
-        groups_per_slot = min(groups_per_slot, groups_by_lds)
-    # ISA 2.3 work-group ceiling; single-wave groups are exempt.
-    if waves_per_group > 1 and mode is WorkgroupProcessorMode.WGP:
-        groups_per_slot = min(groups_per_slot, MAX_WORKGROUPS_PER_WGP)
+    ] or ["lds"]
 
     return WorkgroupOccupancy(
         arch=arch,

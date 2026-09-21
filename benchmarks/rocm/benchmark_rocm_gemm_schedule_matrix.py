@@ -340,7 +340,11 @@ def code_object_resources(
         "vgpr_spill_count": None, "sgpr_spill_count": None,
         "spill_count": None, "spills": None,
         "vgpr_limited_waves_per_simd": None,
-        "occupancy_model": "gfx1151 1536 VGPR/SIMD divided by assembler VGPR count",
+        "occupancy_model": (
+            "tessera.compiler.rocm_occupancy.allocate_vgprs: per-arch VGPR "
+            "file and allocation granule, granule-rounded, capped at the "
+            "per-wave budget"),
+        "occupancy_model_arch": CHIP,
     }
     with tempfile.NamedTemporaryFile(suffix=".hsaco") as obj:
         obj.write(hsaco)

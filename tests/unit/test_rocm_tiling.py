@@ -30,7 +30,7 @@ from tessera.compiler.rocm_tiling import (
     requires_lds_bank_padding,
 )
 
-CDNA = ROCmTargetProfile(arch=AMDArch.GFX_942)  # wave64, 256 VGPR + 256 AGPR
+CDNA = ROCmTargetProfile(arch=AMDArch.GFX_942)   # wave64, 256 VGPR + 256 AGPR
 RDNA = ROCmTargetProfile(arch=AMDArch.GFX_1100)  # wave32, 256 VGPR + 0 AGPR
 
 
@@ -57,10 +57,8 @@ def test_all_cdna_arches_have_512_budget() -> None:
 
 def test_all_rdna_wave32_arches_have_256_budget() -> None:
     for arch in (
-        AMDArch.GFX_1100,
-        AMDArch.GFX_1151,
-        AMDArch.GFX_1200,
-        AMDArch.GFX_1201,
+        AMDArch.GFX_1100, AMDArch.GFX_1151,
+        AMDArch.GFX_1200, AMDArch.GFX_1201,
     ):
         prof = ROCmTargetProfile(arch=arch)
         assert prof.agpr_budget == 0, arch.name
@@ -203,7 +201,8 @@ def test_prune_nothing_silently_lost() -> None:
 
 
 def test_prune_result_metadata() -> None:
-    result = prune_candidates([TileCandidate(TileShape(64, 64, 16), "fp16")], CDNA)
+    result = prune_candidates(
+        [TileCandidate(TileShape(64, 64, 16), "fp16")], CDNA)
     md = result.as_metadata_dict()
     assert md["n_kept"] == 1
     assert md["n_dropped"] == 0
@@ -339,21 +338,16 @@ def test_n_slice_single_part_is_identity() -> None:
 
 # ── Reported occupancy (RDNA-OCCUPANCY-GRANULE-2026-09-20) ──────────────────
 
-
-def _rdna4_profile():
-    return ROCmTargetProfile(arch=AMDArch.GFX_1201, pipeline_stages=2)
+RDNA4_PROFILE = ROCmTargetProfile(arch=AMDArch.GFX_1201, pipeline_stages=2)
 
 
 def test_ranked_candidates_report_occupancy():
-    profile = _rdna4_profile()
     cands = [TileCandidate(TileShape(64, 64, 16), "fp16", double_buffer=True)]
-    ranked = rank_candidates(cands, profile)
-    row = ranked[0]
+    row = rank_candidates(cands, RDNA4_PROFILE)[0]
     assert row.occupancy_waves_per_simd is not None
     assert 1 <= row.occupancy_waves_per_simd <= 16
     assert row.as_metadata_dict()["occupancy_waves_per_simd"] == (
-        row.occupancy_waves_per_simd
-    )
+        row.occupancy_waves_per_simd)
 
 
 def test_reported_occupancy_matches_the_occupancy_model():
@@ -361,51 +355,36 @@ def test_reported_occupancy_matches_the_occupancy_model():
     ``rocm_occupancy`` computes, it does not recompute it (Decision #31)."""
     from tessera.compiler.rocm_occupancy import allocate_vgprs
 
-    profile = _rdna4_profile()
     for shape in ((32, 32, 16), (64, 64, 16), (128, 128, 16)):
         cand = TileCandidate(TileShape(*shape), "fp16", double_buffer=True)
-        ranked = rank_candidates([cand], profile)[0]
+        ranked = rank_candidates([cand], RDNA4_PROFILE)[0]
         if ranked.occupancy_waves_per_simd is None:
             continue
-        assert (
-            ranked.occupancy_waves_per_simd
-            == allocate_vgprs(
-                ranked.vgpr_usage,
-                arch=profile.arch,
-                per_wave_cap=profile.vgpr_budget,
-            ).waves_per_simd
-        )
+        assert ranked.occupancy_waves_per_simd == allocate_vgprs(
+            ranked.vgpr_usage, arch=RDNA4_PROFILE.arch,
+            per_wave_cap=RDNA4_PROFILE.vgpr_budget).waves_per_simd
 
 
 def test_occupancy_is_reported_but_does_not_change_ranking():
     """UNWIRED as a ranking input (Decision #29a).  Making occupancy binding
     changes which tile production selects, which needs exact-device proof on
     the launch arch; until then the score must be untouched.  This test is what
-    stops the field quietly becoming load-bearing.
-    """
-    profile = _rdna4_profile()
+    stops the field quietly becoming load-bearing."""
     cands = [
         TileCandidate(TileShape(32, 32, 16), "fp16", double_buffer=True),
         TileCandidate(TileShape(64, 64, 16), "fp16", double_buffer=True),
         TileCandidate(TileShape(128, 64, 16), "fp16", double_buffer=True),
         TileCandidate(TileShape(64, 128, 16), "fp16", double_buffer=True),
     ]
-    ranked = rank_candidates(cands, profile)
-    # The score must be derivable without ever consulting occupancy: two
-    # candidates on different rungs may not be reordered by that fact.
+    ranked = rank_candidates(cands, RDNA4_PROFILE)
     for row in ranked:
         recomputed = float(row.vgpr_usage)
         if row.register_margin < 0:
             recomputed += 1_000_000 + abs(row.register_margin) * 100
         if row.lds_margin < 0:
             recomputed += 500_000 + abs(row.lds_margin) / 16
-        # score carries further terms; the point is only that no occupancy
-        # term appears -- a score that moved with occupancy would fail the
-        # monotonicity below.
         assert recomputed <= row.score + 1e-6
-
-    by_score = sorted(ranked, key=lambda r: r.score)
-    assert list(ranked) == by_score, "ranking must remain score-ordered"
+    assert list(ranked) == sorted(ranked, key=lambda r: r.score)
 
 
 def test_occupancy_is_none_for_an_arch_without_established_constants():
@@ -413,5 +392,4 @@ def test_occupancy_is_none_for_an_arch_without_established_constants():
     rank at all."""
     profile = ROCmTargetProfile(arch=AMDArch.GFX_942, pipeline_stages=2)
     cands = [TileCandidate(TileShape(64, 64, 16), "fp16", double_buffer=True)]
-    ranked = rank_candidates(cands, profile)
-    assert ranked[0].occupancy_waves_per_simd is None
+    assert rank_candidates(cands, profile)[0].occupancy_waves_per_simd is None

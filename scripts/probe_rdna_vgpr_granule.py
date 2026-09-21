@@ -121,6 +121,22 @@ def _predict(
     return min(file_size // allocated, wave_slots)
 
 
+def _min_waves_for(depth: int) -> int:
+    """__launch_bounds__ min-waves hint for a chain depth.
+
+    Shallow chains get a high hint so the allocator is squeezed onto a busy
+    rung; deep chains get 1 so it may use the whole per-wave budget.  Defined
+    for every depth so no requested pressure level is silently dropped.
+    """
+    if depth <= 8:
+        return 8
+    if depth <= 24:
+        return 4
+    if depth <= 48:
+        return 2
+    return 1
+
+
 def compile_one(
     hipcc: str, arch: str, depth: int, threads: int, min_waves: int
 ) -> dict[str, Any]:
@@ -225,13 +241,14 @@ def main() -> int:
         return 1
 
     packet["hipcc"] = hipcc
+    # __launch_bounds__ min-waves pushes the allocator onto different rungs;
+    # 1 lets it use the whole per-wave budget, widening the observed spread.
+    # Derived per depth rather than zipped against a fixed list: zip silently
+    # truncates, so a user adding a depth to hit a separating VGPR count would
+    # lose that observation and could still be told the answer is unique.
     observations = [
-        compile_one(hipcc, args.arch, d, args.threads, mw)
-        # Vary min_waves too: __launch_bounds__ second argument pushes the
-        # allocator onto different rungs, widening the observed VGPR spread.
-        # __launch_bounds__ min-waves pushes the allocator onto different
-        # rungs; 1 lets it use the whole per-wave budget, widening the spread.
-        for d, mw in zip(args.depths, [8, 8, 4, 4, 2, 2, 1, 1, 1, 1, 1, 1])
+        compile_one(hipcc, args.arch, d, args.threads, _min_waves_for(d))
+        for d in args.depths
     ]
     packet["observations"] = observations
 

@@ -7,6 +7,66 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Compiler-example MoE optional binding — 2026-09-20
+
+Owner E2E-REAL-6; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`. Shared
+Graph/runtime artifact metadata now names the optional `scores` / `route`
+operands of `tessera.moe`; the ROCm executor already consumes that `extras`
+contract. Host-free artifact tests cover the ROCm target. This does not borrow
+Apple execution evidence: no gfx1151/gfx1201 launch or performance claim is
+added, and exact-device qualification remains ROCm-owned.
+
+## An occupancy-bound ROCm kernel, found and measured — 2026-09-21
+
+Sync: `RDNA-OCCUPANCY-GRANULE-2026-09-20`; owner ROCM-2. PR #790 closed with
+"no occupancy-bound ROCm kernel has been measured" as the honest next
+question. One exists.
+
+**Backward attention, split-reduced, D=128 gains +25% from a spill-free
+7 → 8 wave step** — the same lever that cost the forward two-wave kernel 2.2×.
+`fa_dkdv` 209 → 192 VGPRs, zero spills; **+25.3%, +26.4% and +8.4%** on three
+shapes, nine interleaved trials, against a `serial_dkdv` control that moves at
+most 0.8% (the scaffold was gated to the split variant only).
+
+**The wave count still does not predict the sign — the schedule delta does.**
+
+| experiment | regs shed | schedule change | occupancy | outcome |
+|---|---:|---|---|---:|
+| fwd two_wave D=128 (PR #790) | 8 | `s_waitcnt`/100 **+33%** | 10→12 | **−55%** |
+| bwd split D=64 | 62 + 108 | instrs +8%, `fa_dq` wait/100 **+17%** | 6→8/10 | **−23…−33%** |
+| **bwd split D=128** | **17** | **instrs −65/−70, wait/100 −12%/−9%** | **7→8** | **+25%** |
+
+**Occupancy pays exactly when it is free.** At D=128 the register constraint
+made the schedule strictly better — both dominant kernels lost instructions
+*and* lost waits. Everywhere it degraded the schedule, occupancy lost despite
+gaining *more* waves.
+
+Two alternative explanations were excluded by measurement, not argument:
+**not spills** (the D=64 loser has zero spills and zero scratch; spilling only
+starts at `waves_per_eu ≥ 9`, where the loss deepens), and **not an
+under-filled grid** (the D=64 regression *deepens* −23% → −28% → −33% as the
+grid grows 64 → 512 → 2048 q-tiles, with the serial control flat at
+0.3398/0.3387, 10.62/10.58, 80.72/81.96 ms; an unused-capacity effect would
+shrink).
+
+Also learned: `amdgpu-waves-per-eu` is a **minimum** and the allocator
+overshoots it — asking D=64 for 7 waves produced the same 172/144-VGPR build
+as asking for 8. So a kernel cannot always be moved exactly one rung, and the
+D=128/D=64 arms are two separate results rather than a controlled rung pair.
+
+Consequence for the model: `occupancy_waves_per_simd` stays reported and never
+scored. Ranking needs the schedule delta, which lives in the compiled code and
+not in a wave count. Scaffold deleted (Decision #29); the packet says how to
+re-add it.
+
+Open: nothing generalises this beyond attention-backward on gfx1151. Whether
+the "schedule strictly improves" test can be computed *before* committing to a
+build — rather than by compiling both and diffing — is the question that would
+make this actionable in a selector.
+
+Evidence: [occupancy-bound packet](../../../../benchmarks/baselines/rocm_occupancy_bound_20260921/README.md).
+
+
 ## RDNA occupancy: all three follow-ups closed — 2026-09-21
 
 Sync: `RDNA-OCCUPANCY-GRANULE-2026-09-20`; owner ROCM-2. The three items PR

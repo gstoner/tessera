@@ -1,32 +1,48 @@
 """RDNA/CDNA occupancy model: VGPR file, LDS pool and wave slots -> waves/SIMD.
 
-Reported, never scored
-----------------------
+Reported, never scored -- and measured in both directions
+---------------------------------------------------------
 Three things read this module -- two ROCm benchmarks and
 ``rocm_tiling.RankedTileCandidate.occupancy_waves_per_simd`` -- and all three
-only **report** what it computes.  Nothing ranks or selects on it, and that is
-a measured position, not caution.
+only **report** what it computes.  Nothing ranks or selects on it.  That is a
+measured position, and it has now been measured both ways.
 
-On 2026-09-21 the gfx1151 two-wave D=128 attention kernel was moved from 121
-VGPRs (10 waves/SIMD) to 113 (12 waves/SIMD) with zero spills and identical
-memory traffic, and became **2.2x slower** -- 0.734 -> 1.620 ms causal,
-1.364 -> 3.165 ms noncausal, nine interleaved trials against a fixed control.
-The disassembly says why: freeing 8 registers cost 36% more ``s_waitcnt``
-(33 -> 45) while ``ds_``, ``global_``, ``v_wmma`` and scratch were unchanged.
-Shortening live ranges moves loads closer to their uses and destroys
-instruction-level latency hiding, and that kernel is bound by unhidden load
-latency.  So +20% occupancy bought -55% throughput, and a selector maximising
-occupancy would have picked the slower kernel.
+**Occupancy can cost 2.2x** (2026-09-21).  The gfx1151 two-wave D=128
+attention kernel moved from 121 VGPRs (10 waves/SIMD) to 113 (12 waves/SIMD)
+with zero spills and identical memory traffic, and became **2.2x slower** --
+0.734 -> 1.620 ms causal.  ``s_waitcnt`` rose 33 -> 45 (+36%) with ``ds_``,
+``global_``, ``v_wmma`` and scratch unchanged.
 
-This module answers "how many waves fit" -- a *capacity* question.  It does
-not answer "which kernel is faster".  ``matmul_opt_ladder.py`` records the same
-shape from another direction: "Wins despite 67%->17% occupancy -- arithmetic
-intensity beats occupancy".  Evidence:
-``benchmarks/baselines/rdna_occupancy_closure_20260921/``.
+**Occupancy can also pay +25%** (2026-09-21).  Backward attention,
+split-reduced, D=128: a spill-free 7 -> 8 wave step on the dominant
+``fa_dkdv`` kernel (209 -> 192 VGPRs) gave **+25.3%, +26.4% and +8.4%** on
+three shapes, against an untouched control that moved at most 0.8%.  So
+occupancy-bound ROCm kernels exist, and the gain can be large.
 
-What that does *not* show is that occupancy never matters: one kernel family,
-one arch, one rung crossing.  An occupancy-bound kernel could go the other way
-and none has been measured.  Owned by sync
+**The wave count is not the predictor either way.**  What predicts the sign is
+whether the register constraint improves or degrades the *schedule*, which is
+readable from the compiled code:
+
+=====================  ==========  ============================  ==========
+experiment             regs shed   schedule change               outcome
+=====================  ==========  ============================  ==========
+fwd two_wave D=128     8           ``s_waitcnt``/100 +33%        -55%
+bwd split D=64         62 + 108    instrs +8%, dq wait +17%      -23..-33%
+bwd split D=128        17          instrs -65/-70, wait -12/-9%  **+25%**
+=====================  ==========  ============================  ==========
+
+**Occupancy pays exactly when it is free.**  At D=128 the constraint made the
+schedule strictly better -- both dominant kernels lost instructions *and*
+lost waits.  Everywhere the schedule degraded, occupancy lost despite gaining
+*more* waves.  Two alternative explanations were excluded by measurement: not
+spills (the D=64 loser has zero spills and zero scratch) and not an
+under-filled grid (its regression deepens from -23% to -33% as the grid grows
+32x, control flat).
+
+This module answers "how many waves fit" -- a *capacity* question.  Ranking
+needs the schedule delta, which lives in the compiled code, not here.
+Evidence: ``benchmarks/baselines/rdna_occupancy_closure_20260921/`` and
+``benchmarks/baselines/rocm_occupancy_bound_20260921/``.  Owned by sync
 ``RDNA-OCCUPANCY-GRANULE-2026-09-20``.
 
 Why this module exists

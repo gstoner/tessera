@@ -205,20 +205,14 @@ class RankedTileCandidate:
     #: VGPR-limited occupancy in waves/SIMD, from `rocm_occupancy`.  None when
     #: the arch's constants are unestablished.
     #:
-    #: UNWIRED as a ranking input, and **measured to be the right call** rather
-    #: than caution (Decision #29a condition 1): reported, never scored.  The
-    #: exact-device proof this was gated on came back negative -- on gfx1151
-    #: the two-wave D=128 attention kernel at 113 VGPRs (12 waves/SIMD, zero
-    #: spills) is 2.2x SLOWER than the same kernel at 121 (10 waves/SIMD),
-    #: because freeing those registers cost 36% more `s_waitcnt` with memory
-    #: traffic unchanged.  +20% occupancy, -55% throughput: a selector
-    #: maximising this field picks the slower kernel.  Measured the other way
-    #: too (2026-09-21): backward attention split-reduced at D=128 *gains*
-    #: +25% from a spill-free 7->8 wave step, so occupancy-bound kernels do
-    #: exist -- and the same op at D=64 still loses 23-33%.  The wave count is
-    #: not the predictor in either direction; the schedule delta is.  See
-    #: `benchmarks/baselines/rdna_occupancy_closure_20260921/` and
-    #: `benchmarks/baselines/rocm_occupancy_bound_20260921/`.
+    #: UNWIRED as a ranking input, and measured to be the right call
+    #: (Decision #29a): reported, never scored.  Occupancy did not predict
+    #: speed in either direction -- a gfx1151 register constraint gave +25%
+    #: with residency UNCHANGED (the mechanism was memory-level parallelism),
+    #: and the same lever cost 55% elsewhere.  Note also that a register
+    #: change usually cannot move residency on these kernels at all: with
+    #: `block=32` launches, LDS binds and the register ceiling sits 2-8x
+    #: above it.  See `benchmarks/baselines/rocm_mlp_correction_20260921/`.
     #: Owned by RDNA-OCCUPANCY-GRANULE-2026-09-20.
     #:
     #: Worth reporting now because the register margin next to it cannot answer

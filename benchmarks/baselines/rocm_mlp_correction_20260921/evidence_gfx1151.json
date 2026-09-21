@@ -1,0 +1,419 @@
+{
+  "chip": "gfx1151",
+  "note": "launch_threads read from runtime.py launch sites, not max_flat_workgroup_size",
+  "kernels": {
+    "bwd128_dkdv": {
+      "wpe_base": [
+        {
+          "kernel": "fa_dkdv",
+          "vgpr": 209,
+          "lds_bytes": 17408,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 338,
+          "waits": 149,
+          "mem_per_wait": 2.255,
+          "vmcnt0_pct": 49.8,
+          "mean_vmcnt": 3.201,
+          "waves_by_vgpr": 7,
+          "waves_by_lds": 2,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 7,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_8": [
+        {
+          "kernel": "fa_dkdv",
+          "vgpr": 192,
+          "lds_bytes": 17408,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 338,
+          "waits": 70,
+          "mem_per_wait": 4.8,
+          "vmcnt0_pct": 17.3,
+          "mean_vmcnt": 7.441,
+          "waves_by_vgpr": 8,
+          "waves_by_lds": 2,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 7,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_12": [
+        {
+          "kernel": "fa_dkdv",
+          "vgpr": 120,
+          "lds_bytes": 17408,
+          "spills": 78,
+          "launch_threads": 32,
+          "mem_ops": 338,
+          "waits": 194,
+          "mem_per_wait": 1.732,
+          "vmcnt0_pct": 66.4,
+          "mean_vmcnt": 2.15,
+          "waves_by_vgpr": 12,
+          "waves_by_lds": 2,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 7,
+          "limiter": "lds"
+        }
+      ]
+    },
+    "bwd64_dkdv": {
+      "wpe_base": [
+        {
+          "kernel": "fa_dkdv",
+          "vgpr": 234,
+          "lds_bytes": 9216,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 178,
+          "waits": 18,
+          "mem_per_wait": 9.778,
+          "vmcnt0_pct": 16.2,
+          "mean_vmcnt": 9.619,
+          "waves_by_vgpr": 6,
+          "waves_by_lds": 4,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 14,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_8": [
+        {
+          "kernel": "fa_dkdv",
+          "vgpr": 172,
+          "lds_bytes": 9216,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 178,
+          "waits": 55,
+          "mem_per_wait": 3.2,
+          "vmcnt0_pct": 32.2,
+          "mean_vmcnt": 4.924,
+          "waves_by_vgpr": 8,
+          "waves_by_lds": 4,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 14,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_12": [
+        {
+          "kernel": "fa_dkdv",
+          "vgpr": 120,
+          "lds_bytes": 9216,
+          "spills": 42,
+          "launch_threads": 32,
+          "mem_ops": 178,
+          "waits": 42,
+          "mem_per_wait": 4.19,
+          "vmcnt0_pct": 35.2,
+          "mean_vmcnt": 4.931,
+          "waves_by_vgpr": 12,
+          "waves_by_lds": 4,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 14,
+          "limiter": "lds"
+        }
+      ]
+    },
+    "fwd128_1w": {
+      "wpe_base": [
+        {
+          "kernel": "fa",
+          "vgpr": 218,
+          "lds_bytes": 9408,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 161,
+          "waits": 4,
+          "mem_per_wait": 40.0,
+          "vmcnt0_pct": 7.1,
+          "mean_vmcnt": 20.429,
+          "waves_by_vgpr": 6,
+          "waves_by_lds": 3,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 12,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_8": [
+        {
+          "kernel": "fa",
+          "vgpr": 146,
+          "lds_bytes": 9408,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 161,
+          "waits": 96,
+          "mem_per_wait": 1.667,
+          "vmcnt0_pct": 58.2,
+          "mean_vmcnt": 2.23,
+          "waves_by_vgpr": 9,
+          "waves_by_lds": 3,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 12,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_12": [
+        {
+          "kernel": "fa",
+          "vgpr": 120,
+          "lds_bytes": 9408,
+          "spills": 14,
+          "launch_threads": 32,
+          "mem_ops": 161,
+          "waits": 47,
+          "mem_per_wait": 3.404,
+          "vmcnt0_pct": 36.8,
+          "mean_vmcnt": 3.547,
+          "waves_by_vgpr": 12,
+          "waves_by_lds": 3,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 12,
+          "limiter": "lds"
+        }
+      ]
+    },
+    "fwd128_2w": {
+      "wpe_base": [
+        {
+          "kernel": "fa",
+          "vgpr": 121,
+          "lds_bytes": 11456,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 21,
+          "waits": 2,
+          "mem_per_wait": 10.0,
+          "vmcnt0_pct": 16.7,
+          "mean_vmcnt": 5.167,
+          "waves_by_vgpr": 10,
+          "waves_by_lds": 3,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 10,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_8": [
+        {
+          "kernel": "fa",
+          "vgpr": 121,
+          "lds_bytes": 11456,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 21,
+          "waits": 2,
+          "mem_per_wait": 10.0,
+          "vmcnt0_pct": 16.7,
+          "mean_vmcnt": 5.167,
+          "waves_by_vgpr": 10,
+          "waves_by_lds": 3,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 10,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_12": [
+        {
+          "kernel": "fa",
+          "vgpr": 113,
+          "lds_bytes": 11456,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 21,
+          "waits": 17,
+          "mem_per_wait": 1.176,
+          "vmcnt0_pct": 85.0,
+          "mean_vmcnt": 0.3,
+          "waves_by_vgpr": 12,
+          "waves_by_lds": 3,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 10,
+          "limiter": "lds"
+        }
+      ]
+    },
+    "fwd64_1w": {
+      "wpe_base": [
+        {
+          "kernel": "fa",
+          "vgpr": 134,
+          "lds_bytes": 5312,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 81,
+          "waits": 7,
+          "mem_per_wait": 11.429,
+          "vmcnt0_pct": 5.4,
+          "mean_vmcnt": 13.919,
+          "waves_by_vgpr": 10,
+          "waves_by_lds": 6,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 21,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_8": [
+        {
+          "kernel": "fa",
+          "vgpr": 135,
+          "lds_bytes": 5312,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 81,
+          "waits": 4,
+          "mem_per_wait": 20.0,
+          "vmcnt0_pct": 9.1,
+          "mean_vmcnt": 14.879,
+          "waves_by_vgpr": 10,
+          "waves_by_lds": 6,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 21,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_12": [
+        {
+          "kernel": "fa",
+          "vgpr": 120,
+          "lds_bytes": 5312,
+          "spills": 6,
+          "launch_threads": 32,
+          "mem_ops": 81,
+          "waits": 28,
+          "mem_per_wait": 2.857,
+          "vmcnt0_pct": 47.5,
+          "mean_vmcnt": 3.288,
+          "waves_by_vgpr": 12,
+          "waves_by_lds": 6,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 21,
+          "limiter": "lds"
+        }
+      ]
+    },
+    "linattn128": {
+      "wpe_base": [
+        {
+          "kernel": "la",
+          "vgpr": 122,
+          "lds_bytes": 9216,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 161,
+          "waits": 121,
+          "mem_per_wait": 1.322,
+          "vmcnt0_pct": 83.8,
+          "mean_vmcnt": 1.162,
+          "waves_by_vgpr": 10,
+          "waves_by_lds": 4,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 14,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_8": [
+        {
+          "kernel": "la",
+          "vgpr": 122,
+          "lds_bytes": 9216,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 161,
+          "waits": 121,
+          "mem_per_wait": 1.322,
+          "vmcnt0_pct": 83.8,
+          "mean_vmcnt": 1.162,
+          "waves_by_vgpr": 10,
+          "waves_by_lds": 4,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 14,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_12": [
+        {
+          "kernel": "la",
+          "vgpr": 122,
+          "lds_bytes": 9216,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 161,
+          "waits": 121,
+          "mem_per_wait": 1.322,
+          "vmcnt0_pct": 83.8,
+          "mean_vmcnt": 1.162,
+          "waves_by_vgpr": 10,
+          "waves_by_lds": 4,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 14,
+          "limiter": "lds"
+        }
+      ]
+    },
+    "linattn64": {
+      "wpe_base": [
+        {
+          "kernel": "la",
+          "vgpr": 99,
+          "lds_bytes": 5120,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 81,
+          "waits": 30,
+          "mem_per_wait": 2.667,
+          "vmcnt0_pct": 39.6,
+          "mean_vmcnt": 4.375,
+          "waves_by_vgpr": 12,
+          "waves_by_lds": 7,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 25,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_8": [
+        {
+          "kernel": "la",
+          "vgpr": 99,
+          "lds_bytes": 5120,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 81,
+          "waits": 30,
+          "mem_per_wait": 2.667,
+          "vmcnt0_pct": 39.6,
+          "mean_vmcnt": 4.375,
+          "waves_by_vgpr": 12,
+          "waves_by_lds": 7,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 25,
+          "limiter": "lds"
+        }
+      ],
+      "wpe_12": [
+        {
+          "kernel": "la",
+          "vgpr": 99,
+          "lds_bytes": 5120,
+          "spills": 0,
+          "launch_threads": 32,
+          "mem_ops": 81,
+          "waits": 30,
+          "mem_per_wait": 2.667,
+          "vmcnt0_pct": 39.6,
+          "mean_vmcnt": 4.375,
+          "waves_by_vgpr": 12,
+          "waves_by_lds": 7,
+          "waves_by_slots": 16,
+          "resident_groups_per_wgp": 25,
+          "limiter": "lds"
+        }
+      ]
+    }
+  }
+}

@@ -7,6 +7,76 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Correction: the +25% was memory-level parallelism, not occupancy — 2026-09-21
+
+Sync: `RDNA-OCCUPANCY-GRANULE-2026-09-20`; owner ROCM-2. PR #791 reported a
+real, reproducible **+25%** on backward attention D=128 and attributed it to an
+occupancy gain. **The speedup stands; the attribution was wrong.** Raised by
+the Codex reviewer on that PR, confirmed here by measurement.
+
+**Root cause of the error.** The occupancy model was fed
+`max_flat_workgroup_size` (256, a *maximum*) instead of the launch geometry —
+`runtime.py` launches these kernels with `block=32`, **one wave per
+work-group**. With one wave per group LDS binds long before registers, and
+residency is **7 resident groups in both arms**: the register lever moved a
+ceiling that was not binding. The model was right; its input was not.
+
+**The actual mechanism is memory-level parallelism.** Memory traffic is
+byte-identical (338 ops both arms); only the scheduling changed:
+
+| metric | baseline (209 VGPR) | wpe=8 (192 VGPR) |
+|---|---:|---:|
+| `s_waitcnt` executed | 149 | **70** (−53%) |
+| mem ops in flight per wait | 2.26 | **4.80** (+112%) |
+| `vmcnt(0)` full drains | 49.8% | **17.3%** |
+
+Each outstanding load holds its destination VGPR live until the wait retires
+it, so **loads-in-flight are bought with registers**. The constraint forced the
+scheduler to rebalance from long-lived values toward in-flight loads.
+
+**LDS, not registers, is the occupancy limiter** on every attention and
+linear-attention kernel measured, on **both** parts, with the register ceiling
+2–8× above the LDS ceiling. Residency *does* matter — a residency-only sweep
+(dynamic LDS padding, byte-identical code) costs 32/46/63% as groups fall
+7 → 5/3/2 — it is simply not what a register change moves.
+
+**The result does not transfer to gfx1201.** There the lever is inert
+(`fa_dkdv` mpw 2.113 unchanged at wpe=8) because gfx1201 already emits far
+fewer registers (149 vs 209 — the gfx12 fragment layout splits K across
+half-waves). gfx1201 has the same exposure (2.11 mem/wait, 64.7% drains) and
+no lever for it.
+
+**Predictor status, stated honestly.** `mem_per_wait` and `vmcnt0_pct` are
+computable at compile time and scored **4/4 on slowdowns** but **1/2 on
+speedups** — `fwd64_1w` predicted +75% MLP and measured ≈0% at three sizes. A
+saturation hypothesis fits but is untested. It is a screening heuristic, not a
+model.
+
+**Two traps recorded.** `max_flat_workgroup_size` is a maximum, not the launch
+size. And **RDNA4 split the wait counters** — gfx11 emits `s_waitcnt vmcnt(N)`,
+gfx12 emits `s_wait_loadcnt 0xN` plus `s_wait_dscnt`/`s_wait_kmcnt` (ISA
+Table 4) — so a gfx11-shaped regex reports *zero waits* on gfx1201 instead of
+failing. That produced a `waits=0, mem_ops=338` reading in this packet's first
+collection.
+
+**Also measured: the memory-pipelining knobs do not reach these families.**
+`lds_copy_depth`, `lds_copy_width`, `lds_double_buffer`, `k_unroll` and
+`staging=lds` all yield a **byte-identical hsaco** for `attention` and
+`sequence_linear_attention` (same SHA across seven variants) — they are
+matmul-body knobs, silently accepted and discarded elsewhere.
+
+Open, and now well-posed: **`linear_attn D=128` is the worst-conditioned kernel
+measured** (1.32 mem/wait, **83.8% full drains** on gfx1151; 1.98 / 77.1% on
+gfx1201) and has **no available lever** — `waves_per_eu` is inert on it and the
+pipelining knobs do not reach it. Improving it requires a generator change:
+batch independent loads before the wait, which is exactly what `lds-copy-depth`
+already does for the GEMM staging loop (+15% at 1024³, +39% at 2048³). Also
+open: test the saturation hypothesis behind the `fwd64_1w` miss.
+
+Evidence: [MLP correction packet](../../../../benchmarks/baselines/rocm_mlp_correction_20260921/README.md).
+The PR #791 packet now carries a dated correction banner pointing here.
+
+
 ## Compiler-example MoE optional binding — 2026-09-20
 
 Owner E2E-REAL-6; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`. Shared

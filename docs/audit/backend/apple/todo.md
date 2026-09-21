@@ -8,6 +8,15 @@ last_updated: 2026-09-21
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 exact MXFP4 execution — 2026-09-21
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`. Not applicable to Apple physical
+execution. The new scalar/FP8-WMMA packages, exact K32 scale boundary, raw
+HSACO ABI, and Tajasarus proof are ROCm/gfx1201-only. The shared Schedule
+carrier remains fail-closed before Tile, so no Metal IR, dtype, runtime,
+numerical-policy, or device row changes and no ROCm proof transfers.
+
 ## GFX1201 dtype and exact-executor closure — 2026-09-21
 
 Owner ROCM-2 / NUMPOL-CARRIER-1; sync

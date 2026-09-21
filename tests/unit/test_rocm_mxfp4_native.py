@@ -18,6 +18,7 @@ from tessera.compiler.rocm_mxfp4_native import (
     emit_mxfp4_w4a8_exact_hip,
     emit_mxfp4_w4a8_wmma_llvmir,
     mxfp4_w4a8_descriptor,
+    package_mxfp4_w4a8,
 )
 
 
@@ -101,6 +102,34 @@ def test_wmma_descriptor_uses_one_wave_and_exact_policy() -> None:
     assert descriptor.geometry.workgroup == (32, 1, 1)
     assert descriptor.provenance["route"] == "exact_per_block_fp8_wmma"
     assert descriptor.provenance["numeric_policy"] == "exact_per_block"
+
+
+def test_exact_device_proof_registry_admits_both_mxfp4_routes() -> None:
+    proved = runtime._gfx1201_proved_scheduled_abis()
+    assert GFX_MXFP4_W4A8_EXACT_ABI in proved
+    assert GFX_MXFP4_W4A8_WMMA_ABI in proved
+
+
+def test_production_selector_defaults_to_wmma(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, int, int, int, str]] = []
+
+    def record_wmma(m: int, n: int, k: int, *, pipeline_name: str):
+        calls.append(("wmma", m, n, k, pipeline_name))
+        return object()
+
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_mxfp4_native.package_mxfp4_w4a8_wmma",
+        record_wmma,
+    )
+    package_mxfp4_w4a8(17, 19, 64, pipeline_name="proof-pipeline")
+    assert calls == [("wmma", 17, 19, 64, "proof-pipeline")]
+
+
+def test_production_selector_refuses_unknown_route() -> None:
+    with pytest.raises(ValueError, match="scalar_reference"):
+        package_mxfp4_w4a8(16, 16, 32, route="folded")
 
 
 def test_descriptor_names_every_physical_plane_and_shape() -> None:

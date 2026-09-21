@@ -4163,13 +4163,17 @@ def _submit_rocm_sparse_2to4(image: NativeImageArtifact, descriptor: LaunchDescr
 
 
 def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
-    """The scheduled-package ABIs with exact gfx1201 (RX 9070 XT) device proof.
+    """The native-package ABIs with exact gfx1201 (RX 9070 XT) device proof.
 
     One spelling for the launcher registration and the submit-time admission;
-    an ABI joins on a `test_rocm_gfx1201_scheduled.py` device row, never by
-    analogy with gfx1151 (proofs do not transfer between the two RDNA parts).
+    an ABI joins only with an owning-device row, never by analogy with gfx1151
+    (proofs do not transfer between the two RDNA parts).
     """
     from tessera.compiler import rocm_native as rn
+    from tessera.compiler.rocm_mxfp4_native import (
+        GFX_MXFP4_W4A8_EXACT_ABI,
+        GFX_MXFP4_W4A8_WMMA_ABI,
+    )
 
     return frozenset({
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
@@ -4180,6 +4184,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         rn.GFX_MATMUL_I8_I32_ABI, rn.GFX_MATMUL_I4_I32_ABI,
         rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
         rn.GFX_PAGED_KV_F32_ABI, rn.GFX_SPARSE_MATMUL_2TO4_ABI,
+        GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI,
     })
 
 
@@ -5547,8 +5552,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     if (
         (target == "rocm_gfx1151"
          or (target == "rocm_gfx1201" and
-             (abi_id in _gfx1201_proved_scheduled_abis()
-              or abi_id in {GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI})))
+             abi_id in _gfx1201_proved_scheduled_abis()))
         and abi_id
         in {
             GFX_SOFTMAX_F16_ABI,

@@ -592,12 +592,41 @@ def package_mxfp4_w4a8_wmma(
     return ROCMNativePackage(semantic_ir, source, " ".join(command[:-2]), image, descriptor)
 
 
+def package_mxfp4_w4a8(
+    m: int,
+    n: int,
+    k: int,
+    *,
+    route: str = "wmma",
+    pipeline_name: str = "tessera-lower-to-rocm",
+) -> ROCMNativePackage:
+    """Package the proved gfx1201 route, defaulting to the production WMMA ABI.
+
+    The scalar route remains available as an executable specification and
+    device oracle.  Callers must opt into it explicitly so a production call
+    cannot silently lose the native FP8 matrix instruction.
+    """
+
+    if route == "wmma":
+        return package_mxfp4_w4a8_wmma(
+            m, n, k, pipeline_name=pipeline_name
+        )
+    if route == "scalar_reference":
+        return package_mxfp4_w4a8_exact(
+            m, n, k, pipeline_name=pipeline_name
+        )
+    raise ValueError(
+        "MXFP4 W4A8 route must be 'wmma' or 'scalar_reference'"
+    )
+
+
 __all__ = [
     "GFX_MXFP4_W4A8_EXACT_ABI",
     "GFX_MXFP4_W4A8_WMMA_ABI",
     "emit_mxfp4_w4a8_exact_hip",
     "emit_mxfp4_w4a8_wmma_llvmir",
     "mxfp4_w4a8_descriptor",
+    "package_mxfp4_w4a8",
     "package_mxfp4_w4a8_exact",
     "package_mxfp4_w4a8_wmma",
 ]

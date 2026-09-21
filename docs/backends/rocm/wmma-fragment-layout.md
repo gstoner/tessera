@@ -494,20 +494,32 @@ independent hand-written gfx1201 kernel (vllm-radiance `radiance_mxfp4_fp8.hip`,
 2026-09-19) and its tuned configs. Four things there bear directly on results
 recorded in this file.
 
-**The fold is exact, which is why it is not a compromise.** E2M1's sixteen
-values are all exactly representable in e4m3, so the weight upconvert is a
-lossless table lookup, and the MX block scale is E8M0 — a power of two — so
-applying it to the fp32 accumulator is exact. The block exponent is folded into
-the *weight* through a per-binade magnitude table, which removes the per-32-block
-rescale from the inner loop and leaves one per-row factor for the epilogue. The
-result is W4A8 rather than the checkpoint's declared W4A4: strictly *more*
-precise than calibration, but no longer bit-identical to the emulated path, so
-it is opt-in rather than default. That is a numeric-policy decision of exactly
-the kind Decision #15a says belongs in the contract, not in a kernel flag.
+**There are two different routes; only the per-block route is unconditionally
+exact.** E2M1's sixteen values are all exactly representable in E4M3 and E8M0
+is a power of two. Tessera's exact route therefore evaluates two K16 FP8 WMMAs
+from zero for each K32 group, multiplies that local FP32 partial by the group's
+E8M0/per-token scale, and then joins the running accumulator. The faster
+row-reference fold instead moves exponent deltas into E4M3 weight bytes and
+restores one reference factor in the epilogue. E4M3 subnormals make that fold
+lossless only through exponent delta 8; the reviewed checkpoint reaches delta
+10. The fold is consequently an explicit approximate `numeric_policy`, never
+the exact-route oracle or an unconditional replacement. W4A8 itself remains
+opt-in because its activation precision differs from the checkpoint's W4A4
+calibration.
 
 **gfx12's fp8 WMMA honours e4m3 subnormals rather than flushing them**, verified
 on hardware there. The fold depends on it: stopping at the smallest e4m3 normal
-(2⁻⁶) is exact only to d ≤ 5, and a real checkpoint reached d = 10.
+(2⁻⁶) is exact only to d ≤ 5; subnormals extend the guaranteed boundary to
+d ≤ 8, and a real checkpoint reached d = 10.
+
+**Tessera now executes the exact route on gfx1201.** The dedicated native
+package batches independent A/B loads before decode/packing, converts E2M1 to
+E4M3 bytes without arithmetic rounding, and emits exactly
+`v_wmma_f32_16x16x16_fp8_fp8`. Scalar and WMMA packages compare bit-exactly
+after BF16 rounding at `17x19x64` and `32x32x128` on Tajasarus. The WMMA image
+is wave32, 32 SGPR / 94 VGPR, zero LDS and zero scratch. This proves the exact
+mechanism, not the folded policy or throughput. See the
+[evidence packet](../../../benchmarks/baselines/gfx1201_mxfp4_w4a8_20260921/README.md).
 
 **Our contiguous-eight fragment convention is independently corroborated — and
 so is §3's warning about how it was checked.** That kernel records its layout

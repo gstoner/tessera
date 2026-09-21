@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 exact MXFP4 execution — 2026-09-21
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`. Not applicable to AVX-512 physical
+execution. The exact K32 packages and proof registry entries are
+ROCm/gfx1201-only; the shared Schedule carrier still fails closed before Tile.
+No x86 ABI, dtype, numerical policy, runtime, or exact-device claim changes.
+
 ## GFX1201 dtype and exact-executor closure — 2026-09-21
 
 Owner ROCM-2 / NUMPOL-CARRIER-1; sync

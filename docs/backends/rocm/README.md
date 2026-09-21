@@ -14,7 +14,7 @@ and from the historical bring-up record.
 
 | Exact target | Product families | Tessera support boundary |
 |---|---|---|
-| `gfx1201` | Radeon RX 9070 series; Radeon AI PRO R9700/R9700S/R9600D | Exact-device RX 9070 XT proof exists for every registered content-addressed family plugin and bounded scheduled runtime ABIs. Public exact-target capability/execution rows project the proved `matmul`, `flash_attn`, and `softmax` subset. D=128 linear-attention load batching has numerical, HSACO-resource, and paired timing evidence. |
+| `gfx1201` | Radeon RX 9070 series; Radeon AI PRO R9700/R9700S/R9600D | Exact-device RX 9070 XT proof exists for every registered content-addressed family plugin and bounded native runtime ABIs. Public exact-target capability/execution rows project the proved `matmul`, `flash_attn`, and `softmax` subset. D=128 linear-attention load batching has numerical, HSACO-resource, and paired timing evidence. Exact MXFP4 W4A8 scalar and FP8-WMMA packages have bit-exact K32-scale proof and recorded ISA/resources; the public dtype and folded policy remain unpromoted. |
 | `gfx1200` | Radeon RX 9060 and RX 9050 series | ISA, dtype, feature, and compile-target modeling only. No promoted executable family, measured topology default, numerical device fixture, or performance claim. |
 
 `gfx1200` and `gfx1201` share RDNA 4 ISA features, but they are distinct exact

@@ -250,7 +250,9 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         '  %kbase = mul i64 %group, 32',
     ]
 
-    def emit_fragment(kind: str, slab: int) -> str:
+    def build_fragment(kind: str, slab: int) -> tuple[list[str], list[str], str]:
+        load_lines: list[str] = []
+        pack_lines: list[str] = []
         words: list[str] = []
         for word in range(2):
             packed: str | None = None
@@ -258,33 +260,37 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                 h = word * 4 + byte
                 k_off = slab * 16 + h
                 tag = f'{kind}_s{slab}_{h}'
-                lines.extend([
+                load_lines.extend([
                     f'  %{tag}_k0 = add i64 %kbase, {k_off}',
                     f'  %{tag}_k = add i64 %{tag}_k0, %half8',
                 ])
                 if kind == 'a':
-                    lines.extend([
+                    load_lines.extend([
                         f'  %{tag}_rowbase = mul i64 %a_row_safe, %K',
                         f'  %{tag}_idx = add i64 %{tag}_rowbase, %{tag}_k',
                         f'  %{tag}_ptr = getelementptr i8, ptr addrspace(1) %a, i64 %{tag}_idx',
                         f'  %{tag}_raw = load i8, ptr addrspace(1) %{tag}_ptr, align 1',
+                    ])
+                    pack_lines.extend([
                         f'  %{tag}_byte = select i1 %a_row_in, i8 %{tag}_raw, i8 0',
                         f'  %{tag}_z = zext i8 %{tag}_byte to i32',
                     ])
                 else:
-                    lines.extend([
+                    load_lines.extend([
                         f'  %{tag}_kh = lshr i64 %{tag}_k, 1',
                         f'  %{tag}_rowbase = mul i64 %{tag}_kh, %N',
                         f'  %{tag}_idx = add i64 %{tag}_rowbase, %col_safe',
                         f'  %{tag}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{tag}_idx',
                         f'  %{tag}_raw8 = load i8, ptr addrspace(1) %{tag}_ptr, align 1',
+                    ])
+                    pack_lines.extend([
                         f'  %{tag}_raw = zext i8 %{tag}_raw8 to i32',
                     ])
                     code = f'%{tag}_raw'
                     if h & 1:
-                        lines.append(f'  %{tag}_shift = lshr i32 {code}, 4')
+                        pack_lines.append(f'  %{tag}_shift = lshr i32 {code}, 4')
                         code = f'%{tag}_shift'
-                    lines.extend([
+                    pack_lines.extend([
                         f'  %{tag}_code = and i32 {code}, 15',
                         f'  %{tag}_mag = and i32 %{tag}_code, 7',
                         f'  %{tag}_mag64 = zext i32 %{tag}_mag to i64',
@@ -299,23 +305,34 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                     ])
                 value = f'%{tag}_z'
                 if byte:
-                    lines.append(f'  %{tag}_placed = shl i32 {value}, {byte * 8}')
+                    pack_lines.append(f'  %{tag}_placed = shl i32 {value}, {byte * 8}')
                     value = f'%{tag}_placed'
                 if packed is None:
                     packed = value
                 else:
-                    lines.append(f'  %{tag}_or = or i32 {packed}, {value}')
+                    pack_lines.append(f'  %{tag}_or = or i32 {packed}, {value}')
                     packed = f'%{tag}_or'
             assert packed is not None
             words.append(packed)
-        lines.extend([
+        pack_lines.extend([
             f'  %{kind}_s{slab}_v0 = insertelement <2 x i32> poison, i32 {words[0]}, i64 0',
             f'  %{kind}_s{slab}_v = insertelement <2 x i32> %{kind}_s{slab}_v0, i32 {words[1]}, i64 1',
         ])
-        return f'%{kind}_s{slab}_v'
+        return load_lines, pack_lines, f'%{kind}_s{slab}_v'
 
-    a0, b0 = emit_fragment('a', 0), emit_fragment('b', 0)
-    a1, b1 = emit_fragment('a', 1), emit_fragment('b', 1)
+    fragments = [
+        build_fragment('a', 0), build_fragment('b', 0),
+        build_fragment('a', 1), build_fragment('b', 1),
+    ]
+    # ROCM-MXFP4-W4A8-1: the lds-copy-depth principle without an LDS roundtrip.
+    # Make all independent A/B memory operations visible before any byte
+    # decode or WMMA dependency so LLVM can keep multiple VMEM operations in
+    # flight instead of manufacturing a load/decode/wait chain per element.
+    for load_batch, _, _ in fragments:
+        lines.extend(load_batch)
+    for _, packing, _ in fragments:
+        lines.extend(packing)
+    a0, b0, a1, b1 = (fragment[2] for fragment in fragments)
     lines += [
         f'  %partial0 = call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
         f'<2 x i32> {a0}, <2 x i32> {b0}, <8 x float> zeroinitializer)',

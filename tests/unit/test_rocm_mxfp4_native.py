@@ -84,6 +84,7 @@ def test_wmma_source_isolates_each_k32_partial_before_scaling() -> None:
     assert "%running_next = fadd <8 x float> %running, %scaled_partial" in source
     assert "%a_s0_0_k = add i64 %a_s0_0_k0, %half8" in source
     assert "%b_s1_7_k = add i64 %b_s1_7_k0, %half8" in source
+    assert source.index("%b_s1_7_raw8 = load i8") < source.index("%a_s0_0_byte = select")
     assert "@tessera_e2m1_to_e4m3" in source
     assert "@llvm.amdgcn.workgroup.id.x" in source
 

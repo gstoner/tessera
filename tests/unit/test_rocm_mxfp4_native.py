@@ -12,6 +12,7 @@ from tessera import runtime
 from tessera.compiler.native_artifact import NativeEntryPoint, NativeImageArtifact
 from tessera.compiler.rocm_mxfp4_native import (
     GFX_MXFP4_W4A8_EXACT_ABI,
+    _extract_gfx1201_hsaco,
     _rocm_hipcc,
     emit_mxfp4_w4a8_exact_hip,
     mxfp4_w4a8_descriptor,
@@ -29,6 +30,18 @@ def test_hipcc_selection_handles_split_rocm_root(
     monkeypatch.delenv("TESSERA_ROCM_HIPCC", raising=False)
     monkeypatch.setenv("PATH", "")
     assert _rocm_hipcc(core) == hipcc
+
+
+def test_hsaco_extractor_accepts_raw_elf_and_rejects_unknown_container(
+    tmp_path: Path,
+) -> None:
+    compiled = tmp_path / "compiled"
+    output = tmp_path / "raw.hsaco"
+    compiled.write_bytes(b"\x7fELFgfx1201")
+    assert _extract_gfx1201_hsaco(compiled, output, tmp_path) == b"\x7fELFgfx1201"
+    compiled.write_bytes(b"not-a-device-image")
+    with pytest.raises(RuntimeError, match="neither ELF nor a HIP bundle"):
+        _extract_gfx1201_hsaco(compiled, output, tmp_path)
 
 
 def _image() -> NativeImageArtifact:

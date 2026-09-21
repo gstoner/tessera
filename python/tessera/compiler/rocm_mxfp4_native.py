@@ -61,6 +61,48 @@ def _rocm_hipcc(rocm_path: Path) -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
+def _rocm_offload_bundler(rocm_path: Path) -> Path | None:
+    candidates = [
+        rocm_path / "lib" / "llvm" / "bin" / "clang-offload-bundler",
+        rocm_path / "llvm" / "bin" / "clang-offload-bundler",
+        rocm_path / "bin" / "clang-offload-bundler",
+    ]
+    found = shutil.which("clang-offload-bundler")
+    if found:
+        candidates.append(Path(found))
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _extract_gfx1201_hsaco(compiled: Path, output: Path, rocm_path: Path) -> bytes:
+    """Return a raw HSACO from raw or LLVM 23 bundled HIP output."""
+
+    payload = compiled.read_bytes()
+    if payload.startswith(b"\x7fELF"):
+        return payload
+    if not payload.startswith(b"__CLANG_OFFLOAD_BUNDLE__"):
+        raise RuntimeError("MXFP4 W4A8 compiler output is neither ELF nor a HIP bundle")
+    bundler = _rocm_offload_bundler(rocm_path)
+    if bundler is None:
+        raise RuntimeError("MXFP4 W4A8 HIP bundle requires clang-offload-bundler")
+    result = subprocess.run(
+        [
+            str(bundler), "-unbundle", "-type=o",
+            "-targets=hipv4-amdgcn-amd-amdhsa--gfx1201",
+            f"-input={compiled}", f"-output={output}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode or not output.is_file():
+        detail = result.stderr.strip() or f"clang-offload-bundler exited {result.returncode}"
+        raise RuntimeError(f"MXFP4 W4A8 HSACO extraction failed: {detail}")
+    payload = output.read_bytes()
+    if not payload.startswith(b"\x7fELF"):
+        raise RuntimeError("MXFP4 W4A8 extracted device image is not an ELF HSACO")
+    return payload
+
+
 def emit_mxfp4_w4a8_exact_hip(*, entry: str = "tessera_mxfp4_w4a8_exact") -> str:
     """Emit the independent scalar baseline for the exact per-group route."""
 
@@ -213,20 +255,19 @@ def package_mxfp4_w4a8_exact(
     device_libraries = _driver_selected_device_libraries(arch="gfx1201")
     with tempfile.TemporaryDirectory(prefix="tessera-mxfp4-") as directory:
         source_path = Path(directory) / "kernel.hip"
+        bundle_path = Path(directory) / "kernel.hipfb"
         image_path = Path(directory) / "kernel.hsaco"
         source_path.write_text(source)
         command = [
             str(compiler), "-x", "hip", "-O3", "--genco",
             "--offload-arch=gfx1201", f"--rocm-path={rocm_path}",
-            str(source_path), "-o", str(image_path),
+            str(source_path), "-o", str(bundle_path),
         ]
         result = subprocess.run(command, capture_output=True, text=True, check=False)
-        if result.returncode or not image_path.is_file():
+        if result.returncode or not bundle_path.is_file():
             detail = result.stderr.strip() or f"AMD clang exited {result.returncode}"
             raise RuntimeError(f"MXFP4 W4A8 HSACO compilation failed: {detail}")
-        payload = image_path.read_bytes()
-    if not payload.startswith(b"\x7fELF"):
-        raise RuntimeError("MXFP4 W4A8 compiler output is not an ELF HSACO")
+        payload = _extract_gfx1201_hsaco(bundle_path, image_path, rocm_path)
     toolchain_fingerprint = hashlib.sha256(
         (str(rocm_path) + "|gfx1201|O3|exact_per_block").encode()
     ).hexdigest()

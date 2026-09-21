@@ -1,5 +1,8 @@
-# Tessera Jet‑Nemotron (Unofficial Port – Draft)
-This repo provides a **programmer‑oriented port scaffold** of NVIDIA's **Jet‑Nemotron** concepts into the **Tessera Programming Model**, including a working **JetBlock** module (dynamic linear attention + dynamic conv mixing), streaming state, and a **PostNAS**-style search scaffold.
+# Tessera Jet‑Nemotron (Unofficial Research Port)
+This directory preserves a programmer-oriented research port of Jet-Nemotron
+concepts. The maintained default entry point is the self-contained D=128
+linear-attention smoke; the larger JetBlock and PostNAS files require an
+external research stdlib and remain experimental.
 
 > ⚠️ **Status**: Draft implementation for experimentation. The official Jet‑Nemotron code has not yet shipped at the time of writing. This port follows the public paper and README descriptions and stays conservative where details are unspecified.
 
@@ -77,9 +80,18 @@ blk = JetBlock(jcfg)
 `advanced_feature_maps.linear_attention_rf` maintains a **rolling window** of per-block summaries and subtracts stale contributions when the window advances, enabling **block-wise streaming** over long contexts.
 
 
-## Example scaffold (research stack required)
+## Runnable compiler slice
 
-> **STATUS:** scaffold — see [`STATUS.md`](STATUS.md). The example
+```bash
+python3 tests/smoke_linear_attention.py
+```
+
+This validates `tessera.ops.linear_attn` numerics and compiler artifacts on the
+portable target. It is not ROCm device or performance evidence.
+
+## Optional full-model scaffold (research stack required)
+
+> **STATUS:** optional scaffold — see [`STATUS.md`](STATUS.md). The example
 > imports `tessera.stdlib`, which is part of the upstream Jet-Nemotron
 > research stack and is **not** part of the standalone Tessera
 > compiler surface. Install the matching upstream stack to exercise

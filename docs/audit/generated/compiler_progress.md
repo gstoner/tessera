@@ -45,7 +45,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Direct test evidence` | mixed | 408 | 520 | 112 | covered_by_family=26, directly_tested=415, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
 | `Runtime execution matrix` | closed | 268 | 268 | 0 | apple_cpu=2, apple_gpu=24, cpu=7, nvidia_sm120=54, rocm=94, x86=87 | Add rows only when a launch path actually executes. |
 | `Runtime ABI symbols` | mixed | 571 | 900 | 329 | apple=719, nvidia=8, rocm=13, x86=160 | Reduce stub-only ABI rows where a backend claims native execution. |
-| `Audited repo surfaces` | mixed | 31 | 64 | 33 | archived=4, compile_only=18, runnable=31, runnable_optional=2, scaffold=9 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
+| `Audited repo surfaces` | mixed | 36 | 64 | 28 | archived=4, compile_only=18, runnable=36, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
 ## Code Generation Pathways
 
@@ -68,7 +68,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `backend_kernel` | mixed | 420 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. | `docs/audit/generated/s_series_status.md` |
 | `Direct test evidence` | mixed | 112 | covered_by_family=26, directly_tested=415, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. | `tessera.compiler.generated_docs:test_coverage (live renderer)` |
 | `CUDA target-map native promotion` | open | 41 | artifact_only=41 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
-| `Audited repo surfaces` | mixed | 33 | archived=4, compile_only=18, runnable=31, runnable_optional=2, scaffold=9 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
+| `Audited repo surfaces` | mixed | 28 | archived=4, compile_only=18, runnable=36, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
 | `Target IR native/fused codegen` | mixed | 24 | device_verified_abi=27, device_verified_jit=196, fused=72, no_kernel_required=8, not_applicable=26, reference=24 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
 | `ROCm target-map native promotion` | mixed | 21 | artifact_only=11, device_verified_abi=2, device_verified_jit=34, ready=10 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
 

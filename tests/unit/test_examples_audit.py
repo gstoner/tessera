@@ -174,6 +174,34 @@ class TestManifestFilesystem:
         ):
             assert legacy_or_fake not in source
 
+    def test_reworked_scaffolds_use_canonical_entry_points(self) -> None:
+        entries = {entry.directory: entry for entry in all_entries()}
+        expected = {
+            "examples/advanced/Diffusion_LLM": "gpu_denoise.py",
+            "examples/advanced/Jet_nemotron": "smoke_linear_attention.py",
+            "examples/advanced/Tessera_Empirical_Software_Agent": "benchmark_kernel.py",
+            "examples/integration/HF_transformer": "tessera_huggingface_transformers.py",
+            "examples/optimization": "tessera_schedule_example.py",
+        }
+        for directory, filename in expected.items():
+            entry = entries[directory]
+            assert entry.status == "runnable"
+            assert entry.entry_point_path.name == filename
+
+    def test_reworked_diffusion_and_hf_sources_have_no_removed_decorators(self) -> None:
+        roots = (
+            REPO_ROOT / "examples/advanced/Diffusion_LLM",
+            REPO_ROOT / "examples/integration/HF_transformer",
+        )
+        offenders: list[str] = []
+        removed = ("@ts.function", "@tessera.function", "@ts.compile")
+        for root in roots:
+            for path in root.rglob("*.py"):
+                source = path.read_text(encoding="utf-8")
+                if any(token in source for token in removed):
+                    offenders.append(str(path.relative_to(REPO_ROOT)))
+        assert offenders == []
+
 
 class TestGeneratedDashboardDriftGate:
     """The per-surface ``examples_status.md`` doc was consolidated

@@ -1,10 +1,12 @@
-# Status: `scaffold`
+# Status: `runnable` compiler slice; optional full-model scaffold
 
 Tracked by `python/tessera/compiler/examples_manifest.py`.
 
-This directory is a **research sketch**, not a runnable example today.
+The manifest entry point is `tests/smoke_linear_attention.py`. It executes a
+canonical `tessera.ops.linear_attn` graph at D=128, checks a NumPy oracle, and
+requires all four compiler artifacts.
 
-## Why
+## Full-model boundary
 
 `transformer_block.py` imports `from tessera.stdlib import rmsnorm_safe,
 dropout`. `tessera.stdlib` is part of the broader Jet-Nemotron research
@@ -21,12 +23,10 @@ under `python/tessera/`.
   emits an explicit `pytest.skip` naming the missing module rather
   than silently passing.
 
-## Path forward
-
 Install the upstream Jet-Nemotron research stack (which ships
-`tessera.stdlib`) to exercise the example end-to-end. The skeleton
-under this directory is correct; only the optional dependency is
-missing.
+`tessera.stdlib`) to exercise `examples/e2e_infer.py` end-to-end. That optional
+surface remains outside the runnable manifest entry.
 
-Until then, this scaffold ships unchanged. The manifest's drift gate
-will flag any README that claims it is runnable in the default venv.
+The D=128 smoke is host-portable compiler and numerical evidence only. It does
+not close or provide exact-device evidence for the ROCm load/wait scheduling
+gap.

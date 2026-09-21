@@ -145,8 +145,7 @@ class TestKLDivergence:
 
 
 def test_diffusion_llm_style_kl_smoke():
-    """The exact pattern at examples/advanced/Diffusion_LLM/
-    tessera_diffusion_llm.py:520-525:
+    """Preserve the KL pattern from the retired Diffusion-LLM monolith:
         kl = ts.distributions.kl_divergence(
             Normal(pred_noise, ts.exp(0.5 * pred_var)),
             Normal(noise, ts.sqrt(true_var)),

@@ -1,11 +1,17 @@
 
-# Standalone Optimization Sketches
+# Tessera Optimization Example and Standalone Sketches
 
-This directory contains standalone C++/CUDA/MLIR teaching sketches. It is not
-part of Tessera's canonical compiler pipeline and does not demonstrate Tessera
-schedule selection, Target IR lowering, or runtime execution. The CPU sources
+The maintained entry point compiles and validates a tiled matrix multiplication
+through Tessera's canonical pipeline:
+
+```bash
+python3 examples/optimization/tessera_schedule_example.py
+```
+
+It checks NumPy numerics plus non-empty Graph, Schedule, Tile, and Target IR.
+The other files are standalone C++/CUDA/MLIR teaching sketches. The CPU sources
 build through the local CMake file; the CUDA and MLIR files include illustrative
-or incomplete pieces and are not correctness/performance evidence.
+or incomplete pieces and are not correctness or performance evidence.
 
 **Contents**
 - `01_loop_tiling_blocking.cpp` — Cache-blocked GEMM (baseline vs blocked + vectorized loads).

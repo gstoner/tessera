@@ -289,61 +289,52 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
             "Apple CPU compile (self-bootstraps sys.path)."
         ),
     ),
-    # ── Advanced — scaffolds ───────────────────────────────────────────
+    # ── Advanced — maintained slices of larger research examples ──────
     ExampleEntry(
         directory="examples/advanced/Diffusion_LLM",
-        entry_point=(
-            "examples/advanced/Diffusion_LLM/tessera_diffusion_llm.py"
-        ),
-        status="scaffold",
-        reason=(
-            "Research sketch — references non-existent APIs "
-            "(``ts.compile(mode='training')``, ``ts.randint``, "
-            "``Tensor[]`` syntax) and the package modules require "
-            "PyTorch.  Reimplement against the canonical Tessera "
-            "surface or mark broken when that work starts."
+        entry_point="examples/advanced/Diffusion_LLM/gpu_denoise.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python "
+            "examples/advanced/Diffusion_LLM/gpu_denoise.py"
         ),
         notes=(
-            "Submodule ``tessera_diffusion_llm/`` is a separate package "
-            "that imports torch; see STATUS.md for the path forward."
+            "Torch-free MDLM loop with deterministic sampling and a NumPy "
+            "oracle; uses Metal kernels when visible and otherwise validates "
+            "the portable path. The old removed-API monolith was retired."
         ),
     ),
     ExampleEntry(
         directory="examples/advanced/Jet_nemotron",
         entry_point=(
-            "examples/advanced/Jet_nemotron/examples/e2e_infer.py"
+            "examples/advanced/Jet_nemotron/tests/smoke_linear_attention.py"
         ),
-        status="scaffold",
-        reason=(
-            "Requires the upstream ``tessera.stdlib`` research stack "
-            "which is not part of the standalone compiler surface.  "
-            "Test ``tests/test_sanity.py`` locks the e2e_infer import "
-            "block + skips honestly when stdlib is absent."
+        status="runnable",
+        command=(
+            "python examples/advanced/Jet_nemotron/tests/"
+            "smoke_linear_attention.py"
         ),
         notes=(
-            "Post-2026-05-19 fix: removed bogus "
-            "``tessera_jetnemotron`` ghost-package import; example "
-            "now bootstraps sys.path against sibling modules."
+            "Canonical D=128 linear-attention numerical + compiler smoke. "
+            "The full optional model still requires the external research "
+            "stdlib and this host-portable run is not ROCm device evidence."
         ),
     ),
     ExampleEntry(
         directory="examples/advanced/Tessera_Empirical_Software_Agent",
         entry_point=(
-            "examples/advanced/Tessera_Empirical_Software_Agent/src/"
-            "agents/tree_search_runner.py"
+            "examples/advanced/Tessera_Empirical_Software_Agent/examples/"
+            "kernel_autotuning/benchmark_kernel.py"
         ),
-        status="scaffold",
-        reason=(
-            "End-to-end LLM + tree-search agent — requires a real "
-            "LLM client, sandbox executor, and per-task harness.  "
-            "DummyLLM only proposes ``print('hello from variant N')`` "
-            "stubs; the orchestrator is not runnable as a CI smoke "
-            "test."
+        status="runnable",
+        command=(
+            "python examples/advanced/Tessera_Empirical_Software_Agent/"
+            "examples/kernel_autotuning/benchmark_kernel.py"
         ),
         notes=(
-            "Kernel-autotuning sub-example "
-            "(``examples/kernel_autotuning/``) is closer to runnable "
-            "and could graduate independently."
+            "Deterministic candidate-config benchmark with a numerical "
+            "oracle. The parent LLM/tree-search orchestrator remains an "
+            "integration scaffold."
         ),
     ),
     # ── Integration ────────────────────────────────────────────────────
@@ -353,28 +344,28 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
             "examples/integration/HF_transformer/"
             "tessera_huggingface_transformers.py"
         ),
-        status="scaffold",
-        reason=(
-            "References non-existent Tessera APIs "
-            "(``from tessera import function, Module``); needs a "
-            "rewrite against the canonical surface "
-            "(``@tessera.jit`` + ``tessera.nn.Module``)."
-        ),
-        notes="Hugging Face Transformers compatibility sketch.",
-    ),
-    # ── Optimization placeholder ───────────────────────────────────────
-    ExampleEntry(
-        directory="examples/optimization",
-        entry_point="examples/optimization/README.md",
-        status="scaffold",
-        reason=(
-            "Standalone C++/CUDA/MLIR teaching sketches, not a canonical "
-            "Tessera compiler entry point. CPU sources have CMake targets, "
-            "but CUDA/MLIR coverage includes non-functional skeletons."
+        status="runnable",
+        command=(
+            "python examples/integration/HF_transformer/"
+            "tessera_huggingface_transformers.py"
         ),
         notes=(
-            "Needs a Tessera-native schedule/compile/validate entry point or "
-            "retirement to the archive."
+            "HF-shaped BERT/GPT-2/Llama configs select canonical "
+            "@tessera.jit attention graphs and validate against NumPy."
+        ),
+    ),
+    # ── Optimization ──────────────────────────────────────────────────
+    ExampleEntry(
+        directory="examples/optimization",
+        entry_point="examples/optimization/tessera_schedule_example.py",
+        status="runnable",
+        command=(
+            "python examples/optimization/tessera_schedule_example.py"
+        ),
+        notes=(
+            "Canonical scheduled matmul with a NumPy oracle and Graph, "
+            "Schedule, Tile, and Target IR checks. Generic source sketches "
+            "remain teaching material rather than backend evidence."
         ),
     ),
 )

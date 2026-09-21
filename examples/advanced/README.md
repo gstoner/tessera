@@ -25,7 +25,9 @@ These are useful as design sketches and don't need any compiler features. They r
 | [`long_context_attention/`](long_context_attention/) | Retrieval-head vs. streaming-head specialization classifier. Pure heuristics. |
 | [`rlvr_reasoning_suite/`](rlvr_reasoning_suite/) | GRPO/RLVR rollout batching + reward accounting. No Tessera ops. |
 | [`gumiho/`](gumiho/) | Gumiho (ICML'25) hybrid speculative decoding — serial 2-layer Transformer + 5 parallel MLP heads + Full Tree Attention, draft+verify on the Apple GPU/CPU backend, validated vs numpy. |
-| [`Tessera_Empirical_Software_Agent/`](Tessera_Empirical_Software_Agent/) | Tree-search agent skeleton with kernel-autotuning task. LLM hooks are stubs. |
+| [`Tessera_Empirical_Software_Agent/`](Tessera_Empirical_Software_Agent/) | Runnable kernel-candidate benchmark; the parent LLM/tree-search orchestrator remains a scaffold. |
+| [`Diffusion_LLM/`](Diffusion_LLM/) | Torch-free masked-diffusion denoising loop with deterministic sampling and a NumPy oracle. |
+| [`Jet_nemotron/`](Jet_nemotron/) | D=128 canonical linear-attention compiler smoke; the optional full-model port still needs the research stdlib. |
 
 ### Compiler smoke tests (build Graph IR directly)
 
@@ -39,14 +41,12 @@ These bypass the Python `@tessera.jit` surface and emit Graph IR through interna
 
 ---
 
-## Blocked on backlog
+## Optional research surfaces
 
-### Scaffolds — reference phantom APIs, do not run
-
-| Subdir | LOC | Primary blockers (audit Tier) |
-|--------|-----|--------------------------------|
-| [`Diffusion_LLM/`](Diffusion_LLM/) | ~5,300 | `nn.Module` / `Parameter` / `Sequential` (Tier 1), reverse-mode autodiff (Tier 2), `autocast` / `checkpoint` (Tier 3), gather/clip/einsum/masked_fill ops (Tier 3) |
-| [`Jet_nemotron/`](Jet_nemotron/) | ~1,100 | `nn.Module` (Tier 1), `DynamicDepthwiseConv1d` streaming kernel (Tier 1), autodiff (Tier 2), fp8 lowering (Tier 3) |
+Some runnable directories retain larger experimental packages that need extra
+dependencies. Their `STATUS.md` files define the maintained manifest entry and
+the boundary around optional code. A runnable slice is compiler or numerical
+evidence only for the operation and target it actually executes.
 
 ### Stubs
 
@@ -92,7 +92,7 @@ y = F.rms_norm(x, weight=W)
 
 See [`docs/CANONICAL_API.md`](../../docs/CANONICAL_API.md) for the full surface
 that exists today, and the [capability-gap audit](../../docs/audit/coverage/COVERAGE_AUDIT.md)
-for the prioritized backlog that will unblock the scaffolds above.
+for the prioritized compiler backlog.
 
 ---
 

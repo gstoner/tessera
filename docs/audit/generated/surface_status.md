@@ -6,7 +6,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 
 | Surface | Entries | Status breakdown |
 |---|--:|---|
-| examples | 22 | runnable=15, runnable_optional=2, scaffold=5 |
+| examples | 22 | runnable=20, runnable_optional=2 |
 | benchmarks | 24 | archived=1, compile_only=12, runnable=11 |
 | research | 2 | compile_only=1, runnable=1 |
 | tools | 6 | archived=1, compile_only=2, runnable=3 |
@@ -16,11 +16,11 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 
 | Directory | Status | Entry point | Reason |
 |---|---|---|---|
-| `examples/advanced/Diffusion_LLM` | scaffold | `examples/advanced/Diffusion_LLM/tessera_diffusion_llm.py` | Research sketch — references non-existent APIs (``ts.compile(mode='training')``, ``ts.randint``, ``Tensor[]`` syntax) and the package modules require PyTorch.  Reimplement against the canonical Tessera surface or mark broken when that work starts. |
+| `examples/advanced/Diffusion_LLM` | runnable | `examples/advanced/Diffusion_LLM/gpu_denoise.py` |  |
 | `examples/advanced/Fast_dLLM_v2` | runnable | `examples/advanced/Fast_dLLM_v2/tests/smoke_random.py` |  |
-| `examples/advanced/Jet_nemotron` | scaffold | `examples/advanced/Jet_nemotron/examples/e2e_infer.py` | Requires the upstream ``tessera.stdlib`` research stack which is not part of the standalone compiler surface.  Test ``tests/test_sanity.py`` locks the e2e_infer import block + skips honestly when stdlib is absent. |
+| `examples/advanced/Jet_nemotron` | runnable | `examples/advanced/Jet_nemotron/tests/smoke_linear_attention.py` |  |
 | `examples/advanced/Nemotron_Nano_12B_v2` | runnable | `examples/advanced/Nemotron_Nano_12B_v2/tests/smoke_random.py` |  |
-| `examples/advanced/Tessera_Empirical_Software_Agent` | scaffold | `examples/advanced/Tessera_Empirical_Software_Agent/src/agents/tree_search_runner.py` | End-to-end LLM + tree-search agent — requires a real LLM client, sandbox executor, and per-task harness.  DummyLLM only proposes ``print('hello from variant N')`` stubs; the orchestrator is not runnable as a CI smoke test. |
+| `examples/advanced/Tessera_Empirical_Software_Agent` | runnable | `examples/advanced/Tessera_Empirical_Software_Agent/examples/kernel_autotuning/benchmark_kernel.py` |  |
 | `examples/advanced/gumiho` | runnable | `examples/advanced/gumiho/demo.py` |  |
 | `examples/advanced/kv_cache_serving` | runnable | `examples/advanced/kv_cache_serving/demo.py` |  |
 | `examples/advanced/long_context_attention` | runnable | `examples/advanced/long_context_attention/demo.py` |  |
@@ -36,8 +36,8 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `examples/getting_started` | runnable | `examples/getting_started/basic_tensor_ops.py` |  |
 | `examples/getting_started` | runnable | `examples/getting_started/compile_and_explain.py` |  |
 | `examples/getting_started/tessera_flash_attention_demo` | runnable_optional | `examples/getting_started/tessera_flash_attention_demo/examples/flash_attention_demo.py` |  |
-| `examples/integration/HF_transformer` | scaffold | `examples/integration/HF_transformer/tessera_huggingface_transformers.py` | References non-existent Tessera APIs (``from tessera import function, Module``); needs a rewrite against the canonical surface (``@tessera.jit`` + ``tessera.nn.Module``). |
-| `examples/optimization` | scaffold | `examples/optimization/README.md` | Standalone C++/CUDA/MLIR teaching sketches, not a canonical Tessera compiler entry point. CPU sources have CMake targets, but CUDA/MLIR coverage includes non-functional skeletons. |
+| `examples/integration/HF_transformer` | runnable | `examples/integration/HF_transformer/tessera_huggingface_transformers.py` |  |
+| `examples/optimization` | runnable | `examples/optimization/tessera_schedule_example.py` |  |
 
 ## benchmarks
 

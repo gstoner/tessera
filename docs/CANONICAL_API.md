@@ -133,8 +133,8 @@ the execution status of any target.
 | `gfx950`, `mi350p`, `mi350x`, `mi355x` | `rocm_gfx950` |
 | `gfx1100`, `rdna3`, `rx7900` | `rocm_gfx1100` |
 | `gfx1151`, `radeon8060s`, `rdna35`, `ryzenaimax395`, `strixhalo` | `rocm_gfx1151` |
-| `gfx1200`, `gfx12`, `rdna4`, `rx9000`, `rx9060xt`, `rx9070xt`, `radeon_rx_9060_xt`, `radeon_rx_9070_xt`, `Radeon RX 9060 XT`, `Radeon RX 9070 XT` | `rocm_gfx1200` |
-| `gfx1201`, `r9700`, `radeon_ai_pro_r9700` | `rocm_gfx1201` |
+| `gfx1200`, `rx9050`, `rx9060`, `rx9060xt`, `rx9060xtlp`, and their `radeon_rx_*` / display-name forms | `rocm_gfx1200` |
+| `gfx1201`, `rx9070`, `rx9070gre`, `rx9070xt`, `r9600d`, `r9700`, `r9700s`, and their `radeon_*` / display-name forms | `rocm_gfx1201` |
 | `gfx1250`, `mi455x` | `rocm_gfx1250` |
 | `apple_cpu`, `macos_cpu`, `m_series_cpu` | `apple_cpu` |
 | `apple_gpu`, `apple`, `mac`, `macos_gpu`, `m_series_gpu` | `apple_gpu` |
@@ -142,7 +142,9 @@ the execution status of any target.
 `GPUTargetProfile` remains the typed alternative for NVIDIA profiles. The
 authoritative normalization implementation is
 `tessera.compiler.capabilities.normalize_target`; update this table and its
-tests when adding an alias.
+tests when adding an alias. Architecture-family labels such as `gfx12`,
+`rdna4`, and `rx9000` are deliberately not aliases because they do not identify
+one exact target.
 
 ### Logical shape and placement
 

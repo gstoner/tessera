@@ -5,7 +5,7 @@
 
 This dashboard uses one architecture-specific target per proof row. The `rocm` name is a family rollup only and never carries compile, execution, numerical, or performance proof.
 
-A `device_verified_jit` or `device_verified_abi` row requires a checked-in numerical fixture joined to an executable runtime-execution-matrix row. Current native proof is scoped to `gfx1151`; other architectures remain `artifact_only` until exact-device execution exists.
+A `device_verified_jit` or `device_verified_abi` row in this dashboard requires a checked-in numerical fixture joined to a public executable runtime-execution-matrix row. That registry join is currently complete only for `gfx1151`. Bounded content-addressed scheduled packages have separate exact-device `gfx1201` proof; until those packages are projected into the public capability and execution registries, their rows remain `artifact_only` here rather than borrowing proof.
 
 ## Architecture priorities
 
@@ -13,8 +13,8 @@ A `device_verified_jit` or `device_verified_abi` row requires a checked-in numer
 |---|---|---|---|---|---|---:|
 | `rocm_gfx950` | `gfx950` | CDNA 4 | MI350X / MI355X / MI350P | `current_datacenter` | exact-device proof required | 4 |
 | `rocm_gfx1250` | `gfx1250` | CDNA 5 Wave32 XDL-WMMA | MI455X | `forward_datacenter` | upstream-LLVM artifact; exact-device proof required | 1 |
-| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 XT / Radeon AI PRO R9700 | `current_workstation` | exact-device proof required | 11 |
-| `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 XT | `current_consumer` | exact-device proof required | 1 |
+| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D | `current_workstation` | exact-device proof required | 11 |
+| `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 / RX 9050 families | `current_consumer` | exact-device proof required | 1 |
 | `rocm_gfx1151` | `gfx1151` | RDNA 3.5 Wave32 | Ryzen AI Max+ 395 / Radeon 8060S | `proven_development` | may use checked-in gfx1151 execution evidence | 36 |
 | `rocm_gfx1152` | `gfx1152` | Wave32 development bridge | development ISA | `compiler_bridge` | no execution inheritance | 0 |
 | `rocm_gfx942` | `gfx942` | CDNA 3 | MI300X / MI325X | `compatibility` | exact-device proof required | 4 |
@@ -89,7 +89,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 |---|---|---|---|---|---|---|---|
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,int8 |
 
-### `rocm_gfx1201` — Radeon RX 9070 XT / Radeon AI PRO R9700
+### `rocm_gfx1201` — Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|
@@ -105,7 +105,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | stft | ready | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
 
-### `rocm_gfx1200` — Radeon RX 9060 XT
+### `rocm_gfx1200` — Radeon RX 9060 / RX 9050 families
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|

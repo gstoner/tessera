@@ -1,22 +1,44 @@
 ---
-last_updated: 2026-08-05
+last_updated: 2026-09-21
 audit_role: reference
 owning_plan_item: W1.1 / ROCm backend
 ---
 
-# The ROCm lane map — frontend to hsaco, measured
+# The ROCm lane map — frontend to hsaco
 
-What actually executes on gfx1151, layer by layer, and where the W1 Tile-typing
-work sits relative to it. Every number here was measured on 2026-08-05 against
-the working tree; the commands are given so each can be re-run.
+The current executing routes, their exact-target evidence, and the older
+directive-lane snapshot that explains why the scheduled route was built.
 
-This exists because W1.1 has been sized as *"compiler-contract work on the
-Tile IR"* without anyone stating which executing lane traverses Tile IR. The
-answer changes the sequencing.
+## Current lane map (2026-09-21)
+
+| Lane | IR path | Exact targets | Evidence boundary |
+|---|---|---|---|
+| Generic compiled/directive runtime | Python/runtime-selected Target directives → generated `gpu.func` → ROCDL → hsaco | Broad exact-device evidence on `gfx1151`; many family plugins also execute on `gfx1201` through the promotion gate. | The public execution matrix is still primarily joined at generic `rocm`/gfx1151 grain. |
+| Content-addressed family pipeline | typed Graph contract → registered family plugin → replay-bound Tile/Target package → ROCDL → hsaco | Every `FAMILY_PLUGINS` entry is promoted on `gfx1201`; every gfx11-capable entry is promoted on `gfx1151`. `gfx1200` has none. | `rocm_pipeline.promoted_families()` is the fail-closed source of truth. |
+| Scheduled native package | Graph → Schedule → Tile → Target → native image + launch descriptor | `gfx1201` owns bounded softmax/reduction, matmul, attention/backward, depth-attention, paged-KV, and sparse-2:4 ABIs; gfx1151 owns its separately proved set. | `runtime._gfx1201_proved_scheduled_abis()` rejects unproved ABI/architecture pairs. |
+| Public per-target capability/executor registry | capability row + execution-matrix row → generated target dashboards | Registry join is complete for the existing gfx1151 public lanes. | The bounded gfx1201 packages are not yet projected, so generated gfx1201 op rows remain conservative. |
+| gfx1200 artifact lane | ISA/profile/feature modeling → compile or artifact validation | `gfx1200` only. | No promoted family, runtime ABI, numerical device proof, topology default, or performance claim. |
+
+The same RDNA 4 feature tables serve `gfx1200` and `gfx1201`, but package
+admission and evidence are exact-target. Shared ISA support does not authorize
+launching a gfx1201 package on gfx1200 or copying performance conclusions.
+
+The most important remaining gfx1201 compiler gap is `linear_attn` at D=128:
+the measured kernel drains full waits and lacks an available selector lever.
+The generator must batch independent loads before the wait, following the
+existing `lds-copy-depth` staging pattern. The other major gap is projecting
+the already proved scheduled packages into the public capability and execution
+registries without widening their dtype/shape/policy envelopes.
+
+## Historical snapshot (2026-08-05)
+
+The remainder records the earlier gfx1151 directive-versus-canonical-lane
+measurement. Its caller counts and statements that Schedule/Tile were absent
+describe that dated tree; they are not current support claims.
 
 ---
 
-## 1. There are two GEMM lanes, and only one of them runs
+### There were two GEMM lanes, and only one ran
 
 ### Lane A — the directive lane (this is production)
 
@@ -73,7 +95,7 @@ benchmark script.**
 
 ---
 
-## 2. The stack, as executed
+### The stack in that snapshot
 
 | Layer | Status on the executing ROCm lane |
 |---|---|
@@ -90,7 +112,7 @@ never four, because Schedule IR is not in any pipeline.
 
 ---
 
-## 3. The expander population
+### The expander population in that snapshot
 
 The directive lane's work is done by `generate-<op>-kernel` passes, each of which
 expands a one-op directive into a `gpu.func` it synthesizes itself.
@@ -132,7 +154,7 @@ Every expander does its own lane math and emits `tessera_rocm.*` plus raw
 
 ---
 
-## 4. Where the current W1 work sits — the consequence
+### Where the W1 work sat — the consequence
 
 W1.1's typed `!tile.fragment` chain (steps 1, 2, 0, 3a) lives inside
 `lower-tile-to-rocm`. On the executing lane that pass is present **and is a
@@ -185,7 +207,7 @@ population, not with the number of remaining W1.1 steps.
 
 ---
 
-## 5. What this implies for sequencing
+### What that implied for sequencing
 
 1. **Distinguish closing the contract from adopting it.** Steps 3–5 close the
    Tile fragment contract across 5 C++ creation sites plus the Python emitters,
@@ -214,7 +236,7 @@ population, not with the number of remaining W1.1 steps.
 
 ---
 
-## 6. Re-running this
+### Re-running the historical measurements
 
 ```bash
 # Lane pipelines

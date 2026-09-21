@@ -3,10 +3,18 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-20
+last_updated: 2026-09-21
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## GFX12 exact-target alias correction — 2026-09-21
+
+Owner ROCM-2 / ROCM-4; sync `GFX12-EXACT-TARGET-SUPPORT-2026-09-21`. Shared
+target normalization now maps RX 9070 products to `rocm_gfx1201`, RX 9060/RX
+9050 products to `rocm_gfx1200`, and refuses ambiguous RDNA4 family aliases.
+Not applicable to CUDA physical execution: no NVIDIA IR, ABI, dtype, numerical,
+or runtime contract changed, and no ROCm proof transfers to this backend.
 
 ## Compiler-example MoE optional binding — 2026-09-20
 

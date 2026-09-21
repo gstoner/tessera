@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-20
+last_updated: 2026-09-21
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## GFX12 exact-target alias correction — 2026-09-21
+
+Owner ROCM-2 / ROCM-4; sync `GFX12-EXACT-TARGET-SUPPORT-2026-09-21`. Shared
+target normalization now maps RX 9070 products to `rocm_gfx1201`, RX 9060/RX
+9050 products to `rocm_gfx1200`, and refuses ambiguous RDNA4 family aliases.
+Not applicable to x86 physical execution: no x86 IR, ABI, dtype, numerical, or
+runtime contract changed, and no ROCm proof transfers to this backend.
 
 ## Compiler-example MoE optional binding — 2026-09-20
 

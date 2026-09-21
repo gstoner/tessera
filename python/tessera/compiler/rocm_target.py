@@ -15,7 +15,8 @@ Per-ISA feature matrix covers:
   - gfx950 (CDNA 4, MI325X / future)
   - gfx1100 (RDNA 3, prosumer; kept for completeness)
   - gfx1151 (RDNA 3.5, Strix Halo APU — Radeon 8060S / Ryzen AI Max+ 395)
-  - gfx1200 (RDNA 4 / GFX12 consumer class)
+  - gfx1200 (RDNA 4 / RX 9060 and RX 9050 consumer class)
+  - gfx1201 (RDNA 4 / RX 9070 and Radeon AI PRO workstation class)
   - gfx1250 / gfx1251 (CDNA 5, MI455X / MI430X)
 
 Each ISA exposes a feature dict + a dtype set + matrix-instruction
@@ -54,8 +55,8 @@ class AMDArch(IntEnum):
     GFX_950 = 950      # MI325X — CDNA 4
     GFX_1100 = 1100    # RDNA 3 prosumer (RX 7900-series)
     GFX_1151 = 1151    # RDNA 3.5 APU — Strix Halo (Radeon 8060S / Ryzen AI Max+ 395)
-    GFX_1200 = 1200    # RDNA 4 / GFX12 prosumer
-    GFX_1201 = 1201    # RDNA 4 / Radeon AI PRO R9700
+    GFX_1200 = 1200    # RDNA 4 / RX 9060 and RX 9050 families
+    GFX_1201 = 1201    # RDNA 4 / RX 9070 and Radeon AI PRO families
     # CDNA 5: wave32 XDL WMMA/SWMMAC, not legacy wave64 MFMA. gfx1250 is
     # MI455X; gfx1251 is MI430X. They share an instruction ABI but have distinct
     # latency/cost identities and must not share selector evidence.
@@ -727,7 +728,7 @@ class ROCmTargetProfile:
     """Describes the ROCm/AMD target for a ``@jit(target=...)`` function.
 
     Attributes:
-        arch              : AMDArch enum (gfx94x / gfx950 / gfx1100 / gfx1200)
+        arch              : AMDArch enum (gfx94x / gfx950 / gfx1100 / gfx1200 / gfx1201)
         waves_per_cu      : Wave count per CU -- per CU, not per SIMD
                             (must be in [1, _MAX_WAVES]; see that table)
         lds_bytes         : Override LDS budget; None = use generation default

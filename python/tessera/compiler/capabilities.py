@@ -809,10 +809,12 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     "rocm_gfx1200": TargetCapability(
         name="rocm_gfx1200",
         aliases=(
-            "gfx1200", "gfx12", "rdna4", "rx9000",
-            "rx9060xt", "rx9070xt",
-            "radeon_rx_9060_xt", "radeon_rx_9070_xt",
-            "radeon rx 9060 xt", "radeon rx 9070 xt",
+            "gfx1200",
+            "rx9050", "rx9060", "rx9060xt", "rx9060xtlp",
+            "radeon_rx_9050", "radeon_rx_9060",
+            "radeon_rx_9060_xt", "radeon_rx_9060_xt_lp",
+            "radeon rx 9050", "radeon rx 9060",
+            "radeon rx 9060 xt", "radeon rx 9060 xt lp",
         ),
         family="rocm",
         runtime_backend="hip",
@@ -834,7 +836,17 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     ),
     "rocm_gfx1201": TargetCapability(
         name="rocm_gfx1201",
-        aliases=("gfx1201", "radeon_ai_pro_r9700", "r9700"),
+        aliases=(
+            "gfx1201",
+            "rx9070", "rx9070gre", "rx9070xt",
+            "radeon_rx_9070", "radeon_rx_9070_gre", "radeon_rx_9070_xt",
+            "radeon rx 9070", "radeon rx 9070 gre", "radeon rx 9070 xt",
+            "r9600d", "r9700", "r9700s",
+            "radeon_ai_pro_r9600d", "radeon_ai_pro_r9700",
+            "radeon_ai_pro_r9700s",
+            "radeon ai pro r9600d", "radeon ai pro r9700",
+            "radeon ai pro r9700s",
+        ),
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
@@ -846,8 +858,10 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 dtypes=("bf16", "fp16", "fp32", "fp8_e4m3", "fp8_e5m2",
                         "int8", "int32", "int4"),
                 reason=(
-                    "ROCm RDNA 4 gfx1201 / Radeon AI PRO R9700 WMMA artifact; "
-                    "exact-device compile and execution proof remains gated"
+                    "The public exact-target capability/execution-matrix row "
+                    "remains artifact-only pending registry closure; bounded "
+                    "scheduled gfx1201 matmul ABIs have separate RX 9070 XT "
+                    "exact-device compile, launch, and numerical proof"
                 ),
             ),
             # GFX1201-PARITY slice 4 (2026-09-17): the spectral families on

@@ -212,7 +212,7 @@ class MmaDescriptor:
     def isa_instruction(self) -> str:
         """Exact ISA mnemonic where the cross-generation contract owns one."""
         if self.arch in {
-            AMDArch.GFX_1151, AMDArch.GFX_1200,
+            AMDArch.GFX_1151, AMDArch.GFX_1200, AMDArch.GFX_1201,
             AMDArch.GFX_1250, AMDArch.GFX_1251,
         }:
             return select_amd_matrix_instruction(

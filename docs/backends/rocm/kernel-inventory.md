@@ -2,17 +2,17 @@
 status: Informative
 classification: Reference / Kernel Inventory
 authority: Companion to Phase H ROCm backend pre-work
-last_updated: 2026-07-10
+last_updated: 2026-09-21
 ---
 
-# ROCm 7.2.4 MFMA / WMMA Kernel Inventory
+# ROCm 10.0 MFMA / WMMA Kernel Inventory
 
 > Reference enumerating every fused kernel Tessera plans to ship on AMD
-> CDNA 2/3/4 (MFMA) and RDNA 3 / RDNA 3.5 / RDNA 4 (WMMA) under ROCm 7.2.4 +
-> HIP 7.2.4. Companion to `docs/backends/nvidia/kernel-inventory.md` (parallel
+> CDNA 2/3/4 (MFMA) and RDNA 3 / RDNA 3.5 / RDNA 4 (WMMA) under ROCm 10.0 +
+> HIP 7.15. Companion to `docs/backends/nvidia/kernel-inventory.md` (parallel
 > coverage tracking) and `docs/backends/apple/kernel-guide.md`.
 >
-> **Execution status (2026-07-10):** far past hardware-free. On the
+> **Execution status (2026-09-21):** far past hardware-free. On the
 > **RDNA 3.5 `gfx1151`** (Strix Halo APU — Ryzen AI Max+ 395 / Radeon 8060S)
 > **dozens of compiler-generated HIP kernels now execute on real silicon**
 > through `runtime.launch()` (`execution_mode="hip_runtime"`), spanning nearly
@@ -27,6 +27,14 @@ last_updated: 2026-07-10
 > **`device_verified_jit`** lanes (generated binary launched and
 > execute-vs-reference verified, no perf ladder yet).
 >
+> On **RDNA 4 `gfx1201`**, Tajasarus (Radeon RX 9070 XT) supplies distinct
+> exact-device proof for every family in `rocm_pipeline.FAMILY_PLUGINS`, plus
+> bounded scheduled packages for f32 softmax/reduction, f16/bf16/fp8/int8/int4
+> matmul, forward/backward attention, depth attention, paged KV, and checked
+> 2:4 SWMMAC. This does not mean every public operation row has been projected
+> into `capabilities.py` and `execution_matrix.py`; that registry join remains
+> open. **`gfx1200` has no device proof** and remains compile/artifact-only.
+>
 > **Status truth is the generated matrix, not this prose (Decision #26):**
 > [`docs/audit/generated/runtime_execution_matrix.md`](../../audit/generated/runtime_execution_matrix.md)
 > is the drift-gated source for which `(op, target)` rows execute and by which
@@ -37,13 +45,13 @@ last_updated: 2026-07-10
 This document is the **authoritative kernel inventory** for the
 ROCm backend. It captures:
 
-1. The **toolchain pin** — ROCm 7.2.4 + HIP 7.2.4 (RCCL 2.22,
+1. The **toolchain pin** — ROCm 10.0 + HIP 7.15 (RCCL floor 2.22,
    rocBLAS 5.0, MIOpen 3.5).
 2. The **shipped + planned fused kernel surface** across CDNA 2
    (gfx90a / MI250), CDNA 3 (gfx940 / MI300A, gfx942 / MI300X),
    CDNA 4 (gfx950 / MI325X), RDNA 3 (gfx1100 / RX 7900-series),
    **RDNA 3.5 (gfx1151 / Strix Halo APU — Ryzen AI Max+ 395 / Radeon 8060S)**,
-   and RDNA 4 / GFX12 (gfx1200).
+   and RDNA 4 / GFX12 (`gfx1200` and `gfx1201`).
 3. The **MFMA instruction shape contract** per kernel
    ((M, N, K, K_blocks)), LDS layout, dtype variant, and expected MFU.
 4. The **AMDGCN intrinsic patterns** used by the architecture inventory,
@@ -57,12 +65,12 @@ ROCm backend. It captures:
 
 | Pin | Value |
 |---|---|
-| ROCm | **7.2.4** |
-| HIP | **7.2.4** |
-| RCCL | **2.22** (bundled with ROCm 7.2.4) |
+| ROCm | **10.0** |
+| HIP | **7.15** |
+| RCCL | **2.22 minimum** |
 | rocBLAS | **≥ 5.0.0** |
 | MIOpen | **≥ 3.5.0** |
-| hipcc arch strings | `gfx90a`, `gfx940`, `gfx942`, `gfx950`, `gfx1100`, `gfx1151`, `gfx1200` (+ provisional `gfx1250`/`gfx1251`) |
+| hipcc arch strings | `gfx90a`, `gfx940`, `gfx942`, `gfx950`, `gfx1100`, `gfx1151`, `gfx1200`, `gfx1201` (+ provisional `gfx1250`/`gfx1251`) |
 
 Pinned in `python/tessera/compiler/rocm_target.py` as
 `TESSERA_TARGET_ROCM`, `TESSERA_TARGET_HIP`,
@@ -76,28 +84,29 @@ Pinned in `python/tessera/compiler/rocm_target.py` as
 The full matrix lives in `_ROCM_7_2_FEATURES` (`rocm_target.py`).
 Summary:
 
-| Feature | gfx90a | gfx940 | gfx942 | gfx950 | gfx1100 | gfx1151 | gfx1200 |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| `mfma` (baseline) | ✅ | ✅ | ✅ | ✅ | — | — | — |
-| `mfma_f8` | — | ✅ | ✅ | ✅ | — | — | — |
-| `mfma_xf32` | — | ✅ | ✅ | ✅ | — | — | — |
-| `mfma_f4` | — | — | — | ✅ | — | — | — |
-| `mfma_f6` | — | — | — | ✅ | — | — | — |
-| `wmma_f16` | — | — | — | — | ✅ | ✅ | ✅ |
-| `wmma_bf16` | — | — | — | — | ✅ | ✅ | ✅ |
-| `wmma_f8` | — | — | — | — | 🟡 | — | ✅ |
-| `wmma_i4` | — | — | — | — | — | ✅ | ✅ |
-| `scalar_load_u8_u16_i8_i16` | — | — | — | — | — | — | ✅ |
-| `lds_async_copy` | — | ✅ | ✅ | ✅ | — | — | — |
-| `buffer_load_lds` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `global_load_lds` | — | ✅ | ✅ | ✅ | — | — | — |
-| `cluster_mode` | — | — | — | ✅ | — | — | — |
-| `xnack` | ✅ | ✅ | ✅ | ✅ | — | — | — |
-| `sram_ecc` | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| Feature | gfx90a | gfx940 | gfx942 | gfx950 | gfx1100 | gfx1151 | gfx1200 | gfx1201 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `mfma` (baseline) | ✅ | ✅ | ✅ | ✅ | — | — | — | — |
+| `mfma_f8` | — | ✅ | ✅ | ✅ | — | — | — | — |
+| `mfma_xf32` | — | ✅ | ✅ | — | — | — | — | — |
+| `mfma_f4` | — | — | — | ✅ | — | — | — | — |
+| `mfma_f6` | — | — | — | ✅ | — | — | — | — |
+| `wmma_f16` | — | — | — | — | ✅ | ✅ | ✅ | ✅ |
+| `wmma_bf16` | — | — | — | — | ✅ | ✅ | ✅ | ✅ |
+| `wmma_f8` | — | — | — | — | 🟡 | — | ✅ | ✅ |
+| `wmma_i4` | — | — | — | — | — | ✅ | ✅ | ✅ |
+| `scalar_load_u8_u16_i8_i16` | — | — | — | — | — | — | ✅ | ✅ |
+| `lds_async_copy` | — | ✅ | ✅ | ✅ | — | — | — | — |
+| `buffer_load_lds` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `global_load_lds` | — | ✅ | ✅ | ✅ | — | — | — | — |
+| `cluster_mode` | — | — | — | ✅ | — | — | — | — |
+| `xnack` | ✅ | ✅ | ✅ | ✅ | — | — | — | — |
+| `sram_ecc` | ✅ | ✅ | ✅ | ✅ | — | — | — | — |
 
 **Wavefront width:** CDNA = 64 lanes; RDNA (incl. RDNA 3.5) = 32 lanes.
-`gfx1200` is tracked as an RDNA4 / GFX12 WMMA-class artifact-planning target,
-not a CDNA MFMA target.  AMD instruction spelling maps as follows:
+`gfx1200` and `gfx1201` are RDNA4 / GFX12 WMMA-class targets, not CDNA MFMA
+targets. The table is architecture capability, not Tessera execution status.
+AMD instruction spelling maps as follows:
 `FP8`/`F8` → Tessera `fp8_e4m3`; `BF8` → Tessera `fp8_e5m2`;
 `IU4` → canonical signed Tessera `int4` when the storage descriptor selects
 two's-complement nibbles. A distinct unsigned packed-4 dtype remains gated.
@@ -130,42 +139,42 @@ lower to (`_MFMA_VARIANTS` in `rocm_target.py`):
 | **gfx950** (CDNA 4) | + (32, 32, 32, 1) [FP4], (16, 16, 64, 1) [FP4] |
 | **gfx1100** (RDNA 3) | ∅ — WMMA only, no MFMA |
 | **gfx1151** (RDNA 3.5) | ∅ — WMMA only, no MFMA |
-| **gfx1200** (RDNA 4 / GFX12) | ∅ — WMMA/rocWMMA only, no MFMA |
+| **gfx1200 / gfx1201** (RDNA 4 / GFX12) | ∅ — WMMA/rocWMMA only, no MFMA |
 
 **WMMA shape table** (`_WMMA_VARIANTS` in `rocm_target.py`, `(M, N, K)`):
 
 | Arch | WMMA shapes |
 |---|---|
 | **gfx1100 / gfx1151** (RDNA 3 / 3.5) | (16, 16, 16) |
-| **gfx1200** (RDNA 4) | (16, 16, 16), (16, 16, 32) |
+| **gfx1200 / gfx1201** (RDNA 4) | (16, 16, 16), (16, 16, 32) |
 | **gfx1250 / gfx1251** (WMMA-v2, provisional) | (16, 16, 32), (16, 16, 64), (16, 16, 128) |
 
 ---
 
 ## 4. Per-arch dtype matrix
 
-| dtype | gfx90a | gfx940 / gfx942 | gfx950 | gfx1100 | gfx1151 | gfx1200 |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| `fp64` | ✅ | ✅ | ✅ | — | — | — |
-| `fp32` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `bf16` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `fp16` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `fp8_e4m3` | — | ✅ | ✅ | — | — | ✅ |
-| `fp8_e5m2` | — | ✅ | ✅ | — | — | ✅ |
-| `fp6_e2m3` | — | — | ✅ | — | — | — |
-| `fp6_e3m2` | — | — | ✅ | — | — | — |
-| `fp4_e2m1` | — | — | ✅ | — | — | — |
-| `int8` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `int32` | — | — | — | — | — | ✅ |
-| `int4` | — | — | — | — | ✅ | 🟡 |
+| dtype | gfx90a | gfx940 / gfx942 | gfx950 | gfx1100 | gfx1151 | gfx1200 | gfx1201 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `fp64` | ✅ | ✅ | ✅ | — | — | — | — |
+| `fp32` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `bf16` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `fp16` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `fp8_e4m3` | — | ✅ | ✅ | — | — | ✅ | ✅ |
+| `fp8_e5m2` | — | ✅ | ✅ | — | — | ✅ | ✅ |
+| `fp6_e2m3` | — | — | ✅ | — | — | — | — |
+| `fp6_e3m2` | — | — | ✅ | — | — | — | — |
+| `fp4_e2m1` | — | — | ✅ | — | — | — | — |
+| `int8` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `int32` | — | — | — | — | — | ✅ | ✅ |
+| `int4` | — | — | — | — | ✅ | 🟡 | ✅ |
 
 `gfx1151` (RDNA 3.5) carries the RDNA-3 matrix dtype set — `fp16`/`bf16`/`int8`
 WMMA with `fp32` accumulate — and, like every RDNA arch, no `fp64` matrix path.
 The **`fp8` columns are empty** for it: RDNA 3.5 has no FP8 WMMA instruction.
 The runnable gfx1151 matrix set today is `{fp16, bf16}` storage → `fp32`
 accumulate and `{int8, signed packed-int4}` storage → `int32` accumulate.
-The packed-int4 claim is gfx1151-specific; gfx1200 remains artifact-only until
-its required exact-device proof lands.
+The packed-int4 claim has exact-device proof on gfx1151 and gfx1201. gfx1200
+remains artifact-only until its own required exact-device proof lands.
 
 `gfx1200` also exposes scalar load instructions for unsigned/signed
 8-bit and 16-bit values (`s_load_u8`, `s_load_u16`, `s_load_i8`,
@@ -350,7 +359,7 @@ llvm.amdgcn.buffer.load.lds                  # buffer → LDS (gfx9x baseline)
 llvm.amdgcn.s.barrier                        # wave-front barrier
 ```
 
-### RDNA 3 / RDNA 3.5 / RDNA 4 WMMA (gfx1100 / gfx1151 / gfx1200)
+### RDNA 3 / RDNA 3.5 / RDNA 4 WMMA (gfx1100 / gfx1151 / gfx1200 / gfx1201)
 
 `gfx1100` and `gfx1151` (RDNA 3.5) share the same 16×16×16 WMMA intrinsics —
 `f16`/`bf16` only, **no FP8/large-K** (those `.fp8`/`.bf8`/`16x16x32+` forms are
@@ -359,8 +368,8 @@ gfx1200/RDNA 4 and up). On the Strix Halo box these lower via
 the C-ABI launch bridge (the shipped `tessera_rocm_wmma_gemm_{f16,bf16}` symbol).
 
 ```
-llvm.amdgcn.wmma.f32.16x16x16.f16            # WMMA fp16  (gfx1100/gfx1151/gfx1200)
-llvm.amdgcn.wmma.f32.16x16x16.bf16           # WMMA bf16  (gfx1100/gfx1151/gfx1200)
+llvm.amdgcn.wmma.f32.16x16x16.f16            # WMMA fp16  (gfx1100/gfx1151/gfx1200/gfx1201)
+llvm.amdgcn.wmma.f32.16x16x16.bf16           # WMMA bf16  (gfx1100/gfx1151/gfx1200/gfx1201)
 llvm.amdgcn.wmma.f32.16x16x16.f8             # GFX12 planning target
 llvm.amdgcn.wmma.f32.16x16x16.bf8            # GFX12 planning target
 llvm.amdgcn.wmma.i32.16x16x32.iu4            # GFX12 IU4 -> int32
@@ -393,6 +402,13 @@ GFX12 scalar prefetch / load notes tracked for future scheduler work:
 | `compileable` | `hipcc -S --offload-arch=…` (or `llc -mcpu=…`) accepts the kernel; produces a valid object; **without execution** | reachable now on the box (`rocdl_emit.py` + `llc` proven for gfx1100/gfx1151) |
 | `executable` | The kernel loads on a real GPU and produces correct output vs a CPU/numpy reference | ✅ **the majority of §5 on `gfx1151`** — see the generated matrix |
 | `fused` | Performance characterized against the MFU targets in §5 | only `matmul`/`gemm` has a *measured perf ladder*; **no MFU-target sign-off anywhere**; CDNA MFU targets need MI300X/MI325X |
+
+There is also a bounded `gfx1201` execution surface that the public operation
+matrix does not yet represent: content-addressed family packages and the
+scheduled ABIs enumerated by `runtime._gfx1201_proved_scheduled_abis()`. Those
+packages carry exact RX 9070 XT compile, launch, and numerical proof. They do
+not promote a generic operation row until capability and execution-matrix
+projection is implemented. `gfx1200` has no equivalent execution surface.
 
 **Status truth is the generated matrix, not this table (Decision #26).**
 [`docs/audit/generated/runtime_execution_matrix.md`](../../audit/generated/runtime_execution_matrix.md)
@@ -428,12 +444,13 @@ symbols (not just an in-process compiled lane):
   + additive attn_bias + sliding-window + logit-softcap** (scale + causal),
   validated vs autodiff `vjp_flash_attn`. No perf ladder.
 
-Honest scope (Decision #25): everything above is **one arch (RDNA 3.5 `gfx1151`) ×
-{fp16, bf16}**, correctness-first. None of it flips the per-primitive
-`backend_kernel` axis (that needs exact-target device verification). **CDNA MFMA
-entries remain hardware-free** pending MI300-class silicon. Backend lit
-validates typed IR/ROCDL contracts, while `hipcc`/`llc` compile-only validation
-is a distinct toolchain gate. See §9 for the concrete done / open / blocked split.
+Honest scope: the generic public runtime lanes above are `gfx1151`-proven. The
+separate `gfx1201` scheduled packages are exact-target and bounded by family,
+ABI, dtype, shape, and policy; they do not imply a general `rocm_gfx1201`
+executor. Neither proof transfers to `gfx1200`. **CDNA MFMA entries remain
+hardware-free** pending matching silicon. Backend lit validates typed
+IR/ROCDL contracts, while `hipcc`/`llc` compile-only validation is a distinct
+toolchain gate.
 
 ---
 
@@ -442,7 +459,9 @@ is a distinct toolchain gate. See §9 for the concrete done / open / blocked spl
 | Component | Path |
 |---|---|
 | Toolchain pin + feature matrix | `python/tessera/compiler/rocm_target.py` |
-| Per-target capability registry | `python/tessera/compiler/capabilities.py` (`rocm`, `rocm_gfx90a`..`rocm_gfx1200`) |
+| Per-target capability registry | `python/tessera/compiler/capabilities.py` (`rocm`, `rocm_gfx90a`..`rocm_gfx1250`, including distinct `gfx1200`/`gfx1201`) |
+| Exact family promotion gate | `python/tessera/compiler/rocm_pipeline.py` |
+| Bounded scheduled ABI admission | `python/tessera/runtime.py::_gfx1201_proved_scheduled_abis` |
 | Per-kernel MFMA shape + MFU tables | `python/tessera/compiler/backend_manifest.py` (`_ROCM_KERNEL_MFMA_SHAPES`, `_ROCM_KERNEL_MFU`) |
 | BackendKernelEntry schema (G-3) | `python/tessera/compiler/backend_manifest.py` |
 | MLIR pass library | `src/compiler/codegen/Tessera_ROCM_Backend/` (MFMA full coverage, ROCm lowering) |
@@ -457,6 +476,29 @@ is a distinct toolchain gate. See §9 for the concrete done / open / blocked spl
 ---
 
 ## 9. Roadmap — what's done / hardware-free / blocked
+
+### Done on real silicon (gfx1201 / Radeon RX 9070 XT)
+
+- ✅ Every registered content-addressed family plugin is admitted by the
+  exact-architecture promotion gate and has owning-device family evidence.
+- ✅ Bounded scheduled packages cover f32 softmax/reduction; f16/bf16, OCP
+  FP8/BF8, int8, and signed packed-int4 matmul; f16/bf16 attention and backward;
+  depth attention; paged KV; and checked 2:4 SWMMAC.
+- ✅ The driver preserves `rocm_gfx1201`/`gfx1201` in the native image and the
+  runtime rejects any ABI outside the proved allowlist.
+- ⚠️ The public exact-target capability and execution-matrix registries still
+  show `matmul` as `artifact_only`. Closing that projection gap, rather than
+  weakening the exact-target gate, is the next registry task.
+- ⚠️ `linear_attn` at D=128 remains the worst-conditioned measured kernel:
+  independent loads must be batched before the wait, analogous to the existing
+  `lds-copy-depth` staging lever. No current selector knob fixes it.
+
+### Not done (gfx1200)
+
+- No exact device, promoted family, scheduled runtime ABI, numerical fixture,
+  topology/performance default, or performance evidence exists.
+- Architecture tables and compile-target acceptance are not execution proof;
+  gfx1201 measurements may not be reused.
 
 ### Done on real silicon (gfx1151 / Strix Halo APU)
 - ✅ WMMA `matmul`/`gemm` executes + matches numpy (`{fp16, bf16}`, f32 accum);

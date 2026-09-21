@@ -7,6 +7,59 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX12 exact-target support audit — 2026-09-21
+
+Owner ROCM-2 / ROCM-4; sync `GFX12-EXACT-TARGET-SUPPORT-2026-09-21`.
+
+An ast-grep review of target comparisons, promoted-family sets, driver package
+selection, native ABI admission, and their tests establishes the current
+boundary:
+
+- `gfx1201` is the Radeon RX 9070 / Radeon AI PRO R9700S, R9700, and R9600D
+  target. Tajasarus
+  (RX 9070 XT) provides exact-device evidence for every registered
+  content-addressed family plugin. The bounded scheduled launcher additionally
+  admits only the ABIs in `runtime._gfx1201_proved_scheduled_abis()`.
+- `gfx1200` is the Radeon RX 9060 / RX 9050 target. It has ISA/dtype/feature and
+  compile-target modeling, but no promoted executable family, scheduled runtime
+  ABI, numerical device fixture, measured topology default, or performance
+  evidence.
+- Ambiguous family aliases (`gfx12`, `rdna4`, `rx9000`) no longer select an
+  exact target. RX 9070 aliases normalize to `rocm_gfx1201`; RX 9060/RX 9050
+  aliases normalize to `rocm_gfx1200`.
+- The machine-readable ISA/dtype contract now represents `gfx1200` and
+  `gfx1201` as separate RDNA4 products and cost-model identities. The shared
+  dtype-flow audit consumes the exact `GFX_1201` row rather than omitting it,
+  and MMA/fragment provenance no longer rewrites `gfx1201` to `gfx1200`.
+
+Open work, in order:
+
+1. Project the existing bounded gfx1201 package evidence into public capability
+   and execution-matrix rows. The generated target map intentionally remains
+   conservative until this join exists; do not simply flip `matmul` to ready.
+2. Change the `linear_attn` D=128 generator to issue independent loads in a
+   batch before the wait, mirroring the already proved `lds-copy-depth` GEMM
+   staging structure. Re-run correctness, static resource, wait/drain, and
+   paired timing gates on gfx1201.
+3. Acquire matching gfx1200 hardware evidence before promoting any family or
+   adding topology/performance defaults. gfx1201 evidence cannot satisfy this.
+4. Run R9700/R9700S/R9600D hardware validation only before making a
+   product-specific performance or topology claim; ISA-level gfx1201
+   correctness is already established on RX 9070 XT.
+
+Sibling assessment: the change corrects shared target-name normalization and
+the ROCm-specific branch of shared dtype-flow audit infrastructure, but does
+not alter Apple, NVIDIA, or x86 IR, ABI, dtype, numerical, or execution
+contracts. Their plans record this as not applicable to physical execution.
+
+Tajasarus validation follow-through found and closed one physical-proof defect:
+scheduled attention backward launched and matched its oracle on all four
+fp16/bf16 cotangent variants, but attestation reused the autotune device-name
+helper, whose legacy shipped-WMMA-runtime gate returned no device for this
+independent HIP package path. Post-launch attestation now queries the selected
+HIP device directly. The full scheduled gfx1201 suite passes with exact-device
+certificates; no launch, numerical, or ABI contract changed.
+
 ## Correction: the +25% was memory-level parallelism, not occupancy — 2026-09-21
 
 Sync: `RDNA-OCCUPANCY-GRANULE-2026-09-20`; owner ROCM-2. PR #791 reported a

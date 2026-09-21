@@ -95,7 +95,6 @@ class FragmentLayoutDescriptor:
             from .rocm_isa_contract import select_amd_matrix_instruction
             contract_arch = {
                 AMDArch.GFX_1100: AMDArch.GFX_1151,
-                AMDArch.GFX_1201: AMDArch.GFX_1200,
             }.get(self.arch, self.arch)
             return select_amd_matrix_instruction(
                 contract_arch, self.dtype, accumulator=self.acc_dtype,

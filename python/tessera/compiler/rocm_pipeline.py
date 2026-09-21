@@ -110,8 +110,9 @@ def promoted_families(arch: str) -> frozenset[str]:
     """The family plugins with exact-device proof on ``arch``.
 
     This is the one place the executable pipeline's fail-closed rule lives:
-    gfx1151 has every family, gfx1201 has the five replay-verified ones, and
-    gfx1200/gfx1250 have none pending exact-device evidence. It is a function
+    gfx1151 has every family with a gfx11 form, gfx1201 has every registered
+    family (including the RDNA4-only sparse family), and gfx1200/gfx1250 have
+    none pending exact-device evidence. It is a function
     rather than an inline condition so a *test* can ask the same question the
     launch path asks, and skip where launch would refuse. Before it existed,
     ~1500 tests in the `test_rocm_*_compiled.py` families ran on the gfx1201 box

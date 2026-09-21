@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-05
+last_updated: 2026-09-21
 audit_role: sub_audit
 ---
 
@@ -38,10 +38,21 @@ workgroup clusters, the split wait-counter model, device-initiated SDMA — live
 
 ## Current status
 
-The live proof target is `rocm_gfx1151`: RDNA 3.5 / Wave32 WMMA on a Ryzen AI
-Max+ 395. On that target, the curated matrix, normalization, positional, and
-attention feature groups have device execution and numerical evidence. Proof
-does not transfer to RDNA 4, Wave32 WMMA v2, or CDNA MFMA targets.
+There are now two exact-device proof targets with different registry surfaces.
+`rocm_gfx1151` (RDNA 3.5, Ryzen AI Max+ 395) owns the broad generic public
+runtime lanes. `rocm_gfx1201` (RDNA 4, Radeon RX 9070 XT) owns every registered
+content-addressed family plugin and a bounded set of scheduled native ABIs.
+The public capability/execution dashboards have not yet projected those
+scheduled packages, so `gfx1201` operation rows may still read
+`artifact_only`; that is a registry-closure gap, not absence of device proof.
+`rocm_gfx1200` remains compile/artifact-only. Proof never transfers between
+these exact targets.
+
+| Target | Current evidence | Explicit non-claim |
+|---|---|---|
+| `rocm_gfx1201` | RX 9070 XT compile, launch, numerical, fragment-layout, sparse SWMMAC, and measured performance packets for bounded family/package contracts. | No generic per-target executor row; no R9700-specific performance claim; no transfer to gfx1200. |
+| `rocm_gfx1200` | RDNA 4 ISA/dtype/feature modeling and compile-target plumbing. | No device execution, numerical fixture, topology default, promoted family, or performance evidence. |
+| `rocm_gfx1151` | Broad generic compiler-generated and shipped-ABI execution on Ryzen AI Max+ 395. | No RDNA 4 feature or performance inheritance. |
 
 | Feature surface | Real today on `rocm_gfx1151` | Remaining frontier | Authority |
 |---|---|---|---|
@@ -68,10 +79,10 @@ are maintained in [`todo.md`](todo.md).
 | ID | Priority | Action | Completion evidence |
 |---|---|---|---|
 | ROCM-1 | P0 | Add gfx950 MI350-series exact-device proof for the currently advertised artifact rows. | Matching gfx950 compiler, launch, numerical fixture, and `evidence_arch`; generated rows promote without inheriting gfx1151 data. |
-| ROCM-2 | P0 | Add gfx1201 Radeon AI PRO R9700 exact-device proof. | At minimum, the current matmul artifact assembles, launches, and matches its numerical oracle on gfx1201. |
+| ROCM-2 | P0 | Close gfx1201 registry and performance gaps. The ISA target already has RX 9070 XT exact-device proof; project the bounded scheduled packages into public capability/execution rows, batch independent `linear_attn` D=128 loads before the wait, and run R9700-specific validation only for product-specific claims. | Generated rows match the proved family/ABI envelope without broadening it; `linear_attn` D=128 improves with numerical and resource gates; any R9700 claim carries R9700 evidence. |
 | ROCM-3 | P0 | Add gfx1250 MI455X exact-device proof. | The upstream-LLVM artifact is joined to an exact-device launch and numerical fixture with gfx1250 provenance. |
-| ROCM-4 | P1 | Add gfx1200 consumer-device proof and retain gfx942 as an explicitly tested compatibility target. | Each promoted row carries its own runtime and numerical evidence; unsupported feature forms fail with stable diagnostics. |
-| ROCM-5 | P1 | Finish architecture-specific MMA enablement instead of reusing gfx1151 layouts. | Separate RDNA 4, Wave32 WMMA v2, and CDNA MFMA fragment/layout guards pass assemble-and-compare fixtures on their matching devices. |
+| ROCM-4 | P1 | Add gfx1200 consumer-device proof and retain gfx942 as an explicitly tested compatibility target. | Each promoted row carries its own runtime and numerical evidence; unsupported feature forms fail with stable diagnostics. gfx1201 evidence is never accepted for gfx1200. |
+| ROCM-5 | P1 | Finish architecture-specific MMA enablement without reusing proof across targets. | gfx1201 RDNA 4 fragment/layout guards remain exact-device green; gfx1200, Wave32 WMMA v2, and CDNA MFMA gain their own matching-device fixtures before promotion. |
 | ROCM-6 | P1 | Revalidate the three redesign experiments under LLVM/MLIR 23 + ROCm 7.14. Correctness is green, but WSL HIP event timing returns invalid zero durations. | A candidate may retain or change production status only when its aligned/ragged correctness and resource gates pass with valid paired device and E2E timing. Zero/non-finite timing is a blocker, not evidence. |
 | ROCM-8 | P2 | Re-evaluate copy versus zero-copy on bare-metal ROCm. | Device and end-to-end measurements identify a stable crossover outside WSL before any automatic selection policy lands. |
 | TPROF-ROCM-TIME-1 | P0 | Implement independent host-wall, HIP-event, instrumented device-wall-clock, and profiler-activity records for gfx1151 benchmarks. | Every sample preserves explicit source/validity/calibration fields; exact-device timer qualification and paired instrumented/uninstrumented artifacts pass; WSL evidence remains non-promotional. |
@@ -211,11 +222,12 @@ These are measured decisions, not unowned tasks:
 
 ## Proof environment and target semantics
 
-The primary development system is Ubuntu 24.04 under WSL2 with TheRock ROCm
-7.14.0, HIP 7.14.60850, and LLVM/MLIR 23.0.0. The device enumerates through
-`/dev/dxg` as `gfx1151`. Early bring-up
-temporarily reported `gfx1100`; historical notes that name gfx1100 describe that
-environment and are not evidence for a separate exact target.
+The current exact-device systems are Ubuntu 26.04 under WSL2 with ROCm 10.0,
+HIP 7.15.26333, and LLVM/MLIR 23.1.1: Princess-Luna enumerates `gfx1151`, and
+Tajasarus enumerates its Radeon RX 9070 XT as `gfx1201`. Earlier sections that
+name ROCm 7.14 or LLVM 23.0 are dated historical records, not the current pin.
+Early gfx1151 bring-up temporarily reported `gfx1100`; that history is not
+evidence for a separate exact target.
 
 The gfx1151 WMMA surface intentionally includes f16, bf16, iu8, and iu4 forms.
 It does not include the FP8/BF8 and expanded WMMA forms found in newer families.
@@ -226,7 +238,8 @@ Current target priorities are:
 
 1. gfx950, marked current datacenter;
 2. gfx1250, marked forward datacenter;
-3. gfx1201 and gfx1200, the current workstation/consumer RDNA 4 targets;
+3. gfx1201, the current workstation RDNA 4 exact-device target, and gfx1200,
+   the current consumer RDNA 4 artifact-only target;
 4. gfx1151, the proven development target;
 5. gfx942, retained for compatibility.
 

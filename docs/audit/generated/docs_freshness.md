@@ -8,7 +8,7 @@ Reference date for staleness: **2026-09-21**.
 
 - **158** docs catalogued across the canonical doc tree.
 - **157** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **59** updated within the last 30 days.
+- **60** updated within the last 30 days.
 - **37** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -143,23 +143,23 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/APPLE_AUDIT.md` | - | 2026-09-05 | 16 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 70 | ✓ |
 | `backend/apple/README.md` | - | 2026-09-05 | 16 | ✓ |
-| `backend/apple/todo.md` | - | 2026-09-20 | 1 | ✓ |
+| `backend/apple/todo.md` | - | 2026-09-21 | 0 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-09-05 | 16 | ✓ |
 | `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-09-05 | 16 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-19 | 64 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 70 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 89 | ✓ |
-| `backend/nvidia/todo.md` | - | 2026-09-20 | 1 | ✓ |
+| `backend/nvidia/todo.md` | - | 2026-09-21 | 0 | ✓ |
 | `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 48 | ✓ |
 | `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 38 | ✓ |
 | `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 43 | ✓ |
 | `backend/rocm/NATIVE_RDNA4_COMMISSIONING.md` | - | 2026-09-15 | 6 | ✓ |
-| `backend/rocm/ROCM_AUDIT.md` | - | 2026-09-05 | 16 | ✓ |
-| `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-08-05 | 47 | ✓ |
+| `backend/rocm/ROCM_AUDIT.md` | - | 2026-09-21 | 0 | ✓ |
+| `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-09-21 | 0 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 55 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-09-05 | 16 | ✓ |
 | `backend/rocm/todo.md` | - | 2026-09-21 | 0 | ✓ |
-| `backend/x86/todo.md` | - | 2026-09-20 | 1 | ✓ |
+| `backend/x86/todo.md` | - | 2026-09-21 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 55 | ✓ |
 | `compiler/ANN_CALCULUS_DESIGN_SPIKE.md` | - | 2026-09-04 | 17 | ✓ |
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-09-06 | 15 | ✓ |

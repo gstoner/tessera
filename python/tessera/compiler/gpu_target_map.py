@@ -107,10 +107,11 @@ _ROCM_EXACT_TARGETS: tuple[ROCmExactTarget, ...] = (
                     "current_datacenter", "exact-device proof required"),
     ROCmExactTarget("rocm_gfx1250", "gfx1250", "CDNA 5 Wave32 XDL-WMMA", "MI455X",
                     "forward_datacenter", "upstream-LLVM artifact; exact-device proof required"),
-    ROCmExactTarget("rocm_gfx1201", "gfx1201", "RDNA 4", "Radeon RX 9070 XT / Radeon AI PRO R9700",
+    ROCmExactTarget("rocm_gfx1201", "gfx1201", "RDNA 4",
+                    "Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D",
                     "current_workstation", "exact-device proof required"),
     ROCmExactTarget("rocm_gfx1200", "gfx1200", "RDNA 4",
-                    "Radeon RX 9060 XT",
+                    "Radeon RX 9060 / RX 9050 families",
                     "current_consumer", "exact-device proof required"),
     ROCmExactTarget("rocm_gfx1151", "gfx1151", "RDNA 3.5 Wave32",
                     "Ryzen AI Max+ 395 / Radeon 8060S", "proven_development",
@@ -425,10 +426,12 @@ def _render_rocm_exact_markdown() -> str:
         "name is a family rollup only and never carries compile, execution, numerical, "
         "or performance proof.",
         "",
-        "A `device_verified_jit` or `device_verified_abi` row requires a checked-in numerical "
-        "fixture joined to an executable runtime-execution-matrix row. Current native "
-        "proof is scoped to `gfx1151`; other architectures remain `artifact_only` "
-        "until exact-device execution exists.",
+        "A `device_verified_jit` or `device_verified_abi` row in this dashboard requires a "
+        "checked-in numerical fixture joined to a public executable runtime-execution-matrix "
+        "row. That registry join is currently complete only for `gfx1151`. Bounded "
+        "content-addressed scheduled packages have separate exact-device `gfx1201` proof; "
+        "until those packages are projected into the public capability and execution "
+        "registries, their rows remain `artifact_only` here rather than borrowing proof.",
         "",
         "## Architecture priorities",
         "",

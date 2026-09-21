@@ -288,6 +288,8 @@ static StringRef moduleString(ModuleOp module, StringRef primary,
 //: Wrapped below so the declared policy is checked on every exit path.
 static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   ModuleOp module = op->getParentOfType<ModuleOp>();
+  const bool scaledMatmul =
+      op->getName().getStringRef() == "tessera.scaled_matmul";
   if (!module || op->getNumOperands() < 2 || op->getNumOperands() > 4 ||
       op->getNumResults() != 1)
     return failure();
@@ -359,8 +361,11 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   if (!llvm::is_contained({"none", "relu", "gelu", "silu"},
                           schedule.activation))
     return failure();
-  if (op->getNumOperands() !=
-      static_cast<unsigned>(2 + schedule.bias + schedule.residual))
+  if ((!scaledMatmul && op->getNumOperands() !=
+                           static_cast<unsigned>(2 + schedule.bias +
+                                                 schedule.residual)) ||
+      (scaledMatmul && (op->getNumOperands() != 4 || schedule.bias ||
+                        schedule.residual || schedule.activation != "none")))
     return failure();
   unsigned epilogueOperand = 2;
   if (schedule.bias) {
@@ -378,6 +383,18 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
         !compatible(residual.getDimSize(0), schedule.m) ||
         !compatible(residual.getDimSize(1), schedule.n))
       return failure();
+  }
+  if (scaledMatmul) {
+    auto layout = op->getAttrOfType<DictionaryAttr>("scale_layout");
+    auto block = layout ? layout.getAs<ArrayAttr>("block") : ArrayAttr();
+    auto format = layout ? layout.getAs<StringAttr>("format") : StringAttr();
+    if (!block || block.size() != 2 || !format)
+      return failure();
+    auto blockK = dyn_cast<IntegerAttr>(block[1]);
+    if (!blockK || blockK.getInt() <= 0)
+      return failure();
+    schedule.scaleBlockK = blockK.getInt();
+    schedule.scaleFormat = format.getValue();
   }
   bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
              schedule.arch.contains("zen5");
@@ -498,6 +515,18 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   const bool gfx1201 = schedule.arch.contains("gfx1201");
   if (gfx1201 && !schedule.dynamicK && schedule.k >= 64)
     schedule.blockK = 32;
+  if (gfx1201 && scaledMatmul) {
+    // A Schedule macro K may contain several complete scale groups, but it
+    // may never split one. The measured unscaled default is only 32, while
+    // valid Graph contracts also carry K64/K128 groups. Align the physical
+    // carrier before constructing schedule.matmul; otherwise its verifier
+    // correctly rejects the internally inconsistent decision we just made.
+    if (schedule.scaleBlockK % schedule.tileK != 0)
+      return failure();
+    if (schedule.blockK == 0 ||
+        schedule.blockK % schedule.scaleBlockK != 0)
+      schedule.blockK = schedule.scaleBlockK;
+  }
   if (rocmWmmaChip && lhsElement == rhsElement &&
       (lhsElement.isInteger(8) || lhsElement.isInteger(4)) &&
       !lhsElement.isUnsignedInteger() && outElement.isInteger(32) &&
@@ -530,6 +559,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.storage = isa<Float8E4M3FNType>(lhsElement) ? "e4m3" : "e5m2";
     schedule.storageB = isa<Float8E4M3FNType>(rhsElement) ? "e4m3" : "e5m2";
     schedule.accum = "f32";
+    if (scaledMatmul && schedule.scaleBlockK == 0)
+      return failure();
     schedule.macroTileM = gfx1201StaticPanel ? 64 : 16;
     schedule.macroTileN = gfx1201StaticPanel ? 64 : 16;
     return schedule;
@@ -690,6 +721,9 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
       (Twine("target=") + schedule.target + ";arch=" + schedule.arch +
        ";M=" + Twine(schedule.m) + ";N=" + Twine(schedule.n) +
        ";K=" + Twine(schedule.k) + ";storage=" + schedule.storage +
+       ";storage_b=" + schedule.storageB + ";block_k=" +
+       Twine(schedule.blockK) + ";scale_k=" + Twine(schedule.scaleBlockK) +
+       ";scale_format=" + schedule.scaleFormat +
        ";accum=" + schedule.accum + ";tile=" + Twine(schedule.tileM) + "x" +
        Twine(schedule.tileN) + "x" + Twine(schedule.tileK) +
        ";macro_tile=" + Twine(schedule.macroTileM) + "x" +
@@ -2183,7 +2217,8 @@ struct GraphToSchedulePass
 
     SmallVector<Operation *> matmuls;
     mod.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tessera.matmul")
+      if (op->getName().getStringRef() == "tessera.matmul" ||
+          op->getName().getStringRef() == "tessera.scaled_matmul")
         matmuls.push_back(op);
     });
     for (Operation *op : matmuls) {
@@ -2215,6 +2250,12 @@ struct GraphToSchedulePass
       state.addAttribute("pipeline_depth",
                          builder.getI64IntegerAttr(selected->pipelineDepth));
       state.addAttribute("storage", builder.getStringAttr(selected->storage));
+      state.addAttribute("storage_b", builder.getStringAttr(selected->storageB));
+      state.addAttribute("block_k", builder.getI64IntegerAttr(selected->blockK));
+      state.addAttribute("scale_k",
+                         builder.getI64IntegerAttr(selected->scaleBlockK));
+      state.addAttribute("scale_format",
+                         builder.getStringAttr(selected->scaleFormat));
       state.addAttribute("accum", builder.getStringAttr(selected->accum));
       state.addAttribute("bias", builder.getBoolAttr(selected->bias));
       state.addAttribute("activation",
@@ -3207,7 +3248,9 @@ struct ScheduleToTilePass
     SmallVector<func::FuncOp> consumedNvidiaGraphFunctions;
     for (schedule::MatmulOp scheduled : scheduledMatmuls) {
       Operation *graph = scheduled.getSubject().getDefiningOp();
-      if (!graph || graph->getName().getStringRef() != "tessera.matmul" ||
+      if (!graph ||
+          (graph->getName().getStringRef() != "tessera.matmul" &&
+           graph->getName().getStringRef() != "tessera.scaled_matmul") ||
           graph->getNumOperands() < 2 || graph->getNumOperands() > 4 ||
           graph->getNumResults() != 1) {
         scheduled.emitError(
@@ -3228,6 +3271,10 @@ struct ScheduleToTilePass
           scheduled.getWarpsAttr().getInt() != selected->warps ||
           scheduled.getPipelineDepthAttr().getInt() != selected->pipelineDepth ||
           scheduled.getStorage() != selected->storage ||
+          scheduled.getStorageB() != selected->storageB ||
+          scheduled.getBlockK() != selected->blockK ||
+          scheduled.getScaleK() != selected->scaleBlockK ||
+          scheduled.getScaleFormat() != selected->scaleFormat ||
           scheduled.getAccum() != selected->accum ||
           scheduled.getBias() != selected->bias ||
           scheduled.getActivation() != selected->activation ||
@@ -3239,6 +3286,14 @@ struct ScheduleToTilePass
           scheduled.getRasterOrder() != selected->rasterOrder ||
           scheduled.getRasterGroupAttr().getInt() != selected->rasterGroup) {
         scheduled.emitError("scheduled tile or numeric policy was altered after hashing");
+        return signalPassFailure();
+      }
+      if (selected->scaleBlockK > 0) {
+        scheduled.emitError(
+            "ROCM_MXFP4_SCALE_ABI_UNIMPLEMENTED: the schedule preserves the "
+            "block-scale contract, but the current Tile kernel ABI has no "
+            "scale operands; refusing to lower a numerically different "
+            "unscaled matmul");
         return signalPassFailure();
       }
       auto graphDigest = graph->getAttrOfType<StringAttr>("schedule.artifact_hash");

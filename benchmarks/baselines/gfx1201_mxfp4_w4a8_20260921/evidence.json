@@ -1,0 +1,128 @@
+{
+  "device": "Radeon RX 9070 XT",
+  "host": "tajasarus",
+  "live_architecture": "gfx1201",
+  "promotion_scope": "exact gfx1201 ABI and native FP8-WMMA mechanism; no gfx1200, folded-policy, selector-default, or throughput promotion",
+  "proof": {
+    "comparison": "bit-exact BF16 versus independent exact-per-K32 host oracle",
+    "device_test": "tests/device/rocm/test_mxfp4_w4a8_exact.py",
+    "result": "4 passed (scalar and WMMA routes)",
+    "shapes": [
+      [
+        17,
+        19,
+        64
+      ],
+      [
+        32,
+        32,
+        128
+      ]
+    ]
+  },
+  "rocm_path": "/opt/rocm/core",
+  "rows": [
+    {
+      "abi_id": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.exact.v1",
+      "architecture": "gfx1201",
+      "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
+      "entry": "tessera_mxfp4_w4a8_exact",
+      "image_bytes": 6264,
+      "image_sha256": "65edf3eceaac3ac0a00e765c0f18af58d29b8b5d3923f7bab4fefa528e60dd1a",
+      "isa": {
+        "counts": {
+          "global_load": 7,
+          "global_store": 1,
+          "instructions": 326,
+          "scalar_load": 2,
+          "wait": 38,
+          "wmma_fp8_fp8": 0
+        },
+        "selected_matrix_instructions": []
+      },
+      "launch": {
+        "grid": [
+          2,
+          2,
+          1
+        ],
+        "workgroup": [
+          16,
+          16,
+          1
+        ]
+      },
+      "resources": {
+        "group_segment_fixed_size": 0,
+        "kernarg_segment_size": 320,
+        "private_segment_fixed_size": 0,
+        "sgpr_count": 22,
+        "vgpr_count": 26,
+        "wavefront_size": 32
+      },
+      "route": "scalar_exact",
+      "shape": [
+        32,
+        32,
+        128
+      ],
+      "target": "rocm_gfx1201",
+      "target_ir_sha256": "674bdfbc3b92236631174acee663a6705f19d241dee42026e1da0afccebf30df",
+      "toolchain_fingerprint": "2a700e7d71452d0ab53ca725375fa15e7075c91e36cc2f311155b12c8053a2fc"
+    },
+    {
+      "abi_id": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1",
+      "architecture": "gfx1201",
+      "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
+      "entry": "tessera_mxfp4_w4a8_wmma",
+      "image_bytes": 8264,
+      "image_sha256": "84f242e02c2827a6f44953dcec657b2906c6b8377d5685cd59c0e26c5c696744",
+      "isa": {
+        "counts": {
+          "global_load": 35,
+          "global_store": 8,
+          "instructions": 770,
+          "scalar_load": 1,
+          "wait": 112,
+          "wmma_fp8_fp8": 2
+        },
+        "selected_matrix_instructions": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ]
+      },
+      "launch": {
+        "grid": [
+          2,
+          2,
+          1
+        ],
+        "workgroup": [
+          32,
+          1,
+          1
+        ]
+      },
+      "resources": {
+        "group_segment_fixed_size": 0,
+        "kernarg_segment_size": 64,
+        "private_segment_fixed_size": 0,
+        "sgpr_count": 32,
+        "vgpr_count": 94,
+        "wavefront_size": 32
+      },
+      "route": "wmma_exact",
+      "shape": [
+        32,
+        32,
+        128
+      ],
+      "target": "rocm_gfx1201",
+      "target_ir_sha256": "275238ca3980a0c574a093e499ad108ac378d20b5db3089f1e2a3c0d43c411b5",
+      "toolchain_fingerprint": "a3a3991ba5112e33c85004bc53737b9a2321edd0f5890b6da84ac612c9f6cbf2"
+    }
+  ],
+  "schema": "tessera.rocm.gfx1201_mxfp4_evidence.v1",
+  "source_revision": "7c207a34f0b482c9c7781b017215a600be25be4d",
+  "sync_key": "ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21",
+  "work_item": "ROCM-MXFP4-W4A8-1"
+}

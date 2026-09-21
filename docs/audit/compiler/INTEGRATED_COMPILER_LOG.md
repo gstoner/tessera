@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-20
+last_updated: 2026-09-21
 audit_role: reference
 ---
 
@@ -4603,5 +4603,35 @@ fix does not transfer Apple results or promote a selector.
 
 Evidence: Focused compiler-example, frontend, examples-audit, generated-doc,
 and audit-plan gates; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`.
+
+<!-- entry-fields:end -->
+
+### 2026-09-21 — Exact gfx1201 MXFP4 W4A8 reaches FP8 WMMA
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: [#801](https://github.com/gstoner/tessera/pull/801); sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`.
+
+Outcome: The dedicated gfx1201 native package now has two proved ABIs. The
+scalar exact-per-K32 package is the executable oracle; the production selector
+defaults to a wave32 route which batches independent fragment loads, converts
+packed E2M1 exactly to E4M3, issues two
+`v_wmma_f32_16x16x16_fp8_fp8` operations per scale group, scales that local
+FP32 partial, and then joins the running accumulator. Tajasarus proved both
+ABIs bit-exact after BF16 rounding at ragged `17x19x64` and `32x32x128`.
+Review follow-through aligns Schedule macro K to each complete scale group
+(`scale_k=128` now carries `block_k=128`) and preserves reserved E8M0 code zero
+as a zero block through folded-row conversion and its losslessness check.
+
+Remaining: The generic `tessera.scaled_matmul` Schedule/Tile path still needs a
+first-class scaled partial-accumulator consumer. The folded route remains an
+explicit approximate-policy candidate, and throughput/counter promotion needs
+a counter-capable exact gfx1201 environment. No gfx1200 claim follows from
+this gfx1201 proof.
+
+Evidence: [recorded HSACO/ISA/resource packet](../../../benchmarks/baselines/gfx1201_mxfp4_w4a8_20260921/README.md),
+`tests/device/rocm/test_mxfp4_w4a8_exact.py`, and
+`tests/unit/test_rocm_mxfp4_native.py`.
 
 <!-- entry-fields:end -->

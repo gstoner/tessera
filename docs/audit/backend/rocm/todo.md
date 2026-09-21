@@ -7,6 +7,40 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Exact MXFP4 W4A8 execution and FP8-WMMA route — 2026-09-21
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`.
+
+The below-Graph physical contract now has two exact `rocm_gfx1201` native
+packages. The scalar package is the executable specification. The production
+mechanism converts packed E2M1 bytes exactly to E4M3, issues two
+`v_wmma_f32_16x16x16_fp8_fp8` operations per K32 scale group, applies the
+E8M0/per-token scale outer product to that isolated FP32 partial, and only then
+adds it to the running accumulator. Independent A/B loads are emitted before
+decode/packing, following the proven `lds-copy-depth` batching principle
+without an LDS round trip.
+
+On Tajasarus (RX 9070 XT), scalar and WMMA packages pass bit-exact BF16
+comparison at ragged `17x19x64` and `32x32x128`: **4 device rows**. The WMMA
+HSACO selects only the required FP8 instruction, uses 32 SGPR / 94 VGPR,
+wave32, zero LDS and zero scratch. Both ABIs are now in the exact-device proof
+registry. Evidence: [gfx1201 MXFP4 packet](../../../../benchmarks/baselines/gfx1201_mxfp4_w4a8_20260921/README.md).
+
+PR review closed two contract holes before promotion. Graph-to-Schedule now
+expands macro K to contain a complete scale group, so the existing K128 block
+form carries `block_k = 128` instead of constructing an invalid K32 Schedule
+record. The folded-row reference also masks reserved E8M0 code-zero groups
+before E4M3 conversion and losslessness comparison; non-zero E2M1 payload bits
+inside a zero block can no longer reconstruct as tiny non-zero weights.
+
+Still open: replace the Schedule-to-Tile fail-closed boundary with a first-class
+scaled partial-accumulator carrier; admit the approximate folded-row policy
+only behind its explicit numerical policy; measure decode/prefill throughput on
+a counter-capable host; and compare against independent libr4d/Radiance runs.
+No `gfx1200`, public Graph dtype, selector-default, or throughput promotion is
+inferred.
+
 ## GFX1201 dtype and exact-executor closure — 2026-09-21
 
 Owner ROCM-2 / NUMPOL-CARRIER-1; sync
@@ -24,6 +58,28 @@ numerical-policy admission remain separate open work.
 
 Apple, NVIDIA, and x86 are not applicable to physical execution for this sync:
 their IR, ABI, dtype, runtime, and numerical rows are unchanged.
+
+## MXFP4 physical contract and dual numerical routes — 2026-09-21
+
+Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1; sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`.
+
+Source review of vllm-radiance and the canonical StillDeadcode/libr4d tree
+corrected two plan assumptions. MXFP4's E8M0 group is fixed at 32 K elements
+and remains independent of instruction K=16, macro K=64/128, `kUnroll`, and
+split-K. The optimized per-row-reference fold is not unconditionally exact:
+E4M3 subnormals guarantee every non-zero E2M1 value only through exponent
+delta 8; the reviewed checkpoint reaches delta 10.
+
+`python/tessera/compiler/rocm_mxfp4.py` defines the below-Graph-IR physical
+contract and host reference: low-nibble-even packed E2M1, `[K/32,N]` E8M0
+scales, per-token FP32 activation scales, gfx12 fragment-order permutation,
+an exact per-32-group route, and a separately marked folded-row-reference
+route. The exact scalar and FP8-WMMA packages described above now execute this
+contract; the planned public `mxfp4` dtype and generic
+`tessera.scaled_matmul` Schedule-to-Tile consumer remain unpromoted. Next:
+replace that fail-closed generic boundary, add the fold only behind its numeric
+policy, and compare on Tajasarus against independent library baselines.
 
 ## GFX12 public projection and D=128 load batching — 2026-09-21
 

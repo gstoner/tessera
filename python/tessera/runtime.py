@@ -4163,13 +4163,17 @@ def _submit_rocm_sparse_2to4(image: NativeImageArtifact, descriptor: LaunchDescr
 
 
 def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
-    """The scheduled-package ABIs with exact gfx1201 (RX 9070 XT) device proof.
+    """The native-package ABIs with exact gfx1201 (RX 9070 XT) device proof.
 
     One spelling for the launcher registration and the submit-time admission;
-    an ABI joins on a `test_rocm_gfx1201_scheduled.py` device row, never by
-    analogy with gfx1151 (proofs do not transfer between the two RDNA parts).
+    an ABI joins only with an owning-device row, never by analogy with gfx1151
+    (proofs do not transfer between the two RDNA parts).
     """
     from tessera.compiler import rocm_native as rn
+    from tessera.compiler.rocm_mxfp4_native import (
+        GFX_MXFP4_W4A8_EXACT_ABI,
+        GFX_MXFP4_W4A8_WMMA_ABI,
+    )
 
     return frozenset({
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
@@ -4180,7 +4184,111 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         rn.GFX_MATMUL_I8_I32_ABI, rn.GFX_MATMUL_I4_I32_ABI,
         rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
         rn.GFX_PAGED_KV_F32_ABI, rn.GFX_SPARSE_MATMUL_2TO4_ABI,
+        GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI,
     })
+
+
+def _submit_rocm_mxfp4_w4a8(
+    image: NativeImageArtifact,
+    descriptor: LaunchDescriptor,
+    buffers: Mapping[str, Any],
+    scalars: Mapping[str, object],
+) -> Any:
+    """Launch the exact per-K32 MXFP4 baseline on its owning gfx1201 device."""
+    import numpy as np
+
+    if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
+        raise ValueError("MXFP4 W4A8 launch requires an exact gfx1201 image")
+    live = _rocm_live_arch()
+    if live != "gfx1201":
+        raise RuntimeError(
+            "MXFP4 W4A8 launch requires the selected gfx1201 device; "
+            f"live architecture is {live or 'unavailable'}"
+        )
+    ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    if len(ordered) != 5:
+        raise RuntimeError("MXFP4 W4A8 descriptor requires five buffers")
+    a, packed_b, a_scale, b_scale, output = (
+        buffers[item.name] for item in ordered
+    )
+    m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
+    bf16 = _bfloat16_dtype()
+    if bf16 is None:
+        raise RuntimeError("MXFP4 W4A8 output requires ml_dtypes.bfloat16")
+    if (
+        tuple(a.shape) != (m, k)
+        or tuple(packed_b.shape) != (k // 2, n)
+        or tuple(a_scale.shape) != (m,)
+        or tuple(b_scale.shape) != (k // 32, n)
+        or tuple(output.shape) != (m, n)
+        or a.dtype != np.uint8
+        or packed_b.dtype != np.uint8
+        or a_scale.dtype != np.float32
+        or b_scale.dtype != np.uint8
+        or output.dtype != np.dtype(bf16)
+        or k % 32
+    ):
+        raise RuntimeError("MXFP4 W4A8 arrays disagree with the physical ABI")
+    if b_scale.size and int(b_scale.max()) == 255:
+        raise RuntimeError("MXFP4 E8M0 scale code 255 is reserved")
+    arrays = [
+        np.ascontiguousarray(a),
+        np.ascontiguousarray(packed_b),
+        np.ascontiguousarray(a_scale),
+        np.ascontiguousarray(b_scale),
+        output,
+    ]
+    if not output.flags.c_contiguous:
+        raise RuntimeError("MXFP4 W4A8 output must be contiguous")
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise RuntimeError("libamdhip64.so or a usable gfx1201 device is unavailable")
+    module = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(module), image.payload) != 0:
+        raise RuntimeError("MXFP4 W4A8 HSACO module load failed")
+    device = [ctypes.c_void_p() for _ in arrays]
+    try:
+        function = ctypes.c_void_p()
+        if hip.hipModuleGetFunction(
+            ctypes.byref(function), module, descriptor.entry_symbol.encode()
+        ) != 0:
+            raise RuntimeError(f"MXFP4 W4A8 symbol {descriptor.entry_symbol!r} not found")
+        for pointer, array in zip(device, arrays, strict=True):
+            if hip.hipMalloc(ctypes.byref(pointer), int(array.nbytes)) != 0:
+                raise RuntimeError("MXFP4 W4A8 hipMalloc failed")
+        for pointer, array in zip(device[:4], arrays[:4], strict=True):
+            if hip.hipMemcpy(
+                pointer, array.ctypes.data_as(ctypes.c_void_p), int(array.nbytes), 1
+            ) != 0:
+                raise RuntimeError("MXFP4 W4A8 host-to-device copy failed")
+        values: list[Any] = [
+            *(ctypes.c_void_p(pointer.value) for pointer in device),
+            ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k),
+        ]
+        arguments = (ctypes.c_void_p * len(values))(
+            *[ctypes.cast(ctypes.byref(value), ctypes.c_void_p) for value in values]
+        )
+        if descriptor.geometry.grid is None or descriptor.geometry.workgroup is None:
+            raise RuntimeError("MXFP4 W4A8 requires fixed launch geometry")
+        gx, gy, gz = descriptor.geometry.grid
+        wx, wy, wz = descriptor.geometry.workgroup
+        rc = hip.hipModuleLaunchKernel(
+            function, gx, gy, gz, wx, wy, wz, 0, None, arguments, None
+        )
+        if rc != 0 or hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError(f"MXFP4 W4A8 kernel launch failed rc={rc}")
+        if hip.hipMemcpy(
+            output.ctypes.data_as(ctypes.c_void_p), device[4], int(output.nbytes), 2
+        ) != 0:
+            raise RuntimeError("MXFP4 W4A8 device-to-host copy failed")
+        return output
+    finally:
+        for pointer in reversed(device):
+            if pointer.value:
+                hip.hipFree(pointer)
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and module.value:
+            unload(module)
 
 
 def _submit_rocm_gfx1151_native(
@@ -4217,6 +4325,13 @@ def _submit_rocm_gfx1151_native(
         GFX_SOFTMAX_F32_ABI,
         GFX_SPARSE_MATMUL_2TO4_ABI,
     )
+    from tessera.compiler.rocm_mxfp4_native import (
+        GFX_MXFP4_W4A8_EXACT_ABI,
+        GFX_MXFP4_W4A8_WMMA_ABI,
+    )
+
+    if descriptor.abi_id in {GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI}:
+        return _submit_rocm_mxfp4_w4a8(image, descriptor, buffers, scalars)
 
     if descriptor.abi_id == GFX_SPARSE_MATMUL_2TO4_ABI:
         if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
@@ -5429,10 +5544,15 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_SOFTMAX_F32_ABI,
         GFX_SPARSE_MATMUL_2TO4_ABI,
     )
+    from tessera.compiler.rocm_mxfp4_native import (
+        GFX_MXFP4_W4A8_EXACT_ABI,
+        GFX_MXFP4_W4A8_WMMA_ABI,
+    )
 
     if (
         (target == "rocm_gfx1151"
-         or (target == "rocm_gfx1201" and abi_id in _gfx1201_proved_scheduled_abis()))
+         or (target == "rocm_gfx1201" and
+             abi_id in _gfx1201_proved_scheduled_abis()))
         and abi_id
         in {
             GFX_SOFTMAX_F16_ABI,
@@ -5456,6 +5576,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_ATTN_F16_ABI,
             GFX_ATTN_BF16_ABI,
             GFX_SPARSE_MATMUL_2TO4_ABI,
+            GFX_MXFP4_W4A8_EXACT_ABI,
+            GFX_MXFP4_W4A8_WMMA_ABI,
         }
         and target not in _native_launchers
     ):

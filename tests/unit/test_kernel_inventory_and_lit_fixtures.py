@@ -11,7 +11,7 @@ Hardware-free guards for the per-target kernel pre-work:
        coverage in `tests/tessera-ir/phase3/cuda13/nvidia_pipeline_alias.mlir`,
        and typed Tile→Target→NVVM coverage in the NVIDIA backend lit suite.
   H-3: `docs/backends/rocm/kernel-inventory.md` — enumerates every planned
-       ROCm fused kernel under ROCm 7.2.4.
+       ROCm fused kernel under ROCm 10.0 / HIP 7.15.
   H-4: ROCm compiler contracts live in the ROCm backend lit suite, including
        architecture-keyed MFMA/WMMA selection and Target→ROCDL conversion.
 """
@@ -307,8 +307,8 @@ class TestH3RocmInventoryDoc:
             "Fused kernel inventory",
             "AMDGCN intrinsic patterns",
             "Execution gates",
-            "ROCm 7.2.4",
-            "HIP 7.2.4",
+            "ROCm 10.0",
+            "HIP 7.15",
         ):
             assert section in doc, f"Section {section!r} missing"
 

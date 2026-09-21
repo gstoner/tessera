@@ -4610,7 +4610,8 @@ and audit-plan gates; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`.
 
 Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
 
-PRs: this PR; sync `ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`.
+PRs: [#801](https://github.com/gstoner/tessera/pull/801); sync
+`ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`.
 
 Outcome: The dedicated gfx1201 native package now has two proved ABIs. The
 scalar exact-per-K32 package is the executable oracle; the production selector

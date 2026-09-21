@@ -202,6 +202,20 @@ class RankedTileCandidate:
     #: split-K" -- and note the model itself is known wrong for the shape that
     #: needs it most (see `rank_candidates`).
     split_k_required: bool | None
+    #: VGPR-limited occupancy in waves/SIMD, from `rocm_occupancy`.  None when
+    #: the arch's constants are unestablished.
+    #:
+    #: UNWIRED as a ranking input (Decision #29a condition 1): it is reported,
+    #: not scored.  `score` below is deliberately unchanged, because making
+    #: occupancy binding changes which tile production selects, and that needs
+    #: exact-device proof on the launch arch before it can move a selector.
+    #: Owned by RDNA-OCCUPANCY-GRANULE-2026-09-20.
+    #:
+    #: Worth reporting now because the register margin next to it cannot answer
+    #: what occupancy answers: `vgpr_usage` is continuous and occupancy is a
+    #: step function of it, so two candidates 20 registers apart can sit on the
+    #: same rung while two one register apart do not.
+    occupancy_waves_per_simd: int | None
     pipeline_depth: int
     score: float
     reasons: tuple[str, ...]
@@ -224,6 +238,7 @@ class RankedTileCandidate:
             "bank_padding_required": self.bank_padding_required,
             "register_macro_tile": self.register_macro_tile,
             "split_k_required": self.split_k_required,
+            "occupancy_waves_per_simd": self.occupancy_waves_per_simd,
             "pipeline_depth": self.pipeline_depth,
             "score": self.score,
             "reasons": list(self.reasons),
@@ -438,6 +453,25 @@ def select_macro_tile(
 _PANEL_FLOOR = 1024
 
 
+def _occupancy_waves_per_simd(
+        vgprs: int, profile: ROCmTargetProfile) -> int | None:
+    """VGPR-limited occupancy for a candidate, or None when undeterminable.
+
+    Imported lazily so `rocm_tiling` keeps working on an arch whose occupancy
+    constants this fleet has never established: an unmeasured part loses this
+    one reported field rather than failing to rank at all.
+    """
+    from tessera.compiler.rocm_occupancy import (
+        TesseraOccupancyError, allocate_vgprs)
+
+    try:
+        return allocate_vgprs(
+            vgprs, arch=profile.arch,
+            per_wave_cap=profile.vgpr_budget).waves_per_simd
+    except TesseraOccupancyError:
+        return None
+
+
 def rank_candidates(
     candidates: list[TileCandidate],
     profile: ROCmTargetProfile,
@@ -483,6 +517,7 @@ def rank_candidates(
         # that only care about the positive case.
         split_k_required = _split_k_required(
             cand, profile, problem=problem, lds_margin=lds_margin)
+        occupancy = _occupancy_waves_per_simd(vgpr, profile)
         bank_padding = padding > 0
 
         reasons: list[str] = []
@@ -518,6 +553,7 @@ def rank_candidates(
                 bank_padding_required=bank_padding,
                 register_macro_tile=macro_tile,
                 split_k_required=split_k_required,
+                occupancy_waves_per_simd=occupancy,
                 pipeline_depth=depth,
                 score=score,
                 reasons=tuple(reasons),

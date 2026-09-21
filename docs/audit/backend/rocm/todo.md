@@ -7,6 +7,124 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## RDNA occupancy model, measured on both ROCm parts — 2026-09-20
+
+Sync: `RDNA-OCCUPANCY-GRANULE-2026-09-20`; owner ROCM-2. `rocm_target` carried
+every ingredient of an occupancy verdict — the per-wave VGPR cap, `_LDS_BYTES`,
+`_MAX_WAVES` and measured `dispatch_slots` — and nothing composed them, so no
+tile decision could ask whether its latency was coverable. That is the binding
+question on gfx1201, where the staging copy is latency-bound on unhidden load
+latency. `compiler/rocm_occupancy.py` composes the three ceilings (registers,
+LDS, wave slots), names which one binds, and models both quantised allocations
+rather than treating pressure as continuous. `headroom_to_next_rung` answers
+what a spill count cannot: how many registers a kernel must shed to gain a
+wave. 68 host-free unit tests.
+
+**Both parts measured on their own silicon.** `scripts/probe_rdna_vgpr_granule.py`
+compiles twelve kernels at varying register pressure, reads `(VGPRs, Occupancy
+[waves/SIMD])` from the compiler's resource-usage remark, and solves for the
+`(file, granule, wave_slots)` triple explaining all of them. gfx1201
+(Tajasarus) and gfx1151 (Princess-Luna) each resolve uniquely to **1536
+VGPRs/SIMD, wave32 granule 24, 16 wave slots/SIMD**. They agree — and the
+agreement is the result, not the assumption, since proof does not transfer
+between the two parts. `VGPR_GRANULE_CONTESTED` is now empty.
+
+**ISA-verified against the primary manuals**, not the extracted archive: the
+RDNA4 (707 pp.) and RDNA3.5 (644 pp.) ISAs state the granule rule, the 256
+per-wave cap, the 1 KiB LDS block, the two-64 KiB LDS split, 4 SIMD32s/WGP and
+the 32-work-group / 1024-work-item limits in **identical wording**. Wave slots
+per SIMD are stated in neither; that constant rests on the probe alone. Note
+the archive's `sections/*.md` headers cite PDF-physical pages, not the
+document's footer numbering — they differ by 10.
+
+Three ISA ceilings the model was missing are now implemented: LDS allocates in
+1 KiB blocks (a 26000 B request occupies 26624 B, so four groups fit per WGP
+and not the five naive division gives); 1024 work-items per work-group is
+refused rather than clamped; and the 32-work-group limit is applied but
+measured to be *exactly coincident* with the wave-slot ceiling on both parts,
+so it is marked non-binding at the site.
+
+**`_MAX_WAVES` unit defect, fixed at the root.** The table is documented "per
+CU", and the CDNA rows were genuinely per-CU (4 SIMDs x 8 slots = 32) while the
+RDNA rows carried 16, the per-**SIMD** count — one column meaning two things.
+RDNA rows are now 32, with `simds_per_cu()` added as the conversion. The
+`ROCmTargetProfile.waves_per_simd` property was returning `waves_per_cu`
+*unchanged*, serving one number under two names that differ 2x on RDNA and 4x
+on CDNA; it now divides, and returns None where CU geometry is unestablished.
+Relaxing the `waves_per_cu` validator was checked rather than assumed to be
+safe: it reaches no Target IR attribute, is absent from
+`ROCmScheduleDescriptor.cache_key()`, and `waves_per_simd` had no callers.
+`rocm_occupancy` now derives its per-SIMD figure from that one table instead of
+holding a second copy — two copies of one constant is how the unit confusion
+survived.
+
+**CDNA5 (gfx125x) checked against its own manual, and it is not RDNA-shaped.**
+The user's framing is right that CDNA5 is GFX12-derived — it has WGPs, wave32,
+VOPD *and* VOPD3 — which makes it exactly the case where inheriting RDNA
+constants looks safe and is not. Three of this model's constants differ:
+
+| constant | RDNA3.5 / RDNA4 | CDNA5 | source |
+|---|---|---|---|
+| LDS allocation block | 1024 B | **2048 B** | CDNA5 ISA 3.3.4 vs RDNA4 3.3.5 |
+| per-wave VGPR cap | 256 | **1024** (VGPR-MSB indexed above 255) | CDNA5 ISA 3.3.2.1 |
+| "1536/SIMD ⇒ granule 24" clause | present | **absent**; granule stated outright as 16, wave32 only | CDNA5 ISA 3.3.2.1 |
+
+A fourth difference is scale, and it exposed a silent 2x. `simds_per_slot`
+inferred the SIMD tier from "is this RDNA?", sending every non-RDNA part down a
+CU-shaped branch returning 2 — while CDNA5 ISA 2.2 says a work-group's waves
+"can run on any of the 4 SIMD32s" of its WGP. gfx1251 is a far larger part than
+gfx1201, which is exactly where a fallback shaped by the small part goes
+unnoticed. The tier is now an established per-arch table (`_SIMDS_PER_WGP` /
+`_SIMDS_PER_CU_MODE`) that declines instead of borrowing the other mode's
+shape, and `lds_pool_bytes` declines for CDNA5 rather than assuming pool ==
+the 320 kB request cap — an assumption that would cap gfx1251 residency at one
+work-group for any LDS-heavy kernel. What *does* transfer is verified: CDNA5
+ISA 2.2 states the same 32-work-group / 1024-work-item per-WGP limits as RDNA
+2.3, so applying those two constants arch-independently is checked, not
+assumed.
+
+`LDS_ALLOC_GRANULE_BYTES` was a module-wide 1024 and is now the per-arch
+`lds_alloc_granule()`; `per_wave_cap` no longer defaults to 256 but derives
+from `_VGPR_BUDGET`, which already carried CDNA5's 1024. CDNA1–4 have no
+established LDS block size and are absent rather than defaulted. CDNA5's granule is *stated* rather than file-size-conditional, so it is known
+(16) even though its VGPR file per SIMD is not; a derivation keyed on file size
+would have discarded it. Occupancy there still declines — a granule alone
+cannot give a wave count — and CU geometry and the per-WGP LDS pool remain
+unestablished too. That is the correct outcome, not a gap this PR should paper
+over. gfx1250/1251 also have materially more CUs than gfx1201, and
+`dispatch_slots` has never measured them, so every machine-wide figure there
+refuses rather than inheriting the consumer part's count.
+
+**Wired to three consumers**, so the model is not an unconsumed declaration:
+
+1. `benchmarks/rocm/benchmark_rocm_g6b_two_wave.py` and
+2. `benchmarks/rocm/benchmark_rocm_gemm_schedule_matrix.py` each hand-rolled
+   `min(16, 1536 // vgpr_count)` — hardcoded constants, no granule rounding.
+   **This is where the wrong "121 VGPRs -> 12 waves/SIMD" in the G6 record came
+   from**; `1536 // 121 = 12`, where the device gives 10. Both now call the
+   model. The G6 paragraph carries a dated correction in place, and its
+   *measured* 2x speedups are untouched — they were measured, not modeled.
+3. `rocm_tiling.RankedTileCandidate.occupancy_waves_per_simd` reports occupancy
+   alongside the register and LDS margins. **Reported, not scored** (Decision
+   #29a): making it binding changes which tile production selects and needs
+   exact-device proof on the launch arch first.
+   `test_occupancy_is_reported_but_does_not_change_ranking` is what stops it
+   quietly becoming load-bearing.
+
+Open: make occupancy binding in tile selection, behind exact-device proof;
+re-measure the G6 kernel at <=120 VGPRs, since it sits one register above a
+2-wave rung; establish CDNA 5 CU geometry and VGPR file per SIMD (`simds_per_cu` and
+`vgpr_regs_per_simd` both return None there, so its occupancy declines rather
+than guesses); establish the CDNA1-4 LDS block size from a manual.
+
+Scope limit: the probe is **compile-time**. It reads the compiler's resource
+model, not a running kernel's achieved occupancy — what the hardware allocates,
+not what a workload attains. No kernel was launched, no latency measured, and
+no performance promotion is claimed.
+
+Evidence: [gfx1201 packet](../../../../benchmarks/baselines/gfx1201_vgpr_granule_20260920/README.md),
+[gfx1151 packet](../../../../benchmarks/baselines/gfx1151_vgpr_granule_20260920/README.md).
+
 ## Logical sparse matrices, reader release and floor migration — 2026-09-13
 
 Owner E2E-REAL-6 / ROCM-2; sync `LOGICAL-SPARSE-OWNERSHIP-FLOOR-2026-09-13`. Logical row-major f16/bf16 matrices now enter an internal sparse Schedule producer whose compiled GPU code packs values/indices, loops over K, and reports invalid 2:4 groups per lane. gfx1201 verifies six dtype/shape cases through 48x32x128, with exact outputs and emitted SWMMAC instructions. This is not public Graph sparse admission or a production runtime package: consuming validity words, descriptor projection and uncertain teardown ownership remain prerequisites. Reader release now has a non-cancellable asynchronous future; failures retain retryable leases. Four gfx1201 checks verify external-copy retirement under saved/recompute and synchronous/asynchronous release, rejecting device-wide synchronization. Isolated ANN replacement preserves an explicit device ordinal and requires confirmed process death plus fresh numerical health probes; new ordinal/retry tests are host IPC evidence, not gfx1201 recovery proof. Additional sparse formats, mixed-precision cotangents, general public tape composition and calibrated profiling remain open.
@@ -4217,7 +4335,14 @@ dimension chunks, reduce a bounded 2x16x16 partial score tile through 2 KiB of
 additional LDS, share the online-softmax state, and split the PV output chunks
 without a second reduction. The assembler result moves from 256 to 121 VGPRs,
 removes 82 VGPR spills and 332 scratch bytes, and raises modeled occupancy from
-6 to 12 waves/SIMD. Nine interleaved trials measure 2.045x at noncausal
+6 to 12 waves/SIMD. **Corrected 2026-09-20: the 12 is wrong; it is 10.** The
+gfx1201 VGPR allocation granule was measured as 24 (sync
+`RDNA-OCCUPANCY-GRANULE-2026-09-20`), so 121 VGPRs allocate 144 and the rung
+ending at 120 is missed by one register. 12 waves/SIMD would require granule
+16. The 6-at-256 figure is unaffected. The measured 2x speedups below stand --
+they were measured, not modeled -- but the kernel has two more waves available
+to it than this paragraph claimed to have already captured. Nine interleaved
+trials measure 2.045x at noncausal
 `(1,16,1024,128)` and 2.106x at causal sequence 1009, with 100% win rates and
 maximum differences of 5.6e-7 and 8.4e-6. D=64 and advanced GQA/window/bias/
 soft-cap variants retain the one-wave kernel pending their own matrix.

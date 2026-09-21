@@ -186,19 +186,65 @@ _LDS_BYTES: dict[AMDArch, int] = {
 }
 
 
+#: SIMDs per CU.  RDNA pairs two SIMD32s into a CU (and two CUs into a WGP);
+#: CDNA/GCN puts four SIMDs in a CU.  Required to convert between the per-CU
+#: and per-SIMD wave-slot units, which is exactly what this file used to get
+#: wrong.  Absent means "not established" -- a caller must not guess.
+_SIMDS_PER_CU: dict[AMDArch, int] = {
+    AMDArch.GFX_90A:  4,
+    AMDArch.GFX_940:  4,
+    AMDArch.GFX_942:  4,
+    AMDArch.GFX_950:  4,
+    AMDArch.GFX_1100: 2,
+    AMDArch.GFX_1151: 2,
+    AMDArch.GFX_1200: 2,
+    AMDArch.GFX_1201: 2,
+    # CDNA 5 CU geometry not established on this fleet; deliberately absent so
+    # `waves_per_simd` declines rather than deriving a number from nothing.
+}
+
+
 # Maximum waves per CU for each architecture.
+#
+# **The unit is per CU, and the RDNA rows were wrong until 2026-09-20.** They
+# carried 16, which is the per-**SIMD** slot count; an RDNA CU is two SIMD32s,
+# so the per-CU figure is 32. The table was internally inconsistent: the CDNA
+# rows are genuinely per-CU (4 SIMDs x 8 slots = 32 on gfx90a) while the RDNA
+# rows were per-SIMD, so one column meant two different things.
+#
+# Measured, not inferred: the gfx1201 and gfx1151 probes both report occupancy
+# plateauing at exactly 16 waves/SIMD for kernels far below the register
+# ceiling, and RDNA4/RDNA3.5 ISA 2.3 both say a work-group's waves "can run on
+# any of the 4 SIMD32s" of its WGP.  16/SIMD x 2 SIMDs = 32/CU.
+#
+# Correcting it *relaxes* the `ROCmTargetProfile.waves_per_cu` validator. That
+# is safe here and was checked rather than assumed: `waves_per_cu` reaches no
+# Target IR attribute and is not in `ROCmScheduleDescriptor.cache_key()`, and
+# the only reader of the `waves_per_simd` property was the property itself.
 _MAX_WAVES: dict[AMDArch, int] = {
-    AMDArch.GFX_90A:  32,
+    AMDArch.GFX_90A:  32,       # 4 SIMD16 x 8 slots
     AMDArch.GFX_940:  32,
     AMDArch.GFX_942:  32,
     AMDArch.GFX_950:  32,
-    AMDArch.GFX_1100: 16,
-    AMDArch.GFX_1151: 16,       # RDNA 3.5 wave32 occupancy (same as RDNA 3)
-    AMDArch.GFX_1200: 16,
-    AMDArch.GFX_1201: 16,
+    AMDArch.GFX_1100: 32,       # RDNA 3: 2 SIMD32 x 16 slots
+    AMDArch.GFX_1151: 32,       # RDNA 3.5, measured 16/SIMD on Princess-Luna
+    AMDArch.GFX_1200: 32,
+    AMDArch.GFX_1201: 32,       # RDNA 4, measured 16/SIMD on Tajasarus
+    # CDNA 5: left at the previously recorded value; its CU geometry is not
+    # established on this fleet, so it is not re-derived here.
     AMDArch.GFX_1250: 16,
     AMDArch.GFX_1251: 16,
 }
+
+
+def simds_per_cu(arch: AMDArch) -> Optional[int]:
+    """SIMDs in one CU, or None when this fleet has not established it."""
+    return _SIMDS_PER_CU.get(arch)
+
+
+def max_waves_per_cu(arch: AMDArch) -> Optional[int]:
+    """Hardware wave slots per CU, or None for an unlisted arch."""
+    return _MAX_WAVES.get(arch)
 
 
 # Per-arch Tessera-registered executable storage matrix accepted by the ROCm
@@ -682,7 +728,8 @@ class ROCmTargetProfile:
 
     Attributes:
         arch              : AMDArch enum (gfx94x / gfx950 / gfx1100 / gfx1200)
-        waves_per_cu      : Wave count per CU (must be in [1, _MAX_WAVES])
+        waves_per_cu      : Wave count per CU -- per CU, not per SIMD
+                            (must be in [1, _MAX_WAVES]; see that table)
         lds_bytes         : Override LDS budget; None = use generation default
         pipeline_stages   : Software pipeline depth (>=1)
         prefer_inline_asm : Emit raw AMDGCN inline asm rather than hip ops
@@ -814,8 +861,30 @@ class ROCmTargetProfile:
         return _XCD_COUNT[self.arch] > 1
 
     @property
-    def waves_per_simd(self) -> int:
-        return self.waves_per_cu
+    def waves_per_simd(self) -> Optional[int]:
+        """``waves_per_cu`` converted to the per-SIMD unit.
+
+        **Corrected 2026-09-20.** This used to ``return self.waves_per_cu``
+        unchanged, serving one number under two names that differ by the SIMD
+        count -- 2x on RDNA, 4x on CDNA. It had no callers, which is why the
+        conflation survived; it is fixed rather than deleted because the
+        per-SIMD unit is the one an occupancy figure is quoted in.
+
+        Returns None when the arch's CU geometry is not established, and
+        also when ``waves_per_cu`` is not a multiple of the SIMD count -- an
+        uneven distribution has no single per-SIMD value, and flooring it gave
+        0 waves for ``waves_per_cu=1``.  Never falls back to the per-CU number.
+        """
+        simds = simds_per_cu(self.arch)
+        if simds is None:
+            return None
+        if self.waves_per_cu % simds:
+            # Not divisible: the waves do not sit uniformly on the SIMDs, so
+            # there is no single per-SIMD number.  Flooring produced 0 for
+            # waves_per_cu=1 -- not a valid occupancy -- and silently dropped
+            # part of the configured total for every other non-multiple.
+            return None
+        return self.waves_per_cu // simds
 
     @property
     def threads_per_wave(self) -> int:

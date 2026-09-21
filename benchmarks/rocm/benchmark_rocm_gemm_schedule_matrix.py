@@ -34,6 +34,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 
 from tessera import runtime as rt  # noqa: E402
+from tessera.compiler.rocm_occupancy import (  # noqa: E402
+    TesseraOccupancyError,
+    allocate_vgprs,
+)
+from tessera.compiler.rocm_schedule import parse_arch  # noqa: E402
 
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 TILES = ((1, 1), (2, 2), (2, 4), (3, 4), (4, 4))
@@ -303,7 +308,29 @@ def _tool(name: str) -> str | None:
     return None
 
 
-def code_object_resources(hsaco: bytes) -> dict[str, Any]:
+def _occupancy_waves_per_simd(vgpr_count, arch: str):
+    """VGPR-limited occupancy from the compiler's model, not an inline formula.
+
+    Replaces a hand-rolled ``min(16, 1536 // vgprs)``.  That form omitted the
+    VGPR allocation granule, so it reported 12 waves/SIMD for a 121-VGPR kernel
+    where the device gives 10: 121 rounds up to 144 on a part whose wave32
+    granule is 24 (RDNA4 / RDNA3.5 ISA 3.3.2.1, measured on both fleet parts).
+    It also hardcoded 1536 and 16, which are per-arch constants.
+
+    Returns None rather than an approximation when the arch is unestablished
+    or the VGPR count is unusable.
+    """
+    if not vgpr_count:
+        return None
+    try:
+        return allocate_vgprs(int(vgpr_count), arch=parse_arch(arch)).waves_per_simd
+    except (TesseraOccupancyError, ValueError, KeyError):
+        return None
+
+
+def code_object_resources(
+    hsaco: bytes, arch: str = CHIP
+) -> dict[str, Any]:
     readobj = _tool("llvm-readobj")
     objdump = _tool("llvm-objdump")
     resources: dict[str, Any] = {
@@ -313,7 +340,11 @@ def code_object_resources(hsaco: bytes) -> dict[str, Any]:
         "vgpr_spill_count": None, "sgpr_spill_count": None,
         "spill_count": None, "spills": None,
         "vgpr_limited_waves_per_simd": None,
-        "occupancy_model": "gfx1151 1536 VGPR/SIMD divided by assembler VGPR count",
+        "occupancy_model": (
+            "tessera.compiler.rocm_occupancy.allocate_vgprs: per-arch VGPR "
+            "file and allocation granule, granule-rounded, capped at the "
+            "per-wave budget"),
+        "occupancy_model_arch": CHIP,
     }
     with tempfile.NamedTemporaryFile(suffix=".hsaco") as obj:
         obj.write(hsaco)
@@ -352,9 +383,8 @@ def code_object_resources(hsaco: bytes) -> dict[str, Any]:
     resources["spill_count"] = sum(spill_values) if spill_values else None
     resources["spills"] = bool(resources["scratch_bytes"] or
                                resources["spill_count"])
-    if resources["vgpr_count"]:
-        resources["vgpr_limited_waves_per_simd"] = max(
-            1, min(16, 1536 // resources["vgpr_count"]))
+    resources["vgpr_limited_waves_per_simd"] = _occupancy_waves_per_simd(
+        resources["vgpr_count"], arch)
     return resources
 
 

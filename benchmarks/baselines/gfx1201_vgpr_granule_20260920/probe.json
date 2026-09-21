@@ -1,0 +1,121 @@
+{
+  "apply": "set rocm_occupancy._VGPR_REGS_PER_SIMD[gfx1201] = (1536, Provenance.MEASURED) and, if granule 24 contradicts the ISA 3.3.2.1 rule, replace the derivation in vgpr_alloc_granule with a measured table and drop gfx1201 from VGPR_GRANULE_CONTESTED",
+  "arch": "gfx1201",
+  "candidates": [
+    {
+      "granule": 24,
+      "regs_per_simd": 1536,
+      "wave_slots_per_simd": 16
+    }
+  ],
+  "distinct_vgpr_counts": [
+    14,
+    24,
+    31,
+    39,
+    47,
+    62,
+    78,
+    111,
+    132,
+    164,
+    196,
+    228
+  ],
+  "granule_wave32": 24,
+  "hipcc": "/opt/rocm/core-10.0/bin/hipcc",
+  "host": "tajasarus",
+  "isa_rule_holds": true,
+  "observations": [
+    {
+      "depth": 4,
+      "occupancy": 16,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 14
+    },
+    {
+      "depth": 8,
+      "occupancy": 16,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 24
+    },
+    {
+      "depth": 16,
+      "occupancy": 16,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 31
+    },
+    {
+      "depth": 24,
+      "occupancy": 16,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 39
+    },
+    {
+      "depth": 32,
+      "occupancy": 16,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 47
+    },
+    {
+      "depth": 48,
+      "occupancy": 16,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 62
+    },
+    {
+      "depth": 64,
+      "occupancy": 16,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 78
+    },
+    {
+      "depth": 96,
+      "occupancy": 12,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 111
+    },
+    {
+      "depth": 128,
+      "occupancy": 10,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 132
+    },
+    {
+      "depth": 160,
+      "occupancy": 9,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 164
+    },
+    {
+      "depth": 192,
+      "occupancy": 7,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 196
+    },
+    {
+      "depth": 224,
+      "occupancy": 6,
+      "status": "ok",
+      "threads": 256,
+      "vgprs": 228
+    }
+  ],
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "probe": "rdna_vgpr_granule",
+  "regs_per_simd": 1536,
+  "status": "resolved",
+  "threads": 256,
+  "wave_slots_per_simd": 16
+}

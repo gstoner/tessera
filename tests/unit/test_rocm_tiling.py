@@ -334,3 +334,62 @@ def test_n_slice_rejects_zero_parts() -> None:
 def test_n_slice_single_part_is_identity() -> None:
     parts = n_slice(TileShape(64, 128, 16), 1)
     assert parts == (TileShape(64, 128, 16),)
+
+
+# ── Reported occupancy (RDNA-OCCUPANCY-GRANULE-2026-09-20) ──────────────────
+
+RDNA4_PROFILE = ROCmTargetProfile(arch=AMDArch.GFX_1201, pipeline_stages=2)
+
+
+def test_ranked_candidates_report_occupancy():
+    cands = [TileCandidate(TileShape(64, 64, 16), "fp16", double_buffer=True)]
+    row = rank_candidates(cands, RDNA4_PROFILE)[0]
+    assert row.occupancy_waves_per_simd is not None
+    assert 1 <= row.occupancy_waves_per_simd <= 16
+    assert row.as_metadata_dict()["occupancy_waves_per_simd"] == (
+        row.occupancy_waves_per_simd)
+
+
+def test_reported_occupancy_matches_the_occupancy_model():
+    """One authority for the number: the ranking reports what
+    ``rocm_occupancy`` computes, it does not recompute it (Decision #31)."""
+    from tessera.compiler.rocm_occupancy import allocate_vgprs
+
+    for shape in ((32, 32, 16), (64, 64, 16), (128, 128, 16)):
+        cand = TileCandidate(TileShape(*shape), "fp16", double_buffer=True)
+        ranked = rank_candidates([cand], RDNA4_PROFILE)[0]
+        if ranked.occupancy_waves_per_simd is None:
+            continue
+        assert ranked.occupancy_waves_per_simd == allocate_vgprs(
+            ranked.vgpr_usage, arch=RDNA4_PROFILE.arch,
+            per_wave_cap=RDNA4_PROFILE.vgpr_budget).waves_per_simd
+
+
+def test_occupancy_is_reported_but_does_not_change_ranking():
+    """UNWIRED as a ranking input (Decision #29a).  Making occupancy binding
+    changes which tile production selects, which needs exact-device proof on
+    the launch arch; until then the score must be untouched.  This test is what
+    stops the field quietly becoming load-bearing."""
+    cands = [
+        TileCandidate(TileShape(32, 32, 16), "fp16", double_buffer=True),
+        TileCandidate(TileShape(64, 64, 16), "fp16", double_buffer=True),
+        TileCandidate(TileShape(128, 64, 16), "fp16", double_buffer=True),
+        TileCandidate(TileShape(64, 128, 16), "fp16", double_buffer=True),
+    ]
+    ranked = rank_candidates(cands, RDNA4_PROFILE)
+    for row in ranked:
+        recomputed = float(row.vgpr_usage)
+        if row.register_margin < 0:
+            recomputed += 1_000_000 + abs(row.register_margin) * 100
+        if row.lds_margin < 0:
+            recomputed += 500_000 + abs(row.lds_margin) / 16
+        assert recomputed <= row.score + 1e-6
+    assert list(ranked) == sorted(ranked, key=lambda r: r.score)
+
+
+def test_occupancy_is_none_for_an_arch_without_established_constants():
+    """An unmeasured part loses this one reported field rather than failing to
+    rank at all."""
+    profile = ROCmTargetProfile(arch=AMDArch.GFX_942, pipeline_stages=2)
+    cands = [TileCandidate(TileShape(64, 64, 16), "fp16", double_buffer=True)]
+    assert rank_candidates(cands, profile)[0].occupancy_waves_per_simd is None

@@ -143,13 +143,13 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/APPLE_AUDIT.md` | - | 2026-09-05 | 15 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 69 | ✓ |
 | `backend/apple/README.md` | - | 2026-09-05 | 15 | ✓ |
-| `backend/apple/todo.md` | - | 2026-09-15 | 5 | ✓ |
+| `backend/apple/todo.md` | - | 2026-09-20 | 0 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-09-05 | 15 | ✓ |
 | `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-09-05 | 15 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-19 | 63 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 69 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 88 | ✓ |
-| `backend/nvidia/todo.md` | - | 2026-09-14 | 6 | ✓ |
+| `backend/nvidia/todo.md` | - | 2026-09-20 | 0 | ✓ |
 | `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 47 | ✓ |
 | `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 37 | ✓ |
 | `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 42 | ✓ |
@@ -158,8 +158,8 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-08-05 | 46 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 54 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-09-05 | 15 | ✓ |
-| `backend/rocm/todo.md` | - | 2026-09-14 | 6 | ✓ |
-| `backend/x86/todo.md` | - | 2026-09-14 | 6 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-09-21 | -1 | ✓ |
+| `backend/x86/todo.md` | - | 2026-09-20 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 54 | ✓ |
 | `compiler/ANN_CALCULUS_DESIGN_SPIKE.md` | - | 2026-09-04 | 16 | ✓ |
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-09-06 | 14 | ✓ |
@@ -182,7 +182,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-09-06 | 14 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 13 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 9 | ✓ |
-| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-09-17 | 3 | ✓ |
+| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-09-20 | 0 | ✓ |
 | `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-09-15 | 5 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-04 | 16 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 49 | ✓ |

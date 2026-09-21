@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-17
+last_updated: 2026-09-20
 audit_role: reference
 ---
 
@@ -16,6 +16,29 @@ primary Owner; end the five-field block with `<!-- entry-fields:end -->` and
 link additional owners in the body. Update that owner record in
 the same PR. Evidence corrections are explicit; do not rewrite old results as
 current proof. Current priorities live only in the plan.
+
+### 2026-09-20 — Examples expose the lost MoE route name
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: pending
+
+Outcome: The S8 Qwen3-MoE compiler example became an executable Apple CPU
+oracle and exposed a silent wrong-answer path: Graph IR retained the third
+route tensor, but runtime artifact metadata dropped whether that tail meant
+`scores` or `route`, so Apple CPU/GPU execution selected round-robin routing.
+Both frontends now record the declared optional names in `kwargs["extras"]`;
+all foundation-target artifacts retain `route`, and the portable Apple CPU
+launch matches the public-operation oracle.
+
+Remaining: NVIDIA, ROCm, x86, and Apple GPU native execution remain owned by
+their architecture-specific fixtures and exact-device evidence; this shared
+fix does not transfer Apple results or promote a selector.
+
+Evidence: Focused compiler-example, frontend, examples-audit, generated-doc,
+and audit-plan gates; sync `EXAMPLE-MOE-OPTIONAL-BINDING-2026-09-20`.
+
+<!-- entry-fields:end -->
 
 ### 2026-09-04 — Engineering follow-through
 
@@ -4582,4 +4605,3 @@ Remaining: the 8-bit `TR_B64` mapping; the 2048³ transpose-load reversal, which
 Evidence: `docs/audit/backend/rocm/todo.md` §"ROCM-MIXED-FP8-1 closed: the pair was a Schedule field, and two gates were not checking their own claim — 2026-09-19", `tests/unit/test_rocm_gfx1201_scheduled.py`, `tests/unit/test_rocm_wmma_form_reachability.py`, `tests/_support/rocm_isa.py`.
 
 <!-- entry-fields:end -->
-

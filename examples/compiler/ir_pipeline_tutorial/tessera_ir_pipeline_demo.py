@@ -15,22 +15,11 @@ mode first.
 
 from __future__ import annotations
 
-import importlib.util
-
 import numpy as np
 
-
-HAVE_TESSERA = importlib.util.find_spec("tessera") is not None
-if HAVE_TESSERA:
-    import tessera
-else:
-    tessera = None
+import tessera
 
 def main():
-    if not HAVE_TESSERA:
-        print("Tessera is not importable. Run with `PYTHONPATH=python` from the repo root.")
-        return
-
     @tessera.jit(cpu_tile=(32, 32, 16))
     def mlp_step(x, w):
         h = tessera.ops.matmul(x, w)
@@ -39,6 +28,7 @@ def main():
     x = np.arange(16, dtype=np.float32).reshape(4, 4)
     w = np.eye(4, dtype=np.float32)
     out = mlp_step(x, w)
+    np.testing.assert_array_equal(out, x)
     print("ran mlp_step")
     print("output shape:", out.shape)
     # Execution-kind introspection (the post-2026-05 JitFn surface,
@@ -62,6 +52,12 @@ def main():
         "tile": mlp_step.tile_ir,
         "target": mlp_step.target_ir,
     }
+    missing = [level for level, text in artifacts.items() if not text]
+    if missing:
+        raise RuntimeError(
+            "compiler tutorial expected non-empty artifacts for: "
+            + ", ".join(missing)
+        )
     for level, text in artifacts.items():
         print(f"\n==== {level.upper()} IR ====")
         print((text or f"// no {level} artifact emitted")[:1200])

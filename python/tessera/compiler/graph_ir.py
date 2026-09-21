@@ -290,6 +290,14 @@ _PRESENCE_FLAGGED_OPERANDS: Dict[str, tuple[str, ...]] = {
     "tessera.modified_delta_attention": ("gate", "beta", "decay"),
 }
 
+# Ops whose variadic tensor tail is decoded by name at runtime. The operand
+# order alone is insufficient for ``moe``: a third tensor can be either
+# ``scores`` or ``route``. Backends already consume ``kwargs["extras"]``; the
+# frontends must therefore preserve the keyword names that created the tail.
+_NAMED_OPTIONAL_OPERANDS: Dict[str, tuple[str, ...]] = {
+    "tessera.moe": ("scores", "route"),
+}
+
 # Ops whose optional operands are marked by a STRING attribute naming the
 # operand -- the contract `MatmulOp::verify` already reads (`bias = "bias"`,
 # `residual = "residual"`; epilogue input count must equal the markers). The
@@ -332,6 +340,10 @@ def apply_presence_flags(
         for name in marked:
             if name in present:
                 kwargs.setdefault(name, name)
+    named = _NAMED_OPTIONAL_OPERANDS.get(graph_name, ())
+    if named:
+        present = set(keyword_operand_names)
+        kwargs.setdefault("extras", [name for name in named if name in present])
     flagged = _PRESENCE_FLAGGED_OPERANDS.get(graph_name, ())
     if not flagged:
         return

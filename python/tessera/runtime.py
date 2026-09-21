@@ -48952,6 +48952,20 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         return _runtime_rope(np, operands[0], operands[1])
     if op_name == "tessera.flash_attn":
         return _runtime_flash_attn(np, operands[0], operands[1], operands[2], kwargs)
+    if op_name == "tessera.moe":
+        extras = list(kwargs.get("extras", []))
+        extra_values = {
+            name: operands[2 + index]
+            for index, name in enumerate(extras)
+            if 2 + index < len(operands)
+        }
+        return _apple_moe_reference(
+            operands[0],
+            operands[1],
+            extra_values.get("route"),
+            extra_values.get("scores"),
+            np,
+        )
     if op_name == "tessera.varlen_sdpa":
         # Packed-sequence SDPA decomposes to per-block flash_attn (the same lane
         # the C++ VarlenSdpaDecomposePass targets for static cu_seqlens). cu_seqlens

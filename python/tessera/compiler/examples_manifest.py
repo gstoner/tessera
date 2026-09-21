@@ -105,7 +105,10 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
             "--dtype f32 --device cpu --iters 1"
         ),
         extras_required=("torch",),
-        notes="Cross-checks Tessera vs. PyTorch reference attention.",
+        notes=(
+            "Runs canonical @tessera.jit flash attention on reference_cpu, "
+            "checks it against PyTorch SDPA, and can emit real compiler IR."
+        ),
     ),
     # ── Compiler tutorials ─────────────────────────────────────────────
     ExampleEntry(
@@ -120,6 +123,26 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
             "tessera_ir_pipeline_demo.py"
         ),
         notes="Prints Graph IR → Schedule IR → Tile IR → Target IR for a tiny MLP.",
+    ),
+    ExampleEntry(
+        directory="examples/compiler/ir_pipeline_tutorial",
+        entry_point=(
+            "examples/compiler/ir_pipeline_tutorial/"
+            "Tessera_IR_Pipeline_Tutorial.ipynb"
+        ),
+        status="runnable_optional",
+        command=(
+            "PYTHONPATH=python python -m jupyter nbconvert --to notebook "
+            "--execute --stdout --ExecutePreprocessor.timeout=120 "
+            "examples/compiler/ir_pipeline_tutorial/"
+            "Tessera_IR_Pipeline_Tutorial.ipynb"
+        ),
+        extras_required=("jupyter", "nbconvert", "ipykernel"),
+        notes=(
+            "Notebook form of the compiler tutorial. Executes real CPU "
+            "numerics and requires non-empty Graph/Schedule/Tile/Target IR; "
+            "no shim or illustrative artifacts."
+        ),
     ),
     ExampleEntry(
         directory="examples/compiler/dnas",
@@ -345,10 +368,14 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         entry_point="examples/optimization/README.md",
         status="scaffold",
         reason=(
-            "Top-level placeholder directory with only README.md and "
-            "src/ stubs — no entry-point script exists yet."
+            "Standalone C++/CUDA/MLIR teaching sketches, not a canonical "
+            "Tessera compiler entry point. CPU sources have CMake targets, "
+            "but CUDA/MLIR coverage includes non-functional skeletons."
         ),
-        notes="Slated for autotune + roofline tooling examples.",
+        notes=(
+            "Needs a Tessera-native schedule/compile/validate entry point or "
+            "retirement to the archive."
+        ),
     ),
 )
 

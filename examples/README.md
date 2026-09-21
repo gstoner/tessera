@@ -21,22 +21,23 @@ This directory contains examples and tutorials for using Tessera.
 ## Advanced Examples
 
 - [`advanced/Fast_dLLM_v2/`](advanced/Fast_dLLM_v2/) - diffusion LLM inference and parallel decoding
-- [`advanced/Diffusion_LLM/`](advanced/Diffusion_LLM/) - diffusion language model package
+- [`advanced/Diffusion_LLM/`](advanced/Diffusion_LLM/) - runnable masked-diffusion denoising demo
 - [`advanced/rlvr_reasoning_suite/`](advanced/rlvr_reasoning_suite/) - consolidated GRPO/RLVR reasoning suite
-- [`advanced/Jet_nemotron/`](advanced/Jet_nemotron/) - hybrid efficient language model and PostNAS scaffold
+- [`advanced/Jet_nemotron/`](advanced/Jet_nemotron/) - runnable D=128 linear-attention smoke plus optional PostNAS scaffold
 - [`advanced/Nemotron_Nano_12B_v2/`](advanced/Nemotron_Nano_12B_v2/) - hybrid Mamba2/GQA/MLP model port
 - [`advanced/mla/`](advanced/mla/) - Multi-Latent Attention / FlashMLA examples
 - [`advanced/long_context_attention/`](advanced/long_context_attention/) - retrieval-head vs streaming-head planning
 - [`advanced/kv_cache_serving/`](advanced/kv_cache_serving/) - compressed KV-cache and disaggregated serving planner
 - [`advanced/gumiho/`](advanced/gumiho/) - Gumiho (ICML'25) hybrid speculative decoding on the Apple GPU/CPU backend
-- [`advanced/Tessera_Empirical_Software_Agent/`](advanced/Tessera_Empirical_Software_Agent/) - agentic kernel autotuning loop
+- [`advanced/Tessera_Empirical_Software_Agent/`](advanced/Tessera_Empirical_Software_Agent/) - runnable kernel-candidate benchmark plus agent scaffold
 
 Archived advanced examples are preserved under [`archive/examples/advanced/`](../archive/examples/advanced/).
 
-## Standalone Optimization Sketches
+## Optimization Example and Standalone Sketches
 
-These are generic C++/CUDA/MLIR teaching sketches, not canonical Tessera
-compiler examples or backend evidence. See their `STATUS.md` before use.
+[`optimization/tessera_schedule_example.py`](optimization/tessera_schedule_example.py)
+is the canonical scheduled-matmul entry point. The remaining C++/CUDA/MLIR
+files are teaching sketches, not backend evidence. See `STATUS.md` before use.
 
 - [`src/01_loop_tiling_blocking.cpp`](optimization/src/01_loop_tiling_blocking.cpp) - Loop tiling and blocking
 - [`src/02_vectorization_intrinsics.cpp`](optimization/src/02_vectorization_intrinsics.cpp) - Vectorization intrinsics

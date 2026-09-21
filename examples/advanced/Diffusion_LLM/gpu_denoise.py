@@ -232,6 +232,15 @@ if __name__ == "__main__":
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python"))
     s = run_mdlm_demo(tiny_diffusion_config())
+    if not (
+        s.steps >= 1
+        and s.all_unmasked
+        and s.tokens_in_range
+        and s.gpu_backbone_matches_numpy
+        and s.gpu_sampler_matches_numpy
+        and s.deterministic
+    ):
+        raise SystemExit(f"diffusion MDLM validation failed: {s}")
     print("OK diffusion mdlm:", s.backend, "steps", s.steps,
           "all_unmasked", s.all_unmasked, "backbone==np", s.gpu_backbone_matches_numpy,
           "sampler==np", s.gpu_sampler_matches_numpy, "deterministic", s.deterministic)

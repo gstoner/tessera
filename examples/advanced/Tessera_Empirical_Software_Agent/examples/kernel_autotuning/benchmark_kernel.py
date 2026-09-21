@@ -53,10 +53,14 @@ def main() -> None:
     runtime_s = time.perf_counter() - start
     max_err = max(abs(expected[i][j] - actual[i][j]) for i in range(m) for j in range(n))
     correct = max_err < 1e-9
+    if cfg["block_m"] <= 0 or cfg["block_n"] <= 0 or cfg["unroll"] <= 0:
+        raise ValueError(f"tile parameters must be positive: {cfg}")
     tile_area = cfg["block_m"] * cfg["block_n"] * cfg["unroll"]
     occupancy_proxy = min(tile_area / 4096.0, 1.0)
     score = (1.0 / max(runtime_s, 1e-9)) * occupancy_proxy if correct else 0.0
     print(json.dumps({"correct": correct, "max_err": max_err, "runtime_s": runtime_s, "score": score, "config": cfg}))
+    if not correct:
+        raise SystemExit("candidate kernel failed the numerical oracle")
 
 
 if __name__ == "__main__":

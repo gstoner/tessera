@@ -1,10 +1,12 @@
-# Status: `scaffold`
+# Status: `runnable` kernel benchmark; agent orchestrator scaffold
 
 Tracked by `python/tessera/compiler/examples_manifest.py`.
 
-This directory is a **research scaffold**, not a runnable example today.
+The manifest runs `examples/kernel_autotuning/benchmark_kernel.py`. It loads a
+candidate tile configuration, validates the tiled implementation against a
+reference, and fails on invalid parameters or numerical mismatch.
 
-## Why
+## Agent boundary
 
 `src/agents/tree_search_runner.py` orchestrates an end-to-end LLM +
 tree-search agent (sketch of the system from arXiv:2509.06503,
@@ -21,13 +23,5 @@ software"*). To run end-to-end it needs:
 None of those pieces are present in CI, so the orchestrator is
 intentionally not run as a smoke test.
 
-## Path forward
-
-* `examples/kernel_autotuning/benchmark_kernel.py` is closer to
-  runnable (pure-Python tile-config scoring with a numpy-ish
-  reference) and could graduate to its own `runnable` row
-  independent of the agent loop.
-* The orchestrator itself would need a real LLM client + sandbox
-  before it can be promoted past `scaffold`.
-
-Until that work lands, this scaffold ships unchanged.
+The orchestrator itself still needs a real LLM client and sandbox before it can
+be promoted. Its `DummyLLM` output is not used as manifest evidence.

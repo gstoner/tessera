@@ -105,3 +105,38 @@ def test_frontend_matched_packet_and_static_census_are_content_bound() -> None:
         bytes_row = census["requested_bytes"][shape]
         assert bytes_row["tessera_b_folded"] == 2 * bytes_row["radiance_b_packed"]
         assert bytes_row["tessera_a"] == bytes_row["radiance_a"]
+
+
+def test_single_lever_b_cache_ablation_is_refused_and_bound() -> None:
+    packet = json.loads((BASELINE / "b_cache_ablation.json").read_text())
+    assert packet["schema"] == "tessera.rocm.gfx1201_folded_b_cache_ablation.v1"
+    assert packet["source_revision"] == (
+        "679c5b6603f5abd32ddbf878929644f1c4e74e3e"
+    )
+    assert packet["device"] == "AMD Radeon RX 9070 XT"
+    assert packet["architecture"] == "gfx1201"
+    assert packet["radiance_wperm"] == 1
+    assert packet["selected"] == "tessera_folded"
+    assert packet["phase_attribution_admissible"] is False
+    assert packet["isa_guard"] == {
+        "baseline_non_temporal_load_sites": 0,
+        "variant_non_temporal_load_sites": 1,
+    }
+    assert packet["benchmark_sha256"] == hashlib.sha256(
+        (ROOT / "benchmarks/rocm/ablate_gfx1201_folded_b_cache.py").read_bytes(),
+    ).hexdigest()
+    assert packet["generator_sha256"] == hashlib.sha256(
+        (ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py").read_bytes(),
+    ).hexdigest()
+    assert packet["variant_source_sha256"] == hashlib.sha256(
+        variant_source().encode(),
+    ).hexdigest()
+    for case in ("prefill_256x5120x8704", "prefill_1024x17408x5120"):
+        rows = {row["engine"]: row for row in packet["rows"] if row["case"] == case}
+        assert set(rows) == {
+            "tessera", "tessera_folded", "tessera_b_nontemporal", "radiance",
+        }
+        assert len({row["output_sha256"] for row in rows.values()}) == 1
+        assert rows["tessera_b_nontemporal"]["median_ms"] > (
+            rows["tessera_folded"]["median_ms"]
+        )

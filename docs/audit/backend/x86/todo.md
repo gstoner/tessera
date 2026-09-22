@@ -16,6 +16,7 @@ Not applicable to AVX-512 execution: the typed folded package author,
 schedule-to-HSACO receipt, Radiance layout validation, and AMD ISA census
 have no CPU materializer, numerical-policy selection, or benchmark consumer.
 No CPU parity follows from the Tajasarus results.
+The single AMD B non-temporal ablation has no AVX-512 cache-policy consumer.
 
 ## GFX1201 external phase-probe preflight — 2026-09-22
 

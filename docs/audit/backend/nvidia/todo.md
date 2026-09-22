@@ -15,6 +15,7 @@ Not applicable to CUDA execution: the new typed authoring path and receipt
 bind a gfx1201-only folded E4M3/E8M0 ABI and HSACO. Radiance's
 fragment-order WPERM gate and static AMD ISA census do not change NVFP4,
 PTX, Nsight, or the CUDA selector. No timing or device proof transfers.
+The losing AMD B non-temporal load ablation is not a CUDA cache-policy result.
 
 ## GFX1201 external phase-probe preflight — 2026-09-22
 

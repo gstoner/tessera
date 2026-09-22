@@ -32,8 +32,13 @@ barrier pairs in both engines. Source/schedule requested-byte accounting
 shows Tessera's expanded B demand is twice packed B, but A restaging requests
 are larger; no DRAM counter or phase attribution exists. The next single-lever
 experiment should target A/B staging with the same matched inputs and ISA
-record, not fit a bottleneck fraction from requested bytes. `/dev/kfd`
-remains absent, so IKF clock/PC gates and default-route promotion remain open.
+record, not fit a bottleneck fraction from requested bytes. Tajasarus is a
+WSL2 guest with neither `/dev/kfd` nor `/dev/dri`; IKF clock/PC gates and
+default-route promotion remain open.
+The first controlled B-cache ablation changed one emitted
+`global_load_b128` to non-temporal, preserved full BF16 output, and lost
+20%/104% on the two shapes; it is explicitly unselected. Continue with
+A-staging reuse or load scheduling, one variable at a time.
 [Exact-device packets](../../../../benchmarks/baselines/gfx1201_mxfp4_folded_frontend_20260922/README.md).
 
 ## GFX1201 ISA-preserving profiler preflight — 2026-09-22

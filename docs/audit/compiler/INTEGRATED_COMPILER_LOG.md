@@ -4786,9 +4786,11 @@ did not record its WPERM mode despite fragment-order input and is now
 explicitly refused for selector use. A layout-verified v2 matched run leaves
 the folded route 1.28×/1.40× behind pinned Radiance. A static selected-symbol
 ISA census and requested-byte model identify doubled B demand but do not
-establish measured DRAM or stage fractions.
+establish measured DRAM or stage fractions. A one-load B non-temporal
+ablation emits the intended ISA modifier, preserves full BF16 output,
+and regresses 20%/104% against the matched baseline, so it is unselected.
 
-Remaining: exact K32 stays default. Test one A/B staging lever at a time on
+Remaining: exact K32 stays default. Test A-staging reuse/load scheduling on
 matched inputs; extend nonuniform numerical envelopes; restore a usable
 gfx1201 profiler API and close IKF-P0 cross-CU/read-cost gates before L2/L3
 attribution or selector training. General public logical-op integration

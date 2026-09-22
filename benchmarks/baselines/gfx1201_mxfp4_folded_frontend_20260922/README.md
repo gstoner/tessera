@@ -44,6 +44,16 @@ be assigned the measured timing gap. Next controlled experiments should vary
 one A/B staging mechanism at a time and retain the same layout, inputs,
 selected ISA, and HIP-event method.
 
-Tajasarus still exposes no `/dev/kfd`; there are no admitted PC samples,
+The first [single-lever ablation](b_cache_ablation.json) did exactly that:
+one B `global_load_b128` changed to the emitted RDNA4 non-temporal form,
+with no other source change. The ISA guard found zero such sites in production
+and one in the variant; all four engines had identical BF16 output on both
+shapes. Alternating timing gave baseline 0.174913/1.130776 ms and variant
+0.210501/2.308749 ms, a 20%/104% regression. The variant remains unselected.
+This refutes B non-temporal caching as the next production lever on these
+matched shapes, not the possibility that B traffic matters.
+
+Tajasarus is a WSL2 guest with neither `/dev/kfd` nor `/dev/dri`; there are
+no admitted PC samples,
 cross-CU clock result, or phase fractions in these packets. Neither the
 approximate route nor profiler-derived selector training is promoted.

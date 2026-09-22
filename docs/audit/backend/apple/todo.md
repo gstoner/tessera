@@ -15,7 +15,8 @@ Not applicable to Metal execution: the authored E4M3/E8M0 package frontend,
 HSACO receipt, and pinned Radiance layout correction select only gfx1201.
 The historical ROCm comparator's missing layout provenance changes no Apple
 benchmark schema or Metal selector. No Apple performance or device proof
-transfers.
+transfers. The later AMD-only B non-temporal ablation is also not applicable
+to Metal's load/cache instructions.
 
 ## GFX1201 external phase-probe preflight — 2026-09-22
 

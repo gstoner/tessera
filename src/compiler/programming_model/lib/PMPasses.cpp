@@ -3888,15 +3888,29 @@ struct ScheduleToTilePass
           kernelState.addAttribute(
               "physical_contract",
               builder.getStringAttr(selected->physicalContract));
+        // The Target-IR directive is a package boundary rather than a hint.
+        // Keep its problem extents self-contained for both logical inspection
+        // and the exact physical package. Zero remains the existing sentinel
+        // for a runtime-supplied dynamic extent; the gfx1201 physical contract
+        // verifier deliberately admits only positive static values.
+        kernelState.addAttribute("tessera.problem_m",
+                                 builder.getI64IntegerAttr(selected->m));
+        kernelState.addAttribute("tessera.problem_n",
+                                 builder.getI64IntegerAttr(selected->n));
+        kernelState.addAttribute("tessera.problem_k",
+                                 builder.getI64IntegerAttr(selected->k));
       }
-      kernelState.addAttribute(
-          "numeric_policy",
-          builder.getDictionaryAttr({
-              builder.getNamedAttr("storage",
-                                   builder.getStringAttr(selected->storage)),
-              builder.getNamedAttr("accum",
-                                   builder.getStringAttr(selected->accum)),
-          }));
+      SmallVector<NamedAttribute> numericPolicy = {
+          builder.getNamedAttr("storage",
+                               builder.getStringAttr(selected->storage)),
+          builder.getNamedAttr("accum",
+                               builder.getStringAttr(selected->accum)),
+      };
+      if (!selected->physicalContract.empty())
+        numericPolicy.push_back(builder.getNamedAttr(
+            "execution_mode", builder.getStringAttr("exact_per_block")));
+      kernelState.addAttribute("numeric_policy",
+                               builder.getDictionaryAttr(numericPolicy));
       kernelState.addAttribute("tessera.canonical_k_loop",
                                builder.getBoolAttr(true));
       kernelState.addAttribute("tessera.tile_m",

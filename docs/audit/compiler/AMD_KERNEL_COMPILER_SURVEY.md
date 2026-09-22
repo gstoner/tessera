@@ -40,6 +40,7 @@ gfx1201 code-generation checklist:
 | architecture | Select the exact `GFX_1201` row. Shared RDNA4 ISA forms do not transfer RX 9070 proof to `gfx1200`. | `rocm_isa_contract.py`, `rocm_target.py` |
 | instruction | Select the operand pair, K shape, accumulator, signedness, and dense/sparse path before emission. Mixed E4M3/E5M2 order is significant. | `select_amd_matrix_instruction`, `wmma_dtype_forms` |
 | physical storage | Carry BF16 packing, FP8 flavor, int4 nibble order, and independent integer signedness into fragments and the launch ABI. | `rocm_fragment.py`, `GenerateWMMAGemmKernel.cpp` |
+| scale lineage | Keep each MX K32 partial isolated, apply its scale outer product before the running accumulation, and admit the packed physical ABI only under exact-per-block policy. | `tile.scaled_matmul_kernel`, `tessera_rocm.scaled_wmma_gemm`, `rocm_mxfp4_native.py` |
 | execution | Bind the scheduled ABI to an exact-target executor and require both the selected HIP device and compiler chip to be `gfx1201`. | `execution_matrix.py`, `runtime.py` |
 | proof | Check the emitted mnemonic and numerical result for every admitted storage on the owning device. | `test_rocm_gfx1201_scheduled.py`, Tajasarus packet |
 
@@ -52,10 +53,11 @@ lineage and schedule, while TF32 is a math mode rather than storage.
 
 This walk also sharpens the next gaps suggested by the surveyed compilers:
 derive load/packing from the fragment descriptor instead of branching again in
-the emitter; make block-scale operands first-class schedule values; keep sparse
-SWMMAC admission separate from dense WMMA; and key every measured selection or
-cache record by exact architecture, datatype pair, accumulator, and physical
-packing. These are design directions, not promotion claims.
+the emitter; tune the now-first-class block-scale carrier separately for decode
+and prefill; keep sparse SWMMAC admission separate from dense WMMA; and key
+every measured selection or cache record by exact architecture, datatype pair,
+accumulator, and physical packing. These are design directions, not promotion
+claims.
 
 ## 0. Why these four
 

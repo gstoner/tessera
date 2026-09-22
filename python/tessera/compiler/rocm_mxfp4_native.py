@@ -6,9 +6,11 @@ therefore never uses the lossy row-reference fold.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 import hashlib
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -40,6 +42,135 @@ GFX_MXFP4_W4A8_WMMA_ABI = (
     "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k."
     "e4m3_e2m1_e8m0_bf16.wmma_exact.v1"
 )
+_GFX_MXFP4_PHYSICAL_CONTRACT = "rocm_mxfp4_w4a8_exact_v1"
+_GFX_MXFP4_POINTER_ABI = "a_b_lhs_scale_rhs_scale_d_m_n_k"
+
+
+def _target_string_attr(operation: str, name: str) -> str:
+    match = re.search(rf"\b{re.escape(name)}\s*=\s*\"([^\"]*)\"", operation)
+    if match is None:
+        raise ValueError(f"gfx1201 scaled WMMA Target IR is missing {name}")
+    return match.group(1)
+
+
+def _target_integer_attr(operation: str, name: str) -> int:
+    match = re.search(
+        rf"\b{re.escape(name)}\s*=\s*(-?\d+)(?:\s*:\s*i64)?", operation
+    )
+    if match is None:
+        raise ValueError(f"gfx1201 scaled WMMA Target IR is missing {name}")
+    return int(match.group(1))
+
+
+def _exact_scaled_wmma_directive(target_ir: str) -> str:
+    directives = [
+        line.strip()
+        for line in target_ir.splitlines()
+        if "tessera_rocm.scaled_wmma_gemm" in line
+        and GFX_MXFP4_W4A8_WMMA_ABI in line
+    ]
+    if len(directives) != 1:
+        raise ValueError(
+            "gfx1201 native packaging requires exactly one exact packed "
+            "tessera_rocm.scaled_wmma_gemm directive"
+        )
+    return directives[0]
+
+
+def package_scaled_wmma_target_ir(
+    tile_ir: str,
+    target_ir: str,
+    *,
+    pipeline_name: str = "tessera-lower-to-rocm",
+) -> ROCMNativePackage:
+    """Materialize the exact packed scaled-WMMA Target IR as gfx1201 HSACO.
+
+    This is the strict bridge between the generic Graph/Schedule/Tile pipeline
+    and the separately proved RDNA4 generator. Logical block-scaled directives,
+    approximate folding policies, and partially described contracts remain
+    fail-closed instead of silently selecting a different physical ABI.
+    """
+
+    operation = _exact_scaled_wmma_directive(target_ir)
+    strings = {
+        name: _target_string_attr(operation, name)
+        for name in (
+            "abi",
+            "scale_format",
+            "partial_combine",
+            "physical_contract",
+            "output",
+            "package_abi",
+        )
+    }
+    expected_strings = {
+        "abi": _GFX_MXFP4_POINTER_ABI,
+        "scale_format": "e8m0",
+        "partial_combine": "scale_outer_product_then_add",
+        "physical_contract": _GFX_MXFP4_PHYSICAL_CONTRACT,
+        "output": "bf16",
+        "package_abi": GFX_MXFP4_W4A8_WMMA_ABI,
+    }
+    for name, expected in expected_strings.items():
+        if strings[name] != expected:
+            raise ValueError(
+                f"gfx1201 scaled WMMA Target IR requires {name}={expected!r}"
+            )
+
+    integers = {
+        name: _target_integer_attr(operation, name)
+        for name in ("m", "n", "k", "instruction_k", "scale_k", "macro_k")
+    }
+    if min(integers["m"], integers["n"], integers["k"]) <= 0:
+        raise ValueError("gfx1201 scaled WMMA Target IR requires positive static M/N/K")
+    if integers["k"] % 32:
+        raise ValueError("gfx1201 scaled WMMA Target IR requires K divisible by 32")
+    for name, expected in (("instruction_k", 16), ("scale_k", 32), ("macro_k", 32)):
+        if integers[name] != expected:
+            raise ValueError(
+                f"gfx1201 scaled WMMA Target IR requires {name}={expected}"
+            )
+
+    policy_match = re.search(r"\bnumeric_policy\s*=\s*\{([^}]*)\}", operation)
+    if policy_match is None:
+        raise ValueError("gfx1201 scaled WMMA Target IR is missing numeric_policy")
+    policy = policy_match.group(1)
+    expected_policy = {
+        "accum": "f32",
+        "execution_mode": "exact_per_block",
+        "storage": "e4m3_raw_u8",
+    }
+    for name, expected in expected_policy.items():
+        if _target_string_attr(policy, name) != expected:
+            raise ValueError(
+                f"gfx1201 scaled WMMA Target IR requires numeric_policy.{name}="
+                f"{expected!r}"
+            )
+
+    package = package_mxfp4_w4a8_wmma(
+        integers["m"], integers["n"], integers["k"],
+        pipeline_name=pipeline_name,
+    )
+    provenance = {
+        **package.descriptor.provenance,
+        "materializer": "tessera_rocm.scaled_wmma_gemm",
+        "physical_contract": _GFX_MXFP4_PHYSICAL_CONTRACT,
+        "tile_ir_sha256": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        "target_ir_sha256": hashlib.sha256(target_ir.encode()).hexdigest(),
+    }
+    schedule_hash = re.search(
+        r"\btessera\.schedule_hash\s*=\s*\"([^\"]+)\"", operation
+    )
+    if schedule_hash is not None:
+        provenance["schedule_hash"] = schedule_hash.group(1)
+    descriptor = replace(package.descriptor, provenance=provenance)
+    return ROCMNativePackage(
+        tile_ir=tile_ir,
+        target_ir=target_ir,
+        backend_ir=package.target_ir,
+        image=package.image,
+        descriptor=descriptor,
+    )
 
 
 def _rocm_hipcc(rocm_path: Path) -> Path | None:
@@ -629,4 +760,5 @@ __all__ = [
     "package_mxfp4_w4a8",
     "package_mxfp4_w4a8_exact",
     "package_mxfp4_w4a8_wmma",
+    "package_scaled_wmma_target_ir",
 ]

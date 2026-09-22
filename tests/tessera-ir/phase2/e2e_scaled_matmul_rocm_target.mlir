@@ -40,6 +40,10 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // CHECK-SAME: scale_k = 32
 // CHECK-LABEL: func.func @packed_w4a8
 // CHECK: tessera_rocm.scaled_wmma_gemm
+// CHECK-SAME: k = 64
+// CHECK-SAME: m = 17
+// CHECK-SAME: n = 19
+// CHECK-SAME: numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3_raw_u8"}
 // CHECK-SAME: output = "bf16"
 // CHECK-SAME: package_abi = "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1"
 // CHECK-SAME: physical_contract = "rocm_mxfp4_w4a8_exact_v1"

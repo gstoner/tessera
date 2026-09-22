@@ -638,16 +638,21 @@ LogicalResult ScaledMatmulKernelOp::verify() {
   if (auto physical =
           (*this)->getAttrOfType<StringAttr>("physical_contract")) {
     auto epilogue = (*this)->getAttrOfType<TileEpilogueAttr>("epilogue");
+    auto problemM = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_m");
+    auto problemN = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_n");
+    auto problemK = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_k");
     if (physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
       return emitOpError("unknown physical_contract");
     if (mma.getAType() != "e4m3_raw_u8" ||
         mma.getBType() != "e2m1_packed_u8" ||
         mma.getScaleBlockK() != 32 || mma.getScaleFormat() != "e8m0" ||
         mma.getAccType() != "f32" || !epilogue ||
-        epilogue.getOutputType() != "bf16")
+        epilogue.getOutputType() != "bf16" || !problemM || !problemN ||
+        !problemK || problemM.getInt() <= 0 || problemN.getInt() <= 0 ||
+        problemK.getInt() <= 0 || problemK.getInt() % 32 != 0)
       return emitOpError(
           "gfx1201 MXFP4 W4A8 physical contract is inconsistent with mma or "
-          "BF16 output epilogue");
+          "its static M/N/K and BF16 output epilogue");
   }
   return success();
 }

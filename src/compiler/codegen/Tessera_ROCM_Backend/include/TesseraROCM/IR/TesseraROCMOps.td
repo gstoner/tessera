@@ -103,6 +103,7 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     an unscaled generator cannot consume it by accident.
   }];
   let arguments = (ins StrAttr:$name, StrAttr:$abi,
+                       I64Attr:$m, I64Attr:$n, I64Attr:$k,
                        I64Attr:$instruction_k, I64Attr:$scale_k,
                        I64Attr:$macro_k, StrAttr:$scale_format,
                        StrAttr:$partial_combine,

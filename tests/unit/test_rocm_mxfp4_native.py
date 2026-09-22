@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import ml_dtypes
 import numpy as np
@@ -19,7 +20,14 @@ from tessera.compiler.rocm_mxfp4_native import (
     emit_mxfp4_w4a8_wmma_llvmir,
     mxfp4_w4a8_descriptor,
     package_mxfp4_w4a8,
+    package_scaled_wmma_target_ir,
 )
+
+
+def _packed_target_ir(*, execution_mode: str = "exact_per_block") -> str:
+    return f'''module {{
+  tessera_rocm.scaled_wmma_gemm {{abi = "a_b_lhs_scale_rhs_scale_d_m_n_k", instruction_k = 16 : i64, k = 64 : i64, m = 17 : i64, macro_k = 32 : i64, n = 19 : i64, name = "packed_w4a8", numeric_policy = {{accum = "f32", execution_mode = "{execution_mode}", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_WMMA_ABI}", partial_combine = "scale_outer_product_then_add", physical_contract = "rocm_mxfp4_w4a8_exact_v1", scale_format = "e8m0", scale_k = 32 : i64, tessera.schedule_hash = "schedule-proof"}}
+}}'''
 
 
 def test_hipcc_selection_handles_split_rocm_root(
@@ -130,6 +138,63 @@ def test_production_selector_defaults_to_wmma(
 def test_production_selector_refuses_unknown_route() -> None:
     with pytest.raises(ValueError, match="scalar_reference"):
         package_mxfp4_w4a8(16, 16, 32, route="folded")
+
+
+def test_target_ir_materializer_binds_generic_carrier_to_proved_wmma(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[int, int, int, str]] = []
+    image = _image()
+    descriptor = mxfp4_w4a8_descriptor(
+        image,
+        m=17,
+        n=19,
+        k=64,
+        entry="tessera_mxfp4_w4a8_wmma",
+        abi_id=GFX_MXFP4_W4A8_WMMA_ABI,
+        route="exact_per_block_fp8_wmma",
+        workgroup=(32, 1, 1),
+    )
+
+    def record_wmma(m: int, n: int, k: int, *, pipeline_name: str):
+        calls.append((m, n, k, pipeline_name))
+        return SimpleNamespace(
+            tile_ir="semantic",
+            target_ir="proved llvm backend ir",
+            backend_ir="compiler command",
+            image=image,
+            descriptor=descriptor,
+        )
+
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_mxfp4_native.package_mxfp4_w4a8_wmma",
+        record_wmma,
+    )
+    target_ir = _packed_target_ir()
+    package = package_scaled_wmma_target_ir(
+        "tile carrier", target_ir, pipeline_name="proof-pipeline"
+    )
+    assert calls == [(17, 19, 64, "proof-pipeline")]
+    assert package.tile_ir == "tile carrier"
+    assert package.target_ir == target_ir
+    assert package.backend_ir == "proved llvm backend ir"
+    assert package.descriptor.provenance["materializer"] == (
+        "tessera_rocm.scaled_wmma_gemm"
+    )
+    assert package.descriptor.provenance["schedule_hash"] == "schedule-proof"
+    assert package.descriptor.provenance["target_ir_sha256"] == hashlib.sha256(
+        target_ir.encode()
+    ).hexdigest()
+
+
+def test_target_ir_materializer_keeps_logical_and_approximate_routes_closed() -> None:
+    logical = _packed_target_ir().replace(GFX_MXFP4_W4A8_WMMA_ABI, "unbound")
+    with pytest.raises(ValueError, match="exactly one exact packed"):
+        package_scaled_wmma_target_ir("tile", logical)
+    with pytest.raises(ValueError, match="numeric_policy.execution_mode"):
+        package_scaled_wmma_target_ir(
+            "tile", _packed_target_ir(execution_mode="approximate_row_reference")
+        )
 
 
 def test_descriptor_names_every_physical_plane_and_shape() -> None:

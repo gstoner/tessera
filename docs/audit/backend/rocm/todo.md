@@ -22,10 +22,13 @@ B as packed E2M1, and binds the directive to the proved exact WMMA ABI.
 
 The folded-row host transform now requires explicit approximate-policy opt-in
 and returns inexact-value count plus maximum normalized absolute and relative
-error. Exact K32 scaling remains the oracle. Remaining: materialize the new
-Target directive through the existing package compiler, then add decode versus
-prefill tuning axes and matched independent device comparisons. No gfx1200 or
-sibling-backend execution claim follows.
+error. Exact K32 scaling remains the oracle. The packed Target directive is
+self-contained in M/N/K and materializes through the existing proved WMMA
+package compiler only after strict ABI, scale-group, output, and exact-policy
+validation; Tile/Target hashes and the schedule hash are retained in launch
+provenance. Remaining: add decode versus prefill tuning axes and matched
+independent device comparisons. No gfx1200 or sibling-backend execution claim
+follows.
 
 ## GFX1201 scheduled hardware-skip closure — 2026-09-21
 
@@ -88,9 +91,9 @@ record. The folded-row reference also masks reserved E8M0 code-zero groups
 before E4M3 conversion and losslessness comparison; non-zero E2M1 payload bits
 inside a zero block can no longer reconstruct as tiny non-zero weights.
 
-The Schedule-to-Tile carrier and explicit approximate-policy gate are now
-implemented under the sync above. Still open: materialize the Target directive,
-measure decode/prefill throughput on a counter-capable host, and compare against
+The Schedule-to-Tile carrier, strict Target-to-HSACO materializer, and explicit
+approximate-policy gate are now implemented under the sync above. Still open:
+measure decode/prefill throughput on a counter-capable host and compare against
 independent libr4d/Radiance runs.
 No `gfx1200`, public Graph dtype, selector-default, or throughput promotion is
 inferred.

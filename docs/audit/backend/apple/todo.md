@@ -8,6 +8,18 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 folded scale fix and phase-probe refusal — 2026-09-22
+
+Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`ROCM-MXFP4-IKF-DIAGNOSTIC-2026-09-22`. Not applicable to Metal execution.
+The scale-cancellation repair, including a rare FP64 overflow/underflow path,
+is in a gfx1201 HIP epilogue, and the new
+same-CTA phase packet has no Apple consumer. Its trace is refused as
+production attribution because synchronized timestamps change the emitted
+ISA; no Apple timing,
+clock, selector, or physical schedule claim transfers. The cross-IR feedback
+lineage is plan-only and still needs Apple's synthesizer/MLIR seam assessed.
+
 ## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `ROCM-MXFP4-FOLDED-PREFILL-2026-09-22`.

@@ -7,6 +7,33 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 folded scale cancellation and IKF diagnostic — 2026-09-22
+
+Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`ROCM-MXFP4-IKF-DIAGNOSTIC-2026-09-22`. The folded epilogue now multiplies
+row reference by activation scale before the FP32 accumulator, with a rare
+FP64 fallback when the combined FP32 scale overflows or underflows. This
+preserves zero accumulators and finite products in the extreme-scale cases.
+Tajasarus passes all six folded device tests. The refreshed matched packet
+retains full BF16 agreement with exact K32 and pinned Radiance, at
+0.1812/1.2391 ms versus Radiance 0.1428/0.8872 ms. The exact route remains
+the oracle and default.
+
+An opt-in, same-CTA phase probe ran on both prefill shapes. Its BF16 output
+agreed, but instrumentation changed the HSACO from 32 to 64 FP8 WMMAs and
+four to 24 barriers after synchronization around every phase timestamp. The
+packet therefore refuses phase attribution and
+cost-model/selector eligibility even though the alternating HIP-event
+overhead was +13.30%/+3.71%. Same-CTA interval checks do not close IKF-P0's
+cross-CU clock or read-cost gates. Next: find an ISA-preserving probe or use
+controlled uninstrumented variants to measure physical weight traffic and
+staging; do not fit coefficients from the refused phase fractions.
+The folded package currently emits HIP directly rather than traversing the
+Graph→Schedule→Tile→Target scaled-matmul carrier. High-level feedback needs
+that ancestry and a Schedule/Tile hash/ABI receipt before its measurements
+can update optimizer decisions; the IKF plan records the per-level contract.
+[Phase refusal packet](../../../../benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922/README.md).
+
 ## GFX1201 folded MXFP4 BM256/TM4 prefill — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync
@@ -18,10 +45,10 @@ payload hashes; the runtime verifies both payloads, layout, policy, shape,
 selected device, and ABI before launch. A BM256/TM4, BN64, K64 prefill kernel
 stages clamped 16-byte A/B vectors through padded LDS and emits 32 FP8 WMMAs.
 Tajasarus proves deliberately inexact E4M3 underflow, ragged N=48/80, and
-refusal of a changed load-time payload. It uses 138 VGPR, 25,600 LDS bytes,
+refusal of a changed load-time payload. It uses 109 VGPR, 25,600 LDS bytes,
 and no scratch or spills. Matched lossless-fold timing improves the two prefill
-shapes 2.85x and 3.55x over exact K32, while trailing pinned Radiance 1.25x
-and 1.38x. The exact K32 package remains default and the correctness oracle.
+shapes 2.85x and 3.52x over exact K32, while trailing pinned Radiance 1.27x
+and 1.40x. The exact K32 package remains default and the correctness oracle.
 Next: inspect expanded-weight traffic and A/B staging instructions to close
 the remaining performance gap; no policy-default or gfx1200 promotion follows.
 [Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_folded_prefill_20260922/README.md).

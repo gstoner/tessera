@@ -402,3 +402,54 @@ unknown levels, booleans and missing-value placeholders are refused. Existing
 records without the field predate instrumentation and retain L0 semantics.
 This closes the admission guard only. P1 slot schema/math, native producers,
 P0 cross-CU clock proof, and P2/P3 instrumentation remain open.
+
+### 2026-09-22: gfx1201 folded-prefill diagnostic fails perturbation admission
+
+The hand-emitted gfx1201 folded MXFP4 prefill (ROCM-MXFP4-W4A8-1) now has a
+compile-time-only, same-CTA L2-shaped phase probe. Its BF16 output agrees
+with production, and Tajasarus records complete, monotonic per-CTA slots on
+both production prefill shapes. This is a **diagnostic experiment, not IKF-P0
+or P3 closure**: it did not validate cross-CU clock consistency or the clock
+read-cost distribution, and it did not add Schedule/Tile IR trace lowering.
+
+The perturbation gate fails more decisively than the +13.30%/+3.71% median
+HIP-event overhead: the trace now synchronizes every wave around thread 0's
+phase-boundary timestamps; its HSACO emits 64 FP8 WMMAs and 24 workgroup
+barriers versus production's 32 and four. The recorder marks phase
+attribution inadmissible and promotion ineligible; neither the phase fractions
+nor the timing of that different schedule may train a cost model. The next
+gfx1201 measurement slice must preserve production ISA structure before
+interpreting phase time, then complete the P0 cross-CU/read-cost gates.
+[Exact-device diagnostic packet](../../../benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922/README.md).
+
+For the later NVIDIA lane, Super-Bear can supply Nsight Systems, Nsight
+Compute, and CUPTI. Use their uninstrumented kernel spans and counter/PC
+samples to cross-check region hypotheses and generic stack costs, with
+provider-specific provenance. They neither close gfx1201 clock validation
+nor substitute CUDA counters for an AMD exact-device bottleneck claim.
+
+### 2026-09-22: optimizer feedback must retain every IR-level decision
+
+The failed gfx1201 probe is also a lineage warning. The folded prefill
+package currently emits HIP source directly into `ROCMNativePackage`; its
+`tile_ir` is a descriptive string, not a lowered `tile.scaled_matmul_kernel`.
+Therefore its timing can characterize that package but cannot yet train a
+Graph/Schedule/Tile optimizer or claim that a high-level candidate produced
+the measured HSACO. By contrast, the exact scaled route has a
+`tessera.schedule_hash` equality gate between Tile and Target carriers.
+
+| Boundary | Decision or identity to retain | Feedback obligation |
+|---|---|---|
+| Graph | canonical op, shape bucket, dtype/layout and numerical-policy choice; `FusionCost` inputs/verdict | identify what optimization was legal and which candidate was considered |
+| Schedule | candidate hash, tile/stage/wave roles, K-step and scale-group contract | index phase instances by the actual tunable coordinates |
+| Tile | lowered stage/partial-accumulator regions plus the same schedule hash | prove each measured region belongs to that candidate, not a stale lowering |
+| Target | entry, exact architecture, physical ABI and codegen/source digest | bind regions to the generated kernel and reject missing or mismatched ancestry |
+| Native image | HSACO digest, ISA/resource shape, selected device and toolchain | reject an instrumented image whose scheduling structure differs from production |
+| Measurement/arbiter | L2/L3 explanatory vector joined to the above; separate L0/L1 timing | fit only admitted labels; select only from uninstrumented, accuracy-gated timing |
+
+Next compiler slice: make the folded numerical-policy/layout decision and
+BM256/TM4 schedule a real Graph→Schedule→Tile→Target carrier, or explicitly
+leave it outside high-level optimization until that path exists. Add a
+cross-level hash/ABI negative fixture and a receipt that names the exact
+artifact raced. Neither this mapping nor the current phase packet promotes
+the folded route or closes IKF-P0/P2/P3.

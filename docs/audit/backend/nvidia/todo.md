@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-21
+last_updated: 2026-09-22
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## GFX1201 MXFP4 production tuning benchmark — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-PRODUCTION-TUNING-2026-09-22`. Not applicable to CUDA physical
+execution. This benchmark measures OCP E8M0-per-K32 MXFP4 through RDNA4 FP8
+WMMA and changes no NVIDIA NVFP4 block-scale ABI, PTX schedule, selector, or
+device row. Any CUDA tuning remains separately owned and no gfx1201 timing
+transfers to NVIDIA.
 
 ## Shared scaled-partial carrier and MXFP4 policy — 2026-09-21
 

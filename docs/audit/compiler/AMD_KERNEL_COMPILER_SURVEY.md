@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-21
+last_updated: 2026-09-22
 audit_role: reference
 ---
 
@@ -53,8 +53,12 @@ lineage and schedule, while TF32 is a math mode rather than storage.
 
 This walk also sharpens the next gaps suggested by the surveyed compilers:
 derive load/packing from the fragment descriptor instead of branching again in
-the emitter; tune the now-first-class block-scale carrier separately for decode
-and prefill; keep sparse SWMMAC admission separate from dense WMMA; and key
+the emitter. The first exact-device tuning slice now confirms that decode and
+prefill require separate schedules: split-K with an LDS partial reduction helps
+skinny M, while group-M sharing of one expanded B fragment helps prefill. Those
+measured wins do not close the gap to the independent Radiance route; fragment
+layout, staging depth, cache policy, and occupancy remain live axes. Keep sparse
+SWMMAC admission separate from dense WMMA, and key
 every measured selection or cache record by exact architecture, datatype pair,
 accumulator, and physical packing. These are design directions, not promotion
 claims.

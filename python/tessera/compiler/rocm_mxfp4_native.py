@@ -6,7 +6,7 @@ therefore never uses the lossy row-reference fold.
 """
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import hashlib
 import os
 from pathlib import Path
@@ -44,6 +44,49 @@ GFX_MXFP4_W4A8_WMMA_ABI = (
 )
 _GFX_MXFP4_PHYSICAL_CONTRACT = "rocm_mxfp4_w4a8_exact_v1"
 _GFX_MXFP4_POINTER_ABI = "a_b_lhs_scale_rhs_scale_d_m_n_k"
+
+
+@dataclass(frozen=True)
+class MXFP4Schedule:
+    """Concrete gfx1201 schedule axes consumed by native code generation."""
+
+    workload: str
+    group_m: int = 1
+    split_k: int = 1
+    stages: int = 1
+    waves_per_eu: int = 0
+    cache_modifier: str = "default"
+
+    def __post_init__(self) -> None:
+        if self.workload not in {"decode", "prefill"}:
+            raise ValueError("MXFP4 workload must be 'decode' or 'prefill'")
+        if self.group_m not in {1, 2, 4, 8}:
+            raise ValueError("MXFP4 group_m must be 1, 2, 4, or 8")
+        if self.split_k not in {1, 2, 4, 8}:
+            raise ValueError("MXFP4 split_k must be 1, 2, 4, or 8")
+        if self.stages != 1 or self.waves_per_eu != 0:
+            raise ValueError(
+                "unimplemented MXFP4 schedule axes must remain at their fail-closed defaults"
+            )
+        if self.cache_modifier != "default":
+            raise ValueError("MXFP4 cache_modifier is not implemented")
+        if self.workload == "decode" and self.group_m != 1:
+            raise ValueError("decode does not admit prefill group-M staging")
+        if self.workload == "prefill" and self.split_k != 1:
+            raise ValueError("prefill does not admit decode split-K reduction")
+
+
+def select_mxfp4_schedule(m: int, n: int, k: int) -> MXFP4Schedule:
+    """Select only schedules whose generated implementation is present."""
+
+    if min(m, n, k) <= 0 or k % 32:
+        raise ValueError("MXFP4 W4A8 requires positive M/N and K divisible by 32")
+    if m <= 16:
+        return MXFP4Schedule("decode", split_k=8)
+    if m <= 64:
+        return MXFP4Schedule("decode", split_k=4)
+    group_m = 8 if m >= 128 else 4
+    return MXFP4Schedule("prefill", group_m=group_m)
 
 
 def _target_string_attr(operation: str, name: str) -> str:
@@ -344,7 +387,9 @@ extern "C" __global__ void {entry}(
 
 
 def emit_mxfp4_w4a8_wmma_llvmir(
-    *, entry: str = "tessera_mxfp4_w4a8_wmma"
+    *,
+    entry: str = "tessera_mxfp4_w4a8_wmma",
+    schedule: MXFP4Schedule | None = None,
 ) -> str:
     """Emit the exact K32-scaled W4A8 route using two RDNA4 FP8 WMMAs.
 
@@ -357,6 +402,12 @@ def emit_mxfp4_w4a8_wmma_llvmir(
 
     if not entry or not entry.replace("_", "a").isalnum():
         raise ValueError("MXFP4 entry must be a C identifier")
+    schedule = schedule or MXFP4Schedule("decode")
+    group_m = schedule.group_m
+    split_k = schedule.split_k
+    shared_b = group_m > 1
+    split_reduce = split_k > 1
+    waves_per_workgroup = max(group_m, split_k)
 
     lines = [
         '; Exact gfx1201 MXFP4 W4A8: packed E2M1 -> E4M3, two WMMA per K32 group.',
@@ -364,13 +415,27 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         '',
         '@tessera_e2m1_to_e4m3 = private unnamed_addr addrspace(4) constant '
         '[8 x i8] [i8 0, i8 48, i8 56, i8 60, i8 64, i8 68, i8 72, i8 76], align 8',
+    ]
+    if shared_b:
+        lines.append(
+            '@tessera_mxfp4_b_lds = internal addrspace(3) global '
+            '[512 x i8] undef, align 16'
+        )
+    if split_reduce:
+        lines.append(
+            '@tessera_mxfp4_partial_lds = internal addrspace(3) global '
+            f'[{split_k * 1024} x i8] undef, align 16'
+        )
+    lines += [
         '',
         f'define protected amdgpu_kernel void @{entry}(',
         '    ptr addrspace(1) %a, ptr addrspace(1) %b,',
         '    ptr addrspace(1) %a_scale, ptr addrspace(1) %b_scale,',
         '    ptr addrspace(1) %out, i64 %M, i64 %N, i64 %K) #0 {',
         'entry:',
-        '  %lane32 = call i32 @llvm.amdgcn.workitem.id.x()',
+        '  %tid = call i32 @llvm.amdgcn.workitem.id.x()',
+        '  %lane32 = and i32 %tid, 31',
+        '  %wave32 = lshr i32 %tid, 5',
         '  %lane16_32 = and i32 %lane32, 15',
         '  %half32 = lshr i32 %lane32, 4',
         '  %lane16 = zext i32 %lane16_32 to i64',
@@ -380,7 +445,10 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         '  %bidx64 = zext i32 %bidx to i64',
         '  %bidy64 = zext i32 %bidy to i64',
         '  %tile_n = mul i64 %bidx64, 16',
-        '  %tile_m = mul i64 %bidy64, 16',
+        f'  %tile_group_m = mul i64 %bidy64, {16 * group_m}',
+        '  %wave64 = zext i32 %wave32 to i64',
+        f'  %wave_m = mul i64 %wave64, {16 if shared_b else 0}',
+        '  %tile_m = add i64 %tile_group_m, %wave_m',
         '  %col = add i64 %tile_n, %lane16',
         '  %col_in = icmp ult i64 %col, %N',
         '  %col_safe = select i1 %col_in, i64 %col, i64 0',
@@ -403,15 +471,18 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             f'  %as_vec_{j} = insertelement <8 x float> {scale_vec}, float %as_{j}, i64 {j}',
         ]
         scale_vec = f'%as_vec_{j}'
+    loop_backedge = 'b.wait' if shared_b else 'group.body'
+    first_group = '%wave64' if split_reduce else '0'
+    store_target = 'split.store' if split_reduce else 'store.header'
     lines += [
         '  %groups = udiv i64 %K, 32',
         '  br label %group.header',
         '',
         'group.header:',
-        '  %group = phi i64 [ 0, %entry ], [ %group_next, %group.body ]',
-        '  %running = phi <8 x float> [ zeroinitializer, %entry ], [ %running_next, %group.body ]',
+        f'  %group = phi i64 [ {first_group}, %entry ], [ %group_next, %{loop_backedge} ]',
+        f'  %running = phi <8 x float> [ zeroinitializer, %entry ], [ %running_next, %{loop_backedge} ]',
         '  %group_done = icmp uge i64 %group, %groups',
-        '  br i1 %group_done, label %store.header, label %group.body',
+        f'  br i1 %group_done, label %{store_target}, label %group.body',
         '',
         'group.body:',
         '  %kbase = mul i64 %group, 32',
@@ -487,19 +558,66 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         ])
         return load_lines, pack_lines, f'%{kind}_s{slab}_v'
 
-    fragments = [
-        build_fragment('a', 0), build_fragment('b', 0),
-        build_fragment('a', 1), build_fragment('b', 1),
-    ]
+    a_fragments = [build_fragment('a', 0), build_fragment('a', 1)]
+    b_fragments = [build_fragment('b', 0), build_fragment('b', 1)]
     # ROCM-MXFP4-W4A8-1: the lds-copy-depth principle without an LDS roundtrip.
     # Make all independent A/B memory operations visible before any byte
     # decode or WMMA dependency so LLVM can keep multiple VMEM operations in
     # flight instead of manufacturing a load/decode/wait chain per element.
-    for load_batch, _, _ in fragments:
-        lines.extend(load_batch)
-    for _, packing, _ in fragments:
-        lines.extend(packing)
-    a0, b0, a1, b1 = (fragment[2] for fragment in fragments)
+    if shared_b:
+        for load_batch, _, _ in a_fragments:
+            lines.extend(load_batch)
+        for _, packing, _ in a_fragments:
+            lines.extend(packing)
+        a0, a1 = (fragment[2] for fragment in a_fragments)
+        lines += [
+            '  %is_loader_wave = icmp eq i32 %wave32, 0',
+            '  br i1 %is_loader_wave, label %b.load, label %b.wait',
+            '',
+            'b.load:',
+        ]
+        for load_batch, _, _ in b_fragments:
+            lines.extend(load_batch)
+        for _, packing, _ in b_fragments:
+            lines.extend(packing)
+        for slab, fragment in enumerate(b_fragments):
+            offset = slab * 256
+            lines += [
+                f'  %b_lds_lane_{slab} = mul i32 %lane32, 8',
+                f'  %b_lds_off_{slab} = add i32 %b_lds_lane_{slab}, {offset}',
+                f'  %b_lds_ptr_{slab} = getelementptr i8, ptr addrspace(3) '
+                f'@tessera_mxfp4_b_lds, i32 %b_lds_off_{slab}',
+                f'  store <2 x i32> {fragment[2]}, ptr addrspace(3) '
+                f'%b_lds_ptr_{slab}, align 8',
+            ]
+        lines += [
+            '  br label %b.wait',
+            '',
+            'b.wait:',
+            '  call void @llvm.amdgcn.s.barrier()',
+        ]
+        b_values: list[str] = []
+        for slab in range(2):
+            offset = slab * 256
+            lines += [
+                f'  %b_lds_read_lane_{slab} = mul i32 %lane32, 8',
+                f'  %b_lds_read_off_{slab} = add i32 %b_lds_read_lane_{slab}, {offset}',
+                f'  %b_lds_read_ptr_{slab} = getelementptr i8, ptr addrspace(3) '
+                f'@tessera_mxfp4_b_lds, i32 %b_lds_read_off_{slab}',
+                f'  %b_lds_v_{slab} = load <2 x i32>, ptr addrspace(3) '
+                f'%b_lds_read_ptr_{slab}, align 8',
+            ]
+            b_values.append(f'%b_lds_v_{slab}')
+        b0, b1 = b_values
+    else:
+        # Preserve the decode load-batching contract: expose every independent
+        # A/B VMEM operation before starting byte unpack/decode dependencies.
+        for load_batch, _, _ in (*a_fragments, *b_fragments):
+            lines.extend(load_batch)
+        for _, packing, _ in (*a_fragments, *b_fragments):
+            lines.extend(packing)
+        a0, a1 = (fragment[2] for fragment in a_fragments)
+        b0, b1 = (fragment[2] for fragment in b_fragments)
     lines += [
         f'  %partial0 = call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
         f'<2 x i32> {a0}, <2 x i32> {b0}, <8 x float> zeroinitializer)',
@@ -520,11 +638,42 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         f'  %scale_vec = fmul <8 x float> {scale_vec}, %bs_vec',
         '  %scaled_partial = fmul <8 x float> %partial, %scale_vec',
         '  %running_next = fadd <8 x float> %running, %scaled_partial',
-        '  %group_next = add i64 %group, 1',
-        '  br label %group.header',
-        '',
-        'store.header:',
+        f'  %group_next = add i64 %group, {split_k}',
     ]
+    if shared_b:
+        lines.append('  call void @llvm.amdgcn.s.barrier()')
+    lines += ['  br label %group.header', '']
+    final_running = '%running'
+    if split_reduce:
+        lines += [
+            'split.store:',
+            '  %partial_tid64 = zext i32 %tid to i64',
+            '  %partial_off = mul i64 %partial_tid64, 32',
+            '  %partial_ptr = getelementptr i8, ptr addrspace(3) '
+            '@tessera_mxfp4_partial_lds, i64 %partial_off',
+            '  store <8 x float> %running, ptr addrspace(3) %partial_ptr, align 16',
+            '  call void @llvm.amdgcn.s.barrier()',
+            '  %is_reduction_wave = icmp eq i32 %wave32, 0',
+            '  br i1 %is_reduction_wave, label %split.reduce, label %split.done',
+            '',
+            'split.reduce:',
+        ]
+        reduced = 'zeroinitializer'
+        for split in range(split_k):
+            lines += [
+                f'  %split_lane_{split} = add i32 %lane32, {split * 32}',
+                f'  %split_lane64_{split} = zext i32 %split_lane_{split} to i64',
+                f'  %split_off_{split} = mul i64 %split_lane64_{split}, 32',
+                f'  %split_ptr_{split} = getelementptr i8, ptr addrspace(3) '
+                f'@tessera_mxfp4_partial_lds, i64 %split_off_{split}',
+                f'  %split_v_{split} = load <8 x float>, ptr addrspace(3) '
+                f'%split_ptr_{split}, align 16',
+                f'  %split_sum_{split} = fadd <8 x float> {reduced}, %split_v_{split}',
+            ]
+            reduced = f'%split_sum_{split}'
+        final_running = reduced
+        lines += ['  br label %store.header', '', 'split.done:', '  ret void', '']
+    lines.append('store.header:')
 
     for j in range(8):
         next_label = f'store.check.{j + 1}' if j < 7 else 'store.done'
@@ -533,7 +682,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             f'  br i1 %store_ok_{j}, label %store.do.{j}, label %{next_label}',
             '',
             f'store.do.{j}:',
-            f'  %out_f_{j} = extractelement <8 x float> %running, i64 {j}',
+            f'  %out_f_{j} = extractelement <8 x float> {final_running}, i64 {j}',
             f'  %out_bits_{j} = bitcast float %out_f_{j} to i32',
             f'  %out_top_{j} = lshr i32 %out_bits_{j}, 16',
             f'  %out_lsb_{j} = and i32 %out_top_{j}, 1',
@@ -558,10 +707,14 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         'declare i32 @llvm.amdgcn.workitem.id.x()',
         'declare i32 @llvm.amdgcn.workgroup.id.x()',
         'declare i32 @llvm.amdgcn.workgroup.id.y()',
+    ]
+    if shared_b or split_reduce:
+        lines.append('declare void @llvm.amdgcn.s.barrier()')
+    lines += [
         'declare <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
         '<2 x i32>, <2 x i32>, <8 x float>)',
         '',
-        'attributes #0 = { "amdgpu-flat-work-group-size"="32,32" }',
+        f'attributes #0 = {{ "amdgpu-flat-work-group-size"="{32 * waves_per_workgroup},{32 * waves_per_workgroup}" }}',
         '',
     ]
     return '\n'.join(lines)
@@ -699,12 +852,14 @@ def package_mxfp4_w4a8_wmma(
     *,
     pipeline_name: str = "tessera-lower-to-rocm",
     entry: str = "tessera_mxfp4_w4a8_wmma",
+    schedule: MXFP4Schedule | None = None,
 ) -> ROCMNativePackage:
     """Compile the exact two-WMMA-per-K32 gfx1201 production route."""
 
     if min(m, n, k) <= 0 or k % 32:
         raise ValueError("MXFP4 W4A8 requires positive M/N and K divisible by 32")
-    source = emit_mxfp4_w4a8_wmma_llvmir(entry=entry)
+    schedule = schedule or select_mxfp4_schedule(m, n, k)
+    source = emit_mxfp4_w4a8_wmma_llvmir(entry=entry, schedule=schedule)
     rocm_path = _rocm_path()
     compiler = _rocm_clang(rocm_path)
     if compiler is None:
@@ -731,7 +886,7 @@ def package_mxfp4_w4a8_wmma(
         pipeline_name=pipeline_name,
         compiler_fingerprint=_version_fingerprint(compiler),
         toolchain_fingerprint=hashlib.sha256(
-            (str(rocm_path) + "|gfx1201|O3|wmma_exact_k32").encode()
+            (str(rocm_path) + f"|gfx1201|O3|wmma_exact_k32|{schedule}").encode()
         ).hexdigest(),
         target_ir_digest=hashlib.sha256(source.encode()).hexdigest(),
         binary_format="hsaco",
@@ -748,13 +903,34 @@ def package_mxfp4_w4a8_wmma(
         entry=entry,
         abi_id=GFX_MXFP4_W4A8_WMMA_ABI,
         route="exact_per_block_fp8_wmma",
-        workgroup=(32, 1, 1),
+        workgroup=(32 * max(schedule.group_m, schedule.split_k), 1, 1),
+    )
+    descriptor = replace(
+        descriptor,
+        geometry=replace(
+            descriptor.geometry,
+            grid=(
+                (n + 15) // 16,
+                (m + 16 * schedule.group_m - 1) // (16 * schedule.group_m),
+                1,
+            ),
+        ),
+        provenance={
+            **descriptor.provenance,
+            "workload": schedule.workload,
+            "group_m": schedule.group_m,
+            "split_k": schedule.split_k,
+            "stages": schedule.stages,
+            "waves_per_eu": schedule.waves_per_eu,
+            "cache_modifier": schedule.cache_modifier,
+        },
     )
     semantic_ir = (
         f"rocm.mxfp4_w4a8 wmma_exact_per_block M={m} N={n} K={k} "
         "activation=e4m3 scale_a=fp32_per_token weight=e2m1_packed "
         "scale_b=e8m0_k32 instruction=v_wmma_f32_16x16x16_fp8_fp8 "
-        "accum=fp32 output=bf16"
+        f"accum=fp32 output=bf16 workload={schedule.workload} "
+        f"group_m={schedule.group_m}"
     )
     return ROCMNativePackage(semantic_ir, source, " ".join(command[:-2]), image, descriptor)
 
@@ -790,6 +966,7 @@ def package_mxfp4_w4a8(
 __all__ = [
     "GFX_MXFP4_W4A8_EXACT_ABI",
     "GFX_MXFP4_W4A8_WMMA_ABI",
+    "MXFP4Schedule",
     "emit_mxfp4_w4a8_exact_hip",
     "emit_mxfp4_w4a8_wmma_llvmir",
     "mxfp4_w4a8_descriptor",
@@ -797,4 +974,5 @@ __all__ = [
     "package_mxfp4_w4a8_exact",
     "package_mxfp4_w4a8_wmma",
     "package_scaled_wmma_target_ir",
+    "select_mxfp4_schedule",
 ]

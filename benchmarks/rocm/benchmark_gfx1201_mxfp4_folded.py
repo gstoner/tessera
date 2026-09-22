@@ -69,6 +69,8 @@ def folded_engine(
         {
             "abi": package.descriptor.abi_id,
             "image_sha256": hashlib.sha256(package.image.payload).hexdigest(),
+            "compiler_fingerprint": package.image.compiler_fingerprint,
+            "toolchain_fingerprint": package.image.toolchain_fingerprint,
             "route": package.descriptor.provenance,
             **isa,
         },
@@ -155,6 +157,7 @@ def benchmark(
             Path(__file__).resolve().parents[2]
             / "python/tessera/compiler/rocm_mxfp4_folded.py"
         ),
+        "benchmark_sha256": base._sha256(Path(__file__)),
         "timing_order": "alternating_interleaved_per_shape",
         "rows": rows,
     }

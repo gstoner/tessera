@@ -60,7 +60,7 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["architecture"] == "gfx1201"
     source = packet["source"]
-    assert source["revision"] == "c21f234988f516b09b548e7b5519c54e91b2f236"
+    assert source["revision"] == "f397bad6f348da2090c3ec70a6428fa7e1e4bfc0"
     for key, path in (
         (
             "generator_sha256",

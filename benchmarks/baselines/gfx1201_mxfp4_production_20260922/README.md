@@ -3,7 +3,7 @@
 This packet records the versioned fragment-layout decode ABI and the safe
 decode/prefill production selector for
 `ROCM-MXFP4-W4A8-1` on Tajasarus, an AMD Radeon RX 9070 XT (`gfx1201`). It is
-bound to Tessera commit `c21f234988f516b09b548e7b5519c54e91b2f236` and to
+bound to Tessera commit `f397bad6f348da2090c3ec70a6428fa7e1e4bfc0` and to
 the generator and benchmark hashes in `evidence.json`.
 
 ## Method
@@ -33,10 +33,10 @@ tree; neither inspected root exposed a license or SPDX declaration.
 
 | Workload (M x N x K) | Tessera schedule | Tessera ms | Radiance ms | libr4d ms |
 |---|---:|---:|---:|---:|
-| decode 8 x 5120 x 8704 | split-K 8 + fragment | 0.050566 | 0.029671 | 0.040101 |
-| decode 8 x 17408 x 5120 | split-K 8 + fragment | 0.088649 | 0.086727 | 0.104710 |
-| prefill 256 x 5120 x 8704 | group-M 8 + transposed | 0.644733 | 0.139192 | not applicable |
-| prefill 1024 x 17408 x 5120 | group-M 8 + transposed | 4.832110 | 0.883235 | not applicable |
+| decode 8 x 5120 x 8704 | split-K 8 + fragment | 0.050343 | 0.030754 | 0.041314 |
+| decode 8 x 17408 x 5120 | split-K 8 + fragment | 0.087460 | 0.085710 | 0.105920 |
+| prefill 256 x 5120 x 8704 | group-M 8 + transposed | 0.638136 | 0.137557 | not applicable |
+| prefill 1024 x 17408 x 5120 | group-M 8 + transposed | 4.827287 | 0.890993 | not applicable |
 
 The expanded owning-device fixture passes 16 rows: scalar/WMMA/generic routes,
 M=1/5/64, N=48/80, the M64/65 crossover, long-K and wide-N cases, poisoned

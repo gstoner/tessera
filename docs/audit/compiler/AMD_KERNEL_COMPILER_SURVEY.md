@@ -55,8 +55,8 @@ This walk also sharpens the next gaps suggested by the surveyed compilers.
 Versioned checkpoint, gfx12 fragment, and incompatible shuffled identities now
 make packing a launch-visible contract; decode consumes one contiguous lane
 word per K16 step after one load-time conversion. Exact-device measurements
-improve both production decode shapes by about 1.74x, putting the second within
-1.04x of Radiance. A wide-N oracle caught an unsafe attempt to combine fragment
+improve both production decode shapes by about 1.75–1.76x, putting the second
+within 1.03x of Radiance. A wide-N oracle caught an unsafe attempt to combine fragment
 loads with the old LDS-sharing protocol, so production prefill remains on the
 proved transposed/group-M ABI until padded multistage staging and an explicit
 K-step scheduling barrier land. Cache policy and occupancy remain live axes. Keep sparse

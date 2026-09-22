@@ -24,9 +24,9 @@ Tajasarus exact-device coverage includes `M=1,5,64`, `N=48,80`, the M64/65
 crossover, long K, wide N, poisoned rows, and a captured HIP graph whose launch
 performs no conversion, allocation, or synchronization. A sampled independent
 FP32-dequantized oracle now gates every benchmark engine before timing. Fragment
-decode measures 0.0509 and 0.0901 ms, about 1.74x faster than the prior packet;
-the second shape is 1.04x from Radiance and faster than libr4d. Fragment prefill
-exposed unsafe wide-grid LDS reuse and direct per-wave loads regressed, so the
+decode measures 0.0506 and 0.0886 ms, about 1.75–1.76x faster than the prior
+packet; the second shape is 1.03x from Radiance and faster than libr4d.
+Fragment prefill exposed unsafe wide-grid LDS reuse and direct per-wave loads regressed, so the
 production selector deliberately retains the proved transposed/group-M path.
 Next: padded multistage prefill, a backend-neutral K-step scheduling barrier,
 then `waves_per_eu`, cache modifiers, and resource/ISA evidence.

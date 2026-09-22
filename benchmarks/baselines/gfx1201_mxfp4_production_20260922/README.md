@@ -3,7 +3,7 @@
 This packet records the versioned fragment-layout decode ABI and the safe
 decode/prefill production selector for
 `ROCM-MXFP4-W4A8-1` on Tajasarus, an AMD Radeon RX 9070 XT (`gfx1201`). It is
-bound to the Tessera source revision recorded in `evidence.json` and to
+bound to Tessera commit `c21f234988f516b09b548e7b5519c54e91b2f236` and to
 the generator and benchmark hashes in `evidence.json`.
 
 ## Method
@@ -33,15 +33,15 @@ tree; neither inspected root exposed a license or SPDX declaration.
 
 | Workload (M x N x K) | Tessera schedule | Tessera ms | Radiance ms | libr4d ms |
 |---|---:|---:|---:|---:|
-| decode 8 x 5120 x 8704 | split-K 8 + fragment | 0.050867 | 0.029875 | 0.039361 |
-| decode 8 x 17408 x 5120 | split-K 8 + fragment | 0.090106 | 0.086794 | 0.105388 |
-| prefill 256 x 5120 x 8704 | group-M 8 + transposed | 0.641708 | 0.138573 | not applicable |
-| prefill 1024 x 17408 x 5120 | group-M 8 + transposed | 4.843409 | 0.888253 | not applicable |
+| decode 8 x 5120 x 8704 | split-K 8 + fragment | 0.050566 | 0.029671 | 0.040101 |
+| decode 8 x 17408 x 5120 | split-K 8 + fragment | 0.088649 | 0.086727 | 0.104710 |
+| prefill 256 x 5120 x 8704 | group-M 8 + transposed | 0.644733 | 0.139192 | not applicable |
+| prefill 1024 x 17408 x 5120 | group-M 8 + transposed | 4.832110 | 0.883235 | not applicable |
 
 The expanded owning-device fixture passes 16 rows: scalar/WMMA/generic routes,
 M=1/5/64, N=48/80, the M64/65 crossover, long-K and wide-N cases, poisoned
-rows, and a captured HIP graph. Fragment decode is about 1.73–1.74x faster than
-the prior packet; the second production shape is within 1.04x of Radiance and
+rows, and a captured HIP graph. Fragment decode is about 1.75–1.76x faster than
+the prior packet; the second production shape is within 1.03x of Radiance and
 faster than libr4d. An attempted fragment+LDS prefill reuse path failed the
 wide-N exact oracle and was rejected. Correct direct fragment prefill regressed,
 so the selector keeps prefill on the proved transposed/group-M ABI.

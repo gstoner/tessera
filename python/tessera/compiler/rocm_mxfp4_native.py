@@ -67,6 +67,7 @@ class MXFP4Schedule:
     stages: int = 1
     waves_per_eu: int = 0
     cache_modifier: str = "default"
+    lds_pad_dwords: int = 1
     k_step_schedule: str = "isolated_scale_group"
 
     def __post_init__(self) -> None:
@@ -76,12 +77,14 @@ class MXFP4Schedule:
             raise ValueError("MXFP4 group_m must be 1, 2, 4, or 8")
         if self.split_k not in {1, 2, 4, 8}:
             raise ValueError("MXFP4 split_k must be 1, 2, 4, or 8")
-        if self.stages not in {1, 2} or self.waves_per_eu != 0:
-            raise ValueError(
-                "MXFP4 stages must be 1 or 2 and waves_per_eu must remain 0"
-            )
-        if self.cache_modifier != "default":
-            raise ValueError("MXFP4 cache_modifier is not implemented")
+        if self.stages not in {1, 2}:
+            raise ValueError("MXFP4 stages must be 1 or 2")
+        if self.waves_per_eu not in {0, 1, 2, 4, 8}:
+            raise ValueError("MXFP4 waves_per_eu must be 0, 1, 2, 4, or 8")
+        if self.cache_modifier not in {"default", "streaming"}:
+            raise ValueError("MXFP4 cache_modifier must be 'default' or 'streaming'")
+        if self.lds_pad_dwords not in {0, 1, 2, 4}:
+            raise ValueError("MXFP4 lds_pad_dwords must be 0, 1, 2, or 4")
         if self.k_step_schedule not in {"isolated_scale_group", "relaxed"}:
             raise ValueError(
                 "MXFP4 k_step_schedule must be 'isolated_scale_group' or 'relaxed'"
@@ -120,6 +123,7 @@ class MXFP4RouteReceipt:
                 "stages": self.schedule.stages,
                 "waves_per_eu": self.schedule.waves_per_eu,
                 "cache_modifier": self.schedule.cache_modifier,
+                "lds_pad_dwords": self.schedule.lds_pad_dwords,
                 "k_step_schedule": self.schedule.k_step_schedule,
             },
         }
@@ -135,7 +139,7 @@ def select_mxfp4_schedule(m: int, n: int, k: int) -> MXFP4Schedule:
     if m <= 64:
         return MXFP4Schedule("decode", split_k=4)
     group_m = 8 if m >= 128 else 4
-    return MXFP4Schedule("prefill", group_m=group_m, stages=2)
+    return MXFP4Schedule("prefill", group_m=group_m)
 
 
 def select_mxfp4_route(
@@ -549,6 +553,9 @@ def emit_mxfp4_w4a8_wmma_llvmir(
     shared_fragment_b = grouped_waves and fragment_weights
     shared_transposed_b = grouped_waves and not fragment_weights
     shared_b = shared_fragment_b or shared_transposed_b
+    fragment_slab_bytes = (32 + schedule.lds_pad_dwords) * 4
+    fragment_stage_bytes = 2 * fragment_slab_bytes
+    b_cache_md = ", !nontemporal !0" if schedule.cache_modifier == "streaming" else ""
     split_reduce = split_k > 1
     waves_per_workgroup = max(group_m, split_k)
 
@@ -564,7 +571,9 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         # 33-dword slab stride breaks same-bank alignment between slabs; two
         # stages occupy 528 bytes.  The older transposed path stages expanded
         # FP8 fragments and retains its 512-byte single buffer.
-        lds_bytes = schedule.stages * 2 * 33 * 4 if shared_fragment_b else 512
+        lds_bytes = (
+            schedule.stages * fragment_stage_bytes if shared_fragment_b else 512
+        )
         lines.append(
             '@tessera_mxfp4_b_lds = internal addrspace(3) global '
             f'[{lds_bytes} x i8] undef, align 16'
@@ -668,7 +677,8 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                     f'  %{prefix}_slot = add i64 %{prefix}_slot_base, %lane32_64',
                     f'  %{prefix}_byte = mul i64 %{prefix}_slot, 4',
                     f'  %{prefix}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{prefix}_byte',
-                    f'  %{prefix}_word = load i32, ptr addrspace(1) %{prefix}_ptr, align 4',
+                    f'  %{prefix}_word = load i32, ptr addrspace(1) %{prefix}_ptr, '
+                    f'align 4{b_cache_md}',
                 ])
                 fragment_word = f'%{prefix}_word'
             else:
@@ -701,7 +711,8 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                             f'  %{tag}_rowbase = mul i64 %{tag}_kh, %N',
                             f'  %{tag}_idx = add i64 %{tag}_rowbase, %col_safe',
                             f'  %{tag}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{tag}_idx',
-                            f'  %{tag}_raw8 = load i8, ptr addrspace(1) %{tag}_ptr, align 1',
+                            f'  %{tag}_raw8 = load i8, ptr addrspace(1) %{tag}_ptr, '
+                            f'align 1{b_cache_md}',
                         ])
                         pack_lines.append(f'  %{tag}_raw = zext i8 %{tag}_raw8 to i32')
                         code = f'%{tag}_raw'
@@ -771,7 +782,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             lines += [
                 '  %b_stage_group32 = trunc i64 %group to i32',
                 f'  %b_stage = and i32 %b_stage_group32, {schedule.stages - 1}',
-                f'  %b_stage_base = mul i32 %b_stage, {2 * 33 * 4}',
+                f'  %b_stage_base = mul i32 %b_stage, {fragment_stage_bytes}',
             ]
         lines += [
             '  %is_loader_wave = icmp eq i32 %wave32, 0',
@@ -804,9 +815,11 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                     f'  %{prefix}_slot = add i64 %{prefix}_slot_base, %lane32_64',
                     f'  %{prefix}_byte = mul i64 %{prefix}_slot, 4',
                     f'  %{prefix}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{prefix}_byte',
-                    f'  %{prefix}_word = load i32, ptr addrspace(1) %{prefix}_ptr, align 4',
+                    f'  %{prefix}_word = load i32, ptr addrspace(1) %{prefix}_ptr, '
+                    f'align 4{b_cache_md}',
                     f'  %{prefix}_lane = mul i32 %lane32, 4',
-                    f'  %{prefix}_slab = add i32 %b_stage_base, {slab * 33 * 4}',
+                    f'  %{prefix}_slab = add i32 %b_stage_base, '
+                    f'{slab * fragment_slab_bytes}',
                     f'  %{prefix}_off = add i32 %{prefix}_slab, %{prefix}_lane',
                     f'  %{prefix}_lds = getelementptr i8, ptr addrspace(3) '
                     f'@tessera_mxfp4_b_lds, i32 %{prefix}_off',
@@ -849,7 +862,8 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                 prefix = f'b_stage_read_s{slab}'
                 lines += [
                     f'  %{prefix}_lane = mul i32 %lane32, 4',
-                    f'  %{prefix}_slab = add i32 %b_stage_base, {slab * 33 * 4}',
+                    f'  %{prefix}_slab = add i32 %b_stage_base, '
+                    f'{slab * fragment_slab_bytes}',
                     f'  %{prefix}_off = add i32 %{prefix}_slab, %{prefix}_lane',
                     f'  %{prefix}_ptr = getelementptr i8, ptr addrspace(3) '
                     f'@tessera_mxfp4_b_lds, i32 %{prefix}_off',
@@ -886,7 +900,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         lines += [
             '  %b_next_stage_group32 = trunc i64 %group_next to i32',
             '  %b_next_stage = and i32 %b_next_stage_group32, 1',
-            f'  %b_next_stage_base = mul i32 %b_next_stage, {2 * 33 * 4}',
+            f'  %b_next_stage_base = mul i32 %b_next_stage, {fragment_stage_bytes}',
             '  %b_has_next = icmp ult i64 %group_next, %groups',
             '  %b_do_prefetch = and i1 %is_loader_wave, %b_has_next',
             '  br i1 %b_do_prefetch, label %b.prefetch, label %b.compute',
@@ -904,7 +918,8 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                 f'  %{prefix}_slot = add i64 %{prefix}_slot_base, %lane32_64',
                 f'  %{prefix}_byte = mul i64 %{prefix}_slot, 4',
                 f'  %{prefix}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{prefix}_byte',
-                f'  %{prefix}_word = load i32, ptr addrspace(1) %{prefix}_ptr, align 4',
+                f'  %{prefix}_word = load i32, ptr addrspace(1) %{prefix}_ptr, '
+                f'align 4{b_cache_md}',
             ]
         lines += [
             '  br label %b.compute',
@@ -947,7 +962,8 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             prefix = f'b_next_s{slab}'
             lines += [
                 f'  %{prefix}_lane = mul i32 %lane32, 4',
-                f'  %{prefix}_slab = add i32 %b_next_stage_base, {slab * 33 * 4}',
+                f'  %{prefix}_slab = add i32 %b_next_stage_base, '
+                f'{slab * fragment_slab_bytes}',
                 f'  %{prefix}_off = add i32 %{prefix}_slab, %{prefix}_lane',
                 f'  %{prefix}_ptr = getelementptr i8, ptr addrspace(3) '
                 f'@tessera_mxfp4_b_lds, i32 %{prefix}_off',
@@ -1044,13 +1060,21 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         lines.append('declare void @llvm.amdgcn.s.waitcnt(i32 immarg)')
     if schedule.k_step_schedule == "isolated_scale_group":
         lines.append('declare void @llvm.amdgcn.sched.barrier(i32 immarg)')
+    waves_attr = (
+        f' "amdgpu-waves-per-eu"="{schedule.waves_per_eu}"'
+        if schedule.waves_per_eu
+        else ''
+    )
     lines += [
         'declare <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
         '<2 x i32>, <2 x i32>, <8 x float>)',
         '',
-        f'attributes #0 = {{ "amdgpu-flat-work-group-size"="{32 * waves_per_workgroup},{32 * waves_per_workgroup}" }}',
+        f'attributes #0 = {{ "amdgpu-flat-work-group-size"='
+        f'"{32 * waves_per_workgroup},{32 * waves_per_workgroup}"{waves_attr} }}',
         '',
     ]
+    if schedule.cache_modifier == "streaming":
+        lines += ['!0 = !{i32 1}', '']
     return '\n'.join(lines)
 
 
@@ -1283,6 +1307,7 @@ def package_mxfp4_w4a8_wmma(
             "stages": schedule.stages,
             "waves_per_eu": schedule.waves_per_eu,
             "cache_modifier": schedule.cache_modifier,
+            "lds_pad_dwords": schedule.lds_pad_dwords,
             "k_step_schedule": schedule.k_step_schedule,
             "selection_receipt": receipt.as_dict(),
         },

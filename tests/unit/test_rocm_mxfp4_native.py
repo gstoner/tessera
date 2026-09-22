@@ -149,14 +149,14 @@ def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
         "decode", split_k=8
     )
     assert select_mxfp4_schedule(256, 5120, 8704) == MXFP4Schedule(
-        "prefill", group_m=8, stages=2
+        "prefill", group_m=8
     )
     with pytest.raises(ValueError, match="decode does not admit prefill LDS stages"):
         MXFP4Schedule("decode", stages=2)
     with pytest.raises(ValueError, match="prefill does not admit decode split-K"):
         MXFP4Schedule("prefill", split_k=2)
-    with pytest.raises(ValueError, match="cache_modifier is not implemented"):
-        MXFP4Schedule("prefill", cache_modifier="streaming")
+    with pytest.raises(ValueError, match="cache_modifier"):
+        MXFP4Schedule("prefill", cache_modifier="evict")
     with pytest.raises(ValueError, match="k_step_schedule"):
         MXFP4Schedule("decode", k_step_schedule="amd_intrinsic")
 
@@ -166,6 +166,23 @@ def test_relaxed_k_step_control_omits_backend_schedule_fence() -> None:
         schedule=MXFP4Schedule("decode", k_step_schedule="relaxed")
     )
     assert "llvm.amdgcn.sched.barrier" not in source
+
+
+def test_prefill_tuning_axes_reach_physical_llvm_contract() -> None:
+    source = emit_mxfp4_w4a8_wmma_llvmir(
+        schedule=MXFP4Schedule(
+            "prefill",
+            group_m=4,
+            waves_per_eu=4,
+            cache_modifier="streaming",
+            lds_pad_dwords=2,
+        )
+    )
+    assert "[272 x i8]" in source
+    assert "%b_stage_s1_slab = add i32 %b_stage_base, 136" in source
+    assert '"amdgpu-waves-per-eu"="4"' in source
+    assert "align 4, !nontemporal !0" in source
+    assert "!0 = !{i32 1}" in source
 
 
 def test_route_receipts_explain_production_selection_and_refusal() -> None:

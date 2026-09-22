@@ -248,15 +248,40 @@ def _tessera_engine(
     split_k: int | None,
     stream: ctypes.c_void_p | None = None,
     stages: int | None = None,
+    waves_per_eu: int | None = None,
+    cache_modifier: str | None = None,
+    lds_pad_dwords: int | None = None,
     k_step_schedule: str | None = None,
 ) -> _Engine:
     schedule = select_mxfp4_schedule(case.m, case.n, case.k)
-    if any(axis is not None for axis in (group_m, split_k, stages, k_step_schedule)):
+    axes = (
+        group_m,
+        split_k,
+        stages,
+        waves_per_eu,
+        cache_modifier,
+        lds_pad_dwords,
+        k_step_schedule,
+    )
+    if any(axis is not None for axis in axes):
         schedule = replace(
             schedule,
             group_m=group_m if group_m is not None else schedule.group_m,
             split_k=split_k if split_k is not None else schedule.split_k,
             stages=stages if stages is not None else schedule.stages,
+            waves_per_eu=(
+                waves_per_eu if waves_per_eu is not None else schedule.waves_per_eu
+            ),
+            cache_modifier=(
+                cache_modifier
+                if cache_modifier is not None
+                else schedule.cache_modifier
+            ),
+            lds_pad_dwords=(
+                lds_pad_dwords
+                if lds_pad_dwords is not None
+                else schedule.lds_pad_dwords
+            ),
             k_step_schedule=(
                 k_step_schedule
                 if k_step_schedule is not None
@@ -327,6 +352,8 @@ def _tessera_engine(
                     "stages",
                     "waves_per_eu",
                     "cache_modifier",
+                    "lds_pad_dwords",
+                    "k_step_schedule",
                 )
             },
         },
@@ -531,6 +558,9 @@ def benchmark(
     tessera_group_m: int | None,
     tessera_split_k: int | None,
     tessera_stages: int | None,
+    tessera_waves_per_eu: int | None,
+    tessera_cache_modifier: str | None,
+    tessera_lds_pad_dwords: int | None,
     tessera_k_step_schedule: str | None,
     radiance_revision: str | None,
     libr4d_revision: str | None,
@@ -558,6 +588,9 @@ def benchmark(
                 tessera_group_m,
                 tessera_split_k,
                 stages=tessera_stages,
+                waves_per_eu=tessera_waves_per_eu,
+                cache_modifier=tessera_cache_modifier,
+                lds_pad_dwords=tessera_lds_pad_dwords,
                 k_step_schedule=tessera_k_step_schedule,
             )
         ]
@@ -691,6 +724,13 @@ def main() -> None:
     parser.add_argument("--tessera-group-m", type=int, choices=(1, 2, 4, 8))
     parser.add_argument("--tessera-split-k", type=int, choices=(1, 2, 4, 8))
     parser.add_argument("--tessera-stages", type=int, choices=(1, 2))
+    parser.add_argument("--tessera-waves-per-eu", type=int, choices=(0, 1, 2, 4, 8))
+    parser.add_argument(
+        "--tessera-cache-modifier", choices=("default", "streaming")
+    )
+    parser.add_argument(
+        "--tessera-lds-pad-dwords", type=int, choices=(0, 1, 2, 4)
+    )
     parser.add_argument(
         "--tessera-k-step-schedule",
         choices=("isolated_scale_group", "relaxed"),
@@ -710,6 +750,9 @@ def main() -> None:
         tessera_group_m=args.tessera_group_m,
         tessera_split_k=args.tessera_split_k,
         tessera_stages=args.tessera_stages,
+        tessera_waves_per_eu=args.tessera_waves_per_eu,
+        tessera_cache_modifier=args.tessera_cache_modifier,
+        tessera_lds_pad_dwords=args.tessera_lds_pad_dwords,
         tessera_k_step_schedule=args.tessera_k_step_schedule,
         radiance_revision=args.radiance_revision,
         libr4d_revision=args.libr4d_revision,

@@ -116,7 +116,7 @@ def test_folded_prefill_rejects_changed_load_time_payload() -> None:
 def test_folded_prefill_combines_canceling_scales_before_accumulator() -> None:
     assert rt._rocm_live_arch() == "gfx1201"
     m, n, k = 65, 48, 32
-    codes = np.ones((n, k), dtype=np.uint8)
+    codes = np.full((n, k), 2, dtype=np.uint8)
     scales = np.full((1, n), 254, dtype=np.uint8)
     folded = prepare_folded_weights(
         mx.pack_e2m1_codes(codes), scales, allow_approximate=True,

@@ -135,6 +135,7 @@ def measure(case: base.Case, *, trials: int = 11, iterations: int = 12) -> dict[
         raise RuntimeError("phase attribution requires HIP")
     inputs = base._logical_inputs(case)
     image = _trace_image()
+    trace_isa_resources = base._code_object_evidence(image)
     production, _ = folded_bench.folded_engine(hip, case, inputs, 3)
     traced = _trace_engine(hip, case, inputs, image, 3)
     try:
@@ -149,6 +150,9 @@ def measure(case: base.Case, *, trials: int = 11, iterations: int = 12) -> dict[
         plain = samples[production]
         instrumented = samples[traced]
         overhead = statistics.median(instrumented) / statistics.median(plain) - 1.0
+        production_isa = production.metadata["isa"]
+        trace_isa = trace_isa_resources["isa"]
+        same_instruction_structure = production_isa == trace_isa
         return {
             "schema": "tessera.rocm.gfx1201_folded_phase_diagnostic.v1",
             "case": case.label,
@@ -160,11 +164,17 @@ def measure(case: base.Case, *, trials: int = 11, iterations: int = 12) -> dict[
             ),
             "recorder_sha256": base._sha256(Path(__file__)),
             "production_image_sha256": production.metadata["image_sha256"],
+            "production_isa": production_isa,
             "trace_image_sha256": hashlib.sha256(image).hexdigest(),
-            "trace_isa_resources": base._code_object_evidence(image),
+            "trace_isa_resources": trace_isa_resources,
             "instrumentation_level": 2,
             "promotion_eligible": False,
             "ikf_p0_complete": False,
+            "phase_attribution_admissible": False,
+            "phase_attribution_reason": (
+                "instrumentation_changes_isa_structure"
+                if not same_instruction_structure else "p0_clock_validation_open"
+            ),
             "timing_order": "alternating_interleaved",
             "production_ms": plain,
             "instrumented_ms": instrumented,

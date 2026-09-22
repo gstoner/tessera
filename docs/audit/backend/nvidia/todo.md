@@ -8,6 +8,15 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 folded scale fix and phase-probe refusal — 2026-09-22
+
+Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`ROCM-MXFP4-IKF-DIAGNOSTIC-2026-09-22`. Not applicable to CUDA execution.
+The HIP fold epilogue now combines two FP32 scales before accumulation;
+the same-CTA wall-clock trace is AMD-only and fails its structural
+perturbation gate. NVIDIA's `%globaltimer` IKF lane and exact-device proof
+remain separate; the packet is not CUDA cost-model training data.
+
 ## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `ROCM-MXFP4-FOLDED-PREFILL-2026-09-22`.

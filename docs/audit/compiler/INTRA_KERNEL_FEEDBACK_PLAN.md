@@ -402,3 +402,21 @@ unknown levels, booleans and missing-value placeholders are refused. Existing
 records without the field predate instrumentation and retain L0 semantics.
 This closes the admission guard only. P1 slot schema/math, native producers,
 P0 cross-CU clock proof, and P2/P3 instrumentation remain open.
+
+### 2026-09-22: gfx1201 folded-prefill diagnostic fails perturbation admission
+
+The hand-emitted gfx1201 folded MXFP4 prefill (ROCM-MXFP4-W4A8-1) now has a
+compile-time-only, same-CTA L2-shaped phase probe. Its BF16 output agrees
+with production, and Tajasarus records complete, monotonic per-CTA slots on
+both production prefill shapes. This is a **diagnostic experiment, not IKF-P0
+or P3 closure**: it did not validate cross-CU clock consistency or the clock
+read-cost distribution, and it did not add Schedule/Tile IR trace lowering.
+
+The perturbation gate fails more decisively than the +9.38%/+1.17% median
+HIP-event overhead: the traced HSACO emits 64 FP8 WMMAs and eight workgroup
+barriers versus production's 32 and four. The recorder marks phase
+attribution inadmissible and promotion ineligible; neither the phase fractions
+nor the timing of that different schedule may train a cost model. The next
+gfx1201 measurement slice must preserve production ISA structure before
+interpreting phase time, then complete the P0 cross-CU/read-cost gates.
+[Exact-device diagnostic packet](../../../benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922/README.md).

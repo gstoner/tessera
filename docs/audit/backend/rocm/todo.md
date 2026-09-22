@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 folded scale cancellation and IKF diagnostic — 2026-09-22
+
+Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`ROCM-MXFP4-IKF-DIAGNOSTIC-2026-09-22`. The folded epilogue now multiplies
+row reference by activation scale before the FP32 accumulator; Tajasarus
+passes the lossless 2^127 × 2^-127 cancellation regression and all four
+folded device tests. The refreshed matched packet retains full BF16 output
+agreement with exact K32 and pinned Radiance, at 0.1748/1.2310 ms versus
+Radiance 0.1424/0.8896 ms. The exact route remains the oracle and default.
+
+An opt-in, same-CTA phase probe ran on both prefill shapes. Its BF16 output
+agreed, but instrumentation changed the HSACO from 32 to 64 FP8 WMMAs and
+four to eight barriers. The packet therefore refuses phase attribution and
+cost-model/selector eligibility even though the alternating HIP-event
+overhead was +9.38%/+1.17%. Same-CTA interval checks do not close IKF-P0's
+cross-CU clock or read-cost gates. Next: find an ISA-preserving probe or use
+controlled uninstrumented variants to measure physical weight traffic and
+staging; do not fit coefficients from the refused phase fractions.
+[Phase refusal packet](../../../../benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922/README.md).
+
 ## GFX1201 folded MXFP4 BM256/TM4 prefill — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync

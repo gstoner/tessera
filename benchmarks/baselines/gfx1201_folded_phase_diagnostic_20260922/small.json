@@ -1,0 +1,73 @@
+{
+  "case": "prefill_256x5120x8704",
+  "device": "AMD Radeon RX 9070 XT",
+  "generator_sha256": "e3ca228e8b1de89d0b2aedbb019c9688ed6e56e9a7230f1cd05fe006b6538b1b",
+  "ikf_p0_complete": false,
+  "instrumentation_level": 2,
+  "instrumented_ms": [
+    0.21852817138036093,
+    0.21890308459599814,
+    0.18930566310882568,
+    0.18733149766921997,
+    0.18601733446121216,
+    0.18787066141764322,
+    0.1855739951133728,
+    0.1864373286565145,
+    0.1866889993349711,
+    0.18825984001159668,
+    0.18654916683832803
+  ],
+  "median_overhead_fraction": 0.09381185077890009,
+  "phase_attribution_admissible": false,
+  "phase_attribution_reason": "instrumentation_changes_isa_structure",
+  "phases": {
+    "clock_scope": "same_cta_delta_only_cross_cu_unvalidated",
+    "compute_fraction_median": 0.4558013525800245,
+    "compute_ticks_median": 10274.0,
+    "copy_fraction_median": 0.47809931764510794,
+    "copy_ticks_median": 11154.0,
+    "cta_slots": 80,
+    "elapsed_ticks_median": 20996.0
+  },
+  "production_image_sha256": "ce7eae44382c1d683517503609b58db3b9346a39998dde761ac4188402f15237",
+  "production_isa": {
+    "s_barrier": 4,
+    "s_waitcnt": 0,
+    "wmma_fp8_fp8": 32
+  },
+  "production_ms": [
+    0.2034890055656433,
+    0.19111482302347818,
+    0.1772631605466207,
+    0.1693398356437683,
+    0.17033066352208456,
+    0.17260491847991943,
+    0.17080982526143393,
+    0.17126482725143433,
+    0.1691824197769165,
+    0.1769175926844279,
+    0.17084757486979166
+  ],
+  "promotion_eligible": false,
+  "recorder_sha256": "c09ee82653c35452ff24844390b6294a069ee5a6c2d212685d5d18a80f2aff1e",
+  "schema": "tessera.rocm.gfx1201_folded_phase_diagnostic.v1",
+  "source_revision": "817cde29fda75c0323dba7bdbff3f673da32c2f4",
+  "timing_order": "alternating_interleaved",
+  "trace_image_sha256": "bf71a4fa0cab95b122603e2cf56cdffbf5326e7b2a1c0d32a600b45a2f85ac05",
+  "trace_isa_resources": {
+    "isa": {
+      "s_barrier": 8,
+      "s_waitcnt": 0,
+      "wmma_fp8_fp8": 64
+    },
+    "resources": {
+      "lds_bytes": 25600,
+      "scratch_bytes": 0,
+      "sgpr_count": 54,
+      "sgpr_spill_count": 0,
+      "spills": false,
+      "vgpr_count": 140,
+      "vgpr_spill_count": 0
+    }
+  }
+}

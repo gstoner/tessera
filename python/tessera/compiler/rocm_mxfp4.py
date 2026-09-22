@@ -36,6 +36,14 @@ MXFP4_NIBBLE_ORDER = "low_even_high_odd"
 MXFP4_SCALE_ORDER = "k_group_n"
 MXFP4_FRAGMENT_ORDER = "n_tile_k_step_half_row_bytes"
 
+# Stable physical-layout identities.  These are part of the package/launch
+# contract rather than informal names for NumPy views: changing byte order
+# requires a new versioned identity and ABI.
+MXFP4_CHECKPOINT_LAYOUT_V1 = "mxfp4.checkpoint_n_k2.low_even.v1"
+MXFP4_TRANSPOSED_LAYOUT_V1 = "mxfp4.runtime_k2_n.low_even.v1"
+MXFP4_GFX12_FRAGMENT_LAYOUT_V1 = "mxfp4.gfx12.n16_k16_lane_u32.v1"
+MXFP4_AITER_SHUFFLED_LAYOUT_V1 = "mxfp4.aiter_shuffled.opaque.v1"
+
 MXFP4Mode = Literal["exact_per_block", "folded_row_reference"]
 
 _E2M1 = np.asarray(
@@ -55,10 +63,62 @@ def _as_u8(name: str, values: np.ndarray, *, maximum: int) -> np.ndarray:
 
 
 @dataclass(frozen=True)
+class MXFP4WeightLayout:
+    """One versioned packed-weight storage identity.
+
+    ``conversion_supported`` means Tessera owns a checked conversion from the
+    canonical checkpoint representation.  Recognizing a third-party layout is
+    intentionally weaker than claiming that its permutation is implemented.
+    """
+
+    layout_id: str
+    logical_shape: str
+    lane_read: str
+    conversion_supported: bool
+
+
+MXFP4_WEIGHT_LAYOUTS: dict[str, MXFP4WeightLayout] = {
+    MXFP4_CHECKPOINT_LAYOUT_V1: MXFP4WeightLayout(
+        MXFP4_CHECKPOINT_LAYOUT_V1,
+        "[N,K/2]",
+        "strided_checkpoint_rows",
+        True,
+    ),
+    MXFP4_TRANSPOSED_LAYOUT_V1: MXFP4WeightLayout(
+        MXFP4_TRANSPOSED_LAYOUT_V1,
+        "[K/2,N]",
+        "legacy_scalar_k_major",
+        True,
+    ),
+    MXFP4_GFX12_FRAGMENT_LAYOUT_V1: MXFP4WeightLayout(
+        MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+        "[N,K/2]",
+        "one_contiguous_uint32_per_lane_per_n16_k16_step",
+        True,
+    ),
+    MXFP4_AITER_SHUFFLED_LAYOUT_V1: MXFP4WeightLayout(
+        MXFP4_AITER_SHUFFLED_LAYOUT_V1,
+        "opaque",
+        "third_party_incompatible",
+        False,
+    ),
+}
+
+
+def mxfp4_weight_layout(layout_id: str) -> MXFP4WeightLayout:
+    """Resolve a stable MXFP4 layout identity or fail closed."""
+    try:
+        return MXFP4_WEIGHT_LAYOUTS[layout_id]
+    except KeyError as exc:
+        raise ValueError(f"unknown MXFP4 weight layout {layout_id!r}") from exc
+
+
+@dataclass(frozen=True)
 class MXFP4PhysicalContract:
     """The launch-visible storage and scale contract for gfx1201 W4A8."""
 
     weight_storage: str = "packed_e2m1"
+    weight_layout: str = MXFP4_CHECKPOINT_LAYOUT_V1
     weight_container: str = "uint8"
     elements_per_container: int = 2
     nibble_order: str = MXFP4_NIBBLE_ORDER
@@ -74,6 +134,7 @@ class MXFP4PhysicalContract:
     def as_metadata_dict(self) -> dict[str, object]:
         return {
             "weight_storage": self.weight_storage,
+            "weight_layout": self.weight_layout,
             "weight_container": self.weight_container,
             "elements_per_container": self.elements_per_container,
             "nibble_order": self.nibble_order,
@@ -173,6 +234,48 @@ def from_fragment_order(fragment_order: np.ndarray) -> np.ndarray:
         raise ValueError("fragment-order MXFP4 weights require N and K divisible by 16")
     tiled = p.reshape(n // 16, k // 16, 2, 16, 4)
     return np.ascontiguousarray(tiled.transpose(0, 3, 1, 2, 4).reshape(n, packed_k))
+
+
+def convert_weight_layout(
+    weights: np.ndarray,
+    *,
+    source: str,
+    destination: str,
+) -> np.ndarray:
+    """Convert packed weights once at model/package load time.
+
+    The canonical checkpoint layout is the hub.  The AITER shuffled identity
+    is deliberately recognized but refused because its permutation is not the
+    gfx12 fragment contract and Tessera does not yet own an independent
+    specification for it.
+    """
+    src = mxfp4_weight_layout(source)
+    dst = mxfp4_weight_layout(destination)
+    if not src.conversion_supported or not dst.conversion_supported:
+        raise ValueError(
+            "MXFP4 AITER shuffled layout is recognized but has no proved "
+            "Tessera conversion contract"
+        )
+    packed = _as_u8("packed MXFP4 weights", weights, maximum=255)
+    if packed.ndim != 2:
+        raise ValueError("packed MXFP4 weights must be rank 2")
+    if source == destination:
+        return np.ascontiguousarray(packed)
+    if source == MXFP4_CHECKPOINT_LAYOUT_V1:
+        checkpoint = packed
+    elif source == MXFP4_TRANSPOSED_LAYOUT_V1:
+        checkpoint = np.ascontiguousarray(packed.T)
+    elif source == MXFP4_GFX12_FRAGMENT_LAYOUT_V1:
+        checkpoint = from_fragment_order(packed)
+    else:  # Registry totality makes this defensive.
+        raise ValueError(f"unsupported MXFP4 source layout {source!r}")
+    if destination == MXFP4_CHECKPOINT_LAYOUT_V1:
+        return np.ascontiguousarray(checkpoint)
+    if destination == MXFP4_TRANSPOSED_LAYOUT_V1:
+        return np.ascontiguousarray(checkpoint.T)
+    if destination == MXFP4_GFX12_FRAGMENT_LAYOUT_V1:
+        return to_fragment_order(checkpoint)
+    raise ValueError(f"unsupported MXFP4 destination layout {destination!r}")
 
 
 def _validate_scale_plane(codes: np.ndarray, scale_exponents: np.ndarray) -> tuple[int, int]:

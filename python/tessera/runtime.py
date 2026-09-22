@@ -4173,6 +4173,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
     from tessera.compiler.rocm_mxfp4_native import (
         GFX_MXFP4_W4A8_EXACT_ABI,
         GFX_MXFP4_W4A8_WMMA_ABI,
+        GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
 
     return frozenset({
@@ -4185,6 +4186,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
         rn.GFX_PAGED_KV_F32_ABI, rn.GFX_SPARSE_MATMUL_2TO4_ABI,
         GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI,
+        GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     })
 
 
@@ -4212,12 +4214,25 @@ def _submit_rocm_mxfp4_w4a8(
         buffers[item.name] for item in ordered
     )
     m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
+    packed_layout = str(descriptor.provenance.get("weight_layout", ""))
+    from tessera.compiler.rocm_mxfp4 import (
+        MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+        MXFP4_TRANSPOSED_LAYOUT_V1,
+    )
+    if packed_layout == MXFP4_TRANSPOSED_LAYOUT_V1:
+        packed_shape = (k // 2, n)
+    elif packed_layout == MXFP4_GFX12_FRAGMENT_LAYOUT_V1:
+        packed_shape = (n, k // 2)
+    else:
+        raise RuntimeError(
+            f"MXFP4 W4A8 descriptor has unsupported weight layout {packed_layout!r}"
+        )
     bf16 = _bfloat16_dtype()
     if bf16 is None:
         raise RuntimeError("MXFP4 W4A8 output requires ml_dtypes.bfloat16")
     if (
         tuple(a.shape) != (m, k)
-        or tuple(packed_b.shape) != (k // 2, n)
+        or tuple(packed_b.shape) != packed_shape
         or tuple(a_scale.shape) != (m,)
         or tuple(b_scale.shape) != (k // 32, n)
         or tuple(output.shape) != (m, n)
@@ -4328,9 +4343,14 @@ def _submit_rocm_gfx1151_native(
     from tessera.compiler.rocm_mxfp4_native import (
         GFX_MXFP4_W4A8_EXACT_ABI,
         GFX_MXFP4_W4A8_WMMA_ABI,
+        GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
 
-    if descriptor.abi_id in {GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI}:
+    if descriptor.abi_id in {
+        GFX_MXFP4_W4A8_EXACT_ABI,
+        GFX_MXFP4_W4A8_WMMA_ABI,
+        GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
+    }:
         return _submit_rocm_mxfp4_w4a8(image, descriptor, buffers, scalars)
 
     if descriptor.abi_id == GFX_SPARSE_MATMUL_2TO4_ABI:
@@ -5547,6 +5567,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     from tessera.compiler.rocm_mxfp4_native import (
         GFX_MXFP4_W4A8_EXACT_ABI,
         GFX_MXFP4_W4A8_WMMA_ABI,
+        GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
 
     if (
@@ -5578,6 +5599,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_SPARSE_MATMUL_2TO4_ABI,
             GFX_MXFP4_W4A8_EXACT_ABI,
             GFX_MXFP4_W4A8_WMMA_ABI,
+            GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         }
         and target not in _native_launchers
     ):

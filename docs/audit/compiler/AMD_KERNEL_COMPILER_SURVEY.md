@@ -51,13 +51,15 @@ forms, not RDNA4 WMMA inputs. FP4, FP6, MX formats, bool, complex, and TF32 are
 not silently widened into these rows: scaled MX/FP4 needs an explicit scale
 lineage and schedule, while TF32 is a math mode rather than storage.
 
-This walk also sharpens the next gaps suggested by the surveyed compilers:
-derive load/packing from the fragment descriptor instead of branching again in
-the emitter. The first exact-device tuning slice now confirms that decode and
-prefill require separate schedules: split-K with an LDS partial reduction helps
-skinny M, while group-M sharing of one expanded B fragment helps prefill. Those
-measured wins do not close the gap to the independent Radiance route; fragment
-layout, staging depth, cache policy, and occupancy remain live axes. Keep sparse
+This walk also sharpens the next gaps suggested by the surveyed compilers.
+Versioned checkpoint, gfx12 fragment, and incompatible shuffled identities now
+make packing a launch-visible contract; decode consumes one contiguous lane
+word per K16 step after one load-time conversion. Exact-device measurements
+improve both production decode shapes by about 1.74x, putting the second within
+1.04x of Radiance. A wide-N oracle caught an unsafe attempt to combine fragment
+loads with the old LDS-sharing protocol, so production prefill remains on the
+proved transposed/group-M ABI until padded multistage staging and an explicit
+K-step scheduling barrier land. Cache policy and occupancy remain live axes. Keep sparse
 SWMMAC admission separate from dense WMMA, and key
 every measured selection or cache record by exact architecture, datatype pair,
 accumulator, and physical packing. These are design directions, not promotion

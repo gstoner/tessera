@@ -10,10 +10,12 @@ import numpy as np
 import pytest
 
 from tessera import runtime
+from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.native_artifact import NativeEntryPoint, NativeImageArtifact
 from tessera.compiler.rocm_mxfp4_native import (
     GFX_MXFP4_W4A8_EXACT_ABI,
     GFX_MXFP4_W4A8_WMMA_ABI,
+    GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     MXFP4Schedule,
     _extract_gfx1201_hsaco,
     _rocm_hipcc,
@@ -22,6 +24,7 @@ from tessera.compiler.rocm_mxfp4_native import (
     mxfp4_w4a8_descriptor,
     package_mxfp4_w4a8,
     package_scaled_wmma_target_ir,
+    select_mxfp4_route,
     select_mxfp4_schedule,
 )
 
@@ -100,21 +103,32 @@ def test_wmma_source_isolates_each_k32_partial_before_scaling() -> None:
     assert "%scaled_partial = fmul <8 x float> %partial, %scale_vec" in source
     assert "%running_next = fadd <8 x float> %running, %scaled_partial" in source
     assert "%a_s0_0_k = add i64 %a_s0_0_k0, %half8" in source
-    assert "%b_s1_7_k = add i64 %b_s1_7_k0, %half8" in source
-    assert source.index("%b_s1_7_raw8 = load i8") < source.index("%a_s0_0_byte = select")
+    assert source.count("fragment_word = load i32") == 2
+    assert "%b_s1_fragment_slot = add i64" in source
+    assert source.index("%b_s1_fragment_word = load i32") < source.index("%a_s0_0_byte = select")
     assert "@tessera_e2m1_to_e4m3" in source
     assert "@llvm.amdgcn.workgroup.id.x" in source
 
 
 def test_prefill_source_stages_one_b_fragment_for_grouped_row_waves() -> None:
     source = emit_mxfp4_w4a8_wmma_llvmir(
-        schedule=MXFP4Schedule("prefill", group_m=8)
+        schedule=MXFP4Schedule("prefill", group_m=8),
+        weight_layout=mx.MXFP4_TRANSPOSED_LAYOUT_V1,
     )
     assert "@tessera_mxfp4_b_lds" in source
     assert "%is_loader_wave = icmp eq i32 %wave32, 0" in source
     assert source.count("call void @llvm.amdgcn.s.barrier()") == 2
     assert "load <2 x i32>, ptr addrspace(3)" in source
     assert '"amdgpu-flat-work-group-size"="256,256"' in source
+
+
+def test_fragment_prefill_uses_private_contiguous_lane_words_until_multistage() -> None:
+    source = emit_mxfp4_w4a8_wmma_llvmir(
+        schedule=MXFP4Schedule("prefill", group_m=8)
+    )
+    assert "@tessera_mxfp4_b_lds" not in source
+    assert "%wave_m = mul i64 %wave64, 16" in source
+    assert source.count("fragment_word = load i32") == 2
 
 
 def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
@@ -130,6 +144,33 @@ def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
         MXFP4Schedule("prefill", split_k=2)
     with pytest.raises(ValueError, match="cache_modifier is not implemented"):
         MXFP4Schedule("prefill", cache_modifier="streaming")
+
+
+def test_route_receipts_explain_production_selection_and_refusal() -> None:
+    decode = select_mxfp4_route(8, 5120, 8704)
+    assert decode.accepted
+    assert decode.selected_layout == mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+    assert decode.abi_id == GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI
+    assert "contiguous lane words" in decode.reason
+
+    prefill = select_mxfp4_route(256, 5120, 8704)
+    assert prefill.accepted
+    assert prefill.selected_layout == mx.MXFP4_TRANSPOSED_LAYOUT_V1
+    assert prefill.abi_id == GFX_MXFP4_W4A8_WMMA_ABI
+    assert "LDS staging" in prefill.reason
+
+    shuffled = select_mxfp4_route(
+        8, 5120, 8704, requested_layout=mx.MXFP4_AITER_SHUFFLED_LAYOUT_V1
+    )
+    assert not shuffled.accepted
+    assert shuffled.selected_layout is None
+    assert "incompatible" in shuffled.reason
+
+    ragged = select_mxfp4_route(
+        5, 47, 64, requested_layout=mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+    )
+    assert not ragged.accepted
+    assert "N divisible by 16" in ragged.reason
 
 
 def test_decode_split_k_uses_lds_partial_reduction() -> None:
@@ -158,10 +199,41 @@ def test_wmma_descriptor_uses_one_wave_and_exact_policy() -> None:
     assert descriptor.provenance["numeric_policy"] == "exact_per_block"
 
 
-def test_exact_device_proof_registry_admits_both_mxfp4_routes() -> None:
+def test_fragment_descriptor_exposes_layout_in_distinct_launch_abi() -> None:
+    descriptor = mxfp4_w4a8_descriptor(
+        _image(), m=16, n=48, k=64,
+        entry="tessera_mxfp4_w4a8_wmma",
+        abi_id=GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
+        route="exact_per_block_fp8_wmma",
+        workgroup=(32, 1, 1),
+        weight_layout="mxfp4.gfx12.n16_k16_lane_u32.v1",
+    )
+    packed = descriptor.buffers[1]
+    assert packed.layout == "row_major"
+    guards = {
+        (guard.binding, guard.dimension): guard.value
+        for guard in descriptor.shape_guards
+    }
+    assert guards[("b_packed", 0)] == 48
+    assert guards[("b_packed", 1)] == 32
+    assert descriptor.provenance["weight_layout"] == (
+        "mxfp4.gfx12.n16_k16_lane_u32.v1"
+    )
+
+
+def test_fragment_descriptor_refuses_unpadded_n_boundary() -> None:
+    with pytest.raises(ValueError, match="N divisible by 16"):
+        mxfp4_w4a8_descriptor(
+            _image(), m=5, n=47, k=64,
+            weight_layout="mxfp4.gfx12.n16_k16_lane_u32.v1",
+        )
+
+
+def test_exact_device_proof_registry_admits_versioned_mxfp4_routes() -> None:
     proved = runtime._gfx1201_proved_scheduled_abis()
     assert GFX_MXFP4_W4A8_EXACT_ABI in proved
     assert GFX_MXFP4_W4A8_WMMA_ABI in proved
+    assert GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI in proved
 
 
 def test_production_selector_defaults_to_wmma(

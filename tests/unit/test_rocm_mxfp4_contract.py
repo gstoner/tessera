@@ -18,9 +18,11 @@ def test_physical_contract_keeps_scale_group_independent_of_schedule_k() -> None
 
 
 def test_pack_uses_low_nibble_for_even_k_and_round_trips() -> None:
-    codes = np.asarray([[0, 1, 2, 3, 14, 15]], dtype=np.uint8)
+    codes = np.arange(16, dtype=np.uint8).reshape(1, 16)
     packed = mx.pack_e2m1_codes(codes)
-    np.testing.assert_array_equal(packed, [[0x10, 0x32, 0xFE]])
+    np.testing.assert_array_equal(
+        packed, [[0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE]]
+    )
     np.testing.assert_array_equal(mx.unpack_e2m1_codes(packed), codes)
 
 
@@ -42,6 +44,40 @@ def test_fragment_order_is_a_byte_permutation_with_an_inverse() -> None:
     assert permuted.shape == packed.shape
     np.testing.assert_array_equal(np.sort(permuted.reshape(-1)), np.sort(packed.reshape(-1)))
     np.testing.assert_array_equal(mx.from_fragment_order(permuted), packed)
+
+
+def test_versioned_layout_registry_and_load_time_conversion_are_total() -> None:
+    packed = np.arange(16 * 16, dtype=np.uint8).reshape(16, 16)
+    fragment = mx.convert_weight_layout(
+        packed,
+        source=mx.MXFP4_CHECKPOINT_LAYOUT_V1,
+        destination=mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+    )
+    assert mx.mxfp4_weight_layout(
+        mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+    ).lane_read == "one_contiguous_uint32_per_lane_per_n16_k16_step"
+    np.testing.assert_array_equal(
+        mx.convert_weight_layout(
+            fragment,
+            source=mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+            destination=mx.MXFP4_CHECKPOINT_LAYOUT_V1,
+        ),
+        packed,
+    )
+    np.testing.assert_array_equal(
+        mx.convert_weight_layout(
+            packed,
+            source=mx.MXFP4_CHECKPOINT_LAYOUT_V1,
+            destination=mx.MXFP4_TRANSPOSED_LAYOUT_V1,
+        ),
+        packed.T,
+    )
+    with pytest.raises(ValueError, match="recognized but has no proved"):
+        mx.convert_weight_layout(
+            packed,
+            source=mx.MXFP4_CHECKPOINT_LAYOUT_V1,
+            destination=mx.MXFP4_AITER_SHUFFLED_LAYOUT_V1,
+        )
 
 
 def test_exact_decode_uses_k_group_n_scale_order() -> None:

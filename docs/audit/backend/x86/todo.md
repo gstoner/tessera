@@ -9,12 +9,12 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
-## GFX1201 MXFP4 production tuning benchmark — 2026-09-22
+## GFX1201 MXFP4 versioned layout ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync
-`ROCM-MXFP4-PRODUCTION-TUNING-2026-09-22`. Not applicable to AVX-512
-execution. The benchmark schema and its split-K/group-M native schedules are
-bound to the gfx1201 packed ABI and HIP timing. No x86 ABI, vector lowering,
+`ROCM-MXFP4-FRAGMENT-ABI-2026-09-22`. Not applicable to AVX-512 execution.
+The checkpoint conversion, gfx12 lane-word ABI, selector receipts, and HIP
+graph-capture proof are architecture-specific. No x86 ABI, vector lowering,
 dtype, numerical policy, selector, or performance claim changes.
 
 ## Shared scaled-partial carrier and MXFP4 policy — 2026-09-21

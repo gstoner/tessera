@@ -32,6 +32,13 @@ from .rocm_native import (
     _rocm_path,
     _version_fingerprint,
 )
+from .rocm_mxfp4 import (
+    MXFP4_AITER_SHUFFLED_LAYOUT_V1,
+    MXFP4_CHECKPOINT_LAYOUT_V1,
+    MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+    MXFP4_TRANSPOSED_LAYOUT_V1,
+    mxfp4_weight_layout,
+)
 
 
 GFX_MXFP4_W4A8_EXACT_ABI = (
@@ -41,6 +48,10 @@ GFX_MXFP4_W4A8_EXACT_ABI = (
 GFX_MXFP4_W4A8_WMMA_ABI = (
     "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k."
     "e4m3_e2m1_e8m0_bf16.wmma_exact.v1"
+)
+GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI = (
+    "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k."
+    "e4m3_e2m1_e8m0_bf16.wmma_exact.fragment.v1"
 )
 _GFX_MXFP4_PHYSICAL_CONTRACT = "rocm_mxfp4_w4a8_exact_v1"
 _GFX_MXFP4_POINTER_ABI = "a_b_lhs_scale_rhs_scale_d_m_n_k"
@@ -76,6 +87,36 @@ class MXFP4Schedule:
             raise ValueError("prefill does not admit decode split-K reduction")
 
 
+@dataclass(frozen=True)
+class MXFP4RouteReceipt:
+    """Inspectable production selection or refusal for one static shape."""
+
+    accepted: bool
+    workload: str
+    requested_layout: str | None
+    selected_layout: str | None
+    abi_id: str | None
+    reason: str
+    schedule: MXFP4Schedule
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "accepted": self.accepted,
+            "workload": self.workload,
+            "requested_layout": self.requested_layout,
+            "selected_layout": self.selected_layout,
+            "abi_id": self.abi_id,
+            "reason": self.reason,
+            "schedule": {
+                "group_m": self.schedule.group_m,
+                "split_k": self.schedule.split_k,
+                "stages": self.schedule.stages,
+                "waves_per_eu": self.schedule.waves_per_eu,
+                "cache_modifier": self.schedule.cache_modifier,
+            },
+        }
+
+
 def select_mxfp4_schedule(m: int, n: int, k: int) -> MXFP4Schedule:
     """Select only schedules whose generated implementation is present."""
 
@@ -87,6 +128,83 @@ def select_mxfp4_schedule(m: int, n: int, k: int) -> MXFP4Schedule:
         return MXFP4Schedule("decode", split_k=4)
     group_m = 8 if m >= 128 else 4
     return MXFP4Schedule("prefill", group_m=group_m)
+
+
+def select_mxfp4_route(
+    m: int,
+    n: int,
+    k: int,
+    *,
+    requested_layout: str | None = None,
+    schedule: MXFP4Schedule | None = None,
+) -> MXFP4RouteReceipt:
+    """Explain the layout/ABI decision without compiling or allocating."""
+    selected_schedule = schedule or select_mxfp4_schedule(m, n, k)
+    if requested_layout is not None:
+        mxfp4_weight_layout(requested_layout)
+    if requested_layout in {
+        MXFP4_CHECKPOINT_LAYOUT_V1,
+        MXFP4_AITER_SHUFFLED_LAYOUT_V1,
+    }:
+        return MXFP4RouteReceipt(
+            False,
+            selected_schedule.workload,
+            requested_layout,
+            None,
+            None,
+            (
+                "checkpoint layout is a load-time source, not a launch ABI"
+                if requested_layout == MXFP4_CHECKPOINT_LAYOUT_V1
+                else "AITER shuffled layout is incompatible and has no proved converter"
+            ),
+            selected_schedule,
+        )
+    selected = requested_layout
+    if selected is None:
+        selected = (
+            MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+            if selected_schedule.workload == "decode" and n % 16 == 0
+            else MXFP4_TRANSPOSED_LAYOUT_V1
+        )
+    if selected == MXFP4_GFX12_FRAGMENT_LAYOUT_V1 and n % 16:
+        return MXFP4RouteReceipt(
+            False,
+            selected_schedule.workload,
+            requested_layout,
+            None,
+            None,
+            "gfx12 fragment layout requires N divisible by 16",
+            selected_schedule,
+        )
+    if selected not in {
+        MXFP4_TRANSPOSED_LAYOUT_V1,
+        MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+    }:
+        return MXFP4RouteReceipt(
+            False,
+            selected_schedule.workload,
+            requested_layout,
+            None,
+            None,
+            f"layout {selected!r} is not an executable gfx1201 MXFP4 ABI",
+            selected_schedule,
+        )
+    fragment = selected == MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+    return MXFP4RouteReceipt(
+        True,
+        selected_schedule.workload,
+        requested_layout,
+        selected,
+        GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI if fragment else GFX_MXFP4_W4A8_WMMA_ABI,
+        (
+            "decode selects preconverted contiguous lane words"
+            if fragment and selected_schedule.workload == "decode"
+            else "explicit fragment prefill uses private lane-word loads pending multistage staging"
+            if fragment
+            else "prefill retains proved transposed LDS staging"
+        ),
+        selected_schedule,
+    )
 
 
 def _target_string_attr(operation: str, name: str) -> str:
@@ -390,6 +508,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
     *,
     entry: str = "tessera_mxfp4_w4a8_wmma",
     schedule: MXFP4Schedule | None = None,
+    weight_layout: str = MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
 ) -> str:
     """Emit the exact K32-scaled W4A8 route using two RDNA4 FP8 WMMAs.
 
@@ -403,9 +522,20 @@ def emit_mxfp4_w4a8_wmma_llvmir(
     if not entry or not entry.replace("_", "a").isalnum():
         raise ValueError("MXFP4 entry must be a C identifier")
     schedule = schedule or MXFP4Schedule("decode")
+    if weight_layout not in {
+        MXFP4_TRANSPOSED_LAYOUT_V1,
+        MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+    }:
+        mxfp4_weight_layout(weight_layout)
+        raise ValueError(f"MXFP4 WMMA cannot consume weight layout {weight_layout!r}")
+    fragment_weights = weight_layout == MXFP4_GFX12_FRAGMENT_LAYOUT_V1
     group_m = schedule.group_m
     split_k = schedule.split_k
-    shared_b = group_m > 1
+    grouped_waves = group_m > 1
+    # Fragment order already reduces each K16 slab to one contiguous lane
+    # word. Keep those loads private to each wave until the separately tracked
+    # multistage/padded prefill staging protocol is implemented and proved.
+    shared_b = grouped_waves and not fragment_weights
     split_reduce = split_k > 1
     waves_per_workgroup = max(group_m, split_k)
 
@@ -439,6 +569,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         '  %lane16_32 = and i32 %lane32, 15',
         '  %half32 = lshr i32 %lane32, 4',
         '  %lane16 = zext i32 %lane16_32 to i64',
+        '  %lane32_64 = zext i32 %lane32 to i64',
         '  %half = zext i32 %half32 to i64',
         '  %bidx = call i32 @llvm.amdgcn.workgroup.id.x()',
         '  %bidy = call i32 @llvm.amdgcn.workgroup.id.y()',
@@ -447,7 +578,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         '  %tile_n = mul i64 %bidx64, 16',
         f'  %tile_group_m = mul i64 %bidy64, {16 * group_m}',
         '  %wave64 = zext i32 %wave32 to i64',
-        f'  %wave_m = mul i64 %wave64, {16 if shared_b else 0}',
+        f'  %wave_m = mul i64 %wave64, {16 if grouped_waves else 0}',
         '  %tile_m = add i64 %tile_group_m, %wave_m',
         '  %col = add i64 %tile_n, %lane16',
         '  %col_in = icmp ult i64 %col, %N',
@@ -476,6 +607,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
     store_target = 'split.store' if split_reduce else 'store.header'
     lines += [
         '  %groups = udiv i64 %K, 32',
+        '  %k_steps = udiv i64 %K, 16',
         '  br label %group.header',
         '',
         'group.header:',
@@ -492,6 +624,21 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         load_lines: list[str] = []
         pack_lines: list[str] = []
         words: list[str] = []
+        fragment_word: str | None = None
+        if kind == 'b' and fragment_weights:
+            prefix = f'b_s{slab}_fragment'
+            load_lines.extend([
+                f'  %{prefix}_group2 = mul i64 %group, 2',
+                f'  %{prefix}_kstep = add i64 %{prefix}_group2, {slab}',
+                f'  %{prefix}_ntile = mul i64 %bidx64, %k_steps',
+                f'  %{prefix}_tile_step = add i64 %{prefix}_ntile, %{prefix}_kstep',
+                f'  %{prefix}_slot_base = mul i64 %{prefix}_tile_step, 32',
+                f'  %{prefix}_slot = add i64 %{prefix}_slot_base, %lane32_64',
+                f'  %{prefix}_byte = mul i64 %{prefix}_slot, 4',
+                f'  %{prefix}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{prefix}_byte',
+                f'  %{prefix}_word = load i32, ptr addrspace(1) %{prefix}_ptr, align 4',
+            ])
+            fragment_word = f'%{prefix}_word'
         for word in range(2):
             packed: str | None = None
             for byte in range(4):
@@ -514,20 +661,27 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                         f'  %{tag}_z = zext i8 %{tag}_byte to i32',
                     ])
                 else:
-                    load_lines.extend([
-                        f'  %{tag}_kh = lshr i64 %{tag}_k, 1',
-                        f'  %{tag}_rowbase = mul i64 %{tag}_kh, %N',
-                        f'  %{tag}_idx = add i64 %{tag}_rowbase, %col_safe',
-                        f'  %{tag}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{tag}_idx',
-                        f'  %{tag}_raw8 = load i8, ptr addrspace(1) %{tag}_ptr, align 1',
-                    ])
-                    pack_lines.extend([
-                        f'  %{tag}_raw = zext i8 %{tag}_raw8 to i32',
-                    ])
-                    code = f'%{tag}_raw'
-                    if h & 1:
-                        pack_lines.append(f'  %{tag}_shift = lshr i32 {code}, 4')
-                        code = f'%{tag}_shift'
+                    if fragment_word is None:
+                        load_lines.extend([
+                            f'  %{tag}_kh = lshr i64 %{tag}_k, 1',
+                            f'  %{tag}_rowbase = mul i64 %{tag}_kh, %N',
+                            f'  %{tag}_idx = add i64 %{tag}_rowbase, %col_safe',
+                            f'  %{tag}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{tag}_idx',
+                            f'  %{tag}_raw8 = load i8, ptr addrspace(1) %{tag}_ptr, align 1',
+                        ])
+                        pack_lines.append(f'  %{tag}_raw = zext i8 %{tag}_raw8 to i32')
+                        code = f'%{tag}_raw'
+                        if h & 1:
+                            pack_lines.append(f'  %{tag}_shift = lshr i32 {code}, 4')
+                            code = f'%{tag}_shift'
+                    else:
+                        shift = (h // 2) * 8 + (h & 1) * 4
+                        code = fragment_word
+                        if shift:
+                            pack_lines.append(
+                                f'  %{tag}_shift = lshr i32 {fragment_word}, {shift}'
+                            )
+                            code = f'%{tag}_shift'
                     pack_lines.extend([
                         f'  %{tag}_code = and i32 {code}, 15',
                         f'  %{tag}_mag = and i32 %{tag}_code, 7',
@@ -730,6 +884,7 @@ def mxfp4_w4a8_descriptor(
     abi_id: str = GFX_MXFP4_W4A8_EXACT_ABI,
     route: str = "exact_per_block_scalar_baseline",
     workgroup: tuple[int, int, int] = (16, 16, 1),
+    weight_layout: str = MXFP4_TRANSPOSED_LAYOUT_V1,
 ) -> LaunchDescriptor:
     """Build the exact five-buffer W4A8 launch contract."""
 
@@ -737,12 +892,24 @@ def mxfp4_w4a8_descriptor(
         raise ValueError("MXFP4 W4A8 requires positive M/N and K divisible by 32")
     if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
         raise ValueError("MXFP4 W4A8 native packages are exact gfx1201 artifacts")
+    mxfp4_weight_layout(weight_layout)
+    if weight_layout == MXFP4_GFX12_FRAGMENT_LAYOUT_V1 and n % 16:
+        raise ValueError("gfx12 fragment-order MXFP4 requires N divisible by 16")
+    if weight_layout == MXFP4_TRANSPOSED_LAYOUT_V1:
+        b_shape = (k // 2, n)
+    elif weight_layout == MXFP4_GFX12_FRAGMENT_LAYOUT_V1:
+        b_shape = (n, k // 2)
+    else:
+        raise ValueError(f"MXFP4 launch cannot consume weight layout {weight_layout!r}")
     return LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
         abi_id=abi_id,
         buffers=(
             BufferBinding(0, "a", "input", "uint8", 2, "row_major", 1),
+            # BufferBinding.layout describes the host array's stride class.
+            # The packed-byte interpretation is the versioned weight_layout
+            # provenance field and the distinct package ABI below.
             BufferBinding(1, "b_packed", "input", "uint8", 2, "row_major", 1),
             BufferBinding(2, "a_scale", "input", "fp32", 1, "row_major", 4),
             BufferBinding(3, "b_scale", "input", "uint8", 2, "row_major", 1),
@@ -755,7 +922,8 @@ def mxfp4_w4a8_descriptor(
         ),
         shape_guards=(
             ShapeGuard("a", 0, "eq", m), ShapeGuard("a", 1, "eq", k),
-            ShapeGuard("b_packed", 0, "eq", k // 2), ShapeGuard("b_packed", 1, "eq", n),
+            ShapeGuard("b_packed", 0, "eq", b_shape[0]),
+            ShapeGuard("b_packed", 1, "eq", b_shape[1]),
             ShapeGuard("a_scale", 0, "eq", m),
             ShapeGuard("b_scale", 0, "eq", k // 32), ShapeGuard("b_scale", 1, "eq", n),
             ShapeGuard("output", 0, "eq", m), ShapeGuard("output", 1, "eq", n),
@@ -777,6 +945,7 @@ def mxfp4_w4a8_descriptor(
             "shape": [m, n, k],
             "activation_storage": "e4m3_raw_uint8",
             "weight_storage": "e2m1_packed_low_nibble_even_k",
+            "weight_layout": weight_layout,
             "activation_scale": "fp32_per_token",
             "weight_scale": "e8m0_k32_kn_major",
             "scale_group_k": 32,
@@ -853,13 +1022,23 @@ def package_mxfp4_w4a8_wmma(
     pipeline_name: str = "tessera-lower-to-rocm",
     entry: str = "tessera_mxfp4_w4a8_wmma",
     schedule: MXFP4Schedule | None = None,
+    weight_layout: str | None = None,
 ) -> ROCMNativePackage:
     """Compile the exact two-WMMA-per-K32 gfx1201 production route."""
 
     if min(m, n, k) <= 0 or k % 32:
         raise ValueError("MXFP4 W4A8 requires positive M/N and K divisible by 32")
     schedule = schedule or select_mxfp4_schedule(m, n, k)
-    source = emit_mxfp4_w4a8_wmma_llvmir(entry=entry, schedule=schedule)
+    receipt = select_mxfp4_route(
+        m, n, k, requested_layout=weight_layout, schedule=schedule
+    )
+    if not receipt.accepted or receipt.selected_layout is None or receipt.abi_id is None:
+        raise ValueError(f"MXFP4 route refused: {receipt.reason}")
+    weight_layout = receipt.selected_layout
+    abi_id = receipt.abi_id
+    source = emit_mxfp4_w4a8_wmma_llvmir(
+        entry=entry, schedule=schedule, weight_layout=weight_layout
+    )
     rocm_path = _rocm_path()
     compiler = _rocm_clang(rocm_path)
     if compiler is None:
@@ -891,7 +1070,7 @@ def package_mxfp4_w4a8_wmma(
         target_ir_digest=hashlib.sha256(source.encode()).hexdigest(),
         binary_format="hsaco",
         payload=payload,
-        entry_points=(NativeEntryPoint(entry, GFX_MXFP4_W4A8_WMMA_ABI),),
+        entry_points=(NativeEntryPoint(entry, abi_id),),
         compile_state="cold",
         device_libraries=(),
     )
@@ -901,9 +1080,10 @@ def package_mxfp4_w4a8_wmma(
         n=n,
         k=k,
         entry=entry,
-        abi_id=GFX_MXFP4_W4A8_WMMA_ABI,
+        abi_id=abi_id,
         route="exact_per_block_fp8_wmma",
         workgroup=(32 * max(schedule.group_m, schedule.split_k), 1, 1),
+        weight_layout=weight_layout,
     )
     descriptor = replace(
         descriptor,
@@ -923,6 +1103,7 @@ def package_mxfp4_w4a8_wmma(
             "stages": schedule.stages,
             "waves_per_eu": schedule.waves_per_eu,
             "cache_modifier": schedule.cache_modifier,
+            "selection_receipt": receipt.as_dict(),
         },
     )
     semantic_ir = (
@@ -930,7 +1111,7 @@ def package_mxfp4_w4a8_wmma(
         "activation=e4m3 scale_a=fp32_per_token weight=e2m1_packed "
         "scale_b=e8m0_k32 instruction=v_wmma_f32_16x16x16_fp8_fp8 "
         f"accum=fp32 output=bf16 workload={schedule.workload} "
-        f"group_m={schedule.group_m}"
+        f"group_m={schedule.group_m} weight_layout={weight_layout}"
     )
     return ROCMNativePackage(semantic_ir, source, " ".join(command[:-2]), image, descriptor)
 
@@ -966,7 +1147,9 @@ def package_mxfp4_w4a8(
 __all__ = [
     "GFX_MXFP4_W4A8_EXACT_ABI",
     "GFX_MXFP4_W4A8_WMMA_ABI",
+    "GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI",
     "MXFP4Schedule",
+    "MXFP4RouteReceipt",
     "emit_mxfp4_w4a8_exact_hip",
     "emit_mxfp4_w4a8_wmma_llvmir",
     "mxfp4_w4a8_descriptor",
@@ -975,4 +1158,5 @@ __all__ = [
     "package_mxfp4_w4a8_wmma",
     "package_scaled_wmma_target_ir",
     "select_mxfp4_schedule",
+    "select_mxfp4_route",
 ]

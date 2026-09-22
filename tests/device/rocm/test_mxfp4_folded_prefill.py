@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
+import subprocess
 
 import ml_dtypes
 import numpy as np
@@ -11,6 +13,7 @@ import pytest
 from tessera import runtime as rt
 from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.rocm_mxfp4_folded import (
+    package_folded_scaled_wmma_target_ir,
     package_mxfp4_folded_prefill, prepare_folded_weights,
 )
 from tests._support import rocm_isa
@@ -193,4 +196,68 @@ def test_folded_prefill_extreme_scale_product(case: str) -> None:
     assert result["ok"], json.dumps(result, default=str)
     np.testing.assert_array_equal(
         buffers["output"], np.full((m, n), expected, dtype=ml_dtypes.bfloat16),
+    )
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+def test_folded_graph_pipeline_materializes_and_executes() -> None:
+    assert rt._rocm_live_arch() == "gfx1201"
+    tessera_opt = os.environ.get("TESSERA_OPT")
+    assert tessera_opt, "folded Graph pipeline proof requires TESSERA_OPT"
+    fixture = (
+        Path(__file__).resolve().parents[3]
+        / "tests/tessera-ir/phase2/e2e_folded_mxfp4_rocm_target.mlir"
+    )
+    common = [
+        tessera_opt, "--tessera-graph-to-schedule", "--tessera-schedule-to-tile",
+    ]
+    tile_ir = subprocess.run(
+        [*common, str(fixture)], check=True, capture_output=True, text=True,
+    ).stdout
+    target_ir = subprocess.run(
+        [*common, "--lower-tile-to-rocm=arch=gfx1201", str(fixture)],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    m, n, k = 65, 48, 64
+    codes = np.ones((n, k), dtype=np.uint8)  # E2M1 0.5, E8M0 unit scale.
+    folded = prepare_folded_weights(
+        mx.pack_e2m1_codes(codes), np.full((2, n), 127, dtype=np.uint8),
+        allow_approximate=True,
+    )
+    assert folded.lossless
+    package = package_folded_scaled_wmma_target_ir(
+        tile_ir, target_ir, folded, allow_approximate=True,
+    )
+    assert package.descriptor.provenance["schedule_hash"]
+    assert package.descriptor.provenance["physical_contract"] == (
+        "rocm_mxfp4_w4a8_folded_prefill_v1"
+    )
+    rocm_isa.assert_selected(
+        package.image.payload, chip="gfx1201",
+        pattern=r"v_wmma_f32_16x16x16_\w+",
+        require="v_wmma_f32_16x16x16_fp8_fp8",
+        what="generic folded MXFP4 W4A8 route",
+    )
+    buffers = {
+        "a": np.full((m, k), 0x38, dtype=np.uint8),
+        "b_folded": folded.weight_bytes,
+        "a_scale": np.ones(m, dtype=np.float32),
+        "row_reference": folded.row_reference,
+        "output": np.zeros((m, n), dtype=ml_dtypes.bfloat16),
+    }
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir,
+    )
+    result = rt.launch(
+        artifact, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}},
+    )
+    assert result["ok"], json.dumps(result, default=str)
+    np.testing.assert_array_equal(
+        buffers["output"], np.full((m, n), 32, dtype=ml_dtypes.bfloat16),
     )

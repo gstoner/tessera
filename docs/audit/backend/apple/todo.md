@@ -8,6 +8,15 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 external phase-probe preflight — 2026-09-22
+
+Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync
+`GFX1201-FOLDED-PROFILER-CARRIER-2026-09-22`. Not applicable to Metal:
+the refused rocprofv3 PC-sampling path and folded HIP image have no Apple
+consumer. This adds a ROCm-only refusal packet, not a shared clock schema or
+Apple selector evidence. A future folded Graph carrier must be assessed as a
+shared-IR change before claiming parity; no such carrier lands in this slice.
+
 ## GFX1201 folded scale fix and phase-probe refusal — 2026-09-22
 
 Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync

@@ -1,0 +1,20 @@
+{
+  "architecture": "gfx1201",
+  "availability": null,
+  "availability_tool": "/usr/bin/rocprofv3-avail",
+  "clock_read_cost_validated": false,
+  "cross_cu_clock_validated": false,
+  "device": "AMD Radeon RX 9070 XT",
+  "host": "tajasarus",
+  "isa_preserving_phase_probe_available": false,
+  "kfd_path": "/dev/kfd",
+  "method": "external_rocprofv3_pc_sampling",
+  "phase_attribution_admissible": false,
+  "profiler": "/usr/bin/rocprofv3",
+  "promotion_eligible": false,
+  "recorder_sha256": "cba315b4dd96b8754fe507cfad66cfa674f19028a1f7f40ac8f625d260dfb501",
+  "refusal_reasons": [
+    "kfd_device_missing"
+  ],
+  "schema": "tessera.rocm.gfx1201_phase_profiler_preflight.v1"
+}

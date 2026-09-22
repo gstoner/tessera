@@ -472,7 +472,9 @@ LogicalResult ScaledMatmulOp::verify() {
   };
   if (auto physical =
           getOperation()->getAttrOfType<StringAttr>("physical_contract")) {
-    if (physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
+    const bool folded =
+        physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1";
+    if (!folded && physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
       return emitOpError("unknown physical_contract '")
              << physical.getValue() << "'";
     auto lhsScaleType = dyn_cast<RankedTensorType>(getLhsScale().getType());
@@ -488,39 +490,53 @@ LogicalResult ScaledMatmulOp::verify() {
           "bf16 output, and no transpose");
     const int64_t m = aType.getDimSize(0);
     const int64_t k = aType.getDimSize(1);
-    const int64_t n = bType.getDimSize(1);
-    if (k <= 0 || k % 32 != 0 || bType.getDimSize(0) != k / 2 ||
+    const int64_t n = bType.getDimSize(folded ? 0 : 1);
+    if (k <= 0 || k % (folded ? 64 : 32) != 0 ||
+        (folded ? bType.getDimSize(1) != k
+                : bType.getDimSize(0) != k / 2) ||
         rType.getDimSize(0) != m || rType.getDimSize(1) != n)
       return emitOpError(
-          "rocm_mxfp4_w4a8_exact_v1 requires A[M,K], packed B[K/2,N], "
-          "D[M,N], and K divisible by 32");
+          folded ? "rocm_mxfp4_w4a8_folded_prefill_v1 requires A[M,K], "
+                   "folded B[N,K], D[M,N], and K divisible by 64"
+                 : "rocm_mxfp4_w4a8_exact_v1 requires A[M,K], packed "
+                   "B[K/2,N], D[M,N], and K divisible by 32");
+    if (folded && m <= 64)
+      return emitOpError("folded prefill requires M > 64");
     if (!lhsScaleType || lhsScaleType.getRank() != 1 ||
         !lhsScaleType.getElementType().isF32() ||
         lhsScaleType.getDimSize(0) != m || !rhsScaleType ||
-        rhsScaleType.getRank() != 2 ||
+        rhsScaleType.getRank() != (folded ? 1 : 2) ||
         !rhsScaleType.getElementType().isUnsignedInteger(8) ||
-        rhsScaleType.getDimSize(0) != k / 32 ||
-        rhsScaleType.getDimSize(1) != n)
+        (folded ? rhsScaleType.getDimSize(0) != n
+                : rhsScaleType.getDimSize(0) != k / 32 ||
+                  rhsScaleType.getDimSize(1) != n))
       return emitOpError(
-          "rocm_mxfp4_w4a8_exact_v1 requires fp32 A scale [M] and "
-          "E8M0 ui8 B scale [K/32,N]");
+          folded ? "folded prefill requires fp32 A scale [M] and E8M0 "
+                   "ui8 row reference [N]"
+                 : "rocm_mxfp4_w4a8_exact_v1 requires fp32 A scale [M] "
+                   "and E8M0 ui8 B scale [K/32,N]");
     auto sl = getScaleLayoutAttr();
     auto block = sl ? dyn_cast_or_null<ArrayAttr>(sl.get("block")) : ArrayAttr();
     auto format = sl ? dyn_cast_or_null<StringAttr>(sl.get("format")) : StringAttr();
     if (!block || block.size() != 2 ||
         !isa<IntegerAttr>(block[1]) ||
-        cast<IntegerAttr>(block[1]).getInt() != 32 || !format ||
-        format.getValue() != "e8m0")
+        cast<IntegerAttr>(block[1]).getInt() != (folded ? k : 32) || !format ||
+        format.getValue() !=
+            (folded ? "e8m0_row_reference" : "e8m0"))
       return emitOpError(
-          "rocm_mxfp4_w4a8_exact_v1 requires an e8m0 K32 scale layout");
+          folded ? "folded prefill requires one E8M0 row reference across K"
+                 : "rocm_mxfp4_w4a8_exact_v1 requires an e8m0 K32 scale layout");
     auto policy = getNumericPolicyAttr();
     auto mode = policy
                     ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
                     : StringAttr();
-    if (!mode || mode.getValue() != "exact_per_block")
+    if (!mode || mode.getValue() !=
+                     (folded ? "folded_row_reference_explicit_approximate"
+                             : "exact_per_block"))
       return emitOpError(
-          "rocm_mxfp4_w4a8_exact_v1 requires numeric_policy "
-          "execution_mode=exact_per_block");
+          folded ? "folded prefill requires explicit approximate numeric_policy"
+                 : "rocm_mxfp4_w4a8_exact_v1 requires numeric_policy "
+                   "execution_mode=exact_per_block");
     return success();
   }
   const int64_t kA = aType ? aType.getDimSize(getTransposeA() ? 0 : 1)

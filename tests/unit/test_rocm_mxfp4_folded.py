@@ -6,7 +6,9 @@ import pytest
 
 from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.rocm_mxfp4_folded import (
+    GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
     emit_mxfp4_folded_prefill_hip,
+    package_folded_scaled_wmma_target_ir,
     package_mxfp4_folded_prefill,
     prepare_folded_weights,
 )
@@ -71,3 +73,27 @@ def test_folded_kernel_has_tall_tile_and_uniform_stage_barriers() -> None:
     )
     assert "no wave begins WMMA before the copy-end stamp" in source
     assert "no wave starts the next K step before its end stamp" in source
+
+
+def test_folded_materializer_refuses_exact_or_mismatched_carrier() -> None:
+    codes = np.ones((48, 64), dtype=np.uint8)
+    folded = prepare_folded_weights(
+        mx.pack_e2m1_codes(codes), np.full((2, 48), 127, dtype=np.uint8),
+        allow_approximate=True,
+    )
+    tile = '''tile.scaled_matmul_kernel {physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", partial_accumulator = {combine = "row_reference_after_full_k", schedule_scope = "k_stage", scope = "full_k"}, tessera.schedule_hash = "schedule-a"}'''
+    target = f'''tessera_rocm.scaled_wmma_gemm {{abi = "a_b_lhs_scale_rhs_scale_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 65 : i64, macro_k = 64 : i64, n = 48 : i64, numeric_policy = {{accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI}", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, tessera.schedule_hash = "schedule-a", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64}}'''
+    with pytest.raises(ValueError, match="schedule hashes disagree"):
+        package_folded_scaled_wmma_target_ir(
+            tile, target.replace('schedule_hash = "schedule-a"',
+                                 'schedule_hash = "schedule-b"'),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="physical_contract"):
+        package_folded_scaled_wmma_target_ir(
+            tile, target.replace("rocm_mxfp4_w4a8_folded_prefill_v1",
+                                 "rocm_mxfp4_w4a8_exact_v1"),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="explicit approximate"):
+        package_folded_scaled_wmma_target_ir(tile, target, folded)

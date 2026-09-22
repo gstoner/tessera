@@ -422,6 +422,16 @@ gfx1201 measurement slice must preserve production ISA structure before
 interpreting phase time, then complete the P0 cross-CU/read-cost gates.
 [Exact-device diagnostic packet](../../../benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922/README.md).
 
+The next non-instrumenting path now has an exact-host capability preflight.
+`rocprofv3` exists on Tajasarus, but `/dev/kfd` does not, and a kernel-trace
+attempt yielded no artifact. The content-bound packet therefore refuses PC
+sampling, cross-CU clock validation, phase attribution, and selector training;
+HIP event timing remains whole-kernel evidence only. Once a profiler-capable
+gfx1201 host is available, require samples against the unmodified production
+image hash, PC-to-ISA interval ownership, cross-CU clock-domain calibration,
+clock-read-cost distribution, and bounded capture overhead before any phase
+fraction is admissible. [Profiler preflight](../../../benchmarks/baselines/gfx1201_phase_profiler_preflight_20260922/README.md).
+
 For the later NVIDIA lane, Super-Bear can supply Nsight Systems, Nsight
 Compute, and CUPTI. Use their uninstrumented kernel spans and counter/PC
 samples to cross-check region hypotheses and generic stack costs, with

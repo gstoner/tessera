@@ -4742,3 +4742,25 @@ Evidence: [matched folded packet](../../../benchmarks/baselines/gfx1201_mxfp4_fo
 [phase refusal packet](../../../benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922/README.md).
 
 <!-- entry-fields:end -->
+
+### 2026-09-22 — GFX1201 external phase-profiler preflight
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `codex/gfx1201-folded-carrier-clock`.
+
+Outcome: an exact-device, source-bound preflight checks the external
+`rocprofv3` PC-sampling path without changing the folded kernel. Tajasarus
+reports the RX 9070 XT but has no `/dev/kfd`; the packet refuses sample
+collection, clock validation, phase attribution, and promotion. A separate
+kernel-trace attempt produced no trace artifact.
+
+Remaining: restore a profiler-capable gfx1201 environment and validate
+production-image PC sampling plus cross-CU clocks. The folded route still
+needs its own Graph→Schedule→Tile→Target semantics and package ancestry;
+the exact K32 partial carrier cannot be relabeled as a folded row reference.
+
+Evidence: [profiler refusal packet](../../../benchmarks/baselines/gfx1201_phase_profiler_preflight_20260922/README.md),
+`tests/unit/test_gfx1201_phase_profiler_preflight.py`.
+
+<!-- entry-fields:end -->

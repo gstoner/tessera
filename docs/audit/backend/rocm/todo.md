@@ -7,6 +7,28 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 ISA-preserving profiler preflight — 2026-09-22
+
+Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync
+`GFX1201-FOLDED-PROFILER-CARRIER-2026-09-22`. Tajasarus still executes the
+production folded image, but an external `rocprofv3` PC-sampling preflight
+refuses: the host exposes no `/dev/kfd`. A kernel-trace attempt produced no
+trace artifact. The content-bound packet records the exact RX 9070 XT and
+keeps ISA-preserving phase availability, cross-CU clock validation, phase
+attribution, and promotion false. No inline trace fractions enter the cost
+model. Restore a usable profiler API (or use another exact gfx1201 host),
+then prove production-image identity, PC-to-ISA mapping, cross-CU clock
+consistency, clock-read cost, and perturbation overhead before admission.
+[Preflight packet](../../../../benchmarks/baselines/gfx1201_phase_profiler_preflight_20260922/README.md).
+
+The folded Graph carrier remains separate work: `tessera.scaled_matmul`'s
+existing exact `scale_outer_product_then_add` partial cannot represent
+load-time-folded E4M3 with one post-reduction E8M0 row reference. The new
+physical form must carry B as `[N,K]`, Ref as `[N]`, explicit approximate
+policy and loss metadata, BM256/TM4 stage K64, and a distinct Target ABI;
+Graph/Schedule/Tile hashes must bind the package. Do not relabel the exact
+K32 partial as this route or infer provenance from a hand-emitted HIP image.
+
 ## GFX1201 folded scale cancellation and IKF diagnostic — 2026-09-22
 
 Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync

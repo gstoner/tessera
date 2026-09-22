@@ -8,6 +8,15 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 external phase-probe preflight — 2026-09-22
+
+Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync
+`GFX1201-FOLDED-PROFILER-CARRIER-2026-09-22`. Not applicable to CUDA:
+Tajasarus lacks `/dev/kfd`, so its rocprofv3 PC-sampling preflight refuses
+without phase attribution. The packet has no Nsight/CUPTI consumer, changes
+no NVIDIA clock schema or selector, and provides no transferable CUDA proof.
+A later folded shared-IR carrier needs a separate NVIDIA applicability audit.
+
 ## GFX1201 folded scale fix and phase-probe refusal — 2026-09-22
 
 Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync

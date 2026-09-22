@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
+from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as bench
 from benchmarks.rocm.benchmark_gfx1201_mxfp4_production import (
     Case,
     _fragment_order,
@@ -19,7 +21,7 @@ from tessera.compiler import rocm_mxfp4 as mx
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = (
     ROOT
-    / "benchmarks/baselines/gfx1201_mxfp4_production_20260922/evidence.json"
+    / "benchmarks/baselines/gfx1201_mxfp4_kstep_prefill_20260922/evidence.json"
 )
 
 
@@ -54,13 +56,55 @@ def test_case_parser_keeps_workload_separate_from_shape() -> None:
     )
 
 
+def test_matched_timing_alternates_engine_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = object()
+    second = object()
+    order: list[object] = []
+    warmed: list[object] = []
+    monkeypatch.setattr(
+        bench, "_warmup", lambda _hip, engine, _count: warmed.append(engine)
+    )
+
+    def sample(_hip: object, engine: object, *, iterations: int) -> float:
+        assert iterations == 3
+        order.append(engine)
+        return float(len(order))
+
+    monkeypatch.setattr(bench, "_timed_sample", sample)
+    measured = bench._measure_interleaved(
+        object(), [first, second], warmup=2, trials=3, iterations=3
+    )
+    assert warmed == [first, second]
+    assert order == [first, second, second, first, first, second]
+    assert measured[first] == [1.0, 4.0, 5.0]
+    assert measured[second] == [2.0, 3.0, 6.0]
+
+
+def test_rdna4_barrier_counter_uses_archived_split_barrier_opcodes() -> None:
+    assert bench._rdna4_workgroup_barrier_mnemonics() == (
+        "s_barrier_signal",
+        "s_barrier_signal_isfirst",
+        "s_barrier_wait",
+    )
+    isa = """
+        s_barrier_signal -1
+        s_barrier_wait -1
+        s_barrier_signal_isfirst -1
+        s_get_barrier_state s0, -1
+    """
+    assert bench._count_rdna4_workgroup_barriers(isa) == 3
+
+
 def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None:
     packet = json.loads(EVIDENCE.read_text())
     assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_matched_benchmark.v1"
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["architecture"] == "gfx1201"
     source = packet["source"]
-    assert source["revision"] == "f397bad6f348da2090c3ec70a6428fa7e1e4bfc0"
+    assert packet["timing_order"] == "alternating_interleaved_per_shape"
+    assert source["revision"] == "39605e560415cd629bd5d1f1769cc9980e81f4ef"
     for key, path in (
         (
             "generator_sha256",
@@ -83,3 +127,8 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
         tessera = next(row for row in rows if row["engine"] == "tessera")
         expected_axis = "split_k" if case.startswith("decode") else "group_m"
         assert tessera["metadata"]["schedule"][expected_axis] == 8
+        assert tessera["metadata"]["isa"]["wmma_fp8_fp8"] == 2
+        expected_barriers = 2 if case.startswith("decode") else 4
+        assert tessera["metadata"]["isa"]["s_barrier"] == expected_barriers
+        assert tessera["metadata"]["resources"]["scratch_bytes"] == 0
+        assert tessera["metadata"]["resources"]["spills"] is False

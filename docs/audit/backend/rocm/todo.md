@@ -7,10 +7,10 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-## GFX1201 MXFP4 versioned layout ABI and production selector — 2026-09-22
+## GFX1201 MXFP4 K-step and fragment-prefill production loop — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync
-`ROCM-MXFP4-FRAGMENT-ABI-2026-09-22`.
+`ROCM-MXFP4-KSTEP-PREFILL-2026-09-22`.
 
 Checkpoint `[N,K/2]`, legacy transposed `[K/2,N]`, gfx12 fragment-order, and
 opaque AITER-shuffled weights now have separate versioned identities. The load
@@ -20,17 +20,29 @@ layout is recognized but explicitly refused because no independent Tessera
 converter contract exists. Selection/refusal receipts name the chosen schedule,
 layout, ABI, and reason.
 
-Tajasarus exact-device coverage includes `M=1,5,64`, `N=48,80`, the M64/65
-crossover, long K, wide N, poisoned rows, and a captured HIP graph whose launch
-performs no conversion, allocation, or synchronization. A sampled independent
-FP32-dequantized oracle now gates every benchmark engine before timing. Fragment
-decode measures 0.0506 and 0.0886 ms, about 1.75–1.76x faster than the prior
-packet; the second shape is 1.03x from Radiance and faster than libr4d.
-Fragment prefill exposed unsafe wide-grid LDS reuse and direct per-wave loads regressed, so the
-production selector deliberately retains the proved transposed/group-M path.
-Next: padded multistage prefill, a backend-neutral K-step scheduling barrier,
-then `waves_per_eu`, cache modifiers, and resource/ISA evidence.
-[Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_production_20260922/README.md).
+The Schedule/Tile/ROCm carrier now has a backend-neutral isolated-scale-group
+boundary. AMD lowers it to a selective scheduling barrier that forbids VMEM
+and WMMA motion across K32 groups while allowing independent VALU/SALU work;
+the public carrier exposes no AMD intrinsic. Alternating Tajasarus timing makes
+that boundary 3.3% faster on the first decode shape, 0.6% faster on the second,
+and neutral on prefill. Every timed HSACO retains its two FP8 WMMAs plus VGPR,
+SGPR, LDS, scratch, spill, wait, and barrier evidence.
+
+Prefill now consumes the fragment ABI through a padded LDS lane-word stage.
+The first version intermittently corrupted the wide-N oracle because the loader
+wave reached `s_barrier` before its LDS write queue drained; an explicit
+producer wait fixes the race (the former failure passes 10/10 repeats and the
+full device file passes 16/16). A real two-stage producer/consumer pipeline is
+correct but 13–15% slower and remains an explicit unselected axis. Group-M,
+waves-per-EU, cache, and 0/1/2/4-dword padding sweeps found no stable promotion;
+streaming cache loses 1.4–3.5%. The selected fragment route improves prefill
+from 0.6381 to 0.5174 ms and 4.8273 to 4.3722 ms, but Radiance remains 3.44x
+and 4.81x faster because it uses the explicitly approximate row-reference fold
+and a BM256/TM4 multi-output-wave tile while this route preserves exact K32
+scaling. Decode is now 1.33x and 1.02x from Radiance, and the second shape beats
+libr4d. Next: a separately opted-in folded numerical-policy ABI and BM256/TM4
+prefill carrier; do not disguise that policy change as tuning of the exact
+route. [Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_kstep_prefill_20260922/README.md).
 
 ## Scaled-partial carrier and exact MXFP4 ABI binding — 2026-09-21
 

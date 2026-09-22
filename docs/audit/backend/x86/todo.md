@@ -9,6 +9,15 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 MXFP4 K-step and benchmark-evidence schema — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-KSTEP-PREFILL-2026-09-22`. Not applicable to x86 execution. The
+portable isolated-scale-group attributes are shared IR vocabulary, but this PR
+adds only an AMD lowering and gfx1201 native package. Alternating timing order
+and retained HSACO ISA/resource fields change the ROCm evidence schema only;
+no AVX ABI, schedule, numerical policy, selector, or host-proof claim changes.
+
 ## GFX1201 MXFP4 versioned layout ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync

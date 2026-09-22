@@ -8,6 +8,16 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 MXFP4 K-step and benchmark-evidence schema — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-KSTEP-PREFILL-2026-09-22`. Not applicable to Apple execution. The
+portable isolated-scale-group attributes are shared IR vocabulary, but this PR
+adds only an AMD lowering and gfx1201 native package. The alternating timing
+order and per-HSACO ISA/resource fields extend a shared benchmark packet; Apple
+has no consumer of that ROCm packet and no Metal ABI, selector, numerical
+policy, or exact-device claim changes. Tajasarus evidence does not transfer.
+
 ## GFX1201 MXFP4 versioned layout ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync

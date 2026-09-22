@@ -31,7 +31,7 @@ from tessera.compiler.rocm_mxfp4_native import (
 
 def _packed_target_ir(*, execution_mode: str = "exact_per_block") -> str:
     return f'''module {{
-  tessera_rocm.scaled_wmma_gemm {{abi = "a_b_lhs_scale_rhs_scale_d_m_n_k", instruction_k = 16 : i64, k = 64 : i64, m = 17 : i64, macro_k = 32 : i64, n = 19 : i64, name = "packed_w4a8", numeric_policy = {{accum = "f32", execution_mode = "{execution_mode}", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_WMMA_ABI}", partial_combine = "scale_outer_product_then_add", physical_contract = "rocm_mxfp4_w4a8_exact_v1", scale_format = "e8m0", scale_k = 32 : i64, tessera.schedule_hash = "schedule-proof"}}
+  tessera_rocm.scaled_wmma_gemm {{abi = "a_b_lhs_scale_rhs_scale_d_m_n_k", instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_scale_group", m = 17 : i64, macro_k = 32 : i64, n = 19 : i64, name = "packed_w4a8", numeric_policy = {{accum = "f32", execution_mode = "{execution_mode}", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_WMMA_ABI}", partial_combine = "scale_outer_product_then_add", physical_contract = "rocm_mxfp4_w4a8_exact_v1", scale_format = "e8m0", scale_k = 32 : i64, tessera.schedule_hash = "schedule-proof"}}
 }}'''
 
 
@@ -102,6 +102,7 @@ def test_wmma_source_isolates_each_k32_partial_before_scaling() -> None:
     assert "<8 x float> zeroinitializer" in source
     assert "%scaled_partial = fmul <8 x float> %partial, %scale_vec" in source
     assert "%running_next = fadd <8 x float> %running, %scaled_partial" in source
+    assert "call void @llvm.amdgcn.sched.barrier(i32 6)" in source
     assert "%a_s0_0_k = add i64 %a_s0_0_k0, %half8" in source
     assert source.count("fragment_word = load i32") == 2
     assert "%b_s1_fragment_slot = add i64" in source
@@ -122,13 +123,25 @@ def test_prefill_source_stages_one_b_fragment_for_grouped_row_waves() -> None:
     assert '"amdgpu-flat-work-group-size"="256,256"' in source
 
 
-def test_fragment_prefill_uses_private_contiguous_lane_words_until_multistage() -> None:
+def test_fragment_prefill_stages_packed_lane_words_in_padded_double_buffer() -> None:
     source = emit_mxfp4_w4a8_wmma_llvmir(
-        schedule=MXFP4Schedule("prefill", group_m=8)
+        schedule=MXFP4Schedule("prefill", group_m=8, stages=2)
     )
-    assert "@tessera_mxfp4_b_lds" not in source
+    assert "@tessera_mxfp4_b_lds" in source
+    assert "[528 x i8]" in source
+    assert "%b_stage = and i32 %b_stage_group32, 1" in source
+    assert "%b_stage_s1_slab = add i32 %b_stage_base, 132" in source
+    assert "store i32 %b_stage_s0_word, ptr addrspace(3)" in source
+    assert source.index("call void @llvm.amdgcn.s.waitcnt(i32 0)") < source.index(
+        "b.wait:"
+    )
+    assert "%b_lds_word_0 = load i32, ptr addrspace(3)" in source
+    assert "b.prefetch:" in source
+    assert "%b_do_prefetch = and i1 %is_loader_wave, %b_has_next" in source
+    assert "b.store.next:" in source
+    assert "store i32 %b_prefetch_word_0, ptr addrspace(3)" in source
     assert "%wave_m = mul i64 %wave64, 16" in source
-    assert source.count("fragment_word = load i32") == 2
+    assert source.count("call void @llvm.amdgcn.s.barrier()") == 2
 
 
 def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
@@ -138,12 +151,38 @@ def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
     assert select_mxfp4_schedule(256, 5120, 8704) == MXFP4Schedule(
         "prefill", group_m=8
     )
-    with pytest.raises(ValueError, match="unimplemented MXFP4 schedule axes"):
+    with pytest.raises(ValueError, match="decode does not admit prefill LDS stages"):
         MXFP4Schedule("decode", stages=2)
     with pytest.raises(ValueError, match="prefill does not admit decode split-K"):
         MXFP4Schedule("prefill", split_k=2)
-    with pytest.raises(ValueError, match="cache_modifier is not implemented"):
-        MXFP4Schedule("prefill", cache_modifier="streaming")
+    with pytest.raises(ValueError, match="cache_modifier"):
+        MXFP4Schedule("prefill", cache_modifier="evict")
+    with pytest.raises(ValueError, match="k_step_schedule"):
+        MXFP4Schedule("decode", k_step_schedule="amd_intrinsic")
+
+
+def test_relaxed_k_step_control_omits_backend_schedule_fence() -> None:
+    source = emit_mxfp4_w4a8_wmma_llvmir(
+        schedule=MXFP4Schedule("decode", k_step_schedule="relaxed")
+    )
+    assert "llvm.amdgcn.sched.barrier" not in source
+
+
+def test_prefill_tuning_axes_reach_physical_llvm_contract() -> None:
+    source = emit_mxfp4_w4a8_wmma_llvmir(
+        schedule=MXFP4Schedule(
+            "prefill",
+            group_m=4,
+            waves_per_eu=4,
+            cache_modifier="streaming",
+            lds_pad_dwords=2,
+        )
+    )
+    assert "[272 x i8]" in source
+    assert "%b_stage_s1_slab = add i32 %b_stage_base, 136" in source
+    assert '"amdgpu-waves-per-eu"="4"' in source
+    assert "align 4, !nontemporal !0" in source
+    assert "!0 = !{i32 1}" in source
 
 
 def test_route_receipts_explain_production_selection_and_refusal() -> None:
@@ -155,9 +194,9 @@ def test_route_receipts_explain_production_selection_and_refusal() -> None:
 
     prefill = select_mxfp4_route(256, 5120, 8704)
     assert prefill.accepted
-    assert prefill.selected_layout == mx.MXFP4_TRANSPOSED_LAYOUT_V1
-    assert prefill.abi_id == GFX_MXFP4_W4A8_WMMA_ABI
-    assert "LDS staging" in prefill.reason
+    assert prefill.selected_layout == mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+    assert prefill.abi_id == GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI
+    assert "multistage" in prefill.reason
 
     shuffled = select_mxfp4_route(
         8, 5120, 8704, requested_layout=mx.MXFP4_AITER_SHUFFLED_LAYOUT_V1

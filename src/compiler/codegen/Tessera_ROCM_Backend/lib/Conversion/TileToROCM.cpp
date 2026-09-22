@@ -3121,6 +3121,12 @@ struct LowerTileToROCMPass
         auto combine = partial
                            ? partial.getAs<StringAttr>("combine")
                            : StringAttr();
+        auto scheduleScope = partial
+                                 ? partial.getAs<StringAttr>("schedule_scope")
+                                 : StringAttr();
+        auto crossStepMotion =
+            partial ? partial.getAs<StringAttr>("cross_step_motion")
+                    : StringAttr();
         auto physical =
             op->getAttrOfType<StringAttr>("physical_contract");
         auto epilogue =
@@ -3131,13 +3137,16 @@ struct LowerTileToROCMPass
         const bool packedMxfp4 =
             physical &&
             physical.getValue() == "rocm_mxfp4_w4a8_exact_v1";
-        if (!desc || !partial || !combine || !epilogue || !parent ||
+        if (!desc || !partial || !combine || !scheduleScope ||
+            !crossStepMotion || !epilogue || !parent ||
             op->getNumOperands() != 8 || arch != "gfx1201" ||
             desc.getFamily() != "wmma" || desc.getM() != 16 ||
             desc.getN() != 16 || desc.getK() != 16 ||
             desc.getAccType() != "f32" || desc.getScaleBlockK() <= 0 ||
             desc.getScaleBlockK() % desc.getK() != 0 ||
             combine.getValue() != "scale_outer_product_then_add" ||
+            scheduleScope.getValue() != "scale_group" ||
+            crossStepMotion.getValue() != "forbid" ||
             !problemM || !problemN || !problemK || problemM.getInt() < 0 ||
             problemN.getInt() < 0 || problemK.getInt() < 0 ||
             (packedMxfp4 &&
@@ -3171,6 +3180,8 @@ struct LowerTileToROCMPass
         state.addAttribute("scale_format",
                            builder.getStringAttr(desc.getScaleFormat()));
         state.addAttribute("partial_combine", combine);
+        state.addAttribute("k_step_schedule",
+                           builder.getStringAttr("isolated_scale_group"));
         state.addAttribute(
             "physical_contract",
             physical ? physical : builder.getStringAttr("logical_block_scaled"));

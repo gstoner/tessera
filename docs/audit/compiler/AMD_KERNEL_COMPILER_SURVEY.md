@@ -53,14 +53,20 @@ lineage and schedule, while TF32 is a math mode rather than storage.
 
 This walk also sharpens the next gaps suggested by the surveyed compilers.
 Versioned checkpoint, gfx12 fragment, and incompatible shuffled identities now
-make packing a launch-visible contract; decode consumes one contiguous lane
-word per K16 step after one load-time conversion. Exact-device measurements
-improve both production decode shapes by about 1.75–1.76x, putting the second
-within 1.03x of Radiance. A wide-N oracle caught an unsafe attempt to combine fragment
-loads with the old LDS-sharing protocol, so production prefill remains on the
-proved transposed/group-M ABI until padded multistage staging and an explicit
-K-step scheduling barrier land. Cache policy and occupancy remain live axes. Keep sparse
-SWMMAC admission separate from dense WMMA, and key
+make packing a launch-visible contract; decode and prefill consume contiguous
+lane words after one load-time conversion. The portable K-step contract keeps
+VMEM and WMMA on their side of an exact K32 scale-group boundary without
+exposing AMD intrinsics in shared IR. The wide-N oracle caught a missing
+producer-side LDS drain; after the fix it passes 10/10 repeats. A two-stage
+pipeline, group-M, waves-per-EU, cache, and bank-padding sweep found no stable
+promotion beyond the single padded stage; streaming cache and the two-stage
+route lose. Alternating evidence puts decode 1.33x and 1.02x from Radiance, but
+prefill remains 3.44x and 4.81x behind. That is no longer plausibly a cache
+knob: the independent kernel uses BM256/TM4 multi-output-wave reuse and folds
+K32 exponents into one row reference, while Tessera preserves exact per-group
+scaling. The next route must expose that fold as an approximate policy and a
+distinct ABI before adopting the taller tile. Keep sparse SWMMAC admission
+separate from dense WMMA, and key
 every measured selection or cache record by exact architecture, datatype pair,
 accumulator, and physical packing. These are design directions, not promotion
 claims.

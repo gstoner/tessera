@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-21
+last_updated: 2026-09-22
 audit_role: reference
 ---
 
@@ -16,6 +16,29 @@ primary Owner; end the five-field block with `<!-- entry-fields:end -->` and
 link additional owners in the body. Update that owner record in
 the same PR. Evidence corrections are explicit; do not rewrite old results as
 current proof. Current priorities live only in the plan.
+
+### 2026-09-22 — Exact MXFP4 K-step and fragment-prefill loop
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `codex/gfx1201-mxfp4-kstep-prefill`.
+
+Outcome: a portable isolated-scale-group contract lowers to a selective AMD
+VMEM/WMMA scheduling boundary; padded fragment-word LDS prefill is exact after
+an explicit producer drain, and the former wide-N corruption passes 10/10
+repeats. The full gfx1201 MXFP4 device file passes 16/16. Alternating matched
+timing retains HSACO ISA/resources and measures Tessera at 0.0490/0.0885 ms
+decode and 0.5174/4.3722 ms prefill.
+
+Remaining: Radiance is 1.33x/1.02x faster on decode and 3.44x/4.81x on
+prefill. The prefill gap requires a separately opted-in approximate
+row-reference ABI and a BM256/TM4 multi-output-wave tile; the exact route must
+remain the oracle. Two-stage, streaming-cache, and sub-percent tuning results
+are not promoted.
+
+Evidence: [Tajasarus K-step/prefill packet](../../../benchmarks/baselines/gfx1201_mxfp4_kstep_prefill_20260922/README.md), with alternating HIP-event samples, independent FP32 oracle, pinned Radiance/libr4d binaries, and per-HSACO ISA/resource fields.
+
+<!-- entry-fields:end -->
 
 ### 2026-09-04 — Engineering follow-through
 

@@ -21,7 +21,7 @@ from tessera.compiler import rocm_mxfp4 as mx
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = (
     ROOT
-    / "benchmarks/baselines/gfx1201_mxfp4_production_20260922/evidence.json"
+    / "benchmarks/baselines/gfx1201_mxfp4_kstep_prefill_20260922/evidence.json"
 )
 
 
@@ -88,7 +88,8 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["architecture"] == "gfx1201"
     source = packet["source"]
-    assert source["revision"] == "f397bad6f348da2090c3ec70a6428fa7e1e4bfc0"
+    assert packet["timing_order"] == "alternating_interleaved_per_shape"
+    assert source["revision"] == "2052cf17e1d113c03f366986300484fb6b4e354b"
     for key, path in (
         (
             "generator_sha256",
@@ -111,3 +112,6 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
         tessera = next(row for row in rows if row["engine"] == "tessera")
         expected_axis = "split_k" if case.startswith("decode") else "group_m"
         assert tessera["metadata"]["schedule"][expected_axis] == 8
+        assert tessera["metadata"]["isa"]["wmma_fp8_fp8"] == 2
+        assert tessera["metadata"]["resources"]["scratch_bytes"] == 0
+        assert tessera["metadata"]["resources"]["spills"] is False

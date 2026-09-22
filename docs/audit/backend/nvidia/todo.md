@@ -8,6 +8,15 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 MXFP4 K-step and benchmark-evidence schema — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-KSTEP-PREFILL-2026-09-22`. Not applicable to CUDA execution. The
+portable isolated-scale-group attributes are shared IR vocabulary, but this PR
+adds only an AMD lowering and gfx1201 native package. Alternating timing order
+and retained HSACO ISA/resource fields change the ROCm evidence schema only;
+no PTX ABI, schedule, numerical policy, selector, or owning-host claim changes.
+
 ## GFX1201 MXFP4 versioned layout ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync

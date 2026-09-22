@@ -15,7 +15,9 @@ Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1; sync
 `ROCM-MXFP4-SCALED-PARTIAL-CARRIER-2026-09-21`. The shared Graph/Schedule/Tile
 carrier and host approximation metadata are structurally visible, but the
 packed physical contract and Target ABI are gfx1201-only. No AVX-512 package,
-dtype row, numerical promotion, or exact-device claim changes.
+dtype row, numerical promotion, or exact-device claim changes. The MXFP4
+evidence packet's added generic-materializer row is not applicable to x86 and
+changes no shared benchmark semantics.
 
 ## GFX1201 scheduled-proof provenance schema — 2026-09-21
 

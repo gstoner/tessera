@@ -15,7 +15,9 @@ Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1; sync
 contract now represents isolated scale-group partial accumulation, and the
 host fold reports quantified approximation loss. Apple parity is not
 applicable in this slice: the named W4A8 physical ABI and Target directive are
-gfx1201-only, no Metal package consumes them, and no ROCm proof transfers.
+gfx1201-only, no Metal package consumes them, and no ROCm proof transfers. The
+MXFP4 evidence packet's added generic-materializer row is likewise not
+applicable to Apple and changes no shared benchmark semantics.
 
 ## GFX1201 scheduled-proof provenance schema — 2026-09-21
 

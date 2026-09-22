@@ -15,7 +15,9 @@ Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1; sync
 carrier can now state isolated scale-group partials and quantified approximate
 fold loss. NVIDIA follow-up is required only if its distinct UE8M0/NVFP4
 physical form adopts this carrier; the packed E2M1/E8M0 K32 ABI, Target op,
-and exact-device proof remain gfx1201-only.
+and exact-device proof remain gfx1201-only. The MXFP4 evidence packet's added
+generic-materializer row is not applicable to CUDA and changes no shared
+benchmark semantics.
 
 ## GFX1201 scheduled-proof provenance schema — 2026-09-21
 

@@ -11,7 +11,10 @@ the disassembled matrix instruction.
 ## Result
 
 The scalar executable specification and the optimized WMMA route both pass the
-independent exact-per-K32 oracle at `17x19x64` and `32x32x128`: **4 passed**.
+independent exact-per-K32 oracle at `17x19x64` and `32x32x128`. The named
+packed `tessera.scaled_matmul` carrier also compiles through Schedule, Tile,
+and ROCm Target IR, materializes the same proved WMMA ABI, and passes the
+ragged exact comparison: **5 passed**.
 The ragged row proves masked tile edges; the K=128 row crosses four independent
 MX scale groups. Comparison is bit-exact after BF16 round-to-nearest-even, not
 tolerance based.
@@ -27,6 +30,7 @@ batch before decode/packing and the dependent WMMAs.
 |---|---:|---:|---:|---:|---:|---:|---:|
 | scalar exact oracle | 6,264 B | 22 | 26 | 0 | 0 | 32 | 0 |
 | exact FP8 WMMA | 8,264 B | 32 | 94 | 0 | 0 | 32 | 2 |
+| generic carrier → exact FP8 WMMA | 8,264 B | 32 | 94 | 0 | 0 | 32 | 2 |
 
 LLVM 23's `hipcc --genco` returns a clang offload bundle on this installation,
 not a raw ELF. The packager now identifies that container and extracts the
@@ -36,9 +40,10 @@ exact `hipv4-amdgcn-amd-amdhsa--gfx1201` image with the matched
 ## Promotion boundary
 
 This packet promotes the two exact `gfx1201` launch ABIs into the owning-device
-proof registry. It does not promote `gfx1200`, the approximate folded-row
-policy, a public Graph dtype, or a generic compiler selector. The dedicated
-MXFP4 package selector defaults to the proved WMMA mechanism. Tajasarus WSL exposes no
+proof registry and proves the named generic carrier-to-package connection. It
+does not promote `gfx1200`, the approximate folded-row policy, a public Graph
+dtype, or a tuned shape selector. The dedicated MXFP4 package selector defaults
+to the proved WMMA mechanism. Tajasarus WSL exposes no
 usable hardware counters, so the packet proves correctness, mechanism, and
 resource viability—not throughput or counter attribution. The scalar route
 remains the executable oracle; the WMMA route is the production mechanism.

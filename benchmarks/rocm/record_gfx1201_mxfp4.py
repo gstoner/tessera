@@ -15,10 +15,13 @@ from tessera import runtime as rt
 from tessera.compiler.rocm_mxfp4_native import (
     package_mxfp4_w4a8_exact,
     package_mxfp4_w4a8_wmma,
+    package_scaled_wmma_target_ir,
 )
+from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tests._support import rocm_isa
 
 
+ROOT = Path(__file__).resolve().parents[2]
 _RESOURCE_KEYS = (
     "sgpr_count",
     "vgpr_count",
@@ -69,20 +72,37 @@ def _isa_summary(payload: bytes) -> dict[str, object]:
     return {"counts": counts, "selected_matrix_instructions": selected}
 
 
+def _generic_materialized_package():
+    tessera_opt = find_tessera_opt()
+    if tessera_opt is None:
+        raise RuntimeError("generic MXFP4 evidence requires TESSERA_OPT")
+    fixture = ROOT / "tests/tessera-ir/phase2/e2e_scaled_matmul_rocm_target.mlir"
+    common = [
+        str(tessera_opt),
+        "--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile",
+    ]
+    tile_ir = subprocess.check_output([*common, str(fixture)], text=True)
+    target_ir = subprocess.check_output(
+        [*common, "--lower-tile-to-rocm=arch=gfx1201", str(fixture)], text=True
+    )
+    return package_scaled_wmma_target_ir(tile_ir, target_ir)
+
+
 def record(output: Path) -> None:
     if rt._rocm_live_arch() != "gfx1201":
         raise RuntimeError("ROCM-MXFP4-W4A8-1 evidence requires the selected gfx1201 device")
     rows = []
-    for route, factory in (
-        ("scalar_exact", package_mxfp4_w4a8_exact),
-        ("wmma_exact", package_mxfp4_w4a8_wmma),
+    for route, shape, factory in (
+        ("scalar_exact", (32, 32, 128), package_mxfp4_w4a8_exact),
+        ("wmma_exact", (32, 32, 128), package_mxfp4_w4a8_wmma),
+        ("generic_materialized_exact", (17, 19, 64), _generic_materialized_package),
     ):
-        package = factory(32, 32, 128)
+        package = factory(*shape) if route != "generic_materialized_exact" else factory()
         payload = package.image.payload
-        rows.append(
-            {
+        row = {
                 "route": route,
-                "shape": [32, 32, 128],
+                "shape": list(shape),
                 "target": package.image.target,
                 "architecture": package.image.architecture,
                 "abi_id": package.descriptor.abi_id,
@@ -99,11 +119,18 @@ def record(output: Path) -> None:
                 "resources": _resource_metadata(payload),
                 "isa": _isa_summary(payload),
             }
-        )
-    wmma = next(row for row in rows if row["route"] == "wmma_exact")
-    selected = wmma["isa"]["selected_matrix_instructions"]
-    if selected != ["v_wmma_f32_16x16x16_fp8_fp8"]:
-        raise RuntimeError(f"exact WMMA route selected the wrong matrix ISA: {selected}")
+        if materializer := package.descriptor.provenance.get("materializer"):
+            row["materializer"] = materializer
+            row["schedule_hash"] = package.descriptor.provenance["schedule_hash"]
+        rows.append(row)
+    for row in rows:
+        if row["route"] == "scalar_exact":
+            continue
+        selected = row["isa"]["selected_matrix_instructions"]
+        if selected != ["v_wmma_f32_16x16x16_fp8_fp8"]:
+            raise RuntimeError(
+                f"{row['route']} selected the wrong matrix ISA: {selected}"
+            )
     packet = {
         "schema": "tessera.rocm.gfx1201_mxfp4_evidence.v1",
         "work_item": "ROCM-MXFP4-W4A8-1",
@@ -113,18 +140,19 @@ def record(output: Path) -> None:
         "live_architecture": rt._rocm_live_arch(),
         "rocm_path": os.environ.get("ROCM_PATH", ""),
         "source_revision": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
         ).strip(),
         "proof": {
             "device_test": "tests/device/rocm/test_mxfp4_w4a8_exact.py",
             "shapes": [[17, 19, 64], [32, 32, 128]],
             "comparison": "bit-exact BF16 versus independent exact-per-K32 host oracle",
-            "result": "4 passed (scalar and WMMA routes)",
+            "result": "5 passed (scalar, direct WMMA, and generic materialized routes)",
         },
         "rows": rows,
         "promotion_scope": (
-            "exact gfx1201 ABI and native FP8-WMMA mechanism; no gfx1200, "
-            "folded-policy, selector-default, or throughput promotion"
+            "exact gfx1201 ABI, native FP8-WMMA mechanism, and named generic "
+            "carrier materialization; no gfx1200, folded-policy, public dtype, "
+            "or throughput promotion"
         ),
     }
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -4234,7 +4234,7 @@ def _submit_rocm_mxfp4_w4a8(
         ):
             raise RuntimeError("folded MXFP4 launch requires its explicit policy and layout")
         packed_shape = (n, k)
-        scale_shape = (n,)
+        scale_shape: tuple[int, ...] = (n,)
         for key, array in (
             ("weight_sha256", packed_b),
             ("row_reference_sha256", b_scale),

@@ -7,6 +7,35 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 folded frontend and layout-verified prefill — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1 with IKF-1; sync
+`GFX1201-FOLDED-FRONTEND-2026-09-22`. A typed, opt-in Python package author
+now constructs `tessera.scaled_matmul` Graph IR from A, token scales, and a
+load-time folded weight object, then lowers it through Schedule, Tile, and
+Target. The returned receipt binds the selected BM256/BN64/BK64 schedule,
+schedule hash, physical ABI, entry, Graph/Tile/Target hashes, fold loss, and
+HSACO identity. This is a bounded gfx1201 frontend entry, not a general
+logical public MXFP4 dtype or automatic selector. Tajasarus passes 11/11
+folded device rows: the previous seven, ragged 256×80×128, both production
+prefill dimensions, and a deliberately lossy approximate-oracle case. On
+lossless inputs the full BF16 result agrees with the analytic and sampled
+independent exact K32 reference.
+
+The original folded benchmark supplied fragment-order weights to Radiance
+without recording or requiring its `RADIANCE_MXFP4_WPERM=1` selection. That
+historical comparator packet is not layout-verified or selector-admissible.
+A new frontend-bound matched packet requires WPERM=1, validates output, and
+measures 0.182356/1.242242 ms versus pinned Radiance 0.142856/0.888937 ms
+(1.28×/1.40×). Static selected-symbol ISA retains 32 FP8 WMMAs and two
+barrier pairs in both engines. Source/schedule requested-byte accounting
+shows Tessera's expanded B demand is twice packed B, but A restaging requests
+are larger; no DRAM counter or phase attribution exists. The next single-lever
+experiment should target A/B staging with the same matched inputs and ISA
+record, not fit a bottleneck fraction from requested bytes. `/dev/kfd`
+remains absent, so IKF clock/PC gates and default-route promotion remain open.
+[Exact-device packets](../../../../benchmarks/baselines/gfx1201_mxfp4_folded_frontend_20260922/README.md).
+
 ## GFX1201 ISA-preserving profiler preflight — 2026-09-22
 
 Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync

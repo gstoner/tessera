@@ -440,13 +440,17 @@ nor substitute CUDA counters for an AMD exact-device bottleneck claim.
 
 ### 2026-09-22: optimizer feedback must retain every IR-level decision
 
-The failed gfx1201 probe is also a lineage warning. The folded prefill
-package currently emits HIP source directly into `ROCMNativePackage`; its
-`tile_ir` is a descriptive string, not a lowered `tile.scaled_matmul_kernel`.
-Therefore its timing can characterize that package but cannot yet train a
-Graph/Schedule/Tile optimizer or claim that a high-level candidate produced
-the measured HSACO. By contrast, the exact scaled route has a
-`tessera.schedule_hash` equality gate between Tile and Target carriers.
+The failed gfx1201 probe was also a lineage warning. The original direct
+folded package emitted HIP into `ROCMNativePackage` with descriptive Tile
+text, so that historical timing could not identify a high-level producer.
+The later folded Graph→Schedule→Tile→Target carrier and typed frontend now
+close this ancestry gap for an explicitly authored physical call: the
+materializer verifies Tile/Target schedule-hash equality and the receipt
+binds Graph, Tile, Target, ABI, entry, and HSACO identities. This does not
+make an L2/L3 phase label admissible or connect a general public logical
+`scaled_matmul` selector. The v2 matched packet binds the exact artifact
+timed, while the historical Radiance comparison is refused for missing
+weight-layout provenance.
 
 | Boundary | Decision or identity to retain | Feedback obligation |
 |---|---|---|
@@ -457,9 +461,9 @@ the measured HSACO. By contrast, the exact scaled route has a
 | Native image | HSACO digest, ISA/resource shape, selected device and toolchain | reject an instrumented image whose scheduling structure differs from production |
 | Measurement/arbiter | L2/L3 explanatory vector joined to the above; separate L0/L1 timing | fit only admitted labels; select only from uninstrumented, accuracy-gated timing |
 
-Next compiler slice: make the folded numerical-policy/layout decision and
-BM256/TM4 schedule a real Graph→Schedule→Tile→Target carrier, or explicitly
-leave it outside high-level optimization until that path exists. Add a
-cross-level hash/ABI negative fixture and a receipt that names the exact
-artifact raced. Neither this mapping nor the current phase packet promotes
-the folded route or closes IKF-P0/P2/P3.
+The carrier, negative hash/ABI fixture, typed author, and exact-artifact
+receipt are now present for this gfx1201 route. Next: prove an ISA-preserving
+stage label and the P0 cross-CU/read-cost clock contract before any phase
+fractions can train the cost model. Tajasarus still lacks `/dev/kfd`; static
+ISA and requested-byte accounting are not a substitute for measured phase
+traffic. The exact K32 route remains the default.

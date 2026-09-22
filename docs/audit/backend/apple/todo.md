@@ -8,6 +8,15 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 folded frontend and matched-census correction — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-FOLDED-FRONTEND-2026-09-22`.
+Not applicable to Metal execution: the authored E4M3/E8M0 package frontend,
+HSACO receipt, and pinned Radiance layout correction select only gfx1201.
+The historical ROCm comparator's missing layout provenance changes no Apple
+benchmark schema or Metal selector. No Apple performance or device proof
+transfers.
+
 ## GFX1201 external phase-probe preflight — 2026-09-22
 
 Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync

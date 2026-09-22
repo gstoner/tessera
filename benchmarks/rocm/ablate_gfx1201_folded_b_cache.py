@@ -27,6 +27,7 @@ from tessera.compiler.rocm_mxfp4_folded import (
 )
 from tessera.compiler.rocm_mxfp4_native import _extract_gfx1201_hsaco, _rocm_hipcc
 from tessera.compiler.rocm_native import _rocm_path
+from tests._support import rocm_isa
 from benchmarks.rocm import benchmark_gfx1201_mxfp4_folded as folded_bench
 from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as base
 
@@ -159,6 +160,21 @@ def benchmark(
     source = variant_source()
     source_sha = hashlib.sha256(source.encode()).hexdigest()
     payload = _compile_variant(source)
+    variant_isa = rocm_isa.disassemble(payload, chip="gfx1201")
+    if variant_isa.count("th:th_load_nt") != 1:
+        raise RuntimeError("B cache ablation did not emit exactly one non-temporal load")
+    check_codes = np.ones((48, 64), dtype=np.uint8)
+    check_folded = prepare_folded_weights(
+        base.mx.pack_e2m1_codes(check_codes),
+        np.full((2, 48), 127, dtype=np.uint8),
+        allow_approximate=True,
+    )
+    baseline_image = package_mxfp4_folded_prefill(
+        65, 48, 64, check_folded, allow_approximate=True,
+    ).image
+    baseline_isa = rocm_isa.disassemble(baseline_image.payload, chip="gfx1201")
+    if "th:th_load_nt" in baseline_isa:
+        raise RuntimeError("production folded baseline unexpectedly uses non-temporal load")
     rows: list[dict[str, object]] = []
     for case in (
         base.Case("prefill", 256, 5120, 8704),
@@ -207,12 +223,18 @@ def benchmark(
                 engine.close()
     return {
         "schema": "tessera.rocm.gfx1201_folded_b_cache_ablation.v1",
+        "device": base._selected_device_name(hip),
+        "architecture": rt._rocm_live_arch(),
         "source_revision": base._git_revision(),
         "benchmark_sha256": base._sha256(Path(__file__)),
         "generator_sha256": base._sha256(
             ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py"
         ),
         "variant_source_sha256": source_sha,
+        "isa_guard": {
+            "baseline_non_temporal_load_sites": 0,
+            "variant_non_temporal_load_sites": 1,
+        },
         "radiance_revision": radiance_revision,
         "radiance_binary_sha256": base._sha256(radiance_module),
         "radiance_wperm": 1,

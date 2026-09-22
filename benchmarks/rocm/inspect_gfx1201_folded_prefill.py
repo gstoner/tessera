@@ -152,6 +152,7 @@ def inspect(
             ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
             capture_output=True, text=True, check=True,
         ).stdout.strip(),
+        "census_sha256": _sha256(Path(__file__)),
         "method": "static_selected_symbol_and_schedule_requested_bytes",
         "not_measured_dram_or_dynamic_instructions": True,
         "tessera": {

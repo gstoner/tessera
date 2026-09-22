@@ -185,6 +185,14 @@ def benchmark(
             Path(__file__).resolve().parents[2]
             / "python/tessera/compiler/rocm_mxfp4_folded.py"
         ),
+        "frontend_sha256": base._sha256(
+            Path(__file__).resolve().parents[2]
+            / "python/tessera/compiler/rocm_mxfp4_folded_frontend.py"
+        ),
+        "materializer_sha256": base._sha256(
+            Path(__file__).resolve().parents[2]
+            / "python/tessera/compiler/rocm_mxfp4_folded_carrier.py"
+        ),
         "benchmark_sha256": base._sha256(Path(__file__)),
         "timing_order": "alternating_interleaved_per_shape",
         "rows": rows,

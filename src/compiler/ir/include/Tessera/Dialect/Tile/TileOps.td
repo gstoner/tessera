@@ -831,6 +831,20 @@ def Tile_MatmulKernelOp : Tile_Op<"matmul_kernel"> {
   let hasVerifier = 1;
 }
 
+// Launch-level block-scaled contraction. Inputs are A, B, lhs_scale,
+// rhs_scale, D, M, N, K. Unlike tile.matmul_kernel, this carrier makes the
+// per-scale-group accumulator a first-class semantic boundary: each group
+// starts from zero, accumulates whole instruction-K panels, is multiplied by
+// the outer product of its two scale vectors, and only then joins the running
+// accumulator. A target that cannot preserve this order must refuse the op.
+def Tile_ScaledMatmulKernelOp : Tile_Op<"scaled_matmul_kernel"> {
+  let summary = "Launch-level block-scaled matmul with isolated partial accumulators";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level stable row-softmax envelope. Inputs are source, destination,
 // flattened row count, and last-axis width. The storage/accumulation contract
 // is explicit so target lowering never infers precision from a host array.

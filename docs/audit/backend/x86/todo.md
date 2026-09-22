@@ -9,13 +9,29 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## Shared scaled-partial carrier and MXFP4 policy — 2026-09-21
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-SCALED-PARTIAL-CARRIER-2026-09-21`. The shared Graph/Schedule/Tile
+carrier and host approximation metadata are structurally visible, but the
+packed physical contract and Target ABI are gfx1201-only. No AVX-512 package,
+dtype row, numerical promotion, or exact-device claim changes.
+
+## GFX1201 scheduled-proof provenance schema — 2026-09-21
+
+Owner ROCM-2; sync `GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21`. Not
+applicable to AVX-512 execution. The evidence extension binds a gfx1201 run to
+one selected ROCm toolkit and its loaded HIP runtime library. It changes no
+x86 ABI, runtime, dtype, numerical policy, or device row, and no ROCm proof
+transfers to x86.
+
 ## GFX1201 exact MXFP4 execution — 2026-09-21
 
 Owner ROCM-MXFP4-W4A8-1; sync
 `ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`. Not applicable to AVX-512 physical
 execution. The exact K32 packages and proof registry entries are
-ROCm/gfx1201-only; the shared Schedule carrier still fails closed before Tile.
-No x86 ABI, dtype, numerical policy, runtime, or exact-device claim changes.
+ROCm/gfx1201-only. The subsequent shared carrier is assessed above; no x86
+ABI, dtype, runtime, or exact-device claim changes.
 
 ## GFX1201 dtype and exact-executor closure — 2026-09-21
 

@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Scaled-partial carrier and exact MXFP4 ABI binding — 2026-09-21
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-SCALED-PARTIAL-CARRIER-2026-09-21`.
+
+The generic `tessera.scaled_matmul` route no longer drops or refuses its scale
+planes at the Schedule-to-Tile boundary. `tile.scaled_matmul_kernel` carries a
+zero-initialized partial per scale group, a whole-instruction step count, and
+the scale-then-add combine order. The ROCm Target consumer is gfx1201-pinned.
+The ordinary FP8 form remains logical W8A8; only the named
+`rocm_mxfp4_w4a8_exact_v1` ui8-container contract interprets A as raw E4M3,
+B as packed E2M1, and binds the directive to the proved exact WMMA ABI.
+
+The folded-row host transform now requires explicit approximate-policy opt-in
+and returns inexact-value count plus maximum normalized absolute and relative
+error. Exact K32 scaling remains the oracle. Remaining: materialize the new
+Target directive through the existing package compiler, then add decode versus
+prefill tuning axes and matched independent device comparisons. No gfx1200 or
+sibling-backend execution claim follows.
+
 ## GFX1201 scheduled hardware-skip closure — 2026-09-21
 
 Owner ROCM-2; sync `GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21`.
@@ -29,6 +49,11 @@ tested/compiler checkouts, validates LLVM 23.1.1 + ROCm 10.0 + HIP 7.15 before
 assigning the proof-build label, obtains and validates the selected HIP
 device's model, and recomputes the fixture/recorder hashes in the unit drift
 gate. The exact-device packet was regenerated after these guards passed.
+PR #803 review follow-through now resolves the same toolkit used by native
+packaging, invokes that toolkit's `hipcc` by absolute path, resolves the loaded
+HIP ABI through `dladdr`, and rejects a runtime library outside that toolkit.
+The packet records and hashes the exact loaded library; sibling queues record
+the benchmark-schema assessment.
 Evidence:
 [scheduled closure packet](../../../../benchmarks/baselines/gfx1201_scheduled_closure_20260921/README.md).
 
@@ -63,10 +88,10 @@ record. The folded-row reference also masks reserved E8M0 code-zero groups
 before E4M3 conversion and losslessness comparison; non-zero E2M1 payload bits
 inside a zero block can no longer reconstruct as tiny non-zero weights.
 
-Still open: replace the Schedule-to-Tile fail-closed boundary with a first-class
-scaled partial-accumulator carrier; admit the approximate folded-row policy
-only behind its explicit numerical policy; measure decode/prefill throughput on
-a counter-capable host; and compare against independent libr4d/Radiance runs.
+The Schedule-to-Tile carrier and explicit approximate-policy gate are now
+implemented under the sync above. Still open: materialize the Target directive,
+measure decode/prefill throughput on a counter-capable host, and compare against
+independent libr4d/Radiance runs.
 No `gfx1200`, public Graph dtype, selector-default, or throughput promotion is
 inferred.
 
@@ -105,10 +130,11 @@ contract and host reference: low-nibble-even packed E2M1, `[K/32,N]` E8M0
 scales, per-token FP32 activation scales, gfx12 fragment-order permutation,
 an exact per-32-group route, and a separately marked folded-row-reference
 route. The exact scalar and FP8-WMMA packages described above now execute this
-contract; the planned public `mxfp4` dtype and generic
-`tessera.scaled_matmul` Schedule-to-Tile consumer remain unpromoted. Next:
-replace that fail-closed generic boundary, add the fold only behind its numeric
-policy, and compare on Tajasarus against independent library baselines.
+contract. The planned public `mxfp4` dtype remains unpromoted; the generic
+carrier and named packed physical ABI binding are implemented, while the
+Target-to-binary materializer remains open. The folded helper is explicit
+approximate policy with quantified loss. Next compare on Tajasarus against
+independent library baselines.
 
 ## GFX12 public projection and D=128 load batching — 2026-09-21
 

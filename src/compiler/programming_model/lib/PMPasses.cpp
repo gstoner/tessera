@@ -250,6 +250,7 @@ struct MatmulSchedule {
   //: Decision #32 loss on the attribute that picks the instruction.
   int64_t scaleBlockK = 0;
   StringRef scaleFormat;
+  StringRef physicalContract;
   //: The macro K tile (ROCM-MACRO-K-TILE-1). 0 means "one instruction K per
   //: block", i.e. the historical unblocked loop. `kBlocks = blockK / tileK`.
   int64_t blockK = 0;
@@ -307,6 +308,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     return failure();
 
   MatmulSchedule schedule;
+  if (auto physical = op->getAttrOfType<StringAttr>("physical_contract"))
+    schedule.physicalContract = physical.getValue();
   schedule.target = moduleString(module, "tessera.target", "target");
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   bool nvidia_sm120 = schedule.target == "nvidia_sm120" &&
@@ -345,8 +348,14 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   auto compatible = [](int64_t extent, int64_t expected) {
     return ShapedType::isDynamic(extent) || extent == expected;
   };
+  const bool packedMxfp4 =
+      schedule.physicalContract == "rocm_mxfp4_w4a8_exact_v1";
+  const bool rhsKCompatible =
+      packedMxfp4
+          ? compatible(rhs.getDimSize(0), (schedule.k + 1) / 2)
+          : compatible(rhs.getDimSize(0), schedule.k);
   if (schedule.m <= 0 || schedule.n <= 0 || schedule.k <= 0 ||
-      !compatible(rhs.getDimSize(0), schedule.k) ||
+      !rhsKCompatible ||
       !compatible(out.getDimSize(0), schedule.m) ||
       !compatible(out.getDimSize(1), schedule.n))
     return failure();
@@ -395,6 +404,29 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       return failure();
     schedule.scaleBlockK = blockK.getInt();
     schedule.scaleFormat = format.getValue();
+  }
+
+  if (packedMxfp4) {
+    auto lhsScale = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    auto rhsScale = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
+    auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+    auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr();
+    if (schedule.target != "rocm" || schedule.arch != "gfx1201" ||
+        schedule.dynamicM || schedule.dynamicN || schedule.dynamicK ||
+        !lhsElement.isUnsignedInteger(8) ||
+        !rhsElement.isUnsignedInteger(8) || !outElement.isBF16() ||
+        !lhsScale || lhsScale.getRank() != 1 ||
+        !lhsScale.getElementType().isF32() ||
+        lhsScale.getDimSize(0) != schedule.m || !rhsScale ||
+        rhsScale.getRank() != 2 ||
+        !rhsScale.getElementType().isUnsignedInteger(8) ||
+        rhsScale.getDimSize(0) != schedule.k / 32 ||
+        rhsScale.getDimSize(1) != schedule.n || schedule.k % 32 != 0 ||
+        schedule.scaleBlockK != 32 || schedule.scaleFormat != "e8m0" ||
+        !mode || mode.getValue() != "exact_per_block")
+      return failure();
+  } else if (!schedule.physicalContract.empty()) {
+    return failure();
   }
   bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
              schedule.arch.contains("zen5");
@@ -526,6 +558,17 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     if (schedule.blockK == 0 ||
         schedule.blockK % schedule.scaleBlockK != 0)
       schedule.blockK = schedule.scaleBlockK;
+  }
+  if (packedMxfp4) {
+    schedule.storage = "e4m3_raw_u8";
+    schedule.storageB = "e2m1_packed_u8";
+    schedule.accum = "f32";
+    schedule.output = "bf16";
+    schedule.tileK = 16;
+    schedule.blockK = 32;
+    schedule.macroTileM = 16;
+    schedule.macroTileN = 16;
+    return schedule;
   }
   if (rocmWmmaChip && lhsElement == rhsElement &&
       (lhsElement.isInteger(8) || lhsElement.isInteger(4)) &&
@@ -724,6 +767,7 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
        ";storage_b=" + schedule.storageB + ";block_k=" +
        Twine(schedule.blockK) + ";scale_k=" + Twine(schedule.scaleBlockK) +
        ";scale_format=" + schedule.scaleFormat +
+       ";physical_contract=" + schedule.physicalContract +
        ";accum=" + schedule.accum + ";tile=" + Twine(schedule.tileM) + "x" +
        Twine(schedule.tileN) + "x" + Twine(schedule.tileK) +
        ";macro_tile=" + Twine(schedule.macroTileM) + "x" +
@@ -2256,6 +2300,8 @@ struct GraphToSchedulePass
                          builder.getI64IntegerAttr(selected->scaleBlockK));
       state.addAttribute("scale_format",
                          builder.getStringAttr(selected->scaleFormat));
+      state.addAttribute("physical_contract",
+                         builder.getStringAttr(selected->physicalContract));
       state.addAttribute("accum", builder.getStringAttr(selected->accum));
       state.addAttribute("bias", builder.getBoolAttr(selected->bias));
       state.addAttribute("activation",
@@ -3275,6 +3321,7 @@ struct ScheduleToTilePass
           scheduled.getBlockK() != selected->blockK ||
           scheduled.getScaleK() != selected->scaleBlockK ||
           scheduled.getScaleFormat() != selected->scaleFormat ||
+          scheduled.getPhysicalContract() != selected->physicalContract ||
           scheduled.getAccum() != selected->accum ||
           scheduled.getBias() != selected->bias ||
           scheduled.getActivation() != selected->activation ||
@@ -3286,14 +3333,6 @@ struct ScheduleToTilePass
           scheduled.getRasterOrder() != selected->rasterOrder ||
           scheduled.getRasterGroupAttr().getInt() != selected->rasterGroup) {
         scheduled.emitError("scheduled tile or numeric policy was altered after hashing");
-        return signalPassFailure();
-      }
-      if (selected->scaleBlockK > 0) {
-        scheduled.emitError(
-            "ROCM_MXFP4_SCALE_ABI_UNIMPLEMENTED: the schedule preserves the "
-            "block-scale contract, but the current Tile kernel ABI has no "
-            "scale operands; refusing to lower a numerically different "
-            "unscaled matmul");
         return signalPassFailure();
       }
       auto graphDigest = graph->getAttrOfType<StringAttr>("schedule.artifact_hash");
@@ -3747,6 +3786,13 @@ struct ScheduleToTilePass
       };
       Value a = toPointer(graph->getOperand(0), lhsType);
       Value b = toPointer(graph->getOperand(1), rhsType);
+      Value lhsScalePointer, rhsScalePointer;
+      if (selected->scaleBlockK > 0) {
+        auto lhsScaleType = cast<RankedTensorType>(graph->getOperand(2).getType());
+        auto rhsScaleType = cast<RankedTensorType>(graph->getOperand(3).getType());
+        lhsScalePointer = toPointer(graph->getOperand(2), lhsScaleType);
+        rhsScalePointer = toPointer(graph->getOperand(3), rhsScaleType);
+      }
       // The fused epilogue is part of the launch contract on every native
       // target, not only NVIDIA: the Graph op's third operand is the per-column
       // bias (A/B/bias ABI order), carried as the kernel's third pointer.
@@ -3806,10 +3852,16 @@ struct ScheduleToTilePass
               : 1,
           selected->scaleBlockK, selected->scaleFormat);
       auto epilogue = tile::TileEpilogueAttr::get(
-          &getContext(), selected->bias, selected->activation, selected->accum);
+          &getContext(), selected->bias, selected->activation,
+          selected->scaleBlockK > 0 ? selected->output : selected->accum);
 
-      OperationState kernelState(loc, "tile.matmul_kernel");
-      if (biasPointer)
+      OperationState kernelState(
+          loc, selected->scaleBlockK > 0 ? "tile.scaled_matmul_kernel"
+                                        : "tile.matmul_kernel");
+      if (selected->scaleBlockK > 0)
+        kernelState.addOperands(
+            {a, b, lhsScalePointer, rhsScalePointer, d, m, n, k});
+      else if (biasPointer)
         kernelState.addOperands({a, b, biasPointer, d, m, n, k});
       else
         kernelState.addOperands({a, b, d, m, n, k});
@@ -3818,6 +3870,25 @@ struct ScheduleToTilePass
       kernelState.addAttribute("warps",
                                builder.getI64IntegerAttr(selected->warps));
       kernelState.addAttribute("staging", builder.getStringAttr("global"));
+      if (selected->scaleBlockK > 0) {
+        kernelState.addAttribute(
+            "partial_accumulator",
+            builder.getDictionaryAttr({
+                builder.getNamedAttr("scope", builder.getStringAttr("scale_group")),
+                builder.getNamedAttr("init", builder.getStringAttr("zero")),
+                builder.getNamedAttr(
+                    "combine",
+                    builder.getStringAttr("scale_outer_product_then_add")),
+                builder.getNamedAttr(
+                    "instruction_steps",
+                    builder.getI64IntegerAttr(selected->scaleBlockK /
+                                              selected->tileK)),
+            }));
+        if (!selected->physicalContract.empty())
+          kernelState.addAttribute(
+              "physical_contract",
+              builder.getStringAttr(selected->physicalContract));
+      }
       kernelState.addAttribute(
           "numeric_policy",
           builder.getDictionaryAttr({

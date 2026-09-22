@@ -8,6 +8,23 @@ last_updated: 2026-09-21
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## Shared scaled-partial carrier and MXFP4 policy — 2026-09-21
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-SCALED-PARTIAL-CARRIER-2026-09-21`. The shared Graph/Schedule/Tile
+carrier can now state isolated scale-group partials and quantified approximate
+fold loss. NVIDIA follow-up is required only if its distinct UE8M0/NVFP4
+physical form adopts this carrier; the packed E2M1/E8M0 K32 ABI, Target op,
+and exact-device proof remain gfx1201-only.
+
+## GFX1201 scheduled-proof provenance schema — 2026-09-21
+
+Owner ROCM-2; sync `GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21`. Not
+applicable to CUDA execution. The evidence extension binds a gfx1201 run to
+one selected ROCm toolkit and its loaded HIP runtime library. It changes no
+PTX, CUDA launch ABI, dtype, numerical policy, or NVIDIA device row, and no
+ROCm proof transfers to NVIDIA.
+
 ## GFX1201 exact MXFP4 execution — 2026-09-21
 
 Owner ROCM-MXFP4-W4A8-1; sync

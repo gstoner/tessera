@@ -10,6 +10,8 @@ from benchmarks.rocm.record_gfx1201_scheduled_closure import (
     DEVICE_CASE_FAMILIES,
     EXPECTED_DEVICE,
     HOST_CONTRACT_FAMILIES,
+    _require_toolkit_runtime,
+    _rocm_release,
     _sha256,
     _validate_build_versions,
 )
@@ -41,6 +43,10 @@ def test_gfx1201_committed_closure_packet_matches_registry() -> None:
     assert packet["compiler"]["stale_generator_sources"] == 0
     assert packet["compiler"]["source_dirty"] is False
     assert packet["compiler"]["source_revision"] == packet["source_revision"]
+    toolkit = Path(packet["toolchain"]["rocm_path"])
+    assert Path(packet["toolchain"]["hipcc_path"]).is_relative_to(toolkit)
+    assert Path(packet["toolchain"]["hip_runtime_library"]).is_relative_to(toolkit)
+    assert len(packet["toolchain"]["hip_runtime_sha256"]) == 64
     assert packet["result"]["tests"] == proof.required_passed_cases
     assert packet["result"]["failures"] == 0
     assert packet["result"]["errors"] == 0
@@ -87,3 +93,25 @@ def test_gfx1201_proof_build_rejects_mislabeled_toolchain() -> None:
             hipcc_output="HIP version: 7.14.0",
             rocm_release="10.0.0",
         )
+
+
+def test_gfx1201_release_is_read_only_from_selected_toolkit(tmp_path: Path) -> None:
+    selected = tmp_path / "rocm" / "core"
+    (selected / ".info").mkdir(parents=True)
+    (selected / ".info" / "version").write_text("10.0.0\n")
+    (selected.parent / ".info").mkdir()
+    (selected.parent / ".info" / "version").write_text("9.9.0\n")
+    assert _rocm_release(selected) == "10.0.0"
+
+
+def test_gfx1201_loaded_hip_runtime_must_belong_to_toolkit(tmp_path: Path) -> None:
+    toolkit = tmp_path / "rocm" / "core"
+    runtime = toolkit / "lib" / "libamdhip64.so"
+    runtime.parent.mkdir(parents=True)
+    runtime.touch()
+    assert _require_toolkit_runtime(toolkit, runtime) == runtime.resolve()
+    other = tmp_path / "stale" / "libamdhip64.so"
+    other.parent.mkdir()
+    other.touch()
+    with pytest.raises(RuntimeError, match="outside the selected ROCm toolkit"):
+        _require_toolkit_runtime(toolkit, other)

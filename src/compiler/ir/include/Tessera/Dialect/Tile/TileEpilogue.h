@@ -17,7 +17,8 @@ inline bool isSupportedActivation(llvm::StringRef activation) {
 
 inline bool isSupportedOutputType(llvm::StringRef outputType) {
   return outputType == "f64" || outputType == "f32" ||
-         outputType == "f16" || outputType == "i32";
+         outputType == "f16" || outputType == "bf16" ||
+         outputType == "i32";
 }
 
 /// Portable bounded tanh approximation used where a target has no selectable

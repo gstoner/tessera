@@ -1015,21 +1015,6 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="NUMPOL-CARRIER-1",
     ),
     DiagnosticCode(
-        code="ROCM_MXFP4_SCALE_ABI_UNIMPLEMENTED",
-        pass_origin="ScheduleToTilePass",
-        severity="error",
-        summary=(
-            "A block-scaled ROCm matmul reached the Tile boundary before the "
-            "kernel ABI can carry its scale operands."
-        ),
-        fix_hint=(
-            "Use the dedicated block-scale package once available. Never erase "
-            "the scale metadata or lower this program as an unscaled matmul."
-        ),
-        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
-        sprint="ROCM-FP8-BLOCKSCALE-1",
-    ),
-    DiagnosticCode(
         code="NUMERIC_POLICY_ACCUM_UNREALIZABLE",
         pass_origin="TesseraToLinalgPass",
         severity="error",

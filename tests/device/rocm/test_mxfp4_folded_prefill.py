@@ -18,7 +18,136 @@ from tessera.compiler.rocm_mxfp4_folded import (
 from tessera.compiler.rocm_mxfp4_folded_carrier import (
     package_folded_scaled_wmma_target_ir,
 )
+from tessera.compiler.rocm_mxfp4_folded_frontend import (
+    compile_folded_scaled_matmul,
+)
 from tests._support import rocm_isa
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+@pytest.mark.parametrize(
+    "shape",
+    [(256, 80, 128), (256, 5120, 8704), (1024, 17408, 5120)],
+)
+def test_frontend_folded_carrier_broad_and_prefill_shapes(
+    shape: tuple[int, int, int],
+) -> None:
+    """Exercise an authored Graph call, not a replayed fixture."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    tessera_opt = os.environ.get("TESSERA_OPT")
+    assert tessera_opt, "frontend proof requires TESSERA_OPT"
+    m, n, k = shape
+    a = np.full((m, k), 0x38, dtype=np.uint8)  # E4M3 +1
+    a_scale = np.ones(m, dtype=np.float32)
+    codes = np.ones((n, k), dtype=np.uint8)  # E2M1 +0.5
+    scales = np.full((k // 32, n), 127, dtype=np.uint8)
+    folded = prepare_folded_weights(
+        mx.pack_e2m1_codes(codes), scales, allow_approximate=True,
+    )
+    assert folded.lossless and folded.inexact_value_count == 0
+    # Independent exact K32 sample; the full oracle is analytic for this
+    # uniform payload, avoiding a prohibitively large CPU GEMM.
+    exact_sample = mx.exact_weights(codes[:2], scales[:, :2])
+    np.testing.assert_array_equal(exact_sample, np.full((2, k), 0.5))
+    program = compile_folded_scaled_matmul(
+        a, a_scale, folded, tessera_opt=Path(tessera_opt),
+        allow_approximate=True,
+    )
+    receipt = program.route_receipt
+    package = program.package
+    assert receipt["schedule_hash"] == package.descriptor.provenance["schedule_hash"]
+    assert receipt["abi_id"] == package.descriptor.abi_id
+    assert receipt["hsaco_sha256"] == package.image.image_digest
+    assert receipt["fold_lossless"] is True
+    assert receipt["fold_inexact_value_count"] == 0
+    assert receipt["selected_schedule"] == {
+        "block_m": 256, "block_n": 64, "block_k": 64,
+        "tile_m_per_wave": 4, "tile_n_per_wave": 2,
+    }
+    rocm_isa.assert_selected(
+        package.image.payload, chip="gfx1201",
+        pattern=r"v_wmma_f32_16x16x16_\w+",
+        require="v_wmma_f32_16x16x16_fp8_fp8",
+        what="frontend folded MXFP4 prefill",
+    )
+    output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir,
+    )
+    result = rt.launch(
+        artifact,
+        {"buffers": {
+            "a": a, "b_folded": folded.weight_bytes,
+            "a_scale": a_scale, "row_reference": folded.row_reference,
+            "output": output,
+        }, "scalars": {"M": m, "N": n, "K": k}},
+    )
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(
+        result, default=str,
+    )
+    np.testing.assert_array_equal(
+        output, np.full((m, n), k * 0.5, dtype=ml_dtypes.bfloat16),
+    )
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+def test_frontend_folded_carrier_uses_declared_lossy_oracle() -> None:
+    assert rt._rocm_live_arch() == "gfx1201"
+    tessera_opt = os.environ.get("TESSERA_OPT")
+    assert tessera_opt, "frontend proof requires TESSERA_OPT"
+    m, n, k = 256, 80, 128
+    codes = np.zeros((n, k), dtype=np.uint8)
+    codes[:, :32] = 1
+    codes[:, 32:64] = 2
+    scales = np.full((k // 32, n), 127, dtype=np.uint8)
+    scales[0, :] = 116
+    folded = prepare_folded_weights(
+        mx.pack_e2m1_codes(codes), scales, allow_approximate=True,
+    )
+    assert not folded.lossless and folded.inexact_value_count > 0
+    a = np.full((m, k), 0x38, dtype=np.uint8)
+    a_scale = np.ones(m, dtype=np.float32)
+    program = compile_folded_scaled_matmul(
+        a, a_scale, folded, tessera_opt=Path(tessera_opt),
+        allow_approximate=True,
+    )
+    assert program.route_receipt["fold_lossless"] is False
+    assert program.route_receipt["fold_inexact_value_count"] > 0
+    package = program.package
+    output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir,
+    )
+    result = rt.launch(
+        artifact,
+        {"buffers": {
+            "a": a, "b_folded": folded.weight_bytes,
+            "a_scale": a_scale, "row_reference": folded.row_reference,
+            "output": output,
+        }, "scalars": {"M": m, "N": n, "K": k}},
+    )
+    assert result["ok"], json.dumps(result, default=str)
+    approximate = mx.folded_weights(folded).sum(axis=1)
+    exact = mx.exact_weights(codes, scales).sum(axis=1)
+    assert np.any(approximate != exact)
+    np.testing.assert_array_equal(
+        output,
+        np.broadcast_to(
+            approximate.astype(ml_dtypes.bfloat16), (m, n),
+        ),
+    )
 
 
 @pytest.mark.hardware_rocm

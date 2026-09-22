@@ -1,5 +1,13 @@
 # gfx1201 opted-in folded MXFP4 prefill
 
+Historical packet: the benchmark did not record or require Radiance's
+`RADIANCE_MXFP4_WPERM` setting even though it supplied fragment-order
+weights. Its Radiance comparison is therefore not layout-verified and is
+ineligible for selector promotion. The Tessera exact-versus-folded result,
+source hashes, and device correctness tests remain historical observations.
+Use a v2 packet with explicit WPERM and a frontend receipt for matched
+performance conclusions.
+
 Tajasarus (RX 9070 XT, `gfx1201`) recorded this packet from source revision
 `4368c825b866c3eb7b40761c5c17bbcb817e2665`. The benchmark checked the
 exact K32 output against an independent FP32-dequantized sample, required full

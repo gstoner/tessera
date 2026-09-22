@@ -12,7 +12,7 @@ PACKET = (
 )
 
 
-def test_folded_prefill_packet_binds_source_and_compares_matched_outputs() -> None:
+def test_historical_folded_packet_refuses_unbound_radiance_layout() -> None:
     packet = json.loads(PACKET.read_text())
     assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v1"
     assert packet["architecture"] == "gfx1201"
@@ -22,9 +22,11 @@ def test_folded_prefill_packet_binds_source_and_compares_matched_outputs() -> No
     assert packet["folded_generator_sha256"] == hashlib.sha256(
         source.read_bytes()
     ).hexdigest()
-    assert packet["benchmark_sha256"] == hashlib.sha256(
-        (ROOT / "benchmarks/rocm/benchmark_gfx1201_mxfp4_folded.py").read_bytes()
-    ).hexdigest()
+    assert packet["benchmark_sha256"] == (
+        "6ea6d21d398e6623af0ca1d638eadaef25a47246e9a2c7a7eddbdd76c8fe8bbd"
+    )
+    assert packet["radiance_layout_verified"] is False
+    assert packet["promotion_eligible"] is False
     assert packet["radiance"]["revision"] == (
         "dfdfa3832922c9a4253133f09c1f5c0d39748fc7"
     )

@@ -4770,3 +4770,35 @@ Evidence: [profiler refusal packet](../../../benchmarks/baselines/gfx1201_phase_
 `tests/unit/test_gfx1201_phase_profiler_preflight.py`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-22 — GFX1201 folded frontend and layout-verified prefill
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `codex/gfx1201-folded-frontend-proof`
+
+Outcome: a typed physical frontend authors `tessera.scaled_matmul` Graph IR
+from A, token scales, and load-time folded weights, then binds the selected
+Schedule/Tile/Target, ABI, and HSACO to a route receipt. Tajasarus passes
+11/11 folded device cases, including both production prefill shapes and one
+deliberately lossy approximate-oracle case. The original Radiance packet
+did not record its WPERM mode despite fragment-order input and is now
+explicitly refused for selector use. A layout-verified v2 matched run leaves
+the folded route 1.28×/1.40× behind pinned Radiance. A static selected-symbol
+ISA census and requested-byte model identify doubled B demand but do not
+establish measured DRAM or stage fractions. A one-load B non-temporal
+ablation emits the intended ISA modifier, preserves full BF16 output,
+and regresses 20%/104% against the matched baseline, so it is unselected.
+
+Remaining: exact K32 stays default. Test A-staging reuse/load scheduling on
+matched inputs; extend nonuniform numerical envelopes; restore a usable
+gfx1201 profiler API and close IKF-P0 cross-CU/read-cost gates before L2/L3
+attribution or selector training. General public logical-op integration
+remains outside this bounded physical frontend.
+
+Evidence: [frontend and census packets](../../../benchmarks/baselines/gfx1201_mxfp4_folded_frontend_20260922/README.md),
+the historical [layout-unverified packet](../../../benchmarks/baselines/gfx1201_mxfp4_folded_prefill_20260922/README.md),
+`tests/device/rocm/test_mxfp4_folded_prefill.py`, and
+`tests/unit/test_gfx1201_folded_staging_census.py`.
+
+<!-- entry-fields:end -->

@@ -9,6 +9,15 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 folded frontend and matched-census correction — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-FOLDED-FRONTEND-2026-09-22`.
+Not applicable to AVX-512 execution: the typed folded package author,
+schedule-to-HSACO receipt, Radiance layout validation, and AMD ISA census
+have no CPU materializer, numerical-policy selection, or benchmark consumer.
+No CPU parity follows from the Tajasarus results.
+The single AMD B non-temporal ablation has no AVX-512 cache-policy consumer.
+
 ## GFX1201 external phase-probe preflight — 2026-09-22
 
 Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync

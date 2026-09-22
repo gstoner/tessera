@@ -82,6 +82,21 @@ def test_matched_timing_alternates_engine_order(
     assert measured[second] == [2.0, 3.0, 6.0]
 
 
+def test_rdna4_barrier_counter_uses_archived_split_barrier_opcodes() -> None:
+    assert bench._rdna4_workgroup_barrier_mnemonics() == (
+        "s_barrier_signal",
+        "s_barrier_signal_isfirst",
+        "s_barrier_wait",
+    )
+    isa = """
+        s_barrier_signal -1
+        s_barrier_wait -1
+        s_barrier_signal_isfirst -1
+        s_get_barrier_state s0, -1
+    """
+    assert bench._count_rdna4_workgroup_barriers(isa) == 3
+
+
 def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None:
     packet = json.loads(EVIDENCE.read_text())
     assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_matched_benchmark.v1"

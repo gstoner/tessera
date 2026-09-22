@@ -49,6 +49,9 @@ from tessera.compiler.rocm_mxfp4_native import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
+RDNA4_INSTRUCTION_DB = (
+    ROOT / "docs/reference/isa/rdna/rdna4/instructions.json"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -85,6 +88,29 @@ def _llvm_tool(name: str) -> str:
     if found := shutil.which(name):
         return found
     raise RuntimeError(f"matched MXFP4 evidence requires {name}")
+
+
+def _rdna4_workgroup_barrier_mnemonics() -> tuple[str, ...]:
+    """Return the RDNA4 workgroup-barrier opcodes from the ISA archive."""
+
+    instructions = json.loads(RDNA4_INSTRUCTION_DB.read_text())
+    mnemonics = tuple(
+        sorted(
+            instruction["name"].lower()
+            for instruction in instructions
+            if instruction["name"].startswith("S_BARRIER_")
+        )
+    )
+    if not mnemonics:
+        raise RuntimeError("RDNA4 ISA archive contains no workgroup barriers")
+    return mnemonics
+
+
+def _count_rdna4_workgroup_barriers(isa: str) -> int:
+    return sum(
+        len(re.findall(rf"\b{re.escape(mnemonic)}\b", isa))
+        for mnemonic in _rdna4_workgroup_barrier_mnemonics()
+    )
 
 
 def _code_object_evidence(payload: bytes) -> dict[str, object]:
@@ -129,7 +155,7 @@ def _code_object_evidence(payload: bytes) -> dict[str, object]:
                 re.findall(r"\bv_wmma_f32_16x16x16_fp8_fp8\b", isa)
             ),
             "s_waitcnt": len(re.findall(r"\bs_waitcnt\b", isa)),
-            "s_barrier": len(re.findall(r"\bs_barrier\b", isa)),
+            "s_barrier": _count_rdna4_workgroup_barriers(isa),
         },
     }
 

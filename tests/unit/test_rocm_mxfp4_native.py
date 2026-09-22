@@ -261,7 +261,7 @@ def test_production_selector_refuses_unknown_route() -> None:
 def test_target_ir_materializer_binds_generic_carrier_to_proved_wmma(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[int, int, int, str]] = []
+    calls: list[tuple[int, int, int, str, str]] = []
     image = _image()
     descriptor = mxfp4_w4a8_descriptor(
         image,
@@ -274,8 +274,10 @@ def test_target_ir_materializer_binds_generic_carrier_to_proved_wmma(
         workgroup=(32, 1, 1),
     )
 
-    def record_wmma(m: int, n: int, k: int, *, pipeline_name: str):
-        calls.append((m, n, k, pipeline_name))
+    def record_wmma(
+        m: int, n: int, k: int, *, pipeline_name: str, weight_layout: str
+    ):
+        calls.append((m, n, k, pipeline_name, weight_layout))
         return SimpleNamespace(
             tile_ir="semantic",
             target_ir="proved llvm backend ir",
@@ -292,7 +294,13 @@ def test_target_ir_materializer_binds_generic_carrier_to_proved_wmma(
     package = package_scaled_wmma_target_ir(
         _packed_tile_ir(), target_ir, pipeline_name="proof-pipeline"
     )
-    assert calls == [(17, 19, 64, "proof-pipeline")]
+    assert calls == [(
+        17,
+        19,
+        64,
+        "proof-pipeline",
+        mx.MXFP4_TRANSPOSED_LAYOUT_V1,
+    )]
     assert package.tile_ir == _packed_tile_ir()
     assert package.target_ir == target_ir
     assert package.backend_ir == "proved llvm backend ir"

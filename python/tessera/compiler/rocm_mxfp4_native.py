@@ -345,6 +345,10 @@ def package_scaled_wmma_target_ir(
     package = package_mxfp4_w4a8_wmma(
         integers["m"], integers["n"], integers["k"],
         pipeline_name=pipeline_name,
+        # The current Target directive names the legacy WMMA ABI and its
+        # [K/2,N] payload. Never let shape-based production selection silently
+        # reinterpret that buffer as the distinct fragment-order ABI.
+        weight_layout=MXFP4_TRANSPOSED_LAYOUT_V1,
     )
     target_ir_sha256 = hashlib.sha256(target_ir.encode()).hexdigest()
     image = replace(package.image, target_ir_digest=target_ir_sha256)

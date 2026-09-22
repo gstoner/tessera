@@ -17,7 +17,10 @@ from .native_artifact import (
     BufferBinding, LaunchDescriptor, LaunchGeometry, NativeEntryPoint,
     NativeImageArtifact, OrderingSemantics, ScalarArgument, ShapeGuard,
 )
-from .rocm_mxfp4 import FoldedRowReference, fold_to_row_reference
+from .rocm_mxfp4 import (
+    FoldedRowReference, MXFP4_FOLDED_ROW_LAYOUT_V1,
+    fold_to_row_reference,
+)
 from .rocm_mxfp4_native import _rocm_hipcc, _extract_gfx1201_hsaco
 from .rocm_native import (
     ROCMNativePackage, _driver_selected_device_libraries, _rocm_path,
@@ -29,7 +32,7 @@ GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI = (
     "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k."
     "e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
 )
-FOLDED_WEIGHT_LAYOUT = "mxfp4.gfx12.folded_e4m3.nk_row_major.v1"
+FOLDED_WEIGHT_LAYOUT = MXFP4_FOLDED_ROW_LAYOUT_V1
 
 
 def prepare_folded_weights(
@@ -50,8 +53,8 @@ _FOLDED_PREFILL_HIP = r'''
 #include <hip/hip_bf16.h>
 #include <cstdint>
 using floatx8 = float __attribute__((ext_vector_type(8)));
-using int2 = int __attribute__((ext_vector_type(2)));
-using uint4 = unsigned int __attribute__((ext_vector_type(4)));
+using fragment_i32x2 = int __attribute__((ext_vector_type(2)));
+using copy_u32x4 = unsigned int __attribute__((ext_vector_type(4)));
 
 // Four row fragments and two column fragments per wave: 4 x 2 waves form
 // a 256 x 64 output block.  Both operands are padded in LDS by 16 bytes.
@@ -87,26 +90,26 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
       const int slot = tid + q * 256;
       const long row = m0 + slot / 4;
       const int off = (slot & 3) * 16;
-      uint4 value = {};
+      copy_u32x4 value = {};
       if (kb + off < K) {
         const long safe = row < M ? row : M - 1;
-        value = *reinterpret_cast<const uint4 *>(A + safe * K + kb + off);
+        value = *reinterpret_cast<const copy_u32x4 *>(A + safe * K + kb + off);
       }
-      *reinterpret_cast<uint4 *>(sA + (slot / 4) * 80 + off) = value;
+      *reinterpret_cast<copy_u32x4 *>(sA + (slot / 4) * 80 + off) = value;
     }
     {
       const long row = n0 + tid / 4;
       const int off = (tid & 3) * 16;
-      uint4 value = {};
+      copy_u32x4 value = {};
       if (kb + off < K) {
         const long safe = row < N ? row : N - 1;
-        value = *reinterpret_cast<const uint4 *>(B + safe * K + kb + off);
+        value = *reinterpret_cast<const copy_u32x4 *>(B + safe * K + kb + off);
       }
-      *reinterpret_cast<uint4 *>(sB + (tid / 4) * 80 + off) = value;
+      *reinterpret_cast<copy_u32x4 *>(sB + (tid / 4) * 80 + off) = value;
     }
     __syncthreads();
     for (int step = 0; step < 4 && kb + step * 16 < K; ++step) {
-      int2 af[4], bf[2];
+      fragment_i32x2 af[4], bf[2];
 #pragma unroll
       for (int i = 0; i < 4; ++i) {
         const unsigned char *p = sA + (wm * 64 + i * 16 + col) * 80 + step * 16 + half;
@@ -166,10 +169,16 @@ def package_mxfp4_folded_prefill(
         raise ValueError("folded MXFP4 requires explicit approximate policy")
     if min(m, n, k) <= 0 or k % 32:
         raise ValueError("folded MXFP4 requires positive M/N and K divisible by 32")
+    if m <= 64:
+        raise ValueError("folded BM256/TM4 route requires prefill M > 64")
     if folded.weight_bytes.shape != (n, k) or folded.row_reference.shape != (n,):
         raise ValueError("folded payload disagrees with M/N/K")
     if folded.weight_bytes.dtype != np.uint8 or folded.row_reference.dtype != np.uint8:
         raise TypeError("folded payload requires raw E4M3 and E8M0 uint8 arrays")
+    if not folded.weight_bytes.flags.c_contiguous or not folded.row_reference.flags.c_contiguous:
+        raise ValueError("folded payload must be contiguous at package load")
+    if np.any(folded.row_reference == 255):
+        raise ValueError("folded E8M0 row reference code 255 is reserved")
     source = emit_mxfp4_folded_prefill_hip(entry)
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)

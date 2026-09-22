@@ -10,6 +10,7 @@ from tessera.compiler.rocm_mxfp4_folded import (
     package_mxfp4_folded_prefill,
     prepare_folded_weights,
 )
+from tessera import runtime
 
 
 def test_folded_payload_requires_policy_and_carries_loss() -> None:
@@ -27,8 +28,23 @@ def test_folded_payload_requires_policy_and_carries_loss() -> None:
     assert not folded.lossless
     assert folded.inexact_value_count > 0
     assert folded.max_normalized_abs_error > 0
+    assert (
+        mx.mxfp4_weight_layout(mx.MXFP4_FOLDED_ROW_LAYOUT_V1).logical_shape
+        == "[N,K]"
+    )
+    with pytest.raises(ValueError, match="explicit approximate-policy consent"):
+        mx.convert_weight_layout(
+            checkpoint,
+            source=mx.MXFP4_CHECKPOINT_LAYOUT_V1,
+            destination=mx.MXFP4_FOLDED_ROW_LAYOUT_V1,
+        )
     with pytest.raises(ValueError, match="explicit approximate"):
         package_mxfp4_folded_prefill(256, 48, 64, folded)
+    assert (
+        "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k."
+        "e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
+        in runtime._gfx1201_proved_scheduled_abis()
+    )
 
 
 def test_folded_kernel_has_tall_tile_and_uniform_stage_barriers() -> None:

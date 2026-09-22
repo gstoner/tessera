@@ -31,7 +31,7 @@ from tessera.compiler.rocm_mxfp4_native import (
 
 def _packed_target_ir(*, execution_mode: str = "exact_per_block") -> str:
     return f'''module {{
-  tessera_rocm.scaled_wmma_gemm {{abi = "a_b_lhs_scale_rhs_scale_d_m_n_k", instruction_k = 16 : i64, k = 64 : i64, m = 17 : i64, macro_k = 32 : i64, n = 19 : i64, name = "packed_w4a8", numeric_policy = {{accum = "f32", execution_mode = "{execution_mode}", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_WMMA_ABI}", partial_combine = "scale_outer_product_then_add", physical_contract = "rocm_mxfp4_w4a8_exact_v1", scale_format = "e8m0", scale_k = 32 : i64, tessera.schedule_hash = "schedule-proof"}}
+  tessera_rocm.scaled_wmma_gemm {{abi = "a_b_lhs_scale_rhs_scale_d_m_n_k", instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_scale_group", m = 17 : i64, macro_k = 32 : i64, n = 19 : i64, name = "packed_w4a8", numeric_policy = {{accum = "f32", execution_mode = "{execution_mode}", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_WMMA_ABI}", partial_combine = "scale_outer_product_then_add", physical_contract = "rocm_mxfp4_w4a8_exact_v1", scale_format = "e8m0", scale_k = 32 : i64, tessera.schedule_hash = "schedule-proof"}}
 }}'''
 
 
@@ -102,6 +102,7 @@ def test_wmma_source_isolates_each_k32_partial_before_scaling() -> None:
     assert "<8 x float> zeroinitializer" in source
     assert "%scaled_partial = fmul <8 x float> %partial, %scale_vec" in source
     assert "%running_next = fadd <8 x float> %running, %scaled_partial" in source
+    assert "call void @llvm.amdgcn.sched.barrier(i32 0)" in source
     assert "%a_s0_0_k = add i64 %a_s0_0_k0, %half8" in source
     assert source.count("fragment_word = load i32") == 2
     assert "%b_s1_fragment_slot = add i64" in source
@@ -144,6 +145,15 @@ def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
         MXFP4Schedule("prefill", split_k=2)
     with pytest.raises(ValueError, match="cache_modifier is not implemented"):
         MXFP4Schedule("prefill", cache_modifier="streaming")
+    with pytest.raises(ValueError, match="k_step_schedule"):
+        MXFP4Schedule("decode", k_step_schedule="amd_intrinsic")
+
+
+def test_relaxed_k_step_control_omits_backend_schedule_fence() -> None:
+    source = emit_mxfp4_w4a8_wmma_llvmir(
+        schedule=MXFP4Schedule("decode", k_step_schedule="relaxed")
+    )
+    assert "llvm.amdgcn.sched.barrier" not in source
 
 
 def test_route_receipts_explain_production_selection_and_refusal() -> None:

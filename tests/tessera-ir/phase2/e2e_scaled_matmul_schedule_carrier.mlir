@@ -72,7 +72,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // TILE: tile.scaled_matmul_kernel
 // TILE-SAME: scale_k = 32
 // TILE-SAME: scale_fmt = "e8m0"
-// TILE-SAME: partial_accumulator = {combine = "scale_outer_product_then_add", init = "zero", instruction_steps = 2 : i64, scope = "scale_group"}
+// TILE-SAME: partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 2 : i64, schedule_scope = "scale_group", scope = "scale_group"}
 // TILE-LABEL: func.func @scaled_fp8_k128
 // TILE: tile.scaled_matmul_kernel
 // TILE-SAME: scale_k = 128

@@ -32,7 +32,7 @@ rocm,async_copy,optional-only,,dst_space src_space
 rocm,wait,optional-only,,dst_space src_space
 rocm,mfma,optional-only,,dst_space src_space
 rocm,wmma_gemm,requires,dtype,dst_space src_space
-rocm,scaled_wmma_gemm,requires,abi package_abi,dst_space src_space
+rocm,scaled_wmma_gemm,requires,abi k_step_schedule package_abi,dst_space src_space
 rocm,flash_attn,requires,dtype,dst_space src_space
 rocm,flash_attn_bwd,requires,dtype,dst_space src_space
 rocm,linear_attn,requires,dtype feature_map,dst_space src_space

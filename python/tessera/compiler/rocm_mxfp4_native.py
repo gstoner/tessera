@@ -67,6 +67,7 @@ class MXFP4Schedule:
     stages: int = 1
     waves_per_eu: int = 0
     cache_modifier: str = "default"
+    k_step_schedule: str = "isolated_scale_group"
 
     def __post_init__(self) -> None:
         if self.workload not in {"decode", "prefill"}:
@@ -81,6 +82,10 @@ class MXFP4Schedule:
             )
         if self.cache_modifier != "default":
             raise ValueError("MXFP4 cache_modifier is not implemented")
+        if self.k_step_schedule not in {"isolated_scale_group", "relaxed"}:
+            raise ValueError(
+                "MXFP4 k_step_schedule must be 'isolated_scale_group' or 'relaxed'"
+            )
         if self.workload == "decode" and self.group_m != 1:
             raise ValueError("decode does not admit prefill group-M staging")
         if self.workload == "prefill" and self.split_k != 1:
@@ -113,6 +118,7 @@ class MXFP4RouteReceipt:
                 "stages": self.schedule.stages,
                 "waves_per_eu": self.schedule.waves_per_eu,
                 "cache_modifier": self.schedule.cache_modifier,
+                "k_step_schedule": self.schedule.k_step_schedule,
             },
         }
 
@@ -286,6 +292,7 @@ def package_scaled_wmma_target_ir(
             "physical_contract",
             "output",
             "package_abi",
+            "k_step_schedule",
         )
     }
     expected_strings = {
@@ -295,6 +302,7 @@ def package_scaled_wmma_target_ir(
         "physical_contract": _GFX_MXFP4_PHYSICAL_CONTRACT,
         "output": "bf16",
         "package_abi": GFX_MXFP4_W4A8_WMMA_ABI,
+        "k_step_schedule": "isolated_scale_group",
     }
     for name, expected_string in expected_strings.items():
         if strings[name] != expected_string:
@@ -800,6 +808,12 @@ def emit_mxfp4_w4a8_wmma_llvmir(
     ]
     if shared_b:
         lines.append('  call void @llvm.amdgcn.s.barrier()')
+    if schedule.k_step_schedule == "isolated_scale_group":
+        # The Tile/Target carrier states a backend-neutral no-motion boundary.
+        # AMD lowers that contract to a compiler scheduling barrier, not a
+        # workgroup synchronization instruction: no target intrinsic leaks
+        # into shared IR, and no runtime wait is added here.
+        lines.append('  call void @llvm.amdgcn.sched.barrier(i32 0)')
     lines += ['  br label %group.header', '']
     final_running = '%running'
     if split_reduce:
@@ -868,6 +882,8 @@ def emit_mxfp4_w4a8_wmma_llvmir(
     ]
     if shared_b or split_reduce:
         lines.append('declare void @llvm.amdgcn.s.barrier()')
+    if schedule.k_step_schedule == "isolated_scale_group":
+        lines.append('declare void @llvm.amdgcn.sched.barrier(i32 immarg)')
     lines += [
         'declare <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
         '<2 x i32>, <2 x i32>, <8 x float>)',
@@ -1107,6 +1123,7 @@ def package_mxfp4_w4a8_wmma(
             "stages": schedule.stages,
             "waves_per_eu": schedule.waves_per_eu,
             "cache_modifier": schedule.cache_modifier,
+            "k_step_schedule": schedule.k_step_schedule,
             "selection_receipt": receipt.as_dict(),
         },
     )
@@ -1115,7 +1132,8 @@ def package_mxfp4_w4a8_wmma(
         "activation=e4m3 scale_a=fp32_per_token weight=e2m1_packed "
         "scale_b=e8m0_k32 instruction=v_wmma_f32_16x16x16_fp8_fp8 "
         f"accum=fp32 output=bf16 workload={schedule.workload} "
-        f"group_m={schedule.group_m} weight_layout={weight_layout}"
+        f"group_m={schedule.group_m} k_step_schedule={schedule.k_step_schedule} "
+        f"weight_layout={weight_layout}"
     )
     return ROCMNativePackage(semantic_ir, source, " ".join(command[:-2]), image, descriptor)
 

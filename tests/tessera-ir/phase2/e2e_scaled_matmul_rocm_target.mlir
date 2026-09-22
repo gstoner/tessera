@@ -32,6 +32,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // CHECK: tessera_rocm.scaled_wmma_gemm
 // CHECK-SAME: abi = "a_b_lhs_scale_rhs_scale_d_m_n_k"
 // CHECK-SAME: instruction_k = 16
+// CHECK-SAME: k_step_schedule = "isolated_scale_group"
 // CHECK-SAME: macro_k = 32
 // CHECK-SAME: package_abi = "unbound"
 // CHECK-SAME: partial_combine = "scale_outer_product_then_add"

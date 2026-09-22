@@ -99,14 +99,18 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     A/B/lhs-scale/rhs-scale/D/M/N/K, and `partial_combine` is semantic: each
     `scale_k` group starts from zero, accumulates whole `instruction_k` WMMA
     steps, is scaled by the two scale planes, and only then joins the running
-    accumulator. This directive is intentionally distinct from `wmma_gemm` so
-    an unscaled generator cannot consume it by accident.
+    accumulator. `k_step_schedule` is the backend-neutral scheduling contract:
+    `isolated_scale_group` forbids fragment motion across those group
+    boundaries. Backends choose their own physical scheduling primitive. This
+    directive is intentionally distinct from `wmma_gemm` so an unscaled
+    generator cannot consume it by accident.
   }];
   let arguments = (ins StrAttr:$name, StrAttr:$abi,
                        I64Attr:$m, I64Attr:$n, I64Attr:$k,
                        I64Attr:$instruction_k, I64Attr:$scale_k,
                        I64Attr:$macro_k, StrAttr:$scale_format,
                        StrAttr:$partial_combine,
+                       StrAttr:$k_step_schedule,
                        StrAttr:$physical_contract,
                        StrAttr:$output,
                        StrAttr:$package_abi);

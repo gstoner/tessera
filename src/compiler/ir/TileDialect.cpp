@@ -628,13 +628,18 @@ LogicalResult ScaledMatmulKernelOp::verify() {
   auto scope = partial.getAs<StringAttr>("scope");
   auto combine = partial.getAs<StringAttr>("combine");
   auto steps = partial.getAs<IntegerAttr>("instruction_steps");
+  auto scheduleScope = partial.getAs<StringAttr>("schedule_scope");
+  auto crossStepMotion = partial.getAs<StringAttr>("cross_step_motion");
   if (!init || init.getValue() != "zero" || !scope ||
       scope.getValue() != "scale_group" || !combine ||
       combine.getValue() != "scale_outer_product_then_add" || !steps ||
-      steps.getInt() != mma.getScaleBlockK() / mma.getK())
+      steps.getInt() != mma.getScaleBlockK() / mma.getK() ||
+      !scheduleScope || scheduleScope.getValue() != "scale_group" ||
+      !crossStepMotion || crossStepMotion.getValue() != "forbid")
     return emitOpError(
         "partial_accumulator must state zero-init, scale-group scope, "
-        "scale_outer_product_then_add, and scale_k/instruction_k steps");
+        "scale_outer_product_then_add, scale_k/instruction_k steps, and an "
+        "isolated scale-group scheduling boundary");
   if (auto physical =
           (*this)->getAttrOfType<StringAttr>("physical_contract")) {
     auto epilogue = (*this)->getAttrOfType<TileEpilogueAttr>("epilogue");

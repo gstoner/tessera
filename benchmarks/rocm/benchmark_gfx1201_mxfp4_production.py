@@ -244,13 +244,15 @@ def _tessera_engine(
     group_m: int | None,
     split_k: int | None,
     stream: ctypes.c_void_p | None = None,
+    k_step_schedule: str | None = None,
 ) -> _Engine:
     schedule = None
-    if group_m is not None or split_k is not None:
+    if group_m is not None or split_k is not None or k_step_schedule is not None:
         schedule = MXFP4Schedule(
             case.workload,
             group_m=group_m or 1,
             split_k=split_k or 1,
+            k_step_schedule=k_step_schedule or "isolated_scale_group",
         )
     package = package_mxfp4_w4a8_wmma(case.m, case.n, case.k, schedule=schedule)
     module = ctypes.c_void_p()
@@ -519,6 +521,7 @@ def benchmark(
     iterations: int,
     tessera_group_m: int | None,
     tessera_split_k: int | None,
+    tessera_k_step_schedule: str | None,
     radiance_revision: str | None,
     libr4d_revision: str | None,
 ) -> dict[str, object]:
@@ -538,7 +541,13 @@ def benchmark(
         inputs = _logical_inputs(case)
         engines = [
             _tessera_engine(
-                hip, case, inputs, copies, tessera_group_m, tessera_split_k
+                hip,
+                case,
+                inputs,
+                copies,
+                tessera_group_m,
+                tessera_split_k,
+                k_step_schedule=tessera_k_step_schedule,
             )
         ]
         if radiance is not None:
@@ -670,6 +679,10 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=12)
     parser.add_argument("--tessera-group-m", type=int, choices=(1, 2, 4, 8))
     parser.add_argument("--tessera-split-k", type=int, choices=(1, 2, 4, 8))
+    parser.add_argument(
+        "--tessera-k-step-schedule",
+        choices=("isolated_scale_group", "relaxed"),
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if min(args.copies, args.warmup, args.trials, args.iterations) <= 0:
@@ -684,6 +697,7 @@ def main() -> None:
         iterations=args.iterations,
         tessera_group_m=args.tessera_group_m,
         tessera_split_k=args.tessera_split_k,
+        tessera_k_step_schedule=args.tessera_k_step_schedule,
         radiance_revision=args.radiance_revision,
         libr4d_revision=args.libr4d_revision,
     )

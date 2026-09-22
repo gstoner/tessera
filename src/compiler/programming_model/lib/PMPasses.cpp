@@ -3883,6 +3883,10 @@ struct ScheduleToTilePass
                     "instruction_steps",
                     builder.getI64IntegerAttr(selected->scaleBlockK /
                                               selected->tileK)),
+                builder.getNamedAttr("schedule_scope",
+                                     builder.getStringAttr("scale_group")),
+                builder.getNamedAttr("cross_step_motion",
+                                     builder.getStringAttr("forbid")),
             }));
         if (!selected->physicalContract.empty())
           kernelState.addAttribute(

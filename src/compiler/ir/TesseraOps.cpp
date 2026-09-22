@@ -470,6 +470,59 @@ LogicalResult ScaledMatmulOp::verify() {
   auto agree = [](int64_t a, int64_t b) {
     return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
   };
+  if (auto physical =
+          getOperation()->getAttrOfType<StringAttr>("physical_contract")) {
+    if (physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
+      return emitOpError("unknown physical_contract '")
+             << physical.getValue() << "'";
+    auto lhsScaleType = dyn_cast<RankedTensorType>(getLhsScale().getType());
+    auto rhsScaleType = dyn_cast<RankedTensorType>(getRhsScale().getType());
+    if (!aType || !bType || !rType || !aType.hasStaticShape() ||
+        !bType.hasStaticShape() || !rType.hasStaticShape() ||
+        getTransposeA() || getTransposeB() ||
+        !aType.getElementType().isUnsignedInteger(8) ||
+        !bType.getElementType().isUnsignedInteger(8) ||
+        !rType.getElementType().isBF16())
+      return emitOpError(
+          "rocm_mxfp4_w4a8_exact_v1 requires static ui8 A/B containers, "
+          "bf16 output, and no transpose");
+    const int64_t m = aType.getDimSize(0);
+    const int64_t k = aType.getDimSize(1);
+    const int64_t n = bType.getDimSize(1);
+    if (k <= 0 || k % 32 != 0 || bType.getDimSize(0) != k / 2 ||
+        rType.getDimSize(0) != m || rType.getDimSize(1) != n)
+      return emitOpError(
+          "rocm_mxfp4_w4a8_exact_v1 requires A[M,K], packed B[K/2,N], "
+          "D[M,N], and K divisible by 32");
+    if (!lhsScaleType || lhsScaleType.getRank() != 1 ||
+        !lhsScaleType.getElementType().isF32() ||
+        lhsScaleType.getDimSize(0) != m || !rhsScaleType ||
+        rhsScaleType.getRank() != 2 ||
+        !rhsScaleType.getElementType().isUnsignedInteger(8) ||
+        rhsScaleType.getDimSize(0) != k / 32 ||
+        rhsScaleType.getDimSize(1) != n)
+      return emitOpError(
+          "rocm_mxfp4_w4a8_exact_v1 requires fp32 A scale [M] and "
+          "E8M0 ui8 B scale [K/32,N]");
+    auto sl = getScaleLayoutAttr();
+    auto block = sl ? dyn_cast_or_null<ArrayAttr>(sl.get("block")) : ArrayAttr();
+    auto format = sl ? dyn_cast_or_null<StringAttr>(sl.get("format")) : StringAttr();
+    if (!block || block.size() != 2 ||
+        !isa<IntegerAttr>(block[1]) ||
+        cast<IntegerAttr>(block[1]).getInt() != 32 || !format ||
+        format.getValue() != "e8m0")
+      return emitOpError(
+          "rocm_mxfp4_w4a8_exact_v1 requires an e8m0 K32 scale layout");
+    auto policy = getNumericPolicyAttr();
+    auto mode = policy
+                    ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
+                    : StringAttr();
+    if (!mode || mode.getValue() != "exact_per_block")
+      return emitOpError(
+          "rocm_mxfp4_w4a8_exact_v1 requires numeric_policy "
+          "execution_mode=exact_per_block");
+    return success();
+  }
   const int64_t kA = aType ? aType.getDimSize(getTransposeA() ? 0 : 1)
                            : ShapedType::kDynamic;
   const int64_t kB = bType ? bType.getDimSize(getTransposeB() ? 1 : 0)

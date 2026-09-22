@@ -609,7 +609,51 @@ LogicalResult TileEpilogueAttr::verify(
     return emitError() << "TILE_EPILOGUE_BAD_ACTIVATION: activation must be "
                           "none, relu, gelu, or silu";
   if (!isSupportedOutputType(outputType))
-    return emitError() << "TILE_EPILOGUE_BAD_OUTPUT: output must be f64, f32, f16, or i32";
+    return emitError() << "TILE_EPILOGUE_BAD_OUTPUT: output must be f64, f32, f16, bf16, or i32";
+  return success();
+}
+
+LogicalResult ScaledMatmulKernelOp::verify() {
+  if (getInputs().size() != 8)
+    return emitOpError(
+        "requires A, B, lhs_scale, rhs_scale, D, M, N, and K operands");
+  auto mma = (*this)->getAttrOfType<TileMmaDescAttr>("mma");
+  if (!mma || mma.getScaleBlockK() <= 0 || mma.getScaleFormat().empty())
+    return emitOpError(
+        "requires an mma descriptor with scale_k and scale_fmt");
+  auto partial = (*this)->getAttrOfType<DictionaryAttr>("partial_accumulator");
+  if (!partial)
+    return emitOpError("requires partial_accumulator semantics");
+  auto init = partial.getAs<StringAttr>("init");
+  auto scope = partial.getAs<StringAttr>("scope");
+  auto combine = partial.getAs<StringAttr>("combine");
+  auto steps = partial.getAs<IntegerAttr>("instruction_steps");
+  if (!init || init.getValue() != "zero" || !scope ||
+      scope.getValue() != "scale_group" || !combine ||
+      combine.getValue() != "scale_outer_product_then_add" || !steps ||
+      steps.getInt() != mma.getScaleBlockK() / mma.getK())
+    return emitOpError(
+        "partial_accumulator must state zero-init, scale-group scope, "
+        "scale_outer_product_then_add, and scale_k/instruction_k steps");
+  if (auto physical =
+          (*this)->getAttrOfType<StringAttr>("physical_contract")) {
+    auto epilogue = (*this)->getAttrOfType<TileEpilogueAttr>("epilogue");
+    auto problemM = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_m");
+    auto problemN = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_n");
+    auto problemK = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_k");
+    if (physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
+      return emitOpError("unknown physical_contract");
+    if (mma.getAType() != "e4m3_raw_u8" ||
+        mma.getBType() != "e2m1_packed_u8" ||
+        mma.getScaleBlockK() != 32 || mma.getScaleFormat() != "e8m0" ||
+        mma.getAccType() != "f32" || !epilogue ||
+        epilogue.getOutputType() != "bf16" || !problemM || !problemN ||
+        !problemK || problemM.getInt() <= 0 || problemN.getInt() <= 0 ||
+        problemK.getInt() <= 0 || problemK.getInt() % 32 != 0)
+      return emitOpError(
+          "gfx1201 MXFP4 W4A8 physical contract is inconsistent with mma or "
+          "its static M/N/K and BF16 output epilogue");
+  }
   return success();
 }
 

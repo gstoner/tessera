@@ -1,10 +1,10 @@
 {
   "compiler": {
-    "path": "/tmp/tessera-gfx1201-proof.aGx3hQ/build/tools/tessera-opt/tessera-opt",
-    "sha256": "b72793a4b5c2a223f70f611698682bfa557e1633d3928e226cb8951267b93134",
+    "path": "/home/angstorms/tessera-gfx1201-carrier/build-rocm/tools/tessera-opt/tessera-opt",
+    "sha256": "db8b6bdc5ba697249472aa4c6e2fbd002b3091828de68e8374dd995b32c1049f",
     "source_dirty": false,
-    "source_revision": "5da87e9a9c52bde88ec93e566b31e187954c4c4b",
-    "source_root": "/tmp/tessera-gfx1201-proof.aGx3hQ",
+    "source_revision": "9b7099100ebdae14564a17105143201f2e045478",
+    "source_root": "/home/angstorms/tessera-gfx1201-carrier",
     "stale_generator_sources": 0,
     "version": [
       "LLVM (http://llvm.org/):",
@@ -55,25 +55,28 @@
   "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
   "policy": "ordinary non-owning-host CI keeps the explicit skips; promotion is bound to this exact-device, fresh-compiler, zero-skip packet",
   "proof_build": "llvm23.1.1+rocm10.0+gfx1201",
-  "recorder_sha256": "8dbe253e29e0e0502f90639580d9afb1fdedded1326cc2cb78e0290f26beff6a",
+  "recorder_sha256": "032487a1a74b8c4ca86b0bd7f444305059cf4c3dfc7a3235c4a521cc397fb446",
   "result": {
     "errors": 0,
     "failures": 0,
     "hostname": "tajasarus",
-    "seconds": 58.432,
+    "seconds": 57.009,
     "skipped": 0,
     "tests": 95,
-    "timestamp": "2026-09-21T17:46:04.170901-05:00"
+    "timestamp": "2026-09-21T21:00:44.673728-05:00"
   },
   "schema": "tessera.rocm.gfx1201_scheduled_closure.v1",
-  "source_revision": "5da87e9a9c52bde88ec93e566b31e187954c4c4b",
+  "source_revision": "9b7099100ebdae14564a17105143201f2e045478",
   "sync_key": "GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21",
   "target": "rocm_gfx1201",
   "toolchain": {
+    "hip_runtime_library": "/opt/rocm/core-10.0/lib/libamdhip64.so.7.15.26333-0000000",
+    "hip_runtime_sha256": "817aeadfd9f62b68831ad89993163c7f1f470f30595e7e0da5fdc942193142a8",
     "hip_version": "7.15.26333",
     "hipcc": "HIP version: 7.15.26333-0000000",
+    "hipcc_path": "/opt/rocm/core-10.0/bin/hipcc",
     "llvm_version": "23.1.1",
-    "rocm_path": "/opt/rocm/core",
+    "rocm_path": "/opt/rocm/core-10.0",
     "rocm_version": "10.0.0"
   },
   "work_item": "ROCM-2"

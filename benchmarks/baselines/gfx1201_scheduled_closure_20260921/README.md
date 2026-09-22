@@ -7,8 +7,8 @@ are closed on their owning device. Tajasarus is an AMD Radeon RX 9070 XT
 (`gfx1201`) running ROCm 10.0. The compiler was rebuilt from the
 provenance-hardening follow-up to PR #802 against assertions-enabled LLVM/MLIR
 23.1.1 before the recorded run. The recorder validated ROCm 10.0.0, HIP
-7.15.26333, and the selected HIP device's reported model before assigning the
-proof-build label.
+7.15.26333, the selected HIP device's reported model, and the exact toolkit
+compiler and loaded runtime library before assigning the proof-build label.
 
 ## Result
 
@@ -25,13 +25,14 @@ The complete `tests/unit/test_rocm_gfx1201_scheduled.py` suite passes with
 
 The first run found a stale `~/.local/bin/tessera-opt` and was deliberately not
 accepted as evidence even though all tests passed. The hardened rerun was built
-from `5da87e9a9c52bde88ec93e566b31e187954c4c4b`; the recorder required a clean
-tested checkout, the same clean compiler-source revision, and
-`stale_generator_sources == 0`. The committed
+from `9b7099100ebdae14564a17105143201f2e045478`; the recorder required a clean
+tested checkout, the same clean compiler-source revision,
+`stale_generator_sources == 0`, `/opt/rocm/core-10.0/bin/hipcc`, and the loaded
+`/opt/rocm/core-10.0/lib/libamdhip64.so.7.15.26333-0000000`. The committed
 [`evidence.json`](evidence.json) binds the fixture and recorder hashes, exact
-device/target, compiler binary hash, toolchain, family counts, and JUnit
-summary. The unit drift gate recomputes both content hashes, so edits to either
-the fixture or recorder invalidate this packet.
+device/target, compiler binary hash, toolkit paths, HIP runtime hash, family
+counts, and JUnit summary. The unit drift gate recomputes both content hashes,
+so edits to either the fixture or recorder invalidate this packet.
 
 ## Policy boundary
 
@@ -48,7 +49,7 @@ revision:
 ROCM_PATH=/opt/rocm/core \
 TESSERA_ROCM_CHIP=gfx1201 \
 TESSERA_GFX1201_DEVICE_PROOF=1 \
-TESSERA_OPT=/home/angstorms/programming/tessera/build-assertions/tools/tessera-opt/tessera-opt \
+TESSERA_OPT="$PWD/build-rocm/tools/tessera-opt/tessera-opt" \
 PYTHONPATH=python \
 python -m benchmarks.rocm.record_gfx1201_scheduled_closure \
   --output /tmp/gfx1201-scheduled-closure.json

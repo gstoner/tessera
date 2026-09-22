@@ -59,8 +59,11 @@ def test_row_reference_fold_is_exact_through_delta_eight() -> None:
     # magnitude 0.5, so delta 8 reaches E4M3's smallest subnormal (2^-9).
     scales = np.arange(135, 126, -1, dtype=np.uint8)[:, None]
     codes = np.ones((1, scales.shape[0] * 32), dtype=np.uint8)
-    folded = mx.fold_to_row_reference(codes, scales)
+    folded = mx.fold_to_row_reference(codes, scales, allow_approximate=True)
     assert folded.lossless
+    assert folded.inexact_value_count == 0
+    assert folded.max_normalized_abs_error == 0.0
+    assert folded.max_normalized_relative_error == 0.0
     assert int(folded.exponent_delta.max()) == 8
     np.testing.assert_array_equal(mx.folded_weights(folded), mx.exact_weights(codes, scales))
 
@@ -70,8 +73,12 @@ def test_row_reference_fold_reports_rounding_beyond_exact_range() -> None:
     # per-block route remains non-zero; the fast fold must disclose the loss.
     codes = np.ones((1, 64), dtype=np.uint8)
     scales = np.asarray([[135], [126]], dtype=np.uint8)
-    folded = mx.fold_to_row_reference(codes, scales)
+    folded = mx.fold_to_row_reference(codes, scales, allow_approximate=True)
     assert not folded.lossless
+    assert folded.inexact_value_count == 32
+    assert folded.max_normalized_abs_error > 0.0
+    assert folded.max_normalized_relative_error == 1.0
+    assert folded.approximate_policy == "explicit_allow"
     assert int(folded.exponent_delta.max()) == 9
     assert np.any(mx.folded_weights(folded) != mx.exact_weights(codes, scales))
     policy = mx.numeric_policy("folded_row_reference")
@@ -82,7 +89,7 @@ def test_row_reference_fold_reports_rounding_beyond_exact_range() -> None:
 def test_zero_codes_remain_exact_even_at_large_exponent_delta() -> None:
     codes = np.zeros((1, 64), dtype=np.uint8)
     scales = np.asarray([[140], [120]], dtype=np.uint8)
-    folded = mx.fold_to_row_reference(codes, scales)
+    folded = mx.fold_to_row_reference(codes, scales, allow_approximate=True)
     assert folded.lossless
     np.testing.assert_array_equal(mx.folded_weights(folded), 0.0)
 
@@ -92,9 +99,16 @@ def test_reserved_zero_scale_block_stays_zero_during_row_fold() -> None:
     # payload. It must not be treated as exponent zero relative to row_ref=1.
     codes = np.ones((1, 64), dtype=np.uint8)
     scales = np.asarray([[0], [1]], dtype=np.uint8)
-    folded = mx.fold_to_row_reference(codes, scales)
+    folded = mx.fold_to_row_reference(codes, scales, allow_approximate=True)
     reconstructed = mx.folded_weights(folded)
     assert folded.lossless
     np.testing.assert_array_equal(reconstructed, mx.exact_weights(codes, scales))
     np.testing.assert_array_equal(reconstructed[:, :32], 0.0)
     assert np.any(reconstructed[:, 32:] != 0.0)
+
+
+def test_row_reference_fold_requires_explicit_approximate_policy() -> None:
+    codes = np.ones((1, 32), dtype=np.uint8)
+    scales = np.asarray([[127]], dtype=np.uint8)
+    with pytest.raises(ValueError, match="explicit approximate numerical policy"):
+        mx.fold_to_row_reference(codes, scales)

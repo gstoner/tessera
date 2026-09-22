@@ -135,24 +135,61 @@ def _validate_build_versions(
     }
 
 
-def _rocm_release() -> str:
-    roots = []
-    if configured := os.environ.get("ROCM_PATH"):
-        roots.append(Path(configured))
-    roots.extend((Path("/opt/rocm/core"), Path("/opt/rocm")))
-    seen: set[Path] = set()
-    for root in roots:
-        for candidate in (root, root.resolve()):
-            marker = candidate / ".info" / "version"
-            if marker in seen:
-                continue
-            seen.add(marker)
-            if marker.is_file():
-                return _version(marker.read_text(), r"^(\d+\.\d+(?:\.\d+)?)", "ROCm")
-    raise RuntimeError("cannot locate the ROCm release marker under ROCM_PATH")
+def _selected_rocm_toolkit() -> tuple[Path, Path]:
+    """Return the exact toolkit and HIP compiler used by native packaging."""
+
+    toolkit = rocm_native._rocm_path().resolve()
+    if not (toolkit / "amdgcn" / "bitcode").is_dir():
+        raise RuntimeError(f"selected ROCm toolkit has no device libraries: {toolkit}")
+    hipcc = toolkit / "bin" / "hipcc"
+    if not hipcc.is_file():
+        raise RuntimeError(f"selected ROCm toolkit has no hipcc: {hipcc}")
+    return toolkit, hipcc.resolve()
 
 
-def _selected_hip_device_name() -> str:
+def _rocm_release(toolkit: Path) -> str:
+    marker = toolkit / ".info" / "version"
+    if not marker.is_file():
+        raise RuntimeError(f"selected ROCm toolkit has no release marker: {marker}")
+    return _version(marker.read_text(), r"^(\d+\.\d+(?:\.\d+)?)", "ROCm")
+
+
+class _DlInfo(ctypes.Structure):
+    _fields_ = [
+        ("dli_fname", ctypes.c_char_p),
+        ("dli_fbase", ctypes.c_void_p),
+        ("dli_sname", ctypes.c_char_p),
+        ("dli_saddr", ctypes.c_void_p),
+    ]
+
+
+def _loaded_hip_runtime_path(hip: ctypes.CDLL) -> Path:
+    """Resolve the shared object that owns the HIP launch handle's ABI."""
+
+    dladdr = ctypes.CDLL(None).dladdr
+    dladdr.argtypes = [ctypes.c_void_p, ctypes.POINTER(_DlInfo)]
+    dladdr.restype = ctypes.c_int
+    info = _DlInfo()
+    symbol = ctypes.cast(hip.hipGetDevice, ctypes.c_void_p)
+    if dladdr(symbol, ctypes.byref(info)) == 0 or not info.dli_fname:
+        raise RuntimeError("cannot resolve the loaded HIP runtime library")
+    return Path(info.dli_fname.decode("utf-8", errors="strict")).resolve()
+
+
+def _require_toolkit_runtime(toolkit: Path, runtime_library: Path) -> Path:
+    toolkit = toolkit.resolve()
+    runtime_library = runtime_library.resolve()
+    try:
+        runtime_library.relative_to(toolkit)
+    except ValueError as exc:
+        raise RuntimeError(
+            "loaded HIP runtime is outside the selected ROCm toolkit: "
+            f"{runtime_library} not under {toolkit}"
+        ) from exc
+    return runtime_library
+
+
+def _selected_hip_device() -> tuple[str, ctypes.CDLL]:
     hip = rt._load_hip_for_launch()
     if hip is None:
         raise RuntimeError("cannot load HIP to identify the selected gfx1201 device")
@@ -171,7 +208,7 @@ def _selected_hip_device_name() -> str:
     value = name.value.decode("utf-8", errors="strict").strip()
     if not value:
         raise RuntimeError("selected HIP device returned an empty model name")
-    return value
+    return value, hip
 
 
 def _compiler_source_root(tool: Path) -> Path:
@@ -227,7 +264,7 @@ def record(output: Path) -> None:
         raise RuntimeError("set TESSERA_GFX1201_DEVICE_PROOF=1 for this owning-device gate")
     if rt._rocm_live_arch() != "gfx1201" or rt._rocm_chip() != "gfx1201":
         raise RuntimeError("gfx1201 closure evidence requires the selected gfx1201 device and compiler target")
-    selected_device = _selected_hip_device_name()
+    selected_device, hip = _selected_hip_device()
     if selected_device != EXPECTED_DEVICE:
         raise RuntimeError(
             f"gfx1201 closure evidence requires {EXPECTED_DEVICE}; "
@@ -260,13 +297,17 @@ def record(output: Path) -> None:
             f"{compiler_source_revision} != {source_revision}"
         )
 
+    toolkit, hipcc = _selected_rocm_toolkit()
+    runtime_library = _require_toolkit_runtime(
+        toolkit, _loaded_hip_runtime_path(hip)
+    )
     compiler_output = _command_output(str(tool), "--version")
-    hipcc_output = _command_output("hipcc", "--version")
+    hipcc_output = _command_output(str(hipcc), "--version")
     versions = _validate_build_versions(
         proof.proof_build,
         compiler_output=compiler_output,
         hipcc_output=hipcc_output,
-        rocm_release=_rocm_release(),
+        rocm_release=_rocm_release(toolkit),
     )
 
     with tempfile.TemporaryDirectory(prefix="gfx1201-scheduled-closure-") as tmp:
@@ -329,7 +370,10 @@ def record(output: Path) -> None:
             "rocm_version": versions["rocm"],
             "hip_version": versions["hip"],
             "hipcc": hipcc_output.splitlines()[0],
-            "rocm_path": os.environ.get("ROCM_PATH", ""),
+            "hipcc_path": str(hipcc),
+            "hip_runtime_library": str(runtime_library),
+            "hip_runtime_sha256": _sha256(runtime_library),
+            "rocm_path": str(toolkit),
         },
         "result": summary,
         "device_dependent_cases": {

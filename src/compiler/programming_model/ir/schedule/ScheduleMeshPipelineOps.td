@@ -81,6 +81,7 @@ def Schedule_MatmulOp : Op<ScheduleDialect, "matmul", [Pure]> {
                        DefaultValuedAttr<I64Attr, "0">:$block_k,
                        DefaultValuedAttr<I64Attr, "0">:$scale_k,
                        DefaultValuedAttr<StrAttr, "\"\"">:$scale_format,
+                       DefaultValuedAttr<StrAttr, "\"\"">:$physical_contract,
                        StrAttr:$accum,
                        BoolAttr:$bias,
                        StrAttr:$activation,

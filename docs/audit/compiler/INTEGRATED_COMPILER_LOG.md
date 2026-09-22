@@ -4655,11 +4655,16 @@ Review follow-through aligns Schedule macro K to each complete scale group
 (`scale_k=128` now carries `block_k=128`) and preserves reserved E8M0 code zero
 as a zero block through folded-row conversion and its losslessness check.
 
-Remaining: The generic `tessera.scaled_matmul` Schedule/Tile path still needs a
-first-class scaled partial-accumulator consumer. The folded route remains an
-explicit approximate-policy candidate, and throughput/counter promotion needs
-a counter-capable exact gfx1201 environment. No gfx1200 claim follows from
-this gfx1201 proof.
+Follow-through: The generic `tessera.scaled_matmul` path now owns a
+content-addressed Schedule record, a first-class Tile scaled-partial carrier,
+and a gfx1201 Target directive. The packed `rocm_mxfp4_w4a8_exact_v1` form
+binds that directive to the proved WMMA ABI while the logical W8A8 form remains
+distinct. Folded-row conversion requires explicit approximate-policy opt-in
+and reports quantified loss.
+
+Remaining: The in-pipeline binary materializer, tuned decode/prefill selection,
+and counter-capable comparison remain open; no gfx1200 claim follows from this
+gfx1201 proof.
 
 Evidence: [recorded HSACO/ISA/resource packet](../../../benchmarks/baselines/gfx1201_mxfp4_w4a8_20260921/README.md),
 `tests/device/rocm/test_mxfp4_w4a8_exact.py`, and

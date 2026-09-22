@@ -96,6 +96,10 @@ class FoldedRowReference:
     row_reference: np.ndarray
     exponent_delta: np.ndarray
     lossless: bool
+    inexact_value_count: int
+    max_normalized_abs_error: float
+    max_normalized_relative_error: float
+    approximate_policy: str = "explicit_allow"
 
     def __post_init__(self) -> None:
         if self.weight_bytes.dtype != np.uint8:
@@ -202,13 +206,21 @@ def exact_weights(codes: np.ndarray, scale_exponents: np.ndarray) -> np.ndarray:
 
 
 def fold_to_row_reference(codes: np.ndarray,
-                          scale_exponents: np.ndarray) -> FoldedRowReference:
+                          scale_exponents: np.ndarray, *,
+                          allow_approximate: bool = False) -> FoldedRowReference:
     """Fold block exponents into E4M3 bytes relative to one exponent per row.
 
-    ``lossless`` is computed from the actual codes, not only the largest delta:
+    This is an approximate execution route even when one particular payload
+    happens to fold exactly, so callers must opt in with
+    ``allow_approximate=True``. ``lossless`` is computed from the actual codes,
+    not only the largest delta:
     zero values remain exact at every delta, while non-zero values may round or
     underflow once the shifted magnitude leaves the E4M3 grid.
     """
+    if not allow_approximate:
+        raise ValueError(
+            "folded_row_reference requires an explicit approximate numerical policy"
+        )
     c = _as_u8("MXFP4 E2M1 codes", codes, maximum=15)
     s = _as_u8("MXFP4 E8M0 exponents", scale_exponents, maximum=254)
     n, k = _validate_scale_plane(c, s)
@@ -225,11 +237,26 @@ def fold_to_row_reference(codes: np.ndarray,
     normalized = np.where(reserved_zero, np.float32(0.0), normalized)
     folded = normalized.astype(ml_dtypes.float8_e4m3fn)
     folded_f32 = folded.astype(np.float32)
+    different = folded_f32 != normalized
+    abs_error = np.abs(
+        folded_f32.astype(np.float64) - normalized.astype(np.float64)
+    )
+    nonzero = normalized != 0.0
+    relative_error = np.zeros_like(abs_error)
+    np.divide(
+        abs_error,
+        np.abs(normalized.astype(np.float64)),
+        out=relative_error,
+        where=nonzero,
+    )
     return FoldedRowReference(
         weight_bytes=np.ascontiguousarray(folded.view(np.uint8).reshape(n, k)),
         row_reference=np.ascontiguousarray(row_ref),
         exponent_delta=np.ascontiguousarray(delta),
-        lossless=bool(np.array_equal(folded_f32, normalized)),
+        lossless=not bool(np.any(different)),
+        inexact_value_count=int(np.count_nonzero(different)),
+        max_normalized_abs_error=float(abs_error.max(initial=0.0)),
+        max_normalized_relative_error=float(relative_error.max(initial=0.0)),
     )
 
 

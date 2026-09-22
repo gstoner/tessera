@@ -2383,6 +2383,7 @@ struct LowerTileToROCMPass
     getOperation().walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
       if (name == "tile.sparse_mma" || name == "tile.mma" || name == "tile.matmul_kernel" ||
+          name == "tile.scaled_matmul_kernel" ||
           name == "tile.materialize_composed_layout" ||
           name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
           name == "tile.attention_kernel" ||
@@ -3106,6 +3107,84 @@ struct LowerTileToROCMPass
         state.addAttribute("route", builder.getStringAttr("direct_gather"));
         state.addAttribute("arch", builder.getStringAttr(arch));
         state.addAttribute("source", builder.getStringAttr("tile.moe_dispatch_kernel"));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.scaled_matmul_kernel") {
+        auto desc =
+            op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+        auto partial =
+            op->getAttrOfType<DictionaryAttr>("partial_accumulator");
+        auto parent = op->getParentOfType<func::FuncOp>();
+        auto combine = partial
+                           ? partial.getAs<StringAttr>("combine")
+                           : StringAttr();
+        auto physical =
+            op->getAttrOfType<StringAttr>("physical_contract");
+        auto epilogue =
+            op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+        auto problemM = op->getAttrOfType<IntegerAttr>("tessera.problem_m");
+        auto problemN = op->getAttrOfType<IntegerAttr>("tessera.problem_n");
+        auto problemK = op->getAttrOfType<IntegerAttr>("tessera.problem_k");
+        const bool packedMxfp4 =
+            physical &&
+            physical.getValue() == "rocm_mxfp4_w4a8_exact_v1";
+        if (!desc || !partial || !combine || !epilogue || !parent ||
+            op->getNumOperands() != 8 || arch != "gfx1201" ||
+            desc.getFamily() != "wmma" || desc.getM() != 16 ||
+            desc.getN() != 16 || desc.getK() != 16 ||
+            desc.getAccType() != "f32" || desc.getScaleBlockK() <= 0 ||
+            desc.getScaleBlockK() % desc.getK() != 0 ||
+            combine.getValue() != "scale_outer_product_then_add" ||
+            !problemM || !problemN || !problemK || problemM.getInt() < 0 ||
+            problemN.getInt() < 0 || problemK.getInt() < 0 ||
+            (packedMxfp4 &&
+             (desc.getAType() != "e4m3_raw_u8" ||
+              desc.getBType() != "e2m1_packed_u8" ||
+              desc.getScaleBlockK() != 32 ||
+              desc.getScaleFormat() != "e8m0" ||
+              epilogue.getOutputType() != "bf16" ||
+              problemM.getInt() <= 0 || problemN.getInt() <= 0 ||
+              problemK.getInt() <= 0 || problemK.getInt() % 32 != 0))) {
+          op->emitError(
+              "ROCm scaled matmul requires the gfx1201 m16n16k16 f32 "
+              "WMMA contract and isolated scale-group partial accumulation");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.scaled_wmma_gemm");
+        state.addAttribute("name", builder.getStringAttr(parent.getSymName()));
+        state.addAttribute(
+            "abi", builder.getStringAttr("a_b_lhs_scale_rhs_scale_d_m_n_k"));
+        state.addAttribute("m", problemM);
+        state.addAttribute("n", problemN);
+        state.addAttribute("k", problemK);
+        state.addAttribute("instruction_k",
+                           builder.getI64IntegerAttr(desc.getK()));
+        state.addAttribute("scale_k",
+                           builder.getI64IntegerAttr(desc.getScaleBlockK()));
+        state.addAttribute(
+            "macro_k",
+            builder.getI64IntegerAttr(desc.getK() * desc.getKBlocks()));
+        state.addAttribute("scale_format",
+                           builder.getStringAttr(desc.getScaleFormat()));
+        state.addAttribute("partial_combine", combine);
+        state.addAttribute(
+            "physical_contract",
+            physical ? physical : builder.getStringAttr("logical_block_scaled"));
+        state.addAttribute("output",
+                           builder.getStringAttr(epilogue.getOutputType()));
+        state.addAttribute(
+            "package_abi",
+            builder.getStringAttr(
+                packedMxfp4
+                    ? "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1"
+                    : "unbound"));
+        for (StringRef attrName : {"tessera.schedule_hash", "numeric_policy"})
+          if (Attribute attr = op->getAttr(attrName))
+            state.addAttribute(attrName, attr);
         builder.create(state);
         op->erase();
         continue;

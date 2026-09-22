@@ -8,14 +8,33 @@ last_updated: 2026-09-21
 
 # Apple compiler, exact-device, and performance plan
 
+## Shared scaled-partial carrier and MXFP4 policy — 2026-09-21
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-SCALED-PARTIAL-CARRIER-2026-09-21`. The shared Graph/Schedule/Tile
+contract now represents isolated scale-group partial accumulation, and the
+host fold reports quantified approximation loss. Apple parity is not
+applicable in this slice: the named W4A8 physical ABI and Target directive are
+gfx1201-only, no Metal package consumes them, and no ROCm proof transfers. The
+MXFP4 evidence packet's added generic-materializer row is likewise not
+applicable to Apple and changes no shared benchmark semantics.
+
+## GFX1201 scheduled-proof provenance schema — 2026-09-21
+
+Owner ROCM-2; sync `GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21`. Not
+applicable to Apple execution. The evidence extension records the exact ROCm
+toolkit, HIP compiler, and loaded HIP runtime library used by the gfx1201
+owning-host gate. It changes no Metal ABI, runtime, dtype, numerical policy,
+or device row, and the Tajasarus proof does not transfer to Apple.
+
 ## GFX1201 exact MXFP4 execution — 2026-09-21
 
 Owner ROCM-MXFP4-W4A8-1; sync
 `ROCM-MXFP4-PHYSICAL-CONTRACT-2026-09-21`. Not applicable to Apple physical
 execution. The new scalar/FP8-WMMA packages, exact K32 scale boundary, raw
-HSACO ABI, and Tajasarus proof are ROCm/gfx1201-only. The shared Schedule
-carrier remains fail-closed before Tile, so no Metal IR, dtype, runtime,
-numerical-policy, or device row changes and no ROCm proof transfers.
+HSACO ABI, and Tajasarus proof are ROCm/gfx1201-only. The subsequent shared
+carrier is assessed above; no Metal dtype, runtime, or device row changes and
+no ROCm proof transfers.
 
 ## GFX1201 dtype and exact-executor closure — 2026-09-21
 

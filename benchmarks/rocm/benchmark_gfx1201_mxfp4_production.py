@@ -38,6 +38,7 @@ import ml_dtypes
 import numpy as np
 
 from tessera import runtime as rt
+from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.rocm_mxfp4_native import MXFP4Schedule, package_mxfp4_w4a8_wmma
 
 
@@ -129,6 +130,22 @@ def _logical_inputs(case: Case) -> dict[str, np.ndarray]:
         "row_reference": np.ascontiguousarray(row_reference),
         "output": np.zeros((m, n), dtype=ml_dtypes.bfloat16),
     }
+
+
+def _sampled_exact_reference(
+    case: Case, inputs: dict[str, np.ndarray]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return an independent FP32-dequantized oracle for sampled output cells."""
+    row_count = min(case.m, 8)
+    col_count = min(case.n, 16)
+    rows = np.unique(np.linspace(0, case.m - 1, row_count, dtype=np.int64))
+    cols = np.unique(np.linspace(0, case.n - 1, col_count, dtype=np.int64))
+    activation = inputs["a"][rows].view(ml_dtypes.float8_e4m3fn).astype(np.float32)
+    activation *= inputs["a_scale"][rows, None]
+    codes = mx.unpack_e2m1_codes(inputs["packed_row_major"][cols])
+    weights = mx.exact_weights(codes, inputs["b_scale"][:, cols])
+    expected = (activation @ weights.T).astype(ml_dtypes.bfloat16)
+    return rows, cols, expected
 
 
 def _fragment_order(packed: np.ndarray, n: int, k: int) -> np.ndarray:
@@ -226,6 +243,7 @@ def _tessera_engine(
     copies: int,
     group_m: int | None,
     split_k: int | None,
+    stream: ctypes.c_void_p | None = None,
 ) -> _Engine:
     schedule = None
     if group_m is not None or split_k is not None:
@@ -246,7 +264,11 @@ def _tessera_engine(
         raise RuntimeError("Tessera MXFP4 entry is missing")
     arrays = (
         inputs["a"],
-        np.ascontiguousarray(inputs["packed_row_major"].T),
+        mx.convert_weight_layout(
+            inputs["packed_row_major"],
+            source=mx.MXFP4_CHECKPOINT_LAYOUT_V1,
+            destination=str(package.descriptor.provenance["weight_layout"]),
+        ),
         inputs["a_scale"],
         inputs["b_scale"],
         inputs["output"],
@@ -267,7 +289,7 @@ def _tessera_engine(
         workgroup = package.descriptor.geometry.workgroup
         assert grid is not None and workgroup is not None
         rc = hip.hipModuleLaunchKernel(
-            function, *grid, *workgroup, 0, None, arguments, None
+            function, *grid, *workgroup, 0, stream, arguments, None
         )
         if rc != 0:
             raise RuntimeError(f"Tessera MXFP4 launch failed rc={rc}")
@@ -282,6 +304,7 @@ def _tessera_engine(
             "abi": package.descriptor.abi_id,
             "image_sha256": hashlib.sha256(package.image.payload).hexdigest(),
             "route": package.descriptor.provenance["route"],
+            "weight_layout": package.descriptor.provenance["weight_layout"],
             "compiler_fingerprint": package.image.compiler_fingerprint,
             "toolchain_fingerprint": package.image.toolchain_fingerprint,
             "schedule": {
@@ -526,12 +549,33 @@ def benchmark(
                 engines.append(candidate)
         try:
             outputs = {engine.name: engine.output() for engine in engines}
+            sample_rows, sample_cols, expected = _sampled_exact_reference(case, inputs)
+            for name, output in outputs.items():
+                sampled = output[np.ix_(sample_rows, sample_cols)]
+                if not np.array_equal(sampled.view(np.uint16), expected.view(np.uint16)):
+                    mismatch = sampled.view(np.uint16) != expected.view(np.uint16)
+                    first = tuple(int(value) for value in np.argwhere(mismatch)[0])
+                    row = int(sample_rows[first[0]])
+                    col = int(sample_cols[first[1]])
+                    raise RuntimeError(
+                        f"{case.label}: {name} fails sampled exact FP32 reference at "
+                        f"[{row},{col}]: got=0x{int(output.view(np.uint16)[row, col]):04x} "
+                        f"expected=0x{int(expected.view(np.uint16)[first]):04x}"
+                    )
             baseline = outputs["tessera"]
             for name, output in outputs.items():
                 if not np.array_equal(output.view(np.uint16), baseline.view(np.uint16)):
                     mismatch = int(np.count_nonzero(output.view(np.uint16) != baseline.view(np.uint16)))
+                    first = tuple(
+                        int(value)
+                        for value in np.argwhere(
+                            output.view(np.uint16) != baseline.view(np.uint16)
+                        )[0]
+                    )
                     raise RuntimeError(
-                        f"{case.label}: {name} differs from Tessera in {mismatch} BF16 cells"
+                        f"{case.label}: {name} differs from Tessera in {mismatch} BF16 cells; "
+                        f"first={first} tessera=0x{int(baseline.view(np.uint16)[first]):04x} "
+                        f"{name}=0x{int(output.view(np.uint16)[first]):04x}"
                     )
             for engine in engines:
                 samples = _measure(

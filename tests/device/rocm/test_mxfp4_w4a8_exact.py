@@ -1,6 +1,7 @@
 """Owning-device proof for exact scalar and WMMA gfx1201 MXFP4 W4A8."""
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,12 @@ from tessera.compiler.rocm_mxfp4_native import (
     package_scaled_wmma_target_ir,
 )
 from tests._support import rocm_isa
+from benchmarks.rocm.benchmark_gfx1201_mxfp4_production import (
+    Case,
+    _logical_inputs,
+    _sampled_exact_reference,
+    _tessera_engine,
+)
 
 
 def _exact_inputs(
@@ -34,7 +41,7 @@ def _exact_inputs(
     a_raw = np.ascontiguousarray(a_e4m3.view(np.uint8))
     a_scale = np.exp2(rng.integers(-1, 2, size=m)).astype(np.float32)
     codes = rng.integers(0, 16, size=(n, k), dtype=np.uint8)
-    packed_kn = np.ascontiguousarray(mx.pack_e2m1_codes(codes).T)
+    packed_checkpoint = mx.pack_e2m1_codes(codes)
     b_scale = rng.integers(124, 131, size=(k // 32, n), dtype=np.uint8)
     b_scale[0, ::7] = 0  # reserved zero-block spelling is executable semantics
     expected = (
@@ -43,7 +50,7 @@ def _exact_inputs(
     ).astype(ml_dtypes.bfloat16)
     return {
         "a": a_raw,
-        "b_packed": packed_kn,
+        "b_packed": np.ascontiguousarray(packed_checkpoint.T),
         "a_scale": a_scale,
         "b_scale": b_scale,
         "output": np.zeros((m, n), dtype=ml_dtypes.bfloat16),
@@ -75,6 +82,12 @@ def test_exact_mxfp4_w4a8_package_executes_on_gfx1201(
     buffers, expected = _exact_inputs(shape)
 
     package = package_factory(m, n, k)
+    weight_layout = str(package.descriptor.provenance["weight_layout"])
+    buffers["b_packed"] = mx.convert_weight_layout(
+        np.ascontiguousarray(buffers["b_packed"].T),
+        source=mx.MXFP4_CHECKPOINT_LAYOUT_V1,
+        destination=weight_layout,
+    )
     if instruction is not None:
         rocm_isa.assert_selected(
             package.image.payload,
@@ -101,6 +114,143 @@ def test_exact_mxfp4_w4a8_package_executes_on_gfx1201(
         result, default=str
     )
     np.testing.assert_array_equal(buffers["output"], expected)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (1, 48, 64),
+        (5, 80, 64),
+        (64, 48, 128),
+        (65, 48, 64),
+        (128, 80, 64),
+        (65, 48, 8704),
+        (128, 48, 8704),
+        (128, 5120, 64),
+        (64, 5120, 64),
+    ],
+)
+def test_fragment_abi_boundary_and_ragged_tiles_execute_on_gfx1201(
+    shape: tuple[int, int, int],
+) -> None:
+    """Cover skinny-M boundaries and N tiles that are ragged to larger kernels."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, n, k = shape
+    buffers, expected = _exact_inputs(shape)
+    package = package_mxfp4_w4a8_wmma(
+        m,
+        n,
+        k,
+        weight_layout=mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+    )
+    buffers["b_packed"] = mx.convert_weight_layout(
+        np.ascontiguousarray(buffers["b_packed"].T),
+        source=mx.MXFP4_CHECKPOINT_LAYOUT_V1,
+        destination=mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+    )
+    assert package.descriptor.provenance["weight_layout"] == (
+        mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+    )
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": package.image.target},
+        native_image=package.image,
+        launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir,
+        target_ir=package.target_ir,
+    )
+    result = rt.launch(
+        artifact,
+        {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}},
+    )
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(
+        result, default=str
+    )
+    np.testing.assert_array_equal(buffers["output"], expected)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+def test_fragment_decode_launch_is_hip_graph_capture_safe() -> None:
+    """Loading/conversion/allocation happen before capture; launch only enqueues."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    hip = rt._load_hip_for_launch()
+    assert hip is not None and hip.hipInit(0) == 0
+    pointer = ctypes.c_void_p
+    hip.hipStreamCreate.argtypes = [ctypes.POINTER(pointer)]
+    hip.hipStreamBeginCapture.argtypes = [pointer, ctypes.c_int]
+    hip.hipStreamEndCapture.argtypes = [pointer, ctypes.POINTER(pointer)]
+    hip.hipGraphInstantiate.argtypes = [
+        ctypes.POINTER(pointer), pointer, ctypes.POINTER(pointer),
+        ctypes.c_char_p, ctypes.c_size_t,
+    ]
+    hip.hipGraphLaunch.argtypes = [pointer, pointer]
+
+    stream, graph, executable = pointer(), pointer(), pointer()
+    assert hip.hipStreamCreate(ctypes.byref(stream)) == 0
+    case = Case("decode", 5, 48, 64)
+    inputs = _logical_inputs(case)
+    engine = _tessera_engine(hip, case, inputs, 1, None, None, stream)
+    try:
+        assert hip.hipStreamBeginCapture(stream, 0) == 0
+        engine.launch()
+        assert hip.hipStreamEndCapture(stream, ctypes.byref(graph)) == 0
+        assert hip.hipGraphInstantiate(
+            ctypes.byref(executable), graph, None, None, 0
+        ) == 0
+        assert hip.hipGraphLaunch(executable, stream) == 0
+        assert hip.hipStreamSynchronize(stream) == 0
+        rows, cols, expected = _sampled_exact_reference(case, inputs)
+        output = engine.copies[0].download(engine.output_index)
+        np.testing.assert_array_equal(output[np.ix_(rows, cols)], expected)
+    finally:
+        if executable.value:
+            hip.hipGraphExecDestroy(executable)
+        if graph.value:
+            hip.hipGraphDestroy(graph)
+        engine.close()
+        hip.hipStreamDestroy(stream)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+def test_fragment_decode_does_not_store_into_poisoned_rows_after_m() -> None:
+    assert rt._rocm_live_arch() == "gfx1201"
+    hip = rt._load_hip_for_launch()
+    assert hip is not None and hip.hipInit(0) == 0
+    case = Case("decode", 5, 48, 64)
+    inputs = _logical_inputs(case)
+    # The raw device allocation is deliberately larger than the logical
+    # descriptor. Any unguarded row store changes the poison suffix.
+    inputs["output"] = np.full((16, case.n), 123.0, dtype=ml_dtypes.bfloat16)
+    engine = _tessera_engine(hip, case, inputs, 1, None, None)
+    poison = inputs["output"].copy()
+    bundle = engine.copies[0]
+    try:
+        assert hip.hipMemcpy(
+            bundle.device[4],
+            poison.ctypes.data_as(ctypes.c_void_p),
+            int(poison.nbytes),
+            1,
+        ) == 0
+        engine.launch()
+        assert hip.hipDeviceSynchronize() == 0
+        output = bundle.download(4)
+        np.testing.assert_array_equal(
+            output[case.m:].view(np.uint16), poison[case.m:].view(np.uint16)
+        )
+    finally:
+        engine.close()
 
 
 @pytest.mark.hardware_rocm

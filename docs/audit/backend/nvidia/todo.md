@@ -8,14 +8,14 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-## GFX1201 MXFP4 production tuning benchmark — 2026-09-22
+## GFX1201 MXFP4 versioned layout ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync
-`ROCM-MXFP4-PRODUCTION-TUNING-2026-09-22`. Not applicable to CUDA physical
-execution. This benchmark measures OCP E8M0-per-K32 MXFP4 through RDNA4 FP8
-WMMA and changes no NVIDIA NVFP4 block-scale ABI, PTX schedule, selector, or
-device row. Any CUDA tuning remains separately owned and no gfx1201 timing
-transfers to NVIDIA.
+`ROCM-MXFP4-FRAGMENT-ABI-2026-09-22`. Not applicable to CUDA physical
+execution. The gfx12 lane-word permutation and ABI are incompatible with
+NVIDIA's NVFP4 block-scale layout; the HIP graph-capture proof changes no CUDA
+launcher or PTX schedule. NVIDIA layout/version work remains separately owned,
+and no gfx1201 timing or selector decision transfers.
 
 ## Shared scaled-partial carrier and MXFP4 policy — 2026-09-21
 

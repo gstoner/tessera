@@ -8,14 +8,14 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
-## GFX1201 MXFP4 production tuning benchmark — 2026-09-22
+## GFX1201 MXFP4 versioned layout ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync
-`ROCM-MXFP4-PRODUCTION-TUNING-2026-09-22`. Not applicable to Apple physical
-execution. The benchmark schema, HIP-event timing, decode split-K reduction,
-prefill group-M LDS staging, packed E2M1 ABI, and Radiance/libr4d comparisons
-are gfx1201-only. No Metal ABI, selector, dtype, numerical policy, or
-performance claim changes, and no Tajasarus result transfers to Apple.
+`ROCM-MXFP4-FRAGMENT-ABI-2026-09-22`. Not applicable to Apple physical
+execution. The versioned E2M1 checkpoint/fragment/shuffled identities,
+load-time conversion, route receipts, HIP graph-capture proof, and measured
+lane-word loads are gfx1201-only. No Metal ABI, selector, dtype, numerical
+policy, or performance claim changes, and no Tajasarus result transfers.
 
 ## Shared scaled-partial carrier and MXFP4 policy — 2026-09-21
 

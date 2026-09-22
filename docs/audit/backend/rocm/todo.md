@@ -7,26 +7,29 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-## GFX1201 MXFP4 decode/prefill production schedules — 2026-09-22
+## GFX1201 MXFP4 versioned layout ABI and production selector — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync
-`ROCM-MXFP4-PRODUCTION-TUNING-2026-09-22`.
+`ROCM-MXFP4-FRAGMENT-ABI-2026-09-22`.
 
-The exact K32 WMMA generator now selects separate schedules. Decode uses an
-intra-workgroup split-K axis with LDS partial reduction; prefill groups row-tile
-waves and expands one B fragment into LDS for reuse. Both axes are emitted into
-the kernel, launch geometry, toolchain identity, and provenance. Unimplemented
-`stages`, `waves_per_eu`, and `cache_modifier` values fail closed instead of
-appearing as inert tuning controls.
+Checkpoint `[N,K/2]`, legacy transposed `[K/2,N]`, gfx12 fragment-order, and
+opaque AITER-shuffled weights now have separate versioned identities. The load
+path owns checkpoint-to-launch conversion; the fragment ABI exposes one aligned
+`uint32` lane word per N16/K16 step instead of eight strided byte loads. AITER's
+layout is recognized but explicitly refused because no independent Tessera
+converter contract exists. Selection/refusal receipts name the chosen schedule,
+layout, ABI, and reason.
 
-Matched Tajasarus measurements use identical logical E4M3/E2M1/E8M0 operands,
-an exponent-delta envelope where the independent row fold is exact, bit-exact
-BF16 admission, rotating cache-cold copies, and HIP events. `split_k=8` improves
-the two decode shapes from 0.1552 to 0.0891 ms and 0.1776 to 0.1613 ms;
-`group_m=8` improves the two prefill shapes from 1.1141 to 0.6978 ms and 9.2533
-to 4.5847 ms. Radiance remains faster, so selector promotion is not claimed.
-Next: fragment/prepacked decode loads, multi-stage prefill, cache modifiers,
-waves-per-EU tuning, and resource/ISA evidence for the winning kernels.
+Tajasarus exact-device coverage includes `M=1,5,64`, `N=48,80`, the M64/65
+crossover, long K, wide N, poisoned rows, and a captured HIP graph whose launch
+performs no conversion, allocation, or synchronization. A sampled independent
+FP32-dequantized oracle now gates every benchmark engine before timing. Fragment
+decode measures 0.0506 and 0.0886 ms, about 1.75–1.76x faster than the prior
+packet; the second shape is 1.03x from Radiance and faster than libr4d.
+Fragment prefill exposed unsafe wide-grid LDS reuse and direct per-wave loads regressed, so the
+production selector deliberately retains the proved transposed/group-M path.
+Next: padded multistage prefill, a backend-neutral K-step scheduling barrier,
+then `waves_per_eu`, cache modifiers, and resource/ISA evidence.
 [Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_production_20260922/README.md).
 
 ## Scaled-partial carrier and exact MXFP4 ABI binding — 2026-09-21

@@ -1,8 +1,9 @@
 # gfx1201 MXFP4 production-schedule evidence
 
-This packet records the first measured decode/prefill schedule split for
+This packet records the versioned fragment-layout decode ABI and the safe
+decode/prefill production selector for
 `ROCM-MXFP4-W4A8-1` on Tajasarus, an AMD Radeon RX 9070 XT (`gfx1201`). It is
-bound to Tessera commit `a387f8c93c2850d42caf1df222e712178b0659dc` and to
+bound to Tessera commit `f397bad6f348da2090c3ec70a6428fa7e1e4bfc0` and to
 the generator and benchmark hashes in `evidence.json`.
 
 ## Method
@@ -12,6 +13,10 @@ the generator and benchmark hashes in `evidence.json`.
 - E8M0 exponent deltas are at most two, so the independently implemented
   row-reference fold is exact for this comparison.
 - Every engine must produce the same BF16 bits before it is timed.
+- A sampled independent FP32-dequantized reference gates each engine before
+  cross-engine agreement; agreement with Radiance is not used as the oracle.
+- Checkpoint weights are converted once before launch. Decode consumes the
+  versioned gfx12 fragment ABI; prefill retains the proved transposed ABI.
 - Three operand copies rotate between launches; production weight footprints
   exceed the device last-level cache.
 - Timings are HIP events around 12 launches, with six warmups and nine samples.
@@ -28,17 +33,18 @@ tree; neither inspected root exposed a license or SPDX declaration.
 
 | Workload (M x N x K) | Tessera schedule | Tessera ms | Radiance ms | libr4d ms |
 |---|---:|---:|---:|---:|
-| decode 8 x 5120 x 8704 | split-K 8 | 0.088602 | 0.032314 | 0.035013 |
-| decode 8 x 17408 x 5120 | split-K 8 | 0.155802 | 0.085725 | 0.104815 |
-| prefill 256 x 5120 x 8704 | group-M 8 | 0.633868 | 0.139085 | not applicable |
-| prefill 1024 x 17408 x 5120 | group-M 8 | 4.845018 | 0.881319 | not applicable |
+| decode 8 x 5120 x 8704 | split-K 8 + fragment | 0.050343 | 0.030754 | 0.041314 |
+| decode 8 x 17408 x 5120 | split-K 8 + fragment | 0.087460 | 0.085710 | 0.105920 |
+| prefill 256 x 5120 x 8704 | group-M 8 + transposed | 0.638136 | 0.137557 | not applicable |
+| prefill 1024 x 17408 x 5120 | group-M 8 + transposed | 4.827287 | 0.890993 | not applicable |
 
-The new schedules pass the five-row scalar-oracle/WMMA/generic-materializer
-owning-device fixture. They are 1.10–2.02x faster than the direct schedule in
-the tuning sweeps, but Radiance remains 1.82–5.50x faster on these shapes.
-This packet therefore proves schedule function and measured progress, not a
-production selector promotion.
+The expanded owning-device fixture passes 16 rows: scalar/WMMA/generic routes,
+M=1/5/64, N=48/80, the M64/65 crossover, long-K and wide-N cases, poisoned
+rows, and a captured HIP graph. Fragment decode is about 1.75–1.76x faster than
+the prior packet; the second production shape is within 1.03x of Radiance and
+faster than libr4d. An attempted fragment+LDS prefill reuse path failed the
+wide-N exact oracle and was rejected. Correct direct fragment prefill regressed,
+so the selector keeps prefill on the proved transposed/group-M ABI.
 
-Remaining work is fragment/prepacked decode loading, multi-stage prefill,
-cache-modifier and waves-per-EU tuning, then resource/ISA evidence for the
-winner.
+Remaining work is padded multistage prefill, a backend-neutral K-step scheduling
+barrier, cache-modifier and waves-per-EU tuning, then resource/ISA evidence.

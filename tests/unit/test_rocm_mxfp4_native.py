@@ -123,13 +123,18 @@ def test_prefill_source_stages_one_b_fragment_for_grouped_row_waves() -> None:
     assert '"amdgpu-flat-work-group-size"="256,256"' in source
 
 
-def test_fragment_prefill_uses_private_contiguous_lane_words_until_multistage() -> None:
+def test_fragment_prefill_stages_packed_lane_words_in_padded_double_buffer() -> None:
     source = emit_mxfp4_w4a8_wmma_llvmir(
-        schedule=MXFP4Schedule("prefill", group_m=8)
+        schedule=MXFP4Schedule("prefill", group_m=8, stages=2)
     )
-    assert "@tessera_mxfp4_b_lds" not in source
+    assert "@tessera_mxfp4_b_lds" in source
+    assert "[528 x i8]" in source
+    assert "%b_stage = and i32 %b_stage_group32, 1" in source
+    assert "%b_stage_s1_slab = add i32 %b_stage_base, 132" in source
+    assert "store i32 %b_stage_s0_word, ptr addrspace(3)" in source
+    assert "%b_lds_word_0 = load i32, ptr addrspace(3)" in source
     assert "%wave_m = mul i64 %wave64, 16" in source
-    assert source.count("fragment_word = load i32") == 2
+    assert source.count("call void @llvm.amdgcn.s.barrier()") == 2
 
 
 def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
@@ -137,9 +142,9 @@ def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
         "decode", split_k=8
     )
     assert select_mxfp4_schedule(256, 5120, 8704) == MXFP4Schedule(
-        "prefill", group_m=8
+        "prefill", group_m=8, stages=2
     )
-    with pytest.raises(ValueError, match="unimplemented MXFP4 schedule axes"):
+    with pytest.raises(ValueError, match="decode does not admit prefill LDS stages"):
         MXFP4Schedule("decode", stages=2)
     with pytest.raises(ValueError, match="prefill does not admit decode split-K"):
         MXFP4Schedule("prefill", split_k=2)
@@ -165,9 +170,9 @@ def test_route_receipts_explain_production_selection_and_refusal() -> None:
 
     prefill = select_mxfp4_route(256, 5120, 8704)
     assert prefill.accepted
-    assert prefill.selected_layout == mx.MXFP4_TRANSPOSED_LAYOUT_V1
-    assert prefill.abi_id == GFX_MXFP4_W4A8_WMMA_ABI
-    assert "LDS staging" in prefill.reason
+    assert prefill.selected_layout == mx.MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+    assert prefill.abi_id == GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI
+    assert "multistage" in prefill.reason
 
     shuffled = select_mxfp4_route(
         8, 5120, 8704, requested_layout=mx.MXFP4_AITER_SHUFFLED_LAYOUT_V1

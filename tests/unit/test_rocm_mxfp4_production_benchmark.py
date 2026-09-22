@@ -104,7 +104,7 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
     assert packet["architecture"] == "gfx1201"
     source = packet["source"]
     assert packet["timing_order"] == "alternating_interleaved_per_shape"
-    assert source["revision"] == "2052cf17e1d113c03f366986300484fb6b4e354b"
+    assert source["revision"] == "39605e560415cd629bd5d1f1769cc9980e81f4ef"
     for key, path in (
         (
             "generator_sha256",
@@ -128,5 +128,7 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
         expected_axis = "split_k" if case.startswith("decode") else "group_m"
         assert tessera["metadata"]["schedule"][expected_axis] == 8
         assert tessera["metadata"]["isa"]["wmma_fp8_fp8"] == 2
+        expected_barriers = 2 if case.startswith("decode") else 4
+        assert tessera["metadata"]["isa"]["s_barrier"] == expected_barriers
         assert tessera["metadata"]["resources"]["scratch_bytes"] == 0
         assert tessera["metadata"]["resources"]["spills"] is False

@@ -7,6 +7,25 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 folded MXFP4 BM256/TM4 prefill — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-FOLDED-PREFILL-2026-09-22`.
+
+The opt-in load-time fold now has a distinct E4M3 `[N,K]` / E8M0 row-reference
+`[N]` layout and executable gfx1201 ABI. The package records fold loss and
+payload hashes; the runtime verifies both payloads, layout, policy, shape,
+selected device, and ABI before launch. A BM256/TM4, BN64, K64 prefill kernel
+stages clamped 16-byte A/B vectors through padded LDS and emits 32 FP8 WMMAs.
+Tajasarus proves deliberately inexact E4M3 underflow, ragged N=48/80, and
+refusal of a changed load-time payload. It uses 138 VGPR, 25,600 LDS bytes,
+and no scratch or spills. Matched lossless-fold timing improves the two prefill
+shapes 2.85x and 3.55x over exact K32, while trailing pinned Radiance 1.25x
+and 1.38x. The exact K32 package remains default and the correctness oracle.
+Next: inspect expanded-weight traffic and A/B staging instructions to close
+the remaining performance gap; no policy-default or gfx1200 promotion follows.
+[Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_folded_prefill_20260922/README.md).
+
 ## GFX1201 MXFP4 K-step and fragment-prefill production loop — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync
@@ -36,13 +55,12 @@ full device file passes 16/16). A real two-stage producer/consumer pipeline is
 correct but 13–15% slower and remains an explicit unselected axis. Group-M,
 waves-per-EU, cache, and 0/1/2/4-dword padding sweeps found no stable promotion;
 streaming cache loses 1.4–3.5%. The selected fragment route improves prefill
-from 0.6381 to 0.5174 ms and 4.8273 to 4.3722 ms, but Radiance remains 3.44x
-and 4.81x faster because it uses the explicitly approximate row-reference fold
+from 0.6381 to 0.5142 ms and 4.8273 to 4.3803 ms in the corrected packet,
+but Radiance remains 3.40x and 4.81x faster because it uses the explicitly approximate row-reference fold
 and a BM256/TM4 multi-output-wave tile while this route preserves exact K32
-scaling. Decode is now 1.33x and 1.02x from Radiance, and the second shape beats
-libr4d. Next: a separately opted-in folded numerical-policy ABI and BM256/TM4
-prefill carrier; do not disguise that policy change as tuning of the exact
-route. [Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_kstep_prefill_20260922/README.md).
+scaling. Decode is now 1.32x and 1.02x from Radiance, and the second shape beats
+libr4d. The separately opted-in folded ABI and BM256/TM4 prefill carrier are
+recorded above. [Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_kstep_prefill_20260922/README.md).
 
 ## Scaled-partial carrier and exact MXFP4 ABI binding — 2026-09-21
 

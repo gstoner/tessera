@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `ROCM-MXFP4-FOLDED-PREFILL-2026-09-22`.
+Not applicable to AVX-512 execution. The approximate row-reference payload,
+versioned HIP launch ABI, and BM256/TM4 schedule add no x86 physical lowering,
+numeric promotion, selector, or host timing claim. The ROCm evidence packet
+has no x86 consumer.
+
 ## GFX1201 MXFP4 K-step and benchmark-evidence schema — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync

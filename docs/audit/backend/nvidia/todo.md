@@ -8,6 +8,15 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `ROCM-MXFP4-FOLDED-PREFILL-2026-09-22`.
+Not applicable to CUDA execution. The load-time E8M0 row-reference fold and
+BM256/TM4 HIP schedule use a distinct RDNA4 ABI; NVIDIA's UE8M0/NVFP4
+physical contract remains independently owned. The added matched-timing
+packet changes no CUDA selector or benchmark consumer, and no gfx1201 proof
+transfers.
+
 ## GFX1201 MXFP4 K-step and benchmark-evidence schema — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync

@@ -4694,3 +4694,26 @@ are not promoted.
 Evidence: [Tajasarus K-step/prefill packet](../../../benchmarks/baselines/gfx1201_mxfp4_kstep_prefill_20260922/README.md), with alternating HIP-event samples, independent FP32 oracle, pinned Radiance/libr4d binaries, and per-HSACO ISA/resource fields.
 
 <!-- entry-fields:end -->
+
+### 2026-09-22 — Folded MXFP4 BM256/TM4 prefill on gfx1201
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `codex/gfx1201-mxfp4-folded-prefill`.
+
+Outcome: an explicitly approximate load-time E4M3 fold reaches a distinct
+gfx1201 launch ABI. The descriptor records fold loss and binds the converted
+weight and row-reference payloads by SHA256; the runtime refuses mismatched
+payloads. BM256/TM4 prefill stages padded A/B tiles and emits 32 FP8 WMMAs.
+Tajasarus proves deliberately inexact underflow and ragged N. Matched
+lossless-fold timing improves over exact K32 by 2.85x/3.55x and trails pinned
+Radiance by 1.25x/1.38x on the two production shapes.
+
+Remaining: expanded E4M3 weight traffic and A/B staging account for an
+unquantified part of the gap. The exact K32 route stays the default oracle;
+there is no selector-default or gfx1200 promotion.
+
+Evidence: [folded prefill packet](../../../benchmarks/baselines/gfx1201_mxfp4_folded_prefill_20260922/README.md),
+`tests/device/rocm/test_mxfp4_folded_prefill.py`.
+
+<!-- entry-fields:end -->

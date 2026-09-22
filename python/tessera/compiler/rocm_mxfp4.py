@@ -42,6 +42,7 @@ MXFP4_FRAGMENT_ORDER = "n_tile_k_step_half_row_bytes"
 MXFP4_CHECKPOINT_LAYOUT_V1 = "mxfp4.checkpoint_n_k2.low_even.v1"
 MXFP4_TRANSPOSED_LAYOUT_V1 = "mxfp4.runtime_k2_n.low_even.v1"
 MXFP4_GFX12_FRAGMENT_LAYOUT_V1 = "mxfp4.gfx12.n16_k16_lane_u32.v1"
+MXFP4_FOLDED_ROW_LAYOUT_V1 = "mxfp4.gfx12.folded_e4m3.nk_row_major.v1"
 MXFP4_AITER_SHUFFLED_LAYOUT_V1 = "mxfp4.aiter_shuffled.opaque.v1"
 
 MXFP4Mode = Literal["exact_per_block", "folded_row_reference"]
@@ -95,6 +96,12 @@ MXFP4_WEIGHT_LAYOUTS: dict[str, MXFP4WeightLayout] = {
         "[N,K/2]",
         "one_contiguous_uint32_per_lane_per_n16_k16_step",
         True,
+    ),
+    MXFP4_FOLDED_ROW_LAYOUT_V1: MXFP4WeightLayout(
+        MXFP4_FOLDED_ROW_LAYOUT_V1,
+        "[N,K]",
+        "e4m3_bytes_with_separate_row_reference",
+        False,  # Requires E8M0 scales and explicit approximate-policy consent.
     ),
     MXFP4_AITER_SHUFFLED_LAYOUT_V1: MXFP4WeightLayout(
         MXFP4_AITER_SHUFFLED_LAYOUT_V1,
@@ -251,6 +258,11 @@ def convert_weight_layout(
     """
     src = mxfp4_weight_layout(source)
     dst = mxfp4_weight_layout(destination)
+    if MXFP4_FOLDED_ROW_LAYOUT_V1 in (source, destination):
+        raise ValueError(
+            "folded MXFP4 conversion requires E8M0 scales and explicit "
+            "approximate-policy consent; use prepare_folded_weights"
+        )
     if not src.conversion_supported or not dst.conversion_supported:
         raise ValueError(
             "MXFP4 AITER shuffled layout is recognized but has no proved "

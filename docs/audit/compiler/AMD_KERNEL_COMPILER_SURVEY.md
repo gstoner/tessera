@@ -61,11 +61,13 @@ producer-side LDS drain; after the fix it passes 10/10 repeats. A two-stage
 pipeline, group-M, waves-per-EU, cache, and bank-padding sweep found no stable
 promotion beyond the single padded stage; streaming cache and the two-stage
 route lose. Alternating evidence puts decode 1.33x and 1.02x from Radiance, but
-prefill remains 3.44x and 4.81x behind. That is no longer plausibly a cache
-knob: the independent kernel uses BM256/TM4 multi-output-wave reuse and folds
-K32 exponents into one row reference, while Tessera preserves exact per-group
-scaling. The next route must expose that fold as an approximate policy and a
-distinct ABI before adopting the taller tile. Keep sparse SWMMAC admission
+the exact prefill remains 3.40x and 4.81x behind. A separate opt-in folded
+E4M3/row-reference ABI and BM256/TM4 prefill now cut that gap to 1.25x and
+1.38x on the two matched production shapes. Tajasarus proves lossy underflow
+and ragged N while the exact K32 path stays the default oracle. The folded
+route stores expanded E4M3 bytes at load time; remaining work is to measure
+weight traffic and A/B staging instructions against Radiance before promotion.
+Keep sparse SWMMAC admission
 separate from dense WMMA, and key
 every measured selection or cache record by exact architecture, datatype pair,
 accumulator, and physical packing. These are design directions, not promotion

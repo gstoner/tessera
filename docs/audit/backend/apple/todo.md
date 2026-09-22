@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `ROCM-MXFP4-FOLDED-PREFILL-2026-09-22`.
+Not applicable to Metal execution. The explicit approximate fold, E4M3
+row-major physical layout, BM256/TM4 HIP package, and payload-bound launcher
+are gfx1201-only. The added HIP-event packet changes no Apple timing schema or
+selector; no Tajasarus numerical or performance proof transfers.
+
 ## GFX1201 MXFP4 K-step and benchmark-evidence schema — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync

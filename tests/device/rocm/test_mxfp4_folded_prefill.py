@@ -13,8 +13,10 @@ import pytest
 from tessera import runtime as rt
 from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.rocm_mxfp4_folded import (
-    package_folded_scaled_wmma_target_ir,
     package_mxfp4_folded_prefill, prepare_folded_weights,
+)
+from tessera.compiler.rocm_mxfp4_folded_carrier import (
+    package_folded_scaled_wmma_target_ir,
 )
 from tests._support import rocm_isa
 

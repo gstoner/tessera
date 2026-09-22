@@ -8,9 +8,11 @@ from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.rocm_mxfp4_folded import (
     GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
     emit_mxfp4_folded_prefill_hip,
-    package_folded_scaled_wmma_target_ir,
     package_mxfp4_folded_prefill,
     prepare_folded_weights,
+)
+from tessera.compiler.rocm_mxfp4_folded_carrier import (
+    package_folded_scaled_wmma_target_ir,
 )
 from tessera import runtime
 

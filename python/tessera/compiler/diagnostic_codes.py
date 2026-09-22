@@ -2755,8 +2755,8 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
         code="TILE_EPILOGUE_BAD_OUTPUT", pass_origin="TileEpilogueAttr",
         severity="error",
-        summary="A #tile.epilogue output dtype is not f32, f16, or i32.",
-        fix_hint="Use output=f32, output=f16, or output=i32.",
+        summary="A #tile.epilogue output dtype is not f64, f32, f16, bf16, or i32.",
+        fix_hint="Use output=f64, output=f32, output=f16, output=bf16, or output=i32.",
         spec="docs/architecture/proposals/tile_fragment_abi.md",
         sprint="Portable Tile fragment ABI",
     ),

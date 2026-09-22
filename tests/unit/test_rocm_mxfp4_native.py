@@ -30,6 +30,12 @@ def _packed_target_ir(*, execution_mode: str = "exact_per_block") -> str:
 }}'''
 
 
+def _packed_tile_ir(*, schedule_hash: str = "schedule-proof") -> str:
+    return f'''module {{
+  tile.scaled_matmul_kernel {{physical_contract = "rocm_mxfp4_w4a8_exact_v1", tessera.schedule_hash = "{schedule_hash}"}}
+}}'''
+
+
 def test_hipcc_selection_handles_split_rocm_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -172,10 +178,10 @@ def test_target_ir_materializer_binds_generic_carrier_to_proved_wmma(
     )
     target_ir = _packed_target_ir()
     package = package_scaled_wmma_target_ir(
-        "tile carrier", target_ir, pipeline_name="proof-pipeline"
+        _packed_tile_ir(), target_ir, pipeline_name="proof-pipeline"
     )
     assert calls == [(17, 19, 64, "proof-pipeline")]
-    assert package.tile_ir == "tile carrier"
+    assert package.tile_ir == _packed_tile_ir()
     assert package.target_ir == target_ir
     assert package.backend_ir == "proved llvm backend ir"
     assert package.image.target_ir_digest == hashlib.sha256(
@@ -197,7 +203,29 @@ def test_target_ir_materializer_keeps_logical_and_approximate_routes_closed() ->
         package_scaled_wmma_target_ir("tile", logical)
     with pytest.raises(ValueError, match="numeric_policy.execution_mode"):
         package_scaled_wmma_target_ir(
-            "tile", _packed_target_ir(execution_mode="approximate_row_reference")
+            _packed_tile_ir(),
+            _packed_target_ir(execution_mode="approximate_row_reference"),
+        )
+
+
+def test_target_ir_materializer_requires_matching_schedule_provenance() -> None:
+    target_without_hash = _packed_target_ir().replace(
+        ', tessera.schedule_hash = "schedule-proof"', ""
+    )
+    with pytest.raises(ValueError, match="Target IR directive is missing"):
+        package_scaled_wmma_target_ir(_packed_tile_ir(), target_without_hash)
+
+    with pytest.raises(ValueError, match="Tile IR carrier is missing"):
+        package_scaled_wmma_target_ir(
+            _packed_tile_ir().replace(
+                ', tessera.schedule_hash = "schedule-proof"', ""
+            ),
+            _packed_target_ir(),
+        )
+
+    with pytest.raises(ValueError, match="schedule_hash mismatch"):
+        package_scaled_wmma_target_ir(
+            _packed_tile_ir(schedule_hash="stale-schedule"), _packed_target_ir()
         )
 
 

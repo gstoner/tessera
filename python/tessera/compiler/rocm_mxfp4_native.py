@@ -77,6 +77,30 @@ def _exact_scaled_wmma_directive(target_ir: str) -> str:
     return directives[0]
 
 
+def _exact_scaled_wmma_tile_carrier(tile_ir: str) -> str:
+    carriers = [
+        line.strip()
+        for line in tile_ir.splitlines()
+        if "tile.scaled_matmul_kernel" in line
+        and f'physical_contract = "{_GFX_MXFP4_PHYSICAL_CONTRACT}"' in line
+    ]
+    if len(carriers) != 1:
+        raise ValueError(
+            "gfx1201 native packaging requires exactly one exact packed "
+            "tile.scaled_matmul_kernel carrier"
+        )
+    return carriers[0]
+
+
+def _schedule_hash(operation: str, *, carrier: str) -> str:
+    match = re.search(
+        r"\btessera\.schedule_hash\s*=\s*\"([^\"]+)\"", operation
+    )
+    if match is None:
+        raise ValueError(f"gfx1201 scaled WMMA {carrier} is missing tessera.schedule_hash")
+    return match.group(1)
+
+
 def package_scaled_wmma_target_ir(
     tile_ir: str,
     target_ir: str,
@@ -111,10 +135,10 @@ def package_scaled_wmma_target_ir(
         "output": "bf16",
         "package_abi": GFX_MXFP4_W4A8_WMMA_ABI,
     }
-    for name, expected in expected_strings.items():
-        if strings[name] != expected:
+    for name, expected_string in expected_strings.items():
+        if strings[name] != expected_string:
             raise ValueError(
-                f"gfx1201 scaled WMMA Target IR requires {name}={expected!r}"
+                f"gfx1201 scaled WMMA Target IR requires {name}={expected_string!r}"
             )
 
     integers = {
@@ -125,10 +149,12 @@ def package_scaled_wmma_target_ir(
         raise ValueError("gfx1201 scaled WMMA Target IR requires positive static M/N/K")
     if integers["k"] % 32:
         raise ValueError("gfx1201 scaled WMMA Target IR requires K divisible by 32")
-    for name, expected in (("instruction_k", 16), ("scale_k", 32), ("macro_k", 32)):
-        if integers[name] != expected:
+    for name, expected_integer in (
+        ("instruction_k", 16), ("scale_k", 32), ("macro_k", 32)
+    ):
+        if integers[name] != expected_integer:
             raise ValueError(
-                f"gfx1201 scaled WMMA Target IR requires {name}={expected}"
+                f"gfx1201 scaled WMMA Target IR requires {name}={expected_integer}"
             )
 
     policy_match = re.search(r"\bnumeric_policy\s*=\s*\{([^}]*)\}", operation)
@@ -147,6 +173,14 @@ def package_scaled_wmma_target_ir(
                 f"{expected!r}"
             )
 
+    tile_operation = _exact_scaled_wmma_tile_carrier(tile_ir)
+    tile_schedule_hash = _schedule_hash(tile_operation, carrier="Tile IR carrier")
+    target_schedule_hash = _schedule_hash(operation, carrier="Target IR directive")
+    if tile_schedule_hash != target_schedule_hash:
+        raise ValueError(
+            "gfx1201 scaled WMMA Tile/Target tessera.schedule_hash mismatch"
+        )
+
     package = package_mxfp4_w4a8_wmma(
         integers["m"], integers["n"], integers["k"],
         pipeline_name=pipeline_name,
@@ -160,11 +194,7 @@ def package_scaled_wmma_target_ir(
         "tile_ir_sha256": hashlib.sha256(tile_ir.encode()).hexdigest(),
         "target_ir_sha256": target_ir_sha256,
     }
-    schedule_hash = re.search(
-        r"\btessera\.schedule_hash\s*=\s*\"([^\"]+)\"", operation
-    )
-    if schedule_hash is not None:
-        provenance["schedule_hash"] = schedule_hash.group(1)
+    provenance["schedule_hash"] = target_schedule_hash
     descriptor = replace(
         package.descriptor,
         image_digest=image.image_digest,

@@ -97,6 +97,7 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
       copy_start = (unsigned long long)wall_clock64();
       if (kb == 0) first_tick = copy_start;
     }
+    __syncthreads();  // no wave begins this copy phase before its start stamp
 #endif
     // Uniform, clamped vector copies keep every wave on the barrier path.
     // Four A vectors and one B vector per thread cover the two LDS tiles.
@@ -129,6 +130,7 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
       compute_start = (unsigned long long)wall_clock64();
       copy_ticks += compute_start - copy_start;
     }
+    __syncthreads();  // no wave begins WMMA before the copy-end stamp
 #endif
     for (int step = 0; step < 4 && kb + step * 16 < K; ++step) {
       fragment_i32x2 af[4], bf[2];
@@ -154,10 +156,12 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
     }
     __syncthreads();
 #ifdef TESSERA_FOLDED_PHASE_TRACE
+    __syncthreads();  // every wave finishes WMMA before the end stamp
     if (tid == 0) {
       last_tick = (unsigned long long)wall_clock64();
       compute_ticks += last_tick - compute_start;
     }
+    __syncthreads();  // no wave starts the next K step before its end stamp
 #endif
   }
 #ifdef TESSERA_FOLDED_PHASE_TRACE
@@ -181,8 +185,22 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
       for (int e = 0; e < 8; ++e) {
         const long m = m0 + wm * 64 + i * 16 + half + e;
         if (m < M && n < N) {
-          const float combined_scale = row_scale * As[m];
-          O[m * N + n] = (__bf16)(acc[i][j][e] * combined_scale);
+          const float partial = acc[i][j][e];
+          const float activation_scale = As[m];
+          const float combined_scale = row_scale * activation_scale;
+          float scaled = partial * combined_scale;
+          // Keep the common path in FP32. A scale product that overflowed or
+          // underflowed may still have a finite result after the partial.
+          if (__builtin_expect(
+                  !__builtin_isfinite(combined_scale) || combined_scale == 0.0f,
+                  0)) {
+            if (partial == 0.0f && __builtin_isfinite(activation_scale))
+              scaled = 0.0f;
+            else
+              scaled = (float)((double)partial * (double)row_scale *
+                               (double)activation_scale);
+          }
+          O[m * N + n] = (__bf16)scaled;
         }
       }
   }

@@ -52,7 +52,22 @@ def test_folded_kernel_has_tall_tile_and_uniform_stage_barriers() -> None:
     assert "wm * 64 + i * 16" in source
     assert "sA[256 * 80]" in source
     assert "sB[64 * 80]" in source
-    assert source.count("__syncthreads()") == 2
+    assert source.count("__syncthreads()") == 6
     assert "__builtin_amdgcn_wmma_f32_16x16x16_fp8_fp8_w32_gfx12" in source
-    assert "const float combined_scale = row_scale * As[m];" in source
-    assert "acc[i][j][e] * combined_scale" in source
+    assert "const float combined_scale = row_scale * activation_scale;" in source
+    assert "partial * combined_scale" in source
+    assert "(double)partial * (double)row_scale" in source
+    assert source.index("copy_start = (unsigned long long)wall_clock64();") < source.index(
+        "__syncthreads();  // no wave begins this copy phase"
+    )
+    assert source.index("compute_start = (unsigned long long)wall_clock64();") < source.index(
+        "__syncthreads();  // no wave begins WMMA"
+    )
+    assert source.index("__syncthreads();  // every wave finishes WMMA") < source.index(
+        "last_tick = (unsigned long long)wall_clock64();"
+    )
+    assert source.index("last_tick = (unsigned long long)wall_clock64();") < source.index(
+        "__syncthreads();  // no wave starts the next K step"
+    )
+    assert "no wave begins WMMA before the copy-end stamp" in source
+    assert "no wave starts the next K step before its end stamp" in source

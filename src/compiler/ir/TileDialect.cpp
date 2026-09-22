@@ -630,31 +630,48 @@ LogicalResult ScaledMatmulKernelOp::verify() {
   auto steps = partial.getAs<IntegerAttr>("instruction_steps");
   auto scheduleScope = partial.getAs<StringAttr>("schedule_scope");
   auto crossStepMotion = partial.getAs<StringAttr>("cross_step_motion");
+  auto physical = (*this)->getAttrOfType<StringAttr>("physical_contract");
+  const bool folded = physical &&
+                      physical.getValue() ==
+                          "rocm_mxfp4_w4a8_folded_prefill_v1";
   if (!init || init.getValue() != "zero" || !scope ||
-      scope.getValue() != "scale_group" || !combine ||
-      combine.getValue() != "scale_outer_product_then_add" || !steps ||
+      scope.getValue() != (folded ? "full_k" : "scale_group") || !combine ||
+      combine.getValue() !=
+          (folded ? "row_reference_after_full_k"
+                  : "scale_outer_product_then_add") || !steps ||
       steps.getInt() != mma.getScaleBlockK() / mma.getK() ||
-      !scheduleScope || scheduleScope.getValue() != "scale_group" ||
+      !scheduleScope ||
+      scheduleScope.getValue() != (folded ? "k_stage" : "scale_group") ||
       !crossStepMotion || crossStepMotion.getValue() != "forbid")
     return emitOpError(
-        "partial_accumulator must state zero-init, scale-group scope, "
-        "scale_outer_product_then_add, scale_k/instruction_k steps, and an "
-        "isolated scale-group scheduling boundary");
-  if (auto physical =
-          (*this)->getAttrOfType<StringAttr>("physical_contract")) {
+        "partial_accumulator must state the physical contract's zero-init, "
+        "combination, scope, scale_k/instruction_k steps, and isolated "
+        "scheduling boundary");
+  if (physical) {
     auto epilogue = (*this)->getAttrOfType<TileEpilogueAttr>("epilogue");
     auto problemM = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_m");
     auto problemN = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_n");
     auto problemK = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_k");
-    if (physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
+    auto macroM = (*this)->getAttrOfType<IntegerAttr>("tessera.macro_tile_m");
+    auto macroN = (*this)->getAttrOfType<IntegerAttr>("tessera.macro_tile_n");
+    auto warps = (*this)->getAttrOfType<IntegerAttr>("warps");
+    if (!folded && physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
       return emitOpError("unknown physical_contract");
     if (mma.getAType() != "e4m3_raw_u8" ||
-        mma.getBType() != "e2m1_packed_u8" ||
-        mma.getScaleBlockK() != 32 || mma.getScaleFormat() != "e8m0" ||
+        mma.getBType() !=
+            (folded ? "e4m3_folded_nk_u8" : "e2m1_packed_u8") ||
+        mma.getScaleBlockK() !=
+            (folded ? (problemK ? problemK.getInt() : 0) : 32) ||
+        mma.getScaleFormat() !=
+            (folded ? "e8m0_row_reference" : "e8m0") ||
         mma.getAccType() != "f32" || !epilogue ||
         epilogue.getOutputType() != "bf16" || !problemM || !problemN ||
         !problemK || problemM.getInt() <= 0 || problemN.getInt() <= 0 ||
-        problemK.getInt() <= 0 || problemK.getInt() % 32 != 0)
+        problemK.getInt() <= 0 ||
+        problemK.getInt() % (folded ? 64 : 32) != 0 ||
+        (folded && (problemM.getInt() <= 64 || !macroM || !macroN || !warps ||
+                    macroM.getInt() != 256 || macroN.getInt() != 64 ||
+                    warps.getInt() != 8)))
       return emitOpError(
           "gfx1201 MXFP4 W4A8 physical contract is inconsistent with mma or "
           "its static M/N/K and BF16 output epilogue");

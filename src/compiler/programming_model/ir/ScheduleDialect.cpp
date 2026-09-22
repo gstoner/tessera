@@ -112,8 +112,11 @@ LogicalResult MatmulOp::verify() {
       getMacroTileN() % getTileN() != 0)
     return emitOpError(
         "macro tile dimensions must be positive multiples of tile_m/tile_n");
-  if (getWarps() != 1 && getWarps() != 4)
-    return emitOpError("warps must be 1 or 4");
+  const bool foldedMxfp4 =
+      getPhysicalContract() == "rocm_mxfp4_w4a8_folded_prefill_v1";
+  if (getWarps() != 1 && getWarps() != 4 &&
+      !(foldedMxfp4 && getWarps() == 8))
+    return emitOpError("warps must be 1 or 4 (8 only for folded gfx1201 prefill)");
   if (getPipelineDepth() <= 0)
     return emitOpError("pipeline_depth must be positive");
   if (getStorage().empty() || getAccum().empty())
@@ -131,7 +134,7 @@ LogicalResult MatmulOp::verify() {
         "scale_k must be a multiple of tile_k and divide the macro K block");
   const bool packedMxfp4 =
       getPhysicalContract() == "rocm_mxfp4_w4a8_exact_v1";
-  if (!getPhysicalContract().empty() && !packedMxfp4)
+  if (!getPhysicalContract().empty() && !packedMxfp4 && !foldedMxfp4)
     return emitOpError("unknown physical_contract");
   if (packedMxfp4 &&
       (getArch() != "gfx1201" || getStorage() != "e4m3_raw_u8" ||
@@ -139,6 +142,14 @@ LogicalResult MatmulOp::verify() {
        getScaleFormat() != "e8m0" || getAccum() != "f32" ||
        getOutput() != "bf16"))
     return emitOpError("gfx1201 MXFP4 W4A8 physical contract is inconsistent");
+  if (foldedMxfp4 &&
+      (getArch() != "gfx1201" || getStorage() != "e4m3_raw_u8" ||
+       getStorageB() != "e4m3_folded_nk_u8" ||
+       getScaleFormat() != "e8m0_row_reference" ||
+       getAccum() != "f32" || getOutput() != "bf16" ||
+       getMacroTileM() != 256 || getMacroTileN() != 64 ||
+       getWarps() != 8 || getBlockK() != getScaleK()))
+    return emitOpError("gfx1201 folded prefill physical contract is inconsistent");
   if (!llvm::is_contained({"none", "relu", "gelu", "silu"},
                           getActivation()))
     return emitOpError("requires a supported pointwise activation");
@@ -155,7 +166,7 @@ LogicalResult MatmulOp::verify() {
   bool rocmInt = (getStorage() == "int8" || getStorage() == "int4") &&
                  getOutput() == "i32" && getAccum() == "i32" &&
                  (getArch().contains("gfx1151") || getArch().contains("gfx1201"));
-  if (getOutput() != "f32" && getOutput() != "f16" && !packedMxfp4 && !f64 && !u8s8 && !rocmInt &&
+  if (getOutput() != "f32" && getOutput() != "f16" && !packedMxfp4 && !foldedMxfp4 && !f64 && !u8s8 && !rocmInt &&
       !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
     return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, int4 with i32 accumulation/output, or ROCm int8/int4 with i32 accumulation/output");
   if (getALayout() != "row_major" || getBLayout() != "col_major")

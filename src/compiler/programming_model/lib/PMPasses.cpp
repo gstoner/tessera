@@ -350,10 +350,18 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   };
   const bool packedMxfp4 =
       schedule.physicalContract == "rocm_mxfp4_w4a8_exact_v1";
+  const bool foldedMxfp4 =
+      schedule.physicalContract == "rocm_mxfp4_w4a8_folded_prefill_v1";
+  if (foldedMxfp4) {
+    n = bounded(rhs.getDimSize(0), 1, schedule.dynamicN);
+    if (failed(n))
+      return failure();
+    schedule.n = *n;
+  }
   const bool rhsKCompatible =
       packedMxfp4
           ? compatible(rhs.getDimSize(0), (schedule.k + 1) / 2)
-          : compatible(rhs.getDimSize(0), schedule.k);
+          : compatible(rhs.getDimSize(foldedMxfp4 ? 1 : 0), schedule.k);
   if (schedule.m <= 0 || schedule.n <= 0 || schedule.k <= 0 ||
       !rhsKCompatible ||
       !compatible(out.getDimSize(0), schedule.m) ||
@@ -406,7 +414,7 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.scaleFormat = format.getValue();
   }
 
-  if (packedMxfp4) {
+  if (packedMxfp4 || foldedMxfp4) {
     auto lhsScale = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
     auto rhsScale = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
     auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
@@ -418,12 +426,20 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
         !lhsScale || lhsScale.getRank() != 1 ||
         !lhsScale.getElementType().isF32() ||
         lhsScale.getDimSize(0) != schedule.m || !rhsScale ||
-        rhsScale.getRank() != 2 ||
+        rhsScale.getRank() != (foldedMxfp4 ? 1 : 2) ||
         !rhsScale.getElementType().isUnsignedInteger(8) ||
-        rhsScale.getDimSize(0) != schedule.k / 32 ||
-        rhsScale.getDimSize(1) != schedule.n || schedule.k % 32 != 0 ||
-        schedule.scaleBlockK != 32 || schedule.scaleFormat != "e8m0" ||
-        !mode || mode.getValue() != "exact_per_block")
+        (foldedMxfp4
+             ? rhsScale.getDimSize(0) != schedule.n ||
+                   schedule.k % 64 != 0 || schedule.m <= 64 ||
+                   schedule.scaleBlockK != schedule.k ||
+                   schedule.scaleFormat != "e8m0_row_reference" ||
+                   !mode || mode.getValue() !=
+                                "folded_row_reference_explicit_approximate"
+             : rhsScale.getDimSize(0) != schedule.k / 32 ||
+                   rhsScale.getDimSize(1) != schedule.n ||
+                   schedule.k % 32 != 0 || schedule.scaleBlockK != 32 ||
+                   schedule.scaleFormat != "e8m0" || !mode ||
+                   mode.getValue() != "exact_per_block"))
       return failure();
   } else if (!schedule.physicalContract.empty()) {
     return failure();
@@ -568,6 +584,20 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.blockK = 32;
     schedule.macroTileM = 16;
     schedule.macroTileN = 16;
+    return schedule;
+  }
+  if (foldedMxfp4) {
+    schedule.storage = "e4m3_raw_u8";
+    schedule.storageB = "e4m3_folded_nk_u8";
+    schedule.accum = "f32";
+    schedule.output = "bf16";
+    schedule.tileK = 16;
+    // One semantic row reference covers the full K reduction. The K64 LDS
+    // producer stage is a distinct physical decision in the Target directive.
+    schedule.blockK = schedule.k;
+    schedule.macroTileM = 256;
+    schedule.macroTileN = 64;
+    schedule.warps = 8;
     return schedule;
   }
   if (rocmWmmaChip && lhsElement == rhsElement &&
@@ -3871,20 +3901,28 @@ struct ScheduleToTilePass
                                builder.getI64IntegerAttr(selected->warps));
       kernelState.addAttribute("staging", builder.getStringAttr("global"));
       if (selected->scaleBlockK > 0) {
+        const bool foldedMxfp4 = selected->physicalContract ==
+                                  "rocm_mxfp4_w4a8_folded_prefill_v1";
         kernelState.addAttribute(
             "partial_accumulator",
             builder.getDictionaryAttr({
-                builder.getNamedAttr("scope", builder.getStringAttr("scale_group")),
+                builder.getNamedAttr(
+                    "scope", builder.getStringAttr(
+                                 foldedMxfp4 ? "full_k" : "scale_group")),
                 builder.getNamedAttr("init", builder.getStringAttr("zero")),
                 builder.getNamedAttr(
                     "combine",
-                    builder.getStringAttr("scale_outer_product_then_add")),
+                    builder.getStringAttr(
+                        foldedMxfp4 ? "row_reference_after_full_k"
+                                     : "scale_outer_product_then_add")),
                 builder.getNamedAttr(
                     "instruction_steps",
                     builder.getI64IntegerAttr(selected->scaleBlockK /
                                               selected->tileK)),
-                builder.getNamedAttr("schedule_scope",
-                                     builder.getStringAttr("scale_group")),
+                builder.getNamedAttr(
+                    "schedule_scope", builder.getStringAttr(
+                                          foldedMxfp4 ? "k_stage"
+                                                       : "scale_group")),
                 builder.getNamedAttr("cross_step_motion",
                                      builder.getStringAttr("forbid")),
             }));
@@ -3912,7 +3950,12 @@ struct ScheduleToTilePass
       };
       if (!selected->physicalContract.empty())
         numericPolicy.push_back(builder.getNamedAttr(
-            "execution_mode", builder.getStringAttr("exact_per_block")));
+            "execution_mode",
+            builder.getStringAttr(
+                selected->physicalContract ==
+                        "rocm_mxfp4_w4a8_folded_prefill_v1"
+                    ? "folded_row_reference_explicit_approximate"
+                    : "exact_per_block")));
       kernelState.addAttribute("numeric_policy",
                                builder.getDictionaryAttr(numericPolicy));
       kernelState.addAttribute("tessera.canonical_k_loop",

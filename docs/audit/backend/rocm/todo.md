@@ -7,6 +7,34 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 ISA-preserving profiler preflight — 2026-09-22
+
+Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync
+`GFX1201-FOLDED-PROFILER-CARRIER-2026-09-22`. Tajasarus still executes the
+production folded image, but an external `rocprofv3` PC-sampling preflight
+refuses: the host exposes no `/dev/kfd`. A kernel-trace attempt produced no
+trace artifact. The content-bound packet records the exact RX 9070 XT and
+keeps ISA-preserving phase availability, cross-CU clock validation, phase
+attribution, and promotion false. No inline trace fractions enter the cost
+model. Restore a usable profiler API (or use another exact gfx1201 host),
+then prove production-image identity, PC-to-ISA mapping, cross-CU clock
+consistency, clock-read cost, and perturbation overhead before admission.
+[Preflight packet](../../../../benchmarks/baselines/gfx1201_phase_profiler_preflight_20260922/README.md).
+
+The folded Graph carrier now uses a distinct physical contract on
+`tessera.scaled_matmul`: B is load-time-folded E4M3 `[N,K]`, Ref is E8M0
+`[N]`, and the explicit approximate policy selects one post-reduction row
+reference, not the exact route's K32 scale-then-add partial. Schedule and
+Tile retain a full-K accumulator and isolate the K64 physical producer stage;
+Target names BM256/TM4 geometry and the separate pointer/package ABI. The
+materializer checks Tile/Target schedule hashes, shape, policy and ABI, then
+binds quantified fold-loss and payload hashes from the loaded weight object.
+One ragged `65x48x64` Graph→Target package executed against BF16 output on
+Tajasarus; the full folded device file passed 7/7 at clean commit `d8ea906e`,
+and three focused MLIR fixtures passed. The exact K32 carrier remains the
+oracle and default. Broader K/N
+and high-level frontend entry remain open; no default-selector promotion.
+
 ## GFX1201 folded scale cancellation and IKF diagnostic — 2026-09-22
 
 Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync

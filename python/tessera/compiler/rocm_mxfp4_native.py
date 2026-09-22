@@ -620,7 +620,14 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             f'  %as_vec_{j} = insertelement <8 x float> {scale_vec}, float %as_{j}, i64 {j}',
         ]
         scale_vec = f'%as_vec_{j}'
-    loop_backedge = 'b.wait' if shared_b else 'group.body'
+    pipelined_fragment_b = shared_fragment_b and schedule.stages == 2
+    loop_backedge = (
+        'b.next.wait'
+        if pipelined_fragment_b
+        else 'b.wait'
+        if shared_b
+        else 'group.body'
+    )
     first_group = '%wave64' if split_reduce else '0'
     store_target = 'split.store' if split_reduce else 'store.header'
     lines += [
@@ -636,6 +643,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         '',
         'group.body:',
         '  %kbase = mul i64 %group, 32',
+        f'  %group_next = add i64 %group, {split_k}',
     ]
 
     def build_fragment(
@@ -767,7 +775,18 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             ]
         lines += [
             '  %is_loader_wave = icmp eq i32 %wave32, 0',
-            '  br i1 %is_loader_wave, label %b.load, label %b.wait',
+        ]
+        if pipelined_fragment_b:
+            lines += [
+                '  %is_initial_group = icmp eq i64 %group, 0',
+                '  %needs_initial_b = and i1 %is_loader_wave, %is_initial_group',
+                '  br i1 %needs_initial_b, label %b.load, label %b.wait',
+            ]
+        else:
+            lines.append(
+                '  br i1 %is_loader_wave, label %b.load, label %b.wait'
+            )
+        lines += [
             '',
             'b.load:',
         ]
@@ -855,6 +874,37 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             lines.extend(packing)
         a0, a1 = (fragment[2] for fragment in a_fragments)
         b0, b1 = (fragment[2] for fragment in b_fragments)
+    if pipelined_fragment_b:
+        lines += [
+            '  %b_next_stage_group32 = trunc i64 %group_next to i32',
+            '  %b_next_stage = and i32 %b_next_stage_group32, 1',
+            f'  %b_next_stage_base = mul i32 %b_next_stage, {2 * 33 * 4}',
+            '  %b_has_next = icmp ult i64 %group_next, %groups',
+            '  %b_do_prefetch = and i1 %is_loader_wave, %b_has_next',
+            '  br i1 %b_do_prefetch, label %b.prefetch, label %b.compute',
+            '',
+            'b.prefetch:',
+        ]
+        for slab in range(2):
+            prefix = f'b_prefetch_s{slab}'
+            lines += [
+                f'  %{prefix}_group2 = mul i64 %group_next, 2',
+                f'  %{prefix}_kstep = add i64 %{prefix}_group2, {slab}',
+                f'  %{prefix}_ntile = mul i64 %bidx64, %k_steps',
+                f'  %{prefix}_tile_step = add i64 %{prefix}_ntile, %{prefix}_kstep',
+                f'  %{prefix}_slot_base = mul i64 %{prefix}_tile_step, 32',
+                f'  %{prefix}_slot = add i64 %{prefix}_slot_base, %lane32_64',
+                f'  %{prefix}_byte = mul i64 %{prefix}_slot, 4',
+                f'  %{prefix}_ptr = getelementptr i8, ptr addrspace(1) %b, i64 %{prefix}_byte',
+                f'  %{prefix}_word = load i32, ptr addrspace(1) %{prefix}_ptr, align 4',
+            ]
+        lines += [
+            '  br label %b.compute',
+            '',
+            'b.compute:',
+            '  %b_prefetch_word_0 = phi i32 [ %b_prefetch_s0_word, %b.prefetch ], [ 0, %b.wait ]',
+            '  %b_prefetch_word_1 = phi i32 [ %b_prefetch_s1_word, %b.prefetch ], [ 0, %b.wait ]',
+        ]
     lines += [
         f'  %partial0 = call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
         f'<2 x i32> {a0}, <2 x i32> {b0}, <8 x float> zeroinitializer)',
@@ -875,9 +925,32 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         f'  %scale_vec = fmul <8 x float> {scale_vec}, %bs_vec',
         '  %scaled_partial = fmul <8 x float> %partial, %scale_vec',
         '  %running_next = fadd <8 x float> %running, %scaled_partial',
-        f'  %group_next = add i64 %group, {split_k}',
     ]
-    if shared_b:
+    if pipelined_fragment_b:
+        lines += [
+            '  br i1 %b_do_prefetch, label %b.store.next, label %b.next.wait',
+            '',
+            'b.store.next:',
+        ]
+        for slab in range(2):
+            prefix = f'b_next_s{slab}'
+            lines += [
+                f'  %{prefix}_lane = mul i32 %lane32, 4',
+                f'  %{prefix}_slab = add i32 %b_next_stage_base, {slab * 33 * 4}',
+                f'  %{prefix}_off = add i32 %{prefix}_slab, %{prefix}_lane',
+                f'  %{prefix}_ptr = getelementptr i8, ptr addrspace(3) '
+                f'@tessera_mxfp4_b_lds, i32 %{prefix}_off',
+                f'  store i32 %b_prefetch_word_{slab}, ptr addrspace(3) '
+                f'%{prefix}_ptr, align 4',
+            ]
+        lines += [
+            '  call void @llvm.amdgcn.s.waitcnt(i32 0)',
+            '  br label %b.next.wait',
+            '',
+            'b.next.wait:',
+            '  call void @llvm.amdgcn.s.barrier()',
+        ]
+    elif shared_b:
         lines.append('  call void @llvm.amdgcn.s.barrier()')
     if schedule.k_step_schedule == "isolated_scale_group":
         # The Tile/Target carrier states a backend-neutral no-motion boundary.

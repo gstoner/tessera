@@ -136,6 +136,10 @@ def test_fragment_prefill_stages_packed_lane_words_in_padded_double_buffer() -> 
         "b.wait:"
     )
     assert "%b_lds_word_0 = load i32, ptr addrspace(3)" in source
+    assert "b.prefetch:" in source
+    assert "%b_do_prefetch = and i1 %is_loader_wave, %b_has_next" in source
+    assert "b.store.next:" in source
+    assert "store i32 %b_prefetch_word_0, ptr addrspace(3)" in source
     assert "%wave_m = mul i64 %wave64, 16" in source
     assert source.count("call void @llvm.amdgcn.s.barrier()") == 2
 

@@ -30,8 +30,9 @@ Target names BM256/TM4 geometry and the separate pointer/package ABI. The
 materializer checks Tile/Target schedule hashes, shape, policy and ABI, then
 binds quantified fold-loss and payload hashes from the loaded weight object.
 One ragged `65x48x64` Graph→Target package executed against BF16 output on
-Tajasarus; the full folded device file passed 7/7 in the isolated trial
-worktree. The exact K32 carrier remains the oracle and default. Broader K/N
+Tajasarus; the full folded device file passed 7/7 at clean commit `d8ea906e`,
+and three focused MLIR fixtures passed. The exact K32 carrier remains the
+oracle and default. Broader K/N
 and high-level frontend entry remain open; no default-selector promotion.
 
 ## GFX1201 folded scale cancellation and IKF diagnostic — 2026-09-22

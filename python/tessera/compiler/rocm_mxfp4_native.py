@@ -987,7 +987,11 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         # AMD lowers that contract to a compiler scheduling barrier, not a
         # workgroup synchronization instruction: no target intrinsic leaks
         # into shared IR, and no runtime wait is added here.
-        lines.append('  call void @llvm.amdgcn.sched.barrier(i32 0)')
+        # Keep VMEM and WMMA on their side of the K32 boundary while allowing
+        # independent VALU/SALU address arithmetic to fill otherwise idle
+        # issue slots.  This is the AMD realization of the portable
+        # isolated_scale_group contract, not part of the public IR contract.
+        lines.append('  call void @llvm.amdgcn.sched.barrier(i32 6)')
     lines += ['  br label %group.header', '']
     final_running = '%running'
     if split_reduce:

@@ -102,7 +102,7 @@ def test_wmma_source_isolates_each_k32_partial_before_scaling() -> None:
     assert "<8 x float> zeroinitializer" in source
     assert "%scaled_partial = fmul <8 x float> %partial, %scale_vec" in source
     assert "%running_next = fadd <8 x float> %running, %scaled_partial" in source
-    assert "call void @llvm.amdgcn.sched.barrier(i32 0)" in source
+    assert "call void @llvm.amdgcn.sched.barrier(i32 6)" in source
     assert "%a_s0_0_k = add i64 %a_s0_0_k0, %half8" in source
     assert source.count("fragment_word = load i32") == 2
     assert "%b_s1_fragment_slot = add i64" in source

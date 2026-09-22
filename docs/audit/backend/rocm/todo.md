@@ -27,6 +27,7 @@ the two decode shapes from 0.1552 to 0.0891 ms and 0.1776 to 0.1613 ms;
 to 4.5847 ms. Radiance remains faster, so selector promotion is not claimed.
 Next: fragment/prepacked decode loads, multi-stage prefill, cache modifiers,
 waves-per-EU tuning, and resource/ISA evidence for the winning kernels.
+[Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_production_20260922/README.md).
 
 ## Scaled-partial carrier and exact MXFP4 ABI binding — 2026-09-21
 

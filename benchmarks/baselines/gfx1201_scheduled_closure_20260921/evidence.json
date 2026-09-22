@@ -1,10 +1,10 @@
 {
   "compiler": {
-    "path": "/home/angstorms/programming/tessera/build-assertions/tools/tessera-opt/tessera-opt",
-    "sha256": "5c96afedb4448b62715957f6c4c877a18802b100f388cf8f96a17e91d962c98d",
+    "path": "/tmp/tessera-gfx1201-proof.aGx3hQ/build/tools/tessera-opt/tessera-opt",
+    "sha256": "b72793a4b5c2a223f70f611698682bfa557e1633d3928e226cb8951267b93134",
     "source_dirty": false,
-    "source_revision": "fa93b2e59c0326424c00adfb2865b51765b4cfbb",
-    "source_root": "/home/angstorms/programming/tessera",
+    "source_revision": "5da87e9a9c52bde88ec93e566b31e187954c4c4b",
+    "source_root": "/tmp/tessera-gfx1201-proof.aGx3hQ",
     "stale_generator_sources": 0,
     "version": [
       "LLVM (http://llvm.org/):",
@@ -55,23 +55,26 @@
   "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
   "policy": "ordinary non-owning-host CI keeps the explicit skips; promotion is bound to this exact-device, fresh-compiler, zero-skip packet",
   "proof_build": "llvm23.1.1+rocm10.0+gfx1201",
-  "recorder_sha256": "25c37282fc00970ef868b588a8f455a81ffd19828bf9768e056d195d54f118b7",
+  "recorder_sha256": "8dbe253e29e0e0502f90639580d9afb1fdedded1326cc2cb78e0290f26beff6a",
   "result": {
     "errors": 0,
     "failures": 0,
     "hostname": "tajasarus",
-    "seconds": 56.373,
+    "seconds": 58.432,
     "skipped": 0,
     "tests": 95,
-    "timestamp": "2026-09-21T16:40:51.081663-05:00"
+    "timestamp": "2026-09-21T17:46:04.170901-05:00"
   },
   "schema": "tessera.rocm.gfx1201_scheduled_closure.v1",
-  "source_revision": "fa93b2e59c0326424c00adfb2865b51765b4cfbb",
+  "source_revision": "5da87e9a9c52bde88ec93e566b31e187954c4c4b",
   "sync_key": "GFX1201-SCHEDULED-SKIP-CLOSURE-2026-09-21",
   "target": "rocm_gfx1201",
   "toolchain": {
+    "hip_version": "7.15.26333",
     "hipcc": "HIP version: 7.15.26333-0000000",
-    "rocm_path": "/opt/rocm/core"
+    "llvm_version": "23.1.1",
+    "rocm_path": "/opt/rocm/core",
+    "rocm_version": "10.0.0"
   },
   "work_item": "ROCM-2"
 }

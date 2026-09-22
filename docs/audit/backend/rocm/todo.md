@@ -23,7 +23,13 @@ The first all-green run resolved a stale compiler and was rejected. The
 accepted packet uses a freshly rebuilt assertions-enabled LLVM/MLIR 23.1.1
 `tessera-opt`; the recorder hard-fails on stale generator sources, inventory
 count drift, any failed/error/skipped case, a non-gfx1201 selected device, or a
-mismatched compiler target. Evidence:
+mismatched compiler target. PR #802 review follow-through additionally binds
+the tested Git revision through `git -C` on the recorder root, refuses dirty
+tested/compiler checkouts, validates LLVM 23.1.1 + ROCm 10.0 + HIP 7.15 before
+assigning the proof-build label, obtains and validates the selected HIP
+device's model, and recomputes the fixture/recorder hashes in the unit drift
+gate. The exact-device packet was regenerated after these guards passed.
+Evidence:
 [scheduled closure packet](../../../../benchmarks/baselines/gfx1201_scheduled_closure_20260921/README.md).
 
 The skip decorators remain correct on non-owning hosts. This closes the

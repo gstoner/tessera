@@ -15,7 +15,9 @@ Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync
 Tajasarus lacks `/dev/kfd`, so its rocprofv3 PC-sampling preflight refuses
 without phase attribution. The packet has no Nsight/CUPTI consumer, changes
 no NVIDIA clock schema or selector, and provides no transferable CUDA proof.
-A later folded shared-IR carrier needs a separate NVIDIA applicability audit.
+The shared Graph/Schedule/Tile carrier now names a distinct folded full-K
+partial, but the E4M3 `[N,K]` payload, E8M0 row reference, BM256/TM4
+producer and Target ABI are gfx1201-only. No CUDA package consumes it.
 
 ## GFX1201 folded scale fix and phase-probe refusal — 2026-09-22
 

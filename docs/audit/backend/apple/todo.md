@@ -14,8 +14,10 @@ Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync
 `GFX1201-FOLDED-PROFILER-CARRIER-2026-09-22`. Not applicable to Metal:
 the refused rocprofv3 PC-sampling path and folded HIP image have no Apple
 consumer. This adds a ROCm-only refusal packet, not a shared clock schema or
-Apple selector evidence. A future folded Graph carrier must be assessed as a
-shared-IR change before claiming parity; no such carrier lands in this slice.
+Apple selector evidence. The shared `tessera.scaled_matmul` physical-contract
+vocabulary now distinguishes full-K folded row-reference semantics, but its
+Target ABI and K64 BM256/TM4 producer are gfx1201-only; no Metal materializer
+or parity claim follows.
 
 ## GFX1201 folded scale fix and phase-probe refusal — 2026-09-22
 

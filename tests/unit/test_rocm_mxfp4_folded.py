@@ -81,8 +81,8 @@ def test_folded_materializer_refuses_exact_or_mismatched_carrier() -> None:
         mx.pack_e2m1_codes(codes), np.full((2, 48), 127, dtype=np.uint8),
         allow_approximate=True,
     )
-    tile = '''tile.scaled_matmul_kernel {physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", partial_accumulator = {combine = "row_reference_after_full_k", schedule_scope = "k_stage", scope = "full_k"}, tessera.schedule_hash = "schedule-a"}'''
-    target = f'''tessera_rocm.scaled_wmma_gemm {{abi = "a_b_lhs_scale_rhs_scale_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 65 : i64, macro_k = 64 : i64, n = 48 : i64, numeric_policy = {{accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI}", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, tessera.schedule_hash = "schedule-a", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64}}'''
+    tile = '''tile.scaled_matmul_kernel {physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", partial_accumulator = {combine = "row_reference_after_full_k", cross_step_motion = "forbid", init = "zero", instruction_steps = 4 : i64, schedule_scope = "k_stage", scope = "full_k"}, tessera.macro_tile_m = 256 : i64, tessera.macro_tile_n = 64 : i64, tessera.problem_m = 65 : i64, tessera.problem_n = 48 : i64, tessera.problem_k = 64 : i64, tessera.schedule_hash = "schedule-a", warps = 8 : i64}'''
+    target = f'''tessera_rocm.scaled_wmma_gemm {{abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 65 : i64, macro_k = 64 : i64, n = 48 : i64, numeric_policy = {{accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI}", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, tessera.schedule_hash = "schedule-a", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64}}'''
     with pytest.raises(ValueError, match="schedule hashes disagree"):
         package_folded_scaled_wmma_target_ir(
             tile, target.replace('schedule_hash = "schedule-a"',
@@ -93,6 +93,23 @@ def test_folded_materializer_refuses_exact_or_mismatched_carrier() -> None:
         package_folded_scaled_wmma_target_ir(
             tile, target.replace("rocm_mxfp4_w4a8_folded_prefill_v1",
                                  "rocm_mxfp4_w4a8_exact_v1"),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="stage_k"):
+        package_folded_scaled_wmma_target_ir(
+            tile, target.replace("stage_k = 64", "stage_k = 32"),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="numeric_policy.execution_mode"):
+        package_folded_scaled_wmma_target_ir(
+            tile,
+            target.replace("folded_row_reference_explicit_approximate",
+                           "exact_per_block"),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="warps"):
+        package_folded_scaled_wmma_target_ir(
+            tile.replace("warps = 8", "warps = 4"), target,
             folded, allow_approximate=True,
         )
     with pytest.raises(ValueError, match="explicit approximate"):

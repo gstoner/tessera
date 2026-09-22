@@ -14,8 +14,9 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owners IKF-1 / ROCM-MXFP4-W4A8-1; sync
 `GFX1201-FOLDED-PROFILER-CARRIER-2026-09-22`. Not applicable to AVX-512:
 the rocprofv3 `/dev/kfd` refusal packet changes no CPU profiler clock,
-counter, numerical policy, or selector contract. A future folded shared-IR
-carrier requires a distinct x86 applicability assessment; none lands here.
+counter, numerical policy, or selector contract. The shared carrier now
+distinguishes full-K folded semantics, but this physical E4M3/E8M0 ABI has
+no AVX-512 materializer or CPU parity claim.
 
 ## GFX1201 folded scale fix and phase-probe refusal — 2026-09-22
 

@@ -21,13 +21,18 @@ then prove production-image identity, PC-to-ISA mapping, cross-CU clock
 consistency, clock-read cost, and perturbation overhead before admission.
 [Preflight packet](../../../../benchmarks/baselines/gfx1201_phase_profiler_preflight_20260922/README.md).
 
-The folded Graph carrier remains separate work: `tessera.scaled_matmul`'s
-existing exact `scale_outer_product_then_add` partial cannot represent
-load-time-folded E4M3 with one post-reduction E8M0 row reference. The new
-physical form must carry B as `[N,K]`, Ref as `[N]`, explicit approximate
-policy and loss metadata, BM256/TM4 stage K64, and a distinct Target ABI;
-Graph/Schedule/Tile hashes must bind the package. Do not relabel the exact
-K32 partial as this route or infer provenance from a hand-emitted HIP image.
+The folded Graph carrier now uses a distinct physical contract on
+`tessera.scaled_matmul`: B is load-time-folded E4M3 `[N,K]`, Ref is E8M0
+`[N]`, and the explicit approximate policy selects one post-reduction row
+reference, not the exact route's K32 scale-then-add partial. Schedule and
+Tile retain a full-K accumulator and isolate the K64 physical producer stage;
+Target names BM256/TM4 geometry and the separate pointer/package ABI. The
+materializer checks Tile/Target schedule hashes, shape, policy and ABI, then
+binds quantified fold-loss and payload hashes from the loaded weight object.
+One ragged `65x48x64` Graph→Target package executed against BF16 output on
+Tajasarus; the full folded device file passed 7/7 in the isolated trial
+worktree. The exact K32 carrier remains the oracle and default. Broader K/N
+and high-level frontend entry remain open; no default-selector promotion.
 
 ## GFX1201 folded scale cancellation and IKF diagnostic — 2026-09-22
 

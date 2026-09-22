@@ -4755,10 +4755,16 @@ reports the RX 9070 XT but has no `/dev/kfd`; the packet refuses sample
 collection, clock validation, phase attribution, and promotion. A separate
 kernel-trace attempt produced no trace artifact.
 
+Outcome also includes a distinct folded physical Graph→Schedule→Tile→Target
+carrier: the full-K row-reference partial, K64 stage, BM256/TM4 geometry,
+pointer ABI and approximate policy survive the hash-bound materializer. An
+isolated assertions-enabled Tajasarus compiler passed the new FileCheck
+fixture; a `65x48x64` package launched and the folded device file passed 7/7.
+
 Remaining: restore a profiler-capable gfx1201 environment and validate
-production-image PC sampling plus cross-CU clocks. The folded route still
-needs its own Graph→Schedule→Tile→Target semantics and package ancestry;
-the exact K32 partial carrier cannot be relabeled as a folded row reference.
+production-image PC sampling plus cross-CU clocks. Rerun the carrier proof
+from a clean final revision, then widen its shape coverage and wire the
+high-level frontend. Exact K32 remains the default oracle.
 
 Evidence: [profiler refusal packet](../../../benchmarks/baselines/gfx1201_phase_profiler_preflight_20260922/README.md),
 `tests/unit/test_gfx1201_phase_profiler_preflight.py`.

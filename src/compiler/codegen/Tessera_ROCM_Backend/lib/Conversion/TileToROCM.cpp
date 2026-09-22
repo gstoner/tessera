@@ -3191,7 +3191,9 @@ struct LowerTileToROCMPass
         OperationState state(op->getLoc(), "tessera_rocm.scaled_wmma_gemm");
         state.addAttribute("name", builder.getStringAttr(parent.getSymName()));
         state.addAttribute(
-            "abi", builder.getStringAttr("a_b_lhs_scale_rhs_scale_d_m_n_k"));
+            "abi", builder.getStringAttr(
+                       foldedMxfp4 ? "a_bfold_sa_rowref_d_m_n_k"
+                                    : "a_b_lhs_scale_rhs_scale_d_m_n_k"));
         state.addAttribute("m", problemM);
         state.addAttribute("n", problemN);
         state.addAttribute("k", problemK);

@@ -348,7 +348,7 @@ def package_folded_scaled_wmma_target_ir(
         raise ValueError("folded packaging requires exactly one Tile and Target carrier")
     operation, tile_operation = directives[0], carriers[0]
     for name, expected in {
-        "abi": "a_b_lhs_scale_rhs_scale_d_m_n_k",
+        "abi": "a_bfold_sa_rowref_d_m_n_k",
         "physical_contract": physical,
         "package_abi": GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
         "scale_format": "e8m0_row_reference",
@@ -363,6 +363,8 @@ def package_folded_scaled_wmma_target_ir(
         "combine": "row_reference_after_full_k",
         "scope": "full_k",
         "schedule_scope": "k_stage",
+        "init": "zero",
+        "cross_step_motion": "forbid",
     }.items():
         if _target_string_attr(tile_operation, name) != expected:
             raise ValueError(f"folded Tile IR requires {name}={expected!r}")
@@ -378,14 +380,24 @@ def package_folded_scaled_wmma_target_ir(
         )
     }
     m, n, k = integers["m"], integers["n"], integers["k"]
-    if min(m, n, k) <= 0 or m <= 64 or k % 64 or any(
-        integers[name] != expected for name, expected in {
-            "instruction_k": 16, "scale_k": k, "macro_k": k, "stage_k": 64,
-            "block_m": 256, "block_n": 64,
-            "tile_m_per_wave": 4, "tile_n_per_wave": 2,
-        }.items()
-    ):
-        raise ValueError("folded Target IR requires BM256/TM4, K64 stages and full-K scale")
+    if min(m, n, k) <= 0 or m <= 64 or k % 64:
+        raise ValueError("folded Target IR requires M>64, positive N, K divisible by 64")
+    for name, expected_int in {
+        "instruction_k": 16, "scale_k": k, "macro_k": k, "stage_k": 64,
+        "block_m": 256, "block_n": 64,
+        "tile_m_per_wave": 4, "tile_n_per_wave": 2,
+    }.items():
+        if integers[name] != expected_int:
+            raise ValueError(f"folded Target IR requires {name}={expected_int}")
+    for name, expected_int in {
+        "instruction_steps": k // 16,
+        "tessera.problem_m": m, "tessera.problem_n": n,
+        "tessera.problem_k": k,
+        "tessera.macro_tile_m": 256, "tessera.macro_tile_n": 64,
+        "warps": 8,
+    }.items():
+        if _target_integer_attr(tile_operation, name) != expected_int:
+            raise ValueError(f"folded Tile IR requires {name}={expected_int}")
     policy_match = re.search(r"\bnumeric_policy\s*=\s*\{([^}]*)\}", operation)
     if policy_match is None:
         raise ValueError("folded Target IR requires numeric_policy")

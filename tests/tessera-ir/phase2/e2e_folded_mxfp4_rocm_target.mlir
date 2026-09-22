@@ -31,6 +31,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // TILE-SAME: partial_accumulator = {combine = "row_reference_after_full_k"
 // TILE-SAME: physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1"
 // TARGET: tessera_rocm.scaled_wmma_gemm
+// TARGET-SAME: abi = "a_bfold_sa_rowref_d_m_n_k"
 // TARGET-SAME: block_m = 256
 // TARGET-SAME: block_n = 64
 // TARGET-SAME: k_step_schedule = "isolated_k_stage"

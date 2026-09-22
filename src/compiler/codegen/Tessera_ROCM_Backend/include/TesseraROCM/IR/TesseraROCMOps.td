@@ -96,10 +96,12 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
   let summary = "Block-scaled WMMA directive with isolated scale-group partials";
   let description = [{
     Target-IR handoff for a block-scaled contraction. The pointer ABI is
-    A/B/lhs-scale/rhs-scale/D/M/N/K, and `partial_combine` is semantic: each
-    `scale_k` group starts from zero, accumulates whole `instruction_k` WMMA
-    steps, is scaled by the two scale planes, and only then joins the running
-    accumulator. `k_step_schedule` is the backend-neutral scheduling contract:
+    A/B/lhs-scale/rhs-scale/D/M/N/K for exact block scaling, or the distinct
+    A/B-folded/activation-scale/row-reference/D/M/N/K ABI for an explicitly
+    approximate folded physical contract. `partial_combine` is semantic:
+    exact groups scale their isolated WMMA partials before adding, while the
+    folded form applies one reference after the full FP32 reduction.
+    `k_step_schedule` is the backend-neutral scheduling contract:
     `isolated_scale_group` forbids fragment motion across those group
     boundaries. Backends choose their own physical scheduling primitive. This
     directive is intentionally distinct from `wmma_gemm` so an unscaled

@@ -6,6 +6,7 @@ import argparse
 import ctypes
 import hashlib
 import json
+import os
 from pathlib import Path
 import statistics
 from typing import Any
@@ -17,19 +18,32 @@ from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.rocm_mxfp4_folded import (
     package_mxfp4_folded_prefill, prepare_folded_weights,
 )
+from tessera.compiler.rocm_mxfp4_folded_frontend import (
+    compile_folded_scaled_matmul,
+)
 from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as base
 
 
 def folded_engine(
     hip: ctypes.CDLL, case: base.Case, inputs: dict[str, np.ndarray],
-    copies: int,
+    copies: int, *, tessera_opt: Path | None = None,
 ) -> tuple[base._Engine, mx.FoldedRowReference]:
     folded = prepare_folded_weights(
         inputs["packed_row_major"], inputs["b_scale"],
         allow_approximate=True,
     )
-    package = package_mxfp4_folded_prefill(
-        case.m, case.n, case.k, folded, allow_approximate=True,
+    frontend = (
+        compile_folded_scaled_matmul(
+            inputs["a"], inputs["a_scale"], folded,
+            tessera_opt=tessera_opt, allow_approximate=True,
+        )
+        if tessera_opt is not None else None
+    )
+    package = (
+        frontend.package if frontend is not None else
+        package_mxfp4_folded_prefill(
+            case.m, case.n, case.k, folded, allow_approximate=True,
+        )
     )
     isa = base._code_object_evidence(package.image.payload)
     module = ctypes.c_void_p()
@@ -72,6 +86,9 @@ def folded_engine(
             "compiler_fingerprint": package.image.compiler_fingerprint,
             "toolchain_fingerprint": package.image.toolchain_fingerprint,
             "route": package.descriptor.provenance,
+            "frontend_receipt": (
+                frontend.route_receipt if frontend is not None else None
+            ),
             **isa,
         },
     )
@@ -88,6 +105,7 @@ def folded_engine(
 def benchmark(
     cases: tuple[base.Case, ...], radiance_module: Path | None, *,
     radiance_revision: str | None = None,
+    tessera_opt: Path | None = None,
     warmup: int = 6, trials: int = 11, iterations: int = 12,
 ) -> dict[str, object]:
     if rt._rocm_live_arch() != "gfx1201":
@@ -97,6 +115,12 @@ def benchmark(
         raise RuntimeError("folded MXFP4 benchmark requires HIP")
     if radiance_module is not None and not radiance_revision:
         raise ValueError("matched Radiance timing requires its pinned source revision")
+    if radiance_module is not None and os.environ.get("RADIANCE_MXFP4_WPERM") != "1":
+        raise ValueError(
+            "fragment-order Radiance inputs require RADIANCE_MXFP4_WPERM=1"
+        )
+    if tessera_opt is None:
+        raise ValueError("matched folded timing requires the authored Graph frontend")
     radiance = base._load_radiance(radiance_module) if radiance_module else None
     rows: list[dict[str, object]] = []
     for case in cases:
@@ -104,7 +128,9 @@ def benchmark(
             raise ValueError("folded BM256/TM4 benchmark requires prefill")
         inputs = base._logical_inputs(case)
         exact = base._tessera_engine(hip, case, inputs, 3, None, None)
-        folded_engine_obj, folded = folded_engine(hip, case, inputs, 3)
+        folded_engine_obj, folded = folded_engine(
+            hip, case, inputs, 3, tessera_opt=tessera_opt,
+        )
         engines = [exact, folded_engine_obj]
         if radiance is not None:
             engines.append(base._radiance_engine(hip, radiance, case, inputs, 3))
@@ -145,13 +171,15 @@ def benchmark(
             for engine in reversed(engines):
                 engine.close()
     return {
-        "schema": "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v1",
+        "schema": "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v2",
         "device": base._selected_device_name(hip),
         "architecture": rt._rocm_live_arch(),
         "source_revision": base._git_revision(),
         "radiance": None if radiance_module is None else {
             "revision": radiance_revision,
             "binary_sha256": base._sha256(radiance_module),
+            "weight_layout": "fragment_order",
+            "wperm": 1,
         },
         "folded_generator_sha256": base._sha256(
             Path(__file__).resolve().parents[2]
@@ -168,6 +196,7 @@ def main() -> None:
     parser.add_argument("--case", action="append", type=base._parse_case)
     parser.add_argument("--radiance-module", type=Path)
     parser.add_argument("--radiance-revision")
+    parser.add_argument("--tessera-opt", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     packet = benchmark(
@@ -176,6 +205,7 @@ def main() -> None:
             base.Case("prefill", 1024, 17408, 5120),
         )),
         args.radiance_module, radiance_revision=args.radiance_revision,
+        tessera_opt=args.tessera_opt,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n")

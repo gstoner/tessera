@@ -7,6 +7,8 @@
     "binary_sha256": "c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6",
     "revision": "dfdfa3832922c9a4253133f09c1f5c0d39748fc7"
   },
+  "radiance_layout_verified": false,
+  "promotion_eligible": false,
   "rows": [
     {
       "case": "prefill_256x5120x8704",

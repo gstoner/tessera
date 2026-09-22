@@ -25,6 +25,10 @@ overhead was +9.38%/+1.17%. Same-CTA interval checks do not close IKF-P0's
 cross-CU clock or read-cost gates. Next: find an ISA-preserving probe or use
 controlled uninstrumented variants to measure physical weight traffic and
 staging; do not fit coefficients from the refused phase fractions.
+The folded package currently emits HIP directly rather than traversing the
+Graph→Schedule→Tile→Target scaled-matmul carrier. High-level feedback needs
+that ancestry and a Schedule/Tile hash/ABI receipt before its measurements
+can update optimizer decisions; the IKF plan records the per-level contract.
 [Phase refusal packet](../../../../benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922/README.md).
 
 ## GFX1201 folded MXFP4 BM256/TM4 prefill — 2026-09-22

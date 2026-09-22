@@ -18,7 +18,8 @@ perturbation gate. NVIDIA's `%globaltimer` IKF lane and exact-device proof
 remain separate; the packet is not CUDA cost-model training data. Super-Bear
 has Nsight Systems, Nsight Compute, and CUPTI for its later uninstrumented
 span/counter/PC-sample comparisons, with CUDA provenance kept separate from
-Tajasarus gfx1201 evidence.
+Tajasarus gfx1201 evidence. The proposed Graph→Schedule→Tile→Target feedback
+lineage remains a shared plan only; no CUDA carrier or selector changes here.
 
 ## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
 

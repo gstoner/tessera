@@ -426,3 +426,29 @@ Compute, and CUPTI. Use their uninstrumented kernel spans and counter/PC
 samples to cross-check region hypotheses and generic stack costs, with
 provider-specific provenance. They neither close gfx1201 clock validation
 nor substitute CUDA counters for an AMD exact-device bottleneck claim.
+
+### 2026-09-22: optimizer feedback must retain every IR-level decision
+
+The failed gfx1201 probe is also a lineage warning. The folded prefill
+package currently emits HIP source directly into `ROCMNativePackage`; its
+`tile_ir` is a descriptive string, not a lowered `tile.scaled_matmul_kernel`.
+Therefore its timing can characterize that package but cannot yet train a
+Graph/Schedule/Tile optimizer or claim that a high-level candidate produced
+the measured HSACO. By contrast, the exact scaled route has a
+`tessera.schedule_hash` equality gate between Tile and Target carriers.
+
+| Boundary | Decision or identity to retain | Feedback obligation |
+|---|---|---|
+| Graph | canonical op, shape bucket, dtype/layout and numerical-policy choice; `FusionCost` inputs/verdict | identify what optimization was legal and which candidate was considered |
+| Schedule | candidate hash, tile/stage/wave roles, K-step and scale-group contract | index phase instances by the actual tunable coordinates |
+| Tile | lowered stage/partial-accumulator regions plus the same schedule hash | prove each measured region belongs to that candidate, not a stale lowering |
+| Target | entry, exact architecture, physical ABI and codegen/source digest | bind regions to the generated kernel and reject missing or mismatched ancestry |
+| Native image | HSACO digest, ISA/resource shape, selected device and toolchain | reject an instrumented image whose scheduling structure differs from production |
+| Measurement/arbiter | L2/L3 explanatory vector joined to the above; separate L0/L1 timing | fit only admitted labels; select only from uninstrumented, accuracy-gated timing |
+
+Next compiler slice: make the folded numerical-policy/layout decision and
+BM256/TM4 schedule a real Graph→Schedule→Tile→Target carrier, or explicitly
+leave it outside high-level optimization until that path exists. Add a
+cross-level hash/ABI negative fixture and a receipt that names the exact
+artifact raced. Neither this mapping nor the current phase packet promotes
+the folded route or closes IKF-P0/P2/P3.

@@ -16,6 +16,8 @@ Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
 The scale repair and compile-time-only clock trace are gfx1201 HIP physical
 code. The refused diagnostic packet adds no x86 timing schema consumer,
 selector, or CPU cost-model coefficient; TPROF-X86 remains independently owned.
+The proposed cross-IR feedback lineage is plan-only; no x86 carrier or
+selector is added by this ROCm diagnostic.
 
 ## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
 

@@ -15,7 +15,8 @@ Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
 The scale-cancellation repair is in a gfx1201 HIP epilogue, and the new
 same-CTA phase packet has no Apple consumer. Its trace is refused as
 production attribution because it changes the emitted ISA; no Apple timing,
-clock, selector, or physical schedule claim transfers.
+clock, selector, or physical schedule claim transfers. The cross-IR feedback
+lineage is plan-only and still needs Apple's synthesizer/MLIR seam assessed.
 
 ## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
 

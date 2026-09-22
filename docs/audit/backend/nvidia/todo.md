@@ -15,7 +15,10 @@ Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
 The HIP fold epilogue now combines two FP32 scales before accumulation;
 the same-CTA wall-clock trace is AMD-only and fails its structural
 perturbation gate. NVIDIA's `%globaltimer` IKF lane and exact-device proof
-remain separate; the packet is not CUDA cost-model training data.
+remain separate; the packet is not CUDA cost-model training data. Super-Bear
+has Nsight Systems, Nsight Compute, and CUPTI for its later uninstrumented
+span/counter/PC-sample comparisons, with CUDA provenance kept separate from
+Tajasarus gfx1201 evidence.
 
 ## GFX1201 folded MXFP4 ABI and benchmark schema — 2026-09-22
 

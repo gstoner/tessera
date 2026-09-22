@@ -420,3 +420,9 @@ nor the timing of that different schedule may train a cost model. The next
 gfx1201 measurement slice must preserve production ISA structure before
 interpreting phase time, then complete the P0 cross-CU/read-cost gates.
 [Exact-device diagnostic packet](../../../benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922/README.md).
+
+For the later NVIDIA lane, Super-Bear can supply Nsight Systems, Nsight
+Compute, and CUPTI. Use their uninstrumented kernel spans and counter/PC
+samples to cross-check region hypotheses and generic stack costs, with
+provider-specific provenance. They neither close gfx1201 clock validation
+nor substitute CUDA counters for an AMD exact-device bottleneck claim.

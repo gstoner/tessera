@@ -106,3 +106,42 @@ def test_folded_prefill_rejects_changed_load_time_payload() -> None:
     })
     assert not result["ok"]
     assert "weight_sha256" in json.dumps(result, default=str)
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+def test_folded_prefill_combines_canceling_scales_before_accumulator() -> None:
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, n, k = 65, 48, 32
+    codes = np.ones((n, k), dtype=np.uint8)
+    scales = np.full((1, n), 254, dtype=np.uint8)
+    folded = prepare_folded_weights(
+        mx.pack_e2m1_codes(codes), scales, allow_approximate=True,
+    )
+    assert folded.lossless
+    assert np.all(folded.row_reference == 254)
+    package = package_mxfp4_folded_prefill(
+        m, n, k, folded, allow_approximate=True,
+    )
+    buffers = {
+        "a": np.full((m, k), 0x38, dtype=np.uint8),
+        "b_folded": folded.weight_bytes,
+        "a_scale": np.full(m, np.float32(2.0 ** -127), dtype=np.float32),
+        "row_reference": folded.row_reference,
+        "output": np.zeros((m, n), dtype=ml_dtypes.bfloat16),
+    }
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir,
+    )
+    result = rt.launch(
+        artifact, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}},
+    )
+    assert result["ok"], json.dumps(result, default=str)
+    np.testing.assert_array_equal(
+        buffers["output"], np.full((m, n), 32, dtype=ml_dtypes.bfloat16),
+    )

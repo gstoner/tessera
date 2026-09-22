@@ -63,7 +63,11 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
     const unsigned char *__restrict__ B,
     const float *__restrict__ As,
     const unsigned char *__restrict__ Ref,
-    __bf16 *__restrict__ O, long M, long N, long K) {
+    __bf16 *__restrict__ O, long M, long N, long K
+#ifdef TESSERA_FOLDED_PHASE_TRACE
+    , unsigned long long *__restrict__ Trace
+#endif
+    ) {
   __shared__ alignas(16) unsigned char sA[256 * 80];
   __shared__ alignas(16) unsigned char sB[64 * 80];
   const int tid = threadIdx.x;
@@ -75,6 +79,10 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
   const int half = (lane >> 4) * 8;
   const long m0 = (long)blockIdx.y * 256;
   const long n0 = (long)blockIdx.x * 64;
+#ifdef TESSERA_FOLDED_PHASE_TRACE
+  unsigned long long copy_ticks = 0, compute_ticks = 0;
+  unsigned long long first_tick = 0, last_tick = 0;
+#endif
   floatx8 acc[4][2];
 #pragma unroll
   for (int i = 0; i < 4; ++i)
@@ -83,6 +91,13 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
       acc[i][j] = {};
 
   for (long kb = 0; kb < K; kb += 64) {
+#ifdef TESSERA_FOLDED_PHASE_TRACE
+    unsigned long long copy_start = 0;
+    if (tid == 0) {
+      copy_start = (unsigned long long)wall_clock64();
+      if (kb == 0) first_tick = copy_start;
+    }
+#endif
     // Uniform, clamped vector copies keep every wave on the barrier path.
     // Four A vectors and one B vector per thread cover the two LDS tiles.
 #pragma unroll
@@ -108,6 +123,13 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
       *reinterpret_cast<copy_u32x4 *>(sB + (tid / 4) * 80 + off) = value;
     }
     __syncthreads();
+#ifdef TESSERA_FOLDED_PHASE_TRACE
+    unsigned long long compute_start = 0;
+    if (tid == 0) {
+      compute_start = (unsigned long long)wall_clock64();
+      copy_ticks += compute_start - copy_start;
+    }
+#endif
     for (int step = 0; step < 4 && kb + step * 16 < K; ++step) {
       fragment_i32x2 af[4], bf[2];
 #pragma unroll
@@ -131,7 +153,22 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
               af[i], bf[j], acc[i][j]);
     }
     __syncthreads();
+#ifdef TESSERA_FOLDED_PHASE_TRACE
+    if (tid == 0) {
+      last_tick = (unsigned long long)wall_clock64();
+      compute_ticks += last_tick - compute_start;
+    }
+#endif
   }
+#ifdef TESSERA_FOLDED_PHASE_TRACE
+  if (tid == 0) {
+    const long slot = ((long)blockIdx.y * gridDim.x + blockIdx.x) * 4;
+    Trace[slot] = first_tick;
+    Trace[slot + 1] = last_tick;
+    Trace[slot + 2] = copy_ticks;
+    Trace[slot + 3] = compute_ticks;
+  }
+#endif
 
 #pragma unroll
   for (int j = 0; j < 2; ++j) {
@@ -143,8 +180,10 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
 #pragma unroll
       for (int e = 0; e < 8; ++e) {
         const long m = m0 + wm * 64 + i * 16 + half + e;
-        if (m < M && n < N)
-          O[m * N + n] = (__bf16)((acc[i][j][e] * row_scale) * As[m]);
+        if (m < M && n < N) {
+          const float combined_scale = row_scale * As[m];
+          O[m * N + n] = (__bf16)(acc[i][j][e] * combined_scale);
+        }
       }
   }
 }

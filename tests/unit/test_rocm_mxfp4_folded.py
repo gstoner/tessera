@@ -54,3 +54,5 @@ def test_folded_kernel_has_tall_tile_and_uniform_stage_barriers() -> None:
     assert "sB[64 * 80]" in source
     assert source.count("__syncthreads()") == 2
     assert "__builtin_amdgcn_wmma_f32_16x16x16_fp8_fp8_w32_gfx12" in source
+    assert "const float combined_scale = row_scale * As[m];" in source
+    assert "acc[i][j][e] * combined_scale" in source

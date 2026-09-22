@@ -28,10 +28,13 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
+import shutil
 import socket
 import statistics
 import subprocess
 import sys
+import tempfile
 from typing import Any, Callable
 
 import ml_dtypes
@@ -60,6 +63,75 @@ def _git_revision() -> str:
     return subprocess.check_output(
         ("git", "-C", str(ROOT), "rev-parse", "HEAD"), text=True
     ).strip()
+
+
+def _llvm_tool(name: str) -> str:
+    roots = []
+    if configured := os.environ.get("TESSERA_LLVM_BIN"):
+        roots.append(Path(configured))
+    if configured := os.environ.get("ROCM_PATH"):
+        roots.append(Path(configured) / "llvm/bin")
+    roots.extend(
+        (
+            Path("/opt/rocm/llvm/bin"),
+            Path.home() / ".local/share/tessera-toolchains/llvm-23.1.1/bin",
+            Path("/usr/lib/llvm-23/bin"),
+        )
+    )
+    for root in roots:
+        candidate = root / name
+        if candidate.is_file():
+            return str(candidate)
+    if found := shutil.which(name):
+        return found
+    raise RuntimeError(f"matched MXFP4 evidence requires {name}")
+
+
+def _code_object_evidence(payload: bytes) -> dict[str, object]:
+    """Retain ISA and resource facts for the exact timed HSACO."""
+
+    with tempfile.NamedTemporaryFile(suffix=".hsaco") as handle:
+        handle.write(payload)
+        handle.flush()
+        notes = subprocess.run(
+            [_llvm_tool("llvm-readobj"), "--notes", handle.name],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        isa = subprocess.run(
+            [_llvm_tool("llvm-objdump"), "-d", "--mcpu=gfx1201", handle.name],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.lower()
+    patterns = {
+        "vgpr_count": r"\.vgpr_count:\s*(\d+)",
+        "sgpr_count": r"\.sgpr_count:\s*(\d+)",
+        "lds_bytes": r"\.group_segment_fixed_size:\s*(\d+)",
+        "scratch_bytes": r"\.private_segment_fixed_size:\s*(\d+)",
+        "vgpr_spill_count": r"\.vgpr_spill_count:\s*(\d+)",
+        "sgpr_spill_count": r"\.sgpr_spill_count:\s*(\d+)",
+    }
+    resources: dict[str, int | bool | None] = {}
+    for key, pattern in patterns.items():
+        match = re.search(pattern, notes)
+        resources[key] = int(match.group(1)) if match else None
+    resources["spills"] = bool(
+        (resources["scratch_bytes"] or 0)
+        or (resources["vgpr_spill_count"] or 0)
+        or (resources["sgpr_spill_count"] or 0)
+    )
+    return {
+        "resources": resources,
+        "isa": {
+            "wmma_fp8_fp8": len(
+                re.findall(r"\bv_wmma_f32_16x16x16_fp8_fp8\b", isa)
+            ),
+            "s_waitcnt": len(re.findall(r"\bs_waitcnt\b", isa)),
+            "s_barrier": len(re.findall(r"\bs_barrier\b", isa)),
+        },
+    }
 
 
 def _selected_device_name(hip: ctypes.CDLL) -> str:
@@ -252,6 +324,7 @@ def _tessera_engine(
     cache_modifier: str | None = None,
     lds_pad_dwords: int | None = None,
     k_step_schedule: str | None = None,
+    name: str = "tessera",
 ) -> _Engine:
     schedule = select_mxfp4_schedule(case.m, case.n, case.k)
     axes = (
@@ -289,6 +362,7 @@ def _tessera_engine(
             ),
         )
     package = package_mxfp4_w4a8_wmma(case.m, case.n, case.k, schedule=schedule)
+    code_object = _code_object_evidence(package.image.payload)
     module = ctypes.c_void_p()
     function = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(module), package.image.payload) != 0:
@@ -331,7 +405,7 @@ def _tessera_engine(
             raise RuntimeError(f"Tessera MXFP4 launch failed rc={rc}")
 
     engine = _Engine(
-        "tessera",
+        name,
         hip,
         device_copies,
         launch,
@@ -343,6 +417,7 @@ def _tessera_engine(
             "weight_layout": package.descriptor.provenance["weight_layout"],
             "compiler_fingerprint": package.image.compiler_fingerprint,
             "toolchain_fingerprint": package.image.toolchain_fingerprint,
+            **code_object,
             "schedule": {
                 name: package.descriptor.provenance[name]
                 for name in (
@@ -503,6 +578,66 @@ def _libr4d_engine(
     )
 
 
+def _warmup(hip: ctypes.CDLL, engine: _Engine, count: int) -> None:
+    for _ in range(count):
+        engine.launch()
+    if hip.hipDeviceSynchronize() != 0:
+        raise RuntimeError(f"{engine.name} warmup synchronization failed")
+
+
+def _timed_sample(
+    hip: ctypes.CDLL, engine: _Engine, *, iterations: int
+) -> float:
+    start, stop = ctypes.c_void_p(), ctypes.c_void_p()
+    if hip.hipEventCreate(ctypes.byref(start)) != 0:
+        raise RuntimeError("MXFP4 start-event creation failed")
+    if hip.hipEventCreate(ctypes.byref(stop)) != 0:
+        hip.hipEventDestroy(start)
+        raise RuntimeError("MXFP4 stop-event creation failed")
+    try:
+        if hip.hipEventRecord(start, None) != 0:
+            raise RuntimeError("MXFP4 start-event record failed")
+        for _ in range(iterations):
+            engine.launch()
+        if (
+            hip.hipEventRecord(stop, None) != 0
+            or hip.hipEventSynchronize(stop) != 0
+        ):
+            raise RuntimeError("MXFP4 stop-event synchronization failed")
+        elapsed = ctypes.c_float()
+        if hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop) != 0:
+            raise RuntimeError("MXFP4 HIP event timing failed")
+        sample = float(elapsed.value) / iterations
+        if not math.isfinite(sample) or sample <= 0.0:
+            raise RuntimeError(f"invalid MXFP4 timing sample {sample}")
+        return sample
+    finally:
+        hip.hipEventDestroy(start)
+        hip.hipEventDestroy(stop)
+
+
+def _measure_interleaved(
+    hip: ctypes.CDLL,
+    engines: list[_Engine],
+    *,
+    warmup: int,
+    trials: int,
+    iterations: int,
+) -> dict[_Engine, list[float]]:
+    """Alternate engine order so clock/thermal drift cannot select a winner."""
+
+    for engine in engines:
+        _warmup(hip, engine, warmup)
+    samples = {engine: [] for engine in engines}
+    for trial in range(trials):
+        order = engines if trial % 2 == 0 else list(reversed(engines))
+        for engine in order:
+            samples[engine].append(
+                _timed_sample(hip, engine, iterations=iterations)
+            )
+    return samples
+
+
 def _measure(
     hip: ctypes.CDLL,
     engine: _Engine,
@@ -511,39 +646,15 @@ def _measure(
     trials: int,
     iterations: int,
 ) -> list[float]:
-    for _ in range(warmup):
-        engine.launch()
-    if hip.hipDeviceSynchronize() != 0:
-        raise RuntimeError(f"{engine.name} warmup synchronization failed")
-    samples: list[float] = []
-    for _ in range(trials):
-        start, stop = ctypes.c_void_p(), ctypes.c_void_p()
-        if hip.hipEventCreate(ctypes.byref(start)) != 0:
-            raise RuntimeError("MXFP4 start-event creation failed")
-        if hip.hipEventCreate(ctypes.byref(stop)) != 0:
-            hip.hipEventDestroy(start)
-            raise RuntimeError("MXFP4 stop-event creation failed")
-        try:
-            if hip.hipEventRecord(start, None) != 0:
-                raise RuntimeError("MXFP4 start-event record failed")
-            for _ in range(iterations):
-                engine.launch()
-            if (
-                hip.hipEventRecord(stop, None) != 0
-                or hip.hipEventSynchronize(stop) != 0
-            ):
-                raise RuntimeError("MXFP4 stop-event synchronization failed")
-            elapsed = ctypes.c_float()
-            if hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop) != 0:
-                raise RuntimeError("MXFP4 HIP event timing failed")
-            sample = float(elapsed.value) / iterations
-            if not math.isfinite(sample) or sample <= 0.0:
-                raise RuntimeError(f"invalid MXFP4 timing sample {sample}")
-            samples.append(sample)
-        finally:
-            hip.hipEventDestroy(start)
-            hip.hipEventDestroy(stop)
-    return samples
+    """Single-engine compatibility wrapper around the interleaved clock."""
+
+    return _measure_interleaved(
+        hip,
+        [engine],
+        warmup=warmup,
+        trials=trials,
+        iterations=iterations,
+    )[engine]
 
 
 def benchmark(
@@ -562,6 +673,7 @@ def benchmark(
     tessera_cache_modifier: str | None,
     tessera_lds_pad_dwords: int | None,
     tessera_k_step_schedule: str | None,
+    tessera_control_k_step_schedule: str | None,
     radiance_revision: str | None,
     libr4d_revision: str | None,
 ) -> dict[str, object]:
@@ -594,6 +706,23 @@ def benchmark(
                 k_step_schedule=tessera_k_step_schedule,
             )
         ]
+        if tessera_control_k_step_schedule is not None:
+            engines.append(
+                _tessera_engine(
+                    hip,
+                    case,
+                    inputs,
+                    copies,
+                    tessera_group_m,
+                    tessera_split_k,
+                    stages=tessera_stages,
+                    waves_per_eu=tessera_waves_per_eu,
+                    cache_modifier=tessera_cache_modifier,
+                    lds_pad_dwords=tessera_lds_pad_dwords,
+                    k_step_schedule=tessera_control_k_step_schedule,
+                    name="tessera_control",
+                )
+            )
         if radiance is not None:
             engines.append(_radiance_engine(hip, radiance, case, inputs, copies))
         if libr4d is not None:
@@ -630,14 +759,15 @@ def benchmark(
                         f"first={first} tessera=0x{int(baseline.view(np.uint16)[first]):04x} "
                         f"{name}=0x{int(output.view(np.uint16)[first]):04x}"
                     )
+            measured = _measure_interleaved(
+                hip,
+                engines,
+                warmup=warmup,
+                trials=trials,
+                iterations=iterations,
+            )
             for engine in engines:
-                samples = _measure(
-                    hip,
-                    engine,
-                    warmup=warmup,
-                    trials=trials,
-                    iterations=iterations,
-                )
+                samples = measured[engine]
                 weight_bytes = case.n * case.k // 2 + case.n * case.k // 32
                 median_ms = statistics.median(samples)
                 rows.append(
@@ -666,6 +796,7 @@ def benchmark(
         "device": _selected_device_name(hip),
         "architecture": rt._rocm_live_arch(),
         "clock": "hipEventElapsedTime",
+        "timing_order": "alternating_interleaved_per_shape",
         "copies": copies,
         "warmup": warmup,
         "trials": trials,
@@ -735,6 +866,10 @@ def main() -> None:
         "--tessera-k-step-schedule",
         choices=("isolated_scale_group", "relaxed"),
     )
+    parser.add_argument(
+        "--tessera-control-k-step-schedule",
+        choices=("isolated_scale_group", "relaxed"),
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if min(args.copies, args.warmup, args.trials, args.iterations) <= 0:
@@ -754,6 +889,7 @@ def main() -> None:
         tessera_cache_modifier=args.tessera_cache_modifier,
         tessera_lds_pad_dwords=args.tessera_lds_pad_dwords,
         tessera_k_step_schedule=args.tessera_k_step_schedule,
+        tessera_control_k_step_schedule=args.tessera_control_k_step_schedule,
         radiance_revision=args.radiance_revision,
         libr4d_revision=args.libr4d_revision,
     )

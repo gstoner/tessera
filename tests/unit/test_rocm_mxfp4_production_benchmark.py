@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
+from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as bench
 from benchmarks.rocm.benchmark_gfx1201_mxfp4_production import (
     Case,
     _fragment_order,
@@ -52,6 +54,32 @@ def test_case_parser_keeps_workload_separate_from_shape() -> None:
     assert _parse_case("prefill:256x5120x8704") == Case(
         "prefill", 256, 5120, 8704
     )
+
+
+def test_matched_timing_alternates_engine_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = object()
+    second = object()
+    order: list[object] = []
+    warmed: list[object] = []
+    monkeypatch.setattr(
+        bench, "_warmup", lambda _hip, engine, _count: warmed.append(engine)
+    )
+
+    def sample(_hip: object, engine: object, *, iterations: int) -> float:
+        assert iterations == 3
+        order.append(engine)
+        return float(len(order))
+
+    monkeypatch.setattr(bench, "_timed_sample", sample)
+    measured = bench._measure_interleaved(
+        object(), [first, second], warmup=2, trials=3, iterations=3
+    )
+    assert warmed == [first, second]
+    assert order == [first, second, second, first, first, second]
+    assert measured[first] == [1.0, 4.0, 5.0]
+    assert measured[second] == [2.0, 3.0, 6.0]
 
 
 def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None:

@@ -14,6 +14,7 @@ from tessera.compiler.native_artifact import NativeEntryPoint, NativeImageArtifa
 from tessera.compiler.rocm_mxfp4_native import (
     GFX_MXFP4_W4A8_EXACT_ABI,
     GFX_MXFP4_W4A8_WMMA_ABI,
+    MXFP4Schedule,
     _extract_gfx1201_hsaco,
     _rocm_hipcc,
     emit_mxfp4_w4a8_exact_hip,
@@ -21,6 +22,7 @@ from tessera.compiler.rocm_mxfp4_native import (
     mxfp4_w4a8_descriptor,
     package_mxfp4_w4a8,
     package_scaled_wmma_target_ir,
+    select_mxfp4_schedule,
 )
 
 
@@ -102,6 +104,44 @@ def test_wmma_source_isolates_each_k32_partial_before_scaling() -> None:
     assert source.index("%b_s1_7_raw8 = load i8") < source.index("%a_s0_0_byte = select")
     assert "@tessera_e2m1_to_e4m3" in source
     assert "@llvm.amdgcn.workgroup.id.x" in source
+
+
+def test_prefill_source_stages_one_b_fragment_for_grouped_row_waves() -> None:
+    source = emit_mxfp4_w4a8_wmma_llvmir(
+        schedule=MXFP4Schedule("prefill", group_m=8)
+    )
+    assert "@tessera_mxfp4_b_lds" in source
+    assert "%is_loader_wave = icmp eq i32 %wave32, 0" in source
+    assert source.count("call void @llvm.amdgcn.s.barrier()") == 2
+    assert "load <2 x i32>, ptr addrspace(3)" in source
+    assert '"amdgpu-flat-work-group-size"="256,256"' in source
+
+
+def test_schedule_selector_splits_decode_and_prefill_and_fails_closed() -> None:
+    assert select_mxfp4_schedule(8, 5120, 8704) == MXFP4Schedule(
+        "decode", split_k=8
+    )
+    assert select_mxfp4_schedule(256, 5120, 8704) == MXFP4Schedule(
+        "prefill", group_m=8
+    )
+    with pytest.raises(ValueError, match="unimplemented MXFP4 schedule axes"):
+        MXFP4Schedule("decode", stages=2)
+    with pytest.raises(ValueError, match="prefill does not admit decode split-K"):
+        MXFP4Schedule("prefill", split_k=2)
+    with pytest.raises(ValueError, match="cache_modifier is not implemented"):
+        MXFP4Schedule("prefill", cache_modifier="streaming")
+
+
+def test_decode_split_k_uses_lds_partial_reduction() -> None:
+    source = emit_mxfp4_w4a8_wmma_llvmir(
+        schedule=MXFP4Schedule("decode", split_k=8)
+    )
+    assert "@tessera_mxfp4_partial_lds" in source
+    assert "%group = phi i64 [ %wave64, %entry ]" in source
+    assert "%group_next = add i64 %group, 8" in source
+    assert "%is_reduction_wave = icmp eq i32 %wave32, 0" in source
+    assert source.count("%split_v_") == 16
+    assert '"amdgpu-flat-work-group-size"="256,256"' in source
 
 
 def test_wmma_descriptor_uses_one_wave_and_exact_policy() -> None:

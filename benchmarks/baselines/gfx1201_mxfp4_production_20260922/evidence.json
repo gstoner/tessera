@@ -1,0 +1,372 @@
+{
+  "architecture": "gfx1201",
+  "clock": "hipEventElapsedTime",
+  "copies": 3,
+  "device": "AMD Radeon RX 9070 XT",
+  "host": "tajasarus",
+  "independent_comparisons": {
+    "libr4d": {
+      "binary_sha256": "0f7a2780ad096d343f5e5d7d23e8d91456bb808ff25452ebb5b22b45075b8163",
+      "revision": "5dc6302b87d598d1d3bf2ad3b50aab365461a63c"
+    },
+    "radiance": {
+      "binary_sha256": "c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6",
+      "revision": "dfdfa3832922c9a4253133f09c1f5c0d39748fc7"
+    }
+  },
+  "input_contract": "matched logical E4M3/E2M1/E8M0 values; row-reference exponent delta <= 2; bit-exact BF16 agreement required before timing",
+  "iterations": 12,
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "rows": [
+    {
+      "case": "decode_8x5120x8704",
+      "effective_weight_gbps": 267.2040650777969,
+      "engine": "tessera",
+      "matched_output_sha256": "e605e4d3dd0b37f0b48b00aa364cbe6191c0f4e1fb8e6de0f2d78c197e02a685",
+      "median_ms": 0.08860224485397339,
+      "metadata": {
+        "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1",
+        "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
+        "image_sha256": "e931a02af309bee372cbb7a56b2218e9687beb4b799a9c5fa990ee076f63c0ab",
+        "route": "exact_per_block_fp8_wmma",
+        "schedule": {
+          "cache_modifier": "default",
+          "group_m": 1,
+          "split_k": 8,
+          "stages": 1,
+          "waves_per_eu": 0,
+          "workload": "decode"
+        },
+        "toolchain_fingerprint": "38fb6a9ea54311915d377e6e5597e76403ac940550df1ee5075faa37fbc3fd40"
+      },
+      "min_ms": 0.08449008067448933,
+      "samples_ms": [
+        0.10749616225560506,
+        0.10375900069872539,
+        0.08901216586430867,
+        0.08860224485397339,
+        0.0889430046081543,
+        0.08495425184567769,
+        0.08689150214195251,
+        0.0859607458114624,
+        0.08449008067448933
+      ],
+      "shape": [
+        8,
+        5120,
+        8704
+      ],
+      "workload": "decode"
+    },
+    {
+      "case": "decode_8x5120x8704",
+      "effective_weight_gbps": 732.6621809304185,
+      "engine": "radiance",
+      "matched_output_sha256": "e605e4d3dd0b37f0b48b00aa364cbe6191c0f4e1fb8e6de0f2d78c197e02a685",
+      "median_ms": 0.03231350084145864,
+      "metadata": {
+        "row_reference_fold": "exact_delta_le_2",
+        "weight_layout": "fragment_order"
+      },
+      "min_ms": 0.031760250528653465,
+      "samples_ms": [
+        0.03270683437585831,
+        0.03278683374325434,
+        0.03257349878549576,
+        0.03231350084145864,
+        0.032260249058405556,
+        0.03237016747395197,
+        0.032193499306837715,
+        0.031760250528653465,
+        0.03209683299064636
+      ],
+      "shape": [
+        8,
+        5120,
+        8704
+      ],
+      "workload": "decode"
+    },
+    {
+      "case": "decode_8x5120x8704",
+      "effective_weight_gbps": 676.1691450912425,
+      "engine": "libr4d",
+      "matched_output_sha256": "e605e4d3dd0b37f0b48b00aa364cbe6191c0f4e1fb8e6de0f2d78c197e02a685",
+      "median_ms": 0.03501325100660324,
+      "metadata": {
+        "MB": 1,
+        "NPW": 2,
+        "SK": 8,
+        "WV": 2,
+        "row_reference_fold": "exact_delta_le_2",
+        "weight_layout": "fragment_order"
+      },
+      "min_ms": 0.033999999364217125,
+      "samples_ms": [
+        0.036259750525156655,
+        0.0357464998960495,
+        0.03560316562652588,
+        0.03600566585858663,
+        0.034989915788173676,
+        0.03501325100660324,
+        0.03451658288637797,
+        0.034882416327794395,
+        0.033999999364217125
+      ],
+      "shape": [
+        8,
+        5120,
+        8704
+      ],
+      "workload": "decode"
+    },
+    {
+      "case": "decode_8x17408x5120",
+      "effective_weight_gbps": 303.90950182286167,
+      "engine": "tessera",
+      "matched_output_sha256": "83942235f1ea0222f97ef7b8abed366d685db15b11cf582e88f6f1240054465b",
+      "median_ms": 0.15580217043558756,
+      "metadata": {
+        "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1",
+        "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
+        "image_sha256": "e931a02af309bee372cbb7a56b2218e9687beb4b799a9c5fa990ee076f63c0ab",
+        "route": "exact_per_block_fp8_wmma",
+        "schedule": {
+          "cache_modifier": "default",
+          "group_m": 1,
+          "split_k": 8,
+          "stages": 1,
+          "waves_per_eu": 0,
+          "workload": "decode"
+        },
+        "toolchain_fingerprint": "38fb6a9ea54311915d377e6e5597e76403ac940550df1ee5075faa37fbc3fd40"
+      },
+      "min_ms": 0.14973732829093933,
+      "samples_ms": [
+        0.54825758934021,
+        0.19817141691843668,
+        0.1596804161866506,
+        0.1587013304233551,
+        0.15580217043558756,
+        0.15398383140563965,
+        0.1511947512626648,
+        0.15323641896247864,
+        0.14973732829093933
+      ],
+      "shape": [
+        8,
+        17408,
+        5120
+      ],
+      "workload": "decode"
+    },
+    {
+      "case": "decode_8x17408x5120",
+      "effective_weight_gbps": 552.3443146780442,
+      "engine": "radiance",
+      "matched_output_sha256": "83942235f1ea0222f97ef7b8abed366d685db15b11cf582e88f6f1240054465b",
+      "median_ms": 0.08572507898012798,
+      "metadata": {
+        "row_reference_fold": "exact_delta_le_2",
+        "weight_layout": "fragment_order"
+      },
+      "min_ms": 0.08535183469454448,
+      "samples_ms": [
+        0.08680841326713562,
+        0.08617841204007466,
+        0.08619849880536397,
+        0.08599849541982015,
+        0.08535183469454448,
+        0.08564175168673198,
+        0.0855750838915507,
+        0.08572507898012798,
+        0.08557174603144328
+      ],
+      "shape": [
+        8,
+        17408,
+        5120
+      ],
+      "workload": "decode"
+    },
+    {
+      "case": "decode_8x17408x5120",
+      "effective_weight_gbps": 451.74711495623063,
+      "engine": "libr4d",
+      "matched_output_sha256": "83942235f1ea0222f97ef7b8abed366d685db15b11cf582e88f6f1240054465b",
+      "median_ms": 0.1048147479693095,
+      "metadata": {
+        "MB": 1,
+        "NPW": 2,
+        "SK": 8,
+        "WV": 2,
+        "row_reference_fold": "exact_delta_le_2",
+        "weight_layout": "fragment_order"
+      },
+      "min_ms": 0.10305150349934895,
+      "samples_ms": [
+        0.10487558444341023,
+        0.10305150349934895,
+        0.10487141211827596,
+        0.1048147479693095,
+        0.1060047447681427,
+        0.10378482937812805,
+        0.10528141260147095,
+        0.10433816909790039,
+        0.10459808508555095
+      ],
+      "shape": [
+        8,
+        17408,
+        5120
+      ],
+      "workload": "decode"
+    },
+    {
+      "case": "prefill_256x5120x8704",
+      "effective_weight_gbps": 37.34985254034259,
+      "engine": "tessera",
+      "matched_output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
+      "median_ms": 0.6338680982589722,
+      "metadata": {
+        "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1",
+        "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
+        "image_sha256": "88f312034a3ac3e361ab09adb64e2d9141e5c4a19d0dd13db1362f8a1ddecec1",
+        "route": "exact_per_block_fp8_wmma",
+        "schedule": {
+          "cache_modifier": "default",
+          "group_m": 8,
+          "split_k": 1,
+          "stages": 1,
+          "waves_per_eu": 0,
+          "workload": "prefill"
+        },
+        "toolchain_fingerprint": "c92b49dffeeda9c7bc563bc9e56ff8df4f3c7d9679bd58e5e122de999d491db0"
+      },
+      "min_ms": 0.6242732604344686,
+      "samples_ms": [
+        1.3892585436503093,
+        0.6409134864807129,
+        0.6325611670811971,
+        0.634079655011495,
+        0.6312530835469564,
+        0.6316330830256144,
+        0.6242732604344686,
+        0.6344904899597168,
+        0.6338680982589722
+      ],
+      "shape": [
+        256,
+        5120,
+        8704
+      ],
+      "workload": "prefill"
+    },
+    {
+      "case": "prefill_256x5120x8704",
+      "effective_weight_gbps": 170.2192919178102,
+      "engine": "radiance",
+      "matched_output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
+      "median_ms": 0.13908458749453226,
+      "metadata": {
+        "row_reference_fold": "exact_delta_le_2",
+        "weight_layout": "fragment_order"
+      },
+      "min_ms": 0.13603299856185913,
+      "samples_ms": [
+        0.16998541355133057,
+        0.13964133461316428,
+        0.13804291685422262,
+        0.13710632920265198,
+        0.13701966404914856,
+        0.13603299856185913,
+        0.13908458749453226,
+        0.14810516436894736,
+        0.15108925104141235
+      ],
+      "shape": [
+        256,
+        5120,
+        8704
+      ],
+      "workload": "prefill"
+    },
+    {
+      "case": "prefill_1024x17408x5120",
+      "effective_weight_gbps": 9.772875833725747,
+      "engine": "tessera",
+      "matched_output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
+      "median_ms": 4.845018068949382,
+      "metadata": {
+        "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1",
+        "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
+        "image_sha256": "88f312034a3ac3e361ab09adb64e2d9141e5c4a19d0dd13db1362f8a1ddecec1",
+        "route": "exact_per_block_fp8_wmma",
+        "schedule": {
+          "cache_modifier": "default",
+          "group_m": 8,
+          "split_k": 1,
+          "stages": 1,
+          "waves_per_eu": 0,
+          "workload": "prefill"
+        },
+        "toolchain_fingerprint": "c92b49dffeeda9c7bc563bc9e56ff8df4f3c7d9679bd58e5e122de999d491db0"
+      },
+      "min_ms": 4.576972325642903,
+      "samples_ms": [
+        4.576972325642903,
+        4.610500335693359,
+        4.697552680969238,
+        4.848897933959961,
+        4.838483174641927,
+        4.845939954121907,
+        4.845018068949382,
+        4.845024744669597,
+        4.848992029825847
+      ],
+      "shape": [
+        1024,
+        17408,
+        5120
+      ],
+      "workload": "prefill"
+    },
+    {
+      "case": "prefill_1024x17408x5120",
+      "effective_weight_gbps": 53.726009830427,
+      "engine": "radiance",
+      "matched_output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
+      "median_ms": 0.8813191254933676,
+      "metadata": {
+        "row_reference_fold": "exact_delta_le_2",
+        "weight_layout": "fragment_order"
+      },
+      "min_ms": 0.8152001698811849,
+      "samples_ms": [
+        0.8669101397196451,
+        0.8152001698811849,
+        0.8813191254933676,
+        0.8625059922536215,
+        0.8652501900990804,
+        0.9023236433664957,
+        0.9321248531341553,
+        0.9473012288411459,
+        0.9426213105519613
+      ],
+      "shape": [
+        1024,
+        17408,
+        5120
+      ],
+      "workload": "prefill"
+    }
+  ],
+  "schema": "tessera.rocm.gfx1201_mxfp4_matched_benchmark.v1",
+  "source": {
+    "benchmark_sha256": "86eea4f47a0f04871f3239d3d464b994f63d6267acadc1fa2ce97cbdee9bfb53",
+    "generator_sha256": "204a77e4b4a0982a9d2a96c4ebd1cfde0f0ca02e373ea19b526110290ca7f346",
+    "revision": "a387f8c93c2850d42caf1df222e712178b0659dc"
+  },
+  "trials": 9,
+  "warmup": 6
+}

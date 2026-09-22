@@ -1,11 +1,33 @@
 ---
-last_updated: 2026-09-21
+last_updated: 2026-09-22
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## GFX1201 MXFP4 decode/prefill production schedules — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-PRODUCTION-TUNING-2026-09-22`.
+
+The exact K32 WMMA generator now selects separate schedules. Decode uses an
+intra-workgroup split-K axis with LDS partial reduction; prefill groups row-tile
+waves and expands one B fragment into LDS for reuse. Both axes are emitted into
+the kernel, launch geometry, toolchain identity, and provenance. Unimplemented
+`stages`, `waves_per_eu`, and `cache_modifier` values fail closed instead of
+appearing as inert tuning controls.
+
+Matched Tajasarus measurements use identical logical E4M3/E2M1/E8M0 operands,
+an exponent-delta envelope where the independent row fold is exact, bit-exact
+BF16 admission, rotating cache-cold copies, and HIP events. `split_k=8` improves
+the two decode shapes from 0.1552 to 0.0891 ms and 0.1776 to 0.1613 ms;
+`group_m=8` improves the two prefill shapes from 1.1141 to 0.6978 ms and 9.2533
+to 4.5847 ms. Radiance remains faster, so selector promotion is not claimed.
+Next: fragment/prepacked decode loads, multi-stage prefill, cache modifiers,
+waves-per-EU tuning, and resource/ISA evidence for the winning kernels.
+[Evidence packet](../../../../benchmarks/baselines/gfx1201_mxfp4_production_20260922/README.md).
 
 ## Scaled-partial carrier and exact MXFP4 ABI binding — 2026-09-21
 

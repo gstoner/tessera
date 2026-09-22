@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-21
+last_updated: 2026-09-22
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## GFX1201 MXFP4 production tuning benchmark — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync
+`ROCM-MXFP4-PRODUCTION-TUNING-2026-09-22`. Not applicable to Apple physical
+execution. The benchmark schema, HIP-event timing, decode split-K reduction,
+prefill group-M LDS staging, packed E2M1 ABI, and Radiance/libr4d comparisons
+are gfx1201-only. No Metal ABI, selector, dtype, numerical policy, or
+performance claim changes, and no Tajasarus result transfers to Apple.
 
 ## Shared scaled-partial carrier and MXFP4 policy — 2026-09-21
 

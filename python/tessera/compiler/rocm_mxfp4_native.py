@@ -622,7 +622,7 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         scale_vec = f'%as_vec_{j}'
     pipelined_fragment_b = shared_fragment_b and schedule.stages == 2
     loop_backedge = (
-        'b.next.wait'
+        'b.loop'
         if pipelined_fragment_b
         else 'b.wait'
         if shared_b
@@ -779,8 +779,10 @@ def emit_mxfp4_w4a8_wmma_llvmir(
         if pipelined_fragment_b:
             lines += [
                 '  %is_initial_group = icmp eq i64 %group, 0',
-                '  %needs_initial_b = and i1 %is_loader_wave, %is_initial_group',
-                '  br i1 %needs_initial_b, label %b.load, label %b.wait',
+                '  br i1 %is_initial_group, label %b.initial, label %b.read',
+                '',
+                'b.initial:',
+                '  br i1 %is_loader_wave, label %b.load, label %b.wait',
             ]
         else:
             lines.append(
@@ -836,6 +838,12 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             'b.wait:',
             '  call void @llvm.amdgcn.s.barrier()',
         ]
+        if pipelined_fragment_b:
+            lines += [
+                '  br label %b.read',
+                '',
+                'b.read:',
+            ]
         if shared_fragment_b:
             for slab in range(2):
                 prefix = f'b_stage_read_s{slab}'
@@ -902,8 +910,8 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             '  br label %b.compute',
             '',
             'b.compute:',
-            '  %b_prefetch_word_0 = phi i32 [ %b_prefetch_s0_word, %b.prefetch ], [ 0, %b.wait ]',
-            '  %b_prefetch_word_1 = phi i32 [ %b_prefetch_s1_word, %b.prefetch ], [ 0, %b.wait ]',
+            '  %b_prefetch_word_0 = phi i32 [ %b_prefetch_s0_word, %b.prefetch ], [ 0, %b.read ]',
+            '  %b_prefetch_word_1 = phi i32 [ %b_prefetch_s1_word, %b.prefetch ], [ 0, %b.read ]',
         ]
     lines += [
         f'  %partial0 = call <8 x float> @llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8('
@@ -928,7 +936,10 @@ def emit_mxfp4_w4a8_wmma_llvmir(
     ]
     if pipelined_fragment_b:
         lines += [
-            '  br i1 %b_do_prefetch, label %b.store.next, label %b.next.wait',
+            '  br i1 %b_has_next, label %b.store.dispatch, label %b.loop',
+            '',
+            'b.store.dispatch:',
+            '  br i1 %is_loader_wave, label %b.store.next, label %b.next.wait',
             '',
             'b.store.next:',
         ]
@@ -949,6 +960,9 @@ def emit_mxfp4_w4a8_wmma_llvmir(
             '',
             'b.next.wait:',
             '  call void @llvm.amdgcn.s.barrier()',
+            '  br label %b.loop',
+            '',
+            'b.loop:',
         ]
     elif shared_b:
         lines.append('  call void @llvm.amdgcn.s.barrier()')

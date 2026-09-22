@@ -178,6 +178,10 @@ def test_target_ir_materializer_binds_generic_carrier_to_proved_wmma(
     assert package.tile_ir == "tile carrier"
     assert package.target_ir == target_ir
     assert package.backend_ir == "proved llvm backend ir"
+    assert package.image.target_ir_digest == hashlib.sha256(
+        target_ir.encode()
+    ).hexdigest()
+    assert package.descriptor.image_digest == package.image.image_digest
     assert package.descriptor.provenance["materializer"] == (
         "tessera_rocm.scaled_wmma_gemm"
     )

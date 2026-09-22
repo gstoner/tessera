@@ -151,24 +151,30 @@ def package_scaled_wmma_target_ir(
         integers["m"], integers["n"], integers["k"],
         pipeline_name=pipeline_name,
     )
+    target_ir_sha256 = hashlib.sha256(target_ir.encode()).hexdigest()
+    image = replace(package.image, target_ir_digest=target_ir_sha256)
     provenance = {
         **package.descriptor.provenance,
         "materializer": "tessera_rocm.scaled_wmma_gemm",
         "physical_contract": _GFX_MXFP4_PHYSICAL_CONTRACT,
         "tile_ir_sha256": hashlib.sha256(tile_ir.encode()).hexdigest(),
-        "target_ir_sha256": hashlib.sha256(target_ir.encode()).hexdigest(),
+        "target_ir_sha256": target_ir_sha256,
     }
     schedule_hash = re.search(
         r"\btessera\.schedule_hash\s*=\s*\"([^\"]+)\"", operation
     )
     if schedule_hash is not None:
         provenance["schedule_hash"] = schedule_hash.group(1)
-    descriptor = replace(package.descriptor, provenance=provenance)
+    descriptor = replace(
+        package.descriptor,
+        image_digest=image.image_digest,
+        provenance=provenance,
+    )
     return ROCMNativePackage(
         tile_ir=tile_ir,
         target_ir=target_ir,
         backend_ir=package.target_ir,
-        image=package.image,
+        image=image,
         descriptor=descriptor,
     )
 

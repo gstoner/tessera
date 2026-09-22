@@ -4725,12 +4725,14 @@ Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
 PRs: branch `codex/gfx1201-folded-ikf-scale`.
 
 Outcome: the folded gfx1201 epilogue now combines row-reference and
-activation scales before applying the FP32 accumulator, so large/small
-scale cancellation stays finite. Tajasarus passes four device tests,
-including the 2^127 × 2^-127 regression. Refreshed exact/folded/Radiance
+activation scales before applying the FP32 accumulator, with an FP64 rare
+path for overflowing or underflowing scale products. Tajasarus passes six
+device tests, including cancellation, zero-partial, and finite-after-overflow
+regressions. Refreshed exact/folded/Radiance
 outputs agree on lossless inputs. A compile-time-only same-CTA phase probe
 preserves output but fails structural perturbation: 64 versus 32 FP8 WMMAs
-and eight versus four barriers. Both diagnostic packets refuse attribution.
+and 24 versus four barriers after synchronizing every phase boundary. Both
+diagnostic packets refuse attribution.
 
 Remaining: IKF-P0 cross-CU/read-cost validation and an ISA-preserving
 measurement path. No phase fractions feed cost models, selector promotion,

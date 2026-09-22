@@ -13,8 +13,9 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
 `ROCM-MXFP4-IKF-DIAGNOSTIC-2026-09-22`. Not applicable to AVX-512.
-The scale repair and compile-time-only clock trace are gfx1201 HIP physical
-code. The refused diagnostic packet adds no x86 timing schema consumer,
+The scale repair, including its rare FP64 fallback, and synchronized
+compile-time-only clock trace are gfx1201 HIP physical code. The refused
+diagnostic packet adds no x86 timing schema consumer,
 selector, or CPU cost-model coefficient; TPROF-X86 remains independently owned.
 The proposed cross-IR feedback lineage is plan-only; no x86 carrier or
 selector is added by this ROCm diagnostic.

@@ -17,7 +17,7 @@ def test_folded_prefill_packet_binds_source_and_compares_matched_outputs() -> No
     assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v1"
     assert packet["architecture"] == "gfx1201"
     assert packet["device"] == "AMD Radeon RX 9070 XT"
-    assert packet["source_revision"] == "817cde29fda75c0323dba7bdbff3f673da32c2f4"
+    assert packet["source_revision"] == "4368c825b866c3eb7b40761c5c17bbcb817e2665"
     source = ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py"
     assert packet["folded_generator_sha256"] == hashlib.sha256(
         source.read_bytes()

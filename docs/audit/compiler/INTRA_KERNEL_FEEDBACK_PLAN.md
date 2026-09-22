@@ -412,8 +412,9 @@ both production prefill shapes. This is a **diagnostic experiment, not IKF-P0
 or P3 closure**: it did not validate cross-CU clock consistency or the clock
 read-cost distribution, and it did not add Schedule/Tile IR trace lowering.
 
-The perturbation gate fails more decisively than the +9.38%/+1.17% median
-HIP-event overhead: the traced HSACO emits 64 FP8 WMMAs and eight workgroup
+The perturbation gate fails more decisively than the +13.30%/+3.71% median
+HIP-event overhead: the trace now synchronizes every wave around thread 0's
+phase-boundary timestamps; its HSACO emits 64 FP8 WMMAs and 24 workgroup
 barriers versus production's 32 and four. The recorder marks phase
 attribution inadmissible and promotion ineligible; neither the phase fractions
 nor the timing of that different schedule may train a cost model. The next

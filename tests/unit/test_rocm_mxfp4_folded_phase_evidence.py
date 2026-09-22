@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKETS = ROOT / "benchmarks/baselines/gfx1201_folded_phase_diagnostic_20260922"
-REVISION = "817cde29fda75c0323dba7bdbff3f673da32c2f4"
+REVISION = "4368c825b866c3eb7b40761c5c17bbcb817e2665"
 
 
 def test_phase_packets_bind_source_and_refuse_changed_isa() -> None:
@@ -31,7 +31,9 @@ def test_phase_packets_bind_source_and_refuse_changed_isa() -> None:
         assert packet["phase_attribution_admissible"] is False
         assert packet["phase_attribution_reason"] == "instrumentation_changes_isa_structure"
         assert packet["production_isa"]["wmma_fp8_fp8"] == 32
+        assert packet["production_isa"]["s_barrier"] == 4
         assert packet["trace_isa_resources"]["isa"]["wmma_fp8_fp8"] == 64
+        assert packet["trace_isa_resources"]["isa"]["s_barrier"] == 24
         assert packet["phases"]["cta_slots"] == slots
         assert packet["phases"]["clock_scope"] == (
             "same_cta_delta_only_cross_cu_unvalidated"

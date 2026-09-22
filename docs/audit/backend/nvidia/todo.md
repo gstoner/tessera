@@ -12,8 +12,9 @@ last_updated: 2026-09-22
 
 Owners ROCM-MXFP4-W4A8-1 / IKF-1; sync
 `ROCM-MXFP4-IKF-DIAGNOSTIC-2026-09-22`. Not applicable to CUDA execution.
-The HIP fold epilogue now combines two FP32 scales before accumulation;
-the same-CTA wall-clock trace is AMD-only and fails its structural
+The HIP fold epilogue now combines two FP32 scales before accumulation and
+uses a rare FP64 path for extreme scale products; neither is a CUDA ABI change.
+The synchronized same-CTA wall-clock trace is AMD-only and fails its structural
 perturbation gate. NVIDIA's `%globaltimer` IKF lane and exact-device proof
 remain separate; the packet is not CUDA cost-model training data. Super-Bear
 has Nsight Systems, Nsight Compute, and CUPTI for its later uninstrumented

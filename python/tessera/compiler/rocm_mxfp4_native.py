@@ -807,6 +807,11 @@ def emit_mxfp4_w4a8_wmma_llvmir(
                     f'%b_lds_ptr_{slab}, align 8',
                 ]
         lines += [
+            # The producer wave must drain its LDS writes before advertising
+            # arrival at the workgroup barrier.  s_barrier synchronizes wave
+            # arrival, but consumer waves otherwise have no same-wave data
+            # dependency that forces the producer's ds_write queue empty.
+            '  call void @llvm.amdgcn.s.waitcnt(i32 0)',
             '  br label %b.wait',
             '',
             'b.wait:',
@@ -948,6 +953,8 @@ def emit_mxfp4_w4a8_wmma_llvmir(
     ]
     if shared_b or split_reduce:
         lines.append('declare void @llvm.amdgcn.s.barrier()')
+    if shared_b:
+        lines.append('declare void @llvm.amdgcn.s.waitcnt(i32 immarg)')
     if schedule.k_step_schedule == "isolated_scale_group":
         lines.append('declare void @llvm.amdgcn.sched.barrier(i32 immarg)')
     lines += [

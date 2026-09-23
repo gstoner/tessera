@@ -43,6 +43,22 @@ PACKED_FOLDED_TARGET_ABI_V1 = (
     "e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1"
 )
 
+
+def _packed_sync_key(
+    *, vector_pair_loads: bool, permute_decode: bool,
+    batched_loads: bool, batched_a_loads: bool, reuse_pair_scales: bool,
+    a_base_hoist: bool,
+) -> str:
+    if a_base_hoist:
+        return "GFX1201-PACKED-A-BASE-2026-09-23"
+    if vector_pair_loads:
+        return "GFX1201-PACKED-VECTOR-PAIR-2026-09-23"
+    if permute_decode:
+        return "GFX1201-PACKED-PERMUTE-DECODE-2026-09-23"
+    if batched_loads or batched_a_loads or reuse_pair_scales:
+        return "GFX1201-PACKED-STAGING-ABLATION-2026-09-23"
+    return "GFX1201-PACKED-FOLDED-DECODE-2026-09-23"
+
 _PACKED_HELPERS = r'''
 // E2M1 magnitude folded to E4M3FN at each exponent difference. Values at
 // delta >= 13 round to signed zero; E8M0 code zero is a zero block.
@@ -163,6 +179,22 @@ _BATCHED_A_STAGE = r'''    // Issue the four independent A vectors before any LD
       const int slot = tid + q * 256;
       const int off = (slot & 3) * 16;
       *reinterpret_cast<copy_u32x4 *>(sA + (slot / 4) * 80 + off) = staged_a[q];
+    }'''
+
+_HOISTED_BASE_A_STAGE = r'''    // Keep the CTA-uniform A tile base separate from the lane-local row
+    // offset. This is an opt-in address-generation ablation, not a new ABI.
+    const unsigned char *__restrict__ tile_a = A + m0 * K + kb;
+    const long last_local_row = M - m0 - 1;
+#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      const int local_row = slot / 4;
+      const int off = (slot & 3) * 16;
+      const long safe_local_row =
+          local_row < last_local_row ? local_row : last_local_row;
+      const copy_u32x4 value = *reinterpret_cast<const copy_u32x4 *>(
+          tile_a + safe_local_row * K + off);
+      *reinterpret_cast<copy_u32x4 *>(sA + local_row * 80 + off) = value;
     }'''
 
 _PACKED_B_STAGE = r'''    {
@@ -470,6 +502,7 @@ def emit_mxfp4_packed_folded_prefill_hip(
     *, integer_decode: bool = False, batched_loads: bool = False,
     batched_a_loads: bool = False, reuse_pair_scales: bool = False,
     permute_decode: bool = False, vector_pair_loads: bool = False,
+    a_base_hoist: bool = False,
 ) -> str:
     """Emit the K64 packed-fragment LDS decode and folded WMMA schedule."""
     source = emit_mxfp4_folded_prefill_hip(entry, full_k64=True)
@@ -481,6 +514,8 @@ def emit_mxfp4_packed_folded_prefill_hip(
         raise ValueError("paired lane loads require permute decode")
     if vector_pair_loads and (batched_loads or batched_a_loads or reuse_pair_scales):
         raise ValueError("paired lane loads are a separate staging ablation")
+    if a_base_hoist and (batched_a_loads or vector_pair_loads):
+        raise ValueError("A-base hoisting is a separate staging ablation")
     def replace_once(old: str, new: str) -> None:
         nonlocal source
         if source.count(old) != 1:
@@ -492,7 +527,12 @@ def emit_mxfp4_packed_folded_prefill_hip(
         "using copy_u32x4 = unsigned int __attribute__((ext_vector_type(4)));"
         + _PACKED_HELPERS + (_PERMUTE_HELPERS if permute_decode else ""),
     )
-    if batched_a_loads:
+    if a_base_hoist:
+        replace_once(
+            _EXPANDED_A_STAGE.replace("__FULL_K64__", "true"),
+            _HOISTED_BASE_A_STAGE,
+        )
+    elif batched_a_loads:
         replace_once(
             _EXPANDED_A_STAGE.replace("__FULL_K64__", "true"),
             _BATCHED_A_STAGE,
@@ -540,6 +580,7 @@ def package_mxfp4_packed_folded_prefill(
     batched_a_loads: bool = False,
     reuse_pair_scales: bool = False,
     permute_decode: bool = False, vector_pair_loads: bool = False,
+    a_base_hoist: bool = False,
 ) -> ROCMNativePackage:
     """Compile the distinct packed ABI, without admitting it to selection."""
     n, k = payload.shape
@@ -549,6 +590,7 @@ def package_mxfp4_packed_folded_prefill(
         entry, integer_decode=integer_decode, batched_loads=batched_loads,
         batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
         permute_decode=permute_decode, vector_pair_loads=vector_pair_loads,
+        a_base_hoist=a_base_hoist,
     )
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)
@@ -617,12 +659,13 @@ def package_mxfp4_packed_folded_prefill(
         ),
         provenance={
             "work_item": "ROCM-MXFP4-W4A8-1",
-            "sync_key": (
-                "GFX1201-PACKED-PERMUTE-DECODE-2026-09-23"
-                if permute_decode else
-                "GFX1201-PACKED-STAGING-ABLATION-2026-09-23"
-                if batched_loads or batched_a_loads or reuse_pair_scales
-                else "GFX1201-PACKED-FOLDED-DECODE-2026-09-23"
+            "sync_key": _packed_sync_key(
+                vector_pair_loads=vector_pair_loads,
+                permute_decode=permute_decode,
+                batched_loads=batched_loads,
+                batched_a_loads=batched_a_loads,
+                reuse_pair_scales=reuse_pair_scales,
+                a_base_hoist=a_base_hoist,
             ),
             "route": "packed_folded_fragment_bm256_tm4",
             "decode_strategy": "permute_word" if permute_decode else (
@@ -634,6 +677,8 @@ def package_mxfp4_packed_folded_prefill(
             "block_m": 256, "block_n": 64, "block_k": 64,
             "tile_m_per_wave": 4, "tile_n_per_wave": 2,
             "staging_policy": (
+                "packed_fragment_decode_k64_hoisted_a_base" if a_base_hoist
+                else
                 "packed_fragment_decode_k64_vector_pair" if vector_pair_loads
                 else
                 "packed_fragment_decode_k64_pair_scale_reuse" if reuse_pair_scales

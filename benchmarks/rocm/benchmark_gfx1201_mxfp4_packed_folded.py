@@ -26,11 +26,19 @@ from benchmarks.rocm.inspect_gfx1201_folded_prefill import (
 )
 
 
+def _include_permute_control(
+    include_permute: bool, include_vector_pair: bool, include_a_base: bool,
+) -> bool:
+    """Each packed-producer ablation also times its immediate permute control."""
+    return include_permute or include_vector_pair or include_a_base
+
+
 def packed_folded_engine(
     hip: ctypes.CDLL, case: base.Case, inputs: dict[str, np.ndarray], copies: int,
     *, integer_decode: bool, batched_loads: bool = False,
     batched_a_loads: bool = False, reuse_pair_scales: bool = False,
     permute_decode: bool = False, vector_pair_loads: bool = False,
+    a_base_hoist: bool = False,
 ) -> tuple[base._Engine, PackedFoldedPayload]:
     payload = prepare_packed_folded_payload(
         inputs["packed_row_major"], inputs["b_scale"], allow_approximate=True,
@@ -40,6 +48,7 @@ def packed_folded_engine(
         batched_loads=batched_loads, batched_a_loads=batched_a_loads,
         reuse_pair_scales=reuse_pair_scales,
         permute_decode=permute_decode, vector_pair_loads=vector_pair_loads,
+        a_base_hoist=a_base_hoist,
     )
     module = ctypes.c_void_p()
     function = ctypes.c_void_p()
@@ -75,6 +84,7 @@ def packed_folded_engine(
 
     engine = base._Engine(
         (
+            "tessera_packed_hoisted_a_base_permute" if a_base_hoist else
             "tessera_packed_vector_pair_permute" if vector_pair_loads else
             "tessera_packed_batched_b_permute" if permute_decode else
             "tessera_packed_pair_scale_integer" if reuse_pair_scales else
@@ -112,6 +122,7 @@ def benchmark(
     include_batched: bool = False,
     include_permute: bool = False,
     include_vector_pair: bool = False,
+    include_a_base: bool = False,
     warmup: int = 6, trials: int = 11, iterations: int = 12,
 ) -> dict[str, object]:
     if rt._rocm_live_arch() != "gfx1201":
@@ -151,7 +162,7 @@ def benchmark(
                 )
                 batched_engines.append(candidate)
                 batched_payloads.append(candidate_payload)
-        if include_permute:
+        if _include_permute_control(include_permute, include_vector_pair, include_a_base):
             if not include_batched:
                 control, control_payload = packed_folded_engine(
                     hip, case, inputs, 3, integer_decode=True,
@@ -169,6 +180,13 @@ def benchmark(
             candidate, candidate_payload = packed_folded_engine(
                 hip, case, inputs, 3, integer_decode=False,
                 permute_decode=True, vector_pair_loads=True,
+            )
+            batched_engines.append(candidate)
+            batched_payloads.append(candidate_payload)
+        if include_a_base:
+            candidate, candidate_payload = packed_folded_engine(
+                hip, case, inputs, 3, integer_decode=False,
+                batched_loads=True, permute_decode=True, a_base_hoist=True,
             )
             batched_engines.append(candidate)
             batched_payloads.append(candidate_payload)
@@ -214,6 +232,8 @@ def benchmark(
     root = Path(__file__).resolve().parents[2]
     return {
         "schema": (
+            "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v5"
+            if include_a_base else
             "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v4"
             if include_vector_pair else
             "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v3"
@@ -223,6 +243,8 @@ def benchmark(
             "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v1"
         ),
         "sync_key": (
+            "GFX1201-PACKED-A-BASE-2026-09-23"
+            if include_a_base else
             "GFX1201-PACKED-VECTOR-PAIR-2026-09-23"
             if include_vector_pair else
             "GFX1201-PACKED-PERMUTE-DECODE-2026-09-23"
@@ -247,7 +269,9 @@ def benchmark(
         "benchmark_sha256": base._sha256(Path(__file__)),
         **({"isa_inspector_sha256": base._sha256(
             root / "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"
-        )} if include_permute or include_vector_pair else {}),
+        )} if _include_permute_control(
+            include_permute, include_vector_pair, include_a_base,
+        ) else {}),
         "timing_order": "alternating_interleaved_per_shape",
         "rows": rows,
     }
@@ -263,6 +287,7 @@ def main() -> None:
     parser.add_argument("--include-batched", action="store_true")
     parser.add_argument("--include-permute", action="store_true")
     parser.add_argument("--include-vector-pair", action="store_true")
+    parser.add_argument("--include-a-base", action="store_true")
     args = parser.parse_args()
     packet = benchmark(
         tuple(args.case or (
@@ -273,6 +298,7 @@ def main() -> None:
         tessera_opt=args.tessera_opt, include_batched=args.include_batched,
         include_permute=args.include_permute,
         include_vector_pair=args.include_vector_pair,
+        include_a_base=args.include_a_base,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n")

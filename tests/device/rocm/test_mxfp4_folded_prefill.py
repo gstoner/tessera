@@ -14,6 +14,7 @@ import pytest
 from tessera import runtime as rt
 from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.rocm_mxfp4_folded import (
+    GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     package_mxfp4_folded_prefill, prepare_folded_weights,
 )
 from tessera.compiler.rocm_mxfp4_folded_carrier import (
@@ -218,6 +219,61 @@ def test_folded_prefill_matches_its_declared_approximate_oracle(
     np.testing.assert_array_equal(buffers["output"], expected)
     exact = mx.exact_weights(codes, scales)
     assert np.any(exact != mx.folded_weights(folded))
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+@pytest.mark.parametrize("reference_code,activation_scale", [
+    (127, 1.0),
+    (254, 2.0 ** -127),
+])
+def test_safe_folded_epilogue_is_exact_and_binds_activation_bytes(
+    reference_code: int, activation_scale: float,
+) -> None:
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, n, k = 65, 48, 64
+    codes = np.ones((n, k), dtype=np.uint8)
+    scales = np.full((k // 32, n), reference_code, dtype=np.uint8)
+    folded = prepare_folded_weights(
+        mx.pack_e2m1_codes(codes), scales, allow_approximate=True,
+    )
+    assert folded.lossless
+    a_scale = np.full(m, activation_scale, dtype=np.float32)
+    package = package_mxfp4_folded_prefill(
+        m, n, k, folded, allow_approximate=True,
+        safe_epilogue_scales=a_scale,
+    )
+    assert package.descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
+    output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        target_ir=package.target_ir,
+    )
+    buffers = {
+        "a": np.full((m, k), 0x38, dtype=np.uint8),
+        "b_folded": folded.weight_bytes,
+        "a_scale": a_scale,
+        "row_reference": folded.row_reference,
+        "output": output,
+    }
+    result = rt.launch(
+        artifact, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}},
+    )
+    assert result["ok"], json.dumps(result, default=str)
+    np.testing.assert_array_equal(
+        output, np.full((m, n), 32.0, dtype=ml_dtypes.bfloat16),
+    )
+    changed = dict(buffers, a_scale=a_scale.copy())
+    changed["a_scale"][0] *= 2
+    rejected = rt.launch(
+        artifact, {"buffers": changed, "scalars": {"M": m, "N": n, "K": k}},
+    )
+    assert not rejected["ok"]
+    assert "scale certificate" in json.dumps(rejected, default=str)
 
 
 @pytest.mark.hardware_rocm

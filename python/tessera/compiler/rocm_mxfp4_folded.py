@@ -32,7 +32,44 @@ GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI = (
     "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k."
     "e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
 )
+GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI = (
+    "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k."
+    "e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.safe_scale_v1"
+)
 FOLDED_WEIGHT_LAYOUT = MXFP4_FOLDED_ROW_LAYOUT_V1
+
+
+def certify_folded_safe_scales(
+    activation_scales: np.ndarray, row_reference: np.ndarray,
+) -> dict[str, object]:
+    """Certify that every FP32 row-reference/activation scale product is normal.
+
+    This is a host-array certificate, not authorization to substitute another
+    device buffer. The safe kernel remains manual until residency binds bytes.
+    """
+    if activation_scales.dtype != np.float32 or activation_scales.ndim != 1:
+        raise TypeError("safe folded epilogue requires 1-D FP32 activation scales")
+    if row_reference.dtype != np.uint8 or row_reference.ndim != 1:
+        raise TypeError("safe folded epilogue requires 1-D E8M0 row references")
+    if not activation_scales.size or not row_reference.size:
+        raise ValueError("safe folded epilogue requires nonempty scales")
+    if not np.all(np.isfinite(activation_scales)) or np.any(activation_scales == 0):
+        raise ValueError("safe folded epilogue requires finite nonzero activation scales")
+    if np.any((row_reference == 0) | (row_reference == 255)):
+        raise ValueError("safe folded epilogue requires finite nonzero row references")
+    magnitude = np.abs(activation_scales.astype(np.float64))
+    row_factor = np.exp2(row_reference.astype(np.int16) - 127).astype(np.float64)
+    minimum = float(magnitude.min() * row_factor.min())
+    maximum = float(magnitude.max() * row_factor.max())
+    info = np.finfo(np.float32)
+    if minimum < float(info.tiny) or maximum > float(info.max) / 2:
+        raise ValueError("safe folded epilogue scale product may underflow or overflow")
+    return {
+        "activation_scale_sha256": hashlib.sha256(activation_scales.tobytes()).hexdigest(),
+        "row_reference_sha256": hashlib.sha256(row_reference.tobytes()).hexdigest(),
+        "minimum_abs_product": minimum,
+        "maximum_abs_product": maximum,
+    }
 
 
 def prepare_folded_weights(
@@ -197,6 +234,7 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
           float scaled = partial * combined_scale;
           // Keep the common path in FP32. A scale product that overflowed or
           // underflowed may still have a finite result after the partial.
+#if !__SAFE_EPILOGUE__
           if (__builtin_expect(
                   !__builtin_isfinite(combined_scale) || combined_scale == 0.0f,
                   0)) {
@@ -206,6 +244,7 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
               scaled = (float)((double)partial * (double)row_scale *
                                (double)activation_scale);
           }
+#endif
           O[m * N + n] = (__bf16)scaled;
         }
       }
@@ -216,18 +255,20 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
 
 def emit_mxfp4_folded_prefill_hip(
     entry: str = "tessera_mxfp4_folded_prefill",
-    *, full_k64: bool = False,
+    *, full_k64: bool = False, safe_epilogue: bool = False,
 ) -> str:
     if not entry.isidentifier():
         raise ValueError("folded MXFP4 entry must be a C identifier")
     return (_FOLDED_PREFILL_HIP.replace("__ENTRY__", entry)
-            .replace("__FULL_K64__", "true" if full_k64 else "false"))
+            .replace("__FULL_K64__", "true" if full_k64 else "false")
+            .replace("__SAFE_EPILOGUE__", "1" if safe_epilogue else "0"))
 
 
 def package_mxfp4_folded_prefill(
     m: int, n: int, k: int, folded: FoldedRowReference, *,
     allow_approximate: bool = False,
     entry: str = "tessera_mxfp4_folded_prefill",
+    safe_epilogue_scales: np.ndarray | None = None,
 ) -> ROCMNativePackage:
     """Package the opt-in BM256/TM4 route with payload-bound error metadata."""
     if not allow_approximate or folded.approximate_policy != "explicit_allow":
@@ -247,7 +288,19 @@ def package_mxfp4_folded_prefill(
     # The Graph/Target carrier requires K64 slabs. Direct K32 callers retain
     # the masked final slab; never infer this property inside HIP from a shape.
     full_k64 = k % 64 == 0
-    source = emit_mxfp4_folded_prefill_hip(entry, full_k64=full_k64)
+    safe_certificate = (
+        certify_folded_safe_scales(safe_epilogue_scales, folded.row_reference)
+        if safe_epilogue_scales is not None else None
+    )
+    if safe_epilogue_scales is not None and safe_epilogue_scales.shape != (m,):
+        raise ValueError("safe epilogue activation scales disagree with M")
+    source = emit_mxfp4_folded_prefill_hip(
+        entry, full_k64=full_k64, safe_epilogue=safe_certificate is not None,
+    )
+    abi_id = (
+        GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
+        if safe_certificate is not None else GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    )
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)
     if compiler is None:
@@ -278,7 +331,7 @@ def package_mxfp4_folded_prefill(
         ).hexdigest(),
         target_ir_digest=hashlib.sha256(source.encode()).hexdigest(),
         binary_format="hsaco", payload=payload,
-        entry_points=(NativeEntryPoint(entry, GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI),),
+        entry_points=(NativeEntryPoint(entry, abi_id),),
         compile_state="cold",
         device_libraries=_driver_selected_device_libraries(arch="gfx1201"),
     )
@@ -299,10 +352,15 @@ def package_mxfp4_folded_prefill(
         "tile_m_per_wave": 4, "tile_n_per_wave": 2,
         "staging_policy": "unconditional_k64" if full_k64 else "guarded_k32_tail",
         "accum": "fp32", "output": "bf16",
+        **({
+            "epilogue_policy": "host_scale_certified_manual",
+            "safe_scale_certificate": safe_certificate,
+            "execution_state": "manual_executable_candidate",
+        } if safe_certificate is not None else {}),
     }
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry,
-        abi_id=GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        abi_id=abi_id,
         buffers=(
             BufferBinding(0, "a", "input", "uint8", 2, "row_major", 1),
             BufferBinding(1, "b_folded", "input", "uint8", 2, "row_major", 1),
@@ -339,6 +397,7 @@ def package_mxfp4_folded_prefill(
 
 __all__ = [
     "FOLDED_WEIGHT_LAYOUT", "GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI",
+    "GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI", "certify_folded_safe_scales",
     "emit_mxfp4_folded_prefill_hip", "package_mxfp4_folded_prefill",
     "prepare_folded_weights",
 ]

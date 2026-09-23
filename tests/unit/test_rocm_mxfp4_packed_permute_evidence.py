@@ -32,8 +32,10 @@ def test_packed_permute_packet_binds_historical_sources_and_timed_isa() -> None:
     assert packet["benchmark_sha256"] == (
         "69d336432b4b47239c90e50da0427ed04e35afbf8f9d603adba7379a31d82417"
     )
+    assert packet["generator_sha256"] == (
+        "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
+    )
     for key, path in {
-        "generator_sha256": "python/tessera/compiler/rocm_mxfp4_folded.py",
         "isa_inspector_sha256": "benchmarks/rocm/inspect_gfx1201_folded_prefill.py",
     }.items():
         assert packet[key] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()

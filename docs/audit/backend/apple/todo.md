@@ -8,6 +8,15 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 folded-prefill experiments and runtime guard — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-PREFILL-EXPERIMENTS-2026-09-23`. Not applicable to Metal:
+the manual HIP safe-scale ABI, RDNA4 BN128 schedule, HSACO timing schema,
+and ROCm launch-time certificate guard define no Apple route. The model
+weight-residency arithmetic is reusable in principle, but no Apple layout,
+selector, or exact-device claim changes.
+
 ## GFX1201 bounded A-offset benchmark schema — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

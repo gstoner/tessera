@@ -24,8 +24,10 @@ def test_vector_pair_packet_is_source_bound_and_not_a_selector_win() -> None:
     assert packet["benchmark_sha256"] == (
         "12a23198253120e9be16bc0d98c769f986189a5c0bbffbc23cff05637cba7228"
     )
+    assert packet["generator_sha256"] == (
+        "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
+    )
     for field, source in (
-        ("generator_sha256", "python/tessera/compiler/rocm_mxfp4_folded.py"),
         ("isa_inspector_sha256", "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"),
     ):
         assert packet[field] == hashlib.sha256((ROOT / source).read_bytes()).hexdigest()

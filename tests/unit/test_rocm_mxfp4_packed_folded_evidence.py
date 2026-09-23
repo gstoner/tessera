@@ -24,9 +24,9 @@ def test_packed_folded_packet_binds_source_output_and_timed_isa() -> None:
     )
     assert packet["radiance"]["wperm"] == 1
     assert packet["radiance"]["weight_layout"] == "fragment_order"
-    assert packet["generator_sha256"] == hashlib.sha256(
-        (ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py").read_bytes()
-    ).hexdigest()
+    assert packet["generator_sha256"] == (
+        "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
+    )
     # The v1 packet is an immutable historical control. The opt-in batching
     # experiment intentionally changes these two source files in v2.
     assert packet["packed_abi_sha256"] == (

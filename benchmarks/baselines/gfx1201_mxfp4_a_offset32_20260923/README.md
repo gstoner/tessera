@@ -30,6 +30,12 @@ dynamic A-stage counters or stall attribution. Reduced integer ISA has not
 translated into a reproducible wide-shape performance gain, so selection
 remains closed.
 
+Review correction: this historical v6 packet's `integer_alu_isa` field also
+contains floating-point mnemonics such as `v_mul_f32_e32` and `v_mul_f64_e32`.
+Its aggregate is not an integer-instruction count. The benchmark parser now
+excludes floating-point operand types; this immutable packet is not rewritten.
+The named integer mnemonic comparisons above remain valid.
+
 The packet's `source_revision` is PR #823's base `cd758719`; source hashes
 bind the modified files in the isolated device worktree. This is a stacked
 experiment while #823 remains open. A next experiment should target the

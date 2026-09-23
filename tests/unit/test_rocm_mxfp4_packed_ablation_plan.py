@@ -42,6 +42,8 @@ def test_integer_alu_census_is_bound_to_selected_symbol(monkeypatch: pytest.Monk
     disassembly = """00000000 <selected>:
     v_add_co_u32 v0, v1, v2 // 0000
     v_mul_lo_u32 v0, v1, v2 // 0004
+    v_mul_f32_e32 v0, v1, v2 // 0006
+    v_mul_f64_e32 v0, v1, v2 // 0007
 00000008 <other>:
     v_add_co_u32 v0, v1, v2 // 0008
 """

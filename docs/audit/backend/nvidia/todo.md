@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 folded-prefill experiments and runtime guard — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-PREFILL-EXPERIMENTS-2026-09-23`. Not applicable to CUDA:
+the manual HIP safe-scale ABI, RDNA4 BN128 schedule, HSACO timing schema,
+and ROCm launch-time certificate guard do not define an NVFP4/PTX route.
+No NVIDIA selector or exact-device proof transfers from Tajasarus.
+
 ## GFX1201 bounded A-offset benchmark schema — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

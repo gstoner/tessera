@@ -25,9 +25,9 @@ def test_packed_staging_packet_binds_current_source_and_timed_isa() -> None:
     )
     assert packet["radiance"]["wperm"] == 1
     assert packet["radiance"]["weight_layout"] == "fragment_order"
-    assert packet["generator_sha256"] == hashlib.sha256(
-        (ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py").read_bytes()
-    ).hexdigest()
+    assert packet["generator_sha256"] == (
+        "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
+    )
     # Immutable v2 control: v3 changes the generator and benchmark sources.
     assert packet["packed_abi_sha256"] == (
         "7973372af3a0dd25e28d559c29305caad62b41fd7e28a70002d4f78bdcda9fb6"

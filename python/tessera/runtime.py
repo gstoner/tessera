@@ -4175,7 +4175,10 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
-    from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    from tessera.compiler.rocm_mxfp4_folded import (
+        GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
+    )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
 
     return frozenset({
@@ -4190,6 +4193,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         PACKED_FOLDED_TARGET_ABI_V1,
     })
 
@@ -4203,7 +4207,11 @@ def _submit_rocm_mxfp4_w4a8(
     """Launch an admitted MXFP4 ABI on its owning gfx1201 device."""
     import numpy as np
     import hashlib
-    from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    from tessera.compiler.rocm_mxfp4_folded import (
+        GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
+        certify_folded_safe_scales,
+    )
     from tessera.compiler.rocm_mxfp4_packed_folded import (
         PACKED_FOLDED_SCALE_PLANE_V1, PACKED_FOLDED_TARGET_ABI_V1,
     )
@@ -4223,7 +4231,8 @@ def _submit_rocm_mxfp4_w4a8(
         buffers[item.name] for item in ordered
     )
     m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
-    folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    safe_folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
+    folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI or safe_folded
     packed_folded = descriptor.abi_id == PACKED_FOLDED_TARGET_ABI_V1
     packed_layout = str(descriptor.provenance.get("weight_layout", ""))
     from tessera.compiler.rocm_mxfp4 import (
@@ -4250,6 +4259,15 @@ def _submit_rocm_mxfp4_w4a8(
                 np.ascontiguousarray(array).tobytes()
             ).hexdigest() != expected:
                 raise RuntimeError(f"folded MXFP4 {key} does not match load-time payload")
+        if safe_folded:
+            expected_certificate = descriptor.provenance.get("safe_scale_certificate")
+            if (
+                not isinstance(expected_certificate, dict)
+                or expected_certificate != certify_folded_safe_scales(a_scale, b_scale)
+            ):
+                raise RuntimeError(
+                    "safe folded MXFP4 scale certificate does not match launch buffers"
+                )
     elif packed_folded:
         if (
             packed_layout != MXFP4_GFX12_FRAGMENT_LAYOUT_V1
@@ -4398,7 +4416,10 @@ def _submit_rocm_gfx1151_native(
         GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
-    from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    from tessera.compiler.rocm_mxfp4_folded import (
+        GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
+    )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
 
     if descriptor.abi_id in {
@@ -4406,6 +4427,7 @@ def _submit_rocm_gfx1151_native(
         GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         PACKED_FOLDED_TARGET_ABI_V1,
     }:
         return _submit_rocm_mxfp4_w4a8(image, descriptor, buffers, scalars)
@@ -5626,7 +5648,10 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
-    from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    from tessera.compiler.rocm_mxfp4_folded import (
+        GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
+    )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
 
     if (
@@ -5660,6 +5685,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_MXFP4_W4A8_WMMA_ABI,
             GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
             GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+            GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
             PACKED_FOLDED_TARGET_ABI_V1,
         }
         and target not in _native_launchers

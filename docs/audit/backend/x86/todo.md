@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 MXFP4 receipt and device coverage — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-MXFP4-RECEIPT-COVERAGE-2026-09-22`.
+Not applicable to AVX-512 execution: HSACO-byte and artifact-image receipts,
+the folded gfx1201 Target ABI, and refreshed Radiance packet have no x86
+materializer or timing consumer. No CPU route or numerical promotion changes.
+
+
 ## GFX1201 folded frontend and matched-census correction — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-FOLDED-FRONTEND-2026-09-22`.

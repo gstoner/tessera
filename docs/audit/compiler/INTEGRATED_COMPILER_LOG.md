@@ -4802,3 +4802,28 @@ the historical [layout-unverified packet](../../../benchmarks/baselines/gfx1201_
 `tests/unit/test_gfx1201_folded_staging_census.py`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-22 — GFX1201 MXFP4 receipt and lowering coverage follow-on
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `codex/gfx1201-mxfp4-lowering-coverage`
+
+Outcome: `hsaco_sha256` now binds the emitted HSACO bytes, while
+`artifact_image_digest` names the composite image identity. Tajasarus passes
+13/13 folded device cases, adding ragged and multi-K-step frontend lowering;
+the generic exact selector refuses folded layout without opt-in. A clean
+layout-matched rerun leaves folded/Radiance at 1.28×/1.40×. The older B-cache
+packet's receipt metadata was repaired from its retained payload hash without
+changing its losing timing. The current-main scheduled closure independently
+passes 95/95 with zero skips on rebuilt LLVM/MLIR 23.1.1 at `89b2f2fd`.
+
+Remaining: exact K32 remains default; no automatic folded selector or
+profiler-based phase attribution is promoted. Continue controlled A/B staging
+work and nonuniform numerical envelopes on the owning device.
+
+Evidence: [refreshed frontend packet](../../../benchmarks/baselines/gfx1201_mxfp4_folded_frontend_20260922/README.md),
+`tests/device/rocm/test_mxfp4_folded_prefill.py`, and
+`tests/unit/test_gfx1201_folded_staging_census.py`.
+
+<!-- entry-fields:end -->

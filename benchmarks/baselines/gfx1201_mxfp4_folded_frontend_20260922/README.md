@@ -1,15 +1,18 @@
 # gfx1201 folded frontend, layout-verified timing, and staging census
 
-Tajasarus (RX 9070 XT, `gfx1201`) tested clean source revision
-`489c386595bf57890d8727ede97eec0f7c5a2a97` with LLVM/MLIR 23.1.1 and
-the selected ROCm toolkit. The authored Python frontend constructs a
+Tajasarus (RX 9070 XT, `gfx1201`) refreshed the matched packet at clean source
+revision `6f8ba84674da52a710370dc07b83ac7ec2e13637` with the selected
+ROCm toolkit and a freshly rebuilt LLVM/MLIR 23.1.1 compiler from parent
+revision `89b2f2fd9f829a2316c42fb31a9879fb4a82cfea` (the follow-on changes
+do not alter compiler sources). The authored Python frontend constructs a
 `tessera.scaled_matmul` Graph op from typed operand shapes, lowers it through
 Schedule, Tile, and Target, and packages the existing production folded HIP
 kernel. Its receipt binds the selected BM256/BN64/BK64 schedule, Tile/Target
-hashes, approximate policy, ABI, entry, and HSACO identity. The full device
-file passed 11/11: three broader lossless shapes (including both prefill
-dimensions), one deliberately lossy frontend oracle, and the seven previous
-physical-ABI cases. The exact K32 route remains the default and oracle.
+hashes, approximate policy, ABI, entry, the SHA-256 of the actual HSACO bytes,
+and a separately named composite artifact-image digest. The expanded device
+file passes 13/13: the previous 11 plus ragged `65×48×64` and multi-stage-K
+`257×80×192` frontend cases. The exact K32 route remains the default and
+oracle; the generic exact selector explicitly refuses the folded layout.
 
 The [matched timing packet](matched.json) explicitly requires
 `RADIANCE_MXFP4_WPERM=1`, matching the fragment-order weights handed to
@@ -21,8 +24,8 @@ selector-admissible.
 
 | M×N×K | exact K32 | folded frontend | Radiance | folded/Radiance |
 |---|---:|---:|---:|---:|
-| 256×5120×8704 | 0.517379 ms | 0.182356 ms | 0.142856 ms | 1.28× |
-| 1024×17408×5120 | 4.359824 ms | 1.242242 ms | 0.888937 ms | 1.40× |
+| 256×5120×8704 | 0.520409 ms | 0.181164 ms | 0.141740 ms | 1.28× |
+| 1024×17408×5120 | 4.361921 ms | 1.244548 ms | 0.891527 ms | 1.40× |
 
 The [static staging census](staging_census.json) disassembles Tessera's
 selected HSACO and Radiance's exact TN2/WPERM/fast-epilogue symbol from its
@@ -52,6 +55,11 @@ shapes. Alternating timing gave baseline 0.174913/1.130776 ms and variant
 0.210501/2.308749 ms, a 20%/104% regression. The variant remains unselected.
 This refutes B non-temporal caching as the next production lever on these
 matched shapes, not the possibility that B traffic matters.
+
+The older ablation's receipt metadata was corrected mechanically from its
+already recorded payload `image_sha256`: `hsaco_sha256` now names those bytes,
+and its former composite value is retained as `artifact_image_digest`. No
+ablation timing or selection verdict was changed by that metadata repair.
 
 Tajasarus is a WSL2 guest with neither `/dev/kfd` nor `/dev/dri`; there are
 no admitted PC samples,

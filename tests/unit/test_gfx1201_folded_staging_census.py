@@ -63,7 +63,7 @@ def test_frontend_matched_packet_and_static_census_are_content_bound() -> None:
     census = json.loads((BASELINE / "staging_census.json").read_text())
     assert matched["schema"] == "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v2"
     assert matched["source_revision"] == (
-        "489c386595bf57890d8727ede97eec0f7c5a2a97"
+        "6f8ba84674da52a710370dc07b83ac7ec2e13637"
     )
     assert matched["architecture"] == census["architecture"] == "gfx1201"
     assert matched["device"] == census["device"] == "AMD Radeon RX 9070 XT"
@@ -100,6 +100,10 @@ def test_frontend_matched_packet_and_static_census_are_content_bound() -> None:
         assert receipt["abi_id"] == rows["tessera_folded"]["metadata"]["abi"]
         assert receipt["schedule_hash"]
         assert len(receipt["hsaco_sha256"]) == 64
+        assert receipt["hsaco_sha256"] == (
+            rows["tessera_folded"]["metadata"]["image_sha256"]
+        )
+        assert receipt["artifact_image_digest"] != receipt["hsaco_sha256"]
         assert receipt["fold_lossless"] is True
         shape = case.removeprefix("prefill_")
         bytes_row = census["requested_bytes"][shape]
@@ -139,4 +143,9 @@ def test_single_lever_b_cache_ablation_is_refused_and_bound() -> None:
         assert len({row["output_sha256"] for row in rows.values()}) == 1
         assert rows["tessera_b_nontemporal"]["median_ms"] > (
             rows["tessera_folded"]["median_ms"]
+        )
+        baseline = rows["tessera_folded"]["metadata"]
+        assert baseline["frontend_receipt"]["hsaco_sha256"] == baseline["image_sha256"]
+        assert baseline["frontend_receipt"]["artifact_image_digest"] != (
+            baseline["image_sha256"]
         )

@@ -24,12 +24,17 @@ def test_packed_folded_packet_binds_source_output_and_timed_isa() -> None:
     )
     assert packet["radiance"]["wperm"] == 1
     assert packet["radiance"]["weight_layout"] == "fragment_order"
-    for key, source in {
-        "generator_sha256": "python/tessera/compiler/rocm_mxfp4_folded.py",
-        "packed_abi_sha256": "python/tessera/compiler/rocm_mxfp4_packed_folded.py",
-        "benchmark_sha256": "benchmarks/rocm/benchmark_gfx1201_mxfp4_packed_folded.py",
-    }.items():
-        assert packet[key] == hashlib.sha256((ROOT / source).read_bytes()).hexdigest()
+    assert packet["generator_sha256"] == hashlib.sha256(
+        (ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py").read_bytes()
+    ).hexdigest()
+    # The v1 packet is an immutable historical control. The opt-in batching
+    # experiment intentionally changes these two source files in v2.
+    assert packet["packed_abi_sha256"] == (
+        "ea2dbdd867ae3d806eca01e4c77c08fe0054ce6fcb98a4432e07f0c2d97f85e7"
+    )
+    assert packet["benchmark_sha256"] == (
+        "181800f7d5a9110acee58264b7a93900d20bfaef5533277d6760e00646d826cf"
+    )
     for case in ("prefill_256x5120x8704", "prefill_1024x17408x5120"):
         rows = {row["engine"]: row for row in packet["rows"] if row["case"] == case}
         assert set(rows) == {

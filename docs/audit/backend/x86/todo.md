@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 packed producer staging ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-STAGING-ABLATION-2026-09-23`.
+Not applicable to AVX-512 execution: A/B LDS producer ordering and the
+matched HSACO/ISA benchmark schema are gfx1201-specific. No CPU schedule
+or numerical evidence transfers.
+
 ## GFX1201 packed-folded decode proof — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-DECODE-2026-09-23`.

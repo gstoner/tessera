@@ -26,9 +26,16 @@ from tessera.compiler.rocm_mxfp4_packed_folded import (
 )
 @pytest.mark.parametrize("shape", [(65, 48, 64), (257, 80, 128)])
 @pytest.mark.parametrize("lossy", [False, True])
-@pytest.mark.parametrize("integer_decode", [False, True])
+@pytest.mark.parametrize(
+    "integer_decode,batched_loads,batched_a_loads,reuse_pair_scales",
+    [(False, False, False, False), (True, False, False, False),
+     (True, True, False, False), (True, False, True, False),
+     (True, True, True, False), (True, True, False, True)],
+)
 def test_packed_folded_prefill_matches_declared_oracle(
-    shape: tuple[int, int, int], lossy: bool, integer_decode: bool,
+    shape: tuple[int, int, int], lossy: bool,
+    integer_decode: bool, batched_loads: bool,
+    batched_a_loads: bool, reuse_pair_scales: bool,
 ) -> None:
     assert rt._rocm_live_arch() == "gfx1201"
     m, n, k = shape
@@ -43,7 +50,8 @@ def test_packed_folded_prefill_matches_declared_oracle(
     )
     assert payload.lossless is not lossy
     package = package_mxfp4_packed_folded_prefill(
-        m, payload, integer_decode=integer_decode,
+        m, payload, integer_decode=integer_decode, batched_loads=batched_loads,
+        batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
     )
     assert package.descriptor.abi_id.endswith("approx_bm256_tm4.v1")
     output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
@@ -124,9 +132,15 @@ def test_packed_graph_to_target_receipt_and_explicit_launch() -> None:
     os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
     reason="explicit gfx1201 owning-device gate",
 )
-@pytest.mark.parametrize("integer_decode", [False, True])
+@pytest.mark.parametrize(
+    "integer_decode,batched_loads,batched_a_loads,reuse_pair_scales",
+    [(False, False, False, False), (True, False, False, False),
+     (True, True, False, False), (True, False, True, False),
+     (True, True, True, False), (True, True, False, True)],
+)
 def test_packed_folded_prefill_all_codes_scale_deltas_and_zero_blocks(
-    integer_decode: bool,
+    integer_decode: bool, batched_loads: bool,
+    batched_a_loads: bool, reuse_pair_scales: bool,
 ) -> None:
     assert rt._rocm_live_arch() == "gfx1201"
     m, n, k = 65, 48, 64
@@ -145,7 +159,8 @@ def test_packed_folded_prefill_all_codes_scale_deltas_and_zero_blocks(
     a[1::3, ::4] = 0xB8  # -1; exercises cancellation and signed fragments
     a_scale = np.ones(m, dtype=np.float32)
     package = package_mxfp4_packed_folded_prefill(
-        m, payload, integer_decode=integer_decode,
+        m, payload, integer_decode=integer_decode, batched_loads=batched_loads,
+        batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
     )
     output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
     rt._submit_rocm_mxfp4_w4a8(

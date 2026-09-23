@@ -249,7 +249,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   Receipt and coverage follow-on, 2026-09-22: the receipt's `hsaco_sha256` now hashes the actual HSACO bytes; `artifact_image_digest` separately retains the composite target/toolchain/image identity. Two additional exact-device frontend rows cover ragged `65×48×64` and multi-K-step `257×80×192` lowering and launch, bringing the folded device file to 13/13. The generic exact selector is regression-tested to refuse the folded layout without explicit approximate authoring. Clean, uncontended matched timing remains 1.28×/1.40× behind Radiance; the older losing B-cache packet's receipt metadata was corrected from its retained payload hash without changing timing. Independently, the 95-case scheduled package gate ran with zero skips on Tajasarus against freshly rebuilt current `main` (`89b2f2fd`), not as a substitute for the follow-on branch's MXFP4 proof. Neither result promotes automatic folded selection. [Refreshed packet](../../../benchmarks/baselines/gfx1201_mxfp4_folded_frontend_20260922/README.md).
 - Depends on: [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1)
 - Start: device
-- Latest: [GFX1201 folded frontend and layout-verified prefill](INTEGRATED_COMPILER_LOG.md#2026-09-22--gfx1201-folded-frontend-and-layout-verified-prefill)
+- Latest: [GFX1201 MXFP4 receipt and lowering coverage follow-on](INTEGRATED_COMPILER_LOG.md#2026-09-22--gfx1201-mxfp4-receipt-and-lowering-coverage-follow-on)
 
 ### EVIDENCE-PACKET-1
 

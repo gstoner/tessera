@@ -474,7 +474,10 @@ LogicalResult ScaledMatmulOp::verify() {
           getOperation()->getAttrOfType<StringAttr>("physical_contract")) {
     const bool folded =
         physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1";
-    if (!folded && physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
+    const bool packedFolded =
+        physical.getValue() == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
+    const bool foldedFamily = folded || packedFolded;
+    if (!foldedFamily && physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
       return emitOpError("unknown physical_contract '")
              << physical.getValue() << "'";
     auto lhsScaleType = dyn_cast<RankedTensorType>(getLhsScale().getType());
@@ -486,21 +489,21 @@ LogicalResult ScaledMatmulOp::verify() {
         !bType.getElementType().isUnsignedInteger(8) ||
         !rType.getElementType().isBF16())
       return emitOpError(
-          "rocm_mxfp4_w4a8_exact_v1 requires static ui8 A/B containers, "
+          "ROCm MXFP4 physical contract requires static ui8 A/B containers, "
           "bf16 output, and no transpose");
     const int64_t m = aType.getDimSize(0);
     const int64_t k = aType.getDimSize(1);
-    const int64_t n = bType.getDimSize(folded ? 0 : 1);
-    if (k <= 0 || k % (folded ? 64 : 32) != 0 ||
-        (folded ? bType.getDimSize(1) != k
+    const int64_t n = bType.getDimSize(foldedFamily ? 0 : 1);
+    if (k <= 0 || k % (foldedFamily ? 64 : 32) != 0 ||
+        (foldedFamily ? bType.getDimSize(1) != (packedFolded ? k / 2 : k)
                 : bType.getDimSize(0) != k / 2) ||
         rType.getDimSize(0) != m || rType.getDimSize(1) != n)
       return emitOpError(
-          folded ? "rocm_mxfp4_w4a8_folded_prefill_v1 requires A[M,K], "
-                   "folded B[N,K], D[M,N], and K divisible by 64"
+          foldedFamily ? "gfx1201 folded prefill requires A[M,K], B[N,K] "
+                         "or packed B[N,K/2], D[M,N], and K divisible by 64"
                  : "rocm_mxfp4_w4a8_exact_v1 requires A[M,K], packed "
                    "B[K/2,N], D[M,N], and K divisible by 32");
-    if (folded && m <= 64)
+    if (foldedFamily && m <= 64)
       return emitOpError("folded prefill requires M > 64");
     if (!lhsScaleType || lhsScaleType.getRank() != 1 ||
         !lhsScaleType.getElementType().isF32() ||
@@ -508,11 +511,12 @@ LogicalResult ScaledMatmulOp::verify() {
         rhsScaleType.getRank() != (folded ? 1 : 2) ||
         !rhsScaleType.getElementType().isUnsignedInteger(8) ||
         (folded ? rhsScaleType.getDimSize(0) != n
-                : rhsScaleType.getDimSize(0) != k / 32 ||
+                : rhsScaleType.getDimSize(0) !=
+                          (packedFolded ? k / 32 + 1 : k / 32) ||
                   rhsScaleType.getDimSize(1) != n))
       return emitOpError(
-          folded ? "folded prefill requires fp32 A scale [M] and E8M0 "
-                   "ui8 row reference [N]"
+          foldedFamily ? "folded prefill requires fp32 A scale [M] and "
+                         "versioned E8M0 row reference or K32+reference plane"
                  : "rocm_mxfp4_w4a8_exact_v1 requires fp32 A scale [M] "
                    "and E8M0 ui8 B scale [K/32,N]");
     auto sl = getScaleLayoutAttr();
@@ -520,21 +524,22 @@ LogicalResult ScaledMatmulOp::verify() {
     auto format = sl ? dyn_cast_or_null<StringAttr>(sl.get("format")) : StringAttr();
     if (!block || block.size() != 2 ||
         !isa<IntegerAttr>(block[1]) ||
-        cast<IntegerAttr>(block[1]).getInt() != (folded ? k : 32) || !format ||
+        cast<IntegerAttr>(block[1]).getInt() != (foldedFamily ? k : 32) || !format ||
         format.getValue() !=
-            (folded ? "e8m0_row_reference" : "e8m0"))
+            (packedFolded ? "e8m0_k32_plus_row_reference"
+                          : folded ? "e8m0_row_reference" : "e8m0"))
       return emitOpError(
-          folded ? "folded prefill requires one E8M0 row reference across K"
+          foldedFamily ? "folded prefill requires its full-K E8M0 scale layout"
                  : "rocm_mxfp4_w4a8_exact_v1 requires an e8m0 K32 scale layout");
     auto policy = getNumericPolicyAttr();
     auto mode = policy
                     ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
                     : StringAttr();
     if (!mode || mode.getValue() !=
-                     (folded ? "folded_row_reference_explicit_approximate"
+                     (foldedFamily ? "folded_row_reference_explicit_approximate"
                              : "exact_per_block"))
       return emitOpError(
-          folded ? "folded prefill requires explicit approximate numeric_policy"
+          foldedFamily ? "folded prefill requires explicit approximate numeric_policy"
                  : "rocm_mxfp4_w4a8_exact_v1 requires numeric_policy "
                    "execution_mode=exact_per_block");
     return success();

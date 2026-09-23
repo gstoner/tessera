@@ -7,6 +7,20 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 packed-folded physical ABI — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-FOLDED-ABI-2026-09-22`. A versioned candidate keeps
+fragment-order packed E2M1 B `[N,K/2]` and the original E8M0 K32 scale
+plane plus a final row reference `[K/32+1,N]`. Graph, Schedule, Tile, and
+Target carry a distinct physical contract, B storage, scale format, and
+package ABI; the model-load receipt binds layout, payload bytes, numerical
+loss, schedule, and IR hashes. This is artifact-only and must not dispatch
+to the existing expanded-E4M3 HSACO. Next: implement the separate packed
+decode kernel, prove BF16 output against the declared approximate and exact
+K32 oracles on Tajasarus, bind the timed HSACO/ISA, then benchmark against
+matched Radiance before selector admission.
+
 ## GFX1201 folded K64 staging codegen — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

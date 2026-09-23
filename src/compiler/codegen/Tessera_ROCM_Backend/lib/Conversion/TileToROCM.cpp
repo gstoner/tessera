@@ -3143,6 +3143,10 @@ struct LowerTileToROCMPass
         const bool foldedMxfp4 =
             physical &&
             physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1";
+        const bool packedFoldedMxfp4 =
+            physical && physical.getValue() ==
+                            "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
+        const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
         if (!desc || !partial || !combine || !scheduleScope ||
             !crossStepMotion || !epilogue || !parent ||
             op->getNumOperands() != 8 || arch != "gfx1201" ||
@@ -3151,10 +3155,10 @@ struct LowerTileToROCMPass
             desc.getAccType() != "f32" || desc.getScaleBlockK() <= 0 ||
             desc.getScaleBlockK() % desc.getK() != 0 ||
             combine.getValue() !=
-                (foldedMxfp4 ? "row_reference_after_full_k"
+                (foldedFamily ? "row_reference_after_full_k"
                               : "scale_outer_product_then_add") ||
             scheduleScope.getValue() !=
-                (foldedMxfp4 ? "k_stage" : "scale_group") ||
+                (foldedFamily ? "k_stage" : "scale_group") ||
             crossStepMotion.getValue() != "forbid" ||
             !problemM || !problemN || !problemK || problemM.getInt() < 0 ||
             problemN.getInt() < 0 || problemK.getInt() < 0 ||
@@ -3172,19 +3176,23 @@ struct LowerTileToROCMPass
           signalPassFailure();
           return;
         }
-        if (foldedMxfp4 &&
+        if (foldedFamily &&
             (desc.getAType() != "e4m3_raw_u8" ||
-             desc.getBType() != "e4m3_folded_nk_u8" ||
+             desc.getBType() != (packedFoldedMxfp4
+                                     ? "e2m1_fragment_nk2_u8"
+                                     : "e4m3_folded_nk_u8") ||
              desc.getScaleBlockK() != problemK.getInt() ||
-             desc.getScaleFormat() != "e8m0_row_reference" ||
+             desc.getScaleFormat() != (packedFoldedMxfp4
+                                          ? "e8m0_k32_plus_row_reference"
+                                          : "e8m0_row_reference") ||
              epilogue.getOutputType() != "bf16" ||
              problemM.getInt() <= 64 || problemN.getInt() <= 0 ||
              problemK.getInt() <= 0 || problemK.getInt() % 64 != 0 ||
              !macroM || !macroN || !warps || macroM.getInt() != 256 ||
              macroN.getInt() != 64 || warps.getInt() != 8)) {
           op->emitError(
-              "ROCm folded prefill requires E4M3 [N,K], one E8M0 row "
-              "reference, and a full-K FP32 partial");
+              "ROCm folded prefill requires its declared B storage and "
+              "E8M0 scale format, plus a full-K FP32 partial");
           signalPassFailure();
           return;
         }
@@ -3192,7 +3200,8 @@ struct LowerTileToROCMPass
         state.addAttribute("name", builder.getStringAttr(parent.getSymName()));
         state.addAttribute(
             "abi", builder.getStringAttr(
-                       foldedMxfp4 ? "a_bfold_sa_rowref_d_m_n_k"
+                       packedFoldedMxfp4 ? "a_bpacked_sa_scaleplane_d_m_n_k"
+                                    : foldedMxfp4 ? "a_bfold_sa_rowref_d_m_n_k"
                                     : "a_b_lhs_scale_rhs_scale_d_m_n_k"));
         state.addAttribute("m", problemM);
         state.addAttribute("n", problemN);
@@ -3209,9 +3218,9 @@ struct LowerTileToROCMPass
         state.addAttribute("partial_combine", combine);
         state.addAttribute("k_step_schedule",
                            builder.getStringAttr(
-                               foldedMxfp4 ? "isolated_k_stage"
+                               foldedFamily ? "isolated_k_stage"
                                             : "isolated_scale_group"));
-        if (foldedMxfp4) {
+        if (foldedFamily) {
           state.addAttribute("stage_k", builder.getI64IntegerAttr(64));
           state.addAttribute("block_m", builder.getI64IntegerAttr(256));
           state.addAttribute("block_n", builder.getI64IntegerAttr(64));
@@ -3226,7 +3235,9 @@ struct LowerTileToROCMPass
         state.addAttribute(
             "package_abi",
             builder.getStringAttr(
-                foldedMxfp4
+                packedFoldedMxfp4
+                    ? "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1"
+                    : foldedMxfp4
                     ? "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
                     : packedMxfp4
                     ? "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1"

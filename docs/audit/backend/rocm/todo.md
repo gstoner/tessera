@@ -7,6 +7,25 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 packed-word permute decode — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-PERMUTE-DECODE-2026-09-23`. A manual, B-load-batched
+candidate decodes four E2M1 nibbles per RDNA4 `v_perm_b32` using a compact
+table derived from Tessera's scalar E4M3 oracle. The pinned Radiance table
+differs for some subnormal rounding cases, so direct byte-for-byte adoption
+would violate the declared numerical contract. Tajasarus proves ragged,
+lossy, all-code, zero-block BF16 cases and bitwise agreement with exact K32
+on two matched prefill shapes. The timed packet at
+`benchmarks/baselines/gfx1201_mxfp4_packed_permute_20260923/` records
+177.6/1163.4 µs, versus 230.0/1403.3 µs for the same-run B-batched
+integer control and 137.7/891.8 µs for pinned Radiance. Timed ISA shows eight static
+`v_perm_b32`, 75 waits, 110 VGPR, no spills. The remaining 1.29×/1.30×
+kernel gap does not include the larger public runtime gap: host launch still
+loads/unloads the module and allocates/copies/frees buffers per call.
+Automatic selection remains closed. Next: device-resident launch lifecycle
+and graph capture, then one-at-a-time vector B-load/LDS-stage experiments.
+
 ## GFX1201 packed producer staging ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
@@ -21,9 +40,8 @@ control by 3.9%/1.3%, reducing static `s_wait_loadcnt` from 88 to 87 while
 raising VGPRs from 117 to 118. A-only and paired-scale variants do not
 improve both prefill shapes; paired-scale still emits four byte loads in
 selected ISA. B-only remains 1.68×/1.57× Radiance and 1.35×/1.24× the
-expanded folded time. Keep automatic selection closed. Next: identify the per-word
-decode dependency/throughput cost and test a fragment decode representation
-that reduces ALU without expanding the full B matrix at model load.
+expanded folded time. Keep automatic selection closed. The per-word
+decode follow-up and its exact-device result are recorded above.
 
 ## GFX1201 packed-folded decode proof — 2026-09-23
 

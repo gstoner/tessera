@@ -28,7 +28,7 @@ RADIANCE_SYMBOL = (
 )
 _ISA_FAMILIES = (
     "global_load", "ds_load", "ds_store", "s_wait_loadcnt",
-    "s_barrier_signal", "s_barrier_wait", "v_wmma",
+    "s_barrier_signal", "s_barrier_wait", "v_wmma", "v_perm_b32",
 )
 
 

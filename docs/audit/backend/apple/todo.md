@@ -8,6 +8,13 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 packed-word permute decode — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-PERMUTE-DECODE-2026-09-23`.
+Not applicable to Metal execution: RDNA4 `v_perm_b32`, gfx1201 HSACO
+resources, and the AMD-only benchmark v3 schema establish no Apple schedule,
+runtime result, or selector state. The shared MXFP4 numerical policy is unchanged.
+
 ## GFX1201 packed producer staging ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-STAGING-ABLATION-2026-09-23`.

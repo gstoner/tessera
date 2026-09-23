@@ -25,12 +25,16 @@ def test_packed_staging_packet_binds_current_source_and_timed_isa() -> None:
     )
     assert packet["radiance"]["wperm"] == 1
     assert packet["radiance"]["weight_layout"] == "fragment_order"
-    for key, source in {
-        "generator_sha256": "python/tessera/compiler/rocm_mxfp4_folded.py",
-        "packed_abi_sha256": "python/tessera/compiler/rocm_mxfp4_packed_folded.py",
-        "benchmark_sha256": "benchmarks/rocm/benchmark_gfx1201_mxfp4_packed_folded.py",
-    }.items():
-        assert packet[key] == hashlib.sha256((ROOT / source).read_bytes()).hexdigest()
+    assert packet["generator_sha256"] == hashlib.sha256(
+        (ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py").read_bytes()
+    ).hexdigest()
+    # Immutable v2 control: v3 changes the generator and benchmark sources.
+    assert packet["packed_abi_sha256"] == (
+        "7973372af3a0dd25e28d559c29305caad62b41fd7e28a70002d4f78bdcda9fb6"
+    )
+    assert packet["benchmark_sha256"] == (
+        "51c7c6a6a235b9bb57e4f0cb9c6b9838e161c08015f5f6597408057abde6a825"
+    )
     expected_engines = {
         "tessera", "tessera_folded", "tessera_packed_table",
         "tessera_packed_integer", "tessera_packed_batched_b_integer",

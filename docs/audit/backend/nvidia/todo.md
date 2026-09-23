@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 MXFP4 prefill sweep schema — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-PREFILL-SWEEP-2026-09-23`. Not applicable to CUDA: the
+RDNA4 TN2/TN4 schedules, HIP-event/HSACO packet, and gfx1201 free-memory
+snapshots do not establish an NVFP4/PTX selector or a loaded-model budget.
+No NVIDIA exact-device result transfers.
+
 ## GFX1201 folded-prefill experiments and runtime guard — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

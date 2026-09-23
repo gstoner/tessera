@@ -517,3 +517,15 @@ both routes remain manual and selection stays closed. Next require a matched
 real-model memory packet and profiler-capable gfx1201 counter/PC evidence
 before fitting stage-cost labels; whole-kernel timing can continue guiding
 controlled, single-coordinate probes. [Exact-device packet](../../../benchmarks/baselines/gfx1201_mxfp4_prefill_experiments_20260923/README.md).
+
+The six-shape follow-up at M=128/256/1024 and N=5120/17408 confirms an
+M-dependent crossover rather than a universal TN4 gain. TN4 wins at
+M=1024 and nearly meets Radiance at N=5120, but loses at M=128/256 and
+still trails Radiance 1.26× at M=1024, N=17408. Bitwise BF16 equality to
+exact K32 holds for the lossless-fold fixture. HIP free-memory snapshots
+were taken on Tajasarus, but the model was not loaded; the inventory API
+therefore refuses the model budget instead of interpreting idle free bytes
+as headroom. No selector or dynamic stage-cost training is admitted from
+these kernel medians. Next obtain a model-owned post-load capacity packet
+and explain the large-N M=1024 stall with measured memory or PC evidence.
+[Six-shape evidence](../../../benchmarks/baselines/gfx1201_mxfp4_prefill_sweep_20260923/README.md).

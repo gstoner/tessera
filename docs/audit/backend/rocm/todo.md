@@ -7,6 +7,25 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 MXFP4 six-shape prefill crossover and model budget — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-PREFILL-SWEEP-2026-09-23`. Tajasarus repeated a six-shape
+matched Radiance sweep at M=128/256/1024 and N=5120/17408. The final
+source-bound packet passed independent sampled exact K32 output and bitwise
+BF16 agreement for every variant, then timed eleven interleaved HIP-event
+samples per shape. BN128/TN4 wins at M=1024 (455.5 versus Radiance 446.7
+µs for N=5120; 1112.4 versus 886.3 µs for N=17408), but regresses both
+N families at M=128/256. The small-M packed edge is only 1–2 µs and not
+an admission margin. [Evidence](../../../../benchmarks/baselines/gfx1201_mxfp4_prefill_sweep_20260923/README.md).
+HIP free-memory snapshots are real device observations but no model was
+loaded, so they cannot authorize extra expanded-weight residency. The
+new inventory reader refuses model budget and automatic selection. Next:
+obtain an actual checkpoint/layer inventory and model-owned post-load
+memory snapshot with reserves for activations, graph pools, code objects,
+and fragmentation; then decide expanded versus packed prefill by shape.
+Keep exact K32 as oracle and safe/TN4 candidates manual.
+
 ## GFX1201 folded-prefill safe epilogue and TN4 experiments — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

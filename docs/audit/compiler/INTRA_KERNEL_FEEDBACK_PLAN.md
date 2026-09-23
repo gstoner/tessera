@@ -548,3 +548,19 @@ cannot be carried into GPT-OSS-20B E=32 MXFP4 or dense Qwen3-14B by
 matching `gfx1201` alone. Extract the scheduling axes as candidate
 experiments only after matching dtype, physical scales, expert geometry,
 and exact-device timing.
+
+### 2026-09-23: checkpoint metadata is a boundary, not a cost label
+
+The pinned AMD Qwen3.8-27B Quark AWQ MXFP4 gate/up projection has
+`N=17408,K=5120`, matching one prior synthetic sweep geometry, while its
+down projection has `N=5120,K=17408` and needs a broader K proof. Quark
+`reorder` bytes and dynamic MXFP4/E8M0 activations do not satisfy Tessera's
+proved low-even checkpoint converter or W4A8 FP8 activation ABI. The new
+metadata assessment records both unresolved contracts and refuses the
+existing route; it adds no timing or selector training sample. Establish
+an independent checkpoint-byte dequantization oracle and distinct W4A4
+carrier before tuning either projection. The single-file checkpoint's
+19.80 GB of tensors already exceed Tajasarus physical capacity, so any
+model-level benchmark requires a separate sharding/offload design.
+GLM-5.3-Flash's 128×128 FP8 block scales and hybrid attention/MoE belong
+to separate FP8 and attention plans, not this MXFP4 cost model.

@@ -25,6 +25,14 @@ the manual gfx1201 TN2/TN4 schedules and HIP-event/HSACO evidence change
 no x86 kernel, numerical policy, or selector. The model-memory inventory
 is ROCm evidence and does not establish CPU capacity or performance.
 
+## Quark MXFP4 checkpoint metadata and W4A4 refusal — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-MXFP4-CHECKPOINT-2026-09-23`. The Quark metadata reader
+and ROCm route refusal introduce no AVX-512 packing, W4A4 execution,
+or CPU capacity proof. The x86 selector remains unchanged; Qwen/GLM
+checkpoint metadata cannot be transferred to an x86 schedule.
+
 ## GFX1201 folded-prefill experiments and runtime guard — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 bounded A-offset benchmark schema — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-A-OFFSET32-2026-09-23`. Not applicable to CUDA: the
+RDNA4 A-producer arithmetic and v6 HIP-event/HSACO ISA census define no
+PTX/NVFP4 route. Shared ABI, numerical policy, and NVIDIA selection
+remain unchanged; no SM120 proof transfers from Tajasarus.
+
 ## GFX1201 A-base benchmark and provenance correction — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

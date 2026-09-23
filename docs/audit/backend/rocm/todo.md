@@ -7,6 +7,42 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 packed-folded physical ABI — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-FOLDED-ABI-2026-09-22`. A versioned candidate keeps
+fragment-order packed E2M1 B `[N,K/2]` and the original E8M0 K32 scale
+plane plus a final row reference `[K/32+1,N]`. Graph, Schedule, Tile, and
+Target carry a distinct physical contract, B storage, scale format, and
+package ABI; the model-load receipt binds layout, payload bytes, numerical
+loss, schedule, and IR hashes. This is artifact-only and must not dispatch
+to the existing expanded-E4M3 HSACO. Next: implement the separate packed
+decode kernel, prove BF16 output against the declared approximate and exact
+K32 oracles on Tajasarus, bind the timed HSACO/ISA, then benchmark against
+matched Radiance before selector admission.
+
+## GFX1201 folded K64 staging codegen — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-FOLDED-K64-STAGING-2026-09-22`. The Graph→Target folded carrier
+already requires complete K64 slabs, but its HIP generator still predicated
+every A/B vector copy on a K bound. An exact-device single-lever ablation
+removed those redundant predicates, preserving bitwise BF16 agreement with
+the exact K32 route on both matched prefill shapes. The production generator
+now specializes complete K64 slabs to unconditional copies and retains the
+guarded K32-tail path for direct package callers. Tajasarus folded device
+proof passes 13/13. Clean-revision matched HIP-event medians are 0.1668 versus
+Radiance 0.1438 ms and 1.1778 versus 0.8958 ms, roughly 1.16× and 1.31×
+remaining gaps. Do not promote an automatic selector from these timings.
+The refreshed packet records selected-symbol ISA from each timed HSACO,
+rather than recompiling a surrogate shape for the static census.
+Unconditional K16 compute steps increased VGPRs 109→117 and lost versus the
+copy-only change; address hoisting and stricter K-step barrier were small or
+mixed. A full-tile epilogue ablation raised VGPRs to 171 and is not selected.
+Next: test a distinct packed-weight physical execution ABI against the exact
+oracle and matched Radiance before attributing the remaining gap to B traffic.
+
+
 ## GFX1201 MXFP4 receipt and expanded frontend proof — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1 / ROCM-2; sync

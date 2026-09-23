@@ -352,7 +352,10 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       schedule.physicalContract == "rocm_mxfp4_w4a8_exact_v1";
   const bool foldedMxfp4 =
       schedule.physicalContract == "rocm_mxfp4_w4a8_folded_prefill_v1";
-  if (foldedMxfp4) {
+  const bool packedFoldedMxfp4 =
+      schedule.physicalContract == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
+  const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
+  if (foldedFamily) {
     n = bounded(rhs.getDimSize(0), 1, schedule.dynamicN);
     if (failed(n))
       return failure();
@@ -361,7 +364,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   const bool rhsKCompatible =
       packedMxfp4
           ? compatible(rhs.getDimSize(0), (schedule.k + 1) / 2)
-          : compatible(rhs.getDimSize(foldedMxfp4 ? 1 : 0), schedule.k);
+          : compatible(rhs.getDimSize(foldedFamily ? 1 : 0),
+                       packedFoldedMxfp4 ? schedule.k / 2 : schedule.k);
   if (schedule.m <= 0 || schedule.n <= 0 || schedule.k <= 0 ||
       !rhsKCompatible ||
       !compatible(out.getDimSize(0), schedule.m) ||
@@ -414,7 +418,7 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.scaleFormat = format.getValue();
   }
 
-  if (packedMxfp4 || foldedMxfp4) {
+  if (packedMxfp4 || foldedFamily) {
     auto lhsScale = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
     auto rhsScale = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
     auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
@@ -428,11 +432,16 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
         lhsScale.getDimSize(0) != schedule.m || !rhsScale ||
         rhsScale.getRank() != (foldedMxfp4 ? 1 : 2) ||
         !rhsScale.getElementType().isUnsignedInteger(8) ||
-        (foldedMxfp4
-             ? rhsScale.getDimSize(0) != schedule.n ||
+        (foldedFamily
+             ? (foldedMxfp4
+                    ? rhsScale.getDimSize(0) != schedule.n
+                    : rhsScale.getDimSize(0) != schedule.k / 32 + 1 ||
+                          rhsScale.getDimSize(1) != schedule.n) ||
                    schedule.k % 64 != 0 || schedule.m <= 64 ||
                    schedule.scaleBlockK != schedule.k ||
-                   schedule.scaleFormat != "e8m0_row_reference" ||
+                   schedule.scaleFormat !=
+                       (packedFoldedMxfp4 ? "e8m0_k32_plus_row_reference"
+                                          : "e8m0_row_reference") ||
                    !mode || mode.getValue() !=
                                 "folded_row_reference_explicit_approximate"
              : rhsScale.getDimSize(0) != schedule.k / 32 ||
@@ -586,9 +595,11 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.macroTileN = 16;
     return schedule;
   }
-  if (foldedMxfp4) {
+  if (foldedFamily) {
     schedule.storage = "e4m3_raw_u8";
-    schedule.storageB = "e4m3_folded_nk_u8";
+    schedule.storageB = packedFoldedMxfp4
+                            ? "e2m1_fragment_nk2_u8"
+                            : "e4m3_folded_nk_u8";
     schedule.accum = "f32";
     schedule.output = "bf16";
     schedule.tileK = 16;
@@ -3901,8 +3912,10 @@ struct ScheduleToTilePass
                                builder.getI64IntegerAttr(selected->warps));
       kernelState.addAttribute("staging", builder.getStringAttr("global"));
       if (selected->scaleBlockK > 0) {
-        const bool foldedMxfp4 = selected->physicalContract ==
-                                  "rocm_mxfp4_w4a8_folded_prefill_v1";
+        const bool foldedMxfp4 =
+            selected->physicalContract == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
+            selected->physicalContract ==
+                "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
         kernelState.addAttribute(
             "partial_accumulator",
             builder.getDictionaryAttr({
@@ -3952,8 +3965,10 @@ struct ScheduleToTilePass
         numericPolicy.push_back(builder.getNamedAttr(
             "execution_mode",
             builder.getStringAttr(
-                selected->physicalContract ==
-                        "rocm_mxfp4_w4a8_folded_prefill_v1"
+                (selected->physicalContract ==
+                     "rocm_mxfp4_w4a8_folded_prefill_v1" ||
+                 selected->physicalContract ==
+                     "rocm_mxfp4_w4a8_packed_folded_prefill_v1")
                     ? "folded_row_reference_explicit_approximate"
                     : "exact_per_block")));
       kernelState.addAttribute("numeric_policy",

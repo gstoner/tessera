@@ -8,6 +8,25 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 packed-folded physical ABI — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-ABI-2026-09-22`.
+Not applicable to Metal execution: the candidate uses RDNA4 fragment order,
+E8M0 scale-plane layout, and an AMD Target ABI. Shared Graph verification
+recognizes only this explicit physical contract; no Apple route or proof is
+implied.
+
+## GFX1201 folded K64 staging codegen — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-FOLDED-K64-STAGING-2026-09-22`.
+Not applicable to Metal execution: this specializes the gfx1201 HIP A/B
+copy loop and adds AMD-only benchmark evidence. The folded numerical policy
+and shared Graph semantics are unchanged; no Apple schedule or timing proof
+transfers.
+The timed-HSACO ISA evidence schema is gfx1201-specific and has no Metal
+code-object or benchmark consumer.
+
+
 ## GFX1201 MXFP4 receipt and device coverage — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-MXFP4-RECEIPT-COVERAGE-2026-09-22`.

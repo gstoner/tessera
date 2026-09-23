@@ -634,14 +634,18 @@ LogicalResult ScaledMatmulKernelOp::verify() {
   const bool folded = physical &&
                       physical.getValue() ==
                           "rocm_mxfp4_w4a8_folded_prefill_v1";
+  const bool packedFolded = physical &&
+                            physical.getValue() ==
+                                "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
+  const bool foldedFamily = folded || packedFolded;
   if (!init || init.getValue() != "zero" || !scope ||
-      scope.getValue() != (folded ? "full_k" : "scale_group") || !combine ||
+      scope.getValue() != (foldedFamily ? "full_k" : "scale_group") || !combine ||
       combine.getValue() !=
-          (folded ? "row_reference_after_full_k"
+          (foldedFamily ? "row_reference_after_full_k"
                   : "scale_outer_product_then_add") || !steps ||
       steps.getInt() != mma.getScaleBlockK() / mma.getK() ||
       !scheduleScope ||
-      scheduleScope.getValue() != (folded ? "k_stage" : "scale_group") ||
+      scheduleScope.getValue() != (foldedFamily ? "k_stage" : "scale_group") ||
       !crossStepMotion || crossStepMotion.getValue() != "forbid")
     return emitOpError(
         "partial_accumulator must state the physical contract's zero-init, "
@@ -655,21 +659,23 @@ LogicalResult ScaledMatmulKernelOp::verify() {
     auto macroM = (*this)->getAttrOfType<IntegerAttr>("tessera.macro_tile_m");
     auto macroN = (*this)->getAttrOfType<IntegerAttr>("tessera.macro_tile_n");
     auto warps = (*this)->getAttrOfType<IntegerAttr>("warps");
-    if (!folded && physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
+    if (!foldedFamily && physical.getValue() != "rocm_mxfp4_w4a8_exact_v1")
       return emitOpError("unknown physical_contract");
     if (mma.getAType() != "e4m3_raw_u8" ||
         mma.getBType() !=
-            (folded ? "e4m3_folded_nk_u8" : "e2m1_packed_u8") ||
+            (packedFolded ? "e2m1_fragment_nk2_u8"
+                          : folded ? "e4m3_folded_nk_u8" : "e2m1_packed_u8") ||
         mma.getScaleBlockK() !=
-            (folded ? (problemK ? problemK.getInt() : 0) : 32) ||
+            (foldedFamily ? (problemK ? problemK.getInt() : 0) : 32) ||
         mma.getScaleFormat() !=
-            (folded ? "e8m0_row_reference" : "e8m0") ||
+            (packedFolded ? "e8m0_k32_plus_row_reference"
+                          : folded ? "e8m0_row_reference" : "e8m0") ||
         mma.getAccType() != "f32" || !epilogue ||
         epilogue.getOutputType() != "bf16" || !problemM || !problemN ||
         !problemK || problemM.getInt() <= 0 || problemN.getInt() <= 0 ||
         problemK.getInt() <= 0 ||
-        problemK.getInt() % (folded ? 64 : 32) != 0 ||
-        (folded && (problemM.getInt() <= 64 || !macroM || !macroN || !warps ||
+        problemK.getInt() % (foldedFamily ? 64 : 32) != 0 ||
+        (foldedFamily && (problemM.getInt() <= 64 || !macroM || !macroN || !warps ||
                     macroM.getInt() != 256 || macroN.getInt() != 64 ||
                     warps.getInt() != 8)))
       return emitOpError(

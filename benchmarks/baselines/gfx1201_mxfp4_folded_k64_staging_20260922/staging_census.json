@@ -1,0 +1,110 @@
+{
+  "architecture": "gfx1201",
+  "census_sha256": "c0be8ee596d046070cb885e1acb3f2e24737d48548e903676362dc26ddcb8d5b",
+  "device": "AMD Radeon RX 9070 XT",
+  "matched_packet_sha256": "4b337390fb8bde7317c31008a19717ac1e099f96e9e5c080821f46c3bc927467",
+  "method": "timed_hsaco_selected_symbol_and_schedule_requested_bytes",
+  "not_measured_dram_or_dynamic_instructions": true,
+  "radiance": {
+    "image_sha256": "ead04b3a44cb371f01d70ece45774ee3e10b297d7427af6bba981dcae89c9e18",
+    "isa": {
+      "ds_load_2addr_b64": 8,
+      "ds_load_b64": 8,
+      "ds_store_2addr_b64": 5,
+      "global_load_b128": 12,
+      "global_load_b32": 64,
+      "global_load_b64": 3,
+      "global_load_u16": 2,
+      "global_load_u8": 2,
+      "s_barrier_signal": 2,
+      "s_barrier_wait": 2,
+      "s_wait_loadcnt": 78,
+      "s_wait_loadcnt_dscnt": 1,
+      "v_wmma_f32_16x16x16_fp8_fp8": 32
+    },
+    "layout": "fragment_order",
+    "module_sha256": "c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6",
+    "selected_symbol": "_Z30radiance_mxfp4_fp8_gemm_foldedILi2ELb1ELb1EEvPKhS1_S1_S1_PKfPDF16biiiiil",
+    "source_revision": "dfdfa3832922c9a4253133f09c1f5c0d39748fc7",
+    "source_sha256": "79a7eb6f261c2939386a4c231cf5727a0a1f2325d8a391419178778da1fd2ae2"
+  },
+  "requested_bytes": {
+    "1024x17408x5120": {
+      "radiance_a": 1426063360,
+      "radiance_b_packed": 178257920,
+      "radiance_block_scales": 11141120,
+      "radiance_row_reference_minimum": 69632,
+      "tessera_a": 1426063360,
+      "tessera_b_folded": 356515840
+    },
+    "256x5120x8704": {
+      "radiance_a": 178257920,
+      "radiance_b_packed": 22282240,
+      "radiance_block_scales": 1392640,
+      "radiance_row_reference_minimum": 5120,
+      "tessera_a": 178257920,
+      "tessera_b_folded": 44564480
+    }
+  },
+  "schema": "tessera.rocm.gfx1201_folded_staging_census.v2",
+  "source_revision": "52a297422320f57b53e461705b398d75d1b88521",
+  "tessera": {
+    "generator_sha256": "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c",
+    "timed_images": {
+      "prefill_1024x17408x5120": {
+        "entry_symbol": "tessera_mxfp4_folded_prefill",
+        "image_sha256": "e09dbdbe7bcb1fa60bc4100ad5f66511c5fc28a5237e9c63257f348e887ec65a",
+        "instruction_count": 4195,
+        "instruction_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46",
+        "isa": {
+          "ds_load_2addr_b64": 8,
+          "ds_load_b64": 8,
+          "ds_store_b128": 5,
+          "global_load_b128": 5,
+          "global_load_b32": 64,
+          "global_load_u8": 2,
+          "s_barrier_signal": 2,
+          "s_barrier_wait": 2,
+          "s_wait_loadcnt": 71,
+          "v_wmma_f32_16x16x16_fp8_fp8": 32
+        },
+        "resources": {
+          "lds_bytes": 25600,
+          "scratch_bytes": 0,
+          "sgpr_count": 54,
+          "sgpr_spill_count": 0,
+          "spills": false,
+          "vgpr_count": 109,
+          "vgpr_spill_count": 0
+        }
+      },
+      "prefill_256x5120x8704": {
+        "entry_symbol": "tessera_mxfp4_folded_prefill",
+        "image_sha256": "478541c437fd10a96c313b9ee608e699498a6e0083ddf66e5669eb4330288f39",
+        "instruction_count": 4195,
+        "instruction_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46",
+        "isa": {
+          "ds_load_2addr_b64": 8,
+          "ds_load_b64": 8,
+          "ds_store_b128": 5,
+          "global_load_b128": 5,
+          "global_load_b32": 64,
+          "global_load_u8": 2,
+          "s_barrier_signal": 2,
+          "s_barrier_wait": 2,
+          "s_wait_loadcnt": 71,
+          "v_wmma_f32_16x16x16_fp8_fp8": 32
+        },
+        "resources": {
+          "lds_bytes": 25600,
+          "scratch_bytes": 0,
+          "sgpr_count": 54,
+          "sgpr_spill_count": 0,
+          "spills": false,
+          "vgpr_count": 109,
+          "vgpr_spill_count": 0
+        }
+      }
+    }
+  }
+}

@@ -16,6 +16,8 @@ from tessera.compiler.rocm_mxfp4_packed_folded import (
 )
 from tessera.compiler.rocm_mxfp4_resident import PackedFoldedResidentSession
 from tessera.compiler.rocm_mxfp4_graph import PackedFoldedGraphSession
+from tessera.compiler.rocm_mxfp4_graph_pipeline import PackedFoldedGraphPipeline
+from tessera.compiler.rocm_mxfp4_graph_tensor import ROCMGraphTensor
 
 
 class _FakeFunction:
@@ -31,10 +33,13 @@ class _FakeHip:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.node_type = 0
+        self.node_count = 1
         self.fail_stream_sync = False
+        self.fail_graph_instantiate = False
+        self.fail_next_malloc = False
         self.allocations: list[ctypes.Array[ctypes.c_char]] = []
         for name in (
-            "hipInit", "hipStreamCreateWithFlags", "hipStreamDestroy",
+            "hipInit", "hipGetDevice", "hipStreamCreateWithFlags", "hipStreamDestroy",
             "hipStreamSynchronize", "hipModuleLoadData", "hipModuleUnload",
             "hipModuleGetFunction", "hipMalloc", "hipFree", "hipMemcpyAsync",
             "hipModuleLaunchKernel",
@@ -48,6 +53,13 @@ class _FakeHip:
         self.calls.append(name)
         if name == "hipStreamSynchronize" and self.fail_stream_sync:
             return 700
+        if name == "hipGraphInstantiate" and self.fail_graph_instantiate:
+            return 701
+        if name == "hipMalloc" and self.fail_next_malloc:
+            self.fail_next_malloc = False
+            return 2
+        if name == "hipGetDevice":
+            ctypes.cast(args[0], ctypes.POINTER(ctypes.c_int))[0] = ctypes.c_int(0)
         if name in ("hipStreamCreateWithFlags", "hipModuleLoadData", "hipModuleGetFunction"):
             ctypes.cast(args[0], ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(1)
         elif name == "hipMalloc":
@@ -61,9 +73,13 @@ class _FakeHip:
         elif name == "hipStreamEndCapture":
             ctypes.cast(args[1], ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(2)
         elif name == "hipGraphGetNodes":
-            ctypes.cast(args[2], ctypes.POINTER(ctypes.c_size_t))[0] = ctypes.c_size_t(1)
+            ctypes.cast(args[2], ctypes.POINTER(ctypes.c_size_t))[0] = ctypes.c_size_t(
+                self.node_count
+            )
             if args[1] is not None:
-                ctypes.cast(args[1], ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(3)
+                nodes = ctypes.cast(args[1], ctypes.POINTER(ctypes.c_void_p))
+                for ordinal in range(self.node_count):
+                    nodes[ordinal] = ctypes.c_void_p(3 + ordinal)
         elif name == "hipGraphNodeGetType":
             ctypes.cast(args[1], ctypes.POINTER(ctypes.c_int))[0] = ctypes.c_int(
                 self.node_type
@@ -220,3 +236,98 @@ def test_graph_close_destroys_executable_after_async_failure() -> None:
     assert hip.calls.count("hipModuleUnload") == 1
     assert hip.calls.count("hipFree") == 5
     graph.close()  # failed close must still be idempotent
+
+
+def test_model_buffers_are_pinned_until_graph_close() -> None:
+    from tessera import runtime as rt
+
+    package, payload = _fixture()
+    hip = _FakeHip()
+    hip.node_count = 3
+    with (patch("tessera.runtime._rocm_live_arch", return_value="gfx1201"),
+          patch("tessera.compiler.rocm_mxfp4_graph_pipeline._compile_auxiliary_hsaco",
+                return_value=b"fake-aux")):
+        source = ROCMGraphTensor((65, 64), np.float32, hip=hip)
+        result = ROCMGraphTensor((65, 48), rt._bfloat16_dtype(), hip=hip)
+        graph = PackedFoldedGraphPipeline(
+            package, payload, 65, hip=hip, input_tensor=source, output_tensor=result,
+        )
+        assert graph.input_pointer == source.pointer
+        assert graph.final_output_pointer == result.pointer
+        assert graph.receipt()["io_ownership"] == "model_borrowed"
+        assert source.borrowers == result.borrowers == 1
+        with pytest.raises(RuntimeError, match="already has a live graph borrower"):
+            source.borrow((65, 64), np.float32, 0)
+        with pytest.raises(RuntimeError, match="borrowed"):
+            source.close()
+        graph.mark_device_input_ready(stream_pointer=graph.stream_pointer)
+        graph.capture()
+        graph.replay()
+        graph.close()
+        assert source.borrowers == result.borrowers == 0
+        source.close()
+        result.close()
+    assert hip.calls.count("hipMalloc") == 7
+    assert hip.calls.count("hipFree") == 7
+    assert hip.calls.count("hipGraphExecDestroy") == 1
+
+
+def test_failed_capture_releases_model_leases_and_async_failure_quarantines() -> None:
+    from tessera import runtime as rt
+
+    package, payload = _fixture()
+    hip = _FakeHip()
+    hip.node_count = 3
+    with (patch("tessera.runtime._rocm_live_arch", return_value="gfx1201"),
+          patch("tessera.compiler.rocm_mxfp4_graph_pipeline._compile_auxiliary_hsaco",
+                return_value=b"fake-aux")):
+        source = ROCMGraphTensor((65, 64), np.float32, hip=hip)
+        result = ROCMGraphTensor((65, 48), rt._bfloat16_dtype(), hip=hip)
+        graph = PackedFoldedGraphPipeline(
+            package, payload, 65, hip=hip, input_tensor=source, output_tensor=result,
+        )
+        graph.mark_device_input_ready(stream_pointer=graph.stream_pointer)
+        hip.fail_graph_instantiate = True
+        with pytest.raises(RuntimeError, match="hipGraphInstantiate"):
+            graph.capture()
+        graph.close()
+        source.close()
+        result.close()
+        assert hip.calls.count("hipGraphDestroy") == 1
+
+        source = ROCMGraphTensor((65, 64), np.float32, hip=hip)
+        result = ROCMGraphTensor((65, 48), rt._bfloat16_dtype(), hip=hip)
+        graph = PackedFoldedGraphPipeline(
+            package, payload, 65, hip=hip, input_tensor=source, output_tensor=result,
+        )
+        hip.fail_stream_sync = True
+        with pytest.raises(RuntimeError, match="hipStreamSynchronize"):
+            graph.close()
+        assert source.borrowers == result.borrowers == 0
+        with pytest.raises(RuntimeError, match="uncertain"):
+            source.close()
+        with pytest.raises(RuntimeError, match="uncertain"):
+            result.close()
+
+
+def test_model_tensor_rejects_wrong_storage_device_and_failed_allocation() -> None:
+    from tessera import runtime as rt
+
+    hip = _FakeHip()
+    with patch("tessera.runtime._rocm_live_arch", return_value="gfx1201"):
+        with ROCMGraphTensor((65, 64), np.float32, hip=hip) as source:
+            with pytest.raises(ValueError, match="shape/dtype"):
+                source.borrow((64, 64), np.float32, 0)
+            with pytest.raises(ValueError, match="another HIP device"):
+                source.borrow((65, 64), np.float32, 1)
+            assert source.borrowers == 0
+        with pytest.raises(TypeError, match="FP32 or BF16"):
+            ROCMGraphTensor((65, 64), np.float16, hip=hip)
+        with patch("tessera.runtime._bfloat16_dtype", return_value=None):
+            with pytest.raises(TypeError, match="FP32 or BF16"):
+                ROCMGraphTensor((65, 64), np.float64, hip=hip)
+        with pytest.raises(ValueError, match="positive dimensions"):
+            ROCMGraphTensor((65, 0), np.float32, hip=hip)
+        hip.fail_next_malloc = True
+        with pytest.raises(RuntimeError, match="allocation failed"):
+            ROCMGraphTensor((65, 64), rt._bfloat16_dtype(), hip=hip)

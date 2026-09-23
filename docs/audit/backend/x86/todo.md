@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-22
+last_updated: 2026-09-23
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## GFX1201 model-owned MXFP4 graph and producer ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-GRAPH-MODEL-PRODUCER-2026-09-23`. Not applicable to AVX-512:
+HIP device-buffer leases, graph capture, wave32 reduction, and the ROCm
+device-time packet have no x86 runtime counterpart. Shared numerical
+and public selector contracts remain unchanged; no x86 proof transfers.
 
 ## GFX1201 three-kernel MXFP4 graph pipeline — 2026-09-23
 

@@ -1,7 +1,8 @@
 """Manual gfx1201 FP32→E4M3→packed MXFP4→BF16 graph pipeline.
 
-The producer, GEMM, and consumer all operate on owned device buffers. The
-graph is fixed-shape; a different M requires a distinct package/session.
+The producer, GEMM, and consumer operate on retained device buffers. The
+FP32 input and BF16 result may be borrowed from model-owned ROCm tensors.
+The graph is fixed-shape; a different M requires a distinct package/session.
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from typing import Any, Callable
 import numpy as np
 
 from .rocm_mxfp4_graph import PackedFoldedGraphSession
+from .rocm_mxfp4_graph_tensor import ROCMGraphTensor
 from .rocm_mxfp4_packed_folded import PackedFoldedPayload
 from .rocm_mxfp4_native import _extract_gfx1201_hsaco, _rocm_hipcc
 from .rocm_native import ROCMNativePackage, _rocm_path
@@ -36,6 +38,19 @@ extern "C" __global__ void tessera_graph_e4m3_producer(
   float local_max = 0.0f;
   for (long k = t; k < K; k += 256)
     local_max = fmaxf(local_max, fabsf(X[m * K + k]));
+#ifdef TESSERA_PRODUCER_WAVE_REDUCE
+  for (int offset = warpSize / 2; offset > 0; offset >>= 1)
+    local_max = fmaxf(local_max, __shfl_down(local_max, offset));
+  if ((t % warpSize) == 0) maxima[t / warpSize] = local_max;
+  __syncthreads();
+  if (t == 0) {
+    float block_max = 0.0f;
+    for (int wave = 0; wave < 256 / warpSize; ++wave)
+      block_max = fmaxf(block_max, maxima[wave]);
+    row_scale = fmaxf(1.0f, block_max / 448.0f);
+    As[m] = row_scale;
+  }
+#else
   maxima[t] = local_max;
   __syncthreads();
   for (int stride = 128; stride > 0; stride >>= 1) {
@@ -46,6 +61,7 @@ extern "C" __global__ void tessera_graph_e4m3_producer(
     row_scale = fmaxf(1.0f, maxima[0] / 448.0f);
     As[m] = row_scale;
   }
+#endif
   __syncthreads();
   for (long k = t; k < K; k += 256)
     A[m * K + k] = __hip_cvt_float_to_fp8(
@@ -63,7 +79,9 @@ extern "C" __global__ void tessera_graph_bf16_relu(
 """
 
 
-def _compile_auxiliary_hsaco() -> bytes:
+def _compile_auxiliary_hsaco(producer_variant: str = "block") -> bytes:
+    if producer_variant not in ("block", "wave"):
+        raise ValueError("graph producer variant must be block or wave")
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)
     if compiler is None:
@@ -73,8 +91,9 @@ def _compile_auxiliary_hsaco() -> bytes:
         bundle = Path(directory) / "pipeline.hipfb"
         image = Path(directory) / "pipeline.hsaco"
         source.write_text(_PIPELINE_HIP)
+        flags = ["-DTESSERA_PRODUCER_WAVE_REDUCE=1"] if producer_variant == "wave" else []
         result = subprocess.run(
-            [str(compiler), "-x", "hip", "-O3", "--genco",
+            [str(compiler), "-x", "hip", "-O3", *flags, "--genco",
              "--offload-arch=gfx1201", f"--rocm-path={rocm_path}",
              str(source), "-o", str(bundle)],
             capture_output=True, text=True, check=False,
@@ -93,7 +112,14 @@ class PackedFoldedGraphPipeline(PackedFoldedGraphSession):
     def __init__(
         self, package: ROCMNativePackage, payload: PackedFoldedPayload, m: int,
         *, hip: Any | None = None,
+        input_tensor: ROCMGraphTensor | None = None,
+        output_tensor: ROCMGraphTensor | None = None,
+        producer_variant: str = "block",
     ) -> None:
+        if (input_tensor is None) != (output_tensor is None):
+            raise ValueError("model-owned graph input and output must be supplied together")
+        if producer_variant not in ("block", "wave"):
+            raise ValueError("graph producer variant must be block or wave")
         super().__init__(package, payload, m, hip=hip)
         self._aux_module = ctypes.c_void_p()
         self._producer = ctypes.c_void_p()
@@ -102,8 +128,11 @@ class PackedFoldedGraphPipeline(PackedFoldedGraphSession):
         self._final = ctypes.c_void_p()
         self._aux_sha256 = ""
         self._pending_input: np.ndarray | None = None
+        self._owns_io = input_tensor is None
+        self._borrowed: list[ROCMGraphTensor] = []
+        self._producer_variant = producer_variant
         try:
-            image = _compile_auxiliary_hsaco()
+            image = _compile_auxiliary_hsaco(producer_variant)
             self._aux_sha256 = hashlib.sha256(image).hexdigest()
             self._call("hipModuleLoadData", ctypes.byref(self._aux_module), image)
             self._call(
@@ -115,8 +144,22 @@ class PackedFoldedGraphPipeline(PackedFoldedGraphSession):
                 self._aux_module, b"tessera_graph_bf16_relu",
             )
             resident = self._resident
-            self._call("hipMalloc", ctypes.byref(self._input), resident.m * resident.k * 4)
-            self._call("hipMalloc", ctypes.byref(self._final), resident.m * resident.n * 2)
+            if input_tensor is None or output_tensor is None:
+                self._call("hipMalloc", ctypes.byref(self._input), resident.m * resident.k * 4)
+                self._call("hipMalloc", ctypes.byref(self._final), resident.m * resident.n * 2)
+            else:
+                ordinal = ctypes.c_int()
+                self._call("hipGetDevice", ctypes.byref(ordinal))
+                self._input.value = input_tensor.borrow(
+                    (resident.m, resident.k), np.float32, ordinal.value,
+                )
+                self._borrowed.append(input_tensor)
+                from tessera import runtime as rt
+
+                self._final.value = output_tensor.borrow(
+                    (resident.m, resident.n), rt._bfloat16_dtype(), ordinal.value,
+                )
+                self._borrowed.append(output_tensor)
         except BaseException:
             self.close()
             raise
@@ -261,27 +304,38 @@ class PackedFoldedGraphPipeline(PackedFoldedGraphSession):
             **super().receipt(),
             "route": "packed_folded_fp32_e4m3_gemm_relu_graph_manual",
             "producer": "fp32_to_ocp_e4m3_per_token_scale_v1",
+            "producer_variant": self._producer_variant,
             "consumer": "bf16_relu_v1",
             "aux_hsaco_sha256": self._aux_sha256,
             "shape": [self._resident.m, self._resident.n, self._resident.k],
+            "io_ownership": "session" if self._owns_io else "model_borrowed",
             "automatic_selection": False,
         }
 
     def close(self) -> None:
         if self._closed:
             return
+        synchronized = False
         try:
             super().close()
+            synchronized = True
         finally:
-            if self._input.value:
-                self._hip.hipFree(self._input)
+            try:
+                if self._owns_io:
+                    if self._input.value:
+                        self._hip.hipFree(self._input)
+                    if self._final.value:
+                        self._hip.hipFree(self._final)
+                else:
+                    for tensor in reversed(self._borrowed):
+                        tensor.release(synchronized=synchronized)
+                    self._borrowed.clear()
                 self._input.value = None
-            if self._final.value:
-                self._hip.hipFree(self._final)
                 self._final.value = None
-            if self._aux_module.value:
-                self._hip.hipModuleUnload(self._aux_module)
-                self._aux_module.value = None
+            finally:
+                if self._aux_module.value:
+                    self._hip.hipModuleUnload(self._aux_module)
+                    self._aux_module.value = None
 
 
 class PackedFoldedGraphPipelinePool:

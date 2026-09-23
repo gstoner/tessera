@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 device-owned MXFP4 HIP graph — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-DEVICE-GRAPH-2026-09-23`. Not applicable to CUDA:
+the capture APIs, RDNA4 packed HSACO, and benchmark packet are HIP-only.
+The existing NVIDIA staging/runtime contract is unchanged; no CUDA graph
+or device proof transfers from Tajasarus.
+
 ## GFX1201 resident MXFP4 HIP lifecycle — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

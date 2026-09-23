@@ -2,7 +2,7 @@
   "architecture": "gfx1201",
   "census_sha256": "1427cffc5da83c3a4ebd7c3746efb243eb863143fcb6050ff399e5a659f754d7",
   "device": "AMD Radeon RX 9070 XT",
-  "matched_packet_sha256": "92cee7f724d953a94a2ccd1b67c36cc45a8f1785106ae68e9860d15cd0b62eda",
+  "matched_packet_sha256": "9d8b6d5d7e7e9c07f581bfb9b24ecbe5bcb374954212ce68e60feb0f4645508f",
   "method": "static_selected_symbol_and_schedule_requested_bytes",
   "not_measured_dram_or_dynamic_instructions": true,
   "radiance": {
@@ -47,7 +47,7 @@
     }
   },
   "schema": "tessera.rocm.gfx1201_folded_staging_census.v1",
-  "source_revision": "489c386595bf57890d8727ede97eec0f7c5a2a97",
+  "source_revision": "6f8ba84674da52a710370dc07b83ac7ec2e13637",
   "tessera": {
     "code_object": {
       "isa": {
@@ -66,7 +66,7 @@
       }
     },
     "generator_sha256": "14eecec2445bc2ea4a00a4958778ab927da4354dad2e3c8a48dac59952583087",
-    "image_sha256": "11cc6099c8e10f424103e7f0dbaaf94d76b43e5c8493e774290eac48a006c172",
+    "image_sha256": "f35ae82e16a925806efcc263376ed782b845aac9a81c00243d51a274bb9b604d",
     "isa": {
       "ds_load_2addr_b64": 8,
       "ds_load_b64": 8,

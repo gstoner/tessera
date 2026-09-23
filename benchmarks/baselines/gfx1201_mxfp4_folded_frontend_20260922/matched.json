@@ -3,7 +3,7 @@
   "benchmark_sha256": "b2a4286fc0ea554d5d81949a5ced8c8c1c938b8d9cb90415879a9a23ae362062",
   "device": "AMD Radeon RX 9070 XT",
   "folded_generator_sha256": "14eecec2445bc2ea4a00a4958778ab927da4354dad2e3c8a48dac59952583087",
-  "frontend_sha256": "37fa3adc7d0cb80199e7807952ab515a9bff583114d5631de78b422140746b33",
+  "frontend_sha256": "bedb4272bf2c9de73bfbe25367732d4038359fab7caed95934703db5f5a0750b",
   "materializer_sha256": "5fa20cfe34b4df26ffe74984ac6b0536f7f91e1b6d3af0c7c84a4933c70461f2",
   "radiance": {
     "binary_sha256": "c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6",
@@ -15,7 +15,7 @@
     {
       "case": "prefill_256x5120x8704",
       "engine": "tessera",
-      "median_ms": 0.5173788468043009,
+      "median_ms": 0.520409345626831,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.fragment.v1",
         "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
@@ -50,33 +50,34 @@
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.5355480909347534,
-        0.4790605703989665,
-        0.5304871797561646,
-        0.5045429865519205,
-        0.5173788468043009,
-        0.49899717171986896,
-        0.5232630173365275,
-        0.503077507019043,
-        0.5197557608286539,
-        0.5060258309046427,
-        0.5214715798695883
+        0.5225369930267334,
+        0.475116491317749,
+        0.5395663976669312,
+        0.5010197559992472,
+        0.520409345626831,
+        0.5026588439941406,
+        0.5247034231821696,
+        0.4964924256006877,
+        0.5230291684468588,
+        0.5051513512929281,
+        0.525047500928243
       ]
     },
     {
       "case": "prefill_256x5120x8704",
       "engine": "tessera_folded",
-      "median_ms": 0.18235625823338827,
+      "median_ms": 0.18116432428359985,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
         "frontend_receipt": {
           "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "artifact_image_digest": "4fe3b7544c164aba212e42597eed2176a9764b8b7a1aee93ab602e19682b0875",
           "entry_symbol": "tessera_mxfp4_folded_prefill",
           "fold_inexact_value_count": 0,
           "fold_lossless": true,
           "graph_ir_sha256": "150d8dc47b8ec9c301c4a4c22a38467225f092e9a0a2bacd9100e3417b206049",
-          "hsaco_sha256": "8f2e866baf961e9c71f28f45135f77446100267c4ee0a05803623adaec51040f",
+          "hsaco_sha256": "bef9cd6f1a8556cc48b7190645d3daf375adb4837f76827cbfe1a2d74afe2eba",
           "numeric_policy": "folded_row_reference_explicit_approximate",
           "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
           "route": "folded_row_reference_bm256_tm4",
@@ -91,7 +92,7 @@
           "target_ir_sha256": "0e1a3c97fda8107dde8f9e1f80305c0c3d18d26fb9b1595fb609aeb3b57f560f",
           "tile_ir_sha256": "b592d107a66d718ec5886b71bcdab4b0a91fad0fff21967de15ff01dab2391f7"
         },
-        "image_sha256": "9f7369e2f6f076f4d09c622641d58a761666e2fb778dfc35fa5b8e8b880090a0",
+        "image_sha256": "bef9cd6f1a8556cc48b7190645d3daf375adb4837f76827cbfe1a2d74afe2eba",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -136,46 +137,46 @@
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.16996300220489502,
-        0.16670300563176474,
-        0.18656041224797568,
-        0.17142542203267416,
-        0.18623282512029013,
-        0.17862208684285483,
-        0.18235625823338827,
-        0.17698458830515543,
-        0.1857819159825643,
-        0.18592433134714761,
-        0.18457184235254923
+        0.17051184177398682,
+        0.1710918347040812,
+        0.1835659146308899,
+        0.17275283734003702,
+        0.1838759183883667,
+        0.17620191971460977,
+        0.18448925018310547,
+        0.18116432428359985,
+        0.18381317456563315,
+        0.17643491427103677,
+        0.18286732832590738
       ]
     },
     {
       "case": "prefill_256x5120x8704",
       "engine": "radiance",
-      "median_ms": 0.14285632967948914,
+      "median_ms": 0.14173991481463113,
       "metadata": {
         "row_reference_fold": "exact_delta_le_2",
         "weight_layout": "fragment_order"
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.13890807827313742,
-        0.1370164155960083,
-        0.14245299498240152,
-        0.13946466644605002,
-        0.14451966683069864,
-        0.14285632967948914,
-        0.14312883218129477,
-        0.14169299602508545,
-        0.14460042119026184,
-        0.14310283462206522,
-        0.14366783698399863
+        0.13779016335805258,
+        0.1383234163125356,
+        0.14173433184623718,
+        0.1400635838508606,
+        0.14447433749834696,
+        0.14125358064969382,
+        0.14345349868138632,
+        0.14355183641115823,
+        0.1429265836874644,
+        0.14173991481463113,
+        0.1429799199104309
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "tessera",
-      "median_ms": 4.359824180603027,
+      "median_ms": 4.361920674641927,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.fragment.v1",
         "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
@@ -210,33 +211,34 @@
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        4.079821268717448,
-        4.060552597045898,
-        4.371778806050618,
-        4.349259694417317,
-        4.363429705301921,
-        4.354816754659017,
-        4.367388407389323,
-        4.3573306401570635,
-        4.3837464650472,
-        4.359824180603027,
-        4.373320897420247
+        4.0748599370320635,
+        4.063070933024089,
+        4.373624801635742,
+        4.345261573791504,
+        4.3671979904174805,
+        4.351009368896484,
+        4.372435887654622,
+        4.361920674641927,
+        4.376267115275065,
+        4.358761787414551,
+        4.376811345418294
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "tessera_folded",
-      "median_ms": 1.2422423362731934,
+      "median_ms": 1.2445476055145264,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
         "frontend_receipt": {
           "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "artifact_image_digest": "1b696c45b7bbabce05f7778237839c1bc0885dcdfd3b9a4e278cc46aad99d406",
           "entry_symbol": "tessera_mxfp4_folded_prefill",
           "fold_inexact_value_count": 0,
           "fold_lossless": true,
           "graph_ir_sha256": "648b6a948b0d30420c4c7346b60bd02ba6ed3e8bef9c7715f088c9c35b2735ff",
-          "hsaco_sha256": "377ca4bf7eda150fd48d5345a0fbc391e9929e5c3e664c91ebd5c77aa0ac88f4",
+          "hsaco_sha256": "c57858dd09c7612b1bf5707aa2aca7f652631d3b8ad7942b6a4a4fbf6f1a80cf",
           "numeric_policy": "folded_row_reference_explicit_approximate",
           "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
           "route": "folded_row_reference_bm256_tm4",
@@ -251,7 +253,7 @@
           "target_ir_sha256": "8429b863391a48cf12e92b5f34efc60be84420673d61eecc5d339e9e59aff1d6",
           "tile_ir_sha256": "7e93a72ed53f714d2182de07f69bd2008d1898c1016226d0100139d745dc689e"
         },
-        "image_sha256": "d8b2a594f5a207decdede8da9bab6dfbd66788f03956bf937ac3ea42bf024531",
+        "image_sha256": "c57858dd09c7612b1bf5707aa2aca7f652631d3b8ad7942b6a4a4fbf6f1a80cf",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -296,44 +298,44 @@
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        1.12662672996521,
-        1.1420249938964844,
-        1.2525676886240642,
-        1.2618434429168701,
-        1.2422423362731934,
-        1.255918820699056,
-        1.2384135723114014,
-        1.255170186360677,
-        1.2361536820729573,
-        1.2562193870544434,
-        1.239006519317627
+        1.12454088528951,
+        1.1408140659332275,
+        1.2612055937449138,
+        1.2601780891418457,
+        1.2324217160542805,
+        1.2558180491129558,
+        1.2445476055145264,
+        1.2597282727559407,
+        1.2338390350341797,
+        1.2616902192433674,
+        1.2395525773366292
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "radiance",
-      "median_ms": 0.8889366785685221,
+      "median_ms": 0.8915274937947592,
       "metadata": {
         "row_reference_fold": "exact_delta_le_2",
         "weight_layout": "fragment_order"
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        0.8523806730906168,
-        0.868012269337972,
-        0.8941009839375814,
-        0.9177710215250651,
-        0.8873867988586426,
-        0.913536787033081,
-        0.8875652154286703,
-        0.9182251294453939,
-        0.8847745259602865,
-        0.9149010976155599,
-        0.8889366785685221
+        0.8525680700937907,
+        0.8681094646453857,
+        0.8915274937947592,
+        0.9167879422505697,
+        0.8988499641418457,
+        0.9074399471282959,
+        0.88637375831604,
+        0.9193265438079834,
+        0.888484001159668,
+        0.9213809967041016,
+        0.8893742561340332
       ]
     }
   ],
   "schema": "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v2",
-  "source_revision": "489c386595bf57890d8727ede97eec0f7c5a2a97",
+  "source_revision": "6f8ba84674da52a710370dc07b83ac7ec2e13637",
   "timing_order": "alternating_interleaved_per_shape"
 }

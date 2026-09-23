@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 MXFP4 receipt and device coverage — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-MXFP4-RECEIPT-COVERAGE-2026-09-22`.
+Not applicable to CUDA: the corrected HSACO-byte receipt and RDNA4 folded
+carrier have no NVFP4/PTX consumer. Pinned Radiance timing and gfx1201
+lowering/launch tests are not NVIDIA evidence or selector input.
+
+
 ## GFX1201 folded frontend and matched-census correction — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-FOLDED-FRONTEND-2026-09-22`.

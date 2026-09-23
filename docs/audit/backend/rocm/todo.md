@@ -7,6 +7,24 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 MXFP4 receipt and expanded frontend proof — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1 / ROCM-2; sync
+`GFX1201-MXFP4-RECEIPT-COVERAGE-2026-09-22`. The folded route receipt now
+separates SHA-256 of emitted HSACO bytes from the composite artifact-image
+digest. Its checked-in matched packet was remeasured with pinned Radiance
+WPERM=1, and the older losing B-cache packet's metadata was repaired from
+its retained payload hash without altering timing. The generic exact selector
+still refuses folded layout absent explicit approximate authoring. Tajasarus
+passes 13/13 folded device cases, including new ragged `65×48×64` and
+multi-K-step `257×80×192` frontend lowering/launch cases. The 95-case
+scheduled-package gate was rebuilt and rerun on current `main` revision
+`89b2f2fd` with zero skips; that is separate from the follow-on frontend
+commit. No automatic folded selector or default-route promotion follows.
+Matched folded/Radiance timing remains 1.28×/1.40×. Continue A/B staging
+experiments and full selector admission only after matched device evidence.
+
+
 ## GFX1201 folded frontend and layout-verified prefill — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1 with IKF-1; sync

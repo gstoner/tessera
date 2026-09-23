@@ -8,6 +8,15 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 MXFP4 receipt and device coverage — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-MXFP4-RECEIPT-COVERAGE-2026-09-22`.
+Not applicable to Metal: the corrected HSACO-byte receipt, AMD artifact
+identity, folded layout, and new gfx1201 device cases have no Apple consumer.
+The refreshed matched packet changes only ROCm evidence; no Apple numerical,
+selector, or exact-device proof transfers.
+
+
 ## GFX1201 folded frontend and matched-census correction — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-FOLDED-FRONTEND-2026-09-22`.

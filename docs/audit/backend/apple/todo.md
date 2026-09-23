@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 resident MXFP4 HIP lifecycle — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-RESIDENT-HIP-2026-09-23`. Not applicable to Metal
+execution: retained HIP modules, streams, HSACO buffers, and HIP-event
+measurements are AMD runtime contracts. The MXFP4 Graph/Target ABI and
+numerical policy are unchanged. No Apple device or selector proof transfers.
+
 ## GFX1201 packed-word permute decode — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-PERMUTE-DECODE-2026-09-23`.

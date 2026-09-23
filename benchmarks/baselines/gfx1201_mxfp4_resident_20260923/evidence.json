@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "description": "Tajasarus gfx1201 same-HSACO manual lifecycle comparison; source hashes bind uncommitted additions atop merged main revision",
+  "results": [
+    {
+      "device_name": "AMD Radeon RX 9070 XT",
+      "device_ordinal": 0,
+      "full_output_equals_legacy": true,
+      "host": "tajasarus",
+      "hsaco_sha256": "f7f2fc6f4c319bfbb86aa8f18352c497c2196f8e4d9229070069b88637a489f9",
+      "legacy_host_wall_us_median": 19455.922,
+      "resident_host_wall_us_median": 2245.638,
+      "resident_kernel_event_us_median": 202.69129276275635,
+      "resident_receipt": {
+        "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+        "activation_uploads": 9,
+        "automatic_selection": false,
+        "image_sha256": "f7f2fc6f4c319bfbb86aa8f18352c497c2196f8e4d9229070069b88637a489f9",
+        "kernel_launches": 78,
+        "module_loads": 1,
+        "route": "packed_folded_resident_hip_manual",
+        "target": "rocm_gfx1201",
+        "weight_sha256": "16942cab77e7f18078ae0e670c0d30ae0d729e27d8becfcf519e62aadf3dc83e",
+        "weight_uploads": 1
+      },
+      "revision": "5fc724c2789b776f1245e527d4f74ee72867d747",
+      "sampled_bf16_exact": true,
+      "shape": [
+        256,
+        5120,
+        8704
+      ],
+      "source_sha256": {
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_resident.py": "8bce2a7b8ba18fd8fc563f51eb20cc0fab3690a1c8f89713fe3aecd532c6e226",
+        "python/tessera/compiler/rocm_mxfp4_resident.py": "8bda941745cd303c20e36fa8efd1786f0e1404e2469a6178c921b4ba54db0755"
+      },
+      "sync_key": "GFX1201-MXFP4-RESIDENT-HIP-2026-09-23",
+      "target": "rocm_gfx1201",
+      "timing_note": "Host-wall includes pageable NumPy transfers; HIP async copies may block. Event timing excludes H2D/D2H and is not directly comparable to host-wall.",
+      "weight_sha256": "16942cab77e7f18078ae0e670c0d30ae0d729e27d8becfcf519e62aadf3dc83e"
+    },
+    {
+      "device_name": "AMD Radeon RX 9070 XT",
+      "device_ordinal": 0,
+      "full_output_equals_legacy": true,
+      "host": "tajasarus",
+      "hsaco_sha256": "29fadab143c6f523cfca7f303f17b540e28440cc3373831eea9e5377ad00e5e1",
+      "legacy_host_wall_us_median": 54707.171,
+      "resident_host_wall_us_median": 6639.364,
+      "resident_kernel_event_us_median": 1076.9583702087402,
+      "resident_receipt": {
+        "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+        "activation_uploads": 9,
+        "automatic_selection": false,
+        "image_sha256": "29fadab143c6f523cfca7f303f17b540e28440cc3373831eea9e5377ad00e5e1",
+        "kernel_launches": 78,
+        "module_loads": 1,
+        "route": "packed_folded_resident_hip_manual",
+        "target": "rocm_gfx1201",
+        "weight_sha256": "b97e4549af171fc51f9dd5602d0740fda1f2ae2c33e8d54be30d14df33769c68",
+        "weight_uploads": 1
+      },
+      "revision": "5fc724c2789b776f1245e527d4f74ee72867d747",
+      "sampled_bf16_exact": true,
+      "shape": [
+        1024,
+        17408,
+        5120
+      ],
+      "source_sha256": {
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_resident.py": "8bce2a7b8ba18fd8fc563f51eb20cc0fab3690a1c8f89713fe3aecd532c6e226",
+        "python/tessera/compiler/rocm_mxfp4_resident.py": "8bda941745cd303c20e36fa8efd1786f0e1404e2469a6178c921b4ba54db0755"
+      },
+      "sync_key": "GFX1201-MXFP4-RESIDENT-HIP-2026-09-23",
+      "target": "rocm_gfx1201",
+      "timing_note": "Host-wall includes pageable NumPy transfers; HIP async copies may block. Event timing excludes H2D/D2H and is not directly comparable to host-wall.",
+      "weight_sha256": "b97e4549af171fc51f9dd5602d0740fda1f2ae2c33e8d54be30d14df33769c68"
+    }
+  ]
+}

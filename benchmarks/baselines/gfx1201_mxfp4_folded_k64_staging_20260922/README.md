@@ -10,8 +10,8 @@ A/B vector-copy path. K32-tail packages retain guarded copies.
 
 The first pre-promotion ablation measured 0.1660 versus 0.1775 ms on
 `256x5120x8704`, and 1.1532 versus 1.2338 ms on `1024x17408x5120`.
-The clean-checkout packet from commit `0e21ea60` measured 0.1693 versus
-Radiance 0.1434 ms and 1.1812 versus Radiance 0.8980 ms. These are kernel HIP-event medians, not
+The clean-checkout packet from commit `52a29742` measured 0.1668 versus
+Radiance 0.1438 ms and 1.1778 versus Radiance 0.8958 ms. These are kernel HIP-event medians, not
 end-to-end model or measured DRAM times. Sample variation makes single-percent
 effects inconclusive.
 

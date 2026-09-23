@@ -7,6 +7,22 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 packed-folded decode proof — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-FOLDED-DECODE-2026-09-23`. The versioned fragment-order
+E2M1/K32-plus-reference ABI now has a separate HIP packed-decode kernel,
+Graph→Target schedule-bound materializer, explicit launch receipt, and
+exact-target manual runtime launcher. Tajasarus passes 11/11 BF16 device
+cases across ragged N48/N80, K64/K128, lossless/lossy folds, all 16 E2M1
+codes, exponent deltas and reserved zero blocks. The integer-register
+decode improves on divergent table loads, but provisional matched HIP-event
+timing on the two production prefill shapes is about 1.65×/1.63× slower
+than pinned Radiance and slower than Tessera expanded-folded prefill. Keep
+the automatic selector closed; retain exact K32 as the correctness default.
+Next: analyze decode/scale traffic and ISA resource costs from the clean
+packet, then tune one lever at a time before selector admission.
+
 ## GFX1201 packed-folded physical ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

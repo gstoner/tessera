@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 paired-lane MXFP4 benchmark schema — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-VECTOR-PAIR-2026-09-23`. Not applicable to CUDA: the
+RDNA4 fragment-word load and v4 HIP-event/HSACO benchmark schema do not
+define an NVFP4/PTX schedule. Shared numerical policy and NVIDIA selection
+are unchanged; no SM120 proof transfers from Tajasarus.
+
 ## GFX1201 model-owned MXFP4 graph and producer ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

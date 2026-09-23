@@ -30,7 +30,7 @@ def packed_folded_engine(
     hip: ctypes.CDLL, case: base.Case, inputs: dict[str, np.ndarray], copies: int,
     *, integer_decode: bool, batched_loads: bool = False,
     batched_a_loads: bool = False, reuse_pair_scales: bool = False,
-    permute_decode: bool = False,
+    permute_decode: bool = False, vector_pair_loads: bool = False,
 ) -> tuple[base._Engine, PackedFoldedPayload]:
     payload = prepare_packed_folded_payload(
         inputs["packed_row_major"], inputs["b_scale"], allow_approximate=True,
@@ -39,7 +39,7 @@ def packed_folded_engine(
         case.m, payload, integer_decode=integer_decode,
         batched_loads=batched_loads, batched_a_loads=batched_a_loads,
         reuse_pair_scales=reuse_pair_scales,
-        permute_decode=permute_decode,
+        permute_decode=permute_decode, vector_pair_loads=vector_pair_loads,
     )
     module = ctypes.c_void_p()
     function = ctypes.c_void_p()
@@ -75,6 +75,7 @@ def packed_folded_engine(
 
     engine = base._Engine(
         (
+            "tessera_packed_vector_pair_permute" if vector_pair_loads else
             "tessera_packed_batched_b_permute" if permute_decode else
             "tessera_packed_pair_scale_integer" if reuse_pair_scales else
             "tessera_packed_batched_ab_integer" if batched_a_loads and batched_loads else
@@ -110,6 +111,7 @@ def benchmark(
     radiance_revision: str, tessera_opt: Path,
     include_batched: bool = False,
     include_permute: bool = False,
+    include_vector_pair: bool = False,
     warmup: int = 6, trials: int = 11, iterations: int = 12,
 ) -> dict[str, object]:
     if rt._rocm_live_arch() != "gfx1201":
@@ -163,6 +165,13 @@ def benchmark(
             )
             batched_engines.append(candidate)
             batched_payloads.append(candidate_payload)
+        if include_vector_pair:
+            candidate, candidate_payload = packed_folded_engine(
+                hip, case, inputs, 3, integer_decode=False,
+                permute_decode=True, vector_pair_loads=True,
+            )
+            batched_engines.append(candidate)
+            batched_payloads.append(candidate_payload)
         independent = base._radiance_engine(hip, radiance, case, inputs, 3)
         engines = [exact, expanded, packed_table, packed_integer]
         engines.extend(batched_engines)
@@ -205,6 +214,8 @@ def benchmark(
     root = Path(__file__).resolve().parents[2]
     return {
         "schema": (
+            "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v4"
+            if include_vector_pair else
             "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v3"
             if include_permute else
             "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v2"
@@ -212,6 +223,8 @@ def benchmark(
             "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v1"
         ),
         "sync_key": (
+            "GFX1201-PACKED-VECTOR-PAIR-2026-09-23"
+            if include_vector_pair else
             "GFX1201-PACKED-PERMUTE-DECODE-2026-09-23"
             if include_permute else
             "GFX1201-PACKED-STAGING-ABLATION-2026-09-23"
@@ -234,7 +247,7 @@ def benchmark(
         "benchmark_sha256": base._sha256(Path(__file__)),
         **({"isa_inspector_sha256": base._sha256(
             root / "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"
-        )} if include_permute else {}),
+        )} if include_permute or include_vector_pair else {}),
         "timing_order": "alternating_interleaved_per_shape",
         "rows": rows,
     }
@@ -249,6 +262,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--include-batched", action="store_true")
     parser.add_argument("--include-permute", action="store_true")
+    parser.add_argument("--include-vector-pair", action="store_true")
     args = parser.parse_args()
     packet = benchmark(
         tuple(args.case or (
@@ -258,6 +272,7 @@ def main() -> None:
         args.radiance_module, radiance_revision=args.radiance_revision,
         tessera_opt=args.tessera_opt, include_batched=args.include_batched,
         include_permute=args.include_permute,
+        include_vector_pair=args.include_vector_pair,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n")

@@ -7,6 +7,20 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 paired-lane packed MXFP4 prefill ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-VECTOR-PAIR-2026-09-23`. A manual, ABI-preserving paired
+fragment-word/scale-load producer passed exact K32 BF16 agreement on both
+matched Tajasarus prefill shapes. It improves the smaller packed-permute
+kernel 186.4→174.1 µs but regresses the wide kernel 1160.8→1185.9 µs;
+Radiance remains 137.6/895.8 µs. The v4 benchmark packet and selected
+timed-HSACO ISA/resource evidence are [archived](../../../../benchmarks/baselines/gfx1201_mxfp4_vector_pair_20260923/README.md).
+No default or selector promotion. Next isolate A-stage address arithmetic,
+register lifetime, and occupancy before another one-variable matched run.
+The graph admission assessment now explicitly refuses malformed timing rather
+than raising, with the prior hardware packet retained as historical evidence.
+
 ## GFX1201 model-owned MXFP4 graph and producer ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

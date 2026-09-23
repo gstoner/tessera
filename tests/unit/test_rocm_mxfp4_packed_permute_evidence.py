@@ -1,4 +1,4 @@
-"""Current-source and timed-HSACO checks for the gfx1201 word-decode probe."""
+"""Historical source and timed-HSACO checks for the gfx1201 word-decode probe."""
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +13,7 @@ PACKET = (
 )
 
 
-def test_packed_permute_packet_binds_current_sources_and_timed_isa() -> None:
+def test_packed_permute_packet_binds_historical_sources_and_timed_isa() -> None:
     packet = json.loads(PACKET.read_text())
     assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v3"
     assert packet["sync_key"] == "GFX1201-PACKED-PERMUTE-DECODE-2026-09-23"
@@ -24,10 +24,16 @@ def test_packed_permute_packet_binds_current_sources_and_timed_isa() -> None:
         "dfdfa3832922c9a4253133f09c1f5c0d39748fc7"
     )
     assert packet["radiance"]["wperm"] == 1
+    # v4 adds an opt-in paired-lane producer to these two sources. Keep the
+    # immutable v3 packet pinned to its own tested source hashes.
+    assert packet["packed_abi_sha256"] == (
+        "3b4e321be3107c6be37bdf3843aa233711a1cd10b4bc41feba88313012e22218"
+    )
+    assert packet["benchmark_sha256"] == (
+        "69d336432b4b47239c90e50da0427ed04e35afbf8f9d603adba7379a31d82417"
+    )
     for key, path in {
         "generator_sha256": "python/tessera/compiler/rocm_mxfp4_folded.py",
-        "packed_abi_sha256": "python/tessera/compiler/rocm_mxfp4_packed_folded.py",
-        "benchmark_sha256": "benchmarks/rocm/benchmark_gfx1201_mxfp4_packed_folded.py",
         "isa_inspector_sha256": "benchmarks/rocm/inspect_gfx1201_folded_prefill.py",
     }.items():
         assert packet[key] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()

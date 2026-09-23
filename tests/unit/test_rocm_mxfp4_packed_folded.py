@@ -220,3 +220,31 @@ def test_pair_scale_reuse_loads_one_scale_and_reference_for_two_k16_words() -> N
     assert source.index("words[q] = reinterpret_cast") < source.index(
         "const unsigned int word = words[q];"
     )
+
+
+def test_vector_pair_stage_covers_each_fragment_slot_once() -> None:
+    with pytest.raises(ValueError, match="require permute decode"):
+        emit_mxfp4_packed_folded_prefill_hip(vector_pair_loads=True)
+    source = emit_mxfp4_packed_folded_prefill_hip(
+        permute_decode=True, vector_pair_loads=True,
+    )
+    assert "const int first_slot = tid * 2;" in source
+    assert "const unsigned long long packed =" in source
+    assert "const unsigned short block_scales =" in source
+    assert "const unsigned short row_refs =" in source
+    assert "__DECODE_EXPRESSION__" not in source
+    slots = set()
+    stores = set()
+    for tid in range(256):
+        first = tid * 2
+        lane = first & 31
+        tile = first >> 5
+        n_tile, k_step = tile >> 2, tile & 3
+        for q in range(2):
+            slots.add((n_tile, k_step, lane + q))
+            stores.add((n_tile * 16 + (lane & 15) + q,
+                        k_step * 16 + (lane >> 4) * 8))
+    assert len(slots) == 512
+    assert len(stores) == 512
+    assert slots == {(nt, ks, lane) for nt in range(4)
+                     for ks in range(4) for lane in range(32)}

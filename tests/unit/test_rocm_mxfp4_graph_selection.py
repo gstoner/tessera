@@ -1,6 +1,10 @@
 """The MXFP4 graph selector stays closed on host-only wins."""
 from __future__ import annotations
 
+import copy
+
+import pytest
+
 from tessera.compiler.rocm_mxfp4_graph_selection import assess_graph_pipeline_admission
 
 
@@ -66,3 +70,40 @@ def test_admission_refuses_missing_exact_device_or_shape_proof() -> None:
     assert receipt["automatic_selection"] is False
     assert "exact_device_proof_missing" in receipt["refusals"]
     assert "prefill_shape_coverage_incomplete" in receipt["refusals"]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("direct_triple", None),
+    ("graph_triple", {}),
+    ("graph_triple", {"kernel_event_us_median": float("nan")}),
+    ("graph_triple", {"kernel_event_us_median": float("inf")}),
+    ("graph_triple", {"kernel_event_us_median": 0}),
+    ("graph_triple", {"kernel_event_us_median": True}),
+])
+def test_admission_refuses_malformed_round_timing(field: str, value: object) -> None:
+    packet = {
+        "benchmarks": [_row(shape, graph_us=99.0) for shape in sorted((
+            (256, 5120, 8704), (1024, 17408, 5120),
+        ))],
+    }
+    malformed = copy.deepcopy(packet)
+    malformed["benchmarks"][0]["rounds"][0][field] = value
+    receipt = assess_graph_pipeline_admission(malformed)
+    assert "malformed_benchmark_timing" in receipt["refusals"]
+    assert receipt["selected_producer_variant"] == "block"
+    assert receipt["automatic_selection"] is False
+
+
+@pytest.mark.parametrize("summary", [
+    None, {}, {"block": {}, "wave": {}},
+    {"block": {"producer_stage": {"kernel_event_us_median": -1}}},
+])
+def test_admission_refuses_malformed_summary(summary: object) -> None:
+    packet = {"benchmarks": [
+        _row((256, 5120, 8704), graph_us=99.0),
+        _row((1024, 17408, 5120), graph_us=99.0),
+    ]}
+    packet["benchmarks"][0]["summary"] = summary
+    receipt = assess_graph_pipeline_admission(packet)
+    assert "malformed_benchmark_timing" in receipt["refusals"]
+    assert receipt["selected_producer_variant"] == "block"

@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 paired-lane MXFP4 benchmark schema — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-VECTOR-PAIR-2026-09-23`. Not applicable to AVX-512:
+the opt-in RDNA4 fragment-word loads and v4 HIP-event/HSACO benchmark
+schema do not alter x86 numerical, runtime, or selector contracts. No
+x86 exact-device performance result transfers.
+
 ## GFX1201 model-owned MXFP4 graph and producer ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

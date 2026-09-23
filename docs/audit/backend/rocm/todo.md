@@ -20,6 +20,8 @@ guarded K32-tail path for direct package callers. Tajasarus folded device
 proof passes 13/13. Clean-revision matched HIP-event medians are 0.1693 versus
 Radiance 0.1434 ms and 1.1812 versus 0.8980 ms, roughly 1.18× and 1.32×
 remaining gaps. Do not promote an automatic selector from these timings.
+The refreshed packet records selected-symbol ISA from each timed HSACO,
+rather than recompiling a surrogate shape for the static census.
 Unconditional K16 compute steps increased VGPRs 109→117 and lost versus the
 copy-only change; address hoisting and stricter K-step barrier were small or
 mixed. A full-tile epilogue ablation raised VGPRs to 171 and is not selected.

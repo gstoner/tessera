@@ -17,15 +17,8 @@ import shutil
 import subprocess
 import tempfile
 
-import numpy as np
-
 from tessera import runtime as rt
-from tessera.compiler import rocm_mxfp4 as mx
-from tessera.compiler.rocm_mxfp4_folded import (
-    package_mxfp4_folded_prefill, prepare_folded_weights,
-)
 from tests._support import rocm_isa
-from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as base
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +43,39 @@ def _mnemonics(isa: str) -> dict[str, int]:
         if match and match.group(1).startswith(_ISA_FAMILIES):
             counts[match.group(1)] += 1
     return dict(sorted(counts.items()))
+
+
+def selected_symbol_isa_evidence(payload: bytes, entry_symbol: str) -> dict[str, object]:
+    """Fingerprint the selected kernel in the exact HSACO passed to HIP."""
+    isa = rocm_isa.disassemble(payload, chip="gfx1201")
+    lines = isa.splitlines()
+    headers = [
+        i for i, line in enumerate(lines)
+        if re.fullmatch(rf"[0-9a-f]+ <{re.escape(entry_symbol)}>:", line.strip())
+    ]
+    if len(headers) != 1:
+        raise RuntimeError(
+            f"timed HSACO must contain exactly one {entry_symbol} symbol"
+        )
+    selected: list[str] = []
+    for line in lines[headers[0] + 1:]:
+        if re.fullmatch(r"[0-9a-f]+ <[^>]+>:", line.strip()):
+            break
+        if "//" not in line:
+            continue
+        instruction = " ".join(line.split("//", 1)[0].split())
+        if re.match(r"^[a-z][a-z0-9_]+\b", instruction):
+            selected.append(instruction)
+    if len(selected) < 32:
+        raise RuntimeError("selected timed symbol has too few disassembled instructions")
+    normalized = "\n".join(selected) + "\n"
+    return {
+        "entry_symbol": entry_symbol,
+        "payload_sha256": hashlib.sha256(payload).hexdigest(),
+        "instruction_stream_sha256": hashlib.sha256(normalized.encode()).hexdigest(),
+        "instruction_count": len(selected),
+        "mnemonics": _mnemonics(normalized),
+    }
 
 
 def _radiance_selected_isa(module: Path) -> tuple[str, str]:
@@ -87,22 +113,6 @@ def _radiance_selected_isa(module: Path) -> tuple[str, str]:
         return isa, _sha256(image)
 
 
-def _tessera_selected_isa() -> tuple[str, dict[str, object], str]:
-    codes = np.ones((48, 64), dtype=np.uint8)
-    scales = np.full((2, 48), 127, dtype=np.uint8)
-    folded = prepare_folded_weights(
-        mx.pack_e2m1_codes(codes), scales, allow_approximate=True,
-    )
-    package = package_mxfp4_folded_prefill(
-        65, 48, 64, folded, allow_approximate=True,
-    )
-    return (
-        rocm_isa.disassemble(package.image.payload, chip="gfx1201"),
-        base._code_object_evidence(package.image.payload),
-        hashlib.sha256(package.image.payload).hexdigest(),
-    )
-
-
 def requested_bytes(m: int, n: int, k: int) -> dict[str, int]:
     """Source-derived global bytes for BM256/BN64/BK64, before cache effects."""
     if m <= 64 or n <= 0 or k <= 0 or k % 64:
@@ -136,16 +146,43 @@ def inspect(
         raise ValueError("Radiance source revision does not match pinned comparator")
     matched = json.loads(matched_packet.read_text())
     if (
-        matched.get("schema") != "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v2"
+        matched.get("schema") != "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v3"
         or matched.get("radiance", {}).get("wperm") != 1
         or matched.get("radiance", {}).get("binary_sha256") != _sha256(radiance_module)
     ):
-        raise ValueError("ISA census requires a layout-verified matched v2 packet")
-    tessera_isa, tessera_code_object, tessera_image_sha = _tessera_selected_isa()
-    radiance_isa, radiance_image_sha = _radiance_selected_isa(radiance_module)
+        raise ValueError("ISA census requires a layout-verified matched v3 packet")
     cases = ((256, 5120, 8704), (1024, 17408, 5120))
+    timed_images: dict[str, dict[str, object]] = {}
+    for m, n, k in cases:
+        case = f"prefill_{m}x{n}x{k}"
+        rows = [
+            row for row in matched["rows"]
+            if row["case"] == case and row["engine"] == "tessera_folded"
+        ]
+        if len(rows) != 1:
+            raise ValueError(f"ISA census requires one timed folded row for {case}")
+        metadata = rows[0]["metadata"]
+        selected = metadata.get("selected_isa")
+        if not isinstance(selected, dict):
+            raise ValueError(f"timed folded row for {case} lacks selected ISA")
+        receipt = metadata.get("frontend_receipt") or {}
+        if (
+            selected.get("payload_sha256") != metadata.get("image_sha256")
+            or selected.get("payload_sha256") != receipt.get("hsaco_sha256")
+            or selected.get("entry_symbol") != receipt.get("entry_symbol")
+        ):
+            raise ValueError(f"selected ISA is not bound to timed HSACO for {case}")
+        timed_images[case] = {
+            "image_sha256": selected["payload_sha256"],
+            "entry_symbol": selected["entry_symbol"],
+            "instruction_stream_sha256": selected["instruction_stream_sha256"],
+            "instruction_count": selected["instruction_count"],
+            "isa": selected["mnemonics"],
+            "resources": metadata["resources"],
+        }
+    radiance_isa, radiance_image_sha = _radiance_selected_isa(radiance_module)
     return {
-        "schema": "tessera.rocm.gfx1201_folded_staging_census.v1",
+        "schema": "tessera.rocm.gfx1201_folded_staging_census.v2",
         "device": "AMD Radeon RX 9070 XT",
         "architecture": "gfx1201",
         "source_revision": subprocess.run(
@@ -153,12 +190,10 @@ def inspect(
             capture_output=True, text=True, check=True,
         ).stdout.strip(),
         "census_sha256": _sha256(Path(__file__)),
-        "method": "static_selected_symbol_and_schedule_requested_bytes",
+        "method": "timed_hsaco_selected_symbol_and_schedule_requested_bytes",
         "not_measured_dram_or_dynamic_instructions": True,
         "tessera": {
-            "image_sha256": tessera_image_sha,
-            "isa": _mnemonics(tessera_isa),
-            "code_object": tessera_code_object,
+            "timed_images": timed_images,
             "generator_sha256": _sha256(
                 ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py"
             ),

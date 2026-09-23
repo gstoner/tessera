@@ -22,6 +22,9 @@ from tessera.compiler.rocm_mxfp4_folded_frontend import (
     compile_folded_scaled_matmul,
 )
 from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as base
+from benchmarks.rocm.inspect_gfx1201_folded_prefill import (
+    selected_symbol_isa_evidence,
+)
 
 
 def folded_engine(
@@ -46,6 +49,9 @@ def folded_engine(
         )
     )
     isa = base._code_object_evidence(package.image.payload)
+    selected_isa = selected_symbol_isa_evidence(
+        package.image.payload, package.descriptor.entry_symbol,
+    )
     module = ctypes.c_void_p()
     function = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(module), package.image.payload) != 0:
@@ -83,6 +89,7 @@ def folded_engine(
         {
             "abi": package.descriptor.abi_id,
             "image_sha256": hashlib.sha256(package.image.payload).hexdigest(),
+            "selected_isa": selected_isa,
             "compiler_fingerprint": package.image.compiler_fingerprint,
             "toolchain_fingerprint": package.image.toolchain_fingerprint,
             "route": package.descriptor.provenance,
@@ -171,7 +178,7 @@ def benchmark(
             for engine in reversed(engines):
                 engine.close()
     return {
-        "schema": "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v2",
+        "schema": "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v3",
         "device": base._selected_device_name(hip),
         "architecture": rt._rocm_live_arch(),
         "source_revision": base._git_revision(),

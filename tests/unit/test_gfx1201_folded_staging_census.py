@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from benchmarks.rocm.inspect_gfx1201_folded_prefill import (
-    _mnemonics, requested_bytes,
+    _mnemonics, requested_bytes, selected_symbol_isa_evidence,
 )
 from benchmarks.rocm.ablate_gfx1201_folded_b_cache import (
     NEW_LOAD, OLD_LOAD, variant_source,
@@ -57,6 +57,34 @@ def test_isa_census_counts_only_instruction_mnemonics() -> None:
     }
 
 
+def test_selected_symbol_isa_evidence_uses_the_timed_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests._support import rocm_isa
+
+    selected = "\n".join(
+        f"\tglobal_load_b128 v0, v1, off // {i:08x}: cafe"
+        for i in range(40)
+    )
+    disassembly = (
+        "0000000000001000 <unrelated>:\n"
+        "\tv_wmma_f32_16x16x16_fp8_fp8 v0, v1, v2, v3 // 0000: cafe\n"
+        "0000000000001900 <folded_entry>:\n"
+        f"{selected}\n"
+        "0000000000002000 <other>:\n"
+        "\ts_barrier_signal 0 // 0000: cafe\n"
+    )
+    monkeypatch.setattr(rocm_isa, "disassemble", lambda payload, chip: disassembly)
+    evidence = selected_symbol_isa_evidence(b"timed hsaco", "folded_entry")
+    assert evidence["payload_sha256"] == hashlib.sha256(b"timed hsaco").hexdigest()
+    assert evidence["entry_symbol"] == "folded_entry"
+    assert evidence["instruction_count"] == 40
+    assert evidence["mnemonics"] == {"global_load_b128": 40}
+    assert len(evidence["instruction_stream_sha256"]) == 64
+    with pytest.raises(RuntimeError, match="exactly one"):
+        selected_symbol_isa_evidence(b"timed hsaco", "missing_entry")
+
+
 def test_frontend_matched_packet_and_static_census_are_content_bound() -> None:
     matched_path = BASELINE / "matched.json"
     matched = json.loads(matched_path.read_text())
@@ -70,7 +98,6 @@ def test_frontend_matched_packet_and_static_census_are_content_bound() -> None:
     assert matched["radiance"]["wperm"] == 1
     assert matched["radiance"]["weight_layout"] == "fragment_order"
     for key, source in {
-        "benchmark_sha256": "benchmarks/rocm/benchmark_gfx1201_mxfp4_folded.py",
         "frontend_sha256": "python/tessera/compiler/rocm_mxfp4_folded_frontend.py",
         "materializer_sha256": "python/tessera/compiler/rocm_mxfp4_folded_carrier.py",
     }.items():
@@ -80,14 +107,17 @@ def test_frontend_matched_packet_and_static_census_are_content_bound() -> None:
     assert matched["folded_generator_sha256"] == (
         "14eecec2445bc2ea4a00a4958778ab927da4354dad2e3c8a48dac59952583087"
     )
+    assert matched["benchmark_sha256"] == (
+        "b2a4286fc0ea554d5d81949a5ced8c8c1c938b8d9cb90415879a9a23ae362062"
+    )
     assert census["schema"] == "tessera.rocm.gfx1201_folded_staging_census.v1"
     assert census["source_revision"] == matched["source_revision"]
     assert census["matched_packet_sha256"] == hashlib.sha256(
         matched_path.read_bytes(),
     ).hexdigest()
-    assert census["census_sha256"] == hashlib.sha256(
-        (ROOT / "benchmarks/rocm/inspect_gfx1201_folded_prefill.py").read_bytes(),
-    ).hexdigest()
+    assert census["census_sha256"] == (
+        "1427cffc5da83c3a4ebd7c3746efb243eb863143fcb6050ff399e5a659f754d7"
+    )
     assert census["not_measured_dram_or_dynamic_instructions"] is True
     assert census["radiance"]["module_sha256"] == (
         matched["radiance"]["binary_sha256"]

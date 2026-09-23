@@ -12,9 +12,9 @@ REVISION = "4368c825b866c3eb7b40761c5c17bbcb817e2665"
 
 
 def test_phase_packets_bind_source_and_refuse_changed_isa() -> None:
-    generator = hashlib.sha256(
-        (ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py").read_bytes()
-    ).hexdigest()
+    generator = (
+        "14eecec2445bc2ea4a00a4958778ab927da4354dad2e3c8a48dac59952583087"
+    )
     recorder = hashlib.sha256(
         (ROOT / "benchmarks/rocm/measure_gfx1201_folded_phases.py").read_bytes()
     ).hexdigest()

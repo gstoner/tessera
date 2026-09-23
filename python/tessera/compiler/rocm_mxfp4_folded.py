@@ -107,7 +107,10 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
       const long row = m0 + slot / 4;
       const int off = (slot & 3) * 16;
       copy_u32x4 value = {};
-      if (kb + off < K) {
+      if constexpr (__FULL_K64__) {
+        const long safe = row < M ? row : M - 1;
+        value = *reinterpret_cast<const copy_u32x4 *>(A + safe * K + kb + off);
+      } else if (kb + off < K) {
         const long safe = row < M ? row : M - 1;
         value = *reinterpret_cast<const copy_u32x4 *>(A + safe * K + kb + off);
       }
@@ -117,7 +120,10 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
       const long row = n0 + tid / 4;
       const int off = (tid & 3) * 16;
       copy_u32x4 value = {};
-      if (kb + off < K) {
+      if constexpr (__FULL_K64__) {
+        const long safe = row < N ? row : N - 1;
+        value = *reinterpret_cast<const copy_u32x4 *>(B + safe * K + kb + off);
+      } else if (kb + off < K) {
         const long safe = row < N ? row : N - 1;
         value = *reinterpret_cast<const copy_u32x4 *>(B + safe * K + kb + off);
       }
@@ -210,10 +216,12 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
 
 def emit_mxfp4_folded_prefill_hip(
     entry: str = "tessera_mxfp4_folded_prefill",
+    *, full_k64: bool = False,
 ) -> str:
     if not entry.isidentifier():
         raise ValueError("folded MXFP4 entry must be a C identifier")
-    return _FOLDED_PREFILL_HIP.replace("__ENTRY__", entry)
+    return (_FOLDED_PREFILL_HIP.replace("__ENTRY__", entry)
+            .replace("__FULL_K64__", "true" if full_k64 else "false"))
 
 
 def package_mxfp4_folded_prefill(
@@ -236,7 +244,10 @@ def package_mxfp4_folded_prefill(
         raise ValueError("folded payload must be contiguous at package load")
     if np.any(folded.row_reference == 255):
         raise ValueError("folded E8M0 row reference code 255 is reserved")
-    source = emit_mxfp4_folded_prefill_hip(entry)
+    # The Graph/Target carrier requires K64 slabs. Direct K32 callers retain
+    # the masked final slab; never infer this property inside HIP from a shape.
+    full_k64 = k % 64 == 0
+    source = emit_mxfp4_folded_prefill_hip(entry, full_k64=full_k64)
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)
     if compiler is None:
@@ -286,6 +297,7 @@ def package_mxfp4_folded_prefill(
         "fold_max_normalized_relative_error": folded.max_normalized_relative_error,
         "block_m": 256, "block_n": 64, "block_k": 64,
         "tile_m_per_wave": 4, "tile_n_per_wave": 2,
+        "staging_policy": "unconditional_k64" if full_k64 else "guarded_k32_tail",
         "accum": "fp32", "output": "bf16",
     }
     descriptor = LaunchDescriptor(

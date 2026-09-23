@@ -467,3 +467,24 @@ stage label and the P0 cross-CU/read-cost clock contract before any phase
 fractions can train the cost model. Tajasarus still lacks `/dev/kfd`; static
 ISA and requested-byte accounting are not a substitute for measured phase
 traffic. The exact K32 route remains the default.
+
+The next uninstrumented, exact-device feedback loop found a concrete
+Schedule→Target optimization: the folded carrier fixes K64 slabs, yet the
+target emitter guarded every A/B vector copy as if a partial K64 slab were
+possible. Specializing complete K64 copies removed that redundant control
+flow and reduced both matched prefill times by about 6%; the direct K32-tail
+package keeps its mask. This is a target legality decision derived from the
+Schedule K contract, not a change to Graph numerical policy. Its selected
+`staging_policy` travels in launch provenance. Unconditional K16 compute
+steps were separately refused because they increased VGPR pressure and lost
+the timing gain. [Paired device evidence](../../../benchmarks/baselines/gfx1201_mxfp4_folded_k64_staging_20260922/README.md).
+
+For the remaining gap, use the same lineage discipline before building a
+packed-weight candidate: Graph must name the physical layout and explicit
+approximate policy; Schedule chooses staging/decode coordinates; Tile retains
+the K32 scale-group semantics; Target owns the actual packed decode and
+vector loads; the receipt binds that ABI and HSACO; device timing follows a
+bitwise or declared-error oracle. The current folded carrier still
+materializes a bounded HIP template rather than lowering arbitrary Tile IR,
+so a new packed variant needs an explicit carrier and refusal path, not an
+unrecorded source substitution.

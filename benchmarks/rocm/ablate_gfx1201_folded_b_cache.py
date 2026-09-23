@@ -44,9 +44,11 @@ NEW_LOAD = (
 
 
 def variant_source() -> str:
-    source = emit_mxfp4_folded_prefill_hip()
-    if source.count(OLD_LOAD) != 1:
-        raise RuntimeError("B cache ablation requires exactly one baseline load site")
+    source = emit_mxfp4_folded_prefill_hip(full_k64=True)
+    # Two textual branches exist for the K64/K32 compile-time specialization;
+    # hipcc emits only the selected K64 branch and one B vector load site.
+    if source.count(OLD_LOAD) != 2:
+        raise RuntimeError("B cache ablation requires two template load sites")
     return source.replace(OLD_LOAD, NEW_LOAD)
 
 
@@ -77,7 +79,9 @@ def _compile_variant(source: str) -> bytes:
 
 def _variant_engine(
     hip: ctypes.CDLL, case: base.Case, inputs: dict[str, np.ndarray],
-    folded: Any, payload: bytes, source_sha: str,
+    folded: Any, payload: bytes, source_sha: str, *,
+    variant_name: str = "tessera_b_nontemporal",
+    ablation: str = "B_global_load_non_temporal_only",
 ) -> base._Engine:
     package = package_mxfp4_folded_prefill(
         case.m, case.n, case.k, folded, allow_approximate=True,
@@ -90,7 +94,7 @@ def _variant_engine(
         image_digest=image.image_digest,
         provenance={
             **package.descriptor.provenance,
-            "ablation": "B_global_load_non_temporal_only",
+            "ablation": ablation,
             "variant_source_sha256": source_sha,
         },
     )
@@ -127,7 +131,7 @@ def _variant_engine(
             raise RuntimeError(f"B cache ablation launch failed rc={rc}")
 
     engine = base._Engine(
-        "tessera_b_nontemporal", hip, device_copies, launch, 4,
+        variant_name, hip, device_copies, launch, 4,
         {
             "source_sha256": source_sha,
             "image_sha256": hashlib.sha256(image.payload).hexdigest(),

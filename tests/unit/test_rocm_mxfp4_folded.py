@@ -77,6 +77,19 @@ def test_folded_kernel_has_tall_tile_and_uniform_stage_barriers() -> None:
     assert "no wave starts the next K step before its end stamp" in source
 
 
+def test_folded_k64_staging_specialization_preserves_k32_tail() -> None:
+    full = emit_mxfp4_folded_prefill_hip(full_k64=True)
+    tail = emit_mxfp4_folded_prefill_hip(full_k64=False)
+    assert full.count("if constexpr (true)") == 2
+    assert tail.count("if constexpr (false)") == 2
+    assert full.count("else if (kb + off < K)") == 2
+    assert tail.count("else if (kb + off < K)") == 2
+    assert "__FULL_K64__" not in full + tail
+    # Only the two operand copies specialize. K16 issue scheduling remains
+    # guarded because fully unrolling it raised VGPR pressure on gfx1201.
+    assert "step < 4 && kb + step * 16 < K" in full
+
+
 def test_folded_materializer_refuses_exact_or_mismatched_carrier() -> None:
     codes = np.ones((48, 64), dtype=np.uint8)
     folded = prepare_folded_weights(

@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 packed-folded decode proof — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-DECODE-2026-09-23`.
+Not applicable to CUDA execution: the manual HIP launcher and RDNA4 packed
+fragment decode do not define an NVFP4/PTX schedule. The AMD-only benchmark
+schema and Radiance timing do not constitute NVIDIA evidence or selector
+admission.
+
 ## GFX1201 packed-folded physical ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-ABI-2026-09-22`.

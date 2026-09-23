@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 packed-folded decode proof — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-DECODE-2026-09-23`.
+Not applicable to AVX-512 execution: this adds a gfx1201 HSACO/manual
+launcher and AMD-specific packed-fragment benchmark schema. No CPU ISA,
+layout, numerical, or selector evidence transfers.
+
 ## GFX1201 packed-folded physical ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-ABI-2026-09-22`.

@@ -479,12 +479,13 @@ Schedule K contract, not a change to Graph numerical policy. Its selected
 steps were separately refused because they increased VGPR pressure and lost
 the timing gain. [Paired device evidence](../../../benchmarks/baselines/gfx1201_mxfp4_folded_k64_staging_20260922/README.md).
 
-For the remaining gap, use the same lineage discipline before building a
-packed-weight candidate: Graph must name the physical layout and explicit
-approximate policy; Schedule chooses staging/decode coordinates; Tile retains
-the K32 scale-group semantics; Target owns the actual packed decode and
-vector loads; the receipt binds that ABI and HSACO; device timing follows a
-bitwise or declared-error oracle. The current folded carrier still
-materializes a bounded HIP template rather than lowering arbitrary Tile IR,
-so a new packed variant needs an explicit carrier and refusal path, not an
-unrecorded source substitution.
+The next packed-weight candidate now carries a distinct fragment-order
+physical contract from Graph through Target to a manually executable HSACO.
+Its receipt binds the schedule, layout, payload, loss policy, and image. On
+Tajasarus, nonuniform all-code and reserved-zero cases match the declared
+BF16 oracle. However, matched uninstrumented timing remains roughly
+1.65×/1.63× behind Radiance on the two production prefill shapes, so this
+is explanatory evidence, not an automatic selector promotion. The current
+carrier still materializes a bounded HIP template rather than lowering
+arbitrary Tile IR. Continue with ISA/resource and decode-traffic attribution
+before adding tuning coordinates or training the intra-kernel cost model.

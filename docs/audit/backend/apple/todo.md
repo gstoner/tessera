@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 packed-folded decode proof — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-DECODE-2026-09-23`.
+Not applicable to Metal execution: the new manual launcher, HIP fragment
+decode, HSACO ABI, and matched Radiance packet are gfx1201-specific. The
+shared Graph physical contract was already assessed; no Apple schedule,
+selector, or device proof transfers.
+
 ## GFX1201 packed-folded physical ABI — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-ABI-2026-09-22`.

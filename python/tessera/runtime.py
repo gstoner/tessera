@@ -4176,6 +4176,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
     from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
 
     return frozenset({
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
@@ -4189,6 +4190,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        PACKED_FOLDED_TARGET_ABI_V1,
     })
 
 
@@ -4202,6 +4204,9 @@ def _submit_rocm_mxfp4_w4a8(
     import numpy as np
     import hashlib
     from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    from tessera.compiler.rocm_mxfp4_packed_folded import (
+        PACKED_FOLDED_SCALE_PLANE_V1, PACKED_FOLDED_TARGET_ABI_V1,
+    )
 
     if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
         raise ValueError("MXFP4 W4A8 launch requires an exact gfx1201 image")
@@ -4219,6 +4224,7 @@ def _submit_rocm_mxfp4_w4a8(
     )
     m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
     folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    packed_folded = descriptor.abi_id == PACKED_FOLDED_TARGET_ABI_V1
     packed_layout = str(descriptor.provenance.get("weight_layout", ""))
     from tessera.compiler.rocm_mxfp4 import (
         MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
@@ -4244,6 +4250,26 @@ def _submit_rocm_mxfp4_w4a8(
                 np.ascontiguousarray(array).tobytes()
             ).hexdigest() != expected:
                 raise RuntimeError(f"folded MXFP4 {key} does not match load-time payload")
+    elif packed_folded:
+        if (
+            packed_layout != MXFP4_GFX12_FRAGMENT_LAYOUT_V1
+            or descriptor.provenance.get("scale_layout")
+            != PACKED_FOLDED_SCALE_PLANE_V1
+            or descriptor.provenance.get("numeric_policy")
+            != "folded_row_reference_explicit_approximate"
+        ):
+            raise RuntimeError("packed folded MXFP4 requires its policy and layouts")
+        packed_shape = (n, k // 2)
+        scale_shape = (k // 32 + 1, n)
+        for key, array in (
+            ("weight_sha256", packed_b),
+            ("scale_plane_sha256", b_scale),
+        ):
+            expected = descriptor.provenance.get(key)
+            if not isinstance(expected, str) or hashlib.sha256(
+                np.ascontiguousarray(array).tobytes()
+            ).hexdigest() != expected:
+                raise RuntimeError(f"packed folded MXFP4 {key} does not match load-time payload")
     elif packed_layout == MXFP4_TRANSPOSED_LAYOUT_V1:
         packed_shape = (k // 2, n)
         scale_shape = (k // 32, n)
@@ -4373,12 +4399,14 @@ def _submit_rocm_gfx1151_native(
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
     from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
 
     if descriptor.abi_id in {
         GFX_MXFP4_W4A8_EXACT_ABI,
         GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        PACKED_FOLDED_TARGET_ABI_V1,
     }:
         return _submit_rocm_mxfp4_w4a8(image, descriptor, buffers, scalars)
 
@@ -5599,6 +5627,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
     )
     from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+    from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
 
     if (
         (target == "rocm_gfx1151"
@@ -5631,6 +5660,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_MXFP4_W4A8_WMMA_ABI,
             GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
             GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+            PACKED_FOLDED_TARGET_ABI_V1,
         }
         and target not in _native_launchers
     ):

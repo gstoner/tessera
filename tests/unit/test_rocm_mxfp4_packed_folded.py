@@ -248,3 +248,37 @@ def test_vector_pair_stage_covers_each_fragment_slot_once() -> None:
     assert len(stores) == 512
     assert slots == {(nt, ks, lane) for nt in range(4)
                      for ks in range(4) for lane in range(32)}
+
+
+def test_packed_provenance_sync_keys_distinguish_ablation_variants() -> None:
+    def key(**overrides: bool) -> str:
+        flags = dict(vector_pair_loads=False, permute_decode=False,
+                     batched_loads=False, batched_a_loads=False,
+                     reuse_pair_scales=False, a_base_hoist=False)
+        flags.update(overrides)
+        return packed_module._packed_sync_key(**flags)
+
+    assert key() == "GFX1201-PACKED-FOLDED-DECODE-2026-09-23"
+    assert key(batched_loads=True) == "GFX1201-PACKED-STAGING-ABLATION-2026-09-23"
+    assert key(permute_decode=True) == "GFX1201-PACKED-PERMUTE-DECODE-2026-09-23"
+    assert key(permute_decode=True, vector_pair_loads=True) == (
+        "GFX1201-PACKED-VECTOR-PAIR-2026-09-23"
+    )
+    assert key(permute_decode=True, batched_loads=True, a_base_hoist=True) == (
+        "GFX1201-PACKED-A-BASE-2026-09-23"
+    )
+
+
+def test_hoisted_a_base_stage_preserves_clamped_row_and_lds_layout() -> None:
+    with pytest.raises(ValueError, match="separate staging ablation"):
+        emit_mxfp4_packed_folded_prefill_hip(
+            permute_decode=True, a_base_hoist=True, vector_pair_loads=True,
+        )
+    source = emit_mxfp4_packed_folded_prefill_hip(
+        permute_decode=True, batched_loads=True, a_base_hoist=True,
+    )
+    assert "const unsigned char *__restrict__ tile_a = A + m0 * K + kb;" in source
+    assert "local_row < last_local_row ? local_row : last_local_row" in source
+    assert "tile_a + safe_local_row * K + off" in source
+    assert "sA + local_row * 80 + off" in source
+    assert "A + safe * K + kb + off" not in source

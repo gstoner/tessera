@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 A-base benchmark and provenance correction — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-A-BASE-2026-09-23`. Not applicable to Metal: the A-stage HIP
+address ablation and v5 HSACO/HIP-event packet do not define a Metal kernel
+or benchmark. The corrected vector-pair row sync key changes ROCm provenance
+only; shared numerical policy, Apple selection, and device proof are unchanged.
+
 ## GFX1201 paired-lane MXFP4 benchmark schema — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

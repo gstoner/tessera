@@ -37,6 +37,13 @@ separate SHA-256 fields identify the actual tested versions. The Radiance
 binary hash matches the prior pinned comparator packet. The distinct graph
 admission receipt still refuses missing frontend and Radiance parity proof.
 
+Historical provenance limitation: vector-pair rows in this v4 packet inherited
+the older `GFX1201-PACKED-PERMUTE-DECODE-2026-09-23` descriptor sync key.
+The packet-level key and four backend plans correctly identify the vector-pair
+experiment, but the row-level key is not suitable for sync-key joins. The
+post-review generator assigns the vector-pair key before the permute key;
+this timed packet remains unchanged rather than retroactively relabeled.
+
 Next: inspect the selected A-stage address arithmetic and register lifetimes
 against the pinned Radiance ISA, then test one base-address or occupancy change
 at a time. Any candidate must win both shapes without weakening the exact

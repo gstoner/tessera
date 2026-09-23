@@ -1,4 +1,4 @@
-"""Bind the opt-in paired-fragment ablation to its timed exact-device ISA."""
+"""Bind the historical paired-fragment ablation to its timed exact-device ISA."""
 from __future__ import annotations
 
 import hashlib
@@ -16,10 +16,16 @@ def test_vector_pair_packet_is_source_bound_and_not_a_selector_win() -> None:
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["architecture"] == "gfx1201"
     assert packet["radiance"]["weight_layout"] == "fragment_order"
+    # The v4 packet is immutable. Its descriptor inherited the old permute
+    # sync key; the next run uses the corrected key and current source hashes.
+    assert packet["packed_abi_sha256"] == (
+        "efa880d86ba97b35e5c012eeb5ea6dc91c84956621111266823b7be4d157891d"
+    )
+    assert packet["benchmark_sha256"] == (
+        "12a23198253120e9be16bc0d98c769f986189a5c0bbffbc23cff05637cba7228"
+    )
     for field, source in (
         ("generator_sha256", "python/tessera/compiler/rocm_mxfp4_folded.py"),
-        ("packed_abi_sha256", "python/tessera/compiler/rocm_mxfp4_packed_folded.py"),
-        ("benchmark_sha256", "benchmarks/rocm/benchmark_gfx1201_mxfp4_packed_folded.py"),
         ("isa_inspector_sha256", "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"),
     ):
         assert packet[field] == hashlib.sha256((ROOT / source).read_bytes()).hexdigest()
@@ -28,6 +34,9 @@ def test_vector_pair_packet_is_source_bound_and_not_a_selector_win() -> None:
         control = rows["tessera_packed_batched_b_permute"]
         vector = rows["tessera_packed_vector_pair_permute"]
         radiance = rows["radiance"]
+        assert vector["metadata"]["route"]["sync_key"] == (
+            "GFX1201-PACKED-PERMUTE-DECODE-2026-09-23"
+        )
         assert len(control["samples_ms"]) == len(vector["samples_ms"]) == 11
         assert control["output_sha256"] == vector["output_sha256"] == radiance["output_sha256"]
         for row in (control, vector):

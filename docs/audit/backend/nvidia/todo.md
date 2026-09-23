@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 A-base benchmark and provenance correction — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-A-BASE-2026-09-23`. Not applicable to CUDA: the A-stage HIP
+address ablation and v5 HSACO/HIP-event packet define no PTX/NVFP4 route.
+The vector-pair sync-key correction is ROCm artifact provenance only; shared
+numeric policy, NVIDIA selection, and SM120 proof are unchanged.
+
 ## GFX1201 paired-lane MXFP4 benchmark schema — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

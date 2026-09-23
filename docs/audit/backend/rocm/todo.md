@@ -7,6 +7,19 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 packed MXFP4 A-base address ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-A-BASE-2026-09-23`. An opt-in CTA-uniform A-base producer
+passed five Tajasarus exact-device ragged/lossy/all-code cases and matched
+exact K32 BF16 output on both prefill shapes. The v5 HIP-event packet shows
+184.5→180.7 µs on the smaller shape but 1163.5→1178.5 µs on wide N;
+VGPRs remain 110 and static waits 75. No selector promotion. The standalone
+v4 vector-pair rerun now includes its permute control and records the correct
+row-level sync key; the older packet stays historical. [Evidence](../../../../benchmarks/baselines/gfx1201_mxfp4_a_base_20260923/README.md).
+Next isolate bounded 32-bit lane-local A offsets and measure address ISA and
+occupancy without changing the exact K32 numerical oracle.
+
 ## GFX1201 paired-lane packed MXFP4 prefill ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

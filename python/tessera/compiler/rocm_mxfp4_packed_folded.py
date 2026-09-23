@@ -154,6 +154,33 @@ class PackedFoldedPayload:
     scale_layout: str = PACKED_FOLDED_SCALE_PLANE_V1
 
     def __post_init__(self) -> None:
+        # Direct public construction has no trusted fold result. Recompute its
+        # numerical claims before a receipt can be issued.
+        self._validate_and_freeze()
+
+    @classmethod
+    def _from_precomputed(
+        cls, weight: np.ndarray, scales: np.ndarray, folded: FoldedRowReference,
+    ) -> PackedFoldedPayload:
+        """Factory-only path: reuse the fold calculated from the same inputs."""
+        payload = object.__new__(cls)
+        for name, value in (
+            ("weight_bytes", weight), ("scale_plane", scales),
+            ("lossless", folded.lossless),
+            ("inexact_value_count", folded.inexact_value_count),
+            ("max_normalized_abs_error", folded.max_normalized_abs_error),
+            ("max_normalized_relative_error", folded.max_normalized_relative_error),
+            ("approximate_policy", "explicit_allow"),
+            ("weight_layout", PACKED_FOLDED_WEIGHT_LAYOUT_V1),
+            ("scale_layout", PACKED_FOLDED_SCALE_PLANE_V1),
+        ):
+            object.__setattr__(payload, name, value)
+        payload._validate_and_freeze(derived=folded)
+        return payload
+
+    def _validate_and_freeze(
+        self, *, derived: FoldedRowReference | None = None,
+    ) -> None:
         weight = self.weight_bytes
         scales = self.scale_plane
         if self.approximate_policy != "explicit_allow":
@@ -175,15 +202,17 @@ class PackedFoldedPayload:
             raise ValueError("packed folded E8M0 code 255 is reserved")
         if not np.array_equal(scales[-1], scales[:-1].max(axis=0)):
             raise ValueError("packed folded row reference must be the block-exponent maximum")
-        # The dataclass is public, so a receipt cannot trust caller-supplied
-        # loss claims merely because the byte buffers and row max are valid.
-        checkpoint = convert_weight_layout(
-            weight, source=MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
-            destination=MXFP4_CHECKPOINT_LAYOUT_V1,
-        )
-        derived = prepare_folded_weights(
-            checkpoint, scales[:-1], allow_approximate=True,
-        )
+        if derived is None:
+            # The public constructor cannot trust caller-supplied loss claims.
+            checkpoint = convert_weight_layout(
+                weight, source=MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
+                destination=MXFP4_CHECKPOINT_LAYOUT_V1,
+            )
+            derived = prepare_folded_weights(
+                checkpoint, scales[:-1], allow_approximate=True,
+            )
+        if not np.array_equal(derived.row_reference, scales[-1]):
+            raise ValueError("packed folded precomputed row reference disagrees with plane")
         if (self.lossless != derived.lossless or
                 self.inexact_value_count != derived.inexact_value_count or
                 self.max_normalized_abs_error != derived.max_normalized_abs_error or
@@ -225,28 +254,26 @@ def prepare_packed_folded_payload(
     allow_approximate: bool = False,
 ) -> PackedFoldedPayload:
     """Convert once at model load while preserving the exact K32 scale plane."""
+    # Snapshot mutable caller arrays so both fold metadata and fragment bytes
+    # describe the same checkpoint, even if the caller reuses its buffers.
+    checkpoint = np.array(packed_checkpoint, copy=True, order="C")
+    exponent_codes = np.array(scale_exponents, copy=True, order="C")
     folded = prepare_folded_weights(
-        packed_checkpoint, scale_exponents,
+        checkpoint, exponent_codes,
         allow_approximate=allow_approximate,
     )
     fragment = convert_weight_layout(
-        packed_checkpoint,
+        checkpoint,
         source=MXFP4_CHECKPOINT_LAYOUT_V1,
         destination=MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
     )
     # prepare_folded_weights range-checks all integer inputs. Use its
     # canonical uint8 representation for the physical plane as well.
-    canonical_scales = np.ascontiguousarray(np.asarray(scale_exponents, dtype=np.uint8))
+    canonical_scales = np.ascontiguousarray(np.asarray(exponent_codes, dtype=np.uint8))
     plane = np.ascontiguousarray(
         np.concatenate((canonical_scales, folded.row_reference[None, :]), axis=0)
     )
-    return PackedFoldedPayload(
-        weight_bytes=fragment, scale_plane=plane,
-        lossless=folded.lossless,
-        inexact_value_count=folded.inexact_value_count,
-        max_normalized_abs_error=folded.max_normalized_abs_error,
-        max_normalized_relative_error=folded.max_normalized_relative_error,
-    )
+    return PackedFoldedPayload._from_precomputed(fragment, plane, folded)
 
 
 def folded_oracle_from_packed(payload: PackedFoldedPayload) -> FoldedRowReference:

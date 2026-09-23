@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import ast
 import re
+from unittest.mock import patch
 
 import ml_dtypes
 import numpy as np
 import pytest
 
 from tessera.compiler import rocm_mxfp4 as mx
+from tessera.compiler import rocm_mxfp4_packed_folded as packed_module
 from tessera.compiler.rocm_mxfp4_folded import prepare_folded_weights
 from tessera.compiler.rocm_mxfp4_packed_folded import (
     PACKED_FOLDED_PHYSICAL_V1,
@@ -110,6 +112,26 @@ def test_packed_folded_payload_canonicalizes_valid_integer_scales() -> None:
     )
     assert payload.scale_plane.dtype == np.uint8
     np.testing.assert_array_equal(payload.scale_plane[:-1], scales)
+
+
+def test_factory_reuses_fold_but_direct_constructor_verifies_receipt() -> None:
+    checkpoint = mx.pack_e2m1_codes(np.ones((48, 64), dtype=np.uint8))
+    scales = np.full((2, 48), 127, dtype=np.uint8)
+    with patch.object(
+        packed_module, "prepare_folded_weights",
+        wraps=packed_module.prepare_folded_weights,
+    ) as fold:
+        payload = prepare_packed_folded_payload(
+            checkpoint, scales, allow_approximate=True,
+        )
+        assert fold.call_count == 1
+        direct = PackedFoldedPayload(
+            payload.weight_bytes, payload.scale_plane, payload.lossless,
+            payload.inexact_value_count, payload.max_normalized_abs_error,
+            payload.max_normalized_relative_error,
+        )
+        assert fold.call_count == 2
+        assert direct.receipt() == payload.receipt()
 
 
 def test_packed_decode_table_matches_every_e2m1_code_and_delta() -> None:

@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 three-kernel MXFP4 graph pipeline — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-GRAPH-PIPELINE-2026-09-23`. Not applicable to CUDA:
+the HIP OCP E4M3 producer, packed RDNA4 GEMM, BF16 consumer, and exact-M
+HIP graph pool do not establish a CUDA graph or NVFP4 schedule. The
+benchmark schema is AMD-specific; no NVIDIA device result transfers.
+
 ## GFX1201 device-owned MXFP4 HIP graph — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

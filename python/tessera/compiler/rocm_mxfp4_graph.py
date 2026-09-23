@@ -230,11 +230,13 @@ class PackedFoldedGraphSession:
         self._closed = True
         try:
             self._resident.synchronize()
-            if self._graph_exec.value:
-                self._hip.hipGraphExecDestroy(self._graph_exec)
-                self._graph_exec.value = None
         finally:
-            self._resident.close()
+            try:
+                if self._graph_exec.value:
+                    self._hip.hipGraphExecDestroy(self._graph_exec)
+                    self._graph_exec.value = None
+            finally:
+                self._resident.close()
 
     def __enter__(self) -> PackedFoldedGraphSession:
         self._require_open()

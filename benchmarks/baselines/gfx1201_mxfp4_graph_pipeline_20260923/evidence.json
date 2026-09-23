@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "description": "Exact gfx1201 three-kernel MXFP4 graph pipeline, bounded exact-M lifetime proof, and same-stream direct-versus-graph timing",
+  "proof": {
+    "automatic_selection": false,
+    "device_name": "AMD Radeon RX 9070 XT",
+    "device_ordinal": 0,
+    "distinct_live_input_pointers": true,
+    "hipcc": "HIP version: 7.15.26333-0000000",
+    "host": "tajasarus",
+    "leases_invalid_after_pool_close": true,
+    "pool_receipt": {
+      "active_m": [
+        65,
+        129
+      ],
+      "automatic_selection": false,
+      "dynamic_m_strategy": "separate_exact_shape_graphs",
+      "max_shapes": 2,
+      "route": "packed_folded_graph_exact_m_pool_manual"
+    },
+    "revision": "f8e754d4a7e5e411b5972aefc54880a91277f6fd",
+    "rows": [
+      {
+        "aux_hsaco_sha256": "20c393ee80374af23eb2d36cad438295d6bbf1861c4e76bfe5663886a1e381af",
+        "bf16_oracle_exact": true,
+        "capture_nodes": [
+          0,
+          0,
+          0
+        ],
+        "consumer": "bf16_relu_v1",
+        "gemm_hsaco_sha256": "38d2beac7254e1eb4243c261f28c2fd618d81677e4d4a5f72079618d912d9b5b",
+        "producer": "fp32_to_ocp_e4m3_per_token_scale_v1",
+        "shape": [
+          65,
+          48,
+          64
+        ]
+      },
+      {
+        "aux_hsaco_sha256": "ba1ac7ff1b1b6a2237f4d4f20b4f88826c37cd41743862d6e5b3ddaa7c4f7466",
+        "bf16_oracle_exact": true,
+        "capture_nodes": [
+          0,
+          0,
+          0
+        ],
+        "consumer": "bf16_relu_v1",
+        "gemm_hsaco_sha256": "606477fcfbb38d95015977a054f010ef4853cce0883c04eafc06a51c808631d1",
+        "producer": "fp32_to_ocp_e4m3_per_token_scale_v1",
+        "shape": [
+          129,
+          48,
+          64
+        ]
+      }
+    ],
+    "source_sha256": {
+      "benchmarks/rocm/record_gfx1201_mxfp4_graph_pipeline.py": "c8b790e3fde08ffe770fc0f7ba573ceb8c67ec57665859364b96f41c41258d43",
+      "python/tessera/compiler/rocm_mxfp4_graph.py": "2ffea3cdd1105dff04239d0ffe3bc0f46e9ccc27ba28a1e4b5d8eba94517e410",
+      "python/tessera/compiler/rocm_mxfp4_graph_pipeline.py": "3ce292a4618535b708762b09a3f86eefe85f95fc552d972ce839a6167d8402b1",
+      "tests/device/rocm/test_mxfp4_graph_pipeline.py": "e8f578bede39cf56702631d8a99b253efcc77ef975863ac49e465eabcfbde309"
+    },
+    "sync_key": "GFX1201-MXFP4-GRAPH-PIPELINE-2026-09-23",
+    "target": "rocm_gfx1201"
+  },
+  "benchmarks": [
+    {
+      "automatic_selection": false,
+      "aux_hsaco_sha256": "87f9e65e1e34c5c88d0d185285641b16564063c57369e9773c89613334e6b2fa",
+      "capture_nodes": [
+        0,
+        0,
+        0
+      ],
+      "device_name": "AMD Radeon RX 9070 XT",
+      "device_ordinal": 0,
+      "direct": {
+        "host_enqueue_us_median": 15.19525,
+        "kernel_event_us_median": 196.484375
+      },
+      "full_output_equals_direct": true,
+      "gemm_hsaco_sha256": "2e3efe7a4d74da43d111ad566573a7208d620376fa6aa6ee930ceddc2ac07b73",
+      "graph": {
+        "host_enqueue_us_median": 1.93845,
+        "kernel_event_us_median": 200.49434900283813
+      },
+      "host": "tajasarus",
+      "revision": "f8e754d4a7e5e411b5972aefc54880a91277f6fd",
+      "rounds": {
+        "direct_first": {
+          "host_enqueue_us_median": 14.4125,
+          "kernel_event_us_median": 196.64814472198486
+        },
+        "direct_second": {
+          "host_enqueue_us_median": 15.978,
+          "kernel_event_us_median": 196.32060527801514
+        },
+        "graph_first": {
+          "host_enqueue_us_median": 1.9327,
+          "kernel_event_us_median": 200.29559135437012
+        },
+        "graph_second": {
+          "host_enqueue_us_median": 1.9442,
+          "kernel_event_us_median": 200.69310665130615
+        }
+      },
+      "sampled_bf16_exact": true,
+      "shape": [
+        256,
+        5120,
+        8704
+      ],
+      "source_sha256": {
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_graph_pipeline.py": "5beb7aa7dda38bb9b3e505713e9dfea323f8316a90fc251c83624c0cc61b19b6",
+        "python/tessera/compiler/rocm_mxfp4_graph_pipeline.py": "3ce292a4618535b708762b09a3f86eefe85f95fc552d972ce839a6167d8402b1"
+      },
+      "sync_key": "GFX1201-MXFP4-GRAPH-PIPELINE-2026-09-23",
+      "target": "rocm_gfx1201",
+      "timing_note": "Two alternating direct/graph rounds, each seven samples of 20 three-kernel sequences on the same stream, buffers, and code objects. Host enqueue excludes sync; HIP event excludes transfers."
+    },
+    {
+      "automatic_selection": false,
+      "aux_hsaco_sha256": "6ed565fa99b962832c9ce70beb371859826053f1c533914bbfd12a5f3a902801",
+      "capture_nodes": [
+        0,
+        0,
+        0
+      ],
+      "device_name": "AMD Radeon RX 9070 XT",
+      "device_ordinal": 0,
+      "direct": {
+        "host_enqueue_us_median": 14.4879,
+        "kernel_event_us_median": 1303.4766674041748
+      },
+      "full_output_equals_direct": true,
+      "gemm_hsaco_sha256": "27e4fc9acc8af369ff66847384c2c05bb9cb71ae6c6e4a63f3c2ca08b0e4026e",
+      "graph": {
+        "host_enqueue_us_median": 2.001825,
+        "kernel_event_us_median": 1349.2519855499268
+      },
+      "host": "tajasarus",
+      "revision": "f8e754d4a7e5e411b5972aefc54880a91277f6fd",
+      "rounds": {
+        "direct_first": {
+          "host_enqueue_us_median": 14.5743,
+          "kernel_event_us_median": 1263.0155563354492
+        },
+        "direct_second": {
+          "host_enqueue_us_median": 14.401499999999999,
+          "kernel_event_us_median": 1343.9377784729004
+        },
+        "graph_first": {
+          "host_enqueue_us_median": 1.9426999999999999,
+          "kernel_event_us_median": 1349.8129844665527
+        },
+        "graph_second": {
+          "host_enqueue_us_median": 2.06095,
+          "kernel_event_us_median": 1348.6909866333008
+        }
+      },
+      "sampled_bf16_exact": true,
+      "shape": [
+        1024,
+        17408,
+        5120
+      ],
+      "source_sha256": {
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_graph_pipeline.py": "5beb7aa7dda38bb9b3e505713e9dfea323f8316a90fc251c83624c0cc61b19b6",
+        "python/tessera/compiler/rocm_mxfp4_graph_pipeline.py": "3ce292a4618535b708762b09a3f86eefe85f95fc552d972ce839a6167d8402b1"
+      },
+      "sync_key": "GFX1201-MXFP4-GRAPH-PIPELINE-2026-09-23",
+      "target": "rocm_gfx1201",
+      "timing_note": "Two alternating direct/graph rounds, each seven samples of 20 three-kernel sequences on the same stream, buffers, and code objects. Host enqueue excludes sync; HIP event excludes transfers."
+    }
+  ]
+}

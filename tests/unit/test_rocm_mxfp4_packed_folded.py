@@ -1,4 +1,4 @@
-"""Model-load contract for the non-executable packed-folded gfx1201 candidate."""
+"""Model-load contract for the manual packed-folded gfx1201 candidate."""
 from __future__ import annotations
 
 import ast

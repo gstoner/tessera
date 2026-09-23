@@ -16,9 +16,13 @@ Graph→Target schedule-bound materializer, explicit launch receipt, and
 exact-target manual runtime launcher. Tajasarus passes 11/11 BF16 device
 cases across ragged N48/N80, K64/K128, lossless/lossy folds, all 16 E2M1
 codes, exponent deltas and reserved zero blocks. The integer-register
-decode improves on divergent table loads, but provisional matched HIP-event
-timing on the two production prefill shapes is about 1.65×/1.63× slower
-than pinned Radiance and slower than Tessera expanded-folded prefill. Keep
+decode improves on divergent table loads. The clean-revision packet in
+`benchmarks/baselines/gfx1201_mxfp4_packed_folded_20260923/evidence.json`
+binds timed HSACO payloads to selected ISA and shows 1.67×/1.63× Radiance
+on the two production prefill shapes; the packed route is also 1.36×/1.25×
+the expanded-folded time. Static ISA rises from 71 to 88 `s_wait_loadcnt`
+instructions and from 109 to 117 VGPRs for expanded versus packed integer,
+with no spills. Keep
 the automatic selector closed; retain exact K32 as the correctness default.
 Next: analyze decode/scale traffic and ISA resource costs from the clean
 packet, then tune one lever at a time before selector admission.
@@ -31,11 +35,11 @@ fragment-order packed E2M1 B `[N,K/2]` and the original E8M0 K32 scale
 plane plus a final row reference `[K/32+1,N]`. Graph, Schedule, Tile, and
 Target carry a distinct physical contract, B storage, scale format, and
 package ABI; the model-load receipt binds layout, payload bytes, numerical
-loss, schedule, and IR hashes. This is artifact-only and must not dispatch
-to the existing expanded-E4M3 HSACO. Next: implement the separate packed
-decode kernel, prove BF16 output against the declared approximate and exact
-K32 oracles on Tajasarus, bind the timed HSACO/ISA, then benchmark against
-matched Radiance before selector admission.
+loss, schedule, and IR hashes. The artifact contract must not dispatch to
+the existing expanded-E4M3 HSACO; the separate manual packed kernel and
+exact-device result are tracked above. Next: tune packed-word decode and
+LDS staging against the measured expanded and Radiance baselines, one
+lever at a time, before considering selector admission.
 
 ## GFX1201 folded K64 staging codegen — 2026-09-22
 

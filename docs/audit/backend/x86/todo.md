@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 three-kernel MXFP4 graph pipeline — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-GRAPH-PIPELINE-2026-09-23`. Not applicable to AVX-512:
+retained HIP buffers, E4M3 producer, GEMM/consumer graph nodes, and
+exact-M HIP executable caching have no CPU runtime counterpart. Shared
+numeric and selector contracts are unchanged; no x86 proof transfers.
+
 ## GFX1201 device-owned MXFP4 HIP graph — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

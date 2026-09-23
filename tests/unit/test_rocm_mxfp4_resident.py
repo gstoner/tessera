@@ -31,6 +31,7 @@ class _FakeHip:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.node_type = 0
+        self.fail_stream_sync = False
         self.allocations: list[ctypes.Array[ctypes.c_char]] = []
         for name in (
             "hipInit", "hipStreamCreateWithFlags", "hipStreamDestroy",
@@ -45,6 +46,8 @@ class _FakeHip:
 
     def _call(self, name: str, *args: object) -> int:
         self.calls.append(name)
+        if name == "hipStreamSynchronize" and self.fail_stream_sync:
+            return 700
         if name in ("hipStreamCreateWithFlags", "hipModuleLoadData", "hipModuleGetFunction"):
             ctypes.cast(args[0], ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(1)
         elif name == "hipMalloc":
@@ -197,3 +200,23 @@ def test_device_graph_refuses_non_kernel_capture() -> None:
             assert graph.receipt()["graph_captures"] == 0
     assert hip.calls.count("hipGraphDestroy") == 1
     assert hip.calls.count("hipGraphExecDestroy") == 0
+
+
+def test_graph_close_destroys_executable_after_async_failure() -> None:
+    package, payload = _fixture()
+    hip = _FakeHip()
+    with patch("tessera.runtime._rocm_live_arch", return_value="gfx1201"):
+        graph = PackedFoldedGraphSession(package, payload, 65, hip=hip)
+        graph.upload_inputs(
+            np.full((65, 64), 0x38, dtype=np.uint8),
+            np.ones(65, dtype=np.float32),
+        )
+        graph.capture()
+        graph.replay()
+        hip.fail_stream_sync = True
+        with pytest.raises(RuntimeError, match="hipStreamSynchronize failed rc=700"):
+            graph.close()
+    assert hip.calls.count("hipGraphExecDestroy") == 1
+    assert hip.calls.count("hipModuleUnload") == 1
+    assert hip.calls.count("hipFree") == 5
+    graph.close()  # failed close must still be idempotent

@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 three-kernel MXFP4 graph pipeline — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-GRAPH-PIPELINE-2026-09-23`. Not applicable to Metal:
+the OCP E4M3 HIP producer, packed gfx1201 HSACO, HIP graph node sequence,
+and AMD-only timing/lifetime packet do not define an Apple route. Shared
+Graph/Target IR, numerical policy, and Apple selector remain unchanged.
+
 ## GFX1201 device-owned MXFP4 HIP graph — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

@@ -4,7 +4,10 @@ Owner `ROCM-MXFP4-W4A8-1` / `IKF-1`; sync
 `GFX1201-MXFP4-DEVICE-GRAPH-2026-09-23`. Tajasarus selected its AMD
 Radeon RX 9070 XT (gfx1201). The source hashes in `evidence.json` bind
 these results to the graph executor and benchmark atop merged main
-`f5441371`. The candidate is manual; automatic selection remains closed.
+`f5441371`; the captured implementation was merged as `7abdec5e`.
+This historical packet is pinned to that source commit and is not a timing
+claim for subsequent graph cleanup or pipeline revisions. The candidate is
+manual; automatic selection remains closed.
 
 One stable-pointer kernel was captured on the session stream. HIP graph
 inspection found exactly one node of type `hipGraphNodeTypeKernel`; no copy,

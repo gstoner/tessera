@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "description": "Exact gfx1201 kernel-only HIP graph proof and alternating same-HSACO timing against direct resident launch",
+  "source_commit": "7abdec5e592fdfb48fcd4dc9c7f60006ceed5121",
   "results": [
     {
       "capture_nodes": [

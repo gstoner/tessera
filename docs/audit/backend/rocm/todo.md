@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 three-kernel MXFP4 graph pipeline — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-GRAPH-PIPELINE-2026-09-23`. The PR 819 graph executable
+now destroys even when final stream sync reports an asynchronous error.
+A new opt-in graph captures a device-side FP32→OCP E4M3/per-token-scale
+producer, the packed-folded GEMM, and a BF16 ReLU consumer as exactly three
+kernel nodes. Tajasarus passes five exact-device cases including ragged,
+lossy, updated-input replay, and two simultaneously live M-specialized
+graphs. A bounded exact-M pool keeps grids and pointers stable; it refuses
+capacity overflow rather than silently retargeting a live graph. Source-
+bound proof and same-stream timing are in
+`benchmarks/baselines/gfx1201_mxfp4_graph_pipeline_20260923/`. Host enqueue
+falls 15.20→1.94 µs and 14.49→2.00 µs, while HIP-event medians are
+196→200 µs and 1303→1349 µs. This closes the manual producer/consumer
+and exact-M lifetime slice, not in-place dynamic-M graph updates or the
+Radiance GEMM gap. Keep automatic selection closed. Next: integrate
+model-owned device tensors, prove allocator-pressure/failure cleanup, then
+tune device work and reconsider selection.
+
 ## GFX1201 device-owned MXFP4 HIP graph — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

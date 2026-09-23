@@ -16,9 +16,12 @@ manual launch boundary. Tajasarus BF16 tests cover ragged shapes, lossy
 folds, all E2M1 codes, and reserved scale-zero semantics. Record each timed
 HSACO and selected ISA against the same exact/expanded/Radiance inputs in
 `benchmarks/baselines/gfx1201_mxfp4_packed_staging_20260923/`.
-The provisional A-only and paired-scale variants do not improve both prefill
-shapes; B-only batching has a small gain, but is still behind expanded folded
-and Radiance. Keep automatic selection closed. Next: identify the per-word
+The clean packet at `2c1bacd5` shows B-only batching improves the packed
+control by 3.9%/1.3%, reducing static `s_wait_loadcnt` from 88 to 87 while
+raising VGPRs from 117 to 118. A-only and paired-scale variants do not
+improve both prefill shapes; paired-scale still emits four byte loads in
+selected ISA. B-only remains 1.68×/1.57× Radiance and 1.35×/1.24× the
+expanded folded time. Keep automatic selection closed. Next: identify the per-word
 decode dependency/throughput cost and test a fragment decode representation
 that reduces ALU without expanding the full B matrix at model load.
 

@@ -1,4 +1,4 @@
-"""Bind the A-base and corrected standalone vector-pair packets to tested code."""
+"""Bind historical A-base and corrected vector-pair packets to tested code."""
 from __future__ import annotations
 
 import hashlib
@@ -37,10 +37,16 @@ def test_corrected_packet_has_control_provenance_and_timed_isa(
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["architecture"] == "gfx1201"
     assert packet["radiance"]["weight_layout"] == "fragment_order"
+    # The v6 offset ablation changes both sources. Preserve these immutable
+    # v4/v5 packet bindings rather than treating them as current-source proof.
+    assert packet["packed_abi_sha256"] == (
+        "6c2ac1075469aac99523f11e3bd9285d4d280b6eb97c09ff3f962a24b4878a87"
+    )
+    assert packet["benchmark_sha256"] == (
+        "ff9bd6787b898bd681caf63f6e0dea47856485ea2b1f368fc4363548ffe31f31"
+    )
     for field, path in (
         ("generator_sha256", "python/tessera/compiler/rocm_mxfp4_folded.py"),
-        ("packed_abi_sha256", "python/tessera/compiler/rocm_mxfp4_packed_folded.py"),
-        ("benchmark_sha256", "benchmarks/rocm/benchmark_gfx1201_mxfp4_packed_folded.py"),
         ("isa_inspector_sha256", "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"),
     ):
         assert packet[field] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()

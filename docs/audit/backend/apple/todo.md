@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 bounded A-offset benchmark schema — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-A-OFFSET32-2026-09-23`. Not applicable to Metal: the
+RDNA4 A-producer arithmetic and v6 HIP-event/HSACO ISA census define no
+Apple schedule or benchmark. Shared ABI, numerical policy, and Apple
+selection remain unchanged; Tajasarus proof does not transfer.
+
 ## GFX1201 A-base benchmark and provenance correction — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

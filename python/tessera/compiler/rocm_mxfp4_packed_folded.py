@@ -42,13 +42,23 @@ PACKED_FOLDED_TARGET_ABI_V1 = (
     "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k."
     "e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1"
 )
+_MAX_A_OFFSET32_K = ((1 << 31) - 1 - 48) // 255
+
+
+def _validate_a_offset32_k(k: int) -> None:
+    if k <= 0 or k > _MAX_A_OFFSET32_K:
+        raise ValueError(
+            f"32-bit A row offset requires 0 < K <= {_MAX_A_OFFSET32_K}"
+        )
 
 
 def _packed_sync_key(
     *, vector_pair_loads: bool, permute_decode: bool,
     batched_loads: bool, batched_a_loads: bool, reuse_pair_scales: bool,
-    a_base_hoist: bool,
+    a_base_hoist: bool, a_offset32: bool = False,
 ) -> str:
+    if a_offset32:
+        return "GFX1201-PACKED-A-OFFSET32-2026-09-23"
     if a_base_hoist:
         return "GFX1201-PACKED-A-BASE-2026-09-23"
     if vector_pair_loads:
@@ -194,6 +204,25 @@ _HOISTED_BASE_A_STAGE = r'''    // Keep the CTA-uniform A tile base separate fro
           local_row < last_local_row ? local_row : last_local_row;
       const copy_u32x4 value = *reinterpret_cast<const copy_u32x4 *>(
           tile_a + safe_local_row * K + off);
+      *reinterpret_cast<copy_u32x4 *>(sA + local_row * 80 + off) = value;
+    }'''
+
+_OFFSET32_A_STAGE = r'''    // Package-time K bound proves 255*K+48 fits signed 32 bits. Keep the
+    // CTA-uniform base wide; only the lane-local row arithmetic is narrow.
+    const unsigned char *__restrict__ tile_a = A + m0 * K + kb;
+    const int local_stride = (int)K;
+    const long remaining_rows = M - m0 - 1;
+    const int last_local_row = remaining_rows < 255 ? (int)remaining_rows : 255;
+#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      const int local_row = slot / 4;
+      const int off = (slot & 3) * 16;
+      const int safe_local_row =
+          local_row < last_local_row ? local_row : last_local_row;
+      const int byte_offset = safe_local_row * local_stride + off;
+      const copy_u32x4 value = *reinterpret_cast<const copy_u32x4 *>(
+          tile_a + byte_offset);
       *reinterpret_cast<copy_u32x4 *>(sA + local_row * 80 + off) = value;
     }'''
 
@@ -502,7 +531,7 @@ def emit_mxfp4_packed_folded_prefill_hip(
     *, integer_decode: bool = False, batched_loads: bool = False,
     batched_a_loads: bool = False, reuse_pair_scales: bool = False,
     permute_decode: bool = False, vector_pair_loads: bool = False,
-    a_base_hoist: bool = False,
+    a_base_hoist: bool = False, a_offset32: bool = False,
 ) -> str:
     """Emit the K64 packed-fragment LDS decode and folded WMMA schedule."""
     source = emit_mxfp4_folded_prefill_hip(entry, full_k64=True)
@@ -516,6 +545,8 @@ def emit_mxfp4_packed_folded_prefill_hip(
         raise ValueError("paired lane loads are a separate staging ablation")
     if a_base_hoist and (batched_a_loads or vector_pair_loads):
         raise ValueError("A-base hoisting is a separate staging ablation")
+    if a_offset32 and (a_base_hoist or batched_a_loads or vector_pair_loads):
+        raise ValueError("32-bit A offsets are a separate staging ablation")
     def replace_once(old: str, new: str) -> None:
         nonlocal source
         if source.count(old) != 1:
@@ -527,7 +558,12 @@ def emit_mxfp4_packed_folded_prefill_hip(
         "using copy_u32x4 = unsigned int __attribute__((ext_vector_type(4)));"
         + _PACKED_HELPERS + (_PERMUTE_HELPERS if permute_decode else ""),
     )
-    if a_base_hoist:
+    if a_offset32:
+        replace_once(
+            _EXPANDED_A_STAGE.replace("__FULL_K64__", "true"),
+            _OFFSET32_A_STAGE,
+        )
+    elif a_base_hoist:
         replace_once(
             _EXPANDED_A_STAGE.replace("__FULL_K64__", "true"),
             _HOISTED_BASE_A_STAGE,
@@ -580,17 +616,19 @@ def package_mxfp4_packed_folded_prefill(
     batched_a_loads: bool = False,
     reuse_pair_scales: bool = False,
     permute_decode: bool = False, vector_pair_loads: bool = False,
-    a_base_hoist: bool = False,
+    a_base_hoist: bool = False, a_offset32: bool = False,
 ) -> ROCMNativePackage:
     """Compile the distinct packed ABI, without admitting it to selection."""
     n, k = payload.shape
     if m <= 64:
         raise ValueError("packed folded prefill requires M>64")
+    if a_offset32:
+        _validate_a_offset32_k(k)
     source = emit_mxfp4_packed_folded_prefill_hip(
         entry, integer_decode=integer_decode, batched_loads=batched_loads,
         batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
         permute_decode=permute_decode, vector_pair_loads=vector_pair_loads,
-        a_base_hoist=a_base_hoist,
+        a_base_hoist=a_base_hoist, a_offset32=a_offset32,
     )
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)
@@ -666,6 +704,7 @@ def package_mxfp4_packed_folded_prefill(
                 batched_a_loads=batched_a_loads,
                 reuse_pair_scales=reuse_pair_scales,
                 a_base_hoist=a_base_hoist,
+                a_offset32=a_offset32,
             ),
             "route": "packed_folded_fragment_bm256_tm4",
             "decode_strategy": "permute_word" if permute_decode else (
@@ -677,6 +716,8 @@ def package_mxfp4_packed_folded_prefill(
             "block_m": 256, "block_n": 64, "block_k": 64,
             "tile_m_per_wave": 4, "tile_n_per_wave": 2,
             "staging_policy": (
+                "packed_fragment_decode_k64_a_offset32" if a_offset32
+                else
                 "packed_fragment_decode_k64_hoisted_a_base" if a_base_hoist
                 else
                 "packed_fragment_decode_k64_vector_pair" if vector_pair_loads
@@ -689,6 +730,7 @@ def package_mxfp4_packed_folded_prefill(
                 else "packed_fragment_decode_k64"
             ),
             "decode_policy": "integer_register" if integer_decode else "constant_table",
+            **({"a_offset32_k_bound": _MAX_A_OFFSET32_K} if a_offset32 else {}),
             **payload.receipt(),
             "execution_state": "manual_executable_candidate",
         },

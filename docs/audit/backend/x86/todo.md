@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 bounded A-offset benchmark schema — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-A-OFFSET32-2026-09-23`. Not applicable to AVX-512: the
+RDNA4 lane-local A arithmetic and v6 HIP-event/HSACO ISA census do not
+alter x86 runtime, numerical, or selector contracts. No x86 performance
+result transfers from Tajasarus.
+
 ## GFX1201 A-base benchmark and provenance correction — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

@@ -7,6 +7,19 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 bounded A-offset ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-A-OFFSET32-2026-09-23`. A signed-32-bit lane-local A
+offset with a checked K bound passed five Tajasarus exact-device cases and
+matched exact K32 BF16 output. The v6 HIP-event/selected-HSACO packet shows
+188.8→184.3 µs versus the A-base control at 256×5120×8704 but
+1184.4→1186.4 µs at 1024×17408×5120. Static integer ISA falls, while
+VGPRs and waits stay flat. This is an opt-in, no-promotion result; no
+shared ABI or numerical-policy change. [Evidence](../../../../benchmarks/baselines/gfx1201_mxfp4_a_offset32_20260923/README.md).
+Next investigate wide-N producer traffic or K-step scheduling with matched
+Radiance and the exact K32 oracle.
+
 ## GFX1201 packed MXFP4 A-base address ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
@@ -17,8 +30,7 @@ exact K32 BF16 output on both prefill shapes. The v5 HIP-event packet shows
 VGPRs remain 110 and static waits 75. No selector promotion. The standalone
 v4 vector-pair rerun now includes its permute control and records the correct
 row-level sync key; the older packet stays historical. [Evidence](../../../../benchmarks/baselines/gfx1201_mxfp4_a_base_20260923/README.md).
-Next isolate bounded 32-bit lane-local A offsets and measure address ISA and
-occupancy without changing the exact K32 numerical oracle.
+The bounded 32-bit lane-local A-offset follow-up is recorded above.
 
 ## GFX1201 paired-lane packed MXFP4 prefill ablation — 2026-09-23
 

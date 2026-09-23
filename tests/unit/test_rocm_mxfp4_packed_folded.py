@@ -254,7 +254,8 @@ def test_packed_provenance_sync_keys_distinguish_ablation_variants() -> None:
     def key(**overrides: bool) -> str:
         flags = dict(vector_pair_loads=False, permute_decode=False,
                      batched_loads=False, batched_a_loads=False,
-                     reuse_pair_scales=False, a_base_hoist=False)
+                     reuse_pair_scales=False, a_base_hoist=False,
+                     a_offset32=False)
         flags.update(overrides)
         return packed_module._packed_sync_key(**flags)
 
@@ -266,6 +267,9 @@ def test_packed_provenance_sync_keys_distinguish_ablation_variants() -> None:
     )
     assert key(permute_decode=True, batched_loads=True, a_base_hoist=True) == (
         "GFX1201-PACKED-A-BASE-2026-09-23"
+    )
+    assert key(permute_decode=True, batched_loads=True, a_offset32=True) == (
+        "GFX1201-PACKED-A-OFFSET32-2026-09-23"
     )
 
 
@@ -282,3 +286,27 @@ def test_hoisted_a_base_stage_preserves_clamped_row_and_lds_layout() -> None:
     assert "tile_a + safe_local_row * K + off" in source
     assert "sA + local_row * 80 + off" in source
     assert "A + safe * K + kb + off" not in source
+
+
+def test_bounded_a_offset32_stage_only_narrows_lane_local_arithmetic() -> None:
+    limit = packed_module._MAX_A_OFFSET32_K
+    assert limit * 255 + 48 <= (1 << 31) - 1
+    assert (limit + 1) * 255 + 48 > (1 << 31) - 1
+    packed_module._validate_a_offset32_k(limit)
+    with pytest.raises(ValueError, match="32-bit A row offset"):
+        packed_module._validate_a_offset32_k(limit + 1)
+    with pytest.raises(ValueError, match="32-bit A row offset"):
+        packed_module._validate_a_offset32_k(0)
+    with pytest.raises(ValueError, match="separate staging ablation"):
+        emit_mxfp4_packed_folded_prefill_hip(
+            permute_decode=True, a_base_hoist=True, a_offset32=True,
+        )
+    source = emit_mxfp4_packed_folded_prefill_hip(
+        permute_decode=True, batched_loads=True, a_offset32=True,
+    )
+    assert "const unsigned char *__restrict__ tile_a = A + m0 * K + kb;" in source
+    assert "const int local_stride = (int)K;" in source
+    assert "remaining_rows < 255 ? (int)remaining_rows : 255" in source
+    assert "const int byte_offset = safe_local_row * local_stride + off;" in source
+    assert "tile_a + byte_offset" in source
+    assert "sA + local_row * 80 + off" in source

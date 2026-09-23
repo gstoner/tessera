@@ -16,7 +16,7 @@ CENSUS = PACKET.with_name("staging_census.json")
 
 def test_k64_staging_packet_binds_selected_generator_and_exact_output() -> None:
     packet = json.loads(PACKET.read_text())
-    assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v2"
+    assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v3"
     assert packet["source_revision"] == (
         "0e21ea607cc2f12dd9e34f310b77f31004eaeccd"
     )
@@ -50,6 +50,7 @@ def test_k64_staging_packet_binds_selected_generator_and_exact_output() -> None:
 def test_k64_selected_isa_census_binds_the_timed_packet() -> None:
     packet = json.loads(PACKET.read_text())
     census = json.loads(CENSUS.read_text())
+    assert census["schema"] == "tessera.rocm.gfx1201_folded_staging_census.v2"
     assert census["source_revision"] == packet["source_revision"]
     assert census["matched_packet_sha256"] == hashlib.sha256(
         PACKET.read_bytes()
@@ -58,11 +59,29 @@ def test_k64_selected_isa_census_binds_the_timed_packet() -> None:
         (ROOT / "benchmarks/rocm/inspect_gfx1201_folded_prefill.py").read_bytes()
     ).hexdigest()
     assert census["tessera"]["generator_sha256"] == packet["folded_generator_sha256"]
-    assert census["tessera"]["isa"]["v_wmma_f32_16x16x16_fp8_fp8"] == 32
-    assert census["tessera"]["isa"]["s_barrier_signal"] == 2
-    assert census["tessera"]["isa"]["s_barrier_wait"] == 2
-    assert census["tessera"]["isa"]["ds_store_b128"] == 5
-    assert census["tessera"]["code_object"]["resources"]["vgpr_count"] == 109
+    images = census["tessera"]["timed_images"]
+    assert set(images) == {
+        "prefill_256x5120x8704", "prefill_1024x17408x5120",
+    }
+    assert len({row["image_sha256"] for row in images.values()}) == 2
+    for case, image in images.items():
+        timed = next(
+            row for row in packet["rows"]
+            if row["case"] == case and row["engine"] == "tessera_folded"
+        )["metadata"]
+        selected = timed["selected_isa"]
+        assert image["image_sha256"] == timed["image_sha256"]
+        assert image["image_sha256"] == selected["payload_sha256"]
+        assert image["entry_symbol"] == timed["frontend_receipt"]["entry_symbol"]
+        assert image["instruction_stream_sha256"] == (
+            selected["instruction_stream_sha256"]
+        )
+        assert image["instruction_count"] == selected["instruction_count"]
+        assert image["isa"] == selected["mnemonics"]
+        assert image["isa"]["v_wmma_f32_16x16x16_fp8_fp8"] == 32
+        assert image["isa"]["s_barrier_signal"] == 2
+        assert image["isa"]["s_barrier_wait"] == 2
+        assert image["resources"]["vgpr_count"] == 109
     assert census["not_measured_dram_or_dynamic_instructions"] is True
     for shape in ("256x5120x8704", "1024x17408x5120"):
         counts = census["requested_bytes"][shape]

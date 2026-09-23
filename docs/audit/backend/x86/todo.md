@@ -15,6 +15,7 @@ Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-FOLDED-K64-STAGING-2026-09-22`.
 Not applicable to AVX-512 execution: the specialization is a gfx1201 HIP
 copy-loop codegen choice, and its HIP-event packet has no x86 runtime or
 selector consumer. No CPU physical schedule or proof transfers.
+The timed-HSACO ISA evidence schema has no x86 machine-code consumer.
 
 
 ## GFX1201 MXFP4 receipt and device coverage — 2026-09-22

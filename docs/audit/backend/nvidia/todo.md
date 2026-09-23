@@ -14,6 +14,8 @@ Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-FOLDED-K64-STAGING-2026-09-22`.
 Not applicable to CUDA execution: the new K64 specialization changes only
 the gfx1201 HIP vector-copy path and AMD benchmark packet. No PTX/NVFP4
 carrier, numerical policy, or NVIDIA device proof changes.
+The timed-HSACO ISA evidence schema does not apply to cubin/PTX or Nsight
+measurements.
 
 
 ## GFX1201 MXFP4 receipt and device coverage — 2026-09-22

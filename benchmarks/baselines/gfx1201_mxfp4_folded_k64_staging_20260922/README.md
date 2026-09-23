@@ -27,10 +27,16 @@ layout identity, and independent device proof; it cannot silently replace the
 explicit approximate folded representation.
 
 `evidence.json` is the clean-revision exact-device paired packet;
-`staging_census.json` binds its source and payload to selected-symbol ISA and
+`staging_census.json` binds each measured shape's actual loaded HSACO digest
+and normalized selected-symbol instruction digest to its timing row, alongside
 source-derived requested bytes. It is not a DRAM counter or dynamic
-instruction trace. Tessera emits 32 FP8 WMMAs, two RDNA4 signal/wait barrier
-pairs, and no spills at 109 VGPRs; the selected Radiance symbol has the same
-WMMA/barrier counts but uses 141 VGPRs and 23,040 LDS bytes. Historical
+instruction trace. Both timed Tessera kernels emit 32 FP8 WMMAs and two
+RDNA4 signal/wait barrier pairs, without spills at 109 VGPRs. The selected
+Radiance symbol has the same WMMA/barrier counts but uses 141 VGPRs and
+23,040 LDS bytes. Historical
 packets remain pinned to their original generator hashes, not re-labeled as
 evidence for this code revision.
+
+The one-lever follow-up recorder is
+`benchmarks/rocm/ablate_gfx1201_folded_codegen.py`; its variants remain
+diagnostic and are not selected by the production route.

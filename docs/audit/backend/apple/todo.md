@@ -15,6 +15,8 @@ Not applicable to Metal execution: this specializes the gfx1201 HIP A/B
 copy loop and adds AMD-only benchmark evidence. The folded numerical policy
 and shared Graph semantics are unchanged; no Apple schedule or timing proof
 transfers.
+The timed-HSACO ISA evidence schema is gfx1201-specific and has no Metal
+code-object or benchmark consumer.
 
 
 ## GFX1201 MXFP4 receipt and device coverage — 2026-09-22

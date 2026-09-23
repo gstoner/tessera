@@ -1,0 +1,32 @@
+{
+  "schema": "tessera.mxfp4.model_layer_inventory.v1",
+  "model": "openai/gpt-oss-20b",
+  "checkpoint_revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+  "checkpoint_total_tensor_bytes": 13761264768,
+  "config_sha256": "3a2a26ded679375b7928ddeca59764df7cea83220c1961035f6d6e232659e9ce",
+  "index_sha256": "0e085b977c4c9942f85938828e8c989ed7d5cdabf852e4da6a67c116cd502cd1",
+  "shard_headers": [
+    {
+      "name": "model-00000-of-00002.safetensors",
+      "header_bytes": 22248,
+      "header_sha256": "a6bf65fed7ea4e4f661489fdc2c7747981dbd85c78da37d58b4aee2aeaf6233a"
+    },
+    {
+      "name": "model-00001-of-00002.safetensors",
+      "header_bytes": 22312,
+      "header_sha256": "94355300ccfc80eab30f99a6fe9c7c58d3e575e217a6c5c0bd87e628e111da7c"
+    },
+    {
+      "name": "model-00002-of-00002.safetensors",
+      "header_bytes": 7576,
+      "header_sha256": "ebba789e35846465a0a3c916fa41e68e9cdf0741658bf2a0f5a4b58edad3a743"
+    }
+  ],
+  "source_block_layout": "[expert, output_N, K_over_32, packed_16_bytes]",
+  "source_scale_layout": "[expert, output_N, K_over_32]",
+  "source_dtype": "U8",
+  "layers": [
+    {"n": 2880, "k": 2880, "count": 768},
+    {"n": 5760, "k": 2880, "count": 768}
+  ]
+}

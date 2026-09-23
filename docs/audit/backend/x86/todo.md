@@ -9,6 +9,22 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GPT-OSS-20B ROCm full-expanded capacity packet — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-GPT-OSS-20B-MXFP4-CAPACITY-2026-09-23`. The pinned expert
+dimensions are model facts, but the no-fit packet compares Tessera's
+ROCm expanded layout to one gfx1201 VRAM capacity. It does not govern
+x86 RAM capacity, AVX-512 packing, or CPU selection.
+
+## GFX1201 MXFP4 prefill sweep schema — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-PREFILL-SWEEP-2026-09-23`. Not applicable to AVX-512:
+the manual gfx1201 TN2/TN4 schedules and HIP-event/HSACO evidence change
+no x86 kernel, numerical policy, or selector. The model-memory inventory
+is ROCm evidence and does not establish CPU capacity or performance.
+
 ## GFX1201 folded-prefill experiments and runtime guard — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

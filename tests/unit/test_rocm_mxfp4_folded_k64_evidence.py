@@ -18,7 +18,7 @@ def test_k64_staging_packet_binds_selected_generator_and_exact_output() -> None:
     packet = json.loads(PACKET.read_text())
     assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v3"
     assert packet["source_revision"] == (
-        "0e21ea607cc2f12dd9e34f310b77f31004eaeccd"
+        "52a297422320f57b53e461705b398d75d1b88521"
     )
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["architecture"] == "gfx1201"

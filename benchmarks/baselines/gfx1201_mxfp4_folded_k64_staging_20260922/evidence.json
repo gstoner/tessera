@@ -1,6 +1,6 @@
 {
   "architecture": "gfx1201",
-  "benchmark_sha256": "b2a4286fc0ea554d5d81949a5ced8c8c1c938b8d9cb90415879a9a23ae362062",
+  "benchmark_sha256": "c69c5a4917a1dbb5e731fda54e129ca203b677d78ce912921c6b7b72b30f1a37",
   "device": "AMD Radeon RX 9070 XT",
   "folded_generator_sha256": "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c",
   "frontend_sha256": "bedb4272bf2c9de73bfbe25367732d4038359fab7caed95934703db5f5a0750b",
@@ -15,7 +15,7 @@
     {
       "case": "prefill_256x5120x8704",
       "engine": "tessera",
-      "median_ms": 0.5219151576360067,
+      "median_ms": 0.5090893507003784,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.fragment.v1",
         "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
@@ -50,34 +50,34 @@
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.5409259796142578,
-        0.48437448342641193,
-        0.5361260175704956,
-        0.5027376810709635,
-        0.5251575708389282,
-        0.5128150780995687,
-        0.5219151576360067,
-        0.5062468449274699,
-        0.5265825986862183,
-        0.5037444829940796,
-        0.5302760998407999
+        0.5020439227422079,
+        0.4782928228378296,
+        0.5331389904022217,
+        0.5040059884389242,
+        0.5195024808247884,
+        0.5058159033457438,
+        0.521108349164327,
+        0.5080550909042358,
+        0.5214792490005493,
+        0.5090893507003784,
+        0.5185916821161906
       ]
     },
     {
       "case": "prefill_256x5120x8704",
       "engine": "tessera_folded",
-      "median_ms": 0.1693259080251058,
+      "median_ms": 0.16681700944900513,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
         "frontend_receipt": {
           "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
-          "artifact_image_digest": "b97b778d2a72f6e9cde9476cbd948f7aa4b95a59ead651683b8c7ef513609250",
+          "artifact_image_digest": "e87106b5e553eb50ee419d1a8ac9e7d25264f4c4306c90c4b7d24def55e42e80",
           "entry_symbol": "tessera_mxfp4_folded_prefill",
           "fold_inexact_value_count": 0,
           "fold_lossless": true,
           "graph_ir_sha256": "150d8dc47b8ec9c301c4a4c22a38467225f092e9a0a2bacd9100e3417b206049",
-          "hsaco_sha256": "fe286e1985433090b5a1bce65675d8de5468bd7a757d8b6c84e585e7a7077647",
+          "hsaco_sha256": "478541c437fd10a96c313b9ee608e699498a6e0083ddf66e5669eb4330288f39",
           "numeric_policy": "folded_row_reference_explicit_approximate",
           "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
           "route": "folded_row_reference_bm256_tm4",
@@ -92,7 +92,7 @@
           "target_ir_sha256": "0e1a3c97fda8107dde8f9e1f80305c0c3d18d26fb9b1595fb609aeb3b57f560f",
           "tile_ir_sha256": "b592d107a66d718ec5886b71bcdab4b0a91fad0fff21967de15ff01dab2391f7"
         },
-        "image_sha256": "fe286e1985433090b5a1bce65675d8de5468bd7a757d8b6c84e585e7a7077647",
+        "image_sha256": "478541c437fd10a96c313b9ee608e699498a6e0083ddf66e5669eb4330288f39",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -134,50 +134,68 @@
           "weight_sha256": "b260b23531d017c0eac6e71cb45ff9e21c4b6cc70bd182962e6097eaa7e2ec04",
           "work_item": "ROCM-MXFP4-W4A8-1"
         },
+        "selected_isa": {
+          "entry_symbol": "tessera_mxfp4_folded_prefill",
+          "instruction_count": 4195,
+          "instruction_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46",
+          "mnemonics": {
+            "ds_load_2addr_b64": 8,
+            "ds_load_b64": 8,
+            "ds_store_b128": 5,
+            "global_load_b128": 5,
+            "global_load_b32": 64,
+            "global_load_u8": 2,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "s_wait_loadcnt": 71,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32
+          },
+          "payload_sha256": "478541c437fd10a96c313b9ee608e699498a6e0083ddf66e5669eb4330288f39"
+        },
         "toolchain_fingerprint": "acb8aad6c6072651278d317800a917026a79c4970e04ad57d16cb63f2e4825c8"
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.1655229131380717,
-        0.1593653361002604,
-        0.17431332667668661,
-        0.16510666410128275,
-        0.1726909081141154,
-        0.16867591937383017,
-        0.1745633284250895,
-        0.1693259080251058,
-        0.17619341611862183,
-        0.1621525784333547,
-        0.16978925466537476
+        0.15907191236813864,
+        0.15667532881100973,
+        0.17469358444213867,
+        0.16396033763885498,
+        0.17340524991353354,
+        0.16184199849764505,
+        0.17539691925048828,
+        0.16580616434415182,
+        0.16981283823649088,
+        0.16681700944900513,
+        0.17343199253082275
       ]
     },
     {
       "case": "prefill_256x5120x8704",
       "engine": "radiance",
-      "median_ms": 0.1434034208456675,
+      "median_ms": 0.14375216762224832,
       "metadata": {
         "row_reference_fold": "exact_delta_le_2",
         "weight_layout": "fragment_order"
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.13841633001963297,
-        0.13791299859682718,
-        0.14330666263898215,
-        0.13986333211263022,
-        0.1439900000890096,
-        0.1434034208456675,
-        0.14504341284434,
-        0.1436299979686737,
-        0.14525524775187174,
-        0.14270941416422525,
-        0.143459419409434
+        0.13889875014623007,
+        0.1377821664015452,
+        0.14515883723894754,
+        0.14178216457366943,
+        0.1458554963270823,
+        0.14219550291697183,
+        0.14509549736976624,
+        0.14518882830937704,
+        0.14375216762224832,
+        0.14340807994206747,
+        0.14712383349736533
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "tessera",
-      "median_ms": 4.37337080637614,
+      "median_ms": 4.368893623352051,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.fragment.v1",
         "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
@@ -212,34 +230,34 @@
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        4.065011660257976,
-        4.067346572875977,
-        4.3780622482299805,
-        4.3606522878011065,
-        4.3712724049886065,
-        4.3702042897542315,
-        4.382674217224121,
-        4.37781302134196,
-        4.389267921447754,
-        4.378900527954102,
-        4.37337080637614
+        4.056870778401692,
+        4.0698197682698565,
+        4.36619504292806,
+        4.368893623352051,
+        4.372645378112793,
+        4.3566239674886065,
+        4.3721160888671875,
+        4.363765398661296,
+        4.381341298421224,
+        4.375492413838704,
+        4.38439400990804
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "tessera_folded",
-      "median_ms": 1.181162675221761,
+      "median_ms": 1.177803675333659,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
         "frontend_receipt": {
           "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
-          "artifact_image_digest": "be1b5458acf619f29a22dfe60d89a2016dad5c5cfe4589a5ce77920929b23747",
+          "artifact_image_digest": "41a01c4592d60d259b61be53101622a17528f9b2db363a36d72c88e7ffdf63d3",
           "entry_symbol": "tessera_mxfp4_folded_prefill",
           "fold_inexact_value_count": 0,
           "fold_lossless": true,
           "graph_ir_sha256": "648b6a948b0d30420c4c7346b60bd02ba6ed3e8bef9c7715f088c9c35b2735ff",
-          "hsaco_sha256": "67777139bfc6e7111b875b96ed1cb8bf16f7b5638d769d808c0f1e54a2af6599",
+          "hsaco_sha256": "e09dbdbe7bcb1fa60bc4100ad5f66511c5fc28a5237e9c63257f348e887ec65a",
           "numeric_policy": "folded_row_reference_explicit_approximate",
           "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
           "route": "folded_row_reference_bm256_tm4",
@@ -254,7 +272,7 @@
           "target_ir_sha256": "8429b863391a48cf12e92b5f34efc60be84420673d61eecc5d339e9e59aff1d6",
           "tile_ir_sha256": "7e93a72ed53f714d2182de07f69bd2008d1898c1016226d0100139d745dc689e"
         },
-        "image_sha256": "67777139bfc6e7111b875b96ed1cb8bf16f7b5638d769d808c0f1e54a2af6599",
+        "image_sha256": "e09dbdbe7bcb1fa60bc4100ad5f66511c5fc28a5237e9c63257f348e887ec65a",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -296,48 +314,66 @@
           "weight_sha256": "8c9b425cd49bbda2a86244b591190613ef520764fd9a73984c85a3377f23863a",
           "work_item": "ROCM-MXFP4-W4A8-1"
         },
+        "selected_isa": {
+          "entry_symbol": "tessera_mxfp4_folded_prefill",
+          "instruction_count": 4195,
+          "instruction_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46",
+          "mnemonics": {
+            "ds_load_2addr_b64": 8,
+            "ds_load_b64": 8,
+            "ds_store_b128": 5,
+            "global_load_b128": 5,
+            "global_load_b32": 64,
+            "global_load_u8": 2,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "s_wait_loadcnt": 71,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32
+          },
+          "payload_sha256": "e09dbdbe7bcb1fa60bc4100ad5f66511c5fc28a5237e9c63257f348e887ec65a"
+        },
         "toolchain_fingerprint": "acb8aad6c6072651278d317800a917026a79c4970e04ad57d16cb63f2e4825c8"
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        1.0740300019582112,
-        1.0897440910339355,
-        1.1923868656158447,
-        1.2040276527404785,
-        1.1750789483388264,
-        1.1993454297383626,
-        1.179203192392985,
-        1.2006022930145264,
-        1.181162675221761,
-        1.2027076880137126,
-        1.1793341636657715
+        1.0766107241312664,
+        1.0905148188273113,
+        1.1950745582580566,
+        1.2021694978078206,
+        1.1756220658620198,
+        1.2030502160390217,
+        1.1756165822347004,
+        1.1988863945007324,
+        1.177803675333659,
+        1.2002027829488118,
+        1.1717664400736492
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "radiance",
-      "median_ms": 0.8979915777842203,
+      "median_ms": 0.895814577738444,
       "metadata": {
         "row_reference_fold": "exact_delta_le_2",
         "weight_layout": "fragment_order"
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        0.8549393018086752,
-        0.8660659790039062,
-        0.8998169898986816,
-        0.9197102387746176,
-        0.89347243309021,
-        0.9202190240224203,
-        0.8948906262715658,
-        0.9185406366984049,
-        0.8979915777842203,
-        0.9196982383728027,
-        0.8940747578938802
+        0.8528759479522705,
+        0.864774227142334,
+        0.899817943572998,
+        0.9173445701599121,
+        0.8908319473266602,
+        0.9191417694091797,
+        0.8928891023000082,
+        0.9208146731058756,
+        0.895814577738444,
+        0.9214210510253906,
+        0.8922313849131266
       ]
     }
   ],
-  "schema": "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v2",
-  "source_revision": "0e21ea607cc2f12dd9e34f310b77f31004eaeccd",
+  "schema": "tessera.rocm.gfx1201_mxfp4_folded_benchmark.v3",
+  "source_revision": "52a297422320f57b53e461705b398d75d1b88521",
   "timing_order": "alternating_interleaved_per_shape"
 }

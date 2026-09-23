@@ -8,6 +8,14 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 resident MXFP4 HIP lifecycle — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-RESIDENT-HIP-2026-09-23`. Not applicable to CUDA
+execution: this manual HIP module/stream/buffer lifecycle and its benchmark
+schema are gfx1201-specific. The NVIDIA staging arena is a separate runtime
+contract; no CUDA MXFP4 selection or exact-device timing is implied.
+
 ## GFX1201 packed-word permute decode — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-PERMUTE-DECODE-2026-09-23`.

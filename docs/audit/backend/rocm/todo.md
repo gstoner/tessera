@@ -7,6 +7,22 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 resident MXFP4 HIP lifecycle — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-RESIDENT-HIP-2026-09-23`. An opt-in session retains the
+same packed-folded HSACO, HIP stream, five device buffers, fragment-order B,
+and scale plane across calls. Kernel-only submission has no allocation,
+copy, or synchronization; host-array compatibility still uploads A/As and
+downloads BF16 output. Tajasarus passes four lossless/lossy ragged BF16
+cases. Same-HSACO lifecycle measurements and source-bound receipts are in
+`benchmarks/baselines/gfx1201_mxfp4_resident_20260923/`: host-call median
+falls 19.46→2.25 ms and 54.71→6.64 ms on the two production prefill shapes.
+These are host-wall, not kernel, speedups; the existing matched Radiance
+kernel gap remains open. Keep automatic selection closed. Next: expose a
+device-owned input/output lifetime and prove HIP graph capture/replay on the
+same stream before comparing lower-level ROCr/AQL dispatch overhead.
+
 ## GFX1201 packed-word permute decode — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

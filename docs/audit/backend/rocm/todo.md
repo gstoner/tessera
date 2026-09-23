@@ -52,6 +52,31 @@ with reserves for activations, graph pools, code objects, and
 fragmentation; the pinned GPT-OSS-20B full-expansion refusal is above.
 Keep exact K32 as oracle and safe/TN4 candidates manual.
 
+## Quark W4A4 checkpoint boundary and Qwen projection fixture — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-MXFP4-CHECKPOINT-2026-09-23`. The pinned
+[AMD Qwen3.8-27B Quark AWQ MXFP4 checkpoint](https://huggingface.co/amd/Qwen3.8-27B-Quark-AWQ-MXFP4/tree/5233554c5fa56afda40150556b95573c2d7d29c0)
+uses Quark `reorder` packed U8 weights, U8 E8M0 K32 scales, and dynamic
+MXFP4 activations. Its gate/up `N=17408,K=5120` matches the wide-N
+synthetic sweep geometry; down `N=5120,K=17408` does not match the
+`K=8704` control. The new metadata assessment and route receipt identify
+the Quark source layout and W4A4 activation separately and refuse both
+under the proved W4A8 ABI. The checkpoint has 19,797,976,544 tensor
+bytes, exceeding Tajasarus physical VRAM even before runtime reserves.
+This is host-free metadata evidence, not decoded-byte, BF16, or device
+proof. Next obtain a pinned single-projection byte sample and independent
+Quark E2M1/E8M0 oracle, then define a distinct W4A4 activation carrier
+and exact-device numerical tests before any selector or timing claim.
+
+[GLM-5.3-Flash](https://huggingface.co/zai-org/GLM-5.3-Flash/tree/eb9eb208eb0d988989d07a6a12d0fdeb5f52574a)
+is a separate FP8 E4M3/FP32 128×128 block-scale workload, not an MXFP4
+fixture. Its 288-expert top-8 MoE and 34 linear/11 sparse-attention layers
+can guide future FP8 and hybrid-attention work; the 328,326,771,576-byte
+checkpoint cannot be used for single-card Tajasarus model timing. GLM's
+128-dimensional linear-attention heads are not by themselves proof that
+Tessera's current `linear_attn D=128` implements GLM's KDA semantics.
+
 ## GFX1201 folded-prefill safe epilogue and TN4 experiments — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

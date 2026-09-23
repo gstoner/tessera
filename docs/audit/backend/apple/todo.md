@@ -25,6 +25,15 @@ six-shape HIP-event/HSACO packet and ROCm-only manual schedules do not alter
 Apple execution or selection. Its fail-closed model-memory inventory rule
 is informative, not Apple device or capacity proof.
 
+## Quark MXFP4 checkpoint metadata and W4A4 refusal — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-MXFP4-CHECKPOINT-2026-09-23`. The Quark source-layout
+identity and activation field in the Quark assessment receipt do not define a
+Metal converter or W4A4 execution route. Apple numerical policy, target
+selection, and exact-device status remain unchanged; Qwen/GLM metadata is
+not Apple hardware evidence.
+
 ## GFX1201 folded-prefill experiments and runtime guard — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

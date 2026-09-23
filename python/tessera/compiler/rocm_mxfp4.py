@@ -44,6 +44,7 @@ MXFP4_TRANSPOSED_LAYOUT_V1 = "mxfp4.runtime_k2_n.low_even.v1"
 MXFP4_GFX12_FRAGMENT_LAYOUT_V1 = "mxfp4.gfx12.n16_k16_lane_u32.v1"
 MXFP4_FOLDED_ROW_LAYOUT_V1 = "mxfp4.gfx12.folded_e4m3.nk_row_major.v1"
 MXFP4_AITER_SHUFFLED_LAYOUT_V1 = "mxfp4.aiter_shuffled.opaque.v1"
+MXFP4_QUARK_REORDER_LAYOUT_V1 = "mxfp4.quark_reorder.opaque.v1"
 
 MXFP4Mode = Literal["exact_per_block", "folded_row_reference"]
 
@@ -107,6 +108,12 @@ MXFP4_WEIGHT_LAYOUTS: dict[str, MXFP4WeightLayout] = {
         MXFP4_AITER_SHUFFLED_LAYOUT_V1,
         "opaque",
         "third_party_incompatible",
+        False,
+    ),
+    MXFP4_QUARK_REORDER_LAYOUT_V1: MXFP4WeightLayout(
+        MXFP4_QUARK_REORDER_LAYOUT_V1,
+        "[N,K/2]",
+        "third_party_byte_order_unverified",
         False,
     ),
 }
@@ -251,10 +258,8 @@ def convert_weight_layout(
 ) -> np.ndarray:
     """Convert packed weights once at model/package load time.
 
-    The canonical checkpoint layout is the hub.  The AITER shuffled identity
-    is deliberately recognized but refused because its permutation is not the
-    gfx12 fragment contract and Tessera does not yet own an independent
-    specification for it.
+    The canonical checkpoint layout is the hub.  Third-party source layouts
+    remain recognized but refused until Tessera owns byte-level conversions.
     """
     src = mxfp4_weight_layout(source)
     dst = mxfp4_weight_layout(destination)
@@ -265,8 +270,8 @@ def convert_weight_layout(
         )
     if not src.conversion_supported or not dst.conversion_supported:
         raise ValueError(
-            "MXFP4 AITER shuffled layout is recognized but has no proved "
-            "Tessera conversion contract"
+            f"MXFP4 layout conversion {source!r} -> {destination!r} "
+            "is recognized but has no proved Tessera conversion contract"
         )
     packed = _as_u8("packed MXFP4 weights", weights, maximum=255)
     if packed.ndim != 2:

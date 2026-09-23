@@ -24,6 +24,14 @@ RDNA4 TN2/TN4 schedules, HIP-event/HSACO packet, and gfx1201 free-memory
 snapshots do not establish an NVFP4/PTX selector or a loaded-model budget.
 No NVIDIA exact-device result transfers.
 
+## Quark MXFP4 checkpoint metadata and W4A4 refusal — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-MXFP4-CHECKPOINT-2026-09-23`. The new Quark assessment field
+and Quark source-layout refusal do not specify an NVFP4 packing contract,
+CUDA activation producer, or NVIDIA execution route. No SM120 proof or
+selector state transfers from the Qwen/GLM metadata assessment.
+
 ## GFX1201 folded-prefill experiments and runtime guard — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

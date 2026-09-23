@@ -45,8 +45,10 @@ def test_corrected_packet_has_control_provenance_and_timed_isa(
     assert packet["benchmark_sha256"] == (
         "ff9bd6787b898bd681caf63f6e0dea47856485ea2b1f368fc4363548ffe31f31"
     )
+    assert packet["generator_sha256"] == (
+        "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
+    )
     for field, path in (
-        ("generator_sha256", "python/tessera/compiler/rocm_mxfp4_folded.py"),
         ("isa_inspector_sha256", "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"),
     ):
         assert packet[field] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()

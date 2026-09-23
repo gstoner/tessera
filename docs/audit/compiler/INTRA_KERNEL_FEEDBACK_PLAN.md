@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-09-23
 audit_role: plan
 plan_state: open
 ---
@@ -499,3 +499,21 @@ timed HSACO to its selected ISA, VGPR count, and static waits. A-only and
 paired-scale variants are negative controls; B-only gives only a small
 gain. None justifies changing the automatic selector or training a dynamic
 stall label from static ISA counts.
+
+### 2026-09-23: safe epilogue and N-tile reuse are decisions, not phase labels
+
+The next Tajasarus loop paired exact K32 output with ordinary folded TN2,
+host-scale-certified safe TN2, expanded TN4/BN128, packed TN2, and pinned
+Radiance in one uninstrumented HIP-event packet. Removing the rare FP64
+fallback shrank static ISA but gained only about 1–2% and raised VGPRs.
+TN4 halves source-derived A staging requests and improves the wide shape
+about 4.6%, but regresses M=256 where it launches only 40 CTAs on 64 CUs.
+This is a shape-dependent Schedule hypothesis, not a measured DRAM or
+occupancy attribution. Keeping both expanded prefill and packed decode
+requires the *whole* expanded weight image as incremental residency; an
+illustrative 32-layer wide-matrix set needs 2.85 GB extra. With no real
+model free-memory budget or device-resident safe-scale producer certificate,
+both routes remain manual and selection stays closed. Next require a matched
+real-model memory packet and profiler-capable gfx1201 counter/PC evidence
+before fitting stage-cost labels; whole-kernel timing can continue guiding
+controlled, single-coordinate probes. [Exact-device packet](../../../benchmarks/baselines/gfx1201_mxfp4_prefill_experiments_20260923/README.md).

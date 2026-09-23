@@ -20,10 +20,15 @@ def test_offset32_packet_binds_current_sources_oracle_and_selected_isa() -> None
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["architecture"] == "gfx1201"
     assert packet["radiance"]["weight_layout"] == "fragment_order"
+    # The v6 packet predates the safe-epilogue generator and corrected census.
+    assert packet["generator_sha256"] == (
+        "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
+    )
+    assert packet["benchmark_sha256"] == (
+        "07bda3c180807a28a0363cc1127ee3b5671537e11694ccd2edfd4896f491ecf5"
+    )
     for field, path in (
-        ("generator_sha256", "python/tessera/compiler/rocm_mxfp4_folded.py"),
         ("packed_abi_sha256", "python/tessera/compiler/rocm_mxfp4_packed_folded.py"),
-        ("benchmark_sha256", "benchmarks/rocm/benchmark_gfx1201_mxfp4_packed_folded.py"),
         ("isa_inspector_sha256", "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"),
     ):
         assert packet[field] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()

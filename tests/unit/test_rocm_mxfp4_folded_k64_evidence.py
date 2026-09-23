@@ -24,11 +24,13 @@ def test_k64_staging_packet_binds_selected_generator_and_exact_output() -> None:
     assert packet["architecture"] == "gfx1201"
     assert packet["radiance"]["wperm"] == 1
     assert packet["radiance"]["weight_layout"] == "fragment_order"
+    assert packet["folded_generator_sha256"] == (
+        "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
+    )
     for key, path in {
         "benchmark_sha256": "benchmarks/rocm/benchmark_gfx1201_mxfp4_folded.py",
         "frontend_sha256": "python/tessera/compiler/rocm_mxfp4_folded_frontend.py",
         "materializer_sha256": "python/tessera/compiler/rocm_mxfp4_folded_carrier.py",
-        "folded_generator_sha256": "python/tessera/compiler/rocm_mxfp4_folded.py",
     }.items():
         assert packet[key] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
     for case in ("prefill_256x5120x8704", "prefill_1024x17408x5120"):

@@ -7,6 +7,27 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 folded-prefill safe epilogue and TN4 experiments — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-PREFILL-EXPERIMENTS-2026-09-23`. An opt-in, distinct
+safe-scale ABI removes the extreme-scale fallback only after a host-array
+certificate is checked again at launch. Tajasarus exact-device edge-scale
+tests and matched BF16 comparison pass. The final matched run cut selected
+static instructions 4195→2724, but improved the small/wide kernels only
+3.2%/1.0% and raised VGPRs 109→140; it is not the main Radiance gap.
+An isolated expanded-weight BN128/TN4 experiment passed ragged-N device
+tests, improved wide-N 1158.2→1104.6 µs but regressed M=256
+170.5→179.4 µs. Expanded TN2 beats packed TN2 by 5.5% on the small
+shape but only 0.6% on wide N. An illustrative 32-layer wide-shape model
+needs 2.85 GB extra to retain packed decode and expanded prefill. The
+current-source packet and model-level weight-residency assessment are
+[recorded](../../../../benchmarks/baselines/gfx1201_mxfp4_prefill_experiments_20260923/README.md).
+Neither candidate enters automatic selection. Follow-on: verify a real
+model's available memory budget and scale-producer certificate, then profile
+load/wait placement or use controlled scheduling ablations; requested A bytes
+are not measured DRAM traffic.
+
 ## GFX1201 bounded A-offset ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

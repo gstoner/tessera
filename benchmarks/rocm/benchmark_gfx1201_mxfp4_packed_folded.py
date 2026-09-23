@@ -44,7 +44,7 @@ def _selected_integer_alu(payload: bytes, entry: str) -> dict[str, int]:
             continue
         instruction = " ".join(line.split("//", 1)[0].split())
         match = re.match(r"^([vs]_(?:add|sub|mul|mad|lshl|lshr|ashr)[a-z0-9_]*)\b", instruction)
-        if match:
+        if match and not re.search(r"_(?:f16|f32|f64|bf16|fp8|bf8)(?:_|$)", match.group(1)):
             counts[match.group(1)] += 1
     return dict(sorted(counts.items()))
 

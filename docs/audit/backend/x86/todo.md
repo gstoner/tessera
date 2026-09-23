@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 folded-prefill experiments and runtime guard — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-PREFILL-EXPERIMENTS-2026-09-23`. Not applicable to AVX-512:
+the HIP safe-scale ABI, RDNA4 BN128 schedule, HSACO timing schema, and ROCm
+launch guard alter no x86 execution or selector contract. The model-level
+weight-byte assessment is informational, not an x86 performance claim.
+
 ## GFX1201 bounded A-offset benchmark schema — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

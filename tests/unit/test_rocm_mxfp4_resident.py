@@ -15,6 +15,7 @@ from tessera.compiler.rocm_mxfp4_packed_folded import (
     prepare_packed_folded_payload,
 )
 from tessera.compiler.rocm_mxfp4_resident import PackedFoldedResidentSession
+from tessera.compiler.rocm_mxfp4_graph import PackedFoldedGraphSession
 
 
 class _FakeFunction:
@@ -29,12 +30,16 @@ class _FakeFunction:
 class _FakeHip:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.node_type = 0
         self.allocations: list[ctypes.Array[ctypes.c_char]] = []
         for name in (
             "hipInit", "hipStreamCreateWithFlags", "hipStreamDestroy",
             "hipStreamSynchronize", "hipModuleLoadData", "hipModuleUnload",
             "hipModuleGetFunction", "hipMalloc", "hipFree", "hipMemcpyAsync",
             "hipModuleLaunchKernel",
+            "hipStreamBeginCapture", "hipStreamEndCapture", "hipGraphGetNodes",
+            "hipGraphNodeGetType", "hipGraphInstantiate", "hipGraphLaunch",
+            "hipGraphExecDestroy", "hipGraphDestroy",
         ):
             setattr(self, name, _FakeFunction(lambda *args, name=name: self._call(name, *args)))
 
@@ -50,6 +55,18 @@ class _FakeHip:
             )
         elif name == "hipMemcpyAsync":
             ctypes.memmove(args[0], args[1], int(args[2]))
+        elif name == "hipStreamEndCapture":
+            ctypes.cast(args[1], ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(2)
+        elif name == "hipGraphGetNodes":
+            ctypes.cast(args[2], ctypes.POINTER(ctypes.c_size_t))[0] = ctypes.c_size_t(1)
+            if args[1] is not None:
+                ctypes.cast(args[1], ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(3)
+        elif name == "hipGraphNodeGetType":
+            ctypes.cast(args[1], ctypes.POINTER(ctypes.c_int))[0] = ctypes.c_int(
+                self.node_type
+            )
+        elif name == "hipGraphInstantiate":
+            ctypes.cast(args[0], ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(4)
         return 0
 
 
@@ -128,3 +145,55 @@ def test_resident_refuses_wrong_device_and_mismatched_payload() -> None:
     with pytest.raises(ValueError, match="weight_sha256"):
         PackedFoldedResidentSession(package, payload, 65, hip=hip)
     assert not hip.calls
+
+
+def test_device_graph_captures_one_kernel_and_replays_without_host_io() -> None:
+    package, payload = _fixture()
+    hip = _FakeHip()
+    with patch("tessera.runtime._rocm_live_arch", return_value="gfx1201"):
+        with PackedFoldedGraphSession(package, payload, 65, hip=hip) as graph:
+            leases = graph.buffers()
+            assert leases["a"].nbytes == 65 * 64
+            assert leases["output"].pointer != 0
+            with pytest.raises(ValueError, match="session stream"):
+                graph.mark_device_inputs_ready(stream_pointer=0)
+            with pytest.raises(RuntimeError, match="initialized device inputs"):
+                graph.capture()
+            graph.upload_inputs(
+                np.full((65, 64), 0x38, dtype=np.uint8),
+                np.ones(65, dtype=np.float32),
+            )
+            graph.capture()
+            assert graph.receipt()["capture_nodes"] == (0,)
+            assert hip.calls.count("hipGraphGetNodes") == 2
+            before = len(hip.calls)
+            graph.replay()
+            assert hip.calls[before:] == ["hipGraphLaunch"]
+            assert graph.receipt()["graph_replays"] == 1
+            graph.mark_device_inputs_ready(stream_pointer=graph.stream_pointer)
+            with pytest.raises(RuntimeError, match="has not replayed these inputs"):
+                graph.read_output()
+            graph.replay()
+            with pytest.raises(RuntimeError, match="already captured"):
+                graph.capture()
+        with pytest.raises(RuntimeError, match="closed"):
+            _ = leases["a"].pointer
+    assert hip.calls.count("hipGraphExecDestroy") == 1
+    assert hip.calls.count("hipGraphDestroy") == 1
+
+
+def test_device_graph_refuses_non_kernel_capture() -> None:
+    package, payload = _fixture()
+    hip = _FakeHip()
+    hip.node_type = 1  # HIP memcpy node
+    with patch("tessera.runtime._rocm_live_arch", return_value="gfx1201"):
+        with PackedFoldedGraphSession(package, payload, 65, hip=hip) as graph:
+            graph.upload_inputs(
+                np.full((65, 64), 0x38, dtype=np.uint8),
+                np.ones(65, dtype=np.float32),
+            )
+            with pytest.raises(RuntimeError, match="non-kernel node"):
+                graph.capture()
+            assert graph.receipt()["graph_captures"] == 0
+    assert hip.calls.count("hipGraphDestroy") == 1
+    assert hip.calls.count("hipGraphExecDestroy") == 0

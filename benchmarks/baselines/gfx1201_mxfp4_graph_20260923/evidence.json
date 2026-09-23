@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "description": "Exact gfx1201 kernel-only HIP graph proof and alternating same-HSACO timing against direct resident launch",
+  "results": [
+    {
+      "capture_nodes": [
+        0
+      ],
+      "device_name": "AMD Radeon RX 9070 XT",
+      "device_ordinal": 0,
+      "direct": {
+        "host_enqueue_us_median": 6.326825,
+        "kernel_event_us_median": 174.10410046577454
+      },
+      "full_output_equals_direct": true,
+      "graph": {
+        "host_enqueue_us_median": 1.9714999999999998,
+        "kernel_event_us_median": 185.07550358772278
+      },
+      "graph_receipt": {
+        "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+        "activation_uploads": 1,
+        "automatic_selection": false,
+        "capture_nodes": [
+          0
+        ],
+        "graph_captures": 1,
+        "graph_replays": 281,
+        "image_sha256": "97a9f92b6fe025508dccc8a51b6d148862e6778284b1d1ec4009f3684bc2232c",
+        "input_ownership": "session_device_buffers",
+        "kernel_launches": 0,
+        "module_loads": 1,
+        "output_ownership": "session_device_buffer",
+        "route": "packed_folded_device_graph_manual",
+        "target": "rocm_gfx1201",
+        "weight_sha256": "16942cab77e7f18078ae0e670c0d30ae0d729e27d8becfcf519e62aadf3dc83e",
+        "weight_uploads": 1
+      },
+      "host": "tajasarus",
+      "hsaco_sha256": "97a9f92b6fe025508dccc8a51b6d148862e6778284b1d1ec4009f3684bc2232c",
+      "revision": "f54413714d0a814b3fdf0ce20b9a9e1e8aeeaed4",
+      "rounds": {
+        "direct_first": {
+          "host_enqueue_us_median": 6.3932,
+          "kernel_event_us_median": 180.273699760437
+        },
+        "direct_second": {
+          "host_enqueue_us_median": 6.2604500000000005,
+          "kernel_event_us_median": 167.93450117111206
+        },
+        "graph_first": {
+          "host_enqueue_us_median": 1.9372,
+          "kernel_event_us_median": 198.9956021308899
+        },
+        "graph_second": {
+          "host_enqueue_us_median": 2.0058,
+          "kernel_event_us_median": 171.15540504455566
+        }
+      },
+      "sampled_bf16_exact": true,
+      "shape": [
+        256,
+        5120,
+        8704
+      ],
+      "source_sha256": {
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_graph.py": "56eadd9a2f83507a302001eb978b63ed93fa3e45b6a84d548a4dc005df6a1bca",
+        "python/tessera/compiler/rocm_mxfp4_graph.py": "74ac87e4c1a19740d051c0aec05e419a4b180bb9351183af0ae6a5bb75310d78"
+      },
+      "sync_key": "GFX1201-MXFP4-DEVICE-GRAPH-2026-09-23",
+      "target": "rocm_gfx1201",
+      "timing_note": "Two alternating direct/graph rounds, each seven samples of 20 launches; same HSACO and device-resident inputs, separate streams/sessions. Host enqueue excludes synchronization; HIP event timing includes device work and dispatch, not transfers."
+    },
+    {
+      "capture_nodes": [
+        0
+      ],
+      "device_name": "AMD Radeon RX 9070 XT",
+      "device_ordinal": 0,
+      "direct": {
+        "host_enqueue_us_median": 6.382674999999999,
+        "kernel_event_us_median": 1119.8616027832031
+      },
+      "full_output_equals_direct": true,
+      "graph": {
+        "host_enqueue_us_median": 2.42635,
+        "kernel_event_us_median": 1121.5424537658691
+      },
+      "graph_receipt": {
+        "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+        "activation_uploads": 1,
+        "automatic_selection": false,
+        "capture_nodes": [
+          0
+        ],
+        "graph_captures": 1,
+        "graph_replays": 281,
+        "image_sha256": "326a6c746ccc38c379d1ebb384789ceec48f82dd3121b58719e240685b17ea53",
+        "input_ownership": "session_device_buffers",
+        "kernel_launches": 0,
+        "module_loads": 1,
+        "output_ownership": "session_device_buffer",
+        "route": "packed_folded_device_graph_manual",
+        "target": "rocm_gfx1201",
+        "weight_sha256": "b97e4549af171fc51f9dd5602d0740fda1f2ae2c33e8d54be30d14df33769c68",
+        "weight_uploads": 1
+      },
+      "host": "tajasarus",
+      "hsaco_sha256": "326a6c746ccc38c379d1ebb384789ceec48f82dd3121b58719e240685b17ea53",
+      "revision": "f54413714d0a814b3fdf0ce20b9a9e1e8aeeaed4",
+      "rounds": {
+        "direct_first": {
+          "host_enqueue_us_median": 6.3991999999999996,
+          "kernel_event_us_median": 1078.4234046936035
+        },
+        "direct_second": {
+          "host_enqueue_us_median": 6.366149999999999,
+          "kernel_event_us_median": 1161.2998008728027
+        },
+        "graph_first": {
+          "host_enqueue_us_median": 2.19365,
+          "kernel_event_us_median": 1083.5333824157715
+        },
+        "graph_second": {
+          "host_enqueue_us_median": 2.6590499999999997,
+          "kernel_event_us_median": 1159.5515251159668
+        }
+      },
+      "sampled_bf16_exact": true,
+      "shape": [
+        1024,
+        17408,
+        5120
+      ],
+      "source_sha256": {
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_graph.py": "56eadd9a2f83507a302001eb978b63ed93fa3e45b6a84d548a4dc005df6a1bca",
+        "python/tessera/compiler/rocm_mxfp4_graph.py": "74ac87e4c1a19740d051c0aec05e419a4b180bb9351183af0ae6a5bb75310d78"
+      },
+      "sync_key": "GFX1201-MXFP4-DEVICE-GRAPH-2026-09-23",
+      "target": "rocm_gfx1201",
+      "timing_note": "Two alternating direct/graph rounds, each seven samples of 20 launches; same HSACO and device-resident inputs, separate streams/sessions. Host enqueue excludes synchronization; HIP event timing includes device work and dispatch, not transfers."
+    }
+  ]
+}

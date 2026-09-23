@@ -7,6 +7,23 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 device-owned MXFP4 HIP graph — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-DEVICE-GRAPH-2026-09-23`. An opt-in, fixed-shape graph
+session leases its A/As/output device pointers on one owned stream and
+captures exactly one packed-folded kernel node. A same-stream external
+producer updated A between replays; Tajasarus passed four ragged,
+lossless/lossy BF16 cases. Source-bound same-HSACO evidence is in
+`benchmarks/baselines/gfx1201_mxfp4_graph_20260923/`. Graph replay lowers
+host enqueue medians from 6.33→1.97 µs and 6.38→2.43 µs; HIP-event
+medians are 174→185 µs and 1120→1122 µs, with first-shape clock variation.
+This closes the manual capture/lifetime proof, not the Radiance kernel gap.
+Keep automatic selection closed. Next: connect a real device-resident E4M3
+producer and BF16 consumer, prove dynamic-M graph updates and pointer
+lifetime, then revisit a public selector; continue packed decode/LDS tuning
+separately.
+
 ## GFX1201 resident MXFP4 HIP lifecycle — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

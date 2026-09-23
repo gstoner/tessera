@@ -18,8 +18,8 @@ cases across ragged N48/N80, K64/K128, lossless/lossy folds, all 16 E2M1
 codes, exponent deltas and reserved zero blocks. The integer-register
 decode improves on divergent table loads. The clean-revision packet in
 `benchmarks/baselines/gfx1201_mxfp4_packed_folded_20260923/evidence.json`
-binds timed HSACO payloads to selected ISA and shows 1.67×/1.63× Radiance
-on the two production prefill shapes; the packed route is also 1.36×/1.25×
+binds timed HSACO payloads to selected ISA and shows 1.68×/1.63× Radiance
+on the two production prefill shapes; the packed route is also 1.40×/1.26×
 the expanded-folded time. Static ISA rises from 71 to 88 `s_wait_loadcnt`
 instructions and from 109 to 117 VGPRs for expanded versus packed integer,
 with no spills. Keep

@@ -16,7 +16,7 @@ PACKET = (
 def test_packed_folded_packet_binds_source_output_and_timed_isa() -> None:
     packet = json.loads(PACKET.read_text())
     assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v1"
-    assert packet["source_revision"] == "eeeabc3379d4bcbb88b6e3503fca27995d671b53"
+    assert packet["source_revision"] == "5f7f5d8c0d31606daa57110510e290aa267b28e2"
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["architecture"] == "gfx1201"
     assert packet["radiance"]["revision"] == (

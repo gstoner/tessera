@@ -3,7 +3,7 @@
   "benchmark_sha256": "181800f7d5a9110acee58264b7a93900d20bfaef5533277d6760e00646d826cf",
   "device": "AMD Radeon RX 9070 XT",
   "generator_sha256": "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c",
-  "packed_abi_sha256": "53313082dcf40aa4186343dd94d53ad917a81be379e709af700d2eed1037d83f",
+  "packed_abi_sha256": "ea2dbdd867ae3d806eca01e4c77c08fe0054ce6fcb98a4432e07f0c2d97f85e7",
   "radiance": {
     "binary_sha256": "c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6",
     "revision": "dfdfa3832922c9a4253133f09c1f5c0d39748fc7",
@@ -14,7 +14,7 @@
     {
       "case": "prefill_256x5120x8704",
       "engine": "tessera",
-      "median_ms": 0.5056213140487671,
+      "median_ms": 0.5019283294677734,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.fragment.v1",
         "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
@@ -49,34 +49,34 @@
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.4851391712824504,
-        0.4880664348602295,
-        0.5414144992828369,
-        0.4925605058670044,
-        0.5444411834081014,
-        0.5008739233016968,
-        0.5413412650426229,
-        0.5056213140487671,
-        0.5311320622762045,
-        0.5030829906463623,
-        0.527664581934611
+        0.494820237159729,
+        0.4898200035095215,
+        0.5442297458648682,
+        0.4923141797383626,
+        0.5399022499720255,
+        0.49719258149464923,
+        0.5364548365275065,
+        0.49553509553273517,
+        0.5489013989766439,
+        0.5019283294677734,
+        0.5253414312998453
       ]
     },
     {
       "case": "prefill_256x5120x8704",
       "engine": "tessera_folded",
-      "median_ms": 0.16903932889302573,
+      "median_ms": 0.16475916902224222,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
         "frontend_receipt": {
           "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
-          "artifact_image_digest": "c946275b15fd4ebaf0ecca70fd7e4731881127836da6a8d540c0d34b407e648d",
+          "artifact_image_digest": "e036c563882f9ccf08efc678a4bd23f702684fc27ac8ac0e4c052f3714685118",
           "entry_symbol": "tessera_mxfp4_folded_prefill",
           "fold_inexact_value_count": 0,
           "fold_lossless": true,
           "graph_ir_sha256": "150d8dc47b8ec9c301c4a4c22a38467225f092e9a0a2bacd9100e3417b206049",
-          "hsaco_sha256": "ada7af6fe01a9174d7491d24f8d9ea261abb3706de61f2b0b05ae45dfc9d7f25",
+          "hsaco_sha256": "9431b35f75ed05f7d94febab98fa7595e94a733404c2ff6c5722847f3292f421",
           "numeric_policy": "folded_row_reference_explicit_approximate",
           "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
           "route": "folded_row_reference_bm256_tm4",
@@ -91,7 +91,7 @@
           "target_ir_sha256": "0e1a3c97fda8107dde8f9e1f80305c0c3d18d26fb9b1595fb609aeb3b57f560f",
           "tile_ir_sha256": "b592d107a66d718ec5886b71bcdab4b0a91fad0fff21967de15ff01dab2391f7"
         },
-        "image_sha256": "ada7af6fe01a9174d7491d24f8d9ea261abb3706de61f2b0b05ae45dfc9d7f25",
+        "image_sha256": "9431b35f75ed05f7d94febab98fa7595e94a733404c2ff6c5722847f3292f421",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -149,33 +149,33 @@
             "s_wait_loadcnt": 71,
             "v_wmma_f32_16x16x16_fp8_fp8": 32
           },
-          "payload_sha256": "ada7af6fe01a9174d7491d24f8d9ea261abb3706de61f2b0b05ae45dfc9d7f25"
+          "payload_sha256": "9431b35f75ed05f7d94febab98fa7595e94a733404c2ff6c5722847f3292f421"
         },
         "toolchain_fingerprint": "b7915003a9c5eeb2505b73fba1778aef7e3d919ffa85e3de8ff698c3b398d26d"
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.1610094209512075,
-        0.15864858031272888,
-        0.174920916557312,
-        0.16271349787712097,
-        0.17382766803105673,
-        0.1617068350315094,
-        0.17501433690388998,
-        0.16150441765785217,
-        0.175287663936615,
-        0.16903932889302573,
-        0.18270007769266763
+        0.1581545869509379,
+        0.15747891863187155,
+        0.1757471760114034,
+        0.16281799475351968,
+        0.17434382438659668,
+        0.16228974858919779,
+        0.17275633414586386,
+        0.15732558568318686,
+        0.17768549919128418,
+        0.16475916902224222,
+        0.1845590074857076
       ]
     },
     {
       "case": "prefill_256x5120x8704",
       "engine": "tessera_packed_table",
-      "median_ms": 0.26507725318272907,
+      "median_ms": 0.2631283402442932,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
-        "image_sha256": "430dc616f5065a5fbc4ca51adf57311b69f1f42321b663eddec74fe39b3664b6",
+        "image_sha256": "f8c9f66777ced2927b347854afe3d3411c3f5ffcdc3b4fe81f481547b558663b",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -239,33 +239,33 @@
             "s_wait_loadcnt_dscnt": 1,
             "v_wmma_f32_16x16x16_fp8_fp8": 32
           },
-          "payload_sha256": "430dc616f5065a5fbc4ca51adf57311b69f1f42321b663eddec74fe39b3664b6"
+          "payload_sha256": "f8c9f66777ced2927b347854afe3d3411c3f5ffcdc3b4fe81f481547b558663b"
         },
         "toolchain_fingerprint": "47e4d4d2eb279b6333d459a2152167e90f26d608600acf7c3160806c67c84561"
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.260844091574351,
-        0.2636973261833191,
-        0.265773077805837,
-        0.2612714171409607,
-        0.26507725318272907,
-        0.26205233732859295,
-        0.2652464111646016,
-        0.2596123417218526,
-        0.26982982953389484,
-        0.2694814205169678,
-        0.2945530017217
+        0.2616374095280965,
+        0.26154492298762005,
+        0.26806817452112836,
+        0.26152074337005615,
+        0.2676624258359273,
+        0.2624083360036214,
+        0.2631283402442932,
+        0.2635815739631653,
+        0.2626006603240967,
+        0.2684348424275716,
+        0.29941866795221966
       ]
     },
     {
       "case": "prefill_256x5120x8704",
       "engine": "tessera_packed_integer",
-      "median_ms": 0.22954575220743814,
+      "median_ms": 0.23078425725301108,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
-        "image_sha256": "c772b91f4955f4fa71b09654223282eafaf797b62e7e6d6d226dee61120b8020",
+        "image_sha256": "45a02175dfd719d1ce5f622171dedbc0c56f6cefe319a87dacacb74bc8d23343",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -328,52 +328,52 @@
             "s_wait_loadcnt_dscnt": 1,
             "v_wmma_f32_16x16x16_fp8_fp8": 32
           },
-          "payload_sha256": "c772b91f4955f4fa71b09654223282eafaf797b62e7e6d6d226dee61120b8020"
+          "payload_sha256": "45a02175dfd719d1ce5f622171dedbc0c56f6cefe319a87dacacb74bc8d23343"
         },
         "toolchain_fingerprint": "47e4d4d2eb279b6333d459a2152167e90f26d608600acf7c3160806c67c84561"
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.23031334082285562,
-        0.22878074645996094,
-        0.22575241327285767,
-        0.2288432518641154,
-        0.22946574290593466,
-        0.22982082764307657,
-        0.22954575220743814,
-        0.22862492005030313,
-        0.23047741254170737,
-        0.23877741893132529,
-        0.25545233488082886
+        0.23134849468866983,
+        0.2302084962526957,
+        0.22975007692972818,
+        0.22926433881123862,
+        0.22738850116729736,
+        0.22897350788116455,
+        0.2315792441368103,
+        0.23078425725301108,
+        0.2313659985860189,
+        0.23802183071772257,
+        0.2550524075826009
       ]
     },
     {
       "case": "prefill_256x5120x8704",
       "engine": "radiance",
-      "median_ms": 0.13740949829419455,
+      "median_ms": 0.13729908068974814,
       "metadata": {
         "row_reference_fold": "exact_delta_le_2",
         "weight_layout": "fragment_order"
       },
       "output_sha256": "0e63f8d2fb35ea1a959919d107158b97a4e8f0f9f63f10f96e5bea4f1da38511",
       "samples_ms": [
-        0.13758950432141623,
-        0.13700616359710693,
-        0.13740949829419455,
-        0.13666616876920065,
-        0.13680949807167053,
-        0.13663949569066366,
-        0.13755950331687927,
-        0.13695950309435526,
-        0.1393327514330546,
-        0.14101274808247885,
-        0.14940608541170755
+        0.13784241676330566,
+        0.1372290849685669,
+        0.13729908068974814,
+        0.13708908359209696,
+        0.13697574536005655,
+        0.13664575417836508,
+        0.13869241873423258,
+        0.13689908385276794,
+        0.13770533601442972,
+        0.13852524757385254,
+        0.15093850096066794
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "tessera",
-      "median_ms": 4.3862559000651045,
+      "median_ms": 4.364864667256673,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.fragment.v1",
         "compiler_fingerprint": "1b335720a405f2e45a4ff067e7c6cfae3cb513358ae433d748c34d5accaa24c0",
@@ -408,34 +408,34 @@
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        4.073667208353679,
-        4.3862559000651045,
-        4.3974660237630205,
-        4.349608421325684,
-        4.386859893798828,
-        4.353009223937988,
-        4.546102523803711,
-        4.355581919352214,
-        4.3995161056518555,
-        4.359756787618001,
-        4.392149289449056
+        4.071859677632649,
+        4.364864667256673,
+        4.397497812906901,
+        4.349557876586914,
+        4.383724530537923,
+        4.357601165771484,
+        4.391165415445964,
+        4.354103724161784,
+        4.402594248453776,
+        4.352962176005046,
+        4.386588096618652
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "tessera_folded",
-      "median_ms": 1.1253104209899902,
+      "median_ms": 1.120850960413615,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
         "frontend_receipt": {
           "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
-          "artifact_image_digest": "bec701bc87c9ac7a4ea69e1a29dcdca8d2212af6edc71ea5ce969b13fdac9356",
+          "artifact_image_digest": "1e4ec6eab560382d893c25f5332bd61dd33f6d24824ab90986fc8e6dee52e5d4",
           "entry_symbol": "tessera_mxfp4_folded_prefill",
           "fold_inexact_value_count": 0,
           "fold_lossless": true,
           "graph_ir_sha256": "648b6a948b0d30420c4c7346b60bd02ba6ed3e8bef9c7715f088c9c35b2735ff",
-          "hsaco_sha256": "3bd855f8570c1274d01782fcf862af71d1aefa6d28831d5150d2491ed5840b82",
+          "hsaco_sha256": "64f2dfae103abcd473a318e6d6e05041282b28b4b3575642c7b64df93a27c048",
           "numeric_policy": "folded_row_reference_explicit_approximate",
           "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
           "route": "folded_row_reference_bm256_tm4",
@@ -450,7 +450,7 @@
           "target_ir_sha256": "8429b863391a48cf12e92b5f34efc60be84420673d61eecc5d339e9e59aff1d6",
           "tile_ir_sha256": "7e93a72ed53f714d2182de07f69bd2008d1898c1016226d0100139d745dc689e"
         },
-        "image_sha256": "3bd855f8570c1274d01782fcf862af71d1aefa6d28831d5150d2491ed5840b82",
+        "image_sha256": "64f2dfae103abcd473a318e6d6e05041282b28b4b3575642c7b64df93a27c048",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -508,33 +508,33 @@
             "s_wait_loadcnt": 71,
             "v_wmma_f32_16x16x16_fp8_fp8": 32
           },
-          "payload_sha256": "3bd855f8570c1274d01782fcf862af71d1aefa6d28831d5150d2491ed5840b82"
+          "payload_sha256": "64f2dfae103abcd473a318e6d6e05041282b28b4b3575642c7b64df93a27c048"
         },
         "toolchain_fingerprint": "b7915003a9c5eeb2505b73fba1778aef7e3d919ffa85e3de8ff698c3b398d26d"
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        1.0794822374979656,
-        1.1253104209899902,
-        1.177796999613444,
-        1.1170620918273926,
-        1.1786654790242512,
-        1.1176661650339763,
-        1.1550190448760986,
-        1.1159765720367432,
-        1.17668883005778,
-        1.1138090292612712,
-        1.1773993968963623
+        1.07598876953125,
+        1.120850960413615,
+        1.1779940128326416,
+        1.1169076760609944,
+        1.1760540803273518,
+        1.1158658663431804,
+        1.1783850987752278,
+        1.1182034810384114,
+        1.178546667098999,
+        1.1137220064798992,
+        1.1796341737111409
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "tessera_packed_table",
-      "median_ms": 1.533967653910319,
+      "median_ms": 1.5334027608235676,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
-        "image_sha256": "1d9f0485f991cdce12c74f077f34a803a444b8b1af7851c98b8812783cc51a38",
+        "image_sha256": "fbbf6e5ddac455b29482dbd8d2aec227df12b3c032a25cd95786936aada3ec0c",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -598,33 +598,33 @@
             "s_wait_loadcnt_dscnt": 1,
             "v_wmma_f32_16x16x16_fp8_fp8": 32
           },
-          "payload_sha256": "1d9f0485f991cdce12c74f077f34a803a444b8b1af7851c98b8812783cc51a38"
+          "payload_sha256": "fbbf6e5ddac455b29482dbd8d2aec227df12b3c032a25cd95786936aada3ec0c"
         },
         "toolchain_fingerprint": "47e4d4d2eb279b6333d459a2152167e90f26d608600acf7c3160806c67c84561"
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        1.409785270690918,
-        1.5173349380493164,
-        1.5472121238708496,
-        1.5272502899169922,
-        1.5494407018025715,
-        1.5297679901123047,
-        1.533967653910319,
-        1.5357858339945476,
-        1.54727570215861,
-        1.533516565958659,
-        1.5494146347045898
+        1.404037316640218,
+        1.5180733998616536,
+        1.5549519856770833,
+        1.5312488873799641,
+        1.5484787623087566,
+        1.5254319508870442,
+        1.551513671875,
+        1.5334027608235676,
+        1.5486523310343425,
+        1.5314340591430664,
+        1.5493890444437664
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "tessera_packed_integer",
-      "median_ms": 1.4120079676310222,
+      "median_ms": 1.412152926127116,
       "metadata": {
         "abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
         "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
-        "image_sha256": "b56d53f2ce2a8230cb64e827e307909c13311814770f5def9835fa6e723356dc",
+        "image_sha256": "4e8409ecbaf388f841a09a68ead88180007cabeb1bfbdd3b152a77da2568675c",
         "isa": {
           "s_barrier": 4,
           "s_waitcnt": 0,
@@ -687,50 +687,50 @@
             "s_wait_loadcnt_dscnt": 1,
             "v_wmma_f32_16x16x16_fp8_fp8": 32
           },
-          "payload_sha256": "b56d53f2ce2a8230cb64e827e307909c13311814770f5def9835fa6e723356dc"
+          "payload_sha256": "4e8409ecbaf388f841a09a68ead88180007cabeb1bfbdd3b152a77da2568675c"
         },
         "toolchain_fingerprint": "47e4d4d2eb279b6333d459a2152167e90f26d608600acf7c3160806c67c84561"
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        1.33236559232076,
-        1.387095292409261,
-        1.4099775950113933,
-        1.5129040082295735,
-        1.4116937319437664,
-        1.5182048479715984,
-        1.413271427154541,
-        1.5182809829711914,
-        1.4120079676310222,
-        1.5120840072631836,
-        1.409718672434489
+        1.3380602200826008,
+        1.3967897097269695,
+        1.4115293820699055,
+        1.5129857063293457,
+        1.4123161633809407,
+        1.5154221852620442,
+        1.408345063527425,
+        1.517430305480957,
+        1.412032127380371,
+        1.5158591270446777,
+        1.412152926127116
       ]
     },
     {
       "case": "prefill_1024x17408x5120",
       "engine": "radiance",
-      "median_ms": 0.868438720703125,
+      "median_ms": 0.8665835857391357,
       "metadata": {
         "row_reference_fold": "exact_delta_le_2",
         "weight_layout": "fragment_order"
       },
       "output_sha256": "18b643795fdf9c46d218c8e6026ebdf3e9ea0ba4b2301dd656c99329a52956ad",
       "samples_ms": [
-        0.8541829586029053,
-        0.8668104012807211,
-        0.8666965961456299,
-        0.9155471324920654,
-        0.8648366928100586,
-        0.9128498236338297,
-        0.8676701386769613,
-        0.9176398913065592,
-        0.8699133396148682,
-        0.9083165327707926,
-        0.868438720703125
+        0.8544764518737793,
+        0.8642823696136475,
+        0.8652497132619222,
+        0.9148536523183187,
+        0.8622189362843832,
+        0.9167444705963135,
+        0.8665835857391357,
+        0.9163301785786947,
+        0.8653024037679037,
+        0.9159321784973145,
+        0.8684364954630533
       ]
     }
   ],
   "schema": "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v1",
-  "source_revision": "eeeabc3379d4bcbb88b6e3503fca27995d671b53",
+  "source_revision": "5f7f5d8c0d31606daa57110510e290aa267b28e2",
   "timing_order": "alternating_interleaved_per_shape"
 }

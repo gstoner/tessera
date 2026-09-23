@@ -28,6 +28,7 @@ def test_packed_permute_packet_binds_current_sources_and_timed_isa() -> None:
         "generator_sha256": "python/tessera/compiler/rocm_mxfp4_folded.py",
         "packed_abi_sha256": "python/tessera/compiler/rocm_mxfp4_packed_folded.py",
         "benchmark_sha256": "benchmarks/rocm/benchmark_gfx1201_mxfp4_packed_folded.py",
+        "isa_inspector_sha256": "benchmarks/rocm/inspect_gfx1201_folded_prefill.py",
     }.items():
         assert packet[key] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
     expected = {

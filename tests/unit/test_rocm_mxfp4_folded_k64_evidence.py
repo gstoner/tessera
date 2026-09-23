@@ -55,9 +55,10 @@ def test_k64_selected_isa_census_binds_the_timed_packet() -> None:
     assert census["matched_packet_sha256"] == hashlib.sha256(
         PACKET.read_bytes()
     ).hexdigest()
-    assert census["census_sha256"] == hashlib.sha256(
-        (ROOT / "benchmarks/rocm/inspect_gfx1201_folded_prefill.py").read_bytes()
-    ).hexdigest()
+    # Immutable v2 census: v3 extends the inspector with v_perm_b32 counts.
+    assert census["census_sha256"] == (
+        "c0be8ee596d046070cb885e1acb3f2e24737d48548e903676362dc26ddcb8d5b"
+    )
     assert census["tessera"]["generator_sha256"] == packet["folded_generator_sha256"]
     images = census["tessera"]["timed_images"]
     assert set(images) == {

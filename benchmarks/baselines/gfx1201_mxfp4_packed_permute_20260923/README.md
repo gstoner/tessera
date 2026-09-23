@@ -10,8 +10,8 @@ subnormal exponent differences, and reserved E8M0 zero blocks.
 
 | Shape M×N×K | B-batched integer | B-batched permute | expanded folded | Radiance | permute / Radiance |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 256×5120×8704 | 230.0 µs | 177.6 µs | 169.5 µs | 137.7 µs | 1.29× |
-| 1024×17408×5120 | 1403.3 µs | 1163.4 µs | 1118.2 µs | 891.8 µs | 1.30× |
+| 256×5120×8704 | 224.0 µs | 178.1 µs | 168.8 µs | 137.8 µs | 1.29× |
+| 1024×17408×5120 | 1398.6 µs | 1158.5 µs | 1116.9 µs | 888.4 µs | 1.30× |
 
 The opt-in candidate performs the same per-word E2M1→E4M3 fold but uses
 `v_perm_b32` to look up four nibbles at a time. Its packed magnitude table is

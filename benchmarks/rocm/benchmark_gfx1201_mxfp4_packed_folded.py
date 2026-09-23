@@ -232,6 +232,9 @@ def benchmark(
             root / "python/tessera/compiler/rocm_mxfp4_packed_folded.py"
         ),
         "benchmark_sha256": base._sha256(Path(__file__)),
+        **({"isa_inspector_sha256": base._sha256(
+            root / "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"
+        )} if include_permute else {}),
         "timing_order": "alternating_interleaved_per_shape",
         "rows": rows,
     }

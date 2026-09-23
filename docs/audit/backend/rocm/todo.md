@@ -18,8 +18,8 @@ would violate the declared numerical contract. Tajasarus proves ragged,
 lossy, all-code, zero-block BF16 cases and bitwise agreement with exact K32
 on two matched prefill shapes. The timed packet at
 `benchmarks/baselines/gfx1201_mxfp4_packed_permute_20260923/` records
-177.6/1163.4 µs, versus 230.0/1403.3 µs for the same-run B-batched
-integer control and 137.7/891.8 µs for pinned Radiance. Timed ISA shows eight static
+178.1/1158.5 µs, versus 224.0/1398.6 µs for the same-run B-batched
+integer control and 137.8/888.4 µs for pinned Radiance. Timed ISA shows eight static
 `v_perm_b32`, 75 waits, 110 VGPR, no spills. The remaining 1.29×/1.30×
 kernel gap does not include the larger public runtime gap: host launch still
 loads/unloads the module and allocates/copies/frees buffers per call.

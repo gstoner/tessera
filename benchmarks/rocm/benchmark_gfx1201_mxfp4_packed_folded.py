@@ -191,6 +191,10 @@ def benchmark(
             if include_batched else
             "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v1"
         ),
+        "sync_key": (
+            "GFX1201-PACKED-STAGING-ABLATION-2026-09-23"
+            if include_batched else "GFX1201-PACKED-FOLDED-DECODE-2026-09-23"
+        ),
         "device": base._selected_device_name(hip),
         "architecture": rt._rocm_live_arch(),
         "source_revision": base._git_revision(),

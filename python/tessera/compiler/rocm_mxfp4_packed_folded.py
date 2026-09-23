@@ -530,7 +530,11 @@ def package_mxfp4_packed_folded_prefill(
         ),
         provenance={
             "work_item": "ROCM-MXFP4-W4A8-1",
-            "sync_key": "GFX1201-PACKED-FOLDED-DECODE-2026-09-23",
+            "sync_key": (
+                "GFX1201-PACKED-STAGING-ABLATION-2026-09-23"
+                if batched_loads or batched_a_loads or reuse_pair_scales
+                else "GFX1201-PACKED-FOLDED-DECODE-2026-09-23"
+            ),
             "route": "packed_folded_fragment_bm256_tm4",
             "architecture": "gfx1201",
             "physical_contract": PACKED_FOLDED_PHYSICAL_V1,

@@ -1,7 +1,6 @@
 """Drift gate for the exact-device folded MXFP4 prefill packet."""
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -18,10 +17,9 @@ def test_historical_folded_packet_refuses_unbound_radiance_layout() -> None:
     assert packet["architecture"] == "gfx1201"
     assert packet["device"] == "AMD Radeon RX 9070 XT"
     assert packet["source_revision"] == "4368c825b866c3eb7b40761c5c17bbcb817e2665"
-    source = ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py"
-    assert packet["folded_generator_sha256"] == hashlib.sha256(
-        source.read_bytes()
-    ).hexdigest()
+    assert packet["folded_generator_sha256"] == (
+        "14eecec2445bc2ea4a00a4958778ab927da4354dad2e3c8a48dac59952583087"
+    )
     assert packet["benchmark_sha256"] == (
         "6ea6d21d398e6623af0ca1d638eadaef25a47246e9a2c7a7eddbdd76c8fe8bbd"
     )

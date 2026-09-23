@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 folded K64 staging codegen — 2026-09-22
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-FOLDED-K64-STAGING-2026-09-22`. The Graph→Target folded carrier
+already requires complete K64 slabs, but its HIP generator still predicated
+every A/B vector copy on a K bound. An exact-device single-lever ablation
+removed those redundant predicates, preserving bitwise BF16 agreement with
+the exact K32 route on both matched prefill shapes. The production generator
+now specializes complete K64 slabs to unconditional copies and retains the
+guarded K32-tail path for direct package callers. Tajasarus folded device
+proof passes 13/13. Matched production HIP-event medians are 0.1660 versus
+Radiance 0.1409 ms and 1.1695 versus 0.8914 ms, roughly 1.18× and 1.31×
+remaining gaps. Do not promote an automatic selector from these timings.
+Unconditional K16 compute steps increased VGPRs 109→117 and lost versus the
+copy-only change; address hoisting and stricter K-step barrier were small or
+mixed. A full-tile epilogue ablation raised VGPRs to 171 and is not selected.
+Next: test a distinct packed-weight physical execution ABI against the exact
+oracle and matched Radiance before attributing the remaining gap to B traffic.
+
+
 ## GFX1201 MXFP4 receipt and expanded frontend proof — 2026-09-22
 
 Owner ROCM-MXFP4-W4A8-1 / ROCM-2; sync

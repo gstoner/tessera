@@ -66,6 +66,7 @@ def test_frontend_folded_carrier_broad_and_prefill_shapes(
     )
     receipt = program.route_receipt
     package = program.package
+    assert package.descriptor.provenance["staging_policy"] == "unconditional_k64"
     assert receipt["schedule_hash"] == package.descriptor.provenance["schedule_hash"]
     assert receipt["abi_id"] == package.descriptor.abi_id
     assert receipt["hsaco_sha256"] == hashlib.sha256(package.image.payload).hexdigest()
@@ -189,6 +190,7 @@ def test_folded_prefill_matches_its_declared_approximate_oracle(
     package = package_mxfp4_folded_prefill(
         m, n, k, folded, allow_approximate=True,
     )
+    assert package.descriptor.provenance["staging_policy"] == "unconditional_k64"
     rocm_isa.assert_selected(
         package.image.payload, chip="gfx1201",
         pattern=r"v_wmma_f32_16x16x16_\w+",
@@ -273,6 +275,7 @@ def test_folded_prefill_combines_canceling_scales_before_accumulator() -> None:
     package = package_mxfp4_folded_prefill(
         m, n, k, folded, allow_approximate=True,
     )
+    assert package.descriptor.provenance["staging_policy"] == "guarded_k32_tail"
     buffers = {
         "a": np.full((m, k), 0x38, dtype=np.uint8),
         "b_folded": folded.weight_bytes,

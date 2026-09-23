@@ -34,10 +34,10 @@ def test_requested_bytes_distinguish_expanded_and_packed_weights() -> None:
 def test_cache_ablation_changes_only_the_single_b_vector_load() -> None:
     from tessera.compiler.rocm_mxfp4_folded import emit_mxfp4_folded_prefill_hip
 
-    baseline = emit_mxfp4_folded_prefill_hip()
+    baseline = emit_mxfp4_folded_prefill_hip(full_k64=True)
     variant = variant_source()
-    assert baseline.count(OLD_LOAD) == 1
-    assert variant.count(NEW_LOAD) == 1
+    assert baseline.count(OLD_LOAD) == 2
+    assert variant.count(NEW_LOAD) == 2
     assert variant.replace(NEW_LOAD, OLD_LOAD) == baseline
 
 
@@ -73,11 +73,13 @@ def test_frontend_matched_packet_and_static_census_are_content_bound() -> None:
         "benchmark_sha256": "benchmarks/rocm/benchmark_gfx1201_mxfp4_folded.py",
         "frontend_sha256": "python/tessera/compiler/rocm_mxfp4_folded_frontend.py",
         "materializer_sha256": "python/tessera/compiler/rocm_mxfp4_folded_carrier.py",
-        "folded_generator_sha256": "python/tessera/compiler/rocm_mxfp4_folded.py",
     }.items():
         assert matched[key] == hashlib.sha256(
             (ROOT / source).read_bytes(),
         ).hexdigest()
+    assert matched["folded_generator_sha256"] == (
+        "14eecec2445bc2ea4a00a4958778ab927da4354dad2e3c8a48dac59952583087"
+    )
     assert census["schema"] == "tessera.rocm.gfx1201_folded_staging_census.v1"
     assert census["source_revision"] == matched["source_revision"]
     assert census["matched_packet_sha256"] == hashlib.sha256(
@@ -126,15 +128,15 @@ def test_single_lever_b_cache_ablation_is_refused_and_bound() -> None:
         "baseline_non_temporal_load_sites": 0,
         "variant_non_temporal_load_sites": 1,
     }
-    assert packet["benchmark_sha256"] == hashlib.sha256(
-        (ROOT / "benchmarks/rocm/ablate_gfx1201_folded_b_cache.py").read_bytes(),
-    ).hexdigest()
-    assert packet["generator_sha256"] == hashlib.sha256(
-        (ROOT / "python/tessera/compiler/rocm_mxfp4_folded.py").read_bytes(),
-    ).hexdigest()
-    assert packet["variant_source_sha256"] == hashlib.sha256(
-        variant_source().encode(),
-    ).hexdigest()
+    assert packet["benchmark_sha256"] == (
+        "2bffd59f7709c6325ed6f93cc1a1dd669990a46089fbff7ddec49e42f2d2c7b8"
+    )
+    assert packet["generator_sha256"] == (
+        "14eecec2445bc2ea4a00a4958778ab927da4354dad2e3c8a48dac59952583087"
+    )
+    assert packet["variant_source_sha256"] == (
+        "4493913aa35c75ff3cefa7cc748762476509732f63d21a11d24df566fde86351"
+    )
     for case in ("prefill_256x5120x8704", "prefill_1024x17408x5120"):
         rows = {row["engine"]: row for row in packet["rows"] if row["case"] == case}
         assert set(rows) == {

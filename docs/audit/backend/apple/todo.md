@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 paired-lane MXFP4 benchmark schema — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-PACKED-VECTOR-PAIR-2026-09-23`. Not applicable to Metal: the
+opt-in fragment-word vector loads and v4 HIP-event/HSACO benchmark schema
+are RDNA4-specific. Physical ABI, shared numerical policy, and Apple
+selection are unchanged; no Apple performance claim transfers.
+
 ## GFX1201 model-owned MXFP4 graph and producer ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

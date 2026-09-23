@@ -27,16 +27,21 @@ from tessera.compiler.rocm_mxfp4_packed_folded import (
 @pytest.mark.parametrize("shape", [(65, 48, 64), (257, 80, 128)])
 @pytest.mark.parametrize("lossy", [False, True])
 @pytest.mark.parametrize(
-    "integer_decode,batched_loads,batched_a_loads,reuse_pair_scales,permute_decode",
-    [(False, False, False, False, False), (True, False, False, False, False),
-     (True, True, False, False, False), (True, False, True, False, False),
-     (True, True, True, False, False), (True, True, False, True, False),
-     (False, True, False, False, True)],
+    "integer_decode,batched_loads,batched_a_loads,reuse_pair_scales,permute_decode,vector_pair_loads",
+    [(False, False, False, False, False, False),
+     (True, False, False, False, False, False),
+     (True, True, False, False, False, False),
+     (True, False, True, False, False, False),
+     (True, True, True, False, False, False),
+     (True, True, False, True, False, False),
+     (False, True, False, False, True, False),
+     pytest.param(False, False, False, False, True, True, id="vector_pair")],
 )
 def test_packed_folded_prefill_matches_declared_oracle(
     shape: tuple[int, int, int], lossy: bool,
     integer_decode: bool, batched_loads: bool,
     batched_a_loads: bool, reuse_pair_scales: bool, permute_decode: bool,
+    vector_pair_loads: bool,
 ) -> None:
     assert rt._rocm_live_arch() == "gfx1201"
     m, n, k = shape
@@ -53,7 +58,7 @@ def test_packed_folded_prefill_matches_declared_oracle(
     package = package_mxfp4_packed_folded_prefill(
         m, payload, integer_decode=integer_decode, batched_loads=batched_loads,
         batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
-        permute_decode=permute_decode,
+        permute_decode=permute_decode, vector_pair_loads=vector_pair_loads,
     )
     assert package.descriptor.abi_id.endswith("approx_bm256_tm4.v1")
     output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
@@ -135,15 +140,20 @@ def test_packed_graph_to_target_receipt_and_explicit_launch() -> None:
     reason="explicit gfx1201 owning-device gate",
 )
 @pytest.mark.parametrize(
-    "integer_decode,batched_loads,batched_a_loads,reuse_pair_scales,permute_decode",
-    [(False, False, False, False, False), (True, False, False, False, False),
-     (True, True, False, False, False), (True, False, True, False, False),
-     (True, True, True, False, False), (True, True, False, True, False),
-     (False, True, False, False, True)],
+    "integer_decode,batched_loads,batched_a_loads,reuse_pair_scales,permute_decode,vector_pair_loads",
+    [(False, False, False, False, False, False),
+     (True, False, False, False, False, False),
+     (True, True, False, False, False, False),
+     (True, False, True, False, False, False),
+     (True, True, True, False, False, False),
+     (True, True, False, True, False, False),
+     (False, True, False, False, True, False),
+     pytest.param(False, False, False, False, True, True, id="vector_pair")],
 )
 def test_packed_folded_prefill_all_codes_scale_deltas_and_zero_blocks(
     integer_decode: bool, batched_loads: bool,
     batched_a_loads: bool, reuse_pair_scales: bool, permute_decode: bool,
+    vector_pair_loads: bool,
 ) -> None:
     assert rt._rocm_live_arch() == "gfx1201"
     m, n, k = 65, 48, 64
@@ -164,7 +174,7 @@ def test_packed_folded_prefill_all_codes_scale_deltas_and_zero_blocks(
     package = package_mxfp4_packed_folded_prefill(
         m, payload, integer_decode=integer_decode, batched_loads=batched_loads,
         batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
-        permute_decode=permute_decode,
+        permute_decode=permute_decode, vector_pair_loads=vector_pair_loads,
     )
     output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
     rt._submit_rocm_mxfp4_w4a8(

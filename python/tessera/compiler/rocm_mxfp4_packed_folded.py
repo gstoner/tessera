@@ -270,6 +270,42 @@ _PACKED_B_STAGE_SHARED_SCALE = r'''    {
       }
     }'''
 
+_PACKED_B_STAGE_VECTOR_PAIR = r'''    {
+      // The physical fragment contract puts adjacent rows in adjacent lane
+      // words. Assign each thread two adjacent slots so one 64-bit request
+      // fetches both words, and read their E8M0 codes as one aligned pair.
+      const int first_slot = tid * 2;
+      const int local_lane = first_slot & 31;
+      const int tile = first_slot >> 5;
+      const int local_n_tile = tile >> 2;
+      const int local_k_step = tile & 3;
+      const long global_n_tile = (n0 >> 4) + local_n_tile;
+      const long safe_n_tile = global_n_tile < N / 16 ? global_n_tile : N / 16 - 1;
+      const long safe_n = safe_n_tile * 16 + (local_lane & 15);
+      const long k_step = kb / 16 + local_k_step;
+      const long word_slot = (safe_n_tile * (K / 16) + k_step) * 32 + local_lane;
+      const unsigned long long packed =
+          *reinterpret_cast<const unsigned long long *>(
+              reinterpret_cast<const unsigned int *>(B) + word_slot);
+      const unsigned short block_scales =
+          *reinterpret_cast<const unsigned short *>(
+              Ref + (kb / 32 + local_k_step / 2) * N + safe_n);
+      const unsigned short row_refs =
+          *reinterpret_cast<const unsigned short *>(Ref + (K / 32) * N + safe_n);
+#pragma unroll
+      for (int q = 0; q < 2; ++q) {
+        const unsigned int word = (unsigned int)(packed >> (q * 32));
+        const unsigned char block_scale = (unsigned char)(block_scales >> (q * 8));
+        const unsigned char row_ref = (unsigned char)(row_refs >> (q * 8));
+        const int delta = (int)row_ref - (int)block_scale;
+        const unsigned long long decoded =
+            tessera_fold_word_permute(word, delta, block_scale);
+        const int row = local_n_tile * 16 + (local_lane & 15) + q;
+        const int off = local_k_step * 16 + (local_lane >> 4) * 8;
+        *reinterpret_cast<unsigned long long *>(sB + row * 80 + off) = decoded;
+      }
+    }'''
+
 
 @dataclass(frozen=True)
 class PackedFoldedPayload:
@@ -433,7 +469,7 @@ def emit_mxfp4_packed_folded_prefill_hip(
     entry: str = "tessera_mxfp4_packed_folded_prefill",
     *, integer_decode: bool = False, batched_loads: bool = False,
     batched_a_loads: bool = False, reuse_pair_scales: bool = False,
-    permute_decode: bool = False,
+    permute_decode: bool = False, vector_pair_loads: bool = False,
 ) -> str:
     """Emit the K64 packed-fragment LDS decode and folded WMMA schedule."""
     source = emit_mxfp4_folded_prefill_hip(entry, full_k64=True)
@@ -441,6 +477,10 @@ def emit_mxfp4_packed_folded_prefill_hip(
         raise ValueError("paired K16 scale reuse requires batched B loads")
     if permute_decode and integer_decode:
         raise ValueError("select one packed-word decode implementation")
+    if vector_pair_loads and not permute_decode:
+        raise ValueError("paired lane loads require permute decode")
+    if vector_pair_loads and (batched_loads or batched_a_loads or reuse_pair_scales):
+        raise ValueError("paired lane loads are a separate staging ablation")
     def replace_once(old: str, new: str) -> None:
         nonlocal source
         if source.count(old) != 1:
@@ -465,6 +505,7 @@ def emit_mxfp4_packed_folded_prefill_hip(
         "tessera_fold_e2m1_e4m3[delta][code])"
     )
     stage = (
+        _PACKED_B_STAGE_VECTOR_PAIR if vector_pair_loads else
         _PACKED_B_STAGE_SHARED_SCALE if reuse_pair_scales else
         _PACKED_B_STAGE_BATCHED if batched_loads else _PACKED_B_STAGE
     )
@@ -472,7 +513,7 @@ def emit_mxfp4_packed_folded_prefill_hip(
         _EXPANDED_B_STAGE.replace("__FULL_K64__", "true"),
         stage.replace("__DECODE_EXPRESSION__", expression),
     )
-    if permute_decode:
+    if permute_decode and not vector_pair_loads:
         replace_once(
             """        unsigned long long decoded = 0;
 #pragma unroll
@@ -498,7 +539,7 @@ def package_mxfp4_packed_folded_prefill(
     batched_loads: bool = False,
     batched_a_loads: bool = False,
     reuse_pair_scales: bool = False,
-    permute_decode: bool = False,
+    permute_decode: bool = False, vector_pair_loads: bool = False,
 ) -> ROCMNativePackage:
     """Compile the distinct packed ABI, without admitting it to selection."""
     n, k = payload.shape
@@ -507,7 +548,7 @@ def package_mxfp4_packed_folded_prefill(
     source = emit_mxfp4_packed_folded_prefill_hip(
         entry, integer_decode=integer_decode, batched_loads=batched_loads,
         batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
-        permute_decode=permute_decode,
+        permute_decode=permute_decode, vector_pair_loads=vector_pair_loads,
     )
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)
@@ -593,6 +634,8 @@ def package_mxfp4_packed_folded_prefill(
             "block_m": 256, "block_n": 64, "block_k": 64,
             "tile_m_per_wave": 4, "tile_n_per_wave": 2,
             "staging_policy": (
+                "packed_fragment_decode_k64_vector_pair" if vector_pair_loads
+                else
                 "packed_fragment_decode_k64_pair_scale_reuse" if reuse_pair_scales
                 else
                 "packed_fragment_decode_k64_batched_ab" if batched_a_loads and batched_loads

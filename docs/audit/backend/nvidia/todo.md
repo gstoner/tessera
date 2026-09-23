@@ -8,6 +8,13 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 packed producer staging ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-STAGING-ABLATION-2026-09-23`.
+Not applicable to CUDA execution: the opt-in HIP producer ordering, RDNA4
+fragment layout, and HSACO ISA census do not define an NVFP4/PTX schedule
+or NVIDIA performance result.
+
 ## GFX1201 packed-folded decode proof — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-DECODE-2026-09-23`.

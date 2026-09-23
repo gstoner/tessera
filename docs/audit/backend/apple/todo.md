@@ -8,6 +8,13 @@ last_updated: 2026-09-22
 
 # Apple compiler, exact-device, and performance plan
 
+## GFX1201 packed producer staging ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-STAGING-ABLATION-2026-09-23`.
+Not applicable to Metal execution: the opt-in A/B load ordering and paired
+K16 scale reuse are gfx1201 HIP schedule experiments. The matched HSACO/ISA
+benchmark schema does not establish an Apple route or device result.
+
 ## GFX1201 packed-folded decode proof — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-FOLDED-DECODE-2026-09-23`.

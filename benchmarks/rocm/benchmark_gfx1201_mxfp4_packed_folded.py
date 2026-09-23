@@ -28,13 +28,16 @@ from benchmarks.rocm.inspect_gfx1201_folded_prefill import (
 
 def packed_folded_engine(
     hip: ctypes.CDLL, case: base.Case, inputs: dict[str, np.ndarray], copies: int,
-    *, integer_decode: bool,
+    *, integer_decode: bool, batched_loads: bool = False,
+    batched_a_loads: bool = False, reuse_pair_scales: bool = False,
 ) -> tuple[base._Engine, PackedFoldedPayload]:
     payload = prepare_packed_folded_payload(
         inputs["packed_row_major"], inputs["b_scale"], allow_approximate=True,
     )
     package = package_mxfp4_packed_folded_prefill(
         case.m, payload, integer_decode=integer_decode,
+        batched_loads=batched_loads, batched_a_loads=batched_a_loads,
+        reuse_pair_scales=reuse_pair_scales,
     )
     module = ctypes.c_void_p()
     function = ctypes.c_void_p()
@@ -69,7 +72,13 @@ def packed_folded_engine(
             raise RuntimeError(f"packed folded MXFP4 launch failed rc={rc}")
 
     engine = base._Engine(
-        ("tessera_packed_integer" if integer_decode else "tessera_packed_table"),
+        (
+            "tessera_packed_pair_scale_integer" if reuse_pair_scales else
+            "tessera_packed_batched_ab_integer" if batched_a_loads and batched_loads else
+            "tessera_packed_batched_a_integer" if batched_a_loads else
+            "tessera_packed_batched_b_integer" if batched_loads else
+            "tessera_packed_integer" if integer_decode else "tessera_packed_table"
+        ),
         hip, device_copies, launch, 4,
         {
             "abi": package.descriptor.abi_id,
@@ -96,6 +105,7 @@ def packed_folded_engine(
 def benchmark(
     cases: tuple[base.Case, ...], radiance_module: Path, *,
     radiance_revision: str, tessera_opt: Path,
+    include_batched: bool = False,
     warmup: int = 6, trials: int = 11, iterations: int = 12,
 ) -> dict[str, object]:
     if rt._rocm_live_arch() != "gfx1201":
@@ -121,8 +131,24 @@ def benchmark(
         packed_integer, integer_payload = packed_folded_engine(
             hip, case, inputs, 3, integer_decode=True,
         )
+        batched_engines: list[base._Engine] = []
+        batched_payloads: list[PackedFoldedPayload] = []
+        if include_batched:
+            for batched_b, batched_a, pair_scale in (
+                (True, False, False), (False, True, False),
+                (True, True, False), (True, False, True),
+            ):
+                candidate, candidate_payload = packed_folded_engine(
+                    hip, case, inputs, 3, integer_decode=True,
+                    batched_loads=batched_b, batched_a_loads=batched_a,
+                    reuse_pair_scales=pair_scale,
+                )
+                batched_engines.append(candidate)
+                batched_payloads.append(candidate_payload)
         independent = base._radiance_engine(hip, radiance, case, inputs, 3)
-        engines = [exact, expanded, packed_table, packed_integer, independent]
+        engines = [exact, expanded, packed_table, packed_integer]
+        engines.extend(batched_engines)
+        engines.append(independent)
         try:
             outputs = {engine.name: engine.output() for engine in engines}
             sampled_rows, sampled_cols, exact_reference = (
@@ -132,7 +158,9 @@ def benchmark(
                 outputs["tessera"][np.ix_(sampled_rows, sampled_cols)],
                 exact_reference,
             )
-            if not folded.lossless or not payload.lossless or not integer_payload.lossless:
+            if (not folded.lossless or not payload.lossless or
+                    not integer_payload.lossless or
+                    any(not candidate.lossless for candidate in batched_payloads)):
                 raise RuntimeError("matched timing requires lossless folded inputs")
             for engine in engines[1:]:
                 np.testing.assert_array_equal(
@@ -158,7 +186,11 @@ def benchmark(
                 engine.close()
     root = Path(__file__).resolve().parents[2]
     return {
-        "schema": "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v1",
+        "schema": (
+            "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v2"
+            if include_batched else
+            "tessera.rocm.gfx1201_mxfp4_packed_folded_benchmark.v1"
+        ),
         "device": base._selected_device_name(hip),
         "architecture": rt._rocm_live_arch(),
         "source_revision": base._git_revision(),
@@ -186,6 +218,7 @@ def main() -> None:
     parser.add_argument("--radiance-revision", required=True)
     parser.add_argument("--tessera-opt", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--include-batched", action="store_true")
     args = parser.parse_args()
     packet = benchmark(
         tuple(args.case or (
@@ -193,7 +226,7 @@ def main() -> None:
             base.Case("prefill", 1024, 17408, 5120),
         )),
         args.radiance_module, radiance_revision=args.radiance_revision,
-        tessera_opt=args.tessera_opt,
+        tessera_opt=args.tessera_opt, include_batched=args.include_batched,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n")

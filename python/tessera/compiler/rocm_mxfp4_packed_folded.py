@@ -102,6 +102,40 @@ _EXPANDED_B_STAGE = r'''    {
       *reinterpret_cast<copy_u32x4 *>(sB + (tid / 4) * 80 + off) = value;
     }'''
 
+_EXPANDED_A_STAGE = r'''#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      const long row = m0 + slot / 4;
+      const int off = (slot & 3) * 16;
+      copy_u32x4 value = {};
+      if constexpr (__FULL_K64__) {
+        const long safe = row < M ? row : M - 1;
+        value = *reinterpret_cast<const copy_u32x4 *>(A + safe * K + kb + off);
+      } else if (kb + off < K) {
+        const long safe = row < M ? row : M - 1;
+        value = *reinterpret_cast<const copy_u32x4 *>(A + safe * K + kb + off);
+      }
+      *reinterpret_cast<copy_u32x4 *>(sA + (slot / 4) * 80 + off) = value;
+    }'''
+
+_BATCHED_A_STAGE = r'''    // Issue the four independent A vectors before any LDS store. The
+    // ragged-M clamp is uniform in both producer passes.
+    copy_u32x4 staged_a[4];
+#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      const long row = m0 + slot / 4;
+      const int off = (slot & 3) * 16;
+      const long safe = row < M ? row : M - 1;
+      staged_a[q] = *reinterpret_cast<const copy_u32x4 *>(A + safe * K + kb + off);
+    }
+#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      const int off = (slot & 3) * 16;
+      *reinterpret_cast<copy_u32x4 *>(sA + (slot / 4) * 80 + off) = staged_a[q];
+    }'''
+
 _PACKED_B_STAGE = r'''    {
       // Each wave reads two contiguous 16x16 fragment tiles. Eight waves
       // cover four N tiles and four K16 steps in one K64 LDS stage.
@@ -128,6 +162,81 @@ _PACKED_B_STAGE = r'''    {
         }
         const int row = local_n_tile * 16 + col;
         const int off = local_k_step * 16 + (lane >> 4) * 8;
+        *reinterpret_cast<unsigned long long *>(sB + row * 80 + off) = decoded;
+      }
+    }'''
+
+_PACKED_B_STAGE_BATCHED = r'''    {
+      // Issue both independent fragment-word and scale loads before either
+      // decode. The q=0 arithmetic must not force a loadcnt drain before q=1.
+      unsigned int words[2];
+      unsigned char block_scales[2], row_refs[2];
+#pragma unroll
+      for (int q = 0; q < 2; ++q) {
+        const int tile = wave * 2 + q;
+        const int local_n_tile = tile >> 2;
+        const int local_k_step = tile & 3;
+        const long global_n_tile = (n0 >> 4) + local_n_tile;
+        const long safe_n_tile = global_n_tile < N / 16 ? global_n_tile : N / 16 - 1;
+        const long safe_n = safe_n_tile * 16 + col;
+        const long k_step = kb / 16 + local_k_step;
+        const long word_slot = (safe_n_tile * (K / 16) + k_step) * 32 + lane;
+        words[q] = reinterpret_cast<const unsigned int *>(B)[word_slot];
+        block_scales[q] = Ref[(kb / 32 + local_k_step / 2) * N + safe_n];
+        row_refs[q] = Ref[(K / 32) * N + safe_n];
+      }
+#pragma unroll
+      for (int q = 0; q < 2; ++q) {
+        const int tile = wave * 2 + q;
+        const int local_n_tile = tile >> 2;
+        const int local_k_step = tile & 3;
+        const int delta = (int)row_refs[q] - (int)block_scales[q];
+        const unsigned char block_scale = block_scales[q];
+        const unsigned int word = words[q];
+        unsigned long long decoded = 0;
+#pragma unroll
+        for (int e = 0; e < 8; ++e) {
+          const int code = (word >> (e * 4)) & 15;
+          const unsigned char value = __DECODE_EXPRESSION__;
+          decoded |= (unsigned long long)value << (e * 8);
+        }
+        const int row = local_n_tile * 16 + col;
+        const int off = local_k_step * 16 + (lane >> 4) * 8;
+        *reinterpret_cast<unsigned long long *>(sB + row * 80 + off) = decoded;
+      }
+    }'''
+
+_PACKED_B_STAGE_SHARED_SCALE = r'''    {
+      // A wave owns two adjacent K16 words from one N16 tile. They share
+      // one K32 scale code and one row reference; load both words first,
+      // then decode against the same verified exponent delta.
+      const int local_n_tile = wave >> 1;
+      const int first_k_step = (wave & 1) * 2;
+      const long global_n_tile = (n0 >> 4) + local_n_tile;
+      const long safe_n_tile = global_n_tile < N / 16 ? global_n_tile : N / 16 - 1;
+      const long safe_n = safe_n_tile * 16 + col;
+      const unsigned char block_scale = Ref[(kb / 32 + first_k_step / 2) * N + safe_n];
+      const unsigned char row_ref = Ref[(K / 32) * N + safe_n];
+      const int delta = (int)row_ref - (int)block_scale;
+      unsigned int words[2];
+#pragma unroll
+      for (int q = 0; q < 2; ++q) {
+        const long k_step = kb / 16 + first_k_step + q;
+        const long word_slot = (safe_n_tile * (K / 16) + k_step) * 32 + lane;
+        words[q] = reinterpret_cast<const unsigned int *>(B)[word_slot];
+      }
+#pragma unroll
+      for (int q = 0; q < 2; ++q) {
+        const unsigned int word = words[q];
+        unsigned long long decoded = 0;
+#pragma unroll
+        for (int e = 0; e < 8; ++e) {
+          const int code = (word >> (e * 4)) & 15;
+          const unsigned char value = __DECODE_EXPRESSION__;
+          decoded |= (unsigned long long)value << (e * 8);
+        }
+        const int row = local_n_tile * 16 + col;
+        const int off = (first_k_step + q) * 16 + (lane >> 4) * 8;
         *reinterpret_cast<unsigned long long *>(sB + row * 80 + off) = decoded;
       }
     }'''
@@ -293,10 +402,13 @@ def folded_oracle_from_packed(payload: PackedFoldedPayload) -> FoldedRowReferenc
 
 def emit_mxfp4_packed_folded_prefill_hip(
     entry: str = "tessera_mxfp4_packed_folded_prefill",
-    *, integer_decode: bool = False,
+    *, integer_decode: bool = False, batched_loads: bool = False,
+    batched_a_loads: bool = False, reuse_pair_scales: bool = False,
 ) -> str:
     """Emit the K64 packed-fragment LDS decode and folded WMMA schedule."""
     source = emit_mxfp4_folded_prefill_hip(entry, full_k64=True)
+    if reuse_pair_scales and not batched_loads:
+        raise ValueError("paired K16 scale reuse requires batched B loads")
     def replace_once(old: str, new: str) -> None:
         nonlocal source
         if source.count(old) != 1:
@@ -308,6 +420,11 @@ def emit_mxfp4_packed_folded_prefill_hip(
         "using copy_u32x4 = unsigned int __attribute__((ext_vector_type(4)));"
         + _PACKED_HELPERS,
     )
+    if batched_a_loads:
+        replace_once(
+            _EXPANDED_A_STAGE.replace("__FULL_K64__", "true"),
+            _BATCHED_A_STAGE,
+        )
     expression = (
         "tessera_fold_code_integer(code, delta, block_scale)"
         if integer_decode else
@@ -315,9 +432,13 @@ def emit_mxfp4_packed_folded_prefill_hip(
         "(unsigned char)((code & 8) << 4) : "
         "tessera_fold_e2m1_e4m3[delta][code])"
     )
+    stage = (
+        _PACKED_B_STAGE_SHARED_SCALE if reuse_pair_scales else
+        _PACKED_B_STAGE_BATCHED if batched_loads else _PACKED_B_STAGE
+    )
     replace_once(
         _EXPANDED_B_STAGE.replace("__FULL_K64__", "true"),
-        _PACKED_B_STAGE.replace("__DECODE_EXPRESSION__", expression),
+        stage.replace("__DECODE_EXPRESSION__", expression),
     )
     replace_once(
         "const unsigned char exponent = Ref[n < N ? n : 0];",
@@ -330,13 +451,17 @@ def package_mxfp4_packed_folded_prefill(
     m: int, payload: PackedFoldedPayload, *,
     entry: str = "tessera_mxfp4_packed_folded_prefill",
     integer_decode: bool = False,
+    batched_loads: bool = False,
+    batched_a_loads: bool = False,
+    reuse_pair_scales: bool = False,
 ) -> ROCMNativePackage:
     """Compile the distinct packed ABI, without admitting it to selection."""
     n, k = payload.shape
     if m <= 64:
         raise ValueError("packed folded prefill requires M>64")
     source = emit_mxfp4_packed_folded_prefill_hip(
-        entry, integer_decode=integer_decode,
+        entry, integer_decode=integer_decode, batched_loads=batched_loads,
+        batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
     )
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)
@@ -412,7 +537,14 @@ def package_mxfp4_packed_folded_prefill(
             "numeric_policy": "folded_row_reference_explicit_approximate",
             "block_m": 256, "block_n": 64, "block_k": 64,
             "tile_m_per_wave": 4, "tile_n_per_wave": 2,
-            "staging_policy": "packed_fragment_decode_k64",
+            "staging_policy": (
+                "packed_fragment_decode_k64_pair_scale_reuse" if reuse_pair_scales
+                else
+                "packed_fragment_decode_k64_batched_ab" if batched_a_loads and batched_loads
+                else "packed_fragment_decode_k64_batched_a" if batched_a_loads
+                else "packed_fragment_decode_k64_batched_b" if batched_loads
+                else "packed_fragment_decode_k64"
+            ),
             "decode_policy": "integer_register" if integer_decode else "constant_table",
             **payload.receipt(),
             "execution_state": "manual_executable_candidate",

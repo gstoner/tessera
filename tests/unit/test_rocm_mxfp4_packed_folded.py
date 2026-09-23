@@ -158,3 +158,36 @@ def test_packed_decode_table_matches_every_e2m1_code_and_delta() -> None:
         np.testing.assert_array_equal(
             expected, np.asarray([0] * 8 + [128] * 8, dtype=np.uint8),
         )
+
+
+def test_batched_packed_stage_issues_both_loads_before_decode() -> None:
+    source = emit_mxfp4_packed_folded_prefill_hip(
+        integer_decode=True, batched_loads=True,
+    )
+    loads = source.index("words[q] = reinterpret_cast<const unsigned int *>(B)")
+    decode = source.index("const unsigned int word = words[q];")
+    assert loads < decode
+    assert source.count("#pragma unroll\n      for (int q = 0; q < 2; ++q)") == 2
+    assert "__DECODE_EXPRESSION__" not in source
+
+
+def test_batched_activation_stage_issues_all_loads_before_lds_stores() -> None:
+    source = emit_mxfp4_packed_folded_prefill_hip(
+        integer_decode=True, batched_a_loads=True,
+    )
+    assert source.index("staged_a[q] = *reinterpret_cast") < source.index(
+        "sA + (slot / 4) * 80 + off) = staged_a[q]"
+    )
+
+
+def test_pair_scale_reuse_loads_one_scale_and_reference_for_two_k16_words() -> None:
+    with pytest.raises(ValueError, match="requires batched B loads"):
+        emit_mxfp4_packed_folded_prefill_hip(reuse_pair_scales=True)
+    source = emit_mxfp4_packed_folded_prefill_hip(
+        integer_decode=True, batched_loads=True, reuse_pair_scales=True,
+    )
+    assert source.count("const unsigned char block_scale = Ref[") == 1
+    assert source.count("const unsigned char row_ref = Ref[") == 1
+    assert source.index("words[q] = reinterpret_cast") < source.index(
+        "const unsigned int word = words[q];"
+    )

@@ -484,8 +484,18 @@ physical contract from Graph through Target to a manually executable HSACO.
 Its receipt binds the schedule, layout, payload, loss policy, and image. On
 Tajasarus, nonuniform all-code and reserved-zero cases match the declared
 BF16 oracle. However, matched uninstrumented timing remains roughly
-1.65×/1.63× behind Radiance on the two production prefill shapes, so this
+1.68×/1.63× behind Radiance on the two production prefill shapes, so this
 is explanatory evidence, not an automatic selector promotion. The current
 carrier still materializes a bounded HIP template rather than lowering
 arbitrary Tile IR. Continue with ISA/resource and decode-traffic attribution
 before adding tuning coordinates or training the intra-kernel cost model.
+
+The next producer-ordering ablation keeps the same Graph physical contract
+and Target ABI while varying opt-in A-vector load batching, B-word batching,
+and paired-K16 scale reuse. This isolates a Schedule/Target load-dependency
+question: code-shape changes are not useful merely because they reduce
+source-level loads. The checked-in matched packet must bind each candidate's
+timed HSACO to its selected ISA, VGPR count, and static waits. A-only and
+paired-scale variants are negative controls; B-only gives only a small
+gain. None justifies changing the automatic selector or training a dynamic
+stall label from static ISA counts.

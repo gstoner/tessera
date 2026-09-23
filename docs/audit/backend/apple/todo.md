@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-22
+last_updated: 2026-09-23
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## GFX1201 model-owned MXFP4 graph and producer ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-GRAPH-MODEL-PRODUCER-2026-09-23`. Not applicable to Metal:
+the borrowed HIP pointers, HIP graph lifetime/quarantine, wave32 producer,
+and ROCm-only timing schema do not change Apple's `DeviceTensor` contract.
+No Apple schedule or exact-device result transfers; the shared numerical
+policy and public selector remain unchanged.
 
 ## GFX1201 three-kernel MXFP4 graph pipeline — 2026-09-23
 

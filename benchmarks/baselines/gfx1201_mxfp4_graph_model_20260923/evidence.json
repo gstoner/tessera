@@ -1,0 +1,288 @@
+{
+  "admission": {
+    "admission_ready": false,
+    "automatic_selection": false,
+    "device_time_margin": 1.02,
+    "refusals": [
+      "graph_device_time_regression",
+      "matched_radiance_parity_missing",
+      "model_frontend_route_missing"
+    ],
+    "selected_producer_variant": "block",
+    "wave_graph_margin": 0.98,
+    "wave_producer_margin": 0.95
+  },
+  "automatic_selection": false,
+  "benchmarks": [
+    {
+      "automatic_selection": false,
+      "device_name": "AMD Radeon RX 9070 XT",
+      "device_ordinal": 0,
+      "gemm_hsaco_sha256": "27395cc65659d7a57c6d34ab6732e3332a79d0e259a4b5374f510042cffdcc0d",
+      "host": "tajasarus",
+      "revision": "bf422db924231eb56e46ce656d116a1dd0349222",
+      "rounds": [
+        {
+          "aux_hsaco_sha256": "ddc52d5c30c072dbeee8908ff4c911167a0919e64d8e3a5116ce0d981aaa8d6e",
+          "direct_triple": {
+            "host_enqueue_us_median": 14.8563,
+            "kernel_event_us_median": 193.75145435333252
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.01035,
+            "kernel_event_us_median": 197.52589464187622
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.10625,
+            "kernel_event_us_median": 22.053900361061096
+          },
+          "sampled_bf16_exact": true,
+          "variant": "block"
+        },
+        {
+          "aux_hsaco_sha256": "409b860adaf2acf3b6985d0b18671a5bab24009dbad0f21083b63426c87d54c0",
+          "direct_triple": {
+            "host_enqueue_us_median": 14.65795,
+            "kernel_event_us_median": 223.90685081481934
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.05695,
+            "kernel_event_us_median": 196.69100046157837
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.017049999999999,
+            "kernel_event_us_median": 24.74835067987442
+          },
+          "sampled_bf16_exact": true,
+          "variant": "wave"
+        },
+        {
+          "aux_hsaco_sha256": "43e92fed2ac06ccfd29bd30c6149e40abece3752effee6d167c6bc36d48f1875",
+          "direct_triple": {
+            "host_enqueue_us_median": 14.887899999999998,
+            "kernel_event_us_median": 222.80523777008057
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.0885000000000002,
+            "kernel_event_us_median": 196.77095413208008
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.0917,
+            "kernel_event_us_median": 21.715399622917175
+          },
+          "sampled_bf16_exact": true,
+          "variant": "wave"
+        },
+        {
+          "aux_hsaco_sha256": "9e80e38cb648735648a05cf1c7ee047ee068b4c8f6a66137a1b011f8cef28376",
+          "direct_triple": {
+            "host_enqueue_us_median": 14.8403,
+            "kernel_event_us_median": 222.76835441589355
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.11955,
+            "kernel_event_us_median": 196.98699712753296
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.0246,
+            "kernel_event_us_median": 19.60739940404892
+          },
+          "sampled_bf16_exact": true,
+          "variant": "block"
+        }
+      ],
+      "shape": [
+        256,
+        5120,
+        8704
+      ],
+      "source_sha256": {
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_graph_producer.py": "08bb1891055e23a198505b529aa21f7b4e1d04181b4a3927b9c65693dd739471",
+        "python/tessera/compiler/rocm_mxfp4_graph_pipeline.py": "cfc9ec915f539e24ec247946035eec3b8cb448a776b855211808455f3e58d4f3"
+      },
+      "summary": {
+        "block": {
+          "direct_triple": {
+            "host_enqueue_us_median": 14.848299999999998,
+            "kernel_event_us_median": 208.25990438461304
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.0649499999999996,
+            "kernel_event_us_median": 197.2564458847046
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.065425,
+            "kernel_event_us_median": 20.830649882555008
+          }
+        },
+        "wave": {
+          "direct_triple": {
+            "host_enqueue_us_median": 14.772924999999999,
+            "kernel_event_us_median": 223.35604429244995
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.072725,
+            "kernel_event_us_median": 196.73097729682922
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.054375,
+            "kernel_event_us_median": 23.231875151395798
+          }
+        }
+      },
+      "sync_key": "GFX1201-MXFP4-GRAPH-MODEL-PRODUCER-2026-09-23",
+      "target": "rocm_gfx1201",
+      "timing_note": "Block/wave/wave/block order; each round uses seven samples of twenty launches and the same packed GEMM HSACO, shape, logical inputs and device. HIP events exclude host transfers."
+    },
+    {
+      "automatic_selection": false,
+      "device_name": "AMD Radeon RX 9070 XT",
+      "device_ordinal": 0,
+      "gemm_hsaco_sha256": "188106f765d3e7200fff7282bababc7dab1518a8a327747f6b4559cbfc8bc55a",
+      "host": "tajasarus",
+      "revision": "bf422db924231eb56e46ce656d116a1dd0349222",
+      "rounds": [
+        {
+          "aux_hsaco_sha256": "7ec970b9f3cb81d3c1e22edb1c734f916557020bc2a4d27f6d66d6d394e9eb22",
+          "direct_triple": {
+            "host_enqueue_us_median": 14.440549999999998,
+            "kernel_event_us_median": 1261.2483978271484
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.0799499999999997,
+            "kernel_event_us_median": 1351.2359619140625
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 4.95845,
+            "kernel_event_us_median": 39.41130042076111
+          },
+          "sampled_bf16_exact": true,
+          "variant": "block"
+        },
+        {
+          "aux_hsaco_sha256": "c2b5b2f07e58ce4d0cf0cd134e053deb422a6a11662468fc91223bf3345cd874",
+          "direct_triple": {
+            "host_enqueue_us_median": 14.628899999999998,
+            "kernel_event_us_median": 1263.1662368774414
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.0895,
+            "kernel_event_us_median": 1350.4276275634766
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.0291,
+            "kernel_event_us_median": 38.4213000535965
+          },
+          "sampled_bf16_exact": true,
+          "variant": "wave"
+        },
+        {
+          "aux_hsaco_sha256": "840dc4d80e157f4b2d09f36523235f619e25824971241441f3364972e8187f5e",
+          "direct_triple": {
+            "host_enqueue_us_median": 15.985499999999998,
+            "kernel_event_us_median": 1262.367343902588
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.2463,
+            "kernel_event_us_median": 1347.812557220459
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.01205,
+            "kernel_event_us_median": 38.23685050010681
+          },
+          "sampled_bf16_exact": true,
+          "variant": "wave"
+        },
+        {
+          "aux_hsaco_sha256": "8df1055475d7a6d5368350c6f1be86e7893529b161c3fdbae425d09c4c4a9db7",
+          "direct_triple": {
+            "host_enqueue_us_median": 18.0359,
+            "kernel_event_us_median": 1263.785171508789
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 3.21965,
+            "kernel_event_us_median": 1350.452995300293
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.06215,
+            "kernel_event_us_median": 41.76180064678192
+          },
+          "sampled_bf16_exact": true,
+          "variant": "block"
+        }
+      ],
+      "shape": [
+        1024,
+        17408,
+        5120
+      ],
+      "source_sha256": {
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_graph_producer.py": "08bb1891055e23a198505b529aa21f7b4e1d04181b4a3927b9c65693dd739471",
+        "python/tessera/compiler/rocm_mxfp4_graph_pipeline.py": "cfc9ec915f539e24ec247946035eec3b8cb448a776b855211808455f3e58d4f3"
+      },
+      "summary": {
+        "block": {
+          "direct_triple": {
+            "host_enqueue_us_median": 16.238225,
+            "kernel_event_us_median": 1262.5167846679688
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.6498,
+            "kernel_event_us_median": 1350.8444786071777
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.0103,
+            "kernel_event_us_median": 40.586550533771515
+          }
+        },
+        "wave": {
+          "direct_triple": {
+            "host_enqueue_us_median": 15.307199999999998,
+            "kernel_event_us_median": 1262.7667903900146
+          },
+          "graph_triple": {
+            "host_enqueue_us_median": 2.1679000000000004,
+            "kernel_event_us_median": 1349.1200923919678
+          },
+          "producer_stage": {
+            "host_enqueue_us_median": 5.020575,
+            "kernel_event_us_median": 38.329075276851654
+          }
+        }
+      },
+      "sync_key": "GFX1201-MXFP4-GRAPH-MODEL-PRODUCER-2026-09-23",
+      "target": "rocm_gfx1201",
+      "timing_note": "Block/wave/wave/block order; each round uses seven samples of twenty launches and the same packed GEMM HSACO, shape, logical inputs and device. HIP events exclude host transfers."
+    }
+  ],
+  "device_name": "AMD Radeon RX 9070 XT",
+  "hip_runtime": "/opt/rocm/core-10.0/lib/libamdhip64.so.7.15.26333-0000000",
+  "hipcc": "HIP version: 7.15.26333-0000000",
+  "host": "tajasarus",
+  "matched_radiance_parity": false,
+  "model_frontend_route": false,
+  "revision": "bf422db924231eb56e46ce656d116a1dd0349222",
+  "rocm_release": "10.0.0",
+  "rocm_toolkit": "/opt/rocm/core-10.0",
+  "schema_version": 1,
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_gfx1201_mxfp4_graph_producer.py": "08bb1891055e23a198505b529aa21f7b4e1d04181b4a3927b9c65693dd739471",
+    "benchmarks/rocm/record_gfx1201_mxfp4_graph_model.py": "3f3545d64475816354b9a5d282b9d04dbffe9a8fd8d8ee05fc87e8391b0203a5",
+    "python/tessera/compiler/rocm_mxfp4_graph_pipeline.py": "cfc9ec915f539e24ec247946035eec3b8cb448a776b855211808455f3e58d4f3",
+    "python/tessera/compiler/rocm_mxfp4_graph_selection.py": "8370e6453ebf4e85a01613b6ad24700a6174b388397dfa739dfc55267a34430b",
+    "python/tessera/compiler/rocm_mxfp4_graph_tensor.py": "fbba52df4e20c6dbf86c8d7a2789f6d8d159b0072139281d93041f20a74f2976",
+    "tests/device/rocm/test_mxfp4_graph_pipeline.py": "e2a046a29de178218e06e4e27774f0a1090816172fa0fdf3fc61dcbd1d267393",
+    "tests/unit/test_rocm_mxfp4_resident.py": "c7cae4f2b20e04dbbfe25876c5d29e4d611612098e7de95b9ca4df5bf1ed36e1"
+  },
+  "sync_key": "GFX1201-MXFP4-GRAPH-MODEL-PRODUCER-2026-09-23",
+  "target": "rocm_gfx1201",
+  "tests": {
+    "counts": {
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 18
+    },
+    "summary": "18 passed, 1 warning in 12.05s"
+  }
+}

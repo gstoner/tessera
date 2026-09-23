@@ -1,11 +1,28 @@
 ---
-last_updated: 2026-09-22
+last_updated: 2026-09-23
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## GFX1201 model-owned MXFP4 graph and producer ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-GRAPH-MODEL-PRODUCER-2026-09-23`. An opt-in ROCm tensor
+allocation now supplies model-owned FP32 input and BF16 result pointers to
+the three-kernel graph. Borrowing is exclusive; graph close returns the
+lease after stream completion, while asynchronous failure quarantines the
+allocation. Tajasarus ran 18/18 focused device/lifecycle cases, including
+failed capture and allocator churn. A matched block/wave producer ablation
+found no meaningful whole-graph gain, so block reduction stays default.
+The wide graph measured 1350.84 µs versus 1262.52 µs direct device time;
+host enqueue improvement is not selector proof. Source-bound evidence and
+the explicit refusal receipt are in
+`benchmarks/baselines/gfx1201_mxfp4_graph_model_20260923/`. Automatic
+selection stays closed: integrate a high-level model caller, close the
+wide device-time gap, and obtain matched Radiance parity before admission.
 
 ## GFX1201 three-kernel MXFP4 graph pipeline — 2026-09-23
 

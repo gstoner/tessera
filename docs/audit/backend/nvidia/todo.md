@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-22
+last_updated: 2026-09-23
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## GFX1201 model-owned MXFP4 graph and producer ablation — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-MXFP4-GRAPH-MODEL-PRODUCER-2026-09-23`. Not applicable to CUDA:
+the exclusive HIP buffer lease, error quarantine, RDNA4 producer ablation,
+and benchmark schema do not define a CUDA graph or NVFP4 schedule. The
+shared numeric policy and NVIDIA execution matrix are unchanged; no
+NVIDIA exact-device proof transfers from Tajasarus.
 
 ## GFX1201 three-kernel MXFP4 graph pipeline — 2026-09-23
 

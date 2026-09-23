@@ -17,8 +17,8 @@ removed those redundant predicates, preserving bitwise BF16 agreement with
 the exact K32 route on both matched prefill shapes. The production generator
 now specializes complete K64 slabs to unconditional copies and retains the
 guarded K32-tail path for direct package callers. Tajasarus folded device
-proof passes 13/13. Matched production HIP-event medians are 0.1660 versus
-Radiance 0.1409 ms and 1.1695 versus 0.8914 ms, roughly 1.18× and 1.31×
+proof passes 13/13. Clean-revision matched HIP-event medians are 0.1693 versus
+Radiance 0.1434 ms and 1.1812 versus 0.8980 ms, roughly 1.18× and 1.32×
 remaining gaps. Do not promote an automatic selector from these timings.
 Unconditional K16 compute steps increased VGPRs 109→117 and lost versus the
 copy-only change; address hoisting and stricter K-step barrier were small or

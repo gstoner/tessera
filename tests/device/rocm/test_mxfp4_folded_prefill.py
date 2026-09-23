@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -31,7 +32,13 @@ from tests._support import rocm_isa
 )
 @pytest.mark.parametrize(
     "shape",
-    [(256, 80, 128), (256, 5120, 8704), (1024, 17408, 5120)],
+    [
+        (65, 48, 64),
+        (257, 80, 192),
+        (256, 80, 128),
+        (256, 5120, 8704),
+        (1024, 17408, 5120),
+    ],
 )
 def test_frontend_folded_carrier_broad_and_prefill_shapes(
     shape: tuple[int, int, int],
@@ -61,9 +68,15 @@ def test_frontend_folded_carrier_broad_and_prefill_shapes(
     package = program.package
     assert receipt["schedule_hash"] == package.descriptor.provenance["schedule_hash"]
     assert receipt["abi_id"] == package.descriptor.abi_id
-    assert receipt["hsaco_sha256"] == package.image.image_digest
+    assert receipt["hsaco_sha256"] == hashlib.sha256(package.image.payload).hexdigest()
+    assert receipt["hsaco_sha256"] == package.image.payload_digest
+    assert receipt["artifact_image_digest"] == package.image.image_digest
     assert receipt["fold_lossless"] is True
     assert receipt["fold_inexact_value_count"] == 0
+    assert receipt["numeric_policy"] == "folded_row_reference_explicit_approximate"
+    assert package.target_ir.count("tessera_rocm.scaled_wmma_gemm") == 1
+    assert 'physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1"' in package.target_ir
+    assert 'k_step_schedule = "isolated_k_stage"' in package.target_ir
     assert receipt["selected_schedule"] == {
         "block_m": 256, "block_n": 64, "block_k": 64,
         "tile_m_per_wave": 4, "tile_n_per_wave": 2,

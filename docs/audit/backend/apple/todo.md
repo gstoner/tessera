@@ -8,6 +8,15 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## GPT-OSS-20B ROCm full-expanded capacity packet — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-GPT-OSS-20B-MXFP4-CAPACITY-2026-09-23`. The pinned MXFP4
+expert inventory is reusable model information, but the absolute no-fit
+proof uses Tajasarus VRAM and Tessera's ROCm W4A8 representation. It is
+not Apple capacity, layout-conversion, or exact-device evidence; Metal
+selection remains unchanged.
+
 ## GFX1201 MXFP4 prefill sweep schema — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

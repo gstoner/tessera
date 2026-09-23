@@ -529,3 +529,22 @@ as headroom. No selector or dynamic stage-cost training is admitted from
 these kernel medians. Next obtain a model-owned post-load capacity packet
 and explain the large-N M=1024 stall with measured memory or PC evidence.
 [Six-shape evidence](../../../benchmarks/baselines/gfx1201_mxfp4_prefill_sweep_20260923/README.md).
+
+GPT-OSS-20B provides a concrete model-capacity boundary: the pinned
+checkpoint's 1,536 MXFP4 expert projections require 19.11 GB for
+expanded one-byte weights alone, greater than the 16.97 GB physical VRAM
+on Tajasarus. The full-expanded prefill design is therefore refused for
+that model/device before any profiler question. A bounded hot-expert cache
+or streamed producer remains a different hypothesis, requiring actual
+router traffic, model-owned headroom, checkpoint layout conversion, and
+model-specific numerical proof. The prior synthetic N/K kernel timings
+are not GPT-OSS-20B model timings. [Pinned inventory and capacity
+packet](../../../benchmarks/baselines/gfx1201_mxfp4_gpt_oss_20b_20260923/README.md).
+Qwen3-14B's official dense BF16 checkpoint is a separate 29.54 GB
+capacity refusal on this 16.97 GB device, not evidence about MXFP4
+folding. The cited Radiance R9700 fused-MoE table varies M-dependent
+BM/BN, group-M, stages, and warps for FP8 W8A8 at E=256,N=256; it
+cannot be carried into GPT-OSS-20B E=32 MXFP4 or dense Qwen3-14B by
+matching `gfx1201` alone. Extract the scheduling axes as candidate
+experiments only after matching dtype, physical scales, expert geometry,
+and exact-device timing.

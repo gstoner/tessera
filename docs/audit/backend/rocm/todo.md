@@ -7,6 +7,32 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GPT-OSS-20B full-expanded MXFP4 capacity refusal — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-GPT-OSS-20B-MXFP4-CAPACITY-2026-09-23`. Pinned checkpoint
+metadata at revision `6cee5e81ee83917806bbde320786a8fb61efebee`
+contains 24×32 down and gate/up expert matrices. Their fully expanded
+one-byte weights alone require 19,110,297,600 bytes, more than Tajasarus's
+16,974,905,344-byte physical VRAM. [Inventory and exact-device capacity
+packet](../../../../benchmarks/baselines/gfx1201_mxfp4_gpt_oss_20b_20260923/README.md)
+therefore refuse full-model expanded prefill without downloading/loading
+the checkpoint. This closes the full-expansion feasibility question for
+this model/device only, not a loaded-model budget for selective caching.
+Next prove a bounded hot-expert or streaming policy, source-block/scale
+layout conversion, and model-specific BF16/edge-scale output against
+exact K32. Keep the general automatic selector closed.
+Qwen/Qwen3-14B at [pinned revision](https://huggingface.co/Qwen/Qwen3-14B/blob/40c069824f4251a91eefaf281ebe4c544efd3e18/model.safetensors.index.json)
+`40c069824f4251a91eefaf281ebe4c544efd3e18` is a dense BF16
+checkpoint with 29,536,614,400 tensor bytes, so its unquantized weights
+also exceed Tajasarus physical VRAM; it is not an MXFP4 model-budget
+substitute. The linked [Radiance R9700 config](https://github.com/magiccodingman/vllm-radiance/blob/f6727a21b69a5a53a054bd2d9fa8249851ffd33a/moe-configs/E%3D256%2CN%3D256%2Cdevice_name%3DAMD_Radeon_R9700%2Cdtype%3Dfp8_w8a8%2Cblock_shape%3D%5B128%2C128%5D.json) at revision
+`f6727a21b69a5a53a054bd2d9fa8249851ffd33a` is for fused MoE
+`E=256,N=256`, FP8 W8A8, 128×128 scales on a different 32 GB product.
+Its M-dependent BM/BN, grouping, stages, and wave choices are hypotheses
+only, not a GPT-OSS-20B or Qwen3-14B schedule/proof. Choose and pin a
+Qwen3-14B quantized checkpoint before comparing model residency or ABI.
+
 ## GFX1201 MXFP4 six-shape prefill crossover and model budget — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
@@ -21,9 +47,9 @@ an admission margin. [Evidence](../../../../benchmarks/baselines/gfx1201_mxfp4_p
 HIP free-memory snapshots are real device observations but no model was
 loaded, so they cannot authorize extra expanded-weight residency. The
 new inventory reader refuses model budget and automatic selection. Next:
-obtain an actual checkpoint/layer inventory and model-owned post-load
-memory snapshot with reserves for activations, graph pools, code objects,
-and fragmentation; then decide expanded versus packed prefill by shape.
+obtain model-owned post-load headroom for any *selective* expanded cache,
+with reserves for activations, graph pools, code objects, and
+fragmentation; the pinned GPT-OSS-20B full-expansion refusal is above.
 Keep exact K32 as oracle and safe/TN4 candidates manual.
 
 ## GFX1201 folded-prefill safe epilogue and TN4 experiments — 2026-09-23

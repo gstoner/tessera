@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GPT-OSS-20B ROCm full-expanded capacity packet — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-GPT-OSS-20B-MXFP4-CAPACITY-2026-09-23`. The pinned checkpoint
+inventory does not establish an NVFP4 layout, CUDA device budget, or
+NVIDIA exact-device proof. Tajasarus's physical-capacity refusal is
+architecture-specific; NVIDIA selection remains unchanged.
+
 ## GFX1201 MXFP4 prefill sweep schema — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

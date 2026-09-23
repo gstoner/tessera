@@ -8,6 +8,13 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## Quark byte-oracle preflight — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-BYTE-ORACLE-2026-09-23`. The host-only candidate
+checkpoint decode is not an NVFP4 converter, CUDA W4A4 activation
+carrier, or SM120 numerical proof. NVIDIA selection remains unchanged.
+
 ## GPT-OSS-20B ROCm full-expanded capacity packet — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

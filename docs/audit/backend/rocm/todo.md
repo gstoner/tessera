@@ -7,6 +7,22 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Quark checkpoint byte-oracle preflight — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-BYTE-ORACLE-2026-09-23`. Bounded HTTP ranges from the
+pinned Qwen3.8-27B Quark checkpoint now bind gate/down packed-weight and
+E8M0-scale bytes to the safetensors header. A host-only independent E2M1
+low-even/bias-127 candidate oracle checks all 16 codes and the sampled
+bytes. [Byte preflight](../../../../benchmarks/baselines/gfx1201_quark_byte_oracle_20260923/README.md).
+The checkpoint records exporter `0.13+unknown`, while the inspectable
+Quark 0.12 `fp4` packing and biased-E8M0 path are consistent but not a
+matching producer certificate. Do not enable Quark layout
+conversion or W4A4 execution from this evidence. Next obtain matching
+exporter code or an independent dequantized projection slice, resolve
+scale-code 0/255 semantics, then build a distinct W4A4 carrier and run
+gfx1201 BF16/edge-scale proof. The W4A8 selector remains closed to Quark.
+
 ## GPT-OSS-20B full-expanded MXFP4 capacity refusal — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

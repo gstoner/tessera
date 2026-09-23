@@ -12,6 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 from .rocm_mxfp4 import MXFP4_QUARK_REORDER_LAYOUT_V1
 from .rocm_mxfp4_native import MXFP4RouteReceipt, select_mxfp4_schedule
 
@@ -59,6 +61,47 @@ def _u8_shape(tensor: Mapping[str, Any], name: str) -> tuple[int, int]:
     ):
         raise ValueError(f"{name} must have a positive rank-two shape")
     return shape[0], shape[1]
+
+
+def decode_quark_low_even_hypothesis(
+    packed_weight: np.ndarray, scale_codes: np.ndarray,
+) -> np.ndarray:
+    """Host-only candidate oracle for separate ``[N,K/2]``/``[N,K/32]`` planes.
+
+    Quark 0.12's FP4 packer puts even K in the low nibble, and the pinned
+    checkpoint has these plane shapes. Its metadata names a different,
+    unpinned 0.13 exporter, however. The result is an independently computed
+    *hypothesis*, never a conversion certificate or executable route. Scale
+    codes 0 and 255 are refused until their checkpoint-specific meaning is
+    established by a matching producer or an independent dequantization.
+    """
+    weight = np.asarray(packed_weight)
+    scales = np.asarray(scale_codes)
+    if weight.dtype != np.uint8 or scales.dtype != np.uint8:
+        raise TypeError("Quark candidate oracle requires raw uint8 planes")
+    if weight.ndim != 2 or scales.ndim != 2:
+        raise ValueError("Quark candidate oracle requires rank-two planes")
+    n, packed_k = weight.shape
+    if n == 0 or packed_k == 0 or packed_k % 16 or scales.shape != (n, packed_k // 16):
+        raise ValueError("Quark candidate oracle requires aligned [N,K/2] and [N,K/32]")
+    if np.any((scales == 0) | (scales == 255)):
+        raise ValueError("Quark scale-code 0/255 semantics are not proved")
+
+    codes = np.empty((n, packed_k * 2), dtype=np.uint8)
+    codes[:, 0::2] = weight & np.uint8(0x0F)
+    codes[:, 1::2] = weight >> np.uint8(4)
+    magnitude = codes & np.uint8(7)
+    exponent = magnitude >> np.uint8(1)
+    fraction = magnitude & np.uint8(1)
+    values = np.where(
+        exponent == 0,
+        fraction.astype(np.float64) * 0.5,
+        (1.0 + fraction.astype(np.float64) * 0.5)
+        * np.exp2(exponent.astype(np.float64) - 1.0),
+    )
+    values = np.where(codes & np.uint8(8), -values, values)
+    scale = np.exp2(scales.astype(np.float64) - 127.0).repeat(32, axis=1)
+    return np.ascontiguousarray(values * scale)
 
 
 def assess_quark_mxfp4_projection(

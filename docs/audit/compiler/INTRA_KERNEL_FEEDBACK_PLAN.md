@@ -551,6 +551,13 @@ and exact-device timing.
 
 ### 2026-09-23: checkpoint metadata is a boundary, not a cost label
 
+The pinned-checkpoint byte preflight adds gate/down packed-weight and
+scale byte samples plus a host-only low-even E2M1/E8M0 candidate oracle.
+The checkpoint names exporter `0.13+unknown`; the available Quark 0.12
+packer is not sufficient source provenance for executable conversion.
+No W4A4 stage-cost label, selector training sample, or exact-device
+numerical proof is admitted. [Byte preflight](../../../benchmarks/baselines/gfx1201_quark_byte_oracle_20260923/README.md).
+
 The pinned AMD Qwen3.8-27B Quark AWQ MXFP4 gate/up projection has
 `N=17408,K=5120`, matching one prior synthetic sweep geometry, while its
 down projection has `N=5120,K=17408` and needs a broader K proof. Quark

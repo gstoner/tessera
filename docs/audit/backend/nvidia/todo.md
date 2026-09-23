@@ -8,6 +8,13 @@ last_updated: 2026-09-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## GFX1201 packed-word permute decode — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-PERMUTE-DECODE-2026-09-23`.
+Not applicable to CUDA execution: the RDNA4 permute instruction and AMD
+fragment-order HSACO are not an NVFP4/PTX schedule. The matched benchmark v3
+schema is gfx1201-only and supplies no NVIDIA performance or selector proof.
+
 ## GFX1201 packed producer staging ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-STAGING-ABLATION-2026-09-23`.

@@ -88,6 +88,35 @@ __device__ __forceinline__ unsigned char tessera_fold_code_integer(
 }
 '''
 
+_PERMUTE_HELPERS = r'''
+// Four E2M1 magnitudes per v_perm_b32; sign remains the nibble's high bit.
+// Keep all subnormal and signed-zero encodings identical to the scalar oracle.
+__constant__ unsigned int tessera_fold_magnitudes[13][2] = {
+  {0x3c383000u,0x4c484440u}, {0x34302800u,0x44403c38u},
+  {0x2c282000u,0x3c383430u}, {0x24201800u,0x34302c28u},
+  {0x1c181000u,0x2c282420u}, {0x14100800u,0x24201c18u},
+  {0x0c080400u,0x1c181410u}, {0x06040200u,0x14100c08u},
+  {0x03020100u,0x0c080604u}, {0x02010000u,0x06040302u},
+  {0x01000000u,0x03020201u}, {0x00000000u,0x02010100u},
+  {0x00000000u,0x01000000u},
+};
+__device__ __forceinline__ unsigned long long tessera_fold_word_permute(
+    unsigned int word, int delta, unsigned char block_scale) {
+  if (block_scale == 0) return 0;
+  const unsigned int t0 = delta < 13 ? tessera_fold_magnitudes[delta][0] : 0;
+  const unsigned int t1 = delta < 13 ? tessera_fold_magnitudes[delta][1] : 0;
+  const unsigned int ev = word & 0x0f0f0f0fu;
+  const unsigned int od = (word >> 4) & 0x0f0f0f0fu;
+  const unsigned int be = __builtin_amdgcn_perm(t1, t0, ev & 0x07070707u)
+                        | ((ev & 0x08080808u) << 4);
+  const unsigned int bo = __builtin_amdgcn_perm(t1, t0, od & 0x07070707u)
+                        | ((od & 0x08080808u) << 4);
+  const unsigned int low = __builtin_amdgcn_perm(bo, be, 0x05010400u);
+  const unsigned int high = __builtin_amdgcn_perm(bo, be, 0x07030602u);
+  return (unsigned long long)low | ((unsigned long long)high << 32);
+}
+'''
+
 _EXPANDED_B_STAGE = r'''    {
       const long row = n0 + tid / 4;
       const int off = (tid & 3) * 16;
@@ -404,11 +433,14 @@ def emit_mxfp4_packed_folded_prefill_hip(
     entry: str = "tessera_mxfp4_packed_folded_prefill",
     *, integer_decode: bool = False, batched_loads: bool = False,
     batched_a_loads: bool = False, reuse_pair_scales: bool = False,
+    permute_decode: bool = False,
 ) -> str:
     """Emit the K64 packed-fragment LDS decode and folded WMMA schedule."""
     source = emit_mxfp4_folded_prefill_hip(entry, full_k64=True)
     if reuse_pair_scales and not batched_loads:
         raise ValueError("paired K16 scale reuse requires batched B loads")
+    if permute_decode and integer_decode:
+        raise ValueError("select one packed-word decode implementation")
     def replace_once(old: str, new: str) -> None:
         nonlocal source
         if source.count(old) != 1:
@@ -418,7 +450,7 @@ def emit_mxfp4_packed_folded_prefill_hip(
     replace_once(
         "using copy_u32x4 = unsigned int __attribute__((ext_vector_type(4)));",
         "using copy_u32x4 = unsigned int __attribute__((ext_vector_type(4)));"
-        + _PACKED_HELPERS,
+        + _PACKED_HELPERS + (_PERMUTE_HELPERS if permute_decode else ""),
     )
     if batched_a_loads:
         replace_once(
@@ -440,6 +472,18 @@ def emit_mxfp4_packed_folded_prefill_hip(
         _EXPANDED_B_STAGE.replace("__FULL_K64__", "true"),
         stage.replace("__DECODE_EXPRESSION__", expression),
     )
+    if permute_decode:
+        replace_once(
+            """        unsigned long long decoded = 0;
+#pragma unroll
+        for (int e = 0; e < 8; ++e) {
+          const int code = (word >> (e * 4)) & 15;
+          const unsigned char value = """ + expression + """;
+          decoded |= (unsigned long long)value << (e * 8);
+        }""",
+            """        const unsigned long long decoded =
+            tessera_fold_word_permute(word, delta, block_scale);""",
+        )
     replace_once(
         "const unsigned char exponent = Ref[n < N ? n : 0];",
         "const unsigned char exponent = Ref[(K / 32) * N + (n < N ? n : 0)];",
@@ -454,6 +498,7 @@ def package_mxfp4_packed_folded_prefill(
     batched_loads: bool = False,
     batched_a_loads: bool = False,
     reuse_pair_scales: bool = False,
+    permute_decode: bool = False,
 ) -> ROCMNativePackage:
     """Compile the distinct packed ABI, without admitting it to selection."""
     n, k = payload.shape
@@ -462,6 +507,7 @@ def package_mxfp4_packed_folded_prefill(
     source = emit_mxfp4_packed_folded_prefill_hip(
         entry, integer_decode=integer_decode, batched_loads=batched_loads,
         batched_a_loads=batched_a_loads, reuse_pair_scales=reuse_pair_scales,
+        permute_decode=permute_decode,
     )
     rocm_path = _rocm_path()
     compiler = _rocm_hipcc(rocm_path)
@@ -531,11 +577,16 @@ def package_mxfp4_packed_folded_prefill(
         provenance={
             "work_item": "ROCM-MXFP4-W4A8-1",
             "sync_key": (
+                "GFX1201-PACKED-PERMUTE-DECODE-2026-09-23"
+                if permute_decode else
                 "GFX1201-PACKED-STAGING-ABLATION-2026-09-23"
                 if batched_loads or batched_a_loads or reuse_pair_scales
                 else "GFX1201-PACKED-FOLDED-DECODE-2026-09-23"
             ),
             "route": "packed_folded_fragment_bm256_tm4",
+            "decode_strategy": "permute_word" if permute_decode else (
+                "integer_nibble" if integer_decode else "table_nibble"
+            ),
             "architecture": "gfx1201",
             "physical_contract": PACKED_FOLDED_PHYSICAL_V1,
             "numeric_policy": "folded_row_reference_explicit_approximate",

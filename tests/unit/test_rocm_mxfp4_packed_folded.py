@@ -160,6 +160,35 @@ def test_packed_decode_table_matches_every_e2m1_code_and_delta() -> None:
         )
 
 
+def test_permute_decode_table_matches_scalar_oracle() -> None:
+    source = emit_mxfp4_packed_folded_prefill_hip(permute_decode=True)
+    match = re.search(
+        r"tessera_fold_magnitudes\[13\]\[2\] = (\{.*?\});",
+        source, flags=re.DOTALL,
+    )
+    assert match is not None
+    words = [int(value, 16) for value in re.findall(r"0x([0-9a-f]+)u", match.group(1))]
+    assert len(words) == 26
+    scalar_match = re.search(
+        r"tessera_fold_e2m1_e4m3\[13\]\[16\] = (\{.*?\});",
+        source, flags=re.DOTALL,
+    )
+    assert scalar_match is not None
+    scalar = np.asarray(
+        ast.literal_eval(scalar_match.group(1).replace("{", "[").replace("}", "]")),
+        dtype=np.uint8,
+    )
+    for delta in range(13):
+        magnitudes = [
+            (words[delta * 2 + code // 4] >> (8 * (code % 4))) & 255
+            for code in range(8)
+        ]
+        for code in range(16):
+            assert magnitudes[code & 7] | ((code & 8) << 4) == scalar[delta, code]
+    assert "__builtin_amdgcn_perm" in source
+    assert "tessera_fold_word_permute(word, delta, block_scale)" in source
+
+
 def test_batched_packed_stage_issues_both_loads_before_decode() -> None:
     source = emit_mxfp4_packed_folded_prefill_hip(
         integer_decode=True, batched_loads=True,

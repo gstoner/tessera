@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## GFX1201 packed-word permute decode — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-PERMUTE-DECODE-2026-09-23`.
+Not applicable to AVX-512 execution: RDNA4 word permutation, LDS staging,
+and HSACO ISA counts do not transfer to a CPU physical schedule. Benchmark
+v3 changes only the gfx1201 evidence schema; no x86 route is implied.
+
 ## GFX1201 packed producer staging ablation — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-PACKED-STAGING-ABLATION-2026-09-23`.

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .rocm_mxfp4 import MXFP4_QUARK_REORDER_LAYOUT_V1
-from .rocm_mxfp4_native import MXFP4RouteReceipt, select_mxfp4_route
+from .rocm_mxfp4_native import MXFP4RouteReceipt, select_mxfp4_schedule
 
 
 @dataclass(frozen=True)
@@ -112,12 +112,16 @@ def assess_quark_mxfp4_projection(
     k = packed_k * 2
     if k % 32 or (scale_n, scale_k) != (n, k // 32):
         raise ValueError("Quark packed weight and E8M0 scale shapes disagree")
-    route = select_mxfp4_route(
-        m,
-        n,
-        k,
-        requested_layout=MXFP4_QUARK_REORDER_LAYOUT_V1,
-        activation_storage="mxfp4_e2m1",
+    schedule = select_mxfp4_schedule(m, n, k)
+    route = MXFP4RouteReceipt(
+        False,
+        schedule.workload,
+        MXFP4_QUARK_REORDER_LAYOUT_V1,
+        None,
+        None,
+        "Quark reorder bytes have no proved converter and dynamic MXFP4 "
+        "activations require a distinct W4A4 ABI",
+        schedule,
     )
     return QuarkMXFP4ProjectionAssessment(
         module=module,

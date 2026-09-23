@@ -36,7 +36,6 @@ from .rocm_mxfp4 import (
     MXFP4_AITER_SHUFFLED_LAYOUT_V1,
     MXFP4_CHECKPOINT_LAYOUT_V1,
     MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
-    MXFP4_QUARK_REORDER_LAYOUT_V1,
     MXFP4_TRANSPOSED_LAYOUT_V1,
     mxfp4_weight_layout,
 )
@@ -109,7 +108,6 @@ class MXFP4RouteReceipt:
     abi_id: str | None
     reason: str
     schedule: MXFP4Schedule
-    activation_storage: str = "fp8_e4m3"
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -119,7 +117,6 @@ class MXFP4RouteReceipt:
             "selected_layout": self.selected_layout,
             "abi_id": self.abi_id,
             "reason": self.reason,
-            "activation_storage": self.activation_storage,
             "schedule": {
                 "group_m": self.schedule.group_m,
                 "split_k": self.schedule.split_k,
@@ -152,27 +149,14 @@ def select_mxfp4_route(
     *,
     requested_layout: str | None = None,
     schedule: MXFP4Schedule | None = None,
-    activation_storage: str = "fp8_e4m3",
 ) -> MXFP4RouteReceipt:
     """Explain the layout/ABI decision without compiling or allocating."""
     selected_schedule = schedule or select_mxfp4_schedule(m, n, k)
     if requested_layout is not None:
         mxfp4_weight_layout(requested_layout)
-    if activation_storage != "fp8_e4m3":
-        return MXFP4RouteReceipt(
-            False,
-            selected_schedule.workload,
-            requested_layout,
-            None,
-            None,
-            f"activation storage {activation_storage!r} is not the proved W4A8 FP8 ABI",
-            selected_schedule,
-            activation_storage,
-        )
     if requested_layout in {
         MXFP4_CHECKPOINT_LAYOUT_V1,
         MXFP4_AITER_SHUFFLED_LAYOUT_V1,
-        MXFP4_QUARK_REORDER_LAYOUT_V1,
     }:
         return MXFP4RouteReceipt(
             False,
@@ -184,8 +168,6 @@ def select_mxfp4_route(
                 "checkpoint layout is a load-time source, not a launch ABI"
                 if requested_layout == MXFP4_CHECKPOINT_LAYOUT_V1
                 else "AITER shuffled layout is incompatible and has no proved converter"
-                if requested_layout == MXFP4_AITER_SHUFFLED_LAYOUT_V1
-                else "Quark reorder layout has no proved byte-level converter"
             ),
             selected_schedule,
         )

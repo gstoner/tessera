@@ -73,7 +73,7 @@ def test_pinned_qwen_projections_are_metadata_only(
     assert assessment.activation_storage == "mxfp4_e2m1"
     assert not assessment.route.accepted
     assert assessment.route.abi_id is None
-    assert assessment.route.as_dict()["activation_storage"] == "mxfp4_e2m1"
+    assert assessment.as_dict()["activation_storage"] == "mxfp4_e2m1"
     assert len(assessment.unresolved_contracts) == 2
 
 
@@ -89,12 +89,16 @@ def test_quark_layout_and_w4a4_are_independent_refusals() -> None:
         128, 17408, 5120, requested_layout=MXFP4_QUARK_REORDER_LAYOUT_V1,
     )
     assert not layout.accepted
-    assert "byte-level converter" in layout.reason
-    activation = select_mxfp4_route(
-        128, 17408, 5120, activation_storage="mxfp4_e2m1",
+    assert "not an executable gfx1201 MXFP4 ABI" in layout.reason
+    activation = assess_quark_mxfp4_projection(
+        QUARK_CONFIG,
+        module=GATE,
+        m=128,
+        weight={"dtype": "U8", "shape": [17408, 2560]},
+        scale={"dtype": "U8", "shape": [17408, 160]},
     )
-    assert not activation.accepted
-    assert "not the proved W4A8 FP8 ABI" in activation.reason
+    assert not activation.route.accepted
+    assert "dynamic MXFP4 activations" in activation.route.reason
     assert select_mxfp4_route(128, 17408, 5120).accepted
 
 

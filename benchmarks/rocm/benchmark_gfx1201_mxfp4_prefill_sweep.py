@@ -26,15 +26,23 @@ SWEEP = (
 )
 
 
-def _model_layers(path: Path) -> tuple[MXFP4LayerShape, ...]:
+def _model_layers(path: Path) -> tuple[tuple[MXFP4LayerShape, ...], str]:
     """Read an explicit model inventory, not an inferred exemplar."""
-    data = json.loads(path.read_text())
-    if data.get("schema") != "tessera.mxfp4.model_layer_inventory.v1":
+    contents = path.read_bytes()
+    data = json.loads(contents)
+    if not isinstance(data, dict) or data.get("schema") != (
+        "tessera.mxfp4.model_layer_inventory.v1"
+    ):
         raise ValueError("model inventory has an unsupported schema")
     rows = data.get("layers")
     if not isinstance(rows, list) or not rows:
         raise ValueError("model inventory requires nonempty layers")
-    return tuple(MXFP4LayerShape(**row) for row in rows)
+    if not all(isinstance(row, dict) for row in rows):
+        raise ValueError("model inventory layers must be objects")
+    return (
+        tuple(MXFP4LayerShape(**row) for row in rows),
+        hashlib.sha256(contents).hexdigest(),
+    )
 
 
 def _memory_snapshot() -> dict[str, int]:
@@ -50,6 +58,8 @@ def sweep(
 ) -> dict[str, Any]:
     if reserve_bytes < 0:
         raise ValueError("reserve_bytes must be nonnegative")
+    # Input mistakes must fail before touching HIP or compiling six shapes.
+    validated_inventory = _model_layers(model_inventory) if model_inventory is not None else None
     if rt._rocm_live_arch() != "gfx1201":
         raise RuntimeError("prefill sweep requires the selected gfx1201 GPU")
     before = _memory_snapshot()
@@ -62,14 +72,14 @@ def sweep(
         "state": "missing_model_inventory",
         "selection_state": "refused_no_model_budget",
     }
-    if model_inventory is not None:
-        layers = _model_layers(model_inventory)
+    if validated_inventory is not None:
+        layers, inventory_sha256 = validated_inventory
         # The snapshot is only a valid *model* budget when this process owns
         # the loaded model. A standalone benchmark cannot make that claim.
         inventory = {
             "state": "inventory_only_no_loaded_model",
             "selection_state": "refused_no_model_budget",
-            "inventory_sha256": hashlib.sha256(model_inventory.read_bytes()).hexdigest(),
+            "inventory_sha256": inventory_sha256,
             "inventory_path": str(model_inventory),
             "reserve_bytes": reserve_bytes,
             # Idle HIP free bytes do not represent headroom after model load.

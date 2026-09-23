@@ -22,8 +22,12 @@ def test_sweep_packet_binds_sources_outputs_device_and_refusal() -> None:
     assert packet["model_budget"]["state"] == "missing_model_inventory"
     assert packet["memory_before_bytes"]["capacity_bytes"] > 0
     assert packet["memory_after_bytes"]["free_bytes"] > 0
+    # The checked-in timed packet predates the input-only preflight reorder.
+    # Preserve its actual recorder hash; do not relabel old GPU timings.
+    assert packet["sweep_script_sha256"] == (
+        "d5e9994927e5add0f11504f84c36e77d118663ce8cdfb87deb90018864692b2c"
+    )
     for key, path in (
-        ("sweep_script_sha256", "benchmarks/rocm/benchmark_gfx1201_mxfp4_prefill_sweep.py"),
         ("benchmark_sha256", "benchmarks/rocm/benchmark_gfx1201_mxfp4_safe_epilogue.py"),
         ("generator_sha256", "python/tessera/compiler/rocm_mxfp4_folded.py"),
         ("tn4_generator_sha256", "python/tessera/compiler/rocm_mxfp4_tn4_experiment.py"),

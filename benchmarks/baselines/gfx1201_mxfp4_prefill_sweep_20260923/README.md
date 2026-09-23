@@ -11,6 +11,9 @@ weights. Every case passed independent sampled FP32-dequantized exact K32
 reference output and bitwise BF16 agreement across all six engines before
 timing. The folds in this sweep are lossless. Eleven interleaved HIP-event
 trials, twelve launches each, measure kernels, not model latency.
+The packet also retains the original sweep-recorder hash. PR #826 subsequently
+moved optional inventory validation before GPU work; it did not change the
+timed generators or relabel this packet as if the rerun used the new recorder.
 
 | M×N×K | Safe TN2 | Expanded TN4 | Packed TN2 | Radiance | Best Tessera gap |
 | --- | ---: | ---: | ---: | ---: | ---: |

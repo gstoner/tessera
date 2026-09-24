@@ -21,6 +21,7 @@ from typing import Any, cast
 import numpy as np
 
 from .native_artifact import (
+    HAND_EMITTED_HIP_PRODUCER,
     BufferBinding,
     LaunchDescriptor,
     LaunchGeometry,
@@ -194,7 +195,7 @@ def package_quark_w4a4_probe(
     image = NativeImageArtifact(
         target=f"rocm_{arch}",
         architecture=arch,
-        pipeline_name="tessera-lower-to-rocm",
+        pipeline_name=HAND_EMITTED_HIP_PRODUCER,
         compiler_fingerprint=_version_fingerprint(compiler),
         toolchain_fingerprint=hashlib.sha256(
             (str(rocm_path) + f"|{arch}|O3|quark_w4a4_exact_probe").encode()
@@ -240,10 +241,6 @@ def package_quark_w4a4_probe(
             "work_item": "ROCM-MXFP4-W4A8-1",
             "sync_key": QUARK_W4A4_SYNC_KEY,
             "route": "manual_quark_w4a4_scalar_probe",
-            # ``pipeline_name`` must name a registered pipeline and every
-            # hipcc-built MXFP4 package reuses tessera-lower-to-rocm; this
-            # kernel is hand-emitted HIP, not a Tile IR lowering.
-            "lowering": "hand_emitted_hip_hipcc",
             "activation_layout": "e2m1_row_major_low_even_k_v1",
             "weight_layout": "quark_sampled_row_major_low_even_k_v1",
             "activation_scale": "e8m0_m_k32",

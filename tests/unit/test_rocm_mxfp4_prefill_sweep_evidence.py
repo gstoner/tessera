@@ -29,11 +29,14 @@ def test_sweep_packet_binds_sources_outputs_device_and_refusal() -> None:
     )
     for key, path in (
         ("benchmark_sha256", "benchmarks/rocm/benchmark_gfx1201_mxfp4_safe_epilogue.py"),
-        ("generator_sha256", "python/tessera/compiler/rocm_mxfp4_folded.py"),
         ("tn4_generator_sha256", "python/tessera/compiler/rocm_mxfp4_tn4_experiment.py"),
-        ("packed_generator_sha256", "python/tessera/compiler/rocm_mxfp4_packed_folded.py"),
     ):
         assert packet[key] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+    # Recorded before the 2026-09-24 producer relabel (pipeline_name only).
+    # gfx1201_mxfp4_producer_relabel_20260924 proves the relabelled generator
+    # builds the same timed kernels; do not relabel old GPU timings.
+    assert packet["generator_sha256"] == "fb923edfbe4ba1c3eb4cd1da237a3ac72802e8ffa77ad3c9b7935bc071e87616"
+    assert packet["packed_generator_sha256"] == "b45ad1f0b58a90199e270cffd2735d3f0fd30b216824758f40316cd5917bb090"
     assert len(packet["sweep_cases"]) == 6
     for case in packet["sweep_cases"]:
         rows = {row["engine"]: row for row in packet["rows"] if row["case"] == case}

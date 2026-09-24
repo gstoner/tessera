@@ -379,3 +379,53 @@ def test_cached_dtype_spelling_does_not_cache_invocation_shape_or_layout():
     assert _numpy_native_dtype_name.cache_info().hits == 1
     _, transposed = _native_buffer_value(value.T)
     assert transposed.layout == 'col_major'
+
+
+def test_hand_emitted_hip_producer_is_accepted_only_for_rocm_targets() -> None:
+    from tessera.compiler.native_artifact import (
+        HAND_EMITTED_HIP_PRODUCER,
+        NON_MLIR_IMAGE_PRODUCERS,
+    )
+
+    for target in NON_MLIR_IMAGE_PRODUCERS[HAND_EMITTED_HIP_PRODUCER]:
+        image = _image(
+            target=target, architecture=target.removeprefix("rocm_"),
+            pipeline_name=HAND_EMITTED_HIP_PRODUCER, binary_format="hsaco",
+            payload=b"\x7fELF", resource_record=None, device_libraries=(),
+        )
+        assert image.pipeline_name == HAND_EMITTED_HIP_PRODUCER
+        assert image.to_dict()["pipeline_name"] == HAND_EMITTED_HIP_PRODUCER
+    with pytest.raises(ArtifactContractError, match="does not declare target"):
+        _image(pipeline_name=HAND_EMITTED_HIP_PRODUCER)  # nvidia_sm120
+
+
+def test_non_mlir_producers_never_shadow_a_registered_pipeline() -> None:
+    from tessera.compiler.native_artifact import NON_MLIR_IMAGE_PRODUCERS
+    from tessera.compiler.pipeline_registry import pipeline_lookup
+
+    for name in NON_MLIR_IMAGE_PRODUCERS:
+        assert pipeline_lookup(name) is None, name
+
+
+def test_hand_written_mxfp4_and_quark_packagers_name_their_producer() -> None:
+    import inspect
+
+    from tessera.compiler import rocm_mxfp4_native, rocm_mxfp4_quark_native
+    from tessera.compiler.native_artifact import HAND_EMITTED_HIP_PRODUCER
+
+    for function in (
+        rocm_mxfp4_native.package_mxfp4_w4a8,
+        rocm_mxfp4_native.package_mxfp4_w4a8_exact,
+        rocm_mxfp4_native.package_mxfp4_w4a8_wmma,
+        rocm_mxfp4_native.package_scaled_wmma_target_ir,
+    ):
+        default = inspect.signature(function).parameters["pipeline_name"].default
+        assert default == HAND_EMITTED_HIP_PRODUCER, function.__name__
+    # The folded, packed-folded and Quark packagers take no override; their
+    # source must not name an MLIR pipeline they never ran.
+    from pathlib import Path
+
+    root = Path(rocm_mxfp4_native.__file__).parent
+    for name in ("rocm_mxfp4_folded", "rocm_mxfp4_packed_folded", "rocm_mxfp4_quark_native"):
+        assert '"tessera-lower-to-rocm"' not in (root / f"{name}.py").read_text(), name
+    assert rocm_mxfp4_quark_native.GFX1201_QUARK_W4A4_PROBE_ABI

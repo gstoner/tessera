@@ -1,0 +1,288 @@
+{
+  "schema": "tessera.rocm.gfx1201_mxfp4_producer_relabel_identity.v1",
+  "sync_key": "ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24",
+  "host": "tajasarus",
+  "device": "AMD Radeon RX 9070 XT",
+  "architecture": "gfx1201",
+  "hipcc": "HIP version: 7.15.26333-0000000",
+  "parent_revision": "f9ab99a1",
+  "change": "NativeImageArtifact.pipeline_name tessera-lower-to-rocm -> hand-emitted-hip in the MXFP4 packagers; no emitted-source or hipcc-command change",
+  "production_wmma_payloads": {
+    "method": "rebuilt twice at the relabel with each row's recorded schedule; whole HSACO payload sha256 compared to the packet (these builds are byte-deterministic)",
+    "rows": [
+      {
+        "case": "decode_8x17408x5120",
+        "recorded_image_sha256": "87bdc93578e906f4d0ad19627cc46dce9705091888030fcb225cde7de45359a1",
+        "rebuilt_twice_identical": true
+      },
+      {
+        "case": "decode_8x5120x8704",
+        "recorded_image_sha256": "87bdc93578e906f4d0ad19627cc46dce9705091888030fcb225cde7de45359a1",
+        "rebuilt_twice_identical": true
+      },
+      {
+        "case": "prefill_1024x17408x5120",
+        "recorded_image_sha256": "972a4c00794cd2a3e1b88d464968d57601cf766e734b4e0b9ec66024c342878b",
+        "rebuilt_twice_identical": true
+      },
+      {
+        "case": "prefill_256x5120x8704",
+        "recorded_image_sha256": "972a4c00794cd2a3e1b88d464968d57601cf766e734b4e0b9ec66024c342878b",
+        "rebuilt_twice_identical": true
+      }
+    ]
+  },
+  "instruction_streams": {
+    "method": "selected-symbol instruction_stream_sha256 (inspect_gfx1201_folded_prefill) for every folded / safe-epilogue / TN4 / packed variant the benchmarks build, at the parent and at the relabel; whole payloads carry build-specific bytes and differ even between two builds of one revision, so they are not compared",
+    "variants": {
+      "1024x17408x5120/folded": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46",
+        "relabel_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46"
+      },
+      "1024x17408x5120/packed_a_base": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "6955a98e126a2e4232c0be7dde141742d5b9c66102773604314d9896bd3c11c4",
+        "relabel_stream_sha256": "6955a98e126a2e4232c0be7dde141742d5b9c66102773604314d9896bd3c11c4"
+      },
+      "1024x17408x5120/packed_a_offset32": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "07b40b1a4e3c0646554a79ca1be4033b0b1b3237c93f376478f15c3e7b1dcd27",
+        "relabel_stream_sha256": "07b40b1a4e3c0646554a79ca1be4033b0b1b3237c93f376478f15c3e7b1dcd27"
+      },
+      "1024x17408x5120/packed_batched_a": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "607ac47604c887c49d99b2279b7c6023c7574e98b20bed7be68df2c67ea6d296",
+        "relabel_stream_sha256": "607ac47604c887c49d99b2279b7c6023c7574e98b20bed7be68df2c67ea6d296"
+      },
+      "1024x17408x5120/packed_batched_ab": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "de2dab46f447c94d25246041e1acda1df25db25dba14b285f6a6aa87666964d3",
+        "relabel_stream_sha256": "de2dab46f447c94d25246041e1acda1df25db25dba14b285f6a6aa87666964d3"
+      },
+      "1024x17408x5120/packed_batched_b": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "bf61beeb2f9b045330d309481171dadc03987f633ae09776f5a9819db3c68ff3",
+        "relabel_stream_sha256": "bf61beeb2f9b045330d309481171dadc03987f633ae09776f5a9819db3c68ff3"
+      },
+      "1024x17408x5120/packed_batched_b_pair_scale": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "d67e92a39ee1b9f750ab932d16f0f776feaa650718625fea3f2ef364c8ada76f",
+        "relabel_stream_sha256": "d67e92a39ee1b9f750ab932d16f0f776feaa650718625fea3f2ef364c8ada76f"
+      },
+      "1024x17408x5120/packed_integer": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "8e511c3af7a25093fe78dce99a3ab12de075005ad89dfa88d552a4a7b5a37e46",
+        "relabel_stream_sha256": "8e511c3af7a25093fe78dce99a3ab12de075005ad89dfa88d552a4a7b5a37e46"
+      },
+      "1024x17408x5120/packed_permute": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "b0964dcab5d45fc8b207c8ba238dabc739b4f8596d1f5dd81abf7dbfc0d71696",
+        "relabel_stream_sha256": "b0964dcab5d45fc8b207c8ba238dabc739b4f8596d1f5dd81abf7dbfc0d71696"
+      },
+      "1024x17408x5120/packed_table": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "cadae6c7e04106c7cbf08a0620cb4f6309eb60ae7f0088d04be59b4e9aa53538",
+        "relabel_stream_sha256": "cadae6c7e04106c7cbf08a0620cb4f6309eb60ae7f0088d04be59b4e9aa53538"
+      },
+      "1024x17408x5120/packed_vector_pair": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "17efb3c7b75e0dd8b0ba02d50444008c7a512b247d8f05df949fff1bcd80a5f8",
+        "relabel_stream_sha256": "17efb3c7b75e0dd8b0ba02d50444008c7a512b247d8f05df949fff1bcd80a5f8"
+      },
+      "1024x17408x5120/safe_epilogue": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "1b5d14d3e78757e2188bc879cb86ff65579e28973bfe0d8efeeb87db25c250eb",
+        "relabel_stream_sha256": "1b5d14d3e78757e2188bc879cb86ff65579e28973bfe0d8efeeb87db25c250eb"
+      },
+      "1024x17408x5120/tn4": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "e6481b8dd6b24764dd174c10d32a9ce18e2e9fc9bf4477144da5d5af80549e11",
+        "relabel_stream_sha256": "e6481b8dd6b24764dd174c10d32a9ce18e2e9fc9bf4477144da5d5af80549e11"
+      },
+      "1024x5120x8704/folded": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46",
+        "relabel_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46"
+      },
+      "1024x5120x8704/packed_a_base": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "6955a98e126a2e4232c0be7dde141742d5b9c66102773604314d9896bd3c11c4",
+        "relabel_stream_sha256": "6955a98e126a2e4232c0be7dde141742d5b9c66102773604314d9896bd3c11c4"
+      },
+      "1024x5120x8704/packed_a_offset32": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "07b40b1a4e3c0646554a79ca1be4033b0b1b3237c93f376478f15c3e7b1dcd27",
+        "relabel_stream_sha256": "07b40b1a4e3c0646554a79ca1be4033b0b1b3237c93f376478f15c3e7b1dcd27"
+      },
+      "1024x5120x8704/packed_batched_a": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "607ac47604c887c49d99b2279b7c6023c7574e98b20bed7be68df2c67ea6d296",
+        "relabel_stream_sha256": "607ac47604c887c49d99b2279b7c6023c7574e98b20bed7be68df2c67ea6d296"
+      },
+      "1024x5120x8704/packed_batched_ab": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "de2dab46f447c94d25246041e1acda1df25db25dba14b285f6a6aa87666964d3",
+        "relabel_stream_sha256": "de2dab46f447c94d25246041e1acda1df25db25dba14b285f6a6aa87666964d3"
+      },
+      "1024x5120x8704/packed_batched_b": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "bf61beeb2f9b045330d309481171dadc03987f633ae09776f5a9819db3c68ff3",
+        "relabel_stream_sha256": "bf61beeb2f9b045330d309481171dadc03987f633ae09776f5a9819db3c68ff3"
+      },
+      "1024x5120x8704/packed_batched_b_pair_scale": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "d67e92a39ee1b9f750ab932d16f0f776feaa650718625fea3f2ef364c8ada76f",
+        "relabel_stream_sha256": "d67e92a39ee1b9f750ab932d16f0f776feaa650718625fea3f2ef364c8ada76f"
+      },
+      "1024x5120x8704/packed_integer": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "8e511c3af7a25093fe78dce99a3ab12de075005ad89dfa88d552a4a7b5a37e46",
+        "relabel_stream_sha256": "8e511c3af7a25093fe78dce99a3ab12de075005ad89dfa88d552a4a7b5a37e46"
+      },
+      "1024x5120x8704/packed_permute": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "b0964dcab5d45fc8b207c8ba238dabc739b4f8596d1f5dd81abf7dbfc0d71696",
+        "relabel_stream_sha256": "b0964dcab5d45fc8b207c8ba238dabc739b4f8596d1f5dd81abf7dbfc0d71696"
+      },
+      "1024x5120x8704/packed_table": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "cadae6c7e04106c7cbf08a0620cb4f6309eb60ae7f0088d04be59b4e9aa53538",
+        "relabel_stream_sha256": "cadae6c7e04106c7cbf08a0620cb4f6309eb60ae7f0088d04be59b4e9aa53538"
+      },
+      "1024x5120x8704/packed_vector_pair": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "17efb3c7b75e0dd8b0ba02d50444008c7a512b247d8f05df949fff1bcd80a5f8",
+        "relabel_stream_sha256": "17efb3c7b75e0dd8b0ba02d50444008c7a512b247d8f05df949fff1bcd80a5f8"
+      },
+      "1024x5120x8704/safe_epilogue": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "1b5d14d3e78757e2188bc879cb86ff65579e28973bfe0d8efeeb87db25c250eb",
+        "relabel_stream_sha256": "1b5d14d3e78757e2188bc879cb86ff65579e28973bfe0d8efeeb87db25c250eb"
+      },
+      "1024x5120x8704/tn4": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "e6481b8dd6b24764dd174c10d32a9ce18e2e9fc9bf4477144da5d5af80549e11",
+        "relabel_stream_sha256": "e6481b8dd6b24764dd174c10d32a9ce18e2e9fc9bf4477144da5d5af80549e11"
+      },
+      "256x5120x8704/folded": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46",
+        "relabel_stream_sha256": "113a537116e0e37b6fe13ff05836060f236cfd23dc6c45b2ba57f5e61967da46"
+      },
+      "256x5120x8704/packed_a_base": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "6955a98e126a2e4232c0be7dde141742d5b9c66102773604314d9896bd3c11c4",
+        "relabel_stream_sha256": "6955a98e126a2e4232c0be7dde141742d5b9c66102773604314d9896bd3c11c4"
+      },
+      "256x5120x8704/packed_a_offset32": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "07b40b1a4e3c0646554a79ca1be4033b0b1b3237c93f376478f15c3e7b1dcd27",
+        "relabel_stream_sha256": "07b40b1a4e3c0646554a79ca1be4033b0b1b3237c93f376478f15c3e7b1dcd27"
+      },
+      "256x5120x8704/packed_batched_a": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "607ac47604c887c49d99b2279b7c6023c7574e98b20bed7be68df2c67ea6d296",
+        "relabel_stream_sha256": "607ac47604c887c49d99b2279b7c6023c7574e98b20bed7be68df2c67ea6d296"
+      },
+      "256x5120x8704/packed_batched_ab": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "de2dab46f447c94d25246041e1acda1df25db25dba14b285f6a6aa87666964d3",
+        "relabel_stream_sha256": "de2dab46f447c94d25246041e1acda1df25db25dba14b285f6a6aa87666964d3"
+      },
+      "256x5120x8704/packed_batched_b": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "bf61beeb2f9b045330d309481171dadc03987f633ae09776f5a9819db3c68ff3",
+        "relabel_stream_sha256": "bf61beeb2f9b045330d309481171dadc03987f633ae09776f5a9819db3c68ff3"
+      },
+      "256x5120x8704/packed_batched_b_pair_scale": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "d67e92a39ee1b9f750ab932d16f0f776feaa650718625fea3f2ef364c8ada76f",
+        "relabel_stream_sha256": "d67e92a39ee1b9f750ab932d16f0f776feaa650718625fea3f2ef364c8ada76f"
+      },
+      "256x5120x8704/packed_integer": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "8e511c3af7a25093fe78dce99a3ab12de075005ad89dfa88d552a4a7b5a37e46",
+        "relabel_stream_sha256": "8e511c3af7a25093fe78dce99a3ab12de075005ad89dfa88d552a4a7b5a37e46"
+      },
+      "256x5120x8704/packed_permute": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "b0964dcab5d45fc8b207c8ba238dabc739b4f8596d1f5dd81abf7dbfc0d71696",
+        "relabel_stream_sha256": "b0964dcab5d45fc8b207c8ba238dabc739b4f8596d1f5dd81abf7dbfc0d71696"
+      },
+      "256x5120x8704/packed_table": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "cadae6c7e04106c7cbf08a0620cb4f6309eb60ae7f0088d04be59b4e9aa53538",
+        "relabel_stream_sha256": "cadae6c7e04106c7cbf08a0620cb4f6309eb60ae7f0088d04be59b4e9aa53538"
+      },
+      "256x5120x8704/packed_vector_pair": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "17efb3c7b75e0dd8b0ba02d50444008c7a512b247d8f05df949fff1bcd80a5f8",
+        "relabel_stream_sha256": "17efb3c7b75e0dd8b0ba02d50444008c7a512b247d8f05df949fff1bcd80a5f8"
+      },
+      "256x5120x8704/safe_epilogue": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "1b5d14d3e78757e2188bc879cb86ff65579e28973bfe0d8efeeb87db25c250eb",
+        "relabel_stream_sha256": "1b5d14d3e78757e2188bc879cb86ff65579e28973bfe0d8efeeb87db25c250eb"
+      },
+      "256x5120x8704/tn4": {
+        "parent_producer": "tessera-lower-to-rocm",
+        "relabel_producer": "hand-emitted-hip",
+        "parent_stream_sha256": "e6481b8dd6b24764dd174c10d32a9ce18e2e9fc9bf4477144da5d5af80549e11",
+        "relabel_stream_sha256": "e6481b8dd6b24764dd174c10d32a9ce18e2e9fc9bf4477144da5d5af80549e11"
+      }
+    }
+  },
+  "parent_generator_sha256": {
+    "python/tessera/compiler/rocm_mxfp4_native.py": "abc96ab7746692768c5ef228a87a76968c8a34548faa66668f3ea00bff5ed0b5",
+    "python/tessera/compiler/rocm_mxfp4_folded.py": "fb923edfbe4ba1c3eb4cd1da237a3ac72802e8ffa77ad3c9b7935bc071e87616",
+    "python/tessera/compiler/rocm_mxfp4_packed_folded.py": "b45ad1f0b58a90199e270cffd2735d3f0fd30b216824758f40316cd5917bb090"
+  },
+  "relabel_generator_sha256": {
+    "python/tessera/compiler/rocm_mxfp4_native.py": "c3513d31805232745e4a11b0e2c40a5da5eee921d564975c444caa6203dcd5ba",
+    "python/tessera/compiler/rocm_mxfp4_folded.py": "0f57f6231677fb72a00a973ec332c5c8333016395163d67d0c940a854d9c3f53",
+    "python/tessera/compiler/rocm_mxfp4_packed_folded.py": "5b1bb88cdaf5d32ad2f20964f7dcf09be6a191fa30f4bd7e7ea0e698b0b9601e"
+  },
+  "checker_sha256": {
+    "check_instruction_streams.py": "c2429a0a63dce4d6feedeb6560d8e0b62da2622c9371bd8f4a3baf37536135e2",
+    "check_production_payloads.py": "4de94d9e2c5a0b3a7d2911dac7ae53e866e6f37e9eb56657bf14dd4e3bc35c41"
+  }
+}

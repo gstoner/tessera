@@ -14,6 +14,7 @@ import tempfile
 import numpy as np
 
 from .native_artifact import (
+    HAND_EMITTED_HIP_PRODUCER,
     BufferBinding, LaunchDescriptor, LaunchGeometry, NativeEntryPoint,
     NativeImageArtifact, OrderingSemantics, ScalarArgument, ShapeGuard,
 )
@@ -324,7 +325,7 @@ def package_mxfp4_folded_prefill(
         payload = _extract_gfx1201_hsaco(bundle_path, image_path, rocm_path)
     image = NativeImageArtifact(
         target="rocm_gfx1201", architecture="gfx1201",
-        pipeline_name="tessera-lower-to-rocm",
+        pipeline_name=HAND_EMITTED_HIP_PRODUCER,
         compiler_fingerprint=_version_fingerprint(compiler),
         toolchain_fingerprint=hashlib.sha256(
             (str(rocm_path) + "|gfx1201|folded_bm256_tm4_v1").encode()

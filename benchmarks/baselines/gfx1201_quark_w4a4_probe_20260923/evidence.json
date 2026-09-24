@@ -21,6 +21,6 @@
     "ragged_5x3x64": "32d45c37c003555368ca81d0c5d691c9f626a3d08787a9564dae8c18c7862535"
   },
   "device_tests": "3 passed in 1.88s",
-  "focused_host_tests": "PENDING",
+  "focused_host_tests": "395 run at a1bcb83c: 394 passed + 1 failure from the stale build-assertions tessera-opt (09-21); that file passes 16/16 with the branch build/ tessera-opt",
   "image_producer": "hand-emitted-hip"
 }

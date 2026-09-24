@@ -31,10 +31,28 @@ device (no WMMA, so nothing RDNA4-specific), sits in its own
 records `lowering: hand_emitted_hip_hipcc`, and honors glob exclusions. The
 gfx1201 packet was re-recorded from a fresh device run; gfx1151 has its own
 packet (`benchmarks/baselines/gfx1151_quark_w4a4_probe_20260924`).
-Follow-up: every hipcc-built MXFP4 package records
-`pipeline_name="tessera-lower-to-rocm"` because the field must name a
-registered pipeline; a registered hand-emitted-HIP pipeline would make that
-field truthful.
+
+**Image producer.** Every hipcc-built MXFP4 package (exact/WMMA W4A8, folded,
+safe epilogue, TN4, packed-folded) and the Quark probe recorded
+`pipeline_name="tessera-lower-to-rocm"` for a binary no MLIR pipeline
+produced. `NativeImageArtifact` now also accepts a registry of non-MLIR
+producers (`native_artifact.NON_MLIR_IMAGE_PRODUCERS`, kept apart from the
+C++-drift-gated MLIR pipeline registry), and these packagers record
+`hand-emitted-hip`. The four sealed gfx1201 timing packets that bind these
+generators keep their recorded hashes (their tests pin them);
+`benchmarks/baselines/gfx1201_mxfp4_producer_relabel_20260924` proves on
+Tajasarus that every timed kernel is unchanged: byte-identical WMMA payloads,
+identical instruction streams for all 39 folded/packed/TN4 builds, and all 15
+recorded streams reproduced. Whole folded/packed payloads are **not**
+deterministic (two builds of one revision differ), so only the stream is a
+valid identity for them.
+
+**Stale tree on Tajasarus.** `~/.config/tessera/env.sh` points `TESSERA_OPT`
+at `build-assertions/`, last built 2026-09-21; it rejects
+`e2e_scaled_matmul_rocm_target.mlir` ("lhs K (64) and rhs K (32) must agree")
+because it predates the packed-K `scaled_matmul` verifier. With the branch's
+`build/` tessera-opt, `tests/device/rocm/test_mxfp4_w4a8_exact.py` passes
+16/16. Rebuild `build-assertions/` before trusting assertions-lane results there.
 
 **Gumiho/MLA.** `_rocm_f32_gemm` and `_rocm_batched_gemm_f32` now fail on a
 bad sync or copy instead of returning the zeroed host buffer; the MLA smoke

@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## ROCm spectral live-architecture fix — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT; sync
+`GFX1201-SPECTRAL-LIVE-ARCH-2026-09-23`. The changed availability probe
+guards only the HIP Stockham candidate. CPU/AVX-512 FFT planning, native
+image, ABI, and selector are unchanged; x86 parity is not applicable.
+
 ## Quark W4A4 independent projection probe — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

@@ -31,6 +31,7 @@ def test_exact_device_packet_binds_current_generator_and_fixtures() -> None:
     bound = {
         "generator_sha256": root / "python/tessera/compiler/rocm_mxfp4_quark_native.py",
         "device_fixture_sha256": root / "tests/device/rocm/test_quark_w4a4_probe.py",
+        "unit_fixture_sha256": Path(__file__).resolve(),
         "reference_sha256": PACKET,
     }
     for field, path in bound.items():

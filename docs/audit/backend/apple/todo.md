@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## ROCm Gumiho native step — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / DK1; sync `ROCM-GUMIHO-NATIVE-STEP-2026-09-23`.
+The shared example moves two residual adds through its existing backend API
+and adds a score-scaling method; Apple retains its existing host score-scale
+glue. Apple parity is a focused host regression, not a new Metal proof.
+
+
 ## ROCm spectral target feedback and MLA example — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / DK1; sync

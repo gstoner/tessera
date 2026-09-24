@@ -1,7 +1,7 @@
 """Compute backends for the Gumiho draft model.
 
-Two interchangeable backends expose the same small op surface so the *exact
-same* model/draft code runs on either:
+Three interchangeable backends expose the same small op surface so the *exact
+same* model/draft code runs on each:
 
 * :class:`NumpyBackend` — float64 reference. The ground truth the demo
   validates against.
@@ -11,10 +11,11 @@ same* model/draft code runs on either:
   with Metal these execute on the GPU (``execution_mode="metal_runtime"``);
   off Darwin the jit path degrades to numpy so the demo still runs everywhere.
   ``target="apple_cpu"`` selects the Accelerate path instead.
+* :class:`RocmBackend` — routes dense operations through compiled native ROCm
+  kernels and refuses missing or mismatched execution.
 
-Only the dense kernels go through ``tessera.ops``; cheap host glue (the RMSNorm
-gamma scale, reshapes, concat, the attention score scale) stays in numpy — the
-same split the ``test_apple_gpu_batched_mha.py`` block uses.
+The Apple route retains its existing host glue. ROCm performs its dense
+math natively while host control constructs the FTA tree and accepts tokens.
 """
 
 from __future__ import annotations
@@ -86,6 +87,9 @@ class NumpyBackend:
 
     def add(self, a: Any, b: Any) -> np.ndarray:
         return np.asarray(a, np.float64) + np.asarray(b, np.float64)
+
+    def mul(self, a: Any, b: Any) -> np.ndarray:
+        return np.asarray(a, np.float64) * np.asarray(b, np.float64)
 
     def rmsnorm(self, x: Any, gamma: Any) -> np.ndarray:
         d = np.asarray(x, np.float64)
@@ -170,6 +174,10 @@ class AppleBackend:
             ctypes.c_int64(a.size))
         return out.reshape(a.shape)
 
+    def mul(self, a: Any, b: Any) -> np.ndarray:
+        # Attention-score scaling was already host glue on the Apple route.
+        return np.asarray(a) * np.asarray(b)
+
     def rmsnorm(self, x: Any, gamma: Any) -> np.ndarray:
         # Heavy normalize on-device (unweighted, fp32 internal); gamma is host glue.
         if self.target == "apple_gpu":
@@ -211,7 +219,12 @@ def _resolve_dtype(name: str):
 
 
 def make_backend(kind: str, eps: float = 1e-5, compute_dtype: str = "f32"):
-    """``kind`` in {"numpy", "apple_gpu", "apple_cpu"}."""
+    """Select a compute backend; ROCm refuses missing native execution."""
     if kind == "numpy":
         return NumpyBackend(eps=eps)
+    if kind == "rocm":
+        if compute_dtype != "f32":
+            raise ValueError("Gumiho ROCm currently supports f32 only")
+        from .rocm_backend import RocmBackend
+        return RocmBackend(eps=eps)
     return AppleBackend(target=kind, eps=eps, compute_dtype=compute_dtype)

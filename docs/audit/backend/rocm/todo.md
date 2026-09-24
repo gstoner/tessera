@@ -7,6 +7,21 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Native Gumiho step on both ROCm devices — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / DK1; sync `ROCM-GUMIHO-NATIVE-STEP-2026-09-23`.
+The one-step Gumiho draft and tree verification now use fail-closed native f32
+GEMM, batched GEMM, normalization, softmax, activation, and binary routes.
+Tajasarus gfx1201 and Princess Luna gfx1151 each matched the independent
+float64 NumPy oracle (maximum log-probability error 1.81e-6, same paths,
+acceptance, and KV advance). Each receipt counts the seven native route
+families. The gfx1201 run requires `TESSERA_ROCM_CHIP=gfx1201`; a mismatched
+compiler target is explicitly refused. Host-array transport, token selection,
+FTA construction, acceptance, and KV bookkeeping remain host work. This is not
+resident decode, a fused FlashMLA route, model-scale throughput, or a serving
+selector. Those production follow-ups remain open.
+
+
 ## ROCm spectral target feedback and MLA example — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / DK1; sync
@@ -24,10 +39,8 @@ example now has a separate opt-in runtime decode-step smoke: on Tajasarus its
 1.17e-9 against stdlib, with latent and RoPE cache contents equal. Princess
 Luna produced the same native kind, cache result, and maximum error. This
 does not make the toy MLA Graph IR a fused FlashMLA kernel or establish
-model-scale throughput. The Gumiho
-example is still Apple/NumPy-only; a ROCm backend should start with a
-native-or-refused draft/verify step and acceptance oracle before resident
-or serving claims.
+model-scale throughput. The Gumiho native-or-refused step and acceptance
+oracle are recorded above; resident and serving work remains open.
 
 ## GFX1201 spectral candidate live-architecture closure — 2026-09-23
 

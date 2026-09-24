@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## ROCm Gumiho native step — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / DK1; sync `ROCM-GUMIHO-NATIVE-STEP-2026-09-23`.
+The example backend contract changes shared model composition only. No CUDA
+Gumiho native package or exact-device result follows; NVIDIA parity is a
+separate follow-up if this example is added to its backend queue.
+
+
 ## ROCm spectral target feedback and MLA example — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / DK1; sync

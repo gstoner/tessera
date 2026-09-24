@@ -34,6 +34,34 @@ def test_gumiho_backend_matches_reference(gumiho_mod, target):
     assert s.max_logprob_abs_err <= 1e-3
 
 
+def test_rocm_step_requires_matching_native_target(gumiho_mod, monkeypatch):
+    from tessera import runtime as rt
+    from gumiho.rocm_backend import RocmBackend
+
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1201")
+    monkeypatch.setattr(rt, "_rocm_chip", lambda: "gfx1151")
+    monkeypatch.setattr(rt, "_tessera_opt_path", lambda: "/tmp/tessera-opt")
+    with pytest.raises(RuntimeError, match="differs from live"):
+        RocmBackend()
+
+
+def test_rocm_step_refuses_non_native_launch(gumiho_mod, monkeypatch):
+    from tessera import runtime as rt
+    from gumiho.rocm_backend import RocmBackend
+
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1201")
+    monkeypatch.setattr(rt, "_rocm_chip", lambda: "gfx1201")
+    monkeypatch.setattr(rt, "_tessera_opt_path", lambda: "/tmp/tessera-opt")
+    monkeypatch.setattr(rt, "launch", lambda *_: {
+        "ok": True, "execution_kind": "reference_cpu",
+        "compiler_path": "rocm_activation_compiled", "output": np.ones((2,), np.float32),
+    })
+    backend = RocmBackend()
+    with pytest.raises(RuntimeError, match="native tessera.relu refused"):
+        backend.relu(np.ones((2,), np.float32))
+    assert not backend.route_counts
+
+
 def test_gumiho_hybrid_structure(gumiho_mod):
     s = gumiho_mod.run_gumiho_demo(gumiho_mod.tiny_config(), seed=0, target="numpy")
     # 2 serial + 5 parallel = 7 draft tokens; FTA keeps top-8 paths.

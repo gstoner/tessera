@@ -1,4 +1,4 @@
-"""End-to-end Gumiho speculative step on the Apple compiler backend.
+"""End-to-end Gumiho speculative step on Apple or native ROCm.
 
 Drives one full hybrid-speculative step:
 
@@ -16,7 +16,7 @@ rather than just printing a schedule. Degrades to numpy off Apple Silicon.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -45,6 +45,7 @@ class GumihoSummary:
     kv_pre_seq: int
     kv_advanced_to: int
     validated: bool
+    native_routes: dict[str, int] = field(default_factory=dict)
 
     def __str__(self) -> str:  # pragma: no cover - cosmetic
         return (
@@ -55,7 +56,7 @@ class GumihoSummary:
             f"kv {self.kv_pre_seq}->{self.kv_advanced_to} | "
             f"match_ref={self.backend_matches_reference} "
             f"(max_logp_err={self.max_logprob_abs_err:.2e}) "
-            f"validated={self.validated}"
+            f"validated={self.validated} native_routes={self.native_routes}"
         )
 
 
@@ -214,7 +215,7 @@ def run_gumiho_demo(cfg: GumihoConfig | None = None, *, seed: int = 0,
     rng = np.random.default_rng(seed)
     context = rng.integers(0, cfg.vocab, size=cfg.context_len, dtype=np.int64)
 
-    # Backend (Apple GPU/CPU) and float64 reference drafts.
+    # Selected backend and independent float64 reference drafts.
     be = make_backend(target, eps=cfg.rmsnorm_eps)
     ref = make_backend("numpy", eps=cfg.rmsnorm_eps)
     bundle: DraftBundle = _draft_for(be, cfg, weights, context)
@@ -274,4 +275,5 @@ def run_gumiho_demo(cfg: GumihoConfig | None = None, *, seed: int = 0,
         kv_pre_seq=int(pre_seq),
         kv_advanced_to=int(cache.current_seq),
         validated=bool(validated),
+        native_routes=dict(getattr(be, "route_counts", {})),
     )

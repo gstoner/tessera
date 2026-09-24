@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## ROCm Gumiho native step — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / DK1; sync `ROCM-GUMIHO-NATIVE-STEP-2026-09-23`.
+The NumPy oracle and Apple CPU example paths retain their existing contracts.
+No x86 compiler route or AVX-512 proof changes; x86 parity is not applicable.
+
+
 ## ROCm spectral target feedback and MLA example — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / DK1; sync

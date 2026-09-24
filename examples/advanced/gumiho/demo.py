@@ -29,7 +29,7 @@ def main() -> None:
                              "MSL accept)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--target", default="apple_gpu",
-                        choices=["apple_gpu", "apple_cpu", "numpy"],
+                        choices=["apple_gpu", "apple_cpu", "numpy", "rocm"],
                         help="compute backend for the draft + verify math")
     parser.add_argument("--dtype", default="f16", choices=["f16", "bf16"],
                         help="half-precision dtype for --mode precision")
@@ -39,6 +39,9 @@ def main() -> None:
     parser.add_argument("--prompts", type=int, default=8)
     parser.add_argument("--max-new-tokens", type=int, default=24)
     args = parser.parse_args()
+
+    if args.target == "rocm" and args.mode != "step":
+        parser.error("ROCm currently supports --mode step only; no host fallback")
 
     cfg = GumihoConfig(
         serial_tokens=args.serial_tokens,

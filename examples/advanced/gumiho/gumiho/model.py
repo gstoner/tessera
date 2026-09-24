@@ -1,9 +1,9 @@
 """Gumiho model surface — target model + hybrid draft heads.
 
-All dense math goes through a backend object (``NumpyBackend`` or
-``AppleBackend``); host glue (embedding gather, head reshape, score scale,
-mask add, concat) is plain numpy so the *same* code path runs on either
-backend. Weights are tiny seeded synthetics — this example proves the
+All dense math goes through a backend object (NumPy, Apple, or ROCm).
+Host glue handles embedding gather, head reshape, and concatenation; the
+same model path runs on every backend. Weights are tiny seeded synthetics —
+this example proves the
 architecture + backend execution, not pretrained quality.
 
 Components (Gumiho, ICML'25 — arXiv:2503.10135):
@@ -109,7 +109,7 @@ def _attention(backend, h: np.ndarray, layer: _Layer, cfg: GumihoConfig,
         np.asarray(t).reshape(T, H, dh).transpose(1, 0, 2))
     qh, kh, vh = fold(q), fold(k), fold(v)
     scale = 1.0 / math.sqrt(dh)
-    scores = backend.matmul(qh, kh.transpose(0, 2, 1)) * scale   # [H,T,T] (GPU bmm)
+    scores = backend.mul(backend.matmul(qh, kh.transpose(0, 2, 1)), scale)
     if add_mask is not None:
         # additive tree/causal mask, applied on the GPU add op (broadcast over H)
         scores = backend.add(scores, np.broadcast_to(add_mask, (H, T, T)))
@@ -122,12 +122,12 @@ def _attention(backend, h: np.ndarray, layer: _Layer, cfg: GumihoConfig,
 def _decoder_layer(backend, h: np.ndarray, layer: _Layer, cfg: GumihoConfig,
                    add_mask: Any | None) -> np.ndarray:
     a = _attention(backend, backend.rmsnorm(h, layer.ln1), layer, cfg, add_mask)
-    h = np.asarray(h) + np.asarray(a)
+    h = backend.add(h, a)
     n2 = backend.rmsnorm(h, layer.ln2)
     gate = backend.linear(n2, layer.w_gate)
     up = backend.linear(n2, layer.w_up)
     down = backend.linear(backend.silu_mul(gate, up), layer.w_down)
-    return np.asarray(h) + np.asarray(down)
+    return backend.add(h, down)
 
 
 def _causal_mask(T: int) -> np.ndarray:

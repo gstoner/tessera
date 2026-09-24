@@ -465,15 +465,28 @@ def _amd_lib() -> ctypes.CDLL | None:
     return fallback
 
 
-def _composite_host_arch() -> str:
-    """The gfx arch a composite image must be stamped for on this host."""
-    from tessera.compiler.emit.rocm_hip import _rocm_arch
+def _spectral_device_arch() -> str | None:
+    """Use the selected HIP device, never the gfx1151 compiler default.
 
-    try:
-        return _rocm_arch()
-    except Exception:
-        import os
-        return os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+    An explicit target override that disagrees with the physical device is a
+    refusal, not permission to compile a foreign code object and label its
+    unsuccessful execution as a ROCm FFT.
+    """
+    from tessera import runtime as rt
+
+    live = rt._rocm_live_arch()
+    if not live:
+        return None
+    for name in ("TESSERA_ROCM_ARCH", "TESSERA_ROCM_CHIP"):
+        configured = os.environ.get(name)
+        if configured and configured != live:
+            return None
+    return live
+
+
+def _composite_host_arch() -> str:
+    """The live gfx arch a composite image must be stamped for."""
+    return _spectral_device_arch() or "unavailable"
 
 
 def _is_exact_composite_lib(lib: ctypes.CDLL | None, arch: str) -> bool:
@@ -507,7 +520,7 @@ def _amd_composite_lib() -> ctypes.CDLL | None:
     cached = _libs.get("amd_composite_prebuilt")
     if cached is not None:
         return cached if _is_exact_composite_lib(cached, arch) else None
-    lib = _amd_lib()
+    lib = _amd_lib() if arch == "gfx1151" else None
     if not _is_exact_composite_lib(lib, arch):
         lib = _amd_source_lib()
         if not _is_exact_composite_lib(lib, arch):
@@ -518,31 +531,30 @@ def _amd_composite_lib() -> ctypes.CDLL | None:
 
 def _amd_source_lib() -> ctypes.CDLL | None:
     """Development candidate: compile the source hook, never canonical runtime."""
-    if "amd_source" in _libs:
-        cached = _libs["amd_source"]
+    arch = _spectral_device_arch()
+    if arch not in {"gfx1151", "gfx1201"}:
+        return None
+    key = f"amd_source:{arch}"
+    if key in _libs:
+        cached = _libs[key]
         return _configure_amd_lib(cached) if cached is not None else None
     if not shutil.which("hipcc") or not _AMD_SRC.exists():
-        return _libs.get("amd_source")
-    # The one resolver every HIPRTC/hipcc compile in this package uses
-    # (TESSERA_ROCM_ARCH, then the runtime's chip; fails closed). This used to
-    # default to gfx1151 whatever the host was, and the gfx1151-only fat binary
-    # it then dlopened poisoned the process on a gfx1201 box: HIP's runtime
-    # walks every registered fat binary at the next launch, finds one with no
-    # code object for the device, and fails that launch -- any launch, of any
-    # other module -- with hipErrorNoBinaryForGpu (209). A test file later in
-    # the sweep read it as its own kernel failing (Tajasarus, 2026-09-17).
-    from tessera.compiler.emit.rocm_hip import _rocm_arch
-    arch = _rocm_arch()
+        return None
     d = _build_dir("tessera_spectral_amd_")
     so = os.path.join(d, "libspectral_amd.so")
-    lib = _compile("amd_source", ["hipcc", f"--offload-arch={arch}", "-O3",
+    lib = _compile(key, ["hipcc", f"--offload-arch={arch}", "-O3",
                                    "-std=c++17", "-shared", "-fPIC",
                                    str(_AMD_SRC), "-o", so], so)
     return _configure_amd_lib(lib) if lib is not None else None
 
 
 def _amd_candidate_lib() -> ctypes.CDLL | None:
-    return _amd_lib() or _amd_source_lib()
+    arch = _spectral_device_arch()
+    if arch == "gfx1151":
+        return _amd_lib() or _amd_source_lib()
+    if arch == "gfx1201":
+        return _amd_source_lib()
+    return None
 
 
 def _cptr(a: np.ndarray) -> ctypes.c_void_p:
@@ -1031,9 +1043,12 @@ class RocmStockhamFFTCandidate(Candidate):
         if cached is not None:
             return cached
         try:
-            x = np.ones(4, np.complex64)
-            out = np.empty(4, np.complex64)
-            ok = lib.ts_fft_stockham_amd_hostptr(_cptr(x), _cptr(out), 4, -1) == 0
+            x = np.array([1, 0, 0, 0], np.complex64)
+            out = np.zeros(4, np.complex64)
+            ok = (
+                lib.ts_fft_stockham_amd_hostptr(_cptr(x), _cptr(out), 4, -1) == 0
+                and np.allclose(out, np.ones(4, np.complex64), rtol=0, atol=1e-5)
+            )
         except Exception:
             ok = False
         _amd_probe[lib] = ok

@@ -10,6 +10,7 @@ is present it declines and the real-kernel assertions are skipped.
 """
 from __future__ import annotations
 
+import ctypes
 import numpy as np
 import pytest
 
@@ -149,6 +150,8 @@ def test_rocm_fft_fallback_is_not_a_composite_candidate(monkeypatch, tmp_path, a
     monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: (package,))
     monkeypatch.setattr(SC.ctypes, "CDLL", lambda _path: fake)
     monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
+    monkeypatch.setattr(SC, "_composite_host_arch", lambda: "gfx1151")
+    monkeypatch.setattr(SC, "_amd_source_lib", lambda: None)
     try:
         assert SC._amd_lib() is fake  # Architecture-neutral FFT ABI remains usable.
         assert SC._amd_composite_lib() is None
@@ -228,8 +231,10 @@ def test_rocm_availability_probe_runs_once_per_process(monkeypatch):
     calls = []
 
     class _Lib:
-        def ts_fft_stockham_amd_hostptr(self, *_a):
+        def ts_fft_stockham_amd_hostptr(self, _input, output, _n, _sign):
             calls.append(1)
+            expected = np.ones(4, np.complex64)
+            ctypes.memmove(output, expected.ctypes.data, expected.nbytes)
             return 0
 
     lib = _Lib()
@@ -238,6 +243,57 @@ def test_rocm_availability_probe_runs_once_per_process(monkeypatch):
     candidate = SC.RocmStockhamFFTCandidate()
     assert [candidate.available() for _ in range(5)] == [True] * 5
     assert len(calls) == 1
+
+
+def test_rocm_availability_rejects_success_status_with_wrong_output(monkeypatch):
+    class _Lib:
+        def ts_fft_stockham_amd_hostptr(self, _input, output, _n, _sign):
+            wrong = np.zeros(4, np.complex64)
+            ctypes.memmove(output, wrong.ctypes.data, wrong.nbytes)
+            return 0
+
+    monkeypatch.setattr(SC, "_amd_candidate_lib", lambda: _Lib())
+    monkeypatch.setattr(SC, "_amd_probe", {})
+    assert not SC.RocmStockhamFFTCandidate().available()
+
+
+def test_rocm_source_candidate_uses_the_live_arch_not_a_foreign_prebuilt(monkeypatch):
+    marker = object()
+    monkeypatch.setattr(SC, "_spectral_device_arch", lambda: "gfx1201")
+    monkeypatch.setattr(SC, "_amd_source_lib", lambda: marker)
+    monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("foreign prebuilt loaded"))
+    assert SC._amd_candidate_lib() is marker
+
+
+def test_rocm_source_compiler_targets_the_selected_device(monkeypatch, tmp_path):
+    marker = object()
+    captured = []
+
+    def compile_source(key, argv, output):
+        captured.append((key, argv, output))
+        return marker
+
+    monkeypatch.setattr(SC, "_spectral_device_arch", lambda: "gfx1201")
+    monkeypatch.setattr(SC, "_libs", {})
+    monkeypatch.setattr(SC.shutil, "which", lambda _tool: "/opt/rocm/bin/hipcc")
+    monkeypatch.setattr(SC, "_build_dir", lambda _prefix: str(tmp_path))
+    monkeypatch.setattr(SC, "_compile", compile_source)
+    monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
+    assert SC._amd_source_lib() is marker
+    assert len(captured) == 1
+    assert captured[0][0] == "amd_source:gfx1201"
+    assert "--offload-arch=gfx1201" in captured[0][1]
+
+
+def test_rocm_spectral_refuses_explicit_arch_mismatch(monkeypatch):
+    from tessera import runtime as rt
+
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1201")
+    monkeypatch.setenv("TESSERA_ROCM_ARCH", "gfx1151")
+    assert SC._spectral_device_arch() is None
+    monkeypatch.delenv("TESSERA_ROCM_ARCH")
+    monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
+    assert SC._spectral_device_arch() is None
 
 
 def test_rocm_availability_probe_memoizes_a_failed_probe_too(monkeypatch):

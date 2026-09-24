@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## ROCm spectral live-architecture fix — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT; sync
+`GFX1201-SPECTRAL-LIVE-ARCH-2026-09-23`. The numerical availability probe
+and exact live-architecture source selection are ROCm candidate behavior.
+They change no cuFFT package, CUDA ABI, SM120 schedule, or NVIDIA execution;
+CUDA parity is not applicable and its selector is unchanged.
+
 ## Quark W4A4 independent projection probe — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

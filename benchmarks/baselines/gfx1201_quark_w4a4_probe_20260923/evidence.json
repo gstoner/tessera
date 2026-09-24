@@ -11,7 +11,7 @@
   "abi": "tessera.rocm.quark_w4a4.a_b_sa_sb_o_m_n_k.e2m1_low_even_e8m0_k32_bf16.exact_probe.v1",
   "generator_sha256": "74a442ba51546831e2a919ae5361d07792b692ccd51a0cf2b30458c50e33351c",
   "device_fixture_sha256": "f250739da9e19d7fd52b4d9c7718a1cf8cd64456c621f0a5f17ac61a3b752ec0",
-  "unit_fixture_sha256": "6128a6ab8d8da2ff842ba378caa68ceea7fd9f6dc72183efa7f53113f6758aa2",
+  "unit_fixture_sha256": "56e1b35c32148388b2a08bbc36df16b64254d57c38f451ed99dcdb69857f799b",
   "reference_sha256": "10d30b01dbd5774b013edfd6601140b6dcbddd879288faa8697b5260e1fa73ee",
   "launched_hsaco_sha256": {
     "gate_1x2x32": "c061be14a6db9a396f2d644014026d5ddf0aaabfd99b262399aa15289d00efa8",

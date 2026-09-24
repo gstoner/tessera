@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## GFX1201 spectral candidate live-architecture closure — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT; sync
+`GFX1201-SPECTRAL-LIVE-ARCH-2026-09-23`. Tajasarus's non-slow unit sweep
+exposed a spectral failure cluster: the source Stockham candidate used
+the default compiler chip (`gfx1151`) on a live `gfx1201` device, and its
+four-point availability probe accepted return code zero without checking
+the output. Explicitly setting `TESSERA_ROCM_CHIP=gfx1201` made the clean
+main spectral suite pass 124/125, proving the architecture mismatch as the
+cause. The candidate now resolves the selected HIP device, refuses a
+conflicting override, caches source images per architecture, and validates
+the probe's transform values. The gfx1201 candidate avoids loading a
+gfx1151 prebuilt image; the compound route requires an exact architecture
+stamp. The unpinned Tajasarus focused suite passes 159/160, including
+Quark evidence tests. The broad non-slow unit rerun has 16,500 passes and
+zero test failures; pytest still exits 1 because its AVX-512 lane is
+classified as hollow on this host (0 executed, 10 skipped). This is not an
+x86 owning-host proof. Gfx1151 owner-host revalidation is still owed because
+Princess Luna was unreachable on port 22.
+
 ## Bounded independent Quark W4A4 projection and gfx1201 probe — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

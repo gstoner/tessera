@@ -22,5 +22,5 @@
     "ragged_5x3x64": "5e3ed1d1f078001a801c34223dc445e1b7a7eb178005c84b6320b9da564c06ad"
   },
   "device_tests": "3 passed in 3.22s",
-  "focused_host_tests": "PENDING"
+  "focused_host_tests": "188 passed, 88 skipped at f9ab99a1 (same set; every skip is the gfx1201 owning-device gate)"
 }

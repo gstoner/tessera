@@ -22,5 +22,5 @@
     "ragged_5x3x64": "7dcacfb294a3bdc002ad9d674073a1703c9bba0437b6e377892f74cfdab2d16e"
   },
   "device_tests": "3 passed in 1.86s",
-  "focused_host_tests": "PENDING"
+  "focused_host_tests": "276 passed at f9ab99a1 (test_rocm_mxfp4_*, test_rocm_gfx1201*, Quark device + GPT-OSS capacity)"
 }

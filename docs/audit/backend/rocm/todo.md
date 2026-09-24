@@ -7,6 +7,49 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Review fixes: per-chip spectral composite, Quark W4A4 on both chips — 2026-09-24
+
+Owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT / ROCM-MXFP4-W4A8-1; sync
+`ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24`. Corrects the 2026-09-23 spectral and Quark entries below.
+
+**Spectral (#830 regression).** #830 consulted the prebuilt image only for
+gfx1151, so Tajasarus's gfx1201-stamped `libtessera_spectral_rocm.so` was never
+loaded; the composite refusal named `gfx1201`, and the conftest hook reported
+it as a skip. At `origin/main` (8628076f) on Tajasarus,
+`test_rocm_spectral_compiled.py`, `test_autodiff_spectral_target_binding.py`
+and `test_rocm_spectral_backward_exec.py` gave **11 failed, 34 skipped**
+("exact gfx1201 spectral reverse package is unavailable"). The loader now takes the
+prebuilt stamped exactly for the live chip on either part; gfx1151 may still
+inherit an unstamped legacy image but never a foreign-stamped one; the
+Stockham-only source hook is no longer a composite candidate; and a missing
+composite with an image present is a failure, not an arch gate. The live-arch
+property query is memoized per HIP handle and ordinal.
+
+**Quark.** The scalar W4A4 probe packages for the live gfx1151 or gfx1201
+device (no WMMA, so nothing RDNA4-specific), sits in its own
+`_gfx1201_manual_probe_abis()` set rather than the proved scheduled set,
+records `lowering: hand_emitted_hip_hipcc`, and honors glob exclusions. The
+gfx1201 packet was re-recorded from a fresh device run; gfx1151 has its own
+packet (`benchmarks/baselines/gfx1151_quark_w4a4_probe_20260924`).
+Follow-up: every hipcc-built MXFP4 package records
+`pipeline_name="tessera-lower-to-rocm"` because the field must name a
+registered pipeline; a registered hand-emitted-HIP pipeline would make that
+field truthful.
+
+**Gumiho/MLA.** `_rocm_f32_gemm` and `_rocm_batched_gemm_f32` now fail on a
+bad sync or copy instead of returning the zeroed host buffer; the MLA smoke
+checks it ran the requested compiled lane.
+
+**Evidence (branch `claude/rocm-review-fixes-spectral-quark`, 79ac865d/f9ab99a1).**
+Tajasarus gfx1201 (build/ at the branch, spectral stamp gfx1201): 387 passed,
+8 skipped (gfx1151-only JVP) across the spectral/Quark/Gumiho/MLA set, plus
+276 passed on the MXFP4 + gfx1201 scheduled set; Quark device 3/3; MLA
+native, max error 1.16e-9; Gumiho step validated, max log-prob error 1.81e-6.
+Princess Luna gfx1151 (clean worktree build, spectral stamp gfx1151): 369
+passed, 26 skipped (all AVX-512 lanes; that build has no x86 backend, so x86
+was not evaluated), plus 188 passed / 88 skipped (every skip the gfx1201
+owning-device gate); Quark device 3/3 bit-exact; MLA and Gumiho as on gfx1201.
+
 ## Native Gumiho step on both ROCm devices — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / DK1; sync `ROCM-GUMIHO-NATIVE-STEP-2026-09-23`.

@@ -9,6 +9,10 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
+
+Sync `ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24`. x86 parity is not applicable: no x86 spectral or MXFP4 code changes. Princess Luna's review build had no x86 backend, so its AVX-512 spectral lanes skipped and were not evaluated by this work.
+
 ## ROCm Gumiho native step — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / DK1; sync `ROCM-GUMIHO-NATIVE-STEP-2026-09-23`.

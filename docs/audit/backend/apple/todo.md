@@ -8,6 +8,10 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
+
+Sync `ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24`. Apple parity is not applicable: the spectral loader, Quark probe and ROCm GEMM helpers are ROCm-only, and no Metal package, ABI or selector changes. The memoized `_rocm_live_arch` is never reached on macOS (no HIP handle).
+
 ## ROCm Gumiho native step — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / DK1; sync `ROCM-GUMIHO-NATIVE-STEP-2026-09-23`.

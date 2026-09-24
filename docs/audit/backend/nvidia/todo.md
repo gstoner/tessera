@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## ROCm spectral target feedback and MLA example — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / DK1; sync
+`ROCM-SPECTRAL-MLA-EXAMPLE-2026-09-23`. ROCm source-target selection and an
+opt-in HIP MLA decode-step example change no SM120 FFT or MLA package, CUDA
+ABI, or NVIDIA selector. CUDA parity is not applicable; no ROCm device result
+transfers to the NVIDIA MLA lane.
+
 ## ROCm spectral live-architecture fix — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT; sync

@@ -7,6 +7,28 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## ROCm spectral target feedback and MLA example — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / DK1; sync
+`ROCM-SPECTRAL-MLA-EXAMPLE-2026-09-23`. The spectral source hook now accepts
+any selected HIP architecture, keeps feature-qualified compiler targets in its
+cache key, and compares only the base architecture to the live device. The
+gfx1151 prebuilt remains exact-device only; feature-qualified targets use a
+separate source-image cache key. On Tajasarus, ROCm 10.0 `hipcc` rejects the
+illustrative `gfx1201:xnack-` target ID itself; the candidate does not claim
+that feature-qualified build executable. Tajasarus gfx1201 and Princess Luna gfx1151
+each independently passed the combined spectral selection/composed suite
+(151 passed, one skip per host). The MLA
+example now has a separate opt-in runtime decode-step smoke: on Tajasarus its
+`rocm_exotic_attn_compiled` result was `native_gpu`, maximum f32 error
+1.17e-9 against stdlib, with latent and RoPE cache contents equal. Princess
+Luna produced the same native kind, cache result, and maximum error. This
+does not make the toy MLA Graph IR a fused FlashMLA kernel or establish
+model-scale throughput. The Gumiho
+example is still Apple/NumPy-only; a ROCm backend should start with a
+native-or-refused draft/verify step and acceptance oracle before resident
+or serving claims.
+
 ## GFX1201 spectral candidate live-architecture closure — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT; sync

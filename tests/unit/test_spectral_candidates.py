@@ -146,11 +146,12 @@ def test_rocm_fft_fallback_is_not_a_composite_candidate(monkeypatch, tmp_path, a
     fake = _FakeAmdPackage(arch)
     saved = dict(SC._libs)
     SC._libs.pop("amd_prebuilt", None)
-    SC._libs.pop("amd_composite_prebuilt", None)
+    SC._libs.pop("amd_composite:gfx1151", None)
     monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: (package,))
     monkeypatch.setattr(SC.ctypes, "CDLL", lambda _path: fake)
     monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
     monkeypatch.setattr(SC, "_composite_host_arch", lambda: "gfx1151")
+    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1151")
     monkeypatch.setattr(SC, "_amd_source_lib", lambda: None)
     try:
         assert SC._amd_lib() is fake  # Architecture-neutral FFT ABI remains usable.
@@ -166,19 +167,31 @@ def test_rocm_composite_loader_accepts_exact_gfx1151_package(monkeypatch, tmp_pa
     fake = _FakeAmdPackage(b"gfx1151")
     saved = dict(SC._libs)
     SC._libs.pop("amd_prebuilt", None)
-    SC._libs.pop("amd_composite_prebuilt", None)
+    SC._libs.pop("amd_composite:gfx1151", None)
     # The loader selects the image stamped for the host's chip; this test is
     # about the gfx1151 package, so it runs as a gfx1151 host wherever it is.
     monkeypatch.setattr(SC, "_composite_host_arch", lambda: "gfx1151")
+    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1151")
     monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: (package,))
     monkeypatch.setattr(SC.ctypes, "CDLL", lambda _path: fake)
     monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
     try:
         assert SC._amd_composite_lib() is fake
-        assert SC._libs["amd_composite_prebuilt"] is fake
+        assert SC._libs["amd_composite:gfx1151"] is fake
     finally:
         SC._libs.clear()
         SC._libs.update(saved)
+
+
+def test_rocm_composite_feature_target_bypasses_unqualified_prebuilt(monkeypatch):
+    fake = _FakeAmdPackage(b"gfx1151")
+    monkeypatch.setattr(SC, "_libs", {})
+    monkeypatch.setattr(SC, "_composite_host_arch", lambda: "gfx1151")
+    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1151:xnack-")
+    monkeypatch.setattr(SC, "_amd_source_lib", lambda: fake)
+    monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("unqualified prebuilt loaded"))
+    assert SC._amd_composite_lib() is fake
+    assert SC._libs["amd_composite:gfx1151:xnack-"] is fake
 
 
 def test_rocm_composite_launch_rechecks_architecture(monkeypatch):
@@ -259,9 +272,26 @@ def test_rocm_availability_rejects_success_status_with_wrong_output(monkeypatch)
 
 def test_rocm_source_candidate_uses_the_live_arch_not_a_foreign_prebuilt(monkeypatch):
     marker = object()
-    monkeypatch.setattr(SC, "_spectral_device_arch", lambda: "gfx1201")
+    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1201")
     monkeypatch.setattr(SC, "_amd_source_lib", lambda: marker)
     monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("foreign prebuilt loaded"))
+    assert SC._amd_candidate_lib() is marker
+
+
+@pytest.mark.parametrize("arch", ["gfx1100", "gfx1200", "gfx1250"])
+def test_rocm_source_candidate_accepts_other_live_architectures(monkeypatch, arch):
+    marker = object()
+    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: arch)
+    monkeypatch.setattr(SC, "_amd_source_lib", lambda: marker)
+    monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("foreign prebuilt loaded"))
+    assert SC._amd_candidate_lib() is marker
+
+
+def test_rocm_feature_qualified_gfx1151_does_not_use_unqualified_prebuilt(monkeypatch):
+    marker = object()
+    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1151:xnack-")
+    monkeypatch.setattr(SC, "_amd_source_lib", lambda: marker)
+    monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("unqualified prebuilt loaded"))
     assert SC._amd_candidate_lib() is marker
 
 
@@ -273,7 +303,7 @@ def test_rocm_source_compiler_targets_the_selected_device(monkeypatch, tmp_path)
         captured.append((key, argv, output))
         return marker
 
-    monkeypatch.setattr(SC, "_spectral_device_arch", lambda: "gfx1201")
+    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1201")
     monkeypatch.setattr(SC, "_libs", {})
     monkeypatch.setattr(SC.shutil, "which", lambda _tool: "/opt/rocm/bin/hipcc")
     monkeypatch.setattr(SC, "_build_dir", lambda _prefix: str(tmp_path))
@@ -285,6 +315,24 @@ def test_rocm_source_compiler_targets_the_selected_device(monkeypatch, tmp_path)
     assert "--offload-arch=gfx1201" in captured[0][1]
 
 
+def test_rocm_source_compiler_keeps_feature_qualified_target(monkeypatch, tmp_path):
+    captured = []
+
+    def compile_source(key, argv, output):
+        captured.append((key, argv, output))
+        return object()
+
+    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1201:xnack-")
+    monkeypatch.setattr(SC, "_libs", {})
+    monkeypatch.setattr(SC.shutil, "which", lambda _tool: "/opt/rocm/bin/hipcc")
+    monkeypatch.setattr(SC, "_build_dir", lambda _prefix: str(tmp_path))
+    monkeypatch.setattr(SC, "_compile", compile_source)
+    monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
+    assert SC._amd_source_lib() is not None
+    assert captured[0][0] == "amd_source:gfx1201:xnack-"
+    assert "--offload-arch=gfx1201:xnack-" in captured[0][1]
+
+
 def test_rocm_spectral_refuses_explicit_arch_mismatch(monkeypatch):
     from tessera import runtime as rt
 
@@ -294,6 +342,16 @@ def test_rocm_spectral_refuses_explicit_arch_mismatch(monkeypatch):
     monkeypatch.delenv("TESSERA_ROCM_ARCH")
     monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     assert SC._spectral_device_arch() is None
+
+
+def test_rocm_spectral_accepts_feature_qualified_matching_arch(monkeypatch):
+    from tessera import runtime as rt
+
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1201")
+    monkeypatch.setenv("TESSERA_ROCM_ARCH", "gfx1201:xnack-")
+    monkeypatch.delenv("TESSERA_ROCM_CHIP", raising=False)
+    assert SC._spectral_device_arch() == "gfx1201"
+    assert SC._spectral_compile_arch() == "gfx1201:xnack-"
 
 
 def test_rocm_availability_probe_memoizes_a_failed_probe_too(monkeypatch):

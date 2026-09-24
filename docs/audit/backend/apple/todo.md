@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## ROCm spectral target feedback and MLA example — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / DK1; sync
+`ROCM-SPECTRAL-MLA-EXAMPLE-2026-09-23`. ROCm source-target selection and the
+new opt-in MLA runtime smoke alter no Apple FFT, MLA, or Gumiho implementation.
+Apple parity is not applicable; the existing Apple example path remains
+separate, with no new Metal result claimed.
+
 ## ROCm spectral live-architecture fix — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT; sync

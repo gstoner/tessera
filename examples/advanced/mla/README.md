@@ -4,12 +4,19 @@ This example contains a current-compiler FlashMLA smoke path plus the original
 design note for a full Hopper/Blackwell-style Multi-Latent Attention
 implementation.
 
+The checked-in Graph IR is a projection/softmax skeleton, not a fused
+FlashMLA kernel. The Apple and ROCm decode demonstrations below are separate
+runtime paths; neither is produced by lowering that skeleton end to end.
+
 Contents:
 - `mla/` — dependency-light NumPy MLA reference, Graph IR compiler smoke, **and
-  `gpu_decode.py` driving the shipped Apple GPU MLA decode surfaces**.
+  `gpu_decode.py` driving the shipped Apple GPU MLA decode surfaces**;
+  `rocm_decode.py` exercises the separate compiled ROCm decode-step lane.
 - `ir/flash_mla_tiny.mlir` — parser-valid current-dialect Graph IR tensor skeleton.
 - `tests/smoke_random.py` — NumPy shape/cache smoke, Graph -> Schedule -> Tile ->
   Apple Target IR artifact check, **plus the GPU-decode demo validated vs numpy**.
+- `tests/smoke_rocm.py` — exact-selected-device ROCm absorbed-latent decode
+  and cache-side-effect check against `tessera.stdlib.attention`.
 - `flashmla_tessera.md` — full design note for native MLA kernels, paged latent KV cache, RoPE split, and weight absorption.
 
 ## Apple GPU MLA decode (shipped)
@@ -36,6 +43,29 @@ OK mla gpu-decode: metal absorbed==explicit True paged==ref True block_paged==re
 
 (The `kv_cache_ratio` is the per-token cache footprint of the compressed latent +
 shared rope key vs. explicit per-head K/V.)
+
+## ROCm MLA decode step (opt-in)
+
+On a ROCm host with a built `tessera-opt`, select the actual HIP device's
+architecture explicitly and run from the repository root:
+
+```bash
+TESSERA_ROCM_CHIP=gfx1201 \
+TESSERA_OPT="$PWD/build/tools/tessera-opt/tessera-opt" \
+PYTHONPATH=python python3 examples/advanced/mla/tests/smoke_rocm.py
+```
+
+Use `gfx1151` on an actual gfx1151 host; do not carry a result from one device
+to the other. The smoke refuses a missing/mismatched chip pin or a
+`reference_cpu` fallback. It checks native output and latent/RoPE cache
+mutation against the same seeded stdlib reference, and prints the live
+architecture, execution kind, compiler path, maximum absolute error, and
+cache length. Tajasarus (RX 9070 XT, gfx1201) passed this bounded f32
+two-token decode step on 2026-09-23; Princess Luna (Radeon 8060S, gfx1151)
+passed the same check independently. This is the existing
+`rocm_exotic_attn_compiled` runtime path,
+not a claim of native FlashMLA, paged-cache scheduling, model-scale serving,
+or complete Graph→Target lowering.
 
 ## Quick Start
 

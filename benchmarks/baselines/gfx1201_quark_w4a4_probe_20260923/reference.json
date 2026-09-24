@@ -1,0 +1,31 @@
+{
+  "schema": "tessera.quark_independent_projection_slice.v1",
+  "checkpoint": "amd/Qwen3.8-27B-Quark-AWQ-MXFP4",
+  "checkpoint_revision": "5233554c5fa56afda40150556b95573c2d7d29c0",
+  "reference": "sglang.srt.layers.quantization.mxfp4_tensor.MXFP4QuantizeUtil.dequantize",
+  "reference_revision": "28262c20df6f2945c1b1cd7b27b0faef59cb0438",
+  "reference_source_sha256": "2fa61ad1e7c0d8eabb521458fd431f1a710faf79e7f1b88461c3a9911921a76a",
+  "activation_packed_hex": "76543210fedcba9876543210fedcba98",
+  "activation_scale_hex": "7f",
+  "k": 32,
+  "cases": [
+    {
+      "projection": "model.language_model.layers.0.mlp.gate_proj",
+      "weight_packed_hex": ["ca2c11c63a2569da03400522a3055711", "1ac6fdab3f4943fde4669334f34e4d6f"],
+      "weight_scale_hex": ["77", "76"],
+      "weight_http_offsets": [6970850264, 6970852824],
+      "scale_http_offsets": [7015414744, 7015414904],
+      "fp32_reference": [-0.140625, 0.0634765625],
+      "bf16_bits": [48656, 15746]
+    },
+    {
+      "projection": "model.language_model.layers.0.mlp.down_proj",
+      "weight_packed_hex": ["0abf6eefaf61a5773fa7cbfdb0e3cd9d", "6a0415cebba240e1cb0c90ebb103d695"],
+      "weight_scale_hex": ["76", "77"],
+      "weight_http_offsets": [6923500504, 6923509208],
+      "scale_http_offsets": [6968064984, 6968065528],
+      "fp32_reference": [0.00537109375, 0.0849609375],
+      "bf16_bits": [15280, 15790]
+    }
+  ]
+}

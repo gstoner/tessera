@@ -9,6 +9,15 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## Quark W4A4 independent projection probe — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-INDEPENDENT-W4A4-2026-09-23`. The bounded independent
+dequantization fixture is host-portable numerical evidence. The new manual
+packed W4A4 ABI and exact BF16 launch proof are ROCm-specific; there is no
+AVX-512 packing, dynamic-activation producer, CPU execution or performance
+proof. The x86 selector remains unchanged.
+
 ## Quark byte-oracle preflight — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

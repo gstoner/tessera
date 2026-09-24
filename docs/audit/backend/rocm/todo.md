@@ -7,6 +7,23 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Bounded independent Quark W4A4 projection and gfx1201 probe — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-INDEPENDENT-W4A4-2026-09-23`. Independently maintained
+SGLang MXFP4 dequantization was applied to byte-ranged rows of the pinned
+Quark checkpoint and a synthetic packed activation. Gate/down 1×2×32
+FP32/BF16 values are fixed in the [reference packet](../../../../benchmarks/baselines/gfx1201_quark_w4a4_probe_20260923/README.md).
+A distinct low-even E2M1 A/B plus per-K32 E8M0 scale ABI now launches only
+through an explicit scalar probe. Tajasarus gfx1201 passed both pinned BF16
+projection slices and a ragged 5×3×64 scale-cancellation case. This proves
+the bounded arithmetic and physical launch, not Quark 0.13's model-wide
+`reorder` permutation, its dynamic activation quantizer, edge scale codes
+0/255, or production performance. The W4A8 and automatic W4A4 selectors
+remain closed. Next obtain matching exporter/activation-producer source or
+independent full-projection output, then build the Graph→Target W4A4 carrier
+and broader shape/edge proof before production selection.
+
 ## Quark checkpoint byte-oracle preflight — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
@@ -17,11 +34,9 @@ low-even/bias-127 candidate oracle checks all 16 codes and the sampled
 bytes. [Byte preflight](../../../../benchmarks/baselines/gfx1201_quark_byte_oracle_20260923/README.md).
 The checkpoint records exporter `0.13+unknown`, while the inspectable
 Quark 0.12 `fp4` packing and biased-E8M0 path are consistent but not a
-matching producer certificate. Do not enable Quark layout
-conversion or W4A4 execution from this evidence. Next obtain matching
-exporter code or an independent dequantized projection slice, resolve
-scale-code 0/255 semantics, then build a distinct W4A4 carrier and run
-gfx1201 BF16/edge-scale proof. The W4A8 selector remains closed to Quark.
+matching producer certificate. The bounded independent projection slice
+and manual device ABI are recorded above; model-wide conversion and
+scale-code 0/255 semantics remain open. The W4A8 selector stays closed.
 
 ## GPT-OSS-20B full-expanded MXFP4 capacity refusal — 2026-09-23
 
@@ -80,10 +95,9 @@ synthetic sweep geometry; down `N=5120,K=17408` does not match the
 the Quark source layout and W4A4 activation separately and refuse both
 under the proved W4A8 ABI. The checkpoint has 19,797,976,544 tensor
 bytes, exceeding Tajasarus physical VRAM even before runtime reserves.
-This is host-free metadata evidence, not decoded-byte, BF16, or device
-proof. Next obtain a pinned single-projection byte sample and independent
-Quark E2M1/E8M0 oracle, then define a distinct W4A4 activation carrier
-and exact-device numerical tests before any selector or timing claim.
+The original metadata assessment is now complemented by the bounded byte
+and exact-device probe above. It still cannot establish full-checkpoint
+layout conversion, dynamic activation quantization, or selector admission.
 
 [GLM-5.3-Flash](https://huggingface.co/zai-org/GLM-5.3-Flash/tree/eb9eb208eb0d988989d07a6a12d0fdeb5f52574a)
 is a separate FP8 E4M3/FP32 128×128 block-scale workload, not an MXFP4

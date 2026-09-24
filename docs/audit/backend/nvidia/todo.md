@@ -8,6 +8,15 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## Quark W4A4 independent projection probe — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-INDEPENDENT-W4A4-2026-09-23`. The pinned independent
+MXFP4 projection-slice arithmetic can inform a future CUDA oracle, but the
+manual E2M1/E8M0 ABI and BF16 proof belong to gfx1201. They do not imply
+NVFP4 byte compatibility, an SM120 W4A4 kernel, or NVIDIA device proof;
+CUDA selection is unchanged.
+
 ## Quark byte-oracle preflight — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

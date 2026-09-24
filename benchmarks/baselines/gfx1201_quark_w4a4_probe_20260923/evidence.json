@@ -1,0 +1,24 @@
+{
+  "schema": "tessera.gfx1201.quark_w4a4_probe.v1",
+  "sync_key": "GFX1201-QUARK-INDEPENDENT-W4A4-2026-09-23",
+  "base_revision": "ab83b9d3d9be7b2ed26a1529272b38e918406c1b",
+  "host": "tajasarus",
+  "device": "AMD Radeon RX 9070 XT",
+  "live_architecture": "gfx1201",
+  "hipcc": "HIP version: 7.15.26333-0000000",
+  "llvm": "AMD LLVM version 23.0.0git, ROCm commit 8f497e0992fb7513f7f78a6f6b6f1056c375e961",
+  "rocm_path": "/opt/rocm",
+  "abi": "tessera.rocm.quark_w4a4.a_b_sa_sb_o_m_n_k.e2m1_low_even_e8m0_k32_bf16.exact_probe.v1",
+  "generator_sha256": "74a442ba51546831e2a919ae5361d07792b692ccd51a0cf2b30458c50e33351c",
+  "device_fixture_sha256": "f250739da9e19d7fd52b4d9c7718a1cf8cd64456c621f0a5f17ac61a3b752ec0",
+  "unit_fixture_sha256": "6128a6ab8d8da2ff842ba378caa68ceea7fd9f6dc72183efa7f53113f6758aa2",
+  "reference_sha256": "10d30b01dbd5774b013edfd6601140b6dcbddd879288faa8697b5260e1fa73ee",
+  "launched_hsaco_sha256": {
+    "gate_1x2x32": "c061be14a6db9a396f2d644014026d5ddf0aaabfd99b262399aa15289d00efa8",
+    "down_1x2x32": "af6a96f52d247b6da992dea3c3d6f4bb1a46dbb61debc90c87831156c1854648",
+    "ragged_5x3x64": "2b06c80811b9d786adf4539a617b5db73ba90ee5655d352ddcd41c677c5abfc5"
+  },
+  "device_tests": "3 passed in 1.95s",
+  "focused_host_tests": "61 passed in 0.42s",
+  "scope": "bounded numerical probe only; no automatic selection or performance claim"
+}

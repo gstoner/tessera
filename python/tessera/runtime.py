@@ -4180,6 +4180,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
+    from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
 
     return frozenset({
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
@@ -4195,6 +4196,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         PACKED_FOLDED_TARGET_ABI_V1,
+        GFX1201_QUARK_W4A4_PROBE_ABI,
     })
 
 
@@ -4421,6 +4423,12 @@ def _submit_rocm_gfx1151_native(
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
+    from tessera.compiler.rocm_mxfp4_quark_native import (
+        GFX1201_QUARK_W4A4_PROBE_ABI, submit_quark_w4a4_probe,
+    )
+
+    if descriptor.abi_id == GFX1201_QUARK_W4A4_PROBE_ABI:
+        return submit_quark_w4a4_probe(image, descriptor, buffers, scalars)
 
     if descriptor.abi_id in {
         GFX_MXFP4_W4A8_EXACT_ABI,
@@ -5653,6 +5661,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
+    from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
 
     if (
         (target == "rocm_gfx1151"
@@ -5687,6 +5696,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
             GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
             PACKED_FOLDED_TARGET_ABI_V1,
+            GFX1201_QUARK_W4A4_PROBE_ABI,
         }
         and target not in _native_launchers
     ):

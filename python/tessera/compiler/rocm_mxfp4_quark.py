@@ -64,7 +64,8 @@ def _u8_shape(tensor: Mapping[str, Any], name: str) -> tuple[int, int]:
 
 
 def decode_quark_low_even_hypothesis(
-    packed_weight: np.ndarray, scale_codes: np.ndarray,
+    packed_weight: np.ndarray,
+    scale_codes: np.ndarray,
 ) -> np.ndarray:
     """Host-only candidate oracle for separate ``[N,K/2]``/``[N,K/32]`` planes.
 
@@ -96,8 +97,7 @@ def decode_quark_low_even_hypothesis(
     values = np.where(
         exponent == 0,
         fraction.astype(np.float64) * 0.5,
-        (1.0 + fraction.astype(np.float64) * 0.5)
-        * np.exp2(exponent.astype(np.float64) - 1.0),
+        (1.0 + fraction.astype(np.float64) * 0.5) * np.exp2(exponent.astype(np.float64) - 1.0),
     )
     values = np.where(codes & np.uint8(8), -values, values)
     scale = np.exp2(scales.astype(np.float64) - 127.0).repeat(32, axis=1)
@@ -115,33 +115,24 @@ def assess_quark_mxfp4_projection(
     """Describe one Quark W4A4 projection without treating it as W4A8.
 
     ``weight`` and ``scale`` are safetensors-header entries for ``module.weight``
-    and ``module.weight_scale``.  Their payload bytes need a separate Quark
-    dequantization oracle before any conversion can be implemented.
+    and ``module.weight_scale``. Bounded independent projection-slice evidence
+    is not a model-wide Quark 0.13 exporter or activation-producer certificate.
     """
     if not module or module.endswith((".weight", ".weight_scale")):
         raise ValueError("module must identify a projection, not a tensor")
     quant = _record(config.get("quantization_config"), "quantization_config")
     export = _record(quant.get("export"), "quantization_config.export")
-    global_quant = _record(
-        quant.get("global_quant_config"), "quantization_config.global_quant_config"
-    )
+    global_quant = _record(quant.get("global_quant_config"), "quantization_config.global_quant_config")
     weight_quant = _record(global_quant.get("weight"), "weight quantization")
     input_quant = _record(global_quant.get("input_tensors"), "input quantization")
     if quant.get("quant_method") != "quark" or (
-        export.get("weight_format") != "real_quantized"
-        or export.get("pack_method") != "reorder"
+        export.get("weight_format") != "real_quantized" or export.get("pack_method") != "reorder"
     ):
         raise ValueError("projection requires Quark real-quantized reorder export")
     for name, policy in (("weight", weight_quant), ("activation", input_quant)):
-        if (
-            policy.get("dtype") != "fp4"
-            or policy.get("group_size") != 32
-            or policy.get("scale_format") != "e8m0"
-        ):
+        if policy.get("dtype") != "fp4" or policy.get("group_size") != 32 or policy.get("scale_format") != "e8m0":
             raise ValueError(f"{name} is not OCP MXFP4 K32/E8M0")
-    if weight_quant.get("is_dynamic") is not False or (
-        input_quant.get("is_dynamic") is not True
-    ):
+    if weight_quant.get("is_dynamic") is not False or (input_quant.get("is_dynamic") is not True):
         raise ValueError("projection requires static weights and dynamic activations")
     if quant.get("layer_quant_config") or quant.get("layer_type_quant_config"):
         raise ValueError("per-layer Quark overrides need a separate assessment")
@@ -162,8 +153,8 @@ def assess_quark_mxfp4_projection(
         MXFP4_QUARK_REORDER_LAYOUT_V1,
         None,
         None,
-        "Quark reorder bytes have no proved converter and dynamic MXFP4 "
-        "activations require a distinct W4A4 ABI",
+        "Quark reorder has no model-wide proved converter; dynamic MXFP4 "
+        "activations have only a manual W4A4 probe, not a production route",
         schedule,
     )
     return QuarkMXFP4ProjectionAssessment(
@@ -176,7 +167,7 @@ def assess_quark_mxfp4_projection(
         activation_storage="mxfp4_e2m1",
         route=route,
         unresolved_contracts=(
-            "Quark reorder bytes need an independent E2M1 nibble/scale oracle",
-            "dynamic MXFP4 activation groups need a distinct W4A4 lowering and ABI",
+            "Quark 0.13 exporter mapping and E8M0 0/255 semantics remain unproved",
+            "dynamic MXFP4 activations need a model producer and production W4A4 lowering",
         ),
     )

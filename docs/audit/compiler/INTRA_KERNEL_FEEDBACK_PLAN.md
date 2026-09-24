@@ -551,6 +551,17 @@ and exact-device timing.
 
 ### 2026-09-23: checkpoint metadata is a boundary, not a cost label
 
+The next bounded independent [W4A4 projection-slice packet](../../../benchmarks/baselines/gfx1201_quark_w4a4_probe_20260923/README.md)
+uses SGLang's separately implemented MXFP4 dequantizer on pinned Quark
+gate/down row bytes plus a synthetic activation. Its explicit scalar
+E2M1/E8M0 W4A4 carrier passed 1×2×32 BF16 projection slices and a ragged
+5×3×64 cancellation case on Tajasarus gfx1201. This is numerical/ABI proof
+for the bounded sample, not a Quark 0.13 exporter certificate, a model
+activation quantizer, or a stage-cost label. Do not train a selector or
+infer prefill/decode timing from this probe. Next connect a full-projection
+producer reference, resolve edge scale codes, and lower W4A4 through the
+Graph/Schedule/Tile/Target stack before any production-cost comparison.
+
 The pinned-checkpoint byte preflight adds gate/down packed-weight and
 scale byte samples plus a host-only low-even E2M1/E8M0 candidate oracle.
 The checkpoint names exporter `0.13+unknown`; the available Quark 0.12
@@ -565,8 +576,8 @@ down projection has `N=5120,K=17408` and needs a broader K proof. Quark
 proved low-even checkpoint converter or W4A8 FP8 activation ABI. The new
 metadata assessment records both unresolved contracts and refuses the
 existing route; it adds no timing or selector training sample. Establish
-an independent checkpoint-byte dequantization oracle and distinct W4A4
-carrier before tuning either projection. The single-file checkpoint's
+model-wide checkpoint-byte dequantization and production W4A4 carrier
+before tuning either projection. The single-file checkpoint's
 19.80 GB of tensors already exceed Tajasarus physical capacity, so any
 model-level benchmark requires a separate sharding/offload design.
 GLM-5.3-Flash's 128×128 FP8 block scales and hybrid attention/MoE belong

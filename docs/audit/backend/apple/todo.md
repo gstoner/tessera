@@ -8,6 +8,15 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## Quark W4A4 independent projection probe — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-INDEPENDENT-W4A4-2026-09-23`. The pinned independent
+dequantization fixture is reusable host numerical evidence, but the manual
+E2M1/E8M0 W4A4 ABI and BF16 launch proof are gfx1201-specific. No Metal
+packing, dynamic-activation producer, edge-scale policy, or Apple device
+proof follows; Apple selection is unchanged.
+
 ## Quark byte-oracle preflight — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

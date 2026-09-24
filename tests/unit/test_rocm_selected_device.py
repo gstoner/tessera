@@ -36,6 +36,34 @@ def test_live_arch_tracks_selected_device_and_fails_closed(monkeypatch):
     assert rt._rocm_live_arch() is None
 
 
+
+def test_live_arch_memoizes_per_handle_and_ordinal(monkeypatch):
+    current = [0]
+    calls = []
+    def device(pointer):
+        ct.cast(pointer, ct.POINTER(ct.c_int))[0] = current[0]
+        return 0
+    def properties(pointer, ordinal):
+        calls.append(ordinal)
+        name = {0: b"gfx1201", 1: b"gfx1151"}[ordinal]
+        ct.memmove(ct.cast(pointer, ct.c_void_p).value + 1160, name + b"\0", len(name) + 1)
+        return 0
+    class HIP:
+        hipGetDevice = staticmethod(device)
+        hipGetDevicePropertiesR0600 = staticmethod(properties)
+    handle = HIP()
+    monkeypatch.setattr(rt, "_load_hip_for_launch", lambda: handle)
+    monkeypatch.setattr(rt, "_rocm_live_arch_cache", (None, {}))
+    assert [rt._rocm_live_arch() for _ in range(3)] == ["gfx1201"] * 3
+    assert calls == [0]  # hot callers pay the property query once
+    current[0] = 1  # the selected ordinal is still re-read every call
+    assert rt._rocm_live_arch() == "gfx1151"
+    assert calls == [0, 1]
+    other = HIP()  # a different HIP handle never inherits the memo
+    monkeypatch.setattr(rt, "_load_hip_for_launch", lambda: other)
+    assert rt._rocm_live_arch() == "gfx1151"
+    assert calls == [0, 1, 1]
+
 def test_physical_attestation_uses_the_selected_rocm_device(monkeypatch):
     monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1201")
     monkeypatch.setattr(

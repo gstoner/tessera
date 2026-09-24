@@ -148,14 +148,20 @@ def test_scalar_convolution_preserves_length_one_contract():
 
 
 def _composite_or_skip(lib):
-    """The composite package is a gfx1151 artifact (`_amd_composite_lib` returns
-    None for any other package on purpose). On gfx1151 its absence is a failure;
-    on another arch it is the proof not existing here."""
+    """A composite package is stamped for exactly one chip (one
+    ``CMAKE_HIP_ARCHITECTURES`` entry per build). When no prebuilt image was
+    built on this host its absence is a skip; when one exists, finding none
+    stamped for the live chip is a failure (a foreign or stale build), never
+    the proof "not existing here"."""
+    from tessera.compiler.emit import spectral_candidates as candidates
     from tests._support.rocm_build import rocm_host_arch
 
-    if lib is None and rocm_host_arch() != "gfx1151":
-        pytest.skip(f"prebuilt spectral composite image is a gfx1151 package; this host launches on {rocm_host_arch()}")
-    assert lib is not None
+    if lib is None and not any(path.is_file() for path in candidates._prebuilt_amd_paths()):
+        pytest.skip("no prebuilt ROCm spectral image is built on this host")
+    assert lib is not None, (
+        f"a prebuilt ROCm spectral image exists but none is stamped for "
+        f"{rocm_host_arch()}; rebuild TesseraSpectralHIP for this chip"
+    )
 
 
 def test_standalone_convolution_export_uses_packed_plans():

@@ -1,7 +1,9 @@
-"""Opt-in gfx1201 W4A4 numerical probe for bounded Quark projection slices.
+"""Opt-in RDNA W4A4 numerical probe for bounded Quark projection slices.
 
 This is a distinct activation/weight ABI, not a checkpoint converter or an
-automatic production selection. The caller supplies already packed E2M1
+automatic production selection. The kernel is scalar HIP (no WMMA), so it is
+packaged for whichever supported chip is live -- gfx1201 or gfx1151 -- and each
+chip's result is its own exact-device proof; neither transfers. The caller supplies already packed E2M1
 activation and weight planes in row-major, low-even K order. E8M0 edge codes
 0 and 255 remain outside this probe's proved domain.
 """
@@ -28,7 +30,7 @@ from .native_artifact import (
     ScalarArgument,
     ShapeGuard,
 )
-from .rocm_mxfp4_native import _extract_gfx1201_hsaco, _rocm_hipcc
+from .rocm_mxfp4_native import _rocm_hipcc, _rocm_offload_bundler
 from .rocm_native import (
     ROCMNativePackage,
     _driver_selected_device_libraries,
@@ -39,6 +41,42 @@ from .rocm_native import (
 
 GFX1201_QUARK_W4A4_PROBE_ABI = "tessera.rocm.quark_w4a4.a_b_sa_sb_o_m_n_k.e2m1_low_even_e8m0_k32_bf16.exact_probe.v1"
 QUARK_W4A4_SYNC_KEY = "GFX1201-QUARK-INDEPENDENT-W4A4-2026-09-23"
+QUARK_W4A4_PROBE_ARCHS = ("gfx1151", "gfx1201")
+
+
+def _probe_arch(arch: str) -> str:
+    if arch not in QUARK_W4A4_PROBE_ARCHS:
+        raise ValueError(
+            f"Quark W4A4 probe supports exact {' or '.join(QUARK_W4A4_PROBE_ARCHS)}; got {arch!r}"
+        )
+    return arch
+
+
+def _extract_hsaco(compiled: Path, output: Path, rocm_path: Path, arch: str) -> bytes:
+    """Return the raw HSACO for ``arch`` from raw or bundled HIP output."""
+    payload = compiled.read_bytes()
+    if payload.startswith(b"\x7fELF"):
+        return payload
+    if not payload.startswith(b"__CLANG_OFFLOAD_BUNDLE__"):
+        raise RuntimeError("Quark W4A4 compiler output is neither ELF nor a HIP bundle")
+    bundler = _rocm_offload_bundler(rocm_path)
+    if bundler is None:
+        raise RuntimeError("Quark W4A4 HIP bundle requires clang-offload-bundler")
+    result = subprocess.run(
+        [
+            str(bundler), "-unbundle", "-type=o",
+            f"-targets=hipv4-amdgcn-amd-amdhsa--{arch}",
+            f"-input={compiled}", f"-output={output}",
+        ],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode or not output.is_file():
+        detail = result.stderr.strip() or f"clang-offload-bundler exited {result.returncode}"
+        raise RuntimeError(f"Quark W4A4 HSACO extraction failed: {detail}")
+    image = output.read_bytes()
+    if not image.startswith(b"\x7fELF"):
+        raise RuntimeError("Quark W4A4 extracted device image is not an ELF HSACO")
+    return image
 
 
 def validate_quark_w4a4_buffers(buffers: dict[str, np.ndarray]) -> tuple[int, int, int]:
@@ -118,9 +156,11 @@ def package_quark_w4a4_probe(
     n: int,
     k: int,
     *,
+    arch: str = "gfx1201",
     entry: str = "tessera_quark_w4a4_probe",
 ) -> ROCMNativePackage:
     """Compile only the exact-device scalar probe; never select it implicitly."""
+    arch = _probe_arch(arch)
     if min(m, n, k) <= 0 or k % 32:
         raise ValueError("Quark W4A4 requires positive M/N and K divisible by 32")
     source = emit_quark_w4a4_probe_hip(entry=entry)
@@ -128,7 +168,7 @@ def package_quark_w4a4_probe(
     compiler = _rocm_hipcc(rocm_path)
     if compiler is None:
         raise RuntimeError("Quark W4A4 probe requires the HIP compiler driver")
-    device_libraries = _driver_selected_device_libraries(arch="gfx1201")
+    device_libraries = _driver_selected_device_libraries(arch=arch)
     with tempfile.TemporaryDirectory(prefix="tessera-quark-w4a4-") as directory:
         source_path = Path(directory) / "kernel.hip"
         bundle_path = Path(directory) / "kernel.hipfb"
@@ -140,7 +180,7 @@ def package_quark_w4a4_probe(
             "hip",
             "-O3",
             "--genco",
-            "--offload-arch=gfx1201",
+            f"--offload-arch={arch}",
             f"--rocm-path={rocm_path}",
             str(source_path),
             "-o",
@@ -150,14 +190,14 @@ def package_quark_w4a4_probe(
         if result.returncode or not bundle_path.is_file():
             detail = result.stderr.strip() or f"AMD clang exited {result.returncode}"
             raise RuntimeError(f"Quark W4A4 HSACO compilation failed: {detail}")
-        payload = _extract_gfx1201_hsaco(bundle_path, image_path, rocm_path)
+        payload = _extract_hsaco(bundle_path, image_path, rocm_path, arch)
     image = NativeImageArtifact(
-        target="rocm_gfx1201",
-        architecture="gfx1201",
+        target=f"rocm_{arch}",
+        architecture=arch,
         pipeline_name="tessera-lower-to-rocm",
         compiler_fingerprint=_version_fingerprint(compiler),
         toolchain_fingerprint=hashlib.sha256(
-            (str(rocm_path) + "|gfx1201|O3|quark_w4a4_exact_probe").encode()
+            (str(rocm_path) + f"|{arch}|O3|quark_w4a4_exact_probe").encode()
         ).hexdigest(),
         target_ir_digest=hashlib.sha256(source.encode()).hexdigest(),
         binary_format="hsaco",
@@ -200,6 +240,10 @@ def package_quark_w4a4_probe(
             "work_item": "ROCM-MXFP4-W4A8-1",
             "sync_key": QUARK_W4A4_SYNC_KEY,
             "route": "manual_quark_w4a4_scalar_probe",
+            # ``pipeline_name`` must name a registered pipeline and every
+            # hipcc-built MXFP4 package reuses tessera-lower-to-rocm; this
+            # kernel is hand-emitted HIP, not a Tile IR lowering.
+            "lowering": "hand_emitted_hip_hipcc",
             "activation_layout": "e2m1_row_major_low_even_k_v1",
             "weight_layout": "quark_sampled_row_major_low_even_k_v1",
             "activation_scale": "e8m0_m_k32",
@@ -209,7 +253,7 @@ def package_quark_w4a4_probe(
             "output": "bf16",
         },
     )
-    semantic_ir = f"rocm.quark_w4a4_probe M={m} N={n} K={k} A=e2m1_low_even B=e2m1_low_even scales=e8m0_k32 output=bf16"
+    semantic_ir = f"rocm.quark_w4a4_probe arch={arch} M={m} N={n} K={k} A=e2m1_low_even B=e2m1_low_even scales=e8m0_k32 output=bf16"
     return ROCMNativePackage(semantic_ir, source, " ".join(command[:-2]), image, descriptor)
 
 
@@ -218,9 +262,12 @@ def launch_quark_w4a4_probe(buffers: dict[str, np.ndarray]) -> dict[str, object]
     from tessera import runtime as rt
 
     m, n, k = validate_quark_w4a4_buffers(buffers)
-    if rt._rocm_live_arch() != "gfx1201":
-        raise RuntimeError("Quark W4A4 probe requires an exact gfx1201 device")
-    package = package_quark_w4a4_probe(m, n, k)
+    live = rt._rocm_live_arch()
+    if live not in QUARK_W4A4_PROBE_ARCHS:
+        raise RuntimeError(
+            f"Quark W4A4 probe requires an exact gfx1151 or gfx1201 device; live is {live!r}"
+        )
+    package = package_quark_w4a4_probe(m, n, k, arch=live)
     artifact = rt.RuntimeArtifact(
         metadata={"target": package.image.target},
         native_image=package.image,
@@ -230,6 +277,7 @@ def launch_quark_w4a4_probe(buffers: dict[str, np.ndarray]) -> dict[str, object]
     )
     result = rt.launch(artifact, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}})
     result["hsaco_sha256"] = hashlib.sha256(package.image.payload).hexdigest()
+    result["probe_arch"] = live
     return result
 
 
@@ -242,23 +290,25 @@ def submit_quark_w4a4_probe(
     """Runtime submission for this ABI only, with an independent byte guard."""
     from tessera import runtime as rt
 
-    if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
-        raise ValueError("Quark W4A4 probe requires an exact gfx1201 image")
-    if rt._rocm_live_arch() != "gfx1201":
-        raise RuntimeError("Quark W4A4 probe requires a live gfx1201 device")
+    arch = image.architecture
+    if arch not in QUARK_W4A4_PROBE_ARCHS or image.target != f"rocm_{arch}":
+        raise ValueError("Quark W4A4 probe requires an exact gfx1151 or gfx1201 image")
+    live = rt._rocm_live_arch()
+    if live != arch:
+        raise RuntimeError(f"Quark W4A4 {arch} image cannot launch on live device {live!r}")
     if descriptor.abi_id != GFX1201_QUARK_W4A4_PROBE_ABI:
         raise ValueError("Quark W4A4 probe ABI mismatch")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     expected_names = ("a_packed", "b_packed", "a_scale", "b_scale", "output")
     if tuple(item.name for item in ordered) != expected_names:
         raise ValueError("Quark W4A4 descriptor buffer order mismatch")
-    arrays = {name: buffers[name] for name in expected_names}
+    arrays = {name: np.asarray(buffers[name]) for name in expected_names}
     m, n, k = validate_quark_w4a4_buffers(arrays)
     if (m, n, k) != tuple(cast(int, scalars[name]) for name in ("M", "N", "K")):
         raise ValueError("Quark W4A4 descriptor scalar shape mismatch")
     hip = rt._load_hip_for_launch()
     if hip is None or hip.hipInit(0) != 0:
-        raise RuntimeError("Quark W4A4 HIP runtime or gfx1201 device is unavailable")
+        raise RuntimeError(f"Quark W4A4 HIP runtime or {arch} device is unavailable")
     module = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(module), image.payload) != 0:
         raise RuntimeError("Quark W4A4 HSACO module load failed")
@@ -289,8 +339,11 @@ def submit_quark_w4a4_probe(
         gx, gy, gz = descriptor.geometry.grid
         wx, wy, wz = descriptor.geometry.workgroup
         rc = hip.hipModuleLaunchKernel(function, gx, gy, gz, wx, wy, wz, 0, None, arguments, None)
-        if rc != 0 or hip.hipDeviceSynchronize() != 0:
+        if rc != 0:
             raise RuntimeError(f"Quark W4A4 kernel launch failed rc={rc}")
+        sync = hip.hipDeviceSynchronize()
+        if sync != 0:
+            raise RuntimeError(f"Quark W4A4 kernel execution failed rc={sync}")
         output = arrays["output"]
         if hip.hipMemcpy(output.ctypes.data_as(ctypes.c_void_p), device[4], int(output.nbytes), 2) != 0:
             raise RuntimeError("Quark W4A4 device-to-host copy failed")

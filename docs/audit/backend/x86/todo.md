@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## ROCm spectral target feedback and MLA example — 2026-09-23
+
+Owner COMPILER-DEVEX-1 / DK1; sync
+`ROCM-SPECTRAL-MLA-EXAMPLE-2026-09-23`. HIP spectral target selection and the
+native-or-refused ROCm MLA example do not alter the x86 FFT, MLA, or AVX-512
+execution paths. x86 parity is not applicable; no CPU-native proof follows
+from the Tajasarus run.
+
 ## ROCm spectral live-architecture fix — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT; sync

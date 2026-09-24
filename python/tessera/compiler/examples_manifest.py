@@ -302,7 +302,8 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         command="python examples/advanced/mla/tests/smoke_random.py",
         notes=(
             "FlashMLA numpy reference + Graph IR build + Apple CPU compile "
-            "(self-bootstraps sys.path)."
+            "(self-bootstraps sys.path). Separate opt-in smoke_rocm.py requires "
+            "an exact HIP device and never falls back to reference_cpu."
         ),
     ),
     ExampleEntry(

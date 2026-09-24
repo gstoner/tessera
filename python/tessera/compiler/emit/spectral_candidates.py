@@ -479,9 +479,21 @@ def _spectral_device_arch() -> str | None:
         return None
     for name in ("TESSERA_ROCM_ARCH", "TESSERA_ROCM_CHIP"):
         configured = os.environ.get(name)
-        if configured and configured != live:
+        if configured and configured.split(":", 1)[0] != live:
             return None
     return live
+
+
+def _spectral_compile_arch() -> str | None:
+    """The validated offload target, including any requested target features."""
+    live = _spectral_device_arch()
+    if live is None:
+        return None
+    return (
+        os.environ.get("TESSERA_ROCM_ARCH")
+        or os.environ.get("TESSERA_ROCM_CHIP")
+        or live
+    )
 
 
 def _composite_host_arch() -> str:
@@ -517,22 +529,26 @@ def _amd_composite_lib() -> ctypes.CDLL | None:
     that chip (GFX1201-PARITY 2026-09-17) and its stamp must match too.
     """
     arch = _composite_host_arch()
-    cached = _libs.get("amd_composite_prebuilt")
+    compile_arch = _spectral_compile_arch()
+    if compile_arch is None:
+        return None
+    key = f"amd_composite:{compile_arch}"
+    cached = _libs.get(key)
     if cached is not None:
         return cached if _is_exact_composite_lib(cached, arch) else None
-    lib = _amd_lib() if arch == "gfx1151" else None
+    lib = _amd_lib() if compile_arch == "gfx1151" else None
     if not _is_exact_composite_lib(lib, arch):
         lib = _amd_source_lib()
         if not _is_exact_composite_lib(lib, arch):
             return None
-    _libs["amd_composite_prebuilt"] = lib
+    _libs[key] = lib
     return lib
 
 
 def _amd_source_lib() -> ctypes.CDLL | None:
     """Development candidate: compile the source hook, never canonical runtime."""
-    arch = _spectral_device_arch()
-    if arch not in {"gfx1151", "gfx1201"}:
+    arch = _spectral_compile_arch()
+    if arch is None:
         return None
     key = f"amd_source:{arch}"
     if key in _libs:
@@ -549,10 +565,10 @@ def _amd_source_lib() -> ctypes.CDLL | None:
 
 
 def _amd_candidate_lib() -> ctypes.CDLL | None:
-    arch = _spectral_device_arch()
+    arch = _spectral_compile_arch()
     if arch == "gfx1151":
         return _amd_lib() or _amd_source_lib()
-    if arch == "gfx1201":
+    if arch is not None:
         return _amd_source_lib()
     return None
 

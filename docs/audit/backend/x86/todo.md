@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## Quark byte-oracle preflight — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-BYTE-ORACLE-2026-09-23`. Pinned byte ranges and the
+host-only candidate oracle establish no AVX-512 packing, W4A4 route,
+or CPU performance proof. The x86 selector remains unchanged.
+
 ## GPT-OSS-20B ROCm full-expanded capacity packet — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

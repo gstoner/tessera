@@ -8,6 +8,14 @@ last_updated: 2026-09-23
 
 # Apple compiler, exact-device, and performance plan
 
+## Quark byte-oracle preflight — 2026-09-23
+
+Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync
+`GFX1201-QUARK-BYTE-ORACLE-2026-09-23`. Pinned checkpoint byte ranges
+and a host-only candidate E2M1/E8M0 decode add no Metal packing,
+activation carrier, numerical policy, or exact-device proof. Quark
+conversion remains refused; Apple selection is unchanged.
+
 ## GPT-OSS-20B ROCm full-expanded capacity packet — 2026-09-23
 
 Owner ROCM-MXFP4-W4A8-1 / IKF-1; sync

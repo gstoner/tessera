@@ -1,7 +1,6 @@
 {
-  "schema": "tessera.gfx1201.quark_w4a4_probe.v1",
-  "sync_key": "GFX1201-QUARK-INDEPENDENT-W4A4-2026-09-23",
-  "resealed": "2026-09-24: generator gained per-chip packaging; re-run on device, not re-stamped",
+  "schema": "tessera.gfx1151.quark_w4a4_probe.v1",
+  "sync_key": "GFX1151-QUARK-W4A4-PROBE-2026-09-24",
   "abi": "tessera.rocm.quark_w4a4.a_b_sa_sb_o_m_n_k.e2m1_low_even_e8m0_k32_bf16.exact_probe.v1",
   "generator_sha256": "854f10cc40d51da2bb1488e918dd42f84f3c738d1e068136860c6b6c8ca5eefc",
   "device_fixture_sha256": "43702ce75ec74d32764e9df0536d557c36345cfbe43634ea7a07fd6ac1bb4207",
@@ -12,15 +11,16 @@
   "llvm": "AMD LLVM version 23.0.0git, ROCm commit 8f497e0992fb7513f7f78a6f6b6f1056c375e961",
   "lowering": "hand_emitted_hip_hipcc",
   "scope": "bounded numerical probe only; no automatic selection or performance claim",
-  "host": "tajasarus",
-  "device": "AMD Radeon RX 9070 XT",
-  "live_architecture": "gfx1201",
-  "rocm_path": "/opt/rocm/core-10.0",
+  "reference_packet": "../gfx1201_quark_w4a4_probe_20260923/reference.json",
+  "host": "Princess-Luna",
+  "device": "AMD Radeon 8060S (Ryzen AI MAX+ 395)",
+  "live_architecture": "gfx1151",
+  "rocm_path": "/opt/rocm/core",
   "launched_hsaco_sha256": {
-    "gate_1x2x32": "fb64a0f35e9d19a3c2fd9c7eb43aa9b822e5f120ba2d16838ce34838052fb9f6",
-    "down_1x2x32": "030f1e8169cc0d79fc1f13c1b618af6a415384c796c729cec87fdfb1408ead5a",
-    "ragged_5x3x64": "7dcacfb294a3bdc002ad9d674073a1703c9bba0437b6e377892f74cfdab2d16e"
+    "gate_1x2x32": "e1fdbf7b4ce4b212945bff9b65c10c507d6ad874734172c92c52f7edc75ec8a6",
+    "down_1x2x32": "fe08f8cb82a7954f0f834d4f0848a2ea09c6202001f0c8e15fda751da37cafb6",
+    "ragged_5x3x64": "5e3ed1d1f078001a801c34223dc445e1b7a7eb178005c84b6320b9da564c06ad"
   },
-  "device_tests": "3 passed in 1.86s",
+  "device_tests": "3 passed in 3.22s",
   "focused_host_tests": "PENDING"
 }

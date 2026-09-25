@@ -8,6 +8,27 @@ last_updated: 2026-09-25
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## Spectral benchmarks: `cold_ms` is the first call — 2026-09-25
+
+Owner `NVIDIA-FFT-WORKSPACE-1`; sync `SPECTRAL-BENCH-COLD-2026-09-25` (#849).
+**Changed here.** `benchmarks/spectral/benchmark_nvidia_spectral.py` used to
+invoke each case once, untimed, for its correctness check, and then time
+`cold_ms`. So `cold_ms` was a second call. It now times the first invocation,
+and that result is also what the correctness check reads. The FFT runtime
+library, package ABI, spectral arch and device tag (`cuInit`) are probed only
+after every case is timed, so no case's first call finds them already loaded.
+The device-resident lane still loads the library before it sets up plans,
+because it calls the plan ABI directly; its `cold_ms` is the first execute on
+a ready plan.
+
+**Validation (Super-Bear, RTX 5070, one full run):** all 24 rows `ok`. The
+first case, `fft_c2c_1x1024`, reports 326.5 ms cold (library load, `cuInit`
+and plan creation) vs 0.21 ms warm. Later forward cases are 1.2–9.3 ms cold.
+
+**Follow-up required:** the committed `nvidia_spectral_20260925` packets carry
+second-call `cold_ms`. Their README says so; a cold figure needs a new
+recording, not a relabel. Warm medians are unaffected.
+
 ## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory

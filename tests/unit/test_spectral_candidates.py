@@ -398,3 +398,65 @@ def test_rocm_availability_probe_memoizes_a_failed_probe_too(monkeypatch):
     candidate = SC.RocmStockhamFFTCandidate()
     assert [candidate.available() for _ in range(3)] == [False] * 3
     assert len(calls) == 1
+
+
+class _FakePlanLib:
+    """Counts plan creation; each handle remembers the image that made it."""
+
+    def __init__(self, arch: str):
+        self.arch = arch
+        self.created: list[int] = []
+
+    def ts_fft_plan_create_for_artifact_amd(self, n, sign, digest, out):
+        handle = 0x1000 + len(self.created) + (0x100000 if self.arch == "gfx1201" else 0)
+        self.created.append(handle)
+        ctypes.cast(out, ctypes.POINTER(ctypes.c_void_p))[0] = handle
+        return 0
+
+    def ts_fft_plan_destroy_amd(self, handle):
+        pass
+
+    def ts_spectral_composite_plan_create_amd(self, digest, workspace, out):
+        return self.ts_fft_plan_create_for_artifact_amd(0, 0, digest, out)
+
+    def ts_spectral_composite_plan_destroy_amd(self, handle):
+        pass
+
+    def ts_spectral_composite_plan_digest_amd(self, handle):
+        return b"d" * 64
+
+    def ts_spectral_composite_plan_workspace_bytes_amd(self, handle):
+        return 0
+
+
+def test_rocm_fft_plans_are_scoped_to_the_selected_devices_image(monkeypatch):
+    # Codex review on #833: the key once held only (n, sign, digest), so after
+    # switching the selected device a cached plan from the other chip's image
+    # came back before the device-aware image lookup ever ran.
+    libs = {"gfx1151": _FakePlanLib("gfx1151"), "gfx1201": _FakePlanLib("gfx1201")}
+    live = ["gfx1151"]
+    monkeypatch.setattr(SC, "_amd_device_lib", lambda: libs[live[0]])
+    monkeypatch.setattr(SC, "_rocm_plan_cache", SC.collections.OrderedDict())
+    digest = "a" * 64
+    first_lib, first = SC._rocm_plan(64, -1, digest)
+    assert first_lib is libs["gfx1151"]
+    assert SC._rocm_plan(64, -1, digest) == (first_lib, first)  # a cache hit
+    live[0] = "gfx1201"
+    second_lib, second = SC._rocm_plan(64, -1, digest)
+    assert second_lib is libs["gfx1201"]
+    assert second.value != first.value
+    assert len(libs["gfx1151"].created) == len(libs["gfx1201"].created) == 1
+
+
+def test_rocm_composite_plans_and_their_fft_plans_share_one_image(monkeypatch):
+    a, b = _FakePlanLib("gfx1151"), _FakePlanLib("gfx1201")
+    monkeypatch.setattr(SC, "_rocm_plan_cache", SC.collections.OrderedDict())
+    monkeypatch.setattr(SC, "_rocm_composite_plan_cache", SC.collections.OrderedDict())
+    monkeypatch.setattr(SC, "_amd_device_lib", lambda: pytest.fail("composite passes its image"))
+    contract = {"schedule_digest": "d" * 64, "workspace_bytes": 0}
+    plan_a = SC._rocm_composite_plan(contract, a)
+    plan_b = SC._rocm_composite_plan(contract, b)
+    assert plan_a.value != plan_b.value  # one digest, two images, two plans
+    assert SC._rocm_composite_plan(contract, a).value == plan_a.value
+    fft_lib, _ = SC._rocm_plan(32, 1, "e" * 64, b)
+    assert fft_lib is b

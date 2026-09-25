@@ -153,8 +153,11 @@ def test_bluestein_plan_is_cached_and_bound_to_schedule_digest():
     second = rt.launch(artifact, (x,))
     assert first["ok"] is True, first.get("reason")
     assert second["ok"] is True, second.get("reason")
-    assert list(sc._rocm_plan_cache) == [(257, -1, digest)]
-    lib, handle = sc._rocm_plan_cache[(257, -1, digest)]
+    ((lib, n, sign, cached_digest),) = list(sc._rocm_plan_cache)
+    assert (n, sign, cached_digest) == (257, -1, digest)
+    assert lib is sc._amd_device_lib()  # keyed by the selected device's image
+    plan_lib, handle = sc._rocm_plan_cache[(lib, 257, -1, digest)]
+    assert plan_lib is lib
     assert lib.ts_fft_plan_workspace_elems_amd(handle) == 4 * 1024
     assert lib.ts_fft_plan_artifact_digest_amd(handle).decode() == digest
     np.testing.assert_allclose(second["output"], np.fft.fft(x, axis=-1), **_TOL)

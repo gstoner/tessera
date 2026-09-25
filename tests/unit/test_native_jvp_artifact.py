@@ -18,6 +18,7 @@ from tessera.compiler.native_jvp_plugins import (
 )
 from tessera.compiler.graph_ir import IROp
 from tessera.compiler.graph_ir import _format_attr_value, tensor_ir_type
+from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
 def _reduce_child() -> dict:
@@ -276,6 +277,7 @@ def test_gfx1201_admits_only_the_spectral_family():
         )
 
 
+@pytest.mark.skipif(find_tessera_opt() is None, reason="tessera-opt not built")
 @pytest.mark.parametrize("chip", ["gfx1151", "gfx1201"])
 def test_rocm_spectral_jvp_package_is_lowered_for_and_names_its_chip(chip):
     from tessera.compiler.native_jvp_plugins import build_native_jvp_family_artifact

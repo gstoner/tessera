@@ -99,6 +99,70 @@ def _cases(rng: np.random.Generator):
     return cases
 
 
+def _device_resident_rows(lib, device, warmup: int, repeats: int) -> list[dict[str, Any]]:
+    """C2C with input and output already on the GPU (device-pointer ABI).
+
+    Times the enqueue plus a device synchronize: what a caller that keeps its
+    data resident pays per transform, with no host staging or copies.
+    """
+    import ctypes
+
+    if not hasattr(lib, "tessera_nvidia_fft_execute_c2c_device_f32"):
+        return []
+    cudart = ctypes.CDLL("libcudart.so.13")
+    cudart.cudaMalloc.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
+    cudart.cudaFree.argtypes = [ctypes.c_void_p]
+    cudart.cudaMemcpy.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+    execute = lib.tessera_nvidia_fft_execute_c2c_device_f32
+    execute.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_size_t, ctypes.c_int, ctypes.c_void_p]
+    rows = []
+    rng = np.random.default_rng(7)
+    for batch, n in ((1, 1024), (64, 1024), (256, 4096), (16, 65536)):
+        host = (rng.standard_normal((batch, n)) + 1j * rng.standard_normal((batch, n))).astype(np.complex64)
+        plan, size, workspace = ctypes.c_void_p(), ctypes.c_size_t(), ctypes.c_void_p()
+        device_in, device_out = ctypes.c_void_p(), ctypes.c_void_p()
+        if lib.tessera_nvidia_fft_plan_create_c2c_f32(batch, n, ctypes.byref(plan), ctypes.byref(size)):
+            raise RuntimeError("plan creation failed")
+        try:
+            lib.tessera_nvidia_fft_workspace_alloc(size.value, ctypes.byref(workspace))
+            cudart.cudaMalloc(ctypes.byref(device_in), host.nbytes)
+            cudart.cudaMalloc(ctypes.byref(device_out), host.nbytes)
+            cudart.cudaMemcpy(device_in, host.ctypes.data, host.nbytes, 1)
+
+            def call():
+                if execute(plan, device_in, device_out, workspace, size.value, 0, None):
+                    raise RuntimeError("device execute failed")
+                if cudart.cudaDeviceSynchronize():
+                    raise RuntimeError("synchronize failed")
+
+            call()
+            out = np.empty_like(host)
+            cudart.cudaMemcpy(out.ctypes.data, device_out, out.nbytes, 2)
+            expected = np.fft.fft(host, axis=-1)
+            error = float(np.max(np.abs(out - expected))) / max(1.0, float(np.max(np.abs(expected))))
+            cold, samples = _time(call, warmup, repeats)
+            median = float(statistics.median(samples))
+            row = {
+                "backend": "nvidia_sm120", "op": "tessera.fft", "case": f"fft_c2c_{batch}x{n}_device_resident",
+                "shape": [[batch, n]], "dtype": "complex64", "device": device, "tessera_version": "0.1.0",
+                "route": "nvidia_fft_device_pointer", "latency_source": "host_wall_synchronized",
+                "ok": True, "max_rel_error": error, "cold_ms": cold, "latency_ms": median,
+                "p10_ms": float(np.percentile(samples, 10)), "p90_ms": float(np.percentile(samples, 90)),
+                "numpy_ms": None, "tflops": 5.0 * batch * n * np.log2(n) / (median * 1e-3) / 1e12,
+                "memory_bw_gb_s": 2 * host.nbytes / (median * 1e-3) / 1e9, "repeats": repeats,
+            }
+            rows.append(row)
+            print(json.dumps(row), flush=True)
+        finally:
+            for pointer in (device_in, device_out):
+                if pointer.value:
+                    cudart.cudaFree(pointer)
+            if workspace.value:
+                lib.tessera_nvidia_fft_workspace_free(workspace)
+            lib.tessera_nvidia_fft_plan_destroy(plan)
+    return rows
+
+
 def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, list[float]]:
     start = time.perf_counter_ns()
     call()
@@ -178,6 +242,8 @@ def main() -> None:
         )
         rows.append(row)
         print(json.dumps(row), flush=True)
+    if not prefixes or any("device_resident".startswith(p) or p.startswith("fft") for p in prefixes):
+        rows.extend(_device_resident_rows(lib, device, args.warmup, args.repeats))
     packet = {
         "schema": "tessera.nvidia_spectral_benchmark.v1",
         "host": platform.node(), "platform": platform.platform(),

@@ -31,6 +31,23 @@ int tessera_nvidia_fft_plan_create_c2r_f32(int64_t batch, int64_t length,
                                            size_t *workspace_bytes);
 int tessera_nvidia_fft_plan_destroy(void *plan);
 
+// Device-pointer execution: `input`/`output` are device buffers on the plan's
+// device; work is enqueued on `stream` (nullptr = legacy default stream) and
+// not synchronized. Normalization matches the host-pointer entry points. C2R
+// overwrites its input. Statuses as for the host-pointer entry points.
+int tessera_nvidia_fft_execute_c2c_device_f32(void *plan, const void *input,
+                                             void *output, void *workspace,
+                                             size_t workspace_bytes,
+                                             int inverse, void *stream);
+int tessera_nvidia_fft_execute_r2c_device_f32(void *plan, const void *input,
+                                             void *output, void *workspace,
+                                             size_t workspace_bytes,
+                                             void *stream);
+int tessera_nvidia_fft_execute_c2r_device_f32(void *plan, void *input,
+                                             void *output, void *workspace,
+                                             size_t workspace_bytes,
+                                             void *stream);
+
 // Explicit caller-owned device workspace lifecycle. These helpers are narrow
 // CUDA allocation shims; workspace identity remains visible to the caller.
 int tessera_nvidia_fft_workspace_alloc(size_t bytes, void **workspace);

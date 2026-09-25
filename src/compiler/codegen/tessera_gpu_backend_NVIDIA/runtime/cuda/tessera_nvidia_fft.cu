@@ -4,6 +4,7 @@
 #include <cufft.h>
 
 #include <cstdint>
+#include <mutex>
 #include <new>
 
 namespace {
@@ -19,7 +20,25 @@ struct FFTPlan {
   // The CUDA device current when the plan was created. A cuFFT plan (and the
   // caller's workspace for it) belongs to that device's context.
   int device{-1};
+  // Host-pointer executes stage through these, allocated on first use and
+  // reused until the plan is destroyed. Measured on the RTX 5070: allocating
+  // them per call cost ~0.65 ms of a 2.8 ms 256x4096 C2C (kernel: 21 us).
+  void *stageIn{};
+  void *stageOut{};
+  // Serializes executes on this plan: the staging buffers and the plan's
+  // stream and work-area bindings are per-plan state.
+  std::mutex lock;
 };
+
+// Allocates the plan's staging buffers on first use (caller holds plan->lock).
+bool planStaging(FFTPlan *plan, size_t inBytes, size_t outBytes) {
+  if (!plan->stageIn && cudaMalloc(&plan->stageIn, inBytes) != cudaSuccess)
+    return false;
+  if (outBytes && !plan->stageOut &&
+      cudaMalloc(&plan->stageOut, outBytes) != cudaSuccess)
+    return false;
+  return true;
+}
 
 // A plan executes only on the device that created it; a caller that switched
 // devices must create a plan there instead. Returns the execute status: 0 when
@@ -124,6 +143,10 @@ extern "C" int tessera_nvidia_fft_plan_destroy(void *opaquePlan) {
     return 0;
   auto *plan = static_cast<FFTPlan *>(opaquePlan);
   cufftResult status = cufftDestroy(plan->handle);
+  if (plan->stageIn)
+    cudaFree(plan->stageIn);
+  if (plan->stageOut)
+    cudaFree(plan->stageOut);
   delete plan;
   return status == CUFFT_SUCCESS ? 0 : 3;
 }
@@ -154,13 +177,16 @@ extern "C" int tessera_nvidia_fft_execute_c2c_f32(
     return deviceStatus;
   int64_t elements = plan->batch * plan->length;
   size_t bytes = static_cast<size_t>(elements) * sizeof(cufftComplex);
-  cufftComplex *deviceData = nullptr;
-  if (cudaMalloc(&deviceData, bytes) != cudaSuccess)
+  std::lock_guard<std::mutex> guard(plan->lock);
+  if (!planStaging(plan, bytes, 0))
     return 2;
+  auto *deviceData = static_cast<cufftComplex *>(plan->stageIn);
   cudaError_t cudaStatus = cudaMemcpy(deviceData, input, bytes,
                                       cudaMemcpyHostToDevice);
   cufftResult fftStatus = CUFFT_SUCCESS;
   if (cudaStatus == cudaSuccess)
+    fftStatus = cufftSetStream(plan->handle, nullptr);
+  if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
     fftStatus = cufftSetWorkArea(plan->handle, workspace);
   if (fftStatus == CUFFT_SUCCESS)
     fftStatus = cufftExecC2C(plan->handle, deviceData, deviceData,
@@ -170,12 +196,11 @@ extern "C" int tessera_nvidia_fft_execute_c2c_f32(
         deviceData, elements, 1.0f / static_cast<float>(plan->length));
     cudaStatus = cudaGetLastError();
   }
-  if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
-    cudaStatus = cudaDeviceSynchronize();
+  // The synchronous copy back orders after the transform and reports its
+  // errors; no separate device synchronize.
   if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
     cudaStatus = cudaMemcpy(output, deviceData, bytes,
                             cudaMemcpyDeviceToHost);
-  cudaFree(deviceData);
   return fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess ? 0 : 3;
 }
 
@@ -192,27 +217,26 @@ extern "C" int tessera_nvidia_fft_execute_r2c_f32(
     return deviceStatus;
   int64_t realElements = plan->batch * plan->length;
   int64_t complexElements = plan->batch * (plan->length / 2 + 1);
-  float *deviceInput = nullptr;
-  cufftComplex *deviceOutput = nullptr;
-  cudaError_t cudaStatus = cudaMalloc(&deviceInput, realElements * sizeof(float));
-  if (cudaStatus == cudaSuccess)
-    cudaStatus = cudaMalloc(&deviceOutput, complexElements * sizeof(cufftComplex));
-  if (cudaStatus == cudaSuccess)
-    cudaStatus = cudaMemcpy(deviceInput, input, realElements * sizeof(float),
-                            cudaMemcpyHostToDevice);
+  std::lock_guard<std::mutex> guard(plan->lock);
+  if (!planStaging(plan, realElements * sizeof(float),
+                   complexElements * sizeof(cufftComplex)))
+    return 2;
+  auto *deviceInput = static_cast<float *>(plan->stageIn);
+  auto *deviceOutput = static_cast<cufftComplex *>(plan->stageOut);
+  cudaError_t cudaStatus = cudaMemcpy(deviceInput, input,
+                                      realElements * sizeof(float),
+                                      cudaMemcpyHostToDevice);
   cufftResult fftStatus = CUFFT_SUCCESS;
   if (cudaStatus == cudaSuccess)
+    fftStatus = cufftSetStream(plan->handle, nullptr);
+  if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
     fftStatus = cufftSetWorkArea(plan->handle, workspace);
   if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
     fftStatus = cufftExecR2C(plan->handle, deviceInput, deviceOutput);
   if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
-    cudaStatus = cudaDeviceSynchronize();
-  if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
     cudaStatus = cudaMemcpy(output, deviceOutput,
                             complexElements * sizeof(cufftComplex),
                             cudaMemcpyDeviceToHost);
-  cudaFree(deviceInput);
-  cudaFree(deviceOutput);
   return fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess ? 0 : 3;
 }
 
@@ -229,18 +253,20 @@ extern "C" int tessera_nvidia_fft_execute_c2r_f32(
     return deviceStatus;
   int64_t realElements = plan->batch * plan->length;
   int64_t complexElements = plan->batch * (plan->length / 2 + 1);
-  cufftComplex *deviceInput = nullptr;
-  float *deviceOutput = nullptr;
-  cudaError_t cudaStatus =
-      cudaMalloc(&deviceInput, complexElements * sizeof(cufftComplex));
-  if (cudaStatus == cudaSuccess)
-    cudaStatus = cudaMalloc(&deviceOutput, realElements * sizeof(float));
-  if (cudaStatus == cudaSuccess)
-    cudaStatus = cudaMemcpy(deviceInput, input,
-                            complexElements * sizeof(cufftComplex),
-                            cudaMemcpyHostToDevice);
+  std::lock_guard<std::mutex> guard(plan->lock);
+  // C2R overwrites its input: it consumes the staging copy, never the caller's.
+  if (!planStaging(plan, complexElements * sizeof(cufftComplex),
+                   realElements * sizeof(float)))
+    return 2;
+  auto *deviceInput = static_cast<cufftComplex *>(plan->stageIn);
+  auto *deviceOutput = static_cast<float *>(plan->stageOut);
+  cudaError_t cudaStatus = cudaMemcpy(deviceInput, input,
+                                      complexElements * sizeof(cufftComplex),
+                                      cudaMemcpyHostToDevice);
   cufftResult fftStatus = CUFFT_SUCCESS;
   if (cudaStatus == cudaSuccess)
+    fftStatus = cufftSetStream(plan->handle, nullptr);
+  if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
     fftStatus = cufftSetWorkArea(plan->handle, workspace);
   if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
     fftStatus = cufftExecC2R(plan->handle, deviceInput, deviceOutput);
@@ -250,11 +276,104 @@ extern "C" int tessera_nvidia_fft_execute_c2r_f32(
     cudaStatus = cudaGetLastError();
   }
   if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
-    cudaStatus = cudaDeviceSynchronize();
-  if (fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess)
     cudaStatus = cudaMemcpy(output, deviceOutput, realElements * sizeof(float),
                             cudaMemcpyDeviceToHost);
-  cudaFree(deviceInput);
-  cudaFree(deviceOutput);
   return fftStatus == CUFFT_SUCCESS && cudaStatus == cudaSuccess ? 0 : 3;
+}
+
+// ---------------------------------------------------------------------------
+// Device-pointer execution (ROCm parity: ts_fft_plan_execute_*_device_batch).
+// Input and output are device buffers on the plan's device; the transform and
+// the inverse normalization are enqueued on `stream` (nullptr: the legacy
+// default stream) and NOT synchronized -- the caller orders its own reads.
+// No staging and no host copies, so data that stays on the GPU pays neither.
+// Statuses as for the host-pointer entry points; 3 includes a failed launch.
+namespace {
+
+cufftResult bindStream(FFTPlan *plan, void *workspace, void *stream) {
+  cufftResult status =
+      cufftSetStream(plan->handle, static_cast<cudaStream_t>(stream));
+  return status == CUFFT_SUCCESS ? cufftSetWorkArea(plan->handle, workspace)
+                                 : status;
+}
+
+} // namespace
+
+extern "C" int tessera_nvidia_fft_execute_c2c_device_f32(
+    void *opaquePlan, const void *input, void *output, void *workspace,
+    size_t workspaceBytes, int inverse, void *stream) {
+  if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
+      workspace == nullptr || (inverse != 0 && inverse != 1))
+    return 1;
+  auto *plan = static_cast<FFTPlan *>(opaquePlan);
+  if (plan->kind != FFTKind::C2C || workspaceBytes < plan->workspaceBytes)
+    return 1;
+  if (int deviceStatus = checkPlanDevice(plan))
+    return deviceStatus;
+  std::lock_guard<std::mutex> guard(plan->lock);
+  int64_t elements = plan->batch * plan->length;
+  auto *out = static_cast<cufftComplex *>(output);
+  cufftResult fftStatus = bindStream(plan, workspace, stream);
+  if (fftStatus == CUFFT_SUCCESS)
+    fftStatus = cufftExecC2C(
+        plan->handle, static_cast<cufftComplex *>(const_cast<void *>(input)),
+        out, inverse ? CUFFT_INVERSE : CUFFT_FORWARD);
+  if (fftStatus != CUFFT_SUCCESS)
+    return 3;
+  if (inverse) {
+    normalizeInverse<<<static_cast<unsigned>((elements + 255) / 256), 256, 0,
+                       static_cast<cudaStream_t>(stream)>>>(
+        out, elements, 1.0f / static_cast<float>(plan->length));
+    if (cudaGetLastError() != cudaSuccess)
+      return 3;
+  }
+  return 0;
+}
+
+extern "C" int tessera_nvidia_fft_execute_r2c_device_f32(
+    void *opaquePlan, const void *input, void *output, void *workspace,
+    size_t workspaceBytes, void *stream) {
+  if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
+      workspace == nullptr)
+    return 1;
+  auto *plan = static_cast<FFTPlan *>(opaquePlan);
+  if (plan->kind != FFTKind::R2C || workspaceBytes < plan->workspaceBytes)
+    return 1;
+  if (int deviceStatus = checkPlanDevice(plan))
+    return deviceStatus;
+  std::lock_guard<std::mutex> guard(plan->lock);
+  cufftResult fftStatus = bindStream(plan, workspace, stream);
+  if (fftStatus == CUFFT_SUCCESS)
+    fftStatus = cufftExecR2C(
+        plan->handle, static_cast<float *>(const_cast<void *>(input)),
+        static_cast<cufftComplex *>(output));
+  return fftStatus == CUFFT_SUCCESS ? 0 : 3;
+}
+
+// C2R overwrites `input` (cuFFT's out-of-place C2R contract); pass a copy if
+// the spectrum is needed afterwards.
+extern "C" int tessera_nvidia_fft_execute_c2r_device_f32(
+    void *opaquePlan, void *input, void *output, void *workspace,
+    size_t workspaceBytes, void *stream) {
+  if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
+      workspace == nullptr)
+    return 1;
+  auto *plan = static_cast<FFTPlan *>(opaquePlan);
+  if (plan->kind != FFTKind::C2R || workspaceBytes < plan->workspaceBytes)
+    return 1;
+  if (int deviceStatus = checkPlanDevice(plan))
+    return deviceStatus;
+  std::lock_guard<std::mutex> guard(plan->lock);
+  int64_t realElements = plan->batch * plan->length;
+  auto *out = static_cast<float *>(output);
+  cufftResult fftStatus = bindStream(plan, workspace, stream);
+  if (fftStatus == CUFFT_SUCCESS)
+    fftStatus = cufftExecC2R(plan->handle, static_cast<cufftComplex *>(input),
+                             out);
+  if (fftStatus != CUFFT_SUCCESS)
+    return 3;
+  normalizeRealInverse<<<static_cast<unsigned>((realElements + 255) / 256), 256,
+                         0, static_cast<cudaStream_t>(stream)>>>(
+      out, realElements, 1.0f / static_cast<float>(plan->length));
+  return cudaGetLastError() == cudaSuccess ? 0 : 3;
 }

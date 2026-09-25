@@ -397,3 +397,82 @@ def test_device_query_failure_is_an_execution_error_not_a_mismatch(tmp_path):
     assert result.returncode == 0, result.stderr[-2000:]
     statuses = json.loads(result.stdout.strip().splitlines()[-1])
     assert statuses == {"ok": 0, "query_failure": 3, "other_device": 4, "ok_again": 0}
+
+
+def _cudart():
+    """The CUDA runtime the FFT library already loaded (same soname)."""
+    cudart = ctypes.CDLL("libcudart.so.13")
+    cudart.cudaMalloc.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
+    cudart.cudaFree.argtypes = [ctypes.c_void_p]
+    cudart.cudaMemcpy.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+    cudart.cudaDeviceSynchronize.argtypes = []
+    return cudart
+
+
+def _bind_device_entry_points(lib):
+    lib.tessera_nvidia_fft_execute_c2c_device_f32.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_size_t, ctypes.c_int, ctypes.c_void_p]
+    for name in ("tessera_nvidia_fft_execute_r2c_device_f32",
+                 "tessera_nvidia_fft_execute_c2r_device_f32"):
+        getattr(lib, name).argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_size_t, ctypes.c_void_p]
+
+
+@pytest.mark.parametrize("kind", ("c2c", "c2c_inverse", "r2c", "c2r"))
+def test_device_pointer_entry_points_match_numpy(kind):
+    """ROCm-parity device-resident execution: device buffers, no staging."""
+    runtime, lib = _runtime_or_skip()
+    if not hasattr(lib, "tessera_nvidia_fft_execute_c2c_device_f32"):
+        pytest.skip("library predates the device-pointer entry points")
+    _bind_device_entry_points(lib)
+    cudart = _cudart()
+    batch, length = 3, 1024
+    rng = np.random.default_rng(97)
+    if kind.startswith("c2c"):
+        host_in = (rng.standard_normal((batch, length)) +
+                   1j * rng.standard_normal((batch, length))).astype(np.complex64)
+        host_out = np.empty_like(host_in)
+        create = lib.tessera_nvidia_fft_plan_create_c2c_f32
+        expected = (np.fft.ifft if kind == "c2c_inverse" else np.fft.fft)(host_in, axis=-1)
+    elif kind == "r2c":
+        host_in = rng.standard_normal((batch, length)).astype(np.float32)
+        host_out = np.empty((batch, length // 2 + 1), np.complex64)
+        create = lib.tessera_nvidia_fft_plan_create_r2c_f32
+        expected = np.fft.rfft(host_in, axis=-1)
+    else:
+        real = rng.standard_normal((batch, length)).astype(np.float32)
+        host_in = np.fft.rfft(real, axis=-1).astype(np.complex64)
+        host_out = np.empty((batch, length), np.float32)
+        create = lib.tessera_nvidia_fft_plan_create_c2r_f32
+        expected = real
+    plan, size = ctypes.c_void_p(), ctypes.c_size_t()
+    assert create(batch, length, ctypes.byref(plan), ctypes.byref(size)) == 0
+    workspace = ctypes.c_void_p()
+    assert lib.tessera_nvidia_fft_workspace_alloc(size.value, ctypes.byref(workspace)) == 0
+    device_in, device_out = ctypes.c_void_p(), ctypes.c_void_p()
+    try:
+        assert cudart.cudaMalloc(ctypes.byref(device_in), host_in.nbytes) == 0
+        assert cudart.cudaMalloc(ctypes.byref(device_out), host_out.nbytes) == 0
+        assert cudart.cudaMemcpy(device_in, host_in.ctypes.data, host_in.nbytes, 1) == 0
+        if kind.startswith("c2c"):
+            rc = lib.tessera_nvidia_fft_execute_c2c_device_f32(
+                plan, device_in, device_out, workspace, size.value,
+                int(kind == "c2c_inverse"), None)
+        elif kind == "r2c":
+            rc = lib.tessera_nvidia_fft_execute_r2c_device_f32(
+                plan, device_in, device_out, workspace, size.value, None)
+        else:
+            rc = lib.tessera_nvidia_fft_execute_c2r_device_f32(
+                plan, device_in, device_out, workspace, size.value, None)
+        assert rc == 0
+        assert cudart.cudaDeviceSynchronize() == 0  # the entry points do not sync
+        assert cudart.cudaMemcpy(host_out.ctypes.data, device_out, host_out.nbytes, 2) == 0
+        np.testing.assert_allclose(host_out, expected, rtol=2e-4, atol=2e-4)
+    finally:
+        for pointer in (device_in, device_out):
+            if pointer.value:
+                cudart.cudaFree(pointer)
+        lib.tessera_nvidia_fft_workspace_free(workspace)
+        lib.tessera_nvidia_fft_plan_destroy(plan)

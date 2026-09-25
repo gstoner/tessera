@@ -1,0 +1,12 @@
+##### host=Princess-Luna repo=/home/gstoner/programming/tessera head=017a54d8
+== tree build  (mtime 2026-09-20)
+   CMAKE_BUILD_TYPE='' generator='Ninja'
+   src/solvers/spectral/libtessera_spectral_rocm.so: 2 compile cmds; flags:       2 --offload-arch=gfx1151 
+   libtessera_spectral_rocm.so: 2 compile cmds; flags:       2 --offload-arch=gfx1151 
+   tools/tessera-jit/libtessera_jit.so: 86 compile cmds; flags: <none>
+   libtessera_jit.so: 86 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_base.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+   libtessera_x86_base.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+   libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>

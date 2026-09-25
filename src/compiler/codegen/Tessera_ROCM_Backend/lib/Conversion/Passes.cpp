@@ -746,6 +746,9 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMCliffordKernelPass(); });
   registerPass([]() { return createLowerROCMAsyncCopyToLoopPass(); });
   registerPass([]() { return std::make_unique<VerifyROCMExecutablePass>(); });
+  registerPass([]() {
+    return std::make_unique<LowerVectorToVectorForROCDLPass>();
+  });
   PassPipelineRegistration<> pipeline(
       "tessera-rocm-backend",
       "Produce typed Tessera ROCm Target IR for inspection",

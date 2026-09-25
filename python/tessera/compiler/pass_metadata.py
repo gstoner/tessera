@@ -862,6 +862,24 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="Phase 5",
     ),
     PassMetadata(
+        name="tessera-rocm-lower-vector-to-vector",
+        cpp_class="LowerVectorToVectorForROCDLPass",
+        summary=(
+            "The vector-to-vector stage of upstream convert-vector-to-llvm "
+            "(LLVM 23.1.1 defaults), including vector.create_mask "
+            "materialization, run on each gpu.module ahead of "
+            "convert-gpu-to-rocdl in tessera-rocm-executable. It omits the "
+            "upstream pass's partial LLVM conversion, whose type converter "
+            "has no GPU address-space mapping and printed a spurious "
+            "workgroup-memref error on successful compiles; "
+            "convert-gpu-to-rocdl performs that conversion."
+        ),
+        input_dialects=("gpu", "vector", "arith", "memref"),
+        output_dialects=("gpu", "vector", "arith", "memref", "scf"),
+        pass_kind="lowering",
+        sprint="ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24",
+    ),
+    PassMetadata(
         name="tessera-schedule-to-tile",
         cpp_class="ScheduleToTilePass",
         summary="Replays registered Schedule decisions, including gfx1201 packed sparse MMA fragments with f32 or matching f16/bf16 accumulation, independently signed byte-addressable INT4/i8 with i32 accumulation, and independently typed FP8/BF8 operands with f32 accumulation, into Tile carriers and structured SSD loops, including the x86 absolute/floor/ceil and inclusive trailing-axis cumsum contracts and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",

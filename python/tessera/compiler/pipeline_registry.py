@@ -618,6 +618,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "lower-rocm-async-copy",
             "lower-tessera-target-to-rocdl",
             "verify-rocm-executable",
+            "tessera-rocm-lower-vector-to-vector",
             "convert-scf-to-cf",
             "convert-gpu-to-rocdl",
             "reconcile-unrealized-casts",
@@ -709,6 +710,8 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         lit_fixtures=(
             "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_pipeline_contract.mlir",
             "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_boundary_strict.mlir",
+            "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_pipeline_graph_matmul_options.mlir",
+            "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/lds_binary_compile_is_diagnostic_free.mlir",
         ),
         phase="target",
         status="lit_verified",

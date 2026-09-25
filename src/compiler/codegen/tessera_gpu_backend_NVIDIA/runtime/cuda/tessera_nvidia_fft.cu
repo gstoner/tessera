@@ -22,11 +22,15 @@ struct FFTPlan {
 };
 
 // A plan executes only on the device that created it; a caller that switched
-// devices must create a plan there instead. The refusal has its own status,
-// 4: 3 already means a CUDA/cuFFT call failed during execution.
-bool onPlanDevice(const FFTPlan *plan) {
+// devices must create a plan there instead. Returns the execute status: 0 when
+// the current device is the plan's; 3 when the device query itself fails -- a
+// CUDA error, like any other call failing during execution; 4 only when the
+// query succeeds and names a different device.
+int checkPlanDevice(const FFTPlan *plan) {
   int current = -1;
-  return cudaGetDevice(&current) == cudaSuccess && current == plan->device;
+  if (cudaGetDevice(&current) != cudaSuccess)
+    return 3;
+  return current == plan->device ? 0 : 4;
 }
 
 __global__ void normalizeInverse(cufftComplex *values, int64_t count,
@@ -146,8 +150,8 @@ extern "C" int tessera_nvidia_fft_execute_c2c_f32(
   auto *plan = static_cast<FFTPlan *>(opaquePlan);
   if (plan->kind != FFTKind::C2C || workspaceBytes < plan->workspaceBytes)
     return 1;
-  if (!onPlanDevice(plan))
-    return 4;
+  if (int deviceStatus = checkPlanDevice(plan))
+    return deviceStatus;
   int64_t elements = plan->batch * plan->length;
   size_t bytes = static_cast<size_t>(elements) * sizeof(cufftComplex);
   cufftComplex *deviceData = nullptr;
@@ -184,8 +188,8 @@ extern "C" int tessera_nvidia_fft_execute_r2c_f32(
   auto *plan = static_cast<FFTPlan *>(opaquePlan);
   if (plan->kind != FFTKind::R2C || workspaceBytes < plan->workspaceBytes)
     return 1;
-  if (!onPlanDevice(plan))
-    return 4;
+  if (int deviceStatus = checkPlanDevice(plan))
+    return deviceStatus;
   int64_t realElements = plan->batch * plan->length;
   int64_t complexElements = plan->batch * (plan->length / 2 + 1);
   float *deviceInput = nullptr;
@@ -221,8 +225,8 @@ extern "C" int tessera_nvidia_fft_execute_c2r_f32(
   auto *plan = static_cast<FFTPlan *>(opaquePlan);
   if (plan->kind != FFTKind::C2R || workspaceBytes < plan->workspaceBytes)
     return 1;
-  if (!onPlanDevice(plan))
-    return 4;
+  if (int deviceStatus = checkPlanDevice(plan))
+    return deviceStatus;
   int64_t realElements = plan->batch * plan->length;
   int64_t complexElements = plan->batch * (plan->length / 2 + 1);
   cufftComplex *deviceInput = nullptr;

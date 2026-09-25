@@ -321,3 +321,79 @@ def test_cached_plans_are_keyed_by_the_live_cuda_device():
     real = np.ones((2, 64), np.float32)
     runtime._nvidia_fft_real_rows(real, False, None, np)
     assert (device.value, "r2c", 2, 64) in runtime._nvidia_fft_plans
+
+
+_GET_DEVICE_SHIM = r"""
+#define _GNU_SOURCE
+#include <dlfcn.h>
+/* 0 pass through; 1 the query fails; 2 the query succeeds naming device 7. */
+static int mode = 0;
+void tessera_test_set_get_device_mode(int value) { mode = value; }
+int cudaGetDevice(int *device) {
+  static int (*real)(int *) = 0;
+  if (mode == 1) return 999; /* cudaErrorUnknown */
+  if (mode == 2) { *device = 7; return 0; }
+  if (!real) real = (int (*)(int *))dlsym(RTLD_NEXT, "cudaGetDevice");
+  return real(device);
+}
+"""
+
+_STATUS_PROBE = r"""
+import ctypes, json
+import numpy as np
+from tessera import runtime
+lib = runtime._load_nvidia_fft_runtime()
+assert lib is not None
+set_mode = ctypes.CDLL(None).tessera_test_set_get_device_mode
+plan, size = ctypes.c_void_p(), ctypes.c_size_t()
+assert lib.tessera_nvidia_fft_plan_create_c2c_f32(1, 16, ctypes.byref(plan), ctypes.byref(size)) == 0
+workspace = ctypes.c_void_p()
+assert lib.tessera_nvidia_fft_workspace_alloc(size.value, ctypes.byref(workspace)) == 0
+x = np.ones((1, 16), np.complex64)
+out = np.empty_like(x)
+pointer = ctypes.POINTER(ctypes.c_float)
+def execute():
+    return lib.tessera_nvidia_fft_execute_c2c_f32(
+        plan, x.view(np.float32).ctypes.data_as(pointer),
+        out.view(np.float32).ctypes.data_as(pointer), workspace, size.value, 0)
+statuses = {}
+for label, mode in (("ok", 0), ("query_failure", 1), ("other_device", 2), ("ok_again", 0)):
+    set_mode(mode)
+    statuses[label] = execute()
+set_mode(0)
+lib.tessera_nvidia_fft_workspace_free(workspace)
+lib.tessera_nvidia_fft_plan_destroy(plan)
+print(json.dumps(statuses))
+"""
+
+
+def test_device_query_failure_is_an_execution_error_not_a_mismatch(tmp_path):
+    """Codex review on #841: a failed cudaGetDevice must not read as status 4.
+
+    A preloaded shim intercepts the library's dynamic cudaGetDevice so both
+    branches run on real hardware: the query failing (status 3, a CUDA error
+    like any other during execution) and the query naming another device
+    (status 4, the refusal) -- the second being unreachable on a one-GPU box
+    otherwise.
+    """
+    import json
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    runtime, lib = _runtime_or_skip()
+    compiler = shutil.which("cc")
+    if compiler is None:
+        pytest.skip("a C compiler is needed to build the cudaGetDevice shim")
+    source = tmp_path / "shim.c"
+    source.write_text(_GET_DEVICE_SHIM)
+    shim = tmp_path / "libgetdevice_shim.so"
+    subprocess.run([compiler, "-shared", "-fPIC", str(source), "-o", str(shim), "-ldl"],
+                   check=True, capture_output=True)
+    env = dict(os.environ, LD_PRELOAD=str(shim))
+    result = subprocess.run([sys.executable, "-c", _STATUS_PROBE], env=env,
+                            capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr[-2000:]
+    statuses = json.loads(result.stdout.strip().splitlines()[-1])
+    assert statuses == {"ok": 0, "query_failure": 3, "other_device": 4, "ok_again": 0}

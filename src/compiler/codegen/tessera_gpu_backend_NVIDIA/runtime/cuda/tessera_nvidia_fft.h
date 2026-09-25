@@ -8,8 +8,9 @@ extern "C" {
 // Versioned canonical CUDA FFT package contract. Every plan is bound to the
 // CUDA device current at creation. Execute statuses: 0 success; 1 invalid
 // argument or plan/workspace mismatch; 2 allocation failure; 3 a CUDA or cuFFT
-// call failed during execution; 4 (v4) the current device is not the plan's
-// device -- refused without running. v3 returned 3 for that refusal too.
+// call failed during execution, including the current-device query; 4 (v4) the
+// query succeeded and the current device is not the plan's device -- refused
+// without running. v3 returned 3 for that refusal too.
 const char *tessera_nvidia_fft_package_abi();
 
 // The CUDA device this library's runtime currently selects -- the identity a

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-23
+last_updated: 2026-09-24
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## ROCm executable-pipeline follow-ups — 2026-09-24
+
+Sync `ROCM-EXEC-PIPELINE-2026-09-24`. **Not applicable.** The x86 JIT lowers host memrefs with no GPU
+address spaces, so the `convert-vector-to-llvm` workgroup-memref error cannot
+arise there and the CPU pipeline keeps the upstream pass; the LDS knob
+diagnostic and spectral image caches are ROCm-only.
 
 ## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
 

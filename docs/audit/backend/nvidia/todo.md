@@ -3,10 +3,26 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-23
+last_updated: 2026-09-24
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## ROCm executable-pipeline follow-ups — 2026-09-24
+
+Sync `ROCM-EXEC-PIPELINE-2026-09-24`. **Follow-up required (spectral plan cache).** #835 fixed ROCm
+spectral plan caches that were keyed without the image/device that created
+the plan. The CUDA equivalent has the same shape: `_nvidia_fft_plans`
+(`python/tessera/runtime.py`, used by `_nvidia_fft_c2c_rows` and
+`_nvidia_fft_real_rows` for r2c/c2r) keys
+cuFFT plans and their workspaces by `(kind, batch, length)` only, while a cuFFT
+plan belongs to the CUDA context current at creation. A process that switches
+its CUDA device would reuse another device's plan. Not exercisable on the
+fleet (one NVIDIA GPU per box); owner for the fix and its sm_120 validation is
+the NVIDIA spectral lane. **Not applicable (rest):** no NVIDIA GPU lowering runs
+`convert-vector-to-llvm` (checked: the pipelines lower through
+`convert-gpu-to-nvvm`), and `ROCM_CANONICAL_LDS_KNOB_UNSUPPORTED` and the LDS
+knob forwarding are confined to the ROCm WMMA generator.
 
 ## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
 

@@ -88,6 +88,9 @@ add_mlir_library(TesseraROCMConversion
   LINK_LIBS PUBLIC
     MLIRIR MLIRLLVMDialect MLIRROCDLDialect MLIRAMDGPUDialect MLIRFuncDialect MLIRTransformUtils
     MLIRGPUDialect MLIRSCFDialect MLIRVectorDialect MLIRArithDialect
+    # LowerVectorToVectorForROCDLPass (Passes.cpp) uses the vector lowering and
+    # rewrite pattern sets directly.
+    MLIRVectorTransforms
     MLIRGPUTransforms MLIRGPUToROCDLTransforms MLIRSCFToControlFlow
     MLIRReconcileUnrealizedCasts
     # MLIRSCFTransforms carries populateSCFStructuralTypeConversionsAndLegality,

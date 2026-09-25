@@ -65,13 +65,14 @@ def test_forward_and_normalized_inverse_match_numpy(batch, length):
 
 
 def test_plan_and_workspace_are_reused_by_shape():
-    runtime, _ = _runtime_or_skip()
+    runtime, lib = _runtime_or_skip()
     runtime._clear_nvidia_fft_plan_cache()
     x = np.arange(96, dtype=np.float32).reshape(3, 32).astype(np.complex64)
     first = runtime._nvidia_fft_c2c_rows(x, False, np)
-    package = runtime._nvidia_fft_plans[("c2c", 3, 32)]
+    key = (runtime._nvidia_fft_device(lib), "c2c", 3, 32)  # v3: device-scoped
+    package = runtime._nvidia_fft_plans[key]
     second = runtime._nvidia_fft_c2c_rows(x, False, np)
-    assert runtime._nvidia_fft_plans[("c2c", 3, 32)] is package
+    assert runtime._nvidia_fft_plans[key] is package
     np.testing.assert_array_equal(first, second)
 
 

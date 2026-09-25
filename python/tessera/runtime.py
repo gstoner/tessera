@@ -20924,6 +20924,12 @@ def _load_nvidia_fft_runtime() -> ctypes.CDLL | None:
                            ctypes.POINTER(ctypes.c_float), ctypes.c_void_p,
                            ctypes.c_size_t]
         symbol.restype = ctypes.c_int
+    if hasattr(lib, "tessera_nvidia_spectral_conv_f32"):
+        lib.tessera_nvidia_spectral_conv_f32.argtypes = [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_void_p,
+            ctypes.c_int, ctypes.c_float]
+        lib.tessera_nvidia_spectral_conv_f32.restype = ctypes.c_int
     if hasattr(lib, "tessera_nvidia_spectral_package_abi"):
         lib.tessera_nvidia_spectral_package_abi.argtypes = []
         lib.tessera_nvidia_spectral_package_abi.restype = ctypes.c_char_p
@@ -21410,7 +21416,54 @@ def _execute_nvidia_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> A
         if rc != 0:
             raise RuntimeError(f"NVIDIA spectral policy execution failed rc={rc}")
         return output
+    if op_name == "tessera.spectral_conv":
+        native = _nvidia_native_spectral_conv(operands, kwargs, np)
+        if native is not None:
+            return native
     return _spectral_composite(op_name, operands, kwargs, _nvidia_fftexec, np)
+
+
+def _nvidia_native_spectral_conv(operands: list, kwargs: dict, np: Any) -> Any:
+    """Full-length FFT convolution in one native call, or None.
+
+    Covers equal leading shapes and a single broadcast kernel row -- the batched
+    contract the scheduler records for `tessera_nvidia_spectral_conv_f32`.
+    Anything else (other broadcasts, a library without the entry point) returns
+    None and keeps the host-composed path, which computes the same values: the
+    padding, nfft and normalization below match `_spectral_composite` exactly.
+    Measured on the RTX 5070 the composite spent ~99% of its time in three
+    host-staged transforms and NumPy glue (262144x1025: 6.6 ms, kernels ~0.07).
+    """
+    lib = _load_nvidia_fft_runtime()
+    if lib is None or not hasattr(lib, "tessera_nvidia_spectral_conv_f32"):
+        return None
+    normalization = str(kwargs.get("normalization") or kwargs.get("norm", "backward"))
+    if normalization not in {"backward", "forward", "ortho"}:
+        raise ValueError("spectral normalization must be backward, forward, or ortho")
+    x = np.ascontiguousarray(operands[0], np.float32)
+    w = np.ascontiguousarray(operands[1], np.float32)
+    _check_spectral_conv_ranks(x, w)
+    lead, kernel_lead = tuple(x.shape[:-1]), tuple(w.shape[:-1])
+    rows = int(np.prod(lead, dtype=np.int64)) if lead else 1
+    if kernel_lead == lead:
+        kernel_rows = rows
+    elif all(int(dim) == 1 for dim in kernel_lead):
+        kernel_rows = 1
+    else:
+        return None
+    x_length, kernel_length = int(x.shape[-1]), int(w.shape[-1])
+    n = x_length + kernel_length - 1
+    nfft = 1 << int(np.ceil(np.log2(max(n, 1))))
+    # cuFFT is unnormalized both ways; fold rfft(x), rfft(w) and irfft factors.
+    scale = {"backward": 1.0 / nfft, "forward": 1.0 / nfft ** 2,
+             "ortho": nfft ** -1.5}[normalization]
+    out = np.empty(lead + (n,), np.float32)
+    rc = lib.tessera_nvidia_spectral_conv_f32(
+        None, x.ctypes.data, rows, x_length, w.ctypes.data, kernel_rows,
+        kernel_length, out.ctypes.data, nfft, ctypes.c_float(scale))
+    if rc != 0:
+        raise RuntimeError(f"NVIDIA spectral convolution failed rc={rc}")
+    return out
 
 
 # Strided-copy / 0-move lane (P4) — pad / cat / roll / flip / tile / repeat /

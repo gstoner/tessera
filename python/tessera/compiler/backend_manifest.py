@@ -2556,7 +2556,9 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "dtypes": ("fp32",),
             "feature_flags": ("cuda", "cufft", "spectral_composite"),
             "shape_envelope": "canonical float32/complex64 convolution/filter envelope",
-            "notes": "NVIDIA-owned convolution/filter consumer over CUDA FFT/workspace v2.",
+            "notes": "NVIDIA-owned convolution/filter consumer over CUDA FFT/workspace v4: "
+                     "spectral_conv runs as one native batched R2C/multiply/C2R call; "
+                     "spectral_filter's pointwise complex multiply runs on the host.",
         }
         for op in ("spectral_conv", "spectral_filter")
     },

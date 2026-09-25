@@ -1,0 +1,673 @@
+{
+  "schema": "tessera.nvidia_spectral_benchmark.v1",
+  "host": "The-Super-Bear",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+  "device": "sm_120",
+  "rows": [
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_1x1024",
+      "shape": [
+        [
+          1,
+          1024
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 2.6866107438346304e-07,
+      "ok": true,
+      "cold_ms": 0.386102,
+      "latency_ms": 0.21523599999999998,
+      "p10_ms": 0.20378909999999997,
+      "p90_ms": 0.29563700000000004,
+      "numpy_ms": 0.01431,
+      "tflops": 0.00023787842182534523,
+      "memory_bw_gb_s": 0.07612109498411046,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_64x1024",
+      "shape": [
+        [
+          64,
+          1024
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 3.1510764679020535e-07,
+      "ok": true,
+      "cold_ms": 0.444473,
+      "latency_ms": 0.383228,
+      "p10_ms": 0.329603,
+      "p90_ms": 0.4312261,
+      "numpy_ms": 0.267872,
+      "tflops": 0.008550523448182284,
+      "memory_bw_gb_s": 2.7361675034183306,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_256x4096",
+      "shape": [
+        [
+          256,
+          4096
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 3.484571947070312e-07,
+      "ok": true,
+      "cold_ms": 2.735988,
+      "latency_ms": 2.039068,
+      "p10_ms": 1.9214151,
+      "p90_ms": 2.3304210000000003,
+      "numpy_ms": 12.868155,
+      "tflops": 0.03085456689036364,
+      "memory_bw_gb_s": 8.22788450409697,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_16x65536",
+      "shape": [
+        [
+          16,
+          65536
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 3.1106708769944467e-07,
+      "ok": true,
+      "cold_ms": 2.675087,
+      "latency_ms": 1.880722,
+      "p10_ms": 1.8282720999999997,
+      "p90_ms": 2.0151551,
+      "numpy_ms": 17.581896,
+      "tflops": 0.044603125820828385,
+      "memory_bw_gb_s": 8.920625164165676,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_64x1009",
+      "shape": [
+        [
+          64,
+          1009
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 3.014997358032382e-07,
+      "ok": true,
+      "cold_ms": 0.5208229999999999,
+      "latency_ms": 0.357888,
+      "p10_ms": 0.330281,
+      "p90_ms": 0.3824361,
+      "numpy_ms": 1.2107569999999999,
+      "tflops": 0.009002609847316089,
+      "memory_bw_gb_s": 2.8869814020028612,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.rfft",
+      "case": "rfft_64x4096",
+      "shape": [
+        [
+          64,
+          4096
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 2.538922664851669e-07,
+      "ok": true,
+      "cold_ms": 0.814846,
+      "latency_ms": 0.46090299999999995,
+      "p10_ms": 0.4319529,
+      "p90_ms": 0.505424,
+      "numpy_ms": 0.668455,
+      "tflops": 0.01706285270436513,
+      "memory_bw_gb_s": 4.551204917303641,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.irfft",
+      "case": "irfft_64x4096",
+      "shape": [
+        [
+          64,
+          2049
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 2.43849175491749e-07,
+      "ok": true,
+      "cold_ms": 0.574284,
+      "latency_ms": 0.466553,
+      "p10_ms": 0.438945,
+      "p90_ms": 0.49220410000000003,
+      "numpy_ms": 0.398093,
+      "tflops": 0.016856219979294956,
+      "memory_bw_gb_s": 4.496089404633557,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.rfft",
+      "case": "rfft_16x65536",
+      "shape": [
+        [
+          16,
+          65536
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 2.997619087019774e-07,
+      "ok": true,
+      "cold_ms": 1.782282,
+      "latency_ms": 0.9963365,
+      "p10_ms": 0.9634149,
+      "p90_ms": 1.0891,
+      "numpy_ms": 5.877657999999999,
+      "tflops": 0.042097263324188165,
+      "memory_bw_gb_s": 8.419581135489867,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.irfft",
+      "case": "irfft_16x65536",
+      "shape": [
+        [
+          16,
+          32769
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 3.086438043089638e-07,
+      "ok": true,
+      "cold_ms": 1.7745309999999999,
+      "latency_ms": 1.017712,
+      "p10_ms": 0.9865560999999999,
+      "p90_ms": 1.070465,
+      "numpy_ms": 2.093734,
+      "tflops": 0.04121307403273225,
+      "memory_bw_gb_s": 8.242740578867105,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.dct",
+      "case": "dct2_64x1024",
+      "shape": [
+        [
+          64,
+          1024
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_spectral_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 3.379727732138101e-07,
+      "ok": true,
+      "cold_ms": 0.825915,
+      "latency_ms": 0.337172,
+      "p10_ms": 0.316485,
+      "p90_ms": 0.3702719,
+      "numpy_ms": 0.08653,
+      "tflops": null,
+      "memory_bw_gb_s": 1.554957113876597,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.stft",
+      "case": "stft_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ],
+        [
+          512
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_spectral_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 2.4000131482320314e-07,
+      "ok": true,
+      "cold_ms": 1.293788,
+      "latency_ms": 0.6037334999999999,
+      "p10_ms": 0.5752900999999999,
+      "p90_ms": 0.6841579,
+      "numpy_ms": 3.12057,
+      "tflops": null,
+      "memory_bw_gb_s": 4.175193193685625,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.stft",
+      "case": "stft_32x48000_n1024_h256",
+      "shape": [
+        [
+          32,
+          48000
+        ],
+        [
+          1024
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_spectral_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 2.988907852114387e-07,
+      "ok": true,
+      "cold_ms": 6.509522,
+      "latency_ms": 4.4137495,
+      "p10_ms": 3.7112049999999996,
+      "p90_ms": 4.747969100000001,
+      "numpy_ms": 46.505033999999995,
+      "tflops": null,
+      "memory_bw_gb_s": 6.867731845679054,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.spectral_conv",
+      "case": "spectral_conv_16384x257",
+      "shape": [
+        [
+          16384
+        ],
+        [
+          257
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_spectral_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 4.609443114125018e-07,
+      "ok": true,
+      "cold_ms": 0.514224,
+      "latency_ms": 0.4496225,
+      "p10_ms": 0.3925379,
+      "p90_ms": 0.53,
+      "numpy_ms": 0.274842,
+      "tflops": null,
+      "memory_bw_gb_s": 0.2960794889045811,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.spectral_conv",
+      "case": "spectral_conv_262144x1025",
+      "shape": [
+        [
+          262144
+        ],
+        [
+          1025
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_spectral_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 5.613361842407418e-07,
+      "ok": true,
+      "cold_ms": 0.938206,
+      "latency_ms": 0.614519,
+      "p10_ms": 0.5732129,
+      "p90_ms": 0.6850001,
+      "numpy_ms": 14.166132999999999,
+      "tflops": null,
+      "memory_bw_gb_s": 3.4260096107687477,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.spectral_filter",
+      "case": "spectral_filter_64x4096",
+      "shape": [
+        [
+          64,
+          4096
+        ],
+        [
+          64,
+          4096
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_spectral_compiled",
+      "latency_source": "host_wall_synchronized",
+      "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+      "spectral_arch": 120,
+      "max_rel_error": 0.0,
+      "ok": true,
+      "cold_ms": 1.404609,
+      "latency_ms": 0.181651,
+      "p10_ms": 0.176117,
+      "p90_ms": 0.23374409999999998,
+      "numpy_ms": 0.064301,
+      "tflops": null,
+      "memory_bw_gb_s": 34.63485474894165,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_1x1024_device_resident",
+      "shape": [
+        [
+          1,
+          1024
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_device_pointer",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "max_rel_error": 3.857765173448997e-07,
+      "cold_ms": 0.04631,
+      "latency_ms": 0.03788999999999999,
+      "p10_ms": 0.035299,
+      "p90_ms": 0.046952,
+      "numpy_ms": null,
+      "tflops": 0.0013512800211137508,
+      "memory_bw_gb_s": 0.4324096067564002,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_64x1024_device_resident",
+      "shape": [
+        [
+          64,
+          1024
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_device_pointer",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "max_rel_error": 3.161649367009948e-07,
+      "cold_ms": 0.05726,
+      "latency_ms": 0.043856,
+      "p10_ms": 0.032333999999999995,
+      "p90_ms": 0.0763311,
+      "numpy_ms": null,
+      "tflops": 0.07471725647573879,
+      "memory_bw_gb_s": 23.90952207223641,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_256x4096_device_resident",
+      "shape": [
+        [
+          256,
+          4096
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_device_pointer",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "max_rel_error": 3.171134867071683e-07,
+      "cold_ms": 0.24704199999999998,
+      "latency_ms": 0.046545,
+      "p10_ms": 0.044287,
+      "p90_ms": 0.056976000000000006,
+      "numpy_ms": null,
+      "tflops": 1.3516932001289075,
+      "memory_bw_gb_s": 360.4515200343753,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "tessera.fft",
+      "case": "fft_c2c_16x65536_device_resident",
+      "shape": [
+        [
+          16,
+          65536
+        ]
+      ],
+      "dtype": "complex64",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "nvidia_fft_device_pointer",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "max_rel_error": 3.2695885505950665e-07,
+      "cold_ms": 0.288642,
+      "latency_ms": 0.070265,
+      "p10_ms": 0.0651819,
+      "p90_ms": 0.0779601,
+      "numpy_ms": null,
+      "tflops": 1.1938529851277309,
+      "memory_bw_gb_s": 238.77059702554618,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "stft",
+      "case": "stft_jvp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "max_rel_error": 2.5307940435878356e-07,
+      "ok": true,
+      "cold_ms": 2.271915,
+      "latency_ms": 1.653406,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 1.6044949,
+      "p90_ms": 1.7254641,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "stft",
+      "case": "stft_vjp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 1.43813,
+      "latency_ms": 1.1443819999999998,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 1.107179,
+      "p90_ms": 1.221854,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "istft",
+      "case": "istft_jvp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 2.5166459999999997,
+      "latency_ms": 1.9350475,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 1.8601609,
+      "p90_ms": 2.0772949,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "istft",
+      "case": "istft_vjp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 2.604072,
+      "latency_ms": 2.0949435,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 2.005935,
+      "p90_ms": 2.2587829,
+      "repeats": 30
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "istft",
+      "case": "istft_vjp_8x122x257_compact",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 1.52809,
+      "latency_ms": 1.437169,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 1.3395169,
+      "p90_ms": 1.5344622,
+      "repeats": 30
+    }
+  ]
+}

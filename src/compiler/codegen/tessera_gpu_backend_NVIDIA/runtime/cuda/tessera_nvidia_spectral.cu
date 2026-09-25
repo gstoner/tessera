@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <list>
+#include <mutex>
 #include <vector>
 
 namespace {
@@ -39,15 +41,25 @@ bool packHostLayout(const T *input, std::vector<T> &output, int rank,
     elements *= size_t(shape[dim]);
   }
   output.resize(elements);
-  for (size_t logical = 0; logical < elements; ++logical) {
-    size_t cursor = logical;
-    int64_t offset = 0;
-    for (int dim = rank - 1; dim >= 0; --dim) {
-      int64_t coordinate = int64_t(cursor % size_t(shape[dim]));
-      cursor /= size_t(shape[dim]);
-      offset += coordinate * strides[dim];
+  // Odometer walk: one strided row copy per innermost run, carrying the outer
+  // coordinates incrementally. A per-element div/mod over every dimension cost
+  // ~6 ms for a 250k-element strided spectrum in the unoptimized host build.
+  const int last = rank - 1;
+  const int64_t rowExtent = shape[last], rowStride = strides[last];
+  int64_t index[8] = {0};
+  int64_t offset = 0;
+  for (size_t logical = 0; logical < elements; logical += size_t(rowExtent)) {
+    const T *row = input + offset;
+    T *destination = output.data() + logical;
+    for (int64_t i = 0; i < rowExtent; ++i)
+      destination[i] = row[i * rowStride];
+    for (int dim = last - 1; dim >= 0; --dim) {
+      offset += strides[dim];
+      if (++index[dim] < shape[dim])
+        break;
+      offset -= strides[dim] * shape[dim];
+      index[dim] = 0;
     }
-    output[logical] = input[offset];
   }
   return true;
 }
@@ -178,6 +190,18 @@ std::vector<int64_t> compactStrides(int rank, const int64_t *shape) {
   return strides;
 }
 
+// Whether `strides` is the compact row-major layout of `shape` (extent-1
+// dimensions may carry any stride). Such an input needs no host repack.
+bool isCompactLayout(int rank, const int64_t *shape, const int64_t *strides) {
+  int64_t expected = 1;
+  for (int dim = rank - 1; dim >= 0; --dim) {
+    if (shape[dim] != 1 && strides[dim] != expected)
+      return false;
+    expected *= shape[dim];
+  }
+  return true;
+}
+
 template <typename T>
 void packAxis(const T *input, T *output, int64_t outer, int64_t axisExtent,
               int64_t inner) {
@@ -196,6 +220,41 @@ void unpackAxis(const T *input, T *output, int64_t outer, int64_t axisExtent,
       for (int64_t i = 0; i < axisExtent; ++i)
         output[(o * axisExtent + i) * inner + j] =
             input[(o * inner + j) * axisExtent + i];
+}
+
+// Axis-packed ([outer][inner][axis]) view of a strided host tensor holding
+// exactly `expected` elements; nullptr when the layout is invalid or the count
+// disagrees. It is the caller's own buffer when the layout is compact and the
+// axis innermost, so the common case stages nothing on the host. Measured on
+// the RTX 5070: the unconditional pack-then-fold cost more host time than the
+// whole device side of the STFT/ISTFT JVP and backward calls.
+template <typename T>
+const T *stageAxis(const T *host, int rank, const int64_t *shape,
+                   const int64_t *strides, int64_t outer, int64_t axisExtent,
+                   int64_t inner, size_t expected, std::vector<T> &contiguous,
+                   std::vector<T> &packed) {
+  if (!host || !shape || !strides || rank <= 0 || rank > 8)
+    return nullptr;
+  size_t elements = 1;
+  for (int dim = 0; dim < rank; ++dim) {
+    if (shape[dim] <= 0 ||
+        size_t(shape[dim]) > std::numeric_limits<size_t>::max() / elements)
+      return nullptr;
+    elements *= size_t(shape[dim]);
+  }
+  if (elements != expected)
+    return nullptr;
+  const T *staged = host;
+  if (!isCompactLayout(rank, shape, strides)) {
+    if (!packHostLayout(host, contiguous, rank, shape, strides))
+      return nullptr;
+    staged = contiguous.data();
+  }
+  if (inner == 1)
+    return staged;
+  packed.resize(expected);
+  packAxis(staged, packed.data(), outer, axisExtent, inner);
+  return packed.data();
 }
 
 bool foldedBatch(int rank, const int64_t *shape, int axis, int64_t &outer,
@@ -457,217 +516,6 @@ __global__ void dctDirectPolicy(const float *input, float *output, int batch,
   output[index] = float(result * double(scale));
 }
 
-__global__ void stftBackwardInputPolicy(
-    const cufftComplex *dy, const float *windows, float *dx, int batch,
-    int samples, int nfft, int hop, int frames, int bins, float scale,
-    int center, int padMode) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * samples;
-  if (index >= total)
-    return;
-  int sampleIndex = int(index % samples);
-  int row = int(index / samples);
-  int pad = center ? nfft / 2 : 0;
-  double result = 0.0;
-  for (int frame = 0; frame < frames; ++frame)
-    for (int local = 0; local < nfft; ++local) {
-      int source = frame * hop + local - pad;
-      if ((source < 0 || source >= samples) && padMode == 1)
-        source = reflectIndex(source, samples);
-      if (source != sampleIndex)
-        continue;
-      double gradient = 0.0;
-      for (int bin = 0; bin < bins; ++bin) {
-        cufftComplex upstream =
-            dy[(size_t(row) * frames + frame) * bins + bin];
-        double angle = 2.0 * M_PI * double(bin * local) / double(nfft);
-        gradient += double(upstream.x) * cos(angle) -
-                    double(upstream.y) * sin(angle);
-      }
-      result += gradient * double(scale) *
-                double(windows[size_t(row) * nfft + local]);
-    }
-  dx[index] = float(result);
-}
-
-__global__ void stftBackwardWindowPolicy(
-    const cufftComplex *dy, const float *input, const int *rowWindow,
-    float *dwindow, int batch, int windowRows, int samples, int nfft,
-    int win, int hop, int frames, int bins, float scale, int center,
-    int padMode) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(windowRows) * win;
-  if (index >= total)
-    return;
-  int localWindow = int(index % win);
-  int windowRow = int(index / win);
-  int local = (nfft - win) / 2 + localWindow;
-  int pad = center ? nfft / 2 : 0;
-  double result = 0.0;
-  for (int row = 0; row < batch; ++row) {
-    if (rowWindow[row] != windowRow)
-      continue;
-    for (int frame = 0; frame < frames; ++frame) {
-      int source = frame * hop + local - pad;
-      bool present = source >= 0 && source < samples;
-      if (!present && padMode == 1) {
-        source = reflectIndex(source, samples);
-        present = true;
-      }
-      if (!present)
-        continue;
-      double gradient = 0.0;
-      for (int bin = 0; bin < bins; ++bin) {
-        cufftComplex upstream =
-            dy[(size_t(row) * frames + frame) * bins + bin];
-        double angle = 2.0 * M_PI * double(bin * local) / double(nfft);
-        gradient += double(upstream.x) * cos(angle) -
-                    double(upstream.y) * sin(angle);
-      }
-      result += gradient * double(scale) *
-                double(input[size_t(row) * samples + source]);
-    }
-  }
-  dwindow[index] = float(result);
-}
-
-__global__ void istftFrameValuesPolicy(const cufftComplex *spectrum,
-                                       float *framesOut, int batch, int frames,
-                                       int bins, int nfft, float inverseScale,
-                                       int onesided) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * nfft;
-  if (index >= total)
-    return;
-  int local = int(index % nfft);
-  size_t rowFrame = index / nfft;
-  int frame = int(rowFrame % frames);
-  int row = int(rowFrame / frames);
-  double value = 0.0;
-  for (int bin = 0; bin < bins; ++bin) {
-    double weight = 1.0;
-    if (onesided && bin > 0 && !(nfft % 2 == 0 && bin == bins - 1))
-      weight = 2.0;
-    cufftComplex spectral =
-        spectrum[(size_t(row) * frames + frame) * bins + bin];
-    double angle = 2.0 * M_PI * double(bin * local) / double(nfft);
-    value += weight * (double(spectral.x) * cos(angle) -
-                       double(spectral.y) * sin(angle));
-  }
-  framesOut[index] = float(value * double(inverseScale));
-}
-
-__global__ void istftBackwardFramesPolicy(
-    const float *dy, const float *frameValues, const float *windows,
-    float *dframes, int batch, int frames, int nfft, int hop,
-    int outputSamples, int center) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * nfft;
-  if (index >= total)
-    return;
-  int local = int(index % nfft);
-  size_t rowFrame = index / nfft;
-  int frame = int(rowFrame % frames);
-  int row = int(rowFrame / frames);
-  int output = frame * hop + local - (center ? nfft / 2 : 0);
-  if (output < 0 || output >= outputSamples) {
-    dframes[index] = 0.0f;
-    return;
-  }
-  int rawSample = output + (center ? nfft / 2 : 0);
-  double numerator = 0.0;
-  double denominator = 0.0;
-  for (int other = 0; other < frames; ++other) {
-    int otherLocal = rawSample - other * hop;
-    if (otherLocal < 0 || otherLocal >= nfft)
-      continue;
-    double window = windows[size_t(row) * nfft + otherLocal];
-    numerator += double(frameValues[
-                     (size_t(row) * frames + other) * nfft + otherLocal]) *
-                 window;
-    denominator += window * window;
-  }
-  double safe = denominator > 1.0e-12 ? denominator : 1.0e-12;
-  dframes[index] = float(double(dy[size_t(row) * outputSamples + output]) /
-                         safe *
-                         double(windows[size_t(row) * nfft + local]));
-}
-
-__global__ void istftBackwardSpectrumPolicy(
-    const float *dframes, cufftComplex *dspectrum, int batch, int frames,
-    int bins, int nfft, float inverseScale, int onesided) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * bins;
-  if (index >= total)
-    return;
-  int bin = int(index % bins);
-  size_t rowFrame = index / bins;
-  int frame = int(rowFrame % frames);
-  int row = int(rowFrame / frames);
-  double real = 0.0;
-  double imag = 0.0;
-  for (int local = 0; local < nfft; ++local) {
-    double angle = 2.0 * M_PI * double(bin * local) / double(nfft);
-    double value =
-        dframes[(size_t(row) * frames + frame) * nfft + local];
-    real += value * cos(angle);
-    imag -= value * sin(angle);
-  }
-  double weight = double(inverseScale);
-  if (onesided && bin > 0 && !(nfft % 2 == 0 && bin == bins - 1))
-    weight *= 2.0;
-  dspectrum[index] = make_cuFloatComplex(float(real * weight),
-                                         float(imag * weight));
-}
-
-__global__ void istftBackwardWindowPolicy(
-    const float *dy, const float *frameValues, const float *windows,
-    const int *rowWindow, float *dwindow, int batch, int windowRows,
-    int frames, int nfft, int win, int hop, int outputSamples, int center) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(windowRows) * win;
-  if (index >= total)
-    return;
-  int localWindow = int(index % win);
-  int windowRow = int(index / win);
-  int local = (nfft - win) / 2 + localWindow;
-  int trim = center ? nfft / 2 : 0;
-  double result = 0.0;
-  for (int row = 0; row < batch; ++row) {
-    if (rowWindow[row] != windowRow)
-      continue;
-    for (int frame = 0; frame < frames; ++frame) {
-      int output = frame * hop + local - trim;
-      if (output < 0 || output >= outputSamples)
-        continue;
-      int rawSample = output + trim;
-      double numerator = 0.0;
-      double denominator = 0.0;
-      for (int other = 0; other < frames; ++other) {
-        int otherLocal = rawSample - other * hop;
-        if (otherLocal < 0 || otherLocal >= nfft)
-          continue;
-        double window = windows[size_t(row) * nfft + otherLocal];
-        numerator += double(frameValues[
-                         (size_t(row) * frames + other) * nfft + otherLocal]) *
-                     window;
-        denominator += window * window;
-      }
-      double safe = denominator > 1.0e-12 ? denominator : 1.0e-12;
-      double upstream = dy[size_t(row) * outputSamples + output];
-      double draw = upstream / safe;
-      double dweight = denominator > 1.0e-12
-                           ? -upstream * numerator / (safe * safe)
-                           : 0.0;
-      double window = windows[size_t(row) * nfft + local];
-      double frameValue = frameValues[
-          (size_t(row) * frames + frame) * nfft + local];
-      result += draw * frameValue + 2.0 * dweight * window;
-    }
-  }
-  dwindow[index] = float(result);
-}
-
 __global__ void overlapAddReal(const float *framesIn, const float *windows,
                                float *output, int batch, int frames, int nfft,
                                int hop, int outputSamples, int trim,
@@ -769,6 +617,242 @@ __global__ void overlapAddJVP(
                          double(scale));
 }
 
+// ---------------------------------------------------------------------------
+// FFT-based STFT/ISTFT reverse mode. The former direct kernels (removed; the
+// ROCm composite still carries the same ones) evaluated each DFT as an O(N)
+// sum per output element in double precision; on the RTX 5070
+// an 8x16000 (nfft 512, hop 128) STFT VJP took 1.65 s. These compute the same
+// quantities with cuFFT (validated against transcriptions of the direct
+// kernels to ~1e-14 in float64 for even/odd N, one-sided/full spectra and
+// constant/reflect padding) and keep the direct kernels' conventions:
+//   STFT backward: G[frame, local] = Re sum_bins dy_b e^{+i 2 pi b local / N},
+//     every stored bin weighted once -- a C2R of dy with interior bins halved
+//     (C2R counts them twice), or the real part of an unnormalized inverse C2C
+//     for a full spectrum.
+//   ISTFT backward: frame values = C2R(spectrum) * inverseScale (C2R's doubling
+//     is the direct kernel's weight 2); dspectrum = RFFT(dframes) * weight *
+//     inverseScale with that same weight.
+__device__ bool interiorBin(int bin, int bins, int nfft) {
+  return bin > 0 && !(nfft % 2 == 0 && bin == bins - 1);
+}
+
+// Scale each one-sided bin by (interior ? interiorWeight : 1) * scale.
+__global__ void weightOnesidedBins(cufftComplex *values, size_t count,
+                                   int bins, int nfft, float interiorWeight,
+                                   float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= count)
+    return;
+  int bin = int(index % bins);
+  float w = (interiorBin(bin, bins, nfft) ? interiorWeight : 1.0f) * scale;
+  values[index].x *= w;
+  values[index].y *= w;
+}
+
+__global__ void realPartScaled(const cufftComplex *values, float *output,
+                               size_t count, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index < count)
+    output[index] = values[index].x * scale;
+}
+
+__global__ void scaleReal(float *values, size_t count, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index < count)
+    values[index] *= scale;
+}
+
+__global__ void realToComplex(const float *values, cufftComplex *output,
+                              size_t count) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index < count)
+    output[index] = make_cuComplex(values[index], 0.0f);
+}
+
+// dx[row, s] = scale * sum over (frame, local) whose source maps to s of
+// G[frame, local] * window[local]. A deterministic gather: a sample is reached
+// directly and, under reflect padding, from at most two mirrored positions
+// (one bounce suffices -- reflect requires samples > pad).
+__global__ void stftBackwardInputFromG(const float *g, const float *windows,
+                                       float *dx, int batch, int samples,
+                                       int nfft, int hop, int frames,
+                                       float scale, int center, int padMode) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * samples)
+    return;
+  int s = int(index % samples);
+  int row = int(index / samples);
+  int pad = center ? nfft / 2 : 0;
+  int candidates[3] = {s, -s, 2 * samples - 2 - s};
+  int count = padMode == 1 ? 3 : 1;
+  double result = 0.0;
+  for (int c = 0; c < count; ++c) {
+    int t = candidates[c];
+    if (c > 0 && (t == s || (t >= 0 && t < samples) ||
+                  reflectIndex(t, samples) != s))
+      continue;
+    if (c == 2 && t == candidates[1])
+      continue;
+    int reach = t + pad;
+    int first = reach - (nfft - 1) <= 0 ? 0 : (reach - (nfft - 1) + hop - 1) / hop;
+    int last = reach < 0 ? -1 : min(frames - 1, reach / hop);
+    for (int frame = first; frame <= last; ++frame) {
+      int local = reach - frame * hop;
+      if (local < 0 || local >= nfft)
+        continue;
+      result += double(g[(size_t(row) * frames + frame) * nfft + local]) *
+                double(windows[size_t(row) * nfft + local]);
+    }
+  }
+  dx[index] = float(result * double(scale));
+}
+
+// Window-gradient reductions run one block per window element: each thread
+// strides over the flattened (row, frame) pairs and the block folds the
+// partials in a fixed tree order, so the result is deterministic run to run.
+// One thread per element launched only windowRows * win threads (512 for a
+// rank-one n_fft=512 window) and took 0.41 ms (STFT) / 1.59 ms (ISTFT) of
+// serial fp64 on the RTX 5070.
+constexpr int kReduceThreads = 256;
+
+__device__ double blockSum(double value) {
+  __shared__ double partial[kReduceThreads];
+  partial[threadIdx.x] = value;
+  __syncthreads();
+  for (int width = kReduceThreads / 2; width > 0; width /= 2) {
+    if (int(threadIdx.x) < width)
+      partial[threadIdx.x] += partial[threadIdx.x + width];
+    __syncthreads();
+  }
+  return partial[0];
+}
+
+// dwindow: the former direct kernel's reduction, with the per-frame DFT read
+// from G instead of recomputed per element. Launch: windowRows * win blocks of
+// kReduceThreads.
+__global__ void stftBackwardWindowFromG(
+    const float *g, const float *input, const int *rowWindow, float *dwindow,
+    int batch, int windowRows, int samples, int nfft, int win, int hop,
+    int frames, float scale, int center, int padMode) {
+  size_t index = blockIdx.x;
+  if (index >= size_t(windowRows) * win)
+    return;
+  int localWindow = int(index % win);
+  int windowRow = int(index / win);
+  int local = (nfft - win) / 2 + localWindow;
+  int pad = center ? nfft / 2 : 0;
+  double result = 0.0;
+  size_t pairs = size_t(batch) * frames;
+  for (size_t pair = threadIdx.x; pair < pairs; pair += blockDim.x) {
+    int row = int(pair / frames);
+    int frame = int(pair % frames);
+    if (rowWindow[row] != windowRow)
+      continue;
+    int source = frame * hop + local - pad;
+    bool present = source >= 0 && source < samples;
+    if (!present && padMode == 1) {
+      source = reflectIndex(source, samples);
+      present = true;
+    }
+    if (!present)
+      continue;
+    result += double(g[(size_t(row) * frames + frame) * nfft + local]) *
+              double(input[size_t(row) * samples + source]);
+  }
+  result = blockSum(result);
+  if (threadIdx.x == 0)
+    dwindow[index] = float(result * double(scale));
+}
+
+// Overlap-add numerator (sum frame*window) and denominator (sum window^2) per
+// raw sample, gathered once instead of per consumer element.
+__global__ void istftOverlapTerms(const float *frameValues,
+                                  const float *windows, double *numerator,
+                                  double *denominator, int batch, int frames,
+                                  int nfft, int hop, int rawSamples) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * rawSamples)
+    return;
+  int raw = int(index % rawSamples);
+  int row = int(index / rawSamples);
+  int first = raw - (nfft - 1) <= 0 ? 0 : (raw - (nfft - 1) + hop - 1) / hop;
+  int last = min(frames - 1, raw / hop);
+  double num = 0.0, den = 0.0;
+  for (int frame = first; frame <= last; ++frame) {
+    int local = raw - frame * hop;
+    if (local < 0 || local >= nfft)
+      continue;
+    double window = windows[size_t(row) * nfft + local];
+    num += double(frameValues[(size_t(row) * frames + frame) * nfft + local]) *
+           window;
+    den += window * window;
+  }
+  numerator[index] = num;
+  denominator[index] = den;
+}
+
+__global__ void istftBackwardFramesFromTerms(
+    const float *dy, const double *denominator, const float *windows,
+    float *dframes, int batch, int frames, int nfft, int hop,
+    int outputSamples, int rawSamples, int center) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * frames * nfft)
+    return;
+  int local = int(index % nfft);
+  size_t rowFrame = index / nfft;
+  int frame = int(rowFrame % frames);
+  int row = int(rowFrame / frames);
+  int trim = center ? nfft / 2 : 0;
+  int output = frame * hop + local - trim;
+  if (output < 0 || output >= outputSamples) {
+    dframes[index] = 0.0f;
+    return;
+  }
+  double den = denominator[size_t(row) * rawSamples + output + trim];
+  double safe = den > 1.0e-12 ? den : 1.0e-12;
+  dframes[index] = float(double(dy[size_t(row) * outputSamples + output]) /
+                         safe * double(windows[size_t(row) * nfft + local]));
+}
+
+__global__ void istftBackwardWindowFromTerms(
+    const float *dy, const float *frameValues, const float *windows,
+    const double *numerator, const double *denominator, const int *rowWindow,
+    float *dwindow, int batch, int windowRows, int frames, int nfft, int win,
+    int hop, int outputSamples, int rawSamples, int center) {
+  // Launch: windowRows * win blocks of kReduceThreads (see blockSum).
+  size_t index = blockIdx.x;
+  if (index >= size_t(windowRows) * win)
+    return;
+  int localWindow = int(index % win);
+  int windowRow = int(index / win);
+  int local = (nfft - win) / 2 + localWindow;
+  int trim = center ? nfft / 2 : 0;
+  double result = 0.0;
+  size_t pairs = size_t(batch) * frames;
+  for (size_t pair = threadIdx.x; pair < pairs; pair += blockDim.x) {
+    int row = int(pair / frames);
+    int frame = int(pair % frames);
+    if (rowWindow[row] != windowRow)
+      continue;
+    int output = frame * hop + local - trim;
+    if (output < 0 || output >= outputSamples)
+      continue;
+    size_t term = size_t(row) * rawSamples + output + trim;
+    double num = numerator[term], den = denominator[term];
+    double safe = den > 1.0e-12 ? den : 1.0e-12;
+    double upstream = dy[size_t(row) * outputSamples + output];
+    double draw = upstream / safe;
+    double dweight = den > 1.0e-12 ? -upstream * num / (safe * safe) : 0.0;
+    double window = windows[size_t(row) * nfft + local];
+    double frameValue =
+        frameValues[(size_t(row) * frames + frame) * nfft + local];
+    result += draw * frameValue + 2.0 * dweight * window;
+  }
+  result = blockSum(result);
+  if (threadIdx.x == 0)
+    dwindow[index] = float(result);
+}
+
 int makePlan(int batch, int nfft, cufftType type, cufftHandle &plan,
              void *&workspace) {
   plan = 0;
@@ -796,8 +880,179 @@ void destroyPlan(cufftHandle plan, void *workspace) {
     cufftDestroy(plan);
 }
 
-template <typename... Pointers> void release(Pointers... pointers) {
-  ((pointers ? (void)cudaFree(pointers) : (void)0), ...);
+// ---------------------------------------------------------------------------
+// Per-device reuse of cuFFT plans and device staging buffers.
+//
+// Measured on the RTX 5070 (benchmarks/baselines/nvidia_spectral_20260925):
+// a warm STFT spent ~2.7 ms per call in five cudaMalloc/cudaFree pairs plus a
+// fresh cuFFT plan (module load + memory query) around ~15 us of kernels. Every
+// entry point here is synchronous (it synchronizes before returning), so one
+// library-wide lock held for the call makes buffer reuse across calls safe.
+// Plans and buffers are keyed by the CUDA device current at use: a plan belongs
+// to its creating context (see tessera_nvidia_fft.cu).
+std::mutex &spectralMutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
+struct CachedPlan {
+  int device;
+  int type;
+  int nfft;
+  int batch;
+  cufftHandle plan;
+  void *workspace;
+};
+
+constexpr size_t kPlanCacheLimit = 16;
+
+std::list<CachedPlan> &planCache() {
+  static std::list<CachedPlan> cache;
+  return cache;
+}
+
+// Caller holds spectralMutex(). 0 and a reusable plan, or makePlan's status
+// (5 when the current device cannot be read).
+int cachedPlan(int batch, int nfft, cufftType type, cufftHandle &plan) {
+  int device = -1;
+  if (cudaGetDevice(&device) != cudaSuccess)
+    return 5;
+  auto &cache = planCache();
+  for (auto it = cache.begin(); it != cache.end(); ++it)
+    if (it->device == device && it->type == int(type) && it->nfft == nfft &&
+        it->batch == batch) {
+      cache.splice(cache.begin(), cache, it);
+      plan = cache.front().plan;
+      return 0;
+    }
+  cufftHandle fresh = 0;
+  void *workspace = nullptr;
+  if (int status = makePlan(batch, nfft, type, fresh, workspace)) {
+    destroyPlan(fresh, workspace);
+    return status;
+  }
+  if (cache.size() >= kPlanCacheLimit) {
+    destroyPlan(cache.back().plan, cache.back().workspace);
+    cache.pop_back();
+  }
+  cache.push_front({device, int(type), nfft, batch, fresh, workspace});
+  plan = fresh;
+  return 0;
+}
+
+struct ScratchBuffer {
+  int device;
+  int slot;
+  void *pointer;
+  size_t bytes;
+};
+
+std::vector<ScratchBuffer> &scratchPool() {
+  static std::vector<ScratchBuffer> pool;
+  return pool;
+}
+
+// Caller holds spectralMutex(). A device buffer of at least `bytes` for
+// (current device, slot), contents undefined; nullptr on CUDA failure. Grows
+// geometrically so a slowly growing workload does not reallocate every call.
+void *scratch(int slot, size_t bytes) {
+  int device = -1;
+  if (cudaGetDevice(&device) != cudaSuccess)
+    return nullptr;
+  bytes = std::max<size_t>(bytes, 1);
+  for (auto &buffer : scratchPool()) {
+    if (buffer.device != device || buffer.slot != slot)
+      continue;
+    if (buffer.bytes >= bytes)
+      return buffer.pointer;
+    size_t grown = std::max(bytes, buffer.bytes * 2);
+    cudaFree(buffer.pointer);
+    buffer.pointer = nullptr;
+    buffer.bytes = 0;
+    if (cudaMalloc(&buffer.pointer, grown) != cudaSuccess)
+      return nullptr;
+    buffer.bytes = grown;
+    return buffer.pointer;
+  }
+  void *pointer = nullptr;
+  if (cudaMalloc(&pointer, bytes) != cudaSuccess)
+    return nullptr;
+  scratchPool().push_back({device, slot, pointer, bytes});
+  return pointer;
+}
+
+// FFT-based DCT-II / DCT-III (Makhoul), unnormalized like scipy.fft.dct:
+//   DCT-II : v = even samples then reversed odd samples; X[k] =
+//            2 Re(FFT(v)[k] e^{-i pi k / 2N}).
+//   DCT-III: Z[k] = (x[k] - i x[N-k]) e^{i pi k / 2N}, x[N] = 0;
+//            z = unnormalized inverse FFT(Z); y[2m] = z[m], y[2m+1] = z[N-1-m].
+// Replaces an O(N^2) double-precision direct sum (11.5 ms per 64x1024 call,
+// ~99% of the op, on the RTX 5070, whose fp64 rate is 1/64 of fp32).
+__device__ int makhoulIndex(int m, int n) {
+  int half = (n + 1) / 2;
+  return m < half ? 2 * m : 2 * (n - 1 - m) + 1;
+}
+
+__global__ void dct2Reorder(const float *input, cufftComplex *values,
+                            int batch, int n) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * n)
+    return;
+  size_t row = index / n;
+  int m = int(index % n);
+  values[index] = make_cuComplex(input[row * n + makhoulIndex(m, n)], 0.0f);
+}
+
+__global__ void dct2Twiddle(const cufftComplex *values, float *output,
+                            int batch, int n, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * n)
+    return;
+  int k = int(index % n);
+  float sine, cosine;
+  sincospif(float(k) / float(2 * n), &sine, &cosine);
+  output[index] =
+      2.0f * (values[index].x * cosine + values[index].y * sine) * scale;
+}
+
+__global__ void dct3Prepare(const float *input, cufftComplex *values,
+                            int batch, int n) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * n)
+    return;
+  size_t row = index / n;
+  int k = int(index % n);
+  float xk = input[row * n + k];
+  float xnk = k == 0 ? 0.0f : input[row * n + (n - k)];
+  float sine, cosine;
+  sincospif(float(k) / float(2 * n), &sine, &cosine);
+  values[index] = make_cuComplex(xk * cosine + xnk * sine,
+                                 xk * sine - xnk * cosine);
+}
+
+// X[r, k] *= W[kernelRow(r), k] * scale; one kernel row broadcasts to all.
+__global__ void multiplySpectra(cufftComplex *signal,
+                                const cufftComplex *kernel, int rows,
+                                int kernelRows, int bins, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(rows) * bins)
+    return;
+  size_t row = index / bins;
+  size_t k = index % bins;
+  cufftComplex w = kernel[(kernelRows == 1 ? 0 : row) * bins + k];
+  cufftComplex x = signal[index];
+  signal[index] = make_cuComplex((x.x * w.x - x.y * w.y) * scale,
+                                 (x.x * w.y + x.y * w.x) * scale);
+}
+
+__global__ void dct3Scatter(const cufftComplex *values, float *output,
+                            int batch, int n, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * n)
+    return;
+  size_t row = index / n;
+  int m = int(index % n);
+  output[row * n + makhoulIndex(m, n)] = values[index].x * scale;
 }
 
 bool checkedProduct(size_t a, size_t b, size_t &product) {
@@ -830,9 +1085,7 @@ extern "C" int tessera_nvidia_dct_policy_layout_f32(
       rank > 8 || axis < 0 || axis >= rank || dctType < 1 || dctType > 4 ||
       (dctType == 1 && shape[axis] < 2))
     return 290;
-  std::vector<float> contiguous;
-  if (!packHostLayout(inputHost, contiguous, rank, shape, strides) ||
-      shape[axis] > INT32_MAX)
+  if (shape[axis] > INT32_MAX)
     return 291;
   int64_t outer = 0, inner = 0;
   int batch = 0;
@@ -840,30 +1093,73 @@ extern "C" int tessera_nvidia_dct_policy_layout_f32(
   if (!foldedBatch(rank, shape, axis, outer, inner, batch, batchShape))
     return 291;
   int length = int(shape[axis]);
-  std::vector<float> packed(contiguous.size()), output(contiguous.size());
-  packAxis(contiguous.data(), packed.data(), outer, length, inner);
-  float *deviceInput = nullptr, *deviceOutput = nullptr;
-  cudaError_t status = cudaMalloc(&deviceInput, packed.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceOutput, output.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceInput, packed.data(), packed.size() * sizeof(float),
-                        cudaMemcpyHostToDevice);
-  if (status == cudaSuccess) {
-    dctDirectPolicy<<<unsigned((packed.size() + kThreads - 1) / kThreads),
-                      kThreads>>>(deviceInput, deviceOutput, batch, length,
-                                  dctType, outputScale);
+  const size_t elements = size_t(batch) * size_t(length);
+  // Host staging only where the layout needs it: a compact input is read in
+  // place, and with the transform axis innermost (inner == 1) the axis fold
+  // and unfold are identities, so the device reads and writes the caller's
+  // buffers directly (measured ~1.4 ms of host passes per 64x1024 call).
+  std::vector<float> contiguous, packed, output;
+  const float *staged = inputHost;
+  if (!isCompactLayout(rank, shape, strides)) {
+    if (!packHostLayout(inputHost, contiguous, rank, shape, strides))
+      return 291;
+    staged = contiguous.data();
+  }
+  if (inner != 1) {
+    packed.resize(elements);
+    packAxis(staged, packed.data(), outer, length, inner);
+    staged = packed.data();
+    output.resize(elements);
+  }
+  float *result = inner != 1 ? output.data() : outputHost;
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceInput = static_cast<float *>(scratch(0, elements * sizeof(float)));
+  auto *deviceOutput = static_cast<float *>(scratch(1, elements * sizeof(float)));
+  if (!deviceInput || !deviceOutput)
+    return 292;
+  cudaError_t status = cudaMemcpy(deviceInput, staged,
+                                  elements * sizeof(float),
+                                  cudaMemcpyHostToDevice);
+  const unsigned blocks = unsigned((elements + kThreads - 1) / kThreads);
+  if (status == cudaSuccess && (dctType == 2 || dctType == 3)) {
+    auto *values = static_cast<cufftComplex *>(
+        scratch(2, elements * sizeof(cufftComplex)));
+    cufftHandle plan = 0;
+    if (!values || cachedPlan(batch, length, CUFFT_C2C, plan))
+      return 292;
+    if (dctType == 2)
+      dct2Reorder<<<blocks, kThreads>>>(deviceInput, values, batch, length);
+    else
+      dct3Prepare<<<blocks, kThreads>>>(deviceInput, values, batch, length);
+    status = cudaGetLastError();
+    if (status == cudaSuccess &&
+        cufftExecC2C(plan, values, values,
+                     dctType == 2 ? CUFFT_FORWARD : CUFFT_INVERSE) !=
+            CUFFT_SUCCESS)
+      return 292;
+    if (status == cudaSuccess) {
+      if (dctType == 2)
+        dct2Twiddle<<<blocks, kThreads>>>(values, deviceOutput, batch, length,
+                                          outputScale);
+      else
+        dct3Scatter<<<blocks, kThreads>>>(values, deviceOutput, batch, length,
+                                          outputScale);
+      status = cudaGetLastError();
+    }
+  } else if (status == cudaSuccess) {
+    dctDirectPolicy<<<blocks, kThreads>>>(deviceInput, deviceOutput, batch,
+                                          length, dctType, outputScale);
     status = cudaGetLastError();
   }
+  // The synchronous copy back orders after the kernels and reports their
+  // errors, so no separate device synchronize is needed.
   if (status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (status == cudaSuccess)
-    status = cudaMemcpy(output.data(), deviceOutput,
-                        output.size() * sizeof(float), cudaMemcpyDeviceToHost);
-  release(deviceInput, deviceOutput);
+    status = cudaMemcpy(result, deviceOutput, elements * sizeof(float),
+                        cudaMemcpyDeviceToHost);
   if (status != cudaSuccess)
     return 292;
-  unpackAxis(output.data(), outputHost, outer, length, inner);
+  if (inner != 1)
+    unpackAxis(output.data(), outputHost, outer, length, inner);
   return 0;
 }
 
@@ -880,9 +1176,6 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
       (padMode != 0 && padMode != 1) ||
       (onesided != 0 && onesided != 1))
     return 300;
-  std::vector<float> contiguous;
-  if (!packHostLayout(inputHost, contiguous, rank, shape, strides))
-    return 301;
   int64_t outer = 0, inner = 0;
   int batch = 0;
   std::vector<int64_t> batchShape;
@@ -896,8 +1189,20 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
   int64_t padded = std::max<int64_t>(int64_t(samples) + 2 * pad, nfft);
   if (padded > INT32_MAX || frames != (padded - nfft) / hop + 1)
     return 302;
-  std::vector<float> packed(contiguous.size());
-  packAxis(contiguous.data(), packed.data(), outer, samples, inner);
+  const size_t inputElements = size_t(batch) * size_t(samples);
+  // Host staging only where the layout needs it (see the DCT entry point).
+  std::vector<float> contiguous, packed;
+  const float *staged = inputHost;
+  if (!isCompactLayout(rank, shape, strides)) {
+    if (!packHostLayout(inputHost, contiguous, rank, shape, strides))
+      return 301;
+    staged = contiguous.data();
+  }
+  if (inner != 1) {
+    packed.resize(inputElements);
+    packAxis(staged, packed.data(), outer, samples, inner);
+    staged = packed.data();
+  }
   std::vector<float> windows;
   if (!expandHostWindows(windowHost, windowRank, windowShape, windowStrides,
                          batchShape, nfft, windows))
@@ -908,30 +1213,33 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
   if (!checkedProduct(size_t(batch) * frames, size_t(nfft), frameElements) ||
       !checkedProduct(size_t(batch) * frames, size_t(bins), outputElements))
     return 304;
-  float *deviceInput = nullptr, *deviceWindows = nullptr,
-        *deviceRealFrames = nullptr;
-  cufftComplex *deviceComplexFrames = nullptr, *deviceOutput = nullptr;
-  cudaError_t status = cudaMalloc(&deviceInput, packed.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess && onesided)
-    status = cudaMalloc(&deviceRealFrames, frameElements * sizeof(float));
-  if (status == cudaSuccess && !onesided)
-    status = cudaMalloc(&deviceComplexFrames,
-                        frameElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceOutput, outputElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceInput, packed.data(), packed.size() * sizeof(float),
-                        cudaMemcpyHostToDevice);
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceInput =
+      static_cast<float *>(scratch(0, inputElements * sizeof(float)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(1, windows.size() * sizeof(float)));
+  float *deviceRealFrames = nullptr;
+  cufftComplex *deviceComplexFrames = nullptr;
+  if (onesided)
+    deviceRealFrames =
+        static_cast<float *>(scratch(2, frameElements * sizeof(float)));
+  else
+    deviceComplexFrames = static_cast<cufftComplex *>(
+        scratch(2, frameElements * sizeof(cufftComplex)));
+  auto *deviceOutput = static_cast<cufftComplex *>(
+      scratch(3, outputElements * sizeof(cufftComplex)));
+  if (!deviceInput || !deviceWindows || !deviceOutput ||
+      !(onesided ? static_cast<void *>(deviceRealFrames)
+                 : static_cast<void *>(deviceComplexFrames)))
+    return 305;
+  cudaError_t status = cudaMemcpy(deviceInput, staged,
+                                  inputElements * sizeof(float),
+                                  cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceWindows, windows.data(),
                         windows.size() * sizeof(float), cudaMemcpyHostToDevice);
-  if (status != cudaSuccess) {
-    release(deviceInput, deviceWindows, deviceRealFrames, deviceComplexFrames,
-            deviceOutput);
+  if (status != cudaSuccess)
     return 305;
-  }
   unsigned frameBlocks = unsigned((frameElements + kThreads - 1) / kThreads);
   if (onesided)
     frameRealPolicy<<<frameBlocks, kThreads>>>(
@@ -943,11 +1251,9 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
         hop, frames, center, padMode);
   status = cudaGetLastError();
   cufftHandle plan = 0;
-  void *workspace = nullptr;
   int planStatus = status == cudaSuccess
-                       ? makePlan(batch * frames, nfft,
-                                  onesided ? CUFFT_R2C : CUFFT_C2C, plan,
-                                  workspace)
+                       ? cachedPlan(batch * frames, nfft,
+                                    onesided ? CUFFT_R2C : CUFFT_C2C, plan)
                        : 1;
   cufftResult fftStatus = CUFFT_INVALID_PLAN;
   if (!planStatus)
@@ -959,20 +1265,20 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
     scaleComplex<<<unsigned((outputElements + kThreads - 1) / kThreads),
                    kThreads>>>(deviceOutput, outputElements, outputScale);
   status = cudaGetLastError();
-  std::vector<cufftComplex> output(outputElements);
+  // With the sample axis innermost the unfold is an identity: copy straight
+  // into the caller's buffer. The synchronous copy orders after the kernels.
+  std::vector<cufftComplex> output(inner != 1 ? outputElements : 0);
+  auto *result = inner != 1 ? output.data()
+                            : reinterpret_cast<cufftComplex *>(outputHost);
   if (!planStatus && fftStatus == CUFFT_SUCCESS && status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (!planStatus && fftStatus == CUFFT_SUCCESS && status == cudaSuccess)
-    status = cudaMemcpy(output.data(), deviceOutput,
+    status = cudaMemcpy(result, deviceOutput,
                         outputElements * sizeof(cufftComplex),
                         cudaMemcpyDeviceToHost);
-  destroyPlan(plan, workspace);
-  release(deviceInput, deviceWindows, deviceRealFrames, deviceComplexFrames,
-          deviceOutput);
   if (planStatus || fftStatus != CUFFT_SUCCESS || status != cudaSuccess)
     return 306;
-  unpackAxis(output.data(), reinterpret_cast<cufftComplex *>(outputHost), outer,
-             int64_t(frames) * bins, inner);
+  if (inner != 1)
+    unpackAxis(output.data(), reinterpret_cast<cufftComplex *>(outputHost),
+               outer, int64_t(frames) * bins, inner);
   return 0;
 }
 
@@ -990,13 +1296,6 @@ extern "C" int tessera_nvidia_stft_jvp_broadcast_layout_f32(
       (center != 0 && center != 1) || (padMode != 0 && padMode != 1) ||
       (onesided != 0 && onesided != 1))
     return 360;
-  std::vector<float> contiguous;
-  if (!packHostLayout(inputHost, contiguous, rank, shape, strides))
-    return 361;
-  std::vector<float> dcontiguous(contiguous.size(), 0.0f);
-  if (dinputHost &&
-      !packHostLayout(dinputHost, dcontiguous, rank, shape, strides))
-    return 361;
   int64_t outer = 0, inner = 0;
   int batch = 0;
   std::vector<int64_t> batchShape;
@@ -1010,9 +1309,17 @@ extern "C" int tessera_nvidia_stft_jvp_broadcast_layout_f32(
   int64_t padded = std::max<int64_t>(int64_t(samples) + 2 * pad, nfft);
   if (padded > INT32_MAX || frames != (padded - nfft) / hop + 1)
     return 362;
-  std::vector<float> input(contiguous.size()), dinput(dcontiguous.size());
-  packAxis(contiguous.data(), input.data(), outer, samples, inner);
-  packAxis(dcontiguous.data(), dinput.data(), outer, samples, inner);
+  const size_t inputElements = size_t(batch) * size_t(samples);
+  std::vector<float> contiguous, packed, dcontiguous, dpacked, zeros;
+  const float *input = stageAxis(inputHost, rank, shape, strides, outer,
+                                 samples, inner, inputElements, contiguous,
+                                 packed);
+  const float *dinput =
+      dinputHost ? stageAxis(dinputHost, rank, shape, strides, outer, samples,
+                             inner, inputElements, dcontiguous, dpacked)
+                 : (zeros.assign(inputElements, 0.0f), zeros.data());
+  if (!input || !dinput)
+    return 361;
   std::vector<float> windows;
   if (!expandHostWindows(windowHost, windowRank, windowShape, windowStrides,
                          batchShape, nfft, windows))
@@ -1023,41 +1330,38 @@ extern "C" int tessera_nvidia_stft_jvp_broadcast_layout_f32(
                          batchShape, nfft, dwindows))
     return 363;
   int bins = onesided ? nfft / 2 + 1 : nfft;
-  size_t frameElements = size_t(batch) * frames * nfft;
-  size_t outputElements = size_t(batch) * frames * bins;
-  float *deviceInput = nullptr, *deviceDinput = nullptr;
-  float *deviceWindows = nullptr, *deviceDwindows = nullptr;
-  float *deviceFrames = nullptr, *deviceDframes = nullptr;
-  cufftComplex *deviceFramesComplex = nullptr, *deviceDframesComplex = nullptr;
-  cufftComplex *devicePrimal = nullptr, *deviceTangent = nullptr;
-  cudaError_t status = cudaMalloc(&deviceInput, input.size() * sizeof(float));
+  size_t frameElements = 0, outputElements = 0;
+  if (!checkedProduct(size_t(batch) * frames, size_t(nfft), frameElements) ||
+      !checkedProduct(size_t(batch) * frames, size_t(bins), outputElements))
+    return 364;
+  // Pooled buffers and a cached plan, as in the forward STFT: the per-call
+  // version spent ~13 ms of a ~14 ms warm call in nine cudaMalloc/cudaFree
+  // pairs plus plan construction (nsys, RTX 5070, 8x16000, n_fft=512).
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  size_t frameBytes =
+      frameElements * (onesided ? sizeof(float) : sizeof(cufftComplex));
+  auto *deviceInput =
+      static_cast<float *>(scratch(0, inputElements * sizeof(float)));
+  auto *deviceDinput =
+      static_cast<float *>(scratch(1, inputElements * sizeof(float)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(2, windows.size() * sizeof(float)));
+  auto *deviceDwindows =
+      static_cast<float *>(scratch(3, dwindows.size() * sizeof(float)));
+  void *framesBuffer = scratch(4, frameBytes);
+  void *dframesBuffer = scratch(5, frameBytes);
+  auto *devicePrimal = static_cast<cufftComplex *>(
+      scratch(6, outputElements * sizeof(cufftComplex)));
+  auto *deviceTangent = static_cast<cufftComplex *>(
+      scratch(7, outputElements * sizeof(cufftComplex)));
+  if (!deviceInput || !deviceDinput || !deviceWindows || !deviceDwindows ||
+      !framesBuffer || !dframesBuffer || !devicePrimal || !deviceTangent)
+    return 364;
+  cudaError_t status = cudaMemcpy(deviceInput, input,
+                                  inputElements * sizeof(float),
+                                  cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDinput, dinput.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDwindows, dwindows.size() * sizeof(float));
-  if (status == cudaSuccess && onesided)
-    status = cudaMalloc(&deviceFrames, frameElements * sizeof(float));
-  if (status == cudaSuccess && onesided)
-    status = cudaMalloc(&deviceDframes, frameElements * sizeof(float));
-  if (status == cudaSuccess && !onesided)
-    status = cudaMalloc(&deviceFramesComplex,
-                        frameElements * sizeof(cufftComplex));
-  if (status == cudaSuccess && !onesided)
-    status = cudaMalloc(&deviceDframesComplex,
-                        frameElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&devicePrimal,
-                        outputElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceTangent,
-                        outputElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceInput, input.data(), input.size() * sizeof(float),
-                        cudaMemcpyHostToDevice);
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceDinput, dinput.data(), dinput.size() * sizeof(float),
+    status = cudaMemcpy(deviceDinput, dinput, inputElements * sizeof(float),
                         cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceWindows, windows.data(),
@@ -1065,48 +1369,45 @@ extern "C" int tessera_nvidia_stft_jvp_broadcast_layout_f32(
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceDwindows, dwindows.data(),
                         dwindows.size() * sizeof(float), cudaMemcpyHostToDevice);
-  if (status != cudaSuccess) {
-    release(deviceInput, deviceDinput, deviceWindows, deviceDwindows,
-            deviceFrames, deviceDframes, deviceFramesComplex,
-            deviceDframesComplex, devicePrimal, deviceTangent);
+  if (status != cudaSuccess)
     return 364;
-  }
   unsigned frameBlocks = unsigned((frameElements + kThreads - 1) / kThreads);
   if (onesided)
     frameRealJVPPolicy<<<frameBlocks, kThreads>>>(
-        deviceInput, deviceWindows, deviceDinput, deviceDwindows, deviceFrames,
-        deviceDframes, batch, samples, nfft, hop, frames, center, padMode);
+        deviceInput, deviceWindows, deviceDinput, deviceDwindows,
+        static_cast<float *>(framesBuffer), static_cast<float *>(dframesBuffer),
+        batch, samples, nfft, hop, frames, center, padMode);
   else
     frameComplexJVPPolicy<<<frameBlocks, kThreads>>>(
         deviceInput, deviceWindows, deviceDinput, deviceDwindows,
-        deviceFramesComplex, deviceDframesComplex, batch, samples, nfft, hop,
+        static_cast<cufftComplex *>(framesBuffer),
+        static_cast<cufftComplex *>(dframesBuffer), batch, samples, nfft, hop,
         frames, center, padMode);
   status = cudaGetLastError();
   cufftHandle plan = 0;
-  void *workspace = nullptr;
   int planStatus = status == cudaSuccess
-                       ? makePlan(batch * frames, nfft,
-                                  onesided ? CUFFT_R2C : CUFFT_C2C, plan,
-                                  workspace)
+                       ? cachedPlan(batch * frames, nfft,
+                                    onesided ? CUFFT_R2C : CUFFT_C2C, plan)
                        : 1;
   cufftResult first = CUFFT_INVALID_PLAN, second = CUFFT_INVALID_PLAN;
   if (!planStatus) {
     if (onesided) {
-      first = cufftExecR2C(plan, deviceFrames, devicePrimal);
+      first = cufftExecR2C(plan, static_cast<float *>(framesBuffer), devicePrimal);
       second = first == CUFFT_SUCCESS
-                   ? cufftExecR2C(plan, deviceDframes, deviceTangent)
+                   ? cufftExecR2C(plan, static_cast<float *>(dframesBuffer),
+                                  deviceTangent)
                    : CUFFT_INVALID_PLAN;
     } else {
-      first = cufftExecC2C(plan, deviceFramesComplex, devicePrimal,
-                           CUFFT_FORWARD);
+      first = cufftExecC2C(plan, static_cast<cufftComplex *>(framesBuffer),
+                           devicePrimal, CUFFT_FORWARD);
       second = first == CUFFT_SUCCESS
-                   ? cufftExecC2C(plan, deviceDframesComplex, deviceTangent,
-                                  CUFFT_FORWARD)
+                   ? cufftExecC2C(plan, static_cast<cufftComplex *>(dframesBuffer),
+                                  deviceTangent, CUFFT_FORWARD)
                    : CUFFT_INVALID_PLAN;
     }
   }
-  if (!planStatus && first == CUFFT_SUCCESS && second == CUFFT_SUCCESS &&
-      outputScale != 1.0f) {
+  bool ok = !planStatus && first == CUFFT_SUCCESS && second == CUFFT_SUCCESS;
+  if (ok && outputScale != 1.0f) {
     unsigned blocks = unsigned((outputElements + kThreads - 1) / kThreads);
     scaleComplex<<<blocks, kThreads>>>(devicePrimal, outputElements,
                                        outputScale);
@@ -1114,25 +1415,27 @@ extern "C" int tessera_nvidia_stft_jvp_broadcast_layout_f32(
                                        outputScale);
   }
   status = cudaGetLastError();
-  std::vector<cufftComplex> primal(outputElements), tangent(outputElements);
-  if (!planStatus && first == CUFFT_SUCCESS && second == CUFFT_SUCCESS &&
-      status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (status == cudaSuccess)
-    status = cudaMemcpy(primal.data(), devicePrimal,
+  // The synchronous copies order after the kernels and surface their errors.
+  // With the sample axis innermost the unfold is an identity: copy straight
+  // into the caller's buffers.
+  std::vector<cufftComplex> primal(inner != 1 ? outputElements : 0),
+      tangent(inner != 1 ? outputElements : 0);
+  auto *primalOut = inner != 1 ? primal.data()
+                               : reinterpret_cast<cufftComplex *>(primalHost);
+  auto *tangentOut = inner != 1 ? tangent.data()
+                                : reinterpret_cast<cufftComplex *>(tangentHost);
+  if (ok && status == cudaSuccess)
+    status = cudaMemcpy(primalOut, devicePrimal,
                         outputElements * sizeof(cufftComplex),
                         cudaMemcpyDeviceToHost);
-  if (status == cudaSuccess)
-    status = cudaMemcpy(tangent.data(), deviceTangent,
+  if (ok && status == cudaSuccess)
+    status = cudaMemcpy(tangentOut, deviceTangent,
                         outputElements * sizeof(cufftComplex),
                         cudaMemcpyDeviceToHost);
-  destroyPlan(plan, workspace);
-  release(deviceInput, deviceDinput, deviceWindows, deviceDwindows,
-          deviceFrames, deviceDframes, deviceFramesComplex,
-          deviceDframesComplex, devicePrimal, deviceTangent);
-  if (planStatus || first != CUFFT_SUCCESS || second != CUFFT_SUCCESS ||
-      status != cudaSuccess)
+  if (!ok || status != cudaSuccess)
     return 365;
+  if (inner == 1)
+    return 0;
   unpackAxis(primal.data(), reinterpret_cast<cufftComplex *>(primalHost), outer,
              int64_t(frames) * bins, inner);
   unpackAxis(tangent.data(), reinterpret_cast<cufftComplex *>(tangentHost), outer,
@@ -1156,10 +1459,6 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
   int bins = int(shape[axis]);
   if (frames <= 0 || bins != (onesided ? nfft / 2 + 1 : nfft))
     return 311;
-  std::vector<cufftComplex> contiguous;
-  if (!packHostLayout(reinterpret_cast<const cufftComplex *>(inputHost),
-                      contiguous, rank, shape, strides))
-    return 311;
   int64_t outer = 1, inner = 1;
   std::vector<int64_t> batchShape;
   for (int dim = 0; dim < rank; ++dim) {
@@ -1175,9 +1474,21 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
   if (outer <= 0 || inner <= 0 || outer > INT32_MAX / inner)
     return 311;
   int batch = int(outer * inner);
-  std::vector<cufftComplex> spectra(contiguous.size());
-  packAxis(contiguous.data(), spectra.data(), outer,
-           int64_t(frames) * bins, inner);
+  const size_t spectrumElements = size_t(batch) * size_t(frames) * size_t(bins);
+  // Host staging only where the layout needs it (see the DCT entry point).
+  const auto *complexInput = reinterpret_cast<const cufftComplex *>(inputHost);
+  std::vector<cufftComplex> contiguous, spectra;
+  const cufftComplex *staged = complexInput;
+  if (!isCompactLayout(rank, shape, strides)) {
+    if (!packHostLayout(complexInput, contiguous, rank, shape, strides))
+      return 311;
+    staged = contiguous.data();
+  }
+  if (inner != 1) {
+    spectra.resize(spectrumElements);
+    packAxis(staged, spectra.data(), outer, int64_t(frames) * bins, inner);
+    staged = spectra.data();
+  }
   std::vector<float> windows;
   if (!expandHostWindows(windowHost, windowRank, windowShape, windowStrides,
                          batchShape, nfft, windows))
@@ -1188,39 +1499,40 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
   if (outputSamples > available)
     return 313;
 
-  size_t spectrumElements = spectra.size();
   size_t frameElements = size_t(batch) * frames * nfft;
   size_t outputElements = size_t(batch) * outputSamples;
-  cufftComplex *deviceSpectrum = nullptr, *deviceComplexFrames = nullptr;
-  float *deviceRealFrames = nullptr, *deviceWindows = nullptr,
-        *deviceOutput = nullptr;
-  cudaError_t status = cudaMalloc(&deviceSpectrum,
-                                  spectrumElements * sizeof(cufftComplex));
-  if (status == cudaSuccess && onesided)
-    status = cudaMalloc(&deviceRealFrames, frameElements * sizeof(float));
-  if (status == cudaSuccess && !onesided)
-    status = cudaMalloc(&deviceComplexFrames,
-                        frameElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceOutput, outputElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceSpectrum, spectra.data(),
-                        spectrumElements * sizeof(cufftComplex),
-                        cudaMemcpyHostToDevice);
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  // C2R overwrites its input; the spectrum is re-uploaded into scratch every
+  // call, so the caller's data is never touched.
+  auto *deviceSpectrum = static_cast<cufftComplex *>(
+      scratch(0, spectrumElements * sizeof(cufftComplex)));
+  float *deviceRealFrames = nullptr;
+  cufftComplex *deviceComplexFrames = nullptr;
+  if (onesided)
+    deviceRealFrames =
+        static_cast<float *>(scratch(1, frameElements * sizeof(float)));
+  else
+    deviceComplexFrames = static_cast<cufftComplex *>(
+        scratch(1, frameElements * sizeof(cufftComplex)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(2, windows.size() * sizeof(float)));
+  auto *deviceOutput =
+      static_cast<float *>(scratch(3, outputElements * sizeof(float)));
+  if (!deviceSpectrum || !deviceWindows || !deviceOutput ||
+      !(onesided ? static_cast<void *>(deviceRealFrames)
+                 : static_cast<void *>(deviceComplexFrames)))
+    return 314;
+  cudaError_t status = cudaMemcpy(deviceSpectrum, staged,
+                                  spectrumElements * sizeof(cufftComplex),
+                                  cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceWindows, windows.data(),
                         windows.size() * sizeof(float), cudaMemcpyHostToDevice);
-  if (status != cudaSuccess) {
-    release(deviceSpectrum, deviceComplexFrames, deviceRealFrames,
-            deviceWindows, deviceOutput);
+  if (status != cudaSuccess)
     return 314;
-  }
   cufftHandle plan = 0;
-  void *workspace = nullptr;
-  int planStatus = makePlan(batch * frames, nfft,
-                            onesided ? CUFFT_C2R : CUFFT_C2C, plan, workspace);
+  int planStatus = cachedPlan(batch * frames, nfft,
+                              onesided ? CUFFT_C2R : CUFFT_C2C, plan);
   cufftResult fftStatus = CUFFT_INVALID_PLAN;
   if (!planStatus)
     fftStatus = onesided
@@ -1241,20 +1553,89 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
           nfft, hop, outputSamples, trim, inverseScale);
     status = cudaGetLastError();
   }
-  std::vector<float> output(outputElements);
+  std::vector<float> output(inner != 1 ? outputElements : 0);
+  float *result = inner != 1 ? output.data() : outputHost;
   if (!planStatus && fftStatus == CUFFT_SUCCESS && status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (!planStatus && fftStatus == CUFFT_SUCCESS && status == cudaSuccess)
-    status = cudaMemcpy(output.data(), deviceOutput,
-                        outputElements * sizeof(float),
+    status = cudaMemcpy(result, deviceOutput, outputElements * sizeof(float),
                         cudaMemcpyDeviceToHost);
-  destroyPlan(plan, workspace);
-  release(deviceSpectrum, deviceComplexFrames, deviceRealFrames, deviceWindows,
-          deviceOutput);
   if (planStatus || fftStatus != CUFFT_SUCCESS || status != cudaSuccess)
     return 315;
-  unpackAxis(output.data(), outputHost, outer, outputSamples, inner);
+  if (inner != 1)
+    unpackAxis(output.data(), outputHost, outer, outputSamples, inner);
   return 0;
+}
+
+// Batched real FFT convolution, full length (the scheduler's
+// tessera_nvidia_spectral_conv_f32 entry). x is [rows, xLength], w is
+// [kernelRows, kernelLength] with kernelRows == rows or 1, out is
+// [rows, xLength + kernelLength - 1], all compact host arrays. nfft must hold
+// the full convolution. `scale` is the product of the normalization factors
+// (cuFFT is unnormalized both ways); the caller derives it from the norm mode.
+// One upload per operand, one download: replaces three host-staged cuFFT calls
+// with the pad and the spectrum multiply done in NumPy.
+extern "C" int tessera_nvidia_spectral_conv_f32(
+    const char *digest, const float *xHost, int rows, int xLength,
+    const float *wHost, int kernelRows, int kernelLength, float *outHost,
+    int nfft, float scale) {
+  if (!validDigest(digest) || !xHost || !wHost || !outHost || rows <= 0 ||
+      xLength <= 0 || kernelLength <= 0 ||
+      (kernelRows != 1 && kernelRows != rows) || nfft <= 0)
+    return 380;
+  const int64_t outLength = int64_t(xLength) + kernelLength - 1;
+  if (outLength > nfft || int64_t(rows) * nfft > INT32_MAX)
+    return 381;
+  const int bins = nfft / 2 + 1;
+  const size_t realBytes = size_t(rows) * nfft * sizeof(float);
+  const size_t kernelRealBytes = size_t(kernelRows) * nfft * sizeof(float);
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceX = static_cast<float *>(scratch(0, realBytes));
+  auto *deviceW = static_cast<float *>(scratch(1, kernelRealBytes));
+  auto *spectrumX = static_cast<cufftComplex *>(
+      scratch(2, size_t(rows) * bins * sizeof(cufftComplex)));
+  auto *spectrumW = static_cast<cufftComplex *>(
+      scratch(3, size_t(kernelRows) * bins * sizeof(cufftComplex)));
+  if (!deviceX || !deviceW || !spectrumX || !spectrumW)
+    return 382;
+  // Zero padding: clear, then drop each row in with one strided 2-D copy.
+  cudaError_t status = cudaMemset(deviceX, 0, realBytes);
+  if (status == cudaSuccess)
+    status = cudaMemset(deviceW, 0, kernelRealBytes);
+  if (status == cudaSuccess)
+    status = cudaMemcpy2D(deviceX, size_t(nfft) * sizeof(float), xHost,
+                          size_t(xLength) * sizeof(float),
+                          size_t(xLength) * sizeof(float), size_t(rows),
+                          cudaMemcpyHostToDevice);
+  if (status == cudaSuccess)
+    status = cudaMemcpy2D(deviceW, size_t(nfft) * sizeof(float), wHost,
+                          size_t(kernelLength) * sizeof(float),
+                          size_t(kernelLength) * sizeof(float),
+                          size_t(kernelRows), cudaMemcpyHostToDevice);
+  if (status != cudaSuccess)
+    return 383;
+  cufftHandle forwardX = 0, forwardW = 0, inverse = 0;
+  if (cachedPlan(rows, nfft, CUFFT_R2C, forwardX) ||
+      cachedPlan(kernelRows, nfft, CUFFT_R2C, forwardW) ||
+      cachedPlan(rows, nfft, CUFFT_C2R, inverse))
+    return 384;
+  if (cufftExecR2C(forwardX, deviceX, spectrumX) != CUFFT_SUCCESS ||
+      cufftExecR2C(forwardW, deviceW, spectrumW) != CUFFT_SUCCESS)
+    return 385;
+  const size_t spectrumElements = size_t(rows) * bins;
+  multiplySpectra<<<unsigned((spectrumElements + kThreads - 1) / kThreads),
+                    kThreads>>>(spectrumX, spectrumW, rows, kernelRows, bins,
+                                scale);
+  if (cudaGetLastError() != cudaSuccess)
+    return 385;
+  // C2R consumes spectrumX and writes the padded result back over deviceX.
+  if (cufftExecC2R(inverse, spectrumX, deviceX) != CUFFT_SUCCESS)
+    return 385;
+  // Download only the first outLength samples of each row, straight into the
+  // caller's buffer; the synchronous copy orders after the transforms.
+  status = cudaMemcpy2D(outHost, size_t(outLength) * sizeof(float), deviceX,
+                        size_t(nfft) * sizeof(float),
+                        size_t(outLength) * sizeof(float), size_t(rows),
+                        cudaMemcpyDeviceToHost);
+  return status == cudaSuccess ? 0 : 386;
 }
 
 extern "C" int tessera_nvidia_dct_policy_layout_storage(
@@ -1405,16 +1786,6 @@ extern "C" int tessera_nvidia_istft_jvp_broadcast_layout_f32(
   int bins = int(shape[axis]);
   if (frames <= 0 || bins != (onesided ? nfft / 2 + 1 : nfft))
     return 351;
-  std::vector<cufftComplex> contiguous;
-  if (!packHostLayout(reinterpret_cast<const cufftComplex *>(inputHost),
-                      contiguous, rank, shape, strides))
-    return 351;
-  std::vector<cufftComplex> dcontiguous(contiguous.size(),
-                                       make_cuFloatComplex(0.0f, 0.0f));
-  if (dinputHost &&
-      !packHostLayout(reinterpret_cast<const cufftComplex *>(dinputHost),
-                      dcontiguous, rank, shape, strides))
-    return 351;
   int64_t outer = 1, inner = 1;
   std::vector<int64_t> batchShape;
   for (int dim = 0; dim < rank; ++dim) {
@@ -1430,12 +1801,21 @@ extern "C" int tessera_nvidia_istft_jvp_broadcast_layout_f32(
   if (outer <= 0 || inner <= 0 || outer > INT32_MAX / inner)
     return 351;
   int batch = int(outer * inner);
-  std::vector<cufftComplex> spectra(contiguous.size()),
-      dspectra(dcontiguous.size());
-  packAxis(contiguous.data(), spectra.data(), outer,
-           int64_t(frames) * bins, inner);
-  packAxis(dcontiguous.data(), dspectra.data(), outer,
-           int64_t(frames) * bins, inner);
+  const size_t spectrumElements = size_t(batch) * size_t(frames) * size_t(bins);
+  std::vector<cufftComplex> contiguous, packed, dcontiguous, dpacked, zeros;
+  const cufftComplex *spectra = stageAxis(
+      reinterpret_cast<const cufftComplex *>(inputHost), rank, shape, strides,
+      outer, int64_t(frames) * bins, inner, spectrumElements, contiguous,
+      packed);
+  const cufftComplex *dspectra =
+      dinputHost
+          ? stageAxis(reinterpret_cast<const cufftComplex *>(dinputHost), rank,
+                      shape, strides, outer, int64_t(frames) * bins, inner,
+                      spectrumElements, dcontiguous, dpacked)
+          : (zeros.assign(spectrumElements, make_cuFloatComplex(0.0f, 0.0f)),
+             zeros.data());
+  if (!spectra || !dspectra)
+    return 351;
   std::vector<float> windows;
   if (!expandHostWindows(windowHost, windowRank, windowShape, windowStrides,
                          batchShape, nfft, windows))
@@ -1449,43 +1829,37 @@ extern "C" int tessera_nvidia_istft_jvp_broadcast_layout_f32(
   int trim = center ? nfft / 2 : 0;
   if (outputSamples > rawSamples - 2 * trim)
     return 353;
-  size_t spectrumElements = spectra.size();
-  size_t frameElements = size_t(batch) * frames * nfft;
-  size_t outputElements = size_t(batch) * outputSamples;
-  cufftComplex *deviceSpectrum = nullptr, *deviceDspectrum = nullptr;
-  cufftComplex *deviceFramesComplex = nullptr, *deviceDframesComplex = nullptr;
-  float *deviceFrames = nullptr, *deviceDframes = nullptr;
-  float *deviceWindows = nullptr, *deviceDwindows = nullptr;
-  float *devicePrimal = nullptr, *deviceTangent = nullptr;
-  cudaError_t status = cudaMalloc(&deviceSpectrum,
-                                  spectrumElements * sizeof(cufftComplex));
+  size_t frameElements = 0, outputElements = 0;
+  if (!checkedProduct(size_t(batch) * frames, size_t(nfft), frameElements) ||
+      !checkedProduct(size_t(batch), size_t(outputSamples), outputElements))
+    return 354;
+  // Pooled buffers and a cached plan (see the STFT JVP above).
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  size_t frameBytes =
+      frameElements * (onesided ? sizeof(float) : sizeof(cufftComplex));
+  auto *deviceSpectrum = static_cast<cufftComplex *>(
+      scratch(0, spectrumElements * sizeof(cufftComplex)));
+  auto *deviceDspectrum = static_cast<cufftComplex *>(
+      scratch(1, spectrumElements * sizeof(cufftComplex)));
+  void *framesBuffer = scratch(2, frameBytes);
+  void *dframesBuffer = scratch(3, frameBytes);
+  auto *deviceWindows =
+      static_cast<float *>(scratch(4, windows.size() * sizeof(float)));
+  auto *deviceDwindows =
+      static_cast<float *>(scratch(5, dwindows.size() * sizeof(float)));
+  auto *devicePrimal =
+      static_cast<float *>(scratch(6, outputElements * sizeof(float)));
+  auto *deviceTangent =
+      static_cast<float *>(scratch(7, outputElements * sizeof(float)));
+  if (!deviceSpectrum || !deviceDspectrum || !framesBuffer || !dframesBuffer ||
+      !deviceWindows || !deviceDwindows || !devicePrimal || !deviceTangent)
+    return 354;
+  // C2R overwrites its input; the spectra are staged per call, so that is safe.
+  cudaError_t status = cudaMemcpy(deviceSpectrum, spectra,
+                                  spectrumElements * sizeof(cufftComplex),
+                                  cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDspectrum,
-                        spectrumElements * sizeof(cufftComplex));
-  if (status == cudaSuccess && onesided)
-    status = cudaMalloc(&deviceFrames, frameElements * sizeof(float));
-  if (status == cudaSuccess && onesided)
-    status = cudaMalloc(&deviceDframes, frameElements * sizeof(float));
-  if (status == cudaSuccess && !onesided)
-    status = cudaMalloc(&deviceFramesComplex,
-                        frameElements * sizeof(cufftComplex));
-  if (status == cudaSuccess && !onesided)
-    status = cudaMalloc(&deviceDframesComplex,
-                        frameElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDwindows, dwindows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&devicePrimal, outputElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceTangent, outputElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceSpectrum, spectra.data(),
-                        spectrumElements * sizeof(cufftComplex),
-                        cudaMemcpyHostToDevice);
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceDspectrum, dspectra.data(),
+    status = cudaMemcpy(deviceDspectrum, dspectra,
                         spectrumElements * sizeof(cufftComplex),
                         cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
@@ -1494,66 +1868,64 @@ extern "C" int tessera_nvidia_istft_jvp_broadcast_layout_f32(
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceDwindows, dwindows.data(),
                         dwindows.size() * sizeof(float), cudaMemcpyHostToDevice);
-  if (status != cudaSuccess) {
-    release(deviceSpectrum, deviceDspectrum, deviceFrames,
-            deviceDframes, deviceFramesComplex, deviceDframesComplex,
-            deviceWindows, deviceDwindows, devicePrimal, deviceTangent);
+  if (status != cudaSuccess)
     return 354;
-  }
   cufftHandle plan = 0;
-  void *workspace = nullptr;
-  int planStatus = makePlan(batch * frames, nfft,
-                            onesided ? CUFFT_C2R : CUFFT_C2C, plan, workspace);
+  int planStatus =
+      cachedPlan(batch * frames, nfft, onesided ? CUFFT_C2R : CUFFT_C2C, plan);
   cufftResult first = CUFFT_INVALID_PLAN, second = CUFFT_INVALID_PLAN;
   if (!planStatus) {
     if (onesided) {
-      first = cufftExecC2R(plan, deviceSpectrum, deviceFrames);
+      first = cufftExecC2R(plan, deviceSpectrum, static_cast<float *>(framesBuffer));
       second = first == CUFFT_SUCCESS
-                   ? cufftExecC2R(plan, deviceDspectrum, deviceDframes)
+                   ? cufftExecC2R(plan, deviceDspectrum,
+                                  static_cast<float *>(dframesBuffer))
                    : CUFFT_INVALID_PLAN;
     } else {
-      first = cufftExecC2C(plan, deviceSpectrum, deviceFramesComplex,
+      first = cufftExecC2C(plan, deviceSpectrum,
+                           static_cast<cufftComplex *>(framesBuffer),
                            CUFFT_INVERSE);
       second = first == CUFFT_SUCCESS
                    ? cufftExecC2C(plan, deviceDspectrum,
-                                  deviceDframesComplex, CUFFT_INVERSE)
+                                  static_cast<cufftComplex *>(dframesBuffer),
+                                  CUFFT_INVERSE)
                    : CUFFT_INVALID_PLAN;
     }
   }
+  bool ok = !planStatus && first == CUFFT_SUCCESS && second == CUFFT_SUCCESS;
   status = cudaGetLastError();
-  if (!planStatus && first == CUFFT_SUCCESS && second == CUFFT_SUCCESS &&
-      status == cudaSuccess) {
+  if (ok && status == cudaSuccess) {
     unsigned blocks = unsigned((outputElements + kThreads - 1) / kThreads);
     float inverseScale = outputScale / float(nfft);
     if (onesided)
       overlapAddJVP<<<blocks, kThreads>>>(
-          deviceFrames, deviceDframes, deviceWindows, deviceDwindows,
-          devicePrimal, deviceTangent, batch, frames, nfft, hop,
-          outputSamples, trim, inverseScale);
+          static_cast<float *>(framesBuffer), static_cast<float *>(dframesBuffer),
+          deviceWindows, deviceDwindows, devicePrimal, deviceTangent, batch,
+          frames, nfft, hop, outputSamples, trim, inverseScale);
     else
       overlapAddJVP<<<blocks, kThreads>>>(
-          deviceFramesComplex, deviceDframesComplex, deviceWindows,
+          static_cast<cufftComplex *>(framesBuffer),
+          static_cast<cufftComplex *>(dframesBuffer), deviceWindows,
           deviceDwindows, devicePrimal, deviceTangent, batch, frames, nfft,
           hop, outputSamples, trim, inverseScale);
     status = cudaGetLastError();
   }
-  std::vector<float> primal(outputElements), tangent(outputElements);
-  if (!planStatus && first == CUFFT_SUCCESS && second == CUFFT_SUCCESS &&
-      status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (status == cudaSuccess)
-    status = cudaMemcpy(primal.data(), devicePrimal,
+  // Synchronous copies order after the kernels; identity unfold when the
+  // sample axis is innermost.
+  std::vector<float> primal(inner != 1 ? outputElements : 0),
+      tangent(inner != 1 ? outputElements : 0);
+  float *primalOut = inner != 1 ? primal.data() : primalHost;
+  float *tangentOut = inner != 1 ? tangent.data() : tangentHost;
+  if (ok && status == cudaSuccess)
+    status = cudaMemcpy(primalOut, devicePrimal,
                         outputElements * sizeof(float), cudaMemcpyDeviceToHost);
-  if (status == cudaSuccess)
-    status = cudaMemcpy(tangent.data(), deviceTangent,
+  if (ok && status == cudaSuccess)
+    status = cudaMemcpy(tangentOut, deviceTangent,
                         outputElements * sizeof(float), cudaMemcpyDeviceToHost);
-  destroyPlan(plan, workspace);
-  release(deviceSpectrum, deviceDspectrum, deviceFrames, deviceDframes,
-          deviceFramesComplex, deviceDframesComplex, deviceWindows,
-          deviceDwindows, devicePrimal, deviceTangent);
-  if (planStatus || first != CUFFT_SUCCESS || second != CUFFT_SUCCESS ||
-      status != cudaSuccess)
+  if (!ok || status != cudaSuccess)
     return 355;
+  if (inner == 1)
+    return 0;
   unpackAxis(primal.data(), primalHost, outer, outputSamples, inner);
   unpackAxis(tangent.data(), tangentHost, outer, outputSamples, inner);
   return 0;
@@ -1794,22 +2166,19 @@ extern "C" int tessera_nvidia_stft_backward_broadcast_layout_f32(
     if (dim > axis && dyShape[dim + 1] != xShape[dim])
       return 322;
   }
-  std::vector<float> inputContiguous;
-  std::vector<cufftComplex> dyContiguous;
-  if (!packHostLayout(inputHost, inputContiguous, xRank, xShape, xStrides) ||
-      !packHostLayout(reinterpret_cast<const cufftComplex *>(dyHost),
-                      dyContiguous, dyRank, dyShape, dyStrides))
-    return 323;
   size_t inputElements = size_t(batch) * samples;
   size_t spectralElements = size_t(batch) * frames * bins;
-  if (inputContiguous.size() != inputElements ||
-      dyContiguous.size() != spectralElements)
+  std::vector<float> inputContiguous, inputPacked;
+  std::vector<cufftComplex> dyContiguous, dyPacked;
+  const float *input =
+      stageAxis(inputHost, xRank, xShape, xStrides, outer, samples, inner,
+                inputElements, inputContiguous, inputPacked);
+  const cufftComplex *dy = stageAxis(
+      reinterpret_cast<const cufftComplex *>(dyHost), dyRank, dyShape,
+      dyStrides, outer, int64_t(frames) * bins, inner, spectralElements,
+      dyContiguous, dyPacked);
+  if (!input || !dy)
     return 323;
-  std::vector<float> input(inputElements);
-  std::vector<cufftComplex> dy(spectralElements);
-  packAxis(inputContiguous.data(), input.data(), outer, samples, inner);
-  packAxis(dyContiguous.data(), dy.data(), outer,
-           int64_t(frames) * bins, inner);
   std::vector<float> windows;
   std::vector<int> rowWindow;
   int windowRows = 0;
@@ -1820,28 +2189,30 @@ extern "C" int tessera_nvidia_stft_backward_broadcast_layout_f32(
     return 324;
   int win = int(windowShape[windowRank - 1]);
   size_t windowElements = size_t(windowRows) * win;
-  cufftComplex *deviceDy = nullptr;
-  float *deviceInput = nullptr, *deviceWindows = nullptr, *deviceDx = nullptr,
-        *deviceDwindow = nullptr;
-  int *deviceRowWindow = nullptr;
-  cudaError_t status = cudaMalloc(&deviceDy,
-                                  spectralElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceInput, inputElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDx, inputElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDwindow, windowElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceRowWindow, rowWindow.size() * sizeof(int));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceDy, dy.data(),
+  if (windowElements == 0 || windowElements > size_t(INT32_MAX))
+    return 324; // one reduction block per window element
+  size_t frameElements = size_t(batch) * frames * nfft;
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceDy = static_cast<cufftComplex *>(
+      scratch(0, spectralElements * sizeof(cufftComplex)));
+  auto *deviceInput =
+      static_cast<float *>(scratch(1, inputElements * sizeof(float)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(2, windows.size() * sizeof(float)));
+  auto *deviceDx = static_cast<float *>(scratch(3, inputElements * sizeof(float)));
+  auto *deviceDwindow =
+      static_cast<float *>(scratch(4, windowElements * sizeof(float)));
+  auto *deviceRowWindow =
+      static_cast<int *>(scratch(5, rowWindow.size() * sizeof(int)));
+  auto *deviceG = static_cast<float *>(scratch(6, frameElements * sizeof(float)));
+  if (!deviceDy || !deviceInput || !deviceWindows || !deviceDx ||
+      !deviceDwindow || !deviceRowWindow || !deviceG)
+    return 325;
+  cudaError_t status = cudaMemcpy(deviceDy, dy,
                         spectralElements * sizeof(cufftComplex),
                         cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
-    status = cudaMemcpy(deviceInput, input.data(),
+    status = cudaMemcpy(deviceInput, input,
                         inputElements * sizeof(float), cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceWindows, windows.data(),
@@ -1850,34 +2221,53 @@ extern "C" int tessera_nvidia_stft_backward_broadcast_layout_f32(
     status = cudaMemcpy(deviceRowWindow, rowWindow.data(),
                         rowWindow.size() * sizeof(int),
                         cudaMemcpyHostToDevice);
-  if (status == cudaSuccess) {
-    stftBackwardInputPolicy<<<
-        unsigned((inputElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDy, deviceWindows, deviceDx, batch, samples, nfft, hop, frames,
-        bins, forwardScale, center, padMode);
-    stftBackwardWindowPolicy<<<
-        unsigned((windowElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDy, deviceInput, deviceRowWindow, deviceDwindow, batch,
-        windowRows, samples, nfft, win, hop, frames, bins, forwardScale,
-        center, padMode);
+  // G = the per-frame inverse DFT of dy (see stftBackwardInputFromG). The
+  // one-sided C2R consumes the scratch copy of dy, never the caller's.
+  cufftHandle plan = 0;
+  if (status == cudaSuccess &&
+      cachedPlan(batch * frames, nfft, onesided ? CUFFT_C2R : CUFFT_C2C, plan))
+    return 325;
+  if (status == cudaSuccess && onesided) {
+    weightOnesidedBins<<<unsigned((spectralElements + kThreads - 1) / kThreads),
+                         kThreads>>>(deviceDy, spectralElements, bins, nfft,
+                                     0.5f, 1.0f);
+    status = cudaGetLastError();
+    if (status == cudaSuccess &&
+        cufftExecC2R(plan, deviceDy, deviceG) != CUFFT_SUCCESS)
+      return 325;
+  } else if (status == cudaSuccess) {
+    if (cufftExecC2C(plan, deviceDy, deviceDy, CUFFT_INVERSE) != CUFFT_SUCCESS)
+      return 325;
+    realPartScaled<<<unsigned((frameElements + kThreads - 1) / kThreads),
+                     kThreads>>>(deviceDy, deviceG, frameElements, 1.0f);
     status = cudaGetLastError();
   }
-  std::vector<float> dx(inputElements), dwindow(windowElements);
+  if (status == cudaSuccess) {
+    stftBackwardInputFromG<<<
+        unsigned((inputElements + kThreads - 1) / kThreads), kThreads>>>(
+        deviceG, deviceWindows, deviceDx, batch, samples, nfft, hop, frames,
+        forwardScale, center, padMode);
+    stftBackwardWindowFromG<<<unsigned(windowElements), kReduceThreads>>>(
+        deviceG, deviceInput, deviceRowWindow, deviceDwindow, batch,
+        windowRows, samples, nfft, win, hop, frames, forwardScale, center,
+        padMode);
+    status = cudaGetLastError();
+  }
+  // The synchronous copies below order after the kernels; with the sample
+  // axis innermost the unfold is an identity, so dx lands in place.
+  std::vector<float> dx(inner != 1 ? inputElements : 0);
+  float *dxOut = inner != 1 ? dx.data() : dxHost;
   if (status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (status == cudaSuccess)
-    status = cudaMemcpy(dx.data(), deviceDx, inputElements * sizeof(float),
+    status = cudaMemcpy(dxOut, deviceDx, inputElements * sizeof(float),
                         cudaMemcpyDeviceToHost);
   if (status == cudaSuccess)
-    status = cudaMemcpy(dwindow.data(), deviceDwindow,
+    status = cudaMemcpy(dwindowHost, deviceDwindow,
                         windowElements * sizeof(float),
                         cudaMemcpyDeviceToHost);
-  release(deviceDy, deviceInput, deviceWindows, deviceDx, deviceDwindow,
-          deviceRowWindow);
   if (status != cudaSuccess)
     return 325;
-  unpackAxis(dx.data(), dxHost, outer, samples, inner);
-  std::copy(dwindow.begin(), dwindow.end(), dwindowHost);
+  if (inner != 1)
+    unpackAxis(dx.data(), dxHost, outer, samples, inner);
   return 0;
 }
 
@@ -1927,23 +2317,19 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_f32(
     if (dim > outputAxis && spectrumShape[dim + 1] != dyShape[dim])
       return 332;
   }
-  std::vector<float> dyContiguous;
-  std::vector<cufftComplex> spectrumContiguous;
-  if (!packHostLayout(dyHost, dyContiguous, dyRank, dyShape, dyStrides) ||
-      !packHostLayout(reinterpret_cast<const cufftComplex *>(spectrumHost),
-                      spectrumContiguous, spectrumRank, spectrumShape,
-                      spectrumStrides))
-    return 333;
   size_t dyElements = size_t(batch) * outputSamples;
   size_t spectralElements = size_t(batch) * frames * bins;
-  if (dyContiguous.size() != dyElements ||
-      spectrumContiguous.size() != spectralElements)
+  std::vector<float> dyContiguous, dyPacked;
+  std::vector<cufftComplex> spectrumContiguous, spectrumPacked;
+  const float *dy =
+      stageAxis(dyHost, dyRank, dyShape, dyStrides, outer, outputSamples,
+                inner, dyElements, dyContiguous, dyPacked);
+  const cufftComplex *spectrum = stageAxis(
+      reinterpret_cast<const cufftComplex *>(spectrumHost), spectrumRank,
+      spectrumShape, spectrumStrides, outer, int64_t(frames) * bins, inner,
+      spectralElements, spectrumContiguous, spectrumPacked);
+  if (!dy || !spectrum)
     return 333;
-  std::vector<float> dy(dyElements);
-  std::vector<cufftComplex> spectrum(spectralElements);
-  packAxis(dyContiguous.data(), dy.data(), outer, outputSamples, inner);
-  packAxis(spectrumContiguous.data(), spectrum.data(), outer,
-           int64_t(frames) * bins, inner);
   std::vector<float> windows;
   std::vector<int> rowWindow;
   int windowRows = 0;
@@ -1955,32 +2341,39 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_f32(
   int win = int(windowShape[windowRank - 1]);
   size_t frameElements = size_t(batch) * frames * nfft;
   size_t windowElements = size_t(windowRows) * win;
-  float *deviceDy = nullptr, *deviceWindows = nullptr, *deviceFrames = nullptr,
-        *deviceDframes = nullptr, *deviceDwindow = nullptr;
-  cufftComplex *deviceSpectrum = nullptr, *deviceDspectrum = nullptr;
-  int *deviceRowWindow = nullptr;
-  cudaError_t status = cudaMalloc(&deviceDy, dyElements * sizeof(float));
+  if (windowElements == 0 || windowElements > size_t(INT32_MAX))
+    return 334; // one reduction block per window element
+  size_t termElements = size_t(batch) * rawSamples;
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceDy = static_cast<float *>(scratch(0, dyElements * sizeof(float)));
+  auto *deviceSpectrum = static_cast<cufftComplex *>(
+      scratch(1, spectralElements * sizeof(cufftComplex)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(2, windows.size() * sizeof(float)));
+  auto *deviceFrames =
+      static_cast<float *>(scratch(3, frameElements * sizeof(float)));
+  auto *deviceDframes =
+      static_cast<float *>(scratch(4, frameElements * sizeof(float)));
+  auto *deviceDspectrum = static_cast<cufftComplex *>(
+      scratch(5, std::max(spectralElements, onesided ? size_t(0) : frameElements) *
+                     sizeof(cufftComplex)));
+  auto *deviceDwindow =
+      static_cast<float *>(scratch(6, windowElements * sizeof(float)));
+  auto *deviceRowWindow =
+      static_cast<int *>(scratch(7, rowWindow.size() * sizeof(int)));
+  auto *deviceNumerator =
+      static_cast<double *>(scratch(8, termElements * sizeof(double)));
+  auto *deviceDenominator =
+      static_cast<double *>(scratch(9, termElements * sizeof(double)));
+  if (!deviceDy || !deviceSpectrum || !deviceWindows || !deviceFrames ||
+      !deviceDframes || !deviceDspectrum || !deviceDwindow ||
+      !deviceRowWindow || !deviceNumerator || !deviceDenominator)
+    return 335;
+  cudaError_t status = cudaMemcpy(deviceDy, dy,
+                                  dyElements * sizeof(float),
+                                  cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
-    status = cudaMalloc(&deviceSpectrum,
-                        spectralElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceFrames, frameElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDframes, frameElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDspectrum,
-                        spectralElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDwindow, windowElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceRowWindow, rowWindow.size() * sizeof(int));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceDy, dy.data(), dyElements * sizeof(float),
-                        cudaMemcpyHostToDevice);
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceSpectrum, spectrum.data(),
+    status = cudaMemcpy(deviceSpectrum, spectrum,
                         spectralElements * sizeof(cufftComplex),
                         cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
@@ -1990,44 +2383,86 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_f32(
     status = cudaMemcpy(deviceRowWindow, rowWindow.data(),
                         rowWindow.size() * sizeof(int),
                         cudaMemcpyHostToDevice);
-  if (status == cudaSuccess) {
-    istftFrameValuesPolicy<<<
-        unsigned((frameElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceSpectrum, deviceFrames, batch, frames, bins, nfft, inverseScale,
-        onesided);
-    istftBackwardFramesPolicy<<<
-        unsigned((frameElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDy, deviceFrames, deviceWindows, deviceDframes, batch, frames,
-        nfft, hop, outputSamples, center);
-    istftBackwardSpectrumPolicy<<<
-        unsigned((spectralElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDframes, deviceDspectrum, batch, frames, bins, nfft,
-        inverseScale, onesided);
-    istftBackwardWindowPolicy<<<
-        unsigned((windowElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDy, deviceFrames, deviceWindows, deviceRowWindow, deviceDwindow,
-        batch, windowRows, frames, nfft, win, hop, outputSamples, center);
+  const unsigned frameBlocks = unsigned((frameElements + kThreads - 1) / kThreads);
+  cufftHandle inverse = 0, forward = 0;
+  if (status == cudaSuccess &&
+      (cachedPlan(batch * frames, nfft, onesided ? CUFFT_C2R : CUFFT_C2C,
+                  inverse) ||
+       cachedPlan(batch * frames, nfft, onesided ? CUFFT_R2C : CUFFT_C2C,
+                  forward)))
+    return 335;
+  // Frame values: the forward ISTFT's frames (C2R consumes the scratch copy).
+  if (status == cudaSuccess && onesided) {
+    if (cufftExecC2R(inverse, deviceSpectrum, deviceFrames) != CUFFT_SUCCESS)
+      return 335;
+    scaleReal<<<frameBlocks, kThreads>>>(deviceFrames, frameElements,
+                                         inverseScale);
+    status = cudaGetLastError();
+  } else if (status == cudaSuccess) {
+    if (cufftExecC2C(inverse, deviceSpectrum, deviceSpectrum, CUFFT_INVERSE) !=
+        CUFFT_SUCCESS)
+      return 335;
+    realPartScaled<<<frameBlocks, kThreads>>>(deviceSpectrum, deviceFrames,
+                                              frameElements, inverseScale);
     status = cudaGetLastError();
   }
-  std::vector<cufftComplex> dspectrum(spectralElements);
-  std::vector<float> dwindow(windowElements);
+  if (status == cudaSuccess) {
+    istftOverlapTerms<<<unsigned((termElements + kThreads - 1) / kThreads),
+                        kThreads>>>(deviceFrames, deviceWindows,
+                                    deviceNumerator, deviceDenominator, batch,
+                                    frames, nfft, hop, rawSamples);
+    istftBackwardFramesFromTerms<<<frameBlocks, kThreads>>>(
+        deviceDy, deviceDenominator, deviceWindows, deviceDframes, batch,
+        frames, nfft, hop, outputSamples, rawSamples, center);
+    istftBackwardWindowFromTerms<<<unsigned(windowElements),
+                                   kReduceThreads>>>(
+        deviceDy, deviceFrames, deviceWindows, deviceNumerator,
+        deviceDenominator, deviceRowWindow, deviceDwindow, batch, windowRows,
+        frames, nfft, win, hop, outputSamples, rawSamples, center);
+    status = cudaGetLastError();
+  }
+  // dspectrum = forward DFT of dframes, weighted like the direct kernel.
+  if (status == cudaSuccess && onesided) {
+    if (cufftExecR2C(forward, deviceDframes, deviceDspectrum) != CUFFT_SUCCESS)
+      return 335;
+    weightOnesidedBins<<<unsigned((spectralElements + kThreads - 1) / kThreads),
+                         kThreads>>>(deviceDspectrum, spectralElements, bins,
+                                     nfft, 2.0f, inverseScale);
+    status = cudaGetLastError();
+  } else if (status == cudaSuccess) {
+    realToComplex<<<frameBlocks, kThreads>>>(deviceDframes, deviceDspectrum,
+                                             frameElements);
+    status = cudaGetLastError();
+    if (status == cudaSuccess &&
+        cufftExecC2C(forward, deviceDspectrum, deviceDspectrum,
+                     CUFFT_FORWARD) != CUFFT_SUCCESS)
+      return 335;
+    if (status == cudaSuccess) {
+      scaleReal<<<unsigned((2 * spectralElements + kThreads - 1) / kThreads),
+                  kThreads>>>(reinterpret_cast<float *>(deviceDspectrum),
+                              2 * spectralElements, inverseScale);
+      status = cudaGetLastError();
+    }
+  }
+  // The synchronous copies below order after the kernels; identity unfold
+  // when the bin axis is innermost.
+  std::vector<cufftComplex> dspectrum(inner != 1 ? spectralElements : 0);
+  auto *dspectrumOut = inner != 1
+                           ? dspectrum.data()
+                           : reinterpret_cast<cufftComplex *>(dspectrumHost);
   if (status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (status == cudaSuccess)
-    status = cudaMemcpy(dspectrum.data(), deviceDspectrum,
+    status = cudaMemcpy(dspectrumOut, deviceDspectrum,
                         spectralElements * sizeof(cufftComplex),
                         cudaMemcpyDeviceToHost);
   if (status == cudaSuccess)
-    status = cudaMemcpy(dwindow.data(), deviceDwindow,
+    status = cudaMemcpy(dwindowHost, deviceDwindow,
                         windowElements * sizeof(float),
                         cudaMemcpyDeviceToHost);
-  release(deviceDy, deviceSpectrum, deviceWindows, deviceFrames,
-          deviceDframes, deviceDspectrum, deviceDwindow, deviceRowWindow);
   if (status != cudaSuccess)
     return 335;
-  unpackAxis(dspectrum.data(),
-             reinterpret_cast<cufftComplex *>(dspectrumHost), outer,
-             int64_t(frames) * bins, inner);
-  std::copy(dwindow.begin(), dwindow.end(), dwindowHost);
+  if (inner != 1)
+    unpackAxis(dspectrum.data(),
+               reinterpret_cast<cufftComplex *>(dspectrumHost), outer,
+               int64_t(frames) * bins, inner);
   return 0;
 }

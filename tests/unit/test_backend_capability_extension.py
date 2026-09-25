@@ -212,7 +212,7 @@ _ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul", "gemm", "flash_attn"})
 #   - Philox/key-counter RNG and dropout: libtessera_nvidia_rng.so, bit-exact or
 #     tolerance-bounded against tessera.rng_device on SuperBear.
 #   - FFT and compound spectral consumers: libtessera_nvidia_fft.so, checked
-#     against NumPy through the CUDA FFT/workspace v2 ABI on SuperBear.
+#     against NumPy through the CUDA FFT/workspace ABI (v4) on SuperBear.
 _NVIDIA_HARDWARE_VERIFIED_OPS = frozenset({
     "matmul",
     "rng_uniform", "rng_normal", "rng_philox_uniform", "rng_philox_normal",

@@ -8,6 +8,54 @@ last_updated: 2026-09-25
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## CUDA spectral: measured, then deepened — 2026-09-25
+
+Owner `NVIDIA-FFT-WORKSPACE-1`; sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`.
+Every change was chosen from a measured hotspot (`nsys`, `ncu`, cProfile) and
+re-measured. Packet and attribution:
+`benchmarks/baselines/nvidia_spectral_20260925/` (before at `a58a09db`,
+after at `41e008db`, The-Super-Bear RTX 5070, WSL2 wall-clock, no promotion).
+**Landed:**
+- DCT-II/III are FFT-based (Makhoul), replacing an O(N²) fp64 direct kernel:
+  11.95 → 0.34 ms at 64×1024.
+- A per-device cuFFT plan LRU and scratch pool serve STFT/ISTFT, their JVPs
+  and backward, and conv.
+- FFT host entry reuses per-plan staging.
+- New device-pointer entry points `tessera_nvidia_fft_execute_{c2c,r2c,c2r}_device_f32`,
+  which are async and take a stream (ROCm parity), run at 0.04–0.07 ms.
+- `spectral_conv` is one native batched R2C/multiply/C2R call
+  (`tessera_nvidia_spectral_conv_f32`): 6.58 → 0.62 ms at 262144×1025.
+- STFT/ISTFT backward is FFT-based instead of direct DFT: STFT VJP
+  1658 → 1.1 ms, ISTFT VJP 77 → 2.1 ms.
+- JVPs are pooled: STFT 12.6 → 1.7 ms, ISTFT 21.3 → 1.9 ms.
+- Host staging is skipped for compact layouts.
+- Window-gradient reductions run one block per element with a
+  deterministic tree sum.
+
+**Validation:** FFT/spectral device set **143 passed, 4 skipped** (x86 and
+gfx1151 packages absent) on The-Super-Bear at `41e008db`.
+
+**Still losing to NumPy:** small shapes through the host-buffer entry point
+(`fft_c2c_1x1024`, `dct2_64x1024`, `spectral_conv_16384x257`). That is
+~0.2 ms of copies and synchronization, not kernels. `spectral_filter` stays a
+host complex multiply on purpose.
+
+**Open (recorded, not in this change):**
+- The build trees configure with an empty `CMAKE_BUILD_TYPE`, so runtime
+  libraries compile host code at `-O0`. Measured only on Super-Bear's two
+  trees; a host `-O3` rebuild halved the pre-fix autodiff rows.
+- The scheduled contracts still name `sm120_cufft_workspace_v2`
+  (`scheduled_fft.py` kernel family) and a nonexistent
+  `tessera_nvidia_spectral_filter_f32` (`scheduled_spectral.py` native
+  entry). Both are hashed into the schedule digest, so renaming them is a
+  digest change with its own evidence re-recording.
+- The STFT/ISTFT JVP and backward still take host buffers. A device-resident
+  AD entry is the next step for the small-shape rows.
+
+**Sibling backends:** ROCm follow-up required (below, in its queue); Apple
+and x86 not applicable (their queues state why).
+
+
 ## ROCm executable-pipeline follow-ups — 2026-09-24
 
 Sync `ROCM-EXEC-PIPELINE-2026-09-24`; owner `NVIDIA-FFT-WORKSPACE-1` (the

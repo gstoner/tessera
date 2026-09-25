@@ -1,0 +1,61 @@
+{
+  "schema": "tessera.rocm_spectral_benchmark.v1",
+  "host": "tajasarus",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "device": "gfx1201",
+  "image_arch": "gfx1201",
+  "rows": [
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_jvp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1201",
+      "image_arch": "gfx1201",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 12.786874,
+      "latency_ms": 11.546006,
+      "p10_ms": 11.330554999999999,
+      "p90_ms": 11.668268999999999,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 21
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_jvp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1201",
+      "image_arch": "gfx1201",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 4.991522,
+      "latency_ms": 5.024785,
+      "p10_ms": 4.929784,
+      "p90_ms": 5.631132,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 21
+    }
+  ]
+}

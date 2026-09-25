@@ -8,6 +8,13 @@ last_updated: 2026-09-25
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## gfx1201 native spectral JVP — sibling outcome — 2026-09-25
+
+Sync `ROCM-SPECTRAL-JVP-GFX1201-2026-09-25` (#850). **Not applicable.** The
+shared `NativeJVPArtifact` admission is now `native_jvp.architecture_admits`,
+but sm120 remains single-architecture with no per-chip entry. The shared unit
+test asserts that sm120 still rejects other architectures.
+
 ## Spectral benchmarks: `cold_ms` is the first call — 2026-09-25
 
 Owner `NVIDIA-FFT-WORKSPACE-1`; sync `SPECTRAL-BENCH-COLD-2026-09-25` (#849).

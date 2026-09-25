@@ -417,7 +417,8 @@ def _plan_normalization(*, source: Any, primal_inputs: Sequence[Any],
 )
 def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
                             wrt_indices: tuple[int, ...], target: str,
-                            execution_mode: str, **_: Any) -> NativeJVPFamilyPlan:
+                            execution_mode: str, architecture: str = "gfx1151",
+                            **_: Any) -> NativeJVPFamilyPlan:
     from .scheduled_spectral import lower_scheduled_spectral
 
     bare = source.op_name.removeprefix("tessera.")
@@ -443,8 +444,9 @@ def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
     if storage is None:
         raise ValueError(f"native {bare} JVP has unsupported real storage {real_operand.dtype}")
     scheduled = lower_scheduled_spectral(
+        # The exact chip's composite profile (gfx1151 or gfx1201).
         target=(target if target == "nvidia_sm120" else
-                "x86" if target == "x86" else "rocm_gfx1151"),
+                "x86" if target == "x86" else f"rocm_{architecture}"),
         op_name=source.op_name,
         input_shapes=tuple(tuple(int(dim) for dim in value.shape) for value in primal_inputs),
         axis=int(source.kwargs.get("axis", -1)),
@@ -485,8 +487,11 @@ def plan_native_jvp_family(
     *, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[int, ...],
     target: str, architecture: str, execution_mode: str,
 ) -> NativeJVPFamilyPlan:
-    """Dispatch to the sole registered owner for ``source`` or fail closed."""
-    del architecture  # exact architecture is enforced by the parent artifact
+    """Dispatch to the sole registered owner for ``source`` or fail closed.
+
+    Which (target, architecture, family) triples may run is enforced by the
+    parent artifact (``native_jvp.architecture_admits``); planners receive the
+    architecture so a per-chip package is lowered for the chip it runs on."""
     bare = source.op_name.removeprefix("tessera.")
     entry = _PLUGINS.get(bare)
     if entry is None:
@@ -505,6 +510,7 @@ def plan_native_jvp_family(
         wrt_indices=wrt_indices,
         target=target,
         execution_mode=execution_mode,
+        architecture=architecture,
     )
     if plan.family != declaration.family:
         raise ValueError(
@@ -546,6 +552,11 @@ def build_native_jvp_family_artifact(
         ))
     if plan.declaration is None:
         raise ValueError("native JVP family plan lacks a consumer declaration")
+    # ROCm consumers are declared for the primary chip; a package admitted on
+    # another chip names that chip, never gfx1151.
+    target_consumer = plan.declaration.target_consumers[target]
+    if target == "rocm" and architecture != "gfx1151":
+        target_consumer = target_consumer.replace("gfx1151", architecture)
     if plan.family == "normalization":
         child_metadata = plan.steps[0].get("child_metadata")
         contract = (
@@ -578,7 +589,7 @@ def build_native_jvp_family_artifact(
             {
                 "id": str(step["id"]),
                 "child_digest": str(step["child_digest"]),
-                "target_consumer": plan.declaration.target_consumers[target],
+                "target_consumer": target_consumer,
             }
             for step in plan.steps
         ],
@@ -591,7 +602,7 @@ def build_native_jvp_family_artifact(
             "graph": list(plan.declaration.graph_consumers),
             "schedule": plan.declaration.schedule_consumer,
             "tile": plan.declaration.tile_consumer,
-            "target": plan.declaration.target_consumers[target],
+            "target": target_consumer,
             "migration_state": plan.declaration.migration_state,
         } if plan.declaration is not None else None,
         schedule_program=schedule_program,

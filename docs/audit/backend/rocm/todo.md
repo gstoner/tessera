@@ -58,6 +58,34 @@ now goes through `native_jvp.architecture_admits`):
 
 `test_gfx1201_admits_only_the_spectral_family` pins all three outcomes.
 
+## Spectral benchmarks: `cold_ms` is the first call — 2026-09-25
+
+Owner `TSOL-POLICY-PHYS-1`; sync `SPECTRAL-BENCH-COLD-2026-09-25` (#849).
+**Changed here.** `benchmarks/spectral/benchmark_rocm_spectral.py` used to
+invoke each case once, untimed, before timing `cold_ms`, and it probed
+`image_arch` up front through `_amd_composite_lib()`. That call loads and
+caches the composite package the JVP/VJP routes launch from. It now times the
+first invocation and probes the arch only after every case is timed. Probing
+right after the first case is not enough: that case is a plain STFT that never
+loads the composite package.
+
+**Validation (one full run per chip, 6/6 rows `ok`, `image_arch` stamped).**
+The first composite user, `stft_jvp`, now pays for loading the package. Its
+cold time moved as follows:
+
+| Chip | Arch probed after the first case | Arch probed after all cases |
+|---|---:|---:|
+| gfx1201 (Tajasarus) | 245.5 ms | 412.6 ms |
+| gfx1151 (Princess-Luna) | 600.1 ms | 751.4 ms |
+
+Warm medians did not move. These are single runs, not a calibrated cost.
+
+**Follow-up required:** the committed `rocm_spectral_20260925` packets carry
+second-call `cold_ms` on both chips. Re-record each chip on its own box;
+gfx1151 and gfx1201 evidence never transfers. The separate
+`benchmark_rocm_fft_plan_cache.py` already times its first call and is
+unchanged.
+
 ## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory

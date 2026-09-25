@@ -92,10 +92,18 @@ def _istft_reference(spectrum, window):
     return out / np.maximum(weight, 1e-12)
 
 
-def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, list[float]]:
+def _first_call(call: Callable[[], Any]) -> tuple[Any, float]:
+    """The case's first invocation, timed: ``cold_ms`` is this call. It
+    includes compilation, package images and plans that no earlier case in the
+    process already created; the result is also what correctness is checked
+    against, so no untimed call warms the route first."""
     start = time.perf_counter_ns()
-    call()
-    cold = (time.perf_counter_ns() - start) * 1e-6
+    result = call()
+    return result, (time.perf_counter_ns() - start) * 1e-6
+
+
+def _time(call: Callable[[], Any], warmup: int, repeats: int) -> list[float]:
+    """Warm samples only; the cold call is measured by ``_first_call``."""
     for _ in range(warmup):
         call()
     samples = []
@@ -103,7 +111,7 @@ def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, li
         start = time.perf_counter_ns()
         call()
         samples.append((time.perf_counter_ns() - start) * 1e-6)
-    return cold, samples
+    return samples
 
 
 def _image_arch() -> str | None:
@@ -126,8 +134,6 @@ def main() -> None:
     chip = os.environ.get("TESSERA_ROCM_CHIP")
     if not chip:
         raise SystemExit("set TESSERA_ROCM_CHIP (gfx1151 or gfx1201)")
-    image_arch = _image_arch()
-
     rng = np.random.default_rng(11)
     x = rng.standard_normal((BATCH, SAMPLES)).astype(np.float32)
     window = (0.25 + np.hanning(NFFT)).astype(np.float32)
@@ -160,11 +166,11 @@ def main() -> None:
         row: dict[str, Any] = {
             "backend": "rocm", "op": name.split("_")[0], "case": name,
             "shape": [[BATCH, SAMPLES]], "dtype": "float32", "device": chip,
-            "image_arch": image_arch, "tessera_version": "0.1.0", "route": route,
+            "image_arch": None, "tessera_version": "0.1.0", "route": route,
             "latency_source": "host_wall_synchronized",
         }
         try:
-            first = call()
+            first, cold = _first_call(call)
             if reference is not None:
                 actual = np.asarray(first[0] if isinstance(first, tuple) else first)
                 expected = reference()
@@ -172,17 +178,23 @@ def main() -> None:
                 row["max_rel_error"] = float(np.max(np.abs(actual - expected))) / scale
                 if row["max_rel_error"] > 1e-4:
                     raise RuntimeError(f"disagrees with NumPy: {row['max_rel_error']:.3e}")
-            cold, samples_ms = _time(call, args.warmup, args.repeats)
+            samples_ms = _time(call, args.warmup, args.repeats)
         except Exception as exc:  # report, do not time a wrong or refused case
             row.update(ok=False, error=f"{type(exc).__name__}: {exc}"[:500])
             rows.append(row)
-            print(json.dumps(row), flush=True)
             continue
         row.update(ok=True, cold_ms=cold, latency_ms=float(statistics.median(samples_ms)),
                    p10_ms=float(np.percentile(samples_ms, 10)),
                    p90_ms=float(np.percentile(samples_ms, 90)), numpy_ms=None,
                    tflops=None, memory_bw_gb_s=None, repeats=args.repeats)
         rows.append(row)
+    # The arch probe loads and caches the composite package the JVP/VJP routes
+    # launch from. It runs only after every case is timed: probing earlier,
+    # even after the first case, would load that package untimed and move its
+    # discovery and loading out of whichever case first needs it.
+    image_arch = _image_arch()
+    for row in rows:
+        row["image_arch"] = image_arch
         print(json.dumps(row), flush=True)
     packet = {
         "schema": "tessera.rocm_spectral_benchmark.v1",

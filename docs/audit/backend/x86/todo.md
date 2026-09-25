@@ -16,6 +16,15 @@ shared `NativeJVPArtifact` admission is now `native_jvp.architecture_admits`,
 but x86 remains `zen5_avx512`-only with no per-chip entry. The shared unit
 test asserts this.
 
+## Spectral benchmarks: `cold_ms` is the first call — 2026-09-25
+
+Sync `SPECTRAL-BENCH-COLD-2026-09-25` (#849). **Parity validated by code read;
+nothing to change.** `benchmarks/spectral/benchmark_x86_fft_algorithms.py`
+clears the plan cache and times the first call before its correctness check.
+`benchmark_tsol_physical_policies.py --target x86` times the first
+`rt.launch` as `cold_ms`. Both already mean first call, so neither was edited
+and no x86 packet is affected. This was not re-run on a Zen 5 box.
+
 ## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
 
 Owner `RUNTIME-LIB-OPT-1` (new, cross-backend; defined here and mirrored in the

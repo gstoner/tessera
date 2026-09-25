@@ -1579,7 +1579,9 @@ extern "C" int tessera_x86_stft_policy_layout_storage(
       for (int64_t frame = 0; frame < frames; ++frame)
         for (int64_t local = 0; local < fftN; ++local) {
           int64_t source = frame * hop + local - pad;
-          if ((source < 0 || source >= samples) && padMode == 1)
+          // pad_mode is a centered-framing policy: a non-centered frame
+          // past the signal is zero-filled (tessera.ops.stft, reference VJP).
+          if ((source < 0 || source >= samples) && center && padMode == 1)
             source = source < 0 ? -source : 2 * samples - 2 - source;
           const float value = source >= 0 && source < samples
                                   ? x[row * samples + source]
@@ -1772,7 +1774,8 @@ extern "C" int tessera_x86_stft_policy_broadcast_layout_storage(
           double real = 0.0, imag = 0.0;
           for (int64_t local = 0; local < fftN; ++local) {
             int64_t source = frame * hop + local - pad;
-            if ((source < 0 || source >= samples) && padMode == 1)
+            // Reflect only centered frames (see the layout entry point).
+            if ((source < 0 || source >= samples) && center && padMode == 1)
               source = source < 0 ? -source : 2 * samples - 2 - source;
             const double value = source >= 0 && source < samples
                 ? double(x[row * samples + source]) * windows[row * fftN + local]

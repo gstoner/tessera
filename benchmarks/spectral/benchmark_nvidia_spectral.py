@@ -99,7 +99,7 @@ def _cases(rng: np.random.Generator):
     return cases
 
 
-def _device_resident_rows(lib, device, warmup: int, repeats: int) -> list[dict[str, Any]]:
+def _device_resident_rows(probe: "_Probe", warmup: int, repeats: int) -> list[dict[str, Any]]:
     """C2C with input and output already on the GPU (device-pointer ABI).
 
     Times the enqueue plus a device synchronize: what a caller that keeps its
@@ -107,6 +107,9 @@ def _device_resident_rows(lib, device, warmup: int, repeats: int) -> list[dict[s
     """
     import ctypes
 
+    # This lane calls the library's plan ABI directly, so the library must be
+    # loaded before setup; cold_ms here is the first execute on a ready plan.
+    lib = probe.values()["lib"]
     if not hasattr(lib, "tessera_nvidia_fft_execute_c2c_device_f32"):
         return []
     cudart = ctypes.CDLL("libcudart.so.13")
@@ -135,16 +138,17 @@ def _device_resident_rows(lib, device, warmup: int, repeats: int) -> list[dict[s
                 if cudart.cudaDeviceSynchronize():
                     raise RuntimeError("synchronize failed")
 
-            call()
+            _, cold = _first_call(call)
             out = np.empty_like(host)
             cudart.cudaMemcpy(out.ctypes.data, device_out, out.nbytes, 2)
             expected = np.fft.fft(host, axis=-1)
             error = float(np.max(np.abs(out - expected))) / max(1.0, float(np.max(np.abs(expected))))
-            cold, samples = _time(call, warmup, repeats)
+            samples = _time(call, warmup, repeats)
             median = float(statistics.median(samples))
             row = {
                 "backend": "nvidia_sm120", "op": "tessera.fft", "case": f"fft_c2c_{batch}x{n}_device_resident",
-                "shape": [[batch, n]], "dtype": "complex64", "device": device, "tessera_version": "0.1.0",
+                "shape": [[batch, n]], "dtype": "complex64", "device": None,
+                "tessera_version": "0.1.0",
                 "route": "nvidia_fft_device_pointer", "latency_source": "host_wall_synchronized",
                 "ok": True, "max_rel_error": error, "cold_ms": cold, "latency_ms": median,
                 "p10_ms": float(np.percentile(samples, 10)), "p90_ms": float(np.percentile(samples, 90)),
@@ -152,7 +156,6 @@ def _device_resident_rows(lib, device, warmup: int, repeats: int) -> list[dict[s
                 "memory_bw_gb_s": 2 * host.nbytes / (median * 1e-3) / 1e9, "repeats": repeats,
             }
             rows.append(row)
-            print(json.dumps(row), flush=True)
         finally:
             for pointer in (device_in, device_out):
                 if pointer.value:
@@ -163,12 +166,12 @@ def _device_resident_rows(lib, device, warmup: int, repeats: int) -> list[dict[s
     return rows
 
 
-def _autodiff_rows(device, warmup: int, repeats: int) -> list[dict[str, Any]]:
+def _autodiff_rows(warmup: int, repeats: int) -> list[dict[str, Any]]:
     """STFT/ISTFT forward-mode (native_jvp) and reverse-mode (native_backward).
 
     Goes through the public @tessera.jit autodiff entry points at the 8x16000
     audio size; the primal is checked against NumPy before timing. The first
-    call compiles and is excluded by the warmup.
+    call compiles and is reported as ``cold_ms``; the warm samples follow it.
     """
     import tessera
 
@@ -233,37 +236,73 @@ def _autodiff_rows(device, warmup: int, repeats: int) -> list[dict[str, Any]]:
     for name, route, call, expected_primal in cases:
         row: dict[str, Any] = {
             "backend": "nvidia_sm120", "op": name.split("_")[0], "case": name,
-            "shape": [[batch, samples]], "dtype": "float32", "device": device,
+            "shape": [[batch, samples]], "dtype": "float32", "device": None,
             "tessera_version": "0.1.0", "route": route,
             "latency_source": "host_wall_synchronized",
         }
         try:
-            first = call()
+            first, cold = _first_call(call)
             if expected_primal is not None:
                 primal = np.asarray(first[0])
                 scale = max(1.0, float(np.max(np.abs(expected_primal))))
                 row["max_rel_error"] = float(np.max(np.abs(primal - expected_primal))) / scale
                 if row["max_rel_error"] > 1e-4:
                     raise RuntimeError(f"primal disagrees: {row['max_rel_error']:.3e}")
-            cold, samples_ms = _time(call, warmup, repeats)
+            samples_ms = _time(call, warmup, repeats)
         except Exception as exc:
             row.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             rows.append(row)
-            print(json.dumps(row), flush=True)
             continue
         median = float(statistics.median(samples_ms))
         row.update(ok=True, cold_ms=cold, latency_ms=median, numpy_ms=None, tflops=None,
                    memory_bw_gb_s=None, p10_ms=float(np.percentile(samples_ms, 10)),
                    p90_ms=float(np.percentile(samples_ms, 90)), repeats=repeats)
         rows.append(row)
-        print(json.dumps(row), flush=True)
     return rows
 
 
-def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, list[float]]:
+class _Probe:
+    """FFT runtime library, package ABI, spectral arch and device tag, loaded
+    on first use.
+
+    Loading the library and naming the device (``cuInit``) create process state
+    the timed routes share and cache, so rows are stamped only after every case
+    is timed. Probing earlier would move that loading out of the ``cold_ms`` of
+    whichever case first needs it. The device-resident lane is the exception:
+    it calls the library's plan ABI directly, so it loads the library first.
+    """
+
+    def __init__(self) -> None:
+        self._values: dict[str, Any] | None = None
+
+    def values(self) -> dict[str, Any]:
+        if self._values is None:
+            lib = rt._load_nvidia_fft_runtime()
+            if lib is None:
+                raise SystemExit("libtessera_nvidia_fft.so is not loadable")
+            self._values = {
+                "lib": lib,
+                "package_abi": lib.tessera_nvidia_fft_package_abi().decode(),
+                "spectral_arch": (lib.tessera_nvidia_spectral_arch()
+                                  if hasattr(lib, "tessera_nvidia_spectral_arch") else None),
+                "device": (rt._nvidia_device_name()
+                           if hasattr(rt, "_nvidia_device_name") else None),
+            }
+        return self._values
+
+
+def _first_call(call: Callable[[], Any]) -> tuple[Any, float]:
+    """The case's first invocation, timed: ``cold_ms`` is this call. It
+    includes compilation, package images and plans that no earlier case in the
+    process already created; the result is also what correctness is checked
+    against, so no untimed call warms the route first."""
     start = time.perf_counter_ns()
-    call()
-    cold = (time.perf_counter_ns() - start) * 1e-6
+    result = call()
+    return result, (time.perf_counter_ns() - start) * 1e-6
+
+
+def _time(call: Callable[[], Any], warmup: int, repeats: int) -> list[float]:
+    """Warm samples only; the cold call is measured by ``_first_call``."""
     for _ in range(warmup):
         call()
     samples = []
@@ -271,7 +310,7 @@ def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, li
         start = time.perf_counter_ns()
         call()
         samples.append((time.perf_counter_ns() - start) * 1e-6)
-    return cold, samples
+    return samples
 
 
 def main() -> None:
@@ -282,12 +321,7 @@ def main() -> None:
     parser.add_argument("--output")
     args = parser.parse_args()
 
-    lib = rt._load_nvidia_fft_runtime()
-    if lib is None:
-        raise SystemExit("libtessera_nvidia_fft.so is not loadable")
-    abi = lib.tessera_nvidia_fft_package_abi().decode()
-    arch = lib.tessera_nvidia_spectral_arch() if hasattr(lib, "tessera_nvidia_spectral_arch") else None
-    device = rt._nvidia_device_name() if hasattr(rt, "_nvidia_device_name") else None
+    probe = _Probe()
     prefixes = tuple(p for p in args.only.split(",") if p)
     rows = []
     for name, route, op, operands, kwargs, reference, flops in _cases(np.random.default_rng(20260925)):
@@ -306,13 +340,13 @@ def main() -> None:
         row: dict[str, Any] = {
             "backend": "nvidia_sm120", "op": op, "case": name,
             "shape": [list(np.shape(o)) for o in operands],
-            "dtype": str(operands[0].dtype), "device": device,
+            "dtype": str(operands[0].dtype), "device": None,
             "tessera_version": "0.1.0", "route": route,
             "latency_source": "host_wall_synchronized",
-            "package_abi": abi, "spectral_arch": arch,
+            "package_abi": None, "spectral_arch": None,
         }
         try:
-            actual = call()
+            actual, cold = _first_call(call)
             expected = reference() if reference is not None else None
             if expected is not None:
                 scale = max(1.0, float(np.max(np.abs(expected))))
@@ -320,12 +354,11 @@ def main() -> None:
                 row["max_rel_error"] = error
                 if error > 1e-4:
                     raise RuntimeError(f"disagrees with NumPy: rel error {error:.3e}")
-            cold, samples = _time(call, args.warmup, args.repeats)
-            numpy_cold, numpy_samples = (_time(reference, 1, 5) if reference else (None, None))
+            samples = _time(call, args.warmup, args.repeats)
+            numpy_samples = _time(reference, 1, 5) if reference else None
         except Exception as exc:  # report, do not time a wrong or refused case
             row.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             rows.append(row)
-            print(json.dumps(row), flush=True)
             continue
         median = float(statistics.median(samples))
         bytes_moved = sum(np.asarray(o).nbytes for o in operands) + actual.nbytes
@@ -338,16 +371,21 @@ def main() -> None:
             repeats=args.repeats,
         )
         rows.append(row)
-        print(json.dumps(row), flush=True)
     if not prefixes or any("device_resident".startswith(p) or p.startswith("fft") for p in prefixes):
-        rows.extend(_device_resident_rows(lib, device, args.warmup, args.repeats))
+        rows.extend(_device_resident_rows(probe, args.warmup, args.repeats))
     if not prefixes or any(p in ("autodiff", "stft_jvp", "stft_vjp", "istft_jvp", "istft_vjp")
                            for p in prefixes):
-        rows.extend(_autodiff_rows(device, args.warmup, args.repeats))
+        rows.extend(_autodiff_rows(args.warmup, args.repeats))
+    values = probe.values()
+    for row in rows:
+        for key in ("device", "package_abi", "spectral_arch"):
+            if key in row:
+                row[key] = values[key]
+        print(json.dumps(row), flush=True)
     packet = {
         "schema": "tessera.nvidia_spectral_benchmark.v1",
         "host": platform.node(), "platform": platform.platform(),
-        "package_abi": abi, "device": device, "rows": rows,
+        "package_abi": values["package_abi"], "device": values["device"], "rows": rows,
     }
     if args.output:
         with open(args.output, "w") as handle:

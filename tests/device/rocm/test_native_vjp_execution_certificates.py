@@ -4,7 +4,13 @@ Each imported row remains an independent numerical test with its own oracle.
 This packet composes those rows in one process so the process-level execution
 registry can prove total family/target coverage rather than a collection of
 unrelated successful launches. A newly declared ROCm family fails the final
-set equality until it supplies an exact gfx1151 row here.
+set equality until it supplies an exact-device row here.
+
+The packet runs on either ROCm chip the certificate registry models (gfx1151,
+and gfx1201 through ``evidence_target == "rocm_gfx1201"``). Every certificate
+in the process was produced on this host, so each exact-device row must name
+the host's own chip -- in both ``device_arch`` and ``evidence_target``. A row
+naming the other chip is a defect, never an accepted alternative.
 """
 
 from __future__ import annotations
@@ -34,7 +40,12 @@ def test_every_declared_rocm_vjp_family_records_an_exact_certificate() -> None:
     )
 
     if runtime._tessera_opt_path() is None or not runtime._rocm_wmma_runtime_available():
-        pytest.skip("production tessera-opt and live gfx1151 are required")
+        pytest.skip("production tessera-opt and a live ROCm device are required")
+    chip = runtime._rocm_chip()
+    # The registry models exact-device ROCm evidence only for these chips
+    # (native_vjp_plugins.validate_native_vjp_execution_certificate).
+    if chip not in ("gfx1151", "gfx1201"):
+        pytest.skip(f"no exact-device VJP certificate model for {chip!r}")
 
     stateful.test_rocm_adafactor_topologies_record_exact_gfx1151_certificates(
         "full"
@@ -90,4 +101,5 @@ def test_every_declared_rocm_vjp_family_records_an_exact_certificate() -> None:
         assert rows, f"{family}/{target} has no exact-device certificate"
         for row in rows:
             validate_native_vjp_execution_certificate(row)
-            assert row["physical_attestation"]["device_arch"] == "gfx1151"
+            assert row["physical_attestation"]["device_arch"] == chip
+            assert row["evidence_target"] == f"rocm_{chip}"

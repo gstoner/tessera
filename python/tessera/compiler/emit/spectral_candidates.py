@@ -634,11 +634,15 @@ def _cptr(a: np.ndarray) -> ctypes.c_void_p:
 
 
 _rocm_plan_lock = threading.Lock()
+# Both caches are keyed by the image that created the plan. Each prebuilt image
+# is stamped for exactly one chip, so a process that switches its selected HIP
+# device between gfx1151 and gfx1201 can never be handed a plan -- or pass one
+# into a composite entry point -- that another chip's image created.
 _rocm_plan_cache: collections.OrderedDict[
-    tuple[int, int, str], tuple[ctypes.CDLL, ctypes.c_void_p]
+    tuple[ctypes.CDLL, int, int, str], tuple[ctypes.CDLL, ctypes.c_void_p]
 ] = collections.OrderedDict()
 _rocm_composite_plan_cache: collections.OrderedDict[
-    str, tuple[ctypes.CDLL, ctypes.c_void_p]
+    tuple[ctypes.CDLL, str], tuple[ctypes.CDLL, ctypes.c_void_p]
 ] = collections.OrderedDict()
 
 
@@ -658,25 +662,31 @@ atexit.register(_clear_rocm_plan_cache)
 
 
 def _rocm_plan(
-    n: int, sign: int, artifact_digest: str
+    n: int, sign: int, artifact_digest: str, lib: ctypes.CDLL | None = None,
 ) -> tuple[ctypes.CDLL, ctypes.c_void_p]:
+    """FFT plan from ``lib`` (default: the selected device's image).
+
+    A composite caller passes its own image, so every plan handle it hands
+    that image's entry points was created by the same image.
+    """
     if len(artifact_digest) != 64 or any(
         char not in "0123456789abcdef" for char in artifact_digest
     ):
         raise ValueError("ROCm FFT requires a lowercase SHA-256 artifact digest")
-    key = (int(n), int(sign), artifact_digest)
+    if lib is None:
+        lib = _amd_device_lib()
+    if lib is None:
+        raise RuntimeError(
+            "prebuilt ROCm spectral image libtessera_spectral_rocm.so "
+            f"for {_spectral_device_arch() or 'the selected device'} "
+            "is unavailable"
+        )
+    key = (lib, int(n), int(sign), artifact_digest)
     with _rocm_plan_lock:
         cached = _rocm_plan_cache.get(key)
         if cached is not None:
             _rocm_plan_cache.move_to_end(key)
             return cached
-        lib = _amd_device_lib()
-        if lib is None:
-            raise RuntimeError(
-                "prebuilt ROCm spectral image libtessera_spectral_rocm.so "
-                f"for {_spectral_device_arch() or 'the selected device'} "
-                "is unavailable"
-            )
         handle = ctypes.c_void_p()
         rc = lib.ts_fft_plan_create_for_artifact_amd(
             n, sign, artifact_digest.encode("ascii"), ctypes.byref(handle)
@@ -696,10 +706,11 @@ def _rocm_composite_plan(
 ) -> ctypes.c_void_p:
     digest = str(metadata["schedule_digest"])
     workspace_bytes = int(metadata["workspace_bytes"])
+    key = (lib, digest)
     with _rocm_plan_lock:
-        cached = _rocm_composite_plan_cache.get(digest)
+        cached = _rocm_composite_plan_cache.get(key)
         if cached is not None:
-            _rocm_composite_plan_cache.move_to_end(digest)
+            _rocm_composite_plan_cache.move_to_end(key)
             cached_lib, handle = cached
             if (
                 cached_lib.ts_spectral_composite_plan_digest_amd(handle)
@@ -718,7 +729,7 @@ def _rocm_composite_plan(
         if len(_rocm_composite_plan_cache) >= 16:
             _, evicted = _rocm_composite_plan_cache.popitem(last=False)
             evicted[0].ts_spectral_composite_plan_destroy_amd(evicted[1])
-        _rocm_composite_plan_cache[digest] = (lib, handle)
+        _rocm_composite_plan_cache[key] = (lib, handle)
         return handle
 
 
@@ -906,7 +917,7 @@ def run_rocm_spectral_composite(
         dct_type = int(contract["dct_type"])
         plan = None
         if dct_type == 2:
-            _, plan = _rocm_plan(2 * n, -1, str(children[0]["schedule_digest"]))
+            _, plan = _rocm_plan(2 * n, -1, str(children[0]["schedule_digest"]), lib)
         rc = lib.ts_dct_plan_hostptr_strided_storage_amd(
             composite_plan, plan, _cptr(x), _cptr(out), outer, n, inner,
             dct_type, storage_code,
@@ -924,11 +935,11 @@ def run_rocm_spectral_composite(
         fft_n = int(children[0]["length"])
         _, forward = _rocm_plan(
             int(children[0]["physical_length"]), -1,
-            str(children[0]["schedule_digest"])
+            str(children[0]["schedule_digest"]), lib,
         )
         _, inverse = _rocm_plan(
             int(children[1]["physical_length"]), 1,
-            str(children[1]["schedule_digest"])
+            str(children[1]["schedule_digest"]), lib,
         )
         rc = lib.ts_spectral_conv_plan_hostptr_strided_storage_amd(
             composite_plan, forward, inverse, _cptr(x), input_n,
@@ -1020,7 +1031,7 @@ def run_rocm_istft_jvp(
     children = list(contract["child_ffts"])
     _, inverse = _rocm_plan(
         int(children[0]["physical_length"]), 1,
-        str(children[0]["schedule_digest"]),
+        str(children[0]["schedule_digest"]), lib,
     )
     composite_plan = _rocm_composite_plan(dict(contract), lib)
     output_shape = tuple(int(dim) for dim in contract["output_shape"])

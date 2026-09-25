@@ -1803,12 +1803,23 @@ class JitFn:
         execution_mode = "cpu_avx512"
         if target == "rocm":
             from tessera import runtime as _runtime
+            from .native_jvp import architecture_admits
+            from .native_jvp_plugins import native_jvp_plugin_declarations
+
             chip = _runtime._rocm_chip()
-            if chip != "gfx1151":
+            declaration = native_jvp_plugin_declarations().get(
+                source.op_name.removeprefix("tessera.")
+            )
+            family = declaration.family if declaration is not None else ""
+            # gfx1151 carries every family; another chip only the families
+            # with exact-device evidence there (gfx1201: spectral_compound).
+            if not architecture_admits("rocm", chip, family):
                 raise TesseraJitError(
-                    f"native ROCm JVP requires exact gfx1151; detected {chip!r}"
+                    f"native ROCm JVP requires exact gfx1151; detected {chip!r} "
+                    f"(gfx1201 is admitted only for spectral_compound, not "
+                    f"{family or source.op_name!r})"
                 )
-            architecture = "gfx1151"
+            architecture = chip
             execution_mode = "hip_runtime"
         elif target == "nvidia_sm120":
             architecture = "sm120"

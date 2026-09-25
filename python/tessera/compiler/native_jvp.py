@@ -22,6 +22,22 @@ _TARGET_ARCHITECTURES = {
     "rocm": "gfx1151",
     "nvidia_sm120": "sm120",
 }
+# Further exact architectures, each admitted only for the families that have
+# exact-device JVP evidence there. gfx1201 runs the spectral family through its
+# own gfx1201-stamped composite image (ROCM-SPECTRAL-JVP-GFX1201-2026-09-25);
+# every other family on gfx1201, and gfx1200/gfx1250, still fails closed.
+_ADDITIONAL_ARCHITECTURE_FAMILIES: dict[tuple[str, str], frozenset[str]] = {
+    ("rocm", "gfx1201"): frozenset({"spectral_compound"}),
+}
+
+
+def architecture_admits(target: str, architecture: str, family: str) -> bool:
+    """Whether ``family`` has native JVP evidence on ``(target, architecture)``."""
+    if _TARGET_ARCHITECTURES.get(target) == architecture:
+        return True
+    return family in _ADDITIONAL_ARCHITECTURE_FAMILIES.get(
+        (target, architecture), frozenset()
+    )
 
 
 def _canonical_json(value: object) -> str:
@@ -52,7 +68,9 @@ class NativeJVPArtifact:
         if body.get("schema") != _SCHEMA or actual != _digest(body):
             raise ValueError("native JVP artifact has stale content identity")
         target = str(body.get("target", ""))
-        if body.get("architecture") != _TARGET_ARCHITECTURES.get(target):
+        if not architecture_admits(
+            target, str(body.get("architecture", "")), str(body.get("family", ""))
+        ):
             raise ValueError("native JVP artifact is not bound to an exact architecture")
         steps = body.get("steps")
         if not isinstance(steps, list) or not steps:
@@ -132,11 +150,13 @@ def build_native_jvp_artifact(
 
     ``gfx1200`` and ``gfx1250`` are intentionally rejected here, even if a
     caller labels them as ROCm: neither has a native JVP evidence packet.
+    ``gfx1201`` is admitted for the spectral family only.
     """
-    expected = _TARGET_ARCHITECTURES.get(target)
-    if expected is None or architecture != expected:
+    if not architecture_admits(target, architecture, str(family)):
         raise ValueError(
-            "native JVP packages support only zen5_avx512, gfx1151, and sm120; "
+            "native JVP packages support zen5_avx512, gfx1151, and sm120, plus "
+            "gfx1201 for spectral_compound; "
+            f"{architecture!r} has no native {family} JVP evidence; "
             "gfx1200/gfx1250 and other unmeasured architectures fail closed"
         )
     if not source_graph_ir or 'tessera.frontend.authority = "tracer"' not in source_graph_ir:

@@ -7,40 +7,56 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-## ROCm VJP certificate packet names the host chip — 2026-09-25
+## gfx1201: native spectral JVP admitted — 2026-09-25
 
-Owner `E2E-REAL-6F` (the exact-device certificate packet). This closes the
-gfx1201 failure recorded as pre-existing in the gfx1201 spectral JVP entry.
+Owner `TSOL-POLICY-PHYS-1`; sync `ROCM-SPECTRAL-JVP-GFX1201-2026-09-25`. This
+closes the "gfx1201 JVP refused" item left open by
+`ROCM-SPECTRAL-FFT-POLICY-2026-09-25`.
 
-`test_every_declared_rocm_vjp_family_records_an_exact_certificate` asserted
-`device_arch == "gfx1151"` for every exact-device row. Its guard claimed to
-require gfx1151 but checked only for a live ROCm runtime, so on gfx1201 it ran
-and failed with `assert 'gfx1201' == 'gfx1151'`.
+`JitFn.native_jvp` refused every ROCm chip but gfx1151 for every family.
+`native_jvp.py` pinned ROCm to gfx1151, the spectral planner lowered for
+`rocm_gfx1151`, and `run_rocm_istft_jvp` required a gfx1151 image. Now:
 
-**Decision: check the host chip (option b), not skip gfx1201 (option a).** The
-certificate registry models exact-device ROCm evidence per chip.
-`validate_native_vjp_execution_certificate` accepts `exact_device` only when
-the attested `device_arch` matches the chip bound by `evidence_target`
-(gfx1151 by default, gfx1201 for `rocm_gfx1201`). On gfx1201, every declared
-family ran in the packet, passed its own oracle, and was certified
-exact-device for gfx1201.
+- **Admission is per (target, architecture, family)**
+  (`native_jvp.architecture_admits`). gfx1151 keeps every family, and gfx1201
+  is admitted for `spectral_compound` only.
+- **Everything else still fails closed.** Every other family on gfx1201, and
+  gfx1200/gfx1250, is refused at the jit gate, at artifact build, and at
+  launch validation.
+- **Per-chip packages.** The spectral package lowers for `rocm_<chip>` and
+  names that chip in its consumer label; gfx1151 artifacts are byte-identical
+  to before.
+- **ISTFT window JVP.** It now requires that the image, the contract and the
+  host all name the same chip.
 
-Every row in the process comes from this host, so each must name the host
-chip in both `device_arch` and `evidence_target`. A row naming the other chip
-still fails; the test does not accept either chip. The guard now names what
-it checks, and it skips chips with no registry model (anything other than
-gfx1151/gfx1201).
+**Evidence** (`benchmarks/baselines/rocm_spectral_20260925/gfx1201_jvp_after.json`):
+gfx1201 STFT JVP 11.5 ms and ISTFT JVP 5.0 ms, both previously refused.
 
-**Validation at `02f01ed0`:**
+**Tests.**
 
-- The packet passes on gfx1201 (Tajasarus). On `main` (`73f13759`) it failed.
-- It passes on gfx1151 (Princess-Luna).
-- The full ROCm spectral gate is green on both: gfx1201 357 passed,
-  10 skipped; gfx1151 364 passed, 3 skipped.
+- **gfx1201 (Tajasarus):** the spectral product rule, the ISTFT window product
+  and the new STFT linearization pass. The refusal test confirms `_rocm_sum`
+  is still refused. The ROCm spectral gate gives 359 passed, 8 skipped,
+  1 failed.
+- **gfx1151 (Princess-Luna):** the gate gives 364 passed, 4 skipped.
 
-A first gate run failed `test_x86_noncentered_reflect_frame_is_zero_filled` on
-both boxes. The cause was stale `build/` trees that predated #848's AVX-512
-fix. After `ninja -C build` it passes. It was not a regression.
+The gfx1201 failure is pre-existing on `main` (`73f13759`):
+`test_every_declared_rocm_vjp_family_records_an_exact_certificate` asserts
+`device_arch == "gfx1151"` for VJP certificate rows but does not skip on
+gfx1201. It is a VJP test, untouched here.
+
+**Sibling backends** (shared contract changed: `NativeJVPArtifact` admission
+now goes through `native_jvp.architecture_admits`):
+- **NVIDIA: not applicable.** sm120 admission is single-architecture and
+  unchanged; the per-chip map has no NVIDIA entry.
+- **x86: not applicable.** Same: zen5_avx512 only, no per-chip entry.
+- **Apple: not applicable.** Apple has no native JVP target. `JitFn.native_jvp`
+  rejects every target outside x86/ROCm/sm120 before admission runs, and
+  `architecture_admits` returns false for any Apple target because Apple
+  appears in neither map. Apple forward-mode AD runs on its own lanes, not
+  through this artifact.
+
+`test_gfx1201_admits_only_the_spectral_family` pins all three outcomes.
 
 ## Spectral benchmarks: `cold_ms` is the first call — 2026-09-25
 

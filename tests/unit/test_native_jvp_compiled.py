@@ -78,6 +78,25 @@ def _rocm_istft_product(spectrum, window):
     return tessera.ops.istft(spectrum, window, hop=4)
 
 
+@tessera.jit(target="rocm", autodiff="jvp", wrt=("x", "window"))
+def _rocm_stft_product(x, window):
+    return tessera.ops.stft(x, window, axis=-1, n_fft=16, hop=4, center=False,
+                            onesided=True, norm="backward")
+
+
+# The spectral JVP family is admitted on gfx1151 and gfx1201 (each through its
+# own chip-stamped composite image); every other family is gfx1151-only.
+_SPECTRAL_JVP_CHIPS = ("gfx1151", "gfx1201")
+
+
+def _require_rocm_spectral_jvp_chip() -> str:
+    from tessera import runtime
+    chip = runtime._rocm_live_arch()
+    if runtime._tessera_opt_path() is None or chip not in _SPECTRAL_JVP_CHIPS:
+        pytest.skip("exact gfx1151 or gfx1201 compiler/device required")
+    return chip
+
+
 def _affine_layernorm_oracle(x, gamma, beta, dx, dgamma, dbeta):
     mean = x.mean(axis=-1, keepdims=True)
     centered = x - mean
@@ -138,10 +157,8 @@ def test_native_compound_spectral_product_rule(compiled, marker):
     from tessera import runtime
     if marker == "x86" and not runtime._x86_elementwise_available():
         pytest.skip("AVX-512 spectral package unavailable")
-    if marker == "rocm" and (
-        runtime._tessera_opt_path() is None or runtime._rocm_live_arch() != "gfx1151"
-    ):
-        pytest.skip("exact gfx1151 compiler/device required")
+    if marker == "rocm":
+        _require_rocm_spectral_jvp_chip()
     rng = np.random.default_rng(229)
     spectrum = (rng.normal(size=(4, 9)) + 1j * rng.normal(size=(4, 9))).astype(np.complex64)
     filter = (rng.normal(size=(4, 9)) + 1j * rng.normal(size=(4, 9))).astype(np.complex64)
@@ -194,15 +211,13 @@ def test_native_x86_istft_window_product_matches_centered_difference():
 
 
 @pytest.mark.hardware_rocm
-def test_native_gfx1151_istft_window_product_matches_centered_difference():
-    from tessera import runtime
+def test_native_rocm_istft_window_product_matches_centered_difference():
     from tessera.compiler.emit.spectral_candidates import _amd_composite_lib
 
-    if runtime._tessera_opt_path() is None or runtime._rocm_live_arch() != "gfx1151":
-        pytest.skip("exact gfx1151 compiler/device required")
+    chip = _require_rocm_spectral_jvp_chip()
     lib = _amd_composite_lib()
     if lib is None or not hasattr(lib, "ts_istft_jvp_plan_hostptr_batch_amd"):
-        pytest.skip("gfx1151 ISTFT window-JVP image is stale")
+        pytest.skip(f"{chip} ISTFT window-JVP image is stale")
     rng = np.random.default_rng(251)
     spectrum = (
         rng.normal(size=(4, 5)) + 1j * rng.normal(size=(4, 5))
@@ -298,3 +313,37 @@ def test_native_gfx1151_jvp_matches_oracle(compiled):
     np.testing.assert_allclose(tangent, expected_tangent, rtol=3e-4, atol=3e-4)
     assert compiled.last_jvp_execution["execution_mode"] == "hip_runtime"
     assert compiled.last_jvp_execution["evidence_target"] == "rocm_gfx1151"
+
+
+@pytest.mark.hardware_rocm
+def test_native_rocm_stft_product_matches_linearization():
+    chip = _require_rocm_spectral_jvp_chip()
+    rng = np.random.default_rng(263)
+    x = rng.normal(size=(3, 64)).astype(np.float32)
+    window = (np.hanning(16) + 0.2).astype(np.float32)
+    dx = rng.normal(size=x.shape).astype(np.float32)
+    dwindow = rng.normal(size=window.shape).astype(np.float32)
+    primal, tangent = _rocm_stft_product.native_jvp(x, window, tangents=(dx, dwindow))
+
+    def stft(signal, taper):
+        frames = np.stack([signal[:, at:at + 16] * taper
+                           for at in range(0, 64 - 16 + 1, 4)], axis=1)
+        return np.fft.rfft(frames, axis=-1)
+
+    np.testing.assert_allclose(primal, stft(x, window), rtol=2e-4, atol=2e-4)
+    np.testing.assert_allclose(tangent, stft(dx, window) + stft(x, dwindow),
+                               rtol=3e-4, atol=3e-4)
+    execution = _rocm_stft_product.last_jvp_execution
+    assert execution["execution_mode"] == "hip_runtime"
+    assert execution["evidence_target"] == f"rocm_{chip}"
+
+
+@pytest.mark.hardware_rocm
+def test_native_gfx1201_refuses_non_spectral_jvp_families():
+    from tessera import runtime
+    from tessera._jit_boundary import TesseraJitError
+    if runtime._tessera_opt_path() is None or runtime._rocm_live_arch() != "gfx1201":
+        pytest.skip("exact gfx1201 compiler/device required")
+    x = np.ones((5, 64), np.float32)
+    with pytest.raises(TesseraJitError, match="admitted only for spectral_compound"):
+        _rocm_sum.native_jvp(x, tangents=x)

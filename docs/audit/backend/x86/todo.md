@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## gfx1201 native spectral JVP — sibling outcome — 2026-09-25
+
+Sync `ROCM-SPECTRAL-JVP-GFX1201-2026-09-25` (#850). **Not applicable.** The
+shared `NativeJVPArtifact` admission is now `native_jvp.architecture_admits`,
+but x86 remains `zen5_avx512`-only with no per-chip entry. The shared unit
+test asserts this.
+
 ## Spectral benchmarks: `cold_ms` is the first call — 2026-09-25
 
 Sync `SPECTRAL-BENCH-COLD-2026-09-25` (#849). **Parity validated by code read;

@@ -222,6 +222,35 @@ def _rocm_istft_broadcast_full_axis2(spectrum, window):
     )
 
 
+# Odd n_fft (the child plan's Bluestein path) with a short window, and a
+# non-centered frame longer than the signal under pad_mode="reflect": the
+# envelopes the FFT-based ROCm policy entry points had to re-derive. pad_mode
+# is a centered-framing policy, so the second frame's tail is zero-filled; the
+# former direct kernels reflected it, disagreeing with tessera.ops.stft.
+@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "window"))
+def _rocm_stft_odd_centered(x, window):
+    return ts.ops.stft(
+        x, window, axis=-1, n_fft=15, hop=4, center=True,
+        pad_mode="reflect", onesided=True, norm="ortho",
+    )
+
+
+@ts.jit(target="rocm", autodiff="reverse", wrt=("spectrum", "window"))
+def _rocm_istft_odd_centered(spectrum, window):
+    return ts.ops.istft(
+        spectrum, window, axis=-1, n_fft=15, hop=4, center=True,
+        onesided=True, length=36, norm="ortho",
+    )
+
+
+@ts.jit(target="rocm", autodiff="reverse", wrt=("x", "window"))
+def _rocm_stft_noncentered_reflect_tail(x, window):
+    return ts.ops.stft(
+        x, window, axis=-1, n_fft=16, hop=3, center=False,
+        pad_mode="reflect", onesided=False, norm="backward",
+    )
+
+
 def _require_x86_package() -> None:
     from tessera import runtime
 
@@ -952,7 +981,7 @@ def test_rocm_stft_istft_backward_matches_independent_vjp(kind: str) -> None:
             center=False, onesided=True, norm="backward",
         )
         compiled = _rocm_stft
-        algorithm = "direct_stored_bin_gfx1151_v1"
+        algorithm = "c2c_fft_stored_bin_rocm_v1"
     else:
         primal = (
             rng.normal(size=(6, 9)) + 1j * rng.normal(size=(6, 9))
@@ -964,7 +993,7 @@ def test_rocm_stft_istft_backward_matches_independent_vjp(kind: str) -> None:
             center=False, onesided=True, length=56, norm="backward",
         )
         compiled = _rocm_istft
-        algorithm = "normalized_overlap_add_direct_dft_gfx1151_v1"
+        algorithm = "normalized_overlap_add_c2c_fft_rocm_v1"
     for value, reference in zip(actual, expected, strict=True):
         np.testing.assert_allclose(value, reference, rtol=2e-4, atol=2e-4)
     proof = compiled.last_backward_execution
@@ -1127,3 +1156,132 @@ def test_rocm_centered_arbitrary_axis_reverse_matches_independent_vjp(storage):
         _rocm_stft_centered_axis1, _rocm_istft_centered_axis2,
         target="rocm", storage=storage,
     )
+
+
+@pytest.mark.hardware_rocm
+def test_rocm_fft_policy_envelopes_match_independent_references() -> None:
+    _require_rocm_package()
+    from tessera import runtime
+    from tessera.autodiff import vjp
+    from tests.unit.test_rocm_spectral_compiled import _art
+
+    rng = np.random.default_rng(20260925)
+    short = (np.hanning(11) + 0.2).astype(np.float32)
+
+    # Odd n_fft, centered reflect, short window: forward and reverse.
+    signal = rng.normal(size=(2, 37)).astype(np.float32)
+    frames = (37 + 2 * 7 - 15) // 4 + 1
+    forward = runtime.launch(
+        _art(runtime, "tessera.stft", (signal, short), {
+            "n_fft": 15, "hop": 4, "center": True, "pad_mode": "reflect",
+            "normalization": "ortho",
+        }), (signal, short),
+    )
+    assert forward["ok"] is True, forward.get("reason")
+    padded = np.pad(signal, ((0, 0), (7, 7)), mode="reflect")
+    full_window = np.zeros(15, np.float32)
+    full_window[2:13] = short
+    index = np.arange(15)[None, :] + 4 * np.arange(frames)[:, None]
+    expected = np.fft.rfft(padded[:, index] * full_window, axis=-1) / np.sqrt(15)
+    np.testing.assert_allclose(forward["output"], expected, rtol=2e-4, atol=2e-4)
+    dy = (rng.normal(size=expected.shape)
+          + 1j * rng.normal(size=expected.shape)).astype(np.complex64)
+    actual = _rocm_stft_odd_centered.native_backward(signal, short, out_cotangents=dy)
+    reference = vjp._VJPS["stft"](
+        dy, signal, short, axis=-1, n_fft=15, hop=4, center=True,
+        pad_mode="reflect", onesided=True, norm="ortho",
+    )
+    for value, ref in zip(actual, reference, strict=True):
+        np.testing.assert_allclose(value, ref, rtol=5e-4, atol=5e-4)
+
+    spectrum = (rng.normal(size=expected.shape)
+                + 1j * rng.normal(size=expected.shape)).astype(np.complex64)
+    istft_dy = rng.normal(size=(2, 36)).astype(np.float32)
+    actual = _rocm_istft_odd_centered.native_backward(
+        spectrum, short, out_cotangents=istft_dy)
+    reference = vjp._VJPS["istft"](
+        istft_dy, spectrum, short, axis=-1, n_fft=15, hop=4, center=True,
+        onesided=True, length=36, norm="ortho",
+    )
+    for value, ref in zip(actual, reference, strict=True):
+        np.testing.assert_allclose(value, ref, rtol=5e-4, atol=5e-4)
+
+    # A 16-point non-centered frame over a 5-sample signal: zero-filled tail.
+    tiny = rng.normal(size=(3, 5)).astype(np.float32)
+    window = (np.hanning(16) + 0.1).astype(np.float32)
+    tail = runtime.launch(
+        _art(runtime, "tessera.stft", (tiny, window), {
+            "n_fft": 16, "hop": 3, "pad_mode": "reflect", "onesided": False,
+        }), (tiny, window),
+    )
+    assert tail["ok"] is True, tail.get("reason")
+    zero_filled = np.zeros((3, 16), np.float32)
+    zero_filled[:, :5] = tiny * window[:5]
+    np.testing.assert_allclose(
+        np.asarray(tail["output"])[:, 0], np.fft.fft(zero_filled, axis=-1),
+        rtol=2e-4, atol=2e-4)
+    tiny_dy = (rng.normal(size=(3, 1, 16))
+               + 1j * rng.normal(size=(3, 1, 16))).astype(np.complex64)
+    actual = _rocm_stft_noncentered_reflect_tail.native_backward(
+        tiny, window, out_cotangents=tiny_dy)
+    reference = vjp._VJPS["stft"](
+        tiny_dy, tiny, window, axis=-1, n_fft=16, hop=3, center=False,
+        pad_mode="reflect", onesided=False, norm="backward",
+    )
+    for value, ref in zip(actual, reference, strict=True):
+        np.testing.assert_allclose(value, ref, rtol=5e-4, atol=5e-4)
+
+
+def test_rocm_spectral_vjp_image_is_compiled_once_per_identity(
+    monkeypatch, tmp_path
+) -> None:
+    """The ROCm reverse image is a pure function of (compiler, arch, carrier
+    IR); a warm call must not respawn the tessera-opt chain (~160 ms of a
+    ~190 ms gfx1151 STFT reverse before the cache), and a rebuilt compiler or
+    a different package must still recompile."""
+    import dataclasses
+    from types import SimpleNamespace
+
+    from tessera.compiler import native_spectral_vjp as nsv
+    from tessera.compiler import rocm_native, scheduled_matmul
+
+    tool = tmp_path / "tessera-opt"
+    tool.write_bytes(b"compiler-v1")
+    spawned: list[str] = []
+    monkeypatch.setattr(scheduled_matmul, "find_tessera_opt", lambda: tool)
+    monkeypatch.setattr(scheduled_matmul, "run_tessera_opt",
+                        lambda _tool, ir, option: spawned.append(option) or ir)
+    monkeypatch.setattr(
+        nsv.subprocess, "run",
+        lambda *a, **k: spawned.append("serialize") or SimpleNamespace(
+            returncode=0, stdout="image", stderr=""))
+    monkeypatch.setattr(rocm_native, "_extract_hsaco", lambda _text: b"\x7fELF-image")
+    monkeypatch.setattr(nsv, "_ROCM_VJP_IMAGES", {})
+    monkeypatch.setattr(nsv, "_TOOL_DIGESTS", {})
+
+    def package(hop: int):
+        source = SimpleNamespace(op_name="tessera.stft", kwargs={
+            "axis": -1, "n_fft": 16, "hop": hop, "center": False,
+            "onesided": True, "norm": "backward"})
+        frames = (56 - 16) // hop + 1
+        built = nsv.build_native_spectral_vjp_package(
+            source_graph_ir="module {}", source=source, target="x86",
+            ordered_inputs=(np.ones(56, np.float32), np.ones(16, np.float32)),
+            arg_names=("x", "window"),
+            out_cotangent=np.ones((frames, 9), np.complex64))
+        return dataclasses.replace(built, target="rocm", arch="gfx1151")
+
+    first = nsv.compile_rocm_native_spectral_vjp(package(8))
+    cold = len(spawned)
+    assert cold == 5 and first.native_image == b"\x7fELF-image"
+    again = nsv.compile_rocm_native_spectral_vjp(package(8))
+    assert len(spawned) == cold, "a warm compile respawned tessera-opt"
+    assert (again.native_image, again.native_symbol) == (
+        first.native_image, first.native_symbol)
+
+    nsv.compile_rocm_native_spectral_vjp(package(4))
+    assert len(spawned) == 2 * cold, "a different package reused another image"
+
+    tool.write_bytes(b"compiler-v2 (rebuilt)")
+    nsv.compile_rocm_native_spectral_vjp(package(8))
+    assert len(spawned) == 3 * cold, "a rebuilt compiler reused a stale image"

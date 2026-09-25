@@ -11,8 +11,11 @@
 
 #include <cstddef>
 #include <cstring>
+#include <list>
+#include <mutex>
 #include <new>
 #include <limits>
+#include <string>
 #include <vector>
 
 extern "C" int ts_fft_plan_execute_device_batch_amd(
@@ -22,6 +25,9 @@ extern "C" int ts_fft_plan_execute_r2c_packed_device_batch_amd(
 extern "C" int ts_fft_plan_execute_c2r_packed_device_batch_amd(
     void *, const float2 *, float *, int, int, hipStream_t);
 extern "C" int ts_fft_plan_length_amd(void *);
+extern "C" int ts_fft_plan_create_for_artifact_amd(int, int, const char *,
+                                                   void **);
+extern "C" void ts_fft_plan_destroy_amd(void *);
 
 namespace {
 
@@ -216,242 +222,270 @@ __global__ void scaleComplex(float2 *values, size_t elements, float scale) {
   }
 }
 
-__global__ void stftDirectPolicy(const float *input, const float *windows,
-                                 float2 *output, int batch, int samples,
-                                 int fftN, int hop, int frames, int bins,
-                                 float scale, int center, int padMode) {
+// ---------------------------------------------------------------------------
+// FFT-based STFT/ISTFT policy kernels.
+//
+// These replace per-element direct DFTs (an O(fftN) fp64 cos/sin sum for every
+// output bin or sample) that cost 0.35 s per 8x16000 n_fft=512 STFT and up to
+// 11 s per STFT reverse on gfx1151. Every transform below is one batched
+// forward C2C child plan: an inverse-direction sum Re(sum_k Z_k e^{+i 2 pi k l
+// / N}) is computed as Re(FFT(conj Z)), so one sign serves every consumer and
+// odd lengths reach the plan's Bluestein path. Framing, reflect padding and
+// window placement are the former kernels' exactly; overlap-add and every
+// reduction keep their fixed accumulation order and fp64 accumulators.
+
+__device__ __forceinline__ int reflectSample(int source, int samples) {
+  if (samples == 1) return 0;
+  while (source < 0 || source >= samples)
+    source = source < 0 ? -source : 2 * samples - 2 - source;
+  return source;
+}
+
+__device__ __forceinline__ double binWeight(int bin, int fftN, int bins,
+                                            int onesided) {
+  return onesided && bin > 0 && !(fftN % 2 == 0 && bin == bins - 1) ? 2.0 : 1.0;
+}
+
+// frames[row, frame, local] = x[source] * window[row, local], zero outside the
+// signal unless reflect padding applies.
+__global__ void frameComplexPolicy(const float *input, const float *windows,
+                                   float2 *frames, int batch, int samples,
+                                   int fftN, int hop, int frameCount,
+                                   int center, int padMode) {
   size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * bins;
-  if (i >= total) return;
+  if (i >= size_t(batch) * frameCount * fftN) return;
+  int local = int(i % fftN);
+  size_t rowFrame = i / fftN;
+  int frame = int(rowFrame % frameCount), row = int(rowFrame / frameCount);
+  int source = frame * hop + local - (center ? fftN / 2 : 0);
+  if ((source < 0 || source >= samples) && padMode == 1)
+    source = reflectSample(source, samples);
+  float value = source >= 0 && source < samples
+                    ? input[size_t(row) * samples + source] *
+                          windows[size_t(row) * fftN + local]
+                    : 0.0f;
+  frames[i] = make_float2(value, 0.0f);
+}
+
+// out[row, bin] = full[row, bin] * scale * (weighted ? w_bin : 1).
+__global__ void compactBins(const float2 *full, float2 *out, int rows,
+                            int fftN, int bins, float scale, int weighted,
+                            int onesided) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= size_t(rows) * bins) return;
   int bin = int(i % bins);
-  size_t rowFrame = i / bins;
-  int frame = int(rowFrame % frames);
-  int row = int(rowFrame / frames);
-  int pad = center ? fftN / 2 : 0;
-  double real = 0.0, imag = 0.0;
-  for (int local = 0; local < fftN; ++local) {
-    int source = frame * hop + local - pad;
-    if ((source < 0 || source >= samples) && padMode == 1)
-      while (source < 0 || source >= samples)
-        source = source < 0 ? -source : 2 * samples - 2 - source;
-    float value = source >= 0 && source < samples
-                      ? input[size_t(row) * samples + source] *
-                            windows[size_t(row) * fftN + local]
-                      : 0.0f;
-    double angle = 2.0 * M_PI * double(bin * local) / double(fftN);
-    real += double(value) * cos(angle);
-    imag -= double(value) * sin(angle);
-  }
-  output[i] = make_float2(float(real * scale), float(imag * scale));
+  size_t row = i / bins;
+  double factor = double(scale) *
+                  (weighted ? binWeight(bin, fftN, bins, onesided) : 1.0);
+  float2 value = full[row * fftN + bin];
+  out[i] = make_float2(float(value.x * factor), float(value.y * factor));
 }
 
-__global__ void istftDirectPolicy(const float2 *spectrum,
-                                  const float *windows, float *output,
-                                  int batch, int frames, int bins, int fftN,
-                                  int hop, int outputSamples, float scale,
-                                  int center, int onesided) {
+// Z[row, k] = conj(w_k * spectrum[row, k]) for k < bins, zero above: the input
+// whose forward FFT's real part is the weighted inverse-direction sum.
+__global__ void conjugateWeightedSpectrum(const float2 *spectrum, float2 *z,
+                                          int rows, int fftN, int bins,
+                                          int weighted, int onesided) {
   size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * outputSamples;
-  if (i >= total) return;
-  int sample = int(i % outputSamples) + (center ? fftN / 2 : 0);
-  int row = int(i / outputSamples);
-  double numerator = 0.0, denominator = 0.0;
-  for (int frame = 0; frame < frames; ++frame) {
-    int local = sample - frame * hop;
+  if (i >= size_t(rows) * fftN) return;
+  int k = int(i % fftN);
+  size_t row = i / fftN;
+  if (k >= bins) {
+    z[i] = make_float2(0.0f, 0.0f);
+    return;
+  }
+  float w = weighted ? float(binWeight(k, fftN, bins, onesided)) : 1.0f;
+  float2 value = spectrum[row * bins + k];
+  z[i] = make_float2(w * value.x, -w * value.y);
+}
+
+__global__ void realPartScaled(const float2 *values, float *out,
+                               size_t elements, float scale) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i < elements) out[i] = values[i].x * scale;
+}
+
+__global__ void realToComplex(const float *values, float2 *out,
+                              size_t elements) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i < elements) out[i] = make_float2(values[i], 0.0f);
+}
+
+// Overlap-add numerator (sum frame*window) and denominator (sum window^2) per
+// raw sample, visiting frames in ascending order.
+__global__ void istftOverlapTerms(const float *frameValues,
+                                  const float *windows, double *numerator,
+                                  double *denominator, int batch, int frames,
+                                  int fftN, int hop, int rawSamples) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= size_t(batch) * rawSamples) return;
+  int raw = int(i % rawSamples), row = int(i / rawSamples);
+  int first = raw - (fftN - 1) <= 0 ? 0 : (raw - (fftN - 1) + hop - 1) / hop;
+  int last = min(frames - 1, raw / hop);
+  double num = 0.0, den = 0.0;
+  for (int frame = first; frame <= last; ++frame) {
+    int local = raw - frame * hop;
     if (local < 0 || local >= fftN) continue;
-    double time = 0.0;
-    for (int bin = 0; bin < bins; ++bin) {
-      double weight = 1.0;
-      if (onesided && bin > 0 && !(fftN % 2 == 0 && bin == bins - 1))
-        weight = 2.0;
-      float2 value = spectrum[(size_t(row) * frames + frame) * bins + bin];
-      double angle = 2.0 * M_PI * double(bin * local) / double(fftN);
-      time += weight * (double(value.x) * cos(angle) -
-                        double(value.y) * sin(angle));
-    }
     double w = windows[size_t(row) * fftN + local];
-    numerator += (time / double(fftN)) * w;
-    denominator += w * w;
+    num += double(frameValues[(size_t(row) * frames + frame) * fftN + local]) * w;
+    den += w * w;
   }
-  output[i] = float(numerator /
-                    (denominator > 1.0e-12 ? denominator : 1.0e-12) * scale);
+  numerator[i] = num;
+  denominator[i] = den;
 }
 
-__global__ void stftBackwardInputPolicy(
-    const float2 *dy, const float *windows, float *dx, int batch, int samples,
-    int fftN, int hop, int frames, int bins, float scale, int center,
-    int padMode) {
+__global__ void istftOutputFromTerms(const double *numerator,
+                                     const double *denominator, float *output,
+                                     int batch, int outputSamples,
+                                     int rawSamples, int trim, float scale) {
   size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * samples;
-  if (i >= total) return;
-  int sampleIndex = int(i % samples), row = int(i / samples);
+  if (i >= size_t(batch) * outputSamples) return;
+  int sample = int(i % outputSamples), row = int(i / outputSamples);
+  size_t term = size_t(row) * rawSamples + sample + trim;
+  double den = denominator[term];
+  output[i] = float(numerator[term] / (den > 1.0e-12 ? den : 1.0e-12) * scale);
+}
+
+// dx[row, s] = sum over the raw frame positions whose (reflected) source is s
+// of G * scale * window. Preimages of s under reflection are the positions
+// congruent to +-s modulo 2(samples-1), so any number of bounces is exact.
+__global__ void stftBackwardInputFromG(const float2 *g, const float *windows,
+                                       float *dx, int batch, int samples,
+                                       int fftN, int hop, int frames,
+                                       int framedSamples, float scale,
+                                       int center, int padMode) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= size_t(batch) * samples) return;
+  int s = int(i % samples), row = int(i / samples);
   int pad = center ? fftN / 2 : 0;
+  int qmin = -pad, qmax = framedSamples - 1 - pad;
   double result = 0.0;
-  for (int frame = 0; frame < frames; ++frame)
-    for (int local = 0; local < fftN; ++local) {
-      int source = frame * hop + local - pad;
-      if ((source < 0 || source >= samples) && padMode == 1)
-        while (source < 0 || source >= samples)
-          source = source < 0 ? -source : 2 * samples - 2 - source;
-      if (source != sampleIndex) continue;
-      double grad = 0.0;
-      for (int bin = 0; bin < bins; ++bin) {
-        float2 upstream = dy[(size_t(row) * frames + frame) * bins + bin];
-        double angle = 2.0 * M_PI * double(bin * local) / double(fftN);
-        grad += double(upstream.x) * cos(angle) -
-                double(upstream.y) * sin(angle);
-      }
-      result += grad * scale * windows[size_t(row) * fftN + local];
+  auto gather = [&](int q) {
+    if (q < qmin || q > qmax) return;
+    int p = q + pad;
+    int first = p - (fftN - 1) <= 0 ? 0 : (p - (fftN - 1) + hop - 1) / hop;
+    int last = min(frames - 1, p / hop);
+    for (int frame = first; frame <= last; ++frame) {
+      int local = p - frame * hop;
+      result += double(g[(size_t(row) * frames + frame) * fftN + local].x) *
+                double(windows[size_t(row) * fftN + local]);
     }
-  dx[i] = float(result);
+  };
+  if (padMode == 0) {
+    gather(s);
+  } else if (samples == 1) {
+    for (int q = qmin; q <= qmax; ++q) gather(q);
+  } else {
+    int period = 2 * (samples - 1);
+    int bases[2] = {s % period, (period - s) % period};
+    int classes = bases[0] == bases[1] ? 1 : 2;
+    for (int c = 0; c < classes; ++c) {
+      int base = bases[c];
+      // Smallest q >= qmin with q == base (mod period).
+      int offset = qmin - base;
+      int k = offset <= 0 ? -((-offset) / period) : (offset + period - 1) / period;
+      for (int q = base + k * period; q <= qmax; q += period) gather(q);
+    }
+  }
+  dx[i] = float(result * double(scale));
 }
 
-__global__ void stftBackwardWindowPolicy(
-    const float2 *dy, const float *input, const int *rowWindow,
-    float *dwindow, int batch, int windowRows, int samples, int fftN,
-    int win, int hop, int frames, int bins, float scale, int center,
-    int padMode) {
-  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(windowRows) * win;
-  if (i >= total) return;
-  int localWindow = int(i % win), windowRow = int(i / win);
+// Window-gradient reductions: one block per window element, each thread
+// striding over flattened (row, frame) pairs, folded in a fixed tree order so
+// the result is deterministic. One thread per element launched only
+// windowRows * win threads for the whole device.
+constexpr int kReduceThreads = 256;
+
+__device__ double blockSum(double value) {
+  __shared__ double partial[kReduceThreads];
+  partial[threadIdx.x] = value;
+  __syncthreads();
+  for (int width = kReduceThreads / 2; width > 0; width /= 2) {
+    if (int(threadIdx.x) < width)
+      partial[threadIdx.x] += partial[threadIdx.x + width];
+    __syncthreads();
+  }
+  return partial[0];
+}
+
+__global__ void stftBackwardWindowFromG(
+    const float2 *g, const float *input, const int *rowWindow, float *dwindow,
+    int batch, int windowRows, int samples, int fftN, int win, int hop,
+    int frames, float scale, int center, int padMode) {
+  size_t index = blockIdx.x;
+  if (index >= size_t(windowRows) * win) return;
+  int localWindow = int(index % win), windowRow = int(index / win);
   int local = (fftN - win) / 2 + localWindow;
   int pad = center ? fftN / 2 : 0;
   double result = 0.0;
-  for (int row = 0; row < batch; ++row) {
+  size_t pairs = size_t(batch) * frames;
+  for (size_t pair = threadIdx.x; pair < pairs; pair += blockDim.x) {
+    int row = int(pair / frames), frame = int(pair % frames);
     if (rowWindow[row] != windowRow) continue;
-    for (int frame = 0; frame < frames; ++frame) {
-      int source = frame * hop + local - pad;
-      bool present = source >= 0 && source < samples;
-      if (!present && padMode == 1) {
-        while (source < 0 || source >= samples)
-          source = source < 0 ? -source : 2 * samples - 2 - source;
-        present = true;
-      }
-      if (!present) continue;
-      double grad = 0.0;
-      for (int bin = 0; bin < bins; ++bin) {
-        float2 upstream = dy[(size_t(row) * frames + frame) * bins + bin];
-        double angle = 2.0 * M_PI * double(bin * local) / double(fftN);
-        grad += double(upstream.x) * cos(angle) -
-                double(upstream.y) * sin(angle);
-      }
-      result += grad * scale * input[size_t(row) * samples + source];
+    int source = frame * hop + local - pad;
+    bool present = source >= 0 && source < samples;
+    if (!present && padMode == 1) {
+      source = reflectSample(source, samples);
+      present = true;
     }
+    if (!present) continue;
+    result += double(g[(size_t(row) * frames + frame) * fftN + local].x) *
+              double(input[size_t(row) * samples + source]);
   }
-  dwindow[i] = float(result);
+  result = blockSum(result);
+  if (threadIdx.x == 0) dwindow[index] = float(result * double(scale));
 }
 
-__global__ void istftFrameValuesPolicy(const float2 *spectrum, float *framesOut,
-                                       int batch, int frames, int bins,
-                                       int fftN, float inverseScale,
-                                       int onesided) {
-  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * fftN;
-  if (i >= total) return;
-  int local = int(i % fftN);
-  size_t rowFrame = i / fftN;
-  int frame = int(rowFrame % frames), row = int(rowFrame / frames);
-  double value = 0.0;
-  for (int bin = 0; bin < bins; ++bin) {
-    double weight = 1.0;
-    if (onesided && bin > 0 && !(fftN % 2 == 0 && bin == bins - 1))
-      weight = 2.0;
-    float2 spectral = spectrum[(size_t(row) * frames + frame) * bins + bin];
-    double angle = 2.0 * M_PI * double(bin * local) / double(fftN);
-    value += weight * (double(spectral.x) * cos(angle) -
-                       double(spectral.y) * sin(angle));
-  }
-  framesOut[i] = float(value * inverseScale);
-}
-
-__global__ void istftBackwardFramesPolicy(
-    const float *dy, const float *frameValues, const float *windows,
+__global__ void istftBackwardFramesFromTerms(
+    const float *dy, const double *denominator, const float *windows,
     float *dframes, int batch, int frames, int fftN, int hop,
-    int outputSamples, int center) {
+    int outputSamples, int rawSamples, int center) {
   size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * fftN;
-  if (i >= total) return;
+  if (i >= size_t(batch) * frames * fftN) return;
   int local = int(i % fftN);
   size_t rowFrame = i / fftN;
   int frame = int(rowFrame % frames), row = int(rowFrame / frames);
-  int output = frame * hop + local - (center ? fftN / 2 : 0);
+  int trim = center ? fftN / 2 : 0;
+  int output = frame * hop + local - trim;
   if (output < 0 || output >= outputSamples) {
     dframes[i] = 0.0f;
     return;
   }
-  int rawSample = output + (center ? fftN / 2 : 0);
-  double numerator = 0.0, denominator = 0.0;
-  for (int other = 0; other < frames; ++other) {
-    int otherLocal = rawSample - other * hop;
-    if (otherLocal < 0 || otherLocal >= fftN) continue;
-    double w = windows[size_t(row) * fftN + otherLocal];
-    numerator += frameValues[(size_t(row) * frames + other) * fftN + otherLocal] * w;
-    denominator += w * w;
-  }
-  double safe = denominator > 1.0e-12 ? denominator : 1.0e-12;
+  double den = denominator[size_t(row) * rawSamples + output + trim];
+  double safe = den > 1.0e-12 ? den : 1.0e-12;
   dframes[i] = float(double(dy[size_t(row) * outputSamples + output]) / safe *
-                     windows[size_t(row) * fftN + local]);
+                     double(windows[size_t(row) * fftN + local]));
 }
 
-__global__ void istftBackwardSpectrumPolicy(
-    const float *dframes, float2 *dspectrum, int batch, int frames, int bins,
-    int fftN, float inverseScale, int onesided) {
-  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * bins;
-  if (i >= total) return;
-  int bin = int(i % bins);
-  size_t rowFrame = i / bins;
-  int frame = int(rowFrame % frames), row = int(rowFrame / frames);
-  double real = 0.0, imag = 0.0;
-  for (int local = 0; local < fftN; ++local) {
-    double angle = 2.0 * M_PI * double(bin * local) / double(fftN);
-    double value = dframes[(size_t(row) * frames + frame) * fftN + local];
-    real += value * cos(angle);
-    imag -= value * sin(angle);
-  }
-  double weight = inverseScale;
-  if (onesided && bin > 0 && !(fftN % 2 == 0 && bin == bins - 1))
-    weight *= 2.0;
-  dspectrum[i] = make_float2(float(real * weight), float(imag * weight));
-}
-
-__global__ void istftBackwardWindowPolicy(
+__global__ void istftBackwardWindowFromTerms(
     const float *dy, const float *frameValues, const float *windows,
-    const int *rowWindow, float *dwindow, int batch, int windowRows,
-    int frames, int fftN, int win, int hop, int outputSamples, int center) {
-  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(windowRows) * win;
-  if (i >= total) return;
-  int localWindow = int(i % win), windowRow = int(i / win);
+    const double *numerator, const double *denominator, const int *rowWindow,
+    float *dwindow, int batch, int windowRows, int frames, int fftN, int win,
+    int hop, int outputSamples, int rawSamples, int center) {
+  size_t index = blockIdx.x;
+  if (index >= size_t(windowRows) * win) return;
+  int localWindow = int(index % win), windowRow = int(index / win);
   int local = (fftN - win) / 2 + localWindow;
   int trim = center ? fftN / 2 : 0;
   double result = 0.0;
-  for (int row = 0; row < batch; ++row) {
+  size_t pairs = size_t(batch) * frames;
+  for (size_t pair = threadIdx.x; pair < pairs; pair += blockDim.x) {
+    int row = int(pair / frames), frame = int(pair % frames);
     if (rowWindow[row] != windowRow) continue;
-    for (int frame = 0; frame < frames; ++frame) {
-      int output = frame * hop + local - trim;
-      if (output < 0 || output >= outputSamples) continue;
-      int rawSample = output + trim;
-      double numerator = 0.0, denominator = 0.0;
-      for (int other = 0; other < frames; ++other) {
-        int otherLocal = rawSample - other * hop;
-        if (otherLocal < 0 || otherLocal >= fftN) continue;
-        double w = windows[size_t(row) * fftN + otherLocal];
-        numerator += frameValues[(size_t(row) * frames + other) * fftN + otherLocal] * w;
-        denominator += w * w;
-      }
-      double safe = denominator > 1.0e-12 ? denominator : 1.0e-12;
-      double upstream = dy[size_t(row) * outputSamples + output];
-      double draw = upstream / safe;
-      double dweight = denominator > 1.0e-12
-                           ? -upstream * numerator / (safe * safe) : 0.0;
-      double w = windows[size_t(row) * fftN + local];
-      double frameValue = frameValues[(size_t(row) * frames + frame) * fftN + local];
-      result += draw * frameValue + 2.0 * dweight * w;
-    }
+    int output = frame * hop + local - trim;
+    if (output < 0 || output >= outputSamples) continue;
+    size_t term = size_t(row) * rawSamples + output + trim;
+    double num = numerator[term], den = denominator[term];
+    double safe = den > 1.0e-12 ? den : 1.0e-12;
+    double upstream = dy[size_t(row) * outputSamples + output];
+    double draw = upstream / safe;
+    double dweight = den > 1.0e-12 ? -upstream * num / (safe * safe) : 0.0;
+    double w = windows[size_t(row) * fftN + local];
+    double frameValue = frameValues[(size_t(row) * frames + frame) * fftN + local];
+    result += draw * frameValue + 2.0 * dweight * w;
   }
-  dwindow[i] = float(result);
+  result = blockSum(result);
+  if (threadIdx.x == 0) dwindow[index] = float(result);
 }
 
 __global__ void compactHalfSpectrum(const float2 *full, float2 *half, int rows,
@@ -563,6 +597,142 @@ int syncAndCopy(void *host, const void *device, size_t bytes) {
   return hipMemcpy(host, device, bytes, hipMemcpyDeviceToHost) == hipSuccess
              ? 0
              : 9;
+}
+
+// Per-device reuse of the policy entry points' forward child plans and device
+// staging. Every policy entry point synchronizes before it returns, so one
+// library-wide lock held for the call makes buffer reuse safe. Plans are keyed
+// by the HIP device current at use (a plan's buffers belong to that device)
+// and by the package digest they were created for, so a cached plan never
+// carries another artifact's identity.
+std::mutex &policyMutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
+struct CachedChildPlan {
+  int device;
+  int n;
+  std::string digest;
+  void *plan;
+};
+
+constexpr size_t kChildPlanLimit = 16;
+
+std::list<CachedChildPlan> &childPlans() {
+  static std::list<CachedChildPlan> cache;
+  return cache;
+}
+
+// Caller holds policyMutex(). A forward (sign -1) plan of length n bound to
+// `digest`, or nullptr when the device cannot be read or creation fails.
+void *policyForwardPlan(int n, const char *digest) {
+  int device = -1;
+  if (!digest || hipGetDevice(&device) != hipSuccess) return nullptr;
+  auto &cache = childPlans();
+  for (auto it = cache.begin(); it != cache.end(); ++it)
+    if (it->device == device && it->n == n && it->digest == digest) {
+      cache.splice(cache.begin(), cache, it);
+      return cache.front().plan;
+    }
+  void *plan = nullptr;
+  if (ts_fft_plan_create_for_artifact_amd(n, -1, digest, &plan) != 0 || !plan)
+    return nullptr;
+  if (cache.size() >= kChildPlanLimit) {
+    ts_fft_plan_destroy_amd(cache.back().plan);
+    cache.pop_back();
+  }
+  cache.push_front({device, n, digest, plan});
+  return plan;
+}
+
+struct ScratchBuffer {
+  int device;
+  int slot;
+  void *pointer;
+  size_t bytes;
+};
+
+std::vector<ScratchBuffer> &scratchPool() {
+  static std::vector<ScratchBuffer> pool;
+  return pool;
+}
+
+// Caller holds policyMutex(). A device buffer of at least `bytes` for (current
+// device, slot), contents undefined; nullptr on HIP failure. Grows
+// geometrically so a slowly growing workload does not reallocate every call.
+void *scratch(int slot, size_t bytes) {
+  int device = -1;
+  if (hipGetDevice(&device) != hipSuccess) return nullptr;
+  bytes = bytes ? bytes : 1;
+  for (auto &buffer : scratchPool()) {
+    if (buffer.device != device || buffer.slot != slot) continue;
+    if (buffer.bytes >= bytes) return buffer.pointer;
+    size_t grown = bytes > buffer.bytes * 2 ? bytes : buffer.bytes * 2;
+    (void)hipFree(buffer.pointer);
+    buffer.pointer = nullptr;
+    buffer.bytes = 0;
+    if (hipMalloc(&buffer.pointer, grown) != hipSuccess) return nullptr;
+    buffer.bytes = grown;
+    return buffer.pointer;
+  }
+  void *pointer = nullptr;
+  if (hipMalloc(&pointer, bytes) != hipSuccess) return nullptr;
+  scratchPool().push_back({device, slot, pointer, bytes});
+  return pointer;
+}
+
+template <typename T> T *scratchOf(int slot, size_t elements) {
+  return static_cast<T *>(scratch(slot, elements * sizeof(T)));
+}
+
+unsigned blocksFor(size_t elements) {
+  return unsigned((elements + kThreads - 1) / kThreads);
+}
+
+// Frame + forward FFT + bin compaction: the STFT of `deviceInput` into
+// `deviceOutput` ([batch, frames, bins]). Scratch slots 8 and 9.
+int stftThroughFFT(void *plan, const float *deviceInput,
+                   const float *deviceWindows, float2 *deviceOutput, int batch,
+                   int samples, int fftN, int hop, int frames, int bins,
+                   float scale, int center, int padMode) {
+  size_t frameElements = size_t(batch) * frames * fftN;
+  float2 *framed = scratchOf<float2>(8, frameElements);
+  float2 *spectra = scratchOf<float2>(9, frameElements);
+  if (!framed || !spectra) return 1;
+  hipLaunchKernelGGL(frameComplexPolicy, dim3(blocksFor(frameElements)),
+                     dim3(kThreads), 0, 0, deviceInput, deviceWindows, framed,
+                     batch, samples, fftN, hop, frames, center, padMode);
+  if (hipGetLastError() != hipSuccess) return 2;
+  if (ts_fft_plan_execute_device_batch_amd(plan, framed, spectra,
+                                           batch * frames, 0) != 0)
+    return 3;
+  size_t outputElements = size_t(batch) * frames * bins;
+  hipLaunchKernelGGL(compactBins, dim3(blocksFor(outputElements)),
+                     dim3(kThreads), 0, 0, spectra, deviceOutput,
+                     batch * frames, fftN, bins, scale, 0, 0);
+  return hipGetLastError() == hipSuccess ? 0 : 2;
+}
+
+// frameValues[row, frame, local] = factor * Re(sum_k w_k X_k e^{+i2pi kl/N})
+// from a [rows, bins] spectrum, via Re(FFT(conj(w X))). Scratch slots 8, 9.
+int inverseFramesThroughFFT(void *plan, const float2 *deviceSpectrum,
+                            float *frameValues, int rows, int fftN, int bins,
+                            int onesided, float factor) {
+  size_t frameElements = size_t(rows) * fftN;
+  float2 *z = scratchOf<float2>(8, frameElements);
+  float2 *transformed = scratchOf<float2>(9, frameElements);
+  if (!z || !transformed) return 1;
+  hipLaunchKernelGGL(conjugateWeightedSpectrum, dim3(blocksFor(frameElements)),
+                     dim3(kThreads), 0, 0, deviceSpectrum, z, rows, fftN, bins,
+                     1, onesided);
+  if (hipGetLastError() != hipSuccess) return 2;
+  if (ts_fft_plan_execute_device_batch_amd(plan, z, transformed, rows, 0) != 0)
+    return 3;
+  hipLaunchKernelGGL(realPartScaled, dim3(blocksFor(frameElements)),
+                     dim3(kThreads), 0, 0, transformed, frameValues,
+                     frameElements, factor);
+  return hipGetLastError() == hipSuccess ? 0 : 2;
 }
 
 } // namespace
@@ -1204,12 +1374,21 @@ void storeStorage(void *output, size_t index, int storage, float value) {
 std::vector<float> unpackStorage(const void *input, size_t elements,
                                  int storage) {
   std::vector<float> result(elements);
+  if (storage == 0) {
+    if (elements) std::memcpy(result.data(), input, elements * sizeof(float));
+    return result;
+  }
   for (size_t i = 0; i < elements; ++i)
     result[i] = loadStorage(input, i, storage);
   return result;
 }
 
 void packStorage(const std::vector<float> &input, void *output, int storage) {
+  if (storage == 0) {
+    if (!input.empty())
+      std::memcpy(output, input.data(), input.size() * sizeof(float));
+    return;
+  }
   for (size_t i = 0; i < input.size(); ++i)
     storeStorage(output, i, storage, input[i]);
 }
@@ -1228,16 +1407,42 @@ bool packHostLayout(const void *input, void *output, int rank,
   }
   const auto *source = static_cast<const unsigned char *>(input);
   auto *target = static_cast<unsigned char *>(output);
-  for (size_t logical = 0; logical < elements; ++logical) {
-    size_t cursor = logical;
-    int64_t offset = 0;
-    for (int dim = rank - 1; dim >= 0; --dim) {
-      int64_t coordinate = int64_t(cursor % size_t(shape[dim]));
-      cursor /= size_t(shape[dim]);
-      offset += coordinate * strides[dim];
+  // A compact row-major layout (extent-1 dimensions may carry any stride) is
+  // already packed: one copy. Otherwise walk the outer coordinates as an
+  // odometer and copy each innermost run. The per-element div/mod walk this
+  // replaces cost milliseconds per call on the unoptimized host build.
+  bool compact = true;
+  int64_t expected = 1;
+  for (int dim = rank - 1; dim >= 0; --dim) {
+    if (shape[dim] != 1 && strides[dim] != expected) compact = false;
+    expected *= shape[dim];
+  }
+  if (compact) {
+    std::memcpy(target, source, elements * bytes);
+    return true;
+  }
+  const int last = rank - 1;
+  const int64_t rowExtent = shape[last], rowStride = strides[last];
+  int64_t index[8] = {0};
+  int64_t offset = 0;
+  for (size_t logical = 0; logical < elements; logical += size_t(rowExtent)) {
+    unsigned char *row = target + logical * bytes;
+    if (rowStride == 1) {
+      std::memcpy(row, source + std::ptrdiff_t(offset) * std::ptrdiff_t(bytes),
+                  size_t(rowExtent) * bytes);
+    } else {
+      for (int64_t i = 0; i < rowExtent; ++i)
+        std::memcpy(row + size_t(i) * bytes,
+                    source + std::ptrdiff_t(offset + i * rowStride) *
+                                 std::ptrdiff_t(bytes),
+                    bytes);
     }
-    std::memcpy(target + logical * bytes,
-                source + std::ptrdiff_t(offset) * std::ptrdiff_t(bytes), bytes);
+    for (int dim = last - 1; dim >= 0; --dim) {
+      offset += strides[dim];
+      if (++index[dim] < shape[dim]) break;
+      offset -= strides[dim] * shape[dim];
+      index[dim] = 0;
+    }
   }
   return true;
 }
@@ -1413,6 +1618,12 @@ void packAxis(const void *input, void *output, int64_t outer,
               int64_t axisExtent, int64_t inner, size_t bytes) {
   const auto *source = static_cast<const unsigned char *>(input);
   auto *destination = static_cast<unsigned char *>(output);
+  // With nothing inside the moved axis (or nothing outside it on the unpack
+  // side, where the roles swap) the permutation is an identity.
+  if (inner == 1 || axisExtent == 1) {
+    std::memcpy(destination, source, size_t(outer * axisExtent * inner) * bytes);
+    return;
+  }
   for (int64_t o = 0; o < outer; ++o)
     for (int64_t j = 0; j < inner; ++j)
       for (int64_t i = 0; i < axisExtent; ++i) {
@@ -1657,32 +1868,32 @@ extern "C" int ts_stft_plan_hostptr_broadcast_layout_storage_amd(
                          windowStrides, batchShape, fftN, windows)) return 223;
   int bins = onesided ? fftN / 2 + 1 : fftN;
   size_t outputElements = size_t(batch) * frames * bins;
-  float *deviceInput = nullptr, *deviceWindows = nullptr;
-  float2 *deviceOutput = nullptr;
-  if (!allocate(&deviceInput, input.size()) ||
-      !allocate(&deviceWindows, windows.size()) ||
-      !allocate(&deviceOutput, outputElements)) {
-    release(deviceInput, deviceWindows, deviceOutput);
-    return 224;
-  }
+  std::lock_guard<std::mutex> lock(policyMutex());
+  void *fft = policyForwardPlan(
+      fftN, static_cast<CompositePlan *>(opaque)->digest);
+  float *deviceInput = scratchOf<float>(0, input.size());
+  float *deviceWindows = scratchOf<float>(1, windows.size());
+  float2 *deviceOutput = scratchOf<float2>(2, outputElements);
+  if (!fft || !deviceInput || !deviceWindows || !deviceOutput) return 224;
   int rc = 0;
   if (hipMemcpy(deviceInput, input.data(), input.size() * sizeof(float),
                 hipMemcpyHostToDevice) != hipSuccess ||
       hipMemcpy(deviceWindows, windows.data(), windows.size() * sizeof(float),
                 hipMemcpyHostToDevice) != hipSuccess) rc = 225;
   std::vector<float2> packed(outputElements);
-  if (!rc) {
-    hipLaunchKernelGGL(stftDirectPolicy,
-        dim3((outputElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceInput, deviceWindows, deviceOutput, batch, samples, fftN, hop,
-        frames, bins, outputScale, center, padMode);
+  // pad_mode is a centered-framing policy: a non-centered frame that runs
+  // past the signal is zero-filled (tessera.ops.stft and the reference VJP).
+  // The former direct kernel reflected it whenever padMode was 1.
+  if (!rc && stftThroughFFT(fft, deviceInput, deviceWindows, deviceOutput,
+                            batch, samples, fftN, hop, frames, bins,
+                            outputScale, center, center ? padMode : 0))
+    rc = 226;
+  if (!rc)
     rc = syncAndCopy(packed.data(), deviceOutput,
                      outputElements * sizeof(float2));
-  }
   if (!rc)
     unpackAxis(packed.data(), outputHost, outer, int64_t(frames) * bins, inner,
                sizeof(float2));
-  release(deviceInput, deviceWindows, deviceOutput);
   return rc;
 }
 
@@ -1731,35 +1942,52 @@ extern "C" int ts_istft_plan_hostptr_broadcast_layout_storage_amd(
   int available = rawSamples - (center ? fftN : 0);
   if (outputSamples > available) return 233;
   size_t outputElements = size_t(batch) * outputSamples;
-  float2 *deviceSpectrum = nullptr;
-  float *deviceWindows = nullptr, *deviceOutput = nullptr;
-  if (!allocate(&deviceSpectrum, spectra.size()) ||
-      !allocate(&deviceWindows, windows.size()) ||
-      !allocate(&deviceOutput, outputElements)) {
-    release(deviceSpectrum, deviceWindows, deviceOutput);
+  size_t frameElements = size_t(batch) * frames * fftN;
+  size_t termElements = size_t(batch) * rawSamples;
+  std::lock_guard<std::mutex> lock(policyMutex());
+  void *fft = policyForwardPlan(
+      fftN, static_cast<CompositePlan *>(opaque)->digest);
+  float2 *deviceSpectrum = scratchOf<float2>(0, spectra.size());
+  float *deviceWindows = scratchOf<float>(1, windows.size());
+  float *deviceOutput = scratchOf<float>(2, outputElements);
+  float *deviceFrames = scratchOf<float>(3, frameElements);
+  double *deviceNumerator = scratchOf<double>(4, termElements);
+  double *deviceDenominator = scratchOf<double>(5, termElements);
+  if (!fft || !deviceSpectrum || !deviceWindows || !deviceOutput ||
+      !deviceFrames || !deviceNumerator || !deviceDenominator)
     return 234;
-  }
   int rc = 0;
   if (hipMemcpy(deviceSpectrum, spectra.data(), spectra.size() * sizeof(float2),
                 hipMemcpyHostToDevice) != hipSuccess ||
       hipMemcpy(deviceWindows, windows.data(), windows.size() * sizeof(float),
                 hipMemcpyHostToDevice) != hipSuccess) rc = 235;
   std::vector<float> output(outputElements);
+  // Frame values are the former kernel's time/fftN; overlap-add then divides
+  // by the summed squared window and applies the output scale.
+  if (!rc && inverseFramesThroughFFT(fft, deviceSpectrum, deviceFrames,
+                                     batch * frames, fftN, bins, onesided,
+                                     1.0f / float(fftN)))
+    rc = 236;
   if (!rc) {
-    hipLaunchKernelGGL(istftDirectPolicy,
-        dim3((outputElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceSpectrum, deviceWindows, deviceOutput, batch, frames, bins, fftN,
-        hop, outputSamples, outputScale, center, onesided);
+    hipLaunchKernelGGL(istftOverlapTerms, dim3(blocksFor(termElements)),
+                       dim3(kThreads), 0, 0, deviceFrames, deviceWindows,
+                       deviceNumerator, deviceDenominator, batch, frames, fftN,
+                       hop, rawSamples);
+    hipLaunchKernelGGL(istftOutputFromTerms, dim3(blocksFor(outputElements)),
+                       dim3(kThreads), 0, 0, deviceNumerator, deviceDenominator,
+                       deviceOutput, batch, outputSamples, rawSamples,
+                       center ? fftN / 2 : 0, outputScale);
+    if (hipGetLastError() != hipSuccess) rc = 236;
+  }
+  if (!rc)
     rc = syncAndCopy(output.data(), deviceOutput,
                      outputElements * sizeof(float));
-  }
   if (!rc) {
     std::vector<unsigned char> stored(outputElements * storageBytes(storage));
     packStorage(output, stored.data(), storage);
     unpackAxis(stored.data(), outputHost, outer, outputSamples, inner,
                storageBytes(storage));
   }
-  release(deviceSpectrum, deviceWindows, deviceOutput);
   return rc;
 }
 
@@ -1821,27 +2049,26 @@ extern "C" int ts_streaming_stft_hostptr_broadcast_layout_storage_amd(
                          windowStrides, batchShape, fftN, windows)) return 243;
   int bins = onesided ? fftN / 2 + 1 : fftN;
   size_t outputElements = size_t(batch) * frames * bins;
-  float *deviceInput = nullptr, *deviceWindows = nullptr;
-  float2 *deviceOutput = nullptr;
-  if (!allocate(&deviceInput, combined.size()) ||
-      !allocate(&deviceWindows, windows.size()) ||
-      (outputElements && !allocate(&deviceOutput, outputElements))) {
-    release(deviceInput, deviceWindows, deviceOutput);
-    return 244;
-  }
-  int rc = 0;
-  if (hipMemcpy(deviceInput, combined.data(), combined.size() * sizeof(float),
-                hipMemcpyHostToDevice) != hipSuccess ||
-      hipMemcpy(deviceWindows, windows.data(), windows.size() * sizeof(float),
-                hipMemcpyHostToDevice) != hipSuccess) rc = 245;
   std::vector<float2> output(outputElements);
-  if (!rc && outputElements) {
-    hipLaunchKernelGGL(stftDirectPolicy,
-        dim3((outputElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceInput, deviceWindows, deviceOutput, batch, combinedSamples, fftN,
-        hop, frames, bins, outputScale, 0, 0);
-    rc = syncAndCopy(output.data(), deviceOutput,
-                     outputElements * sizeof(float2));
+  int rc = 0;
+  if (outputElements) {
+    std::lock_guard<std::mutex> lock(policyMutex());
+    void *fft = policyForwardPlan(fftN, digest);
+    float *deviceInput = scratchOf<float>(0, combined.size());
+    float *deviceWindows = scratchOf<float>(1, windows.size());
+    float2 *deviceOutput = scratchOf<float2>(2, outputElements);
+    if (!fft || !deviceInput || !deviceWindows || !deviceOutput) return 244;
+    if (hipMemcpy(deviceInput, combined.data(), combined.size() * sizeof(float),
+                  hipMemcpyHostToDevice) != hipSuccess ||
+        hipMemcpy(deviceWindows, windows.data(), windows.size() * sizeof(float),
+                  hipMemcpyHostToDevice) != hipSuccess) rc = 245;
+    if (!rc && stftThroughFFT(fft, deviceInput, deviceWindows, deviceOutput,
+                              batch, combinedSamples, fftN, hop, frames, bins,
+                              outputScale, 0, 0))
+      rc = 246;
+    if (!rc)
+      rc = syncAndCopy(output.data(), deviceOutput,
+                       outputElements * sizeof(float2));
   }
   if (!rc && outputElements)
     unpackAxis(output.data(), outputHost, outer, int64_t(frames) * bins, inner,
@@ -1853,7 +2080,6 @@ extern "C" int ts_streaming_stft_hostptr_broadcast_layout_storage_amd(
       next[size_t(row) * nextSamples + at] =
           combined[size_t(row) * combinedSamples + frames * hop + at];
   packStorage(next, nextTailHost, storage);
-  release(deviceInput, deviceWindows, deviceOutput);
   return rc;
 }
 
@@ -1917,20 +2143,22 @@ extern "C" int ts_stft_backward_hostptr_broadcast_layout_storage_amd(
       !buildWindowRowMap(windowRank, windowShape, batchShape, rowWindow,
                          windowRows)) return 254;
   int win = int(windowShape[windowRank - 1]);
-  float2 *deviceDy = nullptr;
-  float *deviceInput = nullptr, *deviceWindows = nullptr, *deviceDx = nullptr;
-  float *deviceDwindow = nullptr;
-  int *deviceRowWindow = nullptr;
-  if (!allocate(&deviceDy, spectralElements) ||
-      !allocate(&deviceInput, inputElements) ||
-      !allocate(&deviceWindows, windows.size()) ||
-      !allocate(&deviceDx, inputElements) ||
-      !allocate(&deviceDwindow, size_t(windowRows) * win) ||
-      !allocate(&deviceRowWindow, rowWindow.size())) {
-    release(deviceDy, deviceInput, deviceWindows, deviceDx, deviceDwindow,
-            deviceRowWindow);
+  size_t windowElements = size_t(windowRows) * win;
+  if (windowElements == 0 || windowElements > size_t(INT32_MAX)) return 254;
+  size_t frameElements = size_t(batch) * frames * fftN;
+  std::lock_guard<std::mutex> lock(policyMutex());
+  void *fft = policyForwardPlan(fftN, digest);
+  float2 *deviceDy = scratchOf<float2>(0, spectralElements);
+  float *deviceInput = scratchOf<float>(1, inputElements);
+  float *deviceWindows = scratchOf<float>(2, windows.size());
+  float *deviceDx = scratchOf<float>(3, inputElements);
+  float *deviceDwindow = scratchOf<float>(4, windowElements);
+  int *deviceRowWindow = scratchOf<int>(5, rowWindow.size());
+  float2 *z = scratchOf<float2>(6, frameElements);
+  float2 *g = scratchOf<float2>(7, frameElements);
+  if (!fft || !deviceDy || !deviceInput || !deviceWindows || !deviceDx ||
+      !deviceDwindow || !deviceRowWindow || !z || !g)
     return 255;
-  }
   int rc = 0;
   if (hipMemcpy(deviceDy, dy.data(), spectralElements * sizeof(float2),
                 hipMemcpyHostToDevice) != hipSuccess ||
@@ -1941,25 +2169,38 @@ extern "C" int ts_stft_backward_hostptr_broadcast_layout_storage_amd(
       hipMemcpy(deviceRowWindow, rowWindow.data(),
                 rowWindow.size() * sizeof(int), hipMemcpyHostToDevice) != hipSuccess)
     rc = 256;
-  std::vector<float> dx(inputElements), dwindow(size_t(windowRows) * win);
+  // G[row, frame, local] = Re(sum_bin dy e^{+i 2 pi bin local / N}), as
+  // Re(FFT(conj(dy))) with the bins above the stored ones zero.
   if (!rc) {
-    hipLaunchKernelGGL(stftBackwardInputPolicy,
-        dim3((inputElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceDy, deviceWindows, deviceDx, batch, samples, fftN, hop, frames,
-        bins, forwardScale, center, padMode);
-    size_t windowElements = size_t(windowRows) * win;
-    hipLaunchKernelGGL(stftBackwardWindowPolicy,
-        dim3((windowElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceDy, deviceInput, deviceRowWindow, deviceDwindow, batch,
-        windowRows, samples, fftN, win, hop, frames, bins, forwardScale,
-        center, padMode);
-    if (hipDeviceSynchronize() != hipSuccess ||
-        hipMemcpy(dx.data(), deviceDx, inputElements * sizeof(float),
-                  hipMemcpyDeviceToHost) != hipSuccess ||
-        hipMemcpy(dwindow.data(), deviceDwindow,
-                  windowElements * sizeof(float), hipMemcpyDeviceToHost) != hipSuccess)
-      rc = 257;
+    hipLaunchKernelGGL(conjugateWeightedSpectrum, dim3(blocksFor(frameElements)),
+                       dim3(kThreads), 0, 0, deviceDy, z, batch * frames, fftN,
+                       bins, 0, onesided);
+    if (hipGetLastError() != hipSuccess ||
+        ts_fft_plan_execute_device_batch_amd(fft, z, g, batch * frames, 0) != 0)
+      rc = 258;
   }
+  // Reflect only under centered framing (see the forward entry point).
+  const int effectivePad = center ? padMode : 0;
+  if (!rc) {
+    hipLaunchKernelGGL(stftBackwardInputFromG, dim3(blocksFor(inputElements)),
+                       dim3(kThreads), 0, 0, g, deviceWindows, deviceDx, batch,
+                       samples, fftN, hop, frames, framedSamples, forwardScale,
+                       center, effectivePad);
+    hipLaunchKernelGGL(stftBackwardWindowFromG, dim3(unsigned(windowElements)),
+                       dim3(kReduceThreads), 0, 0, g, deviceInput,
+                       deviceRowWindow, deviceDwindow, batch, windowRows,
+                       samples, fftN, win, hop, frames, forwardScale, center,
+                       effectivePad);
+    if (hipGetLastError() != hipSuccess) rc = 258;
+  }
+  std::vector<float> dx(inputElements), dwindow(windowElements);
+  if (!rc && (hipDeviceSynchronize() != hipSuccess ||
+              hipMemcpy(dx.data(), deviceDx, inputElements * sizeof(float),
+                        hipMemcpyDeviceToHost) != hipSuccess ||
+              hipMemcpy(dwindow.data(), deviceDwindow,
+                        windowElements * sizeof(float),
+                        hipMemcpyDeviceToHost) != hipSuccess))
+    rc = 257;
   if (!rc) {
     std::vector<unsigned char> dxStored(inputElements * bytes);
     std::vector<unsigned char> dwStored(dwindow.size() * bytes);
@@ -1968,8 +2209,6 @@ extern "C" int ts_stft_backward_hostptr_broadcast_layout_storage_amd(
     unpackAxis(dxStored.data(), dxHost, outer, samples, inner, bytes);
     std::memcpy(dwindowHost, dwStored.data(), dwStored.size());
   }
-  release(deviceDy, deviceInput, deviceWindows, deviceDx, deviceDwindow,
-          deviceRowWindow);
   return rc;
 }
 
@@ -2032,23 +2271,26 @@ extern "C" int ts_istft_backward_hostptr_broadcast_layout_storage_amd(
       !buildWindowRowMap(windowRank, windowShape, batchShape, rowWindow,
                          windowRows)) return 264;
   int win = int(windowShape[windowRank - 1]);
-  float *deviceDy = nullptr, *deviceWindows = nullptr, *deviceFrames = nullptr;
-  float *deviceDframes = nullptr, *deviceDwindow = nullptr;
-  float2 *deviceSpectrum = nullptr, *deviceDspectrum = nullptr;
-  int *deviceRowWindow = nullptr;
+  size_t windowElements = size_t(windowRows) * win;
+  if (windowElements == 0 || windowElements > size_t(INT32_MAX)) return 264;
   size_t frameElements = size_t(batch) * frames * fftN;
-  if (!allocate(&deviceDy, dyElements) ||
-      !allocate(&deviceSpectrum, spectralElements) ||
-      !allocate(&deviceWindows, windows.size()) ||
-      !allocate(&deviceFrames, frameElements) ||
-      !allocate(&deviceDframes, frameElements) ||
-      !allocate(&deviceDspectrum, spectralElements) ||
-      !allocate(&deviceDwindow, size_t(windowRows) * win) ||
-      !allocate(&deviceRowWindow, rowWindow.size())) {
-    release(deviceDy, deviceSpectrum, deviceWindows, deviceFrames,
-            deviceDframes, deviceDspectrum, deviceDwindow, deviceRowWindow);
+  size_t termElements = size_t(batch) * rawSamples;
+  std::lock_guard<std::mutex> lock(policyMutex());
+  void *fft = policyForwardPlan(fftN, digest);
+  float *deviceDy = scratchOf<float>(0, dyElements);
+  float2 *deviceSpectrum = scratchOf<float2>(1, spectralElements);
+  float *deviceWindows = scratchOf<float>(2, windows.size());
+  float *deviceFrames = scratchOf<float>(3, frameElements);
+  float *deviceDframes = scratchOf<float>(4, frameElements);
+  float2 *deviceDspectrum = scratchOf<float2>(5, spectralElements);
+  float *deviceDwindow = scratchOf<float>(6, windowElements);
+  int *deviceRowWindow = scratchOf<int>(7, rowWindow.size());
+  double *deviceNumerator = scratchOf<double>(10, termElements);
+  double *deviceDenominator = scratchOf<double>(11, termElements);
+  if (!fft || !deviceDy || !deviceSpectrum || !deviceWindows ||
+      !deviceFrames || !deviceDframes || !deviceDspectrum || !deviceDwindow ||
+      !deviceRowWindow || !deviceNumerator || !deviceDenominator)
     return 265;
-  }
   int rc = 0;
   if (hipMemcpy(deviceDy, dy.data(), dyElements * sizeof(float),
                 hipMemcpyHostToDevice) != hipSuccess ||
@@ -2058,33 +2300,62 @@ extern "C" int ts_istft_backward_hostptr_broadcast_layout_storage_amd(
                 hipMemcpyHostToDevice) != hipSuccess ||
       hipMemcpy(deviceRowWindow, rowWindow.data(), rowWindow.size() * sizeof(int),
                 hipMemcpyHostToDevice) != hipSuccess) rc = 266;
-  std::vector<float2> dspectrum(spectralElements);
-  std::vector<float> dwindow(size_t(windowRows) * win);
+  // The forward ISTFT's frame values (the former kernel's value*inverseScale).
+  if (!rc && inverseFramesThroughFFT(fft, deviceSpectrum, deviceFrames,
+                                     batch * frames, fftN, bins, onesided,
+                                     inverseScale))
+    rc = 268;
   if (!rc) {
-    hipLaunchKernelGGL(istftFrameValuesPolicy,
-        dim3((frameElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceSpectrum, deviceFrames, batch, frames, bins, fftN, inverseScale,
-        onesided);
-    hipLaunchKernelGGL(istftBackwardFramesPolicy,
-        dim3((frameElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceDy, deviceFrames, deviceWindows, deviceDframes, batch, frames,
-        fftN, hop, outputSamples, center);
-    hipLaunchKernelGGL(istftBackwardSpectrumPolicy,
-        dim3((spectralElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceDframes, deviceDspectrum, batch, frames, bins, fftN,
-        inverseScale, onesided);
-    size_t windowElements = size_t(windowRows) * win;
-    hipLaunchKernelGGL(istftBackwardWindowPolicy,
-        dim3((windowElements + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
-        deviceDy, deviceFrames, deviceWindows, deviceRowWindow, deviceDwindow,
-        batch, windowRows, frames, fftN, win, hop, outputSamples, center);
-    if (hipDeviceSynchronize() != hipSuccess ||
-        hipMemcpy(dspectrum.data(), deviceDspectrum,
-                  spectralElements * sizeof(float2), hipMemcpyDeviceToHost) != hipSuccess ||
-        hipMemcpy(dwindow.data(), deviceDwindow,
-                  windowElements * sizeof(float), hipMemcpyDeviceToHost) != hipSuccess)
-      rc = 267;
+    hipLaunchKernelGGL(istftOverlapTerms, dim3(blocksFor(termElements)),
+                       dim3(kThreads), 0, 0, deviceFrames, deviceWindows,
+                       deviceNumerator, deviceDenominator, batch, frames, fftN,
+                       hop, rawSamples);
+    hipLaunchKernelGGL(istftBackwardFramesFromTerms,
+                       dim3(blocksFor(frameElements)), dim3(kThreads), 0, 0,
+                       deviceDy, deviceDenominator, deviceWindows,
+                       deviceDframes, batch, frames, fftN, hop, outputSamples,
+                       rawSamples, center);
+    hipLaunchKernelGGL(istftBackwardWindowFromTerms,
+                       dim3(unsigned(windowElements)), dim3(kReduceThreads), 0,
+                       0, deviceDy, deviceFrames, deviceWindows,
+                       deviceNumerator, deviceDenominator, deviceRowWindow,
+                       deviceDwindow, batch, windowRows, frames, fftN, win, hop,
+                       outputSamples, rawSamples, center);
+    if (hipGetLastError() != hipSuccess) rc = 268;
   }
+  // dspectrum = w_bin * inverseScale * FFT(dframes)[bin].
+  if (!rc) {
+    float2 *complexFrames = scratchOf<float2>(8, frameElements);
+    float2 *transformed = scratchOf<float2>(9, frameElements);
+    if (!complexFrames || !transformed) {
+      rc = 265;
+    } else {
+      hipLaunchKernelGGL(realToComplex, dim3(blocksFor(frameElements)),
+                         dim3(kThreads), 0, 0, deviceDframes, complexFrames,
+                         frameElements);
+      if (hipGetLastError() != hipSuccess ||
+          ts_fft_plan_execute_device_batch_amd(fft, complexFrames, transformed,
+                                               batch * frames, 0) != 0)
+        rc = 268;
+      if (!rc) {
+        hipLaunchKernelGGL(compactBins, dim3(blocksFor(spectralElements)),
+                           dim3(kThreads), 0, 0, transformed, deviceDspectrum,
+                           batch * frames, fftN, bins, inverseScale, 1,
+                           onesided);
+        if (hipGetLastError() != hipSuccess) rc = 268;
+      }
+    }
+  }
+  std::vector<float2> dspectrum(spectralElements);
+  std::vector<float> dwindow(windowElements);
+  if (!rc && (hipDeviceSynchronize() != hipSuccess ||
+              hipMemcpy(dspectrum.data(), deviceDspectrum,
+                        spectralElements * sizeof(float2),
+                        hipMemcpyDeviceToHost) != hipSuccess ||
+              hipMemcpy(dwindow.data(), deviceDwindow,
+                        windowElements * sizeof(float),
+                        hipMemcpyDeviceToHost) != hipSuccess))
+    rc = 267;
   if (!rc) {
     unpackAxis(dspectrum.data(), dspectrumHost, outer,
                int64_t(frames) * bins, inner, sizeof(float2));
@@ -2092,7 +2363,5 @@ extern "C" int ts_istft_backward_hostptr_broadcast_layout_storage_amd(
     packStorage(dwindow, dwStored.data(), storage);
     std::memcpy(dwindowHost, dwStored.data(), dwStored.size());
   }
-  release(deviceDy, deviceSpectrum, deviceWindows, deviceFrames,
-          deviceDframes, deviceDspectrum, deviceDwindow, deviceRowWindow);
   return rc;
 }

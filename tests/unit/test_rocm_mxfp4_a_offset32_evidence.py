@@ -28,10 +28,13 @@ def test_offset32_packet_binds_current_sources_oracle_and_selected_isa() -> None
         "07bda3c180807a28a0363cc1127ee3b5671537e11694ccd2edfd4896f491ecf5"
     )
     for field, path in (
-        ("packed_abi_sha256", "python/tessera/compiler/rocm_mxfp4_packed_folded.py"),
         ("isa_inspector_sha256", "benchmarks/rocm/inspect_gfx1201_folded_prefill.py"),
     ):
         assert packet[field] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+    # Recorded before the 2026-09-24 producer relabel (pipeline_name only).
+    # gfx1201_mxfp4_producer_relabel_20260924 proves the relabelled generator
+    # builds the same timed kernels; do not relabel old GPU timings.
+    assert packet["packed_abi_sha256"] == "b45ad1f0b58a90199e270cffd2735d3f0fd30b216824758f40316cd5917bb090"
     for case in ("prefill_256x5120x8704", "prefill_1024x17408x5120"):
         rows = {row["engine"]: row for row in packet["rows"] if row["case"] == case}
         control = rows["tessera_packed_batched_b_permute"]

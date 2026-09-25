@@ -1,4 +1,8 @@
-"""Opt-in exact gfx1201 BF16 proof for the distinct packed W4A4 probe."""
+"""Opt-in exact-device BF16 proof for the distinct packed W4A4 probe.
+
+Runs on the live owning chip -- gfx1151 (Princess-Luna) or gfx1201 (Tajasarus,
+behind TESSERA_GFX1201_DEVICE_PROOF=1). Each chip's pass is its own proof.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,15 @@ from tessera.compiler.rocm_mxfp4_quark_native import launch_quark_w4a4_probe
 PACKET = Path(__file__).resolve().parents[3] / ("benchmarks/baselines/gfx1201_quark_w4a4_probe_20260923/reference.json")
 
 
+def _owning_arch() -> str:
+    live = rt._rocm_live_arch()
+    if live == "gfx1151":
+        return live
+    if live == "gfx1201" and os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") == "1":
+        return live
+    pytest.skip(f"needs a live gfx1151, or gfx1201 with its device-proof gate; live is {live!r}")
+
+
 def _sample_buffers(case: dict[str, object], packet: dict[str, object]) -> dict[str, np.ndarray]:
     return {
         "a_packed": np.frombuffer(bytes.fromhex(packet["activation_packed_hex"]), np.uint8).reshape(1, 16).copy(),
@@ -29,29 +42,22 @@ def _sample_buffers(case: dict[str, object], packet: dict[str, object]) -> dict[
 
 
 @pytest.mark.hardware_rocm
-@pytest.mark.skipif(
-    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
-    reason="explicit gfx1201 owning-device gate",
-)
 @pytest.mark.parametrize("case_index", [0, 1], ids=["gate", "down"])
-def test_pinned_independent_w4a4_projection_on_gfx1201(case_index: int) -> None:
-    assert rt._rocm_live_arch() == "gfx1201"
+def test_pinned_independent_w4a4_projection_on_owning_chip(case_index: int) -> None:
+    arch = _owning_arch()
     packet = json.loads(PACKET.read_text())
     case = packet["cases"][case_index]
     buffers = _sample_buffers(case, packet)
     result = launch_quark_w4a4_probe(buffers)
     assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    assert result["probe_arch"] == arch
     np.testing.assert_array_equal(buffers["output"].view(np.uint16)[0], case["bf16_bits"])
-    print(f"{case['projection']}: launched_hsaco_sha256={result['hsaco_sha256']}")
+    print(f"{arch} {case['projection']}: launched_hsaco_sha256={result['hsaco_sha256']}")
 
 
 @pytest.mark.hardware_rocm
-@pytest.mark.skipif(
-    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
-    reason="explicit gfx1201 owning-device gate",
-)
-def test_w4a4_ragged_k64_and_scale_cancellation_on_gfx1201() -> None:
-    assert rt._rocm_live_arch() == "gfx1201"
+def test_w4a4_ragged_k64_and_scale_cancellation_on_owning_chip() -> None:
+    arch = _owning_arch()
     rng = np.random.default_rng(1201)
     m, n, k = 5, 3, 64
     buffers = {
@@ -70,5 +76,6 @@ def test_w4a4_ragged_k64_and_scale_cancellation_on_gfx1201() -> None:
     ).astype(ml_dtypes.bfloat16)
     result = launch_quark_w4a4_probe(buffers)
     assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    assert result["probe_arch"] == arch
     np.testing.assert_array_equal(buffers["output"], expected)
-    print(f"ragged_k64: launched_hsaco_sha256={result['hsaco_sha256']}")
+    print(f"{arch} ragged_k64: launched_hsaco_sha256={result['hsaco_sha256']}")

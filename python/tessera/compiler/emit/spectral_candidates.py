@@ -424,45 +424,98 @@ def _prebuilt_amd_paths() -> tuple[Path, ...]:
     return tuple(paths)
 
 
+def _load_prebuilt_fft(path: Path) -> ctypes.CDLL | None:
+    """Load one prebuilt image if it exports the FFT-v1 plan ABI."""
+    if not path.is_file():
+        return None
+    try:
+        lib = _configure_amd_lib(ctypes.CDLL(str(path)))
+    except OSError:
+        return None
+    required = (
+        "ts_fft_plan_create_for_artifact_amd",
+        "ts_fft_plan_artifact_digest_amd",
+        "ts_fft_plan_execute_hostptr_batch_amd",
+        "ts_fft_plan_workspace_elems_amd",
+        "ts_fft_plan_destroy_amd",
+        "ts_fft_package_abi_amd",
+    )
+    if not all(hasattr(lib, symbol) for symbol in required):
+        return None
+    if lib.ts_fft_package_abi_amd() != b"tessera.rocm.fft.plan.v1":
+        return None
+    return lib
+
+
+def _prebuilt_stamp(lib: ctypes.CDLL | None) -> bytes | None:
+    """The v7 composite architecture stamp, or ``None`` for an unstamped image."""
+    if (
+        lib is None
+        or not hasattr(lib, "ts_spectral_composite_package_abi_amd")
+        or lib.ts_spectral_composite_package_abi_amd()
+        != b"tessera.rocm.spectral_composite.v7"
+        or not hasattr(lib, "ts_spectral_composite_arch_amd")
+    ):
+        return None
+    return lib.ts_spectral_composite_arch_amd()
+
+
 def _amd_lib() -> ctypes.CDLL | None:
-    """Load the canonical prebuilt ROCm spectral image; never invoke hipcc."""
+    """Load the canonical prebuilt ROCm spectral image; never invoke hipcc.
+
+    Prefers the gfx1151-stamped package and otherwise returns the first FFT-v1
+    image. Device-bound callers use :func:`_amd_device_lib`, which never hands
+    a package stamped for one chip to another.
+    """
     cached = _libs.get("amd_prebuilt")
     if cached is not None:
         return cached
     fallback = None
     for path in _prebuilt_amd_paths():
-        if not path.is_file():
-            continue
-        try:
-            lib = _configure_amd_lib(ctypes.CDLL(str(path)))
-        except OSError:
-            continue
-        required = (
-            "ts_fft_plan_create_for_artifact_amd",
-            "ts_fft_plan_artifact_digest_amd",
-            "ts_fft_plan_execute_hostptr_batch_amd",
-            "ts_fft_plan_workspace_elems_amd",
-            "ts_fft_plan_destroy_amd",
-            "ts_fft_package_abi_amd",
-        )
-        if not all(hasattr(lib, symbol) for symbol in required):
-            continue
-        if lib.ts_fft_package_abi_amd() != b"tessera.rocm.fft.plan.v1":
+        lib = _load_prebuilt_fft(path)
+        if lib is None:
             continue
         if fallback is None:
             fallback = lib
-        if (
-            hasattr(lib, "ts_spectral_composite_package_abi_amd")
-            and lib.ts_spectral_composite_package_abi_amd()
-            == b"tessera.rocm.spectral_composite.v7"
-            and hasattr(lib, "ts_spectral_composite_arch_amd")
-            and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
-        ):
+        if _prebuilt_stamp(lib) == b"gfx1151":
             _libs["amd_prebuilt"] = lib
             return lib
     if fallback is not None:
         _libs["amd_prebuilt"] = fallback
     return fallback
+
+
+def _amd_prebuilt_exact(arch: str) -> ctypes.CDLL | None:
+    """The first prebuilt image whose composite stamp is exactly ``arch``."""
+    key = f"amd_prebuilt:{arch}"
+    if key in _libs:
+        return _libs[key]
+    found = None
+    for path in _prebuilt_amd_paths():
+        lib = _load_prebuilt_fft(path)
+        if lib is not None and _prebuilt_stamp(lib) == arch.encode():
+            found = lib
+            break
+    _libs[key] = found  # a miss is cached too: hot per-call paths ask again
+    return found
+
+
+def _amd_device_lib() -> ctypes.CDLL | None:
+    """The prebuilt FFT image whose code object serves the selected device.
+
+    A package stamped for the live chip always wins. Unstamped FFT-v1 images
+    predate per-arch stamping and were gfx1151 builds, so only gfx1151 may
+    inherit :func:`_amd_lib`'s fallback -- and never one stamped for a
+    different chip. Without a resolvable device the legacy selection stands.
+    """
+    live = _spectral_device_arch()
+    if live is None:
+        return _amd_lib()
+    exact = _amd_prebuilt_exact(live)
+    if exact is not None or live != "gfx1151":
+        return exact
+    lib = _amd_lib()
+    return lib if _prebuilt_stamp(lib) in (None, b"gfx1151") else None
 
 
 def _spectral_device_arch() -> str | None:
@@ -519,28 +572,28 @@ def _is_gfx1151_composite_lib(lib: ctypes.CDLL | None) -> bool:
 
 
 def _amd_composite_lib() -> ctypes.CDLL | None:
-    """Select the composite package stamped for this host's arch.
+    """Select the composite package stamped for the selected device's arch.
 
     ``_amd_lib`` deliberately retains an FFT-v1 fallback because the portable
     FFT plan ABI is architecture-neutral. Compound TSOL entry points are not:
-    their schedules and evidence are owned per chip, so a package stamped for
-    another arch must never inherit that FFT fallback. The prebuilt image is
-    a gfx1151 artifact; on another RDNA chip the source hook is compiled for
-    that chip (GFX1201-PARITY 2026-09-17) and its stamp must match too.
+    their schedules and evidence are owned per chip, so only a package whose
+    stamp equals the live arch qualifies. That package is a CMake build with
+    one ``CMAKE_HIP_ARCHITECTURES`` entry (gfx1151 on Princess-Luna, gfx1201
+    on Tajasarus). The source hook compiles only the Stockham FFT, so it is
+    never a composite candidate. A feature-qualified target (``gfx1151:xnack-``)
+    has no qualified prebuilt stamp and is refused rather than mislabelled.
     """
-    arch = _composite_host_arch()
+    live = _spectral_device_arch()
     compile_arch = _spectral_compile_arch()
-    if compile_arch is None:
+    if live is None or compile_arch != live:
         return None
-    key = f"amd_composite:{compile_arch}"
+    key = f"amd_composite:{live}"
     cached = _libs.get(key)
     if cached is not None:
-        return cached if _is_exact_composite_lib(cached, arch) else None
-    lib = _amd_lib() if compile_arch == "gfx1151" else None
-    if not _is_exact_composite_lib(lib, arch):
-        lib = _amd_source_lib()
-        if not _is_exact_composite_lib(lib, arch):
-            return None
+        return cached if _is_exact_composite_lib(cached, live) else None
+    lib = _amd_prebuilt_exact(live)
+    if not _is_exact_composite_lib(lib, live):
+        return None
     _libs[key] = lib
     return lib
 
@@ -565,12 +618,15 @@ def _amd_source_lib() -> ctypes.CDLL | None:
 
 
 def _amd_candidate_lib() -> ctypes.CDLL | None:
+    """Stockham candidate image: the live chip's prebuilt, else its source build."""
     arch = _spectral_compile_arch()
-    if arch == "gfx1151":
-        return _amd_lib() or _amd_source_lib()
-    if arch is not None:
-        return _amd_source_lib()
-    return None
+    if arch is None:
+        return None
+    if arch == _spectral_device_arch():
+        prebuilt = _amd_device_lib()
+        if prebuilt is not None:
+            return prebuilt
+    return _amd_source_lib()
 
 
 def _cptr(a: np.ndarray) -> ctypes.c_void_p:
@@ -614,10 +670,11 @@ def _rocm_plan(
         if cached is not None:
             _rocm_plan_cache.move_to_end(key)
             return cached
-        lib = _amd_lib()
+        lib = _amd_device_lib()
         if lib is None:
             raise RuntimeError(
                 "prebuilt ROCm spectral image libtessera_spectral_rocm.so "
+                f"for {_spectral_device_arch() or 'the selected device'} "
                 "is unavailable"
             )
         handle = ctypes.c_void_p()
@@ -772,18 +829,17 @@ def run_rocm_spectral_composite(
     )
     lib = _amd_composite_lib()
     if lib is None:
-        # Name the arch this refusal is about. The composite package is a
-        # gfx1151 artifact (its schedules and evidence are owned by gfx1151), so
-        # on any other ROCm host "unavailable" is not a missing build but an
-        # arch-gated contract -- and a test must be able to tell the two apart:
-        # on gfx1151 this is a failure, on gfx1201 it is a skip.
+        # A composite package is stamped for exactly one chip, and both RDNA
+        # chips now own one, so neither message is an arch-gated contract:
+        # both stay failures (no "arch-gated" wording for the skip hook).
         arch = _composite_host_arch()
-        if arch != "gfx1151":
+        if not any(path.is_file() for path in _prebuilt_amd_paths()):
             raise RuntimeError(
-                "prebuilt ROCm spectral composite image is a gfx1151 package, "
-                f"hardware-verified on gfx1151; target '{arch}' has no composite "
-                "image built for it on this host and is arch-gated on its own evidence")
-        raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
+                f"target '{arch}' has no prebuilt ROCm spectral composite image "
+                "built on this host")
+        raise RuntimeError(
+            "prebuilt ROCm spectral composite image for the selected device is "
+            "unavailable: the images present are foreign-chip or stale builds")
     if (
         lib.ts_spectral_composite_package_abi_amd()
         != b"tessera.rocm.spectral_composite.v7"

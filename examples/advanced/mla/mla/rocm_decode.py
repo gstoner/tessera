@@ -7,7 +7,6 @@ the toy Graph IR prefill skeleton. A reference fallback is a failed smoke.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 
 import numpy as np
 
@@ -30,10 +29,12 @@ def run_rocm_decode_smoke(*, seed: int = 46) -> RocmDecodeSummary:
     live = rt._rocm_live_arch()
     if live is None:
         raise RuntimeError("ROCm MLA smoke requires a selected HIP device")
-    chip = os.environ.get("TESSERA_ROCM_CHIP")
+    # The runtime's compiler chip (TESSERA_ROCM_CHIP, default gfx1151) must
+    # name the device the kernel launches on -- the same check Gumiho makes.
+    chip = rt._rocm_chip().split(":", 1)[0]
     if chip != live:
         raise RuntimeError(
-            f"set TESSERA_ROCM_CHIP={live} for the selected device; got {chip!r}"
+            f"set TESSERA_ROCM_CHIP={live} for the selected device; compiler chip is {chip!r}"
         )
 
     rng = np.random.default_rng(seed)
@@ -73,6 +74,10 @@ def run_rocm_decode_smoke(*, seed: int = 46) -> RocmDecodeSummary:
     kind = str(result["execution_kind"])
     if kind != "native_gpu":
         raise RuntimeError(f"ROCm MLA smoke refused {kind} fallback")
+    if result.get("compiler_path") != "rocm_exotic_attn_compiled":
+        raise RuntimeError(
+            f"ROCm MLA smoke ran {result.get('compiler_path')!r}, not the requested compiled lane"
+        )
     output = np.asarray(result["output"])
     np.testing.assert_allclose(output, reference, rtol=2e-4, atol=2e-4)
     if (got_lat.current_seq != ref_lat.current_seq

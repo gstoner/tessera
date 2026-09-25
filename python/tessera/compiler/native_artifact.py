@@ -29,6 +29,17 @@ from .pipeline_registry import pipeline_lookup
 
 
 NATIVE_IMAGE_SCHEMA_VERSION = "tessera.native_image.v1"
+
+# Producers of a native image that are not MLIR pass pipelines. A kernel whose
+# source is hand-emitted HIP and compiled by hipcc is a Tier-3 delegate
+# (Decision #28): its image names that producer rather than borrowing an MLIR
+# pipeline it never ran through. Any Graph/Tile/Target IR the delegate was
+# reached through is bound separately (``target_ir_digest`` and descriptor
+# provenance). Names here must never collide with a registered pipeline.
+HAND_EMITTED_HIP_PRODUCER = "hand-emitted-hip"
+NON_MLIR_IMAGE_PRODUCERS: Mapping[str, tuple[str, ...]] = {
+    HAND_EMITTED_HIP_PRODUCER: ("rocm_gfx1151", "rocm_gfx1201"),
+}
 LAUNCH_DESCRIPTOR_SCHEMA_VERSION = "tessera.launch_descriptor.v1"
 
 NATIVE_IMAGE_FORMATS: frozenset[str] = frozenset({
@@ -276,13 +287,18 @@ class NativeImageArtifact:
         object.__setattr__(self, "target", target)
         if not isinstance(self.architecture, str) or not self.architecture.strip():
             raise _error("E_NATIVE_IMAGE_SCHEMA", "exact architecture must be non-empty")
-        pipeline = pipeline_lookup(self.pipeline_name)
-        if pipeline is None:
-            raise _error(
-                "E_NATIVE_IMAGE_SCHEMA",
-                f"pipeline {self.pipeline_name!r} is not registered",
-            )
-        if target not in pipeline.targets:
+        producer_targets = NON_MLIR_IMAGE_PRODUCERS.get(self.pipeline_name)
+        if producer_targets is not None:
+            declared_targets: tuple[str, ...] = producer_targets
+        else:
+            pipeline = pipeline_lookup(self.pipeline_name)
+            if pipeline is None:
+                raise _error(
+                    "E_NATIVE_IMAGE_SCHEMA",
+                    f"pipeline {self.pipeline_name!r} is not registered",
+                )
+            declared_targets = pipeline.targets
+        if target not in declared_targets:
             raise _error(
                 "E_NATIVE_IMAGE_SCHEMA",
                 f"pipeline {self.pipeline_name!r} does not declare target {target!r}",
@@ -1053,6 +1069,8 @@ class LaunchDescriptor:
 
 __all__ = [
     "ArtifactContractError",
+    "HAND_EMITTED_HIP_PRODUCER",
+    "NON_MLIR_IMAGE_PRODUCERS",
     "BufferArgument",
     "BufferBinding",
     "COMPILE_STATES",

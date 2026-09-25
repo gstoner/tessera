@@ -105,11 +105,11 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
     source = packet["source"]
     assert packet["timing_order"] == "alternating_interleaved_per_shape"
     assert source["revision"] == "39605e560415cd629bd5d1f1769cc9980e81f4ef"
+    # Recorded before the 2026-09-24 producer relabel (pipeline_name only).
+    # gfx1201_mxfp4_producer_relabel_20260924 proves the relabelled generator
+    # builds the same timed kernels; do not relabel old GPU timings.
+    assert source["generator_sha256"] == "abc96ab7746692768c5ef228a87a76968c8a34548faa66668f3ea00bff5ed0b5"
     for key, path in (
-        (
-            "generator_sha256",
-            ROOT / "python/tessera/compiler/rocm_mxfp4_native.py",
-        ),
         (
             "benchmark_sha256",
             ROOT / "benchmarks/rocm/benchmark_gfx1201_mxfp4_production.py",

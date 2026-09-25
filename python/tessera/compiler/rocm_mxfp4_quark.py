@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from typing import Any
 
 import numpy as np
@@ -61,6 +62,13 @@ def _u8_shape(tensor: Mapping[str, Any], name: str) -> tuple[int, int]:
     ):
         raise ValueError(f"{name} must have a positive rank-two shape")
     return shape[0], shape[1]
+
+
+def _excluded(module: str, pattern: str) -> bool:
+    """Quark exclusions are module names or shell-style globs (``*lm_head``)."""
+    if module == pattern or module.startswith(pattern + "."):
+        return True
+    return any(ch in pattern for ch in "*?[") and fnmatchcase(module, pattern)
 
 
 def decode_quark_low_even_hypothesis(
@@ -139,7 +147,7 @@ def assess_quark_mxfp4_projection(
     excluded = quant.get("exclude", [])
     if not isinstance(excluded, list) or any(not isinstance(item, str) for item in excluded):
         raise ValueError("Quark exclusion list must contain module names")
-    if any(module == item or module.startswith(item + ".") for item in excluded):
+    if any(_excluded(module, item) for item in excluded):
         raise ValueError(f"{module} is excluded from MXFP4 quantization")
     n, packed_k = _u8_shape(weight, "packed weight")
     scale_n, scale_k = _u8_shape(scale, "E8M0 scale")

@@ -4180,7 +4180,6 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
-    from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
 
     return frozenset({
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
@@ -4196,8 +4195,19 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         PACKED_FOLDED_TARGET_ABI_V1,
-        GFX1201_QUARK_W4A4_PROBE_ABI,
     })
+
+
+def _gfx1201_manual_probe_abis() -> frozenset[str]:
+    """gfx1201 ABIs launched only by an explicit, opt-in probe call.
+
+    Kept apart from :func:`_gfx1201_proved_scheduled_abis`: a manual numerical
+    probe is neither scheduled nor a production route, and must not be
+    counted as one by anything that reads the proved set.
+    """
+    from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
+
+    return frozenset({GFX1201_QUARK_W4A4_PROBE_ABI})
 
 
 def _submit_rocm_mxfp4_w4a8(
@@ -5666,7 +5676,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     if (
         (target == "rocm_gfx1151"
          or (target == "rocm_gfx1201" and
-             abi_id in _gfx1201_proved_scheduled_abis()))
+             (abi_id in _gfx1201_proved_scheduled_abis()
+              or abi_id in _gfx1201_manual_probe_abis())))
         and abi_id
         in {
             GFX_SOFTMAX_F16_ABI,
@@ -7508,14 +7519,30 @@ def _rocm_live_arch() -> Optional[str]:
         device = ctypes.c_int()
         if get_device(ctypes.byref(device)) != 0:
             return None
+        # A device's architecture cannot change inside a process, but the
+        # property query is not free and hot per-call paths (spectral FFT
+        # candidates) ask on every launch. Memoize successes per HIP handle
+        # and ordinal; the selected ordinal is still re-read every call.
+        global _rocm_live_arch_cache
+        if _rocm_live_arch_cache[0] is not hip:
+            _rocm_live_arch_cache = (hip, {})
+        cached = _rocm_live_arch_cache[1].get(device.value)
+        if cached is not None:
+            return cached
         storage = (ctypes.c_uint64 * 184)()
         if properties(ctypes.byref(storage), device.value) != 0:
             return None
         raw = ctypes.string_at(ctypes.addressof(storage) + 1160, 256)
         arch = raw.split(b"\0", 1)[0].decode("ascii").split(":", 1)[0]
-        return arch if re.fullmatch(r"gfx[0-9a-f]+", arch) and arch != "gfx000" else None
+        if not re.fullmatch(r"gfx[0-9a-f]+", arch) or arch == "gfx000":
+            return None
+        _rocm_live_arch_cache[1][device.value] = arch
+        return arch
     except (AttributeError, OSError, UnicodeError):
         return None
+
+
+_rocm_live_arch_cache: tuple[Any, dict[int, str]] = (None, {})
 
 
 _rocm_device_name_probe: Any = False  # False = unprobed; None/str after
@@ -22740,8 +22767,13 @@ def _rocm_f32_gemm(a: Any, b: Any, np: Any, *, tile: tuple[int, int] | None = No
         or hip.hipMalloc(ctypes.byref(d_c), 4 * n_c) != 0
     ):
         raise RuntimeError("rocm gemm_f32: hipMalloc failed")
-    hip.hipMemcpy(d_a, a.ctypes.data_as(cv), 4 * n_a, 1)
-    hip.hipMemcpy(d_b, b.ctypes.data_as(cv), 4 * n_b, 1)
+    if (
+        hip.hipMemcpy(d_a, a.ctypes.data_as(cv), 4 * n_a, 1) != 0
+        or hip.hipMemcpy(d_b, b.ctypes.data_as(cv), 4 * n_b, 1) != 0
+    ):
+        for d in (d_a, d_b, d_c):
+            hip.hipFree(d)
+        raise RuntimeError("rocm gemm_f32: host-to-device copy failed")
 
     def _mr(p, size):
         return [cv(p.value), cv(p.value), ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
@@ -22760,10 +22792,16 @@ def _rocm_f32_gemm(a: Any, b: Any, np: Any, *, tile: tuple[int, int] | None = No
         for d in (d_a, d_b, d_c):
             hip.hipFree(d)
         raise RuntimeError(f"rocm gemm_f32: kernel launch failed rc={rc}")
-    hip.hipDeviceSynchronize()
-    hip.hipMemcpy(out.ctypes.data_as(cv), d_c, 4 * n_c, 2)
+    # A faulted kernel or failed copy must not return the zero-initialized
+    # host buffer as a native result.
+    sync = hip.hipDeviceSynchronize()
+    copy = hip.hipMemcpy(out.ctypes.data_as(cv), d_c, 4 * n_c, 2) if sync == 0 else -1
     for d in (d_a, d_b, d_c):
         hip.hipFree(d)
+    if sync != 0:
+        raise RuntimeError(f"rocm gemm_f32: kernel execution failed rc={sync}")
+    if copy != 0:
+        raise RuntimeError(f"rocm gemm_f32: device-to-host copy failed rc={copy}")
     return out
 
 
@@ -22811,8 +22849,13 @@ def _rocm_batched_gemm_f32(a: Any, b: Any, np: Any) -> Any:
         or hip.hipMalloc(ctypes.byref(d_c), 4 * n_c) != 0
     ):
         raise RuntimeError("rocm batched_gemm: hipMalloc failed")
-    hip.hipMemcpy(d_a, a_b.ctypes.data_as(cv), 4 * n_a, 1)
-    hip.hipMemcpy(d_b, b_b.ctypes.data_as(cv), 4 * n_b, 1)
+    if (
+        hip.hipMemcpy(d_a, a_b.ctypes.data_as(cv), 4 * n_a, 1) != 0
+        or hip.hipMemcpy(d_b, b_b.ctypes.data_as(cv), 4 * n_b, 1) != 0
+    ):
+        for d in (d_a, d_b, d_c):
+            hip.hipFree(d)
+        raise RuntimeError("rocm batched_gemm: host-to-device copy failed")
 
     def _mr(p, size):
         return [cv(p.value), cv(p.value), ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
@@ -22834,10 +22877,16 @@ def _rocm_batched_gemm_f32(a: Any, b: Any, np: Any) -> Any:
         for d in (d_a, d_b, d_c):
             hip.hipFree(d)
         raise RuntimeError(f"rocm batched_gemm: kernel launch failed rc={rc}")
-    hip.hipDeviceSynchronize()
-    hip.hipMemcpy(out.ctypes.data_as(cv), d_c, 4 * n_c, 2)
+    # A faulted kernel or failed copy must not return the zero-initialized
+    # host buffer as a native result.
+    sync = hip.hipDeviceSynchronize()
+    copy = hip.hipMemcpy(out.ctypes.data_as(cv), d_c, 4 * n_c, 2) if sync == 0 else -1
     for d in (d_a, d_b, d_c):
         hip.hipFree(d)
+    if sync != 0:
+        raise RuntimeError(f"rocm batched_gemm: kernel execution failed rc={sync}")
+    if copy != 0:
+        raise RuntimeError(f"rocm batched_gemm: device-to-host copy failed rc={copy}")
     return out.reshape(*batch, m, n)
 
 

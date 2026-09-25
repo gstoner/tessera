@@ -29,3 +29,10 @@ Tajasarus's AMD Radeon RX 9070 XT (`gfx1201`), the three opt-in BF16
 device cases passed; 61 focused host unit/audit tests also passed. The
 recorded LLVM version is ROCm's development 23.0.0git build, not a claim
 that this host ran an official 23.1.1 release.
+
+**Re-recorded 2026-09-24.** The generator now packages the same scalar
+kernel for whichever of gfx1151/gfx1201 is live, so its digest changed and
+the seal was re-earned by a fresh Tajasarus device run (three cases passed;
+new launched-HSACO digests in `evidence.json`), not by editing hashes.
+gfx1151 holds its own run in
+[`gfx1151_quark_w4a4_probe_20260924`](../gfx1151_quark_w4a4_probe_20260924/README.md).

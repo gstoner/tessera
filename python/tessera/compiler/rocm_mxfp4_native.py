@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 
 from .native_artifact import (
+    HAND_EMITTED_HIP_PRODUCER,
     BufferBinding,
     LaunchDescriptor,
     LaunchGeometry,
@@ -278,7 +279,7 @@ def package_scaled_wmma_target_ir(
     tile_ir: str,
     target_ir: str,
     *,
-    pipeline_name: str = "tessera-lower-to-rocm",
+    pipeline_name: str = HAND_EMITTED_HIP_PRODUCER,
 ) -> ROCMNativePackage:
     """Materialize the exact packed scaled-WMMA Target IR as gfx1201 HSACO.
 
@@ -1169,7 +1170,7 @@ def package_mxfp4_w4a8_exact(
     n: int,
     k: int,
     *,
-    pipeline_name: str = "tessera-lower-to-rocm",
+    pipeline_name: str = HAND_EMITTED_HIP_PRODUCER,
     entry: str = "tessera_mxfp4_w4a8_exact",
 ) -> ROCMNativePackage:
     """Compile the exact scalar gfx1201 baseline to one HSACO package."""
@@ -1227,7 +1228,7 @@ def package_mxfp4_w4a8_wmma(
     n: int,
     k: int,
     *,
-    pipeline_name: str = "tessera-lower-to-rocm",
+    pipeline_name: str = HAND_EMITTED_HIP_PRODUCER,
     entry: str = "tessera_mxfp4_w4a8_wmma",
     schedule: MXFP4Schedule | None = None,
     weight_layout: str | None = None,
@@ -1333,7 +1334,7 @@ def package_mxfp4_w4a8(
     k: int,
     *,
     route: str = "wmma",
-    pipeline_name: str = "tessera-lower-to-rocm",
+    pipeline_name: str = HAND_EMITTED_HIP_PRODUCER,
 ) -> ROCMNativePackage:
     """Package the proved gfx1201 route, defaulting to the production WMMA ABI.
 

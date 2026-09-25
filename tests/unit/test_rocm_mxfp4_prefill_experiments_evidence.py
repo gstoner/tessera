@@ -19,13 +19,16 @@ def test_prefill_packet_binds_sources_oracle_isa_and_budget_refusal() -> None:
     assert packet["architecture"] == "gfx1201"
     assert packet["radiance"]["weight_layout"] == "fragment_order"
     for field, path in (
-        ("generator_sha256", "python/tessera/compiler/rocm_mxfp4_folded.py"),
         ("tn4_generator_sha256", "python/tessera/compiler/rocm_mxfp4_tn4_experiment.py"),
-        ("packed_generator_sha256", "python/tessera/compiler/rocm_mxfp4_packed_folded.py"),
         ("packed_benchmark_sha256", "benchmarks/rocm/benchmark_gfx1201_mxfp4_packed_folded.py"),
         ("benchmark_sha256", "benchmarks/rocm/benchmark_gfx1201_mxfp4_safe_epilogue.py"),
     ):
         assert packet[field] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+    # Recorded before the 2026-09-24 producer relabel (pipeline_name only).
+    # gfx1201_mxfp4_producer_relabel_20260924 proves the relabelled generator
+    # builds the same timed kernels; do not relabel old GPU timings.
+    assert packet["generator_sha256"] == "fb923edfbe4ba1c3eb4cd1da237a3ac72802e8ffa77ad3c9b7935bc071e87616"
+    assert packet["packed_generator_sha256"] == "b45ad1f0b58a90199e270cffd2735d3f0fd30b216824758f40316cd5917bb090"
     assert packet["model_layers"] == [{"n": 17408, "k": 5120, "count": 32}]
     memory = packet["model_weight_residency"]
     assert memory["packed_weight_and_scale_bytes"] == 1515749376

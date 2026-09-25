@@ -139,59 +139,86 @@ class _FakeAmdPackage:
         return self._arch
 
 
+def _as_device(monkeypatch, live, compile_arch=None):
+    """Run the loaders as if ``live`` were the selected HIP device."""
+    monkeypatch.setattr(SC, "_spectral_device_arch", lambda: live)
+    monkeypatch.setattr(
+        SC, "_spectral_compile_arch", lambda: compile_arch or live
+    )
+
+
+def _prebuilt(monkeypatch, tmp_path, *stamps):
+    """Expose one fake prebuilt package per stamp, in search order."""
+    packages = []
+    fakes = {}
+    for index, stamp in enumerate(stamps):
+        path = tmp_path / f"p{index}" / "libtessera_spectral_rocm.so"
+        path.parent.mkdir()
+        path.touch()
+        packages.append(path)
+        fakes[str(path)] = _FakeAmdPackage(stamp)
+    monkeypatch.setattr(SC, "_libs", {})
+    monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: tuple(packages))
+    monkeypatch.setattr(SC.ctypes, "CDLL", lambda path: fakes[path])
+    monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
+    return [fakes[str(path)] for path in packages]
+
+
 @pytest.mark.parametrize("arch", [b"gfx1200", b"gfx1250", b"unknown"])
 def test_rocm_fft_fallback_is_not_a_composite_candidate(monkeypatch, tmp_path, arch):
-    package = tmp_path / "libtessera_spectral_rocm.so"
-    package.touch()
-    fake = _FakeAmdPackage(arch)
-    saved = dict(SC._libs)
-    SC._libs.pop("amd_prebuilt", None)
-    SC._libs.pop("amd_composite:gfx1151", None)
-    monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: (package,))
-    monkeypatch.setattr(SC.ctypes, "CDLL", lambda _path: fake)
-    monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
-    monkeypatch.setattr(SC, "_composite_host_arch", lambda: "gfx1151")
-    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1151")
-    monkeypatch.setattr(SC, "_amd_source_lib", lambda: None)
-    try:
-        assert SC._amd_lib() is fake  # Architecture-neutral FFT ABI remains usable.
-        assert SC._amd_composite_lib() is None
-    finally:
-        SC._libs.clear()
-        SC._libs.update(saved)
+    (fake,) = _prebuilt(monkeypatch, tmp_path, arch)
+    _as_device(monkeypatch, "gfx1151")
+    assert SC._amd_lib() is fake  # Architecture-neutral FFT ABI remains usable.
+    assert SC._amd_composite_lib() is None
+    assert SC._amd_device_lib() is None  # ...but never a foreign chip's code object
 
 
 def test_rocm_composite_loader_accepts_exact_gfx1151_package(monkeypatch, tmp_path):
-    package = tmp_path / "libtessera_spectral_rocm.so"
-    package.touch()
-    fake = _FakeAmdPackage(b"gfx1151")
-    saved = dict(SC._libs)
-    SC._libs.pop("amd_prebuilt", None)
-    SC._libs.pop("amd_composite:gfx1151", None)
-    # The loader selects the image stamped for the host's chip; this test is
-    # about the gfx1151 package, so it runs as a gfx1151 host wherever it is.
-    monkeypatch.setattr(SC, "_composite_host_arch", lambda: "gfx1151")
-    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1151")
-    monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: (package,))
-    monkeypatch.setattr(SC.ctypes, "CDLL", lambda _path: fake)
-    monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
-    try:
-        assert SC._amd_composite_lib() is fake
-        assert SC._libs["amd_composite:gfx1151"] is fake
-    finally:
-        SC._libs.clear()
-        SC._libs.update(saved)
-
-
-def test_rocm_composite_feature_target_bypasses_unqualified_prebuilt(monkeypatch):
-    fake = _FakeAmdPackage(b"gfx1151")
-    monkeypatch.setattr(SC, "_libs", {})
-    monkeypatch.setattr(SC, "_composite_host_arch", lambda: "gfx1151")
-    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1151:xnack-")
-    monkeypatch.setattr(SC, "_amd_source_lib", lambda: fake)
-    monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("unqualified prebuilt loaded"))
+    (fake,) = _prebuilt(monkeypatch, tmp_path, b"gfx1151")
+    _as_device(monkeypatch, "gfx1151")
     assert SC._amd_composite_lib() is fake
-    assert SC._libs["amd_composite:gfx1151:xnack-"] is fake
+    assert SC._libs["amd_composite:gfx1151"] is fake
+
+
+def test_rocm_composite_loader_accepts_exact_gfx1201_package(monkeypatch, tmp_path):
+    # Regression: #830 consulted the prebuilt only for gfx1151, so Tajasarus's
+    # gfx1201-stamped build became unreachable and its refusal (which names
+    # the arch) was reported as a skip.
+    foreign, fake = _prebuilt(monkeypatch, tmp_path, b"gfx1151", b"gfx1201")
+    _as_device(monkeypatch, "gfx1201")
+    assert SC._amd_composite_lib() is fake
+    assert SC._amd_device_lib() is fake
+    assert SC._amd_lib() is foreign  # legacy preference is not a device choice
+
+
+def test_rocm_composite_refuses_a_foreign_stamp_on_each_chip(monkeypatch, tmp_path):
+    _prebuilt(monkeypatch, tmp_path, b"gfx1151")
+    _as_device(monkeypatch, "gfx1201")
+    assert SC._amd_composite_lib() is None
+    assert SC._amd_device_lib() is None
+
+
+def test_rocm_gfx1151_refuses_a_gfx1201_only_prebuilt(monkeypatch, tmp_path):
+    _prebuilt(monkeypatch, tmp_path, b"gfx1201")
+    _as_device(monkeypatch, "gfx1151")
+    assert SC._amd_composite_lib() is None
+    assert SC._amd_device_lib() is None
+
+
+def test_rocm_composite_feature_target_has_no_qualified_prebuilt(monkeypatch, tmp_path):
+    # A feature-qualified target has no prebuilt stamped for it, and the
+    # source hook compiles only the Stockham FFT, so there is no composite.
+    _prebuilt(monkeypatch, tmp_path, b"gfx1151")
+    _as_device(monkeypatch, "gfx1151", "gfx1151:xnack-")
+    monkeypatch.setattr(SC, "_amd_source_lib", lambda: pytest.fail("source is not a composite"))
+    assert SC._amd_composite_lib() is None
+
+
+def test_rocm_candidate_prefers_the_live_chips_prebuilt(monkeypatch, tmp_path):
+    _, fake = _prebuilt(monkeypatch, tmp_path, b"gfx1151", b"gfx1201")
+    _as_device(monkeypatch, "gfx1201")
+    monkeypatch.setattr(SC, "_amd_source_lib", lambda: pytest.fail("prebuilt exists"))
+    assert SC._amd_candidate_lib() is fake
 
 
 def test_rocm_composite_launch_rechecks_architecture(monkeypatch):
@@ -272,7 +299,8 @@ def test_rocm_availability_rejects_success_status_with_wrong_output(monkeypatch)
 
 def test_rocm_source_candidate_uses_the_live_arch_not_a_foreign_prebuilt(monkeypatch):
     marker = object()
-    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1201")
+    _as_device(monkeypatch, "gfx1201")
+    monkeypatch.setattr(SC, "_amd_prebuilt_exact", lambda _arch: None)
     monkeypatch.setattr(SC, "_amd_source_lib", lambda: marker)
     monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("foreign prebuilt loaded"))
     assert SC._amd_candidate_lib() is marker
@@ -281,7 +309,8 @@ def test_rocm_source_candidate_uses_the_live_arch_not_a_foreign_prebuilt(monkeyp
 @pytest.mark.parametrize("arch", ["gfx1100", "gfx1200", "gfx1250"])
 def test_rocm_source_candidate_accepts_other_live_architectures(monkeypatch, arch):
     marker = object()
-    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: arch)
+    _as_device(monkeypatch, arch)
+    monkeypatch.setattr(SC, "_amd_prebuilt_exact", lambda _arch: None)
     monkeypatch.setattr(SC, "_amd_source_lib", lambda: marker)
     monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("foreign prebuilt loaded"))
     assert SC._amd_candidate_lib() is marker
@@ -289,7 +318,8 @@ def test_rocm_source_candidate_accepts_other_live_architectures(monkeypatch, arc
 
 def test_rocm_feature_qualified_gfx1151_does_not_use_unqualified_prebuilt(monkeypatch):
     marker = object()
-    monkeypatch.setattr(SC, "_spectral_compile_arch", lambda: "gfx1151:xnack-")
+    _as_device(monkeypatch, "gfx1151", "gfx1151:xnack-")
+    monkeypatch.setattr(SC, "_amd_prebuilt_exact", lambda _arch: pytest.fail("prebuilt consulted"))
     monkeypatch.setattr(SC, "_amd_source_lib", lambda: marker)
     monkeypatch.setattr(SC, "_amd_lib", lambda: pytest.fail("unqualified prebuilt loaded"))
     assert SC._amd_candidate_lib() is marker

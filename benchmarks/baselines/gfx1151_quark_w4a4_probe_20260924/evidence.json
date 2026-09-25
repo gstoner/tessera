@@ -1,0 +1,26 @@
+{
+  "schema": "tessera.gfx1151.quark_w4a4_probe.v1",
+  "sync_key": "GFX1151-QUARK-W4A4-PROBE-2026-09-24",
+  "abi": "tessera.rocm.quark_w4a4.a_b_sa_sb_o_m_n_k.e2m1_low_even_e8m0_k32_bf16.exact_probe.v1",
+  "generator_sha256": "679ff8c1e5966f7b60e549c255a120599e9505400cf9fcd650d0826db78eb911",
+  "device_fixture_sha256": "43702ce75ec74d32764e9df0536d557c36345cfbe43634ea7a07fd6ac1bb4207",
+  "unit_fixture_sha256": "1866d79cc87e6e7886642a725795aa8b4b4cbbd34effa880d78ea56a688e0961",
+  "reference_sha256": "10d30b01dbd5774b013edfd6601140b6dcbddd879288faa8697b5260e1fa73ee",
+  "base_revision": "993c009d",
+  "hipcc": "HIP version: 7.15.26333-0000000",
+  "llvm": "AMD LLVM version 23.0.0git, ROCm commit 8f497e0992fb7513f7f78a6f6b6f1056c375e961",
+  "scope": "bounded numerical probe only; no automatic selection or performance claim",
+  "reference_packet": "../gfx1201_quark_w4a4_probe_20260923/reference.json",
+  "host": "Princess-Luna",
+  "device": "AMD Radeon 8060S (Ryzen AI MAX+ 395)",
+  "live_architecture": "gfx1151",
+  "rocm_path": "/opt/rocm/core",
+  "launched_hsaco_sha256": {
+    "gate_1x2x32": "a0abca6c46e3f94226b3eb0345106eee1e19a8bd6dcb6ec938b842a1a328a360",
+    "down_1x2x32": "1ac658974a6d7f792f615b28bd6ae439ffb39d7a68f75738633397d1feea4739",
+    "ragged_5x3x64": "3765adf6966f49553d6f74c9e8aa2bf24e721873021f8f509fdef3f2b315b618"
+  },
+  "device_tests": "3 passed in 3.39s",
+  "focused_host_tests": "291 passed, 104 skipped at a1bcb83c (every skip is the gfx1201 owning-device gate)",
+  "image_producer": "hand-emitted-hip"
+}

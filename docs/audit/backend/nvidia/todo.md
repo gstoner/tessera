@@ -8,6 +8,10 @@ last_updated: 2026-09-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
+
+Sync `ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24`. NVIDIA parity is not applicable: no CUDA spectral, MXFP4 or GEMM code changes. Follow-up worth checking separately: whether the CUDA spectral loader has the same only-one-chip prebuilt preference; not evaluated here.
+
 ## ROCm Gumiho native step — 2026-09-23
 
 Owner COMPILER-DEVEX-1 / DK1; sync `ROCM-GUMIHO-NATIVE-STEP-2026-09-23`.

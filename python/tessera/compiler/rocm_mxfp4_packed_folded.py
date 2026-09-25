@@ -22,6 +22,7 @@ from .rocm_mxfp4 import (
 from .rocm_mxfp4_folded import prepare_folded_weights
 from .rocm_mxfp4_folded import emit_mxfp4_folded_prefill_hip
 from .native_artifact import (
+    HAND_EMITTED_HIP_PRODUCER,
     BufferBinding, LaunchDescriptor, LaunchGeometry, NativeEntryPoint,
     NativeImageArtifact, OrderingSemantics, ScalarArgument, ShapeGuard,
 )
@@ -653,7 +654,7 @@ def package_mxfp4_packed_folded_prefill(
         image_bytes = _extract_gfx1201_hsaco(bundle_path, image_path, rocm_path)
     image = NativeImageArtifact(
         target="rocm_gfx1201", architecture="gfx1201",
-        pipeline_name="tessera-lower-to-rocm",
+        pipeline_name=HAND_EMITTED_HIP_PRODUCER,
         compiler_fingerprint=_version_fingerprint(compiler),
         toolchain_fingerprint=hashlib.sha256(
             (str(rocm_path) + "|gfx1201|packed_folded_bm256_tm4_v1").encode()

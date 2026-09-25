@@ -1,24 +1,26 @@
 {
   "schema": "tessera.gfx1201.quark_w4a4_probe.v1",
   "sync_key": "GFX1201-QUARK-INDEPENDENT-W4A4-2026-09-23",
-  "base_revision": "ab83b9d3d9be7b2ed26a1529272b38e918406c1b",
+  "resealed": "2026-09-24: per-chip packaging, then hand-emitted-hip producer; each re-earned by a fresh device run, not re-stamped",
+  "abi": "tessera.rocm.quark_w4a4.a_b_sa_sb_o_m_n_k.e2m1_low_even_e8m0_k32_bf16.exact_probe.v1",
+  "generator_sha256": "679ff8c1e5966f7b60e549c255a120599e9505400cf9fcd650d0826db78eb911",
+  "device_fixture_sha256": "43702ce75ec74d32764e9df0536d557c36345cfbe43634ea7a07fd6ac1bb4207",
+  "unit_fixture_sha256": "1866d79cc87e6e7886642a725795aa8b4b4cbbd34effa880d78ea56a688e0961",
+  "reference_sha256": "10d30b01dbd5774b013edfd6601140b6dcbddd879288faa8697b5260e1fa73ee",
+  "base_revision": "993c009d",
+  "hipcc": "HIP version: 7.15.26333-0000000",
+  "llvm": "AMD LLVM version 23.0.0git, ROCm commit 8f497e0992fb7513f7f78a6f6b6f1056c375e961",
+  "scope": "bounded numerical probe only; no automatic selection or performance claim",
   "host": "tajasarus",
   "device": "AMD Radeon RX 9070 XT",
   "live_architecture": "gfx1201",
-  "hipcc": "HIP version: 7.15.26333-0000000",
-  "llvm": "AMD LLVM version 23.0.0git, ROCm commit 8f497e0992fb7513f7f78a6f6b6f1056c375e961",
-  "rocm_path": "/opt/rocm",
-  "abi": "tessera.rocm.quark_w4a4.a_b_sa_sb_o_m_n_k.e2m1_low_even_e8m0_k32_bf16.exact_probe.v1",
-  "generator_sha256": "74a442ba51546831e2a919ae5361d07792b692ccd51a0cf2b30458c50e33351c",
-  "device_fixture_sha256": "f250739da9e19d7fd52b4d9c7718a1cf8cd64456c621f0a5f17ac61a3b752ec0",
-  "unit_fixture_sha256": "56e1b35c32148388b2a08bbc36df16b64254d57c38f451ed99dcdb69857f799b",
-  "reference_sha256": "10d30b01dbd5774b013edfd6601140b6dcbddd879288faa8697b5260e1fa73ee",
+  "rocm_path": "/opt/rocm/core-10.0",
   "launched_hsaco_sha256": {
-    "gate_1x2x32": "c061be14a6db9a396f2d644014026d5ddf0aaabfd99b262399aa15289d00efa8",
-    "down_1x2x32": "af6a96f52d247b6da992dea3c3d6f4bb1a46dbb61debc90c87831156c1854648",
-    "ragged_5x3x64": "2b06c80811b9d786adf4539a617b5db73ba90ee5655d352ddcd41c677c5abfc5"
+    "gate_1x2x32": "50461bef0ca9b712a0bef565a14586dfd2d4ff4b85fa456cdca752021dab2b39",
+    "down_1x2x32": "e85ca3f6bc4a873afa63b2f09fde65018c41f420e9243f7eb73b6e91aefe979f",
+    "ragged_5x3x64": "32d45c37c003555368ca81d0c5d691c9f626a3d08787a9564dae8c18c7862535"
   },
-  "device_tests": "3 passed in 1.95s",
-  "focused_host_tests": "61 passed in 0.42s",
-  "scope": "bounded numerical probe only; no automatic selection or performance claim"
+  "device_tests": "3 passed in 1.88s",
+  "focused_host_tests": "395 run at a1bcb83c: 394 passed + 1 failure from the stale build-assertions tessera-opt (09-21); that file passes 16/16 with the branch build/ tessera-opt",
+  "image_producer": "hand-emitted-hip"
 }

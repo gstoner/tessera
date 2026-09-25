@@ -208,3 +208,54 @@ def test_glm_fp8_block_scales_are_not_a_quark_mxfp4_checkpoint() -> None:
             weight={"dtype": "F8_E4M3", "shape": [2048, 4096]},
             scale={"dtype": "F32", "shape": [16, 32]},
         )
+
+
+def test_quark_glob_exclusion_is_honored() -> None:
+    config = deepcopy(QUARK_CONFIG)
+    config["quantization_config"]["exclude"] = ["*mlp.gate_proj"]
+    with pytest.raises(ValueError, match="excluded"):
+        assess_quark_mxfp4_projection(
+            config, module=GATE, m=128,
+            weight={"dtype": "U8", "shape": [17408, 2560]},
+            scale={"dtype": "U8", "shape": [17408, 160]},
+        )
+    # A glob that does not match leaves the projection assessable.
+    config["quantization_config"]["exclude"] = ["*lm_head"]
+    assert assess_quark_mxfp4_projection(
+        config, module=GATE, m=128,
+        weight={"dtype": "U8", "shape": [17408, 2560]},
+        scale={"dtype": "U8", "shape": [17408, 160]},
+    ).route.accepted is False
+
+
+def test_quark_probe_is_not_a_proved_scheduled_abi() -> None:
+    from tessera import runtime as rt
+    from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
+
+    assert GFX1201_QUARK_W4A4_PROBE_ABI not in rt._gfx1201_proved_scheduled_abis()
+    assert GFX1201_QUARK_W4A4_PROBE_ABI in rt._gfx1201_manual_probe_abis()
+
+
+@pytest.mark.parametrize("arch", ["gfx1100", "gfx1200", "gfx90a"])
+def test_quark_probe_refuses_unowned_architectures(arch: str) -> None:
+    from tessera.compiler.rocm_mxfp4_quark_native import package_quark_w4a4_probe
+
+    with pytest.raises(ValueError, match="gfx1151 or gfx1201"):
+        package_quark_w4a4_probe(1, 2, 32, arch=arch)
+
+
+def test_quark_probe_launch_refuses_a_foreign_live_device(monkeypatch) -> None:
+    import ml_dtypes
+    from tessera import runtime as rt
+    from tessera.compiler.rocm_mxfp4_quark_native import launch_quark_w4a4_probe
+
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1100")
+    buffers = {
+        "a_packed": np.zeros((1, 16), np.uint8),
+        "b_packed": np.zeros((2, 16), np.uint8),
+        "a_scale": np.full((1, 1), 127, np.uint8),
+        "b_scale": np.full((2, 1), 127, np.uint8),
+        "output": np.zeros((1, 2), ml_dtypes.bfloat16),
+    }
+    with pytest.raises(RuntimeError, match="gfx1151 or gfx1201"):
+        launch_quark_w4a4_probe(buffers)

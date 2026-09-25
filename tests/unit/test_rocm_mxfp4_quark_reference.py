@@ -25,9 +25,19 @@ def reference_cases() -> list[dict[str, object]]:
     return json.loads(PACKET.read_text())["cases"]
 
 
-def test_exact_device_packet_binds_current_generator_and_fixtures() -> None:
+# Each owning chip seals its own run of the same generator; neither
+# chip's pass stands in for the other's.
+EVIDENCE = {
+    "gfx1201": PACKET.parent / "evidence.json",
+    "gfx1151": PACKET.parents[1] / "gfx1151_quark_w4a4_probe_20260924" / "evidence.json",
+}
+
+
+@pytest.mark.parametrize("arch", sorted(EVIDENCE))
+def test_exact_device_packet_binds_current_generator_and_fixtures(arch: str) -> None:
     root = Path(__file__).resolve().parents[2]
-    evidence = json.loads((PACKET.parent / "evidence.json").read_text())
+    evidence = json.loads(EVIDENCE[arch].read_text())
+    assert evidence["live_architecture"] == arch
     bound = {
         "generator_sha256": root / "python/tessera/compiler/rocm_mxfp4_quark_native.py",
         "device_fixture_sha256": root / "tests/device/rocm/test_quark_w4a4_probe.py",

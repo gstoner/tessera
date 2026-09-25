@@ -251,6 +251,17 @@ def _rocm_stft_noncentered_reflect_tail(x, window):
     )
 
 
+# pad_mode is a centered-framing policy: a non-centered 16-point frame over a
+# 5-sample signal is zero-filled past the signal (tessera.ops.stft and the
+# reference VJP). The AVX-512 forward and layout reverse used to reflect it.
+@ts.jit(target="x86", autodiff="reverse", wrt=("x", "window"))
+def _x86_stft_noncentered_reflect_tail(x, window):
+    return ts.ops.stft(
+        x, window, axis=-1, n_fft=16, hop=3, center=False,
+        pad_mode="reflect", onesided=False, norm="backward",
+    )
+
+
 def _require_x86_package() -> None:
     from tessera import runtime
 
@@ -1285,3 +1296,54 @@ def test_rocm_spectral_vjp_image_is_compiled_once_per_identity(
     tool.write_bytes(b"compiler-v2 (rebuilt)")
     nsv.compile_rocm_native_spectral_vjp(package(8))
     assert len(spawned) == 3 * cold, "a rebuilt compiler reused a stale image"
+
+
+def test_x86_noncentered_reflect_frame_is_zero_filled() -> None:
+    _require_x86_package()
+    import ctypes
+
+    from tessera import runtime
+    from tessera.autodiff import vjp
+    from tests.unit.test_x86_spectral_compiled import _art
+
+    rng = np.random.default_rng(20260925)
+    x = rng.normal(size=(3, 5)).astype(np.float32)
+    window = (np.hanning(16) + 0.1).astype(np.float32)
+    zero_filled = np.zeros((3, 16), np.float64)
+    zero_filled[:, :5] = x * window[:5]
+    expected = np.fft.fft(zero_filled, axis=-1)[:, None, :]
+
+    # Public forward (the broadcast-layout ABI).
+    artifact = _art(runtime, "tessera.stft", (x, window), {
+        "n_fft": 16, "hop": 3, "pad_mode": "reflect", "onesided": False,
+    })
+    forward = runtime.launch(artifact, (x, window))
+    assert forward["ok"] is True, forward.get("reason")
+    np.testing.assert_allclose(forward["output"], expected, rtol=2e-5, atol=2e-5)
+
+    # The v7 layout ABI's full-spectrum branch has no Python caller; drive it
+    # directly so its reflect site is covered too.
+    lib = runtime._load_x86_elementwise()
+    digest = artifact.metadata["scheduled_spectral"]["schedule_digest"].encode()
+    out = np.empty((3, 1, 16), np.complex64)
+    shape = (ctypes.c_int64 * 2)(3, 5)
+    strides = (ctypes.c_int64 * 2)(5, 1)
+    rc = lib.tessera_x86_stft_policy_layout_storage(
+        digest, x.ctypes.data_as(ctypes.c_void_p),
+        window.ctypes.data_as(ctypes.c_void_p),
+        out.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        2, shape, strides, 1, 1, 16, 16, 3, 1, 0, ctypes.c_float(1.0), 0, 1, 0)
+    assert rc == 0
+    np.testing.assert_allclose(out, expected, rtol=2e-5, atol=2e-5)
+
+    # Public reverse (the layout reverse ABI).
+    dy = (rng.normal(size=expected.shape)
+          + 1j * rng.normal(size=expected.shape)).astype(np.complex64)
+    actual = _x86_stft_noncentered_reflect_tail.native_backward(
+        x, window, out_cotangents=dy)
+    reference = vjp._VJPS["stft"](
+        dy, x, window, axis=-1, n_fft=16, hop=3, center=False,
+        pad_mode="reflect", onesided=False, norm="backward",
+    )
+    for value, ref in zip(actual, reference, strict=True):
+        np.testing.assert_allclose(value, ref, rtol=5e-5, atol=5e-5)

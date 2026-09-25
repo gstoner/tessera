@@ -1,0 +1,167 @@
+{
+  "schema": "tessera.rocm_spectral_benchmark.v1",
+  "host": "Princess-Luna",
+  "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "device": "gfx1151",
+  "image_arch": "gfx1151",
+  "rows": [
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "forward",
+      "latency_source": "host_wall_synchronized",
+      "max_rel_error": 0.0,
+      "ok": true,
+      "cold_ms": 1.630304,
+      "latency_ms": 1.4569029999999998,
+      "p10_ms": 1.4180009999999998,
+      "p90_ms": 1.515957,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 21
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "forward",
+      "latency_source": "host_wall_synchronized",
+      "max_rel_error": 6.85476296177122e-08,
+      "ok": true,
+      "cold_ms": 2.064068,
+      "latency_ms": 2.050577,
+      "p10_ms": 2.011915,
+      "p90_ms": 2.08778,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 21
+    },
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_jvp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 37.39074,
+      "latency_ms": 35.216201999999996,
+      "p10_ms": 34.814879999999995,
+      "p90_ms": 36.026168,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 21
+    },
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_vjp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 16.359526,
+      "latency_ms": 15.566249,
+      "p10_ms": 15.101982,
+      "p90_ms": 16.482201,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 21
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_jvp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 17.244846,
+      "latency_ms": 16.937137,
+      "p10_ms": 16.510804,
+      "p90_ms": 17.49205,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 21
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_vjp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 25.631173999999998,
+      "latency_ms": 24.536502,
+      "p10_ms": 23.919881999999998,
+      "p90_ms": 25.291795,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 21
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+##### host=Gregorys-MacBook-Pro.local repo=/Users/gregorystoner/dev_project/tessera head=64bafb37
+== tree build  (mtime 2026-09-20)
+   CMAKE_BUILD_TYPE='' generator='Ninja'
+   tools/tessera-jit/libtessera_jit.dylib: 86 compile cmds; flags: <none>
+   libtessera_jit.dylib: 86 compile cmds; flags: <none>
+   src/compiler/codegen/Tessera_Apple_Backend/libTesseraAppleRuntime.dylib: 2 compile cmds; flags: <none>
+   libTesseraAppleRuntime.dylib: 2 compile cmds; flags: <none>

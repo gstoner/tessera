@@ -12,6 +12,7 @@ last_updated: 2026-09-25
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory
 lives); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
 
 **Finding (Apple).** The Mac's `build/` is empty. `libTesseraAppleRuntime.dylib`
 (including `apple_gpu_runtime.mm`) and `libtessera_jit.dylib` compile with no
@@ -37,9 +38,13 @@ alone.
    acts only when `NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES` and
    adds `-O2` for C/CXX/OBJCXX, `-Xcompiler=-O2` for CUDA host code (device
    code is already optimized) and `-O2` for HIP (host and device). It must not
-   define `NDEBUG`. Apply it to `tessera_nvidia_{fft,gemm,rng}`,
-   `tessera_spectral_rocm`, `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
-   `tessera_x86_elementwise` and `tessera_x86_base`.
+   define `NDEBUG`. Apply it to these CMake targets (target names, not
+   output names): `tessera_nvidia_{fft,gemm,rng,ptx_launch}`,
+   `TesseraSpectralHIP` (output `libtessera_spectral_rocm.so`),
+   `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
+   `tessera_x86_elementwise`, `tessera_x86_base` and `tessera_jit`
+   (`tools/tessera-jit`, also built without `-O` on the Mac and on
+   Princess-Luna).
 2. **Why not a top-level `RelWithDebInfo` default.** It defines `NDEBUG` for
    every Tessera translation unit. That switches off the MLIR/LLVM header
    assertions (`cast<>`, interface-promise checks) that today run inside
@@ -87,6 +92,14 @@ a single-config generator was not checked.
 | Super-Bear | `build-assertions` | RelWithDebInfo |
 
 Every runtime library in an empty tree compiles with no `-O` flag.
+
+## ROCm spectral FFT policy paths — 2026-09-25
+
+Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. **Not applicable.** The change is
+confined to the ROCm composite library (`SpectralComposite.hip`) and the ROCm
+reverse packaging; the Apple spectral lane shares no code, ABI or IR contract
+with it.
+
 
 ## CUDA spectral deepening — 2026-09-25
 

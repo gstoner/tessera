@@ -11,6 +11,7 @@ scope: ROCm backend implementation and exact-device proof
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory
 lives); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
 
 **Finding (ROCm).** On Princess-Luna (gfx1151), `build/` is empty, and
 `libtessera_spectral_rocm.so` (`SpectralComposite.hip`, `StockhamRadix4.hip`)
@@ -20,12 +21,14 @@ the device kernels are unoptimized too:
 
 | Build | Device instructions | Kernels using scratch | Max scratch |
 |---|---:|---:|---:|
-| as built | 48,703 | 76 | 1,248 B |
+| as built | 48,703 | 48 | 1,248 B |
 | `-O2` | 7,584 | 0 | 0 |
 
 With an `-O2` copy loaded through `TESSERA_ROCM_SPECTRAL_LIB`, gfx1151 STFT VJP
-went 15.0 → 3.9 ms and ISTFT VJP 23.7 → 4.5 ms
-(`benchmarks/baselines/rocm_spectral_20260925/README.md`). That is the
+went 15.0 → 3.9 ms and ISTFT VJP 23.7 → 4.5 ms. That was an 11-repeat
+experiment recorded as such in `benchmarks/baselines/rocm_spectral_20260925/README.md`
+("Build type"), not a packet. The instruction and scratch counts are raw output
+in `benchmarks/baselines/runtime_lib_opt_20260925/rocm_device_isa_gfx1151.txt`. That is the
 Tajasarus level, whose `build/` is `Release`, so gfx1151 and gfx1201
 composite-image rows have not been comparable. The `tessera-opt` HSACO lanes
 (`gpu-module-to-binary`) and the HIPRTC lanes choose their own optimization
@@ -39,9 +42,13 @@ despite `Release` (the trailing `-UNDEBUG` wins).
    acts only when `NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES` and
    adds `-O2` for C/CXX/OBJCXX, `-Xcompiler=-O2` for CUDA host code (device
    code is already optimized) and `-O2` for HIP (host and device). It must not
-   define `NDEBUG`. Apply it to `tessera_nvidia_{fft,gemm,rng}`,
-   `tessera_spectral_rocm`, `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
-   `tessera_x86_elementwise` and `tessera_x86_base`.
+   define `NDEBUG`. Apply it to these CMake targets (target names, not
+   output names): `tessera_nvidia_{fft,gemm,rng,ptx_launch}`,
+   `TesseraSpectralHIP` (output `libtessera_spectral_rocm.so`),
+   `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
+   `tessera_x86_elementwise`, `tessera_x86_base` and `tessera_jit`
+   (`tools/tessera-jit`, also built without `-O` on the Mac and on
+   Princess-Luna).
 2. **Why not a top-level `RelWithDebInfo` default.** It defines `NDEBUG` for
    every Tessera translation unit. That switches off the MLIR/LLVM header
    assertions (`cast<>`, interface-promise checks) that today run inside
@@ -89,6 +96,64 @@ a single-config generator was not checked.
 | Super-Bear | `build-assertions` | RelWithDebInfo |
 
 Every runtime library in an empty tree compiles with no `-O` flag.
+
+## ROCm spectral STFT/ISTFT on FFT child plans — 2026-09-25
+
+Owner `TSOL-POLICY-PHYS-1`; sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. This
+closes the follow-up under `NVIDIA-SPECTRAL-DEEPEN-2026-09-25` below, and it
+**supersedes the "device direct-DFT/OLA" wording** of the
+`TSOL-POLICY-PHYS-1-8C8G` record.
+
+**What changed:**
+- The v7 package's broadcast-layout STFT/ISTFT, streaming STFT and STFT/ISTFT
+  reverse entry points (`SpectralComposite.hip`) run batched forward C2C child
+  plans, cached per (HIP device, length, package digest), with a per-device
+  scratch pool.
+- Inverse-direction sums are computed as `Re(FFT(conj Z))`, and odd lengths
+  take the plan's Bluestein path.
+- Overlap-add and the window reductions stay fp64 and fixed-order. The window
+  reductions run one block per element.
+- Every warm reverse call used to recompile its package image. That image is
+  now cached by (compiler digest, arch, carrier IR).
+- The algorithm identities now say what runs:
+  `c2c_fft_stored_bin_rocm_v1` and `normalized_overlap_add_c2c_fft_rocm_v1`.
+
+**Measured** (`benchmarks/baselines/rocm_spectral_20260925/`, 8×16000,
+n_fft=512):
+
+| Case | gfx1151 | gfx1201 |
+|---|---|---|
+| STFT VJP | 11059 → 15.6 ms | 2204 → 3.96 ms |
+| ISTFT VJP | 938 → 24.5 ms | 221 → 4.75 ms |
+| STFT JVP | 1047 → 35.2 ms | refused (see below) |
+
+A host `-O2` rebuild of the gfx1151 library brings its rows to the gfx1201
+level (about 4 ms). The rest of the gfx1151 gap is Princess-Luna's empty
+`CMAKE_BUILD_TYPE`, not this code.
+
+**Semantics fix:** a non-centered frame past the signal under
+`pad_mode="reflect"` is zero-filled, as `tessera.ops.stft` defines it. The
+former kernels reflected it, and the new test fails on main's library.
+
+**Validation:** at `017a54d8` the ROCm spectral gate gives gfx1151 362 passed /
+3 skipped and gfx1201 355 passed / 10 skipped, 1 failed each. The failure is the
+pre-existing certificate test that references
+`test_public_gfx1151_attention_vjp_consumes_prebuilt_program`, renamed in
+`b59da796`.
+
+**Open:**
+- On gfx1201 the native JVP is refused ("native ROCm JVP requires exact
+  gfx1151") although the composite image and reverse package run there. It
+  needs gfx1201 JVP proof before any admission change.
+- The certificate test's stale reference.
+- Princess-Luna's build type.
+
+**Sibling backends:**
+- NVIDIA: follow-up required (unconditional reflect; direct-DFT algorithm
+  labels on an FFT-based path). Its queue has the detail.
+- x86: follow-up required (unconditional reflect). Its queue has the detail.
+- Apple: not applicable.
+
 
 ## CUDA spectral deepening — sibling follow-up — 2026-09-25
 

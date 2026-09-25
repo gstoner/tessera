@@ -12,6 +12,7 @@ last_updated: 2026-09-25
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory
 lives); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
 
 **Finding (NVIDIA).** On The-Super-Bear, `build/`, `build-nvidia-cuda/` (the
 tree the runtime loads), `build-nvidia/` and `build-nv/` are all empty.
@@ -34,9 +35,13 @@ host-side latency recorded from these trees carries `-O0` host code.
    acts only when `NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES` and
    adds `-O2` for C/CXX/OBJCXX, `-Xcompiler=-O2` for CUDA host code (device
    code is already optimized) and `-O2` for HIP (host and device). It must not
-   define `NDEBUG`. Apply it to `tessera_nvidia_{fft,gemm,rng}`,
-   `tessera_spectral_rocm`, `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
-   `tessera_x86_elementwise` and `tessera_x86_base`.
+   define `NDEBUG`. Apply it to these CMake targets (target names, not
+   output names): `tessera_nvidia_{fft,gemm,rng,ptx_launch}`,
+   `TesseraSpectralHIP` (output `libtessera_spectral_rocm.so`),
+   `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
+   `tessera_x86_elementwise`, `tessera_x86_base` and `tessera_jit`
+   (`tools/tessera-jit`, also built without `-O` on the Mac and on
+   Princess-Luna).
 2. **Why not a top-level `RelWithDebInfo` default.** It defines `NDEBUG` for
    every Tessera translation unit. That switches off the MLIR/LLVM header
    assertions (`cast<>`, interface-promise checks) that today run inside
@@ -85,6 +90,33 @@ a single-config generator was not checked.
 
 Every runtime library in an empty tree compiles with no `-O` flag.
 
+## ROCm spectral FFT policy paths — sibling outcome — 2026-09-25
+
+Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`; owner `NVIDIA-FFT-WORKSPACE-1`.
+Two follow-ups are required. Neither was run on sm_120 in the ROCm change.
+
+1. **Unconditional reflect.** The ROCm work found that a non-centered frame
+   past the signal under `pad_mode="reflect"` must be zero-filled
+   (`tessera.ops.stft` and the reference VJP define it so), but the kernels
+   reflected it. `tessera_nvidia_spectral.cu` has the same unconditional
+   `padMode == 1` test in its frame and reverse kernels (the
+   `(source < 0 || source >= samples) && padMode == 1` sites, the reflect
+   candidate count, and the window reduction's `!present && padMode == 1`).
+   Nothing canonicalizes `pad_mode` when `center=False`, so the case is
+   reachable. It needs an sm_120 repro and fix.
+
+   One consequence is specific to CUDA. The `dx` gather tries three
+   single-bounce candidates `{s, -s, 2*samples-2-s}`. A non-centered frame
+   over a signal shorter than half of `n_fft` reflects more than once, so the
+   reverse is also inconsistent with CUDA's own forward there. Limiting reflect
+   to centered framing (where `samples > n_fft/2` is enforced) makes the three
+   candidates complete.
+2. **Algorithm identities.** `_algorithm_identity` still labels the CUDA
+   reverse packages `direct_stored_bin_sm120_v1` and
+   `normalized_overlap_add_direct_dft_sm120_v1`. #842 made both FFT-based, so
+   the labels misdescribe what runs.
+
+
 ## CUDA spectral: measured, then deepened — 2026-09-25
 
 Owner `NVIDIA-FFT-WORKSPACE-1`; sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`.
@@ -131,6 +163,16 @@ host complex multiply on purpose.
 
 **Sibling backends:** ROCm follow-up required (below, in its queue); Apple
 and x86 not applicable (their queues state why).
+
+**Corrected 2026-09-25 (Codex review on #842).** The compact-layout fast path
+indexed a caller's strides before any check, so a null shape or stride
+descriptor through the C ABI segfaulted where `packHostLayout` had returned
+the entry point's layout status. Every f32 layout entry point now validates
+its data descriptors first, and the three ISTFT storage wrappers, which size
+buffers from the shape early, validate rank, extents and `outputSamples`. A
+subprocess probe over all eleven entry points died with SIGSEGV before the fix
+and passes after (The-Super-Bear, FFT/spectral device set 144 passed,
+4 skipped).
 
 
 ## ROCm executable-pipeline follow-ups — 2026-09-24

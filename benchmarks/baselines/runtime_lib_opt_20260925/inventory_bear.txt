@@ -1,0 +1,61 @@
+##### host=The-Super-Bear repo=/home/angstorms/programming/tessera head=2a8dd62d4
+== tree build-assertions  (mtime 2026-09-13)
+   CMAKE_BUILD_TYPE='RelWithDebInfo' generator='Ninja'
+   CMAKE_CXX_FLAGS='-fno-rtti'
+   tools/tessera-jit/libtessera_jit.so: 71 compile cmds; flags:      71 -DNDEBUG      71 -O2      71 -g 
+   libtessera_jit.so: 71 compile cmds; flags:      71 -DNDEBUG      71 -O2      71 -g 
+== tree build-nv  (mtime 2026-08-29)
+   CMAKE_BUILD_TYPE='' generator='Ninja'
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_fft.so: 2 compile cmds; flags: <none>
+   libtessera_nvidia_fft.so: 2 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so: 1 compile cmds; flags: <none>
+   libtessera_nvidia_gemm.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_rng.so: 1 compile cmds; flags: <none>
+   libtessera_nvidia_rng.so: 1 compile cmds; flags: <none>
+   tools/tessera-jit/libtessera_jit.so: 69 compile cmds; flags: <none>
+   libtessera_jit.so: 69 compile cmds; flags: <none>
+== tree build-nvidia-cuda  (mtime 2026-09-25)
+   CMAKE_BUILD_TYPE='' generator='Ninja'
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_fft.so: 2 compile cmds; flags: <none>
+   libtessera_nvidia_fft.so: 2 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so: 1 compile cmds; flags: <none>
+   libtessera_nvidia_gemm.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_rng.so: 1 compile cmds; flags: <none>
+   libtessera_nvidia_rng.so: 1 compile cmds; flags: <none>
+   tools/tessera-jit/libtessera_jit.so: 86 compile cmds; flags: <none>
+   libtessera_jit.so: 86 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_base.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+   libtessera_x86_base.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+   libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+== tree build-nvidia  (mtime 2026-09-04)
+   CMAKE_BUILD_TYPE='' generator='Ninja'
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_fft.so: 2 compile cmds; flags: <none>
+   libtessera_nvidia_fft.so: 2 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so: 1 compile cmds; flags: <none>
+   libtessera_nvidia_gemm.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_rng.so: 1 compile cmds; flags: <none>
+   libtessera_nvidia_rng.so: 1 compile cmds; flags: <none>
+   tools/tessera-jit/libtessera_jit.so: 70 compile cmds; flags: <none>
+   libtessera_jit.so: 70 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_base.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+   libtessera_x86_base.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+   libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+== tree build  (mtime 2026-09-25)
+   CMAKE_BUILD_TYPE='' generator='Ninja'
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_fft.so: 2 compile cmds; flags: <none>
+   libtessera_nvidia_fft.so: 2 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so: 1 compile cmds; flags: <none>
+   libtessera_nvidia_gemm.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_rng.so: 1 compile cmds; flags: <none>
+   libtessera_nvidia_rng.so: 1 compile cmds; flags: <none>
+   tools/tessera-jit/libtessera_jit.so: 86 compile cmds; flags: <none>
+   libtessera_jit.so: 86 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_base.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+   libtessera_x86_base.so: 1 compile cmds; flags: <none>
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>
+   libtessera_x86_elementwise.so: 47 compile cmds; flags: <none>

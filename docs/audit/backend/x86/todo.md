@@ -13,6 +13,7 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 Owner `RUNTIME-LIB-OPT-1` (new, cross-backend; defined here and mirrored in the
 NVIDIA, ROCm and Apple queues); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
 
 **Finding (x86).** On Princess-Luna, the primary x86 AVX-512 proof host,
 `build/` has an empty `CMAKE_BUILD_TYPE`. `libtessera_x86_elementwise.so` (47
@@ -51,9 +52,13 @@ comparable until re-measured.
    acts only when `NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES` and
    adds `-O2` for C/CXX/OBJCXX, `-Xcompiler=-O2` for CUDA host code (device
    code is already optimized) and `-O2` for HIP (host and device). It must not
-   define `NDEBUG`. Apply it to `tessera_nvidia_{fft,gemm,rng}`,
-   `tessera_spectral_rocm`, `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
-   `tessera_x86_elementwise` and `tessera_x86_base`.
+   define `NDEBUG`. Apply it to these CMake targets (target names, not
+   output names): `tessera_nvidia_{fft,gemm,rng,ptx_launch}`,
+   `TesseraSpectralHIP` (output `libtessera_spectral_rocm.so`),
+   `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
+   `tessera_x86_elementwise`, `tessera_x86_base` and `tessera_jit`
+   (`tools/tessera-jit`, also built without `-O` on the Mac and on
+   Princess-Luna).
 2. **Why not a top-level `RelWithDebInfo` default.** It defines `NDEBUG` for
    every Tessera translation unit. That switches off the MLIR/LLVM header
    assertions (`cast<>`, interface-promise checks) that today run inside
@@ -101,6 +106,22 @@ a single-config generator was not checked.
 | Super-Bear | `build-assertions` | RelWithDebInfo |
 
 Every runtime library in an empty tree compiles with no `-O` flag.
+
+## ROCm spectral FFT policy paths — sibling outcome — 2026-09-25
+
+Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. **Follow-up required
+(semantics).**
+
+The ROCm change found that a non-centered STFT frame past the signal under
+`pad_mode="reflect"` must be zero-filled, as `tessera.ops.stft` and the
+reference VJP define it. `avx512_fft_f32.cpp` carries the same unconditional
+`(source < 0 || source >= samples) && padMode == 1` reflect in its policy
+STFT forward and reverse loops. Nothing canonicalizes `pad_mode` when
+`center=False`.
+
+This was not run on a Zen 5 host. It needs an AVX-512 repro against
+`vjp._VJPS["stft"]` before and after the fix.
+
 
 ## CUDA spectral deepening — 2026-09-25
 

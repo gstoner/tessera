@@ -63,13 +63,18 @@ def _policy_bool(value: Any) -> bool:
 def _algorithm_identity(
     kind: str, logical_length: int, target: str, spectrum_layout: str
 ) -> str:
+    # ROCm reverse packages (gfx1151 and gfx1201, stored-bin and full-complex
+    # layouts alike) run batched forward C2C child plans since 2026-09-25; the
+    # direct-DFT identities they carried before would now misdescribe them.
+    if target == "rocm" and kind == "tessera.stft":
+        return "c2c_fft_stored_bin_rocm_v1"
+    if target == "rocm" and kind == "tessera.istft":
+        return "normalized_overlap_add_c2c_fft_rocm_v1"
     if spectrum_layout == "full_complex" and kind in {
         "tessera.stft", "tessera.istft"
     }:
         return "full_complex_direct_dft_v1"
     if kind == "tessera.stft":
-        if target == "rocm":
-            return "direct_stored_bin_gfx1151_v1"
         if target == "nvidia_sm120":
             return "direct_stored_bin_sm120_v1"
         return (
@@ -78,8 +83,6 @@ def _algorithm_identity(
             else "direct_stored_bin_odd_tail_v1"
         )
     if kind == "tessera.istft":
-        if target == "rocm":
-            return "normalized_overlap_add_direct_dft_gfx1151_v1"
         if target == "nvidia_sm120":
             return "normalized_overlap_add_direct_dft_sm120_v1"
         return "normalized_overlap_add_r2c_v1"
@@ -584,6 +587,30 @@ def _rocm_vjp_chip() -> str:
     return _rt._rocm_chip()
 
 
+# Compiled ROCm reverse images by (compiler digest, arch, carrier-IR digest).
+# The image is a pure function of those three, and compiling it spawned five
+# tessera-opt processes on every warm call: ~160 ms of a ~190 ms gfx1151 STFT
+# reverse, beside ~20 ms of device work. Bounded; oldest entry evicted first.
+_ROCM_VJP_IMAGES: dict[tuple[str, str, str], tuple[bytes, str]] = {}
+_ROCM_VJP_IMAGE_LIMIT = 64
+# sha256 of a tessera-opt binary, memoized on (path, size, mtime_ns) so a
+# rebuilt compiler is re-hashed and a stable one is hashed once per process.
+_TOOL_DIGESTS: dict[tuple[str, int, int], str] = {}
+
+
+def _tool_digest(tool: Any) -> str:
+    from pathlib import Path
+
+    path = Path(tool)
+    stat = path.stat()
+    identity = (str(path.resolve()), stat.st_size, stat.st_mtime_ns)
+    digest = _TOOL_DIGESTS.get(identity)
+    if digest is None:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        _TOOL_DIGESTS[identity] = digest
+    return digest
+
+
 def compile_rocm_native_spectral_vjp(
     package: NativeSpectralVJPPackage,
 ) -> NativeSpectralVJPPackage:
@@ -596,6 +623,11 @@ def compile_rocm_native_spectral_vjp(
     if tool is None:
         raise RuntimeError("tessera-opt is unavailable for ROCm spectral VJP packaging")
     ir = _graph_carrier(package)
+    key = (_tool_digest(tool), package.arch,
+           hashlib.sha256(ir.encode()).hexdigest())
+    cached = _ROCM_VJP_IMAGES.get(key)
+    if cached is not None:
+        return replace(package, native_image=cached[0], native_symbol=cached[1])
     for option in (
         "--tessera-graph-to-schedule",
         "--tessera-schedule-to-tile",
@@ -620,11 +652,12 @@ def compile_rocm_native_spectral_vjp(
             "ROCm spectral VJP serialization failed: "
             + (result.stderr.strip() or str(result.returncode))
         )
-    return replace(
-        package,
-        native_image=_extract_hsaco(result.stdout),
-        native_symbol=package.kind.removeprefix("tessera.") + "_bwd",
-    )
+    image = _extract_hsaco(result.stdout)
+    symbol = package.kind.removeprefix("tessera.") + "_bwd"
+    if len(_ROCM_VJP_IMAGES) >= _ROCM_VJP_IMAGE_LIMIT:
+        _ROCM_VJP_IMAGES.pop(next(iter(_ROCM_VJP_IMAGES)))
+    _ROCM_VJP_IMAGES[key] = (image, symbol)
+    return replace(package, native_image=image, native_symbol=symbol)
 
 
 def execute_x86_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequence[Any]):
@@ -851,7 +884,7 @@ def execute_rocm_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequence
                 int(bool(contract["onesided"])),
             )
         if rc:
-            raise RuntimeError(f"gfx1151 spectral reverse package failed rc={rc}")
+            raise RuntimeError(f"{expected_arch} spectral reverse package failed rc={rc}")
         return dx, dwindow
     if any(not value.flags.c_contiguous for value in values):
         raise ValueError("ROCm spectral VJP runtime requires contiguous arguments")

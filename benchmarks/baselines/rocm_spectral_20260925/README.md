@@ -88,3 +88,15 @@ On both chips the one failure is the pre-existing
 renamed in `b59da796` (2026-09-13), and it stops with an `AttributeError`
 before reaching its spectral calls. Those spectral tests run directly in the
 same gate and pass.
+
+## Correction: `cold_ms` in these packets is a second call (2026-09-25)
+
+Each case was invoked once, untimed, for its correctness check before the
+timer recorded `cold_ms`. So `cold_ms` in the JSON files here measured the
+**second** call, after compilation, package images and plans were already
+populated. Do not read it as cold-start cost. The warm medians (`latency_ms`,
+`p10_ms`, `p90_ms`) are unaffected. The benchmark now times the first
+invocation as `cold_ms`. These packets are left as recorded rather than
+relabelled; a cold figure needs a new measurement. It probes the composite-package `image_arch` only
+after every case is timed, so the first case that needs that package pays for
+loading it.

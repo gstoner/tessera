@@ -8,6 +8,16 @@ last_updated: 2026-09-25
 
 # Apple compiler, exact-device, and performance plan
 
+## Spectral benchmarks: `cold_ms` is the first call — 2026-09-25
+
+Sync `SPECTRAL-BENCH-COLD-2026-09-25` (#849). **Not applicable.** No Apple
+spectral benchmark exists: `benchmarks/spectral/` has NVIDIA, ROCm and x86
+scripts only, and `benchmark_tsol_physical_policies.py` accepts
+`--target x86|rocm`. The `cold_ms` fields in `benchmarks/apple_gpu/` come from
+separate scripts that this change does not touch. If an Apple spectral
+benchmark is added, it should time the first call and probe package metadata
+after timing, as the NVIDIA and ROCm scripts now do.
+
 ## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory

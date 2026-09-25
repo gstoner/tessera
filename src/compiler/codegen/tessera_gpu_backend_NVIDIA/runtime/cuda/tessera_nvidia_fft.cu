@@ -16,7 +16,17 @@ struct FFTPlan {
   int64_t length{};
   size_t workspaceBytes{};
   FFTKind kind{FFTKind::C2C};
+  // The CUDA device current when the plan was created. A cuFFT plan (and the
+  // caller's workspace for it) belongs to that device's context.
+  int device{-1};
 };
+
+// A plan executes only on the device that created it; a caller that switched
+// devices must create a plan there instead (status 3).
+bool onPlanDevice(const FFTPlan *plan) {
+  int current = -1;
+  return cudaGetDevice(&current) == cudaSuccess && current == plan->device;
+}
 
 __global__ void normalizeInverse(cufftComplex *values, int64_t count,
                                  float scale) {
@@ -42,6 +52,10 @@ int createPlan(int64_t batch, int64_t length, cufftType type, FFTKind kind,
   auto *plan = new (std::nothrow) FFTPlan;
   if (plan == nullptr)
     return 2;
+  if (cudaGetDevice(&plan->device) != cudaSuccess) {
+    delete plan;
+    return 2;
+  }
   if (cufftCreate(&plan->handle) != CUFFT_SUCCESS ||
       cufftSetAutoAllocation(plan->handle, 0) != CUFFT_SUCCESS) {
     if (plan->handle)
@@ -73,7 +87,13 @@ int createPlan(int64_t batch, int64_t length, cufftType type, FFTKind kind,
 } // namespace
 
 extern "C" const char *tessera_nvidia_fft_package_abi() {
-  return "tessera.nvidia.cuda_fft_workspace.v2";
+  return "tessera.nvidia.cuda_fft_workspace.v3";
+}
+
+extern "C" int tessera_nvidia_fft_current_device(int *device) {
+  if (device == nullptr)
+    return 1;
+  return cudaGetDevice(device) == cudaSuccess ? 0 : 2;
 }
 
 extern "C" int tessera_nvidia_fft_plan_create_c2c_f32(
@@ -125,6 +145,8 @@ extern "C" int tessera_nvidia_fft_execute_c2c_f32(
   auto *plan = static_cast<FFTPlan *>(opaquePlan);
   if (plan->kind != FFTKind::C2C || workspaceBytes < plan->workspaceBytes)
     return 1;
+  if (!onPlanDevice(plan))
+    return 3;
   int64_t elements = plan->batch * plan->length;
   size_t bytes = static_cast<size_t>(elements) * sizeof(cufftComplex);
   cufftComplex *deviceData = nullptr;
@@ -161,6 +183,8 @@ extern "C" int tessera_nvidia_fft_execute_r2c_f32(
   auto *plan = static_cast<FFTPlan *>(opaquePlan);
   if (plan->kind != FFTKind::R2C || workspaceBytes < plan->workspaceBytes)
     return 1;
+  if (!onPlanDevice(plan))
+    return 3;
   int64_t realElements = plan->batch * plan->length;
   int64_t complexElements = plan->batch * (plan->length / 2 + 1);
   float *deviceInput = nullptr;
@@ -196,6 +220,8 @@ extern "C" int tessera_nvidia_fft_execute_c2r_f32(
   auto *plan = static_cast<FFTPlan *>(opaquePlan);
   if (plan->kind != FFTKind::C2R || workspaceBytes < plan->workspaceBytes)
     return 1;
+  if (!onPlanDevice(plan))
+    return 3;
   int64_t realElements = plan->batch * plan->length;
   int64_t complexElements = plan->batch * (plan->length / 2 + 1);
   cufftComplex *deviceInput = nullptr;

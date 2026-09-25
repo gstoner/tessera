@@ -2520,7 +2520,7 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "feature_flags": ("cuda", "cufft", "explicit_workspace"),
             "shape_envelope": "non-empty real/complex tensor; arbitrary positive "
                 "transform length and axis; batched C2C/R2C/C2R plan",
-            "notes": "Canonical tessera.nvidia.cuda_fft_workspace.v2 package; "
+            "notes": "Canonical tessera.nvidia.cuda_fft_workspace.v3 package (device-bound plans); "
                 "reusable cuFFT plans, caller-owned workspace, and on-device "
                 "inverse normalization, proven on SuperBear RTX 5070.",
         }

@@ -20818,7 +20818,7 @@ def _execute_nvidia_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
 _nvidia_fft_runtime: ctypes.CDLL | None = None
 _NVIDIA_FFT_PLAN_CACHE_LIMIT = 16
 _nvidia_fft_plans: collections.OrderedDict[
-    tuple[str, int, int], tuple[Any, Any, Any, int]
+    tuple[int, str, int, int], tuple[Any, Any, Any, int]
 ] = collections.OrderedDict()
 _nvidia_fft_plan_lock = threading.RLock()
 
@@ -20843,8 +20843,22 @@ def _clear_nvidia_fft_plan_cache() -> None:
             _release_nvidia_fft_plan_package(package)
 
 
+def _nvidia_fft_device(lib: Any) -> int:
+    """The CUDA device the FFT library's own runtime currently selects.
+
+    A cuFFT plan and its workspace belong to the device current at creation,
+    so cached packages are keyed by it: after a process switches devices, a
+    lookup must never return another device's plan. The query goes through the
+    FFT library so it reads the same CUDA runtime that created the plan.
+    """
+    device = ctypes.c_int(-1)
+    if lib.tessera_nvidia_fft_current_device(ctypes.byref(device)) != 0:
+        raise RuntimeError("NVIDIA FFT could not read the current CUDA device")
+    return int(device.value)
+
+
 def _cache_nvidia_fft_plan(
-    key: tuple[str, int, int], package: tuple[Any, Any, Any, int]
+    key: tuple[int, str, int, int], package: tuple[Any, Any, Any, int]
 ) -> None:
     while len(_nvidia_fft_plans) >= _NVIDIA_FFT_PLAN_CACHE_LIMIT:
         _, stale = _nvidia_fft_plans.popitem(last=False)
@@ -20876,6 +20890,10 @@ def _load_nvidia_fft_runtime() -> ctypes.CDLL | None:
         return None
     lib.tessera_nvidia_fft_package_abi.argtypes = []
     lib.tessera_nvidia_fft_package_abi.restype = ctypes.c_char_p
+    if not hasattr(lib, "tessera_nvidia_fft_current_device"):
+        return None  # predates the v3 device-bound plan contract
+    lib.tessera_nvidia_fft_current_device.argtypes = [ctypes.POINTER(ctypes.c_int)]
+    lib.tessera_nvidia_fft_current_device.restype = ctypes.c_int
     lib.tessera_nvidia_fft_plan_create_c2c_f32.argtypes = [
         ctypes.c_int64, ctypes.c_int64, ctypes.POINTER(ctypes.c_void_p),
         ctypes.POINTER(ctypes.c_size_t)]
@@ -21004,7 +21022,7 @@ def _load_nvidia_fft_runtime() -> ctypes.CDLL | None:
             ctypes.c_int,
         ]
         lib.tessera_nvidia_streaming_stft_broadcast_layout_f32.restype = ctypes.c_int
-    if lib.tessera_nvidia_fft_package_abi() != b"tessera.nvidia.cuda_fft_workspace.v2":
+    if lib.tessera_nvidia_fft_package_abi() != b"tessera.nvidia.cuda_fft_workspace.v3":
         return None
     _nvidia_fft_runtime = lib
     return lib
@@ -21015,13 +21033,13 @@ def _nvidia_fft_c2c_rows(rows: Any, inverse: bool, np: Any) -> Any:
     if values.ndim != 2 or any(int(dim) <= 0 for dim in values.shape):
         raise ValueError("NVIDIA FFT requires non-empty rank-2 complex64 rows")
     batch, length = (int(dim) for dim in values.shape)
-    key = ("c2c", batch, length)
+    lib = _load_nvidia_fft_runtime()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_fft.so not loadable")
     with _nvidia_fft_plan_lock:
+        key = (_nvidia_fft_device(lib), "c2c", batch, length)
         package = _nvidia_fft_plans.get(key)
         if package is None:
-            lib = _load_nvidia_fft_runtime()
-            if lib is None:
-                raise RuntimeError("libtessera_nvidia_fft.so not loadable")
             plan = ctypes.c_void_p()
             workspace_size = ctypes.c_size_t()
             if lib.tessera_nvidia_fft_plan_create_c2c_f32(
@@ -21043,6 +21061,8 @@ def _nvidia_fft_c2c_rows(rows: Any, inverse: bool, np: Any) -> Any:
             output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
             workspace, ctypes.c_size_t(workspace_byte_count),
             ctypes.c_int(bool(inverse)))
+    if rc == 3:
+        raise RuntimeError("NVIDIA FFT plan belongs to another CUDA device")
     if rc != 0:
         raise RuntimeError(f"NVIDIA FFT execution failed rc={rc}")
     return output
@@ -21064,13 +21084,13 @@ def _nvidia_fft_real_rows(rows: Any, inverse: bool, logical_n: int | None,
         length = int(values.shape[1])
     if length <= 0 or (inverse and int(values.shape[1]) != length // 2 + 1):
         raise ValueError("NVIDIA C2R input does not match its logical length")
-    key = (kind, batch, length)
+    lib = _load_nvidia_fft_runtime()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_fft.so not loadable")
     with _nvidia_fft_plan_lock:
+        key = (_nvidia_fft_device(lib), kind, batch, length)
         package = _nvidia_fft_plans.get(key)
         if package is None:
-            lib = _load_nvidia_fft_runtime()
-            if lib is None:
-                raise RuntimeError("libtessera_nvidia_fft.so not loadable")
             plan, workspace_size = ctypes.c_void_p(), ctypes.c_size_t()
             create = (lib.tessera_nvidia_fft_plan_create_c2r_f32 if inverse else
                       lib.tessera_nvidia_fft_plan_create_r2c_f32)
@@ -21095,6 +21115,8 @@ def _nvidia_fft_real_rows(rows: Any, inverse: bool, logical_n: int | None,
             plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
             output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
             workspace, ctypes.c_size_t(workspace_byte_count))
+    if rc == 3:
+        raise RuntimeError(f"NVIDIA {kind.upper()} plan belongs to another CUDA device")
     if rc != 0:
         raise RuntimeError(f"NVIDIA {kind.upper()} execution failed rc={rc}")
     return output

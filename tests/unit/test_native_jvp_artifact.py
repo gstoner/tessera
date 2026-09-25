@@ -247,3 +247,53 @@ def test_normalization_plugin_emits_typed_composite_without_graph_metadata():
         "primal_normalization", "tangent_projection", "normalized_operand",
         "affine_projection", "affine_tangent", "bias_tangent",
     ]
+
+
+def test_gfx1201_admits_only_the_spectral_family():
+    from tessera.compiler.native_jvp import architecture_admits
+
+    assert architecture_admits("rocm", "gfx1151", "reduce")
+    assert architecture_admits("rocm", "gfx1201", "spectral_compound")
+    for family in ("reduce", "fft", "dct", "normalization", "philox_dropout"):
+        assert not architecture_admits("rocm", "gfx1201", family)
+    for chip in ("gfx1200", "gfx1250"):
+        assert not architecture_admits("rocm", chip, "spectral_compound")
+    child = _reduce_child()
+    with pytest.raises(ValueError, match="'gfx1201' has no native reduce JVP evidence"):
+        build_native_jvp_artifact(
+            target="rocm", architecture="gfx1201", family="reduce",
+            source_graph_ir='module attributes {tessera.frontend.authority = "tracer"} {}',
+            paired_jvp_ir="func.func @f__jvp()", wrt_indices=(0,),
+            arg_names=("primal_input", "tangent_input"),
+            steps=({"id": "primal", "child_digest": child_digest(child),
+                    "child_metadata": child, "inputs": ["primal_input"]},),
+        )
+
+
+@pytest.mark.parametrize("chip", ["gfx1151", "gfx1201"])
+def test_rocm_spectral_jvp_package_is_lowered_for_and_names_its_chip(chip):
+    from tessera.compiler.native_jvp_plugins import build_native_jvp_family_artifact
+
+    source = IROp(
+        result="out", op_name="tessera.stft", operands=["%x", "%window"],
+        operand_types=["tensor<2x64xf32>", "tensor<16xf32>"],
+        result_type="tensor<2x7x9xcomplex<f32>>",
+        kwargs={"axis": -1, "n_fft": 16, "hop": 8, "center": False,
+                "onesided": True, "norm": "backward"},
+    )
+    values = (np.ones((2, 64), np.float32), np.ones(16, np.float32))
+    plan, artifact = build_native_jvp_family_artifact(
+        source=source, primal_inputs=values, wrt_indices=(0, 1),
+        target="rocm", architecture=chip, execution_mode="hip_runtime",
+        source_graph_ir='module attributes {tessera.frontend.authority = "tracer"} {}',
+        paired_jvp_ir="func.func @f__jvp()",
+        arg_names=("primal_0", "primal_1", "tangent_0", "tangent_1"),
+    )
+    artifact.validate()
+    contract = artifact.contract
+    assert contract["architecture"] == chip
+    scheduled = plan.steps[0]["child_metadata"]["scheduled_spectral"]
+    assert scheduled["architecture"] == chip
+    consumer = f"rocm.{chip}_spectral"
+    assert contract["consumer_declaration"]["target"] == consumer
+    assert {action["target_consumer"] for action in contract["tile_program"]["actions"]} == {consumer}

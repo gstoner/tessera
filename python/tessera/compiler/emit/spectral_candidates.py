@@ -995,7 +995,8 @@ def run_rocm_istft_jvp(
     metadata: dict[str, Any], spectrum: np.ndarray, window: np.ndarray,
     spectrum_tangent: np.ndarray | None, window_tangent: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Execute the packed-real gfx1151 ISTFT quotient-rule product."""
+    """Execute the packed-real ISTFT quotient-rule product on the exact chip
+    (gfx1151 or gfx1201) whose composite image and contract both name it."""
     from tessera.compiler.scheduled_spectral import (
         spectral_output_scale,
         validate_scheduled_spectral_metadata,
@@ -1025,9 +1026,13 @@ def run_rocm_istft_jvp(
     lib = _amd_composite_lib()
     if lib is None or not hasattr(lib, "ts_istft_jvp_plan_hostptr_batch_amd"):
         raise RuntimeError("ROCm ISTFT window-JVP package is unavailable")
+    host_arch = _composite_host_arch()
     if (not hasattr(lib, "ts_spectral_composite_arch_amd") or
-            lib.ts_spectral_composite_arch_amd() != b"gfx1151"):
-        raise RuntimeError("ROCm ISTFT window-JVP architecture mismatch")
+            lib.ts_spectral_composite_arch_amd() != host_arch.encode() or
+            str(contract.get("architecture", "")) != host_arch):
+        raise RuntimeError(
+            f"ROCm ISTFT window-JVP architecture mismatch: image, contract and "
+            f"host must all name {host_arch}")
     children = list(contract["child_ffts"])
     _, inverse = _rocm_plan(
         int(children[0]["physical_length"]), 1,

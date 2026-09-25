@@ -1095,9 +1095,6 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
       (padMode != 0 && padMode != 1) ||
       (onesided != 0 && onesided != 1))
     return 300;
-  std::vector<float> contiguous;
-  if (!packHostLayout(inputHost, contiguous, rank, shape, strides))
-    return 301;
   int64_t outer = 0, inner = 0;
   int batch = 0;
   std::vector<int64_t> batchShape;
@@ -1111,8 +1108,20 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
   int64_t padded = std::max<int64_t>(int64_t(samples) + 2 * pad, nfft);
   if (padded > INT32_MAX || frames != (padded - nfft) / hop + 1)
     return 302;
-  std::vector<float> packed(contiguous.size());
-  packAxis(contiguous.data(), packed.data(), outer, samples, inner);
+  const size_t inputElements = size_t(batch) * size_t(samples);
+  // Host staging only where the layout needs it (see the DCT entry point).
+  std::vector<float> contiguous, packed;
+  const float *staged = inputHost;
+  if (!isCompactLayout(rank, shape, strides)) {
+    if (!packHostLayout(inputHost, contiguous, rank, shape, strides))
+      return 301;
+    staged = contiguous.data();
+  }
+  if (inner != 1) {
+    packed.resize(inputElements);
+    packAxis(staged, packed.data(), outer, samples, inner);
+    staged = packed.data();
+  }
   std::vector<float> windows;
   if (!expandHostWindows(windowHost, windowRank, windowShape, windowStrides,
                          batchShape, nfft, windows))
@@ -1123,30 +1132,33 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
   if (!checkedProduct(size_t(batch) * frames, size_t(nfft), frameElements) ||
       !checkedProduct(size_t(batch) * frames, size_t(bins), outputElements))
     return 304;
-  float *deviceInput = nullptr, *deviceWindows = nullptr,
-        *deviceRealFrames = nullptr;
-  cufftComplex *deviceComplexFrames = nullptr, *deviceOutput = nullptr;
-  cudaError_t status = cudaMalloc(&deviceInput, packed.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess && onesided)
-    status = cudaMalloc(&deviceRealFrames, frameElements * sizeof(float));
-  if (status == cudaSuccess && !onesided)
-    status = cudaMalloc(&deviceComplexFrames,
-                        frameElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceOutput, outputElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceInput, packed.data(), packed.size() * sizeof(float),
-                        cudaMemcpyHostToDevice);
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceInput =
+      static_cast<float *>(scratch(0, inputElements * sizeof(float)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(1, windows.size() * sizeof(float)));
+  float *deviceRealFrames = nullptr;
+  cufftComplex *deviceComplexFrames = nullptr;
+  if (onesided)
+    deviceRealFrames =
+        static_cast<float *>(scratch(2, frameElements * sizeof(float)));
+  else
+    deviceComplexFrames = static_cast<cufftComplex *>(
+        scratch(2, frameElements * sizeof(cufftComplex)));
+  auto *deviceOutput = static_cast<cufftComplex *>(
+      scratch(3, outputElements * sizeof(cufftComplex)));
+  if (!deviceInput || !deviceWindows || !deviceOutput ||
+      !(onesided ? static_cast<void *>(deviceRealFrames)
+                 : static_cast<void *>(deviceComplexFrames)))
+    return 305;
+  cudaError_t status = cudaMemcpy(deviceInput, staged,
+                                  inputElements * sizeof(float),
+                                  cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceWindows, windows.data(),
                         windows.size() * sizeof(float), cudaMemcpyHostToDevice);
-  if (status != cudaSuccess) {
-    release(deviceInput, deviceWindows, deviceRealFrames, deviceComplexFrames,
-            deviceOutput);
+  if (status != cudaSuccess)
     return 305;
-  }
   unsigned frameBlocks = unsigned((frameElements + kThreads - 1) / kThreads);
   if (onesided)
     frameRealPolicy<<<frameBlocks, kThreads>>>(
@@ -1158,11 +1170,9 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
         hop, frames, center, padMode);
   status = cudaGetLastError();
   cufftHandle plan = 0;
-  void *workspace = nullptr;
   int planStatus = status == cudaSuccess
-                       ? makePlan(batch * frames, nfft,
-                                  onesided ? CUFFT_R2C : CUFFT_C2C, plan,
-                                  workspace)
+                       ? cachedPlan(batch * frames, nfft,
+                                    onesided ? CUFFT_R2C : CUFFT_C2C, plan)
                        : 1;
   cufftResult fftStatus = CUFFT_INVALID_PLAN;
   if (!planStatus)
@@ -1174,20 +1184,20 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
     scaleComplex<<<unsigned((outputElements + kThreads - 1) / kThreads),
                    kThreads>>>(deviceOutput, outputElements, outputScale);
   status = cudaGetLastError();
-  std::vector<cufftComplex> output(outputElements);
+  // With the sample axis innermost the unfold is an identity: copy straight
+  // into the caller's buffer. The synchronous copy orders after the kernels.
+  std::vector<cufftComplex> output(inner != 1 ? outputElements : 0);
+  auto *result = inner != 1 ? output.data()
+                            : reinterpret_cast<cufftComplex *>(outputHost);
   if (!planStatus && fftStatus == CUFFT_SUCCESS && status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (!planStatus && fftStatus == CUFFT_SUCCESS && status == cudaSuccess)
-    status = cudaMemcpy(output.data(), deviceOutput,
+    status = cudaMemcpy(result, deviceOutput,
                         outputElements * sizeof(cufftComplex),
                         cudaMemcpyDeviceToHost);
-  destroyPlan(plan, workspace);
-  release(deviceInput, deviceWindows, deviceRealFrames, deviceComplexFrames,
-          deviceOutput);
   if (planStatus || fftStatus != CUFFT_SUCCESS || status != cudaSuccess)
     return 306;
-  unpackAxis(output.data(), reinterpret_cast<cufftComplex *>(outputHost), outer,
-             int64_t(frames) * bins, inner);
+  if (inner != 1)
+    unpackAxis(output.data(), reinterpret_cast<cufftComplex *>(outputHost),
+               outer, int64_t(frames) * bins, inner);
   return 0;
 }
 
@@ -1371,10 +1381,6 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
   int bins = int(shape[axis]);
   if (frames <= 0 || bins != (onesided ? nfft / 2 + 1 : nfft))
     return 311;
-  std::vector<cufftComplex> contiguous;
-  if (!packHostLayout(reinterpret_cast<const cufftComplex *>(inputHost),
-                      contiguous, rank, shape, strides))
-    return 311;
   int64_t outer = 1, inner = 1;
   std::vector<int64_t> batchShape;
   for (int dim = 0; dim < rank; ++dim) {
@@ -1390,9 +1396,21 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
   if (outer <= 0 || inner <= 0 || outer > INT32_MAX / inner)
     return 311;
   int batch = int(outer * inner);
-  std::vector<cufftComplex> spectra(contiguous.size());
-  packAxis(contiguous.data(), spectra.data(), outer,
-           int64_t(frames) * bins, inner);
+  const size_t spectrumElements = size_t(batch) * size_t(frames) * size_t(bins);
+  // Host staging only where the layout needs it (see the DCT entry point).
+  const auto *complexInput = reinterpret_cast<const cufftComplex *>(inputHost);
+  std::vector<cufftComplex> contiguous, spectra;
+  const cufftComplex *staged = complexInput;
+  if (!isCompactLayout(rank, shape, strides)) {
+    if (!packHostLayout(complexInput, contiguous, rank, shape, strides))
+      return 311;
+    staged = contiguous.data();
+  }
+  if (inner != 1) {
+    spectra.resize(spectrumElements);
+    packAxis(staged, spectra.data(), outer, int64_t(frames) * bins, inner);
+    staged = spectra.data();
+  }
   std::vector<float> windows;
   if (!expandHostWindows(windowHost, windowRank, windowShape, windowStrides,
                          batchShape, nfft, windows))
@@ -1403,39 +1421,40 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
   if (outputSamples > available)
     return 313;
 
-  size_t spectrumElements = spectra.size();
   size_t frameElements = size_t(batch) * frames * nfft;
   size_t outputElements = size_t(batch) * outputSamples;
-  cufftComplex *deviceSpectrum = nullptr, *deviceComplexFrames = nullptr;
-  float *deviceRealFrames = nullptr, *deviceWindows = nullptr,
-        *deviceOutput = nullptr;
-  cudaError_t status = cudaMalloc(&deviceSpectrum,
-                                  spectrumElements * sizeof(cufftComplex));
-  if (status == cudaSuccess && onesided)
-    status = cudaMalloc(&deviceRealFrames, frameElements * sizeof(float));
-  if (status == cudaSuccess && !onesided)
-    status = cudaMalloc(&deviceComplexFrames,
-                        frameElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceOutput, outputElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceSpectrum, spectra.data(),
-                        spectrumElements * sizeof(cufftComplex),
-                        cudaMemcpyHostToDevice);
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  // C2R overwrites its input; the spectrum is re-uploaded into scratch every
+  // call, so the caller's data is never touched.
+  auto *deviceSpectrum = static_cast<cufftComplex *>(
+      scratch(0, spectrumElements * sizeof(cufftComplex)));
+  float *deviceRealFrames = nullptr;
+  cufftComplex *deviceComplexFrames = nullptr;
+  if (onesided)
+    deviceRealFrames =
+        static_cast<float *>(scratch(1, frameElements * sizeof(float)));
+  else
+    deviceComplexFrames = static_cast<cufftComplex *>(
+        scratch(1, frameElements * sizeof(cufftComplex)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(2, windows.size() * sizeof(float)));
+  auto *deviceOutput =
+      static_cast<float *>(scratch(3, outputElements * sizeof(float)));
+  if (!deviceSpectrum || !deviceWindows || !deviceOutput ||
+      !(onesided ? static_cast<void *>(deviceRealFrames)
+                 : static_cast<void *>(deviceComplexFrames)))
+    return 314;
+  cudaError_t status = cudaMemcpy(deviceSpectrum, staged,
+                                  spectrumElements * sizeof(cufftComplex),
+                                  cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceWindows, windows.data(),
                         windows.size() * sizeof(float), cudaMemcpyHostToDevice);
-  if (status != cudaSuccess) {
-    release(deviceSpectrum, deviceComplexFrames, deviceRealFrames,
-            deviceWindows, deviceOutput);
+  if (status != cudaSuccess)
     return 314;
-  }
   cufftHandle plan = 0;
-  void *workspace = nullptr;
-  int planStatus = makePlan(batch * frames, nfft,
-                            onesided ? CUFFT_C2R : CUFFT_C2C, plan, workspace);
+  int planStatus = cachedPlan(batch * frames, nfft,
+                              onesided ? CUFFT_C2R : CUFFT_C2C, plan);
   cufftResult fftStatus = CUFFT_INVALID_PLAN;
   if (!planStatus)
     fftStatus = onesided
@@ -1456,19 +1475,15 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
           nfft, hop, outputSamples, trim, inverseScale);
     status = cudaGetLastError();
   }
-  std::vector<float> output(outputElements);
+  std::vector<float> output(inner != 1 ? outputElements : 0);
+  float *result = inner != 1 ? output.data() : outputHost;
   if (!planStatus && fftStatus == CUFFT_SUCCESS && status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (!planStatus && fftStatus == CUFFT_SUCCESS && status == cudaSuccess)
-    status = cudaMemcpy(output.data(), deviceOutput,
-                        outputElements * sizeof(float),
+    status = cudaMemcpy(result, deviceOutput, outputElements * sizeof(float),
                         cudaMemcpyDeviceToHost);
-  destroyPlan(plan, workspace);
-  release(deviceSpectrum, deviceComplexFrames, deviceRealFrames, deviceWindows,
-          deviceOutput);
   if (planStatus || fftStatus != CUFFT_SUCCESS || status != cudaSuccess)
     return 315;
-  unpackAxis(output.data(), outputHost, outer, outputSamples, inner);
+  if (inner != 1)
+    unpackAxis(output.data(), outputHost, outer, outputSamples, inner);
   return 0;
 }
 

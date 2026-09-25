@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-24
+last_updated: 2026-09-25
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## CUDA spectral deepening — 2026-09-25
+
+Sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`. **Not applicable.** The change is
+confined to the cuFFT-backed CUDA runtime (`libtessera_nvidia_fft`); the x86
+spectral lane uses its own AVX-512 FFT (`avx512_fft_f32.cpp`) and shares no
+code, ABI or IR contract with it.
+
 
 ## ROCm executable-pipeline follow-ups — 2026-09-24
 

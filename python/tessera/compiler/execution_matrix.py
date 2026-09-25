@@ -3785,9 +3785,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="nvidia_fft_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_fft_compiled", runtime_status="success",
-        reason="Canonical CUDA FFT/workspace v2 package executes C2C/R2C/C2R "
-               "FFT/IFFT/RFFT/IRFFT through reusable cuFFT plans with auto-allocation "
-               "disabled and explicit caller-owned device workspace.",
+        reason="Canonical CUDA FFT/workspace v4 package executes C2C/R2C/C2R "
+               "FFT/IFFT/RFFT/IRFFT through device-bound reusable cuFFT plans with "
+               "auto-allocation disabled and explicit caller-owned device workspace.",
         execution_mode="cuda_runtime", direction="forward", op_family="fft",
         device_proof="device_verified_abi", evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_fft_workspace.py",

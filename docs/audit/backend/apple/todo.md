@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-24
+last_updated: 2026-09-25
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## CUDA spectral deepening — 2026-09-25
+
+Sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`. **Not applicable.** The change is
+confined to the cuFFT-backed CUDA runtime (`libtessera_nvidia_fft`): plan and
+scratch pooling, FFT-based DCT and STFT/ISTFT backward, a native conv entry,
+and CUDA device-pointer FFT entry points. The Apple spectral lane runs through
+its own Metal runtime and shares no code, ABI or IR contract with it.
+
 
 ## ROCm executable-pipeline follow-ups — 2026-09-24
 

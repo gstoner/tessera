@@ -1,0 +1,135 @@
+{
+  "schema": "tessera.nvidia_spectral_benchmark.v1",
+  "host": "The-Super-Bear",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "package_abi": "tessera.nvidia.cuda_fft_workspace.v4",
+  "device": "sm_120",
+  "rows": [
+    {
+      "backend": "nvidia_sm120",
+      "op": "stft",
+      "case": "stft_jvp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "max_rel_error": 2.5307940435878356e-07,
+      "ok": true,
+      "cold_ms": 14.790685999999999,
+      "latency_ms": 12.607443,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 12.5065218,
+      "p90_ms": 13.4574012,
+      "repeats": 5
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "stft",
+      "case": "stft_vjp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 1669.6232499999999,
+      "latency_ms": 1658.51128,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 1647.4923033999999,
+      "p90_ms": 1664.4400726000001,
+      "repeats": 5
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "istft",
+      "case": "istft_jvp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 22.142664,
+      "latency_ms": 21.312219,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 21.244107,
+      "p90_ms": 21.479866599999998,
+      "repeats": 5
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "istft",
+      "case": "istft_vjp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 76.767462,
+      "latency_ms": 77.117374,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 76.50972019999999,
+      "p90_ms": 77.7941724,
+      "repeats": 5
+    },
+    {
+      "backend": "nvidia_sm120",
+      "op": "istft",
+      "case": "istft_vjp_8x122x257_compact",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "sm_120",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 76.42595899999999,
+      "latency_ms": 76.357179,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "p10_ms": 76.2813846,
+      "p90_ms": 76.512266,
+      "repeats": 5
+    }
+  ]
+}

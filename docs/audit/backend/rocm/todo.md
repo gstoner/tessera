@@ -1,11 +1,31 @@
 ---
-last_updated: 2026-09-24
+last_updated: 2026-09-25
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## CUDA spectral deepening — sibling follow-up — 2026-09-25
+
+Sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`. **Follow-up required (spectral AD).**
+`src/solvers/spectral/lib/TargetHooks/AMD/SpectralComposite.hip` still carries
+the direct-DFT backward kernels that the NVIDIA lane just replaced:
+`stftBackwardInputPolicy`, `stftBackwardWindowPolicy`, `istftFrameValuesPolicy`,
+`istftBackwardFramesPolicy`, `istftBackwardSpectrumPolicy` and
+`istftBackwardWindowPolicy`. On sm_120 the same shapes went from 1658 ms (STFT
+VJP) and 77 ms (ISTFT VJP) to about 1–2 ms with FFT-based backward, pooled
+plans and scratch, and block-per-element window reductions. The derivation
+(C2R of the weighted cotangent, deterministic overlap-add gathers,
+double-precision overlap numerator/denominator) is backend-neutral. See
+`tessera_nvidia_spectral.cu` and
+`benchmarks/baselines/nvidia_spectral_20260925/README.md`.
+**No ROCm claim:** nothing here was run on gfx1151 or gfx1201, and each chip
+needs its own before/after packet. Also worth checking on both ROCm boxes:
+whether their build trees leave `CMAKE_BUILD_TYPE` empty. Super-Bear's do,
+which put that runtime's host code at `-O0`.
+
 
 ## ROCm executable-pipeline follow-ups (#834–#838) — 2026-09-24
 

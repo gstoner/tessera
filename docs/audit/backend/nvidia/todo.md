@@ -47,6 +47,88 @@ against the reference VJP.
 **Sibling backends:** ROCm fixed in #844; x86 has its own entry
 (`ROCM-SPECTRAL-FFT-POLICY-2026-09-25`); Apple not applicable.
 
+## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
+
+Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory
+lives); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
+
+**Finding (NVIDIA).** On The-Super-Bear, `build/`, `build-nvidia-cuda/` (the
+tree the runtime loads), `build-nvidia/` and `build-nv/` are all empty.
+`libtessera_nvidia_{fft,gemm,rng}.so` compile with no `-O` flag, so their
+**host** code is `-O0`. Device code is unaffected. nvcc hands `ptxas` no `-O`
+(its default is `-O3`), and the SASS for `tessera_nvidia_spectral.cu` is
+identical with and without `-O3` (9,048 instructions both). Only the host
+object changes (16,918 → 19,844 x86 instructions).
+
+Measured effect: a host `-O3` rebuild roughly halved the host-bound
+STFT/ISTFT autodiff rows before #842's code fixes
+(`benchmarks/baselines/nvidia_spectral_20260925/README.md`). Every NVIDIA
+host-side latency recorded from these trees carries `-O0` host code.
+`build-assertions/` is `RelWithDebInfo`, per the documented recipe.
+
+**Proposal (not applied; owner decision because it moves baselines):**
+
+1. **Per-target optimization for the runtime libraries only.** Add a
+   `tessera_runtime_library_optimization(<target>)` helper under `cmake/`. It
+   acts only when `NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES` and
+   adds `-O2` for C/CXX/OBJCXX, `-Xcompiler=-O2` for CUDA host code (device
+   code is already optimized) and `-O2` for HIP (host and device). It must not
+   define `NDEBUG`. Apply it to these CMake targets (target names, not
+   output names): `tessera_nvidia_{fft,gemm,rng,ptx_launch}`,
+   `TesseraSpectralHIP` (output `libtessera_spectral_rocm.so`),
+   `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
+   `tessera_x86_elementwise`, `tessera_x86_base` and `tessera_jit`
+   (`tools/tessera-jit`, also built without `-O` on the Mac and on
+   Princess-Luna).
+2. **Why not a top-level `RelWithDebInfo` default.** It defines `NDEBUG` for
+   every Tessera translation unit. That switches off the MLIR/LLVM header
+   assertions (`cast<>`, interface-promise checks) that today run inside
+   Tessera's compiler code on every empty-build-type tree, including the three
+   boxes whose LLVM is NDEBUG. The runtime library directories contain no
+   `assert()`, so optimizing only them costs no checks.
+3. **Stamp the level into evidence.** Have each runtime library export its
+   compile flags, and have benchmark rows record them beside `route`
+   (Decisions #11/#12). A latency from an `-O0` library is not comparable to
+   one from `-O3`.
+4. **Re-measure, never re-stamp.** Once this lands, every packet whose
+   host-side time came from an unoptimized library is stale. Those packets
+   must be re-recorded, not relabelled. Until then, cross-box comparisons are
+   invalid where one box is `-O0` and the other `Release`: Princess-Luna vs
+   Tajasarus x86, and gfx1151 vs gfx1201 composite rows.
+
+**Intentional?** No evidence of it:
+
+- CI, `scripts/build.sh` (default `Release`) and the documented assertions
+  recipe (`RelWithDebInfo`, `COMPILER_REFACTOR_PLAN.md`) all set a type. The
+  empty trees trace to the canonical configure commands in CLAUDE.md and
+  `GETTING_STARTED.md`, which omit `-DCMAKE_BUILD_TYPE`.
+- Assertions do not depend on it. In Tajasarus `build-assertions/` (`Release`)
+  the assertions LLVM's trailing `-UNDEBUG` follows `-O3 -DNDEBUG`, so
+  `NDEBUG` stays undefined.
+- The only empty-by-choice-looking tree is Tajasarus
+  `build-assertions-nvidia/` (empty + `-UNDEBUG`). It builds the
+  `tessera-nvidia-opt` driver, not runtime libraries.
+
+Unverified side note: `src/compiler/autotuning/CMakeLists.txt` sets
+`CMAKE_BUILD_TYPE Release` as a directory-scoped normal variable. Its effect on
+a single-config generator was not checked.
+
+**Inventory** (`CMakeCache.txt` plus the runtime libraries'
+`ninja -t commands`, 2026-09-25):
+
+| Box | Tree | Build type |
+|---|---|---|
+| Mac | `build` | empty |
+| Princess-Luna | `build` | empty |
+| Tajasarus | `build` | Release |
+| Tajasarus | `build-assertions` | Release |
+| Tajasarus | `build-assertions-nvidia` | empty |
+| Super-Bear | `build`, `build-nvidia-cuda`, `build-nvidia`, `build-nv` | empty |
+| Super-Bear | `build-assertions` | RelWithDebInfo |
+
+Every runtime library in an empty tree compiles with no `-O` flag.
+
 ## ROCm spectral FFT policy paths — sibling outcome — 2026-09-25
 
 Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`; owner `NVIDIA-FFT-WORKSPACE-1`.

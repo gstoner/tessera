@@ -1,0 +1,161 @@
+{
+  "schema": "tessera.compiler.e2e_real4.x86_matmul.v1",
+  "work_item": "E2E-REAL-4",
+  "created_at": "2026-09-25T19:34:41.575704+00:00",
+  "architecture": "zen5-avx512",
+  "device": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "python": "3.14.4",
+  "timing_domain": "host_wall_operation_total",
+  "timing_policy": "serial alternating production/scheduled runtime.launch calls",
+  "warmup_iterations": 5,
+  "trials": 9,
+  "ratchet": {
+    "kind": "production_non_regression",
+    "limit": 1.1
+  },
+  "rows": [
+    {
+      "shape_mkn": [
+        64,
+        128,
+        96
+      ],
+      "shape_class": "aligned",
+      "correctness": {
+        "production_max_abs": 0.0,
+        "scheduled_max_abs": 0.0,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 3e-05,
+        "passed": true
+      },
+      "compile": {
+        "production_ms": 105.455425,
+        "scheduled_cold_ms": 106.89337,
+        "scheduled_warm_ms": 99.025746,
+        "scheduled_compile_state": "prepackaged",
+        "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+        "toolchain_fingerprint": "022e86d279d3e4949952894235b2475ad198e10349a176dfe6bdd57e50f3c0a3",
+        "digests": {
+          "graph": "9ec7fb71c8c6301967329a70f5222eda14c9cc82a54e420327d03f52465fb8ee",
+          "schedule": "c4c498b426b4ce6f25656bc72878b7c4e51204d3af36a0c9a8affbab76e9edde",
+          "decision": "7b0d2625f469b2f0a1aba72e35c8b4199c39db3578f4a18b9d623b4523b09ebb",
+          "tile": "11be0e7bf09ad11fb859cc23c6f086c08bdae723395e9c11f4885ec2374a20fe",
+          "target": "04bfb08cec296a3c1c369a4b0a661e84fa9d9cd58cf6e429d23f19bb3eef7621",
+          "image": "2eb190b337fe3e46d92b745cf2abaaaf0da2dfd8a056146fa253c54b3a32c584",
+          "production_image": "2eb190b337fe3e46d92b745cf2abaaaf0da2dfd8a056146fa253c54b3a32c584"
+        }
+      },
+      "resources": {
+        "scheduled_image_bytes": 783360,
+        "production_image_bytes": 783360,
+        "required_features": [
+          "avx512f",
+          "fma"
+        ],
+        "threads": "OpenMP runtime owned"
+      },
+      "timing": {
+        "production_samples_ms": [
+          0.993147,
+          1.114413,
+          0.968295,
+          1.075091,
+          1.036389,
+          1.068091,
+          1.037089,
+          1.047809,
+          0.989357
+        ],
+        "scheduled_samples_ms": [
+          1.013607,
+          1.016918,
+          1.003877,
+          0.966755,
+          1.007637,
+          0.969255,
+          1.026558,
+          0.959365,
+          1.029548
+        ],
+        "production_median_ms": 1.037089,
+        "scheduled_median_ms": 1.007637,
+        "scheduled_over_production": 0.971601280121571,
+        "non_regression_10pct": true
+      }
+    },
+    {
+      "shape_mkn": [
+        127,
+        65,
+        79
+      ],
+      "shape_class": "ragged",
+      "correctness": {
+        "production_max_abs": 0.0,
+        "scheduled_max_abs": 0.0,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 3e-05,
+        "passed": true
+      },
+      "compile": {
+        "production_ms": 99.693488,
+        "scheduled_cold_ms": 97.345888,
+        "scheduled_warm_ms": 94.525068,
+        "scheduled_compile_state": "prepackaged",
+        "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+        "toolchain_fingerprint": "022e86d279d3e4949952894235b2475ad198e10349a176dfe6bdd57e50f3c0a3",
+        "digests": {
+          "graph": "c2c1b62d53e641a1e47329cf696550de9309c4584e72226ea9d5e42f08dd972c",
+          "schedule": "0596f0094317fc2e6e9796d1c3f0bc97d94653f179cdea87a5d60894d9ac5f01",
+          "decision": "b5423ae69c0a5bc3037acd86221cc3b9240912ef7433acb5932d61cc0ed8e4ba",
+          "tile": "2ccecde5c2b310abd4b0bd852a09af58c485fbd0da23e7cc7179e00626b6b5aa",
+          "target": "5512dad63f9c1475c142e419ee8baab6f6322c3a9e642e30e132ed04b895d015",
+          "image": "4f034959fcffa0006d8fafb6d23875ae89062a2c38a216af08e7c45159ffe7c2",
+          "production_image": "4f034959fcffa0006d8fafb6d23875ae89062a2c38a216af08e7c45159ffe7c2"
+        }
+      },
+      "resources": {
+        "scheduled_image_bytes": 783360,
+        "production_image_bytes": 783360,
+        "required_features": [
+          "avx512f",
+          "fma"
+        ],
+        "threads": "OpenMP runtime owned"
+      },
+      "timing": {
+        "production_samples_ms": [
+          0.938683,
+          0.936084,
+          0.907401,
+          0.944804,
+          1.023658,
+          0.969095,
+          0.908352,
+          0.980616,
+          0.907981
+        ],
+        "scheduled_samples_ms": [
+          0.969225,
+          0.982535,
+          0.962435,
+          0.937303,
+          0.958965,
+          1.011387,
+          0.943184,
+          1.007527,
+          0.940084
+        ],
+        "production_median_ms": 0.938683,
+        "scheduled_median_ms": 0.962435,
+        "scheduled_over_production": 1.0253035369768069,
+        "non_regression_10pct": true
+      }
+    }
+  ],
+  "verdict": "promote",
+  "selector_changed": false,
+  "selector_action": "retain existing canonical scheduled selection",
+  "report_sha256": "9fa4b0b75823bc72df560b28b8465d444eb7260ec89ea46b73083608bcbf0fdc"
+}

@@ -1,0 +1,381 @@
+{
+  "schema": "tessera.x86.e2e_elementwise_comparison.v1",
+  "work_item": "X86-E2E-2",
+  "created_at": "2026-09-25T19:34:42.795560+00:00",
+  "evidence_arch": "x86_64_avx512",
+  "trials": 9,
+  "timing_policy": "serial alternating retained/compiler CPU wall time",
+  "coverage_policy": "one representative per stable ABI family across ragged, medium, and large tensors",
+  "rows": [
+    {
+      "family": "unary",
+      "operation": "tessera.absolute",
+      "shape": [
+        130
+      ],
+      "elements": 130,
+      "correct": true,
+      "retained_route": "x86_unary_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": true,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.128018,
+          0.078314,
+          0.041043,
+          0.072164,
+          0.044893,
+          0.073194,
+          0.038792,
+          0.062774,
+          0.095456
+        ],
+        "compiler_samples_ms": [
+          3.495688,
+          0.728022,
+          0.70218,
+          0.799295,
+          0.722541,
+          0.745652,
+          0.752533,
+          0.701369,
+          0.775024
+        ],
+        "retained_median_ms": 0.072164,
+        "compiler_median_ms": 0.745652,
+        "median_speedup": 0.09677973102734252,
+        "non_regression_10pct": false
+      }
+    },
+    {
+      "family": "unary",
+      "operation": "tessera.absolute",
+      "shape": [
+        32,
+        257
+      ],
+      "elements": 8224,
+      "correct": true,
+      "retained_route": "x86_unary_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": true,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.079834,
+          0.067244,
+          0.040662,
+          0.062003,
+          0.042823,
+          0.068644,
+          0.039992,
+          0.065624,
+          0.039482
+        ],
+        "compiler_samples_ms": [
+          0.807066,
+          0.70605,
+          0.802976,
+          0.69712,
+          0.733201,
+          0.763713,
+          0.751093,
+          0.738692,
+          0.69925
+        ],
+        "retained_median_ms": 0.062003,
+        "compiler_median_ms": 0.738692,
+        "median_speedup": 0.08393620074401781,
+        "non_regression_10pct": false
+      }
+    },
+    {
+      "family": "unary",
+      "operation": "tessera.absolute",
+      "shape": [
+        1024,
+        1024
+      ],
+      "elements": 1048576,
+      "correct": true,
+      "retained_route": "x86_unary_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": true,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.393062,
+          0.211722,
+          0.139078,
+          0.17031,
+          0.133028,
+          0.16685,
+          0.132397,
+          0.165699,
+          0.131307
+        ],
+        "compiler_samples_ms": [
+          1.121804,
+          0.840778,
+          0.763883,
+          0.789514,
+          0.795115,
+          0.831747,
+          0.770044,
+          0.797505,
+          0.751133
+        ],
+        "retained_median_ms": 0.165699,
+        "compiler_median_ms": 0.795115,
+        "median_speedup": 0.2083962697219899,
+        "non_regression_10pct": false
+      }
+    },
+    {
+      "family": "binary",
+      "operation": "tessera.add",
+      "shape": [
+        130
+      ],
+      "elements": 130,
+      "correct": true,
+      "retained_route": "x86_binary_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": false,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.068154,
+          0.087765,
+          0.043433,
+          0.053753,
+          0.033072,
+          0.063573,
+          0.123597,
+          0.068254,
+          0.042793
+        ],
+        "compiler_samples_ms": [
+          0.829927,
+          0.809626,
+          0.71324,
+          0.680308,
+          0.732842,
+          0.69741,
+          0.785475,
+          0.70704,
+          0.686779
+        ],
+        "retained_median_ms": 0.063573,
+        "compiler_median_ms": 0.71324,
+        "median_speedup": 0.08913269025853851,
+        "non_regression_10pct": false
+      }
+    },
+    {
+      "family": "binary",
+      "operation": "tessera.add",
+      "shape": [
+        32,
+        257
+      ],
+      "elements": 8224,
+      "correct": true,
+      "retained_route": "x86_binary_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": false,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.061253,
+          0.073734,
+          0.055893,
+          0.098875,
+          0.070234,
+          0.054413,
+          0.036112,
+          0.123327,
+          0.089495
+        ],
+        "compiler_samples_ms": [
+          0.781295,
+          0.754563,
+          0.720811,
+          0.765424,
+          0.747782,
+          0.69693,
+          0.742292,
+          0.770344,
+          0.774624
+        ],
+        "retained_median_ms": 0.070234,
+        "compiler_median_ms": 0.754563,
+        "median_speedup": 0.09307904045122807,
+        "non_regression_10pct": false
+      }
+    },
+    {
+      "family": "binary",
+      "operation": "tessera.add",
+      "shape": [
+        1024,
+        1024
+      ],
+      "elements": 1048576,
+      "correct": true,
+      "retained_route": "x86_binary_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": true,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.498379,
+          0.266435,
+          0.183111,
+          0.218562,
+          0.276356,
+          0.266985,
+          0.215712,
+          0.208371,
+          0.214962
+        ],
+        "compiler_samples_ms": [
+          1.192437,
+          0.904691,
+          0.976425,
+          0.835518,
+          0.911572,
+          0.840768,
+          0.853349,
+          0.790165,
+          0.845418
+        ],
+        "retained_median_ms": 0.218562,
+        "compiler_median_ms": 0.853349,
+        "median_speedup": 0.25612264149837877,
+        "non_regression_10pct": false
+      }
+    },
+    {
+      "family": "predicate",
+      "operation": "tessera.isfinite",
+      "shape": [
+        130
+      ],
+      "elements": 130,
+      "correct": true,
+      "retained_route": "x86_predicate_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": true,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.056203,
+          0.077014,
+          0.041642,
+          0.104766,
+          0.064294,
+          0.068304,
+          0.069594,
+          0.062374,
+          0.037822
+        ],
+        "compiler_samples_ms": [
+          0.806226,
+          0.747803,
+          0.710671,
+          0.737912,
+          0.740782,
+          0.757853,
+          0.742632,
+          0.690109,
+          0.738002
+        ],
+        "retained_median_ms": 0.064294,
+        "compiler_median_ms": 0.740782,
+        "median_speedup": 0.08679206568194152,
+        "non_regression_10pct": false
+      }
+    },
+    {
+      "family": "predicate",
+      "operation": "tessera.isfinite",
+      "shape": [
+        32,
+        257
+      ],
+      "elements": 8224,
+      "correct": true,
+      "retained_route": "x86_predicate_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": true,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.082445,
+          0.076304,
+          0.036652,
+          0.076404,
+          0.042262,
+          0.070564,
+          0.038022,
+          0.063944,
+          0.037782
+        ],
+        "compiler_samples_ms": [
+          0.816626,
+          0.713521,
+          0.801556,
+          0.831137,
+          0.813166,
+          0.718541,
+          0.749813,
+          0.718321,
+          0.698729
+        ],
+        "retained_median_ms": 0.063944,
+        "compiler_median_ms": 0.749813,
+        "median_speedup": 0.0852799297958291,
+        "non_regression_10pct": false
+      }
+    },
+    {
+      "family": "predicate",
+      "operation": "tessera.isfinite",
+      "shape": [
+        1024,
+        1024
+      ],
+      "elements": 1048576,
+      "correct": true,
+      "retained_route": "x86_predicate_compiled",
+      "compiler_route": "x86_native_descriptor",
+      "selector_eligible": true,
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.183531,
+          0.15894,
+          0.123777,
+          0.16828,
+          0.123477,
+          0.199302,
+          0.124617,
+          0.147788,
+          0.127338
+        ],
+        "compiler_samples_ms": [
+          0.807045,
+          0.877379,
+          0.780074,
+          0.829207,
+          0.822477,
+          0.858038,
+          0.769044,
+          0.794835,
+          0.760553
+        ],
+        "retained_median_ms": 0.147788,
+        "compiler_median_ms": 0.807045,
+        "median_speedup": 0.18312237855386007,
+        "non_regression_10pct": false
+      }
+    }
+  ],
+  "all_correct": true,
+  "all_non_regression": false,
+  "selector_policy_pass": false,
+  "selector_changed": false
+}

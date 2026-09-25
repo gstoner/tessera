@@ -31,6 +31,15 @@ int tessera_nvidia_fft_plan_create_c2r_f32(int64_t batch, int64_t length,
                                            size_t *workspace_bytes);
 int tessera_nvidia_fft_plan_destroy(void *plan);
 
+// Batched real FFT convolution (full length) on the spectral package: x
+// [rows, x_length], w [kernel_rows (== rows or 1), kernel_length], out
+// [rows, x_length + kernel_length - 1]; compact host arrays. `scale` is the
+// product of the normalization factors. 0 on success; 380-386 on failure.
+int tessera_nvidia_spectral_conv_f32(const char *digest, const float *x,
+                                     int rows, int x_length, const float *w,
+                                     int kernel_rows, int kernel_length,
+                                     float *out, int nfft, float scale);
+
 // Device-pointer execution: `input`/`output` are device buffers on the plan's
 // device; work is enqueued on `stream` (nullptr = legacy default stream) and
 // not synchronized. Normalization matches the host-pointer entry points. C2R

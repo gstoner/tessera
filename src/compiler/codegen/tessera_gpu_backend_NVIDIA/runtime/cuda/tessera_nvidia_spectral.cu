@@ -964,6 +964,21 @@ __global__ void dct3Prepare(const float *input, cufftComplex *values,
                                  xk * sine - xnk * cosine);
 }
 
+// X[r, k] *= W[kernelRow(r), k] * scale; one kernel row broadcasts to all.
+__global__ void multiplySpectra(cufftComplex *signal,
+                                const cufftComplex *kernel, int rows,
+                                int kernelRows, int bins, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(rows) * bins)
+    return;
+  size_t row = index / bins;
+  size_t k = index % bins;
+  cufftComplex w = kernel[(kernelRows == 1 ? 0 : row) * bins + k];
+  cufftComplex x = signal[index];
+  signal[index] = make_cuComplex((x.x * w.x - x.y * w.y) * scale,
+                                 (x.x * w.y + x.y * w.x) * scale);
+}
+
 __global__ void dct3Scatter(const cufftComplex *values, float *output,
                             int batch, int n, float scale) {
   size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -1485,6 +1500,79 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
   if (inner != 1)
     unpackAxis(output.data(), outputHost, outer, outputSamples, inner);
   return 0;
+}
+
+// Batched real FFT convolution, full length (the scheduler's
+// tessera_nvidia_spectral_conv_f32 entry). x is [rows, xLength], w is
+// [kernelRows, kernelLength] with kernelRows == rows or 1, out is
+// [rows, xLength + kernelLength - 1], all compact host arrays. nfft must hold
+// the full convolution. `scale` is the product of the normalization factors
+// (cuFFT is unnormalized both ways); the caller derives it from the norm mode.
+// One upload per operand, one download: replaces three host-staged cuFFT calls
+// with the pad and the spectrum multiply done in NumPy.
+extern "C" int tessera_nvidia_spectral_conv_f32(
+    const char *digest, const float *xHost, int rows, int xLength,
+    const float *wHost, int kernelRows, int kernelLength, float *outHost,
+    int nfft, float scale) {
+  if (!validDigest(digest) || !xHost || !wHost || !outHost || rows <= 0 ||
+      xLength <= 0 || kernelLength <= 0 ||
+      (kernelRows != 1 && kernelRows != rows) || nfft <= 0)
+    return 380;
+  const int64_t outLength = int64_t(xLength) + kernelLength - 1;
+  if (outLength > nfft || int64_t(rows) * nfft > INT32_MAX)
+    return 381;
+  const int bins = nfft / 2 + 1;
+  const size_t realBytes = size_t(rows) * nfft * sizeof(float);
+  const size_t kernelRealBytes = size_t(kernelRows) * nfft * sizeof(float);
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceX = static_cast<float *>(scratch(0, realBytes));
+  auto *deviceW = static_cast<float *>(scratch(1, kernelRealBytes));
+  auto *spectrumX = static_cast<cufftComplex *>(
+      scratch(2, size_t(rows) * bins * sizeof(cufftComplex)));
+  auto *spectrumW = static_cast<cufftComplex *>(
+      scratch(3, size_t(kernelRows) * bins * sizeof(cufftComplex)));
+  if (!deviceX || !deviceW || !spectrumX || !spectrumW)
+    return 382;
+  // Zero padding: clear, then drop each row in with one strided 2-D copy.
+  cudaError_t status = cudaMemset(deviceX, 0, realBytes);
+  if (status == cudaSuccess)
+    status = cudaMemset(deviceW, 0, kernelRealBytes);
+  if (status == cudaSuccess)
+    status = cudaMemcpy2D(deviceX, size_t(nfft) * sizeof(float), xHost,
+                          size_t(xLength) * sizeof(float),
+                          size_t(xLength) * sizeof(float), size_t(rows),
+                          cudaMemcpyHostToDevice);
+  if (status == cudaSuccess)
+    status = cudaMemcpy2D(deviceW, size_t(nfft) * sizeof(float), wHost,
+                          size_t(kernelLength) * sizeof(float),
+                          size_t(kernelLength) * sizeof(float),
+                          size_t(kernelRows), cudaMemcpyHostToDevice);
+  if (status != cudaSuccess)
+    return 383;
+  cufftHandle forwardX = 0, forwardW = 0, inverse = 0;
+  if (cachedPlan(rows, nfft, CUFFT_R2C, forwardX) ||
+      cachedPlan(kernelRows, nfft, CUFFT_R2C, forwardW) ||
+      cachedPlan(rows, nfft, CUFFT_C2R, inverse))
+    return 384;
+  if (cufftExecR2C(forwardX, deviceX, spectrumX) != CUFFT_SUCCESS ||
+      cufftExecR2C(forwardW, deviceW, spectrumW) != CUFFT_SUCCESS)
+    return 385;
+  const size_t spectrumElements = size_t(rows) * bins;
+  multiplySpectra<<<unsigned((spectrumElements + kThreads - 1) / kThreads),
+                    kThreads>>>(spectrumX, spectrumW, rows, kernelRows, bins,
+                                scale);
+  if (cudaGetLastError() != cudaSuccess)
+    return 385;
+  // C2R consumes spectrumX and writes the padded result back over deviceX.
+  if (cufftExecC2R(inverse, spectrumX, deviceX) != CUFFT_SUCCESS)
+    return 385;
+  // Download only the first outLength samples of each row, straight into the
+  // caller's buffer; the synchronous copy orders after the transforms.
+  status = cudaMemcpy2D(outHost, size_t(outLength) * sizeof(float), deviceX,
+                        size_t(nfft) * sizeof(float),
+                        size_t(outLength) * sizeof(float), size_t(rows),
+                        cudaMemcpyDeviceToHost);
+  return status == cudaSuccess ? 0 : 386;
 }
 
 extern "C" int tessera_nvidia_dct_policy_layout_storage(

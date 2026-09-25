@@ -237,6 +237,15 @@ def test_nvidia_spectral_consumers_route_through_native_fft(op_name, monkeypatch
         return native(sub_op, x, kwargs)
 
     monkeypatch.setattr(runtime, "_nvidia_fftexec", counted)
+    native_conv = runtime._nvidia_native_spectral_conv
+    native_conv_served = []
+
+    def spied_native_conv(*args):
+        result = native_conv(*args)
+        native_conv_served.append(result is not None)
+        return result
+
+    monkeypatch.setattr(runtime, "_nvidia_native_spectral_conv", spied_native_conv)
     rng = np.random.default_rng(71)
     if op_name == "tessera.dct":
         operands, kwargs = [rng.standard_normal(16).astype(np.float32)], {"type": 2}
@@ -303,6 +312,10 @@ def test_nvidia_spectral_consumers_route_through_native_fft(op_name, monkeypatch
         assert lib.tessera_nvidia_spectral_package_abi() == (
             b"tessera.nvidia.spectral_policy.v1")
         assert lib.tessera_nvidia_spectral_arch() == 120
+    elif op_name == "tessera.spectral_conv":
+        # One native batched convolution, not three host-staged transforms.
+        assert not calls
+        assert native_conv_served == [True]
     elif op_name != "tessera.spectral_filter":
         assert calls
 
@@ -476,3 +489,47 @@ def test_device_pointer_entry_points_match_numpy(kind):
                 cudart.cudaFree(pointer)
         lib.tessera_nvidia_fft_workspace_free(workspace)
         lib.tessera_nvidia_fft_plan_destroy(plan)
+
+
+
+def _composite_conv_reference(x, w, normalization):
+    n = x.shape[-1] + w.shape[-1] - 1
+    nfft = 1 << int(np.ceil(np.log2(n)))
+    return np.fft.irfft(np.fft.rfft(x, nfft, norm=normalization) *
+                        np.fft.rfft(w, nfft, norm=normalization),
+                        nfft, norm=normalization)[..., :n]
+
+
+@pytest.mark.parametrize("normalization", ("backward", "forward", "ortho"))
+@pytest.mark.parametrize("x_shape,w_shape", (
+    ((13,), (5,)),                 # 1-D, odd lengths
+    ((4, 3, 257), (4, 3, 33)),     # batched, one kernel per row
+    ((6, 1000), (1, 64)),          # one kernel row broadcast to all rows
+    ((1, 300), (5, 17)),           # outside the native envelope: host composite
+))
+def test_native_spectral_convolution_matches_composite(normalization, x_shape, w_shape):
+    runtime, lib = _runtime_or_skip()
+    if not hasattr(lib, "tessera_nvidia_spectral_conv_f32"):
+        pytest.skip("library predates tessera_nvidia_spectral_conv_f32")
+    rng = np.random.default_rng(len(x_shape) * 100 + x_shape[-1])
+    x = rng.standard_normal(x_shape).astype(np.float32)
+    w = rng.standard_normal(w_shape).astype(np.float32)
+    native = runtime._nvidia_native_spectral_conv([x, w], {"normalization": normalization}, np)
+    if w_shape == (5, 17):
+        assert native is None  # the batch broadcast is left to the composite
+    else:
+        assert native is not None
+        np.testing.assert_allclose(native, _composite_conv_reference(x, w, normalization),
+                                   rtol=5e-5, atol=5e-5 * max(1.0, float(np.max(np.abs(native)))))
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "nvidia_sm120", "compiler_path": "nvidia_spectral_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["x", "w"], "output_name": "o",
+        "ops": [{"op_name": "tessera.spectral_conv", "result": "o",
+                 "operands": ["x", "w"], "kwargs": {"normalization": normalization}}],
+    })
+    result = runtime.launch(artifact, (x, w))
+    assert result["ok"] is True, result.get("reason")
+    expected = _composite_conv_reference(x, w, normalization)
+    np.testing.assert_allclose(np.asarray(result["output"]), expected, rtol=5e-5,
+                               atol=5e-5 * max(1.0, float(np.max(np.abs(expected)))))

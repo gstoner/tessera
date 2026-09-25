@@ -134,8 +134,6 @@ def main() -> None:
     chip = os.environ.get("TESSERA_ROCM_CHIP")
     if not chip:
         raise SystemExit("set TESSERA_ROCM_CHIP (gfx1151 or gfx1201)")
-    image_arch = _image_arch()
-
     rng = np.random.default_rng(11)
     x = rng.standard_normal((BATCH, SAMPLES)).astype(np.float32)
     window = (0.25 + np.hanning(NFFT)).astype(np.float32)
@@ -168,7 +166,7 @@ def main() -> None:
         row: dict[str, Any] = {
             "backend": "rocm", "op": name.split("_")[0], "case": name,
             "shape": [[BATCH, SAMPLES]], "dtype": "float32", "device": chip,
-            "image_arch": image_arch, "tessera_version": "0.1.0", "route": route,
+            "image_arch": None, "tessera_version": "0.1.0", "route": route,
             "latency_source": "host_wall_synchronized",
         }
         try:
@@ -184,13 +182,19 @@ def main() -> None:
         except Exception as exc:  # report, do not time a wrong or refused case
             row.update(ok=False, error=f"{type(exc).__name__}: {exc}"[:500])
             rows.append(row)
-            print(json.dumps(row), flush=True)
             continue
         row.update(ok=True, cold_ms=cold, latency_ms=float(statistics.median(samples_ms)),
                    p10_ms=float(np.percentile(samples_ms, 10)),
                    p90_ms=float(np.percentile(samples_ms, 90)), numpy_ms=None,
                    tflops=None, memory_bw_gb_s=None, repeats=args.repeats)
         rows.append(row)
+    # The arch probe loads and caches the composite package the JVP/VJP routes
+    # launch from. It runs only after every case is timed: probing earlier,
+    # even after the first case, would load that package untimed and move its
+    # discovery and loading out of whichever case first needs it.
+    image_arch = _image_arch()
+    for row in rows:
+        row["image_arch"] = image_arch
         print(json.dumps(row), flush=True)
     packet = {
         "schema": "tessera.rocm_spectral_benchmark.v1",

@@ -10,6 +10,13 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassOptions.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
+#include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 using namespace mlir;
 
 namespace mlir::tessera_rocm {
@@ -471,6 +478,65 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
   }
 }
 
+// The vector-to-vector stage of upstream `convert-vector-to-llvm`, without its
+// LLVM conversion. The executable pipeline needs that stage for one reason: a
+// fixed-length `vector.create_mask` is materialized by
+// `populateVectorMaskMaterializationPatterns`, which `convert-gpu-to-rocdl`
+// does not add, and an unmaterialized mask dies at translation as a surviving
+// `unrealized_conversion_cast`. The upstream pass's second stage then runs a
+// partial LLVM conversion whose type converter has no GPU address-space
+// mapping; on every kernel with a workgroup (LDS) memref it printed
+// "error: conversion of memref memory space #gpu.address_space<workgroup> to
+// integer address space failed" while the pass -- and the whole compile --
+// succeeded, because `convert-gpu-to-rocdl` then converts those ops with the
+// mapping it does have. A pipeline that reports an error on success hides the
+// next real one. This stage is copied from the LLVM 23.1.1
+// `ConvertVectorToLLVMPass::runOnOperation` with that pass's defaults
+// (contract lowering Dot, transpose lowering EltWise, 32-bit vector indices,
+// no Arm or x86 extensions); `convert-gpu-to-rocdl` does the LLVM conversion.
+struct LowerVectorToVectorForROCDLPass
+    : public PassWrapper<LowerVectorToVectorForROCDLPass,
+                         OperationPass<gpu::GPUModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerVectorToVectorForROCDLPass)
+  StringRef getArgument() const final {
+    return "tessera-rocm-lower-vector-to-vector";
+  }
+  StringRef getDescription() const final {
+    return "Vector-to-vector lowering (incl. mask materialization) ahead of "
+           "convert-gpu-to-rocdl, without a GPU-unaware LLVM type conversion";
+  }
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<arith::ArithDialect, memref::MemRefDialect,
+                    scf::SCFDialect, vector::VectorDialect>();
+  }
+  void runOnOperation() override {
+    RewritePatternSet patterns(&getContext());
+    vector::populateVectorToVectorCanonicalizationPatterns(patterns);
+    vector::populateVectorBitCastLoweringPatterns(patterns);
+    vector::populateVectorBroadcastLoweringPatterns(patterns);
+    vector::populateVectorContractLoweringPatterns(
+        patterns, vector::VectorContractLowering::Dot);
+    vector::populateVectorMaskOpLoweringPatterns(patterns);
+    vector::populateVectorShapeCastLoweringPatterns(patterns);
+    vector::populateVectorInterleaveLoweringPatterns(patterns);
+    vector::populateVectorTransposeLoweringPatterns(
+        patterns, vector::VectorTransposeLowering::EltWise);
+    // Vector transfer ops with rank > 1 are lowered by VectorToSCF upstream.
+    vector::populateVectorTransferLoweringPatterns(patterns,
+                                                   /*maxTransferRank=*/1);
+    vector::populateVectorMaskMaterializationPatterns(
+        patterns, /*force32BitVectorIndices=*/true);
+    vector::populateVectorInsertExtractStridedSliceTransforms(patterns);
+    vector::populateVectorRankReducingFMAPattern(patterns);
+    vector::populateVectorGatherLoweringPatterns(patterns);
+    vector::populateVectorFromElementsUnrollPatterns(patterns);
+    vector::populateVectorToElementsUnrollPatterns(patterns);
+    // Upstream discards this result too: the greedy driver not converging is
+    // not an error, and anything left unlowered fails in the conversion.
+    (void)applyPatternsGreedily(getOperation(), std::move(patterns));
+  }
+};
+
 static void buildROCMExecutablePipeline(
     OpPassManager &pm, const ROCMExecutablePipelineOptions &opts) {
   StringRef family = opts.family;
@@ -535,13 +601,11 @@ static void buildROCMExecutablePipeline(
   pm.addPass(createLowerTesseraTargetToROCDLPass());
   pm.addPass(std::make_unique<VerifyROCMExecutablePass>());
   // `convert-gpu-to-rocdl` calls `populateVectorToLLVMConversionPatterns`, but
-  // a fixed-length `vector.create_mask` is materialized by
-  // `populateVectorMaskMaterializationPatterns`, which only the standalone
-  // pass adds. Without this the staging copy's masked load lowers while its
-  // mask does not, and the module dies at translation with a surviving
-  // `unrealized_conversion_cast`. `rocm_sparse_runtime.py` already runs the
-  // pass here for the same reason; this is the same pipeline, spelled once.
-  pm.addNestedPass<gpu::GPUModuleOp>(createConvertVectorToLLVMPass());
+  // a fixed-length `vector.create_mask` is materialized only by the
+  // vector-to-vector stage of `convert-vector-to-llvm`; see
+  // LowerVectorToVectorForROCDLPass for why that stage runs alone here.
+  pm.addNestedPass<gpu::GPUModuleOp>(
+      std::make_unique<LowerVectorToVectorForROCDLPass>());
   pm.addNestedPass<gpu::GPUModuleOp>(createSCFToControlFlowPass());
   ConvertGpuOpsToROCDLOpsOptions conversion;
   conversion.chipset = arch.str();

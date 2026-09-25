@@ -9,6 +9,44 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## x86 spectral: reflect only centered STFT frames — 2026-09-25
+
+Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. This closes the x86 follow-up
+recorded from the ROCm change (#844).
+
+`pad_mode` is a centered-framing policy: `tessera.ops.stft` and
+`vjp._VJPS["stft"]` zero-fill a non-centered frame that runs past the signal.
+The AVX-512 package reflected it whenever `padMode == 1` at four sites:
+
+- the broadcast-layout STFT forward (the public route);
+- the layout-ABI full-spectrum forward (bound in `runtime.py`, no Python
+  caller);
+- both reflect loops of the layout reverse
+  (`tessera_x86_avx512_stft_bwd_policy_layout_storage`).
+
+Each is now gated on `center`. The remaining reflect sites (the strided policy
+forward and the non-layout reverse) pad only by the centered `pad`, so they
+never see an out-of-range source when framing is not centered. They are
+unchanged.
+
+**Validation (Princess-Luna, Zen 5 AVX-512, `build/` rebuilt).** The new
+`test_x86_noncentered_reflect_frame_is_zero_filled` covers a 5-sample signal,
+`n_fft=16`, `hop=3`, `center=False`, `pad_mode="reflect"`, full spectrum. It
+checks the public forward and the layout ABI (called directly) against a
+zero-filled FFT, and the reverse against the reference VJP.
+
+- On `main` (`47aba850`) it fails at the public forward: 48/48 elements, e.g.
+  3.56 vs 0.61.
+- At `d8689ae8` it passes. `test_autodiff_spectral_target_binding.py` plus
+  `test_scheduled_spectral.py` give **73 passed** (47 in the x86/scheduled
+  selection).
+
+The timing side is unaffected by this change, but note that Princess-Luna's
+`build/` compiles this library without `-O` (`RUNTIME-LIB-OPT-1`, #846).
+
+**Sibling backends:** ROCm fixed in #844; NVIDIA in #847; Apple not
+applicable.
+
 ## ROCm spectral FFT policy paths — sibling outcome — 2026-09-25
 
 Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. **Follow-up required

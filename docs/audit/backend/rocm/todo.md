@@ -7,6 +7,41 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## ROCm VJP certificate packet names the host chip — 2026-09-25
+
+Owner `E2E-REAL-6F` (the exact-device certificate packet). This closes the
+gfx1201 failure recorded as pre-existing in the gfx1201 spectral JVP entry.
+
+`test_every_declared_rocm_vjp_family_records_an_exact_certificate` asserted
+`device_arch == "gfx1151"` for every exact-device row. Its guard claimed to
+require gfx1151 but checked only for a live ROCm runtime, so on gfx1201 it ran
+and failed with `assert 'gfx1201' == 'gfx1151'`.
+
+**Decision: check the host chip (option b), not skip gfx1201 (option a).** The
+certificate registry models exact-device ROCm evidence per chip.
+`validate_native_vjp_execution_certificate` accepts `exact_device` only when
+the attested `device_arch` matches the chip bound by `evidence_target`
+(gfx1151 by default, gfx1201 for `rocm_gfx1201`). On gfx1201, every declared
+family ran in the packet, passed its own oracle, and was certified
+exact-device for gfx1201.
+
+Every row in the process comes from this host, so each must name the host
+chip in both `device_arch` and `evidence_target`. A row naming the other chip
+still fails; the test does not accept either chip. The guard now names what
+it checks, and it skips chips with no registry model (anything other than
+gfx1151/gfx1201).
+
+**Validation at `02f01ed0`:**
+
+- The packet passes on gfx1201 (Tajasarus). On `main` (`73f13759`) it failed.
+- It passes on gfx1151 (Princess-Luna).
+- The full ROCm spectral gate is green on both: gfx1201 357 passed,
+  10 skipped; gfx1151 364 passed, 3 skipped.
+
+A first gate run failed `test_x86_noncentered_reflect_frame_is_zero_filled` on
+both boxes. The cause was stale `build/` trees that predated #848's AVX-512
+fix. After `ninja -C build` it passes. It was not a regression.
+
 ## Spectral benchmarks: `cold_ms` is the first call — 2026-09-25
 
 Owner `TSOL-POLICY-PHYS-1`; sync `SPECTRAL-BENCH-COLD-2026-09-25` (#849).

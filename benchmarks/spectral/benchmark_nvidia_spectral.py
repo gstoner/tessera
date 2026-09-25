@@ -211,6 +211,7 @@ def _autodiff_rows(device, warmup: int, repeats: int) -> list[dict[str, Any]]:
     dspectrum = (rng.standard_normal(spectrum.shape) +
                  1j * rng.standard_normal(spectrum.shape)).astype(np.complex64)
     cotangent_signal = rng.standard_normal((batch, length)).astype(np.float32)
+    compact_spectrum = np.ascontiguousarray(spectrum)
 
     cases = (
         ("stft_jvp_8x16000_n512_h128", "native_jvp",
@@ -219,8 +220,14 @@ def _autodiff_rows(device, warmup: int, repeats: int) -> list[dict[str, Any]]:
          lambda: stft_vjp.native_backward(x, window, out_cotangents=dspectrum), None),
         ("istft_jvp_8x122x257", "native_jvp",
          lambda: istft_jvp.native_jvp(spectrum, window, tangents=(dspectrum, dwindow)), None),
+        # `spectrum` keeps rfft's transposed strides (not C-contiguous), so the
+        # row above exercises the strided host-staging path; this one the
+        # compact path.
         ("istft_vjp_8x122x257", "native_backward",
          lambda: istft_vjp.native_backward(spectrum, window, out_cotangents=cotangent_signal), None),
+        ("istft_vjp_8x122x257_compact", "native_backward",
+         lambda: istft_vjp.native_backward(compact_spectrum, window,
+                                           out_cotangents=cotangent_signal), None),
     )
     rows = []
     for name, route, call, expected_primal in cases:

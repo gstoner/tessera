@@ -42,7 +42,7 @@ def test_every_declared_rocm_vjp_family_records_an_exact_certificate() -> None:
     stateful.test_rocm_adafactor_topologies_record_exact_gfx1151_certificates(
         "factored"
     )
-    attention.test_public_gfx1151_attention_vjp_consumes_prebuilt_program()
+    attention.test_public_rocm_attention_vjp_consumes_prebuilt_program()
     training.test_rocm_bce_backward_runs_gfx1151()
     training.test_rocm_label_smoothed_backward_handles_ragged_runtime_rows()
     training.test_rocm_kl_backward_handles_nonfinal_axis_and_tensor_cotangent()

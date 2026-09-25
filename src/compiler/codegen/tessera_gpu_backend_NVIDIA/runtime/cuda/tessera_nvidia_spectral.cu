@@ -192,7 +192,23 @@ std::vector<int64_t> compactStrides(int rank, const int64_t *shape) {
 
 // Whether `strides` is the compact row-major layout of `shape` (extent-1
 // dimensions may carry any stride). Such an input needs no host repack.
+// A shape/stride descriptor a caller may index: both pointers present, rank in
+// [1, 8], every extent positive. Wrappers that size buffers from `shape` before
+// the f32 entry point validates it call this first.
+bool validDescriptor(int rank, const int64_t *shape, const int64_t *strides) {
+  if (!shape || !strides || rank <= 0 || rank > 8)
+    return false;
+  for (int dim = 0; dim < rank; ++dim)
+    if (shape[dim] <= 0)
+      return false;
+  return true;
+}
+
+// False for an invalid descriptor, so callers fall through to
+// packHostLayout, which reports it as the entry point's layout error.
 bool isCompactLayout(int rank, const int64_t *shape, const int64_t *strides) {
+  if (!shape || !strides || rank <= 0 || rank > 8)
+    return false;
   int64_t expected = 1;
   for (int dim = rank - 1; dim >= 0; --dim) {
     if (shape[dim] != 1 && strides[dim] != expected)
@@ -1081,8 +1097,9 @@ extern "C" int tessera_nvidia_dct_policy_layout_f32(
     const char *digest, const float *inputHost, float *outputHost, int rank,
     const int64_t *shape, const int64_t *strides, int axis, int dctType,
     float outputScale) {
-  if (!validDigest(digest) || !inputHost || !outputHost || rank <= 0 ||
-      rank > 8 || axis < 0 || axis >= rank || dctType < 1 || dctType > 4 ||
+  if (!validDigest(digest) || !inputHost || !outputHost || !shape ||
+      !strides || rank <= 0 || rank > 8 || axis < 0 || axis >= rank ||
+      dctType < 1 || dctType > 4 ||
       (dctType == 1 && shape[axis] < 2))
     return 290;
   if (shape[axis] > INT32_MAX)
@@ -1171,8 +1188,8 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
     int hop, int frames, float outputScale, int center, int padMode,
     int onesided) {
   if (!validDigest(digest) || !inputHost || !windowHost || !outputHost ||
-      rank <= 0 || rank > 8 || axis < 0 || axis >= rank || nfft <= 0 ||
-      hop <= 0 || frames <= 0 || (center != 0 && center != 1) ||
+      !shape || !strides || rank <= 0 || rank > 8 || axis < 0 ||
+      axis >= rank || nfft <= 0 || hop <= 0 || frames <= 0 || (center != 0 && center != 1) ||
       (padMode != 0 && padMode != 1) ||
       (onesided != 0 && onesided != 1))
     return 300;
@@ -1291,8 +1308,8 @@ extern "C" int tessera_nvidia_stft_jvp_broadcast_layout_f32(
     int hop, int frames, float outputScale, int center, int padMode,
     int onesided) {
   if (!validDigest(digest) || !inputHost || !windowHost || !primalHost ||
-      !tangentHost || rank <= 0 || rank > 8 || axis < 0 || axis >= rank ||
-      nfft <= 0 || hop <= 0 || frames <= 0 ||
+      !tangentHost || !shape || !strides || rank <= 0 || rank > 8 ||
+      axis < 0 || axis >= rank || nfft <= 0 || hop <= 0 || frames <= 0 ||
       (center != 0 && center != 1) || (padMode != 0 && padMode != 1) ||
       (onesided != 0 && onesided != 1))
     return 360;
@@ -1450,7 +1467,8 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, float outputScale, int center, int outputSamples, int onesided) {
   if (!validDigest(digest) || !inputHost || !windowHost || !outputHost ||
-      rank < 2 || rank > 8 || axis <= 0 || axis >= rank || nfft <= 0 ||
+      !shape || !strides || rank < 2 || rank > 8 || axis <= 0 ||
+      axis >= rank || nfft <= 0 ||
       hop <= 0 || outputSamples <= 0 || (center != 0 && center != 1) ||
       (onesided != 0 && onesided != 1))
     return 310;
@@ -1739,7 +1757,9 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_storage(
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, int storage, float outputScale, int center, int outputSamples,
     int onesided) {
-  if (!validStorage(storage) || !outputHost)
+  if (!validStorage(storage) || !outputHost ||
+      !validDescriptor(rank, shape, strides) || axis <= 0 || axis >= rank ||
+      outputSamples <= 0)
     return 344;
   if (storage == 0)
     return tessera_nvidia_istft_policy_broadcast_layout_f32(
@@ -1777,7 +1797,8 @@ extern "C" int tessera_nvidia_istft_jvp_broadcast_layout_f32(
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, float outputScale, int center, int outputSamples, int onesided) {
   if (!validDigest(digest) || !inputHost || !windowHost || !primalHost ||
-      !tangentHost || rank < 2 || rank > 8 || axis <= 0 || axis >= rank ||
+      !tangentHost || !shape || !strides || rank < 2 || rank > 8 ||
+      axis <= 0 || axis >= rank ||
       nfft <= 0 || hop <= 0 || outputSamples <= 0 ||
       (center != 0 && center != 1) || (onesided != 0 && onesided != 1))
     return 350;
@@ -1939,7 +1960,9 @@ extern "C" int tessera_nvidia_istft_jvp_broadcast_layout_storage(
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, int storage, float outputScale, int center, int outputSamples,
     int onesided) {
-  if (!validStorage(storage) || !primalHost || !tangentHost)
+  if (!validStorage(storage) || !primalHost || !tangentHost ||
+      !validDescriptor(rank, shape, strides) || axis <= 0 || axis >= rank ||
+      outputSamples <= 0)
     return 356;
   if (storage == 0)
     return tessera_nvidia_istft_jvp_broadcast_layout_f32(
@@ -2028,7 +2051,8 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_storage(
     int windowRank, const int64_t *windowShape,
     const int64_t *windowStrides, int nfft, int hop, int storage,
     float inverseScale, int center, int onesided) {
-  if (!validStorage(storage) || !dspectrumHost || !dwindowHost)
+  if (!validStorage(storage) || !dspectrumHost || !dwindowHost ||
+      !validDescriptor(spectrumRank, spectrumShape, spectrumStrides))
     return 366;
   if (storage == 0)
     return tessera_nvidia_istft_backward_broadcast_layout_f32(
@@ -2074,7 +2098,7 @@ extern "C" int tessera_nvidia_streaming_stft_broadcast_layout_f32(
     float outputScale, int onesided) {
   if (!validDigest(digest) || !inputHost || !windowHost || !nextTailHost ||
       (frames > 0 && !outputHost) || (tailSamples > 0 && !tailHost) ||
-      rank <= 0 || rank > 8 || axis < 0 || axis >= rank || tailSamples < 0 ||
+      !shape || !strides || rank <= 0 || rank > 8 || axis < 0 || axis >= rank || tailSamples < 0 ||
       tailSamples >= nfft || nfft <= 0 || hop <= 0 || hop > nfft ||
       frames < 0 || (onesided != 0 && onesided != 1))
     return 316;
@@ -2139,7 +2163,8 @@ extern "C" int tessera_nvidia_stft_backward_broadcast_layout_f32(
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, float forwardScale, int center, int padMode, int onesided) {
   if (!validDigest(digest) || !dyHost || !inputHost || !windowHost ||
-      !dxHost || !dwindowHost || xRank <= 0 || xRank > 8 ||
+      !dxHost || !dwindowHost || !xShape || !xStrides || !dyShape ||
+      !dyStrides || xRank <= 0 || xRank > 8 ||
       dyRank != xRank + 1 || axis < 0 || axis >= xRank || nfft <= 0 ||
       hop <= 0 || (center != 0 && center != 1) ||
       (padMode != 0 && padMode != 1) ||
@@ -2281,7 +2306,9 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_f32(
     const int64_t *windowStrides, int nfft, int hop, float inverseScale,
     int center, int onesided) {
   if (!validDigest(digest) || !dyHost || !spectrumHost || !windowHost ||
-      !dspectrumHost || !dwindowHost || spectrumRank != dyRank + 1 ||
+      !dspectrumHost || !dwindowHost || !dyShape || !dyStrides ||
+      !spectrumShape || !spectrumStrides || dyRank <= 0 || dyRank > 7 ||
+      spectrumRank != dyRank + 1 ||
       outputAxis < 0 || outputAxis >= dyRank || frameAxis < 0 ||
       binAxis != frameAxis + 1 || binAxis >= spectrumRank || nfft <= 0 ||
       hop <= 0 || (center != 0 && center != 1) ||

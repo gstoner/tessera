@@ -533,3 +533,85 @@ def test_native_spectral_convolution_matches_composite(normalization, x_shape, w
     expected = _composite_conv_reference(x, w, normalization)
     np.testing.assert_allclose(np.asarray(result["output"]), expected, rtol=5e-5,
                                atol=5e-5 * max(1.0, float(np.max(np.abs(expected)))))
+
+
+# Every layout entry point is called with a null shape or stride descriptor
+# (Codex review on #842: the compact-layout fast path indexed `strides` before
+# any check). Each must return its invalid-argument status, not crash. Run in a
+# child so a segfault is a failed assertion rather than a dead pytest worker.
+_NULL_DESCRIPTOR_PROBE = r"""
+import ctypes, json, sys
+lib = ctypes.CDLL(sys.argv[1])
+P, I, F = ctypes.c_void_p, ctypes.c_int, ctypes.c_float
+buf = ctypes.create_string_buffer(1 << 16)
+b = ctypes.cast(buf, P)
+L2 = (ctypes.c_int64 * 2)
+L3 = (ctypes.c_int64 * 3)
+shape2, strides2 = L2(2, 64), L2(64, 1)
+shape3, strides3 = L3(2, 7, 9), L3(63, 9, 1)
+wshape, wstrides = (ctypes.c_int64 * 1)(16), (ctypes.c_int64 * 1)(1)
+results = {}
+for label, sh2, st2, sh3, st3 in (("strides", shape2, None, shape3, None),
+                                  ("shape", None, strides2, None, strides3)):
+    calls = {
+        "dct_f32": lambda: lib.tessera_nvidia_dct_policy_layout_f32(
+            None, b, b, I(2), sh2, st2, I(1), I(2), F(1.0)),
+        "stft_f32": lambda: lib.tessera_nvidia_stft_policy_broadcast_layout_f32(
+            None, b, b, b, I(2), sh2, st2, I(1), I(1), wshape, wstrides,
+            I(16), I(8), I(7), F(1.0), I(0), I(0), I(1)),
+        "stft_jvp_f32": lambda: lib.tessera_nvidia_stft_jvp_broadcast_layout_f32(
+            None, b, b, b, b, b, b, I(2), sh2, st2, I(1), I(1), wshape,
+            wstrides, I(16), I(8), I(7), F(1.0), I(0), I(0), I(1)),
+        "istft_f32": lambda: lib.tessera_nvidia_istft_policy_broadcast_layout_f32(
+            None, b, b, b, I(3), sh3, st3, I(2), I(1), wshape, wstrides,
+            I(16), I(8), F(1.0), I(0), I(64), I(1)),
+        "istft_jvp_f32": lambda: lib.tessera_nvidia_istft_jvp_broadcast_layout_f32(
+            None, b, b, b, b, b, b, I(3), sh3, st3, I(2), I(1), wshape,
+            wstrides, I(16), I(8), F(1.0), I(0), I(64), I(1)),
+        "streaming_f32": lambda: lib.tessera_nvidia_streaming_stft_broadcast_layout_f32(
+            None, b, b, b, b, b, I(2), sh2, st2, I(1), I(0), I(1), wshape,
+            wstrides, I(16), I(8), I(7), F(1.0), I(1)),
+        "stft_backward_f32": lambda: lib.tessera_nvidia_stft_backward_broadcast_layout_f32(
+            None, b, b, b, b, b, I(2), sh2, st2, I(1), I(3), sh3, st3, I(1),
+            wshape, wstrides, I(16), I(8), F(1.0), I(0), I(0), I(1)),
+        "istft_backward_f32": lambda: lib.tessera_nvidia_istft_backward_broadcast_layout_f32(
+            None, b, b, b, b, b, I(2), sh2, st2, I(1), I(3), sh3, st3, I(1),
+            I(2), I(1), wshape, wstrides, I(16), I(8), F(1.0), I(0), I(1)),
+        "istft_storage": lambda: lib.tessera_nvidia_istft_policy_broadcast_layout_storage(
+            None, b, b, b, I(3), sh3, st3, I(2), I(1), wshape, wstrides,
+            I(16), I(8), I(1), F(1.0), I(0), I(64), I(1)),
+        "istft_jvp_storage": lambda: lib.tessera_nvidia_istft_jvp_broadcast_layout_storage(
+            None, b, b, b, b, b, b, I(3), sh3, st3, I(2), I(1), wshape,
+            wstrides, I(16), I(8), I(1), F(1.0), I(0), I(64), I(1)),
+        "istft_backward_storage": lambda: lib.tessera_nvidia_istft_backward_broadcast_layout_storage(
+            None, b, b, b, b, b, I(2), sh2, st2, I(1), I(3), sh3, st3, I(1),
+            I(2), I(1), wshape, wstrides, I(16), I(8), I(1), F(1.0), I(0), I(1)),
+    }
+    for name, call in calls.items():
+        results[f"{name}/{label}"] = call()
+print(json.dumps(results))
+"""
+
+_NULL_DESCRIPTOR_STATUS = {
+    "dct_f32": 290, "stft_f32": 300, "stft_jvp_f32": 360, "istft_f32": 310,
+    "istft_jvp_f32": 350, "streaming_f32": 316, "stft_backward_f32": 320,
+    "istft_backward_f32": 330, "istft_storage": 344, "istft_jvp_storage": 356,
+    "istft_backward_storage": 366,
+}
+
+
+def test_layout_entry_points_refuse_null_descriptors():
+    import json
+    import subprocess
+    import sys
+
+    _, lib = _runtime_or_skip()
+    result = subprocess.run([sys.executable, "-c", _NULL_DESCRIPTOR_PROBE, lib._name],
+                            capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, (
+        f"probe died (rc={result.returncode}): {result.stderr[-2000:]}")
+    statuses = json.loads(result.stdout.strip().splitlines()[-1])
+    expected = {f"{name}/{label}": status
+                for name, status in _NULL_DESCRIPTOR_STATUS.items()
+                for label in ("strides", "shape")}
+    assert statuses == expected

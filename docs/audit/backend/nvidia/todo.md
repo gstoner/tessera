@@ -55,6 +55,16 @@ host complex multiply on purpose.
 **Sibling backends:** ROCm follow-up required (below, in its queue); Apple
 and x86 not applicable (their queues state why).
 
+**Corrected 2026-09-25 (Codex review on #842).** The compact-layout fast path
+indexed a caller's strides before any check, so a null shape or stride
+descriptor through the C ABI segfaulted where `packHostLayout` had returned
+the entry point's layout status. Every f32 layout entry point now validates
+its data descriptors first, and the three ISTFT storage wrappers, which size
+buffers from the shape early, validate rank, extents and `outputSamples`. A
+subprocess probe over all eleven entry points died with SIGSEGV before the fix
+and passes after (The-Super-Bear, FFT/spectral device set 144 passed,
+4 skipped).
+
 
 ## ROCm executable-pipeline follow-ups — 2026-09-24
 

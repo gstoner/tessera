@@ -721,6 +721,9 @@ extern "C" int tessera_x86_avx512_stft_bwd_policy_layout_storage(
   const int64_t bins = dy_shape[axis + 1];
   const int64_t expected_bins = onesided ? fft_n / 2 + 1 : fft_n;
   const int64_t pad = center ? fft_n / 2 : 0;
+  // A non-centered frame may extend past the signal; that tail is zero-filled,
+  // never reflected -- pad_mode is a centered-framing policy (tessera.ops.stft
+  // and the reference VJP), so both reflect sites below also test `center`.
   const int64_t padded_samples = std::max(samples + 2 * pad, fft_n);
   if (bins != expected_bins || frames != (padded_samples - fft_n) / hop + 1 ||
       (pad_mode == 1 && center && samples <= pad))
@@ -765,7 +768,7 @@ extern "C" int tessera_x86_avx512_stft_bwd_policy_layout_storage(
     for (int64_t at = 0; at < padded_samples; ++at) {
       int64_t source = at - pad;
       bool present = source >= 0 && source < samples;
-      if (!present && pad_mode == 1) {
+      if (!present && center && pad_mode == 1) {
         source = reflected_index(source, samples);
         present = true;
       }
@@ -797,7 +800,7 @@ extern "C" int tessera_x86_avx512_stft_bwd_policy_layout_storage(
     for (int64_t at = 0; at < padded_samples; ++at) {
       int64_t source = at - pad;
       bool present = source >= 0 && source < samples;
-      if (!present && pad_mode == 1) {
+      if (!present && center && pad_mode == 1) {
         source = reflected_index(source, samples);
         present = true;
       }

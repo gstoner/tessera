@@ -8,6 +8,33 @@ last_updated: 2026-09-25
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## ROCm spectral FFT policy paths — sibling outcome — 2026-09-25
+
+Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`; owner `NVIDIA-FFT-WORKSPACE-1`.
+Two follow-ups are required. Neither was run on sm_120 in the ROCm change.
+
+1. **Unconditional reflect.** The ROCm work found that a non-centered frame
+   past the signal under `pad_mode="reflect"` must be zero-filled
+   (`tessera.ops.stft` and the reference VJP define it so), but the kernels
+   reflected it. `tessera_nvidia_spectral.cu` has the same unconditional
+   `padMode == 1` test in its frame and reverse kernels (the
+   `(source < 0 || source >= samples) && padMode == 1` sites, the reflect
+   candidate count, and the window reduction's `!present && padMode == 1`).
+   Nothing canonicalizes `pad_mode` when `center=False`, so the case is
+   reachable. It needs an sm_120 repro and fix.
+
+   One consequence is specific to CUDA. The `dx` gather tries three
+   single-bounce candidates `{s, -s, 2*samples-2-s}`. A non-centered frame
+   over a signal shorter than half of `n_fft` reflects more than once, so the
+   reverse is also inconsistent with CUDA's own forward there. Limiting reflect
+   to centered framing (where `samples > n_fft/2` is enforced) makes the three
+   candidates complete.
+2. **Algorithm identities.** `_algorithm_identity` still labels the CUDA
+   reverse packages `direct_stored_bin_sm120_v1` and
+   `normalized_overlap_add_direct_dft_sm120_v1`. #842 made both FFT-based, so
+   the labels misdescribe what runs.
+
+
 ## CUDA spectral: measured, then deepened — 2026-09-25
 
 Owner `NVIDIA-FFT-WORKSPACE-1`; sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`.

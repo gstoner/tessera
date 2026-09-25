@@ -382,6 +382,10 @@ bool buildWindowRowMap(int windowRank, const int64_t *windowShape,
   return true;
 }
 
+// pad_mode is a centered-framing policy (tessera.ops.stft, vjp._VJPS["stft"]):
+// only a centered frame reflects at the signal edge. A non-centered frame that
+// runs past the signal is zero-filled, so every reflect site below is gated on
+// `center && padMode == 1`; gating on padMode alone reflected those frames.
 __device__ int reflectIndex(int source, int samples) {
   while (source < 0 || source >= samples)
     source = source < 0 ? -source : 2 * samples - 2 - source;
@@ -401,7 +405,7 @@ __global__ void frameRealPolicy(const float *input, const float *windows,
   int frame = int(rowFrame % frames);
   int row = int(rowFrame / frames);
   int source = frame * hop + local - (center ? nfft / 2 : 0);
-  if ((source < 0 || source >= samples) && padMode == 1)
+  if ((source < 0 || source >= samples) && center && padMode == 1)
     source = reflectIndex(source, samples);
   float value = source >= 0 && source < samples
                     ? input[size_t(row) * samples + source]
@@ -422,7 +426,7 @@ __global__ void frameComplexPolicy(const float *input, const float *windows,
   int frame = int(rowFrame % frames);
   int row = int(rowFrame / frames);
   int source = frame * hop + local - (center ? nfft / 2 : 0);
-  if ((source < 0 || source >= samples) && padMode == 1)
+  if ((source < 0 || source >= samples) && center && padMode == 1)
     source = reflectIndex(source, samples);
   float value = source >= 0 && source < samples
                     ? input[size_t(row) * samples + source]
@@ -444,7 +448,7 @@ __global__ void frameRealJVPPolicy(
   int frame = int(rowFrame % frames);
   int row = int(rowFrame / frames);
   int source = frame * hop + local - (center ? nfft / 2 : 0);
-  if ((source < 0 || source >= samples) && padMode == 1)
+  if ((source < 0 || source >= samples) && center && padMode == 1)
     source = reflectIndex(source, samples);
   float value = source >= 0 && source < samples
                     ? input[size_t(row) * samples + source]
@@ -472,7 +476,7 @@ __global__ void frameComplexJVPPolicy(
   int frame = int(rowFrame % frames);
   int row = int(rowFrame / frames);
   int source = frame * hop + local - (center ? nfft / 2 : 0);
-  if ((source < 0 || source >= samples) && padMode == 1)
+  if ((source < 0 || source >= samples) && center && padMode == 1)
     source = reflectIndex(source, samples);
   float value = source >= 0 && source < samples
                     ? input[size_t(row) * samples + source]
@@ -687,8 +691,9 @@ __global__ void realToComplex(const float *values, cufftComplex *output,
 
 // dx[row, s] = scale * sum over (frame, local) whose source maps to s of
 // G[frame, local] * window[local]. A deterministic gather: a sample is reached
-// directly and, under reflect padding, from at most two mirrored positions
-// (one bounce suffices -- reflect requires samples > pad).
+// directly and, under reflect padding, from at most two mirrored positions.
+// One bounce suffices because reflect applies only to centered frames and a
+// centered reflect requires samples > pad = nfft / 2.
 __global__ void stftBackwardInputFromG(const float *g, const float *windows,
                                        float *dx, int batch, int samples,
                                        int nfft, int hop, int frames,
@@ -700,7 +705,7 @@ __global__ void stftBackwardInputFromG(const float *g, const float *windows,
   int row = int(index / samples);
   int pad = center ? nfft / 2 : 0;
   int candidates[3] = {s, -s, 2 * samples - 2 - s};
-  int count = padMode == 1 ? 3 : 1;
+  int count = center && padMode == 1 ? 3 : 1;
   double result = 0.0;
   for (int c = 0; c < count; ++c) {
     int t = candidates[c];
@@ -766,7 +771,7 @@ __global__ void stftBackwardWindowFromG(
       continue;
     int source = frame * hop + local - pad;
     bool present = source >= 0 && source < samples;
-    if (!present && padMode == 1) {
+    if (!present && center && padMode == 1) {
       source = reflectIndex(source, samples);
       present = true;
     }

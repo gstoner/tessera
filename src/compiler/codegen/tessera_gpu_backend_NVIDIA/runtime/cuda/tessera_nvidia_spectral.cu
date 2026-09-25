@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <list>
+#include <mutex>
 #include <vector>
 
 namespace {
@@ -176,6 +178,18 @@ std::vector<int64_t> compactStrides(int rank, const int64_t *shape) {
   for (int dim = rank - 2; dim >= 0; --dim)
     strides[size_t(dim)] = strides[size_t(dim + 1)] * shape[dim + 1];
   return strides;
+}
+
+// Whether `strides` is the compact row-major layout of `shape` (extent-1
+// dimensions may carry any stride). Such an input needs no host repack.
+bool isCompactLayout(int rank, const int64_t *shape, const int64_t *strides) {
+  int64_t expected = 1;
+  for (int dim = rank - 1; dim >= 0; --dim) {
+    if (shape[dim] != 1 && strides[dim] != expected)
+      return false;
+    expected *= shape[dim];
+  }
+  return true;
 }
 
 template <typename T>
@@ -800,6 +814,166 @@ template <typename... Pointers> void release(Pointers... pointers) {
   ((pointers ? (void)cudaFree(pointers) : (void)0), ...);
 }
 
+// ---------------------------------------------------------------------------
+// Per-device reuse of cuFFT plans and device staging buffers.
+//
+// Measured on the RTX 5070 (benchmarks/baselines/nvidia_spectral_20260925):
+// a warm STFT spent ~2.7 ms per call in five cudaMalloc/cudaFree pairs plus a
+// fresh cuFFT plan (module load + memory query) around ~15 us of kernels. Every
+// entry point here is synchronous (it synchronizes before returning), so one
+// library-wide lock held for the call makes buffer reuse across calls safe.
+// Plans and buffers are keyed by the CUDA device current at use: a plan belongs
+// to its creating context (see tessera_nvidia_fft.cu).
+std::mutex &spectralMutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
+struct CachedPlan {
+  int device;
+  int type;
+  int nfft;
+  int batch;
+  cufftHandle plan;
+  void *workspace;
+};
+
+constexpr size_t kPlanCacheLimit = 16;
+
+std::list<CachedPlan> &planCache() {
+  static std::list<CachedPlan> cache;
+  return cache;
+}
+
+// Caller holds spectralMutex(). 0 and a reusable plan, or makePlan's status
+// (5 when the current device cannot be read).
+int cachedPlan(int batch, int nfft, cufftType type, cufftHandle &plan) {
+  int device = -1;
+  if (cudaGetDevice(&device) != cudaSuccess)
+    return 5;
+  auto &cache = planCache();
+  for (auto it = cache.begin(); it != cache.end(); ++it)
+    if (it->device == device && it->type == int(type) && it->nfft == nfft &&
+        it->batch == batch) {
+      cache.splice(cache.begin(), cache, it);
+      plan = cache.front().plan;
+      return 0;
+    }
+  cufftHandle fresh = 0;
+  void *workspace = nullptr;
+  if (int status = makePlan(batch, nfft, type, fresh, workspace)) {
+    destroyPlan(fresh, workspace);
+    return status;
+  }
+  if (cache.size() >= kPlanCacheLimit) {
+    destroyPlan(cache.back().plan, cache.back().workspace);
+    cache.pop_back();
+  }
+  cache.push_front({device, int(type), nfft, batch, fresh, workspace});
+  plan = fresh;
+  return 0;
+}
+
+struct ScratchBuffer {
+  int device;
+  int slot;
+  void *pointer;
+  size_t bytes;
+};
+
+std::vector<ScratchBuffer> &scratchPool() {
+  static std::vector<ScratchBuffer> pool;
+  return pool;
+}
+
+// Caller holds spectralMutex(). A device buffer of at least `bytes` for
+// (current device, slot), contents undefined; nullptr on CUDA failure. Grows
+// geometrically so a slowly growing workload does not reallocate every call.
+void *scratch(int slot, size_t bytes) {
+  int device = -1;
+  if (cudaGetDevice(&device) != cudaSuccess)
+    return nullptr;
+  bytes = std::max<size_t>(bytes, 1);
+  for (auto &buffer : scratchPool()) {
+    if (buffer.device != device || buffer.slot != slot)
+      continue;
+    if (buffer.bytes >= bytes)
+      return buffer.pointer;
+    size_t grown = std::max(bytes, buffer.bytes * 2);
+    cudaFree(buffer.pointer);
+    buffer.pointer = nullptr;
+    buffer.bytes = 0;
+    if (cudaMalloc(&buffer.pointer, grown) != cudaSuccess)
+      return nullptr;
+    buffer.bytes = grown;
+    return buffer.pointer;
+  }
+  void *pointer = nullptr;
+  if (cudaMalloc(&pointer, bytes) != cudaSuccess)
+    return nullptr;
+  scratchPool().push_back({device, slot, pointer, bytes});
+  return pointer;
+}
+
+// FFT-based DCT-II / DCT-III (Makhoul), unnormalized like scipy.fft.dct:
+//   DCT-II : v = even samples then reversed odd samples; X[k] =
+//            2 Re(FFT(v)[k] e^{-i pi k / 2N}).
+//   DCT-III: Z[k] = (x[k] - i x[N-k]) e^{i pi k / 2N}, x[N] = 0;
+//            z = unnormalized inverse FFT(Z); y[2m] = z[m], y[2m+1] = z[N-1-m].
+// Replaces an O(N^2) double-precision direct sum (11.5 ms per 64x1024 call,
+// ~99% of the op, on the RTX 5070, whose fp64 rate is 1/64 of fp32).
+__device__ int makhoulIndex(int m, int n) {
+  int half = (n + 1) / 2;
+  return m < half ? 2 * m : 2 * (n - 1 - m) + 1;
+}
+
+__global__ void dct2Reorder(const float *input, cufftComplex *values,
+                            int batch, int n) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * n)
+    return;
+  size_t row = index / n;
+  int m = int(index % n);
+  values[index] = make_cuComplex(input[row * n + makhoulIndex(m, n)], 0.0f);
+}
+
+__global__ void dct2Twiddle(const cufftComplex *values, float *output,
+                            int batch, int n, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * n)
+    return;
+  int k = int(index % n);
+  float sine, cosine;
+  sincospif(float(k) / float(2 * n), &sine, &cosine);
+  output[index] =
+      2.0f * (values[index].x * cosine + values[index].y * sine) * scale;
+}
+
+__global__ void dct3Prepare(const float *input, cufftComplex *values,
+                            int batch, int n) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * n)
+    return;
+  size_t row = index / n;
+  int k = int(index % n);
+  float xk = input[row * n + k];
+  float xnk = k == 0 ? 0.0f : input[row * n + (n - k)];
+  float sine, cosine;
+  sincospif(float(k) / float(2 * n), &sine, &cosine);
+  values[index] = make_cuComplex(xk * cosine + xnk * sine,
+                                 xk * sine - xnk * cosine);
+}
+
+__global__ void dct3Scatter(const cufftComplex *values, float *output,
+                            int batch, int n, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * n)
+    return;
+  size_t row = index / n;
+  int m = int(index % n);
+  output[row * n + makhoulIndex(m, n)] = values[index].x * scale;
+}
+
 bool checkedProduct(size_t a, size_t b, size_t &product) {
   if (a && b > std::numeric_limits<size_t>::max() / a)
     return false;
@@ -830,9 +1004,7 @@ extern "C" int tessera_nvidia_dct_policy_layout_f32(
       rank > 8 || axis < 0 || axis >= rank || dctType < 1 || dctType > 4 ||
       (dctType == 1 && shape[axis] < 2))
     return 290;
-  std::vector<float> contiguous;
-  if (!packHostLayout(inputHost, contiguous, rank, shape, strides) ||
-      shape[axis] > INT32_MAX)
+  if (shape[axis] > INT32_MAX)
     return 291;
   int64_t outer = 0, inner = 0;
   int batch = 0;
@@ -840,30 +1012,73 @@ extern "C" int tessera_nvidia_dct_policy_layout_f32(
   if (!foldedBatch(rank, shape, axis, outer, inner, batch, batchShape))
     return 291;
   int length = int(shape[axis]);
-  std::vector<float> packed(contiguous.size()), output(contiguous.size());
-  packAxis(contiguous.data(), packed.data(), outer, length, inner);
-  float *deviceInput = nullptr, *deviceOutput = nullptr;
-  cudaError_t status = cudaMalloc(&deviceInput, packed.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceOutput, output.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceInput, packed.data(), packed.size() * sizeof(float),
-                        cudaMemcpyHostToDevice);
-  if (status == cudaSuccess) {
-    dctDirectPolicy<<<unsigned((packed.size() + kThreads - 1) / kThreads),
-                      kThreads>>>(deviceInput, deviceOutput, batch, length,
-                                  dctType, outputScale);
+  const size_t elements = size_t(batch) * size_t(length);
+  // Host staging only where the layout needs it: a compact input is read in
+  // place, and with the transform axis innermost (inner == 1) the axis fold
+  // and unfold are identities, so the device reads and writes the caller's
+  // buffers directly (measured ~1.4 ms of host passes per 64x1024 call).
+  std::vector<float> contiguous, packed, output;
+  const float *staged = inputHost;
+  if (!isCompactLayout(rank, shape, strides)) {
+    if (!packHostLayout(inputHost, contiguous, rank, shape, strides))
+      return 291;
+    staged = contiguous.data();
+  }
+  if (inner != 1) {
+    packed.resize(elements);
+    packAxis(staged, packed.data(), outer, length, inner);
+    staged = packed.data();
+    output.resize(elements);
+  }
+  float *result = inner != 1 ? output.data() : outputHost;
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceInput = static_cast<float *>(scratch(0, elements * sizeof(float)));
+  auto *deviceOutput = static_cast<float *>(scratch(1, elements * sizeof(float)));
+  if (!deviceInput || !deviceOutput)
+    return 292;
+  cudaError_t status = cudaMemcpy(deviceInput, staged,
+                                  elements * sizeof(float),
+                                  cudaMemcpyHostToDevice);
+  const unsigned blocks = unsigned((elements + kThreads - 1) / kThreads);
+  if (status == cudaSuccess && (dctType == 2 || dctType == 3)) {
+    auto *values = static_cast<cufftComplex *>(
+        scratch(2, elements * sizeof(cufftComplex)));
+    cufftHandle plan = 0;
+    if (!values || cachedPlan(batch, length, CUFFT_C2C, plan))
+      return 292;
+    if (dctType == 2)
+      dct2Reorder<<<blocks, kThreads>>>(deviceInput, values, batch, length);
+    else
+      dct3Prepare<<<blocks, kThreads>>>(deviceInput, values, batch, length);
+    status = cudaGetLastError();
+    if (status == cudaSuccess &&
+        cufftExecC2C(plan, values, values,
+                     dctType == 2 ? CUFFT_FORWARD : CUFFT_INVERSE) !=
+            CUFFT_SUCCESS)
+      return 292;
+    if (status == cudaSuccess) {
+      if (dctType == 2)
+        dct2Twiddle<<<blocks, kThreads>>>(values, deviceOutput, batch, length,
+                                          outputScale);
+      else
+        dct3Scatter<<<blocks, kThreads>>>(values, deviceOutput, batch, length,
+                                          outputScale);
+      status = cudaGetLastError();
+    }
+  } else if (status == cudaSuccess) {
+    dctDirectPolicy<<<blocks, kThreads>>>(deviceInput, deviceOutput, batch,
+                                          length, dctType, outputScale);
     status = cudaGetLastError();
   }
+  // The synchronous copy back orders after the kernels and reports their
+  // errors, so no separate device synchronize is needed.
   if (status == cudaSuccess)
-    status = cudaDeviceSynchronize();
-  if (status == cudaSuccess)
-    status = cudaMemcpy(output.data(), deviceOutput,
-                        output.size() * sizeof(float), cudaMemcpyDeviceToHost);
-  release(deviceInput, deviceOutput);
+    status = cudaMemcpy(result, deviceOutput, elements * sizeof(float),
+                        cudaMemcpyDeviceToHost);
   if (status != cudaSuccess)
     return 292;
-  unpackAxis(output.data(), outputHost, outer, length, inner);
+  if (inner != 1)
+    unpackAxis(output.data(), outputHost, outer, length, inner);
   return 0;
 }
 

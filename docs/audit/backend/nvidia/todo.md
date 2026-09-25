@@ -57,6 +57,10 @@ device refusal, but 3 was already the library's generic "a CUDA/cuFFT call
 failed during execution" status, so the runtime reported every such failure as
 a foreign-device plan. v4 gives the refusal its own status, **4**; 3 keeps its
 meaning and its generic message, and a host-only test pins that distinction.
+A failed `cudaGetDevice` inside execute is also status 3, not 4 (Codex review
+on #841); an `LD_PRELOAD` shim over the library's dynamic `cudaGetDevice`
+drives both branches on the RTX 5070 -- which also exercises the
+device-mismatch refusal on hardware, unreachable on a one-GPU box otherwise.
 
 ## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
 

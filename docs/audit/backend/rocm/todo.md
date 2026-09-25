@@ -7,6 +7,47 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## gfx1201: native spectral JVP admitted — 2026-09-25
+
+Owner `TSOL-POLICY-PHYS-1`; sync `ROCM-SPECTRAL-JVP-GFX1201-2026-09-25`. This
+closes the "gfx1201 JVP refused" item left open by
+`ROCM-SPECTRAL-FFT-POLICY-2026-09-25`.
+
+`JitFn.native_jvp` refused every ROCm chip but gfx1151 for every family.
+`native_jvp.py` pinned ROCm to gfx1151, the spectral planner lowered for
+`rocm_gfx1151`, and `run_rocm_istft_jvp` required a gfx1151 image. Now:
+
+- **Admission is per (target, architecture, family)**
+  (`native_jvp.architecture_admits`). gfx1151 keeps every family, and gfx1201
+  is admitted for `spectral_compound` only.
+- **Everything else still fails closed.** Every other family on gfx1201, and
+  gfx1200/gfx1250, is refused at the jit gate, at artifact build, and at
+  launch validation.
+- **Per-chip packages.** The spectral package lowers for `rocm_<chip>` and
+  names that chip in its consumer label; gfx1151 artifacts are byte-identical
+  to before.
+- **ISTFT window JVP.** It now requires that the image, the contract and the
+  host all name the same chip.
+
+**Evidence** (`benchmarks/baselines/rocm_spectral_20260925/gfx1201_jvp_after.json`):
+gfx1201 STFT JVP 11.5 ms and ISTFT JVP 5.0 ms, both previously refused.
+
+**Tests.**
+
+- **gfx1201 (Tajasarus):** the spectral product rule, the ISTFT window product
+  and the new STFT linearization pass. The refusal test confirms `_rocm_sum`
+  is still refused. The ROCm spectral gate gives 359 passed, 8 skipped,
+  1 failed.
+- **gfx1151 (Princess-Luna):** the gate gives 364 passed, 4 skipped.
+
+The gfx1201 failure is pre-existing on `main` (`73f13759`):
+`test_every_declared_rocm_vjp_family_records_an_exact_certificate` asserts
+`device_arch == "gfx1151"` for VJP certificate rows but does not skip on
+gfx1201. It is a VJP test, untouched here.
+
+**Sibling backends:** not applicable. NVIDIA and x86 JVP admission is
+single-architecture and unchanged.
+
 ## ROCm spectral STFT/ISTFT on FFT child plans — 2026-09-25
 
 Owner `TSOL-POLICY-PHYS-1`; sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. This

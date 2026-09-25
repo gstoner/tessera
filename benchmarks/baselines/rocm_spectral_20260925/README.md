@@ -88,3 +88,12 @@ On both chips the one failure is the pre-existing
 renamed in `b59da796` (2026-09-13), and it stops with an `AttributeError`
 before reaching its spectral calls. Those spectral tests run directly in the
 same gate and pass.
+
+## gfx1201 JVP admitted (2026-09-25, `dbf7af88`)
+
+`gfx1201_jvp_after.json` (Tajasarus, 21 repeats) records the two rows that
+were refused above: STFT JVP **11.5 ms**, ISTFT JVP **5.0 ms**, image
+`gfx1201`. The native JVP now admits the spectral family on gfx1201
+(`ROCM-SPECTRAL-JVP-GFX1201-2026-09-25`). It was recorded with the benchmark
+from before the cold-timing fix, so its `cold_ms` is a second call as well.
+

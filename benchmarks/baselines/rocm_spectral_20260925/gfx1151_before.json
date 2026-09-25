@@ -1,0 +1,167 @@
+{
+  "schema": "tessera.rocm_spectral_benchmark.v1",
+  "host": "Princess-Luna",
+  "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "device": "gfx1151",
+  "image_arch": "gfx1151",
+  "rows": [
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "forward",
+      "latency_source": "host_wall_synchronized",
+      "max_rel_error": 0.0,
+      "ok": true,
+      "cold_ms": 1.56354,
+      "latency_ms": 1.473935,
+      "p10_ms": 1.4552934,
+      "p90_ms": 1.5379622,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "forward",
+      "latency_source": "host_wall_synchronized",
+      "max_rel_error": 6.85476296177122e-08,
+      "ok": true,
+      "cold_ms": 2.2609529999999998,
+      "latency_ms": 1.998994,
+      "p10_ms": 1.997674,
+      "p90_ms": 2.051246,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    },
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_jvp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 1045.0715539999999,
+      "latency_ms": 1047.134605,
+      "p10_ms": 1045.4120954,
+      "p90_ms": 1048.8678946,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    },
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_vjp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 11065.060308,
+      "latency_ms": 11058.98244,
+      "p10_ms": 11049.036724,
+      "p90_ms": 11063.6645008,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_jvp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 17.980014999999998,
+      "latency_ms": 18.176443,
+      "p10_ms": 17.4931414,
+      "p90_ms": 18.3834718,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_vjp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1151",
+      "image_arch": "gfx1151",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 929.0384329999999,
+      "latency_ms": 938.280679,
+      "p10_ms": 933.703951,
+      "p90_ms": 949.2822494,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    }
+  ]
+}

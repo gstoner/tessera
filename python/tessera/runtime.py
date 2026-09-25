@@ -20891,7 +20891,7 @@ def _load_nvidia_fft_runtime() -> ctypes.CDLL | None:
     lib.tessera_nvidia_fft_package_abi.argtypes = []
     lib.tessera_nvidia_fft_package_abi.restype = ctypes.c_char_p
     if not hasattr(lib, "tessera_nvidia_fft_current_device"):
-        return None  # predates the v3 device-bound plan contract
+        return None  # predates the device-bound plan contract
     lib.tessera_nvidia_fft_current_device.argtypes = [ctypes.POINTER(ctypes.c_int)]
     lib.tessera_nvidia_fft_current_device.restype = ctypes.c_int
     lib.tessera_nvidia_fft_plan_create_c2c_f32.argtypes = [
@@ -21022,7 +21022,7 @@ def _load_nvidia_fft_runtime() -> ctypes.CDLL | None:
             ctypes.c_int,
         ]
         lib.tessera_nvidia_streaming_stft_broadcast_layout_f32.restype = ctypes.c_int
-    if lib.tessera_nvidia_fft_package_abi() != b"tessera.nvidia.cuda_fft_workspace.v3":
+    if lib.tessera_nvidia_fft_package_abi() != b"tessera.nvidia.cuda_fft_workspace.v4":
         return None
     _nvidia_fft_runtime = lib
     return lib
@@ -21061,7 +21061,7 @@ def _nvidia_fft_c2c_rows(rows: Any, inverse: bool, np: Any) -> Any:
             output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
             workspace, ctypes.c_size_t(workspace_byte_count),
             ctypes.c_int(bool(inverse)))
-    if rc == 3:
+    if rc == 4:  # its own status: 3 is a CUDA/cuFFT execution failure
         raise RuntimeError("NVIDIA FFT plan belongs to another CUDA device")
     if rc != 0:
         raise RuntimeError(f"NVIDIA FFT execution failed rc={rc}")
@@ -21115,7 +21115,7 @@ def _nvidia_fft_real_rows(rows: Any, inverse: bool, logical_n: int | None,
             plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
             output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
             workspace, ctypes.c_size_t(workspace_byte_count))
-    if rc == 3:
+    if rc == 4:  # its own status: 3 is a CUDA/cuFFT execution failure
         raise RuntimeError(f"NVIDIA {kind.upper()} plan belongs to another CUDA device")
     if rc != 0:
         raise RuntimeError(f"NVIDIA {kind.upper()} execution failed rc={rc}")

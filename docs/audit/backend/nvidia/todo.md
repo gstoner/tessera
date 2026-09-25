@@ -31,8 +31,8 @@ knob forwarding are confined to the ROCm WMMA generator.
 Owner `NVIDIA-FFT-WORKSPACE-1`; sync `ROCM-EXEC-PIPELINE-2026-09-24`. Closes
 the follow-up above. `libtessera_nvidia_fft` moves to
 `tessera.nvidia.cuda_fft_workspace.v3`: each cuFFT plan records the CUDA device
-current at creation, execute returns 3 without running when the current
-device differs, and `tessera_nvidia_fft_current_device` reports the device
+current at creation, execute refuses without running when the current device
+differs, and `tessera_nvidia_fft_current_device` reports the device
 through the library's own CUDA runtime. `_nvidia_fft_plans` keys on
 `(device, kind, batch, length)` with the device read through that library;
 a v2 library is refused as unloadable. **Shared contracts:** the NVIDIA FFT
@@ -51,6 +51,16 @@ key. **Host note:** both Super-Bear build trees were re-pointed from CUDA
 `build/` had a stale cached compiler identity); caches backed up as
 `CMakeCache.txt.pre-cuda134-20260925`. **Sibling backends:** ROCm fixed in
 #835; Apple and x86 not applicable (no per-device FFT plan cache).
+
+**Corrected 2026-09-25 (Codex review on #840).** v3 returned **3** for the
+device refusal, but 3 was already the library's generic "a CUDA/cuFFT call
+failed during execution" status, so the runtime reported every such failure as
+a foreign-device plan. v4 gives the refusal its own status, **4**; 3 keeps its
+meaning and its generic message, and a host-only test pins that distinction.
+A failed `cudaGetDevice` inside execute is also status 3, not 4 (Codex review
+on #841); an `LD_PRELOAD` shim over the library's dynamic `cudaGetDevice`
+drives both branches on the RTX 5070 -- which also exercises the
+device-mismatch refusal on hardware, unreachable on a one-GPU box otherwise.
 
 ## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
 

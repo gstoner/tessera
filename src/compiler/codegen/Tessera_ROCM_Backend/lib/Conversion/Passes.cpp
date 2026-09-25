@@ -89,9 +89,11 @@ struct ROCMExecutablePipelineOptions
   Option<int> ldsPadDwords{
       *this, "lds-pad-dwords",
       llvm::cl::desc("LDS-staged body: dwords of row padding to break the "
-                     "bank conflict on the fragment read. Default 4, measured "
-                     "at 2048 cubed (ROCM-LDS-BANKPAD-1)"),
-      llvm::cl::init(4)};
+                     "bank conflict on the fragment read. Default 1, the "
+                     "generator's default: moved 4 -> 1 on 2026-09-20 after "
+                     "1 beat 4 on both ROCm parts (ROCM-LDS-BANKPAD-1, "
+                     "wmma-fragment-layout.md 10u/10v)"),
+      llvm::cl::init(1)};
   Option<int> schedGroups{
       *this, "sched-groups",
       llvm::cl::desc("rocdl.sched.group.barrier granularity for the WMMA "
@@ -306,7 +308,7 @@ static std::unique_ptr<Pass> configuredPass(std::unique_ptr<Pass> pass,
 static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool viaTile, StringRef staging, bool depthCooperative = false,
                                int ldsWavesM = 2, int ldsWavesN = 2, int kUnroll = 1,
-                               int schedGroups = 0, int ldsPadDwords = 4,
+                               int schedGroups = 0, int ldsPadDwords = 1,
                                int ldsCopyWidth = 1,
                                bool ldsCopyElide = false,
                                int ldsCopyDepth = 1,

@@ -1193,6 +1193,27 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="GFX1201-PARITY-2026-09-17",
     ),
     DiagnosticCode(
+        code="ROCM_CANONICAL_LDS_KNOB_UNSUPPORTED",
+        pass_origin="GenerateWMMAGemmKernel",
+        severity="error",
+        summary=(
+            "a schedule knob was requested for the canonical LDS comparison "
+            "body, which implements none of them."
+        ),
+        fix_hint=(
+            "Graph-input matmul with canonical-staging=lds reaches the "
+            "one-wave, unpadded canonical LDS body (via-tile=false). It "
+            "ignores lds-waves-m/n, k-unroll, sched-groups, lds-pad-dwords, "
+            "lds-copy-width/elide/depth, lds-double-buffer, "
+            "lds-sched-valu-per-mma and lds-b-row-major, so any value other "
+            "than the default would name a kernel it cannot emit. Use the "
+            "typed LDS body (tile input, via-tile=true), which consumes them, "
+            "or leave them at their defaults."
+        ),
+        spec="docs/backends/rocm/wmma-fragment-layout.md",
+        sprint="ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24",
+    ),
+    DiagnosticCode(
         code="SCHEDULED_MATMUL_DTYPE_CONTRACT_UNSUPPORTED",
         pass_origin="tessera.compiler.scheduled_matmul",
         severity="error",

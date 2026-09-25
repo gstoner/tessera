@@ -258,6 +258,12 @@ def test_gfx1201_admits_only_the_spectral_family():
         assert not architecture_admits("rocm", "gfx1201", family)
     for chip in ("gfx1200", "gfx1250"):
         assert not architecture_admits("rocm", chip, "spectral_compound")
+    # The widening is ROCm-only: x86 and sm120 stay single-architecture, and
+    # Apple has no native JVP target, so no family is admitted there.
+    assert not architecture_admits("x86", "gfx1201", "spectral_compound")
+    assert not architecture_admits("nvidia_sm120", "sm100", "spectral_compound")
+    for target in ("apple_gpu", "apple_cpu"):
+        assert not architecture_admits(target, "apple7", "spectral_compound")
     child = _reduce_child()
     with pytest.raises(ValueError, match="'gfx1201' has no native reduce JVP evidence"):
         build_native_jvp_artifact(

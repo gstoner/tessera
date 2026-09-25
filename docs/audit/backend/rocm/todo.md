@@ -45,8 +45,18 @@ The gfx1201 failure is pre-existing on `main` (`73f13759`):
 `device_arch == "gfx1151"` for VJP certificate rows but does not skip on
 gfx1201. It is a VJP test, untouched here.
 
-**Sibling backends:** not applicable. NVIDIA and x86 JVP admission is
-single-architecture and unchanged.
+**Sibling backends** (shared contract changed: `NativeJVPArtifact` admission
+now goes through `native_jvp.architecture_admits`):
+- **NVIDIA: not applicable.** sm120 admission is single-architecture and
+  unchanged; the per-chip map has no NVIDIA entry.
+- **x86: not applicable.** Same: zen5_avx512 only, no per-chip entry.
+- **Apple: not applicable.** Apple has no native JVP target. `JitFn.native_jvp`
+  rejects every target outside x86/ROCm/sm120 before admission runs, and
+  `architecture_admits` returns false for any Apple target because Apple
+  appears in neither map. Apple forward-mode AD runs on its own lanes, not
+  through this artifact.
+
+`test_gfx1201_admits_only_the_spectral_family` pins all three outcomes.
 
 ## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
 

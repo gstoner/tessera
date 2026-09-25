@@ -8,6 +8,15 @@ last_updated: 2026-09-25
 
 # Apple compiler, exact-device, and performance plan
 
+## gfx1201 native spectral JVP — sibling outcome — 2026-09-25
+
+Sync `ROCM-SPECTRAL-JVP-GFX1201-2026-09-25` (#850). **Not applicable.** The
+change widens `NativeJVPArtifact` admission to gfx1201 for
+`spectral_compound`. Apple has no native JVP target: `JitFn.native_jvp`
+accepts only x86, ROCm and sm120, and `native_jvp.architecture_admits` has no
+Apple entry. The shared unit test asserts that Apple targets are never
+admitted.
+
 ## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory

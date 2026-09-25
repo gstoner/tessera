@@ -61,6 +61,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 
 #include <optional>
 
@@ -1947,6 +1948,23 @@ void emitCanonicalLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   b.create<gpu::ReturnOp>(loc);
 }
 
+// Schedule-knob defaults, shared by the option declarations below and by the
+// canonical LDS body's guard: that body implements none of these knobs, so it
+// refuses any value that differs from them rather than silently emitting its
+// one fixed kernel. Keep these equal to tessera-rocm-executable's defaults
+// (Passes.cpp) and ROCMExecutablePipeline's (rocm_pipeline.py), which serialize
+// every knob at every input level.
+constexpr int kDefaultLdsWaves = 2;
+constexpr int kDefaultKUnroll = 1;
+constexpr int kDefaultSchedGroups = 0;
+constexpr int kDefaultLdsPadDwords = 1;
+constexpr int kDefaultLdsCopyWidth = 1;
+constexpr bool kDefaultLdsCopyElide = false;
+constexpr int kDefaultLdsCopyDepth = 1;
+constexpr bool kDefaultLdsDoubleBuffer = false;
+constexpr int kDefaultLdsSchedValuPerMma = 0;
+constexpr bool kDefaultLdsBRowMajor = false;
+
 struct GenerateWMMAGemmKernelPass
     : PassWrapper<GenerateWMMAGemmKernelPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateWMMAGemmKernelPass)
@@ -1983,14 +2001,14 @@ struct GenerateWMMAGemmKernelPass
                       llvm::cl::desc("typed body: full 16-wide K slabs issued "
                                      "per loop iteration (latency hiding; 1 = "
                                      "the established one-slab loop)"),
-                      llvm::cl::init(1)};
+                      llvm::cl::init(kDefaultKUnroll)};
   Option<int> schedGroups{
       *this, "sched-groups",
       llvm::cl::desc("rocdl.sched.group.barrier granularity for the panel: "
                      "how many (vmem_read, mfma_wmma) groups the body is "
                      "described as. 0 emits nothing and keeps LLVM's default "
                      "drained schedule (ROCM-SCHED-GROUP-1)"),
-      llvm::cl::init(0)};
+      llvm::cl::init(kDefaultSchedGroups)};
   Option<int> ldsPadDwords{
       *this, "lds-pad-dwords",
       llvm::cl::desc("LDS-staged typed body: dwords of padding added to each "
@@ -2012,7 +2030,7 @@ struct GenerateWMMAGemmKernelPass
                      "issue depth; the value it replaces was right for the "
                      "wrong reason and is now right for a measured one (10u, "
                      "10v)"),
-      llvm::cl::init(1)};
+      llvm::cl::init(kDefaultLdsPadDwords)};
   Option<bool> ldsBRowMajor{
       *this, "lds-b-row-major",
       llvm::cl::desc(
@@ -2026,7 +2044,7 @@ struct GenerateWMMAGemmKernelPass
           "the transpose. Also drops B's padding, since the strided column "
           "read that needed it is gone. See "
           "docs/backends/rocm/wmma-fragment-layout.md 10s"),
-      llvm::cl::init(false)};
+      llvm::cl::init(kDefaultLdsBRowMajor)};
   Option<int> ldsSchedValuPerMma{
       *this, "lds-sched-valu-per-mma",
       llvm::cl::desc(
@@ -2040,7 +2058,7 @@ struct GenerateWMMAGemmKernelPass
           "of the current step's MMA -- without it the staging must complete "
           "before the barrier the MMA reads through. 0 = emit nothing. "
           "See docs/backends/rocm/wmma-fragment-layout.md 10o"),
-      llvm::cl::init(0)};
+      llvm::cl::init(kDefaultLdsSchedValuPerMma)};
   Option<bool> ldsDoubleBuffer{
       *this, "lds-double-buffer",
       llvm::cl::desc(
@@ -2052,7 +2070,7 @@ struct GenerateWMMAGemmKernelPass
           "overlaps nothing. Costs 2x LDS and saves one barrier per iteration "
           "(the two buffers are never read and written in the same step). "
           "See docs/backends/rocm/wmma-fragment-layout.md 10n"),
-      llvm::cl::init(false)};
+      llvm::cl::init(kDefaultLdsDoubleBuffer)};
   Option<int> ldsCopyDepth{
       *this, "lds-copy-depth",
       llvm::cl::desc(
@@ -2065,7 +2083,7 @@ struct GenerateWMMAGemmKernelPass
           "trip count (16/width here), which is compile-time, so no remainder "
           "loop is needed. See docs/backends/rocm/wmma-fragment-layout.md "
           "10j.6"),
-      llvm::cl::init(1)};
+      llvm::cl::init(kDefaultLdsCopyDepth)};
   Option<bool> ldsCopyElide{
       *this, "lds-copy-elide",
       llvm::cl::desc("CEILING PROBE ONLY -- emits a DELIBERATELY WRONG kernel. "
@@ -2076,7 +2094,7 @@ struct GenerateWMMAGemmKernelPass
                      "any copy optimisation can buy. Never a production path: "
                      "its own test asserts the result is WRONG "
                      "(ROCM-LDS-STAGE-VECTOR-1, wmma-fragment-layout.md 10j.1)"),
-      llvm::cl::init(false)};
+      llvm::cl::init(kDefaultLdsCopyElide)};
   Option<int> ldsCopyWidth{
       *this, "lds-copy-width",
       llvm::cl::desc("LDS staging copy: elements per thread per step. 1 is "
@@ -2085,15 +2103,15 @@ struct GenerateWMMAGemmKernelPass
                      "13-49% REGRESSION because vector.maskedload expands to "
                      "per-element branches rather than a wide load "
                      "(ROCM-LDS-STAGE-VECTOR-1)"),
-      llvm::cl::init(1)};
+      llvm::cl::init(kDefaultLdsCopyWidth)};
   Option<int> ldsWavesM{*this, "lds-waves-m",
                         llvm::cl::desc("LDS-staged typed body: waves along M "
                                        "per workgroup"),
-                        llvm::cl::init(2)};
+                        llvm::cl::init(kDefaultLdsWaves)};
   Option<int> ldsWavesN{*this, "lds-waves-n",
                         llvm::cl::desc("LDS-staged typed body: waves along N "
                                        "per workgroup"),
-                        llvm::cl::init(2)};
+                        llvm::cl::init(kDefaultLdsWaves)};
 
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
@@ -2810,6 +2828,41 @@ struct GenerateWMMAGemmKernelPass
           op->emitError("generate-wmma-gemm-kernel: canonical LDS comparison "
                         "supports one-wave f16/bf16/int8 GEMM without a fused "
                         "epilogue");
+          return signalPassFailure();
+        }
+        // This body is one fixed wave with an unpadded one-slab copy; it
+        // takes none of the schedule knobs. A request that sets one is a
+        // request for a different kernel, so it is refused by name rather
+        // than answered with this one (Decision #21a).
+        SmallVector<std::string> ignored;
+        auto note = [&](bool differs, StringRef knob, auto value) {
+          if (differs)
+            ignored.push_back((Twine(knob) + "=" + Twine(value)).str());
+        };
+        note(ldsWavesM != kDefaultLdsWaves, "lds-waves-m", int(ldsWavesM));
+        note(ldsWavesN != kDefaultLdsWaves, "lds-waves-n", int(ldsWavesN));
+        note(kUnroll != kDefaultKUnroll, "k-unroll", int(kUnroll));
+        note(schedGroups != kDefaultSchedGroups, "sched-groups",
+             int(schedGroups));
+        note(ldsPadDwords != kDefaultLdsPadDwords, "lds-pad-dwords",
+             int(ldsPadDwords));
+        note(ldsCopyWidth != kDefaultLdsCopyWidth, "lds-copy-width",
+             int(ldsCopyWidth));
+        note(ldsCopyElide != kDefaultLdsCopyElide, "lds-copy-elide",
+             ldsCopyElide ? "true" : "false");
+        note(ldsCopyDepth != kDefaultLdsCopyDepth, "lds-copy-depth",
+             int(ldsCopyDepth));
+        note(ldsDoubleBuffer != kDefaultLdsDoubleBuffer, "lds-double-buffer",
+             ldsDoubleBuffer ? "true" : "false");
+        note(ldsSchedValuPerMma != kDefaultLdsSchedValuPerMma,
+             "lds-sched-valu-per-mma", int(ldsSchedValuPerMma));
+        note(ldsBRowMajor != kDefaultLdsBRowMajor, "lds-b-row-major",
+             ldsBRowMajor ? "true" : "false");
+        if (!ignored.empty()) {
+          op->emitError("ROCM_CANONICAL_LDS_KNOB_UNSUPPORTED: the canonical "
+                        "LDS comparison body is one fixed wave and implements "
+                        "none of the schedule knobs; requested ")
+              << llvm::join(ignored, " ");
           return signalPassFailure();
         }
         gpuFunc->setAttr("tessera.rocm.lds_bytes",

@@ -1,11 +1,53 @@
 ---
-last_updated: 2026-09-23
+last_updated: 2026-09-24
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## ROCm executable-pipeline follow-ups (#834–#838) — 2026-09-24
+
+Sync `ROCM-EXEC-PIPELINE-2026-09-24`. Five PRs that followed the #833 review, each owned separately:
+
+- **#834, stale fixtures + pad default** — owner ROCM-LDS-BANKPAD-1.
+  `typed_matmul_lds_staged.mlir` still expected the withdrawn 4-dword LDS pad
+  and `tessera-rocm-executable` still defaulted `lds-pad-dwords` to 4 (option
+  and `addFamilyGenerator` parameter) after 61bdb2b5 moved the generator to 1;
+  two phase2 `*_invalid.mlir` fixtures expected verifier text a98f46c0
+  reworded (each re-checked to be rejected for its intended reason).
+- **#835, spectral plan caches** — owner COMPILER-DEVEX-1 / ROCM-FFT-PREBUILT.
+  `_rocm_plan` and the composite-plan cache were keyed without the image that
+  created the plan, so a process switching between gfx1151 and gfx1201 could
+  hand one chip's plan to the other's image; both now key on the image and
+  composite callers pass their own.
+- **#836, graph-input matmul knobs** — owners ROCM-LDS-BANKPAD-1,
+  ROCM-LDS-STAGE-VECTOR-1, ROCM-SCHED-GROUP-1. The graph branch dropped every
+  explicit LDS/schedule knob; it now forwards them, the register body consumes
+  `k-unroll`/`sched-groups`, and the canonical LDS comparison body (which
+  implements none) refuses non-default knobs as
+  `ROCM_CANONICAL_LDS_KNOB_UNSUPPORTED`.
+- **#837 + #838, error printed on success** — owner COMPILER-DEVEX-1. The
+  pipeline ran upstream `convert-vector-to-llvm` only for mask
+  materialization; its GPU-unaware partial LLVM conversion printed a workgroup
+  address-space `error:` on every LDS kernel (typed body on both chips, graph
+  canonical body) while exiting 0. `tessera-rocm-lower-vector-to-vector` now
+  runs only the vector-to-vector stage; all 15 `output=binary` compiles in both
+  lit suites are byte-identical before and after. #838 registered the pass in
+  C++, the pipeline registry and pass metadata.
+
+**Validation.** Every PR rebuilt and re-ran `tests/tessera-ir` and the ROCm
+backend suite on Tajasarus (`build/` NDEBUG and `build-assertions/`, LLVM
+23.1.1 assertions ON) and Princess-Luna, 0 failures in each; the gfx1151
+canonical LDS GEMM stayed correct on 6/6 cases and LDS device tests passed on
+both chips. **Missing evidence:** a real mid-process device switch (#835) —
+every box has one GPU of each vendor, so only unit tests cover it.
+**Pre-existing, unchanged:** a graph-input *register* matmul on gfx1201 aborts
+in LLVM (`Cannot select … wmma … 16x16x16`, the general body emits the gfx11
+instruction), and a tile-input *register* compile of
+`typed_matmul_lds_staged.mlir` for gfx1201 fails; the harness already treats
+the first as a gfx1201 refusal.
 
 ## Review fixes: per-chip spectral composite, Quark W4A4 on both chips — 2026-09-24
 

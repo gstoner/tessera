@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-23
+last_updated: 2026-09-24
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## ROCm executable-pipeline follow-ups — 2026-09-24
+
+Sync `ROCM-EXEC-PIPELINE-2026-09-24`. **Not applicable.** The Apple GPU lane emits MSL (and Metal
+runtime calls), not MLIR GPU address-space lowering, so neither the
+`convert-vector-to-llvm` workgroup-memref error nor its replacement pass has
+an Apple analogue; the LDS knob diagnostic is ROCm-generator-only; the Apple
+spectral lane has no per-device image cache keyed like the ROCm one (one GPU,
+one Metal device per process).
 
 ## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
 

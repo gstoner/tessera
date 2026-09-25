@@ -1211,7 +1211,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
             "or leave them at their defaults."
         ),
         spec="docs/backends/rocm/wmma-fragment-layout.md",
-        sprint="ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24",
+        sprint="ROCM-EXEC-PIPELINE-2026-09-24",
     ),
     DiagnosticCode(
         code="SCHEDULED_MATMUL_DTYPE_CONTRACT_UNSUPPORTED",

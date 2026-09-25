@@ -877,7 +877,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         input_dialects=("gpu", "vector", "arith", "memref"),
         output_dialects=("gpu", "vector", "arith", "memref", "scf"),
         pass_kind="lowering",
-        sprint="ROCM-REVIEW-SPECTRAL-QUARK-2026-09-24",
+        sprint="COMPILER-DEVEX-1",
     ),
     PassMetadata(
         name="tessera-schedule-to-tile",

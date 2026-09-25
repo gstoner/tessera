@@ -1,0 +1,22 @@
+tessera.absolute [130]             retained   -O0   0.070  -O3   0.072  x0.97
+tessera.absolute [130]             compiler   -O0   0.732  -O3   0.746  x0.98
+tessera.absolute [32, 257]         retained   -O0   0.059  -O3   0.062  x0.95
+tessera.absolute [32, 257]         compiler   -O0   0.713  -O3   0.739  x0.97
+tessera.absolute [1024, 1024]      retained   -O0   0.383  -O3   0.166  x2.31
+tessera.absolute [1024, 1024]      compiler   -O0   1.053  -O3   0.795  x1.32
+tessera.add [130]                  retained   -O0   0.048  -O3   0.064  x0.75
+tessera.add [130]                  compiler   -O0   0.719  -O3   0.713  x1.01
+tessera.add [32, 257]              retained   -O0   0.051  -O3   0.070  x0.72
+tessera.add [32, 257]              compiler   -O0   0.737  -O3   0.755  x0.98
+tessera.add [1024, 1024]           retained   -O0   0.459  -O3   0.219  x2.10
+tessera.add [1024, 1024]           compiler   -O0   1.139  -O3   0.853  x1.33
+tessera.isfinite [130]             retained   -O0   0.046  -O3   0.064  x0.72
+tessera.isfinite [130]             compiler   -O0   0.714  -O3   0.741  x0.96
+tessera.isfinite [32, 257]         retained   -O0   0.071  -O3   0.064  x1.11
+tessera.isfinite [32, 257]         compiler   -O0   0.729  -O3   0.750  x0.97
+tessera.isfinite [1024, 1024]      retained   -O0   0.486  -O3   0.148  x3.29
+tessera.isfinite [1024, 1024]      compiler   -O0   1.087  -O3   0.807  x1.35
+matmul [64, 128, 96]               production -O0   1.037  -O3   0.761  x1.36
+matmul [64, 128, 96]               scheduled  -O0   1.008  -O3   0.750  x1.34
+matmul [127, 65, 79]               production -O0   0.939  -O3   0.732  x1.28
+matmul [127, 65, 79]               scheduled  -O0   0.962  -O3   0.732  x1.32

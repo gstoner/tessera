@@ -1,0 +1,23 @@
+##### host=tajasarus repo=/home/angstorms/programming/tessera head=017a54d8
+== tree build-assertions-nvidia  (mtime 2026-09-17)
+   CMAKE_BUILD_TYPE='' generator='Ninja'
+   CMAKE_CXX_FLAGS='-fno-rtti -UNDEBUG'
+== tree build-assertions  (mtime 2026-09-20)
+   CMAKE_BUILD_TYPE='Release' generator='Ninja'
+   CMAKE_CXX_FLAGS='-fno-rtti -UNDEBUG'
+   src/solvers/spectral/libtessera_spectral_rocm.so: 2 compile cmds; flags:       2 --offload-arch=gfx1201       2 -DNDEBUG       2 -O3 
+   libtessera_spectral_rocm.so: 2 compile cmds; flags:       2 --offload-arch=gfx1201       2 -DNDEBUG       2 -O3 
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_base.so: 1 compile cmds; flags:       1 -DNDEBUG       1 -O3 
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags:      47 -DNDEBUG      47 -O3 
+   libtessera_x86_base.so: 1 compile cmds; flags:       1 -DNDEBUG       1 -O3 
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags:      47 -DNDEBUG      47 -O3 
+   libtessera_x86_elementwise.so: 47 compile cmds; flags:      47 -DNDEBUG      47 -O3 
+== tree build  (mtime 2026-09-20)
+   CMAKE_BUILD_TYPE='Release' generator='Ninja'
+   src/solvers/spectral/libtessera_spectral_rocm.so: 2 compile cmds; flags:       2 --offload-arch=gfx1201       2 -DNDEBUG       2 -O3 
+   libtessera_spectral_rocm.so: 2 compile cmds; flags:       2 --offload-arch=gfx1201       2 -DNDEBUG       2 -O3 
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_base.so: 1 compile cmds; flags:       1 -DNDEBUG       1 -O3 
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags:      47 -DNDEBUG      47 -O3 
+   libtessera_x86_base.so: 1 compile cmds; flags:       1 -DNDEBUG       1 -O3 
+   src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so: 47 compile cmds; flags:      47 -DNDEBUG      47 -O3 
+   libtessera_x86_elementwise.so: 47 compile cmds; flags:      47 -DNDEBUG      47 -O3 

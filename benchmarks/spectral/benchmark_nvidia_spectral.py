@@ -163,6 +163,96 @@ def _device_resident_rows(lib, device, warmup: int, repeats: int) -> list[dict[s
     return rows
 
 
+def _autodiff_rows(device, warmup: int, repeats: int) -> list[dict[str, Any]]:
+    """STFT/ISTFT forward-mode (native_jvp) and reverse-mode (native_backward).
+
+    Goes through the public @tessera.jit autodiff entry points at the 8x16000
+    audio size; the primal is checked against NumPy before timing. The first
+    call compiles and is excluded by the warmup.
+    """
+    import tessera
+
+    nfft, hop, batch, samples = 512, 128, 8, 16000
+    frames = (samples - nfft) // hop + 1
+    length = (frames - 1) * hop + nfft
+
+    # Literals, not closure variables: the tracer binds a free variable as a
+    # graph value, and n_fft/hop/length must be attributes.
+    @tessera.jit(target="nvidia_sm120", autodiff="jvp", wrt=("x", "window"))
+    def stft_jvp(x, window):
+        return tessera.ops.stft(x, window, axis=-1, n_fft=512, hop=128,
+                                center=False, onesided=True, norm="backward")
+
+    @tessera.jit(target="nvidia_sm120", autodiff="reverse", wrt=("x", "window"))
+    def stft_vjp(x, window):
+        return tessera.ops.stft(x, window, axis=-1, n_fft=512, hop=128,
+                                center=False, onesided=True, norm="backward")
+
+    @tessera.jit(target="nvidia_sm120", autodiff="jvp", wrt=("spectrum", "window"))
+    def istft_jvp(spectrum, window):
+        return tessera.ops.istft(spectrum, window, axis=-1, n_fft=512, hop=128,
+                                 center=False, onesided=True, length=16000,
+                                 norm="backward")
+
+    @tessera.jit(target="nvidia_sm120", autodiff="reverse", wrt=("spectrum", "window"))
+    def istft_vjp(spectrum, window):
+        return tessera.ops.istft(spectrum, window, axis=-1, n_fft=512, hop=128,
+                                 center=False, onesided=True, length=16000,
+                                 norm="backward")
+
+    assert length == 16000 and frames == 122  # the literals above
+
+    rng = np.random.default_rng(11)
+    x = rng.standard_normal((batch, samples)).astype(np.float32)
+    window = (0.25 + np.hanning(nfft)).astype(np.float32)
+    dx = rng.standard_normal(x.shape).astype(np.float32)
+    dwindow = rng.standard_normal(window.shape).astype(np.float32)
+    spectrum = _stft_reference(x, window, nfft, hop).astype(np.complex64)
+    dspectrum = (rng.standard_normal(spectrum.shape) +
+                 1j * rng.standard_normal(spectrum.shape)).astype(np.complex64)
+    cotangent_signal = rng.standard_normal((batch, length)).astype(np.float32)
+
+    cases = (
+        ("stft_jvp_8x16000_n512_h128", "native_jvp",
+         lambda: stft_jvp.native_jvp(x, window, tangents=(dx, dwindow)), spectrum),
+        ("stft_vjp_8x16000_n512_h128", "native_backward",
+         lambda: stft_vjp.native_backward(x, window, out_cotangents=dspectrum), None),
+        ("istft_jvp_8x122x257", "native_jvp",
+         lambda: istft_jvp.native_jvp(spectrum, window, tangents=(dspectrum, dwindow)), None),
+        ("istft_vjp_8x122x257", "native_backward",
+         lambda: istft_vjp.native_backward(spectrum, window, out_cotangents=cotangent_signal), None),
+    )
+    rows = []
+    for name, route, call, expected_primal in cases:
+        row: dict[str, Any] = {
+            "backend": "nvidia_sm120", "op": name.split("_")[0], "case": name,
+            "shape": [[batch, samples]], "dtype": "float32", "device": device,
+            "tessera_version": "0.1.0", "route": route,
+            "latency_source": "host_wall_synchronized",
+        }
+        try:
+            first = call()
+            if expected_primal is not None:
+                primal = np.asarray(first[0])
+                scale = max(1.0, float(np.max(np.abs(expected_primal))))
+                row["max_rel_error"] = float(np.max(np.abs(primal - expected_primal))) / scale
+                if row["max_rel_error"] > 1e-4:
+                    raise RuntimeError(f"primal disagrees: {row['max_rel_error']:.3e}")
+            cold, samples_ms = _time(call, warmup, repeats)
+        except Exception as exc:
+            row.update(ok=False, error=f"{type(exc).__name__}: {exc}")
+            rows.append(row)
+            print(json.dumps(row), flush=True)
+            continue
+        median = float(statistics.median(samples_ms))
+        row.update(ok=True, cold_ms=cold, latency_ms=median, numpy_ms=None, tflops=None,
+                   memory_bw_gb_s=None, p10_ms=float(np.percentile(samples_ms, 10)),
+                   p90_ms=float(np.percentile(samples_ms, 90)), repeats=repeats)
+        rows.append(row)
+        print(json.dumps(row), flush=True)
+    return rows
+
+
 def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, list[float]]:
     start = time.perf_counter_ns()
     call()
@@ -244,6 +334,9 @@ def main() -> None:
         print(json.dumps(row), flush=True)
     if not prefixes or any("device_resident".startswith(p) or p.startswith("fft") for p in prefixes):
         rows.extend(_device_resident_rows(lib, device, args.warmup, args.repeats))
+    if not prefixes or any(p in ("autodiff", "stft_jvp", "stft_vjp", "istft_jvp", "istft_vjp")
+                           for p in prefixes):
+        rows.extend(_autodiff_rows(device, args.warmup, args.repeats))
     packet = {
         "schema": "tessera.nvidia_spectral_benchmark.v1",
         "host": platform.node(), "platform": platform.platform(),

@@ -471,217 +471,6 @@ __global__ void dctDirectPolicy(const float *input, float *output, int batch,
   output[index] = float(result * double(scale));
 }
 
-__global__ void stftBackwardInputPolicy(
-    const cufftComplex *dy, const float *windows, float *dx, int batch,
-    int samples, int nfft, int hop, int frames, int bins, float scale,
-    int center, int padMode) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * samples;
-  if (index >= total)
-    return;
-  int sampleIndex = int(index % samples);
-  int row = int(index / samples);
-  int pad = center ? nfft / 2 : 0;
-  double result = 0.0;
-  for (int frame = 0; frame < frames; ++frame)
-    for (int local = 0; local < nfft; ++local) {
-      int source = frame * hop + local - pad;
-      if ((source < 0 || source >= samples) && padMode == 1)
-        source = reflectIndex(source, samples);
-      if (source != sampleIndex)
-        continue;
-      double gradient = 0.0;
-      for (int bin = 0; bin < bins; ++bin) {
-        cufftComplex upstream =
-            dy[(size_t(row) * frames + frame) * bins + bin];
-        double angle = 2.0 * M_PI * double(bin * local) / double(nfft);
-        gradient += double(upstream.x) * cos(angle) -
-                    double(upstream.y) * sin(angle);
-      }
-      result += gradient * double(scale) *
-                double(windows[size_t(row) * nfft + local]);
-    }
-  dx[index] = float(result);
-}
-
-__global__ void stftBackwardWindowPolicy(
-    const cufftComplex *dy, const float *input, const int *rowWindow,
-    float *dwindow, int batch, int windowRows, int samples, int nfft,
-    int win, int hop, int frames, int bins, float scale, int center,
-    int padMode) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(windowRows) * win;
-  if (index >= total)
-    return;
-  int localWindow = int(index % win);
-  int windowRow = int(index / win);
-  int local = (nfft - win) / 2 + localWindow;
-  int pad = center ? nfft / 2 : 0;
-  double result = 0.0;
-  for (int row = 0; row < batch; ++row) {
-    if (rowWindow[row] != windowRow)
-      continue;
-    for (int frame = 0; frame < frames; ++frame) {
-      int source = frame * hop + local - pad;
-      bool present = source >= 0 && source < samples;
-      if (!present && padMode == 1) {
-        source = reflectIndex(source, samples);
-        present = true;
-      }
-      if (!present)
-        continue;
-      double gradient = 0.0;
-      for (int bin = 0; bin < bins; ++bin) {
-        cufftComplex upstream =
-            dy[(size_t(row) * frames + frame) * bins + bin];
-        double angle = 2.0 * M_PI * double(bin * local) / double(nfft);
-        gradient += double(upstream.x) * cos(angle) -
-                    double(upstream.y) * sin(angle);
-      }
-      result += gradient * double(scale) *
-                double(input[size_t(row) * samples + source]);
-    }
-  }
-  dwindow[index] = float(result);
-}
-
-__global__ void istftFrameValuesPolicy(const cufftComplex *spectrum,
-                                       float *framesOut, int batch, int frames,
-                                       int bins, int nfft, float inverseScale,
-                                       int onesided) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * nfft;
-  if (index >= total)
-    return;
-  int local = int(index % nfft);
-  size_t rowFrame = index / nfft;
-  int frame = int(rowFrame % frames);
-  int row = int(rowFrame / frames);
-  double value = 0.0;
-  for (int bin = 0; bin < bins; ++bin) {
-    double weight = 1.0;
-    if (onesided && bin > 0 && !(nfft % 2 == 0 && bin == bins - 1))
-      weight = 2.0;
-    cufftComplex spectral =
-        spectrum[(size_t(row) * frames + frame) * bins + bin];
-    double angle = 2.0 * M_PI * double(bin * local) / double(nfft);
-    value += weight * (double(spectral.x) * cos(angle) -
-                       double(spectral.y) * sin(angle));
-  }
-  framesOut[index] = float(value * double(inverseScale));
-}
-
-__global__ void istftBackwardFramesPolicy(
-    const float *dy, const float *frameValues, const float *windows,
-    float *dframes, int batch, int frames, int nfft, int hop,
-    int outputSamples, int center) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * nfft;
-  if (index >= total)
-    return;
-  int local = int(index % nfft);
-  size_t rowFrame = index / nfft;
-  int frame = int(rowFrame % frames);
-  int row = int(rowFrame / frames);
-  int output = frame * hop + local - (center ? nfft / 2 : 0);
-  if (output < 0 || output >= outputSamples) {
-    dframes[index] = 0.0f;
-    return;
-  }
-  int rawSample = output + (center ? nfft / 2 : 0);
-  double numerator = 0.0;
-  double denominator = 0.0;
-  for (int other = 0; other < frames; ++other) {
-    int otherLocal = rawSample - other * hop;
-    if (otherLocal < 0 || otherLocal >= nfft)
-      continue;
-    double window = windows[size_t(row) * nfft + otherLocal];
-    numerator += double(frameValues[
-                     (size_t(row) * frames + other) * nfft + otherLocal]) *
-                 window;
-    denominator += window * window;
-  }
-  double safe = denominator > 1.0e-12 ? denominator : 1.0e-12;
-  dframes[index] = float(double(dy[size_t(row) * outputSamples + output]) /
-                         safe *
-                         double(windows[size_t(row) * nfft + local]));
-}
-
-__global__ void istftBackwardSpectrumPolicy(
-    const float *dframes, cufftComplex *dspectrum, int batch, int frames,
-    int bins, int nfft, float inverseScale, int onesided) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(batch) * frames * bins;
-  if (index >= total)
-    return;
-  int bin = int(index % bins);
-  size_t rowFrame = index / bins;
-  int frame = int(rowFrame % frames);
-  int row = int(rowFrame / frames);
-  double real = 0.0;
-  double imag = 0.0;
-  for (int local = 0; local < nfft; ++local) {
-    double angle = 2.0 * M_PI * double(bin * local) / double(nfft);
-    double value =
-        dframes[(size_t(row) * frames + frame) * nfft + local];
-    real += value * cos(angle);
-    imag -= value * sin(angle);
-  }
-  double weight = double(inverseScale);
-  if (onesided && bin > 0 && !(nfft % 2 == 0 && bin == bins - 1))
-    weight *= 2.0;
-  dspectrum[index] = make_cuFloatComplex(float(real * weight),
-                                         float(imag * weight));
-}
-
-__global__ void istftBackwardWindowPolicy(
-    const float *dy, const float *frameValues, const float *windows,
-    const int *rowWindow, float *dwindow, int batch, int windowRows,
-    int frames, int nfft, int win, int hop, int outputSamples, int center) {
-  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  size_t total = size_t(windowRows) * win;
-  if (index >= total)
-    return;
-  int localWindow = int(index % win);
-  int windowRow = int(index / win);
-  int local = (nfft - win) / 2 + localWindow;
-  int trim = center ? nfft / 2 : 0;
-  double result = 0.0;
-  for (int row = 0; row < batch; ++row) {
-    if (rowWindow[row] != windowRow)
-      continue;
-    for (int frame = 0; frame < frames; ++frame) {
-      int output = frame * hop + local - trim;
-      if (output < 0 || output >= outputSamples)
-        continue;
-      int rawSample = output + trim;
-      double numerator = 0.0;
-      double denominator = 0.0;
-      for (int other = 0; other < frames; ++other) {
-        int otherLocal = rawSample - other * hop;
-        if (otherLocal < 0 || otherLocal >= nfft)
-          continue;
-        double window = windows[size_t(row) * nfft + otherLocal];
-        numerator += double(frameValues[
-                         (size_t(row) * frames + other) * nfft + otherLocal]) *
-                     window;
-        denominator += window * window;
-      }
-      double safe = denominator > 1.0e-12 ? denominator : 1.0e-12;
-      double upstream = dy[size_t(row) * outputSamples + output];
-      double draw = upstream / safe;
-      double dweight = denominator > 1.0e-12
-                           ? -upstream * numerator / (safe * safe)
-                           : 0.0;
-      double window = windows[size_t(row) * nfft + local];
-      double frameValue = frameValues[
-          (size_t(row) * frames + frame) * nfft + local];
-      result += draw * frameValue + 2.0 * dweight * window;
-    }
-  }
-  dwindow[index] = float(result);
-}
-
 __global__ void overlapAddReal(const float *framesIn, const float *windows,
                                float *output, int batch, int frames, int nfft,
                                int hop, int outputSamples, int trim,
@@ -781,6 +570,214 @@ __global__ void overlapAddJVP(
   tangent[index] = float((dnumerator / safe -
                           numerator * ddenominator / (safe * safe)) *
                          double(scale));
+}
+
+// ---------------------------------------------------------------------------
+// FFT-based STFT/ISTFT reverse mode. The former direct kernels (removed; the
+// ROCm composite still carries the same ones) evaluated each DFT as an O(N)
+// sum per output element in double precision; on the RTX 5070
+// an 8x16000 (nfft 512, hop 128) STFT VJP took 1.65 s. These compute the same
+// quantities with cuFFT (validated against transcriptions of the direct
+// kernels to ~1e-14 in float64 for even/odd N, one-sided/full spectra and
+// constant/reflect padding) and keep the direct kernels' conventions:
+//   STFT backward: G[frame, local] = Re sum_bins dy_b e^{+i 2 pi b local / N},
+//     every stored bin weighted once -- a C2R of dy with interior bins halved
+//     (C2R counts them twice), or the real part of an unnormalized inverse C2C
+//     for a full spectrum.
+//   ISTFT backward: frame values = C2R(spectrum) * inverseScale (C2R's doubling
+//     is the direct kernel's weight 2); dspectrum = RFFT(dframes) * weight *
+//     inverseScale with that same weight.
+__device__ bool interiorBin(int bin, int bins, int nfft) {
+  return bin > 0 && !(nfft % 2 == 0 && bin == bins - 1);
+}
+
+// Scale each one-sided bin by (interior ? interiorWeight : 1) * scale.
+__global__ void weightOnesidedBins(cufftComplex *values, size_t count,
+                                   int bins, int nfft, float interiorWeight,
+                                   float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= count)
+    return;
+  int bin = int(index % bins);
+  float w = (interiorBin(bin, bins, nfft) ? interiorWeight : 1.0f) * scale;
+  values[index].x *= w;
+  values[index].y *= w;
+}
+
+__global__ void realPartScaled(const cufftComplex *values, float *output,
+                               size_t count, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index < count)
+    output[index] = values[index].x * scale;
+}
+
+__global__ void scaleReal(float *values, size_t count, float scale) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index < count)
+    values[index] *= scale;
+}
+
+__global__ void realToComplex(const float *values, cufftComplex *output,
+                              size_t count) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index < count)
+    output[index] = make_cuComplex(values[index], 0.0f);
+}
+
+// dx[row, s] = scale * sum over (frame, local) whose source maps to s of
+// G[frame, local] * window[local]. A deterministic gather: a sample is reached
+// directly and, under reflect padding, from at most two mirrored positions
+// (one bounce suffices -- reflect requires samples > pad).
+__global__ void stftBackwardInputFromG(const float *g, const float *windows,
+                                       float *dx, int batch, int samples,
+                                       int nfft, int hop, int frames,
+                                       float scale, int center, int padMode) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * samples)
+    return;
+  int s = int(index % samples);
+  int row = int(index / samples);
+  int pad = center ? nfft / 2 : 0;
+  int candidates[3] = {s, -s, 2 * samples - 2 - s};
+  int count = padMode == 1 ? 3 : 1;
+  double result = 0.0;
+  for (int c = 0; c < count; ++c) {
+    int t = candidates[c];
+    if (c > 0 && (t == s || (t >= 0 && t < samples) ||
+                  reflectIndex(t, samples) != s))
+      continue;
+    if (c == 2 && t == candidates[1])
+      continue;
+    int reach = t + pad;
+    int first = reach - (nfft - 1) <= 0 ? 0 : (reach - (nfft - 1) + hop - 1) / hop;
+    int last = reach < 0 ? -1 : min(frames - 1, reach / hop);
+    for (int frame = first; frame <= last; ++frame) {
+      int local = reach - frame * hop;
+      if (local < 0 || local >= nfft)
+        continue;
+      result += double(g[(size_t(row) * frames + frame) * nfft + local]) *
+                double(windows[size_t(row) * nfft + local]);
+    }
+  }
+  dx[index] = float(result * double(scale));
+}
+
+// dwindow: the former direct kernel's reduction, with the per-frame DFT read
+// from G instead of recomputed per element.
+__global__ void stftBackwardWindowFromG(
+    const float *g, const float *input, const int *rowWindow, float *dwindow,
+    int batch, int windowRows, int samples, int nfft, int win, int hop,
+    int frames, float scale, int center, int padMode) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(windowRows) * win)
+    return;
+  int localWindow = int(index % win);
+  int windowRow = int(index / win);
+  int local = (nfft - win) / 2 + localWindow;
+  int pad = center ? nfft / 2 : 0;
+  double result = 0.0;
+  for (int row = 0; row < batch; ++row) {
+    if (rowWindow[row] != windowRow)
+      continue;
+    for (int frame = 0; frame < frames; ++frame) {
+      int source = frame * hop + local - pad;
+      bool present = source >= 0 && source < samples;
+      if (!present && padMode == 1) {
+        source = reflectIndex(source, samples);
+        present = true;
+      }
+      if (!present)
+        continue;
+      result += double(g[(size_t(row) * frames + frame) * nfft + local]) *
+                double(input[size_t(row) * samples + source]);
+    }
+  }
+  dwindow[index] = float(result * double(scale));
+}
+
+// Overlap-add numerator (sum frame*window) and denominator (sum window^2) per
+// raw sample, gathered once instead of per consumer element.
+__global__ void istftOverlapTerms(const float *frameValues,
+                                  const float *windows, double *numerator,
+                                  double *denominator, int batch, int frames,
+                                  int nfft, int hop, int rawSamples) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * rawSamples)
+    return;
+  int raw = int(index % rawSamples);
+  int row = int(index / rawSamples);
+  int first = raw - (nfft - 1) <= 0 ? 0 : (raw - (nfft - 1) + hop - 1) / hop;
+  int last = min(frames - 1, raw / hop);
+  double num = 0.0, den = 0.0;
+  for (int frame = first; frame <= last; ++frame) {
+    int local = raw - frame * hop;
+    if (local < 0 || local >= nfft)
+      continue;
+    double window = windows[size_t(row) * nfft + local];
+    num += double(frameValues[(size_t(row) * frames + frame) * nfft + local]) *
+           window;
+    den += window * window;
+  }
+  numerator[index] = num;
+  denominator[index] = den;
+}
+
+__global__ void istftBackwardFramesFromTerms(
+    const float *dy, const double *denominator, const float *windows,
+    float *dframes, int batch, int frames, int nfft, int hop,
+    int outputSamples, int rawSamples, int center) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(batch) * frames * nfft)
+    return;
+  int local = int(index % nfft);
+  size_t rowFrame = index / nfft;
+  int frame = int(rowFrame % frames);
+  int row = int(rowFrame / frames);
+  int trim = center ? nfft / 2 : 0;
+  int output = frame * hop + local - trim;
+  if (output < 0 || output >= outputSamples) {
+    dframes[index] = 0.0f;
+    return;
+  }
+  double den = denominator[size_t(row) * rawSamples + output + trim];
+  double safe = den > 1.0e-12 ? den : 1.0e-12;
+  dframes[index] = float(double(dy[size_t(row) * outputSamples + output]) /
+                         safe * double(windows[size_t(row) * nfft + local]));
+}
+
+__global__ void istftBackwardWindowFromTerms(
+    const float *dy, const float *frameValues, const float *windows,
+    const double *numerator, const double *denominator, const int *rowWindow,
+    float *dwindow, int batch, int windowRows, int frames, int nfft, int win,
+    int hop, int outputSamples, int rawSamples, int center) {
+  size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= size_t(windowRows) * win)
+    return;
+  int localWindow = int(index % win);
+  int windowRow = int(index / win);
+  int local = (nfft - win) / 2 + localWindow;
+  int trim = center ? nfft / 2 : 0;
+  double result = 0.0;
+  for (int row = 0; row < batch; ++row) {
+    if (rowWindow[row] != windowRow)
+      continue;
+    for (int frame = 0; frame < frames; ++frame) {
+      int output = frame * hop + local - trim;
+      if (output < 0 || output >= outputSamples)
+        continue;
+      size_t term = size_t(row) * rawSamples + output + trim;
+      double num = numerator[term], den = denominator[term];
+      double safe = den > 1.0e-12 ? den : 1.0e-12;
+      double upstream = dy[size_t(row) * outputSamples + output];
+      double draw = upstream / safe;
+      double dweight = den > 1.0e-12 ? -upstream * num / (safe * safe) : 0.0;
+      double window = windows[size_t(row) * nfft + local];
+      double frameValue =
+          frameValues[(size_t(row) * frames + frame) * nfft + local];
+      result += draw * frameValue + 2.0 * dweight * window;
+    }
+  }
+  dwindow[index] = float(result);
 }
 
 int makePlan(int batch, int nfft, cufftType type, cufftHandle &plan,
@@ -2138,24 +2135,24 @@ extern "C" int tessera_nvidia_stft_backward_broadcast_layout_f32(
     return 324;
   int win = int(windowShape[windowRank - 1]);
   size_t windowElements = size_t(windowRows) * win;
-  cufftComplex *deviceDy = nullptr;
-  float *deviceInput = nullptr, *deviceWindows = nullptr, *deviceDx = nullptr,
-        *deviceDwindow = nullptr;
-  int *deviceRowWindow = nullptr;
-  cudaError_t status = cudaMalloc(&deviceDy,
-                                  spectralElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceInput, inputElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDx, inputElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDwindow, windowElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceRowWindow, rowWindow.size() * sizeof(int));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceDy, dy.data(),
+  size_t frameElements = size_t(batch) * frames * nfft;
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceDy = static_cast<cufftComplex *>(
+      scratch(0, spectralElements * sizeof(cufftComplex)));
+  auto *deviceInput =
+      static_cast<float *>(scratch(1, inputElements * sizeof(float)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(2, windows.size() * sizeof(float)));
+  auto *deviceDx = static_cast<float *>(scratch(3, inputElements * sizeof(float)));
+  auto *deviceDwindow =
+      static_cast<float *>(scratch(4, windowElements * sizeof(float)));
+  auto *deviceRowWindow =
+      static_cast<int *>(scratch(5, rowWindow.size() * sizeof(int)));
+  auto *deviceG = static_cast<float *>(scratch(6, frameElements * sizeof(float)));
+  if (!deviceDy || !deviceInput || !deviceWindows || !deviceDx ||
+      !deviceDwindow || !deviceRowWindow || !deviceG)
+    return 325;
+  cudaError_t status = cudaMemcpy(deviceDy, dy.data(),
                         spectralElements * sizeof(cufftComplex),
                         cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
@@ -2168,21 +2165,41 @@ extern "C" int tessera_nvidia_stft_backward_broadcast_layout_f32(
     status = cudaMemcpy(deviceRowWindow, rowWindow.data(),
                         rowWindow.size() * sizeof(int),
                         cudaMemcpyHostToDevice);
+  // G = the per-frame inverse DFT of dy (see stftBackwardInputFromG). The
+  // one-sided C2R consumes the scratch copy of dy, never the caller's.
+  cufftHandle plan = 0;
+  if (status == cudaSuccess &&
+      cachedPlan(batch * frames, nfft, onesided ? CUFFT_C2R : CUFFT_C2C, plan))
+    return 325;
+  if (status == cudaSuccess && onesided) {
+    weightOnesidedBins<<<unsigned((spectralElements + kThreads - 1) / kThreads),
+                         kThreads>>>(deviceDy, spectralElements, bins, nfft,
+                                     0.5f, 1.0f);
+    status = cudaGetLastError();
+    if (status == cudaSuccess &&
+        cufftExecC2R(plan, deviceDy, deviceG) != CUFFT_SUCCESS)
+      return 325;
+  } else if (status == cudaSuccess) {
+    if (cufftExecC2C(plan, deviceDy, deviceDy, CUFFT_INVERSE) != CUFFT_SUCCESS)
+      return 325;
+    realPartScaled<<<unsigned((frameElements + kThreads - 1) / kThreads),
+                     kThreads>>>(deviceDy, deviceG, frameElements, 1.0f);
+    status = cudaGetLastError();
+  }
   if (status == cudaSuccess) {
-    stftBackwardInputPolicy<<<
+    stftBackwardInputFromG<<<
         unsigned((inputElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDy, deviceWindows, deviceDx, batch, samples, nfft, hop, frames,
-        bins, forwardScale, center, padMode);
-    stftBackwardWindowPolicy<<<
+        deviceG, deviceWindows, deviceDx, batch, samples, nfft, hop, frames,
+        forwardScale, center, padMode);
+    stftBackwardWindowFromG<<<
         unsigned((windowElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDy, deviceInput, deviceRowWindow, deviceDwindow, batch,
-        windowRows, samples, nfft, win, hop, frames, bins, forwardScale,
-        center, padMode);
+        deviceG, deviceInput, deviceRowWindow, deviceDwindow, batch,
+        windowRows, samples, nfft, win, hop, frames, forwardScale, center,
+        padMode);
     status = cudaGetLastError();
   }
   std::vector<float> dx(inputElements), dwindow(windowElements);
-  if (status == cudaSuccess)
-    status = cudaDeviceSynchronize();
+  // The synchronous copies below order after the kernels.
   if (status == cudaSuccess)
     status = cudaMemcpy(dx.data(), deviceDx, inputElements * sizeof(float),
                         cudaMemcpyDeviceToHost);
@@ -2190,8 +2207,6 @@ extern "C" int tessera_nvidia_stft_backward_broadcast_layout_f32(
     status = cudaMemcpy(dwindow.data(), deviceDwindow,
                         windowElements * sizeof(float),
                         cudaMemcpyDeviceToHost);
-  release(deviceDy, deviceInput, deviceWindows, deviceDx, deviceDwindow,
-          deviceRowWindow);
   if (status != cudaSuccess)
     return 325;
   unpackAxis(dx.data(), dxHost, outer, samples, inner);
@@ -2273,30 +2288,35 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_f32(
   int win = int(windowShape[windowRank - 1]);
   size_t frameElements = size_t(batch) * frames * nfft;
   size_t windowElements = size_t(windowRows) * win;
-  float *deviceDy = nullptr, *deviceWindows = nullptr, *deviceFrames = nullptr,
-        *deviceDframes = nullptr, *deviceDwindow = nullptr;
-  cufftComplex *deviceSpectrum = nullptr, *deviceDspectrum = nullptr;
-  int *deviceRowWindow = nullptr;
-  cudaError_t status = cudaMalloc(&deviceDy, dyElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceSpectrum,
-                        spectralElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceWindows, windows.size() * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceFrames, frameElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDframes, frameElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDspectrum,
-                        spectralElements * sizeof(cufftComplex));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceDwindow, windowElements * sizeof(float));
-  if (status == cudaSuccess)
-    status = cudaMalloc(&deviceRowWindow, rowWindow.size() * sizeof(int));
-  if (status == cudaSuccess)
-    status = cudaMemcpy(deviceDy, dy.data(), dyElements * sizeof(float),
-                        cudaMemcpyHostToDevice);
+  size_t termElements = size_t(batch) * rawSamples;
+  std::lock_guard<std::mutex> lock(spectralMutex());
+  auto *deviceDy = static_cast<float *>(scratch(0, dyElements * sizeof(float)));
+  auto *deviceSpectrum = static_cast<cufftComplex *>(
+      scratch(1, spectralElements * sizeof(cufftComplex)));
+  auto *deviceWindows =
+      static_cast<float *>(scratch(2, windows.size() * sizeof(float)));
+  auto *deviceFrames =
+      static_cast<float *>(scratch(3, frameElements * sizeof(float)));
+  auto *deviceDframes =
+      static_cast<float *>(scratch(4, frameElements * sizeof(float)));
+  auto *deviceDspectrum = static_cast<cufftComplex *>(
+      scratch(5, std::max(spectralElements, onesided ? size_t(0) : frameElements) *
+                     sizeof(cufftComplex)));
+  auto *deviceDwindow =
+      static_cast<float *>(scratch(6, windowElements * sizeof(float)));
+  auto *deviceRowWindow =
+      static_cast<int *>(scratch(7, rowWindow.size() * sizeof(int)));
+  auto *deviceNumerator =
+      static_cast<double *>(scratch(8, termElements * sizeof(double)));
+  auto *deviceDenominator =
+      static_cast<double *>(scratch(9, termElements * sizeof(double)));
+  if (!deviceDy || !deviceSpectrum || !deviceWindows || !deviceFrames ||
+      !deviceDframes || !deviceDspectrum || !deviceDwindow ||
+      !deviceRowWindow || !deviceNumerator || !deviceDenominator)
+    return 335;
+  cudaError_t status = cudaMemcpy(deviceDy, dy.data(),
+                                  dyElements * sizeof(float),
+                                  cudaMemcpyHostToDevice);
   if (status == cudaSuccess)
     status = cudaMemcpy(deviceSpectrum, spectrum.data(),
                         spectralElements * sizeof(cufftComplex),
@@ -2308,29 +2328,70 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_f32(
     status = cudaMemcpy(deviceRowWindow, rowWindow.data(),
                         rowWindow.size() * sizeof(int),
                         cudaMemcpyHostToDevice);
-  if (status == cudaSuccess) {
-    istftFrameValuesPolicy<<<
-        unsigned((frameElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceSpectrum, deviceFrames, batch, frames, bins, nfft, inverseScale,
-        onesided);
-    istftBackwardFramesPolicy<<<
-        unsigned((frameElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDy, deviceFrames, deviceWindows, deviceDframes, batch, frames,
-        nfft, hop, outputSamples, center);
-    istftBackwardSpectrumPolicy<<<
-        unsigned((spectralElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDframes, deviceDspectrum, batch, frames, bins, nfft,
-        inverseScale, onesided);
-    istftBackwardWindowPolicy<<<
-        unsigned((windowElements + kThreads - 1) / kThreads), kThreads>>>(
-        deviceDy, deviceFrames, deviceWindows, deviceRowWindow, deviceDwindow,
-        batch, windowRows, frames, nfft, win, hop, outputSamples, center);
+  const unsigned frameBlocks = unsigned((frameElements + kThreads - 1) / kThreads);
+  cufftHandle inverse = 0, forward = 0;
+  if (status == cudaSuccess &&
+      (cachedPlan(batch * frames, nfft, onesided ? CUFFT_C2R : CUFFT_C2C,
+                  inverse) ||
+       cachedPlan(batch * frames, nfft, onesided ? CUFFT_R2C : CUFFT_C2C,
+                  forward)))
+    return 335;
+  // Frame values: the forward ISTFT's frames (C2R consumes the scratch copy).
+  if (status == cudaSuccess && onesided) {
+    if (cufftExecC2R(inverse, deviceSpectrum, deviceFrames) != CUFFT_SUCCESS)
+      return 335;
+    scaleReal<<<frameBlocks, kThreads>>>(deviceFrames, frameElements,
+                                         inverseScale);
     status = cudaGetLastError();
+  } else if (status == cudaSuccess) {
+    if (cufftExecC2C(inverse, deviceSpectrum, deviceSpectrum, CUFFT_INVERSE) !=
+        CUFFT_SUCCESS)
+      return 335;
+    realPartScaled<<<frameBlocks, kThreads>>>(deviceSpectrum, deviceFrames,
+                                              frameElements, inverseScale);
+    status = cudaGetLastError();
+  }
+  if (status == cudaSuccess) {
+    istftOverlapTerms<<<unsigned((termElements + kThreads - 1) / kThreads),
+                        kThreads>>>(deviceFrames, deviceWindows,
+                                    deviceNumerator, deviceDenominator, batch,
+                                    frames, nfft, hop, rawSamples);
+    istftBackwardFramesFromTerms<<<frameBlocks, kThreads>>>(
+        deviceDy, deviceDenominator, deviceWindows, deviceDframes, batch,
+        frames, nfft, hop, outputSamples, rawSamples, center);
+    istftBackwardWindowFromTerms<<<
+        unsigned((windowElements + kThreads - 1) / kThreads), kThreads>>>(
+        deviceDy, deviceFrames, deviceWindows, deviceNumerator,
+        deviceDenominator, deviceRowWindow, deviceDwindow, batch, windowRows,
+        frames, nfft, win, hop, outputSamples, rawSamples, center);
+    status = cudaGetLastError();
+  }
+  // dspectrum = forward DFT of dframes, weighted like the direct kernel.
+  if (status == cudaSuccess && onesided) {
+    if (cufftExecR2C(forward, deviceDframes, deviceDspectrum) != CUFFT_SUCCESS)
+      return 335;
+    weightOnesidedBins<<<unsigned((spectralElements + kThreads - 1) / kThreads),
+                         kThreads>>>(deviceDspectrum, spectralElements, bins,
+                                     nfft, 2.0f, inverseScale);
+    status = cudaGetLastError();
+  } else if (status == cudaSuccess) {
+    realToComplex<<<frameBlocks, kThreads>>>(deviceDframes, deviceDspectrum,
+                                             frameElements);
+    status = cudaGetLastError();
+    if (status == cudaSuccess &&
+        cufftExecC2C(forward, deviceDspectrum, deviceDspectrum,
+                     CUFFT_FORWARD) != CUFFT_SUCCESS)
+      return 335;
+    if (status == cudaSuccess) {
+      scaleReal<<<unsigned((2 * spectralElements + kThreads - 1) / kThreads),
+                  kThreads>>>(reinterpret_cast<float *>(deviceDspectrum),
+                              2 * spectralElements, inverseScale);
+      status = cudaGetLastError();
+    }
   }
   std::vector<cufftComplex> dspectrum(spectralElements);
   std::vector<float> dwindow(windowElements);
-  if (status == cudaSuccess)
-    status = cudaDeviceSynchronize();
+  // The synchronous copies below order after the kernels.
   if (status == cudaSuccess)
     status = cudaMemcpy(dspectrum.data(), deviceDspectrum,
                         spectralElements * sizeof(cufftComplex),
@@ -2339,8 +2400,6 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_f32(
     status = cudaMemcpy(dwindow.data(), deviceDwindow,
                         windowElements * sizeof(float),
                         cudaMemcpyDeviceToHost);
-  release(deviceDy, deviceSpectrum, deviceWindows, deviceFrames,
-          deviceDframes, deviceDspectrum, deviceDwindow, deviceRowWindow);
   if (status != cudaSuccess)
     return 335;
   unpackAxis(dspectrum.data(),

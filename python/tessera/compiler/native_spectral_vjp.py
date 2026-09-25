@@ -63,6 +63,13 @@ def _policy_bool(value: Any) -> bool:
 def _algorithm_identity(
     kind: str, logical_length: int, target: str, spectrum_layout: str
 ) -> str:
+    # CUDA reverse packages run cuFFT (C2R/R2C one-sided, C2C full-spectrum)
+    # since #842; the direct-DFT identities they carried before misdescribe
+    # them, for both spectrum layouts.
+    if target == "nvidia_sm120" and kind == "tessera.stft":
+        return "cufft_stored_bin_sm120_v1"
+    if target == "nvidia_sm120" and kind == "tessera.istft":
+        return "normalized_overlap_add_cufft_sm120_v1"
     # ROCm reverse packages (gfx1151 and gfx1201, stored-bin and full-complex
     # layouts alike) run batched forward C2C child plans since 2026-09-25; the
     # direct-DFT identities they carried before would now misdescribe them.
@@ -75,16 +82,12 @@ def _algorithm_identity(
     }:
         return "full_complex_direct_dft_v1"
     if kind == "tessera.stft":
-        if target == "nvidia_sm120":
-            return "direct_stored_bin_sm120_v1"
         return (
             "packed_c2r_stored_bin_v1"
             if logical_length % 2 == 0
             else "direct_stored_bin_odd_tail_v1"
         )
     if kind == "tessera.istft":
-        if target == "nvidia_sm120":
-            return "normalized_overlap_add_direct_dft_sm120_v1"
         return "normalized_overlap_add_r2c_v1"
     return "native_direct_v1"
 

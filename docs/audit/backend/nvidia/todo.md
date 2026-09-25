@@ -3,14 +3,17 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-24
+last_updated: 2026-09-25
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
 ## ROCm executable-pipeline follow-ups — 2026-09-24
 
-Sync `ROCM-EXEC-PIPELINE-2026-09-24`. **Follow-up required (spectral plan cache).** #835 fixed ROCm
+Sync `ROCM-EXEC-PIPELINE-2026-09-24`; owner `NVIDIA-FFT-WORKSPACE-1` (the
+cuFFT plan/workspace contract, sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22`
+below). **Follow-up required (spectral plan cache) — fixed by the entry
+directly below.** #835 fixed ROCm
 spectral plan caches that were keyed without the image/device that created
 the plan. The CUDA equivalent has the same shape: `_nvidia_fft_plans`
 (`python/tessera/runtime.py`, used by `_nvidia_fft_c2c_rows` and
@@ -18,11 +21,36 @@ the plan. The CUDA equivalent has the same shape: `_nvidia_fft_plans`
 cuFFT plans and their workspaces by `(kind, batch, length)` only, while a cuFFT
 plan belongs to the CUDA context current at creation. A process that switches
 its CUDA device would reuse another device's plan. Not exercisable on the
-fleet (one NVIDIA GPU per box); owner for the fix and its sm_120 validation is
-the NVIDIA spectral lane. **Not applicable (rest):** no NVIDIA GPU lowering runs
+fleet (one NVIDIA GPU per box). **Not applicable (rest):** no NVIDIA GPU lowering runs
 `convert-vector-to-llvm` (checked: the pipelines lower through
 `convert-gpu-to-nvvm`), and `ROCM_CANONICAL_LDS_KNOB_UNSUPPORTED` and the LDS
 knob forwarding are confined to the ROCm WMMA generator.
+
+## CUDA FFT plans bound to their device — 2026-09-25
+
+Owner `NVIDIA-FFT-WORKSPACE-1`; sync `ROCM-EXEC-PIPELINE-2026-09-24`. Closes
+the follow-up above. `libtessera_nvidia_fft` moves to
+`tessera.nvidia.cuda_fft_workspace.v3`: each cuFFT plan records the CUDA device
+current at creation, execute returns 3 without running when the current
+device differs, and `tessera_nvidia_fft_current_device` reports the device
+through the library's own CUDA runtime. `_nvidia_fft_plans` keys on
+`(device, kind, batch, length)` with the device read through that library;
+a v2 library is refused as unloadable. **Shared contracts:** the NVIDIA FFT
+C ABI only (versioned); no IR, op, dtype or numerical-policy change.
+**Validation (The-Super-Bear, RTX 5070 CC 12.0, CUDA 13.4.59, driver
+610.88):** the FFT/spectral device set (`test_fft_workspace`,
+`test_spectral_{autodiff,jvp,policy}`, `test_native_vjp_execution_certificates`
+plus the spectral/JVP/capability unit files) went from 121 passed at `main`
+to 125 passed with the fix (the new device-key test and three host-only
+device-switch tests), 4 skipped in both (x86 and gfx1151 packages, not on this
+box). **Missing evidence:** a real mid-process device switch -- one NVIDIA GPU
+per fleet box; the host-only fake-library tests cover it and fail on the old
+key. **Host note:** both Super-Bear build trees were re-pointed from CUDA
+13.3.73 to 13.4.59 because the enforced toolkit pin refused 13.3
+(`build-nvidia-cuda/` had been configured against `/usr/local/cuda-13.3`;
+`build/` had a stale cached compiler identity); caches backed up as
+`CMakeCache.txt.pre-cuda134-20260925`. **Sibling backends:** ROCm fixed in
+#835; Apple and x86 not applicable (no per-device FFT plan cache).
 
 ## ROCm review fixes: spectral composite + Quark W4A4 — 2026-09-24
 

@@ -5,8 +5,14 @@
 
 extern "C" {
 
-// Versioned canonical CUDA FFT package contract.
+// Versioned canonical CUDA FFT package contract. v3: every plan is bound to
+// the CUDA device current at creation, and execute returns 3 (without
+// running) when the current device differs.
 const char *tessera_nvidia_fft_package_abi();
+
+// The CUDA device this library's runtime currently selects -- the identity a
+// caller keys cached plans and workspaces by. Returns 0, or 2 on CUDA error.
+int tessera_nvidia_fft_current_device(int *device);
 
 // Creates one reusable batched contiguous complex64 C2C plan. cuFFT automatic
 // workspace allocation is disabled. The returned byte count is the minimum

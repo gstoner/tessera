@@ -26,7 +26,7 @@ def _runtime_or_skip():
 def test_versioned_abi_and_explicit_workspace_contract():
     runtime, lib = _runtime_or_skip()
     assert lib.tessera_nvidia_fft_package_abi() == (
-        b"tessera.nvidia.cuda_fft_workspace.v2")
+        b"tessera.nvidia.cuda_fft_workspace.v3")
     plan = ctypes.c_void_p()
     workspace_bytes = ctypes.c_size_t()
     assert lib.tessera_nvidia_fft_plan_create_c2c_f32(
@@ -65,13 +65,14 @@ def test_forward_and_normalized_inverse_match_numpy(batch, length):
 
 
 def test_plan_and_workspace_are_reused_by_shape():
-    runtime, _ = _runtime_or_skip()
+    runtime, lib = _runtime_or_skip()
     runtime._clear_nvidia_fft_plan_cache()
     x = np.arange(96, dtype=np.float32).reshape(3, 32).astype(np.complex64)
     first = runtime._nvidia_fft_c2c_rows(x, False, np)
-    package = runtime._nvidia_fft_plans[("c2c", 3, 32)]
+    key = (runtime._nvidia_fft_device(lib), "c2c", 3, 32)  # v3: device-scoped
+    package = runtime._nvidia_fft_plans[key]
     second = runtime._nvidia_fft_c2c_rows(x, False, np)
-    assert runtime._nvidia_fft_plans[("c2c", 3, 32)] is package
+    assert runtime._nvidia_fft_plans[key] is package
     np.testing.assert_array_equal(first, second)
 
 
@@ -304,3 +305,19 @@ def test_nvidia_spectral_consumers_route_through_native_fft(op_name, monkeypatch
         assert lib.tessera_nvidia_spectral_arch() == 120
     elif op_name != "tessera.spectral_filter":
         assert calls
+
+
+def test_cached_plans_are_keyed_by_the_live_cuda_device():
+    runtime, lib = _runtime_or_skip()
+    device = ctypes.c_int(-1)
+    assert lib.tessera_nvidia_fft_current_device(ctypes.byref(device)) == 0
+    assert device.value >= 0
+    runtime._clear_nvidia_fft_plan_cache()
+    x = np.ones((2, 64), np.complex64)
+    np.testing.assert_allclose(
+        runtime._nvidia_fft_c2c_rows(x, False, np), np.fft.fft(x, axis=-1),
+        rtol=2e-5, atol=2e-5)
+    assert list(runtime._nvidia_fft_plans) == [(device.value, "c2c", 2, 64)]
+    real = np.ones((2, 64), np.float32)
+    runtime._nvidia_fft_real_rows(real, False, None, np)
+    assert (device.value, "r2c", 2, 64) in runtime._nvidia_fft_plans

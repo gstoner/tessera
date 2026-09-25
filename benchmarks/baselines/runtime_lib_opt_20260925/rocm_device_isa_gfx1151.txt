@@ -1,0 +1,6 @@
+host=Princess-Luna head=d8689ae8 tree=build CMAKE_BUILD_TYPE=
+extra_flags=[] device_instructions=48703 kernels_using_scratch=48 max_scratch_bytes=1248
+extra_flags=[-O2] device_instructions=7584 kernels_using_scratch=0 max_scratch_bytes=0
+--- device cc1 -O with no flag (clang++ -###):
+  triple=amdgcn-amd-amdhsa opt=
+  triple=x86_64-unknown-linux-gnu opt=

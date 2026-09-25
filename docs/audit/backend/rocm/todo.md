@@ -7,6 +7,96 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
+
+Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory
+lives); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
+
+**Finding (ROCm).** On Princess-Luna (gfx1151), `build/` is empty, and
+`libtessera_spectral_rocm.so` (`SpectralComposite.hip`, `StockhamRadix4.hip`)
+compiles with only `--offload-arch=gfx1151`. Unlike CUDA, **the HIP driver
+then passes no `-O` to the amdgcn device compile either** (`clang++ -###`), so
+the device kernels are unoptimized too:
+
+| Build | Device instructions | Kernels using scratch | Max scratch |
+|---|---:|---:|---:|
+| as built | 48,703 | 48 | 1,248 B |
+| `-O2` | 7,584 | 0 | 0 |
+
+With an `-O2` copy loaded through `TESSERA_ROCM_SPECTRAL_LIB`, gfx1151 STFT VJP
+went 15.0 → 3.9 ms and ISTFT VJP 23.7 → 4.5 ms. That was an 11-repeat
+experiment recorded as such in `benchmarks/baselines/rocm_spectral_20260925/README.md`
+("Build type"), not a packet. The instruction and scratch counts are raw output
+in `benchmarks/baselines/runtime_lib_opt_20260925/rocm_device_isa_gfx1151.txt`. That is the
+Tajasarus level, whose `build/` is `Release`, so gfx1151 and gfx1201
+composite-image rows have not been comparable. The `tessera-opt` HSACO lanes
+(`gpu-module-to-binary`) and the HIPRTC lanes choose their own optimization
+level and are unaffected. On Tajasarus, `build-assertions/` keeps assertions
+despite `Release` (the trailing `-UNDEBUG` wins).
+
+**Proposal (not applied; owner decision because it moves baselines):**
+
+1. **Per-target optimization for the runtime libraries only.** Add a
+   `tessera_runtime_library_optimization(<target>)` helper under `cmake/`. It
+   acts only when `NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES` and
+   adds `-O2` for C/CXX/OBJCXX, `-Xcompiler=-O2` for CUDA host code (device
+   code is already optimized) and `-O2` for HIP (host and device). It must not
+   define `NDEBUG`. Apply it to these CMake targets (target names, not
+   output names): `tessera_nvidia_{fft,gemm,rng,ptx_launch}`,
+   `TesseraSpectralHIP` (output `libtessera_spectral_rocm.so`),
+   `TesseraAppleRuntime`/`TesseraAppleRuntimeShared`,
+   `tessera_x86_elementwise`, `tessera_x86_base` and `tessera_jit`
+   (`tools/tessera-jit`, also built without `-O` on the Mac and on
+   Princess-Luna).
+2. **Why not a top-level `RelWithDebInfo` default.** It defines `NDEBUG` for
+   every Tessera translation unit. That switches off the MLIR/LLVM header
+   assertions (`cast<>`, interface-promise checks) that today run inside
+   Tessera's compiler code on every empty-build-type tree, including the three
+   boxes whose LLVM is NDEBUG. The runtime library directories contain no
+   `assert()`, so optimizing only them costs no checks.
+3. **Stamp the level into evidence.** Have each runtime library export its
+   compile flags, and have benchmark rows record them beside `route`
+   (Decisions #11/#12). A latency from an `-O0` library is not comparable to
+   one from `-O3`.
+4. **Re-measure, never re-stamp.** Once this lands, every packet whose
+   host-side time came from an unoptimized library is stale. Those packets
+   must be re-recorded, not relabelled. Until then, cross-box comparisons are
+   invalid where one box is `-O0` and the other `Release`: Princess-Luna vs
+   Tajasarus x86, and gfx1151 vs gfx1201 composite rows.
+
+**Intentional?** No evidence of it:
+
+- CI, `scripts/build.sh` (default `Release`) and the documented assertions
+  recipe (`RelWithDebInfo`, `COMPILER_REFACTOR_PLAN.md`) all set a type. The
+  empty trees trace to the canonical configure commands in CLAUDE.md and
+  `GETTING_STARTED.md`, which omit `-DCMAKE_BUILD_TYPE`.
+- Assertions do not depend on it. In Tajasarus `build-assertions/` (`Release`)
+  the assertions LLVM's trailing `-UNDEBUG` follows `-O3 -DNDEBUG`, so
+  `NDEBUG` stays undefined.
+- The only empty-by-choice-looking tree is Tajasarus
+  `build-assertions-nvidia/` (empty + `-UNDEBUG`). It builds the
+  `tessera-nvidia-opt` driver, not runtime libraries.
+
+Unverified side note: `src/compiler/autotuning/CMakeLists.txt` sets
+`CMAKE_BUILD_TYPE Release` as a directory-scoped normal variable. Its effect on
+a single-config generator was not checked.
+
+**Inventory** (`CMakeCache.txt` plus the runtime libraries'
+`ninja -t commands`, 2026-09-25):
+
+| Box | Tree | Build type |
+|---|---|---|
+| Mac | `build` | empty |
+| Princess-Luna | `build` | empty |
+| Tajasarus | `build` | Release |
+| Tajasarus | `build-assertions` | Release |
+| Tajasarus | `build-assertions-nvidia` | empty |
+| Super-Bear | `build`, `build-nvidia-cuda`, `build-nvidia`, `build-nv` | empty |
+| Super-Bear | `build-assertions` | RelWithDebInfo |
+
+Every runtime library in an empty tree compiles with no `-O` flag.
+
 ## ROCm spectral STFT/ISTFT on FFT child plans — 2026-09-25
 
 Owner `TSOL-POLICY-PHYS-1`; sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. This

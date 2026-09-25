@@ -49,8 +49,8 @@ class _FakeFFTLib:
         return 0
 
     def _execute(self, plan, *_args):
-        # The real library's v3 refusal: a plan runs only on its own device.
-        return 0 if self.plan_device[plan.value] == self.device else 3
+        # The real library's refusal: a plan runs only on its own device.
+        return 0 if self.plan_device[plan.value] == self.device else 4
 
     tessera_nvidia_fft_execute_c2c_f32 = _execute
     tessera_nvidia_fft_execute_r2c_f32 = _execute
@@ -93,3 +93,14 @@ def test_a_foreign_device_plan_is_reported_not_run(fake, monkeypatch):
     fake.device = 1
     with pytest.raises(RuntimeError, match="belongs to another CUDA device"):
         rt._nvidia_fft_c2c_rows(x, False, np)
+
+
+def test_an_ordinary_execution_failure_is_not_blamed_on_the_device(fake, monkeypatch):
+    # Status 3 is a CUDA/cuFFT failure during execution (Codex review on #840):
+    # it must keep the generic message, not the foreign-device one.
+    monkeypatch.setattr(_FakeFFTLib, "tessera_nvidia_fft_execute_c2c_f32",
+                        lambda self, plan, *args: 3)
+    x = np.ones((1, 8), np.complex64)
+    with pytest.raises(RuntimeError, match="execution failed rc=3") as caught:
+        rt._nvidia_fft_c2c_rows(x, False, np)
+    assert "another CUDA device" not in str(caught.value)

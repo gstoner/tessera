@@ -22,7 +22,8 @@ struct FFTPlan {
 };
 
 // A plan executes only on the device that created it; a caller that switched
-// devices must create a plan there instead (status 3).
+// devices must create a plan there instead. The refusal has its own status,
+// 4: 3 already means a CUDA/cuFFT call failed during execution.
 bool onPlanDevice(const FFTPlan *plan) {
   int current = -1;
   return cudaGetDevice(&current) == cudaSuccess && current == plan->device;
@@ -87,7 +88,7 @@ int createPlan(int64_t batch, int64_t length, cufftType type, FFTKind kind,
 } // namespace
 
 extern "C" const char *tessera_nvidia_fft_package_abi() {
-  return "tessera.nvidia.cuda_fft_workspace.v3";
+  return "tessera.nvidia.cuda_fft_workspace.v4";
 }
 
 extern "C" int tessera_nvidia_fft_current_device(int *device) {
@@ -146,7 +147,7 @@ extern "C" int tessera_nvidia_fft_execute_c2c_f32(
   if (plan->kind != FFTKind::C2C || workspaceBytes < plan->workspaceBytes)
     return 1;
   if (!onPlanDevice(plan))
-    return 3;
+    return 4;
   int64_t elements = plan->batch * plan->length;
   size_t bytes = static_cast<size_t>(elements) * sizeof(cufftComplex);
   cufftComplex *deviceData = nullptr;
@@ -184,7 +185,7 @@ extern "C" int tessera_nvidia_fft_execute_r2c_f32(
   if (plan->kind != FFTKind::R2C || workspaceBytes < plan->workspaceBytes)
     return 1;
   if (!onPlanDevice(plan))
-    return 3;
+    return 4;
   int64_t realElements = plan->batch * plan->length;
   int64_t complexElements = plan->batch * (plan->length / 2 + 1);
   float *deviceInput = nullptr;
@@ -221,7 +222,7 @@ extern "C" int tessera_nvidia_fft_execute_c2r_f32(
   if (plan->kind != FFTKind::C2R || workspaceBytes < plan->workspaceBytes)
     return 1;
   if (!onPlanDevice(plan))
-    return 3;
+    return 4;
   int64_t realElements = plan->batch * plan->length;
   int64_t complexElements = plan->batch * (plan->length / 2 + 1);
   cufftComplex *deviceInput = nullptr;

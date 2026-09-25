@@ -504,8 +504,17 @@ static void buildROCMExecutablePipeline(
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
+  // Graph input reaches the generator without a Tile producer (via-tile=false)
+  // but carries the same explicit schedule request as the other levels;
+  // `pass_pipeline()` serializes every option at every input level, so none
+  // may silently fall back to this helper's defaults here.
   if (matmulPlugin && input == "graph" && output == "binary")
-    addFamilyGenerator(pm, family, false, opts.staging, opts.depthCooperative);
+    addFamilyGenerator(pm, family, false, opts.staging, opts.depthCooperative,
+                       opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
+                       opts.schedGroups, opts.ldsPadDwords,
+                       opts.ldsCopyWidth, opts.ldsCopyElide,
+                       opts.ldsCopyDepth, opts.ldsDoubleBuffer,
+                       opts.ldsSchedValuPerMma, opts.ldsBRowMajor);
   pm.addPass(configuredPass(createLowerTileToROCMPass(),
                             Twine("arch=") + arch));
 

@@ -135,12 +135,12 @@ def _device_resident_rows(lib, device, warmup: int, repeats: int) -> list[dict[s
                 if cudart.cudaDeviceSynchronize():
                     raise RuntimeError("synchronize failed")
 
-            call()
+            _, cold = _first_call(call)
             out = np.empty_like(host)
             cudart.cudaMemcpy(out.ctypes.data, device_out, out.nbytes, 2)
             expected = np.fft.fft(host, axis=-1)
             error = float(np.max(np.abs(out - expected))) / max(1.0, float(np.max(np.abs(expected))))
-            cold, samples = _time(call, warmup, repeats)
+            samples = _time(call, warmup, repeats)
             median = float(statistics.median(samples))
             row = {
                 "backend": "nvidia_sm120", "op": "tessera.fft", "case": f"fft_c2c_{batch}x{n}_device_resident",
@@ -238,14 +238,14 @@ def _autodiff_rows(device, warmup: int, repeats: int) -> list[dict[str, Any]]:
             "latency_source": "host_wall_synchronized",
         }
         try:
-            first = call()
+            first, cold = _first_call(call)
             if expected_primal is not None:
                 primal = np.asarray(first[0])
                 scale = max(1.0, float(np.max(np.abs(expected_primal))))
                 row["max_rel_error"] = float(np.max(np.abs(primal - expected_primal))) / scale
                 if row["max_rel_error"] > 1e-4:
                     raise RuntimeError(f"primal disagrees: {row['max_rel_error']:.3e}")
-            cold, samples_ms = _time(call, warmup, repeats)
+            samples_ms = _time(call, warmup, repeats)
         except Exception as exc:
             row.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             rows.append(row)
@@ -260,10 +260,18 @@ def _autodiff_rows(device, warmup: int, repeats: int) -> list[dict[str, Any]]:
     return rows
 
 
-def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, list[float]]:
+def _first_call(call: Callable[[], Any]) -> tuple[Any, float]:
+    """The case's first invocation, timed: ``cold_ms`` is this call. It
+    includes compilation, package images and plans that no earlier case in the
+    process already created; the result is also what correctness is checked
+    against, so no untimed call warms the route first."""
     start = time.perf_counter_ns()
-    call()
-    cold = (time.perf_counter_ns() - start) * 1e-6
+    result = call()
+    return result, (time.perf_counter_ns() - start) * 1e-6
+
+
+def _time(call: Callable[[], Any], warmup: int, repeats: int) -> list[float]:
+    """Warm samples only; the cold call is measured by ``_first_call``."""
     for _ in range(warmup):
         call()
     samples = []
@@ -271,7 +279,7 @@ def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, li
         start = time.perf_counter_ns()
         call()
         samples.append((time.perf_counter_ns() - start) * 1e-6)
-    return cold, samples
+    return samples
 
 
 def main() -> None:
@@ -312,7 +320,7 @@ def main() -> None:
             "package_abi": abi, "spectral_arch": arch,
         }
         try:
-            actual = call()
+            actual, cold = _first_call(call)
             expected = reference() if reference is not None else None
             if expected is not None:
                 scale = max(1.0, float(np.max(np.abs(expected))))
@@ -320,8 +328,8 @@ def main() -> None:
                 row["max_rel_error"] = error
                 if error > 1e-4:
                     raise RuntimeError(f"disagrees with NumPy: rel error {error:.3e}")
-            cold, samples = _time(call, args.warmup, args.repeats)
-            numpy_cold, numpy_samples = (_time(reference, 1, 5) if reference else (None, None))
+            samples = _time(call, args.warmup, args.repeats)
+            numpy_samples = _time(reference, 1, 5) if reference else None
         except Exception as exc:  # report, do not time a wrong or refused case
             row.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             rows.append(row)

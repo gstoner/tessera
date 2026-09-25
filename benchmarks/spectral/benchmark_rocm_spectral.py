@@ -92,10 +92,18 @@ def _istft_reference(spectrum, window):
     return out / np.maximum(weight, 1e-12)
 
 
-def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, list[float]]:
+def _first_call(call: Callable[[], Any]) -> tuple[Any, float]:
+    """The case's first invocation, timed: ``cold_ms`` is this call. It
+    includes compilation, package images and plans that no earlier case in the
+    process already created; the result is also what correctness is checked
+    against, so no untimed call warms the route first."""
     start = time.perf_counter_ns()
-    call()
-    cold = (time.perf_counter_ns() - start) * 1e-6
+    result = call()
+    return result, (time.perf_counter_ns() - start) * 1e-6
+
+
+def _time(call: Callable[[], Any], warmup: int, repeats: int) -> list[float]:
+    """Warm samples only; the cold call is measured by ``_first_call``."""
     for _ in range(warmup):
         call()
     samples = []
@@ -103,7 +111,7 @@ def _time(call: Callable[[], Any], warmup: int, repeats: int) -> tuple[float, li
         start = time.perf_counter_ns()
         call()
         samples.append((time.perf_counter_ns() - start) * 1e-6)
-    return cold, samples
+    return samples
 
 
 def _image_arch() -> str | None:
@@ -164,7 +172,7 @@ def main() -> None:
             "latency_source": "host_wall_synchronized",
         }
         try:
-            first = call()
+            first, cold = _first_call(call)
             if reference is not None:
                 actual = np.asarray(first[0] if isinstance(first, tuple) else first)
                 expected = reference()
@@ -172,7 +180,7 @@ def main() -> None:
                 row["max_rel_error"] = float(np.max(np.abs(actual - expected))) / scale
                 if row["max_rel_error"] > 1e-4:
                     raise RuntimeError(f"disagrees with NumPy: {row['max_rel_error']:.3e}")
-            cold, samples_ms = _time(call, args.warmup, args.repeats)
+            samples_ms = _time(call, args.warmup, args.repeats)
         except Exception as exc:  # report, do not time a wrong or refused case
             row.update(ok=False, error=f"{type(exc).__name__}: {exc}"[:500])
             rows.append(row)

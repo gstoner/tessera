@@ -7,6 +7,64 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## ROCm spectral STFT/ISTFT on FFT child plans — 2026-09-25
+
+Owner `TSOL-POLICY-PHYS-1`; sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. This
+closes the follow-up under `NVIDIA-SPECTRAL-DEEPEN-2026-09-25` below, and it
+**supersedes the "device direct-DFT/OLA" wording** of the
+`TSOL-POLICY-PHYS-1-8C8G` record.
+
+**What changed:**
+- The v7 package's broadcast-layout STFT/ISTFT, streaming STFT and STFT/ISTFT
+  reverse entry points (`SpectralComposite.hip`) run batched forward C2C child
+  plans, cached per (HIP device, length, package digest), with a per-device
+  scratch pool.
+- Inverse-direction sums are computed as `Re(FFT(conj Z))`, and odd lengths
+  take the plan's Bluestein path.
+- Overlap-add and the window reductions stay fp64 and fixed-order. The window
+  reductions run one block per element.
+- Every warm reverse call used to recompile its package image. That image is
+  now cached by (compiler digest, arch, carrier IR).
+- The algorithm identities now say what runs:
+  `c2c_fft_stored_bin_rocm_v1` and `normalized_overlap_add_c2c_fft_rocm_v1`.
+
+**Measured** (`benchmarks/baselines/rocm_spectral_20260925/`, 8×16000,
+n_fft=512):
+
+| Case | gfx1151 | gfx1201 |
+|---|---|---|
+| STFT VJP | 11059 → 15.6 ms | 2204 → 3.96 ms |
+| ISTFT VJP | 938 → 24.5 ms | 221 → 4.75 ms |
+| STFT JVP | 1047 → 35.2 ms | refused (see below) |
+
+A host `-O2` rebuild of the gfx1151 library brings its rows to the gfx1201
+level (about 4 ms). The rest of the gfx1151 gap is Princess-Luna's empty
+`CMAKE_BUILD_TYPE`, not this code.
+
+**Semantics fix:** a non-centered frame past the signal under
+`pad_mode="reflect"` is zero-filled, as `tessera.ops.stft` defines it. The
+former kernels reflected it, and the new test fails on main's library.
+
+**Validation:** at `017a54d8` the ROCm spectral gate gives gfx1151 362 passed /
+3 skipped and gfx1201 355 passed / 10 skipped, 1 failed each. The failure is the
+pre-existing certificate test that references
+`test_public_gfx1151_attention_vjp_consumes_prebuilt_program`, renamed in
+`b59da796`.
+
+**Open:**
+- On gfx1201 the native JVP is refused ("native ROCm JVP requires exact
+  gfx1151") although the composite image and reverse package run there. It
+  needs gfx1201 JVP proof before any admission change.
+- The certificate test's stale reference.
+- Princess-Luna's build type.
+
+**Sibling backends:**
+- NVIDIA: follow-up required (unconditional reflect; direct-DFT algorithm
+  labels on an FFT-based path). Its queue has the detail.
+- x86: follow-up required (unconditional reflect). Its queue has the detail.
+- Apple: not applicable.
+
+
 ## CUDA spectral deepening — sibling follow-up — 2026-09-25
 
 Sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`. **Follow-up required (spectral AD).**

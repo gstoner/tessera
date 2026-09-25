@@ -1,0 +1,153 @@
+{
+  "schema": "tessera.rocm_spectral_benchmark.v1",
+  "host": "tajasarus",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "device": "gfx1201",
+  "image_arch": "gfx1201",
+  "rows": [
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1201",
+      "image_arch": "gfx1201",
+      "tessera_version": "0.1.0",
+      "route": "forward",
+      "latency_source": "host_wall_synchronized",
+      "max_rel_error": 0.0,
+      "ok": true,
+      "cold_ms": 1.400474,
+      "latency_ms": 1.403931,
+      "p10_ms": 1.3724789999999998,
+      "p90_ms": 1.4567286,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1201",
+      "image_arch": "gfx1201",
+      "tessera_version": "0.1.0",
+      "route": "forward",
+      "latency_source": "host_wall_synchronized",
+      "max_rel_error": 6.85476296177122e-08,
+      "ok": true,
+      "cold_ms": 1.9065409999999998,
+      "latency_ms": 1.8488209999999998,
+      "p10_ms": 1.8197009999999998,
+      "p90_ms": 1.8925842,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    },
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_jvp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1201",
+      "image_arch": "gfx1201",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": false,
+      "error": "TesseraJitError: native ROCm JVP requires exact gfx1151; detected 'gfx1201'"
+    },
+    {
+      "backend": "rocm",
+      "op": "stft",
+      "case": "stft_vjp_8x16000_n512_h128",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1201",
+      "image_arch": "gfx1201",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 2208.065507,
+      "latency_ms": 2203.676621,
+      "p10_ms": 2200.8274585999998,
+      "p90_ms": 2204.4945266,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_jvp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1201",
+      "image_arch": "gfx1201",
+      "tessera_version": "0.1.0",
+      "route": "native_jvp",
+      "latency_source": "host_wall_synchronized",
+      "ok": false,
+      "error": "TesseraJitError: native ROCm JVP requires exact gfx1151; detected 'gfx1201'"
+    },
+    {
+      "backend": "rocm",
+      "op": "istft",
+      "case": "istft_vjp_8x122x257",
+      "shape": [
+        [
+          8,
+          16000
+        ]
+      ],
+      "dtype": "float32",
+      "device": "gfx1201",
+      "image_arch": "gfx1201",
+      "tessera_version": "0.1.0",
+      "route": "native_backward",
+      "latency_source": "host_wall_synchronized",
+      "ok": true,
+      "cold_ms": 222.718277,
+      "latency_ms": 221.29824399999998,
+      "p10_ms": 220.5254256,
+      "p90_ms": 222.6222944,
+      "numpy_ms": null,
+      "tflops": null,
+      "memory_bw_gb_s": null,
+      "repeats": 3
+    }
+  ]
+}

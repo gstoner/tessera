@@ -8,6 +8,14 @@ last_updated: 2026-09-25
 
 # Apple compiler, exact-device, and performance plan
 
+## ROCm spectral FFT policy paths — 2026-09-25
+
+Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. **Not applicable.** The change is
+confined to the ROCm composite library (`SpectralComposite.hip`) and the ROCm
+reverse packaging; the Apple spectral lane shares no code, ABI or IR contract
+with it.
+
+
 ## CUDA spectral deepening — 2026-09-25
 
 Sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`. **Not applicable.** The change is

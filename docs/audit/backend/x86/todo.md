@@ -9,6 +9,22 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## ROCm spectral FFT policy paths — sibling outcome — 2026-09-25
+
+Sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`. **Follow-up required
+(semantics).**
+
+The ROCm change found that a non-centered STFT frame past the signal under
+`pad_mode="reflect"` must be zero-filled, as `tessera.ops.stft` and the
+reference VJP define it. `avx512_fft_f32.cpp` carries the same unconditional
+`(source < 0 || source >= samples) && padMode == 1` reflect in its policy
+STFT forward and reverse loops. Nothing canonicalizes `pad_mode` when
+`center=False`.
+
+This was not run on a Zen 5 host. It needs an AVX-512 repro against
+`vjp._VJPS["stft"]` before and after the fix.
+
+
 ## CUDA spectral deepening — 2026-09-25
 
 Sync `NVIDIA-SPECTRAL-DEEPEN-2026-09-25`. **Not applicable.** The change is

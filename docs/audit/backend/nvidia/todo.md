@@ -15,6 +15,45 @@ shared `NativeJVPArtifact` admission is now `native_jvp.architecture_admits`,
 but sm120 remains single-architecture with no per-chip entry. The shared unit
 test asserts that sm120 still rejects other architectures.
 
+## CUDA spectral: centered-only reflect, cuFFT reverse identities — 2026-09-25
+
+Owner `NVIDIA-FFT-WORKSPACE-1`; sync `ROCM-SPECTRAL-FFT-POLICY-2026-09-25`.
+This closes both CUDA follow-ups recorded from the ROCm change (#844).
+
+1. **Reflect only centered frames.** `tessera_nvidia_spectral.cu` reflected a
+   non-centered frame past the signal whenever `padMode == 1`. The six affected
+   sites were the four frame kernels (forward real/complex, JVP real/complex),
+   the `dx` gather's candidate count, and the window reduction.
+   `tessera.ops.stft` and `vjp._VJPS["stft"]` zero-fill that frame. Every site
+   is now gated on `center && padMode == 1`, inside the kernels, so all
+   callers are covered. The `dx` gather's three single-bounce candidates are
+   complete only under that gate (a centered reflect requires
+   `samples > n_fft/2`).
+2. **Algorithm identities.** The CUDA reverse packages were labelled
+   `direct_stored_bin_sm120_v1`, `normalized_overlap_add_direct_dft_sm120_v1`
+   and, for full spectra, the target-neutral `full_complex_direct_dft_v1`.
+   Since #842 they run cuFFT (C2R/R2C one-sided, C2C full), so they are now
+   `cufft_stored_bin_sm120_v1` and `normalized_overlap_add_cufft_sm120_v1` for
+   both layouts.
+
+**Validation (The-Super-Bear, RTX 5070, both `build/` and `build-nvidia-cuda/`
+rebuilt).** The new
+`test_noncentered_reflect_frame_is_zero_filled_forward_tangent_and_reverse`
+covers a 5-sample signal with `n_fft=16`, `hop=3`, `center=False`,
+`pad_mode="reflect"` and a full spectrum. It checks the forward launch against
+a zero-filled FFT, the JVP tangent against the linearization, and the reverse
+against the reference VJP.
+
+- On `main` (`e6df2191`) it fails at the forward assertion (48/48 elements,
+  e.g. 5.98 vs 0.61).
+- At `d6b0b25a` it passes, and the FFT/spectral device set is **145 passed,
+  4 skipped** (x86 and gfx1151 packages absent).
+- On the Mac, the host-free spectral contract tests (53 passed) and `mypy` are
+  clean.
+
+**Sibling backends:** ROCm fixed in #844; x86 has its own entry
+(`ROCM-SPECTRAL-FFT-POLICY-2026-09-25`); Apple not applicable.
+
 ## Runtime libraries built at -O0 in empty-build-type trees — 2026-09-25
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory

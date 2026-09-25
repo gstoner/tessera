@@ -68,6 +68,25 @@ def _istft_full_broadcast_axis2(spectrum, window):
     )
 
 
+# pad_mode is a centered-framing policy: a non-centered 16-point frame over a
+# 5-sample signal is zero-filled past the signal (tessera.ops.stft and the
+# reference VJP). The CUDA frame and reverse kernels used to reflect it.
+@tessera.jit(target="nvidia_sm120", autodiff="reverse", wrt=("x", "window"))
+def _stft_noncentered_reflect_tail(x, window):
+    return tessera.ops.stft(
+        x, window, axis=-1, n_fft=16, hop=3, center=False,
+        pad_mode="reflect", onesided=False, norm="backward",
+    )
+
+
+@tessera.jit(target="nvidia_sm120", autodiff="jvp", wrt=("x", "window"))
+def _stft_noncentered_reflect_tail_jvp(x, window):
+    return tessera.ops.stft(
+        x, window, axis=-1, n_fft=16, hop=3, center=False,
+        pad_mode="reflect", onesided=False, norm="backward",
+    )
+
+
 def _require_fft():
     from tessera import runtime
     if runtime._load_nvidia_fft_runtime() is None:
@@ -288,3 +307,56 @@ def test_native_stft_forward_and_adjoint_satisfy_inner_product_identity():
     lhs = float(np.vdot(dy, spectrum).real)
     rhs = float(np.vdot(dx, x).real)
     np.testing.assert_allclose(lhs, rhs, rtol=8e-6, atol=8e-5)
+
+
+def test_noncentered_reflect_frame_is_zero_filled_forward_tangent_and_reverse():
+    from tessera import runtime
+    from tessera.autodiff import vjp
+
+    _require_fft()
+    rng = np.random.default_rng(20260925)
+    x = rng.standard_normal((3, 5)).astype(np.float32)
+    window = (np.hanning(16) + 0.1).astype(np.float32)
+    kwargs = {"axis": -1, "n_fft": 16, "hop": 3, "center": False,
+              "pad_mode": "reflect", "onesided": False}
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "nvidia_sm120", "compiler_path": "nvidia_spectral_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["x", "window"], "output_name": "output",
+        "ops": [{"op_name": "tessera.stft", "result": "output",
+                 "operands": ["x", "window"], "kwargs": kwargs}],
+    })
+    launched = runtime.launch(artifact, (x, window))
+    assert launched["ok"] is True, launched.get("reason")
+    assert launched["execution_kind"] == "native_gpu"
+
+    def zero_filled(signal, taper):
+        frames = np.zeros((signal.shape[0], 16), np.float64)
+        frames[:, :5] = signal * taper[:5]
+        return np.fft.fft(frames, axis=-1)[:, None, :]
+
+    expected = zero_filled(x, window)
+    np.testing.assert_allclose(launched["output"], expected, rtol=2e-5, atol=2e-5)
+
+    dx_t = rng.standard_normal(x.shape).astype(np.float32)
+    dw_t = rng.standard_normal(window.shape).astype(np.float32)
+    primal, tangent = _stft_noncentered_reflect_tail_jvp.native_jvp(
+        x, window, tangents=(dx_t, dw_t))
+    np.testing.assert_allclose(primal, expected, rtol=2e-5, atol=2e-5)
+    np.testing.assert_allclose(
+        tangent, zero_filled(dx_t, window) + zero_filled(x, dw_t),
+        rtol=5e-5, atol=5e-5)
+
+    dy = (rng.standard_normal(expected.shape) +
+          1j * rng.standard_normal(expected.shape)).astype(np.complex64)
+    actual = _stft_noncentered_reflect_tail.native_backward(
+        x, window, out_cotangents=dy)
+    reference = vjp._VJPS["stft"](
+        dy, x, window, axis=-1, n_fft=16, hop=3, center=False,
+        pad_mode="reflect", onesided=False, norm="backward",
+    )
+    for value, ref in zip(actual, reference, strict=True):
+        np.testing.assert_allclose(value, ref, rtol=5e-5, atol=5e-5)
+    proof = _stft_noncentered_reflect_tail.last_backward_execution
+    assert proof["algorithm"] == "cufft_stored_bin_sm120_v1"
+    assert proof["physical_attestation"]["device_arch"] == "sm_120"

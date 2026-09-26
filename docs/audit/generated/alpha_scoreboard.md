@@ -48,10 +48,8 @@ improvement fails until the baseline is tightened, so gains are locked.
 | `taj_cpu` | Tajasarus | Zen 5 AVX-512 | 2 |
 | `taj_gpu` | Tajasarus | gfx1201 | 1 |
 
-Known limits: the two Zen 5 lanes read the same fleet architecture key
-(`x86_64_avx512`), because release packets record architecture, not
-host; `taj_gpu` shares the ROCm route module with gfx1151, so its
-chip-specific state comes from the spine and fleet columns.
+Known limits: `taj_gpu` shares the ROCm route module with gfx1151, so
+its chip-specific state comes from the spine and fleet columns.
 
 ## Cells
 

@@ -180,11 +180,14 @@ def _witnessed_medians_ns(
     calibration: dict[str, Any], digests: dict[str, str], environment: str,
     measurement_cpu: int,
 ) -> tuple[list[float], list[dict[str, Any]], list[float]]:
-    """kernel_wall run medians from TSC-witnessed windows, plus the witnesses."""
+    """kernel_wall run medians from TSC-witnessed windows, plus the witnesses.
+
+    Reuses ``profiler_x86_clock.measure`` / ``witness_sample`` -- one clock
+    path for every x86 recorder. ``witness_sample`` records a disagreeing
+    window with the TSC refused rather than raising; a sealed packet cannot
+    carry such a window, so the recorder refuses it here.
+    """
     from tessera.compiler import profiler_x86_clock as clock
-    from tessera.compiler.profiler_timing import (
-        build_timing_sample, measured_clock, unavailable_clock,
-    )
 
     def region() -> None:
         for _ in range(iterations):
@@ -197,33 +200,24 @@ def _witnessed_medians_ns(
     agreement: list[float] = []
     for sample in range(samples):
         for cohort in ((0, 1) if sample % 2 == 0 else (1, 0)):
-            wall_start = time.perf_counter_ns()
             window = clock.measure(region, calibration)
-            wall_end = time.perf_counter_ns()
-            clocks: dict[str, Any] = dict(clock.witness_clocks(calibration, window))
-            clocks["host_wall_ns"] = measured_clock(
-                "host_wall_ns", source="perf_counter", value=wall_end - wall_start,
-                provenance={"encloses": "the rdtscp/raw snapshots around the region"})
-            clocks["perf_task_clock_ns"] = unavailable_clock(
-                "perf_task_clock_ns", source="perf_event_task_clock",
-                reason="not_collected_by_recorder",
-                provenance={"detail": "record_x86_avx512_packet.py opens no perf_event"})
-            witness = build_timing_sample(
-                sample_id=f"{family}-kernel_wall-s{sample:02d}-c{cohort}",
-                target="x86", clocks=clocks, artifact_digests=digests,
-                batch_size=iterations, warm_state="warm",
-                synchronization="synchronous_c_abi_return",
-                execution_environment=environment,
-                resources={"family": family, "measurement_cpu": measurement_cpu},
-            )
+            witness = clock.witness_sample(calibration, window, digests,
+                                           execution_environment=environment)
+            tsc = witness["clocks"]["tsc_cycles"]
+            if tsc.get("eligible_for_promotion") is not True:
+                raise RuntimeError(
+                    f"{family}: TSC witness refused: "
+                    f"{tsc.get('provenance', {}).get('promotion_refused')}")
             raw_ns = float(window["raw_end_ns"] - window["raw_start_ns"])
             tsc_ns = float(window["tsc_end"] - window["tsc_start"]) * 1.0e9 / hz
             error = abs(tsc_ns - raw_ns) / raw_ns
-            if error > AGREEMENT_BAND:
+            if error > AGREEMENT_BAND:  # bare metal: the builder does not check it
                 raise RuntimeError(
                     f"{family}: TSC disagrees with CLOCK_MONOTONIC_RAW by {error:.2%}")
             agreement.append(error)
-            witnesses.append(witness)
+            witnesses.append({"cohort": cohort, "sample": sample,
+                              "iterations_in_window": iterations,
+                              "measurement_cpu": measurement_cpu, **witness})
             cohorts[cohort].append(tsc_ns / iterations)
     return [float(statistics.median(v)) for v in cohorts], witnesses, agreement
 
@@ -458,6 +452,7 @@ def record(*, samples: int, iterations: int, stability_limit: float,
             - _timing_oracle(family, timing_bindings))))
         if not timing_error <= 2e-3:
             raise RuntimeError(f"{family} timing shape disagrees with its oracle ({timing_error})")
+        # The row's image digest first: the tsc_witness route binds on it.
         digests = {"image": timing.image.image_digest,
                    "descriptor": timing.descriptor.descriptor_digest}
         kernel_medians, witnesses, agreement = _witnessed_medians_ns(

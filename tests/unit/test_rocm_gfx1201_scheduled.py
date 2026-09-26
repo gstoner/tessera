@@ -234,6 +234,84 @@ def test_gfx1201_scheduled_matmul_package_executes(shape):
     np.testing.assert_allclose(output, a.astype(np.float32)@b.astype(np.float32), rtol=2e-4, atol=2e-4)
 
 
+def _run_split_k_package(shape, dtype, activation="none", bias=False, seed=1201):
+    """Lower, package and launch one scheduled gfx1201 matmul; returns
+    (package, inputs, output, fused reference in float64)."""
+    import ml_dtypes
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+    m, k, n = shape
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        matmul_module(target="rocm", shape=shape, dtype=dtype, activation=activation, bias=bias),
+        target="rocm_gfx1201")
+    package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+    storage = np.float16 if dtype == "fp16" else ml_dtypes.bfloat16
+    rng = np.random.default_rng(seed)
+    a = (rng.normal(size=(m, k)) * 0.25).astype(storage)
+    b = (rng.normal(size=(k, n)) * 0.25).astype(storage)
+    bias_arr = (rng.normal(size=(n,)) * 0.5).astype(np.float32) if bias else None
+    buffers = {"a": a, "b": b, "o": np.zeros((m, n), np.float32)}
+    if bias:
+        buffers["bias"] = bias_arr
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    ref = a.astype(np.float64) @ b.astype(np.float64)
+    if bias:
+        ref = ref + bias_arr[None, :].astype(np.float64)
+    if activation == "gelu":
+        c = np.sqrt(2.0 / np.pi)
+        ref = 0.5 * ref * (1.0 + np.tanh(c * (ref + 0.044715 * ref ** 3)))
+    elif activation == "relu":
+        ref = np.maximum(ref, 0.0)
+    return package, buffers["o"], ref
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("activation,bias", [("none", False), ("gelu", True), ("relu", True)])
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+@pytest.mark.parametrize("shape", [(16, 2048, 256), (15, 2048, 200)])
+def test_gfx1201_split_k_matmul_executes(shape, dtype, activation, bias):
+    """ROCM-SPLIT-K-1 on device: the router-gate shape (and a ragged M/N
+    sibling that drives the partial's masked edge store) is scheduled with
+    split_k=2, runs as partial + ordered reduce, and matches the fused f64
+    reference -- the epilogue applied ONCE, after the sum. The reduction is
+    ordered, so two launches must be bit-identical."""
+    from tessera import runtime as rt
+    assert rt._rocm_live_arch() == "gfx1201"
+    package, out, ref = _run_split_k_package(shape, dtype, activation, bias)
+    provenance = package.descriptor.provenance
+    assert provenance["split_k"] == 2 and provenance["split_k_reduction"] == "ordered"
+    assert provenance["physical_route"].endswith("_splitk2_ordered")
+    assert package.descriptor.geometry.policy == "rocm_wmma_split_k_grid"
+    assert {e.symbol for e in package.image.entry_points} == {
+        package.descriptor.entry_symbol, f"{package.descriptor.entry_symbol}_splitk_reduce"}
+    scale = float(np.max(np.abs(ref))) + 1e-6
+    rel = float(np.max(np.abs(out.astype(np.float64) - ref))) / scale
+    assert rel < (2e-3 if dtype == "fp16" else 2e-3), rel
+    _, again, _ = _run_split_k_package(shape, dtype, activation, bias)
+    assert np.array_equal(out.view(np.uint32), again.view(np.uint32)), "ordered reduction is not reproducible"
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_gfx1201_split_k_control_shape_stays_unsplit(dtype):
+    """Negative control: 128x256 output is 128 tiles, not occupancy-short, so
+    the same K=2048 schedules no split and runs the one-kernel route."""
+    package, out, ref = _run_split_k_package((128, 2048, 256), dtype)
+    assert package.descriptor.provenance["split_k"] == 1
+    assert "split_k_reduce_entry" not in package.descriptor.provenance
+    assert package.descriptor.geometry.policy == "rocm_wmma_macro_tile_grid"
+    assert len(package.image.entry_points) == 1
+    scale = float(np.max(np.abs(ref))) + 1e-6
+    assert float(np.max(np.abs(out.astype(np.float64) - ref))) / scale < 2e-3
+
+
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
 @pytest.mark.parametrize("bias", [False, True])

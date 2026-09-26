@@ -715,7 +715,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings", "tessera.sparse_policy"),
         preserved_attrs=("numeric_policy", "tessera.launch_bindings", "tessera.dim_names"),
         pass_kind="lowering", sprint="IR-NATIVE-FOUNDATION-1",
-        diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", ),
+        # ROCM_SPLIT_K_NOT_APPLIED is a remark (ROCM-SPLIT-K-1): the
+        # occupancy rule asked for split-K and no aligned split existed.
+        diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", "ROCM_SPLIT_K_NOT_APPLIED"),
     ),
     PassMetadata(
         name="tessera-ir-contracts",

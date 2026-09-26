@@ -57,6 +57,13 @@ class ScheduledMatmulArtifact:
     dynamic_m: bool = False
     dynamic_n: bool = False
     dynamic_k: bool = False
+    #: ROCM-SPLIT-K-1: cross-workgroup K slices (1 = unsplit) and the order
+    #: their partials are summed in ("" when unsplit, else "ordered"). Both
+    #: semantic: `verify_matmul_projection` requires them to equal the native
+    #: Schedule's decision, and `validate` requires the Tile launch op to carry
+    #: exactly this pair.
+    split_k: int = 1
+    split_k_reduction: str = ""
 
     @property
     def graph_digest(self) -> str:
@@ -102,6 +109,22 @@ class ScheduledMatmulArtifact:
                 raise ValueError(f"scheduled matmul Tile artifact has stale {name}")
         if self.activation not in {"none", "relu", "gelu", "silu"}:
             raise ValueError("scheduled matmul artifact has an unsupported activation")
+        # ROCM-SPLIT-K-1: the Tile launch op carries the split as a pair, and
+        # an unsplit artifact carries neither (CHECK-NOT in Python form).
+        if type(self.split_k) is not int or self.split_k < 1:
+            raise ValueError("scheduled matmul split_k must be a positive int")
+        if (self.split_k > 1) != (self.split_k_reduction == "ordered") or (
+                self.split_k == 1 and self.split_k_reduction):
+            raise ValueError(
+                "scheduled matmul split_k > 1 requires split_k_reduction='ordered' "
+                "and an unsplit artifact names no reduction")
+        split_attrs = re.findall(r"tessera\.split_k = (\d+) : i64", self.tile_ir)
+        reduction_attrs = re.findall(r'tessera\.split_k_reduction = "(\w+)"', self.tile_ir)
+        if self.split_k > 1:
+            if split_attrs != [str(self.split_k)] or reduction_attrs != [self.split_k_reduction]:
+                raise ValueError("scheduled matmul Tile artifact dropped or altered its split-K contract")
+        elif split_attrs or reduction_attrs:
+            raise ValueError("scheduled matmul Tile artifact carries a split-K the artifact does not state")
         if self.bias_name is not None and 'bias = true' not in self.tile_ir:
             raise ValueError("scheduled matmul artifact dropped its bias epilogue")
         if self.residual_name is not None and 'residual = true' not in self.tile_ir:
@@ -275,6 +298,32 @@ def rocm_gfx1151_panel(m: int, n: int, *, dynamic: bool) -> tuple[int, int]:
         measured_band=(1024, 2048))
 
 
+#: The macro K block gfx1201 schedules select, mirroring
+#: `getInferredMatmulSchedule` (ROCM-MACRO-K-TILE-1): 32 for a static K of at
+#: least 64, none otherwise.
+def rocm_gfx1201_block_k(k: int, *, dynamic_k: bool) -> int:
+    return 32 if not dynamic_k and k >= 64 else 0
+
+
+def rocm_split_k(m: int, n: int, k: int, *, target: str, storage: str,
+                 macro_tile: tuple[int, int], dynamic: bool) -> tuple[int, str]:
+    """ROCM-SPLIT-K-1 oracle: the (split_k, reduction) the native Schedule
+    must have selected. The C++ `selectGfx1201SplitK` is the authority; this is
+    its declared differential check (Decision #31), applied on every package by
+    `verify_matmul_projection`. gfx1201 f16/bf16 only -- the scope the C++ rule
+    admits and the scope with device evidence; gfx1151 and the fp8/integer
+    storages are never split."""
+    if target != "rocm_gfx1201" or storage not in {"f16", "bf16"}:
+        return 1, ""
+    from .rocm_tiling import select_split_k
+    slices, _reason = select_split_k(
+        m, n, k, macro_tile=macro_tile,
+        block_k=rocm_gfx1201_block_k(k, dynamic_k=dynamic),
+        profile=_rocm_profile("gfx1201"),
+        dtype="bf16" if storage == "bf16" else "fp16", dynamic=dynamic)
+    return (slices, "ordered") if slices > 1 else (1, "")
+
+
 def lower_scheduled_matmul(
     module: GraphIRModule,
     *,
@@ -339,6 +388,10 @@ def lower_scheduled_matmul(
         dynamic_n,
         dynamic_k,
     ) = contract
+    split_k, split_k_reduction = rocm_split_k(
+        m, n, k, target=target, storage=storage,
+        macro_tile=(macro_tile_m, macro_tile_n),
+        dynamic=dynamic_m or dynamic_n or dynamic_k)
     artifact = ScheduledMatmulArtifact(
         graph_ir=graph_ir,
         schedule_ir=schedule_ir,
@@ -366,6 +419,8 @@ def lower_scheduled_matmul(
         dynamic_m=dynamic_m,
         dynamic_n=dynamic_n,
         dynamic_k=dynamic_k,
+        split_k=split_k,
+        split_k_reduction=split_k_reduction,
     )
     artifact.validate()
     return artifact
@@ -841,6 +896,28 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
         if len(matches) != 1:
             raise ValueError('matmul native tile decision is missing')
         expected[key] = int(matches[0])
+    # ROCM-SPLIT-K-1: the native Schedule is the split-K authority. Absence
+    # means unsplit (the C++ side states the pair only when it splits).
+    split_matches = re.findall(r'(?:^|, )split_k = (\d+) : i64(?:,|$)', attrs)
+    reduction_matches = re.findall(r'(?:^|, )split_k_reduction = "(\w*)"(?:,|$)', attrs)
+    if len(split_matches) > 1 or len(reduction_matches) > 1 or (
+            bool(split_matches) != bool(reduction_matches)):
+        raise ValueError('matmul native split-K contract is malformed')
+    expected['split_k'] = int(split_matches[0]) if split_matches else 1
+    expected['split_k_reduction'] = reduction_matches[0] if reduction_matches else ''
+    # ...and the Python predicate is its declared oracle: recompute the
+    # decision from the projected shape/tile and refuse a disagreement, so the
+    # two deciders cannot drift apart silently (Decision #31).
+    if artifact.target == 'rocm':
+        oracle = rocm_split_k(
+            m, n, k, target=f'rocm_{artifact.architecture}', storage=storage,
+            macro_tile=(expected['macro_tile_m'], expected['macro_tile_n']),
+            dynamic=bool(expected['dynamic_m'] or expected['dynamic_n'] or expected['dynamic_k']))
+        if oracle != (expected['split_k'], expected['split_k_reduction']):
+            raise ValueError(
+                'ROCM-SPLIT-K-1 oracle disagrees with the native Schedule: '
+                f'rocm_tiling.select_split_k says {oracle}, the Schedule says '
+                f"{(expected['split_k'], expected['split_k_reduction'])}")
     for key, value in expected.items():
         actual = getattr(artifact, key)
         if type(actual) is not type(value) or actual != value:

@@ -4500,6 +4500,7 @@ def _submit_rocm_gfx1151_native(
                                    GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
+    split_k = 1  # ROCM-SPLIT-K-1; read from the descriptor in the matmul branch
     depth_attention = descriptor.abi_id == GFX_DEPTH_ATTN_F32_ABI
     attention_bias = attention and bool(descriptor.provenance["bias"])
     expected_buffers = (
@@ -4589,6 +4590,25 @@ def _submit_rocm_gfx1151_native(
         macro_m, macro_n = macro_tile
         grid_x = (n + macro_n - 1) // macro_n
         grid_y = (m + macro_m - 1) // macro_m
+        # ROCM-SPLIT-K-1: a split schedule is two launches -- the partial over
+        # grid.z = S into an fp32 [S, M, N] workspace, then the ordered
+        # reduction that applies the epilogue. Every field is checked; a split
+        # descriptor missing one is refused, never run as the unsplit kernel.
+        raw_split = descriptor.provenance.get("split_k", 1)
+        if not isinstance(raw_split, int) or isinstance(raw_split, bool) or raw_split < 1:
+            raise RuntimeError("ROCm matmul descriptor split_k must be a positive int")
+        split_k = raw_split
+        if split_k > 1:
+            if (
+                descriptor.provenance.get("split_k_reduction") != "ordered"
+                or descriptor.geometry.policy != "rocm_wmma_split_k_grid"
+                or not isinstance(descriptor.provenance.get("split_k_reduce_entry"), str)
+                or matmul_integer
+                or output.dtype != np.float32
+            ):
+                raise RuntimeError(
+                    "ROCm split-K matmul descriptor requires an ordered reduction entry, "
+                    "the split-K grid policy and an fp32 output")
     elif attention:
         q, key, value = (buffers[item.name] for item in ordered[:3])
         bias = buffers[ordered[3].name] if attention_bias else None
@@ -4744,6 +4764,50 @@ def _submit_rocm_gfx1151_native(
                 ctypes.c_int64(size),
                 ctypes.c_int64(1),
             ]
+
+        if matmul and split_k > 1:
+            m_, n_, k_ = dimensions
+            reduce_function = ctypes.c_void_p()
+            reduce_entry = cast(str, descriptor.provenance["split_k_reduce_entry"])
+            if hip.hipModuleGetFunction(ctypes.byref(reduce_function), module, reduce_entry.encode()) != 0:
+                raise RuntimeError(f"ROCm split-K reduce symbol {reduce_entry!r} not found")
+            workspace = ctypes.c_void_p()
+            workspace_elements = split_k * m_ * n_
+            if hip.hipMalloc(ctypes.byref(workspace), workspace_elements * 4) != 0:
+                raise RuntimeError("ROCm split-K workspace hipMalloc failed")
+            device_buffers.append(workspace)
+            # Every workspace element is written by exactly one slice (the
+            # masked store covers the ragged M/N edge), so no clear is needed.
+            partial_args: list[Any] = []
+            for device, array in zip(device_inputs[:2], input_arrays[:2], strict=True):
+                partial_args.extend(memref_args(device, int(array.size)))
+            partial_args.extend(memref_args(workspace, workspace_elements))
+            partial_args.extend(ctypes.c_int64(value) for value in dimensions)
+            reduce_args: list[Any] = list(memref_args(workspace, workspace_elements))
+            if matmul_bias:
+                reduce_args.extend(memref_args(device_inputs[2], int(input_arrays[2].size)))
+            reduce_args.extend(memref_args(device_o, int(output.size)))
+            reduce_args.extend((ctypes.c_int64(m_), ctypes.c_int64(n_)))
+            reduce_block = int(cast(list[int], descriptor.provenance.get("split_k_reduce_workgroup", [256]))[0])
+            launches = (
+                (function, (grid_x, grid_y, split_k),
+                 int(cast(list[int], descriptor.provenance.get("workgroup", [32]))[0]), partial_args),
+                (reduce_function, ((m_ * n_ + reduce_block - 1) // reduce_block, 1, 1), reduce_block, reduce_args),
+            )
+            for kernel, grid, block, kernel_args in launches:
+                packed = (ctypes.c_void_p * len(kernel_args))()
+                for index, value in enumerate(kernel_args):
+                    packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+                # Same (null) stream for both, so the reduction is ordered
+                # after the partial without a host synchronization between.
+                rc = hip.hipModuleLaunchKernel(kernel, *grid, block, 1, 1, 0, None, packed, None)
+                if rc != 0:
+                    raise RuntimeError(f"ROCm split-K kernel launch failed rc={rc}")
+            if hip.hipDeviceSynchronize() != 0:
+                raise RuntimeError("ROCm split-K device synchronization failed")
+            if hip.hipMemcpy(output.ctypes.data_as(ctypes.c_void_p), device_o, output_byte_count, 2) != 0:
+                raise RuntimeError("ROCm split-K device-to-host copy failed")
+            return output
 
         arguments = []
         if attention:

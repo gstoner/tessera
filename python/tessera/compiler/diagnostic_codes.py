@@ -1170,6 +1170,101 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/reference/tessera_tensor_attributes.md",
         sprint="NUMPOL-CARRIER-1",
     ),
+    # ── ROCM-SPLIT-K-1: cross-workgroup split-K (2026-09-26) ──
+    DiagnosticCode(
+        code="ROCM_SPLIT_K_NOT_APPLIED",
+        pass_origin="GraphToSchedulePass",
+        severity="warning",
+        summary=(
+            "an occupancy-short gfx1201 matmul asked for split-K, but K has no "
+            "2-way split into whole macro K blocks of the minimum slice; the "
+            "unsplit kernel was scheduled (emitted as a remark)."
+        ),
+        fix_hint=(
+            "Split-K is a performance decision, so falling back is allowed -- "
+            "but never silently (Decision #21a). Slices must be whole macro K "
+            "blocks (block_k, ROCM-MACRO-K-TILE-1) of at least "
+            "`rocm_tiling.SPLIT_K_MIN_SLICE_K`; pad K to a multiple of "
+            "2 * block_k if the split is wanted."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
+    DiagnosticCode(
+        code="ROCM_SPLIT_K_UNSUPPORTED",
+        pass_origin="GenerateWMMAGemmKernel",
+        severity="error",
+        summary=(
+            "a split-K matmul reached a ROCm consumer that cannot emit the "
+            "stated split (wrong route, staging, accumulator, dynamic K, a K "
+            "that does not divide into whole slices, or a reduction other than "
+            "'ordered')."
+        ),
+        fix_hint=(
+            "Split-K is realized only by the typed register-staged "
+            "tile.matmul_kernel body with an fp32 accumulator and a static K "
+            "that divides into split_k slices of fragK x k_blocks x k-unroll. "
+            "The split and its reduction order are semantic, so a consumer "
+            "that cannot honour them refuses rather than running unsplit. "
+            "Also emitted by LowerTileToROCM when tessera.split_k arrives "
+            "without its reduction."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
+    DiagnosticCode(
+        code="ROCM_WMMA_GEMM_SPLIT_K_BAD_CONTRACT",
+        pass_origin="tessera_rocm.wmma_gemm verifier",
+        severity="error",
+        summary=(
+            "tessera_rocm.wmma_gemm states split_k without the 'ordered' "
+            "reduction, a reduction without a split, or split_k < 1."
+        ),
+        fix_hint=(
+            "split_k and split_k_reduction are a semantic pair (Decision "
+            "#21a): state both or neither. 'ordered' (fixed slice order, "
+            "deterministic) is the only admitted reduction."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
+    DiagnosticCode(
+        code="SCHEDULE_SPLIT_K_BAD_CONTRACT",
+        pass_origin="schedule.matmul verifier",
+        severity="error",
+        summary=(
+            "schedule.matmul states an inconsistent split-K: split_k < 1, a "
+            "reduction without a split, a split without the 'ordered' "
+            "reduction or without a macro K block, or a split on a "
+            "block-scaled/physical-contract matmul."
+        ),
+        fix_hint=(
+            "The Graph->Schedule pass is the one split-K decider "
+            "(selectGfx1201SplitK). A hand-written schedule must state "
+            "split_k > 1 together with split_k_reduction = \"ordered\" and "
+            "block_k > 0, or neither."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
+    DiagnosticCode(
+        code="TILE_SPLIT_K_BAD_CONTRACT",
+        pass_origin="tile.matmul_kernel verifier",
+        severity="error",
+        summary=(
+            "tile.matmul_kernel carries tessera.split_k / "
+            "tessera.split_k_reduction inconsistently, with a non-f32 "
+            "accumulator, outside the canonical K loop, or with a static K "
+            "that does not split into whole macro K blocks."
+        ),
+        fix_hint=(
+            "State both attributes or neither; split_k >= 2; reduction "
+            "'ordered'; f32 accumulation; tessera.canonical_k_loop = true; "
+            "and K divisible by split_k x mma.k x k_blocks."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
     DiagnosticCode(
         code="ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",

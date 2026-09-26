@@ -6713,7 +6713,8 @@ E2E-REAL-6F census. Record and recount: [`ROCM_LANE_MAP.md`](ROCM_LANE_MAP.md)
 the one Graph entry for ROCm GEMM through the scheduled route, the benchmark
 was rebuilt on it, and `family=matmul input=graph` is refused in Python and
 C++. gfx1151 packet recorded
-(`benchmarks/baselines/rocm_gfx1151_canonical_gemm_scheduled_20260926/`); gfx1201 owed.
+(`benchmarks/baselines/rocm_gfx1151_canonical_gemm_scheduled_20260926/`) and gfx1201
+(`benchmarks/baselines/rocm_gfx1201_canonical_gemm_scheduled_20260926/`) packets recorded.
 Lane B's physical consumer in `GenerateWMMAGemmKernel.cpp` (canonical
 `scf.for` matcher, one-wave LDS comparison body, `canonical_mnk_scf_for`
 stamp, `ROCM_CANONICAL_LDS_{ARCH,KNOB}_UNSUPPORTED`) was deleted the same day

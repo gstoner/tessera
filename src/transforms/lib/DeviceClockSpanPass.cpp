@@ -39,6 +39,17 @@
 //             non-profiler NVIDIA witness the sm_120 lane was missing.
 // Both are emitted as `llvm.call_intrinsic`, so no extra dialect is needed.
 //
+// The start stamp is placed AFTER the entry block's last alloca, never before
+// it. Its leader guard lowers to a branch that splits the entry block, and an
+// alloca left behind the split is no longer in the entry block, so LLVM treats
+// it as dynamic and will not promote it to registers. Measured on the gfx1151
+// serial SSD kernel (2026-09-26): stamping at the block start turned a fully
+// unrolled 2512-instruction kernel into a 924-instruction looped one that ran
+// 2.4x faster than the clean image, so the "instrumented twin" timed a
+// different program. Everything before that point must be free of memory
+// effects (constants, casts, views, the allocas themselves), otherwise the
+// stamp would miss real work and the pass refuses.
+//
 // The span argument and the clock are recorded on the kernel as
 // `tessera.device_clock_span`, so the package and its consumers can see that
 // this image is the instrumented member of a clean/instrumented pair.
@@ -48,7 +59,9 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
@@ -150,7 +163,25 @@ struct DeviceClockSpanPass
                                       LLVM::AtomicOrdering::monotonic);
     };
 
-    OpBuilder head(&block, block.begin());
+    Operation *lastAlloca = nullptr;
+    for (Operation &op : block)
+      if (isa<LLVM::AllocaOp, memref::AllocaOp>(op))
+        lastAlloca = &op;
+    if (lastAlloca) {
+      for (Operation &op : block) {
+        if (!isa<LLVM::AllocaOp, memref::AllocaOp>(op) && !isMemoryEffectFree(&op))
+          return op.emitError(
+              "TESSERA_DEVICE_CLOCK_ALLOCA_AFTER_WORK: an alloca follows an op "
+              "with memory effects; the start stamp cannot both precede the "
+              "work and keep every alloca in the entry block");
+        if (&op == lastAlloca)
+          break;
+      }
+    }
+    OpBuilder head = lastAlloca ? OpBuilder(block.getParentOp()->getContext())
+                                : OpBuilder(&block, block.begin());
+    if (lastAlloca)
+      head.setInsertionPointAfter(lastAlloca);
     stamp(head, LLVM::AtomicBinOp::umin, 0);
     gpu::BarrierOp::create(head, loc);
 

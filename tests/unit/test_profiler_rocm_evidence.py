@@ -223,3 +223,17 @@ def test_a_packet_that_drops_a_timing_blocker_is_rejected() -> None:
     packet["packet_sha256"] = _digest(packet)
     with pytest.raises(ROCmProfilerPacketError, match="differ"):
         validate_rocm_profiler_packet(packet)
+
+
+def test_an_instrumented_image_faster_than_its_clean_twin_blocks() -> None:
+    """Two-sided gate: measured 2026-09-26, stamping split the gfx1151 serial
+    SSD entry block and the 'instrumented twin' ran 2.4x faster -- a different
+    program, whose clock says nothing about the clean image."""
+    packet = build_rocm_profiler_packet(
+        timing=_wsl_witness_timing(), capture=_no_kfd_capture(),
+        uninstrumented=_image(10_000, "clean"),
+        instrumented=_image(4_100, "probe"),
+        source={"source_commit": "c" * 40, "worktree_dirty": False},
+    )
+    assert packet["ineligibility_reasons"] == ["INSTRUMENTATION_CHANGED_THE_KERNEL"]
+    assert packet["eligible_for_promotion"] is False

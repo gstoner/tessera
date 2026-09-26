@@ -43,3 +43,18 @@ module attributes {gpu.container_module} {
     }
   }
 }
+
+// -----
+
+module attributes {gpu.container_module} {
+  gpu.module @m {
+    gpu.func @alloca_after_work(%a: !llvm.ptr<1>) kernel {
+      // expected-error @below {{TESSERA_DEVICE_CLOCK_ALLOCA_AFTER_WORK}}
+      %v = llvm.load %a : !llvm.ptr<1> -> f32
+      %one = llvm.mlir.constant(1 : i64) : i64
+      %s = llvm.alloca %one x f32 : (i64) -> !llvm.ptr
+      llvm.store %v, %s : f32, !llvm.ptr
+      gpu.return
+    }
+  }
+}

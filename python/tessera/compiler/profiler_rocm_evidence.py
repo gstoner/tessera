@@ -124,6 +124,11 @@ def _derive_eligibility(
         reasons.append("ROCPROFILER_PC_SAMPLES_MISSING")
     if overhead > maximum_instrumentation_overhead:
         reasons.append("INSTRUMENTATION_OVERHEAD_EXCEEDED")
+    elif overhead < 1.0 / maximum_instrumentation_overhead:
+        # Two-sided: an instrumented image materially FASTER than its clean
+        # twin is a different program, so its clock says nothing about the
+        # clean image (measured: gfx1151 serial SSD, 2026-09-26).
+        reasons.append("INSTRUMENTATION_CHANGED_THE_KERNEL")
     if source.get("worktree_dirty"):
         reasons.append("SOURCE_WORKTREE_DIRTY")
     route = _admission_route(timing)

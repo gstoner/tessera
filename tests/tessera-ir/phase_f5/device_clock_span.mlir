@@ -35,5 +35,20 @@ module attributes {gpu.container_module} {
       }
       gpu.return
     }
+    // The start stamp follows the entry block's last alloca, so every alloca
+    // stays in the entry block (a split would leave it dynamic and unpromoted).
+    // CHECK-LABEL: gpu.func @with_scratch
+    // CHECK: %[[S:.*]] = llvm.alloca
+    // CHECK-NEXT: arith.constant 0 : index
+    // CHECK: llvm.call_intrinsic "llvm.readsteadycounter"
+    // CHECK: gpu.barrier
+    // CHECK: llvm.store %{{.*}}, %[[S]]
+    gpu.func @with_scratch(%a: !llvm.ptr<1>) kernel {
+      %one = llvm.mlir.constant(1 : i64) : i64
+      %s = llvm.alloca %one x f32 : (i64) -> !llvm.ptr
+      %v = llvm.load %a : !llvm.ptr<1> -> f32
+      llvm.store %v, %s : f32, !llvm.ptr
+      gpu.return
+    }
   }
 }

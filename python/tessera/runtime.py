@@ -4501,6 +4501,7 @@ def _submit_rocm_gfx1151_native(
     matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
     split_k = 1  # ROCM-SPLIT-K-1; read from the descriptor in the matmul branch
+    split_reduce_block = 0
     depth_attention = descriptor.abi_id == GFX_DEPTH_ATTN_F32_ABI
     attention_bias = attention and bool(descriptor.provenance["bias"])
     expected_buffers = (
@@ -4609,6 +4610,30 @@ def _submit_rocm_gfx1151_native(
                 raise RuntimeError(
                     "ROCm split-K matmul descriptor requires an ordered reduction entry, "
                     "the split-K grid policy and an fp32 output")
+            # The workspace is allocated from the TYPED descriptor field
+            # (Decision #32); provenance is a readable copy and must agree.
+            expected_bytes = split_k * m * n * 4
+            workspace_spec = descriptor.workspace
+            if (
+                workspace_spec.bytes != expected_bytes
+                or workspace_spec.lifetime != "launch"
+                or descriptor.provenance.get("split_k_workspace")
+                != {"dtype": "fp32", "shape": [split_k, m, n]}
+            ):
+                raise RuntimeError(
+                    "ROCm split-K descriptor workspace disagrees with split_k x M x N x fp32 "
+                    f"(typed {workspace_spec.bytes} B, expected {expected_bytes} B)")
+            raw_block = descriptor.provenance.get("split_k_reduce_workgroup")
+            if (
+                not isinstance(raw_block, list)
+                or len(raw_block) != 3
+                or not all(isinstance(v, int) and not isinstance(v, bool) for v in raw_block)
+                or not 1 <= raw_block[0] <= 1024
+                or raw_block[1:] != [1, 1]
+            ):
+                raise RuntimeError(
+                    "ROCm split-K reduce workgroup must be [x, 1, 1] with 1 <= x <= 1024")
+            split_reduce_block = raw_block[0]
     elif attention:
         q, key, value = (buffers[item.name] for item in ordered[:3])
         bias = buffers[ordered[3].name] if attention_bias else None
@@ -4773,8 +4798,11 @@ def _submit_rocm_gfx1151_native(
                 raise RuntimeError(f"ROCm split-K reduce symbol {reduce_entry!r} not found")
             workspace = ctypes.c_void_p()
             workspace_elements = split_k * m_ * n_
-            if hip.hipMalloc(ctypes.byref(workspace), workspace_elements * 4) != 0:
+            if hip.hipMalloc(ctypes.byref(workspace), descriptor.workspace.bytes) != 0:
                 raise RuntimeError("ROCm split-K workspace hipMalloc failed")
+            if workspace.value is None or workspace.value % descriptor.workspace.alignment:
+                hip.hipFree(workspace)
+                raise RuntimeError("ROCm split-K workspace allocation violates its declared alignment")
             device_buffers.append(workspace)
             # Every workspace element is written by exactly one slice (the
             # masked store covers the ragged M/N edge), so no clear is needed.
@@ -4788,7 +4816,7 @@ def _submit_rocm_gfx1151_native(
                 reduce_args.extend(memref_args(device_inputs[2], int(input_arrays[2].size)))
             reduce_args.extend(memref_args(device_o, int(output.size)))
             reduce_args.extend((ctypes.c_int64(m_), ctypes.c_int64(n_)))
-            reduce_block = int(cast(list[int], descriptor.provenance.get("split_k_reduce_workgroup", [256]))[0])
+            reduce_block = split_reduce_block
             launches = (
                 (function, (grid_x, grid_y, split_k),
                  int(cast(list[int], descriptor.provenance.get("workgroup", [32]))[0]), partial_args),

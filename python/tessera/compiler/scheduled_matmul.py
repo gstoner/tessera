@@ -324,6 +324,23 @@ def rocm_split_k(m: int, n: int, k: int, *, target: str, storage: str,
     return (slices, "ordered") if slices > 1 else (1, "")
 
 
+def schedule_split_k(schedule_ir: str) -> tuple[int, str]:
+    """The (split_k, split_k_reduction) the native Schedule stated on its one
+    `schedule.matmul`; absence means unsplit. Malformed or half-stated pairs
+    are refused rather than read as unsplit (Decision #21a)."""
+    records = re.findall(r"(?m)^\s*%[^=]+ = schedule\.matmul %\w+ \{([^{}]*)\}", schedule_ir)
+    if len(records) != 1:
+        raise ValueError("scheduled matmul requires one native schedule.matmul record")
+    attrs = records[0]
+    splits = re.findall(r"(?:^|, )split_k = (\d+) : i64(?:,|$)", attrs)
+    reductions = re.findall(r'(?:^|, )split_k_reduction = "(\w*)"(?:,|$)', attrs)
+    if len(splits) > 1 or len(reductions) > 1 or bool(splits) != bool(reductions):
+        raise ValueError("native schedule.matmul split-K contract is malformed")
+    if not splits:
+        return 1, ""
+    return int(splits[0]), reductions[0]
+
+
 def lower_scheduled_matmul(
     module: GraphIRModule,
     *,
@@ -388,10 +405,12 @@ def lower_scheduled_matmul(
         dynamic_n,
         dynamic_k,
     ) = contract
-    split_k, split_k_reduction = rocm_split_k(
-        m, n, k, target=target, storage=storage,
-        macro_tile=(macro_tile_m, macro_tile_n),
-        dynamic=dynamic_m or dynamic_n or dynamic_k)
+    # ROCM-SPLIT-K-1: the artifact states what the AUTHORITY decided -- the C++
+    # Schedule -- never what the Python oracle predicts. The oracle is compared
+    # against it in `verify_matmul_projection`, so a disagreement reports as
+    # oracle-vs-authority instead of as a Tile artifact that "dropped" a
+    # contract it never carried.
+    split_k, split_k_reduction = schedule_split_k(schedule_ir)
     artifact = ScheduledMatmulArtifact(
         graph_ir=graph_ir,
         schedule_ir=schedule_ir,

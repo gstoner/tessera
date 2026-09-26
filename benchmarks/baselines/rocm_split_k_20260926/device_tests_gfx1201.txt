@@ -1,0 +1,63 @@
+host: tajasarus
+device: gfx1201
+commit: 1387cd1b994e0645ef932de05df7fbf8fdcf4708 (tracked changes: 0)
+tessera-opt: /home/angstorms/programming/tessera-splitk/build/tools/tessera-opt/tessera-opt
+env: TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1
+command: python -m pytest tests/unit/test_rocm_split_k.py -v -p no:cacheprovider
+date: 2026-09-26T18:21:40Z
+
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0 -- /home/angstorms/programming/tessera/.venv/bin/python
+hypothesis profile 'default'
+rootdir: /home/angstorms/programming/tessera-splitk
+configfile: pyproject.toml
+plugins: xdist-3.8.0, cov-7.1.0, hypothesis-6.168.0, timeout-2.4.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 41 items
+
+tests/unit/test_rocm_split_k.py::test_router_gate_shape_splits_in_two PASSED [  2%]
+tests/unit/test_rocm_split_k.py::test_slice_count_fills_the_machine_as_a_power_of_two PASSED [  4%]
+tests/unit/test_rocm_split_k.py::test_occupied_machine_is_never_split PASSED [  7%]
+tests/unit/test_rocm_split_k.py::test_unaligned_k_falls_back_with_a_reason_not_silently PASSED [  9%]
+tests/unit/test_rocm_split_k.py::test_minimum_slice_guard_bounds_the_split PASSED [ 12%]
+tests/unit/test_rocm_split_k.py::test_no_split_without_a_macro_k_block_or_static_shape PASSED [ 14%]
+tests/unit/test_rocm_split_k.py::test_only_gfx1201_float_storage_is_split PASSED [ 17%]
+tests/unit/test_rocm_split_k.py::test_retuning_k_unroll_cannot_break_a_split_package[1] PASSED [ 19%]
+tests/unit/test_rocm_split_k.py::test_retuning_k_unroll_cannot_break_a_split_package[2] PASSED [ 21%]
+tests/unit/test_rocm_split_k.py::test_retuning_k_unroll_cannot_break_a_split_package[3] PASSED [ 24%]
+tests/unit/test_rocm_split_k.py::test_retuning_k_unroll_cannot_break_a_split_package[4] PASSED [ 26%]
+tests/unit/test_rocm_split_k.py::test_retuning_k_unroll_cannot_break_a_split_package[8] PASSED [ 29%]
+tests/unit/test_rocm_split_k.py::test_a_pinned_unroll_the_split_cannot_honour_is_refused PASSED [ 31%]
+tests/unit/test_rocm_split_k.py::test_schedule_split_k_parses_the_authority PASSED [ 34%]
+tests/unit/test_rocm_split_k.py::test_native_schedule_and_oracle_agree[shape0-2] PASSED [ 36%]
+tests/unit/test_rocm_split_k.py::test_native_schedule_and_oracle_agree[shape1-1] PASSED [ 39%]
+tests/unit/test_rocm_split_k.py::test_native_schedule_and_oracle_agree[shape2-32] PASSED [ 41%]
+tests/unit/test_rocm_split_k.py::test_native_schedule_and_oracle_agree[shape3-2] PASSED [ 43%]
+tests/unit/test_rocm_split_k.py::test_native_schedule_and_oracle_agree[shape4-1] PASSED [ 46%]
+tests/unit/test_rocm_split_k.py::test_native_schedule_and_oracle_agree[shape5-1] PASSED [ 48%]
+tests/unit/test_rocm_split_k.py::test_artifact_that_disagrees_with_its_tile_ir_is_refused PASSED [ 51%]
+tests/unit/test_rocm_split_k.py::test_artifact_states_the_authority_even_when_the_oracle_disagrees PASSED [ 53%]
+tests/unit/test_rocm_split_k.py::test_projection_refuses_when_the_oracle_and_the_authority_diverge PASSED [ 56%]
+tests/unit/test_rocm_split_k.py::test_tile_artifact_must_carry_the_pair PASSED [ 58%]
+tests/unit/test_rocm_split_k.py::test_split_epilogue_stays_the_programs PASSED [ 60%]
+tests/unit/test_rocm_split_k.py::test_lds_staging_refuses_a_split_schedule PASSED [ 63%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape0-fp16-none-False] PASSED [ 65%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape0-fp16-gelu-True] PASSED [ 68%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape0-fp16-relu-True] PASSED [ 70%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape0-bf16-none-False] PASSED [ 73%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape0-bf16-gelu-True] PASSED [ 75%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape0-bf16-relu-True] PASSED [ 78%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape1-fp16-none-False] PASSED [ 80%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape1-fp16-gelu-True] PASSED [ 82%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape1-fp16-relu-True] PASSED [ 85%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape1-bf16-none-False] PASSED [ 87%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape1-bf16-gelu-True] PASSED [ 90%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_matmul_executes[shape1-bf16-relu-True] PASSED [ 92%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_control_shape_stays_unsplit[fp16] PASSED [ 95%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_control_shape_stays_unsplit[bf16] PASSED [ 97%]
+tests/unit/test_rocm_split_k.py::test_gfx1201_split_k_workspace_is_typed_and_the_launcher_checks_it PASSED [100%]
+
+============================= 41 passed in 10.82s ==============================
+exit: 0

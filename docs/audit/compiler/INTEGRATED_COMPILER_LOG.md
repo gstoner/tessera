@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-22
+last_updated: 2026-09-26
 audit_role: reference
 ---
 
@@ -4827,3 +4827,19 @@ Evidence: [refreshed frontend packet](../../../benchmarks/baselines/gfx1201_mxfp
 `tests/unit/test_gfx1201_folded_staging_census.py`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-26 — ROCM-SPLIT-K-1: ordered cross-workgroup split-K lands on gfx1201
+
+Owner: [ROCM-SPLIT-K-1](INTEGRATED_COMPILER_PLAN.md#rocm-split-k-1)
+
+PRs: branches `claude/amd-x86-alpha-lanes-splitk` (merged into `claude/amd-x86-alpha-lanes` as cecabc5d) and `claude/amd-x86-alpha-lanes-splitk-fixes` (pre-PR review fixes).
+
+Outcome: cross-workgroup split-K with an **ordered** reduction on the gfx1201 typed route, f16/bf16. One decider -- `selectGfx1201SplitK` in Graph->Schedule -- with `rocm_tiling.select_split_k` as its declared oracle, compared on every package (Decision #31). `split_k` + `split_k_reduction="ordered"` are a semantic pair carried through `schedule.matmul` (and its digest, only when S>1), `tile.matmul_kernel` and `tessera_rocm.wmma_gemm`, every verifier failing closed. The generator emits a partial (grid.z = slice, fp32 workspace, no epilogue) and an ordered reduce that applies the epilogue once; the descriptor declares the workspace in its typed field. Router gate 16x256x2048 on Tajasarus, paired and interleaved, host wall clock: S=2 is 2.05x (fp16) / 2.01x (bf16) over the unsplit kernel of the same Tile IR, both launches counted.
+
+Remaining: per-shape slice rule (the measurement-only sweep had S=4/S=8 faster still on this shape); fp8/int split; device-clock timing witness; gfx1151 (never split; no evidence).
+
+Evidence: `benchmarks/baselines/rocm_split_k_20260926/` (timing packet, README, device-test logs with host and commit).
+
+<!-- entry-fields:end -->
+
+Review fixes (2026-09-26). (1) The S*M*N*4 scratch was only in untyped provenance -- a Decision #32 under-declaration; it is now `LaunchDescriptor.workspace` (256-aligned, launch lifetime, uninitialized because every element is written by exactly one slice), and the launcher allocates from it and refuses a provenance disagreement. **Not moved to `ROCMNativeProgram`:** that type is consumed only by the attention-backward launcher and would change `package_scheduled_matmul`'s return type for every caller (runtime `RuntimeArtifact`, the canonical GEMM benchmark, the gap recorder) for one extra entry; the reduce entry stays a declared second image entry point with its own ABI id. (2) The artifact now states the split the C++ Schedule wrote (`schedule_split_k`), so an oracle defect reports as oracle-vs-authority. (3) `k_unroll` is a performance key and yields: a derived unroll that does not divide the slice falls back to 1 and is recorded; a pinned one is refused. (8) `ROCM_SPLIT_K_NOT_APPLIED` is a registered warning and is emitted as one, and only when K >= 512 is misaligned: firing on every 16x256x256 decode GEMM was noise about a split that was never on offer. The "three idle SIMDs" explanation of S=4/8 is a hypothesis, not a measurement (no counters on WSL2).

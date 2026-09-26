@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,44 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## AVX-512 E2E release packets, one per Zen 5 host — 2026-09-26
+
+Sync `AVX512-E2E-PACKETS-2026-09-26` (E2E-SPINE-3; uses `RUNTIME-LIB-OPT-1` and the
+x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
+
+- **Registry split.** The single `("x86", "x86_64_avx512")` fleet key is replaced by
+  two host-pinned keys, `x86_64_avx512_strix_halo` (Princess-Luna, Ryzen AI MAX+ 395)
+  and `x86_64_avx512_granite_ridge` (Tajasarus, Ryzen 7 9800X3D), each owing
+  matmul / softmax / reduction / attention / linalg. `alpha_scoreboard` `luna_cpu` /
+  `taj_cpu` read their own key; the "two Zen 5 lanes share one key" limit is gone.
+- **Recorder** `benchmarks/e2e_spine/record_x86_avx512_packet.py` maps the CPU model
+  name to the one key that host may record and refuses any other host, a host without
+  the AVX-512 image feature set, a dirty tree, or a runtime library whose
+  `record_for_library` stamp is not optimized. `kernel_wall` is timed by
+  `profiler_x86_clock.measure` / `witness_sample` (TSC calibrated over separate
+  intervals, rdtscp + `CLOCK_MONOTONIC_RAW` around each window on one pinned CPU);
+  a window whose TSC is refused aborts the recording. The stamp sits inside each row's
+  `resource_fingerprint` and in the sealed `resources.json`.
+- **linalg fixture** `cholesky-f32-3x3-spd-v1` added to `benchmarks/e2e_spine/fixtures.json`
+  (exact float factor; runs through `x86_breadth.package_graph_breadth`).
+- **Sealed** (both at source commit `154e7fc9`, WSL2, each built from a fresh worktree
+  with no build type so the x86 libraries are `-O2` by `RUNTIME-LIB-OPT-1`; Tajasarus's
+  own `build/` is Release, deliberately not mirrored so both lanes are `-O2`):
+  `docs/audit/evidence/e2e_spine/x86/x86_64_avx512_strix_halo/` on Princess-Luna and
+  `.../x86_64_avx512_granite_ridge/` on Tajasarus, all five families each. Medians live
+  in the packets. Every witnessed window agreed with the raw clock within 2.5e-4.
+- **Findings, not fixed here.** (1) `end_to_end` through `runtime.launch` costs
+  ~0.39 ms (Tajasarus) to ~0.71 ms (Princess-Luna) per call even for a 1 µs reduction,
+  so the public launch path, not the kernel, dominates every small family — owed a
+  look at the x86 descriptor launch path. (2) The `-O2` `libtessera_x86_elementwise.so`
+  was byte-identical on the two hosts (same GCC 15.2.0, same detected flags), so a
+  per-host timing gap is the part, not the build. (3) Under WSL2 the raw clock is
+  itself TSC-derived; the witness shows a stable TSC scale, not an independent
+  oscillator (stated in `profiler_x86_clock`).
+
+**Sibling outcomes.** ROCm / NVIDIA / Apple: not applicable (x86 CPU packets; no shared
+code changed beyond the x86 registrations and a new fixture that no other packet claims).
 
 ## Device-clock markers — 2026-09-26
 

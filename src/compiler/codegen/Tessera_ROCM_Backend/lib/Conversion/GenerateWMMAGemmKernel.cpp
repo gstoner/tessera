@@ -150,6 +150,11 @@ struct WmmaGemmRequest {
   // being read from `desc` at the emission site, because the descriptor is only
   // in scope in the adapters that populate this request.
   int64_t kBlocks = 1;
+  // ROCM-SPLIT-K-1: cross-workgroup K slices and their reduction order, from
+  // `tile.matmul_kernel`'s `tessera.split_k` / `tessera.split_k_reduction`.
+  // 1 / "" is the unsplit kernel.
+  int64_t splitK = 1;
+  std::string splitKReduction;
   tessera::tile::TilePackedFormatAttr storagePack;
 };
 
@@ -301,7 +306,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      StringRef rasterOrder = "row_major",
                      int64_t rasterGroup = 1, int64_t staticM = 0,
                      int64_t staticN = 0, int64_t staticK = 0,
-                     int64_t kUnroll = 1, int64_t schedGroups = 0) {
+                     int64_t kUnroll = 1, int64_t schedGroups = 0,
+                     int64_t splitK = 1, int64_t sliceK = 0) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -405,6 +411,25 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   }
   Value baseRow = b.create<arith::MulIOp>(loc, tileM, c16mt);
   Value baseCol = b.create<arith::MulIOp>(loc, tileN, c16nt);
+
+  // ROCM-SPLIT-K-1: the PARTIAL half of a cross-workgroup split. blockIdx.z
+  // selects K slice `z`, which walks [z*sliceK, (z+1)*sliceK) -- a whole
+  // number of macro K blocks, checked by the caller, so the slice needs no
+  // remainder loop and no ragged-K tail. The fp32 partial lands in the
+  // [S, M, N] workspace at row z*M + r, which is plane z of the workspace in
+  // the same row-major addressing the unsplit store uses. The epilogue is
+  // NOT applied here: the caller passes none, and the ordered reduction
+  // kernel applies the program's epilogue once, after the sum.
+  const bool split = splitK > 1;
+  Value kBegin = c0, kEnd, storeRowShift, storeRowBound = M;
+  if (split) {
+    Value slice = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::z);
+    Value cSlice = b.create<arith::ConstantIndexOp>(loc, sliceK);
+    kBegin = b.create<arith::MulIOp>(loc, slice, cSlice);
+    kEnd = b.create<arith::AddIOp>(loc, kBegin, cSlice);
+    storeRowShift = b.create<arith::MulIOp>(loc, slice, M);
+    storeRowBound = b.create<arith::AddIOp>(loc, storeRowShift, M);
+  }
 
   // W1.1 step 3 pilot. The typed Tile chain must retain the runtime leading
   // dimensions of this problem-size-generic kernel, so leading_dim=0 means the
@@ -840,11 +865,16 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           unpack.addAttribute("tile.layout", accTileLayout);
           Value tile = sb.create(unpack)->getResult(0);
           OperationState store(loc, "tile.store");
+          // Split-K partials land in workspace plane z (rows z*M .. z*M+M).
+          Value storeRow =
+              split ? Value(sb.create<arith::AddIOp>(loc, rowOrigin[mi],
+                                                     storeRowShift))
+                    : rowOrigin[mi];
           if (masked)
             store.addOperands(
-                {tile, D, rowOrigin[mi], colOrigin[ni], M, N, N});
+                {tile, D, storeRow, colOrigin[ni], storeRowBound, N, N});
           else
-            store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], N});
+            store.addOperands({tile, D, storeRow, colOrigin[ni], N});
           if (typedEpilogue) {
             if (hasBias)
               store.addOperands({bias});
@@ -937,12 +967,15 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         masked ? 1 : std::max<int64_t>(kUnroll, 1) * blocks;
     Value kStep = rb.create<arith::ConstantIndexOp>(loc, T.fragK * unroll);
     Value kMainU = kMain;
-    if (unroll > 1) {
+    if (split) {
+      // The slice is a whole multiple of the step (checked by the caller).
+      kMainU = kEnd;
+    } else if (unroll > 1) {
       Value remU = rb.create<arith::RemUIOp>(loc, kMain, kStep);
       kMainU = rb.create<arith::SubIOp>(loc, kMain, remU);
     }
     auto kLoop = rb.create<scf::ForOp>(
-        loc, c0, kMainU, kStep, initAccs,
+        loc, split ? kBegin : c0, kMainU, kStep, initAccs,
         [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
           SmallVector<Value> accs(iter.begin(), iter.end());
           for (int64_t u = 0; u < unroll; ++u) {
@@ -954,6 +987,11 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           }
           bb.create<scf::YieldOp>(l, accs);
         });
+    if (split) {
+      // No remainder and no ragged tail inside a whole-block slice.
+      emitStore(rb, kLoop.getResults(), masked);
+      return;
+    }
     // The 1..unroll-1 full slabs the unrolled loop could not take.
     scf::ForOp remainder;
     if (unroll > 1) {
@@ -1965,6 +2003,71 @@ constexpr bool kDefaultLdsDoubleBuffer = false;
 constexpr int kDefaultLdsSchedValuPerMma = 0;
 constexpr bool kDefaultLdsBRowMajor = false;
 
+// ROCM-SPLIT-K-1: the ORDERED reduction half of a cross-workgroup split.
+//
+// Args: W (fp32 [S, M, N] workspace), optional bias (fp32 [N]), D, M, N. One
+// thread per output element sums the S partials in FIXED slice order 0..S-1
+// -- a sequential chain of plain `arith.addf` with no fast-math flags, so LLVM
+// may not reassociate it and the result is bit-reproducible run to run
+// (Decision #21a: the reduction order is the semantic key it claims to be).
+// It then applies the program's epilogue exactly once, through the same
+// `tile::emitScalarFloatActivation` / output-conversion helpers the unsplit
+// store uses, with the same bias-then-activation order. The partial kernel
+// never applies it: an epilogue per slice would compute a different program,
+// and dropping it would be the "fallback must compute the same program"
+// failure this repo has already paid for once.
+static void emitSplitKReduceBody(OpBuilder &b, Location loc,
+                                 gpu::GPUFuncOp fn, int64_t splitK,
+                                 bool hasBias, StringRef activation,
+                                 Type outputType) {
+  b.setInsertionPointToStart(&fn.getBody().front());
+  unsigned next = 0;
+  Value W = fn.getArgument(next++);
+  Value bias = hasBias ? fn.getArgument(next++) : Value();
+  Value D = fn.getArgument(next++);
+  Value M = fn.getArgument(next++);
+  Value N = fn.getArgument(next++);
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  Value cS = b.create<arith::ConstantIndexOp>(loc, splitK);
+  Value tx = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value bx = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value bdim = b.create<gpu::BlockDimOp>(loc, gpu::Dimension::x);
+  Value idx = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bx, bdim), tx);
+  Value mn = b.create<arith::MulIOp>(loc, M, N);
+  Value inb = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, idx, mn);
+  auto guard = b.create<scf::IfOp>(loc, inb, /*withElseRegion=*/false);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(guard.thenBlock());
+    Type f32Ty = b.getF32Type();
+    Value zero = b.create<arith::ConstantOp>(loc, f32Ty,
+                                             b.getFloatAttr(f32Ty, 0.0));
+    auto sum = b.create<scf::ForOp>(
+        loc, c0, cS, c1, ValueRange{zero},
+        [&](OpBuilder &lb, Location l, Value slice, ValueRange acc) {
+          Value offset = lb.create<arith::AddIOp>(
+              l, lb.create<arith::MulIOp>(l, slice, mn), idx);
+          Value partial =
+              lb.create<memref::LoadOp>(l, W, ValueRange{offset});
+          lb.create<scf::YieldOp>(
+              l, ValueRange{lb.create<arith::AddFOp>(l, acc[0], partial)});
+        });
+    Value value = sum.getResult(0);
+    if (bias) {
+      Value col = b.create<arith::RemUIOp>(loc, idx, N);
+      value = b.create<arith::AddFOp>(
+          loc, value, b.create<memref::LoadOp>(loc, bias, ValueRange{col}));
+    }
+    value = tessera::tile::emitScalarFloatActivation(b, loc, value, activation);
+    value = tessera::tile::emitFloatOutputConversion(b, loc, value, outputType);
+    b.create<memref::StoreOp>(loc, value, D, ValueRange{idx});
+  }
+  b.setInsertionPointToEnd(&fn.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 struct GenerateWMMAGemmKernelPass
     : PassWrapper<GenerateWMMAGemmKernelPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateWMMAGemmKernelPass)
@@ -2261,6 +2364,12 @@ struct GenerateWMMAGemmKernelPass
       // and read by nobody except three gates that refused anything but 1 -- so
       // a macro K tile was expressible and unreachable. This is the consumer.
       request.kBlocks = std::max<int64_t>(desc.getKBlocks(), 1);
+      if (auto split = op->getAttrOfType<IntegerAttr>("tessera.split_k")) {
+        request.splitK = split.getInt();
+        if (auto reduction =
+                op->getAttrOfType<StringAttr>("tessera.split_k_reduction"))
+          request.splitKReduction = reduction.getValue().str();
+      }
       request.bias = epilogue.getBias();
       request.activation = epilogue.getActivation().str();
       request.output = epilogue.getOutputType().str();
@@ -2347,6 +2456,16 @@ struct GenerateWMMAGemmKernelPass
       request.storagePack =
           op->getAttrOfType<tessera::tile::TilePackedFormatAttr>(
               "tessera.storage_pack");
+      // ROCM-SPLIT-K-1 is implemented on the typed tile.matmul_kernel route
+      // only. A directive that states a split names a program this adapter
+      // cannot emit, so it is refused rather than answered unsplit.
+      if (auto split = op->getAttrOfType<IntegerAttr>("split_k");
+          split && split.getInt() != 1) {
+        op->emitError("ROCM_SPLIT_K_UNSUPPORTED: the tessera_rocm.wmma_gemm "
+                      "directive adapter has no split-K body; split-K is "
+                      "emitted from tile.matmul_kernel on the typed route");
+        return signalPassFailure();
+      }
       requests.push_back(std::move(request));
     }
 
@@ -2650,6 +2769,47 @@ struct GenerateWMMAGemmKernelPass
         }
       }
 
+      // ROCM-SPLIT-K-1: admission for a cross-workgroup split. Every refusal
+      // names what it cannot emit rather than answering with the unsplit
+      // kernel, because the split and its order are semantic (#21a).
+      const bool splitK = request.splitK > 1;
+      int64_t sliceK = 0;
+      if (request.splitK < 1 || (!splitK && !request.splitKReduction.empty())) {
+        op->emitError("ROCM_SPLIT_K_UNSUPPORTED: inconsistent split-K contract "
+                      "(split_k=")
+            << request.splitK << ", reduction='" << request.splitKReduction
+            << "')";
+        return signalPassFailure();
+      }
+      if (splitK) {
+        const int64_t step =
+            T.fragK * std::max<int64_t>(T.kBlocks, 1) *
+            std::max<int64_t>(int64_t(kUnroll), 1);
+        std::string why;
+        if (request.splitKReduction != "ordered")
+          why = "the only admitted reduction is 'ordered'";
+        else if (!viaTile || !portableContract)
+          why = "split-K is emitted on the typed tile.matmul_kernel route only";
+        else if (canonicalStaging != "register")
+          why = "split-K is implemented on the register-staged body only";
+        else if (T.isInt || T.halfAccumulator || !T.accElem.isF32() ||
+                 outputTy != T.accElem)
+          why = "split-K partials are an fp32 workspace; the contract must "
+                "accumulate and store in f32";
+        else if (request.staticK <= 0)
+          why = "split-K needs a static K to cut into slices";
+        else if (request.staticK % (request.splitK * step) != 0)
+          why = (Twine("K=") + Twine(request.staticK) + " does not split into " +
+                 Twine(request.splitK) + " slices of whole K steps (" +
+                 Twine(step) + " = fragK x k_blocks x k-unroll)")
+                    .str();
+        if (!why.empty()) {
+          op->emitError("ROCM_SPLIT_K_UNSUPPORTED: ") << why;
+          return signalPassFailure();
+        }
+        sliceK = request.staticK / request.splitK;
+      }
+
       // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K[,bias]) kernel }
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -2670,7 +2830,8 @@ struct GenerateWMMAGemmKernelPass
       auto dTy = MemRefType::get({ShapedType::kDynamic}, outputTy);
       auto biasTy = MemRefType::get({ShapedType::kDynamic}, T.accElem);
       SmallVector<Type> argTys{abTy, bAbTy};
-      if (hasBias && portableContract)
+      // A split partial takes no bias: the epilogue belongs to the reduction.
+      if (hasBias && portableContract && !splitK)
         argTys.push_back(biasTy);
       argTys.append({dTy, idxTy, idxTy, idxTy});
       if (hasBias && !portableContract)
@@ -2715,7 +2876,8 @@ struct GenerateWMMAGemmKernelPass
       // different physical body: it must not claim the contract, or the
       // topology check refuses it with a message about a contract it never
       // meant to make (2026-09-18).
-      if (viaTile && gfx11Request && canonicalStaging != "lds" && kUnroll <= 1 &&
+      if (viaTile && gfx11Request && !splitK && canonicalStaging != "lds" &&
+          kUnroll <= 1 &&
           mt == 2 && nt == 4 && T.pack == 0 && !hasBias &&
           activation == "none" && outputTy == T.accElem) {
         gpuFunc->setAttr("tessera.rocm.typed_gfx11_gemm_contract",
@@ -2871,6 +3033,41 @@ struct GenerateWMMAGemmKernelPass
         gpuFunc->setAttr("tessera.rocm.pipeline_stages",
                          b.getI64IntegerAttr(1));
         emitCanonicalLdsBody(bodyB, loc, gpuFunc, T, outputTy);
+      } else if (splitK) {
+        // The partial: no epilogue, fp32 into workspace plane blockIdx.z.
+        emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
+                        portableContract, viaTile, /*hasBias=*/false,
+                        /*activation=*/"none", packDesc && dt == "int4",
+                        request.rasterOrder, request.rasterGroup,
+                        request.staticM, request.staticN, request.staticK,
+                        kUnroll, schedGroups, request.splitK, sliceK);
+        const std::string reduceName = kname + "_splitk_reduce";
+        gpuFunc->setAttr("tessera.rocm.split_k",
+                         b.getI64IntegerAttr(request.splitK));
+        gpuFunc->setAttr("tessera.rocm.split_k_reduction",
+                         b.getStringAttr(request.splitKReduction));
+        gpuFunc->setAttr("tessera.rocm.split_k_role",
+                         b.getStringAttr("partial"));
+        gpuFunc->setAttr("tessera.rocm.split_k_slice",
+                         b.getI64IntegerAttr(sliceK));
+        gpuFunc->setAttr("tessera.rocm.split_k_reduce_entry",
+                         b.getStringAttr(reduceName));
+        SmallVector<Type> reduceTys{dTy};
+        if (hasBias)
+          reduceTys.push_back(biasTy);
+        reduceTys.append({dTy, idxTy, idxTy});
+        auto reduceFunc = b.create<gpu::GPUFuncOp>(
+            loc, reduceName, b.getFunctionType(reduceTys, {}));
+        reduceFunc.setKernel(true);
+        reduceFunc->setAttr("tessera.rocm.split_k",
+                            b.getI64IntegerAttr(request.splitK));
+        reduceFunc->setAttr("tessera.rocm.split_k_reduction",
+                            b.getStringAttr(request.splitKReduction));
+        reduceFunc->setAttr("tessera.rocm.split_k_role",
+                            b.getStringAttr("ordered_reduce"));
+        OpBuilder reduceB(reduceFunc.getContext());
+        emitSplitKReduceBody(reduceB, loc, reduceFunc, request.splitK, hasBias,
+                             activation, outputTy);
       } else {
         emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
                         portableContract, viaTile, hasBias, activation,

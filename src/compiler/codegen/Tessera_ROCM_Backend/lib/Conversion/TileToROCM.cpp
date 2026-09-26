@@ -3333,6 +3333,22 @@ struct LowerTileToROCMPass
           state.addAttribute("schedule_raster_order", order);
         if (Attribute group = op->getAttr("tessera.raster_group"))
           state.addAttribute("schedule_raster_group", group);
+        // ROCM-SPLIT-K-1: the split and its reduction order are semantic and
+        // must survive the Target boundary (Decision #32). The Tile verifier
+        // already proved they arrive as a consistent pair.
+        if (auto split = op->getAttrOfType<IntegerAttr>("tessera.split_k")) {
+          auto reduction =
+              op->getAttrOfType<StringAttr>("tessera.split_k_reduction");
+          if (!reduction) {
+            op->emitError("ROCM_SPLIT_K_UNSUPPORTED: tessera.split_k without "
+                          "tessera.split_k_reduction reached the ROCm Target "
+                          "consumer");
+            signalPassFailure();
+            return;
+          }
+          state.addAttribute("split_k", split);
+          state.addAttribute("split_k_reduction", reduction);
+        }
         builder.create(state);
         op->erase();
         continue;

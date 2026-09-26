@@ -254,6 +254,19 @@ struct MatmulSchedule {
   //: The macro K tile (ROCM-MACRO-K-TILE-1). 0 means "one instruction K per
   //: block", i.e. the historical unblocked loop. `kBlocks = blockK / tileK`.
   int64_t blockK = 0;
+  //: ROCM-SPLIT-K-1: cross-workgroup split-K. `splitK` K slices each write
+  //: an fp32 partial into an [S, M, N] workspace, and a second kernel sums
+  //: them in fixed slice order and applies the epilogue. 1 = no split.
+  //: Both fields are SEMANTIC (Decision #21a): the slice count and the
+  //: reduction order decide the floating-point result, so they enter the
+  //: digest and every consumer refuses a split that arrives without an
+  //: explicit `ordered` reduction.
+  int64_t splitK = 1;
+  StringRef splitKReduction;
+  //: Why an occupancy-short schedule was left unsplit (empty otherwise). Not
+  //: part of the contract or the digest; Graph->Schedule turns it into a
+  //: ROCM_SPLIT_K_NOT_APPLIED remark so the fallback is never silent.
+  std::string splitKFallback;
   StringRef accum;
   int64_t m;
   int64_t n;
@@ -283,6 +296,66 @@ static StringRef moduleString(ModuleOp module, StringRef primary,
   if (auto value = module->getAttrOfType<StringAttr>(fallback))
     return value.getValue();
   return {};
+}
+
+// ── ROCM-SPLIT-K-1: the one split-K decider ─────────────────────────────
+//
+// This is the production authority (Decision #31). The Python predicate
+// `rocm_tiling._split_k_required` / `select_split_k` is its declared ORACLE:
+// `scheduled_matmul.verify_matmul_projection` recomputes the decision on every
+// package and refuses one that disagrees, the same arrangement as the macro
+// tile (`rocm_tiling.select_macro_tile`).
+//
+// Keyed on OCCUPANCY, not K magnitude: split-K exists to put work on units
+// that would otherwise idle, so the trigger is "fewer output tiles than
+// workgroup slots". A workgroup occupies a WGP in WGP mode, which is what our
+// kernels emit (COMPUTE_PGM_RSRC1 bit 29, measured 2026-09-20). The slot count
+// mirrors `rocm_target._DISPATCH_SLOTS[GFX_1201]` (32 WGPs on the RX 9070 XT,
+// three sources agreeing); the projection check is what keeps the two equal.
+constexpr int64_t kGfx1201DispatchSlotsWgp = 32;
+// Smallest contraction extent one slice may carry. UNMEASURED guard, stated
+// as such: below it the second launch and the fp32 workspace round trip are
+// not plausibly repaid, and splitting a K=64 problem into two 32-wide slices
+// is not what this item exists for. Mirrors `rocm_tiling.SPLIT_K_MIN_SLICE_K`.
+constexpr int64_t kSplitKMinSliceK = 256;
+
+static void selectGfx1201SplitK(MatmulSchedule &schedule) {
+  // Only a static, K-blocked schedule has slice boundaries to align to: a
+  // split partitions the macro K tile (ROCM-MACRO-K-TILE-1), and without one
+  // there is nothing to partition.
+  if (schedule.dynamicM || schedule.dynamicN || schedule.dynamicK ||
+      schedule.blockK <= 0 || schedule.macroTileM <= 0 ||
+      schedule.macroTileN <= 0)
+    return;
+  const int64_t tiles =
+      ((schedule.m + schedule.macroTileM - 1) / schedule.macroTileM) *
+      ((schedule.n + schedule.macroTileN - 1) / schedule.macroTileN);
+  if (tiles >= kGfx1201DispatchSlotsWgp)
+    return;
+  // Enough slices to give every WGP a workgroup, rounded down to a power of
+  // two, and only as far as every slice stays a whole number of macro K
+  // blocks of at least kSplitKMinSliceK. Divisibility is monotone in S, so
+  // the first failure ends the search.
+  const int64_t wanted =
+      (kGfx1201DispatchSlotsWgp + tiles - 1) / tiles;
+  int64_t chosen = 1;
+  for (int64_t slices = 2; slices <= wanted; slices *= 2) {
+    if (schedule.k % (slices * schedule.blockK) != 0 ||
+        schedule.k / slices < kSplitKMinSliceK)
+      break;
+    chosen = slices;
+  }
+  if (chosen == 1) {
+    schedule.splitKFallback =
+        (Twine(tiles) + " output tiles on " + Twine(kGfx1201DispatchSlotsWgp) +
+         " WGPs asks for split-K, but K=" + Twine(schedule.k) +
+         " has no 2-way split into whole macro K blocks (block_k=" +
+         Twine(schedule.blockK) + ") of at least " + Twine(kSplitKMinSliceK))
+            .str();
+    return;
+  }
+  schedule.splitK = chosen;
+  schedule.splitKReduction = "ordered";
 }
 
 //: The schedule as INFERRED from operand/result element types per target.
@@ -671,6 +744,10 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.accum = "f32";
     schedule.macroTileM = gfx1201StaticPanel ? 64 : 16;
     schedule.macroTileN = gfx1201StaticPanel ? 64 : 16;
+    // ROCM-SPLIT-K-1: f16/bf16 only. The fp8 and integer branches above keep
+    // S=1 until they have their own device proof; an i32 workspace would be
+    // exact, but "would be" is not evidence.
+    selectGfx1201SplitK(schedule);
     return schedule;
   }
   if (rocm && lhsElement == rhsElement &&
@@ -821,6 +898,12 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
        Twine(schedule.dynamicM) + Twine(schedule.dynamicN) +
        Twine(schedule.dynamicK))
           .str();
+  // ROCM-SPLIT-K-1: appended only when a split exists, so every unsplit
+  // schedule keeps the digest it had before split-K could be expressed.
+  if (schedule.splitK > 1)
+    contract += (Twine(";split_k=") + Twine(schedule.splitK) +
+                 ";split_k_reduction=" + schedule.splitKReduction)
+                    .str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
 }
@@ -2317,6 +2400,11 @@ struct GraphToSchedulePass
       }
       std::string digest = scheduleDigest(*selected);
       op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
+      // A performance fallback may happen, but never silently (#21a).
+      if (!selected->splitKFallback.empty())
+        op->emitRemark("ROCM_SPLIT_K_NOT_APPLIED: ")
+            << selected->splitKFallback
+            << "; scheduling the unsplit kernel (ROCM-SPLIT-K-1).";
 
       builder.setInsertionPointAfter(op);
       OperationState state(op->getLoc(), "schedule.matmul");
@@ -2337,6 +2425,13 @@ struct GraphToSchedulePass
       state.addAttribute("storage", builder.getStringAttr(selected->storage));
       state.addAttribute("storage_b", builder.getStringAttr(selected->storageB));
       state.addAttribute("block_k", builder.getI64IntegerAttr(selected->blockK));
+      // Stated only when a split exists, so unsplit schedule IR is unchanged.
+      if (selected->splitK > 1) {
+        state.addAttribute("split_k",
+                           builder.getI64IntegerAttr(selected->splitK));
+        state.addAttribute("split_k_reduction",
+                           builder.getStringAttr(selected->splitKReduction));
+      }
       state.addAttribute("scale_k",
                          builder.getI64IntegerAttr(selected->scaleBlockK));
       state.addAttribute("scale_format",
@@ -3360,6 +3455,8 @@ struct ScheduleToTilePass
           scheduled.getStorage() != selected->storage ||
           scheduled.getStorageB() != selected->storageB ||
           scheduled.getBlockK() != selected->blockK ||
+          scheduled.getSplitK() != selected->splitK ||
+          scheduled.getSplitKReduction() != selected->splitKReduction ||
           scheduled.getScaleK() != selected->scaleBlockK ||
           scheduled.getScaleFormat() != selected->scaleFormat ||
           scheduled.getPhysicalContract() != selected->physicalContract ||
@@ -3995,6 +4092,17 @@ struct ScheduleToTilePass
                                builder.getI64IntegerAttr(selected->rasterGroup));
       kernelState.addAttribute("tessera.schedule_hash",
                                builder.getStringAttr(scheduled.getArtifactHash()));
+      // ROCM-SPLIT-K-1: the split and its reduction order reach the Tile
+      // launch op as a pair. The epilogue attribute above still states the
+      // PROGRAM's epilogue; a split consumer applies it once, in the ordered
+      // reduction, never per slice.
+      if (selected->splitK > 1) {
+        kernelState.addAttribute("tessera.split_k",
+                                 builder.getI64IntegerAttr(selected->splitK));
+        kernelState.addAttribute(
+            "tessera.split_k_reduction",
+            builder.getStringAttr(selected->splitKReduction));
+      }
       builder.create(kernelState);
 
       Value result = builder.create<bufferization::ToTensorOp>(

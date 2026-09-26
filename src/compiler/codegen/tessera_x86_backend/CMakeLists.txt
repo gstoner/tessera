@@ -13,6 +13,9 @@ option(TESSERA_ENABLE_AVX512 "Enable AVX-512 kernels" ON)
 add_library(tessera_x86_base SHARED
   src/kernels/base_e2e_f32.cpp
 )
+if(COMMAND tessera_runtime_library_optimization)
+  tessera_runtime_library_optimization(tessera_x86_base)  # RUNTIME-LIB-OPT-1
+endif()
 target_compile_options(tessera_x86_base PRIVATE
   -march=x86-64 -mno-avx -mno-avx2 -mno-avx512f
 )
@@ -240,6 +243,9 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_predicate_f32.cpp
   src/kernels/kv_cache_f32.cpp
 )
+if(COMMAND tessera_runtime_library_optimization)
+  tessera_runtime_library_optimization(tessera_x86_elementwise)  # RUNTIME-LIB-OPT-1
+endif()
 target_include_directories(tessera_x86_elementwise PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../../layout_algebra/include
 )

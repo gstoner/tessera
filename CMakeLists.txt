@@ -142,6 +142,7 @@ endif()
 # have never run against the fleet, and turning them on blind would trade one
 # silent gap for a loud one.
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/TesseraToolchainPins.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/TesseraRuntimeLibraryOptimization.cmake)
 tessera_pin_llvm(${TESSERA_REQUIRED_LLVM_VERSION})
 
 
@@ -358,6 +359,7 @@ endif()
 # --------------------------------------------------------------------------
 message(STATUS "----------------------------------------------------")
 message(STATUS "Tessera ${TESSERA_VERSION} build configuration")
+tessera_write_runtime_library_build_record()
 message(STATUS "  LLVM/MLIR version : ${LLVM_PACKAGE_VERSION}")
 message(STATUS "  CUDA support      : ${TESSERA_ENABLE_CUDA}")
 message(STATUS "  CPU only          : ${TESSERA_CPU_ONLY}")

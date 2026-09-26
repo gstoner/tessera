@@ -116,6 +116,9 @@ if(TESSERA_ENABLE_HIP)
     add_library(TesseraSpectralHIP SHARED
         lib/TargetHooks/AMD/StockhamRadix4.hip
         lib/TargetHooks/AMD/SpectralComposite.hip)
+    if(COMMAND tessera_runtime_library_optimization)
+      tessera_runtime_library_optimization(TesseraSpectralHIP)  # RUNTIME-LIB-OPT-1
+    endif()
     set_property(TARGET TesseraSpectralHIP PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_target_properties(TesseraSpectralHIP PROPERTIES
         OUTPUT_NAME tessera_spectral_rocm

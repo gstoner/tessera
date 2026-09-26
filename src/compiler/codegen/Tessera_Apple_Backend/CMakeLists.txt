@@ -140,6 +140,9 @@ if(APPLE)
     runtime/apple_cpu_runtime.cpp
     runtime/apple_gpu_runtime.mm
   )
+  if(COMMAND tessera_runtime_library_optimization)
+    tessera_runtime_library_optimization(TesseraAppleRuntime)  # RUNTIME-LIB-OPT-1
+  endif()
   set_source_files_properties(runtime/apple_gpu_runtime.mm
     PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   target_link_libraries(TesseraAppleRuntime PUBLIC
@@ -157,6 +160,9 @@ if(APPLE)
     runtime/apple_cpu_runtime.cpp
     runtime/apple_gpu_runtime.mm
   )
+  if(COMMAND tessera_runtime_library_optimization)
+    tessera_runtime_library_optimization(TesseraAppleRuntimeShared)  # RUNTIME-LIB-OPT-1
+  endif()
   set_target_properties(TesseraAppleRuntimeShared PROPERTIES
     OUTPUT_NAME TesseraAppleRuntime
   )

@@ -39,6 +39,9 @@ if(_tessera_jit_blocker)
 endif()
 
 add_library(tessera_jit SHARED tessera_jit.cpp)
+if(COMMAND tessera_runtime_library_optimization)
+  tessera_runtime_library_optimization(tessera_jit)  # RUNTIME-LIB-OPT-1
+endif()
 
 # Domain dialects ride the same lane when their backend is built: the Clifford
 # (geometric-algebra) dialect's GradeFusion + ExpandProductTable run ahead of

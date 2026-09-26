@@ -382,6 +382,57 @@ def _target_family_route(target: str, family: str) -> tuple[str, str] | None:
     return route
 
 
+def _returned_call_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Name):
+            return func.id
+        if isinstance(func, ast.Attribute):
+            return func.attr
+    return ""
+
+
+def _packager_is_generic_scheduled(target: str, family: str) -> bool:
+    """True iff ``package_<family>`` on ``target`` only ever compiles through
+    the generic Schedule→Tile route.
+
+    Derived from the packager body, never declared: the function must call
+    ``lower_scheduled_kernel`` and **every** ``return`` must hand back
+    ``package_scheduled_kernel(...)``. One return of anything else — a direct
+    Tile constructor, a delegate, a dtype branch — and the family stays a
+    ``gap``, because a mixed body still owns a lowering the prune would lose.
+    Other exits must raise, which is the fail-closed shape these wrappers use.
+    """
+    filename = dict(_BACKEND_MODULES).get(target)
+    if filename is None:
+        return False
+    tree = _parse(_COMPILER / filename)
+    if tree is None:
+        return False
+    fn = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
+               and n.name == f"package_{family}"), None)
+    if fn is None:
+        return False
+    returns: list[ast.Return] = []
+    lowers = False
+    stack: list[ast.AST] = list(fn.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.Lambda, ast.ClassDef)):
+            continue  # nested scopes do not return from the packager
+        if isinstance(node, ast.Return):
+            returns.append(node)
+        if _returned_call_name(node) == "lower_scheduled_kernel":
+            lowers = True
+        stack.extend(ast.iter_child_nodes(node))
+    return bool(returns) and lowers and all(
+        r.value is not None
+        and _returned_call_name(r.value) == "package_scheduled_kernel"
+        for r in returns
+    )
+
+
 def family_rows() -> tuple[tuple[str, str, str, str], ...]:
     """(target, family, compiled_route, status) for every classified family."""
     verify_declared_mapping()
@@ -389,7 +440,11 @@ def family_rows() -> tuple[tuple[str, str, str, str], ...]:
     for inv in collect_inventories():
         for family in inv.families:
             route = _target_family_route(inv.target, family)
-            if route is None:
+            if route is None and _packager_is_generic_scheduled(inv.target, family):
+                rows.append((inv.target, family,
+                             f"{_GENERIC_COMPILED[0]}.{_GENERIC_COMPILED[1]}",
+                             "generic_compiled"))
+            elif route is None:
                 rows.append((inv.target, family, "—", "gap"))
             else:
                 rows.append(
@@ -429,6 +484,7 @@ def summary() -> dict[str, int]:
         "lines": sum(i.lines for i in inventories),
         "families": len(rows),
         "compiled": sum(1 for r in rows if r[3] == "compiled"),
+        "generic_compiled": sum(1 for r in rows if r[3] == "generic_compiled"),
         "gap": sum(1 for r in rows if r[3] == "gap"),
         "orphan_packagers": len(orphan_packagers()),
         "constructs_tile_ir": sum(
@@ -486,6 +542,7 @@ def render_markdown() -> str:
         f"| Lines in those modules | {s['lines']} |",
         f"| Classified family/target candidates (shape admission not implied) | {s['families']} |",
         f"| — covered by a compiled route | {s['compiled']} |",
+        f"| — packager compiles only through the generic scheduled route | {s['generic_compiled']} |",
         f"| — **gap (no declared family route)** | {s['gap']} |",
         f"| Packagers matching no family | {s['orphan_packagers']} |",
         "",
@@ -520,6 +577,13 @@ def render_markdown() -> str:
         "`compiled` means a family has a declared admission-predicate mapping.",
         "The target module must also define the corresponding package consumer.",
         "Actual driver paths, shapes and policies require separate checks.",
+        "",
+        "`generic` means the family has no family-named route, but its",
+        "`package_<family>` body is derived (AST) to call",
+        "`lower_scheduled_kernel` and to return only",
+        "`package_scheduled_kernel(...)` on every path — so its lowering",
+        "already runs Graph → Schedule → Tile. The Graph-input wrapper is",
+        "what remains to retire; any other return keeps the row a `gap`.",
         "It does **not** assert the compiled route reaches parity on",
         "every shape and dtype — that is per-family evidence the backend",
         "queues own.",
@@ -528,7 +592,8 @@ def render_markdown() -> str:
         "|---|---|---|---|",
     ]
     for target, family, route, status in rows:
-        mark = "✅ compiled" if status == "compiled" else "🔴 **gap**"
+        mark = {"compiled": "✅ compiled",
+                "generic_compiled": "🟡 generic"}.get(status, "🔴 **gap**")
         route_cell = f"`{route}`" if route != "—" else "—"
         out.append(f"| `{target}` | `{family}` | {route_cell} | {mark} |")
 

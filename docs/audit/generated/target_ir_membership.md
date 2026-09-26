@@ -42,9 +42,7 @@ op is to derive it from the base class and inherit the optional bag,
 which adds surface that *looks* contract-carrying and is not.
 **A new op should declare its contract attributes as required.**
 
-Apple is the sharpest case — it requires nothing at all, which is the
-same gap as its missing machine primitives seen from the contract
-side: a dialect of dispatch containers has no contract to enforce.
+Apple is the sharpest case — 7 of 31 ops require their contract and 12 carry none. The no-contract rows are largely dispatch containers and machine-primitive plumbing: the contract gap is the same gap as the machine vocabulary that still lives outside the compiler, seen from the contract side.
 
 ## Ops requiring no contract at all
 

@@ -172,6 +172,13 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
    only 11 shape/dtype rows with cross-domain near-winner consensus and linked
    cubin resources enter the corpus. Long-attention and several small gated/
    fused rows remain composed or unpromoted where the domains/runs disagree.
+> **Items 4–5 re-tiered 2026-09-25 (owner decision): future features, not
+> compiler gates.** The goal is a fully functional end-to-end compiler on the
+> sm_120 part that runs today; Hopper and datacenter Blackwell keep these
+> obligations for when that silicon exists. WSL is not a blocker for sm_120
+> performance work either — see
+> [MASTER_AUDIT §Consolidated action list](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25).
+
 4. **`wgmma` sm_90a** — complete the instruction-encoding skeleton into a real
    Hopper WGMMA kernel (assemble-only until a Hopper box) — and **sm_100 tcgen05**.
 5. Promote sm_80/90/100 manifest rows only when their own silicon is available

@@ -4,9 +4,9 @@ nvidia_sm120,attention_lse,—,gap
 nvidia_sm120,attention_backward,—,gap
 nvidia_sm120,paged_kv,—,gap
 nvidia_sm120,attention,scheduled_attention.supports_scheduled_attention,compiled
-nvidia_sm120,softmax,—,gap
-nvidia_sm120,norm,—,gap
-nvidia_sm120,reduction,—,gap
+nvidia_sm120,softmax,scheduled_kernel.supports_scheduled_kernel,generic_compiled
+nvidia_sm120,norm,scheduled_kernel.supports_scheduled_kernel,generic_compiled
+nvidia_sm120,reduction,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 nvidia_sm120,nvfp4_matmul,—,gap
 nvidia_sm120,int4_matmul,—,gap
 nvidia_sm120,mx_matmul,—,gap
@@ -35,7 +35,7 @@ apple_cpu,softmax,—,gap
 apple_cpu,svd,—,gap
 apple_cpu,tri_solve,—,gap
 apple_gpu,batched_gemm,—,gap
-apple_gpu,softmax,—,gap
+apple_gpu,softmax,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 apple_gpu,dynamic_softmax,—,gap
 apple_gpu,transpose,—,gap
 apple_gpu,gelu,—,gap

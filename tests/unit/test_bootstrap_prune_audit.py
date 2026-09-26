@@ -59,10 +59,69 @@ def test_gap_rows_are_only_ever_families_with_no_declared_route():
     for _target, family, route, status in audit.family_rows():
         if status == "gap":
             assert audit._target_family_route(_target, family) is None
+            assert not audit._packager_is_generic_scheduled(_target, family)
             assert route == "—"
+        elif status == "generic_compiled":
+            assert audit._target_family_route(_target, family) is None
+            assert audit._packager_is_generic_scheduled(_target, family)
+            assert route == "scheduled_kernel.supports_scheduled_kernel"
         else:
             assert status == "compiled"
             assert family in audit._FAMILY_TO_COMPILED
+
+
+def _generic_fixture(monkeypatch, tmp_path, body: str) -> bool:
+    (tmp_path / "fixture_native.py").write_text(body)
+    monkeypatch.setattr(audit, "_COMPILER", tmp_path)
+    monkeypatch.setattr(audit, "_BACKEND_MODULES", (("fixture", "fixture_native.py"),))
+    return audit._packager_is_generic_scheduled("fixture", "softmax")
+
+
+def test_generic_route_requires_every_return_to_be_the_scheduled_package(
+        monkeypatch, tmp_path):
+    """A mixed body still owns a lowering; reporting it generic would make the
+    prune lossy, so any non-scheduled return keeps the family a gap."""
+    pure = (
+        "def package_softmax(module, *, pipeline_name):\n"
+        "    if not ok(module):\n"
+        "        raise ValueError('no')\n"
+        "    return package_scheduled_kernel(\n"
+        "        lower_scheduled_kernel(module, target='t'), pipeline_name=pipeline_name)\n"
+    )
+    assert _generic_fixture(monkeypatch, tmp_path, pure)
+
+    mixed = (
+        "def package_softmax(module, *, pipeline_name):\n"
+        "    if dtype(module) == 'f16':\n"
+        "        return _compile_tile_ir(module)\n"
+        "    return package_scheduled_kernel(\n"
+        "        lower_scheduled_kernel(module, target='t'), pipeline_name=pipeline_name)\n"
+    )
+    assert not _generic_fixture(monkeypatch, tmp_path, mixed)
+
+    never_lowers = (
+        "def package_softmax(module, *, pipeline_name):\n"
+        "    return package_scheduled_kernel(cached(module), pipeline_name=pipeline_name)\n"
+    )
+    assert not _generic_fixture(monkeypatch, tmp_path, never_lowers)
+
+    only_raises = (
+        "def package_softmax(module, *, pipeline_name):\n"
+        "    lower_scheduled_kernel(module, target='t')\n"
+        "    raise ValueError('unsupported')\n"
+    )
+    assert not _generic_fixture(monkeypatch, tmp_path, only_raises)
+
+
+def test_nvidia_unary_families_are_derived_generic_not_declared():
+    """NVIDIA softmax/norm/reduction migrated to the generic Schedule→Tile
+    route (F2-U1–U10); the dashboard read them as gaps because only
+    family-named routes counted. Derived from the bodies, never declared."""
+    for family in ("softmax", "norm", "reduction"):
+        assert family not in audit._FAMILY_TO_COMPILED
+        assert audit._packager_is_generic_scheduled("nvidia_sm120", family)
+    # A family whose packager builds its own Tile IR must stay a gap.
+    assert not audit._packager_is_generic_scheduled("nvidia_sm120", "nvfp4_matmul")
 
 
 def test_the_analysis_is_not_vacuous():

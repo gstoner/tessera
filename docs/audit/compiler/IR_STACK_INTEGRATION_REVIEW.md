@@ -7,6 +7,20 @@ companions: FRONTEND_GRAPH_SCHEDULE_REVIEW.md · COMPILER_ARCHITECTURE_SWEEP.md 
 
 # Graph IR → Schedule IR → Tile IR Integration Review
 
+> **Status banner, 2026-09-25 — read before acting on this review.**
+> - **T5 / U7 are closed:** the dead `tessera.queue` dialect (both duplicate
+>   ODS files) was deleted 2026-08-10 under Decisions #29/#31.
+> - **The `AnyType` count below is stale and moving the wrong way.** On
+>   2026-09-25, `grep -o AnyType src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td`
+>   gives 87 (76 as `Variadic<AnyType>`) against the 71 (66) recorded here.
+>   `tile.mma` typing is enforced in `verify()` (W1.1), not in ODS.
+> - **Only T4/U4 is routed** (as W3.3 in the integrated plan). U2 (legality
+>   passes → ODS + one dataflow pass), U3 (Python/C++ dual boundaries with no
+>   differential test), U5 (boundary verifier for #15a attributes) and U6
+>   (scheduling decisions into Schedule IR) have no live-queue ID; they are
+>   listed as open decisions in
+>   [MASTER_AUDIT §Consolidated action list](../MASTER_AUDIT.md#consolidated-action-list-2026-09-25).
+
 The seams between the three IR levels: what each level owns, what survives the
 transition, and what has to be re-derived because it didn't.
 

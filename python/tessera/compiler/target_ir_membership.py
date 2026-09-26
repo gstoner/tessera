@@ -223,10 +223,23 @@ def render_markdown() -> str:
         "which adds surface that *looks* contract-carrying and is not.",
         "**A new op should declare its contract attributes as required.**",
         "",
-        "Apple is the sharpest case — it requires nothing at all, which is the",
-        "same gap as its missing machine primitives seen from the contract",
-        "side: a dialect of dispatch containers has no contract to enforce.",
-        "",
+    ]
+    apple = per.get("apple")
+    if apple is not None:
+        # Derived from the table, not written as prose: the 2026-09-15
+        # simdgroup primitives made an earlier "Apple requires nothing"
+        # sentence false while the table beside it stayed correct.
+        apple_total = sum(apple.values())
+        out += [
+            f"Apple is the sharpest case — {apple['requires']} of "
+            f"{apple_total} ops require their contract and "
+            f"{apple['no-contract']} carry none. The no-contract rows are "
+            "largely dispatch containers and machine-primitive plumbing: the "
+            "contract gap is the same gap as the machine vocabulary that "
+            "still lives outside the compiler, seen from the contract side.",
+            "",
+        ]
+    out += [
         "## Ops requiring no contract at all",
         "",
         "| Backend | Op |",

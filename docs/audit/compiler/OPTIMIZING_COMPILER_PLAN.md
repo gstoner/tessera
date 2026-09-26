@@ -6,6 +6,16 @@ plan_state: landing
 
 # Tessera Optimizing-Compiler Plan — from op-library to world-class
 
+> **Name collision, noted 2026-09-25.** This plan's **F0–F6** are its own
+> fusion/synthesizer phases (2026-07). They are *not* the foundation program's
+> **F0–F5 cuts** in
+> [`INTEGRATED_COMPILER_PLAN.md#foundation-program`](INTEGRATED_COMPILER_PLAN.md#foundation-program)
+> (2026-09, sync `IR-NATIVE-FOUNDATION-1`), which own current sequencing. Cite
+> this plan's phases as "OCP-F*n*" to disambiguate. Its per-arch Python emitter
+> plugins (F6) are also subject to the foundation rule that source generators do
+> not own semantics — the `emit/*` registry is scheduled for family-by-family
+> retirement there.
+
 > **Routing:** start at [`README.md`](README.md). This document owns middle-end
 > synthesis and backend-lift acceptance details; global ordering lives only in
 > [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).

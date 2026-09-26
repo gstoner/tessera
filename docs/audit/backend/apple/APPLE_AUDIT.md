@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-05
+last_updated: 2026-09-25
 audit_role: sub_audit
 ---
 
@@ -256,6 +256,17 @@ and `reference_cpu` name actual placement rather than broad support.
 
 ## Active decisions and backlog
 
+> **Corrected 2026-09-25 — the sentence below is scoped to the legacy
+> runtime-correctness track and must not be read as "Apple has no open
+> compiler work."** Open compiler foundation items live in the
+> [Apple queue](todo.md) and the [consolidated action list](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25):
+> Apple F2 Schedule consumers (norm, attention, unary) under
+> IR-NATIVE-FOUNDATION-1; `gpu.matmul2d` lowering to compiler-owned MSL
+> rather than runtime symbols (APPLE-MATMUL2D-1); simdgroup threadgroup
+> staging (APPLE-SIMDGROUP-IR-1); AOT-2 B/C/D; Apple arbiter candidacy and
+> device timing (APPLE-TIMER-WITNESS, row 32); and block-scaled FP8/FP4
+> (APPLE-DTYPE-1, row 17).
+
 _No open Apple-compiler items on the existing correctness track._ The 2026-06-02 PK8–PK8h
 arc closed packaged-kernel authoring end to end, the 2026-06-09 sprint closed the
 four remaining themes (descriptor-driven dispatch, feature-table-driven selection,
@@ -373,7 +384,8 @@ work is **not** blocked waiting on newer silicon.
 **The one ML gap on Apple7 is toolchain, not hardware:** the FP8/FP4/MX `MTLTensor` *dtypes*
 (`MetalFloat8E4M3/E5M2`, `MetalFloat4E2M1`, `MetalFloat8UE8M0` block-scale) + multi-plane scale-tensor
 machinery are **macOS-27.0 SDK-gated**, not hardware-gated — the same M1 Max gets them on a 27.0 SDK
-(this machine is macOS 26.5.1). The hardware-free Tessera bridge for this is
+(recorded on macOS 26.5.1; **corrected 2026-09-25:** the Mac has run macOS 27.0 / SDK 27 since 2026-09-14,
+and FP8 E4M3/E5M2 + FP4 E2M1 now execute as emulated `matmul2d` operands — see `todo.md` row 17). The hardware-free Tessera bridge for this is
 `python/tessera/compiler/microscaling.py`.
 
 **MLX** (`ml-explore`) is the production Apple-Silicon ML framework and Tessera's Apple-lane reference:

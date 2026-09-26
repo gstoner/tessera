@@ -44,6 +44,29 @@ def runtime_library_build(build_dir: str | Path, *, require: tuple[str, ...] = (
     return record
 
 
+def record_for_library(library: str | Path, target: str) -> dict[str, Any]:
+    """The build record describing one loaded runtime library.
+
+    Walks up from the library to the build tree that holds the record and
+    requires that tree to name ``target`` (the CMake target, not the file
+    name). A library loaded from outside a configured tree -- an override
+    path, a hand-rebuilt copy -- has no record and is refused: its
+    optimization level is exactly what cannot be vouched for.
+    """
+    path = Path(library).resolve()
+    for parent in path.parents:
+        if (parent / "runtime_library_build.json").is_file():
+            record = runtime_library_build(parent, require=(target,))
+            return {"library": str(path), "target": target,
+                    "level": record["libraries"][target],
+                    "optimized": is_optimized(record["libraries"][target]),
+                    "cmake_build_type": record.get("cmake_build_type", ""),
+                    "cxx_compiler": record.get("cxx_compiler", "")}
+    raise RuntimeLibraryBuildError(
+        f"{path} is not inside a build tree with runtime_library_build.json; "
+        "its optimization level cannot be recorded")
+
+
 def is_optimized(level: str) -> bool:
     """True unless the recorded level is an unoptimized build type."""
     text = level.strip()
@@ -53,4 +76,5 @@ def is_optimized(level: str) -> bool:
     return build_type in {"release", "relwithdebinfo", "minsizerel"}
 
 
-__all__ = ["RuntimeLibraryBuildError", "SCHEMA", "is_optimized", "runtime_library_build"]
+__all__ = ["RuntimeLibraryBuildError", "SCHEMA", "is_optimized", "record_for_library",
+           "runtime_library_build"]

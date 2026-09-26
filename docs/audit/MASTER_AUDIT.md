@@ -302,13 +302,17 @@ matches its module fails generation. Read the counts there.
    refuses WSL2 — its witness is the Nsight activity window, which is
    profiler-derived and unverified on WSL2. **Kept by owner decision
    (2026-09-26);** the 5% agreement gate is what rejects bad WSL2 windows. What remains: no fleet packet recorded on the new routes; the
-   x86 probe cannot yet measure TSC independently, so x86 has no packet
-   route; NVIDIA has no non-profiler witness (`%globaltimer`); event-only
+   x86 packet has a derived `tsc_witness` route since 2026-09-26 (per-row
+   TSC vs CLOCK_MONOTONIC_RAW around the real trial region, frequency from
+   separate pinned calibration intervals) but no Zen 5 packet recorded on it
+   yet; NVIDIA has no non-profiler witness (`%globaltimer`); event-only
    recorders stay ineligible. Separately: NVIDIA timers run on the
    default stream (DEVICE-CLOCK-DISCIPLINE); Apple `kernelStartTime` does not
    measure work; and runtime libraries in empty-build-type trees compile at
-   `-O0` (RUNTIME-LIB-OPT-1, proposed, not applied), which biases every
-   comparison packet recorded from them.
+   `-O0` (RUNTIME-LIB-OPT-1, **applied 2026-09-26** as `-O2` for the runtime
+   libraries only, with a `runtime_library_build.json` stamp), which biased
+   every comparison packet recorded from them; those packets stay stale until
+   re-recorded.
 
 ### Foundation still to build, by IR level
 
@@ -400,9 +404,10 @@ matches its module fails generation. Read the counts there.
    sync `DEVICE-CLOCK-MARKER-2026-09-26`). Open: validate the NVIDIA
    `%globaltimer` marker on Super-Bear and record its SSD packet; an SSD Nsight
    activity-window packet on Super-Bear's WSL2; marker timing in
-   `calibrate_gfx1151.py`; an independent TSC measurement in the x86 probe
-   (then its packet route); gfx1201 and Zen 2 packet adapters.
-1. RUNTIME-LIB-OPT-1 on all four backends, then re-measure affected packets.
+   `calibrate_gfx1151.py`; a Zen 5 x86 packet on the `tsc_witness` route
+   (route landed 2026-09-26); gfx1201 and Zen 2 packet adapters.
+1. RUNTIME-LIB-OPT-1: applied 2026-09-26 (`-O2` runtime libraries + build
+   record); open: re-measure the affected packets on their own boxes.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
    dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.
 3. Decision #11 versioned cache key and a Decision #12 `route` schema field.

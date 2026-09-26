@@ -30,7 +30,6 @@ import ctypes
 import hashlib
 import json
 import math
-import os
 import platform
 import statistics
 import subprocess
@@ -133,33 +132,20 @@ def _git(*args: str) -> str:
                           capture_output=True, text=True).stdout
 
 
-def _build_dir() -> Path:
-    selected = os.environ.get("TESSERA_BUILD_DIR")
-    if not selected:
-        return ROOT / "build"
-    path = Path(selected).expanduser()
-    return path if path.is_absolute() else ROOT / path
-
-
 def _library_record() -> dict[str, Any]:
+    """RUNTIME-LIB-OPT-1 stamp for the library the AVX-512 images embed."""
     from tessera.compiler import x86_native
-    from tessera.compiler.runtime_library_build import is_optimized, runtime_library_build
+    from tessera.compiler.runtime_library_build import record_for_library
 
-    build = _build_dir()
     library = x86_native._library_path(x86_native.X86_AVX512_ARCHITECTURE)
-    expected = build / "src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so"
-    if library is None or library.resolve() != expected.resolve():
+    if library is None:
+        raise RuntimeError("no AVX-512 runtime library is available to package")
+    stamp = record_for_library(library, REQUIRED_LIBRARY)
+    if stamp["optimized"] is not True:
         raise RuntimeError(
-            f"the AVX-512 image library is {library}, not {expected}; the optimization "
-            "record would describe a different library than the one measured")
-    record = runtime_library_build(build, require=(REQUIRED_LIBRARY,))
-    level = str(record["libraries"][REQUIRED_LIBRARY])
-    if not is_optimized(level):
-        raise RuntimeError(
-            f"{REQUIRED_LIBRARY} is not optimized ({level!r}); RUNTIME-LIB-OPT-1 "
+            f"{REQUIRED_LIBRARY} is not optimized ({stamp['level']!r}); RUNTIME-LIB-OPT-1 "
             "forbids recording timing from an unoptimized runtime library")
-    return {**record, "measured_library": str(expected),
-            "measured_library_sha256": hashlib.sha256(expected.read_bytes()).hexdigest()}
+    return {**stamp, "library_sha256": hashlib.sha256(Path(stamp["library"]).read_bytes()).hexdigest()}
 
 
 def _two_run_medians_ns(call: Callable[[], object], *, samples: int,
@@ -473,7 +459,7 @@ def record(*, samples: int, iterations: int, stability_limit: float,
             "image_digest": timing.image.image_digest,
             "timing_shape": spec["timing_shape"],
             "instruction_envelope": "x86-64 AVX-512 (avx512f/bw/cd/dq/vl/vnni/bf16/vpopcntdq)",
-            "runtime_library_level": library_record["libraries"][REQUIRED_LIBRARY],
+            "runtime_library_build": library_record,
         }
         resource_fingerprint = hashlib.sha256(
             json.dumps(resource, sort_keys=True).encode()).hexdigest()

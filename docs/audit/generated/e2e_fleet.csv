@@ -9,16 +9,16 @@ tessera.e2e-release-packet.v1,apple_cpu,apple_m1_max,apple,matmul,release_ready,
 tessera.e2e-release-packet.v1,apple_cpu,apple_m1_max,apple,linalg,packet_pending,,,Family absent from active packet.
 tessera.e2e-release-packet.v1,x86,x86_64_base,x86,softmax,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_base,9f3757ef2dda2dd61ff94f1aefe0244f1b80f064,Validated hash-sealed packet.
 tessera.e2e-release-packet.v1,x86,x86_64_base,x86,reduction,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_base,9f3757ef2dda2dd61ff94f1aefe0244f1b80f064,Validated hash-sealed packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,matmul,packet_pending,,,AVX512 x86 scope awaits a Princess-Luna (Ryzen AI MAX+ 395) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,softmax,packet_pending,,,AVX512 x86 scope awaits a Princess-Luna (Ryzen AI MAX+ 395) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,reduction,packet_pending,,,AVX512 x86 scope awaits a Princess-Luna (Ryzen AI MAX+ 395) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,attention,packet_pending,,,AVX512 x86 scope awaits a Princess-Luna (Ryzen AI MAX+ 395) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,linalg,packet_pending,,,AVX512 x86 scope awaits a Princess-Luna (Ryzen AI MAX+ 395) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,matmul,packet_pending,,,AVX512 x86 scope awaits a Tajasarus (Ryzen 7 9800X3D) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,softmax,packet_pending,,,AVX512 x86 scope awaits a Tajasarus (Ryzen 7 9800X3D) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,reduction,packet_pending,,,AVX512 x86 scope awaits a Tajasarus (Ryzen 7 9800X3D) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,attention,packet_pending,,,AVX512 x86 scope awaits a Tajasarus (Ryzen 7 9800X3D) host packet.
-tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,linalg,packet_pending,,,AVX512 x86 scope awaits a Tajasarus (Ryzen 7 9800X3D) host packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,matmul,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_strix_halo,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,softmax,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_strix_halo,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,reduction,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_strix_halo,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,attention,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_strix_halo,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_strix_halo,x86,linalg,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_strix_halo,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,matmul,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_granite_ridge,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,softmax,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_granite_ridge,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,reduction,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_granite_ridge,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,attention,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_granite_ridge,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512_granite_ridge,x86,linalg,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_avx512_granite_ridge,f8022572b19d85434bbcb074ae5519db87f46be7,Validated hash-sealed packet.
 tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,matmul,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
 tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,softmax,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
 tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,reduction,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.

@@ -44,27 +44,41 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   packet relabelled and resealed as Strix Halo used to be accepted.)
 - **linalg fixture** `cholesky-f32-3x3-spd-v1` added to `benchmarks/e2e_spine/fixtures.json`
   (exact float factor; runs through `x86_breadth.package_graph_breadth`).
-- **Sealed** (both at source commit `154e7fc9`, WSL2, each built from a fresh worktree
-  with no build type so the x86 libraries are `-O2` by `RUNTIME-LIB-OPT-1`; Tajasarus's
-  own `build/` is Release, deliberately not mirrored so both lanes are `-O2`):
+- **Sealed** (both at source commit `f8022572`, WSL2, each built from a fresh worktree
+  with no build type so the x86 libraries are `-O2` by `RUNTIME-LIB-OPT-1`, the libraries
+  force-rebuilt after the final configure; Tajasarus's own `build/` is Release,
+  deliberately not mirrored so both lanes are `-O2`):
   `docs/audit/evidence/e2e_spine/x86/x86_64_avx512_strix_halo/` on Princess-Luna and
   `.../x86_64_avx512_granite_ridge/` on Tajasarus, all five families each. Medians live
-  in the packets. Every witnessed window agreed with the raw clock within 2.5e-4.
+  in the packets. Every witnessed window re-verifies and agreed with the raw clock
+  within 1.4e-4. These replace the first recordings (at `154e7fc9`), withdrawn because
+  their witnesses did not carry the calibration they were checked against.
 - **Findings, not fixed here.** (1) `end_to_end` through `runtime.launch` costs
   ~0.39 ms (Tajasarus) to ~0.71 ms (Princess-Luna) per call even for a 1 µs reduction,
   so the public launch path, not the kernel, dominates every small family — owed a
   look at the x86 descriptor launch path. (2) The `-O2` `libtessera_x86_elementwise.so`
   was byte-identical on the two hosts (same GCC 15.2.0, same detected flags), so a
   per-host timing gap is not the build; it is not isolated further — the WSL kernels
-  (6.18.33.1 vs 6.18.33.2) and the memory systems also differ. (3) Under WSL2 the raw clock is
+  (6.18.33.1 vs 6.18.33.2) and the memory systems also differ. (3) Within one recording
+  every family is stable to the 4% policy, but **across the two recordings** matmul
+  256³ kernel_wall moved ~1.5× on both hosts, in opposite directions (Tajasarus
+  0.68 → 1.05 ms on the same pinned CPU 15; Princess-Luna 1.07 → 0.71 ms, CPU 23 → 14),
+  and attention 0.71 → 0.59 ms on Tajasarus, while softmax, reduction, cholesky and
+  Princess-Luna attention stayed within ~4%. The packet's stability gate
+  does not capture recording-to-recording variance; not root-caused (thread placement
+  inside the AVX-512 GEMM/attention kernels is the first thing to check). (4) Under WSL2 the raw clock is
   itself TSC-derived; the witness shows a stable TSC scale, not an independent
   oscillator (stated in `profiler_x86_clock`).
-- **Zen 5 profiler packet on the witness route** (Princess-Luna, clean tree `7b3094e9`,
-  `-O2` library stamp): `benchmarks/baselines/x86_zen5_profiler_packet_20260926_princess_luna.json`
-  came out `admission_route = tsc_witness`, `verdict = promote`, no ineligibility
-  reasons; diagnostic gaps `VIRTUALIZED_HOST`, `WSL_CLOCK_DOMAIN`,
+- **Zen 5 profiler packet on the witness route** (Princess-Luna, clean tree `f8022572`,
+  schema v2, `-O2` library stamp, recorded after — not alongside — the E2E packet):
+  `benchmarks/baselines/x86_zen5_profiler_packet_20260926_princess_luna.json` came out
+  `admission_route = tsc_witness`, `verdict = promote`, no ineligibility reasons;
+  diagnostic gaps `VIRTUALIZED_HOST`, `WSL_CLOCK_DOMAIN`,
   `TIMING_PROOF_INCOMPLETE:perf_event_open,perf_sample_valid`, `SYMBOL_SAMPLING_MISSING`.
-  Not recorded on Tajasarus.
+  Its production and scheduled images are byte-identical, so `promote` is a parity check
+  under WSL2, not a performance promotion. It replaces the v1 packet recorded at
+  `7b3094e9`. Not recorded on Tajasarus. `test_checked_in_princess_luna_packet_validates`
+  re-validates it off-host.
 
 **Sibling outcomes.** ROCm / NVIDIA: not applicable (x86 CPU packets; the only shared
 changes are the x86 registrations, a new fixture, and a directory-name check in

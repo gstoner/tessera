@@ -3,7 +3,7 @@
   "architecture": "zen5-avx512",
   "benchmark": {
     "architecture": "zen5-avx512",
-    "created_at": "2026-09-26T17:00:26.581419+00:00",
+    "created_at": "2026-09-26T17:57:29.054010+00:00",
     "device": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
     "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
     "python": "3.14.4",
@@ -11,7 +11,7 @@
       "kind": "production_non_regression",
       "limit": 1.1
     },
-    "report_sha256": "d159a70eee07e1e2d1103cc024f1cfd9d804c7123e1aef10586f8af6d7a3eba2",
+    "report_sha256": "1f37349017fe94d80b288716578ea748dcbac0106be85ade689faa4ea395dc87",
     "rows": [
       {
         "compile": {
@@ -25,10 +25,10 @@
             "target": "04bfb08cec296a3c1c369a4b0a661e84fa9d9cd58cf6e429d23f19bb3eef7621",
             "tile": "11be0e7bf09ad11fb859cc23c6f086c08bdae723395e9c11f4885ec2374a20fe"
           },
-          "production_ms": 148.299979,
-          "scheduled_cold_ms": 90.195416,
+          "production_ms": 93.905529,
+          "scheduled_cold_ms": 85.87283,
           "scheduled_compile_state": "prepackaged",
-          "scheduled_warm_ms": 97.267479,
+          "scheduled_warm_ms": 86.580101,
           "toolchain_fingerprint": "421e7b692491c4bd4b24904c7b6c0c750361cb4b3347350b773c2ff01af0a32d"
         },
         "correctness": {
@@ -55,54 +55,54 @@
         ],
         "timing": {
           "non_regression_10pct": true,
-          "production_median_ms": 0.750312,
+          "production_median_ms": 0.750313,
           "production_samples_ms": [
-            0.70154,
-            0.813356,
-            0.748272,
-            0.750312,
-            0.750353,
-            0.805216,
-            0.749272,
-            0.724491,
-            0.7088,
-            0.792665,
-            0.741662,
-            0.800156,
-            0.762103,
-            0.801435,
-            0.776005,
-            0.738682,
-            0.734452,
-            0.751713,
-            0.777144,
-            0.736562,
-            0.736232
+            0.726861,
+            0.861509,
+            0.784035,
+            0.754613,
+            0.809986,
+            0.718101,
+            0.759933,
+            0.779454,
+            0.724372,
+            0.746942,
+            0.760134,
+            0.800986,
+            0.737622,
+            0.750313,
+            0.773924,
+            0.722912,
+            0.695679,
+            0.70953,
+            0.749823,
+            0.784754,
+            0.725621
           ],
-          "scheduled_median_ms": 0.751393,
-          "scheduled_over_production": 1.0014407339879943,
+          "scheduled_median_ms": 0.761333,
+          "scheduled_over_production": 1.0146872038735835,
           "scheduled_samples_ms": [
-            0.795235,
-            0.781464,
-            0.711191,
-            0.804246,
-            0.747423,
-            0.7,
-            0.7005,
-            0.751393,
-            0.810426,
-            0.754252,
-            0.70556,
-            0.801085,
-            0.739222,
-            0.69438,
-            0.70989,
-            0.752413,
-            0.809386,
-            0.724821,
-            0.726262,
-            0.759853,
-            0.756383
+            0.69578,
+            0.785675,
+            0.739762,
+            0.720101,
+            0.810716,
+            0.746392,
+            0.809387,
+            0.740912,
+            0.761333,
+            0.796896,
+            0.773634,
+            0.829077,
+            0.762023,
+            0.720841,
+            0.832637,
+            0.791655,
+            0.752443,
+            0.748633,
+            0.717621,
+            0.747633,
+            0.808526
           ]
         },
         "timing_witness": {
@@ -118,13 +118,13 @@
               "eligible_for_regression": true,
               "instrumented": false,
               "provenance": {},
-              "raw_value": 31699392,
+              "raw_value": 32038234,
               "reason": null,
               "slot": "host_wall_ns",
               "source": "perf_counter",
               "unit": "ns",
               "valid": true,
-              "value": 31699392
+              "value": 32038234
             },
             "monotonic_raw_ns": {
               "calibrated_against": [],
@@ -132,13 +132,13 @@
               "eligible_for_regression": true,
               "instrumented": false,
               "provenance": {},
-              "raw_value": 31689375,
+              "raw_value": 32025650,
               "reason": null,
               "slot": "monotonic_raw_ns",
               "source": "clock_monotonic_raw",
               "unit": "ns",
               "valid": true,
-              "value": 31689375
+              "value": 32025650
             },
             "perf_task_clock_ns": {
               "calibrated_against": [],
@@ -162,30 +162,78 @@
               "eligible_for_regression": true,
               "instrumented": false,
               "provenance": {
-                "calibrated_frequency_hz": 2999829050.1857624,
-                "calibration_sha256": "d98fede621c5315f22831403c2b9d458d4a70edd67c6615f4621d127c878d7d7",
-                "calibration_spread": 5.468125449073026e-08,
+                "calibrated_frequency_hz": 2999829070.1583605,
+                "calibration": {
+                  "frequency_hz": 2999829070.1583605,
+                  "rates_hz": [
+                    2999828979.9294252,
+                    2999829138.335165,
+                    2999829076.584699,
+                    2999829065.423754,
+                    2999829070.1583605
+                  ],
+                  "spread": 5.280492190706003e-08,
+                  "windows": [
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162065168360,
+                      "raw_start_ns": 230161865156748,
+                      "tsc_end": 690448329381812,
+                      "tsc_start": 690447729381182
+                    },
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162265200717,
+                      "raw_start_ns": 230162065179255,
+                      "tsc_end": 690448929444722,
+                      "tsc_start": 690448329414512
+                    },
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162465239135,
+                      "raw_start_ns": 230162265219729,
+                      "tsc_end": 690449529525752,
+                      "tsc_start": 690448929501722
+                    },
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162665257387,
+                      "raw_start_ns": 230162465251041,
+                      "tsc_end": 690450129546332,
+                      "tsc_start": 690449529561482
+                    },
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162865276299,
+                      "raw_start_ns": 230162665264413,
+                      "tsc_end": 690450729568862,
+                      "tsc_start": 690450129567392
+                    }
+                  ]
+                },
+                "calibration_sha256": "7e78b04f0b6296fe151a220353617b20b0bafecf3d89a76f9d714c4f1c925feb",
+                "calibration_spread": 5.280492190706003e-08,
                 "frequency_source": "independent_calibration_interval",
                 "invariant_tsc": true,
-                "logical_cpu_end": 1,
-                "logical_cpu_start": 1,
+                "logical_cpu_end": 2,
+                "logical_cpu_start": 2,
                 "measurement_window": {
-                  "host_wall_ns": 31699392,
-                  "logical_cpu_end": 1,
-                  "logical_cpu_start": 1,
-                  "raw_end_ns": 226740694401085,
-                  "raw_start_ns": 226740662711710,
-                  "tsc_end": 680184801916740,
-                  "tsc_start": 680184706854030
+                  "host_wall_ns": 32038234,
+                  "logical_cpu_end": 2,
+                  "logical_cpu_start": 2,
+                  "raw_end_ns": 230163185984533,
+                  "raw_start_ns": 230163153958883,
+                  "tsc_end": 690451691638772,
+                  "tsc_start": 690451595567282
                 }
               },
-              "raw_value": 95062710,
+              "raw_value": 96071490,
               "reason": null,
               "slot": "tsc_cycles",
               "source": "rdtscp",
               "unit": "cycles",
               "valid": true,
-              "value": 95062710
+              "value": 96071490
             }
           },
           "environment": {
@@ -193,7 +241,7 @@
           },
           "execution_environment": "wsl2",
           "resources": {},
-          "sample_id": "x86-tsc-7c3a42311838-226740662711710",
+          "sample_id": "x86-tsc-7c3a42311838-230163153958883",
           "schema": "tessera.profiler_timing.v1",
           "synchronization": "serial runtime.launch",
           "target": "x86",
@@ -212,10 +260,10 @@
             "target": "5512dad63f9c1475c142e419ee8baab6f6322c3a9e642e30e132ed04b895d015",
             "tile": "2ccecde5c2b310abd4b0bd852a09af58c485fbd0da23e7cc7179e00626b6b5aa"
           },
-          "production_ms": 94.252158,
-          "scheduled_cold_ms": 92.809516,
+          "production_ms": 92.387561,
+          "scheduled_cold_ms": 85.477846,
           "scheduled_compile_state": "prepackaged",
-          "scheduled_warm_ms": 94.412007,
+          "scheduled_warm_ms": 85.660386,
           "toolchain_fingerprint": "421e7b692491c4bd4b24904c7b6c0c750361cb4b3347350b773c2ff01af0a32d"
         },
         "correctness": {
@@ -242,54 +290,54 @@
         ],
         "timing": {
           "non_regression_10pct": true,
-          "production_median_ms": 0.757943,
+          "production_median_ms": 0.730912,
           "production_samples_ms": [
-            0.805546,
-            0.764253,
-            0.720301,
-            0.72003,
-            0.688999,
-            0.815557,
-            0.737762,
-            0.803206,
-            0.753682,
-            0.777544,
-            0.722611,
-            0.745672,
-            0.795175,
-            0.780854,
-            0.734661,
-            0.892351,
-            0.785305,
-            0.757943,
-            0.830507,
-            0.691489,
-            0.746133
+            0.70355,
+            0.685209,
+            0.833577,
+            0.797826,
+            0.71521,
+            0.684379,
+            0.843088,
+            0.715151,
+            0.684159,
+            0.730912,
+            0.823767,
+            0.742142,
+            0.709111,
+            0.71585,
+            0.744493,
+            0.715421,
+            0.752052,
+            0.775824,
+            0.770604,
+            0.764393,
+            0.730422
           ],
-          "scheduled_median_ms": 0.765043,
-          "scheduled_over_production": 1.0093674590305604,
+          "scheduled_median_ms": 0.755583,
+          "scheduled_over_production": 1.0337537213782233,
           "scheduled_samples_ms": [
-            0.772684,
-            0.734952,
-            0.790815,
-            0.794536,
-            0.745372,
-            0.864889,
-            0.70859,
-            0.761534,
-            0.777574,
-            0.788295,
-            0.765043,
-            0.779654,
-            0.744323,
-            0.779384,
-            0.742072,
-            0.824306,
-            0.730752,
-            0.69891,
-            0.786905,
-            0.718591,
-            0.762933
+            0.776545,
+            0.715271,
+            0.737972,
+            0.746893,
+            0.814237,
+            0.71647,
+            0.755583,
+            0.838988,
+            0.743212,
+            0.713731,
+            0.733142,
+            0.760443,
+            0.795765,
+            0.765444,
+            0.729191,
+            0.817597,
+            0.798715,
+            0.716471,
+            0.734082,
+            0.763504,
+            0.804126
           ]
         },
         "timing_witness": {
@@ -305,13 +353,13 @@
               "eligible_for_regression": true,
               "instrumented": false,
               "provenance": {},
-              "raw_value": 32222552,
+              "raw_value": 31686664,
               "reason": null,
               "slot": "host_wall_ns",
               "source": "perf_counter",
               "unit": "ns",
               "valid": true,
-              "value": 32222552
+              "value": 31686664
             },
             "monotonic_raw_ns": {
               "calibrated_against": [],
@@ -319,13 +367,13 @@
               "eligible_for_regression": true,
               "instrumented": false,
               "provenance": {},
-              "raw_value": 32207480,
+              "raw_value": 31672024,
               "reason": null,
               "slot": "monotonic_raw_ns",
               "source": "clock_monotonic_raw",
               "unit": "ns",
               "valid": true,
-              "value": 32207480
+              "value": 31672024
             },
             "perf_task_clock_ns": {
               "calibrated_against": [],
@@ -349,30 +397,78 @@
               "eligible_for_regression": true,
               "instrumented": false,
               "provenance": {
-                "calibrated_frequency_hz": 2999829050.1857624,
-                "calibration_sha256": "d98fede621c5315f22831403c2b9d458d4a70edd67c6615f4621d127c878d7d7",
-                "calibration_spread": 5.468125449073026e-08,
+                "calibrated_frequency_hz": 2999829070.1583605,
+                "calibration": {
+                  "frequency_hz": 2999829070.1583605,
+                  "rates_hz": [
+                    2999828979.9294252,
+                    2999829138.335165,
+                    2999829076.584699,
+                    2999829065.423754,
+                    2999829070.1583605
+                  ],
+                  "spread": 5.280492190706003e-08,
+                  "windows": [
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162065168360,
+                      "raw_start_ns": 230161865156748,
+                      "tsc_end": 690448329381812,
+                      "tsc_start": 690447729381182
+                    },
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162265200717,
+                      "raw_start_ns": 230162065179255,
+                      "tsc_end": 690448929444722,
+                      "tsc_start": 690448329414512
+                    },
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162465239135,
+                      "raw_start_ns": 230162265219729,
+                      "tsc_end": 690449529525752,
+                      "tsc_start": 690448929501722
+                    },
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162665257387,
+                      "raw_start_ns": 230162465251041,
+                      "tsc_end": 690450129546332,
+                      "tsc_start": 690449529561482
+                    },
+                    {
+                      "cpu": 2,
+                      "raw_end_ns": 230162865276299,
+                      "raw_start_ns": 230162665264413,
+                      "tsc_end": 690450729568862,
+                      "tsc_start": 690450129567392
+                    }
+                  ]
+                },
+                "calibration_sha256": "7e78b04f0b6296fe151a220353617b20b0bafecf3d89a76f9d714c4f1c925feb",
+                "calibration_spread": 5.280492190706003e-08,
                 "frequency_source": "independent_calibration_interval",
                 "invariant_tsc": true,
-                "logical_cpu_end": 1,
-                "logical_cpu_start": 1,
+                "logical_cpu_end": 2,
+                "logical_cpu_start": 2,
                 "measurement_window": {
-                  "host_wall_ns": 32222552,
-                  "logical_cpu_end": 1,
-                  "logical_cpu_start": 1,
-                  "raw_end_ns": 226741019832733,
-                  "raw_start_ns": 226740987625253,
-                  "tsc_end": 680185778156070,
-                  "tsc_start": 680185681539120
+                  "host_wall_ns": 31686664,
+                  "logical_cpu_end": 2,
+                  "logical_cpu_start": 2,
+                  "raw_end_ns": 230163492987520,
+                  "raw_start_ns": 230163461315496,
+                  "tsc_end": 690452612595242,
+                  "tsc_start": 690452517584582
                 }
               },
-              "raw_value": 96616950,
+              "raw_value": 95010660,
               "reason": null,
               "slot": "tsc_cycles",
               "source": "rdtscp",
               "unit": "cycles",
               "valid": true,
-              "value": 96616950
+              "value": 95010660
             }
           },
           "environment": {
@@ -380,7 +476,7 @@
           },
           "execution_environment": "wsl2",
           "resources": {},
-          "sample_id": "x86-tsc-587bb0e2dd6e-226740987625253",
+          "sample_id": "x86-tsc-587bb0e2dd6e-230163461315496",
           "schema": "tessera.profiler_timing.v1",
           "synchronization": "serial runtime.launch",
           "target": "x86",
@@ -406,7 +502,7 @@
     "warmup_iterations": 5,
     "work_item": "E2E-REAL-4"
   },
-  "benchmark_sha256": "230ecfe53d94326dba4e0c7ebbcbc6ee0458b3c6397ba9c822eebbfde12a524a",
+  "benchmark_sha256": "9be8be83aa71581a609f07ee7beda5b1dd0c3882d739b68a73d44f9db64adafa",
   "cpu": {
     "cpu_family": 26,
     "flags": [
@@ -544,24 +640,24 @@
   "eligible_for_promotion": true,
   "environment": {
     "affinity": [
-      1
+      2
     ],
     "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
     "kernel": "6.18.33.1-microsoft-standard-WSL2",
-    "source_commit": "7b3094e9bfff7b31a624cc1abc3007d7f1853970",
+    "source_commit": "f8022572b19d85434bbcb074ae5519db87f46be7",
     "virtualized": true,
     "worktree_dirty": false,
     "wsl": true
   },
   "ineligibility_reasons": [],
-  "packet_sha256": "0a7aea25687310b615c3c9e6438bd1dbb4e94a0a3734a4272037525948cf04ea",
+  "packet_sha256": "bed3ba29247a1415e536e87d59783fc664a2e9d29cba9fc9948a4411d4da9456",
   "sampling": null,
-  "schema": "tessera.profiler_x86_packet.v1",
-  "source_commit": "7b3094e9bfff7b31a624cc1abc3007d7f1853970",
+  "schema": "tessera.profiler_x86_packet.v2",
+  "source_commit": "f8022572b19d85434bbcb074ae5519db87f46be7",
   "timing_status": {
     "affinity_stable": true,
     "avx512_visible": true,
-    "calibrated_tsc_hz": 3000015703.3837204,
+    "calibrated_tsc_hz": 3000004133.8688755,
     "clock_agreement_valid": true,
     "invariant_tsc": true,
     "monotonic_raw_valid": true,
@@ -575,11 +671,11 @@
     "perf_time_enabled_ns": 0,
     "perf_time_running_ns": 0,
     "perf_unavailable_events_mask": 255,
-    "raw_interval_ns": 100296855,
+    "raw_interval_ns": 101115931,
     "rdtscp_valid": true,
     "schema": "tessera.x86_timing_status.v1",
-    "steady_interval_ns": 100296124,
-    "tsc_interval_cycles": 300892140,
+    "steady_interval_ns": 101116439,
+    "tsc_interval_cycles": 303348211,
     "x86_64": true
   },
   "verdict": "promote",

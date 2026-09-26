@@ -206,7 +206,7 @@ Per-phase deliverables and the open-work priority queue live in
 | `compiler/resident_{ssd,attention,trace,gated_pool,incremental_pool,object_pool,pool_snapshot,gradient_sum,rocm_attention}.py`, `gpu_exception_heap.py`, `heap_{barrier_contract,async_receipt,finalization,protocol_model,writer_model}.py`, `native_exception_{arena,ir,producer}.py`, `apple_native_arena.py` | **Resident storage / arenas / gated heaps**: `TileBufferArenaPass` dynamic GPU arenas (RTX 5070 + gfx1151 exact checks), opt-in `ResidentGatedPool` where every metadata op passes an owner-injected gate, exception-carrying heaps. |
 | `compiler/native_driver_isolation.py`, `native_isolated_ann.py`, `native_{module,reader}_retirement.py`, `native_stream_epoch.py`, `isolated_rocm_attention.py` | **Isolated recovery**: out-of-process CUDA/HIP workers; a replacement is admitted only after confirmed predecessor death plus a re-run numerical health probe; explicit device ordinals; retryable retirement. |
 | `compiler/rocm_sparse_{logical,packing,runtime}.py`, `sparse_capture.py` | 2:4 sparse stack for gfx1201: logical row-major producer → packed values/indices → `tessera_rocm.swmmac` (public Graph sparse admission still closed). |
-| `compiler/{bootstrap_prune_audit,primitive_route_map,target_ir_membership,frontend_authority_audit}.py` | Audit generators behind the 2026-09 dashboards `bootstrap_prune_gap.md` (which `package_*` families would lose their only lowering under #31), `primitive_route_map.md`, `target_ir_membership.md` (Decision #19 membership measured: 46 of 150 Target IR ops require the contract they carry), and the `_OpExtractor` retirement gate. |
+| `compiler/{bootstrap_prune_audit,primitive_route_map,target_ir_membership,frontend_authority_audit}.py` | Audit generators behind the 2026-09 dashboards `bootstrap_prune_gap.md` (which `package_*` families would lose their only lowering under #31), `primitive_route_map.md`, `target_ir_membership.md` (Decision #19 membership measured: how many Target IR ops *require* the contract they carry — read the count there, not here), and the `_OpExtractor` retirement gate. |
 | `testing/mock_collective.py` | Thread-based fake ranks for multi-rank tests (no NCCL/MPI dep). |
 
 ### C++ (`src/`)
@@ -365,9 +365,10 @@ Per-phase deliverables and the open-work priority queue live in
     historical. The measured gap is Metal 4 cooperative-tensor `matmul2d`
     (see the 2026-09-15 Apple paragraph under **What Tessera Is**).
     `docs/audit/generated/target_ir_membership.md` now scores every Target IR
-    op against this decision's membership test: 46 of 150 ops *require* the
-    contract they carry; `optional-only` carriage is flagged as failing open
-    against #32 and #21a by construction.
+    op against this decision's membership test — only a minority of ops
+    *require* the contract they carry (read the count on the dashboard; a
+    "46 of 150" once copied here went stale); `optional-only` carriage is
+    flagged as failing open against #32 and #21a by construction.
 
     **`X86-DIALECT-LOAD-CRASH-2026-08-12` was a build-flag leak, not an IR
     defect — root-caused 2026-08-15.** The dialect and its `TileType`

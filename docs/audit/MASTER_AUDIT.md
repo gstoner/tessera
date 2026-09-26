@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-12
+last_updated: 2026-09-25
 audit_role: root
 ---
 
@@ -151,6 +151,127 @@ Owners:
 [`backend/nvidia/todo.md`](backend/nvidia/todo.md),
 [`backend/rocm/todo.md`](backend/rocm/todo.md), and
 [`backend/x86/todo.md`](backend/x86/todo.md).
+
+## Consolidated action list (2026-09-25)
+
+A cross-read of every non-archived theme audit, backend queue and generated
+dashboard, reduced to what is still open. It **routes**; it does not
+sequence (the [integrated plan](compiler/INTEGRATED_COMPILER_PLAN.md#live-queue)
+owns order) and it copies no totals (follow the dashboard links). Items are
+grouped by what unblocks them, and each names its owning ID.
+
+### Three blockers most other items wait on
+
+1. **One compiler authority.** Most families still reach a backend through a
+   Python `package_*` constructor rather than Graph→Schedule→Tile→Target:
+   see [`bootstrap_prune_gap`](generated/bootstrap_prune_gap.md) (now
+   separating family-named routes, generic-route wrappers and true gaps),
+   [`primitive_route_map`](generated/primitive_route_map.md) and
+   [`compilation_spine_inventory`](generated/compilation_spine_inventory.md)
+   (Level C is absent for `nvidia_sm120` and `gfx1201`). Owner E2E-REAL-6,
+   after E2E-REAL-6F's census review.
+2. **Contract carriage across levels.** Most Target IR ops declare their
+   contract as optional and verify with it unset
+   ([`target_ir_membership`](generated/target_ir_membership.md)); no boundary
+   verifier checks that `numeric_policy` / `layout` / `distribution` survive a
+   lowering (IR_STACK U5); and [`verifier_coverage`](generated/verifier_coverage.md)
+   scans only `TesseraOps.td` and `Attn.td`, so its closed status does not
+   cover Tile, Schedule or Target ODS.
+3. **Timing that can promote.** WSL2 wall clock does not promote; NVIDIA
+   timers run on the default stream; ROCm has no `/dev/kfd` counters under
+   WSL2; Apple `kernelStartTime` does not measure work; and runtime libraries
+   in empty-build-type trees compile at `-O0` (RUNTIME-LIB-OPT-1, proposed,
+   not applied), which biases every comparison packet recorded from them.
+
+### Foundation still to build, by IR level
+
+| Level | Open | Owners |
+|---|---|---|
+| Frontend | Tracer as sole frontend; family selection out of `JitFn`; tracer-emitted `loc` before `_OpExtractor` deletion; masks/padding as operands | E2E-REAL-6, E2E-REAL-6F, FRONTEND-IR-MEDIUM-1 |
+| Graph IR | Opportunistic folders; attribute-stamp-only passes; one `tessera.source_kind` admission for `NativeTapeToGPUPass` | [COMPILER_AUDIT](compiler/COMPILER_AUDIT.md) scorecard |
+| Schedule IR | Schedule→Tile is op-name macro expansion with tile sizes from pass options (U6); every boundary exists in Python and C++ with no differential test and `LowerScheduleToTarget` is a scaffold (U3); collective placement/overlap is runtime code, not a pass | [IR_STACK review](compiler/IR_STACK_INTEGRATION_REVIEW.md) U3/U6 (unrouted), DIST-NATIVE-1 |
+| Tile IR | Partial Tile rows in [`compiler_progress`](generated/compiler_progress.md) (linalg, optimizers, `game_*`, `depth_attn`); two NVIDIA tensor-valued `tile.mma` sites; `Tile_MMAOp` still `Variadic<AnyType>`; split whole-kernel/domain ops out of Tile; collapse the legality passes | W1.1 (NVIDIA closure), W3.3, IR_STACK U2 |
+| Target IR | Required (not optional) contracts per op; an ODS-op→consumer gate; layout/packing/scale-layout witnesses | GOV-ODS-CONSUMER-1, LAYOUT-ALG-1, IR_STACK U5 |
+| MLIR→LLVM/NVVM/ROCDL | x86 packages a prebuilt image instead of compiling the body (reuse `tessera-jit`); retire the `emit/*` source emitters family by family; compiler-owned Apple MSL endpoint; NVIDIA AOT beyond the f16 GEMM | [foundation program](compiler/INTEGRATED_COMPILER_PLAN.md#foundation-program) F2/F3 |
+| Runtime | Dispatch-bridge waits and checked-output ownership; allocation- and control-flow-scoped release; ROCm host-transfer coalescing; JIT `scf.while` forward crash | DISPATCH-BREAKER, IR-NATIVE-FOUNDATION-1, ROCM-TRANSFER-RESIDENCY-1, COMPILER-DEVEX-1 |
+| AD | General nested persistent tapes; native SAVE/RECOMPUTE plans; real batching; sparse coloring; native jets; KKT/IFT | [AUTODIFF plan](compiler/AUTODIFF_EXECUTION_PLAN.md): W4-PRODUCT-1 → AD-RESIDUAL-EVAL-1 → W2.4a / AD-HIGHER-1 |
+| Control flow | Source-CFG recovery, multi-block regions, Presburger constraints, scan JVP/VJP | §2 above |
+| Distributed | Typed fail-closed placement lattice, reshard insertion, native NCCL/RCCL and MPI beyond two ranks | DIST-NATIVE-1, TSOL-SHARD-1 |
+| Numeric policy | Typed carrier below Graph IR; nvfp4 vs mxfp4 distinguishable below Graph; FP8 block-scale as a schedule change | NUMPOL-CARRIER-1, ROCM-FP8-BLOCKSCALE-1 → MXFP4-W4A8 → NVFP4-INGEST; [`dtype_flow`](generated/dtype_flow.md) |
+
+### Optimization foundation, by layer
+
+| Layer | Exists | Open |
+|---|---|---|
+| Analysis | W2.1 dataflow substrate, per-op memory effects, symbolic-dim equality | Value, alias, effect, memory-dependence and ordered-collective **consumers** (§3 above) |
+| Fusion | One authoritative recognizer; Apple synthesizer F0–F5 | Synthesizer not portable through IR; consumer-driven canonicalization (W5.5); ANN admission of measured candidates (MSW-9) |
+| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log | **Decision #11's versioned cache key is not implemented** (neither `autotune_v2.cache_key` nor `emit/autotune.py` carries toolchain or delegate-ABI identity); Decision #12 `route` is stamped per recorder, not a schema field; repeat counts too low to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
+| Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA | Apple/ROCm layout opt-in; ROCm split-K unwired and keyed on `k > 4096` instead of occupancy (ROCM-SPLIT-K-1) |
+| Memory | `TileBufferReusePass`, `TileBufferArenaPass` on ROCm/NVIDIA | Control-flow path-max sizing; multiple dynamic arenas; measured full-model remat |
+| Cost models | `target_perf.py`, T1 GEMM model, `FusionCost` | T1 failed ranking — replace, do not coefficient-tune; per-arch correlation (NVIDIA-CALIB-1, ROCM-COSTMODEL-T1, X86-CALIB-1, APPLE-CALIB-1); sm_120 and Apple roofline peaks |
+
+### Per backend
+
+- **NVIDIA** ([queue](backend/nvidia/todo.md)). Absorb the remaining
+  Graph-input families (most already build Tile IR, so this is absorption,
+  not rewrite); settle the `package_matmul` fallback as oracle or retire it
+  (Decision #31, coverage comparison first); the eight delegate-contract gaps
+  in NVIDIA-DELEGATE-CONTRACT-2026-08-30, starting with non-composing
+  accuracy budgets; `NVWGMMALoweringPass` still drops the accumulator;
+  DEVICE-CLOCK-DISCIPLINE before any promotion; NVIDIA-CALIB-1 corpus
+  descriptors; one block-index convention. Hardware-gated: sm_90 WGMMA,
+  sm_100 tcgen05/TMEM, bare-metal calibration.
+- **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
+  The broad production lane still skips Graph/Schedule/Tile; the ~58
+  `generate-*` expander adoption policy (a/b/c) and Lane B are undecided;
+  ROCM-SPLIT-K-1 re-keyed on occupancy; the LDS body's remaining lever is the
+  **VGPR** ceiling (the K1-blocked layout was refuted 2026-09-20 and the pad
+  default corrected to 1 — see ROCM-LDS-BANKPAD-1 / ROCM-LDS-STAGE-VECTOR-1);
+  no MFMA descriptor table and no ROCm `math_mode` consumer; `ROCM_WaitTokenOp`
+  lacks a wait immediate (gfx1250 async overlap); gfx1201 native JVP beyond
+  `spectral_compound`. Hardware-gated: a native-Linux KFD host (unblocks
+  ROCM-6, RASTER-1B, COSTMODEL-T1, TPROF-ROCM-TIME-1), gfx950/942/1250/1200.
+- **Apple** ([queue](backend/apple/todo.md)). `gpu.matmul2d` still lowers to
+  runtime symbols, not compiler-owned MSL (APPLE-MATMUL2D-1); simdgroup
+  lowering lacks threadgroup staging (APPLE-SIMDGROUP-IR-1); F2 Schedule
+  consumers (norm, attention, unary); `FlashAttnToAppleGPU` skips Tile; AOT-2
+  B/C/D; Apple into the arbiter with a device-latency witness and dual-clock
+  capture (APPLE-TIMER-WITNESS, row 32); block-scaled FP8/FP4 and GPU
+  packing (APPLE-DTYPE-1, row 17).
+- **x86** ([queue](backend/x86/todo.md)). `x86vector` AVX-512 lowering to
+  replace the C-shim `func.call` (unlocks a `tile.mma` consumer and compiled
+  microkernels); the `TileToX86Pass` P0 assertions-build rerun (Tajasarus);
+  packed-byte INT4/FP8 VNNI consumer (MODEL-WEIGHT-PHYS-1); no ACE/AVX10
+  capability plan exists; AVX-512 E2E packets need bare-metal Zen 5.
+
+### Grouped by what unblocks it
+
+**Software, on existing boxes**
+1. RUNTIME-LIB-OPT-1 on all four backends, then re-measure affected packets.
+2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
+   dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.
+3. Decision #11 versioned cache key and a Decision #12 `route` schema field.
+4. E2E-REAL-6F census review, then bootstrap absorption (NVIDIA gap families,
+   ROCm softmax/reduction/paged-KV first).
+5. Required Target IR contracts + GOV-ODS-CONSUMER-1; extend
+   `verifier_coverage` to Tile/Schedule/Target ODS.
+6. NVIDIA `tile.mma` sites (W1.1), then W3.3.
+7. ROCM-SPLIT-K-1; the LDS-body VGPR lever.
+8. `x86vector` lowering via the `tessera-jit` path.
+9. Apple `matmul2d` → compiler-owned MSL; Apple arbiter candidacy.
+
+**Needs an owner decision**
+- ROCm expander adoption (a/b/c) and Lane B's disposition.
+- Apple MLIR→AIR versus a supported MSL emitter (AOT-2).
+- Whether Apple fp32-only accumulation is permanent (gates DIAG-PY-BACKLOG-1).
+- An ACE/AVX10 capability-as-attribute plan for x86.
+- Live-queue IDs for IR_STACK U2, U3, U5 and U6 (only U4 is routed, as W3.3).
+
+**Hardware-gated**
+- Native-Linux KFD ROCm host; bare-metal Zen 5 and NVIDIA hosts — the single
+  gap behind every performance promotion.
+- sm_90, sm_100, gfx950, gfx942, gfx1250, gfx1200; second Apple device.
+- Multi-GPU / multi-rank ([`single_gpu_closeout`](generated/single_gpu_closeout.md) `multi_gpu_deferred`).
 
 ## Proof vocabulary
 

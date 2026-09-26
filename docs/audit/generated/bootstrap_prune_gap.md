@@ -33,7 +33,8 @@ the bootstrap row can go.
 | Lines in those modules | 10848 |
 | Classified family/target candidates (shape admission not implied) | 54 |
 | — covered by a compiled route | 6 |
-| — **gap (no declared family route)** | 48 |
+| — packager compiles only through the generic scheduled route | 4 |
+| — **gap (no declared family route)** | 44 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -65,6 +66,13 @@ A missing family mapping is not proof that no generic scheduled route accepts it
 `compiled` means a family has a declared admission-predicate mapping.
 The target module must also define the corresponding package consumer.
 Actual driver paths, shapes and policies require separate checks.
+
+`generic` means the family has no family-named route, but its
+`package_<family>` body is derived (AST) to call
+`lower_scheduled_kernel` and to return only
+`package_scheduled_kernel(...)` on every path — so its lowering
+already runs Graph → Schedule → Tile. The Graph-input wrapper is
+what remains to retire; any other return keeps the row a `gap`.
 It does **not** assert the compiled route reaches parity on
 every shape and dtype — that is per-family evidence the backend
 queues own.
@@ -76,9 +84,9 @@ queues own.
 | `nvidia_sm120` | `attention_backward` | — | 🔴 **gap** |
 | `nvidia_sm120` | `paged_kv` | — | 🔴 **gap** |
 | `nvidia_sm120` | `attention` | `scheduled_attention.supports_scheduled_attention` | ✅ compiled |
-| `nvidia_sm120` | `softmax` | — | 🔴 **gap** |
-| `nvidia_sm120` | `norm` | — | 🔴 **gap** |
-| `nvidia_sm120` | `reduction` | — | 🔴 **gap** |
+| `nvidia_sm120` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
+| `nvidia_sm120` | `norm` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
+| `nvidia_sm120` | `reduction` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `nvidia_sm120` | `nvfp4_matmul` | — | 🔴 **gap** |
 | `nvidia_sm120` | `int4_matmul` | — | 🔴 **gap** |
 | `nvidia_sm120` | `mx_matmul` | — | 🔴 **gap** |
@@ -107,7 +115,7 @@ queues own.
 | `apple_cpu` | `svd` | — | 🔴 **gap** |
 | `apple_cpu` | `tri_solve` | — | 🔴 **gap** |
 | `apple_gpu` | `batched_gemm` | — | 🔴 **gap** |
-| `apple_gpu` | `softmax` | — | 🔴 **gap** |
+| `apple_gpu` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `apple_gpu` | `dynamic_softmax` | — | 🔴 **gap** |
 | `apple_gpu` | `transpose` | — | 🔴 **gap** |
 | `apple_gpu` | `gelu` | — | 🔴 **gap** |

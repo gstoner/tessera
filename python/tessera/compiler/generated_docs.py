@@ -521,6 +521,10 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         _GEN / "target_ir_membership.md", _r_target_ir_membership,
         csv_path=_GEN / "target_ir_membership.csv",
         render_csv=_r_target_ir_membership_csv,
+        # The MD carries the per-backend summary and prose derived from it;
+        # the CSV is per-op only, so gating the CSV alone let a stale Apple
+        # sentence survive beside a correct table.
+        also_gate_md=True,
     ),
     # ── Bootstrap-prune gap analysis (E2E-REAL-6 backend half) ──
     GeneratedDoc(

@@ -43,7 +43,8 @@ gfx1201 STFT JVP 11.5 ms and ISTFT JVP 5.0 ms, both previously refused.
 The gfx1201 failure is pre-existing on `main` (`73f13759`):
 `test_every_declared_rocm_vjp_family_records_an_exact_certificate` asserts
 `device_arch == "gfx1151"` for VJP certificate rows but does not skip on
-gfx1201. It is a VJP test, untouched here.
+gfx1201. It is a VJP test, untouched here. **Closed 2026-09-25** by PR #851
+— see [§ROCm VJP certificate packet names the host chip](#rocm-vjp-certificate-packet-names-the-host-chip--2026-09-25).
 
 **Sibling backends** (shared contract changed: `NativeJVPArtifact` admission
 now goes through `native_jvp.architecture_admits`):

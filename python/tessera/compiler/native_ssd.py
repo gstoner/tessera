@@ -115,10 +115,15 @@ class NativeSSD:
         return generate_tensor_binding(self.package,signature)
 
 
-def materialize_ssd(logical, *, compiler, llvm_bin, backend, chip, cooperative=False, adjoint=False):
+def materialize_ssd(logical, *, compiler, llvm_bin, backend, chip, cooperative=False, adjoint=False,
+                    device_clock_span=False):
+    """``device_clock_span`` builds the instrumented member of a calibration
+    pair (see ``build_native_gpu_storage``); such a program is launched raw by
+    a recorder and refuses the tensor binding."""
     compiler,llvm_bin = Path(compiler),Path(llvm_bin)
     source,_ = _prepare(logical,compiler,llvm_bin,backend,cooperative,adjoint)
-    package = build_native_gpu_storage(source,compiler=compiler,llvm_bin=llvm_bin,backend=backend,chip=chip)
+    package = build_native_gpu_storage(source,compiler=compiler,llvm_bin=llvm_bin,backend=backend,chip=chip,
+                                       device_clock_span=device_clock_span)
     result = NativeSSD(logical,compiler,llvm_bin,package,cooperative,adjoint)
     result.validate()
     return result

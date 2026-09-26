@@ -514,38 +514,47 @@ def _import_binds_real_lowering(node: ast.AST, name: str) -> bool:
 
 
 def _names_are_the_real_lowering(tree: ast.Module, fn: ast.FunctionDef) -> bool:
-    """No module- or function-level binding may redefine the reserved names
-    (review: ``lower_scheduled_kernel = CACHE.get`` inside the packager)."""
-    scopes: tuple[list[ast.AST], ...] = (list(tree.body), list(ast.walk(fn)))
-    for scope in scopes:
-        for node in scope:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                if node.name in ("lower_scheduled_kernel", "scheduled_kernel"):
+    """No binding anywhere in the module may redefine the reserved names.
+
+    Walks the **whole** module (review of #855): parameters
+    (``def package_x(module, lower_scheduled_kernel)``), statements nested under
+    module-level ``if`` / ``try``, assignment / loop / ``with`` / walrus /
+    ``except`` / ``match`` targets, ``global`` / ``nonlocal`` declarations,
+    nested definitions and imports all count. The only permitted bindings are
+    the real imports (``from .scheduled_kernel import lower_scheduled_kernel``,
+    ``from . import scheduled_kernel``) and this module's single top-level
+    ``def package_scheduled_kernel``. ``fn`` is kept for the call signature; it
+    is inside ``tree`` and so already covered.
+    """
+    del fn
+    top_level_defs = 0
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == "package_scheduled_kernel" and node in tree.body \
+                    and not isinstance(node, ast.ClassDef):
+                top_level_defs += 1
+            elif node.name in _RESERVED:
+                return False
+        elif isinstance(node, ast.arg) and node.arg in _RESERVED:
+            return False
+        elif isinstance(node, ast.Name) and node.id in _RESERVED \
+                and isinstance(node.ctx, (ast.Store, ast.Del)):
+            return False
+        elif isinstance(node, (ast.Global, ast.Nonlocal)) \
+                and any(name in _RESERVED for name in node.names):
+            return False
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name in _RESERVED:
+            return False
+        elif isinstance(node, ast.MatchMapping) and node.rest in _RESERVED:
+            return False
+        elif isinstance(node, ast.ExceptHandler) and node.name in _RESERVED:
+            return False
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound = alias.asname or alias.name.split(".")[0]
+                if bound in _RESERVED and not _import_binds_real_lowering(node, bound):
                     return False
-                continue
-            targets: list[ast.AST] = []
-            if isinstance(node, (ast.Assign,)):
-                targets = list(node.targets)
-            elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
-                targets = [node.target]
-            elif isinstance(node, (ast.For, ast.AsyncFor)):
-                targets = [node.target]
-            for t in targets:
-                for n in ast.walk(t):
-                    if isinstance(n, ast.Name) and n.id in _RESERVED:
-                        return False
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                for alias in node.names:
-                    bound = alias.asname or alias.name.split(".")[0]
-                    if bound in _RESERVED and bound != "package_scheduled_kernel" \
-                            and not _import_binds_real_lowering(node, bound):
-                        return False
-                    if bound == "package_scheduled_kernel":
-                        return False
-    # package_scheduled_kernel must be this module's own single definition.
-    defs = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and n.name == "package_scheduled_kernel"]
-    return len(defs) == 1
+    return top_level_defs == 1
 
 
 def _packaged_artifact(call: ast.Call) -> ast.expr | None:

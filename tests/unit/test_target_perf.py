@@ -583,8 +583,11 @@ def test_planner_refuses_to_inherit_another_devices_smem_budget() -> None:
         reset_registry()
 
 
+_MEASUREMENT = "sha256:raw-gfx1151-measurement"
+
+
 def _timing_sample(sample_id: str, *, device_ns: float = 900, event_ns: float = 920,
-                   target: str = "rocm_gfx1151") -> dict:
+                   target: str = "rocm_gfx1151", measurement: str = _MEASUREMENT) -> dict:
     from tessera.compiler.profiler_timing import build_timing_sample, measured_clock, unavailable_clock
     return build_timing_sample(
         sample_id=sample_id, target=target,
@@ -598,14 +601,16 @@ def _timing_sample(sample_id: str, *, device_ns: float = 900, event_ns: float = 
             "profiler_activity_ns": unavailable_clock(
                 "profiler_activity_ns", source="rocprofiler_activity", reason="NO_KFD"),
         },
-        artifact_digests={"package": "sha256:abc"}, batch_size=100, warm_state="warm",
+        artifact_digests={"package": "sha256:abc", "measurement": measurement},
+        batch_size=100, warm_state="warm",
         synchronization="hipEventSynchronize", execution_environment="wsl2")
 
 
 def _wsl_corpus(**extra):
     corpus = {"version": CORPUS_VERSION, "measured_on": "2026-09-26",
               "host": "princess-luna-wsl2", "selector_eligible": True,
-              "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}}}
+              "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}},
+              "measurement_digests": {"radeon_8060s": _MEASUREMENT}}
     corpus.update(extra)
     return corpus
 
@@ -651,6 +656,19 @@ def test_witness_samples_must_themselves_be_wsl_samples() -> None:
     with pytest.raises(ValueError, match="not a WSL sample"):
         apply_corpus(_wsl_corpus(timing_witness=_witness(
             sample, _timing_sample("b", device_ns=910, event_ns=930))))
+
+
+def test_witness_samples_must_be_bound_to_the_calibrated_measurement() -> None:
+    """Review of #855: timing from an unrelated workload cannot authorize a
+    device's measured values."""
+    with pytest.raises(ValueError, match="bound to its measurement"):
+        apply_corpus(_wsl_corpus(timing_witness=_witness(
+            _timing_sample("a", measurement="sha256:unrelated"),
+            _timing_sample("b", device_ns=910, event_ns=930, measurement="sha256:unrelated"))))
+    corpus = _wsl_corpus(timing_witness=_witness())
+    del corpus["measurement_digests"]
+    with pytest.raises(ValueError, match="measurement_digests"):
+        apply_corpus(corpus)
 
 
 def test_samples_must_be_the_calibrated_devices_own_target() -> None:

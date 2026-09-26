@@ -97,8 +97,12 @@ class NativeGPUStoragePackage:
     def validate(self) -> None:
         if (self.backend, self.chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151'), ('rocm', 'gfx1201')) or not self.image or not self.host_library:
             raise ValueError('invalid native storage package binding')
-        if not self.abi or any(t not in ('pointer', 'index') for t in self.abi):
+        if not self.abi or any(t not in ('pointer', 'index', 'clock_span') for t in self.abi):
             raise ValueError('unsupported native storage ABI')
+        # The span buffer is the instrumented member of a clean/instrumented
+        # pair: at most one, always the trailing argument the pass appended.
+        if 'clock_span' in self.abi[:-1] or self.abi.count('clock_span') > 1:
+            raise ValueError('device-clock span must be the single trailing argument')
         if self._digest() != self.binding_digest:
             raise ValueError('native kernel/sizer package binding disagrees')
 
@@ -139,7 +143,18 @@ def replay_arena_ir(compiler: Path, source: str) -> str:
 
 
 def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
-                             backend: str, chip: str, toolkit: Path | None = None) -> NativeGPUStoragePackage:
+                             backend: str, chip: str, toolkit: Path | None = None,
+                             device_clock_span: bool = False) -> NativeGPUStoragePackage:
+    """Compile one native storage kernel and its sizing companion.
+
+    ``device_clock_span`` builds the *instrumented* member of a clean /
+    instrumented pair: the compiler's ``--tessera-device-clock-span`` pass
+    stamps the kernel's span with the target's constant-rate device clock
+    into an appended span-buffer argument (ABI kind ``clock_span``), which a
+    calibration recorder owns. Production packages never set it, and the
+    tensor binding refuses such a package (its ABI no longer matches the
+    tensor contract) so it cannot reach a production call by accident.
+    """
     if (backend, chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151'), ('rocm', 'gfx1201')):
         raise ValueError('native storage target is not validated')
     if re.search(r'\btessera\.denormal_mode\s*=', source):
@@ -148,6 +163,8 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
     arena = replay_arena_ir(compiler, source)
     device = _block(arena, r'^  gpu.module .*?^  }')
     host = _block(arena, r'^  func.func @__tessera_shared_bytes_.*?^  }')
+    if device_clock_span:
+        device = _run(compiler, f'--tessera-device-clock-span=backend={backend}', source=device)
     signatures = re.findall(r'gpu.func @([\w]+)\(([^)]*)\) kernel', device)
     if len(signatures) != 1:
         raise ValueError('native storage package requires exactly one kernel')
@@ -155,6 +172,14 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
     types = [arg.split(':', 1)[1].strip() for arg in arguments.split(',')]
     if any(t not in ('!llvm.ptr<1>', 'index') for t in types):
         raise ValueError('native storage ABI admits device pointers and index scalars only')
+    abi = ['pointer' if t.startswith('!llvm.ptr') else 'index' for t in types]
+    if device_clock_span:
+        stamped = re.search(r'tessera\.device_clock_span = \{argument = (\d+) : i64', device)
+        if stamped is None or int(stamped[1]) != len(types) - 1 or abi[-1] != 'pointer':
+            raise ValueError('device-clock span pass did not append the trailing span argument')
+        abi[-1] = 'clock_span'
+    elif 'tessera.device_clock_span' in device:
+        raise ValueError('an instrumented kernel reached an uninstrumented package build')
     symbol = re.search(r'tile.dynamic_shared_size = @([\w]+)', device)
     if symbol is None or f'func.func @{symbol[1]}(' not in host:
         raise ValueError('kernel lacks its compiler-generated sizing companion')
@@ -182,7 +207,7 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
              '-o', str(directory / 'sizer.so'))
         host_library = (directory / 'sizer.so').read_bytes()
     package = NativeGPUStoragePackage(backend, chip, entry, symbol[1],
-        tuple('pointer' if t.startswith('!llvm.ptr') else 'index' for t in types),
+        tuple(abi),
         arena, image, host_library, _sha(compiler.read_bytes()),
         _sha(_resolve_tool(llvm_bin / 'mlir-opt').read_bytes()), '')
     return NativeGPUStoragePackage(**{**asdict(package), 'binding_digest': package._digest()})
@@ -308,8 +333,11 @@ class BoundNativeGPUStorage:
         path.write_bytes(package.host_library)
         self._library = ct.CDLL(str(path))
         self._size = getattr(self._library, package.sizer)
-        self._types = tuple(ct.c_void_p if t == 'pointer' else ct.c_int64 for t in package.abi)
-        self._size.argtypes, self._size.restype = list(self._types), ct.c_int64
+        self._types = tuple(ct.c_int64 if t == 'index' else ct.c_void_p for t in package.abi)
+        # The sizing companion is generated from the uninstrumented kernel, so
+        # it never takes the appended span buffer.
+        self._size.argtypes = [t for t, kind in zip(self._types, package.abi) if kind != 'clock_span']
+        self._size.restype = ct.c_int64
         cuda = package.backend == 'nvidia'
         self._driver = ct.CDLL('libcuda.so.1' if cuda else 'libamdhip64.so')
         P, U = ct.c_void_p, ct.c_uint
@@ -361,7 +389,7 @@ class BoundNativeGPUStorage:
         for kind, value in zip(self.package.abi, arguments, strict=True):
             if type(value) is not int or value < 0 or value > ((1 << 63) - 1):
                 raise ValueError('native arguments require nonnegative representable integers')
-            if kind == 'pointer' and value == 0:
+            if kind in ('pointer', 'clock_span') and value == 0:
                 raise ValueError('native device pointer must be non-null')
         return [t(v) for t, v in zip(self._types, arguments, strict=True)]
 
@@ -371,7 +399,9 @@ class BoundNativeGPUStorage:
         values = self._arguments(arguments)
         if len(grid) != 3 or len(block) != 3 or any(type(v) is not int or not 0 < v < (1 << 32) for v in grid + block):
             raise ValueError('invalid native launch geometry')
-        count = self._size(*values)
+        abi = getattr(getattr(self, 'package', None), 'abi', ())
+        count = self._size(*(v for i, v in enumerate(values)
+                             if i >= len(abi) or abi[i] != 'clock_span'))
         if count < 0 or count > (1 << 31) - 1:
             raise ValueError('native sizing companion rejected the launch extent')
         return values, count

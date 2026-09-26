@@ -24,7 +24,9 @@ def main():
     options = dict(compiler=args.compiler,llvm_bin=Path('/usr/lib/llvm-23/bin'),backend=packet['backend'],chip=packet['architecture'])
     serial = materialize_ssd(logical,**options)
     cooperative = materialize_ssd(logical,cooperative=True,**options)
-    bound,decision = bind_measured_ssd(serial,cooperative,comparison)
+    # Calibrations ride in the comparison (record_ssd_*_calibrated_pairs);
+    # without them admission refuses, which is the correct replay result.
+    bound,decision = bind_measured_ssd(serial,cooperative,comparison,comparison.get('calibrations',()))
     try:
         result = dict(decision=asdict(decision),selected_binding=bound.package.binding_digest,
                       incumbent_binding=serial.package.binding_digest,candidate_binding=cooperative.package.binding_digest)

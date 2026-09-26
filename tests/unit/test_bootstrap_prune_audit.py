@@ -222,6 +222,27 @@ def test_review_escape_hatches_are_refused(monkeypatch, tmp_path):
         assert not _generic_fixture(monkeypatch, tmp_path, body), label
 
 
+def test_every_reserved_name_binding_in_the_module_is_refused(monkeypatch, tmp_path):
+    """Review of #855: parameters and bindings nested under module-level
+    control flow can also redefine the lowering name."""
+    ok = ("def package_softmax(module, *, pipeline_name):\n"
+          "    return package_scheduled_kernel(\n"
+          "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n")
+    assert _generic_fixture(monkeypatch, tmp_path, ok)
+    cases = {
+        "parameter": ("def package_softmax(module, lower_scheduled_kernel, *, pipeline_name):\n"
+                      "    return package_scheduled_kernel(\n"
+                      "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n"),
+        "conditional_module_assignment": "if LEGACY:\n    lower_scheduled_kernel = legacy\n" + ok,
+        "try_nested_import": "try:\n    from cache import lower_scheduled_kernel\nexcept ImportError:\n    pass\n" + ok,
+        "other_function_global": ("def patch():\n    global lower_scheduled_kernel\n"
+                                  "    lower_scheduled_kernel = legacy\n") + ok,
+        "scheduled_kernel_parameter_elsewhere": "def helper(scheduled_kernel):\n    return scheduled_kernel\n" + ok,
+    }
+    for label, body in cases.items():
+        assert not _generic_fixture(monkeypatch, tmp_path, body), label
+
+
 def test_nvidia_unary_families_are_derived_generic_not_declared():
     """NVIDIA softmax/norm/reduction migrated to the generic Schedule→Tile
     route (F2-U1–U10); the dashboard read them as gaps because only

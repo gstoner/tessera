@@ -18,6 +18,178 @@ from benchmarks.record_device_ring_protocol import Device  # noqa: E402
 from tessera.compiler.scheduled_ssd import lower_scheduled_ssd  # noqa: E402
 from tessera.compiler.native_ssd import materialize_ssd  # noqa: E402
 
+import platform  # noqa: E402
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
+
+WINDOWS, LAUNCHES = 7, 100
+
+
+def _hip_enum(name):
+    """An enum value from THIS host's HIP headers, never a hard-coded guess."""
+    root = Path(os.environ.get('ROCM_PATH', '/opt/rocm'))
+    include = root / 'include'
+    if not (include / 'hip' / 'hip_runtime_api.h').is_file():
+        raise SystemExit(f'device-clock calibration needs HIP headers under {include} '
+                         '(source scripts/_rocm_env.sh)')
+    with tempfile.TemporaryDirectory(prefix='hip-enum-') as tmp:
+        src, exe = Path(tmp)/'probe.c', Path(tmp)/'probe'
+        src.write_text('#include <hip/hip_runtime_api.h>\n#include <stdio.h>\n'
+                       f'int main(void){{printf("%d",(int){name});return 0;}}\n')
+        subprocess.run(['cc','-D__HIP_PLATFORM_AMD__','-I',str(include),str(src),'-o',str(exe)],
+                       check=True,capture_output=True,timeout=60)
+        return int(subprocess.run([str(exe)],check=True,capture_output=True,text=True,timeout=30).stdout)
+
+
+def _isa_sha256(image, llvm_bin):
+    with tempfile.TemporaryDirectory(prefix='ssd-isa-') as tmp:
+        obj = Path(tmp)/'image.hsaco'
+        obj.write_bytes(image)
+        text = subprocess.run([str(llvm_bin/'llvm-objdump'),'-d',str(obj)],check=True,
+                              capture_output=True,text=True,timeout=120).stdout
+    body = '\n'.join(line for line in text.splitlines() if not line.startswith(str(obj)))
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
+def _resources(device, function):
+    out = {}
+    for key, attribute in (('lds_bytes', 1), ('scratch_bytes', 3), ('vgpr', 4)):
+        value = ct.c_int()
+        device.check(device.attribute(ct.byref(value), attribute, function))
+        out[key] = value.value
+    return out
+
+
+def device_clock_calibration(*, device, logical, clean_program, clean_binding, raw, grid, block,
+                             clean_event_ms, verify, compiler, llvm_bin, cooperative, output):
+    """Calibrate one process's clean SSD image against its instrumented twin.
+
+    The instrumented image is the compiler's --tessera-device-clock-span build
+    of the same Schedule IR: identical arguments plus a span buffer the kernel
+    fills with the constant-rate device clock (min start / max end across
+    blocks and launches). Each window resets the span, brackets LAUNCHES
+    launches with HIP events and the host wall, then reads the span back. The
+    device span must agree with the event it runs under (profiler_timing
+    enforces 5%); the clean/instrumented duration ratio is the overhead gate.
+    """
+    from tessera.compiler.profiler_timing import (
+        build_timing_sample, measured_clock, unavailable_clock, wall_clock_ticks_to_ns)
+    from tessera.compiler.profiler_rocm_evidence import build_rocm_profiler_packet
+    if device.cuda:
+        raise SystemExit('device-clock calibration is implemented for ROCm here; '
+                         'NVIDIA uses the Nsight activity-window recorder')
+    rate = ct.c_int()
+    get_attribute = device.lib.hipDeviceGetAttribute
+    get_attribute.argtypes, get_attribute.restype = [ct.POINTER(ct.c_int), ct.c_int, ct.c_int], ct.c_int
+    device.check(get_attribute(ct.byref(rate), _hip_enum('hipDeviceAttributeWallClockRate'), 0))
+    if rate.value <= 0:
+        raise SystemExit('hipDeviceAttributeWallClockRate is not positive on this device')
+    instrumented = materialize_ssd(logical,compiler=compiler,llvm_bin=llvm_bin,backend='rocm',
+                                   chip='gfx1151',cooperative=cooperative,device_clock_span=True)
+    if instrumented.package.abi[:-1] != clean_program.package.abi or instrumented.package.abi[-1] != 'clock_span':
+        raise SystemExit('instrumented SSD image does not extend the clean ABI by one span buffer')
+    bound = instrumented.package.bind()
+    span = ct.c_void_p()
+    host_span = (ct.c_uint64 * 2)()
+    events = [ct.c_void_p(), ct.c_void_p()]
+    try:
+        device.check(device.alloc(ct.byref(span), ct.sizeof(host_span)))
+        values, shared = bound._launch_size(tuple(raw) + (span.value,), grid, block)
+        _, clean_shared = clean_binding._bound._launch_size(tuple(raw), grid, block)
+        if shared != clean_shared:
+            raise SystemExit('instrumented image sizes shared memory differently from the clean image')
+        argv = (ct.c_void_p*len(values))(*[ct.cast(ct.byref(v),ct.c_void_p) for v in values])
+        for event in events:
+            device.check(device.event_create(ct.byref(event), 0))
+        device_ns, event_ns, host_ns = [], [], []
+        for _ in range(WINDOWS):
+            host_span[0], host_span[1] = (1 << 64) - 1, 0
+            device.check(device.copy(span, ct.addressof(host_span), ct.sizeof(host_span), 1))
+            start = time.perf_counter_ns()
+            device.check(device.event_record(events[0], None))
+            for _ in range(LAUNCHES):
+                device.check(device.launch(bound._function,*grid,*block,shared,None,argv,None))
+            device.check(device.event_record(events[1], None))
+            device.check(device.event_sync(events[1]))
+            host_ns.append((time.perf_counter_ns() - start) / LAUNCHES)
+            ms = ct.c_float()
+            device.check(device.event_elapsed(ct.byref(ms), events[0], events[1]))
+            event_ns.append(ms.value * 1e6 / LAUNCHES)
+            device.check(device.copy(ct.addressof(host_span), span, ct.sizeof(host_span), 2))
+            if host_span[0] == (1 << 64) - 1 or host_span[1] <= host_span[0]:
+                raise SystemExit(f'device-clock span was not written: {list(host_span)}')
+            device_ns.append(wall_clock_ticks_to_ns(host_span[1] - host_span[0], rate.value) / LAUNCHES)
+        verify()  # the instrumented image must compute the same result
+        resources_probe = _resources(device, bound._function)
+        resources_clean = _resources(device, clean_binding._bound._function)
+    finally:
+        for event in events:
+            if event.value:
+                device.check(device.event_destroy(event))
+        if span.value:
+            device.check(device.free(span))
+        bound.close()
+    environment = 'wsl2' if 'microsoft' in platform.release().lower() else 'bare_metal'
+    sample_id = f'{output.stem}-{uuid.uuid4().hex[:12]}'
+    clean_sha = hashlib.sha256(clean_program.package.image).hexdigest()
+    probe_sha = hashlib.sha256(instrumented.package.image).hexdigest()
+    semantic = hashlib.sha256(logical.schedule_ir.encode()).hexdigest()
+    timing = build_timing_sample(
+        sample_id=sample_id, target='rocm_gfx1151',
+        clocks={
+            'host_wall_ns': measured_clock('host_wall_ns', source='perf_counter',
+                                           value=statistics.median(host_ns)),
+            'hip_event_ns': measured_clock('hip_event_ns', source='hip_event',
+                                           value=statistics.median(event_ns)),
+            'device_wall_clock_ns': measured_clock(
+                'device_wall_clock_ns', source='device_wall_clock',
+                value=statistics.median(device_ns), instrumented=True,
+                calibrated_against=('hip_event_ns',), eligible_for_promotion=True,
+                provenance={'clock': 'llvm.readsteadycounter', 'wall_clock_rate_khz': rate.value,
+                            'windows': WINDOWS, 'launches_per_window': LAUNCHES,
+                            'per_window_ns': device_ns}),
+            'profiler_activity_ns': unavailable_clock(
+                'profiler_activity_ns', source='rocprofiler_activity',
+                reason='ROCPROFILER_UNAVAILABLE_NO_KFD' if environment == 'wsl2' else 'NOT_CAPTURED'),
+        },
+        artifact_digests={'application_image': clean_sha, 'instrumented_image': probe_sha,
+                          'schedule_ir': semantic},
+        batch_size=LAUNCHES, warm_state='warm', synchronization='hipEventSynchronize',
+        execution_environment=environment,
+        resources={'clean': resources_clean, 'instrumented': resources_probe},
+        environment={'kernel_release': platform.release(), 'per_window_event_ns': event_ns,
+                     'per_window_host_ns': host_ns})
+    isa = _isa_sha256
+    image = dict(architecture='gfx1151', kernel_name=clean_program.package.entry,
+                 semantic_sha256=semantic, clock_source='hip_event', calibration_sample_id=sample_id)
+    clean = dict(image, image_sha256=clean_sha, isa_sha256=isa(clean_program.package.image, llvm_bin),
+                 duration_ns=statistics.median(clean_event_ms) * 1e6, instrumented=False,
+                 resources=resources_clean)
+    probe = dict(image, image_sha256=probe_sha, isa_sha256=isa(instrumented.package.image, llvm_bin),
+                 duration_ns=statistics.median(event_ns), instrumented=True,
+                 resources=resources_probe)
+    capture = {
+        'schema': 'tessera.profiler_rocm_native_capture.v1', 'provider': 'rocprofiler',
+        'status': 'blocked', 'fresh_process': True, 'process': {'clean_exit': True},
+        'reason': ('rocprofiler requires /dev/kfd; this WSL2 host exposes /dev/dxg only'
+                   if environment == 'wsl2' else 'rocprofiler capture not requested'),
+        'proof': {'dispatch_activity_seen': False, 'hip_callback_seen': False,
+                  'counter_records_seen': False, 'pc_samples_seen': False},
+        'requested': {'counters': [], 'pc_sampling': False},
+        'provider_trace': _empty_trace(), 'eligible_for_promotion': False,
+    }
+    root = subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip()
+    dirty = bool(subprocess.run(['git','status','--porcelain'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip())
+    packet = build_rocm_profiler_packet(timing=timing, capture=capture, uninstrumented=clean,
+                                        instrumented=probe, source={'source_commit': root, 'worktree_dirty': dirty})
+    output.write_text(json.dumps(packet, indent=2) + '\n')
+    return packet
+
+
+def _empty_trace():
+    from tessera.compiler.profiler_provider_trace import build_provider_trace_artifact
+    return build_provider_trace_artifact(provider='rocprofiler', records=(), source_status='unavailable')
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -28,7 +200,12 @@ def main():
     parser.add_argument('--shape',type=int,nargs=4,default=(5,2,3,2))
     parser.add_argument('--chunk',type=int)
     parser.add_argument('--profile',action='store_true')
+    parser.add_argument('--device-clock-calibration',type=Path,
+                        help='ROCm: also calibrate the clean image against its '
+                             '--tessera-device-clock-span twin and write the packet here')
     args = parser.parse_args()
+    if args.device_clock_calibration and not (args.profile and args.chunk and args.backend == 'rocm'):
+        parser.error('--device-clock-calibration needs --backend rocm, --profile and one --chunk')
     run_id = uuid.uuid4().hex
     device = Device(args.backend)
     rows = []
@@ -98,6 +275,17 @@ def main():
                 finally:
                     if end.value: device.check(device.event_destroy(end))
                     device.check(device.event_destroy(start))
+                if args.device_clock_calibration:
+                    def verify():
+                        for i,value in enumerate(outputs):
+                            result = np.empty_like(value)
+                            device.check(device.copy(result.ctypes.data,pointers[5+i],result.nbytes,2))
+                            np.testing.assert_allclose(result,expected[i],rtol=1e-5,atol=1e-6)
+                    device_clock_calibration(
+                        device=device, logical=logical, clean_program=program, clean_binding=binding,
+                        raw=raw, grid=grid, block=block, clean_event_ms=timings, verify=verify,
+                        compiler=args.compiler, llvm_bin=Path('/usr/lib/llvm-23/bin'),
+                        cooperative=args.cooperative, output=args.device_clock_calibration)
             rows.append(dict(chunk=chunk,binding_ms=bind_ms,checked_call_ms=checked_call_ms,device_event_ms=timings,
                              device_event_median_ms=statistics.median(timings) if timings else None,max_abs_errors=observed,binding_digest=program.package.binding_digest,
                              image_sha256=hashlib.sha256(program.package.image).hexdigest()))

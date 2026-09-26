@@ -728,7 +728,8 @@ def _check_kind(payload: Mapping[str, Any], expected: str, other: str) -> None:
 MIN_WITNESS_SAMPLES = 2
 
 
-def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> None:
+def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any],
+                                measurement_digests: Any = None) -> None:
     """A WSL corpus is selector authority only when it *carries* the evidence.
 
     ``timing_witness.samples`` holds ``tessera.profiler_timing.v1`` payloads.
@@ -738,6 +739,12 @@ def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> Non
     of that target, with a witness valid in the same sample and agreeing
     within the provider band). Derived, not declared: a corpus that merely
     names a method is refused (review of #854).
+
+    **Bound to the calibrated measurement** (review of #855): the corpus names,
+    per device, the digest of the raw measurement its overlay was computed
+    from (``measurement_digests``), and a sample counts for that device only
+    when its ``artifact_digests`` include that digest. Timing from an unrelated
+    workload therefore cannot authorize a device's measured values.
     """
     import hashlib
     import json
@@ -756,7 +763,14 @@ def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> Non
     samples = witness.get("samples") if isinstance(witness, Mapping) else None
     if not isinstance(samples, (list, tuple)) or not samples:
         raise ValueError(hint)
-    admissible: dict[str, set[str]] = {}
+    if not isinstance(measurement_digests, Mapping) or any(
+            not isinstance(measurement_digests.get(d), str) or not measurement_digests.get(d)
+            for d in devices):
+        raise ValueError(
+            "WSL calibration needs measurement_digests: for every device, the "
+            "digest of the raw measurement its overlay was computed from, so "
+            "witness samples can be bound to it")
+    admissible: list[tuple[str, str, frozenset[str]]] = []
     for index, sample in enumerate(samples):
         if not isinstance(sample, Mapping):
             raise ValueError(f"timing_witness.samples[{index}] is not a timing sample; {hint}")
@@ -780,14 +794,17 @@ def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> Non
         # new sample_id is the same measurement and must not count twice.
         content = hashlib.sha256(
             json.dumps(clocks, sort_keys=True, default=str).encode()).hexdigest()
-        admissible.setdefault(sample["target"], set()).add(content)
+        admissible.append((sample["target"], content,
+                           frozenset(str(v) for v in sample["artifact_digests"].values())))
     for device in devices:
         target = perf_for_device(device).target
-        count = len(admissible.get(target, ()))
-        if count < MIN_WITNESS_SAMPLES:
+        digest = measurement_digests[device]
+        bound = {content for sample_target, content, digests in admissible
+                 if sample_target == target and digest in digests}
+        if len(bound) < MIN_WITNESS_SAMPLES:
             raise ValueError(
-                f"device {device!r} (target {target!r}) has {count} admissible "
-                f"timing sample(s); {hint}")
+                f"device {device!r} (target {target!r}) has {len(bound)} admissible "
+                f"timing sample(s) bound to its measurement {digest[:16]}…; {hint}")
 
 
 def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
@@ -837,7 +854,8 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
         # selector authority when it declares the independent-witness method
         # the owner accepted (MASTER_AUDIT; DEVICE-CLOCK-DISCIPLINE-2026-08-31).
         _require_wsl_timing_witness(corpus.get("timing_witness"),
-                                    dict(corpus.get("devices", {})))
+                                    dict(corpus.get("devices", {})),
+                                    corpus.get("measurement_digests"))
     # Phase 1 — build and validate everything. perf_for_device() raises on an
     # unknown device, with_measured() raises on an unknown field.
     staged: list[TargetPerf] = [

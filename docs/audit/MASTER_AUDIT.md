@@ -191,11 +191,12 @@ instruction counts). Missing `/dev/kfd` or a bare-metal host does not stop the
 compiler from being completed or its performance from being checked;
 hardware counters are diagnostic extras.
 
-### Definition of done: a 100% functional compiler on the fleet
+### Functional-complete alpha: definition and guard rails
 
-Owner statement (2026-09-25). The compiler is done when every program runs
-through one pipeline, on every fleet lane, with each stage produced by MLIR
-passes and optimized at that stage:
+Owner statement (2026-09-25). These are the **release criteria for
+functional-complete alpha** — a software definition, not a direction. Alpha
+ships when every in-scope program runs through one pipeline, on every fleet
+lane, with each stage produced by MLIR passes and optimized at that stage:
 
 ```
 Python / textual frontend
@@ -231,6 +232,32 @@ the lane:
 Hand-tuned or library kernels remain allowed only as **arbiter candidates
 behind a declared Target IR op** (Decisions #28/#31) — never as the only way
 a family reaches the device.
+
+**Guard rails.** Every change is judged against these until alpha ships:
+
+1. **No new bypass.** A change may not add a Python `package_*` constructor,
+   an `emit/*` source emitter, a prebuilt-kernel lowering, or an
+   optional-only Target IR contract. The counts in
+   [`bootstrap_prune_gap`](generated/bootstrap_prune_gap.md) and
+   [`target_ir_membership`](generated/target_ir_membership.md) only go down.
+2. **Every stage is real.** A family counts toward alpha only when each
+   stage above is MLIR-produced on the lane and the stage's exit criterion
+   holds; a later stage cannot compensate for a skipped one.
+3. **All eight lanes.** A family is alpha-complete only when all eight lanes
+   pass; a lane that cannot run a family records a named, stable refusal
+   (Decision #21), never a silent reference fallback.
+4. **Execute-and-compare on the lane's own device.** Evidence never transfers
+   between lanes. Performance is checked with the accepted non-profiler
+   method (device clock cross-checked against events and host wall, paired
+   interleaved runs); counters are optional.
+5. **Future features are out of alpha.** Non-fleet GPUs, multi-GPU
+   transports and ACE neither gate alpha nor count toward it.
+6. **Delete only after absorption.** A bypass is removed only once its
+   family passes all stages on the lanes it served (Decision #31 ordering).
+
+Enforced today: 4 (per-device proof rules) and 6 (Decision #31 gates).
+**Not yet enforced:** 1–3 need the scoreboard below plus ratchet tests that
+fail CI when a bypass count rises or a lane regresses.
 
 **Scoreboard gap.** No dashboard measures this definition yet: the spine
 inventory is per target with three levels, and the route maps are per
@@ -348,8 +375,9 @@ matrix), so progress is measured rather than narrated.
 ### Grouped by what unblocks it
 
 **Software, on existing boxes**
-- Build the lane × family × stage scoreboard for the definition of done
-  (above), so every item below is measured against it.
+- Build the lane × family × stage scoreboard for functional-complete alpha,
+  with ratchet tests enforcing guard rails 1–3, so every item below is
+  measured against the release definition.
 0. Align the timing-admission code with the direction above: let
    `wall_clock64`/event-validated paired timing from the fleet hosts be
    selector-admissible instead of refusing every WSL sample

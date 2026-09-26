@@ -136,14 +136,9 @@ struct WmmaGemmRequest {
   std::string output;
   bool bias = false;
   bool portableABI = false;
-  bool canonicalKLoop = false;
-  bool ssaOwnershipProof = false;
-  bool raggedZeroPad = false;
   // Populated only by the canonical Schedule -> Tile consumer.  These are
   // static problem extents, never a substitute for dynamic leading dimensions.
   int64_t staticM = 0, staticN = 0, staticK = 0;
-  int64_t logicalTileM = 0, logicalTileN = 0, logicalTileK = 0;
-  std::string accumulate;
   std::string rasterOrder = "row_major";
   int64_t rasterGroup = 1;
   // ROCM-MACRO-K-TILE-1: the descriptor's `k_blocks`. Arrives here rather than
@@ -157,143 +152,6 @@ struct WmmaGemmRequest {
   std::string splitKReduction;
   tessera::tile::TilePackedFormatAttr storagePack;
 };
-
-static bool isForOp(Operation *op) {
-  return op && op->getName().getStringRef() == "scf.for";
-}
-
-/// Recognize the shared CORE-GEMM-KLOOP semantic contract. This deliberately
-/// validates the loop instead of merely looking for the inner marker: the K
-/// loop must carry real pipeline state, the contraction must slice two values
-/// defined outside the nest, and the outer result must be the function result.
-/// ROCm then re-forms the semantic loop into its existing problem-size-generic
-/// WMMA schedule; it does not build a second GEMM implementation.
-static FailureOr<WmmaGemmRequest>
-matchCanonicalGemmLoop(Operation *matmul) {
-  StringRef opName = matmul->getName().getStringRef();
-  bool sharedMatmul = opName == "tessera.matmul";
-  bool loweredTileMma = opName == "tile.mma";
-  if (!matmul->hasAttr("tessera.canonical_k_step") ||
-      (!sharedMatmul && !loweredTileMma) || matmul->getNumResults() != 1 ||
-      (sharedMatmul && matmul->getNumOperands() != 2) ||
-      (loweredTileMma && matmul->getNumOperands() < 3))
-    return failure();
-
-  Operation *kLoop = matmul->getParentOp();
-  Operation *nLoop = kLoop ? kLoop->getParentOp() : nullptr;
-  Operation *mLoop = nLoop ? nLoop->getParentOp() : nullptr;
-  if (!isForOp(kLoop) || !isForOp(nLoop) || !isForOp(mLoop))
-    return failure();
-  if (!llvm::any_of(kLoop->getResultTypes(), [](Type type) {
-        return llvm::isa<tessera::tile::PipelineStateType>(type);
-      }) ||
-      mLoop->getNumResults() != 1)
-    return failure();
-
-  bool hasAsyncToken = false;
-  bool hasBuffer = false;
-  bool hasPipelineState = false;
-  for (Value operand : matmul->getOperands()) {
-    hasAsyncToken |=
-        llvm::isa<tessera::tile::AsyncTokenType>(operand.getType());
-    hasBuffer |= llvm::isa<tessera::tile::BufferType>(operand.getType());
-    hasPipelineState |=
-        llvm::isa<tessera::tile::PipelineStateType>(operand.getType());
-  }
-  if (loweredTileMma &&
-      (!hasAsyncToken || !hasBuffer || !hasPipelineState))
-    return failure();
-
-  SmallVector<Value, 2> sources;
-  for (Value operand : matmul->getOperands().take_front(2)) {
-    if (loweredTileMma) {
-      Operation *copy = operand.getDefiningOp();
-      if (!copy || copy->getName().getStringRef() != "tile.async_copy" ||
-          copy->getNumOperands() == 0 ||
-          !llvm::any_of(copy->getOperands(), [](Value value) {
-            return llvm::isa<tessera::tile::BufferType>(value.getType());
-          }) ||
-          !llvm::any_of(copy->getOperands(), [](Value value) {
-            return llvm::isa<tessera::tile::PipelineStateType>(
-                value.getType());
-          }) ||
-          !llvm::any_of(copy->getResults(), [](Value value) {
-            return llvm::isa<tessera::tile::AsyncTokenType>(value.getType());
-          }))
-        return failure();
-      operand = copy->getOperand(0);
-    }
-    Operation *slice = operand.getDefiningOp();
-    if (!slice || slice->getName().getStringRef() != "tensor.extract_slice")
-      return failure();
-    Value source = slice->getOperand(0);
-    Operation *sourceDef = source.getDefiningOp();
-    if (sourceDef && mLoop->isProperAncestor(sourceDef))
-      return failure();
-    sources.push_back(source);
-  }
-
-  auto parent = matmul->getParentOfType<func::FuncOp>();
-  if (!parent || parent.getNumArguments() != 2 ||
-      parent.getFunctionType().getNumResults() != 1)
-    return failure();
-  Operation *terminator = parent.getBody().front().getTerminator();
-  if (!terminator || terminator->getNumOperands() != 1)
-    return failure();
-  Value returned = terminator->getOperand(0);
-  if (Operation *slice = returned.getDefiningOp();
-      slice && slice->getName().getStringRef() == "tensor.extract_slice")
-    returned = slice->getOperand(0);
-  if (returned != mLoop->getResult(0))
-    return failure();
-
-  auto aType = llvm::dyn_cast<RankedTensorType>(sources[0].getType());
-  auto bType = llvm::dyn_cast<RankedTensorType>(sources[1].getType());
-  auto resultType = llvm::dyn_cast<RankedTensorType>(mLoop->getResult(0).getType());
-  if (!aType || !bType || !resultType || aType.getRank() != 2 ||
-      bType.getRank() != 2 || resultType.getRank() != 2 ||
-      !aType.hasStaticShape() || !bType.hasStaticShape() ||
-      !resultType.hasStaticShape() ||
-      aType.getElementType() != bType.getElementType())
-    return failure();
-
-  WmmaGemmRequest request;
-  request.anchor = matmul;
-  request.eraseOwner = parent;
-  request.name = parent.getSymName().str();
-  request.portableABI = true;
-  request.canonicalKLoop = true;
-  request.ssaOwnershipProof = loweredTileMma;
-  request.raggedZeroPad = matmul->hasAttr("tessera.ragged_zero_pad");
-  auto tileM = matmul->getAttrOfType<IntegerAttr>("tessera.tile_m");
-  auto tileN = matmul->getAttrOfType<IntegerAttr>("tessera.tile_n");
-  auto tileK = matmul->getAttrOfType<IntegerAttr>("tessera.tile_k");
-  if (!tileM || !tileN || !tileK || tileM.getInt() <= 0 ||
-      tileN.getInt() <= 0 || tileK.getInt() <= 0 ||
-      !request.raggedZeroPad)
-    return failure();
-  request.logicalTileM = tileM.getInt();
-  request.logicalTileN = tileN.getInt();
-  request.logicalTileK = tileK.getInt();
-  Type storage = aType.getElementType();
-  Type accum = resultType.getElementType();
-  if (storage.isF16() && accum.isF32()) {
-    request.dtype = "f16";
-    request.output = "f32";
-    request.accumulate = "f32";
-  } else if (storage.isBF16() && accum.isF32()) {
-    request.dtype = "bf16";
-    request.output = "f32";
-    request.accumulate = "f32";
-  } else if (storage.isInteger(8) && accum.isInteger(32)) {
-    request.dtype = "int8";
-    request.output = "i32";
-    request.accumulate = "i32";
-  } else {
-    return failure();
-  }
-  return request;
-}
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
 // `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index), for the dtype in `T`.
@@ -1792,206 +1650,10 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   b.create<gpu::ReturnOp>(loc);
 }
 
-// Materialize the canonical K loop as a one-wave LDS-staged schedule. The
-// shared Tile loop has already proven allocation, completion, and phase
-// ownership before it reaches this re-former; this body is the AMD physical
-// answer: cooperative global loads, address-space-3 storage, s_barrier on both
-// sides of the WMMA consumer, ragged zero fill, and a loop-carried accumulator.
-//
-// CORRECTED 2026-08-04 -- the note here previously read "the measured gfx1151
-// incumbent remains the register schedule ... an LDS schedule that is slower on
-// unified-memory Strix Halo". The measurement was right; the conclusion
-// generalized from a configuration in which LDS CANNOT help.
-//
-// This body is one-wave, MT=NT=1, so its block tile is 16x16 and its arithmetic
-// intensity is BM*BN/(BM+BN) = 8 FLOP/byte -- IDENTICAL to the naive register
-// schedule. Staging through LDS at equal AI buys no reuse and costs barriers
-// plus a round trip, so it must be slower, and it is. Measured at 2048^3 f16 on
-// gfx1151:
-//
-//   naive          MT=NT=1                16x16 tile   AI  8.0    3.62 TFLOP/s
-//   LDS  1x1 waves MT=NT=1                16x16 tile   AI  8.0    2.90
-//   LDS  2x2 waves MT=NT=2                64x64 tile   AI 32.0    8.47
-//   LDS  4x2 waves MT=NT=2               128x64 tile   AI 42.7    9.78
-//   LDS+pipelined 4x2 waves MT=NT=2      128x64 tile   AI 42.7   10.33
-//
-// LDS staging pays exactly when it enables reuse across a MULTI-WAVE,
-// MULTI-TILE block; at 1x1 there is no reuse to capture. The hand-written
-// `tessera_rocm_wmma_gemm_f16_bench_{lds,pipe}` kernels reach 2.7-3.5x the
-// production register schedule, so the incumbent is not the ceiling -- it is
-// the configuration this generator happens to support.
-//
-// Do not re-derive "LDS is slower here" from a 1x1 experiment.
-void emitCanonicalLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
-                          const WmmaTypes &T, Type outputType) {
-  MLIRContext *ctx = b.getContext();
-  auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
-  auto ldsTy =
-      MemRefType::get({256}, T.store, MemRefLayoutAttrInterface(), ws);
-  Value ldsA = gpuFunc.addWorkgroupAttribution(ldsTy, loc);
-  Value ldsB = gpuFunc.addWorkgroupAttribution(ldsTy, loc);
-
-  b.setInsertionPointToStart(&gpuFunc.getBody().front());
-  Value A = gpuFunc.getArgument(0);
-  Value B = gpuFunc.getArgument(1);
-  Value D = gpuFunc.getArgument(2);
-  Value M = gpuFunc.getArgument(3);
-  Value N = gpuFunc.getArgument(4);
-  Value K = gpuFunc.getArgument(5);
-  auto ci = [&](int64_t value) {
-    return b.create<arith::ConstantIndexOp>(loc, value);
-  };
-  Value c0 = ci(0), c4 = ci(4), c15 = ci(15), c16 = ci(16);
-  Value c32 = ci(32), c256 = ci(256);
-  Value tx = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
-  Value lane = b.create<arith::AndIOp>(loc, tx, c15);
-  Value lhi = b.create<arith::ShRUIOp>(loc, tx, c4);
-  Value baseRow = b.create<arith::MulIOp>(
-      loc, b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y), c16);
-  Value baseCol = b.create<arith::MulIOp>(
-      loc, b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x), c16);
-
-  Value scalarZero;
-  Value fragmentZero;
-  Value accumulatorZero;
-  if (T.isInt) {
-    scalarZero = b.create<arith::ConstantOp>(
-        loc, T.store, b.getIntegerAttr(T.store, 0));
-    fragmentZero = b.create<arith::ConstantOp>(
-        loc, T.load,
-        DenseElementsAttr::get(cast<ShapedType>(T.load), APInt(8, 0)));
-    accumulatorZero = b.create<arith::ConstantOp>(
-        loc, T.acc,
-        DenseElementsAttr::get(cast<ShapedType>(T.acc), APInt(32, 0)));
-  } else {
-    scalarZero =
-        b.create<arith::ConstantOp>(loc, T.store, b.getFloatAttr(T.store, 0.0));
-    APFloat zero =
-        cast<FloatAttr>(b.getFloatAttr(T.store, 0.0)).getValue();
-    fragmentZero = b.create<arith::ConstantOp>(
-        loc, T.load,
-        DenseElementsAttr::get(cast<ShapedType>(T.load), zero));
-    APFloat accZero =
-        cast<FloatAttr>(b.getFloatAttr(T.accElem, 0.0)).getValue();
-    accumulatorZero = b.create<arith::ConstantOp>(
-        loc, T.acc,
-        DenseElementsAttr::get(cast<ShapedType>(T.acc), accZero));
-  }
-
-  auto loadSafe = [&](OpBuilder &ib, Value memref, Value logical,
-                      Value inBounds) {
-    Value safe = ib.create<arith::SelectOp>(loc, inBounds, logical, c0);
-    Value loaded = ib.create<memref::LoadOp>(loc, memref, ValueRange{safe});
-    return Value(
-        ib.create<arith::SelectOp>(loc, inBounds, loaded, scalarZero));
-  };
-
-  auto kLoop = b.create<scf::ForOp>(
-      loc, c0, K, c16, ValueRange{accumulatorZero},
-      [&](OpBuilder &kb, Location kloc, Value k0, ValueRange iter) {
-        auto copyA = kb.create<scf::ForOp>(kloc, tx, c256, c32);
-        {
-          OpBuilder::InsertionGuard guard(kb);
-          kb.setInsertionPointToStart(copyA.getBody());
-          Value e = copyA.getInductionVar();
-          Value row = kb.create<arith::DivUIOp>(kloc, e, c16);
-          Value kk = kb.create<arith::RemUIOp>(kloc, e, c16);
-          Value gr = kb.create<arith::AddIOp>(kloc, baseRow, row);
-          Value gk = kb.create<arith::AddIOp>(kloc, k0, kk);
-          Value rowIn = kb.create<arith::CmpIOp>(
-              kloc, arith::CmpIPredicate::slt, gr, M);
-          Value kIn = kb.create<arith::CmpIOp>(
-              kloc, arith::CmpIPredicate::slt, gk, K);
-          Value in = kb.create<arith::AndIOp>(kloc, rowIn, kIn);
-          Value logical = kb.create<arith::AddIOp>(
-              kloc, kb.create<arith::MulIOp>(kloc, gr, K), gk);
-          kb.create<memref::StoreOp>(kloc, loadSafe(kb, A, logical, in), ldsA,
-                                    ValueRange{e});
-        }
-        auto copyB = kb.create<scf::ForOp>(kloc, tx, c256, c32);
-        {
-          OpBuilder::InsertionGuard guard(kb);
-          kb.setInsertionPointToStart(copyB.getBody());
-          Value e = copyB.getInductionVar();
-          Value kk = kb.create<arith::DivUIOp>(kloc, e, c16);
-          Value col = kb.create<arith::RemUIOp>(kloc, e, c16);
-          Value gk = kb.create<arith::AddIOp>(kloc, k0, kk);
-          Value gc = kb.create<arith::AddIOp>(kloc, baseCol, col);
-          Value kIn = kb.create<arith::CmpIOp>(
-              kloc, arith::CmpIPredicate::slt, gk, K);
-          Value colIn = kb.create<arith::CmpIOp>(
-              kloc, arith::CmpIPredicate::slt, gc, N);
-          Value in = kb.create<arith::AndIOp>(kloc, kIn, colIn);
-          Value logical = kb.create<arith::AddIOp>(
-              kloc, kb.create<arith::MulIOp>(kloc, gk, N), gc);
-          kb.create<memref::StoreOp>(kloc, loadSafe(kb, B, logical, in), ldsB,
-                                    ValueRange{e});
-        }
-        kb.create<gpu::BarrierOp>(kloc);
-
-        Value aBase = kb.create<arith::MulIOp>(kloc, lane, c16);
-        Value aFragment =
-            kb.create<vector::LoadOp>(kloc, T.load, ldsA, ValueRange{aBase});
-        Value bFragment = fragmentZero;
-        for (int64_t i = 0; i < 16; ++i) {
-          Value index = kb.create<arith::AddIOp>(
-              kloc,
-              kb.create<arith::MulIOp>(
-                  kloc, kb.create<arith::ConstantIndexOp>(kloc, i), c16),
-              lane);
-          Value element =
-              kb.create<memref::LoadOp>(kloc, ldsB, ValueRange{index});
-          bFragment = kb.create<vector::InsertOp>(
-              kloc, element, bFragment, ArrayRef<int64_t>{i});
-        }
-        Value aOperand = aFragment;
-        Value bOperand = bFragment;
-        if (T.pack == 1) {
-          aOperand = kb.create<vector::BitCastOp>(kloc, T.frag, aFragment);
-          bOperand = kb.create<vector::BitCastOp>(kloc, T.frag, bFragment);
-        }
-        OperationState wmma(kloc, "tessera_rocm.wmma");
-        wmma.addOperands({aOperand, bOperand, iter.front()});
-        wmma.addTypes(T.acc);
-        Value next = kb.create(wmma)->getResult(0);
-        kb.create<gpu::BarrierOp>(kloc);
-        kb.create<scf::YieldOp>(kloc, next);
-      });
-
-  Value acc = kLoop.getResult(0);
-  for (int64_t e = 0; e < 8; ++e) {
-    Value row = b.create<arith::AddIOp>(
-        loc, baseRow,
-        b.create<arith::AddIOp>(loc, ci(2 * e), lhi));
-    Value col = b.create<arith::AddIOp>(loc, baseCol, lane);
-    Value rowIn =
-        b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, row, M);
-    Value colIn =
-        b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, col, N);
-    auto storeIf = b.create<scf::IfOp>(
-        loc, b.create<arith::AndIOp>(loc, rowIn, colIn),
-        /*withElseRegion=*/false);
-    OpBuilder::InsertionGuard guard(b);
-    b.setInsertionPointToStart(storeIf.thenBlock());
-    int64_t accumulatorIndex = T.halfAccumulator ? 2 * e : e;
-    Value value = b.create<vector::ExtractOp>(
-        loc, acc, ArrayRef<int64_t>{accumulatorIndex});
-    if (value.getType() != outputType)
-      value = b.create<arith::TruncFOp>(loc, outputType, value);
-    Value index = b.create<arith::AddIOp>(
-        loc, b.create<arith::MulIOp>(loc, row, N), col);
-    b.create<memref::StoreOp>(loc, value, D, ValueRange{index});
-  }
-  b.setInsertionPointToEnd(&gpuFunc.getBody().front());
-  b.create<gpu::ReturnOp>(loc);
-}
-
-// Schedule-knob defaults, shared by the option declarations below and by the
-// canonical LDS body's guard: that body implements none of these knobs, so it
-// refuses any value that differs from them rather than silently emitting its
-// one fixed kernel. Keep these equal to tessera-rocm-executable's defaults
-// (Passes.cpp) and ROCMExecutablePipeline's (rocm_pipeline.py), which serialize
-// every knob at every input level.
+// Schedule-knob defaults for the option declarations below. Keep these equal
+// to tessera-rocm-executable's defaults (Passes.cpp) and
+// ROCMExecutablePipeline's (rocm_pipeline.py), which serialize every knob at
+// every input level.
 constexpr int kDefaultLdsWaves = 2;
 constexpr int kDefaultKUnroll = 1;
 constexpr int kDefaultSchedGroups = 0;
@@ -2095,10 +1757,10 @@ struct GenerateWMMAGemmKernelPass
                        llvm::cl::init(false)};
   Option<std::string> canonicalStaging{
       *this, "canonical-staging",
-      llvm::cl::desc("physical schedule for a canonical M/N/K loop: "
-                     "register (gfx1151 incumbent) or lds (comparison lane); "
-                     "with via-tile, lds selects the multi-wave LDS-staged "
-                     "typed body"),
+      llvm::cl::desc("physical schedule for the GEMM body: register (the "
+                     "default) or lds, which selects the multi-wave "
+                     "LDS-staged typed body and therefore requires "
+                     "via-tile=true"),
       llvm::cl::init("register")};
   Option<int> kUnroll{*this, "k-unroll",
                       llvm::cl::desc("typed body: full 16-wide K slabs issued "
@@ -2239,29 +1901,30 @@ struct GenerateWMMAGemmKernelPass
 
     SmallVector<WmmaGemmRequest, 2> requests;
 
-    // Direct shared-contract adapter. Prefer the Tile form after the shared
-    // async seam and ROCm ownership planner have materialized !tile.buffer,
-    // !tile.async_token, and !tile.pipeline_state edges. The pre-Tile form is
-    // retained for narrow structural compatibility tests.
-    SmallVector<Operation *> canonicalSteps;
-    module.walk([&](Operation *op) {
+    // ROCm GEMM enters this generator at Tile level (`tile.matmul_kernel`,
+    // from the scheduled Graph -> Schedule -> Tile route) or as the
+    // `tessera_rocm.wmma_gemm` directive. The canonical M/N/K `scf.for` entry
+    // (a `tessera.matmul` / `tile.mma` carrying `tessera.canonical_k_step`
+    // from `tessera-tiling`) was Lane B's and was deleted with it on
+    // 2026-09-26 (ROCM_LANE_MAP.md, "Lane B is retired"). A marked step that
+    // still reaches this pass is refused by name rather than passed through
+    // unlowered (Decision #21). The marker itself stays: Apple's
+    // `tessera-apple-canonical-gemm` consumes it.
+    WalkResult retired = module.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
       if ((name == "tessera.matmul" || name == "tile.mma") &&
-          op->hasAttr("tessera.canonical_k_step"))
-        canonicalSteps.push_back(op);
-    });
-    for (Operation *step : canonicalSteps) {
-      FailureOr<WmmaGemmRequest> request = matchCanonicalGemmLoop(step);
-      if (failed(request)) {
-        step->emitError(
-            "ROCm canonical GEMM requires the verified three-level M/N/K "
-            "scf.for contract with loop-carried pipeline state, external "
-            "rank-2 slices, ragged zero-fill, and f16/bf16->f32 or i8->i32 "
-            "accumulation");
-        return signalPassFailure();
+          op->hasAttr("tessera.canonical_k_step")) {
+        op->emitError(
+            "ROCM_CANONICAL_GEMM_LOOP_RETIRED: ROCm has no canonical M/N/K "
+            "scf.for GEMM entry; GEMM enters at Tile level as "
+            "tile.matmul_kernel from the scheduled route "
+            "(scheduled_matmul.lower_scheduled_matmul)");
+        return WalkResult::interrupt();
       }
-      requests.push_back(std::move(*request));
-    }
+      return WalkResult::advance();
+    });
+    if (retired.wasInterrupted())
+      return signalPassFailure();
 
     // Portable launch-level adapter. It validates the target-neutral contract
     // and directly populates the in-memory request consumed by the production
@@ -2902,26 +2565,6 @@ struct GenerateWMMAGemmKernelPass
               std::pair{"tessera.raster_group", "tessera.rocm.schedule_raster_group"}})
           if (Attribute attr = op->getAttr(typed))
             gpuFunc->setAttr(kernel, attr);
-      if (request.canonicalKLoop) {
-        gpuFunc->setAttr("tessera.rocm.source",
-                         b.getStringAttr("canonical_mnk_scf_for"));
-        gpuFunc->setAttr("tessera.rocm.canonical_k_loop",
-                         b.getBoolAttr(true));
-        gpuFunc->setAttr("tessera.rocm.ssa_ownership_proof",
-                         b.getBoolAttr(request.ssaOwnershipProof));
-        gpuFunc->setAttr("tessera.rocm.ragged_zero_pad",
-                         b.getBoolAttr(request.raggedZeroPad));
-        gpuFunc->setAttr("tessera.rocm.accumulate",
-                         b.getStringAttr(request.accumulate));
-        gpuFunc->setAttr("tessera.rocm.tile_m",
-                         b.getI64IntegerAttr(request.logicalTileM));
-        gpuFunc->setAttr("tessera.rocm.tile_n",
-                         b.getI64IntegerAttr(request.logicalTileN));
-        gpuFunc->setAttr("tessera.rocm.tile_k",
-                         b.getI64IntegerAttr(request.logicalTileK));
-        gpuFunc->setAttr("tessera.rocm.physical_staging",
-                         b.getStringAttr(canonicalStaging));
-      }
 
       OpBuilder bodyB(gpuFunc.getContext());
       // The typed via-tile path carries the fused bias/activation epilogue
@@ -2933,6 +2576,18 @@ struct GenerateWMMAGemmKernelPass
         op->emitError(
             "generate-wmma-gemm-kernel: typed via-tile pilot requires a GEMM "
             "stored in its accumulator type");
+        return signalPassFailure();
+      }
+      // The only LDS-staged body is the typed one. The direct lane
+      // (via-tile=false) has the register body alone since the canonical
+      // M/N/K comparison body was deleted with Lane B (2026-09-26), so an
+      // lds request there is refused rather than answered with the register
+      // kernel under an lds label (Decision #21a).
+      if (!viaTile && canonicalStaging == "lds") {
+        op->emitError("generate-wmma-gemm-kernel: canonical-staging=lds "
+                      "selects the LDS-staged typed body and requires "
+                      "via-tile=true; the direct lane has the register body "
+                      "only");
         return signalPassFailure();
       }
       if (viaTile && canonicalStaging == "lds") {
@@ -2953,86 +2608,6 @@ struct GenerateWMMAGemmKernelPass
                          ldsCopyWidth, ldsCopyElide, ldsCopyDepth,
                          ldsDoubleBuffer, ldsSchedValuPerMma,
                          ldsBRowMajor);
-      } else if (request.canonicalKLoop && canonicalStaging == "lds") {
-        // This body writes its accumulator back at row `2*e + lhi`, which is
-        // RDNA3's wave32 distribution. gfx12 distributes the same accumulator
-        // by COLUMN (`(lane/16)*8 + j`, see
-        // docs/backends/rocm/wmma-fragment-layout.md section 2), and the
-        // `tessera_rocm.wmma` this body emits is the arch-resolving Target IR
-        // op -- so on gfx12 it would lower to the RDNA4 instruction and then
-        // scatter the result to RDNA3 rows. That is the silent-wrong-tiles
-        // failure the layout contract exists to prevent: no verifier catches
-        // it and the kernel runs to completion.
-        //
-        // Unlike the control-for-WMMA generators, which emit the gfx11 rocdl
-        // intrinsic directly and therefore die at instruction selection on
-        // gfx12, this one has nothing to fail on. It is a gfx11-only
-        // comparison lane whose evidence is gfx1151-only, so it refuses by
-        // name instead (Decision #21). Found 2026-09-19 by a structural
-        // search for accumulator index math with no arch branch; a substring
-        // audit the same week had cleared this file.
-        if (!gfx11Request) {
-          op->emitError(
-              "ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED: the canonical LDS "
-              "comparison body stores its accumulator in the RDNA3 row "
-              "distribution and is admitted on gfx11 only; this request is ")
-              << requestArch;
-          return signalPassFailure();
-        }
-        if (T.halfAccumulator) {
-          op->emitError(
-              "ROCM_WMMA_ACCUM_UNSUPPORTED: f16 accumulation is admitted "
-              "only on the measured register-staged gfx1151 path");
-          return signalPassFailure();
-        }
-        if (hasBias || activation != "none" || T.pack == 2 || mt != 1 ||
-            nt != 1) {
-          op->emitError("generate-wmma-gemm-kernel: canonical LDS comparison "
-                        "supports one-wave f16/bf16/int8 GEMM without a fused "
-                        "epilogue");
-          return signalPassFailure();
-        }
-        // This body is one fixed wave with an unpadded one-slab copy; it
-        // takes none of the schedule knobs. A request that sets one is a
-        // request for a different kernel, so it is refused by name rather
-        // than answered with this one (Decision #21a).
-        SmallVector<std::string> ignored;
-        auto note = [&](bool differs, StringRef knob, auto value) {
-          if (differs)
-            ignored.push_back((Twine(knob) + "=" + Twine(value)).str());
-        };
-        note(ldsWavesM != kDefaultLdsWaves, "lds-waves-m", int(ldsWavesM));
-        note(ldsWavesN != kDefaultLdsWaves, "lds-waves-n", int(ldsWavesN));
-        note(kUnroll != kDefaultKUnroll, "k-unroll", int(kUnroll));
-        note(schedGroups != kDefaultSchedGroups, "sched-groups",
-             int(schedGroups));
-        note(ldsPadDwords != kDefaultLdsPadDwords, "lds-pad-dwords",
-             int(ldsPadDwords));
-        note(ldsCopyWidth != kDefaultLdsCopyWidth, "lds-copy-width",
-             int(ldsCopyWidth));
-        note(ldsCopyElide != kDefaultLdsCopyElide, "lds-copy-elide",
-             ldsCopyElide ? "true" : "false");
-        note(ldsCopyDepth != kDefaultLdsCopyDepth, "lds-copy-depth",
-             int(ldsCopyDepth));
-        note(ldsDoubleBuffer != kDefaultLdsDoubleBuffer, "lds-double-buffer",
-             ldsDoubleBuffer ? "true" : "false");
-        note(ldsSchedValuPerMma != kDefaultLdsSchedValuPerMma,
-             "lds-sched-valu-per-mma", int(ldsSchedValuPerMma));
-        note(ldsBRowMajor != kDefaultLdsBRowMajor, "lds-b-row-major",
-             ldsBRowMajor ? "true" : "false");
-        if (!ignored.empty()) {
-          op->emitError("ROCM_CANONICAL_LDS_KNOB_UNSUPPORTED: the canonical "
-                        "LDS comparison body is one fixed wave and implements "
-                        "none of the schedule knobs; requested ")
-              << llvm::join(ignored, " ");
-          return signalPassFailure();
-        }
-        gpuFunc->setAttr("tessera.rocm.lds_bytes",
-                         b.getI64IntegerAttr(
-                             512 * T.store.getIntOrFloatBitWidth() / 8));
-        gpuFunc->setAttr("tessera.rocm.pipeline_stages",
-                         b.getI64IntegerAttr(1));
-        emitCanonicalLdsBody(bodyB, loc, gpuFunc, T, outputTy);
       } else if (splitK) {
         // The partial: no epilogue, fp32 into workspace plane blockIdx.z.
         emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,

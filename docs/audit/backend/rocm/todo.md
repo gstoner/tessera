@@ -6683,6 +6683,13 @@ the one Graph entry for ROCm GEMM through the scheduled route, the benchmark
 was rebuilt on it, and `family=matmul input=graph` is refused in Python and
 C++. gfx1151 packet recorded
 (`benchmarks/baselines/rocm_gfx1151_canonical_gemm_scheduled_20260926/`); gfx1201 owed.
+Lane B's physical consumer in `GenerateWMMAGemmKernel.cpp` (canonical
+`scf.for` matcher, one-wave LDS comparison body, `canonical_mnk_scf_for`
+stamp, `ROCM_CANONICAL_LDS_{ARCH,KNOB}_UNSUPPORTED`) was deleted the same day
+after a producer census found no ROCm pipeline that tiles ahead of the
+generator; a marked step is now refused as `ROCM_CANONICAL_GEMM_LOOP_RETIRED`
+and `canonical-staging=lds` without `via-tile=true` is refused. Detail and the
+test conversions: `ROCM_LANE_MAP.md` §"Decision — Lane B is retired".
 
 **Step 3 pilot landed:** `GenerateWMMAGemmKernel{via-tile=true}` is the first
 C++ producer of the full typed `tile.view` -> `fragment_pack` -> `tile.mma` ->
@@ -10451,6 +10458,10 @@ it now refuses by name (`ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED`, registered)
 rather than being taught the RDNA4 layout — the typed LDS body already
 resolves row and column from the fragment family and is the arch-correct
 route. Two fixtures, one acceptance and one refusal.
+
+**Superseded 2026-09-26:** `emitCanonicalLdsBody`, its arch refusal and both
+fixtures were deleted with Lane B's physical consumer (`ROCM_LANE_MAP.md`
+§"Decision — Lane B is retired"); the typed LDS body is the only LDS body.
 
 **The lesson is about the audit, not the tool.** The first pass searched for
 one spelling of the formula, found the sites that had it, and called the file

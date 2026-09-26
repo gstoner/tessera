@@ -152,8 +152,7 @@ def _packages(shape: tuple[int, int, int]):
         module, target="nvidia_sm120")
     return {
         "scheduled": nvidia_native.package_scheduled_matmul(
-            module, scheduled,
-            pipeline_name="tessera-lower-to-nvidia-sm120"),
+            scheduled, pipeline_name="tessera-lower-to-nvidia-sm120"),
         "direct": nvidia_native.package_f16_matmul(
             module, pipeline_name="tessera-lower-to-nvidia-sm120",
             schedule="direct"),

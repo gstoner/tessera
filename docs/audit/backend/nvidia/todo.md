@@ -69,8 +69,23 @@ enters the replayed contract:
 6. **Broken benchmark (verified by reading the code, not run):**
    `benchmarks/nvidia/benchmark_scheduled_macro_matmul.py` calls
    `package_scheduled_matmul(module, scheduled, pipeline_name=...)`. The
-   function takes one artifact, so this raises `TypeError`. Fix it when
-   Super-Bear is back.
+   function takes one artifact, so this raises `TypeError`. **Fixed and run
+   2026-09-26 on The-Super-Bear (RTX 5070):** the unfixed call reproduced the
+   `TypeError` at 16x32x8; the fixed call (`package_scheduled_matmul(scheduled,
+   pipeline_name=...)`) ran to completion. Smoke run only, not a timing claim.
+
+**Branch regression check for this PR (The-Super-Bear, 2026-09-26).** Fresh
+worktrees of `main` (b5da0a4e) and the branch (4e810487), each built all
+targets in both `build` and `build-nvidia-cuda` configurations; the branch's
+NVIDIA runtime libraries compile at `-O2` (RUNTIME-LIB-OPT-1), `main`'s with
+no `-O`. Release gate: cpu 923 vs 927 passed; compiler 1 vs 1 passed; device
+1035 passed / 88 failed on **both**, with identical failure sets; NVIDIA unit
+selection 959 vs 959 passed. **No branch-only failure.** The 88 device
+failures are pre-existing on `main` on this box (84 in
+`test_e2e_spine_native.py`: `KeyError: 'nan_mode'`, "requires a supported
+native scheduled reduction", a 9e-06 vs 1e-05 tolerance literal) and are
+owed their own investigation. Also noted: the gate's `compiler` layer
+selects a single test on both trees, so it checks very little.
 
 Other families follow the same Python-Tile-string pattern
 (`emit_softmax/reduce/norm/paged_attention/...` in `nvidia_native.py`). They

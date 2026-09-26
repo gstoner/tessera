@@ -77,12 +77,26 @@ its stated evidence exists; emitting an artifact alone is not completion.
 Implementation order, portable Tile/ReplaySSM additions, and per-item test gates
 are maintained in [`todo.md`](todo.md).
 
+> **Re-tiered 2026-09-25 (owner decision).** The goal now is a fully
+> functional end-to-end compiler on the parts that run today (gfx1151,
+> gfx1201). Targets with no fleet hardware — gfx950 (ROCM-1), gfx1250
+> (ROCM-3), gfx1200/gfx942 (ROCM-4) and the CDNA-MFMA half of ROCM-5 — are
+> **future features, not compiler gates**; their completion evidence below
+> is unchanged for when the hardware arrives. Missing `/dev/kfd` does not
+> block ROCM-6 / ROCM-8 / TPROF-ROCM-TIME-1: the `wall_clock64` device clock
+> cross-checked against banded HIP events and host wall
+> ([DEVICE-CLOCK-DISCIPLINE-2026-08-31](todo.md#cross-backend-sync-device-clock-discipline-2026-08-31))
+> plus paired interleaved runs is an accepted performance method; counters
+> are diagnostic extras. The code still refuses WSL samples for promotion
+> (`profiler_timing.py`, `target_perf.apply_corpus`) — aligning it is the
+> first item in [MASTER_AUDIT's action list](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25).
+
 | ID | Priority | Action | Completion evidence |
 |---|---|---|---|
-| ROCM-1 | P0 | Add gfx950 MI350-series exact-device proof for the currently advertised artifact rows. | Matching gfx950 compiler, launch, numerical fixture, and `evidence_arch`; generated rows promote without inheriting gfx1151 data. |
+| ROCM-1 | Future (was P0) | Add gfx950 MI350-series exact-device proof for the currently advertised artifact rows. | Matching gfx950 compiler, launch, numerical fixture, and `evidence_arch`; generated rows promote without inheriting gfx1151 data. |
 | ROCM-2 | P0 | Preserve the closed gfx1201 scheduled-suite, public-projection, and D=128 load-batching gates; run R9700-specific validation only before making product-specific claims. | The 90-row owning-device closure remains 95/95 with zero skips and a fresh compiler; generated rows stay bounded by the exact proof registry; the D=128 numerical/resource/timing packet stays green; any R9700 claim carries R9700 evidence. |
-| ROCM-3 | P0 | Add gfx1250 MI455X exact-device proof. | The upstream-LLVM artifact is joined to an exact-device launch and numerical fixture with gfx1250 provenance. |
-| ROCM-4 | P1 | Add gfx1200 consumer-device proof and retain gfx942 as an explicitly tested compatibility target. | Each promoted row carries its own runtime and numerical evidence; unsupported feature forms fail with stable diagnostics. gfx1201 evidence is never accepted for gfx1200. |
+| ROCM-3 | Future (was P0) | Add gfx1250 MI455X exact-device proof. | The upstream-LLVM artifact is joined to an exact-device launch and numerical fixture with gfx1250 provenance. |
+| ROCM-4 | Future (was P1) | Add gfx1200 consumer-device proof and retain gfx942 as an explicitly tested compatibility target. | Each promoted row carries its own runtime and numerical evidence; unsupported feature forms fail with stable diagnostics. gfx1201 evidence is never accepted for gfx1200. |
 | ROCM-5 | P1 | Finish architecture-specific MMA enablement without reusing proof across targets. | gfx1201 RDNA 4 fragment/layout guards remain exact-device green; gfx1200, Wave32 WMMA v2, and CDNA MFMA gain their own matching-device fixtures before promotion. |
 | ROCM-6 | P1 | Revalidate the three redesign experiments under LLVM/MLIR 23 + ROCm 7.14. Correctness is green, but WSL HIP event timing returns invalid zero durations. | A candidate may retain or change production status only when its aligned/ragged correctness and resource gates pass with valid paired device and E2E timing. Zero/non-finite timing is a blocker, not evidence. |
 | ROCM-8 | P2 | Re-evaluate copy versus zero-copy on bare-metal ROCm. | Device and end-to-end measurements identify a stable crossover outside WSL before any automatic selection policy lands. |

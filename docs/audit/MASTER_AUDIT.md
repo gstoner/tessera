@@ -121,8 +121,10 @@ the applicable backend plan.
 
 ### 7. Architecture promotion
 
-RX 9070 XT gfx1201 correctness commissioning now has an owning host, Tajasarus;
-R9700-specific performance and native-Linux counter evidence remain open.
+RX 9070 XT gfx1201 correctness commissioning now has an owning host, Tajasarus.
+R9700-specific performance and native-Linux counter evidence are future
+features, not compiler gates (see the scope decision in the consolidated
+action list below).
 Bounded scheduled unary and standalone backward execute on gfx1201; paired AD,
 general matrix packaging and performance promotion remain open.
 See the [ROCm queue](backend/rocm/todo.md#gfx1201-scheduled-integration--2026-09-13).
@@ -170,6 +172,25 @@ as an open risk-appetite call, and is superseded on that point. On x86, ACE
 is the matrix path but is **deferred until a shipping processor supports
 it**; it is not open work.
 
+**Scope (owner decision, 2026-09-25): a fully functional end-to-end compiler on
+the targets that run today.** Those are gfx1151, gfx1201, sm_120, Apple7 GPU +
+Apple CPU, and x86 / AVX-512. Every GPU the fleet cannot run — sm_80/90/100,
+CDNA gfx90a/942/950, gfx1250, gfx1200, R9700-specific parts, a second Apple
+device, multi-GPU transports — is a **future feature**: it keeps its backlog
+entry and its own proof obligation when it arrives, but it is **not a gate on
+the compiler** and not a priority now. Evidence still never transfers
+between architectures; this changes what gates, not what may be claimed.
+
+**Performance evidence does not require a profiler or KFD.** The fleet has a
+proven non-profiler method: the in-kernel `wall_clock64` device clock, cross-
+checked against banded HIP/CUDA events and the host wall clock
+([DEVICE-CLOCK-DISCIPLINE-2026-08-31](backend/rocm/todo.md#cross-backend-sync-device-clock-discipline-2026-08-31):
+all three agree to four significant figures on gfx1151), plus paired,
+interleaved A/B runs and ISA / resource census (`hipFuncGetAttribute`,
+instruction counts). Missing `/dev/kfd` or a bare-metal host does not stop the
+compiler from being completed or its performance from being checked;
+hardware counters are diagnostic extras.
+
 ### Three blockers most other items wait on
 
 1. **One compiler authority.** Most families still reach a backend through a
@@ -189,11 +210,16 @@ it**; it is not open work.
    cover Tile, Schedule or Target ODS (it now fails closed on a missing mapped
    `.td`; a dead entry for the deleted Queue dialect had been skipped
    silently).
-3. **Timing that can promote.** WSL2 wall clock does not promote; NVIDIA
-   timers run on the default stream; ROCm has no `/dev/kfd` counters under
-   WSL2; Apple `kernelStartTime` does not measure work; and runtime libraries
-   in empty-build-type trees compile at `-O0` (RUNTIME-LIB-OPT-1, proposed,
-   not applied), which biases every comparison packet recorded from them.
+3. **Timing the compiler can act on.** The method exists (above); the code
+   has not caught up. It still hard-codes the older "WSL never promotes"
+   rule — `profiler_timing.py` raises on any WSL sample marked
+   promotion-eligible, `target_perf.apply_corpus` rejects WSL packets, and
+   several recorders stamp `blocked_on_bare_metal` — so selection cannot use
+   the evidence the fleet can produce. Separately: NVIDIA timers run on the
+   default stream (DEVICE-CLOCK-DISCIPLINE); Apple `kernelStartTime` does not
+   measure work; and runtime libraries in empty-build-type trees compile at
+   `-O0` (RUNTIME-LIB-OPT-1, proposed, not applied), which biases every
+   comparison packet recorded from them.
 
 ### Foundation still to build, by IR level
 
@@ -232,8 +258,8 @@ it**; it is not open work.
   accuracy budgets; `NVWGMMALoweringPass` cannot thread the accumulator (it
   refuses with `NVWGMMA_ACCUMULATOR_DROPPED`; W1.1 step 2b);
   DEVICE-CLOCK-DISCIPLINE before any promotion; NVIDIA-CALIB-1 corpus
-  descriptors; one block-index convention. Hardware-gated: sm_90 WGMMA,
-  sm_100 tcgen05/TMEM, bare-metal calibration.
+  descriptors; one block-index convention. Future features (not gates):
+  sm_90 WGMMA, sm_100 tcgen05/TMEM.
 - **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
   The broad production lane still skips Graph/Schedule/Tile; the ~58
   `generate-*` expander adoption policy (a/b/c) and Lane B are undecided;
@@ -247,8 +273,9 @@ it**; it is not open work.
   is table-driven (`_WMMA_VARIANTS`) and `math_mode="tf32"` is correctly
   refused there. MFMA is CDNA-only — its `mfma_table.inc` has no consumer and
   Decision #14's `MFMAFullCoveragePass` was never built, which matters only
-  when a CDNA part arrives. Hardware-gated: a native-Linux KFD host (unblocks
-  ROCM-6, RASTER-1B, COSTMODEL-T1, TPROF-ROCM-TIME-1), gfx950/942/1250/1200.
+  when a CDNA part arrives. ROCM-6, RASTER-1B and COSTMODEL-T1 proceed on
+  `wall_clock64`-validated paired timing rather than waiting for KFD
+  counters. Future features (not gates): gfx950/942/1250/1200 (ROCM-1/3/4).
 - **Apple** ([queue](backend/apple/todo.md)), on the shared MLIR/LLVM path. `gpu.matmul2d` still lowers to
   runtime symbols, not compiler-owned MSL (APPLE-MATMUL2D-1); simdgroup
   lowering stages per tile but lacks the cooperative K-slab copy
@@ -263,12 +290,19 @@ it**; it is not open work.
   body compiled through the `tessera-jit` linalg/vector/LLVM lane instead of
   packaging a prebuilt image; the `TileToX86Pass` assertions-build rerun
   (the dependent-dialect fix is in; Tajasarus confirms it); packed-byte
-  INT4/FP8 VNNI consumer (MODEL-WEIGHT-PHYS-1); AVX-512 E2E packets need
-  bare-metal Zen 5. ACE: deferred until shipping hardware.
+  INT4/FP8 VNNI consumer (MODEL-WEIGHT-PHYS-1); seal the AVX-512 E2E
+  packets with the non-profiler timing discipline (no PMU needed). ACE:
+  deferred until shipping hardware.
 
 ### Grouped by what unblocks it
 
 **Software, on existing boxes**
+0. Align the timing-admission code with the direction above: let
+   `wall_clock64`/event-validated paired timing from the fleet hosts be
+   selector-admissible instead of refusing every WSL sample
+   (`profiler_timing.py`, `target_perf.apply_corpus`, the recorders that
+   stamp `blocked_on_bare_metal`), keeping the validity bands and paired-run
+   requirements that make it trustworthy.
 1. RUNTIME-LIB-OPT-1 on all four backends, then re-measure affected packets.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
    dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.
@@ -287,11 +321,15 @@ it**; it is not open work.
 - Whether Apple fp32-only accumulation is permanent (gates DIAG-PY-BACKLOG-1).
 - Live-queue IDs for IR_STACK U2, U3, U5 and U6 (only U4 is routed, as W3.3).
 
-**Hardware-gated**
-- Native-Linux KFD ROCm host; bare-metal Zen 5 and NVIDIA hosts — the single
-  gap behind every performance promotion.
-- sm_90, sm_100, gfx950, gfx942, gfx1250, gfx1200; second Apple device.
-- Multi-GPU / multi-rank ([`single_gpu_closeout`](generated/single_gpu_closeout.md) `multi_gpu_deferred`).
+**Future features — tracked, not compiler gates**
+- sm_80/90/100 (WGMMA, tcgen05/TMEM); CDNA gfx90a/942/950 (MFMA);
+  gfx1250; gfx1200; R9700-specific parts; a second Apple device.
+- Multi-GPU transports and multi-rank device packets
+  ([`single_gpu_closeout`](generated/single_gpu_closeout.md)
+  `multi_gpu_deferred`); the CPU / mock-rank distributed contracts stay in scope.
+- ACE on x86, once a shipping processor supports it.
+- Native-Linux KFD counters and bare-metal hosts: useful diagnostics, not a
+  prerequisite for completing or measuring the compiler.
 
 ## Proof vocabulary
 

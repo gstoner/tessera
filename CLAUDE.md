@@ -73,7 +73,9 @@ Schedule → Tile IR** with the Python Graph constructors retired to test
 baselines. **Apple GPU on macOS 27 / Metal 4.1 executes FP8 E4M3/E5M2 and FP4
 E2M1 `matmul2d` operands with fp32 accumulation — emulated, at 0.77–0.93× fp16,
 not an acceleration claim.** Datacenter archs (ROCm CDNA/MI300; NVIDIA Hopper
-sm_90 / datacenter sm_100) stay hardware-gated (Phase G/H). **No NVIDIA or ROCm
+sm_90 / datacenter sm_100) stay hardware-gated (Phase G/H) — **future features,
+not compiler gates (owner, 2026-09-25): the goal is a fully functional
+end-to-end compiler on the parts the fleet runs today.** **No NVIDIA or ROCm
 performance promotion has cleared its margin since 2026-08-30**, and one set of
 NVIDIA allocation/token-memref evidence was withdrawn (2026-09-09) because the
 harness recorded a different lowerer than it measured — profiler attribution on
@@ -926,7 +928,12 @@ driver's JIT is one release behind the toolkit** (610.88 = CUDA 13.3 driver API,
 PTX ≤ 9.3, measured 2026-09-17): PTX that will be driver-JIT'd is stamped
 `driver_jit_ptx_isa()`, never the toolkit's 9.4 — see `gpu_target.py`.
 Source `scripts/_nvidia_env.sh` before pytest (see Testing). WSL timings do not
-promote: bare-metal calibration is owed on every NVIDIA perf row.
+promote: bare-metal calibration is owed on every NVIDIA perf row. **Superseded
+2026-09-25 (owner):** WSL is not a blocker — device-clock timing cross-checked
+against banded events and host wall, with paired interleaved runs, is an
+accepted performance method; bare-metal and profiler counters are diagnostic
+extras. The code still enforces the old rule (`profiler_timing.py`,
+`target_perf.apply_corpus`) until the MASTER_AUDIT action-list item lands.
 
 ### Apple only — Mac M1 Max (Homebrew, off-venv)
 

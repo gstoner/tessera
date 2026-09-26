@@ -54,6 +54,8 @@ def main():
     p.add_argument('--output-dir', required=True, type=Path)
     p.add_argument('--shape', type=int, nargs=4, default=(512, 2, 32, 8))
     p.add_argument('--chunk', type=int, default=32)
+    p.add_argument('--launches', type=int, default=100,
+                   help='launches per timing window, passed to every process')
     p.add_argument('--diagnostic', action='store_true')
     args = p.parse_args()
 
@@ -72,7 +74,8 @@ def main():
     env = {**os.environ, 'PYTHONPATH': str(ROOT / 'python')}
     recorder = ROOT / 'benchmarks' / 'record_ssd_gpu.py'
     base = [sys.executable, str(recorder), '--backend', 'rocm', '--compiler', str(args.compiler.resolve()),
-            '--shape', *map(str, args.shape), '--chunk', str(args.chunk), '--profile']
+            '--shape', *map(str, args.shape), '--chunk', str(args.chunk), '--profile',
+            '--launches', str(args.launches)]
 
     pairs, calibrations = [], []
     for index in range(9):

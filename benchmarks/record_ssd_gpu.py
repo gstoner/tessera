@@ -254,6 +254,7 @@ def _empty_trace():
 
 
 def main():
+    global LAUNCHES
     parser = argparse.ArgumentParser()
     parser.add_argument('--backend',choices=['nvidia','rocm'],required=True)
     parser.add_argument('--compiler',type=Path,required=True)
@@ -261,11 +262,19 @@ def main():
     parser.add_argument('--cooperative',action='store_true')
     parser.add_argument('--shape',type=int,nargs=4,default=(5,2,3,2))
     parser.add_argument('--chunk',type=int)
+    parser.add_argument('--launches',type=int,default=LAUNCHES,
+                        help='launches per timing window (default %(default)s). The event\n'
+                             'bracket and the marker span differ by a roughly fixed offset per\n'
+                             'window, so short kernels need longer windows to stay inside the\n'
+                             '5%% clock-agreement band (measured gfx1201, 2026-09-26)')
     parser.add_argument('--profile',action='store_true')
     parser.add_argument('--device-clock-calibration',type=Path,
                         help='ROCm: also calibrate the clean image with compiler-built '
                              'device-clock markers and write the packet here')
     args = parser.parse_args()
+    if args.launches <= 0:
+        parser.error('--launches must be positive')
+    LAUNCHES = args.launches
     if args.device_clock_calibration and not (args.profile and args.chunk and args.backend == 'rocm'):
         parser.error('--device-clock-calibration needs --backend rocm, --profile and one --chunk')
     run_id = uuid.uuid4().hex
@@ -359,7 +368,7 @@ def main():
                         compiler=args.compiler, llvm_bin=_llvm_bin(),
                         output=args.device_clock_calibration, run_id=run_id)
             rows.append(dict(chunk=chunk,binding_ms=bind_ms,checked_call_ms=checked_call_ms,device_event_ms=timings,
-                             device_event_median_ms=statistics.median(timings) if timings else None,max_abs_errors=observed,binding_digest=program.package.binding_digest,
+                             device_event_median_ms=statistics.median(timings) if timings else None,launches_per_window=LAUNCHES,max_abs_errors=observed,binding_digest=program.package.binding_digest,
                              image_sha256=hashlib.sha256(program.package.image).hexdigest()))
         finally:
             binding.close()

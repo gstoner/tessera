@@ -21,6 +21,7 @@ import pytest
 from tessera.compiler.capabilities import TARGET_CAPABILITIES
 from tessera.compiler.schedule_planner import SchedulePlanner
 from tessera.compiler.target_perf import (
+    _measurement_digest,
     CORPUS_VERSION,
     UNIT_MATRIX,
     UNIT_VECTOR,
@@ -285,7 +286,7 @@ def test_apply_corpus_merges_and_reports_updated_devices() -> None:
         updated = apply_corpus(
             {
                 "version": CORPUS_VERSION,
-                "measured_on": "2026-07-28",
+                "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                 "host": "test-host",
                 "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
             }
@@ -327,6 +328,7 @@ def test_wsl_host_cannot_claim_selector_eligibility() -> None:
             {
                 "version": CORPUS_VERSION,
                 "measured_on": "2026-08-15",
+                "execution_environment": "wsl2",
                 "host": "host-via-dxg",
                 "selector_eligible": True,
                 "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}},
@@ -342,7 +344,7 @@ def test_reset_registry_undoes_a_corpus_merge() -> None:
     apply_corpus(
         {
             "version": CORPUS_VERSION,
-            "measured_on": "2026-07-28",
+            "measured_on": "2026-07-28", "execution_environment": "bare_metal",
             "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
         }
     )
@@ -361,12 +363,12 @@ def test_reset_registry_drops_an_ad_hoc_registration() -> None:
 
 def test_corpus_rejects_version_skew_unknown_device_and_missing_date() -> None:
     with pytest.raises(ValueError, match="version"):
-        apply_corpus({"version": 999, "measured_on": "2026-07-28", "devices": {}})
+        apply_corpus({"version": 999, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {}})
     with pytest.raises(ValueError, match="measured_on"):
         apply_corpus({"version": CORPUS_VERSION, "devices": {}})
     with pytest.raises(TargetPerfError, match="registered:"):
         apply_corpus(
-            {"version": CORPUS_VERSION, "measured_on": "2026-07-28", "devices": {"no_such_gpu": {"dram_bw_gbps": 1.0}}}
+            {"version": CORPUS_VERSION, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {"no_such_gpu": {"dram_bw_gbps": 1.0}}}
         )
 
 
@@ -386,7 +388,7 @@ def test_apply_corpus_is_atomic_across_devices() -> None:
             apply_corpus(
                 {
                     "version": CORPUS_VERSION,
-                    "measured_on": "2026-07-28",
+                    "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                     "devices": {
                         "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},  # valid, first
                         "no_such_gpu": {"dram_bw_gbps": 1.0},  # invalid, later
@@ -408,7 +410,7 @@ def test_apply_corpus_is_atomic_across_bad_fields() -> None:
             apply_corpus(
                 {
                     "version": CORPUS_VERSION,
-                    "measured_on": "2026-07-28",
+                    "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                     "devices": {
                         "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},
                         "h100_sxm5": {"dram_bandwidth": 3000.0},
@@ -451,7 +453,7 @@ def test_snapshot_survives_a_calibration_overlay() -> None:
         apply_corpus(
             {
                 "version": CORPUS_VERSION,
-                "measured_on": "2026-07-28",
+                "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                 "host": "test-host",
                 "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
             }
@@ -476,7 +478,7 @@ def test_each_loader_refuses_the_other_artifact_by_name() -> None:
     with pytest.raises(ValueError, match="apply_registry_snapshot"):
         apply_corpus(snap)
 
-    corpus = {"kind": KIND_CORPUS, "version": CORPUS_VERSION, "measured_on": "2026-07-28", "devices": {}}
+    corpus = {"kind": KIND_CORPUS, "version": CORPUS_VERSION, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {}}
     with pytest.raises(ValueError, match="apply_corpus"):
         apply_registry_snapshot(corpus)
 
@@ -583,7 +585,8 @@ def test_planner_refuses_to_inherit_another_devices_smem_budget() -> None:
         reset_registry()
 
 
-_MEASUREMENT = "sha256:raw-gfx1151-measurement"
+_RAW = {"architecture": "gfx1151", "results": {"dram_bw_gbps": 186.8}}
+_MEASUREMENT = _measurement_digest(_RAW)
 
 
 def _timing_sample(sample_id: str, *, device_ns: float = 900, event_ns: float = 920,
@@ -609,8 +612,9 @@ def _timing_sample(sample_id: str, *, device_ns: float = 900, event_ns: float = 
 def _wsl_corpus(**extra):
     corpus = {"version": CORPUS_VERSION, "measured_on": "2026-09-26",
               "host": "princess-luna-wsl2", "selector_eligible": True,
+              "execution_environment": "wsl2",
               "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}},
-              "measurement_digests": {"radeon_8060s": _MEASUREMENT}}
+              "measurements": {"radeon_8060s": _RAW}}
     corpus.update(extra)
     return corpus
 
@@ -666,8 +670,29 @@ def test_witness_samples_must_be_bound_to_the_calibrated_measurement() -> None:
             _timing_sample("a", measurement="sha256:unrelated"),
             _timing_sample("b", device_ns=910, event_ns=930, measurement="sha256:unrelated"))))
     corpus = _wsl_corpus(timing_witness=_witness())
-    del corpus["measurement_digests"]
-    with pytest.raises(ValueError, match="measurement_digests"):
+    del corpus["measurements"]
+    with pytest.raises(ValueError, match="measurements"):
+        apply_corpus(corpus)
+
+
+def test_overlay_values_must_equal_the_carried_raw_measurement() -> None:
+    """Review: a declared digest let arbitrary overlay values ride on
+    unrelated samples; the values must be the raw measurement's results."""
+    corpus = _wsl_corpus(timing_witness=_witness())
+    corpus["devices"] = {"radeon_8060s": {"dram_bw_gbps": 9999.0}}
+    with pytest.raises(ValueError, match="results.*equal"):
+        apply_corpus(corpus)
+
+
+def test_a_wsl_corpus_is_checked_whatever_its_host_is_called() -> None:
+    """Review: 'princess-luna' carries no 'wsl' in its name; the stated
+    environment, not the label, triggers the witness check."""
+    corpus = _wsl_corpus()
+    corpus["host"] = "princess-luna"
+    with pytest.raises(ValueError, match="timing_witness.samples"):
+        apply_corpus(corpus)
+    corpus["execution_environment"] = None
+    with pytest.raises(ValueError, match="must state execution_environment"):
         apply_corpus(corpus)
 
 

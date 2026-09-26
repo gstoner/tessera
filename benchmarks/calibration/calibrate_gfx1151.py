@@ -639,6 +639,10 @@ def _finalize(
         ),
         "source": source,
         "measurement_sha256": _sha256_json(raw),
+        # apply_corpus derives the witness binding from the raw measurement and
+        # requires the environment to be stated, not inferred from the host name.
+        "execution_environment": raw["execution_environment"],
+        "measurements": {"radeon_8060s": raw},
         "profiler_capture": capture_summary,
         "timing_records": timings,
         "device_identity": identity,

@@ -105,6 +105,10 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
     if identity[4] != 'HIP events' or len(calibrations) != 18:
         return SSDAdmission(False,'each measured process requires native HIP clock calibration',lower)
     from .profiler_rocm_evidence import build_rocm_profiler_packet
+    commits = {(c.get('source') or {}).get('source_commit') for c in calibrations}
+    stated = (comparison.get('source') or {}).get('source_commit')
+    if len(commits) != 1 or None in commits or (stated is not None and commits != {stated}):
+        return SSDAdmission(False,'calibrations do not share one source commit with the comparison',lower)
     seen = set()
     for index,pair in enumerate(comparison['pairs']):
         for offset,name in enumerate(('serial','cooperative')):
@@ -113,6 +117,11 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
             if timing['sample_id'] in seen:
                 raise ValueError('SSD calibration sample was reused across process runs')
             seen.add(timing['sample_id'])
+            # Bound to the measured process, not only to an equal duration
+            # (review): the calibration names the row's run_id.
+            run_id = pair[name].get('run_id')
+            if not run_id or (timing.get('environment') or {}).get('run_id') != run_id:
+                raise ValueError('SSD calibration does not name the measured process run')
             images = packet['instrumentation_comparison']
             clean,probe = images['uninstrumented'],images['instrumented']
             if any(type(im.get('duration_ns')) not in (float,int) or not math.isfinite(im['duration_ns']) or im['duration_ns'] <= 0 for im in (clean,probe)):

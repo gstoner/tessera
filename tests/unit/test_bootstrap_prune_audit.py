@@ -74,7 +74,9 @@ def _generic_fixture(monkeypatch, tmp_path, body: str) -> bool:
     # A real backend module defines package_scheduled_kernel exactly once;
     # the detector requires that, so the fixture does too.
     stub = "\n\ndef package_scheduled_kernel(artifact, **kwargs):\n    return artifact\n"
-    (tmp_path / "fixture_native.py").write_text(body + stub)
+    # ...and binds the lowering through the exact relative import.
+    head = "from .scheduled_kernel import lower_scheduled_kernel\n\n"
+    (tmp_path / "fixture_native.py").write_text(head + body + stub)
     monkeypatch.setattr(audit, "_COMPILER", tmp_path)
     monkeypatch.setattr(audit, "_BACKEND_MODULES", (("fixture", "fixture_native.py"),))
     return audit._packager_is_generic_scheduled("fixture", "softmax")
@@ -241,6 +243,38 @@ def test_every_reserved_name_binding_in_the_module_is_refused(monkeypatch, tmp_p
     }
     for label, body in cases.items():
         assert not _generic_fixture(monkeypatch, tmp_path, body), label
+
+
+def test_second_review_escape_hatches_are_refused(monkeypatch, tmp_path):
+    """Review of the SSD packet branch: star imports, attribute / subscript /
+    setattr rebinding, a look-alike module, and a decorated
+    package_scheduled_kernel could each supply a different lowering."""
+    ok = ("def package_softmax(module, *, pipeline_name):\n"
+          "    return package_scheduled_kernel(\n"
+          "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n")
+    assert _generic_fixture(monkeypatch, tmp_path, ok)
+    cases = {
+        "star_import": "from .legacy_cache import *\n" + ok,
+        "attribute_store": "from . import scheduled_kernel\nscheduled_kernel.lower_scheduled_kernel = CACHE.get\n" + ok,
+        "subscript_store": "globals()['lower_scheduled_kernel'] = CACHE.get\n" + ok,
+        "setattr": "import builtins\nsetattr(builtins, 'lower_scheduled_kernel', CACHE.get)\n" + ok,
+        "lookalike_module": "from legacy.scheduled_kernel import lower_scheduled_kernel\n" + ok,
+        "decorated_package": ok + "\n\n@legacy\ndef package_scheduled_kernel(a, **k):\n    return a\n",
+    }
+    for label, body in cases.items():
+        assert not _generic_fixture(monkeypatch, tmp_path, body), label
+
+
+def test_a_bare_lowering_name_needs_the_real_import(monkeypatch, tmp_path):
+    """Without the import, builtins or a star import could supply it."""
+    body = ("def package_softmax(module, *, pipeline_name):\n"
+            "    return package_scheduled_kernel(\n"
+            "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n"
+            "\n\ndef package_scheduled_kernel(artifact, **kwargs):\n    return artifact\n")
+    (tmp_path / "fixture_native.py").write_text(body)
+    monkeypatch.setattr(audit, "_COMPILER", tmp_path)
+    monkeypatch.setattr(audit, "_BACKEND_MODULES", (("fixture", "fixture_native.py"),))
+    assert not audit._packager_is_generic_scheduled("fixture", "softmax")
 
 
 def test_nvidia_unary_families_are_derived_generic_not_declared():

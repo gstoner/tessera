@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import json
 from typing import Any, Mapping
 
@@ -36,8 +37,11 @@ def _image_record(image: Mapping[str, Any], role: str) -> dict[str, Any]:
     if missing:
         raise ROCmProfilerPacketError(f"{role} image record is missing {missing}")
     duration = image["duration_ns"]
-    if not isinstance(duration, (int, float)) or duration <= 0:
-        raise ROCmProfilerPacketError(f"{role} image duration must be positive")
+    # NaN and inf compare False against every bound, so they would slip past
+    # both sides of the overhead gate (review); require a finite value.
+    if (not isinstance(duration, (int, float)) or isinstance(duration, bool)
+            or not math.isfinite(duration) or duration <= 0):
+        raise ROCmProfilerPacketError(f"{role} image duration must be finite and positive")
     resources = image.get("resources")
     if not isinstance(resources, Mapping):
         raise ROCmProfilerPacketError(f"{role} image requires resources")
@@ -95,6 +99,8 @@ def _derive_eligibility(
     the validator recomputes all four from the packet's own inputs.
     """
     overhead = float(probe["duration_ns"]) / float(clean["duration_ns"])
+    if not math.isfinite(overhead) or overhead <= 0:
+        raise ROCmProfilerPacketError("instrumentation duration ratio must be finite and positive")
     reasons: list[str] = []
     if timing.get("execution_environment") != "bare_metal":
         reasons.append("BARE_METAL_REQUIRED")
@@ -249,7 +255,8 @@ def validate_rocm_profiler_packet(payload: Mapping[str, Any]) -> None:
         raise ROCmProfilerPacketError("ROCm profiler packet calibration lineage mismatch")
     expected_ratio = float(probe["duration_ns"]) / float(clean["duration_ns"])
     ratio = comparison.get("duration_ratio")
-    if not isinstance(ratio, (int, float)) or abs(float(ratio) - expected_ratio) > 1e-12:
+    if (not isinstance(ratio, (int, float)) or not math.isfinite(float(ratio))
+            or abs(float(ratio) - expected_ratio) > 1e-12):
         raise ROCmProfilerPacketError("ROCm instrumentation duration ratio mismatch")
     if _digest(timing) != payload.get("timing_sha256"):
         raise ROCmProfilerPacketError("ROCm timing digest mismatch")

@@ -237,3 +237,15 @@ def test_an_instrumented_image_faster_than_its_clean_twin_blocks() -> None:
     )
     assert packet["ineligibility_reasons"] == ["INSTRUMENTATION_CHANGED_THE_KERNEL"]
     assert packet["eligible_for_promotion"] is False
+
+
+def test_non_finite_durations_are_refused() -> None:
+    """Review: NaN/inf compare False against both overhead bounds."""
+    import pytest
+    from tessera.compiler.profiler_rocm_evidence import ROCmProfilerPacketError
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ROCmProfilerPacketError, match="finite"):
+            build_rocm_profiler_packet(
+                timing=_wsl_witness_timing(), capture=_no_kfd_capture(),
+                uninstrumented=_image(10_000, "clean"), instrumented=_image(bad, "probe"),
+                source={"source_commit": "c" * 40, "worktree_dirty": False})

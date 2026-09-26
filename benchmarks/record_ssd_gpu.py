@@ -61,7 +61,7 @@ def _resources(device, function):
 
 
 def device_clock_calibration(*, device, logical, clean_program, clean_binding, raw, grid, block,
-                             clean_event_ms, reset, verify, compiler, llvm_bin, output):
+                             clean_event_ms, reset, verify, compiler, llvm_bin, output, run_id):
     """Calibrate one process's clean SSD image with compiler-built device-clock markers.
 
     Each window: reset the span, record a HIP event, launch the marker, launch
@@ -81,6 +81,13 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
     if device.cuda:
         raise SystemExit('device-clock calibration is implemented for ROCm here; '
                          'NVIDIA uses the Nsight activity-window recorder')
+    # Query the device rather than trusting the requested target (review):
+    # the packet and SSD adapter are gfx1151-only today.
+    from benchmarks.calibration.calibrate_gfx1151 import _active_device_identity
+    identity = _active_device_identity(device.lib)
+    if identity['architecture'] != 'gfx1151':
+        raise SystemExit(f"device-clock SSD calibration is gfx1151-only; this device is "
+                         f"{identity['architecture']}")
     rate = ct.c_int()
     get_attribute = device.lib.hipDeviceGetAttribute
     get_attribute.argtypes, get_attribute.restype = [ct.POINTER(ct.c_int), ct.c_int, ct.c_int], ct.c_int
@@ -127,13 +134,17 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
         verify()
         resources = _resources(device, clean_binding._bound._function)
     finally:
-        for event in events:
-            if event.value:
-                device.check(device.event_destroy(event))
-        if span.value:
-            device.check(device.free(span))
-        if module.value:
-            device.check(device.unload(module))
+        # Run every release even if one fails, and never let a cleanup error
+        # replace the exception that brought us here (review).
+        failures = []
+        for release in ([lambda e=e: device.event_destroy(e) for e in events if e.value]
+                        + ([lambda: device.free(span)] if span.value else [])
+                        + ([lambda: device.unload(module)] if module.value else [])):
+            status = release()
+            if status:
+                failures.append(status)
+        if failures and sys.exc_info()[0] is None:
+            raise RuntimeError(f'device-clock calibration cleanup failed with status {failures}')
     environment = 'wsl2' if 'microsoft' in platform.release().lower() else 'bare_metal'
     sample_id = f'{output.stem}-{uuid.uuid4().hex[:12]}'
     clean_sha = hashlib.sha256(clean_program.package.image).hexdigest()
@@ -163,7 +174,8 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
         batch_size=LAUNCHES, warm_state='warm', synchronization='hipEventSynchronize',
         execution_environment=environment, resources={'application': resources},
         environment={'kernel_release': platform.release(), 'per_window_event_ns': event_ns,
-                     'per_window_host_ns': host_ns})
+                     'per_window_host_ns': host_ns, 'run_id': run_id, 'process_id': os.getpid(),
+                     'device_identity': identity})
     isa = _isa_sha256(clean_program.package.image, llvm_bin)
     image = dict(architecture='gfx1151', kernel_name=clean_program.package.entry, semantic_sha256=semantic,
                  image_sha256=clean_sha, isa_sha256=isa, clock_source='hip_event',
@@ -293,7 +305,7 @@ def main():
                         device=device, logical=logical, clean_program=program, clean_binding=binding,
                         raw=raw, grid=grid, block=block, clean_event_ms=timings, reset=reset, verify=verify,
                         compiler=args.compiler, llvm_bin=Path('/usr/lib/llvm-23/bin'),
-                        output=args.device_clock_calibration)
+                        output=args.device_clock_calibration, run_id=run_id)
             rows.append(dict(chunk=chunk,binding_ms=bind_ms,checked_call_ms=checked_call_ms,device_event_ms=timings,
                              device_event_median_ms=statistics.median(timings) if timings else None,max_abs_errors=observed,binding_digest=program.package.binding_digest,
                              image_sha256=hashlib.sha256(program.package.image).hexdigest()))

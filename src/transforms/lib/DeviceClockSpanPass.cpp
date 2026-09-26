@@ -46,7 +46,11 @@
 // serial SSD kernel (2026-09-26): stamping at the block start turned a fully
 // unrolled 2512-instruction kernel into a 924-instruction looped one that ran
 // 2.4x faster than the clean image, so the "instrumented twin" timed a
-// different program. Everything before that point must be free of memory
+// different program. Placing it after the allocas still left ~1230
+// instructions -- any memory op ahead of that kernel's loops changed LLVM's
+// optimization -- which is why timing callers bracket the unmodified kernel
+// with an instrumented EMPTY marker (tessera.compiler.native_device_clock)
+// instead of stamping the kernel itself. Everything before that point must be free of memory
 // effects (constants, casts, views, the allocas themselves), otherwise the
 // stamp would miss real work and the pass refuses.
 //
@@ -169,7 +173,11 @@ struct DeviceClockSpanPass
         lastAlloca = &op;
     if (lastAlloca) {
       for (Operation &op : block) {
-        if (!isa<LLVM::AllocaOp, memref::AllocaOp>(op) && !isMemoryEffectFree(&op))
+        // Memory-effect-free is not "cheap": an scf.for of pure arithmetic
+        // would run before the stamp and be missed (review). Only region-free,
+        // effect-free setup (constants, casts, views) may precede it.
+        if (!isa<LLVM::AllocaOp, memref::AllocaOp>(op) &&
+            (op.getNumRegions() != 0 || !isMemoryEffectFree(&op)))
           return op.emitError(
               "TESSERA_DEVICE_CLOCK_ALLOCA_AFTER_WORK: an alloca follows an op "
               "with memory effects; the start stamp cannot both precede the "

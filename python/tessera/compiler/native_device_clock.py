@@ -10,8 +10,9 @@ constant-rate clock, independent of the host event API.
 
 Why markers rather than instrumenting the measured kernel: on the gfx1151
 serial SSD kernel (2026-09-26) any memory operation stamped at the kernel's
-start changed LLVM's optimization of it (2512 -> ~1230 instructions, 2.4x
-faster), so an "instrumented twin" timed a different program. A marker leaves
+start changed LLVM's optimization of it (2512 instructions -> 924 when stamped
+at the block start, ~1230 when placed after the entry allocas; the 924 form ran
+2.4x faster), so an "instrumented twin" timed a different program. A marker leaves
 the measured image byte-identical; its own cost (two tiny launches per window)
 is what the instrumented/clean ratio in the calibration packet bounds.
 

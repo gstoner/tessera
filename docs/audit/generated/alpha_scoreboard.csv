@@ -25,14 +25,14 @@ mac_gpu,Mac M1 Max,Apple7 GPU,replay_ssm,bypass,unmeasured,unrouted,partial,abse
 mac_gpu,Mac M1 Max,Apple7 GPU,ppo,bypass,unmeasured,bypass,partial,packet_pending,no
 mac_gpu,Mac M1 Max,Apple7 GPU,ebm,bypass,unmeasured,bypass,partial,packet_pending,no
 mac_gpu,Mac M1 Max,Apple7 GPU,clifford,bypass,unmeasured,bypass,partial,packet_pending,no
-luna_cpu,Princess-Luna,Zen 5 AVX-512,matmul,bypass,unmeasured,native,partial,native,no
-luna_cpu,Princess-Luna,Zen 5 AVX-512,softmax,bypass,unmeasured,bypass,partial,native,no
-luna_cpu,Princess-Luna,Zen 5 AVX-512,reduction,bypass,unmeasured,bypass,partial,native,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,matmul,bypass,unmeasured,native,partial,packet_pending,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,softmax,bypass,unmeasured,bypass,partial,packet_pending,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,reduction,bypass,unmeasured,bypass,partial,packet_pending,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,norm,bypass,unmeasured,unrouted,partial,absent,no
-luna_cpu,Princess-Luna,Zen 5 AVX-512,attention,bypass,unmeasured,native,partial,native,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,attention,bypass,unmeasured,native,partial,packet_pending,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,moe,bypass,unmeasured,unrouted,partial,absent,no
-luna_cpu,Princess-Luna,Zen 5 AVX-512,linalg,bypass,unmeasured,unrouted,partial,native,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,linalg,bypass,unmeasured,unrouted,partial,packet_pending,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,epilogue,bypass,unmeasured,unrouted,partial,absent,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,ppo,bypass,unmeasured,unrouted,partial,absent,no
@@ -77,14 +77,14 @@ bear_gpu,The-Super-Bear,sm_120,replay_ssm,bypass,unmeasured,unrouted,absent,nati
 bear_gpu,The-Super-Bear,sm_120,ppo,bypass,unmeasured,unrouted,absent,absent,no
 bear_gpu,The-Super-Bear,sm_120,ebm,bypass,unmeasured,unrouted,absent,absent,no
 bear_gpu,The-Super-Bear,sm_120,clifford,bypass,unmeasured,unrouted,absent,absent,no
-taj_cpu,Tajasarus,Zen 5 AVX-512,matmul,bypass,unmeasured,native,partial,native,no
-taj_cpu,Tajasarus,Zen 5 AVX-512,softmax,bypass,unmeasured,bypass,partial,native,no
-taj_cpu,Tajasarus,Zen 5 AVX-512,reduction,bypass,unmeasured,bypass,partial,native,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,matmul,bypass,unmeasured,native,partial,packet_pending,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,softmax,bypass,unmeasured,bypass,partial,packet_pending,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,reduction,bypass,unmeasured,bypass,partial,packet_pending,no
 taj_cpu,Tajasarus,Zen 5 AVX-512,norm,bypass,unmeasured,unrouted,partial,absent,no
-taj_cpu,Tajasarus,Zen 5 AVX-512,attention,bypass,unmeasured,native,partial,native,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,attention,bypass,unmeasured,native,partial,packet_pending,no
 taj_cpu,Tajasarus,Zen 5 AVX-512,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
 taj_cpu,Tajasarus,Zen 5 AVX-512,moe,bypass,unmeasured,unrouted,partial,absent,no
-taj_cpu,Tajasarus,Zen 5 AVX-512,linalg,bypass,unmeasured,unrouted,partial,native,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,linalg,bypass,unmeasured,unrouted,partial,packet_pending,no
 taj_cpu,Tajasarus,Zen 5 AVX-512,epilogue,bypass,unmeasured,unrouted,partial,absent,no
 taj_cpu,Tajasarus,Zen 5 AVX-512,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
 taj_cpu,Tajasarus,Zen 5 AVX-512,ppo,bypass,unmeasured,unrouted,partial,absent,no

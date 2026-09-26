@@ -787,7 +787,9 @@ def compile_graph_module(
             (None, "; ".join(f"{d.code}: {d.message}" for d in unresolved))
             if unresolved
             else _lower_apple_value_target_ir(
-                module.to_mlir(verify=False, canonical=True), target_kind
+                materialize_matmul_accumulators(module).to_mlir(
+                    verify=False, canonical=True),
+                target_kind,
             )
         )
         if value_ir:
@@ -1269,6 +1271,50 @@ def compile_graph_module(
     )
     _maybe_dump_debug_artifacts(bundle)
     return bundle
+
+
+#: Graph ops whose Apple value lowering selects an accumulator (the TILE-1
+#: simdgroup GEMM and the canonical GEMM routes read ``numeric_policy.accum``).
+_ACCUMULATING_GRAPH_OPS = frozenset({"tessera.matmul"})
+
+
+def materialize_matmul_accumulators(module: GraphIRModule) -> GraphIRModule:
+    """Write the frontend's documented accumulator into the IR the backend reads.
+
+    APPLE-ACCUM-1. Decision #15a states the matmul numeric policy as
+    ``storage=<tensor dtype>, accum=fp32`` and the primitive registry
+    (``primitive_coverage._matmul_policy``) records that same default, but the
+    canonical Graph IR render never carried it: ``IROp.numeric_policy`` is not
+    rendered and no pipeline runs ``propagate_numeric_policy``. The Apple
+    backend reads the accumulator from ``numeric_policy.accum`` and refuses an
+    op without one (#21a), so the frontend -- the layer that owns the default --
+    states it here, explicitly, on every accumulating op that does not already
+    declare one. An op that declares ``numeric_policy`` keeps it unchanged,
+    including an ``accum`` the backend will then refuse.
+
+    Returns a copy; the caller's module (and the digests computed from it) is
+    not mutated.
+    """
+    import copy
+
+    from .numeric_policy_pass import _policy_for_op_name
+
+    stamped = copy.deepcopy(module)
+    for fn in stamped.functions:
+        for op in fn.body:
+            if op.op_name not in _ACCUMULATING_GRAPH_OPS:
+                continue
+            if "numeric_policy" in op.kwargs:
+                continue
+            carried = getattr(op, "numeric_policy", None)
+            accum = getattr(carried, "accum", None) if carried is not None else None
+            if accum is None:
+                registered = _policy_for_op_name(op.op_name)
+                accum = getattr(registered, "accum", None)
+            if accum is None:
+                continue  # no documented default: the backend refuses, named.
+            op.kwargs["numeric_policy"] = {"accum": str(accum)}
+    return stamped
 
 
 def _resolve_apple_target_ir_mode(options: Mapping[str, Any]) -> str:

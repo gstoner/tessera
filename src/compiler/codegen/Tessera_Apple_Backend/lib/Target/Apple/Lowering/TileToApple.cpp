@@ -582,7 +582,8 @@ bool safeEraseLowered(Operation *op, OpBuilder &builder) {
 void emitAppleValueCall(OpBuilder &b, Operation *op,
                         llvm::StringRef valueOpName, llvm::StringRef opKind,
                         llvm::StringRef symbol, llvm::StringRef abi,
-                        llvm::StringRef status, llvm::StringRef framework) {
+                        llvm::StringRef status, llvm::StringRef framework,
+                        llvm::ArrayRef<NamedAttribute> extra = {}) {
   OperationState st(op->getLoc(), valueOpName);
   st.addOperands(op->getOperands());
   st.addTypes(op->getResultTypes());
@@ -591,6 +592,7 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
   st.addAttribute("abi", b.getStringAttr(abi));
   st.addAttribute("status", b.getStringAttr(status));
   st.addAttribute("framework", b.getStringAttr(framework));
+  st.addAttributes(extra);
   // Sprint 3: preserve linalg semantic attrs from the source op so runtime
   // dispatch never silently assumes a default (lower/trans/unit_diag for
   // solves; full_matrices for qr/svd).  Copied verbatim when present.
@@ -911,9 +913,38 @@ struct LowerTileToAppleGPUPass
             else if (et.isBF16())
               symbol = "tessera_apple_gpu_tile_simdgroup_gemm_bf16";
             if (!symbol.empty()) {
+              // APPLE-ACCUM-1: the accumulator is the program's
+              // numeric_policy.accum, carried to the runtime materializer as
+              // `tessera_apple.accumulate`. It is never inferred from the f16/
+              // bf16 result type and never defaulted (Decision #21a).
+              StringAttr declared = appleDeclaredAccumulator(op);
+              if (!declared) {
+                op->emitError("APPLE_SIMDGROUP_ACCUM_MISSING: apple_gpu TILE-1 "
+                              "simdgroup GEMM needs the program's accumulator; '")
+                    << name << "' carries no numeric_policy.accum";
+                signalPassFailure();
+                return;
+              }
+              Type accElem =
+                  appleAccumulatorType(op->getContext(), declared.getValue());
+              std::string refusal =
+                  accElem ? appleSimdgroupAccumulatorRefusal(accElem)
+                          : std::string("not a Decision #15a accumulator name");
+              if (!refusal.empty()) {
+                op->emitError("APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: apple_gpu "
+                              "TILE-1 simdgroup GEMM cannot accumulate storage ")
+                    << et << " in accum=\"" << declared.getValue()
+                    << "\": " << refusal;
+                signalPassFailure();
+                return;
+              }
+              StringRef accumName = accElem.isF16() ? "fp16" : "fp32";
               emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
                                  "tile_simdgroup_gemm", symbol,
-                                 "tile_simdgroup_msl", "executable", "Metal");
+                                 "tile_simdgroup_msl", "executable", "Metal",
+                                 {builder.getNamedAttr(
+                                     "tessera_apple.accumulate",
+                                     builder.getStringAttr(accumName))});
               ++ordinal;
               continue;
             }

@@ -133,33 +133,102 @@ def select_apple_tile_promotion(
     return "mps"
 
 
+#: Accumulator spellings accepted at this boundary, normalized to the
+#: canonical Decision #15a names.
+_ACCUMULATOR_ALIASES: dict[str, str] = {
+    "fp32": "fp32", "f32": "fp32", "float32": "fp32",
+    "fp16": "fp16", "f16": "fp16", "float16": "fp16",
+    "bf16": "bf16", "bfloat16": "bf16",
+    "int32": "int32", "i32": "int32",
+}
+
+#: Accumulator byte widths for the admitted accumulators.
+ACCUMULATOR_BYTES: dict[str, int] = {"fp32": 4, "fp16": 2}
+
+#: Simdgroup accumulators this lane admits, per storage dtype. Every entry is a
+#: measured fact on Apple7 (M1 Max, macOS 27.0, Metal toolchain 32023.921), not
+#: an inference from the header alone (APPLE-ACCUM-1 in
+#: docs/audit/backend/apple/todo.md):
+#:
+#: * ``metal_simdgroup_matrix`` (Metal toolchain headers) constrains
+#:   ``simdgroup_multiply_accumulate`` only by ``is_floating_point_v`` on every
+#:   operand and declares ``simdgroup_matrix`` for half, bfloat and float, so
+#:   every half/bfloat/float storage x accumulator pair compiles at MSL 3.1 (the
+#:   runtime's compile version) and every integer accumulator fails to compile.
+#: * Run on the GPU against a numpy model of the same arithmetic, an fp32
+#:   accumulator is bit-exact with a sequential fp32 FMA chain. An fp16
+#:   accumulator is bit-exact with a sequential fp16 FMA chain for fp16
+#:   storage, and with "fp32 inside each 8-deep MMA, round-to-nearest-even to
+#:   fp16 after every MMA" for bf16 storage. Both are genuine fp16
+#:   accumulation: every partial sum carried between MMAs is an fp16 value.
+#: * A **bf16** accumulator is not bf16 accumulation on this part: the result is
+#:   bit-exact with fp32 accumulation carried across the whole K loop and
+#:   truncated (round-toward-zero) to bf16 at ``simdgroup_store``. Admitting it
+#:   would execute a different numeric class -- fp32 accumulation with an RTZ
+#:   output rounding -- than the program declared, so it is refused.
+#:
+#: ``tests/unit/test_apple_simdgroup_accumulator_device.py`` re-derives every
+#: admitted row on the device.
+SIMDGROUP_ACCUMULATORS: dict[str, tuple[str, ...]] = {
+    "fp16": ("fp32", "fp16"),
+    "bf16": ("fp32", "fp16"),
+}
+
+_REFUSED_ACCUMULATOR_REASONS: dict[str, str] = {
+    "bf16": (
+        "Apple7 does not accumulate a simdgroup_matrix<bfloat> in bf16 -- measured "
+        "on the M1 Max it carries fp32 across the K loop and truncates "
+        "(round-toward-zero) to bf16 at simdgroup_store, so accum=bf16 would run "
+        "fp32 accumulation with an RTZ output instead of the declared bf16 "
+        "accumulation"
+    ),
+    "int32": (
+        "simdgroup_matrix has no integer element type (metal_simdgroup_matrix "
+        "requires is_floating_point_v; an int accumulator does not compile)"
+    ),
+}
+
+
+def canonical_accumulator_dtype(accumulator_dtype: str) -> str:
+    """Normalize an accumulator spelling to its canonical Decision #15a name."""
+    return _ACCUMULATOR_ALIASES.get(accumulator_dtype, accumulator_dtype)
+
+
 def select_apple_simdgroup_fragment(
-    target: AppleGPUTargetProfile, storage_dtype: str, *, accumulator_dtype: str = "fp32",
+    target: AppleGPUTargetProfile, storage_dtype: str, *, accumulator_dtype: str,
 ) -> AppleSimdgroupFragment:
     """Select the exact Apple7+ 8x8x8 fragment for a logical Tile MMA.
 
-    Inputs are f16/bf16, accumulation is f32.  Tile edge handling is outside
-    the fragment itself and must be supplied by the selected materializer.
+    ``accumulator_dtype`` is the program's ``numeric_policy.accum`` and is
+    required: the accumulator selects semantics (Decision #21a), so this
+    boundary never supplies one. Storage is fp16/bf16 and the admitted
+    accumulators are :data:`SIMDGROUP_ACCUMULATORS`. Tile edge handling is
+    outside the fragment itself and must be supplied by the selected
+    materializer.
     """
     aliases = {"f16": "fp16", "bf16": "bf16"}
     storage = aliases.get(storage_dtype, storage_dtype)
+    arch = target.arch.name.lower()
     if not target.supports_simdgroup_matrix:
         raise AppleFragmentError(
-            f"APPLE_FRAGMENT_UNSUPPORTED_ARCH: {target.arch.name.lower()} has no simdgroup_matrix")
-    if storage not in {"fp16", "bf16"}:
+            f"APPLE_FRAGMENT_UNSUPPORTED_ARCH: {arch} has no simdgroup_matrix")
+    if storage not in SIMDGROUP_ACCUMULATORS:
         raise AppleFragmentError(
             f"APPLE_FRAGMENT_UNSUPPORTED_DTYPE: {storage_dtype!r} needs fp16 or bf16 storage")
-    if accumulator_dtype not in {"fp32", "f32"}:
+    accum = canonical_accumulator_dtype(accumulator_dtype)
+    if accum not in SIMDGROUP_ACCUMULATORS[storage]:
+        reason = _REFUSED_ACCUMULATOR_REASONS.get(
+            accum, "no simdgroup_matrix accumulator of that type is proven on this lane")
         raise AppleFragmentError(
-            "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR: Apple simdgroup Tile fragments "
-            f"accumulate in fp32 only (got {accumulator_dtype!r}); this is the simdgroup "
-            "lane's limit, not Apple's -- reduced-precision accumulation belongs on the "
-            "Metal 4 matmul2d lane")
-    return AppleSimdgroupFragment(target.arch, storage, "fp32")
+            "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR: apple_gpu simdgroup_matrix "
+            f"({arch}) accepts accum in {list(SIMDGROUP_ACCUMULATORS[storage])} for "
+            f"storage={storage}; got accum={accumulator_dtype!r}: {reason}")
+    return AppleSimdgroupFragment(target.arch, storage, accum)
 
 
 __all__ = [
-    "AppleFragmentError", "AppleSimdgroupFragment", "AppleTilePromotionEvidence",
-    "AppleTileResourceRecord", "select_apple_simdgroup_fragment",
-    "select_apple_tile_promotion",
+    "ACCUMULATOR_BYTES", "AppleFragmentError", "AppleSimdgroupFragment",
+    "AppleTilePromotionEvidence", "AppleTileResourceRecord",
+    "SIMDGROUP_ACCUMULATORS", "canonical_accumulator_dtype",
+    "select_apple_simdgroup_fragment", "select_apple_tile_promotion",
 ]

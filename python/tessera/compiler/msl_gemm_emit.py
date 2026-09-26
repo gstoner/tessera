@@ -42,9 +42,11 @@ import subprocess
 from dataclasses import dataclass
 
 from .apple_fragment import (
+    ACCUMULATOR_BYTES,
     AppleFragmentError,
     AppleSimdgroupFragment,
     AppleTileResourceRecord,
+    canonical_accumulator_dtype,
     select_apple_simdgroup_fragment,
 )
 from .apple_target import AppleGPUTargetProfile
@@ -150,6 +152,23 @@ def _scalar(dtype: str) -> str:
     return s
 
 
+def _accumulator_scalar(accum: str) -> str:
+    """MSL scalar for a simdgroup accumulator the Apple fragment contract admits.
+
+    The raw emitters are template functions, but they must not be able to
+    synthesize an accumulator the fragment contract refuses: a bf16 accumulator
+    compiles and runs, and computes fp32 accumulation with a round-toward-zero
+    output on Apple7 (APPLE-ACCUM-1), so emitting it would reintroduce exactly
+    the unfaithful numerics :func:`select_apple_simdgroup_fragment` refuses.
+    """
+    canonical = canonical_accumulator_dtype(accum)
+    if canonical not in ACCUMULATOR_BYTES:
+        raise AppleFragmentError(
+            "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR: the Apple simdgroup MSL "
+            f"emitter synthesizes fp32 or fp16 accumulators only; got {accum!r}")
+    return _scalar(canonical)
+
+
 def _rank2(row: str, column: str, leading_dimension: str) -> str:
     """Materialize canonical row-major MSL index text from the shared contract."""
 
@@ -190,7 +209,7 @@ def emit_simdgroup_gemm_msl(
             "silently compute only the top-left 8x8. Use emit_steel_gemm_msl for "
             "multi-fragment M/N tiling.")
     T = _scalar(dtype)
-    ACC = _scalar(accum)
+    ACC = _accumulator_scalar(accum)
     f = SIMDGROUP_FRAG
     name = entry or f"tessera_simdgroup_gemm_{dtype}"
     a_index = _rank2("m0", "k0", "K")
@@ -281,6 +300,7 @@ def emit_steel_gemm_msl(
     staged_a_elements: int | None = None,
     staged_b_elements: int | None = None,
     edge_scratch_elements: int | None = None,
+    out: str | None = None,
 ) -> str:
     """Emit the **steel-structured** MSL ``simdgroup_matrix`` GEMM — the production
     shape MLX uses (``kernels/steel/gemm``), a step up from the single-fragment
@@ -307,6 +327,15 @@ def emit_steel_gemm_msl(
         steady-state loop that **prefetches the next tile into the alternate slot
         while computing the current** one (one barrier per step instead of two).
 
+    ``out`` is the element type of ``C`` and defaults to the accumulator. When
+    it differs (the TILE-1 runtime ABI always hands the kernel an fp32 ``C``,
+    and an fp16 accumulator is admitted), ``simdgroup_store`` cannot write the
+    fragment directly -- it moves raw elements and does not convert -- so every
+    fragment goes through the ``partial_edge`` scratch and is converted per
+    element on the copy out. fp16 -> fp32 is exact, so the stored values are
+    exactly the fp16 accumulator's values. That path requires
+    ``partial_edge=True``.
+
     **Honesty ceiling.** Even with both refinements this is a documented,
     structurally-grounded skeleton (cooperative load is still naive; no async-copy
     DMA). The Apple rung-3 toolchain (``metal``) is **absent on this host**, so —
@@ -319,7 +348,13 @@ def emit_steel_gemm_msl(
         raise ValueError(
             f"steel tile ({bm},{bn},{bk}) invalid — each must be a positive "
             f"multiple of {SIMDGROUP_FRAG}")
-    T, ACC, f = _scalar(dtype), _scalar(accum), SIMDGROUP_FRAG
+    T, ACC, f = _scalar(dtype), _accumulator_scalar(accum), SIMDGROUP_FRAG
+    OUT = ACC if out is None else _scalar(out)
+    converting_store = OUT != ACC
+    if converting_store and not partial_edge:
+        raise ValueError(
+            f"a {ACC} accumulator stored to a {OUT} C needs the partial_edge "
+            "scratch path: simdgroup_store moves raw elements and does not convert")
     mf, nf = bm // f, bn // f
     a_elements = staged_a_elements if staged_a_elements is not None else bm * bk
     b_elements = staged_b_elements if staged_b_elements is not None else bk * bn
@@ -401,22 +436,33 @@ def emit_steel_gemm_msl(
     c_edge_index = _rank2("(cr + rr)", "(cc + cl)", "N")
     scratch_index = _rank2("rr", "cl", "F")
     if partial_edge:
+        # A converting store has no direct fast path: simdgroup_store cannot
+        # write a {ACC} fragment into a {OUT} buffer, so every fragment is
+        # staged and converted per element (``{OUT}(Cs[...])``) on the copy out.
+        copy_value = (f"{OUT}(Cs[{scratch_index}])" if converting_store
+                      else f"Cs[{scratch_index}]")
+        if converting_store:
+            fast_path = (f"      // converting store ({ACC} accumulator -> {OUT} C): "
+                         "every fragment is staged\n      {\n")
+        else:
+            fast_path = (
+                "      if (cr + F <= M && cc + F <= N) {\n"
+                f"        simdgroup_store(acc[im * {nf}u + in], C + {c_fragment_index}, N);"
+                "   // full fragment fast path\n"
+                "      } else {\n")
         store = f"""  // B1: edge-aware store. The full/edge test is threadgroup-uniform (keyed on
   // tgid + compile-time loop counters), so the scratch barriers are hit uniformly.
   threadgroup {ACC} Cs[{scratch_elements}];
   for (uint im = 0; im < {mf}u; ++im) {{
     for (uint in = 0; in < {nf}u; ++in) {{
       uint cr = m0 + im * F, cc = n0 + in * F;
-      if (cr + F <= M && cc + F <= N) {{
-        simdgroup_store(acc[im * {nf}u + in], C + {c_fragment_index}, N);   // full fragment fast path
-      }} else {{
-        simdgroup_store(acc[im * {nf}u + in], Cs, F);                // stage 8x8 to scratch
+{fast_path}        simdgroup_store(acc[im * {nf}u + in], Cs, F);                // stage 8x8 to scratch
         threadgroup_barrier(mem_flags::mem_threadgroup);
         if (cr < M && cc < N) {{                                     // copy only valid elements
           uint rows = min(F, M - cr), cols = min(F, N - cc);
           for (uint e = tid; e < rows * cols; e += tcount) {{
             uint rr = e / cols, cl = e % cols;
-            C[{c_edge_index}] = Cs[{scratch_index}];
+            C[{c_edge_index}] = {copy_value};
           }}
         }}
         threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -449,7 +495,7 @@ using namespace metal;
 kernel void {name}(
     device const {T}* A [[buffer(0)]],   // M x K row-major
     device const {T}* B [[buffer(1)]],   // K x N row-major
-    device {ACC}*     C [[buffer(2)]],   // M x N row-major
+    device {OUT}*     C [[buffer(2)]],   // M x N row-major
     constant uint& M [[buffer(3)]],
     constant uint& N [[buffer(4)]],
     constant uint& K [[buffer(5)]],
@@ -483,6 +529,7 @@ def materialize_apple_simdgroup_tile_msl(
     bn: int = 32,
     bk: int = 16,
     *,
+    accumulator_dtype: str,
     partial_edge: bool = True,
     double_buffer: bool = True,
     raster_order: RasterOrder | str = RasterOrder.ROW_MAJOR,
@@ -498,8 +545,21 @@ def materialize_apple_simdgroup_tile_msl(
     store. This function intentionally returns source plus metadata only: no
     runtime ABI accepts this artifact yet, so materialization is not a native
     execution result.
+
+    ``accumulator_dtype`` is the program's ``numeric_policy.accum`` and is
+    required (Decision #21a). ``C`` is always fp32, the TILE-1 runtime ABI's
+    output buffer; an fp16 accumulator is widened exactly on the way out, so
+    the returned values are the fp16 accumulator's values.
     """
-    fragment = select_apple_simdgroup_fragment(target, storage_dtype)
+    fragment = select_apple_simdgroup_fragment(
+        target, storage_dtype, accumulator_dtype=accumulator_dtype)
+    accumulator_bytes = ACCUMULATOR_BYTES[fragment.accumulator_dtype]
+    if accumulator_bytes != 4 and not partial_edge:
+        raise AppleFragmentError(
+            "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR: an "
+            f"{fragment.accumulator_dtype} accumulator reaches the fp32 TILE-1 "
+            "output only through the partial_edge scratch (simdgroup_store does "
+            "not convert); materialize with partial_edge=True")
     order = RasterOrder(raster_order)
     # This validates the group and keeps the MSL source's non-default mapping
     # exactly tied to the shared rasterization contract.
@@ -513,7 +573,10 @@ def materialize_apple_simdgroup_tile_msl(
     buffer_count = 2 if double_buffer else 1
     expected_a_bytes = buffer_count * bm * bk * storage_bytes
     expected_b_bytes = buffer_count * bk * bn * storage_bytes
-    expected_scratch_bytes = fragment.m * fragment.n * 4 if partial_edge else 0
+    # The edge scratch holds one accumulator fragment, so its size follows the
+    # accumulator width (fp32 256 B, fp16 128 B), not the output's.
+    expected_scratch_bytes = (fragment.m * fragment.n * accumulator_bytes
+                              if partial_edge else 0)
     expected_total_bytes = expected_a_bytes + expected_b_bytes + expected_scratch_bytes
     if staging_contract is None:
         # Compatibility entrypoint for source-only materialization. Compiler
@@ -579,7 +642,9 @@ def materialize_apple_simdgroup_tile_msl(
             raster_group=raster_group,
             staged_a_elements=staged_a_bytes // (buffer_count * storage_bytes),
             staged_b_elements=staged_b_bytes // (buffer_count * storage_bytes),
-            edge_scratch_elements=edge_scratch_bytes // 4 if partial_edge else None,
+            edge_scratch_elements=(edge_scratch_bytes // accumulator_bytes
+                                   if partial_edge else None),
+            out="fp32",
         ),
     )
 

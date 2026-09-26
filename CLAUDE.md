@@ -124,7 +124,8 @@ declares Apple7 machine primitives (`!tessera_apple.simdgroup_matrix`,
 `gpu.threadgroup_barrier`) **with a producer**
 (`lib/Target/Apple/Lowering/MatmulToAppleSimdgroup.cpp`), so "the MLIR pipeline
 cannot express an Apple kernel" is no longer true; the simdgroup op carries the
-fp32-accumulator contract and a storage attribute limited to f16/bf16/f32. What
+program's accumulator (fp32 or fp16 since APPLE-ACCUM-1, 2026-09-26; bf16
+refused as measured-unfaithful) and a storage attribute limited to f16/bf16/f32. What
 the pipeline still cannot express is the **fastest** Apple GEMM lane, Metal 4
 MetalPerformancePrimitives cooperative-tensor `matmul2d` — measured 1.34–1.45×
 the simdgroup kernel and the only lane carrying FP8/FP4 (macOS 27) — which is

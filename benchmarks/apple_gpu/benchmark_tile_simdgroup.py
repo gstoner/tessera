@@ -87,7 +87,8 @@ def _mps_call(dtype: str, a: np.ndarray, b: np.ndarray) -> Callable[[], tuple[np
 
 def _tile_call(dtype: str, a: np.ndarray, b: np.ndarray) -> Callable[[], tuple[np.ndarray | None, bool, Any]]:
     artifact = materialize_apple_simdgroup_tile_msl(
-        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16)
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16,
+        accumulator_dtype="fp32")
     return lambda: dispatch_apple_simdgroup_tile_f16(artifact, a, b, return_provenance=True)
 
 

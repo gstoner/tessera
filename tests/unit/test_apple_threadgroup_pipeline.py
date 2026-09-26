@@ -89,7 +89,7 @@ def test_ir_arena_matches_the_materializer_resource_record(
     compiler_toolchain: CompilerToolchain,
 ) -> None:
     """Placing the emitter's own staged bytes must reproduce its arena total."""
-    artifact = materialize_apple_simdgroup_tile_msl(TARGET, "fp16", 32, 32, 16)
+    artifact = materialize_apple_simdgroup_tile_msl(TARGET, "fp16", 32, 32, 16, accumulator_dtype="fp32")
     resources = artifact.resources
     proc = _place(compiler_toolchain, _module_with_allocs([
         resources.staged_a_bytes,
@@ -111,6 +111,7 @@ def test_materializer_refuses_a_descriptor_layout_that_drifts_from_its_tile() ->
     with pytest.raises(AppleFragmentError, match="E_PIPE_LAYOUT_MISMATCH"):
         materialize_apple_simdgroup_tile_msl(
             TARGET, "fp16", 32, 32, 16,
+            accumulator_dtype="fp32",
             staging_contract={
                 "stage_depth": 2,
                 "staged_a_bytes": 1,
@@ -128,7 +129,7 @@ def test_both_owners_reject_the_same_over_capacity_tile(
     capacity = TARGET.threadgroup_memory_capacity_bytes
     # 128x128x64 fp16 double-buffered stages far past the 32 KiB ceiling.
     with pytest.raises(AppleFragmentError) as emitter_error:
-        materialize_apple_simdgroup_tile_msl(TARGET, "fp16", 128, 128, 64)
+        materialize_apple_simdgroup_tile_msl(TARGET, "fp16", 128, 128, 64, accumulator_dtype="fp32")
     assert "APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED" in str(emitter_error.value)
 
     proc = _place(compiler_toolchain, _module_with_allocs([capacity - 1024, 4096]))
@@ -141,7 +142,7 @@ def test_ping_pong_depth_is_the_double_buffering_the_emitter_declares(
 ) -> None:
     """Depth 2 is accepted precisely because the emitted MSL is ping-pong."""
     artifact = materialize_apple_simdgroup_tile_msl(
-        TARGET, "fp16", 32, 32, 16, double_buffer=True)
+        TARGET, "fp16", 32, 32, 16, double_buffer=True, accumulator_dtype="fp32")
     assert artifact.resources.double_buffered
     # The emitted source declares two staged buffers per operand.
     assert "As[2]" in artifact.msl and "Bs[2]" in artifact.msl
@@ -204,7 +205,7 @@ def test_apple_mma_accepts_exactly_the_fragment_contract_dtypes(
 ) -> None:
     """The IR gate admits a dtype only when the fragment selector does too."""
     # The Python owner accepts it...
-    fragment = select_apple_simdgroup_fragment(TARGET, storage)
+    fragment = select_apple_simdgroup_fragment(TARGET, storage, accumulator_dtype="fp32")
     assert fragment.accumulator_dtype == "fp32"
     # ...so the C++ capability gate must not reject it.
     proc = _place(compiler_toolchain, _mma_module(storage, "fp32"))
@@ -222,7 +223,7 @@ def test_apple_mma_rejects_sdk_gated_and_unrouted_dtypes(
     descriptor reach Metal lowering with no kernel behind it.
     """
     with pytest.raises(AppleFragmentError) as fragment_error:
-        select_apple_simdgroup_fragment(TARGET, storage)
+        select_apple_simdgroup_fragment(TARGET, storage, accumulator_dtype="fp32")
     assert "APPLE_FRAGMENT_UNSUPPORTED_DTYPE" in str(fragment_error.value)
 
     accum = "int32" if storage == "int4" else "fp32"
@@ -342,7 +343,7 @@ def test_single_buffered_emitter_maps_to_depth_one(
 ) -> None:
     """A non-double-buffered artifact is the 'single' staging mode, not depth 2."""
     artifact = materialize_apple_simdgroup_tile_msl(
-        TARGET, "fp16", 32, 32, 16, double_buffer=False)
+        TARGET, "fp16", 32, 32, 16, double_buffer=False, accumulator_dtype="fp32")
     assert not artifact.resources.double_buffered
     assert "As[2]" not in artifact.msl
 

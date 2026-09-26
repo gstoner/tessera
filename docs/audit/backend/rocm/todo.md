@@ -30,7 +30,7 @@ Sync `GFX1201-SSD-CALIBRATION-2026-09-26` (follows `DEVICE-CLOCK-MARKER-2026-09-
 - `profiler_rocm_evidence`: the packet's architecture is **derived** from the timing target `rocm_<arch>` over an explicit set `ROCM_PROFILER_ARCHITECTURES = (gfx1151, gfx1201)`. Both images must name that architecture. The validator re-derives it and refuses a relabelled packet. Every committed gfx1151 packet still validates (tested).
 - `ssd_performance.admit_ssd_candidate` admits either chip, but every calibration's rebuilt and stored architecture must equal the package chip, so a gfx1151 calibration cannot admit a gfx1201 package or the reverse.
 - The recorders query the chip from the active HIP device rather than assuming it, and resolve LLVM through `llvm_tools` (Tajasarus has no `/usr/lib/llvm-23`).
-- `record_ssd_gpu.py` now **interleaves** plain and marker-bracketed windows in alternating order behind one span-reset gap. It also takes `--launches` (default 100, so the gfx1151 protocol is unchanged).
+- `record_ssd_gpu.py` now **interleaves** plain and marker-bracketed windows in alternating order behind one span-reset gap. It also takes `--launches` (default 100). This **changes the gfx1151 protocol** even at the default: with a calibration requested, plain windows are timed inside the interleaved loop rather than before calibration, so any new gfx1151 recording differs from the committed one (re-record owed, follow-up 1).
 
 **ROCm outcome: landed, with gfx1201 evidence.** [`benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Tajasarus (RX 9070 XT, WSL2, no KFD), `32,2,16,4` chunk 8, 1000 launches per window. All 18 packets are eligible:
 
@@ -48,6 +48,16 @@ The gfx1201 serial envelope matches gfx1151's: the 4096-byte native-tape limit. 
 1. The recorder changes were not re-run on gfx1151. Its committed packet stands as recorded at `54442ef5`, and a re-record on Princess-Luna is owed before claiming the new protocol there.
 2. Power state is part of these measurements: first windows run ~30% slower on gfx1201. Pinning or warm-up policy is open.
 3. Follow-ups 2–4 of `DEVICE-CLOCK-MARKER-2026-09-26` are unchanged.
+4. **Pre-PR review (2026-09-26), open:** SSD admission never checks a
+   calibration's window protocol or launch count, so a packet recorded under
+   the old, power-state-biased protocol would still admit when it passes the
+   5% overhead gate (the committed gfx1151 calibrations carry no
+   `window_protocol` field). `admit_ssd_candidate` compares backends but not
+   `package.chip` (pre-existing; the cooperative image-digest binding
+   mitigates it). **Fixed in review:** the ROCm packet validator now refuses a
+   packet whose timing target disagrees with the device identity queried at
+   record time (a relabel-and-rebuild previously validated), and the run logs
+   are committed as `record.txt`.
 
 
 ## Device-clock markers — 2026-09-26

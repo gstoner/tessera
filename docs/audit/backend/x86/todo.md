@@ -76,12 +76,21 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   (`X86-WITNESS-PIN-1`): pin only the clock reads, or restore the
   full affinity mask for the timed region, then re-measure both hosts at least
   twice and bound cross-recording variance before any timing is compared
-  across recordings. (4) Under WSL2 the raw clock is
+  across recordings.
+  **Pre-PR review (2026-09-26), open:** `validate_x86_avx512_packet` re-derives
+  witnesses, medians, stability and the environment label, but only *compares*
+  the host/model, library path, source commit, toolchain fingerprint and the
+  library digest — a resealed forgery of those passes, since the packet digest
+  is unkeyed. A packet under an unregistered key (e.g. the retired
+  `x86_64_avx512`) seals without the AVX-512 checks, though no registration
+  credits it. The recorder's freshness check is mtime-based and covers only
+  the x86 backend sources and the optimization cmake module (`tessera-opt` is
+  checked by path, not freshness). (4) Under WSL2 the raw clock is
   itself TSC-derived; the witness shows a stable TSC scale, not an independent
   oscillator (stated in `profiler_x86_clock`).
 - **Zen 5 profiler packet on the witness route** (Princess-Luna, clean tree `f8022572`,
   schema v2, `-O2` library stamp, recorded after — not alongside — the E2E packet):
-  `benchmarks/baselines/x86_zen5_profiler_packet_20260926_princess_luna.json` came out
+  `benchmarks/baselines/x86_zen5_profiler_packet_20260926_princess_luna.json` (notes: `x86_zen5_profiler_packet_20260926_princess_luna_README.md`) came out
   `admission_route = tsc_witness`, `verdict = promote`, no ineligibility reasons;
   diagnostic gaps `VIRTUALIZED_HOST`, `WSL_CLOCK_DOMAIN`,
   `TIMING_PROOF_INCOMPLETE:perf_event_open,perf_sample_valid`, `SYMBOL_SAMPLING_MISSING`.

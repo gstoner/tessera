@@ -66,6 +66,10 @@ def test_graph_level_matmul_pipeline_is_refused():
 
     with pytest.raises(ValueError, match="no Graph-level pipeline entry"):
         ROCMExecutablePipeline(family="matmul", input_level=ROCMInputLevel.GRAPH)
+    # The directive lane has no LDS body since the canonical one was deleted.
+    with pytest.raises(ValueError, match="LDS staging requires Tile input"):
+        ROCMExecutablePipeline(family="matmul", input_level=ROCMInputLevel.DIRECTIVE,
+                               staging="lds")
     # Attention keeps its Graph entry; only matmul's shortcut was retired.
     ROCMExecutablePipeline(family="attention", input_level=ROCMInputLevel.GRAPH)
 

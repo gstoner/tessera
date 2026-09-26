@@ -264,6 +264,14 @@ class ROCMExecutablePipeline:
             raise ValueError(
                 "family 'control_state_machine' has no Target-IR boundary; "
                 "only output=binary is supported")
+        if (self.family == "matmul" and self.input_level is ROCMInputLevel.DIRECTIVE
+                and self.staging == "lds"):
+            # The typed body is the only LDS body since the canonical one was
+            # deleted (2026-09-26); the C++ generator refuses this at run time,
+            # so refuse it here before any compile is attempted.
+            raise ValueError(
+                "ROCm matmul LDS staging requires Tile input (the typed body); the "
+                "directive lane has only the register body")
         if self.family == "matmul" and self.input_level is ROCMInputLevel.GRAPH:
             # Lane B, retired 2026-09-26 (owner decision): a Graph->Tile
             # shortcut beside the scheduled route was a second lowering

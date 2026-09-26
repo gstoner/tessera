@@ -107,6 +107,19 @@ def _timing_architecture(timing: Mapping[str, Any]) -> str:
             f"ROCm profiler packet requires exact timing on one of "
             f"{', '.join('rocm_' + a for a in ROCM_PROFILER_ARCHITECTURES)}; got {target!r}")
     assert isinstance(arch, str)
+    # The recorder queries the device (hipGetDeviceProperties) and stores what
+    # it found. That queried identity outranks the target label: a packet whose
+    # label and images were relabelled to another chip still carries the chip
+    # it actually ran on, so the two must agree (review, 2026-09-26). Packets
+    # recorded before the query existed carry no identity and are judged on the
+    # label alone; the SSD admission path binds image digests besides.
+    identity = (timing.get("environment") or {}).get("device_identity")
+    if identity is not None:
+        queried = identity.get("architecture") if isinstance(identity, Mapping) else None
+        if queried != arch:
+            raise ROCmProfilerPacketError(
+                f"timing target names {arch!r} but the device queried at record time was "
+                f"{queried!r}")
     return arch
 
 

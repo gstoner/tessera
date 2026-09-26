@@ -79,11 +79,17 @@ chosen to match the gfx1151 packet's shape.
    window). Pair 0 was admissible: ratios 0.9991 and 0.9744, cooperative device
    clock 4.40% below the event. Pair 1's cooperative process then **aborted**:
    the timing contract refuses a sample whose witnesses disagree by more than
-   5%, and this one disagreed by 6.8% (`record.log`).
+   5%, and this one disagreed by 6.8% (`superseded/second_6e6904dc_short_window/record.txt`, line 29).
    - The event bracket and the marker span differ by a roughly fixed amount per
      window, about 60 µs here. That is 3.5–7% of a 1.6 ms cooperative window.
    - 1000-launch windows (`--launches`, commit `856c2b2a`) cut it below 0.7%.
-     The default stays 100, so the gfx1151 protocol is unchanged.
+     The default launch count stays 100, but **the gfx1151 protocol is not
+     unchanged**: with a calibration requested, the plain windows are now timed
+     inside the interleaved loop (each after a span-reset copy and a sync)
+     instead of before calibration. Any new gfx1151 recording uses the new
+     protocol; the committed gfx1151 packet was recorded under the old one.
+   - Run logs are committed as `.txt` (the repo ignores `*.log`): `record.txt`
+     here and one `record.txt` in each `superseded/` directory.
 
 ## Not claimed
 - **No gfx1151 claim.** This packet says nothing new about gfx1151. The recorder

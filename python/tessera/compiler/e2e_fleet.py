@@ -469,12 +469,14 @@ def validate_x86_avx512_packet(report: Mapping[str, Any],
                                resources: Mapping[str, Any]) -> None:
     """Re-derive an x86 AVX-512 packet's host, witness, timing and library claims.
 
-    Nothing stored as a conclusion is trusted: the host is checked against
-    the architecture key, each TSC witness is re-verified from its integers,
-    agreement and every run median are recomputed from the samples, the
-    environment label is checked against the kernel release, stability uses
-    the fixed policy, and the stamped library digest must be the digest of the
-    library embedded in every timed image.
+    What is re-derived: each TSC witness from its integers, agreement and every
+    run median from the samples, stability under the fixed policy, and the
+    environment label against the kernel release. What is only compared, not
+    re-derived (a resealed forgery of these passes; review, 2026-09-26): the
+    host and model against the architecture key, the library path, the source
+    commit, the toolchain fingerprint, and the stamped library digest against
+    the digest recorded for each timed image. The packet digest detects
+    accidental edits, not forgery, because it is unkeyed.
     """
     from .profiler_x86_clock import verify_witness_sample
     from .runtime_library_build import is_optimized

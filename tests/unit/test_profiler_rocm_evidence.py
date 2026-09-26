@@ -361,3 +361,35 @@ def test_every_committed_rocm_calibration_packet_still_validates() -> None:
         validate_rocm_profiler_packet(payload)
         packet_dir = path.relative_to(root).parts[0]
         assert payload["architecture"] == packet_dir.split("_", 1)[0]
+
+
+def test_a_rebuilt_packet_relabelled_to_another_chip_is_refused() -> None:
+    """Review (2026-09-26): relabelling the timing target and both images of a
+    committed gfx1201 calibration to gfx1151 and rebuilding it validated,
+    because the architecture was derived only from writable labels. The chip
+    the recorder queried from HIP now outranks them."""
+    import copy
+    import json
+    from pathlib import Path
+
+    import pytest
+    from tessera.compiler.profiler_rocm_evidence import (
+        ROCmProfilerPacketError, build_rocm_profiler_packet)
+
+    path = (Path(__file__).resolve().parents[2] / "benchmarks" / "baselines"
+            / "gfx1201_ssd_calibrated_pairs_20260926" / "0-serial-calibration.json")
+    packet = json.loads(path.read_text())
+    assert packet["timing"]["environment"]["device_identity"]["architecture"] == "gfx1201"
+    comparison = packet["instrumentation_comparison"]
+    rebuilt = dict(capture=packet["capture"], source=packet["source"],
+                   uninstrumented=copy.deepcopy(comparison["uninstrumented"]),
+                   instrumented=copy.deepcopy(comparison["instrumented"]),
+                   maximum_instrumentation_overhead=comparison["maximum_duration_ratio"])
+    # Unmodified, it rebuilds.
+    build_rocm_profiler_packet(timing=packet["timing"], **rebuilt)
+    forged_timing = copy.deepcopy(packet["timing"])
+    forged_timing["target"] = "rocm_gfx1151"
+    for image in (rebuilt["uninstrumented"], rebuilt["instrumented"]):
+        image["architecture"] = "gfx1151"
+    with pytest.raises(ROCmProfilerPacketError, match="device queried at record time was 'gfx1201'"):
+        build_rocm_profiler_packet(timing=forged_timing, **rebuilt)

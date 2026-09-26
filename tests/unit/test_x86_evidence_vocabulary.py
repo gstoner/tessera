@@ -78,9 +78,13 @@ def _real_packet() -> dict:
         benchmark={
             "schema": "tessera.compiler.e2e_real4.x86_matmul.v1",
             "architecture": "zen5-avx512",
+            "ratchet": {"kind": "production_non_regression", "limit": 1.10},
             "rows": [
-                {"shape_class": "aligned", "correctness": {"passed": True}},
-                {"shape_class": "ragged", "correctness": {"passed": True}},
+                {"shape_class": shape_class, "correctness": {"passed": True},
+                 "timing": {"production_samples_ms": [5.0, 5.0, 5.0],
+                            "scheduled_samples_ms": [5.0, 5.0, 5.0],
+                            "non_regression_10pct": True}}
+                for shape_class in ("aligned", "ragged")
             ],
             "verdict": "promote",
         },

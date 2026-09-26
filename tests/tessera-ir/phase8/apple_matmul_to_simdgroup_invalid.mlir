@@ -48,8 +48,19 @@ func.func @int32_accumulator_is_refused(%a: tensor<16x16xf16>, %b: tensor<16x8xf
 // accumulator a second time; there is no single-rounding epilogue for it.
 func.func @double_rounding_result_is_refused(%a: tensor<16x16xf16>, %b: tensor<16x8xf16>)
     -> tensor<16x8xbf16> {
-  // expected-error @+1 {{no single-rounding epilogue}}
+  // expected-error @+1 {{no single-rounding conversion from an f16 accumulator to an bf16 result}}
   %c = "tessera.matmul"(%a, %b) {numeric_policy = {storage = "fp16", accum = "fp16"}}
       : (tensor<16x16xf16>, tensor<16x8xf16>) -> tensor<16x8xbf16>
   return %c : tensor<16x8xbf16>
+}
+
+// -----
+
+// A policy storage that contradicts the operands is refused, not believed.
+func.func @policy_storage_contradicts_operands(%a: tensor<16x16xf16>, %b: tensor<16x8xf16>)
+    -> tensor<16x8xf32> {
+  // expected-error @+1 {{APPLE_SIMDGROUP_STORAGE_MISMATCH: numeric_policy.storage="bf16" does not name the operands' element type f16}}
+  %c = "tessera.matmul"(%a, %b) {numeric_policy = {storage = "bf16", accum = "fp32"}}
+      : (tensor<16x16xf16>, tensor<16x8xf16>) -> tensor<16x8xf32>
+  return %c : tensor<16x8xf32>
 }

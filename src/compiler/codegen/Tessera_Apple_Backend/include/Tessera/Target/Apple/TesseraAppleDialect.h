@@ -69,9 +69,24 @@ int appleMatmul2dActCode(::llvm::StringRef act);
 /// null result as a refusal, never as an implied fp32.
 ::mlir::StringAttr appleDeclaredAccumulator(::mlir::Operation *op);
 
-/// Map a Decision #15a accumulator name (fp32/f32, fp16/f16, bf16) to its MLIR
-/// float type, or a null type for any other name.
+/// Map a Decision #15a floating dtype name to its MLIR float type, or a null
+/// type for any other name. The accepted spellings are exactly the fp32/fp16/
+/// bf16 entries of `tessera.dtype` (canonical names plus `_DTYPE_ALIASES`,
+/// case-folded): fp32/f32/float32/float, fp16/f16/float16/half,
+/// bf16/bfloat16. `test_apple_accumulator_spellings_match_tessera_dtype`
+/// drift-gates the two lists against each other.
 ::mlir::Type appleAccumulatorType(::mlir::MLIRContext *ctx, ::llvm::StringRef name);
+
+/// Why an accumulator of type `accum` cannot produce a result of type
+/// `result` with at most one rounding, or an empty string when it can: equal
+/// types store as-is, f16 -> f32 widens exactly, f32 -> f16/bf16 rounds once.
+/// f16 -> bf16 would round an already-rounded accumulator a second time.
+std::string appleAccumulatorResultRefusal(::mlir::Type accum, ::mlir::Type result);
+
+/// Why a declared `numeric_policy.storage` disagrees with the operand element
+/// type, or an empty string when it agrees or is absent (storage lives on the
+/// tensor per Decision #15a; the policy copy must not contradict it).
+std::string appleDeclaredStorageRefusal(::mlir::Operation *op, ::mlir::Type operandElem);
 
 /// Why a simdgroup_matrix accumulator of `accum` element type is refused on
 /// Apple7, or an empty string when it is admitted (f32, f16). Measured on the

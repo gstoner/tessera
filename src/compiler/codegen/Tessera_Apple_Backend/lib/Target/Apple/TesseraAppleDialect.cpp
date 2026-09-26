@@ -269,11 +269,56 @@ static ::mlir::LogicalResult verifyElementMatch(::mlir::Operation *op,
 }
 
 ::mlir::Type appleAccumulatorType(::mlir::MLIRContext *ctx, ::llvm::StringRef name) {
+  // Mirrors tessera.dtype.canonicalize_dtype for the float family: canonical
+  // names plus _DTYPE_ALIASES, with the same single lowercase fold.
   ::mlir::Builder b(ctx);
-  if (name == "fp32" || name == "f32") return b.getF32Type();
-  if (name == "fp16" || name == "f16") return b.getF16Type();
-  if (name == "bf16") return b.getBF16Type();
+  const std::string lower = name.lower();
+  const ::llvm::StringRef n(lower);
+  if (n == "fp32" || n == "f32" || n == "float32" || n == "float")
+    return b.getF32Type();
+  if (n == "fp16" || n == "f16" || n == "float16" || n == "half")
+    return b.getF16Type();
+  if (n == "bf16" || n == "bfloat16")
+    return b.getBF16Type();
   return {};
+}
+
+std::string appleAccumulatorResultRefusal(::mlir::Type accum, ::mlir::Type result) {
+  if (!accum || !result)
+    return "the accumulator or result type is unknown";
+  if (accum == result)
+    return "";
+  if (accum.isF16() && result.isF32())
+    return "";  // exact widening
+  if (accum.isF32() && (result.isF16() || result.isBF16()))
+    return "";  // one round-to-nearest-even
+  std::string text;
+  ::llvm::raw_string_ostream os(text);
+  os << "there is no single-rounding conversion from an " << accum
+     << " accumulator to an " << result << " result";
+  if (accum.isF16() && result.isBF16())
+    os << " (the fp16 accumulator is already rounded, so a bf16 result would "
+          "round it a second time); accumulate in fp32 for a bf16 result";
+  return os.str();
+}
+
+std::string appleDeclaredStorageRefusal(::mlir::Operation *op, ::mlir::Type operandElem) {
+  auto policy = op->getAttrOfType<::mlir::DictionaryAttr>("numeric_policy");
+  if (!policy)
+    return "";
+  auto storage = policy.getAs<::mlir::StringAttr>("storage");
+  if (!storage || storage.getValue().empty())
+    return "";
+  ::mlir::Type declared = appleAccumulatorType(op->getContext(), storage.getValue());
+  if (declared && declared == operandElem)
+    return "";
+  std::string text;
+  ::llvm::raw_string_ostream os(text);
+  os << "numeric_policy.storage=\"" << storage.getValue()
+     << "\" does not name the operands' element type " << operandElem
+     << "; storage lives on the tensor (Decision #15a) and a policy that "
+        "contradicts it cannot be lowered without guessing which one is meant";
+  return os.str();
 }
 
 std::string appleSimdgroupAccumulatorRefusal(::mlir::Type accum) {

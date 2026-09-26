@@ -2,9 +2,13 @@
 
 The Apple simdgroup lane admits an accumulator only when the device computes
 exactly what the program declared. This file is the evidence behind
-``apple_fragment.SIMDGROUP_ACCUMULATORS``: each admitted (storage, accumulator)
-pair runs through the real TILE-1 runtime ABI and must be **bit-exact** with a
-numpy model of the declared accumulation. A tolerance would hide the one fact
+``apple_fragment.SIMDGROUP_ACCUMULATORS`` and the C++ verifier. The 16-bit
+storage pairs (fp16/bf16 x fp32/fp16) run through the real TILE-1 runtime ABI
+with the Tessera-emitted kernel. The f32-storage x fp16 pair, which only the IR
+lane (``MatmulToAppleSimdgroup``) admits -- the TILE-1 ABI takes 16-bit
+operands -- runs as a hand-written kernel on the cooperative-matmul runtime
+symbol (f32 operands), since no Tessera executor exists for it yet. Every row
+must be **bit-exact** with a numpy model of the declared accumulation. A tolerance would hide the one fact
 that matters here -- whether the partial sums really live in the declared
 type -- so none is used.
 
@@ -14,8 +18,9 @@ The models (all measured on the M1 Max, Apple7, macOS 27.0, Metal toolchain
 * fp32 accumulator: a sequential fp32 fused multiply-add chain over K.
 * fp16 accumulator, fp16 storage: a sequential fp16 fused multiply-add chain
   (every step rounds to fp16).
-* fp16 accumulator, bf16 storage: fp32 inside each 8-deep MMA (starting from
-  the fp16 accumulator), rounded to nearest-even fp16 after every MMA.
+* fp16 accumulator, bf16 or f32 storage: fp32 inside each 8-deep MMA
+  (starting from the fp16 accumulator), rounded to nearest-even fp16 after
+  every MMA.
 
 The bf16 accumulator is *refused*, and ``test_bf16_accumulator_is_not_bf16``
 keeps the measurement that refuses it honest: on this part it is bit-exact
@@ -211,12 +216,62 @@ kernel void probe(device const bfloat* A [[buffer(0)]], device const bfloat* B [
     assert not np.array_equal(out.astype(np.float64), per_step_bf16)
 
 
-def test_value_lane_executes_the_declared_fp16_accumulator():
-    """End to end: Graph IR numeric_policy accum=fp16 -> TileToApple stamps
-    tessera_apple.accumulate -> the runtime materializes an fp16-accumulator
-    kernel -> the GPU result is bit-exact with the fp16 model, not the fp32 one."""
+_F32_FP16_KERNEL = """#include <metal_stdlib>
+#include <metal_simdgroup_matrix>
+using namespace metal;
+kernel void probe(device const float* A [[buffer(0)]], device const float* B [[buffer(1)]],
+                  device float* C [[buffer(2)]], constant int& M [[buffer(3)]],
+                  constant int& N [[buffer(4)]], constant int& K [[buffer(5)]],
+                  uint3 tg [[threadgroup_position_in_grid]],
+                  uint sg [[simdgroup_index_in_threadgroup]],
+                  uint lane [[thread_index_in_simdgroup]]) {
+  threadgroup half Cs[4][64];
+  for (uint f = sg; f < 16; f += 4) {
+    const uint m0 = tg.y * 32 + (f / 4) * 8, n0 = tg.x * 32 + (f % 4) * 8;
+    simdgroup_matrix<half, 8, 8> acc = make_filled_simdgroup_matrix<half, 8, 8>(half(0));
+    simdgroup_matrix<float, 8, 8> a, b;
+    for (int k0 = 0; k0 < K; k0 += 8) {
+      simdgroup_load(a, A + m0 * K + k0, K);
+      simdgroup_load(b, B + k0 * N + n0, N);
+      simdgroup_multiply_accumulate(acc, a, b, acc);
+    }
+    simdgroup_store(acc, Cs[sg], 8);
+    simdgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint e = lane; e < 64; e += 32) C[(m0 + e / 8) * N + n0 + e % 8] = float(Cs[sg][e]);
+    simdgroup_barrier(mem_flags::mem_threadgroup);
+  }
+}
+"""
+
+
+def test_f32_storage_fp16_accumulator_is_bit_exact_with_its_model():
+    """Re-derives the f32 x fp16 row the C++ verifier and MatmulToAppleSimdgroup
+    admit (APPLE-ACCUM-1 review): fp32 inside each 8-deep MMA, RNE to fp16 after
+    every MMA. Hand-written kernel, so this proves the hardware fact the IR lane
+    relies on, not an end-to-end route (none exists for f32 storage)."""
     _require_device()
-    from tessera.compiler.canonical_compile import canonical_compile
+    from tessera._apple_gpu_dispatch import apple_gpu_runtime
+
+    rt = apple_gpu_runtime()
+    assert rt is not None
+    sym = rt.tessera_apple_gpu_synth_matmul_epilogue_coopmat
+    rng = np.random.default_rng(32)
+    for m, n, k in ((64, 64, 64), (64, 64, 1024)):
+        a = rng.standard_normal((m, k)).astype(np.float32)
+        b = rng.standard_normal((k, n)).astype(np.float32)
+        out = np.full((m, n), np.nan, dtype=np.float32)
+        rc = sym(ctypes.c_char_p(_F32_FP16_KERNEL.encode()), ctypes.c_char_p(b"probe"),
+                 a.ctypes.data_as(ctypes.c_void_p), b.ctypes.data_as(ctypes.c_void_p),
+                 None, out.ctypes.data_as(ctypes.c_void_p),
+                 ctypes.c_int32(m), ctypes.c_int32(n), ctypes.c_int32(k),
+                 ctypes.c_int32(0), ctypes.c_int32(4), ctypes.c_int32(32))
+        assert rc == 1
+        a64, b64 = a.astype(np.float64), b.astype(np.float64)
+        want = _fma_chain(a64, b64, np.float32, MMA_K, np.float16)
+        assert np.array_equal(out.astype(np.float64), want), (m, n, k)
+
+
+def _value_lane_module(mlir: str, dt: str, m: int, k: int, n: int, policy):
     from tessera.compiler.graph_ir import (
         GraphIRFunction,
         GraphIRModule,
@@ -224,28 +279,80 @@ def test_value_lane_executes_the_declared_fp16_accumulator():
         IROp,
         IRType,
     )
-    from tessera.runtime import launch
 
-    m, k, n = 32, 512, 32
-    ta = IRType(f"tensor<{m}x{k}xf16>", (str(m), str(k)), "fp16")
-    tb = IRType(f"tensor<{k}x{n}xf16>", (str(k), str(n)), "fp16")
-    tc = IRType(f"tensor<{m}x{n}xf16>", (str(m), str(n)), "fp16")
-    module = GraphIRModule(functions=[GraphIRFunction(
+    ta = IRType(f"tensor<{m}x{k}x{mlir}>", (str(m), str(k)), dt)
+    tb = IRType(f"tensor<{k}x{n}x{mlir}>", (str(k), str(n)), dt)
+    tc = IRType(f"tensor<{m}x{n}x{mlir}>", (str(m), str(n)), dt)
+    return GraphIRModule(functions=[GraphIRFunction(
         name="f", args=[IRArg("a", ta), IRArg("b", tb)], result_types=[tc],
         body=[IROp(result="c", op_name="tessera.matmul", operands=["%a", "%b"],
                    operand_types=[ta.mlir_str, tb.mlir_str], result_type=tc.mlir_str,
-                   kwargs={"numeric_policy": {"storage": "fp16", "accum": "fp16"}})],
+                   kwargs={"numeric_policy": policy})],
         return_values=["%c"])])
-    art = canonical_compile(
+
+
+def _value_lane_artifact(module):
+    from tessera.compiler.canonical_compile import canonical_compile
+
+    return canonical_compile(
         module, target="apple_gpu", options={"apple_target_ir_mode": "value"},
     ).to_runtime_artifact()
+
+
+def test_value_lane_executes_the_declared_fp16_accumulator():
+    """End to end: Graph IR numeric_policy accum=fp16 -> TileToApple stamps
+    tessera_apple.accumulate -> the runtime materializes an fp16-accumulator
+    kernel -> the GPU result is bit-exact with the fp16 model, not the fp32 one,
+    and is returned in the declared f16 result dtype."""
+    _require_device()
+    from tessera.runtime import launch
+
+    m, k, n = 32, 512, 32
+    art = _value_lane_artifact(_value_lane_module(
+        "f16", "fp16", m, k, n, {"storage": "fp16", "accum": "fp16"}))
     calls = art.metadata.get("apple_value_calls") or []
     assert calls and calls[0]["op_kind"] == "tile_simdgroup_gemm", art.metadata
-    assert calls[0]["accumulate"] == "fp16"
+    assert calls[0]["accumulate"] == "fp16" and calls[0]["result_dtype"] == "fp16"
     a, b, a64, b64 = _operands("fp16", m, k, n, seed=11)
     result = launch(art, [a, b])
     assert result["ok"], result
+    assert result["output"].dtype == np.float16
     got = np.asarray(result["output"], dtype=np.float64)
     assert np.array_equal(got, _model("fp16", "fp16", a64, b64))
     assert not np.array_equal(got, _model("fp16", "fp32", a64, b64).astype(np.float16)
                               .astype(np.float64))
+
+
+@pytest.mark.parametrize("dtype, mlir", [("fp16", "f16"), ("bf16", "bf16")])
+def test_value_lane_returns_the_declared_result_dtype_rounded_once(dtype, mlir):
+    """APPLE-ACCUM-1 review: the TILE-1 lane used to return the kernel's fp32
+    buffer for a declared f16/bf16 result -- a different dtype and unrounded
+    values. It now returns the declared dtype, rounded once (RNE) from the fp32
+    accumulator, the same single rounding MatmulToAppleSimdgroup performs."""
+    _require_device()
+    from tessera.runtime import launch
+
+    m, k, n = 32, 256, 32
+    art = _value_lane_artifact(_value_lane_module(
+        mlir, dtype, m, k, n, {"storage": dtype, "accum": "fp32"}))
+    a, b, a64, b64 = _operands(dtype, m, k, n, seed=21)
+    result = launch(art, [a, b])
+    assert result["ok"], result
+    st = _storage(dtype)
+    assert result["output"].dtype == np.dtype(st)
+    want = _model(dtype, "fp32", a64, b64).astype(np.float32).astype(st)
+    assert np.array_equal(np.asarray(result["output"]).view(np.uint16),
+                          np.asarray(want).view(np.uint16))
+
+
+def test_value_lane_refuses_an_fp16_accumulator_into_a_bf16_result():
+    """APPLE-ACCUM-1 review P1-1: bf16 x bf16 -> bf16 with accum=fp16 used to
+    dispatch and return fp16-precision values in a bf16-declared tensor. It is
+    now refused at TileToApple (the same rule the IR lane enforces) and never
+    reaches the GPU."""
+    art = _value_lane_artifact(_value_lane_module(
+        "bf16", "bf16", 16, 32, 16, {"storage": "bf16", "accum": "fp16"}))
+    assert art.metadata.get("compiler_path") != "apple_value_target_ir"
+    error = str(art.metadata.get("apple_value_target_ir_error"))
+    assert "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED" in error
+    assert "single-rounding" in error

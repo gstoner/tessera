@@ -1027,9 +1027,18 @@ def _low_precision_matmul_body(dtype, policy):
 @pytest.mark.parametrize("dtype", ["f16", "bf16"])
 @pytest.mark.parametrize("accum", ["fp32", "fp16"])
 def test_gpu_full_low_precision_rank2_matmul_selects_tile_simdgroup_abi(dtype, accum):
-    """APPLE-ACCUM-1: the TILE-1 call carries the program's accumulator."""
+    """APPLE-ACCUM-1: the TILE-1 call carries the program's accumulator and
+    the declared result dtype. An fp16 accumulator into a bf16 result would
+    round twice and is refused (review P1-1)."""
     body = _low_precision_matmul_body(dtype, f'{{accum = "{accum}"}}')
     p = _run("tessera-lower-to-apple_gpu-full", body)
+    if dtype == "bf16" and accum == "fp16":
+        assert p.returncode != 0
+        assert "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED" in p.stderr
+        assert "single-rounding" in p.stderr
+        assert "tile_simdgroup_gemm" not in p.stdout
+        return
+    assert f'tessera_apple.result_dtype = "{ {"f16": "fp16"}.get(dtype, dtype) }"' in p.stdout
     assert p.returncode == 0, p.stderr
     assert 'op_kind = "tile_simdgroup_gemm"' in p.stdout
     assert f'symbol = "tessera_apple_gpu_tile_simdgroup_gemm_{dtype}"' in p.stdout

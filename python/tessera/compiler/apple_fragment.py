@@ -133,15 +133,6 @@ def select_apple_tile_promotion(
     return "mps"
 
 
-#: Accumulator spellings accepted at this boundary, normalized to the
-#: canonical Decision #15a names.
-_ACCUMULATOR_ALIASES: dict[str, str] = {
-    "fp32": "fp32", "f32": "fp32", "float32": "fp32",
-    "fp16": "fp16", "f16": "fp16", "float16": "fp16",
-    "bf16": "bf16", "bfloat16": "bf16",
-    "int32": "int32", "i32": "int32",
-}
-
 #: Accumulator byte widths for the admitted accumulators.
 ACCUMULATOR_BYTES: dict[str, int] = {"fp32": 4, "fp16": 2}
 
@@ -190,8 +181,21 @@ _REFUSED_ACCUMULATOR_REASONS: dict[str, str] = {
 
 
 def canonical_accumulator_dtype(accumulator_dtype: str) -> str:
-    """Normalize an accumulator spelling to its canonical Decision #15a name."""
-    return _ACCUMULATOR_ALIASES.get(accumulator_dtype, accumulator_dtype)
+    """Normalize an accumulator spelling to its canonical Decision #15a name.
+
+    One mapping for the whole stack: ``tessera.dtype.canonicalize_dtype``
+    (canonical names plus ``_DTYPE_ALIASES``, one lowercase fold). The C++
+    side (``appleAccumulatorType``) accepts exactly its fp32/fp16/bf16
+    spellings, drift-gated by
+    ``test_apple_accumulator_spellings_match_tessera_dtype``. An unknown
+    spelling is returned unchanged so the caller refuses it by name.
+    """
+    from tessera.dtype import TesseraDtypeError, canonicalize_dtype
+
+    try:
+        return canonicalize_dtype(accumulator_dtype)
+    except (TesseraDtypeError, TypeError):
+        return accumulator_dtype
 
 
 def select_apple_simdgroup_fragment(

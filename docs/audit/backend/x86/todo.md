@@ -65,8 +65,18 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   0.68 → 1.05 ms on the same pinned CPU 15; Princess-Luna 1.07 → 0.71 ms, CPU 23 → 14),
   and attention 0.71 → 0.59 ms on Tajasarus, while softmax, reduction, cholesky and
   Princess-Luna attention stayed within ~4%. The packet's stability gate
-  does not capture recording-to-recording variance; not root-caused (thread placement
-  inside the AVX-512 GEMM/attention kernels is the first thing to check). (4) Under WSL2 the raw clock is
+  does not capture recording-to-recording variance; not root-caused. **One confound
+  is confirmed by code read (2026-09-26):** the TSC witness pins the recording
+  thread to one CPU (`profiler_x86_clock.pin_current_cpu`), and
+  `avx512_flash_attn_f32.cpp` spawns `std::thread`s, which inherit that
+  single-CPU mask. So on the witness route attention's threads share one CPU,
+  which is not the production configuration. The witness therefore changes what
+  it measures for threaded kernels. No threading was found in the GEMM kernel
+  source, so the matmul shift is not explained by this. Owed
+  (`X86-WITNESS-PIN-1`): pin only the clock reads, or restore the
+  full affinity mask for the timed region, then re-measure both hosts at least
+  twice and bound cross-recording variance before any timing is compared
+  across recordings. (4) Under WSL2 the raw clock is
   itself TSC-derived; the witness shows a stable TSC scale, not an independent
   oscillator (stated in `profiler_x86_clock`).
 - **Zen 5 profiler packet on the witness route** (Princess-Luna, clean tree `f8022572`,
@@ -105,7 +115,7 @@ Sync `WSL-TIMING-ADMISSION-2026-09-26` (owner direction, [MASTER_AUDIT](../../MA
 
 - `profiler_timing`: on WSL, promotion is carried only by a kernel-side clock **of the sample's own target** (`promotion_clock_slots`: `device_wall_clock_ns` for ROCm, `tsc_cycles` for x86, none for NVIDIA). Its admissible witnesses are fixed per clock — HIP event or profiler activity for the device clock, `CLOCK_MONOTONIC_RAW` for the TSC, **never host wall** — at least one must be valid in the same sample, and **every** valid one it names must agree within 5% (`|witness − clock| / witness`, the providers' band). A TSC must carry a frequency from an independent source (`cpuid_leaf_0x15` or a separate calibration interval). Environments are matched exactly; an unrecognized one carries no promotion.
 - `target_perf.apply_corpus`: a WSL calibration corpus is selector authority only when `timing_witness.samples` carries at least two admissible WSL timing samples per calibrated device, of that device's target and distinct by clock content — derived evidence, not a declared method.
-- The ROCm profiler packet gains a derived `admission_route` (`device_clock_witness`); on it, environment and profiler reasons become `diagnostic_gaps`, the witness sample must name the calibrated image, and the validator re-derives reasons, gaps, route and eligibility from the packet's own inputs. SSD admission on gfx1151 consumes it. (An x86 `tsc_witness` packet route was drafted and **withdrawn**: the probe's `clock_agreement_valid` compares steady_clock with monotonic-raw, not the TSC, so it proved nothing about the TSC.)
+- The ROCm profiler packet gains a derived `admission_route` (`device_clock_witness`); on it, environment and profiler reasons become `diagnostic_gaps`, the witness sample must name the calibrated image, and the validator re-derives reasons, gaps, route and eligibility from the packet's own inputs. SSD admission on gfx1151 consumes it. (An x86 `tsc_witness` packet route was drafted and **withdrawn**: the probe's `clock_agreement_valid` compares steady_clock with monotonic-raw, not the TSC, so it proved nothing about the TSC. **Superseded the same day** by the rebuilt route: per-row TSC vs CLOCK_MONOTONIC_RAW around the real trial region, frequency from separate stored calibration intervals, everything re-derived by `profiler_x86_clock.verify_witness_sample`, and the per-launch samples bound to the witnessed region.)
 - `profiler_cuda_window` drops "bare metal required"; its activity-window / event 5% agreement and 5% overhead gates decide. This is an explicit exception recorded in MASTER_AUDIT and **kept by owner decision (2026-09-26)**: the Nsight activity window is profiler-derived, and its validity on WSL2 is unverified until a Super-Bear packet is recorded.
 - Recorders that time with events or host wall only now stamp `kernel_clock_witness_required` instead of a bare-metal reason; committed historical packets are unchanged.
 

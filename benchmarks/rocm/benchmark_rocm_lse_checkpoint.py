@@ -168,7 +168,7 @@ def main() -> int:
             "bare_metal_device_event_complete"
             if event_eligible
             else (
-                "blocked_wsl_device_event_not_transferable"
+                "blocked_wsl_kernel_clock_witness_required"
                 if wsl
                 else "blocked_zero_or_unavailable_device_event"
             )

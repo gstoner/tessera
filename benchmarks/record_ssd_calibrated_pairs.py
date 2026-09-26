@@ -25,8 +25,11 @@ def require_eligible_host(source):
     reasons = []
     if source["worktree_dirty"]:
         reasons.append("source tree has uncommitted changes")
-    if source["execution_environment"] != "bare_metal":
-        reasons.append("bare-metal owning CUDA host required")
+    # WSL2 is admissible since 2026-09-25 (owner, MASTER_AUDIT): the
+    # calibration's activity-window / event agreement gate decides, not the
+    # host environment.
+    if source["execution_environment"] not in ("bare_metal", "wsl2"):
+        reasons.append(f"unknown execution environment {source['execution_environment']!r}")
     if reasons:
         raise ValueError("; ".join(reasons))
 

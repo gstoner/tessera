@@ -91,8 +91,9 @@ def test_cuda_selector_rebuilds_and_refuses_reused_calibration():
 
 def test_production_collection_preflight_requires_eligible_host():
     from benchmarks.record_ssd_calibrated_pairs import require_eligible_host
-    with pytest.raises(ValueError,match='bare-metal'):
-        require_eligible_host(dict(worktree_dirty=False,execution_environment='wsl2'))
+    require_eligible_host(dict(worktree_dirty=False,execution_environment='wsl2'))
+    with pytest.raises(ValueError,match='unknown execution environment'):
+        require_eligible_host(dict(worktree_dirty=False,execution_environment='container'))
     with pytest.raises(ValueError,match='uncommitted'):
         require_eligible_host(dict(worktree_dirty=True,execution_environment='bare_metal'))
 
@@ -102,3 +103,14 @@ def test_cuda_calibration_refuses_foreign_capture_process():
     args['capture_device']['process_id'] += 1
     with pytest.raises(ValueError,match='another profiled process'):
         build_cuda_window_calibration(**args)
+
+
+def test_wsl2_cuda_window_is_admissible_when_its_clocks_agree():
+    """Owner direction 2026-09-25: the activity-window / event agreement is
+    the witness; WSL2 alone no longer refuses."""
+    args = arguments()
+    args["source"]["execution_environment"] = "wsl2"
+    report = build_cuda_window_calibration(**args)
+    assert report["eligible_for_promotion"], report["ineligibility_reasons"]
+    args["profiled"]["rows"][0]["device_event_ms"] = [2.0] * 7
+    assert not build_cuda_window_calibration(**args)["eligible_for_promotion"]

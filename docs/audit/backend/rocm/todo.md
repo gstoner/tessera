@@ -7,6 +7,21 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## WSL timing admission — 2026-09-26
+
+Sync `WSL-TIMING-ADMISSION-2026-09-26` (owner direction, [MASTER_AUDIT](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25), 2026-09-25). **Shared timing contract changed.** Missing `/dev/kfd` or bare metal no longer blocks promotion; the independent-witness method does:
+
+- `profiler_timing`: on WSL, promotion is carried only by a kernel-side clock **of the sample's own target** (`promotion_clock_slots`: `device_wall_clock_ns` for ROCm, `tsc_cycles` for x86, none for NVIDIA). Its admissible witnesses are fixed per clock — HIP event or profiler activity for the device clock, `CLOCK_MONOTONIC_RAW` for the TSC, **never host wall** — at least one must be valid in the same sample, and **every** valid one it names must agree within 5% (`|witness − clock| / witness`, the providers' band). A TSC must carry a frequency from an independent source (`cpuid_leaf_0x15` or a separate calibration interval). Environments are matched exactly; an unrecognized one carries no promotion.
+- `target_perf.apply_corpus`: a WSL calibration corpus is selector authority only when `timing_witness.samples` carries at least two admissible WSL timing samples per calibrated device, of that device's target and distinct by clock content — derived evidence, not a declared method.
+- The ROCm profiler packet gains a derived `admission_route` (`device_clock_witness`); on it, environment and profiler reasons become `diagnostic_gaps`, the witness sample must name the calibrated image, and the validator re-derives reasons, gaps, route and eligibility from the packet's own inputs. SSD admission on gfx1151 consumes it. (An x86 `tsc_witness` packet route was drafted and **withdrawn**: the probe's `clock_agreement_valid` compares steady_clock with monotonic-raw, not the TSC, so it proved nothing about the TSC.)
+- `profiler_cuda_window` drops "bare metal required"; its activity-window / event 5% agreement and 5% overhead gates decide. This is an explicit exception recorded in MASTER_AUDIT and **kept by owner decision (2026-09-26)**: the Nsight activity window is profiler-derived, and its validity on WSL2 is unverified until a Super-Bear packet is recorded.
+- Recorders that time with events or host wall only now stamp `kernel_clock_witness_required` instead of a bare-metal reason; committed historical packets are unchanged.
+
+This supersedes the WSL half of `GFX1151-CALIB-BAREMETAL-2026-08-16`.
+
+**ROCm outcome: applicable — follow-up required for evidence.** gfx1151 and gfx1201 have the kernel-side slot (`wall_clock64`). SSD candidate admission on gfx1151 now promotes from WSL packets on the `device_clock_witness` route (tested with fixtures; **no device packet recorded in this change** — the Mac cannot produce one). Follow-ups: (1) record a gfx1151 SSD calibrated-pairs packet on Princess-Luna under the new route; (2) `calibrate_gfx1151.py` times with HIP events against host wall only, so its WSL corpora stay pruning-only until its kernels carry `wall_clock64` stamps; (3) the ROCm profiler packet and SSD admission are gfx1151-only — gfx1201 needs its own adapter before Tajasarus evidence can promote; (4) HIP-event-only recorders (`benchmark_rocm_lse_checkpoint`, `record_gfx1201_attention_overlap`, `record_deltanet_backward_selectors`) stay ineligible until they record the device clock.
+
+
 ## gfx1201: native spectral JVP admitted — 2026-09-25
 
 Owner `TSOL-POLICY-PHYS-1`; sync `ROCM-SPECTRAL-JVP-GFX1201-2026-09-25`. This
@@ -3291,7 +3306,7 @@ and authority evidence, not selector-grade timing; broader broadcasting,
 axes/dtypes, STFT/ISTFT backward, and gfx1200/gfx1250 remain open.
 
 `GFX1151-CALIB-BAREMETAL-2026-08-16` — **producer hardened; bare-metal packet
-still hardware-gated.** The 2026-08-15 WSL figures (186.8 GB/s, 47.27 fp16
+still hardware-gated.** *(WSL half superseded 2026-09-26 by `WSL-TIMING-ADMISSION-2026-09-26`, top of this file: a WSL corpus now promotes when it carries admissible device-clock witness samples.)* The 2026-08-15 WSL figures (186.8 GB/s, 47.27 fp16
 WMMA TFLOP/s, 50.22 bf16 WMMA TFLOP/s) are now explicitly
 `provisional_pruning_only`; `target_perf.load_corpus()` rejects them instead of
 silently assigning measured selector authority. The calibration runner records

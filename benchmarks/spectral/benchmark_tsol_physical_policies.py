@@ -248,6 +248,7 @@ def _cases() -> list[PolicyCase]:
 def _run(target: str, iterations: int) -> dict[str, Any]:
     from tessera import runtime as rt
     from tessera.compiler.scheduled_spectral import validate_scheduled_spectral_metadata
+    from tessera.compiler.profiler_timing import WSL_WITNESS_MISSING
 
     rows = []
     for case in _cases():
@@ -331,7 +332,7 @@ def _run(target: str, iterations: int) -> dict[str, Any]:
         ),
         "timing_domain": "synchronized_host_wall",
         "selector_eligible": target == "x86",
-        "device_event_follow_up": None if target == "x86" else "bare_metal_required",
+        "device_event_follow_up": None if target == "x86" else WSL_WITNESS_MISSING,
         "iterations": iterations,
         "rows": rows,
     }

@@ -87,9 +87,10 @@ are maintained in [`todo.md`](todo.md).
 > cross-checked against banded HIP events and host wall
 > ([DEVICE-CLOCK-DISCIPLINE-2026-08-31](todo.md#cross-backend-sync-device-clock-discipline-2026-08-31))
 > plus paired interleaved runs is an accepted performance method; counters
-> are diagnostic extras. The code still refuses WSL samples for promotion
-> (`profiler_timing.py`, `target_perf.apply_corpus`) — aligning it is the
-> first item in [MASTER_AUDIT's action list](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25).
+> are diagnostic extras. The code admits that method since 2026-09-26
+> (`WSL-TIMING-ADMISSION-2026-09-26`, top of [`todo.md`](todo.md)),
+> including SSD admission on gfx1151 via the `device_clock_witness` packet
+> route; what remains is recording the packets.
 
 | ID | Priority | Action | Completion evidence |
 |---|---|---|---|

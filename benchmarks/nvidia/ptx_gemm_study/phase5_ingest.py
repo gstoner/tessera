@@ -50,7 +50,7 @@ def proposal(results: list[dict], counters: list[dict], capability: dict) -> dic
         "device": capability["device"],
         "compute_capability": capability["cc"],
         "selector_eligible": not wsl,
-        "promotion": "blocked_on_bare_metal" if wsl else "review_required",
+        "promotion": "kernel_clock_witness_required" if wsl else "review_required",
         "reason": ("WSL2 measurements are not selector authority; rerun the "
                    "same green packet bare metal before calling target_perf.apply_corpus()."
                    if wsl else "Review the complete green packet before producing a calibration corpus."),

@@ -399,8 +399,10 @@ def _measure(*, allow_provisional: bool) -> dict[str, object]:
     wsl = _is_wsl()
     if wsl and not allow_provisional:
         raise SystemExit(
-            "selector calibration requires bare-metal gfx1151; this host is WSL. "
-            "Use --allow-provisional only for pruning diagnostics."
+            "selector calibration on WSL needs a kernel-side device-clock witness "
+            "(wall_clock64 agreeing with HIP events); this recorder times with HIP "
+            "events against host wall only. Use --allow-provisional for pruning "
+            "diagnostics."
         )
     hip = hip_lib()
     if hip.hipInit(0) != 0:
@@ -548,7 +550,9 @@ def _finalize(
 
     reasons: list[str] = []
     if raw.get("execution_environment") != "bare_metal":
-        reasons.append("BARE_METAL_REQUIRED")
+        # Not "bare metal required" since 2026-09-25: the missing piece on WSL
+        # is a kernel-side clock witness, which this measurement does not take.
+        reasons.append("KERNEL_CLOCK_WITNESS_REQUIRED")
     for name, timing in timings.items():
         if not isinstance(timing, dict) or timing.get("hip_event_valid") is not True:
             reasons.append(f"HIP_DEVICE_EVENT_INVALID:{name}")

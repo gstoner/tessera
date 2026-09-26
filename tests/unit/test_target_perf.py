@@ -581,3 +581,86 @@ def test_planner_refuses_to_inherit_another_devices_smem_budget() -> None:
         assert planner.peak_tflops == pytest.approx(2.0)
     finally:
         reset_registry()
+
+
+def _timing_sample(sample_id: str, *, device_ns: float = 900, event_ns: float = 920,
+                   target: str = "rocm_gfx1151") -> dict:
+    from tessera.compiler.profiler_timing import build_timing_sample, measured_clock, unavailable_clock
+    return build_timing_sample(
+        sample_id=sample_id, target=target,
+        clocks={
+            "host_wall_ns": measured_clock("host_wall_ns", source="steady_clock", value=1200),
+            "hip_event_ns": measured_clock("hip_event_ns", source="hip_event", value=event_ns),
+            "device_wall_clock_ns": measured_clock(
+                "device_wall_clock_ns", source="device_wall_clock", value=device_ns,
+                instrumented=True, calibrated_against=("hip_event_ns",),
+                eligible_for_promotion=True),
+            "profiler_activity_ns": unavailable_clock(
+                "profiler_activity_ns", source="rocprofiler_activity", reason="NO_KFD"),
+        },
+        artifact_digests={"package": "sha256:abc"}, batch_size=100, warm_state="warm",
+        synchronization="hipEventSynchronize", execution_environment="wsl2")
+
+
+def _wsl_corpus(**extra):
+    corpus = {"version": CORPUS_VERSION, "measured_on": "2026-09-26",
+              "host": "princess-luna-wsl2", "selector_eligible": True,
+              "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}}}
+    corpus.update(extra)
+    return corpus
+
+
+def _witness(*samples):
+    return {"samples": list(samples) or [_timing_sample("a"),
+                                         _timing_sample("b", device_ns=910, event_ns=930)]}
+
+
+def test_wsl_corpus_carrying_admissible_samples_becomes_selector_authority() -> None:
+    """Owner direction 2026-09-25: no bare metal or profiler required."""
+    try:
+        assert apply_corpus(_wsl_corpus(timing_witness=_witness())) == ["radeon_8060s"]
+        assert perf_for_device("radeon_8060s").value("dram_bw_gbps") == 186.8
+    finally:
+        reset_registry()
+
+
+@pytest.mark.parametrize("witness, match", [
+    (None, "timing_witness.samples"),
+    ({"clock": "device_wall_clock_ns", "paired_runs": 6}, "timing_witness.samples"),
+    ({"samples": [_timing_sample("only")]}, "1 admissible"),
+    ({"samples": [_timing_sample("dup"), _timing_sample("dup")]}, "1 admissible"),
+    ({"samples": ["not a sample"]}, "not a timing sample"),
+])
+def test_a_wsl_corpus_without_admissible_evidence_fails_closed(witness, match) -> None:
+    before = perf_for_device("radeon_8060s").measured
+    with pytest.raises(ValueError, match=match):
+        apply_corpus(_wsl_corpus(timing_witness=witness))
+    assert perf_for_device("radeon_8060s").measured == before
+
+
+def test_a_renamed_copy_of_one_sample_counts_once() -> None:
+    """Review: distinct sample_ids over identical clocks are one measurement."""
+    with pytest.raises(ValueError, match="1 admissible"):
+        apply_corpus(_wsl_corpus(timing_witness=_witness(
+            _timing_sample("a"), _timing_sample("renamed"))))
+
+
+def test_witness_samples_must_themselves_be_wsl_samples() -> None:
+    sample = _timing_sample("bm")
+    sample["execution_environment"] = "bare_metal"
+    with pytest.raises(ValueError, match="not a WSL sample"):
+        apply_corpus(_wsl_corpus(timing_witness=_witness(
+            sample, _timing_sample("b", device_ns=910, event_ns=930))))
+
+
+def test_samples_must_be_the_calibrated_devices_own_target() -> None:
+    """gfx1201 evidence cannot calibrate the gfx1151 device profile."""
+    with pytest.raises(ValueError, match="0 admissible"):
+        apply_corpus(_wsl_corpus(timing_witness=_witness(
+            _timing_sample("a", target="rocm_gfx1201"),
+            _timing_sample("b", target="rocm_gfx1201", device_ns=910, event_ns=930))))
+
+
+def test_a_selector_ineligible_wsl_corpus_stays_pruning_only_even_with_samples() -> None:
+    with pytest.raises(ValueError, match="pruning-only"):
+        apply_corpus(_wsl_corpus(selector_eligible=False, timing_witness=_witness()))

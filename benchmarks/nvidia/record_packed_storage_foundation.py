@@ -157,7 +157,10 @@ def record(*, observations: int = 7, amortized_launches: int = 10) -> dict[str, 
             "device_observations": observations,
             "aggregate": "median",
         },
-        "selector_policy": "WSL evidence is selector-ineligible",
+        "selector_policy": (
+            "WSL rows are selector-ineligible until a kernel-side clock witness "
+            "(%globaltimer) is recorded; CUDA events alone do not qualify"
+        ),
         "rows": rows,
     }
 

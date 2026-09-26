@@ -141,12 +141,15 @@ def test_bare_metal_device_event_and_profiler_packet_is_selector_eligible() -> N
     assert corpus["profiler_capture"]["proof"]["dispatch_activity_seen"] is True
 
 
-def test_wsl_packet_cannot_be_finalized_as_selector_authority() -> None:
-    with pytest.raises(ValueError, match="BARE_METAL_REQUIRED"):
+def test_wsl_packet_without_a_kernel_clock_witness_is_not_selector_authority() -> None:
+    """This recorder times with HIP events against host wall only; on WSL the
+    missing piece is a kernel-side clock witness (MASTER_AUDIT 2026-09-25),
+    not bare metal."""
+    with pytest.raises(ValueError, match="KERNEL_CLOCK_WITNESS_REQUIRED"):
         CALIBRATION._finalize(_raw(environment="wsl2"), None, allow_provisional=False)
     corpus = CALIBRATION._finalize(_raw(environment="wsl2"), None, allow_provisional=True)
     assert corpus["selector_eligible"] is False
-    assert "BARE_METAL_REQUIRED" in corpus["ineligibility_reasons"]
+    assert "KERNEL_CLOCK_WITNESS_REQUIRED" in corpus["ineligibility_reasons"]
     assert "ROCPROFILER_ACTIVITY_NOT_COLLECTED" in corpus["ineligibility_reasons"]
 
 

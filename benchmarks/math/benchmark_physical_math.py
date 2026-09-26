@@ -239,6 +239,7 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
     if target not in {"x86", "rocm"} or type(iterations) is not int or iterations <= 0:
         raise ValueError("known target and positive iterations required")
     from tessera import runtime as rt
+    from tessera.compiler.profiler_timing import WSL_WITNESS_MISSING
 
     common = {
         "schema": "tessera.physical_math_evidence.v1",
@@ -281,7 +282,7 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         **common,
         "device": rt._rocm_device_name() or "unknown",
         "selector_eligible": False,
-        "device_event_follow_up": "bare_metal_required",
+        "device_event_follow_up": WSL_WITNESS_MISSING,
         "storage_dtypes": ["f32", "f16", "bf16"],
         "module_policy": "process_lifetime_cache_by_family_chip_kind_dtype",
         "dtype_rows": dtype_rows,

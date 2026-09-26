@@ -7,7 +7,7 @@ import json
 from typing import Any, Mapping
 
 from .profiler_rocm_native import validate_rocm_native_capture
-from .profiler_timing import validate_timing_sample
+from .profiler_timing import is_wsl_environment, validate_timing_sample, wsl_promotion_refusals
 
 
 ROCM_PROFILER_PACKET_SCHEMA_VERSION = "tessera.profiler_rocm_packet.v1"
@@ -42,6 +42,101 @@ def _image_record(image: Mapping[str, Any], role: str) -> dict[str, Any]:
     if not isinstance(resources, Mapping):
         raise ROCmProfilerPacketError(f"{role} image requires resources")
     return dict(image)
+
+
+#: Reasons that describe the *environment* (bare metal, a profiler that needs
+#: KFD) rather than whether the timing is true. On the device-clock-witness
+#: route they are recorded as diagnostic gaps instead of blocking promotion.
+_ENVIRONMENT_REASONS = frozenset({
+    "BARE_METAL_REQUIRED",
+    "ROCPROFILER_CAPTURE_MISSING",
+    "ROCPROFILER_DISPATCH_MISSING",
+    "ROCPROFILER_RUNTIME_CALLBACK_MISSING",
+    "ROCPROFILER_COUNTERS_MISSING",
+    "ROCPROFILER_PC_SAMPLES_MISSING",
+})
+ROUTE_PROFILER = "profiler_correlated"
+ROUTE_DEVICE_CLOCK = "device_clock_witness"
+
+
+def _admission_route(timing: Mapping[str, Any]) -> str:
+    """Which evidence route this timing sample can use.
+
+    ``device_clock_witness`` is the owner-accepted non-profiler method
+    (MASTER_AUDIT, 2026-09-25): on WSL, a promotion-eligible in-kernel device
+    clock whose witness is valid and agrees in the same sample. Derived from
+    the sample every time, never read from a stored field.
+    """
+    clocks = timing["clocks"]
+    device = clocks.get("device_wall_clock_ns", {})
+    if (
+        is_wsl_environment(timing.get("execution_environment", ""))
+        and device.get("valid") is True
+        and device.get("eligible_for_promotion") is True
+        and not wsl_promotion_refusals(str(timing["target"]), clocks)
+    ):
+        return ROUTE_DEVICE_CLOCK
+    return ROUTE_PROFILER
+
+
+def _derive_eligibility(
+    *,
+    timing: Mapping[str, Any],
+    capture: Mapping[str, Any],
+    clean: Mapping[str, Any],
+    probe: Mapping[str, Any],
+    source: Mapping[str, Any],
+    maximum_instrumentation_overhead: float,
+) -> tuple[float, list[str], str, list[str]]:
+    """(overhead, blocking reasons, admission route, diagnostic gaps).
+
+    The single derivation both the builder and the validator run, so a stored
+    packet cannot drop a blocker, claim a route, or relabel gaps (review):
+    the validator recomputes all four from the packet's own inputs.
+    """
+    overhead = float(probe["duration_ns"]) / float(clean["duration_ns"])
+    reasons: list[str] = []
+    if timing.get("execution_environment") != "bare_metal":
+        reasons.append("BARE_METAL_REQUIRED")
+    clocks = timing["clocks"]
+    device = clocks["device_wall_clock_ns"]
+    hip = clocks["hip_event_ns"]
+    activity = clocks["profiler_activity_ns"]
+    if not device.get("valid"):
+        reasons.append("DEVICE_WALL_CLOCK_INVALID")
+    if not (hip.get("valid") or activity.get("valid")):
+        reasons.append("INDEPENDENT_DEVICE_CLOCK_MISSING")
+    if device.get("valid") and not set(device.get("calibrated_against", ())).intersection(
+        {"hip_event_ns", "profiler_activity_ns"}
+    ):
+        reasons.append("DEVICE_WALL_CLOCK_UNCALIBRATED")
+    proof = capture.get("proof", {})
+    if capture.get("provider") != "rocprofiler" or capture.get("status") != "collected":
+        reasons.append("ROCPROFILER_CAPTURE_MISSING")
+    if not proof.get("dispatch_activity_seen"):
+        reasons.append("ROCPROFILER_DISPATCH_MISSING")
+    if not (proof.get("hip_callback_seen") or proof.get("hsa_callback_seen")):
+        reasons.append("ROCPROFILER_RUNTIME_CALLBACK_MISSING")
+    requested = capture.get("requested", {})
+    if requested.get("counters") and not proof.get("counter_records_seen"):
+        reasons.append("ROCPROFILER_COUNTERS_MISSING")
+    if requested.get("pc_sampling") and not proof.get("pc_samples_seen"):
+        reasons.append("ROCPROFILER_PC_SAMPLES_MISSING")
+    if overhead > maximum_instrumentation_overhead:
+        reasons.append("INSTRUMENTATION_OVERHEAD_EXCEEDED")
+    if source.get("worktree_dirty"):
+        reasons.append("SOURCE_WORKTREE_DIRTY")
+    route = _admission_route(timing)
+    diagnostic_gaps: list[str] = []
+    if route == ROUTE_DEVICE_CLOCK:
+        # The witness sample must name the image it calibrates (review): one
+        # genuine sample copied under new sample_ids must not vouch for others.
+        digests = timing.get("artifact_digests", {})
+        if clean.get("image_sha256") not in set(digests.values()):
+            reasons.append("CALIBRATION_IMAGE_UNBOUND")
+        diagnostic_gaps = [r for r in reasons if r in _ENVIRONMENT_REASONS]
+        reasons = [r for r in reasons if r not in _ENVIRONMENT_REASONS]
+    return overhead, reasons, route, diagnostic_gaps
 
 
 def build_rocm_profiler_packet(
@@ -83,41 +178,13 @@ def build_rocm_profiler_packet(
         raise ROCmProfilerPacketError("application images do not bind the timing calibration sample")
     if maximum_instrumentation_overhead < 1.0:
         raise ROCmProfilerPacketError("instrumentation overhead limit must be at least 1.0")
-    overhead = float(probe["duration_ns"]) / float(clean["duration_ns"])
-    reasons: list[str] = []
-    if timing.get("execution_environment") != "bare_metal":
-        reasons.append("BARE_METAL_REQUIRED")
-    clocks = timing["clocks"]
-    device = clocks["device_wall_clock_ns"]
-    hip = clocks["hip_event_ns"]
-    activity = clocks["profiler_activity_ns"]
-    if not device.get("valid"):
-        reasons.append("DEVICE_WALL_CLOCK_INVALID")
-    if not (hip.get("valid") or activity.get("valid")):
-        reasons.append("INDEPENDENT_DEVICE_CLOCK_MISSING")
-    if device.get("valid") and not set(device.get("calibrated_against", ())).intersection(
-        {"hip_event_ns", "profiler_activity_ns"}
-    ):
-        reasons.append("DEVICE_WALL_CLOCK_UNCALIBRATED")
-    proof = capture.get("proof", {})
-    if capture.get("provider") != "rocprofiler" or capture.get("status") != "collected":
-        reasons.append("ROCPROFILER_CAPTURE_MISSING")
-    if not proof.get("dispatch_activity_seen"):
-        reasons.append("ROCPROFILER_DISPATCH_MISSING")
-    if not (proof.get("hip_callback_seen") or proof.get("hsa_callback_seen")):
-        reasons.append("ROCPROFILER_RUNTIME_CALLBACK_MISSING")
-    requested = capture.get("requested", {})
-    if requested.get("counters") and not proof.get("counter_records_seen"):
-        reasons.append("ROCPROFILER_COUNTERS_MISSING")
-    if requested.get("pc_sampling") and not proof.get("pc_samples_seen"):
-        reasons.append("ROCPROFILER_PC_SAMPLES_MISSING")
-    if overhead > maximum_instrumentation_overhead:
-        reasons.append("INSTRUMENTATION_OVERHEAD_EXCEEDED")
-    if source.get("worktree_dirty"):
-        reasons.append("SOURCE_WORKTREE_DIRTY")
     source_commit = source.get("source_commit")
     if not isinstance(source_commit, str) or len(source_commit) != 40:
         raise ROCmProfilerPacketError("ROCm profiler packet requires full source commit")
+    overhead, reasons, route, diagnostic_gaps = _derive_eligibility(
+        timing=timing, capture=capture, clean=clean, probe=probe, source=source,
+        maximum_instrumentation_overhead=maximum_instrumentation_overhead)
+    device = timing["clocks"]["device_wall_clock_ns"]
     packet = {
         "schema": ROCM_PROFILER_PACKET_SCHEMA_VERSION,
         "work_item": "TPROF-ROCM-NATIVE-1",
@@ -142,6 +209,8 @@ def build_rocm_profiler_packet(
         "eligible_for_regression": bool(device.get("valid")) and overhead > 0,
         "eligible_for_promotion": not reasons,
         "ineligibility_reasons": reasons,
+        "admission_route": route,
+        "diagnostic_gaps": diagnostic_gaps,
         "calibration_status": "promotable" if not reasons else "retain_only",
     }
     packet["packet_sha256"] = _digest(packet)
@@ -186,6 +255,25 @@ def validate_rocm_profiler_packet(payload: Mapping[str, Any]) -> None:
         raise ROCmProfilerPacketError("invalid ROCm profiler ineligibility reasons")
     if payload.get("eligible_for_promotion") and reasons:
         raise ROCmProfilerPacketError("promotion-eligible ROCm packet has blockers")
+    source = payload.get("source")
+    maximum = comparison.get("maximum_duration_ratio")
+    if not isinstance(source, Mapping) or not isinstance(maximum, (int, float)):
+        raise ROCmProfilerPacketError("ROCm profiler packet requires source and overhead limit")
+    _, derived, route, gaps = _derive_eligibility(
+        timing=timing, capture=capture, clean=clean, probe=probe, source=source,
+        maximum_instrumentation_overhead=float(maximum))
+    stored_route = payload.get("admission_route", ROUTE_PROFILER)
+    if stored_route != route:
+        raise ROCmProfilerPacketError(
+            f"ROCm packet claims admission route {stored_route!r}, but its inputs "
+            f"support {route!r}")
+    if reasons != derived:
+        raise ROCmProfilerPacketError(
+            f"ROCm packet reasons {reasons} differ from those its inputs derive {derived}")
+    if payload.get("diagnostic_gaps", []) != gaps:
+        raise ROCmProfilerPacketError("ROCm diagnostic gaps differ from those its inputs derive")
+    if bool(payload.get("eligible_for_promotion")) != (not derived):
+        raise ROCmProfilerPacketError("ROCm promotion eligibility differs from its derived reasons")
     unsigned = dict(payload)
     packet_digest = unsigned.pop("packet_sha256", None)
     if _digest(unsigned) != packet_digest:
@@ -194,6 +282,8 @@ def validate_rocm_profiler_packet(payload: Mapping[str, Any]) -> None:
 
 __all__ = [
     "ROCM_PROFILER_PACKET_SCHEMA_VERSION",
+    "ROUTE_DEVICE_CLOCK",
+    "ROUTE_PROFILER",
     "ROCmProfilerPacketError",
     "build_rocm_profiler_packet",
     "validate_rocm_profiler_packet",

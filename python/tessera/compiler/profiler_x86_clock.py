@@ -132,21 +132,51 @@ def invariant_tsc() -> bool:
     return "constant_tsc" in flags and "nonstop_tsc" in flags
 
 
+def _affinity() -> set[int] | None:
+    getter = getattr(os, "sched_getaffinity", None)
+    return set(getter(0)) if getter is not None else None
+
+
+def clocksource() -> str | None:
+    """The kernel's current clocksource, e.g. ``tsc`` or
+    ``hyperv_clocksource_tsc_page`` (WSL2); None when unreadable."""
+    try:
+        return Path("/sys/devices/system/clocksource/clocksource0/current_clocksource"
+                    ).read_text().strip() or None
+    except OSError:
+        return None
+
+
 def calibrate(*, intervals: int = CALIBRATION_INTERVALS,
               seconds: float = CALIBRATION_SECONDS) -> dict[str, Any]:
-    """TSC Hz from separate busy intervals on the current (pinned) CPU."""
-    rates, windows = [], []
-    for _ in range(intervals):
-        start = snapshot()
-        deadline = time.perf_counter() + seconds
-        while time.perf_counter() < deadline:
-            pass
-        end = snapshot()
-        if start.cpu != end.cpu:
-            raise X86ClockError("calibration migrated between CPUs; pin the process first")
-        rates.append((end.tsc - start.tsc) * 1e9 / (end.raw_ns - start.raw_ns))
-        windows.append({"raw_start_ns": start.raw_ns, "raw_end_ns": end.raw_ns,
-                        "tsc_start": start.tsc, "tsc_end": end.tsc, "cpu": start.cpu})
+    """TSC Hz from separate busy intervals on ONE CPU.
+
+    The calling thread is pinned for the calibration only and its original
+    CPU set is restored afterwards (X86-WITNESS-PIN-1): the timed regions that
+    follow run with the process's normal CPU set, so a kernel that spawns
+    threads is measured in its production configuration.
+    """
+    setter = getattr(os, "sched_setaffinity", None)
+    original = _affinity()
+    if setter is None or original is None:
+        raise X86ClockError("this host cannot pin a thread for TSC calibration")
+    cpu = snapshot().cpu
+    setter(0, {cpu})
+    try:
+        rates, windows = [], []
+        for _ in range(intervals):
+            start = snapshot()
+            deadline = time.perf_counter() + seconds
+            while time.perf_counter() < deadline:
+                pass
+            end = snapshot()
+            if start.cpu != end.cpu or start.cpu != cpu:
+                raise X86ClockError("calibration migrated between CPUs despite pinning")
+            rates.append((end.tsc - start.tsc) * 1e9 / (end.raw_ns - start.raw_ns))
+            windows.append({"raw_start_ns": start.raw_ns, "raw_end_ns": end.raw_ns,
+                            "tsc_start": start.tsc, "tsc_end": end.tsc, "cpu": start.cpu})
+    finally:
+        setter(0, original)
     hz = statistics.median(rates)
     spread = (max(rates) - min(rates)) / hz
     if spread > CALIBRATION_SPREAD_LIMIT:
@@ -155,7 +185,14 @@ def calibrate(*, intervals: int = CALIBRATION_INTERVALS,
 
 
 def measure(region: Callable[[], Any], calibration: dict[str, Any]) -> dict[str, Any]:
-    """Time one region with the TSC and the raw clock, on the calibrated CPU."""
+    """Time one region with the TSC and the raw clock, unpinned.
+
+    The region runs with the thread's normal CPU set; the window records that
+    set's size against the host's CPU count and the kernel clocksource, so a
+    validator can confirm the region was not confined and that reads on two
+    CPUs are comparable.
+    """
+    affinity = _affinity()
     host_start = time.perf_counter_ns()
     start = snapshot()
     region()
@@ -167,6 +204,9 @@ def measure(region: Callable[[], Any], calibration: dict[str, Any]) -> dict[str,
     return {"raw_start_ns": start.raw_ns, "raw_end_ns": end.raw_ns,
             "tsc_start": start.tsc, "tsc_end": end.tsc,
             "logical_cpu_start": start.cpu, "logical_cpu_end": end.cpu,
+            "timed_affinity_cpus": len(affinity) if affinity is not None else None,
+            "host_logical_cpus": os.cpu_count(),
+            "clocksource": clocksource(),
             "host_wall_ns": host_end - host_start}
 
 
@@ -190,6 +230,7 @@ def witness_clocks(calibration: dict[str, Any], window: dict[str, Any], *,
             provenance={"invariant_tsc": invariant_tsc(),
                         "logical_cpu_start": window["logical_cpu_start"],
                         "logical_cpu_end": window["logical_cpu_end"],
+                        "clocksource": window.get("clocksource"),
                         "calibrated_frequency_hz": calibration["frequency_hz"],
                         "frequency_source": "independent_calibration_interval",
                         "calibration_spread": calibration["spread"],
@@ -303,25 +344,27 @@ def verify_witness_sample(sample: Any) -> str | None:
         return "calibrated frequency is not the median of the calibration rates"
     if (max(rates) - min(rates)) / hz > CALIBRATION_SPREAD_LIMIT:
         return "calibration intervals disagree beyond the spread limit"
-    cpus = {interval["cpu"] for interval in windows} | {
-        window["logical_cpu_start"], window["logical_cpu_end"]}
-    if len(cpus) != 1:
-        return f"calibration and measurement ran on different CPUs {sorted(cpus)}"
+    calibration_cpus = {interval["cpu"] for interval in windows}
+    if len(calibration_cpus) != 1:
+        return f"calibration intervals ran on different CPUs {sorted(calibration_cpus)}"
+    # X86-WITNESS-PIN-1: the timed region must run with the host's full CPU
+    # set, not the calibration pin, or a threaded kernel is measured confined.
+    if (not isinstance(window.get("timed_affinity_cpus"), int)
+            or window.get("timed_affinity_cpus") != window.get("host_logical_cpus")):
+        return ("timed region did not run with the host's full CPU set "
+                f"({window.get('timed_affinity_cpus')} of {window.get('host_logical_cpus')})")
+    cpus = calibration_cpus | {window["logical_cpu_start"], window["logical_cpu_end"]}
+    from .profiler_timing import TSC_SYNCHRONIZED_CLOCKSOURCES
+    if len(cpus) != 1 and window.get("clocksource") not in TSC_SYNCHRONIZED_CLOCKSOURCES:
+        return (f"TSC read on CPUs {sorted(cpus)} under clocksource "
+                f"{window.get('clocksource')!r}, which does not vouch for cross-CPU TSC sync")
+    if prov.get("clocksource") != window.get("clocksource"):
+        return "tsc provenance clocksource disagrees with its measurement window"
     if window["raw_start_ns"] <= max(interval["raw_end_ns"] for interval in windows):
         return "measurement window does not follow the calibration intervals"
     return None
 
 
-def pin_current_cpu() -> int:
-    """Pin to the CPU we are on now, so calibration and measurement share it."""
-    cpu = snapshot().cpu
-    setaffinity = getattr(os, "sched_setaffinity", None)
-    if setaffinity is None:
-        raise X86ClockError("this host cannot pin a process to one CPU")
-    setaffinity(0, {cpu})
-    return cpu
-
-
-__all__ = ["X86ClockError", "calibrate", "calibration_digest", "invariant_tsc", "measure",
-           "pin_current_cpu", "snapshot", "verify_witness_sample", "witness_clocks",
+__all__ = ["X86ClockError", "calibrate", "calibration_digest", "clocksource", "invariant_tsc", "measure",
+           "snapshot", "verify_witness_sample", "witness_clocks",
            "witness_sample"]

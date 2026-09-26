@@ -101,7 +101,9 @@ def _calibration(*, cpu: int = _CPU) -> dict[str, Any]:
 
 
 def _witness(row: dict[str, Any], *, tsc_scale: float = 1.0, image: str | None = None,
-             env: str = "wsl2", measure_cpu: int = _CPU, gap_ns: int = 100_000) -> dict[str, Any]:
+             env: str = "wsl2", measure_cpu: int = _CPU, gap_ns: int = 100_000,
+             timed_cpus: int = 16, clocksource: str | None = "hyperv_clocksource_tsc_page",
+             ) -> dict[str, Any]:
     from tessera.compiler.profiler_x86_clock import witness_sample
 
     timing = row["timing"]
@@ -111,7 +113,8 @@ def _witness(row: dict[str, Any], *, tsc_scale: float = 1.0, image: str | None =
     window = {"raw_start_ns": start, "raw_end_ns": start + raw_ns,
               "tsc_start": 10, "tsc_end": 10 + int(raw_ns * _HZ / 1e9 * tsc_scale),
               "logical_cpu_start": measure_cpu, "logical_cpu_end": measure_cpu,
-              "host_wall_ns": raw_ns + 1000}
+              "timed_affinity_cpus": timed_cpus, "host_logical_cpus": 16,
+              "clocksource": clocksource, "host_wall_ns": raw_ns + 1000}
     return witness_sample(_calibration(), window,
                           {"image": image or row["compile"]["digests"]["image"]},
                           execution_environment=env)
@@ -175,6 +178,16 @@ def test_every_row_witnessed_takes_the_tsc_route_and_demotes_environment_tags() 
     validate_x86_profiler_packet(packet)
 
 
+def test_an_unconfined_region_may_read_the_tsc_on_another_cpu() -> None:
+    """X86-WITNESS-PIN-1: calibration is pinned, the timed region is not, so
+    the end read may land on another CPU; a TSC-synchronized clocksource makes
+    that comparable, and agreement with the raw clock still has to hold."""
+    benchmark = _benchmark()
+    for row in benchmark["rows"]:
+        row["timing_witness"] = _witness(row, measure_cpu=_CPU + 5)
+    assert _packet(benchmark)["admission_route"] == "tsc_witness"
+
+
 def test_a_regressed_benchmark_never_becomes_a_promote_packet() -> None:
     """Review P0: a benchmark whose own verdict is `retain` promoted on the
     tsc route, because only `reject` was read from the benchmark."""
@@ -208,7 +221,8 @@ def test_avx512_visibility_still_blocks_on_the_tsc_route() -> None:
 
 
 @pytest.mark.parametrize("damage", [
-    "missing_row", "disagreeing_tsc", "other_image", "migrated_cpu", "samples_not_bound",
+    "missing_row", "disagreeing_tsc", "other_image", "migrated_cpu_unsynced_clocksource",
+    "confined_timed_region", "samples_not_bound",
 ])
 def test_one_bad_row_keeps_the_profiler_route(damage: str) -> None:
     benchmark = _witnessed()
@@ -219,8 +233,11 @@ def test_one_bad_row_keeps_the_profiler_route(damage: str) -> None:
         row["timing_witness"] = _witness(row, tsc_scale=1.10)
     elif damage == "other_image":
         row["timing_witness"] = _witness(row, image="f" * 64)
-    elif damage == "migrated_cpu":
-        row["timing_witness"] = _witness(row, measure_cpu=_CPU + 1)
+    elif damage == "migrated_cpu_unsynced_clocksource":
+        row["timing_witness"] = _witness(row, measure_cpu=_CPU + 1, clocksource="acpi_pm")
+    elif damage == "confined_timed_region":
+        # X86-WITNESS-PIN-1: a region timed under a one-CPU mask is refused.
+        row["timing_witness"] = _witness(row, timed_cpus=1)
     else:
         # The witnessed region is 25% longer than the samples it claims to
         # bracket: the verdict's numbers are not what the witness measured.

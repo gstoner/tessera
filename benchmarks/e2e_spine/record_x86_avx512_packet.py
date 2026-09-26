@@ -228,7 +228,7 @@ def _two_run_samples_ns(call: Callable[[], object], *, samples: int,
 def _witnessed_medians_ns(
     call: Callable[[], object], *, family: str, samples: int, iterations: int,
     calibration: dict[str, Any], digests: dict[str, str], environment: str,
-    measurement_cpu: int,
+    calibration_cpu: int,
 ) -> tuple[list[list[float]], list[dict[str, Any]], list[float]]:
     """kernel_wall run medians from TSC-witnessed windows, plus the witnesses.
 
@@ -272,7 +272,7 @@ def _witnessed_medians_ns(
                 raise RuntimeError(f"{family}: witness does not re-verify: {reason}")
             witnesses.append({"cohort": cohort, "sample": sample,
                               "iterations_in_window": iterations,
-                              "measurement_cpu": measurement_cpu, "witness": witness})
+                              "calibration_cpu": calibration_cpu, "witness": witness})
             cohorts[cohort].append(tsc_ns / iterations)
     return [list(c) for c in cohorts], witnesses, agreement
 
@@ -467,8 +467,12 @@ def record(*, samples: int, iterations: int,
     environment = execution_environment()
     fixtures = load_fixture_corpus()
 
-    measurement_cpu = clock.pin_current_cpu()
+    # Calibration pins itself to one CPU and restores the CPU set, so every
+    # timed region runs unconfined (X86-WITNESS-PIN-1); the witness records
+    # the region's CPU-set size and the clocksource, and the validator checks
+    # both.
     calibration = clock.calibrate()
+    calibration_cpu = calibration["windows"][0]["cpu"]
 
     fixture_rows, cache_rows, benchmark_rows, resource_rows = [], [], [], []
     witness_rows: dict[str, Any] = {}
@@ -525,7 +529,7 @@ def record(*, samples: int, iterations: int,
         kernel_samples, witnesses, agreement = _witnessed_medians_ns(
             _direct_call(family, timing, timing_bindings), family=family,
             samples=samples, iterations=iterations, calibration=calibration,
-            digests=digests, environment=environment, measurement_cpu=measurement_cpu,
+            digests=digests, environment=environment, calibration_cpu=calibration_cpu,
         )
         e2e_samples = _two_run_samples_ns(
             lambda: rt.launch(timing_artifact, timing_bindings),
@@ -597,7 +601,7 @@ def record(*, samples: int, iterations: int,
         "device": {"model": model, "flags": flags, "host": hostname,
                    "kernel_release": platform.release()},
         "execution_environment": environment,
-        "measurement_cpu": measurement_cpu,
+        "calibration_cpu": calibration_cpu,
         "runtime_library_build": library_record,
         "tsc_calibration": calibration,
         "timing_witness": witness_rows,

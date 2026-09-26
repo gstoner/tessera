@@ -171,8 +171,9 @@ def run(*, trials: int, warmup: int, timing_witness: bool = False) -> dict[str, 
     rng = np.random.default_rng(4004)
     calibration = None
     if timing_witness:
-        from tessera.compiler.profiler_x86_clock import calibrate, pin_current_cpu
-        pin_current_cpu()
+        from tessera.compiler.profiler_x86_clock import calibrate
+        # Calibration pins itself and restores the CPU set; the trials then
+        # run unconfined (X86-WITNESS-PIN-1).
         calibration = calibrate()
     rows = []
     for shape in SHAPES:

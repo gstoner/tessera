@@ -363,4 +363,6 @@ def test_gfx1201_split_k_workspace_is_typed_and_the_launcher_checks_it():
             tile_ir=package.tile_ir, target_ir=package.target_ir)
         result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": np.zeros((16, 256), np.float32)},
                                      "scalars": {"M": 16, "N": 256, "K": 2048}})
-        assert not (result.get("ok") and result.get("execution_kind") == "native_gpu"), json.dumps(result, default=str)
+        assert not result.get("ok"), json.dumps(result, default=str)
+        # Refused by the split-K checks, not by something unrelated.
+        assert "split-K" in str(result.get("reason") or result.get("error")), json.dumps(result, default=str)

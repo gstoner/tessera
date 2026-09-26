@@ -140,6 +140,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "ROCM_LOWERING_LAYOUT_NOT_LDS",
             "ROCM_LOWERING_UNCONSUMED_STORAGE_PACK",
             "ROCM_TILE_UNSUPPORTED_DTYPE",
+            "ROCM_FRAGMENT_STORE_EPILOGUE",
+            "ROCM_FRAGMENT_TRANSPOSE_UNSUPPORTED",
         ),
         pass_kind="lowering",
         sprint="ROCm Tile-IR convergence",
@@ -174,6 +176,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "ROCM_WAVE_LDS_OVERLAPPING_WRITE",
             "ROCM_WAVE_LDS_UNSUPPORTED_BARRIER_KIND",
             "ROCM_WAVE_LDS_ROLE_UNRESOLVED",
+            "ROCM_WAVE_LDS_UNSUPPORTED_NV_CONSTRUCT",
         ),
         must_run_after=("rocm-wave-lds-pipeline",),
         pass_kind="verifier",
@@ -543,6 +546,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "AUTODIFF_STOCHASTIC_NO_PRODUCT",
             "AUTODIFF_STOCHASTIC_UNKEYED",
             "AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED",
+            "AUTODIFF_WHILE_DYNAMIC_STATE",
         ),
         pass_kind="transform",
         sprint="W4-STRUCTURED-AD-2026-08-11",
@@ -586,6 +590,35 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         diagnostic_codes=(),
         pass_kind="transform",
         sprint="C4 (TIRx)",
+    ),
+    PassMetadata(
+        name="tessera-device-clock-span",
+        cpp_class="DeviceClockSpanPass",
+        summary=(
+            "Stamps each gpu.func kernel's execution span with the target's "
+            "constant-rate device clock (rocm: llvm.readsteadycounter; nvidia: "
+            "%globaltimer) into one appended !llvm.ptr<1> span-buffer argument: "
+            "block leader atomic umin at entry then a barrier; a barrier then "
+            "atomic umax before the single final gpu.return. The start stamp "
+            "follows the entry block's last alloca and only constants, casts, "
+            "undef/poison and descriptor construction may precede it. Its "
+            "consumer is the empty device-clock marker kernel "
+            "(tessera.compiler.native_device_clock); stamping a measured kernel "
+            "was measured to change its codegen."
+        ),
+        input_dialects=("gpu", "llvm", "arith", "scf", "memref"),
+        output_dialects=("gpu", "llvm", "arith", "scf"),
+        preserved_attrs=("tessera.device_clock_span",),
+        diagnostic_codes=(
+            "TESSERA_DEVICE_CLOCK_ABI",
+            "TESSERA_DEVICE_CLOCK_ALLOCA_AFTER_WORK",
+            "TESSERA_DEVICE_CLOCK_ALREADY_INSTRUMENTED",
+            "TESSERA_DEVICE_CLOCK_BACKEND",
+            "TESSERA_DEVICE_CLOCK_NO_KERNEL",
+            "TESSERA_DEVICE_CLOCK_UNSTRUCTURED",
+        ),
+        pass_kind="transform",
+        sprint="DEVICE-CLOCK-MARKER-2026-09-26",
     ),
     PassMetadata(
         name="tessera-distribution-lower",
@@ -682,6 +715,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings", "tessera.sparse_policy"),
         preserved_attrs=("numeric_policy", "tessera.launch_bindings", "tessera.dim_names"),
         pass_kind="lowering", sprint="IR-NATIVE-FOUNDATION-1",
+        diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", ),
     ),
     PassMetadata(
         name="tessera-ir-contracts",
@@ -727,6 +761,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         diagnostic_codes=(
             "LAYOUT_LEGALITY_UNKNOWN_LAYOUT",
             "LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH",
+            "LAYOUT_LEGALITY_SCALE_WITHOUT_LAYOUT",
         ),
         pass_kind="verifier",
         sprint="V2 + V4a",
@@ -1045,6 +1080,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "TILE_PIPELINE_RING_UNDERIVED",
             "TILE_TMA_EXPECT_MISMATCH",
             "TILE_TMA_DESC_ORIGIN_UNRESOLVED",
+            "TILE_ROLE_RELATION_INVALID",
         ),
         pass_kind="verifier",
         sprint="TILE-SYNC-TYPED-2026-08-15",
@@ -1106,6 +1142,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "WARPSPEC_LOOP_COUNT_DISAGREE",
             "WARPSPEC_MISSING_VISIBILITY_FENCE",
             "WARPSPEC_USE_AFTER_FREE",
+            "WARPSPEC_MMA_NOT_TOKEN_SYNCED",
+            "WARPSPEC_MMA_TOKEN_NOT_RETIRED",
         ),
         pass_kind="verifier",
         sprint="C6 (TIRx)",

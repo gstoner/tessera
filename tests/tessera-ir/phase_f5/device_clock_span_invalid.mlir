@@ -76,3 +76,18 @@ module attributes {gpu.container_module} {
     }
   }
 }
+
+// -----
+
+module attributes {gpu.container_module} {
+  gpu.module @m {
+    gpu.func @arith_before_alloca(%a: !llvm.ptr<1>, %x: f32) kernel {
+      // expected-error @below {{TESSERA_DEVICE_CLOCK_ALLOCA_AFTER_WORK}}
+      %y = arith.mulf %x, %x : f32
+      %one = llvm.mlir.constant(1 : i64) : i64
+      %s = llvm.alloca %one x f32 : (i64) -> !llvm.ptr
+      llvm.store %y, %s : f32, !llvm.ptr
+      gpu.return
+    }
+  }
+}

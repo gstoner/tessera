@@ -65,7 +65,9 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Interfaces/CastInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Interfaces/ViewLikeInterface.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
@@ -74,6 +76,19 @@ using namespace mlir;
 
 namespace tessera {
 namespace {
+
+// Setup that may precede the start stamp: materializing constants, casting,
+// viewing and assembling descriptors. Anything else -- even pure arithmetic
+// whose result is used later -- is work the span must include (review of
+// #856), so the pass refuses rather than stamping after it.
+bool isSetupOp(Operation &op) {
+  if (op.getNumRegions() != 0 || !isMemoryEffectFree(&op))
+    return false;
+  return op.hasTrait<OpTrait::ConstantLike>() || isa<CastOpInterface>(op) ||
+         isa<ViewLikeOpInterface>(op) ||
+         isa<LLVM::UndefOp, LLVM::PoisonOp, LLVM::ZeroOp, LLVM::InsertValueOp,
+             LLVM::AddrSpaceCastOp, memref::ViewOp, memref::MemorySpaceCastOp>(op);
+}
 
 constexpr StringLiteral kSpanAttr = "tessera.device_clock_span";
 
@@ -173,15 +188,14 @@ struct DeviceClockSpanPass
         lastAlloca = &op;
     if (lastAlloca) {
       for (Operation &op : block) {
-        // Memory-effect-free is not "cheap": an scf.for of pure arithmetic
-        // would run before the stamp and be missed (review). Only region-free,
-        // effect-free setup (constants, casts, views) may precede it.
-        if (!isa<LLVM::AllocaOp, memref::AllocaOp>(op) &&
-            (op.getNumRegions() != 0 || !isMemoryEffectFree(&op)))
+        // Only setup may precede the stamp (see isSetupOp): an scf.for or an
+        // arith chain would run before it and be missed (reviews).
+        if (!isa<LLVM::AllocaOp, memref::AllocaOp>(op) && !isSetupOp(op))
           return op.emitError(
               "TESSERA_DEVICE_CLOCK_ALLOCA_AFTER_WORK: an alloca follows an op "
-              "with memory effects; the start stamp cannot both precede the "
-              "work and keep every alloca in the entry block");
+              "that is not setup (constants, casts, views, descriptors); the "
+              "start stamp cannot both precede the work and keep every alloca "
+              "in the entry block");
         if (&op == lastAlloca)
           break;
       }

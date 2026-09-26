@@ -107,6 +107,18 @@
       },
       "oracle": [[5.0, 6.0], [1.0, 2.0]],
       "tolerance": {"atol": 0.0, "rtol": 0.0, "equal_nan": false}
+    },
+    {
+      "fixture_id": "cholesky-f32-3x3-spd-v1",
+      "family": "linalg",
+      "dtype": "fp32",
+      "shape": [3, 3],
+      "semantic_contract": "lower Cholesky factor L of an SPD matrix A=L@L.T; zero strict upper triangle; oracle from numpy float64 cast to fp32",
+      "inputs": {
+        "matrix": [[4.0, 2.0, -2.0], [2.0, 10.0, 0.5], [-2.0, 0.5, 3.5]]
+      },
+      "oracle": [[2.0, 0.0, 0.0], [1.0, 3.0, 0.0], [-1.0, 0.5, 1.5]],
+      "tolerance": {"atol": 2e-6, "rtol": 2e-6, "equal_nan": false}
     }
   ]
 }

@@ -404,3 +404,92 @@ def test_status_bearing_abis_exist_for_every_sealed_apple_gpu_route() -> None:
         assert f'extern "C" int32_t {symbol}(' in runtime_source, (
             f"{symbol} was removed; the apple_gpu packet cannot prove Metal "
             "placement without it")
+
+
+# Sync AVX512-E2E-PACKETS-2026-09-26: the two Zen 5 hosts are separate lanes.
+_AVX512_HOSTS = {
+    "x86_64_avx512_strix_halo": "AMD RYZEN AI MAX+ 395",
+    "x86_64_avx512_granite_ridge": "AMD Ryzen 7 9800X3D",
+}
+_WITNESS_WRAPPER_KEYS = {"cohort", "sample", "iterations_in_window", "measurement_cpu"}
+
+
+def test_x86_avx512_hosts_are_separate_registrations() -> None:
+    """Evidence never transfers between the two Zen 5 parts, so neither key is shared."""
+    registrations = {
+        row.architecture: row for row in FLEET_REGISTRATIONS if row.target == "x86"
+    }
+    assert "x86_64_avx512" not in registrations, "the shared AVX-512 key is back"
+    for architecture in _AVX512_HOSTS:
+        assert architecture in registrations
+    families = {registrations[a].families for a in _AVX512_HOSTS}
+    assert len(families) == 1, "the two Zen 5 lanes must owe the same families"
+
+
+def test_x86_avx512_recorder_refuses_the_other_host() -> None:
+    import importlib.util
+
+    path = REPO_ROOT / "benchmarks/e2e_spine/record_x86_avx512_packet.py"
+    spec = importlib.util.spec_from_file_location("record_x86_avx512_packet", path)
+    assert spec is not None and spec.loader is not None
+    recorder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(recorder)
+    assert recorder.host_architecture("AMD RYZEN AI MAX+ 395 w/ Radeon 8060S") == (
+        "x86_64_avx512_strix_halo")
+    assert recorder.host_architecture("AMD Ryzen 7 9800X3D 8-Core Processor") == (
+        "x86_64_avx512_granite_ridge")
+    assert set(recorder.HOST_ARCHITECTURES.values()) == set(_AVX512_HOSTS)
+    with pytest.raises(RuntimeError, match="not an assigned"):
+        recorder.host_architecture("AMD Ryzen Threadripper 3970X 32-Core Processor")
+
+
+@pytest.mark.parametrize("architecture", sorted(_AVX512_HOSTS))
+def test_x86_avx512_packet_is_host_pinned_witnessed_and_optimized(architecture: str) -> None:
+    """Each AVX-512 packet: its own host, registered families only, a TSC
+    witness bound to each timed image, and an optimized runtime library."""
+    from tessera.compiler.profiler_timing import validate_timing_sample
+    from tessera.compiler.runtime_library_build import is_optimized
+
+    packet = discover_packets().get(("x86", architecture))
+    assert packet is not None, f"x86/{architecture} has no sealed packet"
+    packet_dir, _ = packet
+    report = json.loads((packet_dir / "report.json").read_text(encoding="utf-8"))
+    resources = json.loads((packet_dir / "resources.json").read_text(encoding="utf-8"))
+    registered = next(
+        row.families for row in FLEET_REGISTRATIONS
+        if (row.target, row.architecture) == ("x86", architecture))
+    assert set(report["scope"]) <= set(registered)
+    host = _AVX512_HOSTS[architecture]
+    assert report["device"]["identity"].split(" | ", 1)[1].startswith(host)
+    assert resources["device"]["model"].startswith(host)
+
+    stamp = resources["runtime_library_build"]
+    assert stamp["target"] == "tessera_x86_elementwise"
+    assert stamp["optimized"] is True and is_optimized(stamp["level"])
+
+    rows = {row["family"]: row for row in resources["rows"]}
+    assert set(rows) == set(report["scope"])
+    for row in rows.values():
+        assert row["runtime_library_build"] == stamp
+    kernel_rows = [row for row in report["benchmarks"] if row["timing_domain"] == "kernel_wall"]
+    assert {row["family"] for row in kernel_rows} == set(report["scope"])
+    for row in kernel_rows:
+        assert row["timing_source"] == "tsc_rdtscp_witnessed_by_clock_monotonic_raw"
+        assert row["resource_fingerprint"] == rows[row["family"]]["resource_fingerprint"]
+
+    environment = resources["execution_environment"]
+    assert environment in {"wsl2", "bare_metal"}
+    for family in report["scope"]:
+        witness = resources["timing_witness"][family]
+        assert witness["timing_domain"] == "kernel_wall"
+        agreement = witness["agreement"]
+        assert agreement["max_relative_error"] <= agreement["band"] <= 0.05
+        assert len(witness["samples"]) == agreement["windows"] >= 4
+        for sample in witness["samples"]:
+            payload = {k: v for k, v in sample.items() if k not in _WITNESS_WRAPPER_KEYS}
+            validate_timing_sample(payload)  # under WSL this re-checks TSC vs raw
+            assert payload["execution_environment"] == environment
+            assert payload["artifact_digests"]["image"] == rows[family]["image_digest"]
+            tsc = payload["clocks"]["tsc_cycles"]
+            assert tsc["valid"] is True and tsc["eligible_for_promotion"] is True
+            assert tsc["provenance"]["frequency_source"] == "independent_calibration_interval"

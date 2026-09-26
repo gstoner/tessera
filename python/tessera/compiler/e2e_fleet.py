@@ -67,10 +67,21 @@ FLEET_REGISTRATIONS: tuple[FleetRegistration, ...] = (
         "x86", "x86_64_base", "x86", ("softmax", "reduction"),
         "packet_pending", "Portable non-AVX512 x86 scope awaits an NR2-host packet.",
     ),
+    # The two Zen 5 AVX-512 hosts are separate proof lanes (sync
+    # AVX512-E2E-PACKETS-2026-09-26): the same ISA on a different part is not
+    # the same evidence, so each host gets its own (target, architecture) key
+    # and the recorder refuses to write a packet for the other host's key.
     FleetRegistration(
-        "x86", "x86_64_avx512", "x86",
+        "x86", "x86_64_avx512_strix_halo", "x86",
         ("matmul", "softmax", "reduction", "attention", "linalg"),
-        "packet_pending", "AVX512 x86 scope awaits a Strix Halo host packet.",
+        "packet_pending",
+        "AVX512 x86 scope awaits a Princess-Luna (Ryzen AI MAX+ 395) host packet.",
+    ),
+    FleetRegistration(
+        "x86", "x86_64_avx512_granite_ridge", "x86",
+        ("matmul", "softmax", "reduction", "attention", "linalg"),
+        "packet_pending",
+        "AVX512 x86 scope awaits a Tajasarus (Ryzen 7 9800X3D) host packet.",
     ),
     FleetRegistration(
         "nvidia_sm120", "sm_120a", "nvidia",

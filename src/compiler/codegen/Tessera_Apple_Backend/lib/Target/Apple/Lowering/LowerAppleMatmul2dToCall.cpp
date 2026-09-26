@@ -87,6 +87,14 @@ struct LowerAppleMatmul2dToCallPass
     state.addAttribute("status", builder.getStringAttr("executable"));
     state.addAttribute("framework", builder.getStringAttr("Metal"));
     state.addAttribute("dtype", builder.getStringAttr(elementName(aElem) + "x" + elementName(bElem)));
+    // Carried from the op's verified `accumulate` (only "f32" exists: a
+    // matmul2d half/bfloat destination is fp32 accumulation rounded once,
+    // APPLE-ACCUM-1), spelled in the Decision #15a name the runtime reads.
+    auto accumulate = op->getAttrOfType<StringAttr>("accumulate");
+    if (!accumulate || accumulate.getValue() != "f32") {
+      op->emitOpError("APPLE_MATMUL2D_ACCUM: matmul2d lowers only an f32 accumulator");
+      return false;
+    }
     state.addAttribute("tessera_apple.accumulate", builder.getStringAttr("fp32"));
     state.addAttribute("tessera_apple.pair", builder.getI64IntegerAttr(code));
     if (code < 10)  // kept for readers of the earlier slice; `pair` is the contract

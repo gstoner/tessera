@@ -6064,6 +6064,7 @@ def _submit_apple_gpu_native(
         APPLE_TOPK_DYNAMIC_F32_I32_ABI,
         APPLE_TOPK_F32_SYMBOL,
         APPLE_SIMDGROUP_GEMM_F16_ABI,
+        APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
         APPLE_SIMDGROUP_GEMM_F16_SYMBOL,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
@@ -6313,8 +6314,13 @@ def _submit_apple_gpu_native(
             raise RuntimeError("Apple simdgroup GEMM requires a contiguous f32 output")
         block = cast(Sequence[int], descriptor.provenance.get("block") or [32, 32, 16])
         bm, bn, bk = (int(value) for value in block)
+        # The accumulator is part of this ABI's identity
+        # (`...simdgroup_gemm.a_b_o_m_n_k.f16_f32.v1`): the packager only emits
+        # it for a scheduled matmul whose numeric policy is storage f16 /
+        # accum f32, so it is read from the ABI, not defaulted (APPLE-ACCUM-1).
         artifact = materialize_apple_simdgroup_tile_msl(
             AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", bm, bn, bk,
+            accumulator_dtype=APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
             double_buffer=True,
         )
         result, native = dispatch_apple_simdgroup_tile_f16(artifact, a, b)
@@ -37949,7 +37955,11 @@ def _apple_gpu_tile_simdgroup_gemm_available() -> bool:
             materialize_apple_simdgroup_tile_msl,
         )
 
-        art = materialize_apple_simdgroup_tile_msl(AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 8, 8, 8)
+        # Probes the f16-storage / fp32-accumulator form of the ABI; the
+        # accumulator is stated, not defaulted (APPLE-ACCUM-1).
+        art = materialize_apple_simdgroup_tile_msl(
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 8, 8, 8,
+            accumulator_dtype="fp32")
         a = _np.eye(8, dtype=_np.float16)
         out, native = dispatch_apple_simdgroup_tile_f16(art, a, a)
         return bool(native and _np.allclose(out, _np.eye(8, dtype=_np.float32)))
@@ -38283,8 +38293,18 @@ def _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np):
             ) from exc
     else:
         raise ValueError(f"tile_simdgroup_gemm has unknown staging layout owner {layout_owner!r}")
+    # APPLE-ACCUM-1: the accumulator is the one the compiler stamped from the
+    # program's numeric_policy (`tessera_apple.accumulate`). A call without one
+    # is refused -- the accumulator selects semantics (Decision #21a) and this
+    # dispatcher does not choose it.
+    accumulate = call.get("accumulate")
+    if not isinstance(accumulate, str) or not accumulate:
+        raise ValueError(
+            "APPLE_SIMDGROUP_ACCUM_MISSING: tile_simdgroup_gemm call carries no "
+            "tessera_apple.accumulate; the accumulator is not defaulted")
     art = materialize_apple_simdgroup_tile_msl(
         AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, bm, bn, bk,
+        accumulator_dtype=accumulate,
         double_buffer=(contract is None or contract["stage_depth"] == 2),
         staging_contract=contract,
     )

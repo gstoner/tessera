@@ -1015,17 +1015,39 @@ def test_cpu_full_matmul_lowers_to_gemm_value_call():
         assert bad not in p.stdout, f"forbidden '{bad}' in matmul value output"
 
 
-@pytest.mark.parametrize("dtype", ["f16", "bf16"])
-def test_gpu_full_low_precision_rank2_matmul_selects_tile_simdgroup_abi(dtype):
-    body = (f'func.func @f(%a: tensor<8x8x{dtype}>, %b: tensor<8x8x{dtype}>) '
+def _low_precision_matmul_body(dtype, policy):
+    attrs = f" {{numeric_policy = {policy}}}" if policy else ""
+    return (f'func.func @f(%a: tensor<8x8x{dtype}>, %b: tensor<8x8x{dtype}>) '
             f'-> tensor<8x8x{dtype}> {{\n'
-            f'  %0 = tessera.matmul %a, %b : '
+            f'  %0 = tessera.matmul %a, %b{attrs} : '
             f'(tensor<8x8x{dtype}>, tensor<8x8x{dtype}>) -> tensor<8x8x{dtype}>\n'
             f'  return %0 : tensor<8x8x{dtype}>\n}}')
+
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+@pytest.mark.parametrize("accum", ["fp32", "fp16"])
+def test_gpu_full_low_precision_rank2_matmul_selects_tile_simdgroup_abi(dtype, accum):
+    """APPLE-ACCUM-1: the TILE-1 call carries the program's accumulator."""
+    body = _low_precision_matmul_body(dtype, f'{{accum = "{accum}"}}')
     p = _run("tessera-lower-to-apple_gpu-full", body)
     assert p.returncode == 0, p.stderr
     assert 'op_kind = "tile_simdgroup_gemm"' in p.stdout
     assert f'symbol = "tessera_apple_gpu_tile_simdgroup_gemm_{dtype}"' in p.stdout
+    assert f'tessera_apple.accumulate = "{accum}"' in p.stdout
+
+
+@pytest.mark.parametrize("policy, code", [
+    (None, "APPLE_SIMDGROUP_ACCUM_MISSING"),
+    ('{accum = "bf16"}', "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED"),
+    ('{accum = "int32"}', "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED"),
+])
+def test_gpu_full_tile_simdgroup_refuses_a_missing_or_unfaithful_accumulator(policy, code):
+    """The accumulator selects semantics (#21a): absent is refused, not fp32;
+    bf16 is refused because Apple7 runs it as fp32 + RTZ (measured)."""
+    p = _run("tessera-lower-to-apple_gpu-full", _low_precision_matmul_body("bf16", policy))
+    assert p.returncode != 0
+    assert code in p.stderr
+    assert "tile_simdgroup_gemm" not in p.stdout
 
 
 def test_cpu_full_matmul_symbol_on_runtime_allowlist():

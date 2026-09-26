@@ -205,7 +205,7 @@ def test_canonical_loop_dispatch_executes_and_matches_the_oracle(
     )
     artifact = materialize_apple_simdgroup_tile_msl(
         TARGET, "fp16", block.m, block.n, block.k,
-        staging_contract=_staging_contract(descriptor))
+        staging_contract=_staging_contract(descriptor), accumulator_dtype="fp32")
     assert artifact.resources.total_threadgroup_bytes <= (
         TARGET.threadgroup_memory_capacity_bytes)
 

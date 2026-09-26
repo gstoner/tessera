@@ -3030,27 +3030,69 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         language="python",
         pass_origin="apple_fragment.select_apple_simdgroup_fragment",
         severity="error",
-        summary="Apple simdgroup Tile fragments accumulate in fp32 only.",
-        fix_hint=(
-            "Set accum=fp32 (Decision #15a: the accumulator is numeric_policy, "
-            "not the storage dtype). This is the SIMDGROUP path's contract and "
-            "not an Apple-wide limit -- checked against the macOS 27 SDK on "
-            "2026-09-20, MPPTensorOpsMatMul2d.h templates matmul2d on "
-            "DestinationOperandType with only a tensor/cooperative-tensor "
-            "constraint plus a relaxed_precision flag, so the cooperative-"
-            "tensor lane is NOT known to require fp32. Do not restate this "
-            "limit as architectural, and do not assume the other lane shares "
-            "it without reading that header. Owner decision 2026-09-26: Apple "
-            "accumulation is NOT fp32-only by policy -- this refusal is the "
-            "simdgroup lane's current implementation limit. For half, bfloat "
-            "or int32 accumulation use the Metal 4 matmul2d lane, whose header "
-            "table lists half x half -> half, bfloat x bfloat -> bfloat and "
-            "int8 x int8 -> int32 destinations; the internal precision of a "
-            "reduced-precision destination is not stated there, so measure it "
-            "against the fp32 result before admitting it under numeric_policy."
+        summary=(
+            "The requested simdgroup accumulator is not one Apple7 executes "
+            "faithfully: the lane admits fp32 and fp16 (fp16/bf16 storage) and "
+            "refuses bf16, integer and any other accumulator."
         ),
-        spec="docs/audit/backend/apple/todo.md",
+        fix_hint=(
+            "Declare numeric_policy.accum as fp32 or fp16 (Decision #15a: the "
+            "accumulator is numeric_policy, not the storage dtype; #21a: it is "
+            "never defaulted). APPLE-ACCUM-1, owner decision 2026-09-26: Apple "
+            "accumulation is not fp32-only, and the simdgroup lane supports "
+            "what the device computes exactly -- fp32 and fp16 accumulators, "
+            "each measured bit-exact on the M1 Max against a model of the "
+            "declared accumulation (tests/unit/"
+            "test_apple_simdgroup_accumulator_device.py). bf16 is refused "
+            "because Metal compiles it but Apple7 carries it at fp32 and "
+            "truncates to bf16 at the store, which is not bf16 accumulation; "
+            "integer accumulators have no simdgroup_matrix element type. Do "
+            "not route bf16/int accumulation to the Metal 4 matmul2d lane "
+            "either: matmul2d accumulates in fp32 only (a half/bfloat "
+            "destination is fp32 accumulation rounded once, measured)."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
         sprint="Apple simdgroup fragment ABI",
+    ),
+    DiagnosticCode(
+        code="APPLE_SIMDGROUP_ACCUM_MISSING",
+        pass_origin="MatmulToAppleSimdgroup / TileToApple (TILE-1 value call)",
+        severity="error",
+        summary=(
+            "A GEMM reaching an Apple simdgroup lowering declares no "
+            "numeric_policy.accum, so the lane has no accumulator to lower "
+            "(APPLE-ACCUM-1)."
+        ),
+        fix_hint=(
+            "State numeric_policy = {accum = \"fp32\"} or {accum = \"fp16\"} "
+            "on the matmul. The accumulator selects semantics (Decision #21a) "
+            "and the backend does not default it; the Python front door "
+            "writes the registered matmul default (fp32) into the Apple value "
+            "lane's Graph IR (driver.materialize_matmul_accumulators) when the "
+            "program states none."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
+        sprint="APPLE-ACCUM-1",
+    ),
+    DiagnosticCode(
+        code="APPLE_SIMDGROUP_ACCUM_UNSUPPORTED",
+        pass_origin="TesseraAppleDialect verifiers / MatmulToAppleSimdgroup / TileToApple",
+        severity="error",
+        summary=(
+            "The simdgroup accumulator (or its result conversion) is not one "
+            "Apple7 executes faithfully: f32 and f16 are admitted; bf16, "
+            "integer and double-rounding result conversions are refused."
+        ),
+        fix_hint=(
+            "Use accum fp32 or fp16. bf16 compiles but Apple7 carries it at "
+            "fp32 and truncates (round-toward-zero) to bf16 at the store "
+            "(measured on the M1 Max), which is not bf16 accumulation; "
+            "simdgroup_matrix has no integer element type; an fp16 "
+            "accumulator into a bf16 result would round twice. For a bf16 "
+            "result, accumulate in fp32 and let the epilogue round once."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
+        sprint="APPLE-ACCUM-1",
     ),
     DiagnosticCode(
         code="APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED",
@@ -3265,16 +3307,16 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
         code="APPLE_CANONICAL_GEMM_DTYPE_UNSUPPORTED", pass_origin="CanonicalGemmToAppleGPU",
         severity="error",
-        summary="apple_gpu re-forms the canonical reduction only for fp16/bf16 storage; simdgroup_matrix has no f32 operand form.",
+        summary="apple_gpu re-forms the canonical reduction only for fp16/bf16 storage; the TILE-1 simdgroup runtime ABI takes 16-bit operands.",
         fix_hint="Leave f32 contractions on the incumbent Accelerate/MPS value route rather than rerouting them.",
         spec="docs/audit/backend/apple/todo.md APPLE-TILE-2", sprint="APPLE-TILE-2",
     ),
     DiagnosticCode(
         code="APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED", pass_origin="CanonicalGemmToAppleGPU",
         severity="error",
-        summary="The canonical reduction must accumulate in fp32 for the Apple simdgroup route.",
-        fix_hint="Keep numeric_policy.accum = fp32; reduced-precision accumulation is not a simdgroup_matrix contract.",
-        spec="docs/audit/backend/apple/todo.md APPLE-TILE-2", sprint="APPLE-TILE-2",
+        summary="The canonical reduction's accumulator is refused: a declared numeric_policy.accum disagrees with the nest's loop-carried accumulator, or that accumulator has no faithful simdgroup form (APPLE-ACCUM-1).",
+        fix_hint="The shared tiler carries the accumulator in the nest's result type (fp32/i32 today); declare the accumulator the nest carries. fp16 accumulation reaches Apple through the TILE-1 value lane (tile.matmul with numeric_policy.accum = fp16), not through an fp32 canonical nest.",
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1", sprint="APPLE-TILE-2",
     ),
     # APPLE-ATTN-STREAM-1 — StreamingAttentionToAppleGPUPass.
     DiagnosticCode(
@@ -3363,10 +3405,10 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/backend/apple/todo.md APPLE-MATMUL2D-1", sprint="APPLE-MATMUL2D-1",
     ),
     DiagnosticCode(
-        code="APPLE_MATMUL2D_ACCUM", pass_origin="TesseraAppleDialect verifiers",
+        code="APPLE_MATMUL2D_ACCUM", pass_origin="TesseraAppleDialect verifiers / LowerAppleMatmul2dToCall",
         severity="error",
         summary="matmul2d accumulates in fp32, but the result element type is not f32 or `accumulate` does not say f32 (Decision #15a).",
-        fix_hint="Produce a tensor<MxNxf32> result with accumulate = \"f32\" and cast afterwards if a narrower result is wanted.",
+        fix_hint="Produce a tensor<MxNxf32> result with accumulate = \"f32\" and cast afterwards if a narrower result is wanted. fp32 is the only accumulator matmul2d implements: a half/bfloat destination is bit-exact with fp32 accumulation rounded once (APPLE-ACCUM-1, measured on the M1 Max).",
         spec="docs/audit/backend/apple/todo.md APPLE-MATMUL2D-1", sprint="APPLE-MATMUL2D-1",
     ),
     DiagnosticCode(
@@ -3421,8 +3463,8 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
         code="APPLE_MATMUL2D_ACCUM_UNSUPPORTED", pass_origin="CanonicalGemmToAppleMatmul2dPass",
         severity="error",
-        summary="The canonical reduction does not accumulate in fp32, which the Metal 4 matmul2d lane requires.",
-        fix_hint="Accumulate the GEMM in fp32 (storage may stay f16/bf16/FP8/FP4) and cast the result afterwards.",
+        summary="The canonical reduction or its declared numeric_policy.accum is not fp32; the Metal 4 matmul2d lane accumulates in fp32 only.",
+        fix_hint="Accumulate the GEMM in fp32 (storage may stay f16/bf16/FP8/FP4) and cast the result afterwards. MPPTensorOpsMatMul2d.h lists half/bfloat destinations, but measured on the M1 Max (APPLE-ACCUM-1) they are fp32 accumulation rounded once to the destination, so the lane refuses accum=fp16/bf16 rather than label an fp32 accumulation with it. For fp16 accumulation use the simdgroup lane.",
         spec="docs/audit/backend/apple/todo.md APPLE-MATMUL2D-1", sprint="APPLE-MATMUL2D-1",
     ),
     DiagnosticCode(

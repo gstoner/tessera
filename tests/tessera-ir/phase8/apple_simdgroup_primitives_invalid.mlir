@@ -34,17 +34,32 @@ func.func @store_stride_below_matrix_width(%m: memref<64xf32>, %o: index,
 
 // -----
 
-func.func @f16_accumulator(%a: !tessera_apple.simdgroup_matrix<f16>,
-                           %c: !tessera_apple.simdgroup_matrix<f16>) {
-  // The simdgroup MMA accumulates in fp32 whatever the inputs are, and
-  // apple_msl.py depends on it so the fused epilogue sees full-precision
-  // results. An f16 accumulator re-rounds every partial sum -- a numerics
-  // change no test of the matmul alone would show.
-  // expected-error @+1 {{accumulator `c` and result `d` must be f32}}
+func.func @bf16_accumulator(%a: !tessera_apple.simdgroup_matrix<bf16>,
+                            %c: !tessera_apple.simdgroup_matrix<bf16>) {
+  // APPLE-ACCUM-1. Metal compiles a bfloat accumulator, but measured on the
+  // M1 Max it is carried at fp32 across the K loop and truncated
+  // (round-toward-zero) to bf16 at the store -- not the bf16 accumulation the
+  // program declared. f32 and f16 accumulators are admitted (both measured
+  // bit-exact against a model of the declared accumulation); bf16 is refused.
+  // expected-error-re @+1 {{APPLE_SIMDGROUP_ACCUM_{{UNSUPPORTED}}: a bf16 simdgroup accumulator is not bf16 accumulation on Apple7}}
+  %d = tessera_apple.gpu.simdgroup_matmul %a, %a, %c
+      {storage = "bf16", m = 8 : i64, n = 8 : i64, k = 8 : i64}
+      : !tessera_apple.simdgroup_matrix<bf16>, !tessera_apple.simdgroup_matrix<bf16>,
+        !tessera_apple.simdgroup_matrix<bf16> -> !tessera_apple.simdgroup_matrix<bf16>
+  return
+}
+
+// -----
+
+func.func @accumulator_and_result_disagree(%a: !tessera_apple.simdgroup_matrix<f16>,
+                                           %c: !tessera_apple.simdgroup_matrix<f16>) {
+  // The result is the next K step's accumulator. An f16 `c` producing an f32
+  // `d` hides a conversion inside the MMA chain, so the two must agree.
+  // expected-error @+1 {{accumulator `c` and result `d` must have the same element type}}
   %d = tessera_apple.gpu.simdgroup_matmul %a, %a, %c
       {storage = "f16", m = 8 : i64, n = 8 : i64, k = 8 : i64}
       : !tessera_apple.simdgroup_matrix<f16>, !tessera_apple.simdgroup_matrix<f16>,
-        !tessera_apple.simdgroup_matrix<f16> -> !tessera_apple.simdgroup_matrix<f16>
+        !tessera_apple.simdgroup_matrix<f16> -> !tessera_apple.simdgroup_matrix<f32>
   return
 }
 

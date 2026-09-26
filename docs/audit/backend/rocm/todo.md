@@ -6659,6 +6659,14 @@ fragment contract (steps 3-5) is **5 C++ `tile.mma` creation sites + the Python
 emitters**, while making the backend traverse Tile IR is **58 expanders** and is
 unpriced. Only the second scales with the expander population.
 
+**Adoption policy decided 2026-09-26 (owner): option (a).** Every family is to
+be entered from Tile IR produced by the scheduled route; each `generate-*` pass
+stays as its family's Tile → Target generator, and the Python-built directive
+entry is what gets retired. Order follows (b): GEMM, flash-attention and
+linear-attention first, then the long tail, tracked per family by the
+E2E-REAL-6F census. Record and recount: [`ROCM_LANE_MAP.md`](ROCM_LANE_MAP.md)
+§"Decision — expander adoption is (a)". Lane B is still open.
+
 **Step 3 pilot landed:** `GenerateWMMAGemmKernel{via-tile=true}` is the first
 C++ producer of the full typed `tile.view` -> `fragment_pack` -> `tile.mma` ->
 `fragment_unpack` -> `tile.store` chain. At production `mt=2, nt=4`, the

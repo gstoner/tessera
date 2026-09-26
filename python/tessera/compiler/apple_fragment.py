@@ -151,7 +151,10 @@ def select_apple_simdgroup_fragment(
             f"APPLE_FRAGMENT_UNSUPPORTED_DTYPE: {storage_dtype!r} needs fp16 or bf16 storage")
     if accumulator_dtype not in {"fp32", "f32"}:
         raise AppleFragmentError(
-            "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR: Apple simdgroup Tile fragments require fp32")
+            "APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR: Apple simdgroup Tile fragments "
+            f"accumulate in fp32 only (got {accumulator_dtype!r}); this is the simdgroup "
+            "lane's limit, not Apple's -- reduced-precision accumulation belongs on the "
+            "Metal 4 matmul2d lane")
     return AppleSimdgroupFragment(target.arch, storage, "fp32")
 
 

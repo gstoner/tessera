@@ -530,7 +530,16 @@ invented fix hint is worse than a missing entry — it reads as settled and send
 the next caller the wrong way.
 
 The ratchet fails if the set grows and fails again when one of the five is
-registered without being deleted from the list, so this can only shrink. Note
+registered without being deleted from the list, so this can only shrink.
+
+**Closed 2026-09-20; owner decision 2026-09-26.** All five are registered and
+the ratchet is empty. The owner has decided Apple accumulation is **not
+fp32-only by policy**. `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR` is therefore
+the simdgroup lane's current limit, and its hint and refusal message route
+half/bfloat/int32 accumulation to the Metal 4 `matmul2d` lane (the SDK header
+lists those destinations). Admitting a reduced-precision destination still
+needs a measured error against the fp32 result, because the header does not
+state the internal accumulation precision. No device claim is made here. Note
 the nine ROCm siblings found in the same sweep were registered the same day;
 only Apple's are outstanding.
 

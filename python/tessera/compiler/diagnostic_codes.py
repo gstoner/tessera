@@ -2945,7 +2945,14 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
             "constraint plus a relaxed_precision flag, so the cooperative-"
             "tensor lane is NOT known to require fp32. Do not restate this "
             "limit as architectural, and do not assume the other lane shares "
-            "it without reading that header."
+            "it without reading that header. Owner decision 2026-09-26: Apple "
+            "accumulation is NOT fp32-only by policy -- this refusal is the "
+            "simdgroup lane's current implementation limit. For half, bfloat "
+            "or int32 accumulation use the Metal 4 matmul2d lane, whose header "
+            "table lists half x half -> half, bfloat x bfloat -> bfloat and "
+            "int8 x int8 -> int32 destinations; the internal precision of a "
+            "reduced-precision destination is not stated there, so measure it "
+            "against the fp32 result before admitting it under numeric_policy."
         ),
         spec="docs/audit/backend/apple/todo.md",
         sprint="Apple simdgroup fragment ABI",

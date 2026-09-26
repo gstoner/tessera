@@ -355,7 +355,9 @@ matches its module fails generation. Read the counts there.
   sm_90 WGMMA, sm_100 tcgen05/TMEM.
 - **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
   The broad production lane still skips Graph/Schedule/Tile; the ~58
-  `generate-*` expander adoption policy (a/b/c) and Lane B are undecided;
+  `generate-*` expanders are decided **(a): every family is entered from Tile IR**
+  (owner, 2026-09-26; the expander stays as the Tile→Target generator, the
+  Python-built directive entry goes); Lane B is undecided;
   ROCM-SPLIT-K-1 needs a production consumer (the predicate is already keyed
   on occupancy); the LDS body's remaining lever is the
   **VGPR** ceiling (the K1-blocked layout was refuted 2026-09-20 and the pad
@@ -421,8 +423,7 @@ matches its module fails generation. Read the counts there.
 9. Apple `matmul2d` → compiler-owned MSL; Apple arbiter candidacy.
 
 **Needs an owner decision**
-- ROCm expander adoption (a/b/c) and Lane B's disposition.
-- Whether Apple fp32-only accumulation is permanent (gates DIAG-PY-BACKLOG-1).
+- Lane B's disposition (under discussion 2026-09-26; see the ROCm lane map).
 - Live-queue IDs for IR_STACK U2, U3, U5 and U6 (only U4 is routed, as W3.3).
 
 **Future features — tracked, not compiler gates**

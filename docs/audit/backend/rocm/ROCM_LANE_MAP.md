@@ -32,6 +32,20 @@ reduces full load drains from 81 to 16, and improves paired device timing by
 owns that exact claim. `gfx1200` remains unpromoted pending matching-device
 proof.
 
+## Decision — expander adoption is (a) (owner, 2026-09-26)
+
+Every ROCm family is to be entered from Tile IR, produced by the scheduled
+route (Graph → Schedule → Tile) from a Graph contract. **The expander passes
+themselves are not being rewritten away:** a `generate-*` pass remains the
+Tile → Target generator for its family. What goes is the entry point, a Target
+IR directive composed as a string in Python, which skips Graph, Schedule and
+Tile. Sequencing follows (b)'s order — GEMM, flash-attention and
+linear-attention first (the three expanders that already consume the Tile
+fragment types), then the long tail — with progress measured family by family
+by the E2E-REAL-6F route census, not asserted here. Recounted 2026-09-26: 78
+`Generate*.cpp` expanders (71 in the snapshot below); 3 consume Tile fragment
+types (0 in the snapshot). Lane B's disposition is separate and still open.
+
 ## Historical snapshot (2026-08-05)
 
 The remainder records the earlier gfx1151 directive-versus-canonical-lane

@@ -556,6 +556,12 @@ static void buildROCMExecutablePipeline(
   StringRef arch = opts.arch;
   pm.addPass(std::make_unique<DeclareROCMPipelineContractPass>(
       family, input, output, arch, opts.depthCooperative));
+  // Graph-level matmul has no pipeline (Lane B, retired 2026-09-26): schedule
+  // nothing past the contract pass, whose run refuses it. Building the rest
+  // would leave the refusal as the only thing standing between a caller and
+  // a Graph->Tile GEMM lowering that skips Schedule IR.
+  if (family == "matmul" && input == "graph")
+    return;
 
   if (input == "graph") {
     auto tileLowering = ::tessera::createTileIRLoweringPass();

@@ -7932,9 +7932,11 @@ def build_canonical_gemm_hsaco(
     through ``rocm_native.package_scheduled_matmul``. Returns the
     ``ROCMNativePackage``: ``image.payload`` is the hsaco, and the launch
     descriptor carries the entry symbol, ABI, bindings and the ``macro_tile`` /
-    ``workgroup`` a launcher must use. This is the only ROCm GEMM entry from
-    Graph IR; the Graph->Tile shortcut that skipped Schedule IR (Lane B) was
-    retired 2026-09-26.
+    ``workgroup`` a launcher must use -- a package, not bare bytes, because
+    the hsaco alone cannot be launched correctly. The traced frontend reaches
+    the same lower-and-package authority through ``driver.py``; the
+    Graph->Tile shortcut that skipped Schedule IR (Lane B) was retired
+    2026-09-26.
     """
     from .compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
     from .compiler.rocm_native import package_scheduled_matmul

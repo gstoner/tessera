@@ -125,6 +125,7 @@ class ResidentPackage:
     def _upload(self, host: np.ndarray) -> ctypes.c_void_p:
         pointer = self._alloc(host.nbytes)
         if self.hip.hipMemcpy(pointer, host.ctypes.data_as(ctypes.c_void_p), host.nbytes, 1) != 0:
+            self.hip.hipFree(pointer)
             raise RuntimeError("host-to-device copy failed")
         return pointer
 

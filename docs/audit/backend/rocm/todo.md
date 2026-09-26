@@ -6669,7 +6669,8 @@ E2E-REAL-6F census. Record and recount: [`ROCM_LANE_MAP.md`](ROCM_LANE_MAP.md)
 (same file, §"Decision — Lane B is retired"): `build_canonical_gemm_hsaco` is
 the one Graph entry for ROCm GEMM through the scheduled route, the benchmark
 was rebuilt on it, and `family=matmul input=graph` is refused in Python and
-C++. Owed: a fresh packet from the rebuilt benchmark on each chip it names.
+C++. gfx1151 packet recorded
+(`benchmarks/baselines/rocm_gfx1151_canonical_gemm_scheduled_20260926/`); gfx1201 owed.
 
 **Step 3 pilot landed:** `GenerateWMMAGemmKernel{via-tile=true}` is the first
 C++ producer of the full typed `tile.view` -> `fragment_pack` -> `tile.mma` ->

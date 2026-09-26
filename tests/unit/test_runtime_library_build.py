@@ -57,3 +57,24 @@ def test_record_for_library_walks_to_its_build_tree(tmp_path) -> None:
     stray.write_bytes(b"")
     with pytest.raises(RuntimeLibraryBuildError, match="cannot be recorded"):
         record_for_library(stray, "tessera_x86_elementwise")
+
+
+@pytest.mark.parametrize("level, optimized", [
+    ("O2 (runtime-library default: tree has no build type)", True),
+    ("Release: -O3 -DNDEBUG", True),
+    ("RelWithDebInfo: -O2 -g", True),
+    ("CMAKE_CXX_FLAGS: -O3 -march=native", True),
+    ("Custom: -Os", True),
+    ("X: -Ofast", True),
+    ("Debug: -O2", True),
+    # A build type's name is not evidence of what it compiled with.
+    ("Release: ", False),
+    ("RelWithDebInfo: -O0 -g", False),
+    ("Debug: -g", False),
+    ("X: -O2 -O0", False),
+    ("X: -Og", False),
+    ("O2x", False),
+    ("multi-config generator: per-configuration flags", False),
+])
+def test_is_optimized_reads_the_flags_not_the_build_type_name(level, optimized) -> None:
+    assert is_optimized(level) is optimized

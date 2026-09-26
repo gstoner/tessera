@@ -29,7 +29,10 @@ from __future__ import annotations
 
 import ctypes as ct
 import hashlib
+import json
+import math
 import os
+import shutil
 import platform
 import statistics
 import subprocess
@@ -85,15 +88,28 @@ def _library() -> ct.CDLL:
         return _LIB
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "AMD64"):
         raise X86ClockError("the TSC witness needs x86_64 Linux")
+    compiler = shutil.which("cc")
+    if compiler is None:
+        raise X86ClockError("the x86 clock helper needs a C compiler on PATH as `cc`")
     directory = Path(tempfile.mkdtemp(prefix="tessera-x86-clock-"))
     source, shared = directory / "clock.c", directory / "libclock.so"
-    source.write_text(_HELPER_C)
     try:
-        subprocess.run(["cc", "-O2", "-shared", "-fPIC", str(source), "-o", str(shared)],
-                       check=True, capture_output=True, timeout=60)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise X86ClockError(f"could not build the x86 clock helper: {exc}") from exc
-    lib = ct.CDLL(str(shared))
+        source.write_text(_HELPER_C)
+        try:
+            subprocess.run([compiler, "-O2", "-shared", "-fPIC", str(source), "-o", str(shared)],
+                           check=True, capture_output=True, text=True, timeout=60)
+        except subprocess.CalledProcessError as exc:
+            raise X86ClockError(
+                f"could not build the x86 clock helper: {exc.stderr.strip()[:400]}") from exc
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise X86ClockError(f"could not build the x86 clock helper: {exc}") from exc
+        try:
+            lib = ct.CDLL(str(shared))
+        except OSError as exc:
+            raise X86ClockError(f"could not load the x86 clock helper: {exc}") from exc
+    finally:
+        # The mapping survives unlinking on Linux; leave no per-process debris.
+        shutil.rmtree(directory, ignore_errors=True)
     lib.tessera_x86_clock_snapshot.argtypes = [ct.POINTER(ct.c_uint64)]
     lib.tessera_x86_clock_snapshot.restype = None
     _LIB = lib
@@ -167,7 +183,6 @@ def witness_clocks(calibration: dict[str, Any], window: dict[str, Any], *,
     cycles = window["tsc_end"] - window["tsc_start"]
     if raw <= 0 or cycles <= 0:
         raise X86ClockError("measured window is empty or went backwards")
-    calibration_digest = hashlib.sha256(repr(sorted(calibration.items())).encode()).hexdigest()
     return {
         "monotonic_raw_ns": measured_clock("monotonic_raw_ns", source="clock_monotonic_raw", value=raw),
         "tsc_cycles": measured_clock(
@@ -178,7 +193,11 @@ def witness_clocks(calibration: dict[str, Any], window: dict[str, Any], *,
                         "calibrated_frequency_hz": calibration["frequency_hz"],
                         "frequency_source": "independent_calibration_interval",
                         "calibration_spread": calibration["spread"],
-                        "calibration_sha256": calibration_digest,
+                        "calibration_sha256": calibration_digest(calibration),
+                        # Stored whole so a validator can re-derive the
+                        # frequency, spread, CPU and ordering instead of
+                        # trusting the fields above.
+                        "calibration": calibration,
                         "measurement_window": window,
                         **({"promotion_refused": refused} if refused else {})},
             calibrated_against=("monotonic_raw_ns",), eligible_for_promotion=refused is None),
@@ -195,6 +214,8 @@ def witness_sample(calibration: dict[str, Any], window: dict[str, Any],
     from .profiler_timing import (
         ProfilerTimingError, build_timing_sample, measured_clock, unavailable_clock,
         wsl_promotion_refusals)
+    if not isinstance(digests.get("image"), str) or not digests["image"]:
+        raise X86ClockError("a TSC witness must name the measured image digest as `image`")
     if execution_environment is None:
         execution_environment = ("wsl2" if "microsoft" in platform.release().lower()
                                  else "bare_metal")
@@ -216,7 +237,9 @@ def witness_sample(calibration: dict[str, Any], window: dict[str, Any],
     # A window whose TSC and raw clock disagree is a measured fact about this
     # row, not a reason to abort the benchmark: record the sample with the
     # TSC ineligible and the refusal named, and the packet route stays
-    # profiler_correlated. Any other invalidity is a bug and propagates.
+    # profiler_correlated. Any other invalidity (a host without an invariant
+    # TSC, a migrated CPU) propagates: it is a fact about the host, and a run
+    # that cannot produce a valid witness must say so rather than record one.
     try:
         sample = build(None)
     except ProfilerTimingError:
@@ -234,6 +257,61 @@ def witness_sample(calibration: dict[str, Any], window: dict[str, Any],
     return sample
 
 
+def calibration_digest(calibration: dict[str, Any]) -> str:
+    """Canonical digest of a calibration record (JSON, sorted keys)."""
+    return hashlib.sha256(
+        json.dumps(calibration, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def verify_witness_sample(sample: Any) -> str | None:
+    """Re-derive a TSC witness from its stored integers; None when consistent.
+
+    Nothing the sample states is trusted: the clock values must equal their
+    measurement window's deltas, the frequency must be the median of the
+    stored calibration intervals' own rates (each recomputed from its raw
+    integers) with the stored spread within the limit, every calibration
+    interval and both ends of the measurement must be on one logical CPU, the
+    measurement must start after the last calibration interval ends, and the
+    stored digest must match the stored calibration. Returns the first
+    inconsistency found, as a reason string.
+    """
+    try:
+        clocks = sample["clocks"]
+        tsc, raw = clocks["tsc_cycles"], clocks["monotonic_raw_ns"]
+        prov = tsc["provenance"]
+        window, calibration = prov["measurement_window"], prov["calibration"]
+        windows, rates = calibration["windows"], calibration["rates_hz"]
+    except (KeyError, TypeError):
+        return "witness lacks its measurement window or stored calibration"
+    if prov.get("frequency_source") != "independent_calibration_interval":
+        return "frequency was not taken from separate calibration intervals"
+    if prov.get("calibration_sha256") != calibration_digest(calibration):
+        return "calibration digest does not match the stored calibration"
+    if raw.get("value") != window["raw_end_ns"] - window["raw_start_ns"]:
+        return "monotonic_raw_ns is not its measurement window's delta"
+    if tsc.get("value") != window["tsc_end"] - window["tsc_start"]:
+        return "tsc_cycles is not its measurement window's delta"
+    if not windows or len(windows) != len(rates):
+        return "calibration intervals and rates disagree in number"
+    for interval, rate in zip(windows, rates):
+        elapsed = interval["raw_end_ns"] - interval["raw_start_ns"]
+        if elapsed <= 0 or not math.isclose(
+                (interval["tsc_end"] - interval["tsc_start"]) * 1e9 / elapsed, rate, rel_tol=1e-9):
+            return "a calibration rate is not its interval's own measurement"
+    hz = statistics.median(rates)
+    if not math.isclose(prov.get("calibrated_frequency_hz", 0.0), hz, rel_tol=1e-12):
+        return "calibrated frequency is not the median of the calibration rates"
+    if (max(rates) - min(rates)) / hz > CALIBRATION_SPREAD_LIMIT:
+        return "calibration intervals disagree beyond the spread limit"
+    cpus = {interval["cpu"] for interval in windows} | {
+        window["logical_cpu_start"], window["logical_cpu_end"]}
+    if len(cpus) != 1:
+        return f"calibration and measurement ran on different CPUs {sorted(cpus)}"
+    if window["raw_start_ns"] <= max(interval["raw_end_ns"] for interval in windows):
+        return "measurement window does not follow the calibration intervals"
+    return None
+
+
 def pin_current_cpu() -> int:
     """Pin to the CPU we are on now, so calibration and measurement share it."""
     cpu = snapshot().cpu
@@ -244,5 +322,6 @@ def pin_current_cpu() -> int:
     return cpu
 
 
-__all__ = ["X86ClockError", "calibrate", "invariant_tsc", "measure", "pin_current_cpu",
-           "snapshot", "witness_clocks", "witness_sample"]
+__all__ = ["X86ClockError", "calibrate", "calibration_digest", "invariant_tsc", "measure",
+           "pin_current_cpu", "snapshot", "verify_witness_sample", "witness_clocks",
+           "witness_sample"]

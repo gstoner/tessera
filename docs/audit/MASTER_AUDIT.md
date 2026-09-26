@@ -300,8 +300,8 @@ matches its module fails generation. Read the counts there.
    gfx1151 SSD admission gain a re-derived `device_clock_witness` route.
    **Explicit exception:** the CUDA activity-window calibration no longer
    refuses WSL2 — its witness is the Nsight activity window, which is
-   profiler-derived and unverified on WSL2; reverse it if that is not
-   wanted. What remains: no fleet packet recorded on the new routes; the
+   profiler-derived and unverified on WSL2. **Kept by owner decision
+   (2026-09-26);** the 5% agreement gate is what rejects bad WSL2 windows. What remains: no fleet packet recorded on the new routes; the
    x86 probe cannot yet measure TSC independently, so x86 has no packet
    route; NVIDIA has no non-profiler witness (`%globaltimer`); event-only
    recorders stay ineligible. Separately: NVIDIA timers run on the

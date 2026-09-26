@@ -5,7 +5,7 @@ It never substitutes the sum of kernel durations for the launch-inclusive span.
 Promotion also requires clean source, event/activity-window agreement within
 5% and <=5% trace overhead, on bare metal or WSL2 alike (owner direction,
 MASTER_AUDIT 2026-09-25 -- recorded there as an explicit NVIDIA exception,
-since this witness is profiler-derived).
+since this witness is profiler-derived; kept by owner decision 2026-09-26).
 """
 
 import hashlib

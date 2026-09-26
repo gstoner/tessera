@@ -421,12 +421,201 @@ def validate_backend_report(
     }
 
 
+#: Host-pinned x86 AVX-512 packet keys (sync AVX512-E2E-PACKETS-2026-09-26):
+#: architecture -> (hostname, CPU model-name prefix). Both are compared
+#: case-insensitively. The recorder and the validator read this one table.
+X86_AVX512_HOSTS: dict[str, tuple[str, str]] = {
+    "x86_64_avx512_strix_halo": ("Princess-Luna", "AMD RYZEN AI MAX+ 395"),
+    "x86_64_avx512_granite_ridge": ("tajasarus", "AMD Ryzen 7 9800X3D"),
+}
+#: Fixed stability policy for these packets; a row cannot choose its own.
+X86_AVX512_STABILITY_LIMIT_PCT = 4.0
+#: TSC vs CLOCK_MONOTONIC_RAW agreement band, re-derived from the samples.
+X86_AVX512_AGREEMENT_BAND = 0.05
+X86_AVX512_RESOURCE_SCHEMA = "tessera.e2e-x86-avx512-resource-record.v2"
+X86_AVX512_LIBRARY_TARGET = "tessera_x86_elementwise"
+
+
+def x86_avx512_host_refusal(architecture: str, hostname: str, model: str) -> str | None:
+    """Why (hostname, model) may not record ``architecture``; None when it may."""
+    pinned = X86_AVX512_HOSTS.get(architecture)
+    if pinned is None:
+        return f"{architecture!r} is not a host-pinned x86 AVX-512 key"
+    host, prefix = pinned
+    if hostname.strip().casefold() != host.casefold():
+        return f"{architecture} is pinned to host {host!r}, not {hostname!r}"
+    if not model.strip().casefold().startswith(prefix.casefold()):
+        return f"{architecture} is pinned to CPU {prefix!r}, not {model!r}"
+    return None
+
+
+def _kernel_wall_ns(witness: Mapping[str, Any]) -> tuple[float, float]:
+    """(TSC ns, raw ns) of one witness sample, from its stored integers."""
+    clocks = witness["clocks"]
+    tsc = clocks["tsc_cycles"]
+    hz = float(tsc["provenance"]["calibrated_frequency_hz"])
+    return float(tsc["value"]) * 1.0e9 / hz, float(clocks["monotonic_raw_ns"]["value"])
+
+
+def _x86_avx512_stability(where: str, samples: Sequence[float]) -> None:
+    delta = (max(samples) - min(samples)) / min(samples) * 100.0
+    if delta > X86_AVX512_STABILITY_LIMIT_PCT:
+        raise FleetEvidenceError(
+            f"{where} is not stable under the fixed policy "
+            f"({delta:.3f}% > {X86_AVX512_STABILITY_LIMIT_PCT}%)")
+
+
+def validate_x86_avx512_packet(report: Mapping[str, Any],
+                               resources: Mapping[str, Any]) -> None:
+    """Re-derive an x86 AVX-512 packet's host, witness, timing and library claims.
+
+    Nothing stored as a conclusion is trusted: the host is checked against
+    the architecture key, each TSC witness is re-verified from its integers,
+    agreement and every run median are recomputed from the samples, the
+    environment label is checked against the kernel release, stability uses
+    the fixed policy, and the stamped library digest must be the digest of the
+    library embedded in every timed image.
+    """
+    from .profiler_x86_clock import verify_witness_sample
+    from .runtime_library_build import is_optimized
+
+    architecture = str(report["architecture"])
+    if report.get("target") != "x86" or architecture not in X86_AVX512_HOSTS:
+        raise FleetEvidenceError(f"{architecture!r} is not a host-pinned x86 AVX-512 key")
+    if resources.get("schema") != X86_AVX512_RESOURCE_SCHEMA:
+        raise FleetEvidenceError(f"resources.json is not a {X86_AVX512_RESOURCE_SCHEMA} record")
+    identity = str(report["device"]["identity"])
+    hostname, _, model = identity.partition(" | ")
+    device = resources.get("device")
+    if not isinstance(device, dict):
+        raise FleetEvidenceError("resources.device must be an object")
+    if device.get("host") != hostname or device.get("model") != model:
+        raise FleetEvidenceError("resources.device disagrees with report.device.identity")
+    refusal = x86_avx512_host_refusal(architecture, hostname, model)
+    if refusal is not None:
+        raise FleetEvidenceError(refusal)
+
+    environment = resources.get("execution_environment")
+    release = str(device.get("kernel_release", ""))
+    if not release:
+        raise FleetEvidenceError("resources.device.kernel_release is required")
+    expected_environment = "wsl2" if "microsoft" in release.lower() else "bare_metal"
+    if environment != expected_environment:
+        raise FleetEvidenceError(
+            f"execution_environment {environment!r} contradicts kernel {release!r}")
+
+    stamp = resources.get("runtime_library_build")
+    if (not isinstance(stamp, dict) or stamp.get("target") != X86_AVX512_LIBRARY_TARGET
+            or stamp.get("optimized") is not True
+            or not is_optimized(str(stamp.get("level", "")))
+            or not _is_digest(stamp.get("library_sha256"))):
+        raise FleetEvidenceError("runtime_library_build is not an optimized, digested stamp")
+
+    scope = list(report["scope"])
+    rows = resources.get("rows")
+    if not isinstance(rows, list):
+        raise FleetEvidenceError("resources.rows must be a list")
+    rows_by_family = {row.get("family"): row for row in rows if isinstance(row, dict)}
+    if set(rows_by_family) != set(scope) or len(rows_by_family) != len(rows):
+        raise FleetEvidenceError("resources.rows must hold exactly one row per scoped family")
+    benchmarks: dict[tuple[str, str], Mapping[str, Any]] = {
+        (str(row["family"]), str(row["timing_domain"])): row for row in report["benchmarks"]
+    }
+    witnesses = resources.get("timing_witness")
+    end_to_end = resources.get("end_to_end_samples_ns")
+    if not isinstance(witnesses, dict) or not isinstance(end_to_end, dict):
+        raise FleetEvidenceError("resources must carry timing_witness and end_to_end_samples_ns")
+    for family in scope:
+        where = f"x86 {family}"
+        row = rows_by_family[family]
+        resource = row.get("resource")
+        if not isinstance(resource, dict):
+            raise FleetEvidenceError(f"{where} resource row has no resource record")
+        fingerprint = hashlib.sha256(json.dumps(resource, sort_keys=True).encode()).hexdigest()
+        if row.get("resource_fingerprint") != fingerprint:
+            raise FleetEvidenceError(f"{where} resource_fingerprint does not hash its resource")
+        if resource.get("architecture") != architecture:
+            raise FleetEvidenceError(f"{where} resource names another architecture")
+        if resource.get("runtime_library_build") != stamp:
+            raise FleetEvidenceError(f"{where} resource carries a different library stamp")
+        if resource.get("image_payload_sha256") != stamp["library_sha256"]:
+            raise FleetEvidenceError(
+                f"{where} timed image does not embed the stamped library")
+
+        kernel = benchmarks.get((family, "kernel_wall"))
+        e2e = benchmarks.get((family, "end_to_end"))
+        if kernel is None or e2e is None:
+            raise FleetEvidenceError(f"{where} lacks kernel_wall/end_to_end rows")
+        for bench in (kernel, e2e):
+            if bench.get("resource_fingerprint") != fingerprint:
+                raise FleetEvidenceError(f"{where} benchmark row names another resource")
+            if bench.get("stability_limit_pct") != X86_AVX512_STABILITY_LIMIT_PCT:
+                raise FleetEvidenceError(f"{where} row chose its own stability limit")
+        if kernel.get("timing_source") != "tsc_rdtscp_witnessed_by_clock_monotonic_raw":
+            raise FleetEvidenceError(f"{where} kernel_wall is not TSC-witnessed")
+
+        record = witnesses.get(family)
+        if not isinstance(record, dict) or not isinstance(record.get("samples"), list):
+            raise FleetEvidenceError(f"{where} has no timing witness")
+        cohorts: tuple[list[float], list[float]] = ([], [])
+        calibrations: set[str] = set()
+        for index, entry in enumerate(record["samples"]):
+            at = f"{where} witness[{index}]"
+            if not isinstance(entry, dict) or entry.get("cohort") not in (0, 1):
+                raise FleetEvidenceError(f"{at} is malformed")
+            witness = entry.get("witness")
+            iterations = entry.get("iterations_in_window")
+            if not isinstance(witness, dict) or not isinstance(iterations, int) or iterations <= 0:
+                raise FleetEvidenceError(f"{at} is malformed")
+            reason = verify_witness_sample(witness)
+            if reason is not None:
+                raise FleetEvidenceError(f"{at} does not verify: {reason}")
+            if witness.get("execution_environment") != environment:
+                raise FleetEvidenceError(f"{at} was taken in another environment")
+            if witness.get("artifact_digests", {}).get("image") != resource.get("image_digest"):
+                raise FleetEvidenceError(f"{at} names another image")
+            tsc = witness["clocks"]["tsc_cycles"]
+            if tsc.get("eligible_for_promotion") is not True:
+                raise FleetEvidenceError(f"{at} TSC is not promotion-eligible")
+            calibrations.add(str(tsc["provenance"].get("calibration_sha256")))
+            tsc_ns, raw_ns = _kernel_wall_ns(witness)
+            if raw_ns <= 0 or abs(tsc_ns - raw_ns) / raw_ns > X86_AVX512_AGREEMENT_BAND:
+                raise FleetEvidenceError(f"{at} TSC disagrees with the raw clock")
+            cohorts[int(entry["cohort"])].append(tsc_ns / iterations)
+        if len(calibrations) != 1:
+            raise FleetEvidenceError(f"{where} witnesses do not share one calibration")
+        if min(len(cohorts[0]), len(cohorts[1])) < 2:
+            raise FleetEvidenceError(f"{where} needs two witnessed windows per cohort")
+        for bench, cohort_samples, label in (
+            (kernel, cohorts, "kernel_wall"),
+            (e2e, end_to_end.get(family), "end_to_end"),
+        ):
+            if (not isinstance(cohort_samples, (list, tuple)) or len(cohort_samples) != 2
+                    or not all(isinstance(c, list) and c for c in cohort_samples)):
+                raise FleetEvidenceError(f"{where} {label} has no per-window samples")
+            derived = [float(statistics.median(c)) for c in cohort_samples]
+            stored = bench.get("run_medians_ns")
+            if not isinstance(stored, list) or len(stored) != 2 or not all(
+                math.isclose(float(a), b, rel_tol=1e-9, abs_tol=0.0)
+                for a, b in zip(stored, derived)
+            ):
+                raise FleetEvidenceError(f"{where} {label} run medians are not the samples'")
+            _x86_avx512_stability(f"{where} {label}", derived)
+
+
+def _validate_attachments(packet_dir: Path, report: Mapping[str, Any]) -> None:
+    """Target-specific attachment checks, run at seal and at validation."""
+    if report.get("target") == "x86" and report.get("architecture") in X86_AVX512_HOSTS:
+        validate_x86_avx512_packet(report, _load_json(packet_dir / "resources.json"))
+
+
 def seal_packet(packet_dir: Path) -> dict[str, Any]:
     """Validate ``report.json`` and hash-seal every other packet attachment."""
     packet_dir = packet_dir.resolve()
     report_path = packet_dir / "report.json"
     report = _load_json(report_path)
     summary = validate_backend_report(report)
+    _validate_attachments(packet_dir, report)
     files: dict[str, dict[str, Any]] = {}
     for path in sorted(packet_dir.rglob("*")):
         if path.is_symlink():
@@ -481,6 +670,7 @@ def validate_packet(packet_dir: Path) -> dict[str, Any]:
         raise FleetEvidenceError("packet commit disagrees with report")
     if manifest.get("validation") != summary:
         raise FleetEvidenceError("packet validation summary is stale")
+    _validate_attachments(packet_dir, report)
     return summary
 
 
@@ -538,6 +728,10 @@ def discover_packets(
         packet_dir = manifest.parent
         summary = validate_packet(packet_dir)
         key = (str(summary["target"]), str(summary["architecture"]))
+        if (packet_dir.parent.name, packet_dir.name) != key:
+            raise FleetEvidenceError(
+                f"{packet_dir} holds a packet for {key[0]}/{key[1]}; a packet must "
+                "live in the directory named by its target and architecture")
         if key in packets:
             raise FleetEvidenceError(
                 f"multiple active fleet packets for {key[0]} architecture {key[1]}"

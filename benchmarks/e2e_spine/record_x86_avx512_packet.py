@@ -2,17 +2,20 @@
 """Record an exact-host E2E-SPINE-3 packet for the x86 AVX-512 lane.
 
 Sync AVX512-E2E-PACKETS-2026-09-26. The two Zen 5 hosts are separate proof
-lanes, so the packet architecture is pinned to the host by CPU model name and
-the recorder refuses to write one host's key from the other:
+lanes, so the packet architecture is pinned to the host by hostname and CPU
+model name (``e2e_fleet.X86_AVX512_HOSTS``) and the recorder refuses to write
+one host's key from the other:
 
 * Princess-Luna, ``AMD RYZEN AI MAX+ 395`` (Strix Halo) -> ``x86_64_avx512_strix_halo``
 * Tajasarus, ``AMD Ryzen 7 9800X3D`` (Granite Ridge)    -> ``x86_64_avx512_granite_ridge``
 
-Three further refusals keep the packet comparable across the two hosts:
+Further refusals keep the packet comparable across the two hosts:
 
-* the runtime kernel library must be optimized (RUNTIME-LIB-OPT-1): the
-  ``runtime_library_build.json`` record of the build tree whose library the
-  images embed is read, checked and stamped into ``resources.json``;
+* the runtime kernel library must be optimized (RUNTIME-LIB-OPT-1) and bound
+  to this checkout: no override environment, the library and ``tessera-opt``
+  from this checkout's own ``build/``, the ``.so`` newer than its configure
+  record, HEAD's commit and every tracked source that builds it, and every
+  timed image embedding exactly the stamped library;
 * the ``kernel_wall`` domain is timed with the x86 TSC witness
   (``profiler_x86_clock``): the TSC frequency is calibrated over separate
   intervals, every timed window is read with ``rdtscp`` and
@@ -20,7 +23,9 @@ Three further refusals keep the packet comparable across the two hosts:
   ``tessera.profiler_timing.v1`` sample that must build (under WSL the
   builder itself refuses a TSC that disagrees with the raw clock by more
   than 5%). The recorder applies the same 5% band on bare metal;
-* the source tree must be clean, so ``source_commit`` names what ran.
+* the source tree must be clean, so ``source_commit`` names what ran;
+* the assembled packet must pass ``e2e_fleet.validate_x86_avx512_packet``,
+  the same re-derivation the portable validator runs, before it is sealed.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ import ctypes
 import hashlib
 import json
 import math
+import os
 import platform
 import statistics
 import subprocess
@@ -44,14 +50,16 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
-#: CPU model-name prefix -> the one fleet architecture that host may record.
-HOST_ARCHITECTURES: dict[str, str] = {
-    "AMD RYZEN AI MAX+ 395": "x86_64_avx512_strix_halo",
-    "AMD Ryzen 7 9800X3D": "x86_64_avx512_granite_ridge",
-}
 PIPELINE = "tessera-lower-to-x86"
-AGREEMENT_BAND = 0.05
 REQUIRED_LIBRARY = "tessera_x86_elementwise"
+LIBRARY_RELPATH = Path("src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so")
+TESSERA_OPT_RELPATH = Path("tools/tessera-opt/tessera-opt")
+#: Environment overrides that would let a library or compiler from another
+#: checkout or build tree be timed and sealed under this checkout's HEAD.
+OVERRIDE_ENVIRONMENT = ("TESSERA_X86_ELEMENTWISE_LIB", "TESSERA_BUILD_DIR", "TESSERA_OPT")
+#: Tracked sources whose change must rebuild the timed library.
+LIBRARY_SOURCE_ROOTS = ("src/compiler/codegen/tessera_x86_backend",
+                        "cmake/TesseraRuntimeLibraryOptimization.cmake")
 
 
 def _tensor(shape: tuple[int, ...]):
@@ -113,14 +121,70 @@ def _cpu_identity() -> tuple[str, list[str]]:
     return model, sorted(flags.split())
 
 
-def host_architecture(model: str) -> str:
-    """The single fleet architecture this CPU may record; refuses any other host."""
-    for prefix, architecture in HOST_ARCHITECTURES.items():
-        if model.strip().lower().startswith(prefix.lower()):
+def host_architecture(model: str, hostname: str) -> str:
+    """The single fleet architecture this host may record; refuses any other.
+
+    Pinned to both the hostname and the CPU model (``e2e_fleet.X86_AVX512_HOSTS``,
+    the table the validator also reads).
+    """
+    from tessera.compiler.e2e_fleet import X86_AVX512_HOSTS, x86_avx512_host_refusal
+
+    for architecture in X86_AVX512_HOSTS:
+        if x86_avx512_host_refusal(architecture, hostname, model) is None:
             return architecture
     raise RuntimeError(
-        f"CPU {model!r} is not an assigned x86 AVX-512 packet host; "
-        f"expected one of {sorted(HOST_ARCHITECTURES)}")
+        f"host {hostname!r} with CPU {model!r} is not an assigned x86 AVX-512 packet "
+        f"host; expected one of {sorted(X86_AVX512_HOSTS.values())}")
+
+
+def library_binding_refusal(
+    root: Path, *, environ: dict[str, str], head_commit_time: float,
+    sources: list[Path], resolved_library: Path | None, resolved_opt: Path | None,
+) -> str | None:
+    """Why the timed library/compiler cannot be sealed under ``root``'s HEAD.
+
+    The library and ``tessera-opt`` must be the ones in ``root``'s own
+    ``build/`` (no override environment), and the library must be newer than
+    its configure-time record, than HEAD's commit time and than every tracked
+    source that builds it -- a configure stamp says nothing about a ``.so``
+    that was not rebuilt.
+    """
+    overrides = [name for name in OVERRIDE_ENVIRONMENT if environ.get(name)]
+    if overrides:
+        return f"override environment set: {', '.join(overrides)}"
+    build = root / "build"
+    library, opt = build / LIBRARY_RELPATH, build / TESSERA_OPT_RELPATH
+    if resolved_library is None or resolved_library.resolve() != library.resolve():
+        return f"the AVX-512 library resolves to {resolved_library}, not {library}"
+    if resolved_opt is None or resolved_opt.resolve() != opt.resolve():
+        return f"tessera-opt resolves to {resolved_opt}, not {opt}"
+    record = build / "runtime_library_build.json"
+    if not record.is_file():
+        return f"{record} is missing"
+    built = library.stat().st_mtime
+    if built <= record.stat().st_mtime:
+        return "the library is older than its runtime_library_build.json record"
+    if built <= head_commit_time:
+        return "the library is older than HEAD's commit; rebuild it"
+    stale = [str(path) for path in sources if path.stat().st_mtime >= built]
+    if stale:
+        return f"the library is older than {len(stale)} tracked source(s), e.g. {stale[0]}"
+    return None
+
+
+def _check_library_binding() -> None:
+    from tessera.compiler import x86_native
+
+    tracked = _git("ls-files", "--", *LIBRARY_SOURCE_ROOTS).split()
+    refusal = library_binding_refusal(
+        ROOT, environ=dict(os.environ),
+        head_commit_time=float(_git("log", "-1", "--format=%ct").strip()),
+        sources=[ROOT / name for name in tracked],
+        resolved_library=x86_native._library_path(x86_native.X86_AVX512_ARCHITECTURE),
+        resolved_opt=x86_native._tessera_opt(),
+    )
+    if refusal is not None:
+        raise RuntimeError(f"refusing to record: {refusal}")
 
 
 def execution_environment() -> str:
@@ -148,8 +212,8 @@ def _library_record() -> dict[str, Any]:
     return {**stamp, "library_sha256": hashlib.sha256(Path(stamp["library"]).read_bytes()).hexdigest()}
 
 
-def _two_run_medians_ns(call: Callable[[], object], *, samples: int,
-                        iterations: int) -> list[float]:
+def _two_run_samples_ns(call: Callable[[], object], *, samples: int,
+                        iterations: int) -> list[list[float]]:
     call()  # First-use loader/compiler/cache effects never enter the timing sample.
     cohorts: tuple[list[float], list[float]] = ([], [])
     for sample in range(samples):
@@ -158,14 +222,14 @@ def _two_run_medians_ns(call: Callable[[], object], *, samples: int,
             for _ in range(iterations):
                 call()
             cohorts[cohort].append((time.perf_counter_ns() - started) / iterations)
-    return [float(statistics.median(values)) for values in cohorts]
+    return [list(values) for values in cohorts]
 
 
 def _witnessed_medians_ns(
     call: Callable[[], object], *, family: str, samples: int, iterations: int,
     calibration: dict[str, Any], digests: dict[str, str], environment: str,
     measurement_cpu: int,
-) -> tuple[list[float], list[dict[str, Any]], list[float]]:
+) -> tuple[list[list[float]], list[dict[str, Any]], list[float]]:
     """kernel_wall run medians from TSC-witnessed windows, plus the witnesses.
 
     Reuses ``profiler_x86_clock.measure`` / ``witness_sample`` -- one clock
@@ -174,6 +238,7 @@ def _witnessed_medians_ns(
     carry such a window, so the recorder refuses it here.
     """
     from tessera.compiler import profiler_x86_clock as clock
+    from tessera.compiler.e2e_fleet import X86_AVX512_AGREEMENT_BAND
 
     def region() -> None:
         for _ in range(iterations):
@@ -184,6 +249,7 @@ def _witnessed_medians_ns(
     cohorts: tuple[list[float], list[float]] = ([], [])
     witnesses: list[dict[str, Any]] = []
     agreement: list[float] = []
+    band = X86_AVX512_AGREEMENT_BAND
     for sample in range(samples):
         for cohort in ((0, 1) if sample % 2 == 0 else (1, 0)):
             window = clock.measure(region, calibration)
@@ -197,15 +263,18 @@ def _witnessed_medians_ns(
             raw_ns = float(window["raw_end_ns"] - window["raw_start_ns"])
             tsc_ns = float(window["tsc_end"] - window["tsc_start"]) * 1.0e9 / hz
             error = abs(tsc_ns - raw_ns) / raw_ns
-            if error > AGREEMENT_BAND:  # bare metal: the builder does not check it
+            if error > band:  # bare metal: the builder does not check it
                 raise RuntimeError(
                     f"{family}: TSC disagrees with CLOCK_MONOTONIC_RAW by {error:.2%}")
             agreement.append(error)
+            reason = clock.verify_witness_sample(witness)
+            if reason is not None:
+                raise RuntimeError(f"{family}: witness does not re-verify: {reason}")
             witnesses.append({"cohort": cohort, "sample": sample,
                               "iterations_in_window": iterations,
-                              "measurement_cpu": measurement_cpu, **witness})
+                              "measurement_cpu": measurement_cpu, "witness": witness})
             cohorts[cohort].append(tsc_ns / iterations)
-    return [float(statistics.median(v)) for v in cohorts], witnesses, agreement
+    return [list(c) for c in cohorts], witnesses, agreement
 
 
 def _stability(run_medians: list[float]) -> float:
@@ -369,17 +438,23 @@ def _timing_oracle(family: str, bindings: dict[str, Any]) -> np.ndarray:
     return np.linalg.cholesky(bindings["matrix"].astype(np.float64))
 
 
-def record(*, samples: int, iterations: int, stability_limit: float,
+def record(*, samples: int, iterations: int,
            allow_dirty: bool = False) -> tuple[dict, dict]:
     from tessera import runtime as rt
     from tessera.compiler import profiler_x86_clock as clock
-    from tessera.compiler.e2e_fleet import load_fixture_corpus, validate_backend_report
+    from tessera.compiler.e2e_fleet import (
+        X86_AVX512_AGREEMENT_BAND, X86_AVX512_RESOURCE_SCHEMA,
+        X86_AVX512_STABILITY_LIMIT_PCT, load_fixture_corpus,
+        validate_backend_report, validate_x86_avx512_packet,
+    )
     from tessera.compiler.x86_native import (
         X86_AVX512_ARCHITECTURE, host_supports_architecture,
     )
 
     model, flags = _cpu_identity()
-    architecture = host_architecture(model)
+    hostname = platform.node()
+    architecture = host_architecture(model, hostname)
+    stability_limit = X86_AVX512_STABILITY_LIMIT_PCT
     if not host_supports_architecture(X86_AVX512_ARCHITECTURE):
         raise RuntimeError("this host lacks the AVX-512 feature set the image requires")
     if not clock.invariant_tsc():
@@ -387,6 +462,7 @@ def record(*, samples: int, iterations: int, stability_limit: float,
     if _git("status", "--porcelain").strip() and not allow_dirty:
         raise RuntimeError("source tree is dirty; commit before recording evidence")
     source_commit = _git("rev-parse", "HEAD").strip()
+    _check_library_binding()
     library_record = _library_record()
     environment = execution_environment()
     fixtures = load_fixture_corpus()
@@ -396,8 +472,10 @@ def record(*, samples: int, iterations: int, stability_limit: float,
 
     fixture_rows, cache_rows, benchmark_rows, resource_rows = [], [], [], []
     witness_rows: dict[str, Any] = {}
+    end_to_end_samples: dict[str, Any] = {}
     toolchains: set[str] = set()
-    for spec in _family_definitions(fixtures):
+    definitions = _family_definitions(fixtures)
+    for spec in definitions:
         family, fixture_id = spec["family"], spec["fixture_id"]
         cold, warm = spec["package"](spec["module"]), spec["package"](spec["module"])
         toolchains.add(cold.image.toolchain_fingerprint)
@@ -441,16 +519,22 @@ def record(*, samples: int, iterations: int, stability_limit: float,
         # The row's image digest first: the tsc_witness route binds on it.
         digests = {"image": timing.image.image_digest,
                    "descriptor": timing.descriptor.descriptor_digest}
-        kernel_medians, witnesses, agreement = _witnessed_medians_ns(
+        payload_sha256 = hashlib.sha256(timing.image.payload).hexdigest()
+        if payload_sha256 != library_record["library_sha256"]:
+            raise RuntimeError(f"{family} image does not embed the stamped library")
+        kernel_samples, witnesses, agreement = _witnessed_medians_ns(
             _direct_call(family, timing, timing_bindings), family=family,
             samples=samples, iterations=iterations, calibration=calibration,
             digests=digests, environment=environment, measurement_cpu=measurement_cpu,
         )
+        e2e_samples = _two_run_samples_ns(
+            lambda: rt.launch(timing_artifact, timing_bindings),
+            samples=samples, iterations=iterations)
+        end_to_end_samples[family] = e2e_samples
         run_medians = {
-            "kernel_wall": kernel_medians,
-            "end_to_end": _two_run_medians_ns(
-                lambda: rt.launch(timing_artifact, timing_bindings),
-                samples=samples, iterations=iterations),
+            domain: [float(statistics.median(c)) for c in cohort_samples]
+            for domain, cohort_samples in (("kernel_wall", kernel_samples),
+                                           ("end_to_end", e2e_samples))
         }
         resource = {
             "architecture": architecture,
@@ -460,6 +544,7 @@ def record(*, samples: int, iterations: int, stability_limit: float,
             "timing_shape": spec["timing_shape"],
             "instruction_envelope": "x86-64 AVX-512 (avx512f/bw/cd/dq/vl/vnni/bf16/vpopcntdq)",
             "runtime_library_build": library_record,
+            "image_payload_sha256": payload_sha256,
         }
         resource_fingerprint = hashlib.sha256(
             json.dumps(resource, sort_keys=True).encode()).hexdigest()
@@ -486,10 +571,11 @@ def record(*, samples: int, iterations: int, stability_limit: float,
                  "descriptor_digest": cold.descriptor.descriptor_digest}
         cache_rows.append({"fixture_id": fixture_id, "cold": state, "warm": dict(state)})
         resource_rows.append({"family": family, "resource_fingerprint": resource_fingerprint,
-                              "timing_max_abs_error": timing_error, **resource})
+                              "timing_max_abs_error": timing_error, "resource": resource})
         witness_rows[family] = {
             "timing_domain": "kernel_wall",
-            "agreement": {"band": AGREEMENT_BAND, "min_relative_error": min(agreement),
+            "agreement": {"band": X86_AVX512_AGREEMENT_BAND,
+                          "min_relative_error": min(agreement),
                           "max_relative_error": max(agreement), "windows": len(agreement)},
             "samples": witnesses,
         }
@@ -498,25 +584,27 @@ def record(*, samples: int, iterations: int, stability_limit: float,
     report = {
         "schema": "tessera.e2e-backend-report.v1",
         "target": "x86", "architecture": architecture,
-        "device": {"exact": True, "identity": f"{platform.node()} | {model}"},
+        "device": {"exact": True, "identity": f"{hostname} | {model}"},
         "source_commit": source_commit, "toolchain_fingerprint": toolchain,
-        "scope": [spec["family"] for spec in _family_definitions(fixtures)],
+        "scope": [spec["family"] for spec in definitions],
         "required_timing_domains": ["kernel_wall", "end_to_end"],
         "fixtures": fixture_rows, "cache_proofs": cache_rows,
         "benchmarks": benchmark_rows,
     }
     validate_backend_report(report)
     resources = {
-        "schema": "tessera.e2e-x86-resource-record.v1",
-        "device": {"model": model, "flags": flags, "host": platform.node(),
+        "schema": X86_AVX512_RESOURCE_SCHEMA,
+        "device": {"model": model, "flags": flags, "host": hostname,
                    "kernel_release": platform.release()},
         "execution_environment": environment,
         "measurement_cpu": measurement_cpu,
         "runtime_library_build": library_record,
         "tsc_calibration": calibration,
         "timing_witness": witness_rows,
+        "end_to_end_samples_ns": end_to_end_samples,
         "rows": resource_rows,
     }
+    validate_x86_avx512_packet(report, resources)
     return report, resources
 
 
@@ -526,7 +614,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=int, default=15)
     parser.add_argument("--iterations", type=int, default=100)
-    parser.add_argument("--stability-limit", type=float, default=4.0)
     parser.add_argument("--packet-dir", type=Path)
     parser.add_argument("--allow-dirty", action="store_true",
                         help="dry runs only; a sealed packet must name a clean commit")
@@ -536,8 +623,7 @@ def main() -> int:
     if args.packet_dir and args.allow_dirty:
         parser.error("--allow-dirty cannot seal a packet")
     report, resources = record(
-        samples=args.samples, iterations=args.iterations,
-        stability_limit=args.stability_limit, allow_dirty=args.allow_dirty,
+        samples=args.samples, iterations=args.iterations, allow_dirty=args.allow_dirty,
     )
     if args.packet_dir:
         if args.packet_dir.name != report["architecture"]:

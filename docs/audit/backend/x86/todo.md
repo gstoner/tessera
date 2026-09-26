@@ -19,14 +19,29 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   and `x86_64_avx512_granite_ridge` (Tajasarus, Ryzen 7 9800X3D), each owing
   matmul / softmax / reduction / attention / linalg. `alpha_scoreboard` `luna_cpu` /
   `taj_cpu` read their own key; the "two Zen 5 lanes share one key" limit is gone.
-- **Recorder** `benchmarks/e2e_spine/record_x86_avx512_packet.py` maps the CPU model
-  name to the one key that host may record and refuses any other host, a host without
-  the AVX-512 image feature set, a dirty tree, or a runtime library whose
-  `record_for_library` stamp is not optimized. `kernel_wall` is timed by
-  `profiler_x86_clock.measure` / `witness_sample` (TSC calibrated over separate
-  intervals, rdtscp + `CLOCK_MONOTONIC_RAW` around each window on one pinned CPU);
-  a window whose TSC is refused aborts the recording. The stamp sits inside each row's
-  `resource_fingerprint` and in the sealed `resources.json`.
+- **Recorder** `benchmarks/e2e_spine/record_x86_avx512_packet.py` maps the hostname
+  **and** CPU model (`e2e_fleet.X86_AVX512_HOSTS`, case-insensitive) to the one key that
+  host may record and refuses any other host, a host without the AVX-512 image feature
+  set, a dirty tree, any override environment (`TESSERA_X86_ELEMENTWISE_LIB`,
+  `TESSERA_BUILD_DIR`, `TESSERA_OPT`), a library or `tessera-opt` outside the checkout's
+  own `build/`, a `.so` not newer than its `runtime_library_build.json`, HEAD's commit
+  time and every tracked source that builds it (the configure-time `-O2` stamp says
+  nothing about a library that was not rebuilt), a timed image that does not embed the
+  stamped library, and a runtime library whose `record_for_library` stamp is not
+  optimized. `kernel_wall` is timed by `profiler_x86_clock.measure` / `witness_sample`
+  (TSC calibrated over separate intervals, rdtscp + `CLOCK_MONOTONIC_RAW` around each
+  window on one pinned CPU); a window whose witness is refused or does not re-verify
+  aborts the recording. Stability uses the fixed policy
+  `X86_AVX512_STABILITY_LIMIT_PCT`, not a per-row limit.
+- **Validator** `e2e_fleet.validate_x86_avx512_packet` runs at seal and at every
+  `validate_packet`: it parses `resources.json`, checks hostname + model against the
+  architecture key, checks the environment label against the recorded kernel release,
+  re-verifies every witness (`verify_witness_sample`) and recomputes agreement, re-derives
+  both domains' run medians from the stored per-window samples, applies the fixed
+  stability policy, re-hashes each resource fingerprint and requires every timed image
+  to embed the stamped library. `discover_packets` also requires a packet to sit in the
+  directory named by its target and architecture. (Review of this branch: a Tajasarus
+  packet relabelled and resealed as Strix Halo used to be accepted.)
 - **linalg fixture** `cholesky-f32-3x3-spd-v1` added to `benchmarks/e2e_spine/fixtures.json`
   (exact float factor; runs through `x86_breadth.package_graph_breadth`).
 - **Sealed** (both at source commit `154e7fc9`, WSL2, each built from a fresh worktree
@@ -40,7 +55,8 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   so the public launch path, not the kernel, dominates every small family — owed a
   look at the x86 descriptor launch path. (2) The `-O2` `libtessera_x86_elementwise.so`
   was byte-identical on the two hosts (same GCC 15.2.0, same detected flags), so a
-  per-host timing gap is the part, not the build. (3) Under WSL2 the raw clock is
+  per-host timing gap is not the build; it is not isolated further — the WSL kernels
+  (6.18.33.1 vs 6.18.33.2) and the memory systems also differ. (3) Under WSL2 the raw clock is
   itself TSC-derived; the witness shows a stable TSC scale, not an independent
   oscillator (stated in `profiler_x86_clock`).
 - **Zen 5 profiler packet on the witness route** (Princess-Luna, clean tree `7b3094e9`,
@@ -50,8 +66,12 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   `TIMING_PROOF_INCOMPLETE:perf_event_open,perf_sample_valid`, `SYMBOL_SAMPLING_MISSING`.
   Not recorded on Tajasarus.
 
-**Sibling outcomes.** ROCm / NVIDIA / Apple: not applicable (x86 CPU packets; no shared
-code changed beyond the x86 registrations and a new fixture that no other packet claims).
+**Sibling outcomes.** ROCm / NVIDIA: not applicable (x86 CPU packets; the only shared
+changes are the x86 registrations, a new fixture, and a directory-name check in
+`discover_packets` that every existing packet already satisfies). **Apple: follow-up
+opportunity** — `apple_cpu/apple_m1_max` registers `linalg`, and the new
+`cholesky-f32-3x3-spd-v1` fixture is the corpus entry its packet could claim; no Apple
+packet was re-recorded here.
 
 ## Device-clock markers — 2026-09-26
 

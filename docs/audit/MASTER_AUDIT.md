@@ -191,6 +191,54 @@ instruction counts). Missing `/dev/kfd` or a bare-metal host does not stop the
 compiler from being completed or its performance from being checked;
 hardware counters are diagnostic extras.
 
+### Definition of done: a 100% functional compiler on the fleet
+
+Owner statement (2026-09-25). The compiler is done when every program runs
+through one pipeline, on every fleet lane, with each stage produced by MLIR
+passes and optimized at that stage:
+
+```
+Python / textual frontend
+  → typed semantic Graph IR
+  → structured differentiation and optimization
+  → Schedule IR → Tile IR
+  → backend Target IR and native lowering (MLIR → LLVM / NVVM / ROCDL / Apple)
+  → native image + checked runtime ABI → execution
+```
+
+**Eight lanes on four machines — all required, none optional:**
+
+| Machine | CPU lane | GPU lane | Lane state today ([spine](generated/compilation_spine_inventory.md)) |
+|---|---|---|---|
+| Mac M1 Max | `apple_cpu` — arm64 (LLVM AArch64) | `apple_gpu` — Apple7, Metal 4 | CPU and GPU Level C `partial` |
+| Princess-Luna, Ryzen AI MAX+ 395 | `x86` — Zen 5, AVX-512 | `rocm_gfx1151` — RDNA 3.5 | x86 C `partial` (prebuilt kernel image); gfx1151 C `partial` |
+| The-Super-Bear, Threadripper 3970X | `x86` — **Zen 2, AVX2, no AVX-512** | `nvidia_sm120` — RTX 5070 | **no Zen 2 lane** beyond `x86_64_base` softmax/reduction; sm_120 C **`absent`** |
+| Tajasarus, Ryzen 7 9800X3D | `x86` — Zen 5, AVX-512 | `rocm_gfx1201` — RDNA4 | x86 as Princess-Luna; gfx1201 C **`absent`** |
+
+**What "native, not a bypass" means at each stage** — each is a checkable
+exit criterion, and a family counts toward 100% only when all of them hold on
+the lane:
+
+| Stage | Done when | Known bypass today |
+|---|---|---|
+| Frontend | The tracer is the only frontend; no AST `_OpExtractor`, no family selection in `JitFn` | E2E-REAL-6 |
+| Graph IR + AD + optimization | Typed Graph IR; AD is a Graph-IR transformation; canonicalize / fold / CSE / fusion / layout run as MLIR passes | Python-side fusion recognizer and synthesizer; attribute-stamp-only passes |
+| Schedule IR | Tiling, staging, pipeline and distribution decisions are Schedule IR produced and consumed by passes | Schedule→Tile is op-name macro expansion with tile sizes from pass options (IR_STACK U6); Python/C++ dual boundaries (U3) |
+| Tile IR | Typed Tile IR; buffer reuse / arena / async-copy / legality passes run | Untyped `tile.mma` sites (W1.1); whole-kernel and domain ops in Tile (W3.3) |
+| Target IR + native lowering | Contract-carrying Target IR lowered by MLIR to LLVM / NVVM / ROCDL / Apple device code | Python `package_*` constructors ([`bootstrap_prune_gap`](generated/bootstrap_prune_gap.md)); `emit/*` source emitters; x86 packages a prebuilt image; Apple `matmul2d` / hand-written MSL reached by symbol |
+| Image + ABI + execution | Native image with a checked runtime ABI, launched and compared on the lane's own device | [`runtime_abi`](generated/runtime_abi.md) stubs |
+
+Hand-tuned or library kernels remain allowed only as **arbiter candidates
+behind a declared Target IR op** (Decisions #28/#31) — never as the only way
+a family reaches the device.
+
+**Scoreboard gap.** No dashboard measures this definition yet: the spine
+inventory is per target with three levels, and the route maps are per
+family without stages or per-CPU lanes. The first deliverable toward 100% is
+a generated **lane × family × stage** scoreboard derived from those sources
+(bootstrap/route maps, frontend authority, spine, runtime ABI, execution
+matrix), so progress is measured rather than narrated.
+
 ### Three blockers most other items wait on
 
 1. **One compiler authority.** Most families still reach a backend through a
@@ -291,12 +339,17 @@ hardware counters are diagnostic extras.
   packaging a prebuilt image; the `TileToX86Pass` assertions-build rerun
   (the dependent-dialect fix is in; Tajasarus confirms it); packed-byte
   INT4/FP8 VNNI consumer (MODEL-WEIGHT-PHYS-1); seal the AVX-512 E2E
-  packets with the non-profiler timing discipline (no PMU needed). ACE:
-  deferred until shipping hardware.
+  packets with the non-profiler timing discipline (no PMU needed). **Add a
+  Zen 2 / AVX2 lane for Super-Bear** — today only `x86_64_base`
+  (softmax/reduction) and `zen5-avx512` exist; compiling bodies through LLVM
+  with per-host target features (`znver2` / `znver5`) is how one pipeline
+  covers both CPUs. ACE: deferred until shipping hardware.
 
 ### Grouped by what unblocks it
 
 **Software, on existing boxes**
+- Build the lane × family × stage scoreboard for the definition of done
+  (above), so every item below is measured against it.
 0. Align the timing-admission code with the direction above: let
    `wall_clock64`/event-validated paired timing from the fleet hosts be
    selector-admissible instead of refusing every WSL sample

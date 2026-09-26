@@ -416,11 +416,15 @@ matches its module fails generation. Read the counts there.
    **Done 2026-09-26:** the gfx1151 SSD calibrated-pairs packet — the
    production selector admits the cooperative candidate on compiler-built
    device-clock markers, no KFD ([packet](../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md),
-   sync `DEVICE-CLOCK-MARKER-2026-09-26`). Open: validate the NVIDIA
+   sync `DEVICE-CLOCK-MARKER-2026-09-26`); and the gfx1201 packet on
+   Tajasarus, where the same selector admits cooperative, lower bound 9.73×
+   ([packet](../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md),
+   sync `GFX1201-SSD-CALIBRATION-2026-09-26`). Open: validate the NVIDIA
    `%globaltimer` marker on Super-Bear and record its SSD packet; an SSD Nsight
    activity-window packet on Super-Bear's WSL2; marker timing in
-   `calibrate_gfx1151.py`; gfx1201 and Zen 2 packet adapters. **Done
-   2026-09-26:** the Zen 5 x86 profiler packet on the `tsc_witness` route
+   `calibrate_gfx1151.py`; a Zen 2 packet adapter; a gfx1151 SSD re-record
+   under the interleaved protocol. **Done 2026-09-26:** the Zen 5 x86 profiler
+   packet on the `tsc_witness` route
    (Princess-Luna, `-O2` library; environment tags are diagnostic gaps). Its
    verdict is E2E-REAL-4's **non-regression check between the production and
    scheduled images, which are byte-identical in both rows** — a parity check

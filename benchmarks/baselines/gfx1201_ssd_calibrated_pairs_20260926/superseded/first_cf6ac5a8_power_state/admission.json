@@ -1,0 +1,18 @@
+{
+  "decision": {
+    "admitted": false,
+    "reason": "native calibration refuses promotion: INSTRUMENTATION_OVERHEAD_EXCEEDED",
+    "lower_bound": 9.01387072663539
+  },
+  "admission_routes": [
+    "device_clock_witness"
+  ],
+  "selected_binding": "d2922b7805767d6705a8eb97686ff19bc437058846fbd3f259fa612402f616f7",
+  "incumbent_binding": "d2922b7805767d6705a8eb97686ff19bc437058846fbd3f259fa612402f616f7",
+  "candidate_binding": "df6b475e8ea96f2f669a04399153c0533e963a1ea5020b4b6b3bf0e7483f7234",
+  "source": {
+    "source_commit": "cf6ac5a842305a37b27e27adcaeb022bd3310291",
+    "worktree_dirty": false,
+    "execution_environment": "wsl2"
+  }
+}

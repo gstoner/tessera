@@ -152,3 +152,76 @@ def test_ssd_absolute_correctness_gate_boundary(variant, output):
     errors[output] = math.nextafter(SSD_MAX_ABS_ERROR, math.inf)
     with pytest.raises(ValueError, match='absolute admission tolerance'):
         summarize(pairs)
+
+
+def _witness_admission(package_chip, calibration_chip):
+    """One SSD admission over nine witness-calibrated pairs, where the rows and
+    packages name ``package_chip`` and every calibration ``calibration_chip``."""
+    import hashlib
+    from types import SimpleNamespace
+    from tessera.compiler.ssd_performance import bind_measured_ssd
+    from tessera.compiler.profiler_rocm_evidence import build_rocm_profiler_packet
+    from test_profiler_rocm_evidence import _wsl_witness_timing, _no_kfd_capture, _image
+    logical = SimpleNamespace(compiler_digest='compiler',schedule_ir='chunk_size = 8 : i64')
+    specs = [SimpleNamespace(shape=(32,2,4)),None,SimpleNamespace(shape=(32,2,16))]
+    def artifact(cooperative):
+        name = 'cooperative' if cooperative else 'serial'
+        return SimpleNamespace(logical=logical,adjoint=False,cooperative=cooperative,
+            package=SimpleNamespace(backend='rocm',chip=package_chip,binding_digest=name,image=name.encode()),
+            validate=lambda:specs,bind=lambda:name)
+    pairs = evidence()
+    for i,pair in enumerate(pairs):
+        for name,packet in pair.items():
+            packet.update(backend='rocm',architecture=package_chip,clock='HIP events',run_id=f'{i}-{name}')
+            packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
+    comparison = dict(pairs=pairs,source=dict(source_commit='a'*40))
+    calibrations = []
+    for i,pair in enumerate(pairs):
+        for name in ('serial','cooperative'):
+            row = pair[name]['rows'][0]
+            timing = _wsl_witness_timing(image_sha256=row['image_sha256'],architecture=calibration_chip)
+            timing['sample_id'] = f'{i}-{name}'
+            timing['environment']['run_id'] = f'{i}-{name}'
+            clean,probe = _image(1,'clean',calibration_chip),_image(1,'probe',calibration_chip)
+            for image in (clean,probe):
+                image.update(calibration_sample_id=timing['sample_id'],
+                             semantic_sha256=hashlib.sha256(logical.schedule_ir.encode()).hexdigest(),
+                             duration_ns=row['device_event_ms'][0]*1e6)
+            clean['image_sha256'] = row['image_sha256']
+            calibrations.append(build_rocm_profiler_packet(timing=timing,capture=_no_kfd_capture(),
+                uninstrumented=clean,instrumented=probe,source=dict(source_commit='a'*40,worktree_dirty=False)))
+    return bind_measured_ssd(artifact(False),artifact(True),comparison,calibrations)
+
+
+@pytest.mark.parametrize('chip', ['gfx1151', 'gfx1201'])
+def test_ssd_admits_a_witness_calibration_on_its_own_chip(chip):
+    """Sync GFX1201-SSD-CALIBRATION-2026-09-26: both calibrated chips admit
+    through the same route when calibrations name the package chip."""
+    bound,decision = _witness_admission(chip, chip)
+    assert bound == 'cooperative' and decision.admitted
+
+
+@pytest.mark.parametrize('package_chip,calibration_chip', [('gfx1201','gfx1151'),('gfx1151','gfx1201')])
+def test_ssd_calibration_never_transfers_between_chips(package_chip, calibration_chip):
+    with pytest.raises(ValueError, match='does not match the measured package chip'):
+        _witness_admission(package_chip, calibration_chip)
+
+
+def test_ssd_admission_refuses_a_rocm_chip_without_a_calibration_route():
+    import hashlib
+    from types import SimpleNamespace
+    from tessera.compiler.ssd_performance import admit_ssd_candidate
+    logical = SimpleNamespace(compiler_digest='compiler',schedule_ir='chunk_size = 8 : i64')
+    specs = [SimpleNamespace(shape=(32,2,4)),None,SimpleNamespace(shape=(32,2,16))]
+    def artifact(cooperative):
+        name = 'cooperative' if cooperative else 'serial'
+        return SimpleNamespace(logical=logical,adjoint=False,cooperative=cooperative,
+            package=SimpleNamespace(backend='rocm',chip='gfx1100',binding_digest=name,image=name.encode()),
+            validate=lambda:specs)
+    pairs = evidence()
+    for pair in pairs:
+        for name,packet in pair.items():
+            packet.update(backend='rocm',architecture='gfx1100',clock='HIP events')
+            packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
+    decision = admit_ssd_candidate(artifact(False),artifact(True),dict(pairs=pairs),())
+    assert not decision.admitted and 'no native calibration adapter' in decision.reason

@@ -11,6 +11,16 @@ from tessera.compiler.native_ssd import materialize_ssd  # noqa: E402
 from tessera.compiler.ssd_performance import bind_measured_ssd  # noqa: E402
 
 
+def _llvm_bin():
+    """The matched LLVM 23 bin directory (``TESSERA_LLVM_BIN`` first), never a
+    hard-coded apt path: Tajasarus has no /usr/lib/llvm-23."""
+    from tessera.compiler.llvm_tools import llvm_bin_dir
+    found = llvm_bin_dir()
+    if found is None:
+        raise SystemExit('matched LLVM 23 tools not found (set TESSERA_LLVM_BIN)')
+    return found
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--comparison',type=Path,required=True)
@@ -21,7 +31,7 @@ def main():
     packet = comparison['pairs'][0]['serial']
     T,H,N,P = packet['shape']
     logical = lower_scheduled_ssd(T,H,N,P,packet['rows'][0]['chunk'],compiler=args.compiler)
-    options = dict(compiler=args.compiler,llvm_bin=Path('/usr/lib/llvm-23/bin'),backend=packet['backend'],chip=packet['architecture'])
+    options = dict(compiler=args.compiler,llvm_bin=_llvm_bin(),backend=packet['backend'],chip=packet['architecture'])
     serial = materialize_ssd(logical,**options)
     cooperative = materialize_ssd(logical,cooperative=True,**options)
     # Calibrations ride in the comparison (record_ssd_*_calibrated_pairs);

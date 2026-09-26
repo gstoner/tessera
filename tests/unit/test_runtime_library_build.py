@@ -75,6 +75,12 @@ def test_record_for_library_walks_to_its_build_tree(tmp_path) -> None:
     ("X: -Og", False),
     ("O2x", False),
     ("multi-config generator: per-configuration flags", False),
+    # Per-language records (Codex review on #857): each language decides.
+    ("languages: CUDA=O2 default | CXX=-O3", True),
+    ("languages: CXX=-O3 | CUDA=-O0", False),
+    ("languages: CXX=Release: -O3 -DNDEBUG | CUDA=Release: ", False),
+    ("languages: C=RelWithDebInfo: -O2 -g | CXX=RelWithDebInfo: -O2 -g", True),
+    ("languages: ", False),
 ])
 def test_is_optimized_reads_the_flags_not_the_build_type_name(level, optimized) -> None:
     assert is_optimized(level) is optimized

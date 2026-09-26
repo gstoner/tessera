@@ -74,8 +74,9 @@ _OPT_FLAG = re.compile(r"(?:^|\s)-O(\d|s|z|g|fast)?(?=\s|$)")
 def is_optimized(level: str) -> bool:
     """Whether the recorded compile flags optimize, read from the flags.
 
-    ``O2 (...)`` is the helper's own default. Otherwise the record is
-    ``<source>: <flags>``; the LAST ``-O`` flag decides (as the compiler's
+    ``O2 (...)`` is the helper's own default; ``languages: L=... | ...`` is the
+    per-language record (every language must be optimized). Otherwise the
+    record is ``<source>: <flags>``; the LAST ``-O`` flag decides (as the compiler's
     does), ``-O0`` and ``-Og`` are unoptimized, and a record naming no ``-O``
     flag at all is not optimized -- a build type's name is not evidence of
     what it compiled with.
@@ -83,7 +84,24 @@ def is_optimized(level: str) -> bool:
     text = level.strip()
     if text.startswith("O2 ("):
         return True
-    _, _, flags = text.partition(":")
+    if text.startswith("languages:"):
+        # Per-language record (`LANG=O2 default | LANG=<flags> | ...`): the
+        # library is optimized only if every language it compiles is.
+        entries = [e.strip() for e in text[len("languages:"):].split("|") if e.strip()]
+        return bool(entries) and all(_language_optimized(e) for e in entries)
+    return _flags_optimized(text.partition(":")[2])
+
+
+def _language_optimized(entry: str) -> bool:
+    _, _, value = entry.partition("=")
+    value = value.strip()
+    if value == "O2 default":
+        return True
+    # `<BuildType>: <flags>` or bare user flags.
+    return _flags_optimized(value.partition(":")[2] if ":" in value else value)
+
+
+def _flags_optimized(flags: str) -> bool:
     levels = _OPT_FLAG.findall(flags)
     if not levels:
         return False

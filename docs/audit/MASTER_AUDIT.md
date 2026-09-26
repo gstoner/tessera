@@ -340,7 +340,7 @@ matches its module fails generation. Read the counts there.
 | Analysis | W2.1 dataflow substrate, per-op memory effects, symbolic-dim equality | Value, alias, effect, memory-dependence and ordered-collective **consumers** (§3 above) |
 | Fusion | One authoritative recognizer; Apple synthesizer F0–F5 | Synthesizer not portable through IR; consumer-driven canonicalization (W5.5); ANN admission of measured candidates (MSW-9) |
 | Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log | **Decision #11 is not enforced in production**: neither cache key carries toolchain or delegate-ABI identity, and while `emit/autotune.py` can fail closed on compiler/resource fingerprints as *evidence* fields, only a benchmark script and a unit test ever pass `required_evidence` — the default warm-start loads rows unchecked; Decision #12 `route` is stamped per recorder, not a schema field; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
-| Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; the split-K predicate has no production consumer (ROCM-SPLIT-K-1) |
+| Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; split-K has a production consumer on gfx1201 f16/bf16 since 2026-09-26 (ROCM-SPLIT-K-1) -- the per-shape slice rule, fp8/int split and gfx1151 remain open |
 | Memory | `TileBufferReusePass`, `TileBufferArenaPass` on ROCm/NVIDIA | Control-flow path-max sizing; multiple dynamic arenas; measured full-model remat |
 | Cost models | `target_perf.py`, T1 GEMM model, `FusionCost` | T1 failed ranking — replace, do not coefficient-tune; per-arch correlation (NVIDIA-CALIB-1, ROCM-COSTMODEL-T1, X86-CALIB-1, APPLE-CALIB-1); sm_120 and Apple roofline peaks |
 
@@ -366,8 +366,9 @@ matches its module fails generation. Read the counts there.
   (owner, 2026-09-26; the expander stays as the Tile→Target generator, the
   Python-built directive entry goes); Lane B (the Graph→Tile GEMM shortcut
   that skipped Schedule IR) is **retired 2026-09-26** — see the lane map;
-  ROCM-SPLIT-K-1 needs a production consumer (the predicate is already keyed
-  on occupancy); the LDS body's remaining lever is the
+  ROCM-SPLIT-K-1 landed on gfx1201 f16/bf16 (ordered cross-workgroup
+  split-K; router gate 16x256x2048 measured ~2x on Tajasarus, host wall clock)
+  and still owes a per-shape slice rule; the LDS body's remaining lever is the
   **VGPR** ceiling (the K1-blocked layout was refuted 2026-09-20 and the pad
   default corrected to 1 — see ROCM-LDS-BANKPAD-1 / ROCM-LDS-STAGE-VECTOR-1);
   `ROCM_WaitTokenOp` names a counter class but carries no count immediate, so
@@ -435,7 +436,7 @@ matches its module fails generation. Read the counts there.
 5. Required Target IR contracts + GOV-ODS-CONSUMER-1; extend
    `verifier_coverage` to Tile/Schedule/Target ODS.
 6. NVIDIA `tile.mma` sites (W1.1), then W3.3.
-7. ROCM-SPLIT-K-1; the LDS-body VGPR lever.
+7. ROCM-SPLIT-K-1 per-shape slice rule (landed S rule is conservative on the router gate); the LDS-body VGPR lever.
 8. `x86vector` lowering via the `tessera-jit` path.
 9. Apple `matmul2d` → compiler-owned MSL; Apple arbiter candidacy.
 

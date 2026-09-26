@@ -32,6 +32,8 @@ What the numbers are and are not:
 
 - A split iteration is **both** launches (partial + ordered reduce); the
   workspace is allocated once outside the timed loop, as are all buffers.
+  `runtime.launch` instead `hipMalloc`s/`hipFree`s the S*M*N*4-byte workspace
+  on every call; that per-call cost is **excluded** from every row here.
 - The unsplit control is the production Tile IR with the `tessera.split_k`
   pair removed, compiled by the same `_compile_native_tile_ir` call. It is
   what this shape ran before ROCM-SPLIT-K-1; it is not a production route now.
@@ -41,5 +43,7 @@ What the numbers are and are not:
   and 5e-7 (bf16) for the selected split; split vs unsplit max relative
   difference 1.7e-6 / 7.4e-7.
 - The S=4/S=8 rows say the selection rule (fill each WGP once) is
-  conservative for this shape. The rule was **not** retuned from one shape.
+  conservative for this shape. Why is not measured: one hypothesis is that one
+  wave per WGP leaves three of its four SIMDs idle, but no counters exist on this
+  WSL2 host to confirm it. The rule was **not** retuned from one shape.
 - gfx1151 evidence: none. Split-K is never selected there.

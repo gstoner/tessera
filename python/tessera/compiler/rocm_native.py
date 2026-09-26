@@ -1709,6 +1709,59 @@ def package_sparse_matmul(artifact, *, pipeline_name: str) -> ROCMNativePackage:
     return ROCMNativePackage(artifact.tile_ir, target_ir, backend_ir, image, descriptor)
 
 
+def resolve_scheduled_matmul_k_unroll(
+    artifact: ScheduledMatmulArtifact,
+    *,
+    staging: str,
+    k_unroll: int | None,
+) -> tuple[int, int | None]:
+    """The K unroll a scheduled matmul package is compiled with.
+
+    Returns ``(k_unroll, derived_rule_value)``: the second element is what the
+    measured rule (`scheduled_matmul.rocm_k_unroll`) asked for when that is NOT
+    what is used, else None.
+
+    `k_unroll` is a performance key and the split-K slice count is a semantic
+    one (ROCM-SPLIT-K-1), so the performance key yields. The Schedule's decider
+    only guarantees ``K % (split_k * block_k) == 0``, which makes k_unroll=1
+    always legal for a split; a larger derived unroll that does not divide the
+    slice would otherwise turn a retune of `rocm_k_unroll` into a packaging
+    error for every split shape. So a DERIVED unroll that does not fit falls
+    back deterministically to 1 and the fallback is recorded in provenance
+    (Decision #21a: a performance fallback is allowed, never silent). A
+    caller-PINNED unroll that does not fit is refused: the caller asked for a
+    specific kernel, and it does not exist.
+    """
+    split_k = int(artifact.split_k)
+    pinned = k_unroll is not None
+    if k_unroll is None:
+        # Derived from the measured rule unless the caller pins one (the gap
+        # recorder does). The measured rule is the REGISTER body's; LDS
+        # staging is a separate physical schedule and keeps the single slab.
+        from .scheduled_matmul import rocm_k_unroll
+        k_unroll = 1 if staging != "register" else rocm_k_unroll(
+            artifact.m, artifact.n, artifact.k, arch=artifact.architecture,
+            dynamic=artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k,
+            storage=artifact.storage)
+    k_unroll = int(k_unroll)
+    if split_k <= 1:
+        return k_unroll, None
+    from .scheduled_matmul import rocm_gfx1201_block_k
+    block = max(rocm_gfx1201_block_k(artifact.k, dynamic_k=artifact.dynamic_k), 16)
+    if artifact.k % (split_k * block * k_unroll) == 0:
+        return k_unroll, None
+    if pinned:
+        raise ValueError(
+            f"ROCM-SPLIT-K-1: K={artifact.k} does not split into {split_k} slices "
+            f"of whole K steps ({block * k_unroll} = block_k x pinned k_unroll)")
+    if artifact.k % (split_k * block) != 0:
+        # The Schedule's own invariant; reaching this is a decider bug.
+        raise ValueError(
+            f"ROCM-SPLIT-K-1: K={artifact.k} does not split into {split_k} slices "
+            f"of whole macro K blocks ({block})")
+    return 1, k_unroll
+
+
 def package_scheduled_matmul(
     artifact: ScheduledMatmulArtifact,
     *,
@@ -1750,35 +1803,19 @@ def package_scheduled_matmul(
             "or int8/int4-to-i32 contract (or any OCP FP8 e4m3/e5m2 pairing, "
             "including mixed, to f32 on gfx1201)")
     arch = artifact.architecture
-    if k_unroll is None:
-        # A performance key: derived from the measured rule unless the caller
-        # pins one (the gap recorder does). Recorded in provenance either way.
-        # The measured rule is the REGISTER body's; LDS staging is a separate
-        # physical schedule and keeps the single-slab loop unless asked.
-        from .scheduled_matmul import rocm_k_unroll
-        k_unroll = 1 if staging != "register" else rocm_k_unroll(
-            artifact.m, artifact.n, artifact.k, arch=arch,
-            dynamic=artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k,
-            storage=artifact.storage)
-    if staging == "lds" and k_unroll != 1:
-        raise ValueError("ROCm LDS staging and K unrolling are separate physical schedules")
     # ROCM-SPLIT-K-1: the split is a SEMANTIC decision of the Schedule, and the
     # physical body that realizes it is the register-staged typed body. An LDS
     # request for a split schedule names a kernel that does not exist; refuse
     # rather than run it unsplit (Decision #21a).
     split_k = int(artifact.split_k)
-    if split_k > 1:
-        if staging != "register":
-            raise ValueError(
-                "ROCM-SPLIT-K-1: a split-K schedule is realized by the register-staged "
-                "body only; staging='lds' has no split partial")
-        from .scheduled_matmul import rocm_gfx1201_block_k
-        block = max(rocm_gfx1201_block_k(artifact.k, dynamic_k=artifact.dynamic_k), 16)
-        step = block * int(k_unroll)
-        if artifact.k % (split_k * step) != 0:
-            raise ValueError(
-                f"ROCM-SPLIT-K-1: K={artifact.k} does not split into {split_k} slices "
-                f"of whole K steps ({step} = block_k x k_unroll)")
+    if split_k > 1 and staging != "register":
+        raise ValueError(
+            "ROCM-SPLIT-K-1: a split-K schedule is realized by the register-staged "
+            "body only; staging='lds' has no split partial")
+    k_unroll, k_unroll_derived = resolve_scheduled_matmul_k_unroll(
+        artifact, staging=staging, k_unroll=k_unroll)
+    if staging == "lds" and k_unroll != 1:
+        raise ValueError("ROCm LDS staging and K unrolling are separate physical schedules")
     (
         target_ir,
         backend_ir,
@@ -1895,6 +1932,9 @@ def package_scheduled_matmul(
                                f"{arch}_lds_wmma_{lds_waves[0]}x{lds_waves[1]}waves_{artifact.macro_tile_m // 16}x{artifact.macro_tile_n // 16}"),
             "staging": staging,
             "k_unroll": int(k_unroll),
+            # ROCM-SPLIT-K-1: the measured rule's unroll when a split forced
+            # the single-slab loop instead (None = the rule's value was used).
+            "k_unroll_split_fallback_from": k_unroll_derived,
             "workgroup": [32 if staging == "register" else 32 * lds_waves[0] * lds_waves[1], 1, 1],
             "shape_policy": "bounded_dynamic" if dynamic else "static",
             "shape": [artifact.m, artifact.n, artifact.k],
@@ -1926,6 +1966,17 @@ def package_scheduled_matmul(
                 "split_k_workspace": {"dtype": "fp32", "shape": [split_k, artifact.m, artifact.n]},
             } if split_k > 1 else {}),
         },
+        # ROCM-SPLIT-K-1 (Decision #32): the partials' scratch is part of the
+        # launch contract, so it is declared in the TYPED field the launcher
+        # allocates from -- not only in provenance. Launch lifetime, and no
+        # initialization: every element is written by exactly one slice (the
+        # masked edge store covers ragged M/N) before the reduce reads it.
+        workspace=(WorkspaceRequirement(
+            bytes=split_k * artifact.m * artifact.n * 4,
+            alignment=256,
+            lifetime="launch",
+            initialization="undefined",
+        ) if split_k > 1 else WorkspaceRequirement()),
     )
     return ROCMNativePackage(
         artifact.tile_ir,

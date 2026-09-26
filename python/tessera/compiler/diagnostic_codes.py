@@ -1178,7 +1178,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         summary=(
             "an occupancy-short gfx1201 matmul asked for split-K, but K has no "
             "2-way split into whole macro K blocks of the minimum slice; the "
-            "unsplit kernel was scheduled (emitted as a remark)."
+            "unsplit kernel was scheduled (emitted as a warning). Not emitted when K is below two minimum slices: that is outside the rule's domain, not a fallback."
         ),
         fix_hint=(
             "Split-K is a performance decision, so falling back is allowed -- "

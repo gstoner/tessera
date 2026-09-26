@@ -265,7 +265,7 @@ struct MatmulSchedule {
   StringRef splitKReduction;
   //: Why an occupancy-short schedule was left unsplit (empty otherwise). Not
   //: part of the contract or the digest; Graph->Schedule turns it into a
-  //: ROCM_SPLIT_K_NOT_APPLIED remark so the fallback is never silent.
+  //: ROCM_SPLIT_K_NOT_APPLIED warning so the fallback is never silent.
   std::string splitKFallback;
   StringRef accum;
   int64_t m;
@@ -345,6 +345,12 @@ static void selectGfx1201SplitK(MatmulSchedule &schedule) {
       break;
     chosen = slices;
   }
+  // K below two minimum slices is outside the rule's domain (every 16x256x256
+  // decode GEMM lands here): no split was ever on offer, so there is no
+  // fallback to report. The warning is kept for the case it exists for -- a K
+  // large enough to split whose extent does not divide into whole blocks.
+  if (chosen == 1 && schedule.k < 2 * kSplitKMinSliceK)
+    return;
   if (chosen == 1) {
     schedule.splitKFallback =
         (Twine(tiles) + " output tiles on " + Twine(kGfx1201DispatchSlotsWgp) +
@@ -2402,7 +2408,7 @@ struct GraphToSchedulePass
       op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
       // A performance fallback may happen, but never silently (#21a).
       if (!selected->splitKFallback.empty())
-        op->emitRemark("ROCM_SPLIT_K_NOT_APPLIED: ")
+        op->emitWarning("ROCM_SPLIT_K_NOT_APPLIED: ")
             << selected->splitKFallback
             << "; scheduling the unsplit kernel (ROCM-SPLIT-K-1).";
 

@@ -9,7 +9,11 @@ three kinds of variant are built from its Tile IR:
 * ``split:S`` (production) -- the scheduled package exactly as
   ``rocm_native.package_scheduled_matmul`` emits it: the partial kernel over
   grid.z = S into an fp32 [S, M, N] workspace, then the ordered reduction.
-  One timed iteration is BOTH launches, because that is what a caller pays.
+  One timed iteration is BOTH launches. **It is not everything a caller of
+  ``runtime.launch`` pays:** that path also ``hipMalloc``s and ``hipFree``s the
+  S*M*N*4-byte workspace on every call, and this harness allocates it once per
+  variant, outside the timed loop (as it does every other buffer). The
+  per-call allocation cost is therefore excluded from every row here.
 * ``unsplit`` (measurement-only control) -- the same Tile IR with the
   ``tessera.split_k`` pair removed, compiled by the same
   ``_compile_native_tile_ir`` call. It is the program the route ran before
@@ -72,12 +76,50 @@ def _pack(args):
     return arr
 
 
+def _graph_module(m, n, k, dtype):
+    """A one-matmul Graph module, built here rather than borrowed from the
+    test suite so the recorder does not depend on a test helper's signature."""
+    from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
+
+    element = {"fp16": "f16", "bf16": "bf16"}[dtype]
+    a = IRType(f"tensor<{m}x{k}x{element}>", (str(m), str(k)), dtype)
+    b = IRType(f"tensor<{k}x{n}x{element}>", (str(k), str(n)), dtype)
+    out = IRType(f"tensor<{m}x{n}xf32>", (str(m), str(n)), "fp32")
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="rocm_split_k_router_gate",
+        args=[IRArg("a", a), IRArg("b", b)],
+        result_types=[out],
+        body=[IROp(result="o", op_name="tessera.matmul", operands=["%a", "%b"],
+                   operand_types=[str(a), str(b)], result_type=str(out),
+                   kwargs={"activation": "none"})],
+        return_values=["%o"],
+    )])
+
+
+def _check(rc, what):
+    if rc != 0:
+        raise RuntimeError(f"{what} failed rc={rc}")
+
+
 class _Variant:
-    """One loaded kernel family: unsplit (one launch) or split (two)."""
+    """One loaded kernel family: unsplit (one launch) or split (two).
+
+    Owns its module and device buffers from the first line of ``__init__``,
+    so ``close()`` is safe on a variant whose construction or correctness
+    check failed part-way."""
 
     def __init__(self, hip, hsaco, symbol, a, b, m, n, k, macro, split_k):
         self.hip, self.m, self.n, self.split_k = hip, m, n, split_k
         self.mod = ct.c_void_p()
+        self.dev = [ct.c_void_p() for _ in range(4)]
+        try:
+            self._init(hsaco, symbol, a, b, m, n, k, macro, split_k)
+        except Exception:
+            self.close()
+            raise
+
+    def _init(self, hsaco, symbol, a, b, m, n, k, macro, split_k):
+        hip = self.hip
         if hip.hipModuleLoadData(ct.byref(self.mod), hsaco) != 0:
             raise RuntimeError("hipModuleLoadData refused the image")
         self.fn = ct.c_void_p()
@@ -87,13 +129,12 @@ class _Variant:
         if split_k > 1 and hip.hipModuleGetFunction(
                 ct.byref(self.reduce_fn), self.mod, f"{symbol}_splitk_reduce".encode()) != 0:
             raise RuntimeError("split-K reduce symbol not found")
-        self.dev = [ct.c_void_p() for _ in range(4)]
         workspace = split_k * m * n if split_k > 1 else 0
         for dev, nbytes in zip(self.dev, (a.nbytes, b.nbytes, 4 * m * n, 4 * max(workspace, 1))):
             if hip.hipMalloc(ct.byref(dev), nbytes) != 0:
                 raise RuntimeError("hipMalloc failed")
-        hip.hipMemcpy(self.dev[0], a.ctypes.data_as(ct.c_void_p), a.nbytes, 1)
-        hip.hipMemcpy(self.dev[1], b.ctypes.data_as(ct.c_void_p), b.nbytes, 1)
+        _check(hip.hipMemcpy(self.dev[0], a.ctypes.data_as(ct.c_void_p), a.nbytes, 1), "hipMemcpy A")
+        _check(hip.hipMemcpy(self.dev[1], b.ctypes.data_as(ct.c_void_p), b.nbytes, 1), "hipMemcpy B")
         target = self.dev[3] if split_k > 1 else self.dev[2]
         target_size = workspace if split_k > 1 else m * n
         self.keep = (_memref(self.dev[0], m * k) + _memref(self.dev[1], k * n)
@@ -119,9 +160,10 @@ class _Variant:
         for _ in range(3):
             if self.launch() != 0:
                 raise RuntimeError("warm-up launch failed")
-        self.hip.hipDeviceSynchronize()
+        _check(self.hip.hipDeviceSynchronize(), "hipDeviceSynchronize")
         out = np.zeros((self.m, self.n), np.float32)
-        self.hip.hipMemcpy(out.ctypes.data_as(ct.c_void_p), self.dev[2], 4 * self.m * self.n, 2)
+        _check(self.hip.hipMemcpy(out.ctypes.data_as(ct.c_void_p), self.dev[2],
+                                  4 * self.m * self.n, 2), "hipMemcpy D")
         return out
 
     def time_batch(self, iters):
@@ -135,17 +177,20 @@ class _Variant:
 
     def close(self):
         for dev in self.dev:
-            self.hip.hipFree(dev)
-        self.hip.hipModuleUnload(self.mod)
+            if dev.value:
+                self.hip.hipFree(dev)
+                dev.value = None
+        if self.mod.value:
+            self.hip.hipModuleUnload(self.mod)
+            self.mod.value = None
 
 
 def _variants(chip, shape, dtype, extra_slices):
     from tessera.compiler import rocm_native, scheduled_matmul
-    from tests.unit.test_scheduled_matmul_consumers import _module
 
     m, n, k = shape
     artifact = scheduled_matmul.lower_scheduled_matmul(
-        _module(target="rocm", shape=(m, k, n), dtype=dtype), target=f"rocm_{chip}")
+        _graph_module(m, n, k, dtype), target=f"rocm_{chip}")
     package = rocm_native.package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
     provenance = package.descriptor.provenance
     macro = tuple(provenance["macro_tile"])
@@ -218,6 +263,7 @@ def worker(shapes, dtypes, iters, rounds, extra_slices):
                 shape_rows.append(row)
                 if payload is None:
                     continue
+                variant = None
                 try:
                     variant = _Variant(hip, payload, symbol, a, b, m, n, k, macro, slices)
                     out = variant.result()
@@ -229,6 +275,8 @@ def worker(shapes, dtypes, iters, rounds, extra_slices):
                     loaded.append((row, variant))
                 except Exception as exc:
                     row["refused"] = str(exc)[:300]
+                    if variant is not None:
+                        variant.close()
             if "unsplit" in outputs:
                 for row, _ in loaded:
                     if row["variant"] != "unsplit":

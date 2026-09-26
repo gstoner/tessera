@@ -1,6 +1,6 @@
 // RUN: tessera-opt --tessera-graph-to-schedule %s 2>/dev/null | FileCheck %s --check-prefix=SCHED
 // RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile %s 2>/dev/null | FileCheck %s --check-prefix=TILE
-// RUN: tessera-opt --tessera-graph-to-schedule %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=REMARK
+// RUN: tessera-opt --tessera-graph-to-schedule %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=WARN
 //
 // ROCM-SPLIT-K-1: the Graph->Schedule decision. `selectGfx1201SplitK` is the
 // one decider (Decision #31; `rocm_tiling.select_split_k` is its oracle): split
@@ -12,7 +12,10 @@
 //                                     PROGRAM's epilogue (the reduce applies it)
 //   @ragged_k     K = 2050         -> occupancy asks, no aligned split exists:
 //                                     unsplit, and a ROCM_SPLIT_K_NOT_APPLIED
-//                                     remark says so (never silent, #21a)
+//                                     warning says so (never silent, #21a)
+//   @decode       16x256x256       -> occupancy-short but K below two
+//                                     256-wide slices: outside the rule,
+//                                     no split and NO warning
 //   @wide         1024^2 x 2048    -> 256 tiles: not occupancy-short, no split
 //
 // The last two are the negative fixtures Decision #10a requires.
@@ -28,6 +31,10 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
   }
   func.func @ragged_k(%a: tensor<16x2050xf16>, %b: tensor<2050x256xf16>) -> tensor<16x256xf32> {
     %0 = tessera.matmul %a, %b : (tensor<16x2050xf16>, tensor<2050x256xf16>) -> tensor<16x256xf32>
+    return %0 : tensor<16x256xf32>
+  }
+  func.func @decode(%a: tensor<16x256xf16>, %b: tensor<256x256xf16>) -> tensor<16x256xf32> {
+    %0 = tessera.matmul %a, %b : (tensor<16x256xf16>, tensor<256x256xf16>) -> tensor<16x256xf32>
     return %0 : tensor<16x256xf32>
   }
   func.func @wide(%a: tensor<1024x2048xf16>, %b: tensor<2048x1024xf16>) -> tensor<1024x1024xf32> {
@@ -50,6 +57,9 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // SCHED-LABEL: func.func @ragged_k
 // SCHED: schedule.matmul
 // SCHED-NOT: split_k
+// SCHED-LABEL: func.func @decode
+// SCHED: schedule.matmul
+// SCHED-NOT: split_k
 // SCHED-LABEL: func.func @wide
 // SCHED: schedule.matmul
 // SCHED-NOT: split_k
@@ -70,5 +80,5 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // TILE: tile.matmul_kernel
 // TILE-NOT: tessera.split_k
 
-// REMARK: remark: ROCM_SPLIT_K_NOT_APPLIED: 16 output tiles on 32 WGPs asks for split-K, but K=2050 has no 2-way split
-// REMARK-NOT: ROCM_SPLIT_K_NOT_APPLIED
+// WARN: warning: ROCM_SPLIT_K_NOT_APPLIED: 16 output tiles on 32 WGPs asks for split-K, but K=2050 has no 2-way split
+// WARN-NOT: ROCM_SPLIT_K_NOT_APPLIED

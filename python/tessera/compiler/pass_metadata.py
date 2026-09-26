@@ -138,6 +138,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "ROCM_FRAGMENT_UNPACK_UNCONSUMED",
             "ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT",
             "ROCM_LOWERING_LAYOUT_NOT_LDS",
+            # ROCM-SPLIT-K-1: tessera.split_k without its reduction order.
+            "ROCM_SPLIT_K_UNSUPPORTED",
             "ROCM_LOWERING_UNCONSUMED_STORAGE_PACK",
             "ROCM_TILE_UNSUPPORTED_DTYPE",
             "ROCM_FRAGMENT_STORE_EPILOGUE",
@@ -717,7 +719,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings", "tessera.sparse_policy"),
         preserved_attrs=("numeric_policy", "tessera.launch_bindings", "tessera.dim_names"),
         pass_kind="lowering", sprint="IR-NATIVE-FOUNDATION-1",
-        # ROCM_SPLIT_K_NOT_APPLIED is a remark (ROCM-SPLIT-K-1): the
+        # ROCM_SPLIT_K_NOT_APPLIED is a warning (ROCM-SPLIT-K-1): the
         # occupancy rule asked for split-K and no aligned split existed.
         diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", "ROCM_SPLIT_K_NOT_APPLIED"),
     ),

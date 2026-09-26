@@ -71,9 +71,12 @@ def test_unaligned_k_falls_back_with_a_reason_not_silently() -> None:
 
 
 def test_minimum_slice_guard_bounds_the_split() -> None:
-    # K=256 would give two 128-wide slices, below the guard.
-    slices, reason = _gfx1201(16, 256, 256)
-    assert slices == 1 and reason is not None
+    # K=256 would give two 128-wide slices, below the guard. That is outside
+    # the rule's domain rather than a fallback, so there is no reason string
+    # (and no ROCM_SPLIT_K_NOT_APPLIED warning): every 16x256x256 decode GEMM
+    # would otherwise warn.
+    assert _gfx1201(16, 256, 256) == (1, None)
+    assert _gfx1201(16, 256, 511) == (1, None)
     # K=512 gives exactly two slices of the guard size.
     assert _gfx1201(16, 256, 2 * SPLIT_K_MIN_SLICE_K) == (2, None)
     # The guard also caps the count: 1 tile wants 32, K=2048 allows 8.
@@ -96,7 +99,62 @@ def test_only_gfx1201_float_storage_is_split() -> None:
         assert rocm_split_k(16, 256, 2048, target="rocm_gfx1201", storage=storage, **router) == (1, "")
 
 
+# ── k_unroll yields to the split (review item 3) ───────────────────────────
+
+
+def _split_artifact(k=2048, split_k=2, **extra):
+    from tessera.compiler.scheduled_matmul import ScheduledMatmulArtifact
+    fields = dict(graph_ir="", schedule_ir="", tile_ir="", target="rocm",
+                  architecture="gfx1201", function_name="router", a_name="a",
+                  b_name="b", output_name="o", m=16, n=256, k=k, a_dtype="fp16",
+                  b_dtype="fp16", output_dtype="fp32", storage="f16", accum="f32",
+                  macro_tile_m=16, macro_tile_n=16, schedule_digest="0" * 64,
+                  split_k=split_k, split_k_reduction="ordered" if split_k > 1 else "")
+    fields.update(extra)
+    return ScheduledMatmulArtifact(**fields)
+
+
+@pytest.mark.parametrize("retuned", [1, 2, 3, 4, 8])
+def test_retuning_k_unroll_cannot_break_a_split_package(monkeypatch, retuned) -> None:
+    """Whatever the measured unroll rule is retuned to, a split schedule
+    resolves to an unroll its slices divide -- falling back to 1, recorded --
+    instead of a packaging error. K=2048/S=2 gives 1024-wide slices: 2 and 4
+    fit (32*2, 32*4 divide 1024), 3 and 8 at K=1088 do not."""
+    from tessera.compiler import rocm_native, scheduled_matmul
+    monkeypatch.setattr(scheduled_matmul, "rocm_k_unroll", lambda *a, **k: retuned)
+    for k in (2048, 1088):   # 1088/2 = 544 = 17 blocks of 32: only unroll 1 fits
+        artifact = _split_artifact(k=k)
+        used, fallback_from = rocm_native.resolve_scheduled_matmul_k_unroll(
+            artifact, staging="register", k_unroll=None)
+        assert k % (2 * 32 * used) == 0
+        if k % (2 * 32 * retuned) == 0:
+            assert (used, fallback_from) == (retuned, None)
+        else:
+            assert (used, fallback_from) == (1, retuned)
+
+
+def test_a_pinned_unroll_the_split_cannot_honour_is_refused() -> None:
+    from tessera.compiler import rocm_native
+    with pytest.raises(ValueError, match="pinned k_unroll"):
+        rocm_native.resolve_scheduled_matmul_k_unroll(
+            _split_artifact(k=1088), staging="register", k_unroll=2)
+    # An unsplit schedule keeps whatever it was given.
+    assert rocm_native.resolve_scheduled_matmul_k_unroll(
+        _split_artifact(split_k=1), staging="register", k_unroll=4) == (4, None)
+
+
 # ── authority vs oracle, on real native lowerings ──────────────────────────
+
+
+def test_schedule_split_k_parses_the_authority() -> None:
+    from tessera.compiler.scheduled_matmul import schedule_split_k
+    def record(extra):
+        return ('    %1 = schedule.matmul %0 {arch = "gfx1201", block_k = 32 : i64, '
+                + extra + 'storage = "f16"} : tensor<16x256xf32> -> tensor<16x256xf32>')
+    assert schedule_split_k(record('split_k = 2 : i64, split_k_reduction = "ordered", ')) == (2, "ordered")
+    assert schedule_split_k(record("")) == (1, "")
+    with pytest.raises(ValueError, match="malformed"):
+        schedule_split_k(record("split_k = 2 : i64, "))
 
 
 needs_opt = pytest.mark.skipif(find_tessera_opt() is None,
@@ -134,6 +192,19 @@ def test_artifact_that_disagrees_with_its_tile_ir_is_refused() -> None:
     for forged in (replace(artifact, split_k=4), replace(artifact, split_k=1, split_k_reduction="")):
         with pytest.raises(ValueError, match="split-K"):
             forged.validate()
+
+
+@needs_opt
+def test_artifact_states_the_authority_even_when_the_oracle_disagrees(monkeypatch) -> None:
+    """Review item 2: the artifact's split comes from the C++ Schedule, so a
+    wrong oracle is reported by the projection as oracle-vs-authority, never
+    by `validate` as a Tile artifact that dropped its contract."""
+    from tessera.compiler import scheduled_matmul
+    monkeypatch.setattr(scheduled_matmul, "rocm_split_k", lambda *a, **k: (1, ""))
+    artifact = _lower((16, 2048, 256))
+    assert (artifact.split_k, artifact.split_k_reduction) == (2, "ordered")
+    with pytest.raises(ValueError, match="oracle disagrees with the native Schedule"):
+        scheduled_matmul.verify_matmul_projection(artifact)
 
 
 @needs_opt
@@ -262,3 +333,34 @@ def test_gfx1201_split_k_control_shape_stays_unsplit(dtype):
     assert len(package.image.entry_points) == 1
     scale = float(np.max(np.abs(ref))) + 1e-6
     assert float(np.max(np.abs(out.astype(np.float64) - ref))) / scale < 2e-3
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+def test_gfx1201_split_k_workspace_is_typed_and_the_launcher_checks_it():
+    """Review items 1 and 9: the S*M*N*4 scratch lives in the TYPED descriptor
+    workspace, and the launcher refuses a descriptor whose typed workspace,
+    provenance copy or reduce workgroup disagree."""
+    from tessera import runtime as rt
+    from tessera.compiler.native_artifact import WorkspaceRequirement
+    package, _, _ = _run_split_k_package((16, 2048, 256), "fp16")
+    workspace = package.descriptor.workspace
+    assert (workspace.bytes, workspace.alignment, workspace.lifetime, workspace.initialization) == (
+        2 * 16 * 256 * 4, 256, "launch", "undefined")
+    rng = np.random.default_rng(3)
+    a = rng.normal(size=(16, 2048)).astype(np.float16)
+    b = rng.normal(size=(2048, 256)).astype(np.float16)
+    provenance = dict(package.descriptor.provenance)
+    forged = [
+        replace(package.descriptor, workspace=WorkspaceRequirement()),
+        replace(package.descriptor, provenance={**provenance, "split_k_workspace": {"dtype": "fp32", "shape": [2, 16, 128]}}),
+        replace(package.descriptor, provenance={**provenance, "split_k_reduce_workgroup": [0, 1, 1]}),
+        replace(package.descriptor, provenance={**provenance, "split_k_reduce_workgroup": [2048, 1, 1]}),
+    ]
+    for descriptor in forged:
+        runtime = rt.RuntimeArtifact(metadata={"target": package.image.target},
+            native_image=package.image, launch_descriptor=descriptor,
+            tile_ir=package.tile_ir, target_ir=package.target_ir)
+        result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": np.zeros((16, 256), np.float32)},
+                                     "scalars": {"M": 16, "N": 256, "K": 2048}})
+        assert not (result.get("ok") and result.get("execution_kind") == "native_gpu"), json.dumps(result, default=str)

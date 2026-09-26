@@ -428,7 +428,7 @@ def select_split_k(
 
     Returns ``(1, reason)`` when the ranking asked for a split and none aligns
     -- the C++ side turns the same case into a `ROCM_SPLIT_K_NOT_APPLIED`
-    remark -- and ``(1, None)`` when no split was asked for. The LDS-overflow
+    warning -- and ``(1, None)`` when no split was asked for. The LDS-overflow
     trigger has no C++ mirror (the shipped register panels cannot overflow);
     if it ever fires, the two sides disagree and the projection refuses the
     package, which is the fail-closed direction.
@@ -453,6 +453,10 @@ def select_split_k(
             break
         chosen = slices
         slices *= 2
+    if chosen == 1 and k < 2 * SPLIT_K_MIN_SLICE_K:
+        # Outside the rule's domain, not a fallback: mirrors the C++ side,
+        # which emits no ROCM_SPLIT_K_NOT_APPLIED warning here.
+        return 1, None
     if chosen == 1:
         return 1, (f"{tiles} output tiles on {slots} WGPs asks for split-K, but "
                    f"K={k} has no 2-way split into whole macro K blocks "

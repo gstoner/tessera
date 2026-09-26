@@ -44,7 +44,37 @@ linear-attention first (the three expanders that already consume the Tile
 fragment types), then the long tail — with progress measured family by family
 by the E2E-REAL-6F route census, not asserted here. Recounted 2026-09-26: 78
 `Generate*.cpp` expanders (71 in the snapshot below); 3 consume Tile fragment
-types (0 in the snapshot). Lane B's disposition is separate and still open.
+types (0 in the snapshot).
+
+## Decision — Lane B is retired (owner, 2026-09-26)
+
+Lane B (`runtime._build_canonical_gemm_hsaco`: Graph IR → `tessera-tiling` →
+`tessera-tile-ir-lowering` → generator with `via-tile=false`) skipped Schedule
+IR, so its schedule arrived as pass options rather than a replayed Schedule
+contract, and it was a second Graph → Tile authority for GEMM beside the
+scheduled route (Decision #31). Skipping Schedule IR bought no runtime speed
+(same generator, same serialized options) and negligible compile time (both
+routes are content-cached). Retired in one change:
+
+* **Correct path first.** `runtime.build_canonical_gemm_hsaco` is the one
+  Graph entry for ROCm GEMM: `lower_scheduled_matmul` (Graph → Schedule →
+  Tile, replay-checked) then `package_scheduled_matmul` (Tile → `tessera_rocm`
+  → HSACO). The runtime's compiled GEMM now builds through it.
+* **Benchmark rebuilt.** `benchmark_rocm_canonical_gemm_kloop.py` measures
+  that route, launches from the package's own descriptor, requires an explicit
+  `TESSERA_ROCM_CHIP` (gfx1151 or gfx1201), and stamps route, schedule digest
+  and image digest per row. Lane B's committed packet
+  (`rocm_gfx1151_canonical_gemm_kloop.json`) stays as that route's record and
+  is not this one's baseline.
+* **Deleted.** `_build_canonical_gemm_hsaco` and the `input=graph` matmul
+  branch of `tessera-rocm-executable`; both the Python pipeline config and the
+  C++ contract pass now refuse `family=matmul input=graph`, with a negative
+  lit fixture (`executable_pipeline_graph_matmul_options.mlir`). Attention
+  keeps its Graph entry.
+* **Census.** The E2E-REAL-6F package census and `bootstrap_prune_gap` were
+  re-run before and after: ROCm GEMM's only package is
+  `package_scheduled_matmul` on the `scheduled` boundary, and no package row
+  changed — Lane B was never a package, so no family lost its only lowering.
 
 ## Historical snapshot (2026-08-05)
 

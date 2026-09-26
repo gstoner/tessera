@@ -49,7 +49,8 @@ from tessera.compiler.rocm_pipeline import (
 #: quietly skipping a field.
 _FIELD_ALTERNATIVES: dict[str, tuple[dict[str, object], object]] = {
     "family": ({}, "softmax"),
-    "input_level": ({}, ROCMInputLevel.GRAPH),
+    # matmul has no Graph entry (Lane B retired 2026-09-26); attention does.
+    "input_level": ({"family": "attention"}, ROCMInputLevel.GRAPH),
     "output_level": ({}, ROCMOutputLevel.TARGET),
     # matmul is promoted on both AMD parts, so this pair is legal; proof never
     # transfers between them, and neither may a cached kernel.
@@ -235,8 +236,11 @@ def test_every_runtime_pipeline_site_keys_on_the_authority() -> None:
     nor `_rocm_lane_config` (which returns it) is either not caching, or
     caching on a second spelling of the config."""
     sites = _functions_building_a_rocm_pipeline()
-    assert len(sites) == 7, (
-        "expected the six lane sites plus `_rocm_lane_config`, found "
+    # Five lane sites plus `_rocm_lane_config`: the sixth, Lane B's
+    # `_build_canonical_gemm_hsaco`, was retired 2026-09-26 (its GEMM now
+    # enters through the scheduled route, which keys on the schedule digest).
+    assert len(sites) == 6, (
+        "expected the five lane sites plus `_rocm_lane_config`, found "
         f"{sorted(sites)}"
     )
     missing = [

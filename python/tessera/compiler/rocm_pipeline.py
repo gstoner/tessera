@@ -264,6 +264,15 @@ class ROCMExecutablePipeline:
             raise ValueError(
                 "family 'control_state_machine' has no Target-IR boundary; "
                 "only output=binary is supported")
+        if self.family == "matmul" and self.input_level is ROCMInputLevel.GRAPH:
+            # Lane B, retired 2026-09-26 (owner decision): a Graph->Tile
+            # shortcut beside the scheduled route was a second lowering
+            # authority for GEMM (Decision #31) whose schedule never entered
+            # Schedule IR. Mirrors the C++ contract-pass rejection.
+            raise ValueError(
+                "ROCm matmul has no Graph-level pipeline entry: it enters at Tile "
+                "level from the scheduled route (scheduled_matmul.lower_scheduled_matmul, "
+                "Graph -> Schedule -> Tile); the Graph->Tile shortcut was retired 2026-09-26")
         if self.family not in promoted_families(self.arch):
             if self.family in RDNA4_ONLY_FAMILIES:
                 raise ValueError(

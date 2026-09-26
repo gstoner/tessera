@@ -6665,7 +6665,11 @@ stays as its family's Tile → Target generator, and the Python-built directive
 entry is what gets retired. Order follows (b): GEMM, flash-attention and
 linear-attention first, then the long tail, tracked per family by the
 E2E-REAL-6F census. Record and recount: [`ROCM_LANE_MAP.md`](ROCM_LANE_MAP.md)
-§"Decision — expander adoption is (a)". Lane B is still open.
+§"Decision — expander adoption is (a)". **Lane B retired 2026-09-26**
+(same file, §"Decision — Lane B is retired"): `build_canonical_gemm_hsaco` is
+the one Graph entry for ROCm GEMM through the scheduled route, the benchmark
+was rebuilt on it, and `family=matmul input=graph` is refused in Python and
+C++. Owed: a fresh packet from the rebuilt benchmark on each chip it names.
 
 **Step 3 pilot landed:** `GenerateWMMAGemmKernel{via-tile=true}` is the first
 C++ producer of the full typed `tile.view` -> `fragment_pack` -> `tile.mma` ->

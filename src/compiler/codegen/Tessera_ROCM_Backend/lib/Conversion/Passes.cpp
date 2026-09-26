@@ -177,6 +177,17 @@ struct DeclareROCMPipelineContractPass
       getOperation().emitError("ROCm pipeline output must be target or binary");
       return signalPassFailure();
     }
+    // Lane B, retired 2026-09-26: matmul enters at Tile level from the
+    // scheduled route (Graph -> Schedule -> Tile). A Graph->Tile shortcut here
+    // was a second GEMM lowering authority whose schedule never reached
+    // Schedule IR (Decision #31). Mirrors rocm_pipeline.ROCMExecutablePipeline.
+    if (family == "matmul" && input == "graph") {
+      getOperation().emitError(
+          "ROCm matmul has no Graph-level pipeline entry: it enters at Tile "
+          "level from the scheduled route (Graph -> Schedule -> Tile); the "
+          "Graph->Tile shortcut was retired 2026-09-26");
+      return signalPassFailure();
+    }
     // The state-machine family is a host-level per-thread lowering with no
     // tessera_rocm.* Target-IR boundary: output=target would return before
     // the family generator runs and relabel the untouched host program as
@@ -547,8 +558,6 @@ static void buildROCMExecutablePipeline(
       family, input, output, arch, opts.depthCooperative));
 
   if (input == "graph") {
-    if (family == "matmul")
-      pm.addPass(::tessera::createTilingPass());
     auto tileLowering = ::tessera::createTileIRLoweringPass();
     pm.addPass(configuredPass(
         std::move(tileLowering),
@@ -560,7 +569,7 @@ static void buildROCMExecutablePipeline(
   // producer. Every other family already arrives as canonical Tile IR and its
   // plugin runs after the Target-IR consumer.
   bool matmulPlugin = family == "matmul";
-  if (matmulPlugin && input != "graph" && output == "binary")
+  if (matmulPlugin && output == "binary")
     addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
                        opts.schedGroups, opts.ldsPadDwords,
@@ -570,17 +579,6 @@ static void buildROCMExecutablePipeline(
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
-  // Graph input reaches the generator without a Tile producer (via-tile=false)
-  // but carries the same explicit schedule request as the other levels;
-  // `pass_pipeline()` serializes every option at every input level, so none
-  // may silently fall back to this helper's defaults here.
-  if (matmulPlugin && input == "graph" && output == "binary")
-    addFamilyGenerator(pm, family, false, opts.staging, opts.depthCooperative,
-                       opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
-                       opts.schedGroups, opts.ldsPadDwords,
-                       opts.ldsCopyWidth, opts.ldsCopyElide,
-                       opts.ldsCopyDepth, opts.ldsDoubleBuffer,
-                       opts.ldsSchedValuPerMma, opts.ldsBRowMajor);
   pm.addPass(configuredPass(createLowerTileToROCMPass(),
                             Twine("arch=") + arch));
 

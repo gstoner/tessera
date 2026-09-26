@@ -7320,7 +7320,6 @@ _rocm_hip_launch_lib: ctypes.CDLL | None = None
 #: chip are not listed: they are carried by the directive and by `arch`. The
 #: kernel remains shape-generic — shape never enters the directive.
 _rocm_compiled_hsaco_cache: dict[tuple[object, ...], bytes] = {}
-_rocm_canonical_gemm_hsaco_cache: dict[tuple[object, ...], bytes] = {}
 
 
 class _RocmCompiledUnavailable(RuntimeError):
@@ -7719,97 +7718,6 @@ def _build_compiled_gemm_hsaco(
     return hsaco
 
 
-def _build_canonical_gemm_hsaco(
-    m: int,
-    n: int,
-    k: int,
-    dtype: str = "f16",
-    *,
-    staging: str = "register",
-) -> bytes:
-    """Compile the shared explicit M/N/K ``scf.for`` GEMM contract to gfx11.
-
-    Unlike :func:`_build_compiled_gemm_hsaco`, this front door begins with a
-    Graph-IR matmul, runs the shared tiler and Tile async seam, then requires
-    the ROCm ownership planner to materialize the ``!tile.buffer``,
-    ``!tile.async_token``, and ``!tile.pipeline_state`` proof consumed by the
-    ROCm generator. The resulting physical kernel and ABI intentionally remain
-    the one established problem-size-generic WMMA body.
-    """
-    if min(m, n, k) <= 0:
-        raise ValueError("canonical ROCm GEMM dimensions must be positive")
-    if staging not in {"register", "lds"}:
-        raise ValueError("canonical ROCm GEMM staging must be register or lds")
-    chip = _rocm_chip()
-    if not chip.startswith("gfx11"):
-        raise _RocmCompiledUnavailable(
-            "canonical ROCm GEMM currently requires the gfx11 16x16x16 WMMA physical consumer"
-        )
-    spellings = {
-        "f16": ("f16", "f32"),
-        "bf16": ("bf16", "f32"),
-        "int8": ("i8", "i32"),
-        "i8": ("i8", "i32"),
-    }
-    if dtype not in spellings:
-        raise ValueError("canonical ROCm GEMM dtype must be f16, bf16, or int8")
-    storage, accum = spellings[dtype]
-    canonical_dtype = "int8" if dtype == "i8" else dtype
-    source = f"""module {{
-  func.func @gemm(%a: tensor<{m}x{k}x{storage}>,
-                  %b: tensor<{k}x{n}x{storage}>)
-      -> tensor<{m}x{n}x{accum}> {{
-    %0 = "tessera.matmul"(%a, %b)
-        : (tensor<{m}x{k}x{storage}>, tensor<{k}x{n}x{storage}>)
-        -> tensor<{m}x{n}x{accum}>
-    return %0 : tensor<{m}x{n}x{accum}>
-  }}
-}}
-"""
-    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
-
-    spec: dict[str, Any] = dict(
-        family="matmul",
-        input_level=ROCMInputLevel.GRAPH,
-        arch=chip,
-        staging=staging,
-    )
-    config, identity = _rocm_lane_config(**spec)
-    # Unlike the directive lanes this one is problem-size-specific: m/n/k are
-    # in the Graph IR source, so the source text is the whole "what". `chip`
-    # and `staging` are not listed separately -- the config carries both, and
-    # listing them again is the drift this keying exists to remove
-    # (ROCM-PIPELINE-KEY-1). `canonical_dtype` stays: `f16`/`bf16` spell the
-    # source identically to their aliases, but `i8` and `int8` both map to the
-    # same `i8` storage, so the source does not distinguish the request.
-    key = (canonical_dtype, source) + identity
-    cached = _rocm_canonical_gemm_hsaco_cache.get(key)
-    if cached is not None:
-        return cached
-    opt = _tessera_opt_path()
-    if opt is None:
-        raise _RocmCompiledUnavailable("tessera-opt not built — no canonical ROCm GEMM compiler")
-    if config is None:
-        ROCMExecutablePipeline(**spec)  # raises the family/arch refusal, here
-    pipeline = config.pass_pipeline()  # type: ignore[union-attr]
-    import subprocess
-
-    result = subprocess.run(
-        [str(opt), "-", f"--pass-pipeline={pipeline}"],
-        input=source,
-        capture_output=True,
-        text=True,
-        env=_rocm_serializer_env(),
-    )
-    if result.returncode != 0 or "gpu.binary" not in result.stdout:
-        _rocm_compiled_failed(f"canonical M/N/K ROCm GEMM did not serialize: {result.stderr[:400]}")
-    hsaco = _extract_hsaco_blob(result.stdout)
-    if hsaco[:4] != b"\x7fELF":
-        _rocm_compiled_failed("canonical ROCm GEMM output was not an ELF hsaco")
-    _rocm_canonical_gemm_hsaco_cache[key] = hsaco
-    return hsaco
-
-
 def _scheduled_storage_numpy_dtype(name: str):
     """The numpy dtype a scheduled-package buffer binding names, or None."""
     import numpy as np
@@ -8003,6 +7911,73 @@ def _rocm_wmma_oracle_can_stand_in(artifact: RuntimeArtifact, args: Any) -> bool
 _rocm_scheduled_gemm_packages: dict[tuple[Any, ...], Any] = {}
 
 
+#: Storage tag -> (MLIR element, canonical dtype name) for the canonical GEMM.
+_CANONICAL_GEMM_STORAGE: dict[str, tuple[str, str]] = {
+    "f16": ("f16", "fp16"), "bf16": ("bf16", "bf16"),
+    "e4m3": ("f8E4M3FN", "fp8_e4m3"), "e5m2": ("f8E5M2", "fp8_e5m2"),
+    "int8": ("i8", "int8"), "int4": ("i4", "int4"),
+}
+
+
+def build_canonical_gemm_hsaco(
+    m: int, n: int, k: int, dtype: str = "f16", *, chip: str | None = None,
+    bias: bool = False, activation: str = "none", staging: str = "register",
+) -> Any:
+    """The canonical ROCm GEMM image, built through every IR level.
+
+    One ``tessera.matmul`` Graph module (the A/B[/bias] ABI order the frontend
+    uses) goes Graph -> Schedule -> Tile through
+    ``scheduled_matmul.lower_scheduled_matmul`` (which replays Schedule->Tile
+    and refuses a mismatch), then Tile -> ``tessera_rocm`` Target IR -> HSACO
+    through ``rocm_native.package_scheduled_matmul``. Returns the
+    ``ROCMNativePackage``: ``image.payload`` is the hsaco, and the launch
+    descriptor carries the entry symbol, ABI, bindings and the ``macro_tile`` /
+    ``workgroup`` a launcher must use. This is the only ROCm GEMM entry from
+    Graph IR; the Graph->Tile shortcut that skipped Schedule IR (Lane B) was
+    retired 2026-09-26.
+    """
+    from .compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
+    from .compiler.rocm_native import package_scheduled_matmul
+    from .compiler.scheduled_matmul import lower_scheduled_matmul
+
+    if min(m, n, k) <= 0:
+        raise ValueError("canonical ROCm GEMM dimensions must be positive")
+    if dtype not in _CANONICAL_GEMM_STORAGE:
+        raise ValueError(f"canonical ROCm GEMM storage must be one of {sorted(_CANONICAL_GEMM_STORAGE)}")
+    if staging not in {"register", "lds"}:
+        raise ValueError("canonical ROCm GEMM staging must be register or lds")
+    chip = chip or _rocm_chip()
+    ir_elem, ir_dtype = _CANONICAL_GEMM_STORAGE[dtype]
+    integer = dtype in ("int8", "int4")
+    out_elem, out_dtype_name = ("i32", "int32") if integer else ("f32", "fp32")
+    key = (chip, int(m), int(n), int(k), bool(bias), activation, dtype, staging)
+    package = _rocm_scheduled_gemm_packages.get(key)
+    if package is not None:
+        return package
+    a_type = IRType(f"tensor<{m}x{k}x{ir_elem}>", (str(m), str(k)), ir_dtype)
+    b_type = IRType(f"tensor<{k}x{n}x{ir_elem}>", (str(k), str(n)), ir_dtype)
+    out_type = IRType(f"tensor<{m}x{n}x{out_elem}>", (str(m), str(n)), out_dtype_name)
+    ir_args = [IRArg("a", a_type), IRArg("b", b_type)]
+    operands, operand_types = ["%a", "%b"], [str(a_type), str(b_type)]
+    kwargs: dict[str, object] = {"activation": activation}
+    if bias:
+        bias_type = IRType(f"tensor<{n}xf32>", (str(n),), "fp32")
+        ir_args.append(IRArg("bias", bias_type))
+        kwargs["bias"] = "%bias"
+        operands.append("%bias")
+        operand_types.append(str(bias_type))
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name="rocm_compiled_gemm", args=ir_args, result_types=[out_type],
+        body=[IROp(result="o", op_name="tessera.matmul", operands=operands,
+                   operand_types=operand_types, result_type=str(out_type), kwargs=kwargs)],
+        return_values=["%o"])])
+    artifact = lower_scheduled_matmul(module, target=f"rocm_{chip}")
+    package = package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm",
+                                       staging=staging)
+    _rocm_scheduled_gemm_packages[key] = package
+    return package
+
+
 def _rocm_compiled_gemm_via_scheduled_package(
     a: Any, b: Any, bias: Any, activation: str, m: int, n: int, k: int, chip: str,
     dtype_tag: str = "f16",
@@ -8012,17 +7987,13 @@ def _rocm_compiled_gemm_via_scheduled_package(
     tessera_rocm -> HSACO, with the typed Tile->ROCm consumer applying the
     epilogue on this chip's fragment layout. The Graph module is built the
     way the frontend builds it (one `tessera.matmul` with the A/B/bias ABI
-    order), so the package is the same product a traced program yields."""
+    order), so the package is the same product a traced program yields.
+    The package itself comes from :func:`build_canonical_gemm_hsaco`."""
     import numpy as np
-    from .compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
-    from .compiler.rocm_native import package_scheduled_matmul
-    from .compiler.scheduled_matmul import lower_scheduled_matmul
 
     has_bias = bias is not None
-    ir_elem, ir_dtype = {"f16": ("f16", "fp16"), "bf16": ("bf16", "bf16"),
-                         "e4m3": ("f8E4M3FN", "fp8_e4m3"), "e5m2": ("f8E5M2", "fp8_e5m2"),
-                         "int8": ("i8", "int8"), "int4": ("i4", "int4")}[dtype_tag]
     integer = dtype_tag in ("int8", "int4")
+    ir_dtype = _CANONICAL_GEMM_STORAGE[dtype_tag][1]
     # int4 values travel in int8 containers, one logical value per byte.
     store_dtype = _scheduled_storage_numpy_dtype("int8" if integer else ir_dtype)
     if store_dtype is None:
@@ -8033,30 +8004,9 @@ def _rocm_compiled_gemm_via_scheduled_package(
         for name, arr in (("a", np.asarray(a)), ("b", np.asarray(b))):
             if arr.dtype != np.int8 or (arr.size and (int(arr.min()) < -8 or int(arr.max()) > 7)):
                 raise ValueError(f"rocm_compiled int4 lane needs logical int8 {name} values in [-8,7]")
-    out_elem, out_dtype_name, out_np = ("i32", "int32", np.int32) if integer else ("f32", "fp32", np.float32)
-    key = (chip, int(m), int(n), int(k), has_bias, activation, dtype_tag)
-    package = _rocm_scheduled_gemm_packages.get(key)
-    if package is None:
-        a_type = IRType(f"tensor<{m}x{k}x{ir_elem}>", (str(m), str(k)), ir_dtype)
-        b_type = IRType(f"tensor<{k}x{n}x{ir_elem}>", (str(k), str(n)), ir_dtype)
-        out_type = IRType(f"tensor<{m}x{n}x{out_elem}>", (str(m), str(n)), out_dtype_name)
-        ir_args = [IRArg("a", a_type), IRArg("b", b_type)]
-        operands, operand_types = ["%a", "%b"], [str(a_type), str(b_type)]
-        kwargs: dict[str, object] = {"activation": activation}
-        if has_bias:
-            bias_type = IRType(f"tensor<{n}xf32>", (str(n),), "fp32")
-            ir_args.append(IRArg("bias", bias_type))
-            kwargs["bias"] = "%bias"
-            operands.append("%bias")
-            operand_types.append(str(bias_type))
-        module = GraphIRModule(functions=[GraphIRFunction(
-            name="rocm_compiled_gemm", args=ir_args, result_types=[out_type],
-            body=[IROp(result="o", op_name="tessera.matmul", operands=operands,
-                       operand_types=operand_types, result_type=str(out_type), kwargs=kwargs)],
-            return_values=["%o"])])
-        artifact = lower_scheduled_matmul(module, target=f"rocm_{chip}")
-        package = package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
-        _rocm_scheduled_gemm_packages[key] = package
+    out_np = np.int32 if integer else np.float32
+    package = build_canonical_gemm_hsaco(
+        m, n, k, dtype_tag, chip=chip, bias=has_bias, activation=activation)
     out = np.zeros((m, n), out_np)
     buffers: dict[str, Any] = {"a": np.ascontiguousarray(a, store_dtype),
                                "b": np.ascontiguousarray(b, store_dtype), "o": out}

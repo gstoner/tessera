@@ -1,0 +1,15 @@
+# Tajasarus, RX 9070 XT (gfx1201), WSL2; checkout cf6ac5a8; SSD 32,2,16,4 chunk 8;
+# HIP-event ns per launch, 7 windows x 100 launches. Diagnostic only, not packet evidence.
+# A_plain = event,100 launches,event.  D_recorder = span reset+sync, event,marker,100 launches,marker,event.
+serial idle=0.0s A_plain    median= 151492.4 windows=[184301, 150303, 151040, 151372, 151492, 151578, 152018]
+serial idle=0.0s D_recorder median= 162119.8 windows=[151613, 156670, 159986, 162170, 162145, 162120, 162198]
+serial idle=3.0s A_plain    median= 162524.1 windows=[345022, 162889, 162524, 162524, 162512, 162268, 162683]
+serial idle=3.0s D_recorder median= 163480.5 windows=[340283, 163378, 163347, 164128, 163216, 163480, 164299]
+serial idle=3.0s A_plain    median= 164068.2 windows=[346649, 163607, 164870, 164068, 163978, 163878, 164192]
+serial idle=3.0s D_recorder median= 163871.0 windows=[349495, 163889, 163776, 163871, 163784, 163831, 163931]
+cooperative idle=0.0s A_plain    median=  18774.0 windows=[34832, 34610, 32810, 18774, 18251, 17477, 17129]
+cooperative idle=0.0s D_recorder median=  16942.8 windows=[16983, 16921, 17177, 16943, 17182, 16890, 16799]
+cooperative idle=3.0s A_plain    median=  34770.0 windows=[34346, 34945, 34772, 34770, 35017, 34345, 34448]
+cooperative idle=3.0s D_recorder median=  33785.1 windows=[33785, 33760, 34773, 33645, 33882, 33673, 33823]
+cooperative idle=3.0s A_plain    median=  34620.3 windows=[34353, 34620, 34550, 34681, 34668, 34602, 34655]
+cooperative idle=3.0s D_recorder median=  33791.1 windows=[33810, 33791, 34721, 33745, 33618, 33736, 33836]

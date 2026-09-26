@@ -1,11 +1,37 @@
 ---
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## gfx1201 SSD calibration and admission — 2026-09-26
+
+Sync `GFX1201-SSD-CALIBRATION-2026-09-26` (follows `DEVICE-CLOCK-MARKER-2026-09-26`; closes its follow-up 1). **Shared contracts changed:**
+
+- `profiler_rocm_evidence`: the packet's architecture is **derived** from the timing target `rocm_<arch>` over an explicit set `ROCM_PROFILER_ARCHITECTURES = (gfx1151, gfx1201)`. Both images must name that architecture. The validator re-derives it and refuses a relabelled packet. Every committed gfx1151 packet still validates (tested).
+- `ssd_performance.admit_ssd_candidate` admits either chip, but every calibration's rebuilt and stored architecture must equal the package chip, so a gfx1151 calibration cannot admit a gfx1201 package or the reverse.
+- The recorders query the chip from the active HIP device rather than assuming it, and resolve LLVM through `llvm_tools` (Tajasarus has no `/usr/lib/llvm-23`).
+- `record_ssd_gpu.py` now **interleaves** plain and marker-bracketed windows in alternating order behind one span-reset gap. It also takes `--launches` (default 100, so the gfx1151 protocol is unchanged).
+
+**ROCm outcome: landed, with gfx1201 evidence.** [`benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Tajasarus (RX 9070 XT, WSL2, no KFD), `32,2,16,4` chunk 8, 1000 launches per window. All 18 packets are eligible:
+
+- Device clock below the HIP event by 0.03–0.08% (serial) and 0.29–0.61% (cooperative).
+- Bracketing ratios 0.9941–1.0043 and 0.9960–1.0034.
+- The selector **admits the cooperative candidate** (lower bound 9.73×), and `check_ssd_admission.py` replays the same decision.
+
+Two superseded attempts are kept with the evidence:
+
+- **100 launches, plain windows first: refused `INSTRUMENTATION_OVERHEAD_EXCEEDED`** (cooperative ratio ~2.0). A diagnostic traced this to the GPU idling while the marker compiled, not to the markers themselves. That is the reason for interleaving.
+- **Interleaved, 100 launches: aborted** at a 6.8% device-vs-event disagreement. The bracket offset is roughly fixed at about 60 µs per window, which is too large a share of a 1.6 ms window.
+
+The gfx1201 serial envelope matches gfx1151's: the 4096-byte native-tape limit. Follow-ups:
+
+1. The recorder changes were not re-run on gfx1151. Its committed packet stands as recorded at `54442ef5`, and a re-record on Princess-Luna is owed before claiming the new protocol there.
+2. Power state is part of these measurements: first windows run ~30% slower on gfx1201. Pinning or warm-up policy is open.
+3. Follow-ups 2–4 of `DEVICE-CLOCK-MARKER-2026-09-26` are unchanged.
 
 ## Device-clock markers — 2026-09-26
 

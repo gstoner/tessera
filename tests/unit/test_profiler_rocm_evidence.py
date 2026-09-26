@@ -354,9 +354,10 @@ def test_every_committed_rocm_calibration_packet_still_validates() -> None:
     import json
     from pathlib import Path
     root = Path(__file__).resolve().parents[2] / "benchmarks" / "baselines"
-    packets = sorted(root.glob("gfx1*_ssd_calibrated_pairs_*/*calibration*.json"))
+    packets = sorted(root.glob("gfx1*_ssd_calibrated_pairs_*/**/*calibration*.json"))
     assert packets, "no committed ROCm SSD calibration packets found"
     for path in packets:
         payload = json.loads(path.read_text())
         validate_rocm_profiler_packet(payload)
-        assert payload["architecture"] == path.parent.name.split("_", 1)[0]
+        packet_dir = path.relative_to(root).parts[0]
+        assert payload["architecture"] == packet_dir.split("_", 1)[0]

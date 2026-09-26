@@ -397,11 +397,14 @@ matches its module fails generation. Read the counts there.
    **Done 2026-09-26:** the gfx1151 SSD calibrated-pairs packet — the
    production selector admits the cooperative candidate on compiler-built
    device-clock markers, no KFD ([packet](../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md),
-   sync `DEVICE-CLOCK-MARKER-2026-09-26`). Open: validate the NVIDIA
+   sync `DEVICE-CLOCK-MARKER-2026-09-26`); and the gfx1201 packet on
+   Tajasarus, where the same selector admits cooperative, lower bound 9.73×
+   ([packet](../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md),
+   sync `GFX1201-SSD-CALIBRATION-2026-09-26`). Open: validate the NVIDIA
    `%globaltimer` marker on Super-Bear and record its SSD packet; an SSD Nsight
    activity-window packet on Super-Bear's WSL2; marker timing in
    `calibrate_gfx1151.py`; an independent TSC measurement in the x86 probe
-   (then its packet route); gfx1201 and Zen 2 packet adapters.
+   (then its packet route); a Zen 2 packet adapter; a gfx1151 re-record under the interleaved protocol.
 1. RUNTIME-LIB-OPT-1 on all four backends, then re-measure affected packets.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
    dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.

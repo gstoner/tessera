@@ -1,0 +1,10 @@
+{
+  "decision": {
+    "admitted": true,
+    "reason": "exact-artifact paired measurements and native calibration admitted",
+    "lower_bound": 9.730442795296131
+  },
+  "selected_binding": "df6b475e8ea96f2f669a04399153c0533e963a1ea5020b4b6b3bf0e7483f7234",
+  "incumbent_binding": "d2922b7805767d6705a8eb97686ff19bc437058846fbd3f259fa612402f616f7",
+  "candidate_binding": "df6b475e8ea96f2f669a04399153c0533e963a1ea5020b4b6b3bf0e7483f7234"
+}

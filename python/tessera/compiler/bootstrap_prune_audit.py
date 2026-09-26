@@ -392,16 +392,91 @@ def _returned_call_name(node: ast.AST) -> str:
     return ""
 
 
+def _local_bindings(fn: ast.FunctionDef) -> dict[str, list[ast.expr | None]]:
+    """name -> every value bound to it in ``fn`` (``None`` = not a plain value).
+
+    Parameters, tuple unpacking, augmented assignment, loop / ``with`` / walrus
+    targets and ``except`` names all record ``None``: the audit cannot say what
+    they hold, so a name bound that way never counts as a lowered artifact.
+    """
+    out: dict[str, list[ast.expr | None]] = {}
+
+    def bind(target: ast.AST, value: ast.expr | None) -> None:
+        if isinstance(target, ast.Name):
+            out.setdefault(target.id, []).append(value)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for elt in target.elts:
+                bind(elt, None)
+        elif isinstance(target, ast.Starred):
+            bind(target.value, None)
+
+    args = fn.args
+    for a in (*args.posonlyargs, *args.args, *args.kwonlyargs,
+              *(x for x in (args.vararg, args.kwarg) if x is not None)):
+        out.setdefault(a.arg, []).append(None)
+    stack: list[ast.AST] = list(fn.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.Lambda, ast.ClassDef)):
+            continue
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                bind(t, node.value if isinstance(t, ast.Name) else None)
+        elif isinstance(node, ast.AnnAssign):
+            bind(node.target, node.value)
+        elif isinstance(node, ast.AugAssign):
+            bind(node.target, None)
+        elif isinstance(node, ast.NamedExpr):
+            bind(node.target, None)
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            bind(node.target, None)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                if item.optional_vars is not None:
+                    bind(item.optional_vars, None)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            out.setdefault(node.name, []).append(None)
+        stack.extend(ast.iter_child_nodes(node))
+    return out
+
+
+def _is_lowered_artifact(node: ast.expr | None,
+                         bindings: dict[str, list[ast.expr | None]]) -> bool:
+    """``node`` is a ``lower_scheduled_kernel(...)`` result, by data flow."""
+    if node is None:
+        return False
+    if _returned_call_name(node) == "lower_scheduled_kernel":
+        return True
+    if isinstance(node, ast.Name):
+        values = bindings.get(node.id, [])
+        # Every binding must itself be the lowering call: one other source
+        # (a cache, a parameter, a reassignment) and the artifact may not be
+        # the scheduled lowering on some path.
+        return bool(values) and all(
+            v is not None and _returned_call_name(v) == "lower_scheduled_kernel"
+            for v in values)
+    return False
+
+
+def _packaged_artifact(call: ast.Call) -> ast.expr | None:
+    if call.args:
+        return call.args[0]
+    return next((k.value for k in call.keywords if k.arg == "artifact"), None)
+
+
 def _packager_is_generic_scheduled(target: str, family: str) -> bool:
     """True iff ``package_<family>`` on ``target`` only ever compiles through
     the generic Schedule→Tile route.
 
-    Derived from the packager body, never declared: the function must call
-    ``lower_scheduled_kernel`` and **every** ``return`` must hand back
-    ``package_scheduled_kernel(...)``. One return of anything else — a direct
-    Tile constructor, a delegate, a dtype branch — and the family stays a
-    ``gap``, because a mixed body still owns a lowering the prune would lose.
-    Other exits must raise, which is the fail-closed shape these wrappers use.
+    Derived from the packager body, never declared: **every** ``return`` must
+    hand back ``package_scheduled_kernel(artifact, ...)`` where ``artifact`` is
+    data-flow-derived from ``lower_scheduled_kernel(...)`` — the call itself,
+    or a local whose every binding is that call. Merely calling the lowering
+    somewhere is not enough (review of #852): a packager that lowers for
+    validation and returns a cached or independently built artifact still
+    owns a lowering the prune would lose. One return of anything else and the
+    family stays a ``gap``. Other exits must raise.
     """
     filename = dict(_BACKEND_MODULES).get(target)
     if filename is None:
@@ -414,7 +489,6 @@ def _packager_is_generic_scheduled(target: str, family: str) -> bool:
     if fn is None:
         return False
     returns: list[ast.Return] = []
-    lowers = False
     stack: list[ast.AST] = list(fn.body)
     while stack:
         node = stack.pop()
@@ -423,12 +497,12 @@ def _packager_is_generic_scheduled(target: str, family: str) -> bool:
             continue  # nested scopes do not return from the packager
         if isinstance(node, ast.Return):
             returns.append(node)
-        if _returned_call_name(node) == "lower_scheduled_kernel":
-            lowers = True
         stack.extend(ast.iter_child_nodes(node))
-    return bool(returns) and lowers and all(
-        r.value is not None
+    bindings = _local_bindings(fn)
+    return bool(returns) and all(
+        isinstance(r.value, ast.Call)
         and _returned_call_name(r.value) == "package_scheduled_kernel"
+        and _is_lowered_artifact(_packaged_artifact(r.value), bindings)
         for r in returns
     )
 

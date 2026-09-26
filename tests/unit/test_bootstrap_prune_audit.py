@@ -113,6 +113,47 @@ def test_generic_route_requires_every_return_to_be_the_scheduled_package(
     assert not _generic_fixture(monkeypatch, tmp_path, only_raises)
 
 
+def test_generic_route_ties_the_returned_artifact_to_the_lowering(
+        monkeypatch, tmp_path):
+    """Review of #852: calling the lowering is not enough -- the *returned*
+    artifact must come from it by data flow, on every return path."""
+    head = "def package_softmax(module, *, pipeline_name, cached=None):\n"
+    via_local = head + (
+        "    artifact = lower_scheduled_kernel(module, target='t')\n"
+        "    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)\n")
+    assert _generic_fixture(monkeypatch, tmp_path, via_local)
+    via_keyword = head + (
+        "    return package_scheduled_kernel(\n"
+        "        artifact=lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n")
+    assert _generic_fixture(monkeypatch, tmp_path, via_keyword)
+
+    # The reviewer's case: lowered for validation, something else returned.
+    side_effect = head + (
+        "    lower_scheduled_kernel(module, target='t')\n"
+        "    return package_scheduled_kernel(cached(module), pipeline_name=pipeline_name)\n")
+    assert not _generic_fixture(monkeypatch, tmp_path, side_effect)
+    reassigned = head + (
+        "    artifact = lower_scheduled_kernel(module, target='t')\n"
+        "    if cached is not None:\n"
+        "        artifact = cached\n"
+        "    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)\n")
+    assert not _generic_fixture(monkeypatch, tmp_path, reassigned)
+    parameter = head + (
+        "    lower_scheduled_kernel(module, target='t')\n"
+        "    return package_scheduled_kernel(cached, pipeline_name=pipeline_name)\n")
+    assert not _generic_fixture(monkeypatch, tmp_path, parameter)
+    unpacked = head + (
+        "    artifact, _ = lower_scheduled_kernel(module), None\n"
+        "    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)\n")
+    assert not _generic_fixture(monkeypatch, tmp_path, unpacked)
+    one_bad_path = head + (
+        "    if cached is not None:\n"
+        "        return package_scheduled_kernel(cached, pipeline_name=pipeline_name)\n"
+        "    return package_scheduled_kernel(\n"
+        "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n")
+    assert not _generic_fixture(monkeypatch, tmp_path, one_bad_path)
+
+
 def test_nvidia_unary_families_are_derived_generic_not_declared():
     """NVIDIA softmax/norm/reduction migrated to the generic Schedule→Tile
     route (F2-U1–U10); the dashboard read them as gaps because only

@@ -43,6 +43,12 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   per-host timing gap is the part, not the build. (3) Under WSL2 the raw clock is
   itself TSC-derived; the witness shows a stable TSC scale, not an independent
   oscillator (stated in `profiler_x86_clock`).
+- **Zen 5 profiler packet on the witness route** (Princess-Luna, clean tree `7b3094e9`,
+  `-O2` library stamp): `benchmarks/baselines/x86_zen5_profiler_packet_20260926_princess_luna.json`
+  came out `admission_route = tsc_witness`, `verdict = promote`, no ineligibility
+  reasons; diagnostic gaps `VIRTUALIZED_HOST`, `WSL_CLOCK_DOMAIN`,
+  `TIMING_PROOF_INCOMPLETE:perf_event_open,perf_sample_valid`, `SYMBOL_SAMPLING_MISSING`.
+  Not recorded on Tajasarus.
 
 **Sibling outcomes.** ROCm / NVIDIA / Apple: not applicable (x86 CPU packets; no shared
 code changed beyond the x86 registrations and a new fixture that no other packet claims).

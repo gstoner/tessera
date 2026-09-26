@@ -1266,47 +1266,25 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="ROCM-SPLIT-K-1",
     ),
     DiagnosticCode(
-        code="ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED",
+        code="ROCM_CANONICAL_GEMM_LOOP_RETIRED",
         pass_origin="GenerateWMMAGemmKernel",
         severity="error",
         summary=(
-            "the canonical LDS comparison body was requested for an "
-            "architecture whose accumulator distribution it does not write."
+            "a tessera.matmul or tile.mma carrying tessera.canonical_k_step "
+            "(the tessera-tiling M/N/K scf.for nest) reached the ROCm WMMA "
+            "GEMM generator, which no longer has a canonical-loop entry."
         ),
         fix_hint=(
-            "That body stores its accumulator at row `2*e + lhi`, RDNA3's "
-            "wave32 distribution. gfx12 distributes the same accumulator by "
-            "column, and the `tessera_rocm.wmma` it emits resolves per arch -- "
-            "so on gfx12 the kernel would run to completion and scatter its "
-            "result to the wrong rows, with no verifier to catch it. It is a "
-            "gfx11-only comparison lane with gfx1151-only evidence. Use the "
-            "typed LDS body (`via-tile=true canonical-staging=lds`), which "
-            "resolves row and column from the fragment family, or the "
-            "register body."
+            "The canonical-loop entry was Lane B's Graph->Tile GEMM route, "
+            "retired 2026-09-26 with its matcher and LDS comparison body "
+            "(docs/audit/backend/rocm/ROCM_LANE_MAP.md). ROCm GEMM enters at "
+            "Tile level as tile.matmul_kernel from the scheduled route "
+            "(scheduled_matmul.lower_scheduled_matmul, Graph -> Schedule -> "
+            "Tile), or as a tessera_rocm.wmma_gemm directive. Do not run "
+            "tessera-tiling ahead of generate-wmma-gemm-kernel."
         ),
-        spec="docs/backends/rocm/wmma-fragment-layout.md",
-        sprint="GFX1201-PARITY-2026-09-17",
-    ),
-    DiagnosticCode(
-        code="ROCM_CANONICAL_LDS_KNOB_UNSUPPORTED",
-        pass_origin="GenerateWMMAGemmKernel",
-        severity="error",
-        summary=(
-            "a schedule knob was requested for the canonical LDS comparison "
-            "body, which implements none of them."
-        ),
-        fix_hint=(
-            "Graph-input matmul with canonical-staging=lds reaches the "
-            "one-wave, unpadded canonical LDS body (via-tile=false). It "
-            "ignores lds-waves-m/n, k-unroll, sched-groups, lds-pad-dwords, "
-            "lds-copy-width/elide/depth, lds-double-buffer, "
-            "lds-sched-valu-per-mma and lds-b-row-major, so any value other "
-            "than the default would name a kernel it cannot emit. Use the "
-            "typed LDS body (tile input, via-tile=true), which consumes them, "
-            "or leave them at their defaults."
-        ),
-        spec="docs/backends/rocm/wmma-fragment-layout.md",
-        sprint="ROCM-EXEC-PIPELINE-2026-09-24",
+        spec="docs/audit/backend/rocm/ROCM_LANE_MAP.md",
+        sprint="ROCM-LANE-B-RETIRE-2026-09-26",
     ),
     DiagnosticCode(
         code="SCHEDULED_MATMUL_DTYPE_CONTRACT_UNSUPPORTED",

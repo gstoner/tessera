@@ -195,12 +195,14 @@ class RankedTileCandidate:
     lds_margin: int
     bank_padding_required: bool
     register_macro_tile: tuple[int, int]
-    #: UNWIRED (Decision #29a condition 1). Nothing in the production lowering
-    #: reads this: `scheduled_matmul.py` never imports this module, so the
-    #: emitted gfx1201 kernel has no split-K regardless of what is ranked here.
-    #: Owned by ROCM-SPLIT-K-1. Do not read its presence as "the compiler models
-    #: split-K" -- and note the model itself is known wrong for the shape that
-    #: needs it most (see `rank_candidates`).
+    #: Occupancy-keyed split-K need (ROCM-SPLIT-K-1). WIRED since 2026-09-26:
+    #: `select_split_k` turns it into a slice count, and
+    #: `scheduled_matmul.verify_matmul_projection` compares that against the
+    #: slice count the C++ Schedule authority (`selectGfx1201SplitK`,
+    #: PMPasses.cpp) wrote -- this is the declared oracle half of one decision
+    #: (Decision #31), and a disagreement refuses the package. It is keyed on
+    #: output tiles vs measured WGPs, not on K magnitude; the old `k > 4096`
+    #: model was wrong for exactly the gfx1201 router-gate shape and is gone.
     split_k_required: bool | None
     #: VGPR-limited occupancy in waves/SIMD, from `rocm_occupancy`.  None when
     #: the arch's constants are unestablished.
@@ -388,6 +390,76 @@ def _split_k_required(
 
 
 
+#: Smallest contraction extent one split-K slice may carry. An UNMEASURED
+#: guard, stated as one: below it the second launch and the fp32 workspace
+#: round trip are not plausibly repaid, and splitting K=64 into two 32-wide
+#: slices is not what ROCM-SPLIT-K-1 exists for. Mirrors `kSplitKMinSliceK`
+#: in PMPasses.cpp; the projection check keeps the two equal.
+SPLIT_K_MIN_SLICE_K = 256
+
+
+def select_split_k(
+    m: int,
+    n: int,
+    k: int,
+    *,
+    macro_tile: tuple[int, int],
+    block_k: int,
+    profile: ROCmTargetProfile,
+    dtype: str,
+    dynamic: bool,
+) -> tuple[int, str | None]:
+    """The split-K slice count for one problem, and why it is 1 if it is.
+
+    The ORACLE half of ROCM-SPLIT-K-1 (Decision #31): the production decider is
+    `selectGfx1201SplitK` in PMPasses.cpp, and
+    `scheduled_matmul.verify_matmul_projection` refuses any package whose
+    native Schedule disagrees with this. It is the consumer of
+    `RankedTileCandidate.split_k_required`, which is why that field is no
+    longer marked unwired.
+
+    Rule: the ranking says split-K is required (fewer output tiles than
+    workgroup slots, or LDS overflow). Take enough slices to give every WGP a
+    workgroup -- ``ceil(slots / tiles)`` -- rounded down to a power of two, and
+    only as far as each slice stays a whole number of macro K blocks
+    (``block_k``, ROCM-MACRO-K-TILE-1) of at least `SPLIT_K_MIN_SLICE_K`.
+    A split partitions the macro K tile, so with no K block (``block_k == 0``)
+    there is nothing to split.
+
+    Returns ``(1, reason)`` when the ranking asked for a split and none aligns
+    -- the C++ side turns the same case into a `ROCM_SPLIT_K_NOT_APPLIED`
+    remark -- and ``(1, None)`` when no split was asked for. The LDS-overflow
+    trigger has no C++ mirror (the shipped register panels cannot overflow);
+    if it ever fires, the two sides disagree and the projection refuses the
+    package, which is the fail-closed direction.
+    """
+    if dynamic or block_k <= 0:
+        return 1, None
+    tile_m, tile_n = macro_tile
+    ranked = rank_candidates(
+        [TileCandidate(tile=TileShape(m=tile_m, n=tile_n, k=block_k), dtype=dtype)],
+        profile, problem=(m, n))[0]
+    if ranked.split_k_required is not True:
+        return 1, None
+    slots = dispatch_slots(profile.arch, WorkgroupProcessorMode.WGP)
+    if slots is None:
+        return 1, "no measured dispatch-slot count for this arch"
+    tiles = _ceil_div(m, tile_m) * _ceil_div(n, tile_n)
+    wanted = _ceil_div(slots, tiles)
+    chosen = 1
+    slices = 2
+    while slices <= wanted:
+        if k % (slices * block_k) != 0 or k // slices < SPLIT_K_MIN_SLICE_K:
+            break
+        chosen = slices
+        slices *= 2
+    if chosen == 1:
+        return 1, (f"{tiles} output tiles on {slots} WGPs asks for split-K, but "
+                   f"K={k} has no 2-way split into whole macro K blocks "
+                   f"(block_k={block_k}) of at least {SPLIT_K_MIN_SLICE_K}")
+    return chosen, None
+
+
 #: Panels each RDNA chip admits, largest first. The macro tile is a panel of
 #: 16x16 WMMA fragments, so (64, 64) is the 4x4 panel and (16, 16) the 1x1.
 _RDNA_PANELS: tuple[tuple[int, int], ...] = ((64, 64), (32, 64), (16, 16))
@@ -504,8 +576,8 @@ def rank_candidates(
         lds_with_padding = lds + padding
         lds_margin = profile.lds_capacity_bytes - lds_with_padding
         macro_tile = _register_macro_tile(cand)
-        # KNOWN WRONG, and unwired so nothing catches it (Decision #29a): the
-        # Re-keyed on OCCUPANCY 2026-09-20 (first half of ROCM-SPLIT-K-1).
+        # Re-keyed on OCCUPANCY 2026-09-20 (first half of ROCM-SPLIT-K-1);
+        # consumed by `select_split_k` since 2026-09-26 (the second half).
         #
         # The old predicate was `k > 4096`, which answers False for the shape
         # that needs split-K most: the gfx1201 MoE router gate (M<=16, K=2048,
@@ -656,6 +728,8 @@ __all__ = [
     "fits_budget",
     "rank_candidates",
     "select_macro_tile",
+    "select_split_k",
+    "SPLIT_K_MIN_SLICE_K",
     "prune_candidates",
     "requires_lds_bank_padding",
     "quad_slice",

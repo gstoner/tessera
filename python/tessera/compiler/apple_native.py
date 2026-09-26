@@ -19,6 +19,9 @@ APPLE_BMM_F32_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.f32.v1"
 APPLE_BMM_F32_SYMBOL = "tessera_apple_gpu_bmm_f32"
 APPLE_SIMDGROUP_GEMM_F16_ABI = "tessera.apple.tile.simdgroup_gemm.a_b_o_m_n_k.f16_f32.v1"
 APPLE_SIMDGROUP_GEMM_F16_SYMBOL = "tessera_apple_gpu_tile_simdgroup_gemm_f16"
+#: The accumulator this ABI fixes (the `f16_f32` in its id): the packager emits it
+#: only for a scheduled matmul whose numeric policy is storage f16 / accum f32.
+APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR = "fp32"
 APPLE_FLASH_ATTN_VARIANT_F32_ABI = (
     "tessera.apple.flash_attn.q_k_v_bias_o_b_hq_hkv_sq_sk_d.f32.v1"
 )

@@ -19,7 +19,7 @@ from tessera.compiler.msl_gemm_emit import (
 @pytest.mark.parametrize("dtype", ["fp16", "f16", "bf16"])
 def test_apple7_simdgroup_fragment_is_exact_physical_contract(dtype):
     fragment = select_apple_simdgroup_fragment(
-        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype)
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, accumulator_dtype="fp32")
     assert (fragment.m, fragment.n, fragment.k) == (8, 8, 8)
     assert fragment.lanes == 32
     assert fragment.threadgroup == (32, 1, 1)
@@ -27,12 +27,95 @@ def test_apple7_simdgroup_fragment_is_exact_physical_contract(dtype):
     assert fragment.as_metadata_dict()["family"] == "simdgroup_matrix"
 
 
-def test_fragment_rejects_non_matrix_storage_and_accumulator():
+def test_fragment_rejects_non_matrix_storage():
     target = AppleGPUTargetProfile(AppleGPUArch.APPLE7)
     with pytest.raises(AppleFragmentError, match="UNSUPPORTED_DTYPE"):
-        select_apple_simdgroup_fragment(target, "fp32")
+        select_apple_simdgroup_fragment(target, "fp32", accumulator_dtype="fp32")
+
+
+def test_accumulator_is_required_not_defaulted():
+    """Decision #21a: the accumulator is a semantic key; the selector has none."""
+    target = AppleGPUTargetProfile(AppleGPUArch.APPLE7)
+    with pytest.raises(TypeError):
+        select_apple_simdgroup_fragment(target, "fp16")  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        materialize_apple_simdgroup_tile_msl(target, "fp16", 32, 32, 16)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("storage", ["fp16", "bf16"])
+@pytest.mark.parametrize("accum, canonical", [
+    ("fp32", "fp32"), ("f32", "fp32"), ("fp16", "fp16"), ("f16", "fp16")])
+def test_fragment_admits_the_measured_accumulators(storage, accum, canonical):
+    """APPLE-ACCUM-1: fp32 and fp16 accumulators are admitted for fp16/bf16
+    storage -- each measured bit-exact on the M1 Max against a model of the
+    declared accumulation (test_apple_simdgroup_accumulator_device.py)."""
+    fragment = select_apple_simdgroup_fragment(
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), storage, accumulator_dtype=accum)
+    assert fragment.accumulator_dtype == canonical
+
+
+@pytest.mark.parametrize("storage", ["fp16", "bf16"])
+@pytest.mark.parametrize("accum, reason", [
+    ("bf16", "truncates"),
+    ("int32", "no integer element type"),
+    ("fp64", "no simdgroup_matrix accumulator"),
+])
+def test_fragment_refuses_unfaithful_or_absent_accumulators(storage, accum, reason):
+    """bf16 compiles and runs on Apple7 but is fp32 accumulation with an RTZ
+    output (measured), so it is refused; integers have no simdgroup_matrix."""
+    with pytest.raises(AppleFragmentError) as err:
+        select_apple_simdgroup_fragment(
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), storage, accumulator_dtype=accum)
+    message = str(err.value)
+    assert message.startswith("APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR")
+    assert f"storage={storage}" in message and repr(accum) in message
+    assert "apple7" in message and reason in message
+
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_fp16_accumulator_materializes_a_converting_store(dtype):
+    """An fp16 accumulator reaches the fp32 TILE-1 output through the scratch:
+    simdgroup_store cannot convert, so no fragment may take the direct path."""
+    artifact = materialize_apple_simdgroup_tile_msl(
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16,
+        accumulator_dtype="fp16")
+    msl = artifact.msl
+    assert artifact.fragment.accumulator_dtype == "fp16"
+    assert "simdgroup_matrix<half, 8, 8> acc[4 * 4]" in msl
+    assert "threadgroup half Cs[64]" in msl
+    assert "device float*     C" in msl
+    assert "= float(Cs[" in msl
+    assert "full fragment fast path" not in msl
+    assert artifact.resources.edge_scratch_bytes == 8 * 8 * 2
+    assert validate_steel_gemm_structure(
+        msl, dtype=artifact.fragment.storage_dtype, accum="fp16",
+        partial_edge=True, double_buffer=True).ok
     with pytest.raises(AppleFragmentError, match="UNSUPPORTED_ACCUMULATOR"):
-        select_apple_simdgroup_fragment(target, "fp16", accumulator_dtype="fp16")
+        materialize_apple_simdgroup_tile_msl(
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16,
+            accumulator_dtype="fp16", partial_edge=False)
+
+
+def test_value_lane_dispatcher_refuses_a_call_without_an_accumulator():
+    """APPLE-ACCUM-1: the runtime materializer is told the accumulator by the
+    compiler (`tessera_apple.accumulate`); it never picks one itself."""
+    import numpy as np
+    from tessera.runtime import _dispatch_gpu_tile_simdgroup_gemm
+
+    a = np.ones((8, 8), np.float16)
+    call = {"symbol": "tessera_apple_gpu_tile_simdgroup_gemm_f16"}
+    with pytest.raises(ValueError, match="APPLE_SIMDGROUP_ACCUM_MISSING"):
+        _dispatch_gpu_tile_simdgroup_gemm([a, a], call, np)
+    with pytest.raises(AppleFragmentError, match="UNSUPPORTED_ACCUMULATOR"):
+        _dispatch_gpu_tile_simdgroup_gemm([a, a], {**call, "accumulate": "bf16"}, np)
+
+
+def test_raw_emitter_cannot_synthesize_a_refused_accumulator():
+    from tessera.compiler.msl_gemm_emit import emit_simdgroup_gemm_msl, emit_steel_gemm_msl
+
+    for emit in (emit_simdgroup_gemm_msl, emit_steel_gemm_msl):
+        with pytest.raises(AppleFragmentError, match="UNSUPPORTED_ACCUMULATOR"):
+            emit("bf16", accum="bf16")
 
 
 def _promotion_evidence(route, medians, *, counter_supported=False, **overrides):
@@ -80,7 +163,7 @@ def test_tile_promotion_requires_real_counter_deltas_when_capable():
 @pytest.mark.parametrize("dtype", ["f16", "bf16"])
 def test_target_selected_fragment_materializes_steel_msl_with_ragged_store(dtype):
     artifact = materialize_apple_simdgroup_tile_msl(
-        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16)
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16, accumulator_dtype="fp32")
 
     assert artifact.fragment.storage_dtype == {"f16": "fp16", "bf16": "bf16"}[dtype]
     assert artifact.fragment.threadgroup == (32, 1, 1)
@@ -100,14 +183,14 @@ def test_target_selected_fragment_materializes_steel_msl_with_ragged_store(dtype
 def test_target_selected_materializer_rejects_non_fragment_tile_extent():
     with pytest.raises(ValueError, match="positive multiples"):
         materialize_apple_simdgroup_tile_msl(
-            AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 30, 32, 16)
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 30, 32, 16, accumulator_dtype="fp32")
 
 
 def test_target_selected_materializer_rejects_threadgroup_memory_overflow():
     with pytest.raises(AppleFragmentError, match="THREADGROUP_MEMORY_EXCEEDED"):
         materialize_apple_simdgroup_tile_msl(
             AppleGPUTargetProfile(AppleGPUArch.APPLE7, threadgroup_memory_bytes=4096),
-            "f16", 32, 32, 16)
+            "f16", 32, 32, 16, accumulator_dtype="fp32")
 
 
 def test_tile_runtime_abi_receives_selected_source_and_reports_no_fallback(monkeypatch):
@@ -115,7 +198,7 @@ def test_tile_runtime_abi_receives_selected_source_and_reports_no_fallback(monke
     from tessera import _apple_gpu_dispatch
 
     artifact = materialize_apple_simdgroup_tile_msl(
-        AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 32, 32, 16)
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 32, 32, 16, accumulator_dtype="fp32")
     calls = []
 
     def unavailable(*args):
@@ -138,7 +221,7 @@ def test_tile_runtime_provenance_retains_source_and_resource_record(monkeypatch)
     from tessera import _apple_gpu_dispatch
 
     artifact = materialize_apple_simdgroup_tile_msl(
-        AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 32, 32, 16)
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 32, 32, 16, accumulator_dtype="fp32")
     monkeypatch.setattr(_apple_gpu_dispatch, "bind_registered", lambda _symbol: lambda *_args: 0)
     out, native, record = dispatch_apple_simdgroup_tile_f16(
         artifact, np.ones((8, 8), np.float16), np.ones((8, 8), np.float16),
@@ -175,7 +258,7 @@ def test_apple7_simdgroup_tile_executes_and_missing_binding_is_explicit(
 
     require_apple_metal()
     artifact = materialize_apple_simdgroup_tile_msl(
-        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16)
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16, accumulator_dtype="fp32")
     m, n, k = shape
     af = np.arange(m * k, dtype=np.float32).reshape(m, k) / 16
     bf = np.arange(k * n, dtype=np.float32).reshape(k, n) / 32

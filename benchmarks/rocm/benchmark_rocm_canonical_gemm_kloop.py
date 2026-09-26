@@ -81,6 +81,14 @@ class ResidentPackage:
         descriptor = package.descriptor
         if descriptor.provenance.get("bias") or descriptor.provenance.get("activation") != "none":
             raise ValueError("this packet measures the plain GEMM ABI only")
+        # A split-K package (ROCM-SPLIT-K-1) is two launches over a workspace;
+        # launching only its partial kernel would time half the program and
+        # read an unreduced output. Refuse rather than measure the wrong thing
+        # (split rows belong to benchmarks/rocm/record_split_k_router_gate.py).
+        if descriptor.geometry.policy != "rocm_wmma_macro_tile_grid":
+            raise RuntimeError(
+                f"{case.key}: this harness launches the single-kernel macro-tile grid; the "
+                f"package uses {descriptor.geometry.policy!r}")
         macro = descriptor.provenance.get("macro_tile")
         workgroup = descriptor.provenance.get("workgroup")
         if (not isinstance(macro, list) or len(macro) != 2
@@ -125,6 +133,7 @@ class ResidentPackage:
     def _upload(self, host: np.ndarray) -> ctypes.c_void_p:
         pointer = self._alloc(host.nbytes)
         if self.hip.hipMemcpy(pointer, host.ctypes.data_as(ctypes.c_void_p), host.nbytes, 1) != 0:
+            self.hip.hipFree(pointer)
             raise RuntimeError("host-to-device copy failed")
         return pointer
 
@@ -196,6 +205,7 @@ def run(*, warmup: int, rounds: int, iterations: int, staging: str = "register")
             "macro_tile": provenance.get("macro_tile"),
             "workgroup": provenance.get("workgroup"),
             "k_unroll": provenance.get("k_unroll"),
+            "split_k": provenance.get("split_k", 1),
             "correct": _correct(case, metrics),
             "numerics": metrics,
             "artifact": {

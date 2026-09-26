@@ -259,9 +259,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="CanonicalGemmToAppleGPUPass",
         summary=(
             "APPLE-TILE-2: recognizes the shared canonical M/N/K GEMM "
-            "reduction (three-deep scf.for with an fp32 accumulator and staged "
-            "!tile.pipeline_state) and re-forms it as one "
-            "`tessera_apple.gpu.kernel_call` simdgroup_matrix dispatch, "
+            "reduction (three-deep scf.for with a loop-carried accumulator and "
+            "staged !tile.pipeline_state) and re-forms it as one "
+            "`tessera_apple.gpu.kernel_call` simdgroup_matrix dispatch whose "
+            "`tessera_apple.accumulate` is read from that accumulator and "
+            "cross-checked against numeric_policy.accum (APPLE-ACCUM-1), "
             "carrying the loop's own tile decision and ragged-zero-pad "
             "guarantee plus the compiler-owned Metal staging-byte contract. "
             "Recognition is not promotion: value-mode "
@@ -715,7 +717,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings", "tessera.sparse_policy"),
         preserved_attrs=("numeric_policy", "tessera.launch_bindings", "tessera.dim_names"),
         pass_kind="lowering", sprint="IR-NATIVE-FOUNDATION-1",
-        diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", ),
+        # ROCM_SPLIT_K_NOT_APPLIED is a remark (ROCM-SPLIT-K-1): the
+        # occupancy rule asked for split-K and no aligned split existed.
+        diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", "ROCM_SPLIT_K_NOT_APPLIED"),
     ),
     PassMetadata(
         name="tessera-ir-contracts",
@@ -779,6 +783,28 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         preserved_attrs=("world_size", "dtype", "chunk_bytes"),
         pass_kind="lowering",
         sprint="COLLECTIVE-TARGET-FUNCTIONAL-1",
+    ),
+    PassMetadata(
+        name="tessera-matmul-to-apple-simdgroup",
+        cpp_class="LowerMatmulToAppleSimdgroupPass",
+        summary=(
+            "Lowers `tessera.matmul` to the Apple GPU machine primitives "
+            "(`simdgroup_fill/load/matmul/store`, staged threadgroup tiles, "
+            "barriers). APPLE-ACCUM-1: the accumulator is read from the op's "
+            "`numeric_policy.accum` -- fp32 or fp16, each measured bit-exact "
+            "on the M1 Max -- and carried as the `simdgroup_matrix` element "
+            "type; a missing accumulator, bf16/integer accumulators and "
+            "double-rounding result conversions are refused, named."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera_apple", "scf", "memref", "arith", "bufferization"),
+        required_attrs=("numeric_policy",),
+        diagnostic_codes=(
+            "APPLE_SIMDGROUP_ACCUM_MISSING",
+            "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED",
+        ),
+        pass_kind="lowering",
+        sprint="APPLE-ACCUM-1",
     ),
     PassMetadata(
         name="tessera-native-tape-to-gpu",

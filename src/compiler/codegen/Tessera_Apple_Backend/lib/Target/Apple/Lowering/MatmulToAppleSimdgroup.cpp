@@ -67,8 +67,13 @@ namespace {
 constexpr int64_t kExtent = 8;
 
 struct LowerMatmulToAppleSimdgroup : public RewritePattern {
-  LowerMatmulToAppleSimdgroup(MLIRContext *ctx)
-      : RewritePattern("tessera.matmul", /*benefit=*/2, ctx) {}
+  LowerMatmulToAppleSimdgroup(MLIRContext *ctx, bool &refused)
+      : RewritePattern("tessera.matmul", /*benefit=*/2, ctx), refused(refused) {}
+
+  // Set when a matmul the pattern would otherwise lower is refused with a
+  // diagnostic; the pass turns it into a failure so a refusal is never a
+  // silently unlowered op.
+  bool &refused;
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
@@ -98,24 +103,57 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     if (rhsTy.getDimSize(0) != K)
       return rewriter.notifyMatchFailure(op, "matmul shape mismatch");
 
-    // The accumulator is f32 and `simdgroup_store` does not convert -- it
-    // moves raw elements. An f16 result therefore needs an explicit rounding
-    // epilogue, which is exactly what the MSL kernel does: store the tile to
-    // `threadgroup float`, then convert per element on the way out. Emitting
-    // that is what keeps Decision #15a's split real here -- storage f16,
-    // accumulator f32 -- and it is why the rounding happens ONCE at the end
-    // rather than at every K step.
+    // The accumulator is the program's `numeric_policy.accum` (APPLE-ACCUM-1,
+    // Decision #15a), never a default: it selects semantics (#21a), so an op
+    // that declares none is refused rather than given fp32. The accumulator
+    // is stored raw -- `simdgroup_store` moves elements and does not convert
+    // -- so a result narrower than the accumulator gets an explicit rounding
+    // epilogue, ONCE after the whole reduction, and a wider one an exact
+    // widening. That is what keeps storage, accumulator and result three
+    // separate facts here.
     auto resTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
     if (!resTy || !resTy.hasStaticShape())
       return rewriter.notifyMatchFailure(op, "requires a static result type");
     Type resElem = resTy.getElementType();
-    if (!resElem.isF16() && !resElem.isBF16() && !resElem.isF32())
-      return rewriter.notifyMatchFailure(
-          op, "result must be f16, bf16 or f32; the accumulator is f32 and "
-              "only those have a defined rounding epilogue");
+    StringAttr declared = appleDeclaredAccumulator(op);
+    if (!declared) {
+      op->emitOpError("APPLE_SIMDGROUP_ACCUM_MISSING: apple_gpu simdgroup "
+                      "lowering needs the program's accumulator; this matmul "
+                      "carries no numeric_policy.accum, and the accumulator "
+                      "selects semantics (Decision #21a) so it is not "
+                      "defaulted -- state numeric_policy = {accum = \"fp32\"} "
+                      "or {accum = \"fp16\"}");
+      refused = true;
+      return failure();
+    }
+    Type accElem = appleAccumulatorType(getContext(), declared.getValue());
+    std::string refusal =
+        accElem ? appleSimdgroupAccumulatorRefusal(accElem)
+                : std::string("the name is not a Decision #15a accumulator");
+    if (!refusal.empty()) {
+      op->emitOpError("APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: apple_gpu "
+                      "simdgroup_matrix cannot accumulate storage ")
+          << elem << " in accum=\"" << declared.getValue() << "\": " << refusal;
+      refused = true;
+      return failure();
+    }
+    // Result conversions with a defined, single rounding (or none): equal
+    // types store as-is; f16 -> f32 widens exactly; f32 -> f16/bf16 rounds
+    // once. f16 -> bf16 would be a second rounding of an already-rounded
+    // accumulator, so it is refused rather than silently double-rounded.
+    const bool sameResult = resElem == accElem;
+    const bool widen = accElem.isF16() && resElem.isF32();
+    const bool narrow = accElem.isF32() && (resElem.isF16() || resElem.isBF16());
+    if (!sameResult && !widen && !narrow) {
+      op->emitOpError("APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: apple_gpu has no "
+                      "single-rounding epilogue from an ")
+          << accElem << " accumulator to an " << resElem
+          << " result (storage " << elem << ")";
+      refused = true;
+      return failure();
+    }
 
     Location loc = op->getLoc();
-    Type f32Ty = rewriter.getF32Type();
     const int64_t MP = ((M + kExtent - 1) / kExtent) * kExtent;
     const int64_t NP = ((N + kExtent - 1) / kExtent) * kExtent;
 
@@ -133,7 +171,7 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     // Padded to whole tiles so a ragged edge writes into the pad rather than
     // out of bounds; the epilogue copies back only the valid region.
     Value accBuf =
-        rewriter.create<memref::AllocOp>(loc, MemRefType::get({MP * NP}, f32Ty));
+        rewriter.create<memref::AllocOp>(loc, MemRefType::get({MP * NP}, accElem));
 
     auto idx = [&](int64_t v) {
       return rewriter.create<arith::ConstantIndexOp>(loc, v).getResult();
@@ -161,7 +199,7 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     Value zeroElem = rewriter.create<arith::ConstantOp>(
         loc, elem, rewriter.getFloatAttr(elem, 0.0));
 
-    Type accTy = SimdgroupMatrixType::get(getContext(), f32Ty);
+    Type accTy = SimdgroupMatrixType::get(getContext(), accElem);
     Type inTy = SimdgroupMatrixType::get(getContext(), elem);
     StringRef storage = elem.isF16() ? "f16" : (elem.isBF16() ? "bf16" : "f32");
     auto scope = rewriter.getStringAttr("threadgroup");
@@ -244,9 +282,12 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     rewriter.setInsertionPointAfter(mLoop);
 
     // Epilogue: copy the valid region out of the padded accumulator, rounding
-    // ONCE when the result is narrower. Measured over K = 4096 that is 1.7e-04
-    // relative error against 5.8e-03 for accumulating in f16 -- which is what
-    // the fp32 tile buys (tests/unit/test_apple_simdgroup_contract.py).
+    // ONCE when the result is narrower than an f32 accumulator and widening
+    // exactly when an f16 accumulator meets an f32 result. Measured on the M1
+    // Max at K = 4096 (APPLE-ACCUM-1), an f16 accumulator over f16 storage is
+    // 1.3e-02 to 1.8e-02 max relative error (two draws) against the exact
+    // product and an f32 one about 2e-06
+    // -- what the program asked for is what runs.
     Value outFlat = rewriter.create<memref::AllocOp>(
         loc, MemRefType::get({M * N}, resElem));
     auto rLoop = rewriter.create<scf::ForOp>(loc, zero, mLimit, one);
@@ -258,10 +299,13 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     Value srcOff = rewriter.create<arith::AddIOp>(
         loc, rewriter.create<arith::MulIOp>(loc, r, npStride), c);
     Value v = rewriter.create<memref::LoadOp>(loc, accBuf, ValueRange{srcOff});
-    // arith.truncf is round-to-nearest-even despite the name.
-    Value outV = resElem.isF32()
-                     ? v
-                     : rewriter.create<arith::TruncFOp>(loc, resElem, v).getResult();
+    // arith.truncf is round-to-nearest-even despite the name; arith.extf of
+    // an f16 accumulator into an f32 result is exact.
+    Value outV = v;
+    if (narrow)
+      outV = rewriter.create<arith::TruncFOp>(loc, resElem, v).getResult();
+    else if (widen)
+      outV = rewriter.create<arith::ExtFOp>(loc, resElem, v).getResult();
     Value dstOff = rewriter.create<arith::AddIOp>(
         loc, rewriter.create<arith::MulIOp>(loc, r, nStride), c);
     rewriter.create<memref::StoreOp>(loc, outV, outFlat, ValueRange{dstOff});
@@ -294,8 +338,10 @@ struct LowerMatmulToAppleSimdgroupPass
   }
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
-    patterns.add<LowerMatmulToAppleSimdgroup>(&getContext());
-    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
+    bool refused = false;
+    patterns.add<LowerMatmulToAppleSimdgroup>(&getContext(), refused);
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))) ||
+        refused)
       signalPassFailure();
   }
 };

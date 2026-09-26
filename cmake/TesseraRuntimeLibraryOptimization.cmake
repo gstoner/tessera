@@ -25,10 +25,24 @@ function(tessera_runtime_library_optimization target)
   if(NOT TARGET ${target})
     message(FATAL_ERROR "tessera_runtime_library_optimization: no target '${target}'")
   endif()
-  if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    target_compile_options(${target} PRIVATE
-      $<$<COMPILE_LANGUAGE:C,CXX,OBJCXX,HIP>:-O2>
-      $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-O2>)
+  get_property(done TARGET ${target} PROPERTY TESSERA_RUNTIME_LIBRARY_RECORDED)
+  if(done)
+    message(FATAL_ERROR "tessera_runtime_library_optimization: '${target}' recorded twice")
+  endif()
+  set_property(TARGET ${target} PROPERTY TESSERA_RUNTIME_LIBRARY_RECORDED TRUE)
+  if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES
+     AND CMAKE_CXX_FLAGS MATCHES "(^| )-O")
+    # The user chose an optimization level for the whole tree; never override
+    # it (an -O3 must not be downgraded to this helper's -O2).
+    set(level "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+  elseif(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:C,CXX,OBJCXX,HIP>:-O2>)
+    # -Xcompiler is nvcc's spelling; clang-as-CUDA takes the flag directly.
+    if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
+      target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-O2>)
+    elseif(CMAKE_CUDA_COMPILER_ID)
+      target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O2>)
+    endif()
     set(level "O2 (runtime-library default: tree has no build type)")
   elseif(CMAKE_CONFIGURATION_TYPES)
     set(level "multi-config generator: per-configuration flags")
@@ -36,9 +50,10 @@ function(tessera_runtime_library_optimization target)
     string(TOUPPER "${CMAKE_BUILD_TYPE}" upper)
     set(level "${CMAKE_BUILD_TYPE}: ${CMAKE_CXX_FLAGS_${upper}}")
   endif()
-  # The record is a CMake list joined into JSON, so neither list separators
-  # nor quotes may appear inside it.
+  # The record is a CMake list joined into JSON, so no list separator, quote
+  # or backslash may appear inside it (a backslash is an invalid JSON escape).
   string(REPLACE ";" " " level "${level}")
+  string(REPLACE "\\" "/" level "${level}")
   string(REPLACE "\"" "'" level "${level}")
   set_property(GLOBAL APPEND PROPERTY TESSERA_RUNTIME_LIBRARY_RECORDS
     "\"${target}\": \"${level}\"")

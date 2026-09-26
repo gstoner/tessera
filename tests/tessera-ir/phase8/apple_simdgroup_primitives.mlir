@@ -62,3 +62,27 @@ func.func @f32_inputs_same_fp32_accumulator(%m: memref<64xf32>, %o: index) {
       : !tessera_apple.simdgroup_matrix<f32>, memref<64xf32>, index
   return
 }
+
+// -----
+
+// APPLE-ACCUM-1: an f16 accumulator is admitted. Measured on the M1 Max it is
+// genuine fp16 accumulation (bit-exact with a sequential fp16 FMA chain for f16
+// storage), so numeric_policy accum = "fp16" is what executes. `c` and `d`
+// carry the accumulator; the store writes it raw into an f16 buffer.
+func.func @f16_inputs_f16_accumulator(%m: memref<64xf16>, %o: index) {
+  %a = tessera_apple.gpu.simdgroup_load %m, %o
+      {leading_dim = 8 : i64, space = "device"}
+      : memref<64xf16>, index -> !tessera_apple.simdgroup_matrix<f16>
+  %zero = tessera_apple.gpu.simdgroup_fill {value = 0.0 : f32}
+      : !tessera_apple.simdgroup_matrix<f16>
+  %d = tessera_apple.gpu.simdgroup_matmul %a, %a, %zero
+      {storage = "f16", m = 8 : i64, n = 8 : i64, k = 8 : i64}
+      : !tessera_apple.simdgroup_matrix<f16>, !tessera_apple.simdgroup_matrix<f16>,
+        !tessera_apple.simdgroup_matrix<f16> -> !tessera_apple.simdgroup_matrix<f16>
+  tessera_apple.gpu.simdgroup_store %d, %m, %o
+      {leading_dim = 8 : i64, space = "device"}
+      : !tessera_apple.simdgroup_matrix<f16>, memref<64xf16>, index
+  return
+}
+// CHECK-LABEL: @f16_inputs_f16_accumulator
+// CHECK: tessera_apple.gpu.simdgroup_matmul {{.*}} -> <f16>

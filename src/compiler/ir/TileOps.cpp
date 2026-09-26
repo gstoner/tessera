@@ -1381,6 +1381,47 @@ LogicalResult MatmulKernelOp::verify() {
       return emitOpError(
           "canonical K-loop requires FP32, INT32, or FP64 accumulation");
   }
+  // ROCM-SPLIT-K-1: cross-workgroup split-K arrives as a PAIR -- the slice
+  // count and the order the partials are summed in. Both are semantic keys
+  // (Decision #21a): a count without an order, or an order without a count,
+  // fails closed here rather than defaulting below.
+  auto splitK = getOperation()->getAttrOfType<IntegerAttr>("tessera.split_k");
+  auto splitReduction =
+      getOperation()->getAttrOfType<StringAttr>("tessera.split_k_reduction");
+  if (splitK || splitReduction) {
+    if (!splitK || !splitReduction)
+      return emitOpError("TILE_SPLIT_K_BAD_CONTRACT: tessera.split_k and "
+                         "tessera.split_k_reduction must appear together");
+    if (splitK.getInt() < 2)
+      return emitOpError("TILE_SPLIT_K_BAD_CONTRACT: tessera.split_k must be "
+                         ">= 2 when stated (absence means unsplit)");
+    if (splitReduction.getValue() != "ordered")
+      return emitOpError("TILE_SPLIT_K_BAD_CONTRACT: the only admitted "
+                         "split-K reduction is \"ordered\" (deterministic, "
+                         "fixed slice order); got \"")
+             << splitReduction.getValue() << "\"";
+    if (desc.getAccType() != "f32")
+      return emitOpError("TILE_SPLIT_K_BAD_CONTRACT: split-K partials are an "
+                         "fp32 workspace; the accumulator must be f32");
+    auto canonical =
+        getOperation()->getAttrOfType<BoolAttr>("tessera.canonical_k_loop");
+    if (!canonical || !canonical.getValue())
+      return emitOpError("TILE_SPLIT_K_BAD_CONTRACT: split-K partitions the "
+                         "canonical K loop and requires "
+                         "tessera.canonical_k_loop = true");
+    // When K is a static operand, the slices must be whole macro K blocks.
+    // Operands: pointers, then M, N, K (then optional leading dimensions).
+    Value kOperand = getInputs()[pointerCount + 2];
+    if (getInputs().size() == compactExpected)
+      if (auto constant = kOperand.getDefiningOp<arith::ConstantIntOp>()) {
+        const int64_t block = desc.getK() * std::max<int64_t>(desc.getKBlocks(), 1);
+        if (constant.value() % (splitK.getInt() * block) != 0)
+          return emitOpError("TILE_SPLIT_K_BAD_CONTRACT: K=")
+                 << constant.value() << " does not split into "
+                 << splitK.getInt() << " slices of whole macro K blocks ("
+                 << block << ")";
+      }
+  }
   return success();
 }
 

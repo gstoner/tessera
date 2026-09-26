@@ -62,6 +62,22 @@ int appleMatmul2dPairCode(::mlir::Type a, ::mlir::Type b);
 /// 1 relu, 2 gelu (tanh form), 3 silu; -1 for anything else. The codes are
 /// the MSL kernel's `ts_epi` contract.
 int appleMatmul2dActCode(::llvm::StringRef act);
+
+/// APPLE-ACCUM-1. The accumulator an op's program declared: the `accum` entry
+/// of its `numeric_policy` dictionary, or a null attribute when the op carries
+/// none. The accumulator selects semantics (Decision #21a), so callers treat a
+/// null result as a refusal, never as an implied fp32.
+::mlir::StringAttr appleDeclaredAccumulator(::mlir::Operation *op);
+
+/// Map a Decision #15a accumulator name (fp32/f32, fp16/f16, bf16) to its MLIR
+/// float type, or a null type for any other name.
+::mlir::Type appleAccumulatorType(::mlir::MLIRContext *ctx, ::llvm::StringRef name);
+
+/// Why a simdgroup_matrix accumulator of `accum` element type is refused on
+/// Apple7, or an empty string when it is admitted (f32, f16). Measured on the
+/// M1 Max: a bf16 accumulator runs fp32 accumulation truncated to bf16 at the
+/// store, so it is not the bf16 accumulation a program asking for it declared.
+std::string appleSimdgroupAccumulatorRefusal(::mlir::Type accum);
 } // namespace tessera::apple
 
 #endif // TESSERA_TARGET_APPLE_DIALECT_H

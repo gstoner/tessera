@@ -41,7 +41,6 @@ namespace {
 
 constexpr int64_t kAppleSimdgroupFragment = 8;
 constexpr int64_t kAppleStagingElementBytes = 2;
-constexpr int64_t kAppleEdgeScratchBytes = 8 * 8 * 4;
 constexpr int64_t kAppleThreadgroupCapacityBytes = 32 * 1024;
 
 int64_t roundToAppleFragment(int64_t extent) {
@@ -182,18 +181,41 @@ struct CanonicalGemmToAppleGPUPass
       } else {
         root->emitOpError(
             "APPLE_CANONICAL_GEMM_DTYPE_UNSUPPORTED: apple_gpu re-forms the "
-            "canonical reduction only for fp16/bf16 storage with fp32 "
-            "accumulation (simdgroup_matrix contract)");
+            "canonical reduction only for fp16/bf16 storage (the TILE-1 "
+            "simdgroup_matrix runtime ABI takes 16-bit operands)");
         signalPassFailure();
         return;
       }
-      if (!resultType.getElementType().isF32()) {
-        root->emitOpError(
-            "APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED: the canonical reduction "
-            "must accumulate in fp32 for the Apple simdgroup route");
+      // APPLE-ACCUM-1: the accumulator is read from IR, never assumed. The
+      // canonical nest states it as the loop-carried accumulator's element
+      // type (the root's result); a `numeric_policy.accum` on the K step, when
+      // present, must name the same type -- a disagreement means the nest does
+      // not compute what the program declared.
+      Type accElem = resultType.getElementType();
+      if (StringAttr declared = appleDeclaredAccumulator(matmul)) {
+        Type declaredType = appleAccumulatorType(&getContext(), declared.getValue());
+        if (declaredType != accElem) {
+          root->emitOpError(
+              "APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED: numeric_policy.accum=\"")
+              << declared.getValue() << "\" disagrees with the canonical "
+              << "reduction's loop-carried " << accElem
+              << " accumulator (storage " << storage << ", target apple_gpu)";
+          signalPassFailure();
+          return;
+        }
+      }
+      const std::string refusal = appleSimdgroupAccumulatorRefusal(accElem);
+      if (!refusal.empty()) {
+        root->emitOpError("APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED: storage ")
+            << storage << " with a " << accElem
+            << " accumulator has no apple_gpu simdgroup route: " << refusal;
         signalPassFailure();
         return;
       }
+      const StringRef accumName = accElem.isF16() ? "fp16" : "fp32";
+      const int64_t edgeScratchBytes =
+          kAppleSimdgroupFragment * kAppleSimdgroupFragment *
+          (accElem.getIntOrFloatBitWidth() / 8);
 
       OpBuilder builder(root);
       OperationState state(root->getLoc(), "tessera_apple.gpu.kernel_call");
@@ -210,7 +232,7 @@ struct CanonicalGemmToAppleGPUPass
       state.addAttribute("tessera_apple.canonical_k_loop",
                          builder.getBoolAttr(true));
       state.addAttribute("tessera_apple.accumulate",
-                         builder.getStringAttr("fp32"));
+                         builder.getStringAttr(accumName));
       // Carry the loop's own tile decision rather than re-deriving one.
       for (StringRef tileAttr :
            {"tessera.tile_m", "tessera.tile_n", "tessera.tile_k"}) {
@@ -258,7 +280,7 @@ struct CanonicalGemmToAppleGPUPass
                               kAppleStagingElementBytes;
       const int64_t stagedB = stageDepth * stageK * stageN *
                               kAppleStagingElementBytes;
-      const int64_t arena = stagedA + stagedB + kAppleEdgeScratchBytes;
+      const int64_t arena = stagedA + stagedB + edgeScratchBytes;
       if (arena > kAppleThreadgroupCapacityBytes) {
         root->emitOpError(
             "APPLE_THREADGROUP_MEMORY_EXCEEDED: canonical Apple GEMM staging "
@@ -281,7 +303,7 @@ struct CanonicalGemmToAppleGPUPass
       state.addAttribute("tessera_apple.staged_b_bytes",
                          builder.getI64IntegerAttr(stagedB));
       state.addAttribute("tessera_apple.edge_scratch_bytes",
-                         builder.getI64IntegerAttr(kAppleEdgeScratchBytes));
+                         builder.getI64IntegerAttr(edgeScratchBytes));
       state.addAttribute("tessera_apple.threadgroup_arena_bytes",
                          builder.getI64IntegerAttr(arena));
       state.addAttribute("tessera_apple.threadgroup_capacity_bytes",

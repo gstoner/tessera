@@ -4500,6 +4500,7 @@ def _submit_rocm_gfx1151_native(
                                    GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
+    split_k = 1  # ROCM-SPLIT-K-1; read from the descriptor in the matmul branch
     depth_attention = descriptor.abi_id == GFX_DEPTH_ATTN_F32_ABI
     attention_bias = attention and bool(descriptor.provenance["bias"])
     expected_buffers = (
@@ -4589,6 +4590,25 @@ def _submit_rocm_gfx1151_native(
         macro_m, macro_n = macro_tile
         grid_x = (n + macro_n - 1) // macro_n
         grid_y = (m + macro_m - 1) // macro_m
+        # ROCM-SPLIT-K-1: a split schedule is two launches -- the partial over
+        # grid.z = S into an fp32 [S, M, N] workspace, then the ordered
+        # reduction that applies the epilogue. Every field is checked; a split
+        # descriptor missing one is refused, never run as the unsplit kernel.
+        raw_split = descriptor.provenance.get("split_k", 1)
+        if not isinstance(raw_split, int) or isinstance(raw_split, bool) or raw_split < 1:
+            raise RuntimeError("ROCm matmul descriptor split_k must be a positive int")
+        split_k = raw_split
+        if split_k > 1:
+            if (
+                descriptor.provenance.get("split_k_reduction") != "ordered"
+                or descriptor.geometry.policy != "rocm_wmma_split_k_grid"
+                or not isinstance(descriptor.provenance.get("split_k_reduce_entry"), str)
+                or matmul_integer
+                or output.dtype != np.float32
+            ):
+                raise RuntimeError(
+                    "ROCm split-K matmul descriptor requires an ordered reduction entry, "
+                    "the split-K grid policy and an fp32 output")
     elif attention:
         q, key, value = (buffers[item.name] for item in ordered[:3])
         bias = buffers[ordered[3].name] if attention_bias else None
@@ -4744,6 +4764,50 @@ def _submit_rocm_gfx1151_native(
                 ctypes.c_int64(size),
                 ctypes.c_int64(1),
             ]
+
+        if matmul and split_k > 1:
+            m_, n_, k_ = dimensions
+            reduce_function = ctypes.c_void_p()
+            reduce_entry = cast(str, descriptor.provenance["split_k_reduce_entry"])
+            if hip.hipModuleGetFunction(ctypes.byref(reduce_function), module, reduce_entry.encode()) != 0:
+                raise RuntimeError(f"ROCm split-K reduce symbol {reduce_entry!r} not found")
+            workspace = ctypes.c_void_p()
+            workspace_elements = split_k * m_ * n_
+            if hip.hipMalloc(ctypes.byref(workspace), workspace_elements * 4) != 0:
+                raise RuntimeError("ROCm split-K workspace hipMalloc failed")
+            device_buffers.append(workspace)
+            # Every workspace element is written by exactly one slice (the
+            # masked store covers the ragged M/N edge), so no clear is needed.
+            partial_args: list[Any] = []
+            for device, array in zip(device_inputs[:2], input_arrays[:2], strict=True):
+                partial_args.extend(memref_args(device, int(array.size)))
+            partial_args.extend(memref_args(workspace, workspace_elements))
+            partial_args.extend(ctypes.c_int64(value) for value in dimensions)
+            reduce_args: list[Any] = list(memref_args(workspace, workspace_elements))
+            if matmul_bias:
+                reduce_args.extend(memref_args(device_inputs[2], int(input_arrays[2].size)))
+            reduce_args.extend(memref_args(device_o, int(output.size)))
+            reduce_args.extend((ctypes.c_int64(m_), ctypes.c_int64(n_)))
+            reduce_block = int(cast(list[int], descriptor.provenance.get("split_k_reduce_workgroup", [256]))[0])
+            launches = (
+                (function, (grid_x, grid_y, split_k),
+                 int(cast(list[int], descriptor.provenance.get("workgroup", [32]))[0]), partial_args),
+                (reduce_function, ((m_ * n_ + reduce_block - 1) // reduce_block, 1, 1), reduce_block, reduce_args),
+            )
+            for kernel, grid, block, kernel_args in launches:
+                packed = (ctypes.c_void_p * len(kernel_args))()
+                for index, value in enumerate(kernel_args):
+                    packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+                # Same (null) stream for both, so the reduction is ordered
+                # after the partial without a host synchronization between.
+                rc = hip.hipModuleLaunchKernel(kernel, *grid, block, 1, 1, 0, None, packed, None)
+                if rc != 0:
+                    raise RuntimeError(f"ROCm split-K kernel launch failed rc={rc}")
+            if hip.hipDeviceSynchronize() != 0:
+                raise RuntimeError("ROCm split-K device synchronization failed")
+            if hip.hipMemcpy(output.ctypes.data_as(ctypes.c_void_p), device_o, output_byte_count, 2) != 0:
+                raise RuntimeError("ROCm split-K device-to-host copy failed")
+            return output
 
         arguments = []
         if attention:
@@ -6000,6 +6064,7 @@ def _submit_apple_gpu_native(
         APPLE_TOPK_DYNAMIC_F32_I32_ABI,
         APPLE_TOPK_F32_SYMBOL,
         APPLE_SIMDGROUP_GEMM_F16_ABI,
+        APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
         APPLE_SIMDGROUP_GEMM_F16_SYMBOL,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
@@ -6249,8 +6314,13 @@ def _submit_apple_gpu_native(
             raise RuntimeError("Apple simdgroup GEMM requires a contiguous f32 output")
         block = cast(Sequence[int], descriptor.provenance.get("block") or [32, 32, 16])
         bm, bn, bk = (int(value) for value in block)
+        # The accumulator is part of this ABI's identity
+        # (`...simdgroup_gemm.a_b_o_m_n_k.f16_f32.v1`): the packager only emits
+        # it for a scheduled matmul whose numeric policy is storage f16 /
+        # accum f32, so it is read from the ABI, not defaulted (APPLE-ACCUM-1).
         artifact = materialize_apple_simdgroup_tile_msl(
             AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", bm, bn, bk,
+            accumulator_dtype=APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
             double_buffer=True,
         )
         result, native = dispatch_apple_simdgroup_tile_f16(artifact, a, b)
@@ -7932,9 +8002,11 @@ def build_canonical_gemm_hsaco(
     through ``rocm_native.package_scheduled_matmul``. Returns the
     ``ROCMNativePackage``: ``image.payload`` is the hsaco, and the launch
     descriptor carries the entry symbol, ABI, bindings and the ``macro_tile`` /
-    ``workgroup`` a launcher must use. This is the only ROCm GEMM entry from
-    Graph IR; the Graph->Tile shortcut that skipped Schedule IR (Lane B) was
-    retired 2026-09-26.
+    ``workgroup`` a launcher must use -- a package, not bare bytes, because
+    the hsaco alone cannot be launched correctly. The traced frontend reaches
+    the same lower-and-package authority through ``driver.py``; the
+    Graph->Tile shortcut that skipped Schedule IR (Lane B) was retired
+    2026-09-26.
     """
     from .compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
     from .compiler.rocm_native import package_scheduled_matmul
@@ -37883,7 +37955,11 @@ def _apple_gpu_tile_simdgroup_gemm_available() -> bool:
             materialize_apple_simdgroup_tile_msl,
         )
 
-        art = materialize_apple_simdgroup_tile_msl(AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 8, 8, 8)
+        # Probes the f16-storage / fp32-accumulator form of the ABI; the
+        # accumulator is stated, not defaulted (APPLE-ACCUM-1).
+        art = materialize_apple_simdgroup_tile_msl(
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 8, 8, 8,
+            accumulator_dtype="fp32")
         a = _np.eye(8, dtype=_np.float16)
         out, native = dispatch_apple_simdgroup_tile_f16(art, a, a)
         return bool(native and _np.allclose(out, _np.eye(8, dtype=_np.float32)))
@@ -38217,8 +38293,18 @@ def _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np):
             ) from exc
     else:
         raise ValueError(f"tile_simdgroup_gemm has unknown staging layout owner {layout_owner!r}")
+    # APPLE-ACCUM-1: the accumulator is the one the compiler stamped from the
+    # program's numeric_policy (`tessera_apple.accumulate`). A call without one
+    # is refused -- the accumulator selects semantics (Decision #21a) and this
+    # dispatcher does not choose it.
+    accumulate = call.get("accumulate")
+    if not isinstance(accumulate, str) or not accumulate:
+        raise ValueError(
+            "APPLE_SIMDGROUP_ACCUM_MISSING: tile_simdgroup_gemm call carries no "
+            "tessera_apple.accumulate; the accumulator is not defaulted")
     art = materialize_apple_simdgroup_tile_msl(
         AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, bm, bn, bk,
+        accumulator_dtype=accumulate,
         double_buffer=(contract is None or contract["stage_depth"] == 2),
         staging_contract=contract,
     )

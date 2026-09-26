@@ -242,17 +242,58 @@ static ::mlir::LogicalResult verifyElementMatch(::mlir::Operation *op,
                          << " to match `storage`; a mixed-precision pair is a "
                             "convert plus an MMA, not a simdgroup MMA";
 
-  // The accumulator is ALWAYS fp32, whatever the inputs are. Metal's
-  // accumulate form takes simdgroup_float8x8, and the MSL synthesizer relies on
-  // it so the fused epilogue sees full-precision matmul results. An f16
-  // accumulator would silently change the numerics of every kernel built on
-  // this op.
-  if (!cElem.isF32() || !dElem.isF32())
+  // The accumulator is the program's `numeric_policy.accum`, carried as the
+  // element type of `c` and `d` (APPLE-ACCUM-1). `c` and `d` must agree: the
+  // result feeds the next K step's `c`, so a disagreement is a conversion
+  // hidden inside the MMA chain. Which accumulators are admitted is measured,
+  // not assumed -- see appleSimdgroupAccumulatorRefusal.
+  if (cElem != dElem)
     return emitOpError()
-           << "accumulator `c` and result `d` must be f32; the simdgroup MMA "
-              "accumulates in fp32 regardless of input precision, and an f16 "
-              "accumulator would re-round every partial sum";
+           << "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: accumulator `c` and result `d` "
+              "must have the same element type; the result is the next K step's "
+              "accumulator, so a mismatch is a conversion hidden in the chain";
+  const std::string refusal = appleSimdgroupAccumulatorRefusal(cElem);
+  if (!refusal.empty())
+    return emitOpError() << "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: " << refusal;
   return ::mlir::success();
+}
+
+::mlir::StringAttr appleDeclaredAccumulator(::mlir::Operation *op) {
+  auto policy = op->getAttrOfType<::mlir::DictionaryAttr>("numeric_policy");
+  if (!policy)
+    return {};
+  auto accum = policy.getAs<::mlir::StringAttr>("accum");
+  if (!accum || accum.getValue().empty())
+    return {};
+  return accum;
+}
+
+::mlir::Type appleAccumulatorType(::mlir::MLIRContext *ctx, ::llvm::StringRef name) {
+  ::mlir::Builder b(ctx);
+  if (name == "fp32" || name == "f32") return b.getF32Type();
+  if (name == "fp16" || name == "f16") return b.getF16Type();
+  if (name == "bf16") return b.getBF16Type();
+  return {};
+}
+
+std::string appleSimdgroupAccumulatorRefusal(::mlir::Type accum) {
+  // Measured 2026-09-26 on the M1 Max (Apple7, macOS 27.0, Metal toolchain
+  // 32023.921): every half/bfloat/float storage x accumulator pair compiles at
+  // MSL 3.1 (metal_simdgroup_matrix constrains the MMA only by
+  // is_floating_point_v), and on the GPU an f32 accumulator is bit-exact with a
+  // sequential fp32 FMA chain and an f16 accumulator is bit-exact with genuine
+  // fp16 accumulation (fp16 FMA per element for f16 storage; fp32 inside each
+  // 8-deep MMA, rounded to fp16 after every MMA, for bf16/f32 storage).
+  if (accum && (accum.isF32() || accum.isF16()))
+    return "";
+  if (accum && accum.isBF16())
+    return "a bf16 simdgroup accumulator is not bf16 accumulation on Apple7: "
+           "measured on the M1 Max it carries fp32 across the K loop and "
+           "truncates (round-toward-zero) to bf16 at simdgroup_store, so it "
+           "would run a different numeric class than accum=bf16 declares; use "
+           "accum=fp32 (and round the result) or accum=fp16";
+  return "simdgroup_matrix accumulates in f32 or f16 on this lane; Metal has no "
+         "integer simdgroup_matrix and no other float element type";
 }
 
 //===----------------------------------------------------------------------===//

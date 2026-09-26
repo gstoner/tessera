@@ -126,6 +126,24 @@ LogicalResult MatmulOp::verify() {
     return emitOpError("requires explicit storage and accumulation types");
   if (getBlockK() < 0 || (getBlockK() > 0 && getBlockK() % getTileK() != 0))
     return emitOpError("block_k must be 0 or a positive multiple of tile_k");
+  // ROCM-SPLIT-K-1. The slice count and the reduction order decide the
+  // floating-point result, so a split without a stated order fails closed
+  // (Decision #21a); `ordered` is the only admitted mode -- no atomic mode.
+  if (getSplitK() < 1)
+    return emitOpError("SCHEDULE_SPLIT_K_BAD_CONTRACT: split_k must be >= 1");
+  if (getSplitK() == 1 && !getSplitKReduction().empty())
+    return emitOpError("SCHEDULE_SPLIT_K_BAD_CONTRACT: split_k_reduction "
+                       "requires split_k > 1");
+  if (getSplitK() > 1 && getSplitKReduction() != "ordered")
+    return emitOpError("SCHEDULE_SPLIT_K_BAD_CONTRACT: split_k > 1 requires "
+                       "split_k_reduction = \"ordered\" (the only admitted, "
+                       "deterministic reduction)");
+  if (getSplitK() > 1 && getBlockK() <= 0)
+    return emitOpError("SCHEDULE_SPLIT_K_BAD_CONTRACT: split_k > 1 requires "
+                       "a macro K block (block_k > 0) for slices to align to");
+  if (getSplitK() > 1 && (getScaleK() > 0 || !getPhysicalContract().empty()))
+    return emitOpError("SCHEDULE_SPLIT_K_BAD_CONTRACT: split-K is not "
+                       "defined for block-scaled or physical-contract matmuls");
   if (getScaleK() < 0)
     return emitOpError("scale_k must be non-negative");
   if ((getScaleK() == 0) != getScaleFormat().empty())

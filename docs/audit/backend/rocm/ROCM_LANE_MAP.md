@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-21
+last_updated: 2026-09-26
 audit_role: reference
 owning_plan_item: W1.1 / ROCm backend
 ---
@@ -52,12 +52,20 @@ Lane B (`runtime._build_canonical_gemm_hsaco`: Graph IR → `tessera-tiling` →
 `tessera-tile-ir-lowering` → generator with `via-tile=false`) skipped Schedule
 IR, so its schedule arrived as pass options rather than a replayed Schedule
 contract, and it was a second Graph → Tile authority for GEMM beside the
-scheduled route (Decision #31). Skipping Schedule IR bought no runtime speed
-(same generator, same serialized options) and negligible compile time (both
-routes are content-cached). Retired in one change:
+scheduled route (Decision #31). Skipping Schedule IR is not a fast path:
+compile time is negligible either way (both routes are content-cached), and
+no runtime advantage was ever measured — **the two were not measured head to
+head**. They do not produce the same kernel: Lane B entered the generator
+through the canonical `scf.for` matcher with `via-tile=false`, the scheduled
+route enters through the typed `tile.matmul_kernel` adapter with
+`via-tile=true`. Resource counts differ too (Lane B's packet: 0 spills; the
+scheduled packet: 45-48 on f16/bf16) across a toolchain change (ROCm 7.14 →
+10.0), so no regression or speed claim is made in either direction.
+Retired in one change:
 
-* **Correct path first.** `runtime.build_canonical_gemm_hsaco` is the one
-  Graph entry for ROCm GEMM: `lower_scheduled_matmul` (Graph → Schedule →
+* **Correct path first.** `runtime.build_canonical_gemm_hsaco` builds a ROCm
+  GEMM from a Graph module (the traced frontend reaches the same
+  lower-and-package authority through `driver.py`): `lower_scheduled_matmul` (Graph → Schedule →
   Tile, replay-checked) then `package_scheduled_matmul` (Tile → `tessera_rocm`
   → HSACO). The runtime's compiled GEMM now builds through it.
 * **Benchmark rebuilt.** `benchmark_rocm_canonical_gemm_kloop.py` measures
@@ -72,9 +80,18 @@ routes are content-cached). Retired in one change:
   lit fixture (`executable_pipeline_graph_matmul_options.mlir`). Attention
   keeps its Graph entry.
 * **Census.** The E2E-REAL-6F package census and `bootstrap_prune_gap` were
-  re-run before and after: ROCm GEMM's only package is
-  `package_scheduled_matmul` on the `scheduled` boundary, and no package row
-  changed — Lane B was never a package, so no family lost its only lowering.
+  re-run before and after: counts identical (46 graph / 14 scheduled / 15 raw)
+  and ROCm GEMM's only package is `package_scheduled_matmul` on the
+  `scheduled` boundary, so no family lost its only lowering. **This evidence
+  is weak by construction:** Lane B was never a `package_*`, so the census
+  cannot see it, and cannot show what Lane B uniquely carried.
+* **Still owed (#29/#31):** Lane B's physical consumer — the generator's
+  canonical `scf.for` matcher, its LDS comparison body and the
+  `canonical_mnk_scf_for` stamp — is now reached only by hand-assembled pass
+  lists in tests (`graph_matmul_generator_knobs.mlir`,
+  `canonical_lds_arch_{guard,refused}.mlir`, `test_rocm_wmma_gemm_generated.py`).
+  Delete it or declare it an oracle with a differential test; it is not
+  production.
 
 ## Historical snapshot (2026-08-05)
 

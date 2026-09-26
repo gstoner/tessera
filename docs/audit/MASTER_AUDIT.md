@@ -304,8 +304,11 @@ matches its module fails generation. Read the counts there.
    (2026-09-26);** the 5% agreement gate is what rejects bad WSL2 windows. What remains: no fleet packet recorded on the new routes; the
    x86 packet has a derived `tsc_witness` route since 2026-09-26 (per-row
    TSC vs CLOCK_MONOTONIC_RAW around the real trial region, frequency from
-   separate pinned calibration intervals); its first Zen 5 packet is recorded
-   (Princess-Luna, 2026-09-26); NVIDIA has no non-profiler witness (`%globaltimer`); event-only
+   separate pinned calibration intervals, the per-launch samples bound to the
+   witnessed region, everything re-derived from stored integers). **Under
+   WSL2 the raw clock is itself derived from the TSC, so the route shows a
+   stable TSC scale bracketing the samples, not agreement with an independent
+   oscillator**; its Zen 5 packet is recorded on Princess-Luna; NVIDIA has no non-profiler witness (`%globaltimer`); event-only
    recorders stay ineligible. Separately: NVIDIA timers run on the
    default stream (DEVICE-CLOCK-DISCIPLINE); Apple `kernelStartTime` does not
    measure work; and runtime libraries in empty-build-type trees compile at
@@ -354,7 +357,7 @@ matches its module fails generation. Read the counts there.
   descriptors; one block-index convention. Future features (not gates):
   sm_90 WGMMA, sm_100 tcgen05/TMEM.
 - **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
-  The broad production lane still skips Graph/Schedule/Tile; the ~58
+  The broad production lane still skips Graph/Schedule/Tile; the 78
   `generate-*` expanders are decided **(a): every family is entered from Tile IR**
   (owner, 2026-09-26; the expander stays as the Tile→Target generator, the
   Python-built directive entry goes); Lane B (the Graph→Tile GEMM shortcut
@@ -409,9 +412,11 @@ matches its module fails generation. Read the counts there.
    activity-window packet on Super-Bear's WSL2; marker timing in
    `calibrate_gfx1151.py`; gfx1201 and Zen 2 packet adapters. **Done
    2026-09-26:** the Zen 5 x86 profiler packet on the `tsc_witness` route
-   (Princess-Luna, `-O2` library, verdict `promote`; environment tags are
-   diagnostic gaps) and host-keyed AVX-512 E2E packets on both Zen 5 boxes
-   (`AVX512-E2E-PACKETS-2026-09-26`).
+   (Princess-Luna, `-O2` library; environment tags are diagnostic gaps). Its
+   verdict is E2E-REAL-4's **non-regression check between the production and
+   scheduled images, which are byte-identical in both rows** — a parity check
+   under WSL2, not a performance promotion. Also host-keyed AVX-512 E2E packets
+   on both Zen 5 boxes (`AVX512-E2E-PACKETS-2026-09-26`).
 1. RUNTIME-LIB-OPT-1: applied 2026-09-26 (`-O2` runtime libraries + build
    record); open: re-measure the affected packets on their own boxes.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),

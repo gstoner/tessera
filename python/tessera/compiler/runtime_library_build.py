@@ -11,6 +11,7 @@ a packet must say which it measured.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -67,13 +68,26 @@ def record_for_library(library: str | Path, target: str) -> dict[str, Any]:
         "its optimization level cannot be recorded")
 
 
+_OPT_FLAG = re.compile(r"(?:^|\s)-O(\d|s|z|g|fast)?(?=\s|$)")
+
+
 def is_optimized(level: str) -> bool:
-    """True unless the recorded level is an unoptimized build type."""
+    """Whether the recorded compile flags optimize, read from the flags.
+
+    ``O2 (...)`` is the helper's own default. Otherwise the record is
+    ``<source>: <flags>``; the LAST ``-O`` flag decides (as the compiler's
+    does), ``-O0`` and ``-Og`` are unoptimized, and a record naming no ``-O``
+    flag at all is not optimized -- a build type's name is not evidence of
+    what it compiled with.
+    """
     text = level.strip()
-    if text.startswith("O2"):
+    if text.startswith("O2 ("):
         return True
-    build_type = text.split(":", 1)[0].strip().lower()
-    return build_type in {"release", "relwithdebinfo", "minsizerel"}
+    _, _, flags = text.partition(":")
+    levels = _OPT_FLAG.findall(flags)
+    if not levels:
+        return False
+    return levels[-1] not in ("0", "g")
 
 
 __all__ = ["RuntimeLibraryBuildError", "SCHEMA", "is_optimized", "record_for_library",

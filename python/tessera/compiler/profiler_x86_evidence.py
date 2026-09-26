@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
+import statistics
 from typing import Any, Mapping
 
 from .profiler_symbol_sampling import validate_symbol_sampling_artifact
 
 
-X86_PROFILER_PACKET_SCHEMA_VERSION = "tessera.profiler_x86_packet.v1"
+X86_PROFILER_PACKET_SCHEMA_VERSION = "tessera.profiler_x86_packet.v2"
+#: Packets recorded before the admission route existed. Accepted for reading
+#: only, under the subset rule in the validator; never promotion-eligible
+#: unless their stored inputs derive no blocker, and never on tsc_witness.
+X86_PROFILER_PACKET_SCHEMA_V1 = "tessera.profiler_x86_packet.v1"
+#: E2E-REAL-4's non-regression ratchet: scheduled median <= production * this.
+NON_REGRESSION_LIMIT = 1.10
 ZEN5_MODEL_TOKEN = "AMD RYZEN AI MAX+ 395"
 
 
@@ -81,32 +89,101 @@ X86_ROUTE_PROFILER = "profiler_correlated"
 X86_ROUTE_TSC = "tsc_witness"
 
 
-def x86_admission_route(benchmark: Mapping[str, Any]) -> str:
-    """``tsc_witness`` only when EVERY benchmark row carries a timing sample
-    whose TSC -- converted with a separate calibration interval's frequency --
-    agrees with CLOCK_MONOTONIC_RAW over that row's measured region, and the
-    sample names the row's scheduled image. Derived from the digest-bound
-    benchmark record every time; the tprof booleans play no part.
+def benchmark_verdict(benchmark: Mapping[str, Any]) -> str:
+    """E2E-REAL-4's verdict re-derived from the rows' own samples.
+
+    ``reject`` when any row failed correctness; ``promote`` only when every
+    row's scheduled median is within :data:`NON_REGRESSION_LIMIT` of its
+    production median, computed here from the stored samples rather than
+    read from the stored ``non_regression_10pct`` flag; else ``retain``.
     """
+    rows = benchmark.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise X86ProfilerPacketError("benchmark has no rows to derive a verdict from")
+    ratchet = benchmark.get("ratchet")
+    if not isinstance(ratchet, Mapping) or ratchet.get("limit") != NON_REGRESSION_LIMIT:
+        raise X86ProfilerPacketError(
+            f"benchmark ratchet limit must be the E2E-REAL-4 policy {NON_REGRESSION_LIMIT}")
+    regressed = False
+    for row in rows:
+        try:
+            passed = row["correctness"]["passed"]
+            production = [float(v) for v in row["timing"]["production_samples_ms"]]
+            scheduled = [float(v) for v in row["timing"]["scheduled_samples_ms"]]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise X86ProfilerPacketError(f"benchmark row lacks correctness or samples: {exc}") from exc
+        if passed is not True:
+            return "reject"
+        if not production or not scheduled or not all(
+                math.isfinite(v) and v > 0 for v in production + scheduled):
+            raise X86ProfilerPacketError("benchmark row samples must be finite and positive")
+        within = statistics.median(scheduled) <= statistics.median(production) * NON_REGRESSION_LIMIT
+        if row["timing"].get("non_regression_10pct") is not within:
+            raise X86ProfilerPacketError(
+                "a row's stored non_regression_10pct disagrees with its own samples")
+        regressed = regressed or not within
+    return "retain" if regressed else "promote"
+
+
+def _witness_refusal(row: Mapping[str, Any]) -> str | None:
+    """Why this row's TSC witness cannot carry the tsc_witness route, or None."""
     from .profiler_timing import (
-        ProfilerTimingError, validate_timing_sample, wsl_promotion_refusals)
+        CLOCK_AGREEMENT_BAND, ProfilerTimingError, validate_timing_sample,
+        wsl_promotion_refusals)
+    from .profiler_x86_clock import verify_witness_sample
+    sample = row.get("timing_witness")
+    if not isinstance(sample, Mapping):
+        return "row carries no timing witness"
+    try:
+        validate_timing_sample(sample)
+    except ProfilerTimingError as exc:
+        return f"witness invalid: {exc}"
+    clocks = sample["clocks"]
+    tsc = clocks.get("tsc_cycles", {})
+    image = ((row.get("compile") or {}).get("digests") or {}).get("image")
+    if sample.get("target") != "x86" or tsc.get("eligible_for_promotion") is not True:
+        return "witness TSC is not promotion-eligible"
+    refusals = wsl_promotion_refusals("x86", clocks)
+    if refusals:
+        return "; ".join(refusals)
+    if image is None or sample.get("artifact_digests", {}).get("image") != image:
+        return "witness does not name this row's image"
+    inconsistent = verify_witness_sample(sample)
+    if inconsistent:
+        return inconsistent
+    # Bind the witness to the numbers that decide the verdict: the per-launch
+    # host-wall samples are sub-intervals of the witnessed region, so their
+    # sum can neither exceed it nor fall short of it by more than the band.
+    try:
+        timing = row["timing"]
+        sample_ns = 1e6 * (sum(float(v) for v in timing["production_samples_ms"])
+                           + sum(float(v) for v in timing["scheduled_samples_ms"]))
+    except (KeyError, TypeError, ValueError):
+        return "row lacks the samples its witness must bind"
+    tsc_ns = tsc["value"] * 1e9 / tsc["provenance"]["calibrated_frequency_hz"]
+    if not (1.0 - CLOCK_AGREEMENT_BAND) * tsc_ns <= sample_ns <= tsc_ns * (1.0 + 1e-6):
+        return (f"per-launch samples ({sample_ns:.0f} ns) are not bound to the witnessed "
+                f"region ({tsc_ns:.0f} ns) within {CLOCK_AGREEMENT_BAND:.0%}")
+    return None
+
+
+def x86_admission_route(benchmark: Mapping[str, Any]) -> str:
+    """``tsc_witness`` only when EVERY benchmark row's witness survives
+    :func:`_witness_refusal`: a valid sample naming the row's image, whose
+    TSC -- re-derived from its stored window with the frequency re-derived
+    from its stored, separate calibration intervals on the same CPU --
+    agrees with CLOCK_MONOTONIC_RAW, and whose region brackets the per-launch
+    samples the verdict is computed from. The tprof booleans play no part.
+
+    What it proves under WSL2 is bounded: the raw clock is itself derived from
+    the TSC there, so agreement shows a stable TSC scale and binds the
+    samples to it, not agreement with an independent oscillator.
+    """
     rows = benchmark.get("rows")
     if not isinstance(rows, list) or not rows:
         return X86_ROUTE_PROFILER
     for row in rows:
-        sample = row.get("timing_witness") if isinstance(row, Mapping) else None
-        if not isinstance(sample, Mapping):
-            return X86_ROUTE_PROFILER
-        try:
-            validate_timing_sample(sample)
-        except ProfilerTimingError:
-            return X86_ROUTE_PROFILER
-        clocks = sample["clocks"]
-        tsc = clocks.get("tsc_cycles", {})
-        image = ((row.get("compile") or {}).get("digests") or {}).get("image")
-        if (sample.get("target") != "x86" or tsc.get("eligible_for_promotion") is not True
-                or wsl_promotion_refusals("x86", clocks)
-                or image not in set(sample.get("artifact_digests", {}).values())):
+        if not isinstance(row, Mapping) or _witness_refusal(row) is not None:
             return X86_ROUTE_PROFILER
     return X86_ROUTE_TSC
 
@@ -202,6 +279,14 @@ def _derive_reasons(
     return reasons
 
 
+def _packet_verdict(benchmark_derived: str, blocking: list[str]) -> str:
+    """A packet can never be stronger than its benchmark: a benchmark that
+    rejects or retains yields that verdict whatever the timing route."""
+    if benchmark_derived in ("reject", "retain"):
+        return benchmark_derived
+    return "retain" if blocking else "promote"
+
+
 def build_x86_profiler_packet(
     *,
     benchmark: Mapping[str, Any],
@@ -224,12 +309,11 @@ def build_x86_profiler_packet(
         raise X86ProfilerPacketError("benchmark is not the Zen 5 AVX-512 lane")
     route = x86_admission_route(benchmark)
     reasons, diagnostic_gaps = _split_for_route(reasons, route)
-    if benchmark.get("verdict") == "reject":
-        verdict = "reject"
-    elif reasons:
-        verdict = "retain"
-    else:
-        verdict = "promote"
+    derived = benchmark_verdict(benchmark)
+    if benchmark.get("verdict") != derived:
+        raise X86ProfilerPacketError(
+            f"benchmark states verdict {benchmark.get('verdict')!r} but its rows derive {derived!r}")
+    verdict = _packet_verdict(derived, reasons)
     packet = {
         "schema": X86_PROFILER_PACKET_SCHEMA_VERSION,
         "work_item": "TPROF-X86-TIME-1",
@@ -253,8 +337,13 @@ def build_x86_profiler_packet(
 
 
 def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
-    if payload.get("schema") != X86_PROFILER_PACKET_SCHEMA_VERSION:
+    schema = payload.get("schema")
+    if schema not in (X86_PROFILER_PACKET_SCHEMA_VERSION, X86_PROFILER_PACKET_SCHEMA_V1):
         raise X86ProfilerPacketError("unsupported x86 profiler packet schema")
+    legacy = schema == X86_PROFILER_PACKET_SCHEMA_V1
+    if legacy and ("admission_route" in payload or "diagnostic_gaps" in payload):
+        raise X86ProfilerPacketError(
+            "a v1 x86 packet predates admission routes; route-bearing packets are v2")
     if payload.get("architecture") != "zen5-avx512":
         raise X86ProfilerPacketError("x86 profiler packet requires zen5-avx512")
     if (
@@ -291,7 +380,9 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
     # Re-derive the route and the reason split from the stored benchmark (the
     # same digest-bound record); a stored claim is never trusted.
     route = x86_admission_route(payload["benchmark"])
-    if payload.get("admission_route", X86_ROUTE_PROFILER) != route:
+    if legacy and route != X86_ROUTE_PROFILER:
+        raise X86ProfilerPacketError("a v1 x86 packet cannot carry a tsc_witness benchmark")
+    if not legacy and payload.get("admission_route") != route:
         raise X86ProfilerPacketError(
             f"x86 packet claims admission route {payload.get('admission_route')!r}, "
             f"but its benchmark supports {route!r}")
@@ -307,7 +398,7 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
     blocking, derived_gaps = _split_for_route(
         _derive_reasons(payload["timing_status"], payload["cpu"], payload["environment"], sampling),
         route)
-    if "admission_route" in payload:
+    if not legacy:
         # Current schema: the lists are exactly what the inputs derive.
         if sorted(blocking) != sorted(reasons) or sorted(derived_gaps) != sorted(gaps):
             raise X86ProfilerPacketError(
@@ -320,10 +411,17 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
         if not set(reasons) <= set(blocking) or gaps:
             raise X86ProfilerPacketError(
                 "legacy x86 packet states reasons its stored inputs do not derive")
-    if payload["benchmark"].get("verdict") == "reject":
-        expected_verdict = "reject"
+    if legacy:
+        # v1 packets predate the row-sample re-derivation; their stored
+        # benchmark verdict still caps the packet's.
+        stated = payload["benchmark"].get("verdict")
+        benchmark_derived = stated if stated in ("reject", "retain") else "promote"
     else:
-        expected_verdict = "retain" if blocking else "promote"
+        benchmark_derived = benchmark_verdict(payload["benchmark"])
+        if payload["benchmark"].get("verdict") != benchmark_derived:
+            raise X86ProfilerPacketError(
+                "benchmark's stated verdict differs from what its rows derive")
+    expected_verdict = _packet_verdict(benchmark_derived, blocking)
     if payload.get("verdict") != expected_verdict:
         raise X86ProfilerPacketError(
             f"x86 packet verdict {payload.get('verdict')!r} is not the derived {expected_verdict!r}")
@@ -337,8 +435,11 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
 
 __all__ = [
     "X86_PROFILER_PACKET_SCHEMA_VERSION",
+    "NON_REGRESSION_LIMIT",
+    "X86_PROFILER_PACKET_SCHEMA_V1",
     "X86_ROUTE_PROFILER",
     "X86_ROUTE_TSC",
+    "benchmark_verdict",
     "x86_admission_route",
     "X86ProfilerPacketError",
     "build_x86_profiler_packet",

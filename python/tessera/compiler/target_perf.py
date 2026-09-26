@@ -769,6 +769,11 @@ def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any],
         "valid and agrees in the same sample; without them use "
         "load_pruning_corpus()"
     )
+    # Binding strength, stated plainly: a sample is tied to the device's raw
+    # measurement by digest (and the raw record's architecture and environment
+    # are checked by apply_corpus), not by comparing its clock values with the
+    # measured metric. No producer emits WSL witness corpora yet; value-level
+    # binding is owed with the first one (calibrate_gfx1151 marker timing).
     samples = witness.get("samples") if isinstance(witness, Mapping) else None
     if not isinstance(samples, (list, tuple)) or not samples:
         raise ValueError(hint)
@@ -829,6 +834,9 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
          "measured_on": "2026-07-28",
          "host": "strix-halo",
          "selector_eligible": true,
+         "execution_environment": "bare_metal",
+         "measurements": {"radeon_8060s": {<raw record>, "results": {...},
+                                           "execution_environment": "bare_metal"}},
          "devices": {"radeon_8060s": {"dram_bw_gbps": 214.3,
                                       "peak_tflops.bf16:matrix": 51.2}}}
 
@@ -860,13 +868,32 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
             "authority; use load_pruning_corpus() to inspect it without "
             "mutating the measured registry"
         )
-    # The environment is stated, not inferred from a host label (review): a
-    # WSL corpus whose host name lacks "wsl" must not skip the witness check.
+    # The environment is derived from the carried raw measurements, not taken
+    # from a label (reviews): every selector-eligible corpus carries them, and
+    # the corpus statement, each raw record and the host label must agree.
     environment = corpus.get("execution_environment")
     if environment not in ("bare_metal", "wsl2"):
         raise ValueError(
             "selector-eligible calibration corpus must state execution_environment "
             f"as 'bare_metal' or 'wsl2', got {environment!r}")
+    measurements = corpus.get("measurements")
+    if not isinstance(measurements, Mapping):
+        raise ValueError("selector-eligible calibration corpus must carry its raw measurements")
+    for device, fields in dict(corpus.get("devices", {})).items():
+        raw = measurements.get(device)
+        if not isinstance(raw, Mapping) or raw.get("results") != fields:
+            raise ValueError(
+                f"measurements[{device!r}] must be the raw measurement whose 'results' "
+                "equal this device's overlay values")
+        if raw.get("execution_environment") != environment:
+            raise ValueError(
+                f"measurements[{device!r}] was taken on {raw.get('execution_environment')!r} "
+                f"but the corpus states {environment!r}")
+        arch = raw.get("architecture")
+        target = perf_for_device(device).target
+        if arch is not None and not target.endswith(str(arch)):
+            raise ValueError(
+                f"measurements[{device!r}] is from {arch!r}, not the device's target {target!r}")
     labelled_wsl = isinstance(host, str) and ("wsl" in host.lower() or "dxg" in host.lower())
     if labelled_wsl and environment != "wsl2":
         raise ValueError(f"host {host!r} is labelled WSL but the corpus states {environment!r}")

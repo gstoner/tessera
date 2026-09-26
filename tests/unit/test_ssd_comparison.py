@@ -48,7 +48,7 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
         for name,packet in pair.items():
             packet.update(backend='rocm',architecture='gfx1151',clock='HIP events',run_id=f'{i}-{name}')
             packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
-    comparison = dict(pairs=pairs,promotion_eligible=True,median_speedup_lower_bound=10000.)
+    comparison = dict(pairs=pairs,promotion_eligible=True,median_speedup_lower_bound=10000.,source=dict(source_commit='a'*40))
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison)
     assert bound == 'serial' and not decision.admitted
     calibrations = []
@@ -105,7 +105,7 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
         for name,packet in pair.items():
             packet.update(backend='rocm',architecture='gfx1151',clock='HIP events',run_id=f'{i}-{name}')
             packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
-    comparison = dict(pairs=pairs,promotion_eligible=True,median_speedup_lower_bound=10000.)
+    comparison = dict(pairs=pairs,promotion_eligible=True,median_speedup_lower_bound=10000.,source=dict(source_commit='a'*40))
     def calibrations(event_ns):
         out = []
         for i,pair in enumerate(pairs):
@@ -133,6 +133,10 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
     mixed = calibrations(10_100)
     mixed[0]['source']['source_commit'] = 'b'*40
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison,mixed)
+    assert bound == 'serial' and 'source commit' in decision.reason
+    # ...and a comparison that states no commit refuses outright (review).
+    unstated = {k: v for k, v in comparison.items() if k != 'source'}
+    bound,decision = bind_measured_ssd(incumbent,candidate,unstated,calibrations(10_100))
     assert bound == 'serial' and 'source commit' in decision.reason
 
 

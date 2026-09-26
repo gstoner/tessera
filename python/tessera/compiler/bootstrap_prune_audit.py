@@ -503,7 +503,8 @@ def _import_binds_real_lowering(node: ast.AST, name: str) -> bool:
     whose name merely *ends* in ``scheduled_kernel`` (``legacy.scheduled_kernel``)
     or an absolute import could supply a different function.
     """
-    if not isinstance(node, ast.ImportFrom) or node.level < 1:
+    # Exactly one level: ``..scheduled_kernel`` resolves to a different package.
+    if not isinstance(node, ast.ImportFrom) or node.level != 1:
         return False
     for alias in node.names:
         if (alias.asname or alias.name) != name or alias.asname is not None:
@@ -537,7 +538,7 @@ def _names_are_the_real_lowering(tree: ast.Module, fn: ast.FunctionDef) -> bool:
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if node.name == "package_scheduled_kernel" and node in tree.body \
-                    and not isinstance(node, ast.ClassDef) and not node.decorator_list:
+                    and isinstance(node, ast.FunctionDef) and not node.decorator_list:
                 top_level_defs += 1
             elif node.name in _RESERVED:
                 return False
@@ -552,10 +553,15 @@ def _names_are_the_real_lowering(tree: ast.Module, fn: ast.FunctionDef) -> bool:
         elif isinstance(node, ast.Subscript) and isinstance(node.ctx, (ast.Store, ast.Del)) \
                 and isinstance(node.slice, ast.Constant) and node.slice.value in _RESERVED:
             return False
-        elif isinstance(node, ast.Call) and any(
-                isinstance(arg, ast.Constant) and isinstance(arg.value, str)
-                and arg.value in _RESERVED
-                for arg in (*node.args, *(k.value for k in node.keywords))):
+        elif isinstance(node, ast.Call) and (
+                any(k.arg in _RESERVED for k in node.keywords)
+                or any(isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                       and arg.value in _RESERVED
+                       for arg in (*node.args, *(k.value for k in node.keywords)))
+                or any(isinstance(arg, ast.Dict) and any(
+                           isinstance(key, ast.Constant) and key.value in _RESERVED
+                           for key in arg.keys)
+                       for arg in (*node.args, *(k.value for k in node.keywords)))):
             # setattr(mod, 'lower_scheduled_kernel', ...) and friends. A plain
             # string elsewhere (an ``__all__`` entry) binds nothing.
             return False
@@ -576,7 +582,10 @@ def _names_are_the_real_lowering(tree: ast.Module, fn: ast.FunctionDef) -> bool:
                 if bound in _RESERVED:
                     if not _import_binds_real_lowering(node, bound):
                         return False
-                    imported.add(bound)
+                    # Only an import visible to the packager binds its name: a
+                    # module-level one, or one inside the packager itself.
+                    if node in tree.body or any(node is n for n in ast.walk(fn)):
+                        imported.add(bound)
     for use in ("lower_scheduled_kernel", "scheduled_kernel"):
         loaded = any(isinstance(n, ast.Name) and n.id == use and isinstance(n.ctx, ast.Load)
                      for n in ast.walk(fn))
@@ -642,6 +651,9 @@ def _packager_is_generic_scheduled(target: str, family: str) -> bool:
         return False
     # Every path must end in return or raise: no implicit ``return None``.
     if not fn.body or not isinstance(fn.body[-1], (ast.Return, ast.Raise)):
+        return False
+    # A generator packager returns an iterator, not a package (review).
+    if any(isinstance(n, (ast.Yield, ast.YieldFrom, ast.Await)) for n in ast.walk(fn)):
         return False
     returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
     bindings = _local_bindings(fn)

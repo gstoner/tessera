@@ -277,6 +277,40 @@ def test_a_bare_lowering_name_needs_the_real_import(monkeypatch, tmp_path):
     assert not audit._packager_is_generic_scheduled("fixture", "softmax")
 
 
+def test_third_review_escape_hatches_are_refused(monkeypatch, tmp_path):
+    ok = ("def package_softmax(module, *, pipeline_name):\n"
+          "    return package_scheduled_kernel(\n"
+          "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n")
+    assert _generic_fixture(monkeypatch, tmp_path, ok)
+    cases = {
+        "keyword_name": "globals().update(lower_scheduled_kernel=legacy)\n" + ok,
+        "dict_key": "globals().update({'lower_scheduled_kernel': legacy})\n" + ok,
+        "generator": ("def package_softmax(module, *, pipeline_name):\n"
+                      "    yield None\n"
+                      "    return package_scheduled_kernel(\n"
+                      "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n"),
+        "async_package": ok + "\n\nasync def package_scheduled_kernel(a, **k):\n    return a\n",
+    }
+    for label, body in cases.items():
+        assert not _generic_fixture(monkeypatch, tmp_path, body), label
+
+
+def test_imports_must_be_exact_and_visible_to_the_packager(monkeypatch, tmp_path):
+    """Review: ``..scheduled_kernel`` is a different package, and an import
+    inside some other function does not bind the packager's global name."""
+    body = ("def package_softmax(module, *, pipeline_name):\n"
+            "    return package_scheduled_kernel(\n"
+            "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n"
+            "\n\ndef package_scheduled_kernel(artifact, **kwargs):\n    return artifact\n")
+    for head in ("from ..scheduled_kernel import lower_scheduled_kernel\n",
+                 "def helper():\n    from .scheduled_kernel import lower_scheduled_kernel\n"
+                 "    return lower_scheduled_kernel\n"):
+        (tmp_path / "fixture_native.py").write_text(head + "\n" + body)
+        monkeypatch.setattr(audit, "_COMPILER", tmp_path)
+        monkeypatch.setattr(audit, "_BACKEND_MODULES", (("fixture", "fixture_native.py"),))
+        assert not audit._packager_is_generic_scheduled("fixture", "softmax"), head
+
+
 def test_nvidia_unary_families_are_derived_generic_not_declared():
     """NVIDIA softmax/norm/reduction migrated to the generic Schedule→Tile
     route (F2-U1–U10); the dashboard read them as gaps because only

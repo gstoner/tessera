@@ -281,6 +281,13 @@ def test_measured_overlay_requires_a_date() -> None:
 # --- calibration corpus ------------------------------------------------------
 
 
+def _raw(devices, environment="bare_metal"):
+    """The raw measurement records a corpus must carry: apply_corpus checks
+    each overlay equals its record's results and derives the environment."""
+    return {d: {"results": dict(f), "execution_environment": environment}
+            for d, f in devices.items()}
+
+
 def test_apply_corpus_merges_and_reports_updated_devices() -> None:
     try:
         updated = apply_corpus(
@@ -289,6 +296,7 @@ def test_apply_corpus_merges_and_reports_updated_devices() -> None:
                 "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                 "host": "test-host",
                 "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
+                "measurements": _raw({"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}}),
             }
         )
         assert updated == ["a100_sxm4_80gb"]
@@ -329,6 +337,7 @@ def test_wsl_host_cannot_claim_selector_eligibility() -> None:
                 "version": CORPUS_VERSION,
                 "measured_on": "2026-08-15",
                 "execution_environment": "wsl2",
+                "measurements": _raw({"radeon_8060s": {"dram_bw_gbps": 186.8}}, "wsl2"),
                 "host": "host-via-dxg",
                 "selector_eligible": True,
                 "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}},
@@ -346,6 +355,7 @@ def test_reset_registry_undoes_a_corpus_merge() -> None:
             "version": CORPUS_VERSION,
             "measured_on": "2026-07-28", "execution_environment": "bare_metal",
             "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
+                "measurements": _raw({"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}}),
         }
     )
     assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == 1700.0
@@ -368,7 +378,7 @@ def test_corpus_rejects_version_skew_unknown_device_and_missing_date() -> None:
         apply_corpus({"version": CORPUS_VERSION, "devices": {}})
     with pytest.raises(TargetPerfError, match="registered:"):
         apply_corpus(
-            {"version": CORPUS_VERSION, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {"no_such_gpu": {"dram_bw_gbps": 1.0}}}
+            {"version": CORPUS_VERSION, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {"no_such_gpu": {"dram_bw_gbps": 1.0}}, "measurements": _raw({"no_such_gpu": {"dram_bw_gbps": 1.0}})}
         )
 
 
@@ -393,6 +403,8 @@ def test_apply_corpus_is_atomic_across_devices() -> None:
                         "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},  # valid, first
                         "no_such_gpu": {"dram_bw_gbps": 1.0},  # invalid, later
                     },
+                    "measurements": _raw({"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},
+                                          "no_such_gpu": {"dram_bw_gbps": 1.0}}),
                 }
             )
         assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == before
@@ -415,6 +427,8 @@ def test_apply_corpus_is_atomic_across_bad_fields() -> None:
                         "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},
                         "h100_sxm5": {"dram_bandwidth": 3000.0},
                     },
+                    "measurements": _raw({"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},
+                                          "h100_sxm5": {"dram_bandwidth": 3000.0}}),
                 }
             )
         assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == before
@@ -456,6 +470,7 @@ def test_snapshot_survives_a_calibration_overlay() -> None:
                 "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                 "host": "test-host",
                 "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
+                "measurements": _raw({"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}}),
             }
         )
         snap = json.loads(json.dumps(registry_snapshot()))
@@ -585,7 +600,8 @@ def test_planner_refuses_to_inherit_another_devices_smem_budget() -> None:
         reset_registry()
 
 
-_RAW = {"architecture": "gfx1151", "results": {"dram_bw_gbps": 186.8}}
+_RAW = {"architecture": "gfx1151", "execution_environment": "wsl2",
+        "results": {"dram_bw_gbps": 186.8}}
 _MEASUREMENT = _measurement_digest(_RAW)
 
 
@@ -707,3 +723,20 @@ def test_samples_must_be_the_calibrated_devices_own_target() -> None:
 def test_a_selector_ineligible_wsl_corpus_stays_pruning_only_even_with_samples() -> None:
     with pytest.raises(ValueError, match="pruning-only"):
         apply_corpus(_wsl_corpus(selector_eligible=False, timing_witness=_witness()))
+
+
+def test_a_wsl_measurement_cannot_be_relabelled_bare_metal() -> None:
+    """Review: the environment is derived from the raw record, so a WSL
+    measurement stated as bare_metal (to skip the witness) is refused."""
+    corpus = _wsl_corpus()
+    corpus["execution_environment"] = "bare_metal"
+    corpus["host"] = "princess-luna"
+    with pytest.raises(ValueError, match="was taken on 'wsl2'"):
+        apply_corpus(corpus)
+
+
+def test_a_raw_measurement_from_another_architecture_is_refused() -> None:
+    corpus = _wsl_corpus(timing_witness=_witness())
+    corpus["measurements"] = {"radeon_8060s": {**_RAW, "architecture": "gfx1201"}}
+    with pytest.raises(ValueError, match="not the device's target"):
+        apply_corpus(corpus)

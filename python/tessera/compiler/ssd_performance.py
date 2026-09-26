@@ -107,7 +107,9 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
     from .profiler_rocm_evidence import build_rocm_profiler_packet
     commits = {(c.get('source') or {}).get('source_commit') for c in calibrations}
     stated = (comparison.get('source') or {}).get('source_commit')
-    if len(commits) != 1 or None in commits or (stated is not None and commits != {stated}):
+    # The comparison must state its commit (the recorder always writes it), or
+    # calibrations from any one stale commit would pass (review).
+    if stated is None or commits != {stated}:
         return SSDAdmission(False,'calibrations do not share one source commit with the comparison',lower)
     seen = set()
     for index,pair in enumerate(comparison['pairs']):

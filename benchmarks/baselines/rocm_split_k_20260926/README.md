@@ -47,3 +47,24 @@ What the numbers are and are not:
   wave per WGP leaves three of its four SIMDs idle, but no counters exist on this
   WSL2 host to confirm it. The rule was **not** retuned from one shape.
 - gfx1151 evidence: none. Split-K is never selected there.
+
+## Device-test and sweep logs (Tajasarus, 2026-09-26)
+
+Each log starts with host, device, commit (with a tracked-changes count),
+`tessera-opt` path, env and the exact command.
+
+- `device_tests_gfx1201.txt` -- `tests/unit/test_rocm_split_k.py` at
+  `1387cd1b` (review-fix branch): **41 passed, 0 skipped**. That covers the
+  host-free cases, the router/ragged split cases (fp16/bf16, none / bias+gelu /
+  bias+relu, bit-identical reruns), the unsplit control, and the forged-descriptor
+  refusals (typed workspace, provenance copy, reduce workgroup).
+- `spectral_sweep_{head,base_054fa7c3}.txt` -- the same `-k "rocm or gfx1201 or
+  gfx1151"` unit sweep at the review-fix HEAD and at `054fa7c3` (before any
+  split-K code). Both fail exactly one test,
+  `test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[rocm-True]`
+  (`rc=246`). It was already failing, and split-K did not introduce it.
+- `spectral_isolated_{head,base_054fa7c3}.txt` -- that test file's parameters
+  run alone: they pass on both commits. So the failure depends on test order.
+  Separately, the passing run asserts `architecture_identity == "gfx1151"`
+  on a gfx1201 device (see `docs/audit/backend/rocm/todo.md`).
+

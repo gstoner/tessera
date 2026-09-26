@@ -1,0 +1,193 @@
+host: tajasarus
+device: gfx1201
+commit: 1387cd1b994e0645ef932de05df7fbf8fdcf4708 (tracked changes: 0)
+tessera-opt: /home/angstorms/programming/tessera-splitk/build/tools/tessera-opt/tessera-opt
+env: TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1
+command: python -m pytest tests/unit/ -q -m "not slow" -k "rocm or gfx1201 or gfx1151" -p no:cacheprovider -p no:randomly -rf
+date: 2026-09-26T18:21:51Z
+
+........................................................................ [  1%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+........................................................................ [ 21%]
+........s..................s..ssss......ss.............................. [ 22%]
+............................................ss.......................... [ 24%]
+...........................................ssssssssss................... [ 26%]
+........................................................................ [ 27%]
+..................................................s..................... [ 29%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+.........................ss.......................................ssssss [ 35%]
+ssss.................................................................... [ 37%]
+......................ss.ssssssss...............................ssss.... [ 39%]
+..............................sssssssssssssssssss....................... [ 40%]
+........................................................................ [ 42%]
+......................................s................................. [ 43%]
+.................................................sssssssssssssssssssss.. [ 45%]
+...................................................s.................... [ 47%]
+........................................................................ [ 48%]
+.....................ssssssss........................................... [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 53%]
+........................................................................ [ 55%]
+........................................................................ [ 56%]
+.......sss.............................................................. [ 58%]
+........................................................................ [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 66%]
+........................................................................ [ 68%]
+..................................................................s..... [ 69%]
+........................................................................ [ 71%]
+........................................................................ [ 73%]
+........................................................................ [ 74%]
+........................................................................ [ 76%]
+........................................................................ [ 78%]
+........................................................................ [ 79%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 86%]
+........................................................................ [ 87%]
+........................................................................ [ 89%]
+........................................................................ [ 91%]
+.....................................sssssssssssssssssssssssssssssssss.. [ 92%]
+................................................s....s...........ss..... [ 94%]
+......................sss.s.........................sssssssssssssssssss. [ 95%]
+...........................s.s.s.s.s.s..s.s............................. [ 97%]
+.sF........ssss......................................................... [ 99%]
+...............................ss.                                       [100%]
+=================================== FAILURES ===================================
+__ test_physical_streaming_broadcast_strides_and_artifact_lineage[rocm-True] ___
+
+onesided = True, target = 'rocm'
+
+    @pytest.mark.parametrize("onesided", [True, False])
+    @pytest.mark.parametrize("target", ["x86", "rocm", "nvidia_sm120"])
+    def test_physical_streaming_broadcast_strides_and_artifact_lineage(onesided, target):
+        from tessera import runtime
+    
+        if target == "x86" and not runtime._x86_elementwise_available():
+            pytest.skip("x86 spectral physical package is unavailable")
+        if target == "rocm" and not runtime._rocm_wmma_runtime_available():
+            pytest.skip("gfx1151 spectral physical package is unavailable")
+        if target == "nvidia_sm120":
+            lib = runtime._load_nvidia_fft_runtime()
+            if lib is None or lib.tessera_nvidia_spectral_arch() != 120:
+                pytest.skip("SM120 spectral physical package is unavailable")
+        rng = np.random.default_rng(812 + int(onesided))
+        signal = rng.standard_normal((2, 46, 3)).astype(np.float32)[:, ::2, :]
+        window = np.stack((np.hanning(6), np.hamming(6)), axis=0).astype(
+            np.float32
+        )[:, None, :]
+        policy = StreamingSTFTPolicy(
+            axis=1, n_fft=8, window_length=6, hop=4, onesided=onesided,
+            max_chunk_samples=9,
+        )
+        pieces = np.split(signal, [7, 16], axis=1)
+        state = None
+        outputs = []
+        for piece in pieces:
+>           output, state = stream_stft_chunk(
+                piece, window, policy, state, target=target
+            )
+
+tests/unit/test_spectral_streaming.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/spectral_streaming.py:374: in stream_stft_chunk
+    spectra, tail, frame_count = _stream_stft_chunk_rocm(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+values = array([[[-0.2635012 ,  0.35066646, -0.16633897],
+        [ 0.5488402 ,  0.26347637, -0.4126163 ],
+        [ 0.10327338...3 ],
+        [ 1.065849  , -0.43924853, -0.24736026],
+        [ 0.30032662,  0.13734865, -1.6367378 ]]], dtype=float32)
+window = array([[[0.        , 0.3454915 , 0.9045085 , 0.9045085 , 0.3454915 ,
+         0.        ]],
+
+       [[0.08      , 0.39785218, 0.9121478 , 0.9121478 , 0.39785218,
+         0.08      ]]], dtype=float32)
+policy = StreamingSTFTPolicy(axis=1, n_fft=8, window_length=6, hop=4, onesided=True, center=False, pad_mode='constant', max_chunk_samples=9)
+axis = 1
+tail = array([[[-0.06812205, -1.1766033 ,  0.07413459, -0.6455109 ,
+          0.8315617 , -1.0956688 , -0.2941093 ],
+        ... [-0.41085914, -0.5327975 ,  0.7125956 ,  1.1491468 ,
+          0.13514845, -0.8588123 ,  1.2089154 ]]], dtype=float32)
+artifact_digest = '8089061d1e34f7e7bba07bec8428cb58a096f4092d31e02251368ef1cc4fe9f0'
+
+    def _stream_stft_chunk_rocm(
+        values: np.ndarray, window: np.ndarray, policy: StreamingSTFTPolicy,
+        axis: int, tail: np.ndarray | None, artifact_digest: str,
+    ) -> tuple[np.ndarray, np.ndarray, int]:
+        import ctypes
+        from tessera.compiler.emit import spectral_candidates
+    
+        if str(values.dtype) not in {"float16", "bfloat16", "float32"} or (
+            window.dtype != values.dtype
+        ):
+            raise ValueError("gfx1151 streaming STFT requires matching f16/bf16/f32 storage")
+        lib = spectral_candidates._amd_composite_lib()
+        if lib is None or not hasattr(
+            lib, "ts_streaming_stft_hostptr_broadcast_layout_storage_amd"
+        ):
+            raise RuntimeError("gfx1151 streaming STFT physical package is unavailable")
+    
+        def descriptor(array: np.ndarray) -> tuple[Any, Any]:
+            if any(stride % array.itemsize for stride in array.strides):
+                raise ValueError("streaming STFT strides must be element aligned")
+            element_strides = tuple(
+                int(stride // array.itemsize) for stride in array.strides
+            )
+            if any(stride == 0 and array.shape[dim] > 1
+                   for dim, stride in enumerate(element_strides)):
+                raise ValueError("streaming STFT overlapping layouts are unsupported")
+            return ((ctypes.c_int64 * array.ndim)(*map(int, array.shape)),
+                    (ctypes.c_int64 * array.ndim)(*element_strides))
+    
+        shape, strides = descriptor(values)
+        window_shape, window_strides = descriptor(window)
+        batch_shape = values.shape[:axis] + values.shape[axis + 1 :]
+        tail_samples = 0 if tail is None else int(tail.shape[-1])
+        if tail is not None and (tail.shape[:-1] != batch_shape or tail.dtype != values.dtype):
+            raise ValueError("streaming STFT tail ABI does not match the chunk")
+        combined = tail_samples + values.shape[axis]
+        frames = max(0, (combined - policy.n_fft) // policy.hop + 1)
+        bins = policy.n_fft // 2 + 1 if policy.onesided else policy.n_fft
+        output = np.empty(
+            values.shape[:axis] + (frames, bins) + values.shape[axis + 1 :],
+            np.complex64,
+        )
+        next_tail = np.empty(
+            batch_shape + (combined - frames * policy.hop,), dtype=values.dtype
+        )
+        empty_tail = np.empty((0,), dtype=values.dtype) if tail is None else tail
+        storage = {"float32": 0, "float16": 1, "bfloat16": 2}[str(values.dtype)]
+        rc = lib.ts_streaming_stft_hostptr_broadcast_layout_storage_amd(
+            artifact_digest.encode(), spectral_candidates._cptr(values),
+            spectral_candidates._cptr(empty_tail), spectral_candidates._cptr(window),
+            spectral_candidates._cptr(output), spectral_candidates._cptr(next_tail),
+            values.ndim, shape, strides, axis, tail_samples, window.ndim,
+            window_shape, window_strides, policy.n_fft, policy.hop, frames,
+            storage, ctypes.c_float(1.0), int(policy.onesided),
+        )
+        if rc:
+>           raise RuntimeError(f"gfx1151 streaming STFT package failed rc={rc}")
+E           RuntimeError: gfx1151 streaming STFT package failed rc=246
+
+python/tessera/compiler/spectral_streaming.py:247: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[rocm-True]
+1 failed, 4249 passed, 176 skipped, 20750 deselected in 291.97s (0:04:51)
+exit: 1

@@ -1,20 +1,20 @@
 {
-  "architecture": "x86_64_avx512_granite_ridge",
+  "architecture": "x86_64_avx512_strix_halo",
   "files": {
     "report.json": {
-      "bytes": 12280,
-      "sha256": "e19b3504fc457b21c55b434c19e39a1d27cd755d328e17b0ddcb3b5fdff3c8ca"
+      "bytes": 12285,
+      "sha256": "277e37bec23257ac1ec87077517d0a785526dbfe92c97d5ec6f4fa850877eca5"
     },
     "resources.json": {
-      "bytes": 921099,
-      "sha256": "5cd8dc0c8f022503728ebcac77ba63319641fa2742a8b011cffffa8392b4d51a"
+      "bytes": 921270,
+      "sha256": "94b2cc264907fff6b62e0549239c111ff2b285f90a2f4f2f80f20c00c56ea184"
     }
   },
   "schema": "tessera.e2e-release-packet.v1",
   "target": "x86",
   "tested_commit": "dcdaf2a91a8b95a6a6e1cad154791e2b631083fe",
   "validation": {
-    "architecture": "x86_64_avx512_granite_ridge",
+    "architecture": "x86_64_avx512_strix_halo",
     "benchmark_rows": 10,
     "cache_proofs": 5,
     "families": 5,

@@ -4,13 +4,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1071270.2423770793,
+      "median_ns": 723681.9165066584,
       "repetitions": 1500,
       "resource_fingerprint": "3fa86479ade57eb79172ee7fddee3c4baf4247f2caa7842643ae95c522aacae9",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1071747.269558711,
-        1070793.2151954477
+        721550.3951082043,
+        725813.4379051125
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -22,13 +22,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1849557.585,
+      "median_ns": 1481070.0699999998,
       "repetitions": 1500,
       "resource_fingerprint": "3fa86479ade57eb79172ee7fddee3c4baf4247f2caa7842643ae95c522aacae9",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1850539.04,
-        1848576.13
+        1485765.93,
+        1476374.21
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -40,13 +40,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 2960.3686856728173,
+      "median_ns": 3370.241948418966,
       "repetitions": 1500,
       "resource_fingerprint": "6d55889dded457165a26e5dcefaad75ec4ea2a39cb4158dfa854de58671f0058",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        2951.668189907209,
-        2969.0691814384254
+        3364.491620915395,
+        3375.9922759225365
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -58,13 +58,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 738079.145,
+      "median_ns": 702477.87,
       "repetitions": 1500,
       "resource_fingerprint": "6d55889dded457165a26e5dcefaad75ec4ea2a39cb4158dfa854de58671f0058",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        737305.94,
-        738852.35
+        702035.45,
+        702920.29
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -76,13 +76,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 748.1926329930809,
+      "median_ns": 763.0934611477846,
       "repetitions": 1500,
       "resource_fingerprint": "8afa1f0e6dc1f97f2257929227ea552bbf3928c5ad8177694f02304cb07d172f",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        757.7431771955589,
-        738.642088790603
+        759.4432532542135,
+        766.7436690413557
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -94,13 +94,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 708313.67,
+      "median_ns": 704528.6299999999,
       "repetitions": 1500,
       "resource_fingerprint": "8afa1f0e6dc1f97f2257929227ea552bbf3928c5ad8177694f02304cb07d172f",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        709314.54,
-        707312.8
+        703900.19,
+        705157.07
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -112,13 +112,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 625287.5797026776,
+      "median_ns": 629683.8629510258,
       "repetitions": 1500,
       "resource_fingerprint": "b10194c961c78a34b2e18f60a89de833d73a35318d261bc8d0f604a43422d0a9",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        625233.8266397578,
-        625341.3327655973
+        629230.7371437445,
+        630136.9887583073
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -130,13 +130,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 1386910.875,
+      "median_ns": 1416782.645,
       "repetitions": 1500,
       "resource_fingerprint": "b10194c961c78a34b2e18f60a89de833d73a35318d261bc8d0f604a43422d0a9",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1385959.87,
-        1387861.88
+        1417288.72,
+        1416276.57
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -148,13 +148,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 63465.966373626215,
+      "median_ns": 65495.13020301949,
       "repetitions": 1500,
       "resource_fingerprint": "d359231bb2465f2a4f603ba7f6566e990a5a8bcbadaafd94bcb3965371f685e4",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        63558.42164184811,
-        63373.51110540432
+        65361.22257645807,
+        65629.0378295809
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -166,13 +166,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 772535.255,
+      "median_ns": 800766.39,
       "repetitions": 1500,
       "resource_fingerprint": "d359231bb2465f2a4f603ba7f6566e990a5a8bcbadaafd94bcb3965371f685e4",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        772633.91,
-        772436.6
+        800185.56,
+        801347.22
       ],
       "selected": true,
       "stability_limit_pct": 4.0,

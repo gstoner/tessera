@@ -4,13 +4,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1053423.4277075804,
+      "median_ns": 1052027.5059279567,
       "repetitions": 1500,
       "resource_fingerprint": "c37f235b45bfa21243036e703cc76deac98b99f950152ef7dc34fe230b4f1fbe",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1053218.2887276807,
-        1053628.5666874803
+        1051866.8512944311,
+        1052188.1605614822
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -22,13 +22,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1499772.995,
+      "median_ns": 1497640.4500000002,
       "repetitions": 1500,
       "resource_fingerprint": "c37f235b45bfa21243036e703cc76deac98b99f950152ef7dc34fe230b4f1fbe",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1503127.01,
-        1496418.98
+        1497111.59,
+        1498169.31
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -40,13 +40,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 2883.8683259753097,
+      "median_ns": 2875.1518667171513,
       "repetitions": 1500,
       "resource_fingerprint": "409f3f7f5cc2172cb647d4632497ce0ac8a87061080c247995528495cf4916ab",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        2884.770035777067,
-        2882.9666161735527
+        2882.465735284261,
+        2867.8379981500416
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -58,13 +58,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 385097.305,
+      "median_ns": 385351.605,
       "repetitions": 1500,
       "resource_fingerprint": "409f3f7f5cc2172cb647d4632497ce0ac8a87061080c247995528495cf4916ab",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        384798.43,
-        385396.18
+        385725.07,
+        384978.14
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -76,13 +76,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 723.6221159101124,
+      "median_ns": 730.2847669269024,
       "repetitions": 1500,
       "resource_fingerprint": "8efc24e83ee652c3d7d7943ca3ad9cf7c4c067441f6142b5b736e95326b916cb",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        725.0748705907212,
-        722.1693612295036
+        728.6817272409604,
+        731.8878066128443
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -94,13 +94,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 383172.12,
+      "median_ns": 386348.965,
       "repetitions": 1500,
       "resource_fingerprint": "8efc24e83ee652c3d7d7943ca3ad9cf7c4c067441f6142b5b736e95326b916cb",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        383569.88,
-        382774.36
+        386645.03,
+        386052.9
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -112,13 +112,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 591448.4912687696,
+      "median_ns": 708097.3451087316,
       "repetitions": 1500,
       "resource_fingerprint": "6eb022813346861b0b42f284833fb58dda1533ada6e3bf664f38c99df66478ce",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        591481.0530116109,
-        591415.9295259285
+        707988.7892649992,
+        708205.9009524641
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -130,13 +130,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 1039880.04,
+      "median_ns": 1153295.95,
       "repetitions": 1500,
       "resource_fingerprint": "6eb022813346861b0b42f284833fb58dda1533ada6e3bf664f38c99df66478ce",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1040188.18,
-        1039571.9
+        1153173.77,
+        1153418.13
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -148,13 +148,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 62441.80073203502,
+      "median_ns": 62279.59464854801,
       "repetitions": 1500,
       "resource_fingerprint": "a83881b4d7018d203866854c4450fdb2de045e9f3e8b9dec662aeed928c6538e",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        62460.8368278499,
-        62422.76463622015
+        62291.61744619257,
+        62267.57185090344
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -166,13 +166,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 455155.44999999995,
+      "median_ns": 449167.51,
       "repetitions": 1500,
       "resource_fingerprint": "a83881b4d7018d203866854c4450fdb2de045e9f3e8b9dec662aeed928c6538e",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        455700.79,
-        454610.11
+        449517.73,
+        448817.29
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -382,7 +382,7 @@
     "attention",
     "linalg"
   ],
-  "source_commit": "f8022572b19d85434bbcb074ae5519db87f46be7",
+  "source_commit": "dcdaf2a91a8b95a6a6e1cad154791e2b631083fe",
   "target": "x86",
   "toolchain_fingerprint": "b67aa70609e5e1787d08b7449e988a6f7ca047259999d28df7aaafaa9dd8b0ce"
 }

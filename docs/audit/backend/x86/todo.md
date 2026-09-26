@@ -72,11 +72,23 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   single-CPU mask. So on the witness route attention's threads share one CPU,
   which is not the production configuration. The witness therefore changes what
   it measures for threaded kernels. No threading was found in the GEMM kernel
-  source, so the matmul shift is not explained by this. Owed
-  (`X86-WITNESS-PIN-1`): pin only the clock reads, or restore the
-  full affinity mask for the timed region, then re-measure both hosts at least
-  twice and bound cross-recording variance before any timing is compared
-  across recordings.
+  source, so the matmul shift is not explained by this.
+  **`X86-WITNESS-PIN-1` fixed 2026-09-26 (`dcdaf2a9`):** calibration pins itself and
+  restores the CPU set; the timed region runs unconfined; each window records its
+  CPU-set size, the host CPU count and the kernel clocksource, and
+  `verify_witness_sample` refuses a region that did not run on the full set (reads on
+  two CPUs are accepted only under a TSC-synchronized clocksource). Both hosts
+  re-recorded **twice** at `dcdaf2a9`; the committed packets are the second runs and
+  `x86_avx512_unpinned_variance_20260926` (`benchmarks/baselines/`) holds the first runs,
+  the one refused attempt (softmax 4.194% > 4% stability) and the run-to-run table.
+  Attention is now stable across recordings (0.993 / 1.012).
+  **`X86-MATMUL-BIMODAL-1` (open):** matmul 256³ `kernel_wall` lands on one of two
+  levels (~0.72 / ~1.05 ms). Princess-Luna moved 1.48x between two *unpinned*
+  recordings of identical code, so the pin did not cause it. Tajasarus stayed in the
+  slower mode twice. Not root-caused; a single recording's matmul latency is not a
+  stable number until it is. Also owed: `record_x86_base_packet.py` pins its whole
+  timing to one CPU the same way and should get the same fix before its threaded rows
+  are trusted.
   **Pre-PR review (2026-09-26), open:** `validate_x86_avx512_packet` re-derives
   witnesses, medians, stability and the environment label, but only *compares*
   the host/model, library path, source commit, toolchain fingerprint and the

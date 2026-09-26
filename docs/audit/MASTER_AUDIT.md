@@ -429,13 +429,13 @@ matches its module fails generation. Read the counts there.
    verdict is E2E-REAL-4's **non-regression check between the production and
    scheduled images, which are byte-identical in both rows** — a parity check
    under WSL2, not a performance promotion. Also host-keyed AVX-512 E2E packets
-   on both Zen 5 boxes (`AVX512-E2E-PACKETS-2026-09-26`). **Caveat on those
-   packets (`X86-WITNESS-PIN-1`):** the TSC witness pins the recorder to one
-   CPU and the threaded attention kernel inherits that mask, so the x86
-   attention rows were timed on one core; the dashboard's `release_ready` for
-   x86 attention records correctness and a stable in-recording timing, not a
-   production-configuration latency. Matmul also moved ~1.5x between two
-   recordings on both hosts, not root-caused.
+   on both Zen 5 boxes (`AVX512-E2E-PACKETS-2026-09-26`). These were re-recorded twice per host
+   after `X86-WITNESS-PIN-1` was fixed (the timed region now runs unconfined,
+   so threaded attention is measured as in production and is stable across
+   recordings). **Open caveat (`X86-MATMUL-BIMODAL-1`):** matmul 256³
+   `kernel_wall` lands on one of two levels (~0.72 / ~1.05 ms), moving 1.48x
+   between two unpinned recordings of identical code on Princess-Luna; one
+   recording's matmul latency is not a stable number until that is explained.
 1. RUNTIME-LIB-OPT-1: applied 2026-09-26 (`-O2` runtime libraries + build
    record); open: re-measure the affected packets on their own boxes.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),

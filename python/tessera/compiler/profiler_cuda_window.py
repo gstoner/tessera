@@ -2,7 +2,10 @@
 
 This bounded adapter consumes one checked warm-up and seven 100-launch windows.
 It never substitutes the sum of kernel durations for the launch-inclusive span.
-Promotion also requires clean source, bare-metal capture and <=5% trace overhead.
+Promotion also requires clean source, event/activity-window agreement within
+5% and <=5% trace overhead, on bare metal or WSL2 alike (owner direction,
+MASTER_AUDIT 2026-09-25 -- recorded there as an explicit NVIDIA exception,
+since this witness is profiler-derived).
 """
 
 import hashlib
@@ -93,8 +96,10 @@ def build_cuda_window_calibration(*, clean, profiled, kernels, source, capture_d
         reasons.append("profiler overhead exceeds five percent")
     if source["worktree_dirty"]:
         reasons.append("source tree has uncommitted changes")
-    if source["execution_environment"] != "bare_metal":
-        reasons.append("bare-metal promotion evidence required")
+    # No bare-metal requirement since 2026-09-25 (owner, MASTER_AUDIT): the
+    # Nsight kernel activity window is a GPU-side clock and the CUDA event its
+    # witness, so the 5% agreement and 5% overhead gates above are the
+    # independent-witness method on WSL2 and bare metal alike.
     return dict(
         schema=1,
         sample_id=sample_id,

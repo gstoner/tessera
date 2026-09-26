@@ -723,39 +723,71 @@ def _check_kind(payload: Mapping[str, Any], expected: str, other: str) -> None:
         raise ValueError(f"unknown payload kind {kind!r}; expected {expected!r}")
 
 
-#: Clocks a WSL calibration may be cross-checked against. Kept in step with
-#: ``profiler_timing``'s slot names so a corpus and a timing sample describe
-#: the same method in the same words.
-_WITNESS_PARTNERS = frozenset({
-    "hip_event_ns", "cuda_event_ns", "host_wall_ns", "monotonic_raw_ns",
-})
+#: Distinct admissible timing samples each calibrated device needs. Two is
+#: the paired-run minimum; a single sample cannot show the measurement repeats.
+MIN_WITNESS_SAMPLES = 2
 
 
-def _require_wsl_timing_witness(witness: Any) -> None:
-    """A WSL corpus is selector authority only with a declared, well-formed
-    independent-witness method; anything else stays pruning-only."""
-    from .profiler_timing import KERNEL_SIDE_CLOCKS
+def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> None:
+    """A WSL corpus is selector authority only when it *carries* the evidence.
+
+    ``timing_witness.samples`` holds ``tessera.profiler_timing.v1`` payloads.
+    Each is re-validated, and every calibrated device needs at least
+    :data:`MIN_WITNESS_SAMPLES` distinct samples **of its own target** whose
+    promotion claim passes the independent-witness rule (a kernel-side clock
+    of that target, with a witness valid in the same sample and agreeing
+    within the provider band). Derived, not declared: a corpus that merely
+    names a method is refused (review of #854).
+    """
+    import hashlib
+    import json
+
+    from .profiler_timing import (
+        ProfilerTimingError, is_wsl_environment, validate_timing_sample,
+        wsl_promotion_refusals)
 
     hint = (
-        "WSL calibration needs a 'timing_witness' declaring the accepted "
-        "non-profiler method: {'clock': one of "
-        f"{sorted(KERNEL_SIDE_CLOCKS)}, 'cross_checked_against': a non-empty "
-        f"subset of {sorted(_WITNESS_PARTNERS)}, 'paired_runs': >= 2}}; "
-        "without it use load_pruning_corpus()"
+        "WSL calibration needs timing_witness.samples: at least "
+        f"{MIN_WITNESS_SAMPLES} tessera.profiler_timing.v1 samples per device, "
+        "each with a promotion-eligible kernel-side clock whose witness is "
+        "valid and agrees in the same sample; without them use "
+        "load_pruning_corpus()"
     )
-    if not isinstance(witness, Mapping):
+    samples = witness.get("samples") if isinstance(witness, Mapping) else None
+    if not isinstance(samples, (list, tuple)) or not samples:
         raise ValueError(hint)
-    clock = witness.get("clock")
-    partners = witness.get("cross_checked_against")
-    runs = witness.get("paired_runs")
-    if clock not in KERNEL_SIDE_CLOCKS:
-        raise ValueError(f"timing_witness.clock {clock!r} is not a kernel-side clock; {hint}")
-    if (not isinstance(partners, (list, tuple)) or not partners
-            or not set(partners) <= _WITNESS_PARTNERS or clock in partners):
-        raise ValueError(
-            f"timing_witness.cross_checked_against {partners!r} is invalid; {hint}")
-    if not isinstance(runs, int) or isinstance(runs, bool) or runs < 2:
-        raise ValueError(f"timing_witness.paired_runs {runs!r} must be an int >= 2; {hint}")
+    admissible: dict[str, set[str]] = {}
+    for index, sample in enumerate(samples):
+        if not isinstance(sample, Mapping):
+            raise ValueError(f"timing_witness.samples[{index}] is not a timing sample; {hint}")
+        try:
+            validate_timing_sample(sample)
+        except ProfilerTimingError as exc:
+            raise ValueError(f"timing_witness.samples[{index}] is invalid: {exc}") from exc
+        if not is_wsl_environment(sample.get("execution_environment")):
+            raise ValueError(
+                f"timing_witness.samples[{index}] is not a WSL sample; a WSL corpus "
+                "must be vouched for by measurements from the same kind of host")
+        clocks = sample["clocks"]
+        promoted = [slot for slot, record in clocks.items()
+                    if record.get("eligible_for_promotion")]
+        refusals = wsl_promotion_refusals(sample["target"], clocks)
+        if not promoted or refusals:
+            raise ValueError(
+                f"timing_witness.samples[{index}] carries no admissible promotion "
+                f"clock ({'; '.join(refusals) or 'nothing marked promotion-eligible'}); {hint}")
+        # Distinct by measured content, not by name: a sample copied under a
+        # new sample_id is the same measurement and must not count twice.
+        content = hashlib.sha256(
+            json.dumps(clocks, sort_keys=True, default=str).encode()).hexdigest()
+        admissible.setdefault(sample["target"], set()).add(content)
+    for device in devices:
+        target = perf_for_device(device).target
+        count = len(admissible.get(target, ()))
+        if count < MIN_WITNESS_SAMPLES:
+            raise ValueError(
+                f"device {device!r} (target {target!r}) has {count} admissible "
+                f"timing sample(s); {hint}")
 
 
 def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
@@ -773,9 +805,9 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
                                       "peak_tflops.bf16:matrix": 51.2}}}
 
     A row for an unregistered device, an unknown field, a mismatched version,
-    a WSL host without a well-formed ``timing_witness`` (kernel-side clock,
-    cross-checked, paired runs), or an explicitly selector-ineligible packet
-    raises — a
+    a WSL host without ``timing_witness.samples`` that prove the
+    independent-witness method per device, or an explicitly
+    selector-ineligible packet raises — a
     calibration run that silently lands nowhere or promotes provisional timing
     is worse than one that fails. Use :func:`load_pruning_corpus` for the latter.
 
@@ -804,7 +836,8 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
         # Was an unconditional refusal. Since 2026-09-25 a WSL corpus becomes
         # selector authority when it declares the independent-witness method
         # the owner accepted (MASTER_AUDIT; DEVICE-CLOCK-DISCIPLINE-2026-08-31).
-        _require_wsl_timing_witness(corpus.get("timing_witness"))
+        _require_wsl_timing_witness(corpus.get("timing_witness"),
+                                    dict(corpus.get("devices", {})))
     # Phase 1 — build and validate everything. perf_for_device() raises on an
     # unknown device, with_measured() raises on an unknown field.
     staged: list[TargetPerf] = [

@@ -71,7 +71,10 @@ def test_gap_rows_are_only_ever_families_with_no_declared_route():
 
 
 def _generic_fixture(monkeypatch, tmp_path, body: str) -> bool:
-    (tmp_path / "fixture_native.py").write_text(body)
+    # A real backend module defines package_scheduled_kernel exactly once;
+    # the detector requires that, so the fixture does too.
+    stub = "\n\ndef package_scheduled_kernel(artifact, **kwargs):\n    return artifact\n"
+    (tmp_path / "fixture_native.py").write_text(body + stub)
     monkeypatch.setattr(audit, "_COMPILER", tmp_path)
     monkeypatch.setattr(audit, "_BACKEND_MODULES", (("fixture", "fixture_native.py"),))
     return audit._packager_is_generic_scheduled("fixture", "softmax")
@@ -152,6 +155,71 @@ def test_generic_route_ties_the_returned_artifact_to_the_lowering(
         "    return package_scheduled_kernel(\n"
         "        lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n")
     assert not _generic_fixture(monkeypatch, tmp_path, one_bad_path)
+
+
+def test_scope_bindings_shadowing_the_artifact_fail_closed(monkeypatch, tmp_path):
+    """Review of #853: a nested def/class, import, match capture or global
+    that rebinds the artifact name must count as an unknown binding."""
+    lowered = ("def package_softmax(module, *, pipeline_name):\n"
+               "    artifact = lower_scheduled_kernel(module, target='t')\n")
+    tail = "    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)\n"
+    shadows = {
+        "decorated_def": "    @cached_scheduled\n    def artifact():\n        pass\n",
+        "class": "    class artifact:\n        pass\n",
+        "import": "    from cache import artifact\n",
+        "import_as": "    import cache as artifact\n",
+        "global": "    global artifact\n",
+        "match": "    match module:\n        case {'cached': artifact}:\n            pass\n",
+        "match_rest": "    match module:\n        case {**artifact}:\n            pass\n",
+    }
+    assert _generic_fixture(monkeypatch, tmp_path, lowered + tail)
+    for label, shadow in shadows.items():
+        assert not _generic_fixture(monkeypatch, tmp_path, lowered + shadow + tail), label
+
+
+def test_review_escape_hatches_are_refused(monkeypatch, tmp_path):
+    """Each body below returned generic=True before the review fixes; each can
+    package something other than the scheduled lowering on some path."""
+    head = "def package_softmax(module, *, pipeline_name):\n"
+    ok = head + (
+        "    art = lower_scheduled_kernel(module)\n"
+        "    return package_scheduled_kernel(art, pipeline_name=pipeline_name)\n")
+    assert _generic_fixture(monkeypatch, tmp_path, ok)
+    hatches = {
+        "nonlocal_rebind": head + (
+            "    art = lower_scheduled_kernel(module)\n"
+            "    def swap():\n        nonlocal art\n        art = CACHE[module]\n"
+            "    swap()\n"
+            "    return package_scheduled_kernel(art, pipeline_name=pipeline_name)\n"),
+        "rebound_lowering_name": head + (
+            "    lower_scheduled_kernel = CACHE.get\n"
+            "    art = lower_scheduled_kernel(module)\n"
+            "    return package_scheduled_kernel(art, pipeline_name=pipeline_name)\n"),
+        "foreign_attribute_callee": head + (
+            "    art = CACHE.lower_scheduled_kernel(module)\n"
+            "    return package_scheduled_kernel(art, pipeline_name=pipeline_name)\n"),
+        "attribute_store": head + (
+            "    art = lower_scheduled_kernel(module)\n"
+            "    art.image = CACHE[module]\n"
+            "    return package_scheduled_kernel(art, pipeline_name=pipeline_name)\n"),
+        "method_mutation": head + (
+            "    art = lower_scheduled_kernel(module)\n"
+            "    art.update(CACHE[module])\n"
+            "    return package_scheduled_kernel(art, pipeline_name=pipeline_name)\n"),
+        "falls_off_the_end": head + (
+            "    if module:\n"
+            "        return package_scheduled_kernel(\n"
+            "            lower_scheduled_kernel(module), pipeline_name=pipeline_name)\n"),
+        "decorated": "@legacy_route\n" + ok,
+        "second_definition": ok + "\n\ndef package_softmax(module, *, pipeline_name):\n    return LEGACY(module)\n",
+        "module_rebinding": ok + "\npackage_softmax = legacy_softmax\n",
+        "imported_lowering_alias": head + (
+            "    from cache import get as lower_scheduled_kernel\n"
+            "    art = lower_scheduled_kernel(module)\n"
+            "    return package_scheduled_kernel(art, pipeline_name=pipeline_name)\n"),
+    }
+    for label, body in hatches.items():
+        assert not _generic_fixture(monkeypatch, tmp_path, body), label
 
 
 def test_nvidia_unary_families_are_derived_generic_not_declared():

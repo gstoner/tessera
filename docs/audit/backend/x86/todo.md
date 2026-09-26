@@ -9,6 +9,21 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## WSL timing admission — 2026-09-26
+
+Sync `WSL-TIMING-ADMISSION-2026-09-26` (owner direction, [MASTER_AUDIT](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25), 2026-09-25). **Shared timing contract changed.** Missing `/dev/kfd` or bare metal no longer blocks promotion; the independent-witness method does:
+
+- `profiler_timing`: on WSL, promotion is carried only by a kernel-side clock **of the sample's own target** (`promotion_clock_slots`: `device_wall_clock_ns` for ROCm, `tsc_cycles` for x86, none for NVIDIA). Its admissible witnesses are fixed per clock — HIP event or profiler activity for the device clock, `CLOCK_MONOTONIC_RAW` for the TSC, **never host wall** — at least one must be valid in the same sample, and **every** valid one it names must agree within 5% (`|witness − clock| / witness`, the providers' band). A TSC must carry a frequency from an independent source (`cpuid_leaf_0x15` or a separate calibration interval). Environments are matched exactly; an unrecognized one carries no promotion.
+- `target_perf.apply_corpus`: a WSL calibration corpus is selector authority only when `timing_witness.samples` carries at least two admissible WSL timing samples per calibrated device, of that device's target and distinct by clock content — derived evidence, not a declared method.
+- The ROCm profiler packet gains a derived `admission_route` (`device_clock_witness`); on it, environment and profiler reasons become `diagnostic_gaps`, the witness sample must name the calibrated image, and the validator re-derives reasons, gaps, route and eligibility from the packet's own inputs. SSD admission on gfx1151 consumes it. (An x86 `tsc_witness` packet route was drafted and **withdrawn**: the probe's `clock_agreement_valid` compares steady_clock with monotonic-raw, not the TSC, so it proved nothing about the TSC.)
+- `profiler_cuda_window` drops "bare metal required"; its activity-window / event 5% agreement and 5% overhead gates decide. This is an explicit exception recorded in MASTER_AUDIT: the Nsight activity window is profiler-derived, and its validity on WSL2 is unverified.
+- Recorders that time with events or host wall only now stamp `kernel_clock_witness_required` instead of a bare-metal reason; committed historical packets are unchanged.
+
+This supersedes the WSL half of `GFX1151-CALIB-BAREMETAL-2026-08-16`.
+
+**x86 outcome: follow-up required — the policy admits x86, the probe cannot yet prove it.** In `profiler_timing` the kernel-side slot is `tsc_cycles`, witnessed by `monotonic_raw_ns` within 5%, and it requires a TSC frequency from an independent source. The Zen 5 profiler packet (`TPROF-X86-TIME-1`) is **unchanged**: a `tsc_witness` route was drafted and withdrawn after review, because `tools/profiler/cli/tprof.cpp` computes `clock_agreement_valid` as steady_clock vs monotonic-raw and derives the TSC frequency from `tsc / raw` over the same interval, so TSC-vs-raw agreement holds by construction. Follow-ups: (1) make the probe take the TSC frequency from CPUID leaf 0x15 or a separate calibration interval and measure TSC vs monotonic-raw over the timed benchmark region, bound to that run; (2) then add the packet route and record packets on Princess-Luna and Tajasarus; (3) the packet is Zen 5-only — the Zen 2 AVX2 lane on Super-Bear (an alpha lane) has no adapter yet.
+
+
 ## gfx1201 native spectral JVP — sibling outcome — 2026-09-25
 
 Sync `ROCM-SPECTRAL-JVP-GFX1201-2026-09-25` (#850). **Not applicable.** The
@@ -1875,7 +1890,7 @@ work, and clean Zen 5 performance evidence remains open.
 Cross-backend sync `GFX1151-CALIB-BAREMETAL-2026-08-16` — **shared calibration
 authority parity validated; no x86 evidence transfers.** `target_perf` now
 rejects explicitly provisional and WSL-hosted corpora from its measured
-selector registry while exposing a non-mutating pruning reader. AVX-512 code
+selector registry while exposing a non-mutating pruning reader. *(Superseded 2026-09-26 by `WSL-TIMING-ADMISSION-2026-09-26`, top of this file: a WSL corpus is now admitted when it carries admissible kernel-clock witness samples.)* AVX-512 code
 and selectors are unchanged; clean Zen 5 perf/IBS evidence remains the x86
 promotion authority.
 

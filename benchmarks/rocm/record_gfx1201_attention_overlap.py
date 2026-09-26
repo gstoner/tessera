@@ -1,7 +1,8 @@
 """Same-device HIP-event overlap windows for two independent attention owners.
 
-Events bracket each ordered kernel program (including resets). This is raw
-uncalibrated WSL evidence; it cannot promote a production performance candidate.
+Events bracket each ordered kernel program (including resets). HIP events alone
+are not a kernel-side clock witness, so this WSL evidence cannot promote a
+production performance candidate (MASTER_AUDIT 2026-09-25 timing rule).
 """
 import argparse
 import ctypes as ct

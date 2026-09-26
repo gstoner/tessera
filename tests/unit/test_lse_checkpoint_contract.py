@@ -79,5 +79,5 @@ def test_rocm_lse_revalidation_uses_dual_clocks_and_fails_closed() -> None:
     assert "hip.hipEventDestroy(event_stop)" in runtime
     assert '"schema": "tessera.rocm.lse_checkpoint.benchmark.v2"' in benchmark
     assert '"device_event": "hipEventElapsedTime"' in benchmark
-    assert '"blocked_wsl_device_event_not_transferable"' in benchmark
+    assert '"blocked_wsl_kernel_clock_witness_required"' in benchmark
     assert '"blocked_zero_or_unavailable_device_event"' in benchmark

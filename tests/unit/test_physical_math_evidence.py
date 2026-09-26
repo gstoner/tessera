@@ -38,6 +38,8 @@ def test_gfx1151_math_packet_covers_dtypes_and_cache_gain() -> None:
     packet = _packet("math_physical_gfx1151_2026_08_06.json")
     assert packet["schema"] == "tessera.physical_math_evidence.v1"
     assert packet["selector_eligible"] is False
+    # Committed 2026-08-06 evidence records the rule in force then; fresh
+    # packets name the kernel-clock witness instead (checked below).
     assert packet["device_event_follow_up"] == "bare_metal_required"
     assert packet["storage_dtypes"] == ["f32", "f16", "bf16"]
     assert len(packet["dtype_rows"]) == 21
@@ -94,7 +96,7 @@ def test_generator_emits_complete_rocm_packet_schema(monkeypatch) -> None:
     )
     packet = benchmark._run("rocm", "all", 4)
     assert packet["selector_eligible"] is False
-    assert packet["device_event_follow_up"] == "bare_metal_required"
+    assert packet["device_event_follow_up"] == "kernel_clock_witness_required"
     assert packet["storage_dtypes"] == ["f32", "f16", "bf16"]
     assert len(packet["dtype_rows"]) == 21
     assert {row["dtype"] for row in packet["dtype_rows"]} == {

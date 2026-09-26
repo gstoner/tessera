@@ -396,8 +396,11 @@ def _local_bindings(fn: ast.FunctionDef) -> dict[str, list[ast.expr | None]]:
     """name -> every value bound to it in ``fn`` (``None`` = not a plain value).
 
     Parameters, tuple unpacking, augmented assignment, loop / ``with`` / walrus
-    targets and ``except`` names all record ``None``: the audit cannot say what
-    they hold, so a name bound that way never counts as a lowered artifact.
+    targets, ``except`` names, nested ``def`` / ``class`` names, imports,
+    ``match`` captures and ``global`` / ``nonlocal`` declarations all record
+    ``None``: the audit cannot say what they hold, so a name bound that way
+    never counts as a lowered artifact. A nested definition's *name* binds in
+    this scope even though its body is skipped (review of #853).
     """
     out: dict[str, list[ast.expr | None]] = {}
 
@@ -417,9 +420,26 @@ def _local_bindings(fn: ast.FunctionDef) -> dict[str, list[ast.expr | None]]:
     stack: list[ast.AST] = list(fn.body)
     while stack:
         node = stack.pop()
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
-                             ast.Lambda, ast.ClassDef)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            # The statement binds its name here; decorators run here too, so
+            # walk them. Only the body belongs to another scope.
+            out.setdefault(node.name, []).append(None)
+            stack.extend(node.decorator_list)
             continue
+        if isinstance(node, ast.Lambda):
+            continue
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                if name != "*":
+                    out.setdefault(name, []).append(None)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            for name in node.names:
+                out.setdefault(name, []).append(None)
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
+            out.setdefault(node.name, []).append(None)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            out.setdefault(node.rest, []).append(None)
         if isinstance(node, ast.Assign):
             for t in node.targets:
                 bind(t, node.value if isinstance(t, ast.Name) else None)
@@ -441,22 +461,91 @@ def _local_bindings(fn: ast.FunctionDef) -> dict[str, list[ast.expr | None]]:
     return out
 
 
+def _is_lowering_call(node: ast.AST | None) -> bool:
+    """``lower_scheduled_kernel(...)`` or ``scheduled_kernel.lower_scheduled_kernel(...)``.
+
+    Nothing else (review): ``CACHE.lower_scheduled_kernel(...)`` merely shares
+    the attribute name. Whether those names really denote the scheduled module
+    is checked separately by :func:`_names_are_the_real_lowering`.
+    """
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id == "lower_scheduled_kernel"
+    return (isinstance(func, ast.Attribute) and func.attr == "lower_scheduled_kernel"
+            and isinstance(func.value, ast.Name) and func.value.id == "scheduled_kernel")
+
+
 def _is_lowered_artifact(node: ast.expr | None,
                          bindings: dict[str, list[ast.expr | None]]) -> bool:
     """``node`` is a ``lower_scheduled_kernel(...)`` result, by data flow."""
     if node is None:
         return False
-    if _returned_call_name(node) == "lower_scheduled_kernel":
+    if _is_lowering_call(node):
         return True
     if isinstance(node, ast.Name):
         values = bindings.get(node.id, [])
         # Every binding must itself be the lowering call: one other source
         # (a cache, a parameter, a reassignment) and the artifact may not be
         # the scheduled lowering on some path.
-        return bool(values) and all(
-            v is not None and _returned_call_name(v) == "lower_scheduled_kernel"
-            for v in values)
+        return bool(values) and all(_is_lowering_call(v) for v in values)
     return False
+
+
+_RESERVED = ("lower_scheduled_kernel", "package_scheduled_kernel", "scheduled_kernel")
+
+
+def _import_binds_real_lowering(node: ast.AST, name: str) -> bool:
+    """The only bindings of the reserved names that keep their meaning."""
+    if not isinstance(node, ast.ImportFrom):
+        return False
+    for alias in node.names:
+        bound = alias.asname or alias.name
+        if bound != name:
+            continue
+        if name == "lower_scheduled_kernel":
+            return (alias.asname is None and alias.name == name
+                    and (node.module or "").split(".")[-1] == "scheduled_kernel")
+        if name == "scheduled_kernel":
+            return (alias.asname is None and alias.name == name
+                    and node.level >= 1 and not node.module)
+    return False
+
+
+def _names_are_the_real_lowering(tree: ast.Module, fn: ast.FunctionDef) -> bool:
+    """No module- or function-level binding may redefine the reserved names
+    (review: ``lower_scheduled_kernel = CACHE.get`` inside the packager)."""
+    scopes: tuple[list[ast.AST], ...] = (list(tree.body), list(ast.walk(fn)))
+    for scope in scopes:
+        for node in scope:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if node.name in ("lower_scheduled_kernel", "scheduled_kernel"):
+                    return False
+                continue
+            targets: list[ast.AST] = []
+            if isinstance(node, (ast.Assign,)):
+                targets = list(node.targets)
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+                targets = [node.target]
+            elif isinstance(node, (ast.For, ast.AsyncFor)):
+                targets = [node.target]
+            for t in targets:
+                for n in ast.walk(t):
+                    if isinstance(n, ast.Name) and n.id in _RESERVED:
+                        return False
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    bound = alias.asname or alias.name.split(".")[0]
+                    if bound in _RESERVED and bound != "package_scheduled_kernel" \
+                            and not _import_binds_real_lowering(node, bound):
+                        return False
+                    if bound == "package_scheduled_kernel":
+                        return False
+    # package_scheduled_kernel must be this module's own single definition.
+    defs = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name == "package_scheduled_kernel"]
+    return len(defs) == 1
 
 
 def _packaged_artifact(call: ast.Call) -> ast.expr | None:
@@ -484,27 +573,60 @@ def _packager_is_generic_scheduled(target: str, family: str) -> bool:
     tree = _parse(_COMPILER / filename)
     if tree is None:
         return False
-    fn = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
-               and n.name == f"package_{family}"), None)
-    if fn is None:
+    name = f"package_{family}"
+    # Exactly one module-level binding, an undecorated def (review: a second
+    # def, a later ``package_x = legacy``, or a decorator could replace it).
+    bindings_at_module = 0
+    fn: ast.FunctionDef | None = None
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) \
+                and node.name == name:
+            bindings_at_module += 1
+            fn = node if isinstance(node, ast.FunctionDef) else None
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            bindings_at_module += sum(
+                1 for t in targets for n in ast.walk(t)
+                if isinstance(n, ast.Name) and n.id == name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            bindings_at_module += sum(
+                1 for a in node.names if (a.asname or a.name.split(".")[0]) == name)
+    if fn is None or bindings_at_module != 1 or fn.decorator_list:
         return False
-    returns: list[ast.Return] = []
-    stack: list[ast.AST] = list(fn.body)
-    while stack:
-        node = stack.pop()
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
-                             ast.Lambda, ast.ClassDef)):
-            continue  # nested scopes do not return from the packager
-        if isinstance(node, ast.Return):
-            returns.append(node)
-        stack.extend(ast.iter_child_nodes(node))
+    # No nested scopes and no global/nonlocal (review: a nested def can
+    # rebind the artifact through ``nonlocal``, invisibly to this walk).
+    for inner in ast.walk(fn):
+        if inner is fn:
+            continue
+        if isinstance(inner, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
+                              ast.ClassDef, ast.Global, ast.Nonlocal)):
+            return False
+    if not _names_are_the_real_lowering(tree, fn):
+        return False
+    # Every path must end in return or raise: no implicit ``return None``.
+    if not fn.body or not isinstance(fn.body[-1], (ast.Return, ast.Raise)):
+        return False
+    returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
     bindings = _local_bindings(fn)
-    return bool(returns) and all(
-        isinstance(r.value, ast.Call)
-        and _returned_call_name(r.value) == "package_scheduled_kernel"
-        and _is_lowered_artifact(_packaged_artifact(r.value), bindings)
-        for r in returns
-    )
+    packaged_names: dict[str, int] = {}
+    for r in returns:
+        call = r.value
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                and call.func.id == "package_scheduled_kernel"):
+            return False
+        artifact = _packaged_artifact(call)
+        if not _is_lowered_artifact(artifact, bindings):
+            return False
+        if isinstance(artifact, ast.Name):
+            packaged_names[artifact.id] = packaged_names.get(artifact.id, 0) + 1
+    # An artifact local may be read only by the package call (review: an
+    # attribute store or method call on it could swap its contents).
+    for local, uses in packaged_names.items():
+        loads = sum(1 for n in ast.walk(fn) if isinstance(n, ast.Name)
+                    and n.id == local and isinstance(n.ctx, ast.Load))
+        if loads != uses:
+            return False
+    return bool(returns)
 
 
 def family_rows() -> tuple[tuple[str, str, str, str], ...]:

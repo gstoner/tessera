@@ -13,6 +13,7 @@ from tessera.compiler.profiler_timing import (
     build_timing_sample,
     measure_synchronized_host_batch,
     measured_clock,
+    promotion_clock_slots,
     unavailable_clock,
     validate_timing_sample,
     wall_clock_ticks_to_ns,
@@ -145,21 +146,21 @@ def test_timing_cli_round_trips_valid_sample(tmp_path: Path) -> None:
     validate_timing_sample(json.loads(output.read_text(encoding="utf-8")))
 
 
-def _witnessed_wsl_sample(**device_overrides: object) -> dict[str, object]:
+def _witnessed_wsl_sample(*, device_ns: float = 900, event_ns: float = 920,
+                          target: str = "rocm_gfx1151") -> dict[str, object]:
     clocks = _rocm_clocks()
-    clocks["hip_event_ns"] = measured_clock("hip_event_ns", source="hip_event", value=950)
+    clocks["hip_event_ns"] = measured_clock("hip_event_ns", source="hip_event", value=event_ns)
     clocks["device_wall_clock_ns"] = measured_clock(
         "device_wall_clock_ns",
         source="device_wall_clock",
-        value=900,
+        value=device_ns,
         instrumented=True,
-        calibrated_against=("hip_event_ns", "host_wall_ns"),
+        calibrated_against=("hip_event_ns",),
         eligible_for_promotion=True,
-        **device_overrides,
     )
     return build_timing_sample(
-        sample_id="sample-wsl-witnessed",
-        target="rocm_gfx1151",
+        sample_id=f"sample-wsl-{device_ns}-{event_ns}",
+        target=target,
         clocks=clocks,
         artifact_digests={"package": "sha256:abc"},
         batch_size=100,
@@ -169,12 +170,22 @@ def _witnessed_wsl_sample(**device_overrides: object) -> dict[str, object]:
     )
 
 
-def test_wsl_device_clock_with_a_valid_in_sample_witness_is_promotion_admissible() -> None:
+def test_wsl_device_clock_with_an_agreeing_in_sample_witness_is_admissible() -> None:
     """Owner direction 2026-09-25: the wall_clock64 method is performance
     evidence without KFD or bare metal (DEVICE-CLOCK-DISCIPLINE-2026-08-31)."""
-    payload = _witnessed_wsl_sample()
+    payload = _witnessed_wsl_sample(device_ns=900, event_ns=920)  # 2.2% apart
     assert payload["clocks"]["device_wall_clock_ns"]["eligible_for_promotion"] is True
     validate_timing_sample(payload)
+
+
+def test_a_valid_witness_that_disagrees_is_refused() -> None:
+    """Review of #854: 1 ns against a valid 1 s event must not pass."""
+    with pytest.raises(ProfilerTimingError, match="disagree beyond 5%"):
+        _witnessed_wsl_sample(device_ns=1, event_ns=1_000_000_000)
+    # The band is the providers' relation, |witness - clock| / witness <= 5%.
+    _witnessed_wsl_sample(device_ns=950, event_ns=1000)
+    with pytest.raises(ProfilerTimingError, match="disagree"):
+        _witnessed_wsl_sample(device_ns=949, event_ns=1000)
 
 
 def test_wsl_promotion_still_needs_a_kernel_side_clock() -> None:
@@ -187,11 +198,95 @@ def test_wsl_promotion_still_needs_a_kernel_side_clock() -> None:
 
 def test_wsl_witness_must_be_valid_in_the_same_sample() -> None:
     payload = _witnessed_wsl_sample()
-    payload["clocks"]["device_wall_clock_ns"]["calibrated_against"] = ["hip_event_ns"]
     payload["clocks"]["hip_event_ns"].update(
         valid=False, value=None, reason="HIP_EVENT_ZERO_DURATION",
         eligible_for_regression=False)
     with pytest.raises(ProfilerTimingError, match="no independent witness"):
+        validate_timing_sample(payload)
+
+
+def test_promotion_clocks_are_target_specific() -> None:
+    """Review of #854: a ROCm sample cannot promote through an appended TSC,
+    and a target without a kernel-side slot (NVIDIA today) has none."""
+    assert promotion_clock_slots("rocm_gfx1151") == {"device_wall_clock_ns"}
+    assert promotion_clock_slots("x86") == {"tsc_cycles"}
+    assert promotion_clock_slots("nvidia_sm120") == frozenset()
+
+    payload = _witnessed_wsl_sample()
+    payload["clocks"]["device_wall_clock_ns"]["eligible_for_promotion"] = False
+    payload["clocks"]["monotonic_raw_ns"] = measured_clock(
+        "monotonic_raw_ns", source="clock_monotonic_raw", value=1000).to_dict()
+    payload["clocks"]["tsc_cycles"] = measured_clock(
+        "tsc_cycles", source="rdtscp", value=4000,
+        provenance={"invariant_tsc": True, "logical_cpu_start": 0,
+                    "logical_cpu_end": 0, "calibrated_frequency_hz": 4.0e9},
+        calibrated_against=("monotonic_raw_ns",), eligible_for_promotion=True).to_dict()
+    with pytest.raises(ProfilerTimingError, match="kernel-side clock of target 'rocm_gfx1151'"):
+        validate_timing_sample(payload)
+
+
+def _x86_wsl_sample(frequency_source: str | None) -> dict[str, object]:
+    provenance = {"invariant_tsc": True, "logical_cpu_start": 3,
+                  "logical_cpu_end": 3, "calibrated_frequency_hz": 4.0e9}
+    if frequency_source is not None:
+        provenance["frequency_source"] = frequency_source
+    clocks = {
+        "host_wall_ns": measured_clock("host_wall_ns", source="steady_clock", value=1010),
+        "monotonic_raw_ns": measured_clock("monotonic_raw_ns", source="clock_monotonic_raw", value=1000),
+        "tsc_cycles": measured_clock(
+            "tsc_cycles", source="rdtscp", value=4000, provenance=provenance,
+            calibrated_against=("monotonic_raw_ns",), eligible_for_promotion=True),
+        "perf_task_clock_ns": unavailable_clock(
+            "perf_task_clock_ns", source="perf_event_task_clock", reason="PERF_EVENT_DENIED"),
+    }
+    return build_timing_sample(
+        sample_id="x86-wsl", target="x86", clocks=clocks,
+        artifact_digests={"package": "sha256:abc"}, batch_size=10, warm_state="warm",
+        synchronization="none", execution_environment="wsl2")
+
+
+def test_x86_tsc_needs_an_independently_sourced_frequency() -> None:
+    """Review: a TSC frequency derived from tsc/raw over the checked interval
+    makes TSC-vs-raw agree by construction, so it cannot be the witness."""
+    with pytest.raises(ProfilerTimingError, match="calibrated_frequency_hz from"):
+        _x86_wsl_sample(frequency_source=None)
+    with pytest.raises(ProfilerTimingError, match="calibrated_frequency_hz from"):
+        _x86_wsl_sample(frequency_source="tsc_over_raw_same_interval")
+    _x86_wsl_sample(frequency_source="cpuid_leaf_0x15")
+
+
+def test_host_wall_is_never_a_witness_and_one_disagreeing_witness_refuses() -> None:
+    """Review demo: device 10,000 ns, HIP event 20,000 (50% off), host wall
+    10,100. Host wall agreeing must not rescue a disagreeing HIP event."""
+    clocks = _rocm_clocks()
+    clocks["host_wall_ns"] = measured_clock("host_wall_ns", source="steady_clock", value=10_100)
+    clocks["hip_event_ns"] = measured_clock("hip_event_ns", source="hip_event", value=20_000)
+    clocks["device_wall_clock_ns"] = measured_clock(
+        "device_wall_clock_ns", source="device_wall_clock", value=10_000, instrumented=True,
+        calibrated_against=("hip_event_ns", "host_wall_ns"), eligible_for_promotion=True)
+    with pytest.raises(ProfilerTimingError, match="witnesses disagree"):
+        build_timing_sample(
+            sample_id="demo", target="rocm_gfx1151", clocks=clocks,
+            artifact_digests={"package": "sha256:abc"}, batch_size=1, warm_state="warm",
+            synchronization="hipEventSynchronize", execution_environment="wsl2")
+    # Host wall alone is not a witness either.
+    clocks["hip_event_ns"] = unavailable_clock("hip_event_ns", source="hip_event", reason="ZERO")
+    with pytest.raises(ProfilerTimingError, match="no admissible witness"):
+        build_timing_sample(
+            sample_id="demo2", target="rocm_gfx1151", clocks=clocks,
+            artifact_digests={"package": "sha256:abc"}, batch_size=1, warm_state="warm",
+            synchronization="hipEventSynchronize", execution_environment="wsl2")
+
+
+def test_wsl_is_matched_exactly_not_by_substring() -> None:
+    from tessera.compiler.profiler_timing import is_wsl_environment
+    assert is_wsl_environment("wsl2") and is_wsl_environment("WSL")
+    assert not is_wsl_environment("bare_metal_not_wsl")
+    assert not is_wsl_environment("bare_metal")
+    # ...and an unrecognized environment gets no promotion at all.
+    payload = _witnessed_wsl_sample()
+    payload["execution_environment"] = "bare_metal_not_wsl"
+    with pytest.raises(ProfilerTimingError, match="unknown execution environment"):
         validate_timing_sample(payload)
 
 

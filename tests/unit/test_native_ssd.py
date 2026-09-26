@@ -5,6 +5,7 @@ import pytest
 from tessera.compiler.scheduled_ssd import lower_scheduled_ssd
 from tessera.compiler.native_ssd import materialize_ssd
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tessera.compiler.llvm_tools import llvm_bin_dir
 from tests._support.environment import require_native_storage_lane
 
 
@@ -16,8 +17,8 @@ def test_ssd_gpu_package_replays_schedule_and_abi(backend,chip,cooperative):
         # the Tajasarus lane, never inferred from a gfx1151 host.
         pytest.skip('gfx1201 SSD packaging runs under TESSERA_GFX1201_DEVICE_PROOF=1')
     tool = find_tessera_opt()
-    llvm = Path('/usr/lib/llvm-23/bin')
-    if tool is None or not (llvm/'mlir-opt').exists():
+    llvm = llvm_bin_dir()
+    if tool is None or llvm is None or not (llvm/'mlir-opt').exists():
         pytest.skip('native GPU toolchain required')
     # Both lanes, not just ROCm. This guarded `rocm` and left `nvidia` bare, so
     # on either ROCm box the nvidia rows failed inside `mlir-opt`'s NVVM
@@ -64,8 +65,8 @@ def test_cooperative_ssd_refuses_unowned_module_definitions():
 
 def test_ssd_native_gpu_adjoint_projects_all_roles():
     tool = find_tessera_opt()
-    llvm = Path('/usr/lib/llvm-23/bin')
-    if tool is None or not (llvm/'mlir-opt').exists():
+    llvm = llvm_bin_dir()
+    if tool is None or llvm is None or not (llvm/'mlir-opt').exists():
         pytest.skip('native GPU toolchain required')
     require_native_storage_lane('nvidia')  # this test packages for sm_120 only
     logical = lower_scheduled_ssd(3,2,2,2,2,compiler=tool)

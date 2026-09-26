@@ -36,7 +36,16 @@ from tessera.compiler.scheduled_ssd import lower_scheduled_ssd  # noqa: E402
 from tessera.compiler.profiler_rocm_evidence import ROCM_PROFILER_ARCHITECTURES  # noqa: E402
 from tessera.compiler.ssd_performance import bind_measured_ssd, summarize  # noqa: E402
 
-LLVM_BIN = Path('/usr/lib/llvm-23/bin')
+
+
+def _llvm_bin():
+    """The matched LLVM 23 bin directory (``TESSERA_LLVM_BIN`` first), never a
+    hard-coded apt path: Tajasarus has no /usr/lib/llvm-23."""
+    from tessera.compiler.llvm_tools import llvm_bin_dir
+    found = llvm_bin_dir()
+    if found is None:
+        raise SystemExit('matched LLVM 23 tools not found (set TESSERA_LLVM_BIN)')
+    return found
 
 
 def main():
@@ -91,7 +100,7 @@ def main():
 
     T, H, N, P = args.shape
     logical = lower_scheduled_ssd(T, H, N, P, args.chunk, compiler=args.compiler)
-    options = dict(compiler=args.compiler, llvm_bin=LLVM_BIN, backend='rocm', chip=chip)
+    options = dict(compiler=args.compiler, llvm_bin=_llvm_bin(), backend='rocm', chip=chip)
     serial = materialize_ssd(logical, **options)
     cooperative = materialize_ssd(logical, cooperative=True, **options)
     bound, decision = bind_measured_ssd(serial, cooperative, comparison, calibrations)

@@ -25,6 +25,16 @@ import tempfile  # noqa: E402
 WINDOWS, LAUNCHES = 7, 100
 
 
+def _llvm_bin():
+    """The matched LLVM 23 bin directory (``TESSERA_LLVM_BIN`` first), never a
+    hard-coded apt path: Tajasarus has no /usr/lib/llvm-23."""
+    from tessera.compiler.llvm_tools import llvm_bin_dir
+    found = llvm_bin_dir()
+    if found is None:
+        raise SystemExit('matched LLVM 23 tools not found (set TESSERA_LLVM_BIN)')
+    return found
+
+
 def _hip_enum(name):
     """An enum value from THIS host's HIP headers, never a hard-coded guess."""
     root = Path(os.environ.get('ROCM_PATH', '/opt/rocm'))
@@ -244,7 +254,7 @@ def main():
     T,H,N,P = args.shape
     for chunk in ((args.chunk,) if args.chunk else (1,2,5)):
         logical = lower_scheduled_ssd(T,H,N,P,chunk,compiler=args.compiler)
-        program = materialize_ssd(logical,compiler=args.compiler,llvm_bin=Path('/usr/lib/llvm-23/bin'),
+        program = materialize_ssd(logical,compiler=args.compiler,llvm_bin=_llvm_bin(),
                                   backend=args.backend,chip=chip,cooperative=args.cooperative)
         rng = np.random.default_rng(740+chunk)
         inputs = [rng.uniform(-.5,.5,shape).astype(np.float32)
@@ -320,7 +330,7 @@ def main():
                     device_clock_calibration(
                         device=device, logical=logical, clean_program=program, clean_binding=binding,
                         raw=raw, grid=grid, block=block, clean_event_ms=timings, reset=reset, verify=verify,
-                        compiler=args.compiler, llvm_bin=Path('/usr/lib/llvm-23/bin'),
+                        compiler=args.compiler, llvm_bin=_llvm_bin(),
                         output=args.device_clock_calibration, run_id=run_id)
             rows.append(dict(chunk=chunk,binding_ms=bind_ms,checked_call_ms=checked_call_ms,device_event_ms=timings,
                              device_event_median_ms=statistics.median(timings) if timings else None,max_abs_errors=observed,binding_digest=program.package.binding_digest,

@@ -58,6 +58,19 @@ Owner `RUNTIME-LIB-OPT-1` (new, cross-backend; defined here and mirrored in the
 NVIDIA, ROCm and Apple queues); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
 Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
 
+**Applied 2026-09-26 (owner decision; this PR).** Items 1 and 3 landed as proposed,
+with one stated difference: the level is **`-O2`**, while the table below measured
+`-O3`, so the `-O0`→`-O2` gain on these rows is unmeasured until item 4 re-records them.
+`cmake/TesseraRuntimeLibraryOptimization.cmake` applies to the ten targets named in
+item 1. It acts only in empty-build-type trees and never defines `NDEBUG`. Configure
+writes `<build>/runtime_library_build.json` (`tessera.runtime_library_build.v1`), and
+`runtime_library_build.record_for_library` stamps it into evidence. It refuses a
+library loaded from outside a configured tree. First consumer:
+`record_x86_zen5_profiler_packet.py` puts it inside the digest-bound benchmark record.
+Verified on the Mac only (Apple runtime and `tessera_jit` compile at `-O2`;
+`tessera-opt` translation units unchanged). **Item 4 is still owed:** a packet
+recorded before this change keeps its old number until it is re-recorded on its own box.
+
 **Finding (x86).** On Princess-Luna, the primary x86 AVX-512 proof host,
 `build/` has an empty `CMAKE_BUILD_TYPE`. `libtessera_x86_elementwise.so` (47
 translation units, including the AVX-512 FFT and kernels) and
@@ -88,7 +101,7 @@ did not. That is exactly the comparison Decision #28's arbiter relies on.
 Tajasarus x86 rows are `-O3`, so rows from the two Zen 5 boxes are not
 comparable until re-measured.
 
-**Proposal (not applied; owner decision because it moves baselines):**
+**Proposal (applied 2026-09-26, see the banner above):**
 
 1. **Per-target optimization for the runtime libraries only.** Add a
    `tessera_runtime_library_optimization(<target>)` helper under `cmake/`. It

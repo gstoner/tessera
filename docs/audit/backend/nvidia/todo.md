@@ -106,6 +106,11 @@ against the reference VJP.
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory
 lives); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+
+**Applied 2026-09-26.** The `-O2` runtime-library helper and the
+`runtime_library_build.json` record landed. Status and the owed re-measurement
+live in the x86 queue entry. Parity is not claimed on this backend: its rows
+need re-recording on its own box before this backend's numbers change.
 Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
 
 **Finding (NVIDIA).** On The-Super-Bear, `build/`, `build-nvidia-cuda/` (the

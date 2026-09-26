@@ -39,3 +39,21 @@ def test_a_missing_or_malformed_record_fails_loudly(tmp_path) -> None:
 ])
 def test_is_optimized(level, optimized) -> None:
     assert is_optimized(level) is optimized
+
+
+def test_record_for_library_walks_to_its_build_tree(tmp_path) -> None:
+    from tessera.compiler.runtime_library_build import record_for_library
+    _write(tmp_path, {"schema": "tessera.runtime_library_build.v1", "cmake_build_type": "",
+                      "cxx_compiler": "GNU 15",
+                      "libraries": {"tessera_x86_elementwise": "O2 (runtime-library default: tree has no build type)"}})
+    library = tmp_path / "src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so"
+    library.parent.mkdir(parents=True)
+    library.write_bytes(b"")
+    stamp = record_for_library(library, "tessera_x86_elementwise")
+    assert stamp["optimized"] is True and stamp["target"] == "tessera_x86_elementwise"
+    with pytest.raises(RuntimeLibraryBuildError, match="does not describe"):
+        record_for_library(library, "tessera_x86_base")
+    stray = tmp_path.parent / f"{tmp_path.name}-override.so"
+    stray.write_bytes(b"")
+    with pytest.raises(RuntimeLibraryBuildError, match="cannot be recorded"):
+        record_for_library(stray, "tessera_x86_elementwise")

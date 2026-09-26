@@ -101,7 +101,7 @@ runtime ABI):
 | f16 / bf16 | fp32 | **admitted** (unchanged) | sequential fp32 FMA chain | 1.2e-06 - 2.3e-06 |
 | f16 | fp16 | **admitted (new)** | sequential fp16 FMA chain, every step rounded to fp16 | 1.3e-02 - 1.8e-02 |
 | bf16 | fp16 | **admitted (new)** | fp32 inside each 8-deep MMA, RNE to fp16 after every MMA | 5.6e-03 |
-| f32 | fp16 | admitted in the IR lane only (the TILE-1 ABI takes 16-bit operands) | same model as bf16 x fp16 (probe only) | 6.7e-03 |
+| f32 | fp16 | admitted in the IR lane only (the TILE-1 ABI takes 16-bit operands) | same model as bf16 x fp16 -- re-derived by a committed hand-written-kernel test (`test_f32_storage_fp16_accumulator_is_bit_exact_with_its_model`); no end-to-end route | 6.7e-03 |
 | any | bf16 | **refused** `APPLE_SIMDGROUP_ACCUM_UNSUPPORTED` / `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR` | compiles, but is fp32 accumulation over the whole K **truncated (RTZ)** to bf16 at `simdgroup_store` -- not bf16 accumulation | n/a |
 | any | int32 etc. | **refused** | no integer `simdgroup_matrix` (does not compile) | n/a |
 
@@ -171,12 +171,56 @@ that does not accumulate in those types (and whose op refuses them).
   and `APPLE_CANONICAL_GEMM_DTYPE_UNSUPPORTED` texts corrected. Pass metadata
   for `tessera-matmul-to-apple-simdgroup` added.
 
+**Pre-PR review fixes (2026-09-26, same host, device tests unsandboxed).**
+
+- **P1-1 (TILE-1 double rounding).** `TileToApple` checked only the
+  accumulator, so bf16 x bf16 -> bf16 with `accum = "fp16"` dispatched and
+  returned fp16-precision values in a bf16-declared tensor. The
+  accumulator -> result rule now lives in one helper
+  (`appleAccumulatorResultRefusal`) used by both `TileToApple` and
+  `MatmulToAppleSimdgroup`; f16 -> bf16 is refused in both
+  (`apple_tile_simdgroup_accum_invalid.mlir`,
+  `test_value_lane_refuses_an_fp16_accumulator_into_a_bf16_result`).
+  **Related, user-visible, fixed:** the TILE-1 value lane returned the
+  kernel's fp32 output buffer for every declared f16/bf16 result -- a
+  different dtype and unrounded values. `TileToApple` now stamps
+  `tessera_apple.result_dtype` (the canonical route stamps its f32
+  accumulator type) and the dispatcher returns that dtype, rounded once
+  (RNE) from the fp32 accumulator -- the same single rounding the IR lane's
+  epilogue performs -- and refuses a call without it
+  (`test_value_lane_returns_the_declared_result_dtype_rounded_once`, bit-exact
+  for f16 and bf16). The driver also now records a value-pipeline failure's
+  first `error:` line instead of the trailing `note:`, which had dropped every
+  named refusal's code.
+- **P1-2 (front-door carrier).** `materialize_matmul_accumulators` reads
+  dict and `primitive_coverage.NumericPolicy` carriers, refuses any other
+  shape with `APPLE_ACCUM_POLICY_UNRECOGNIZED` (recorded as the value-mode
+  error), and stamps the registered fp32 default only for f16/bf16/f32/f64
+  operands (an int8 matmul gets nothing and the backend refuses it, named).
+  `graph_ir.NumericPolicy` is refused on purpose: its `accum` defaults to
+  "f32", so a defaulted value would read as declared; no producer sets
+  `IROp.numeric_policy` to it today.
+- **P1-3 (hint).** `APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED` now says fp16
+  accumulation has a route only on TILE-1 and only for an f16/bf16 *result*
+  (in practice f16 -> f16, since fp16 -> bf16 is refused), and that an
+  f32-result matmul declaring fp16 (e.g. f16 x f16 -> f32) has **no** Apple
+  GPU route today.
+- **P2.** The raw MSL emitters and validators take no default accumulator.
+  One spelling map: Python uses `tessera.dtype.canonicalize_dtype`; C++
+  `appleAccumulatorType` accepts exactly its fp32/fp16/bf16 spellings
+  (case-folded), drift-gated by
+  `test_apple_accumulator_spellings_match_tessera_dtype`. A
+  `numeric_policy.storage` that contradicts the operands is refused
+  (`APPLE_SIMDGROUP_STORAGE_MISMATCH`) in `MatmulToAppleSimdgroup`,
+  `TileToApple` and `CanonicalGemmToAppleGPU`.
+
 **Still open (owned here, APPLE-ACCUM-1 follow-ups).**
 
 - The shared `TilingPass` forms the canonical nest only for f32/i32 result
   types (the accumulator rides in the result type), so an fp16 accumulator
-  cannot reach the canonical-GEMM route; it reaches Apple through the TILE-1
-  value lane. Changing that is a shared Tile contract (sibling impact on every
+  cannot reach the canonical-GEMM route; it reaches Apple only through the
+  TILE-1 value lane, and only for f16/bf16 results -- f16 x f16 -> f32 with
+  accum=fp16 has no Apple GPU route. Changing that is a shared Tile contract (sibling impact on every
   canonical-GEMM consumer), not an Apple change.
 - `emit/apple_msl.py` fused-region kernels (`FusedRegion`, from the
   arch-agnostic `fusion_core`) accumulate in fp32 unconditionally and

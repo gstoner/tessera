@@ -3073,6 +3073,41 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="APPLE-ACCUM-1",
     ),
     DiagnosticCode(
+        code="APPLE_SIMDGROUP_STORAGE_MISMATCH",
+        pass_origin="MatmulToAppleSimdgroup / TileToApple (TILE-1 value call) / CanonicalGemmToAppleGPU",
+        severity="error",
+        summary=(
+            "A declared numeric_policy.storage names a different element type "
+            "than the GEMM's operands (APPLE-ACCUM-1 review)."
+        ),
+        fix_hint=(
+            "Storage lives on the tensor (Decision #15a); make numeric_policy."
+            "storage name the operands' element type (fp16/f16/float16/half, "
+            "bf16/bfloat16, fp32/f32/float32/float) or drop it. The lowering "
+            "refuses rather than believing one of the two."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
+        sprint="APPLE-ACCUM-1",
+    ),
+    DiagnosticCode(
+        code="APPLE_ACCUM_POLICY_UNRECOGNIZED",
+        language="python",
+        pass_origin="driver.materialize_matmul_accumulators",
+        severity="error",
+        summary=(
+            "A matmul's IROp.numeric_policy carrier has a shape the Apple "
+            "value-mode front door cannot read an accumulator from."
+        ),
+        fix_hint=(
+            "Carry the policy as a dict or a primitive_coverage.NumericPolicy, "
+            "or render it explicitly as the op's numeric_policy kwarg. "
+            "graph_ir.NumericPolicy is refused on purpose: its accum defaults "
+            "to f32, so a defaulted value would read as declared (#21a)."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
+        sprint="APPLE-ACCUM-1",
+    ),
+    DiagnosticCode(
         code="APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED",
         language="python",
         pass_origin="msl_gemm_emit",
@@ -3293,7 +3328,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         code="APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED", pass_origin="CanonicalGemmToAppleGPU",
         severity="error",
         summary="The canonical reduction's accumulator is refused: a declared numeric_policy.accum disagrees with the nest's loop-carried accumulator, or that accumulator has no faithful simdgroup form (APPLE-ACCUM-1).",
-        fix_hint="The shared tiler carries the accumulator in the nest's result type (fp32/i32 today); declare the accumulator the nest carries. fp16 accumulation reaches Apple through the TILE-1 value lane (tile.matmul with numeric_policy.accum = fp16), not through an fp32 canonical nest.",
+        fix_hint="The shared tiler carries the accumulator in the nest's result type (f32/i32 only), so this route accumulates in fp32; declare accum = fp32 here. fp16 accumulation has a route only on the TILE-1 value lane, and only when the matmul's RESULT is f16 or bf16 (tile.matmul f16/bf16 storage, numeric_policy.accum = fp16; an f16 accumulator into a bf16 result is itself refused as a double rounding, so in practice f16 storage -> f16 result). An f32-result matmul declaring accum = fp16 (e.g. f16 x f16 -> f32) has NO Apple GPU route today: TILE-1 selects only f16/bf16 results and this canonical route is fp32-only.",
         spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1", sprint="APPLE-TILE-2",
     ),
     # APPLE-ATTN-STREAM-1 — StreamingAttentionToAppleGPUPass.

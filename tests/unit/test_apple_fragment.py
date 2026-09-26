@@ -108,6 +108,13 @@ def test_value_lane_dispatcher_refuses_a_call_without_an_accumulator():
         _dispatch_gpu_tile_simdgroup_gemm([a, a], call, np)
     with pytest.raises(AppleFragmentError, match="UNSUPPORTED_ACCUMULATOR"):
         _dispatch_gpu_tile_simdgroup_gemm([a, a], {**call, "accumulate": "bf16"}, np)
+    # The declared result dtype is not guessed either (APPLE-ACCUM-1 review).
+    with pytest.raises(ValueError, match="result_dtype"):
+        _dispatch_gpu_tile_simdgroup_gemm([a, a], {**call, "accumulate": "fp32"}, np)
+    b16 = {"symbol": "tessera_apple_gpu_tile_simdgroup_gemm_bf16",
+           "accumulate": "fp16", "result_dtype": "bf16"}
+    with pytest.raises(ValueError, match="APPLE_SIMDGROUP_ACCUM_UNSUPPORTED"):
+        _dispatch_gpu_tile_simdgroup_gemm([a, a], b16, np)
 
 
 def test_raw_emitter_cannot_synthesize_a_refused_accumulator():
@@ -175,7 +182,7 @@ def test_target_selected_fragment_materializes_steel_msl_with_ragged_store(dtype
         artifact.resources.target_threadgroup_capacity_bytes)
     assert validate_steel_gemm_structure(
         artifact.msl, dtype=artifact.fragment.storage_dtype,
-        partial_edge=True, double_buffer=True).ok
+        partial_edge=True, double_buffer=True, accum="f32").ok
     assert "threadgroup_barrier(mem_flags::mem_threadgroup)" in artifact.msl
     assert "copy only valid elements" in artifact.msl
 

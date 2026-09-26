@@ -938,13 +938,46 @@ struct LowerTileToAppleGPUPass
                 signalPassFailure();
                 return;
               }
+              // The same storage and accumulator->result rules the IR lane
+              // (MatmulToAppleSimdgroup) enforces, from the same helpers: a
+              // policy storage that contradicts the operands, or an fp16
+              // accumulator returned as bf16 (a second rounding), is refused
+              // here rather than dispatched.
+              Type storageElem = et;
+              if (op->getNumOperands() > 0)
+                if (auto st = llvm::dyn_cast<ShapedType>(op->getOperand(0).getType()))
+                  storageElem = st.getElementType();
+              std::string storageRefusal = appleDeclaredStorageRefusal(op, storageElem);
+              if (!storageRefusal.empty()) {
+                op->emitError("APPLE_SIMDGROUP_STORAGE_MISMATCH: apple_gpu TILE-1 "
+                              "simdgroup GEMM: ")
+                    << storageRefusal;
+                signalPassFailure();
+                return;
+              }
+              std::string resultRefusal = appleAccumulatorResultRefusal(accElem, et);
+              if (!resultRefusal.empty()) {
+                op->emitError("APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: apple_gpu TILE-1 "
+                              "simdgroup GEMM (storage ")
+                    << storageElem << ", accum=\"" << declared.getValue()
+                    << "\"): " << resultRefusal;
+                signalPassFailure();
+                return;
+              }
               StringRef accumName = accElem.isF16() ? "fp16" : "fp32";
+              // The declared result element type rides to the runtime so the
+              // dispatcher returns that dtype (rounded once) instead of the
+              // kernel's fp32 output buffer.
+              StringRef resultName = et.isF16() ? "fp16" : "bf16";
               emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
                                  "tile_simdgroup_gemm", symbol,
                                  "tile_simdgroup_msl", "executable", "Metal",
                                  {builder.getNamedAttr(
-                                     "tessera_apple.accumulate",
-                                     builder.getStringAttr(accumName))});
+                                      "tessera_apple.accumulate",
+                                      builder.getStringAttr(accumName)),
+                                  builder.getNamedAttr(
+                                      "tessera_apple.result_dtype",
+                                      builder.getStringAttr(resultName))});
               ++ordinal;
               continue;
             }

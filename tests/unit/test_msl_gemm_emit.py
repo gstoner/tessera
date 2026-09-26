@@ -24,8 +24,8 @@ from tessera.compiler.tile_rasterization import RASTER_GROUP_CHOICES, RasterOrde
 
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
 def test_emit_and_validate_roundtrip(dtype):
-    msl = emit_simdgroup_gemm_msl(dtype, 8, 8, 8)
-    v = validate_msl_gemm_structure(msl, dtype=dtype)
+    msl = emit_simdgroup_gemm_msl(dtype, 8, 8, 8, accum="f32")
+    v = validate_msl_gemm_structure(msl, dtype=dtype, accum="f32")
     assert v.ok, v.reasons
     # The documented simdgroup_matrix sequence is present.
     assert "simdgroup_multiply_accumulate(acc, a, b, acc)" in msl
@@ -34,7 +34,7 @@ def test_emit_and_validate_roundtrip(dtype):
 
 
 def test_accumulator_is_fp32_for_low_precision_inputs():
-    msl = emit_simdgroup_gemm_msl("bf16", 8, 8, 8)
+    msl = emit_simdgroup_gemm_msl("bf16", 8, 8, 8, accum="f32")
     # bf16 inputs, fp32 accumulator (the production / numeric_policy pattern).
     assert "simdgroup_matrix<bfloat, 8, 8> a, b" in msl
     assert "simdgroup_matrix<float, 8, 8> acc" in msl
@@ -61,24 +61,24 @@ def test_tile_shape_validity(m, n, k, ok):
         # The single-fragment emitter only accepts m==n==8; larger valid tiles are
         # the steel (multi-fragment) emitter's job.
         if m == n == 8:
-            msl = emit_simdgroup_gemm_msl("f16", m, n, k)
+            msl = emit_simdgroup_gemm_msl("f16", m, n, k, accum="f32")
         else:
-            msl = emit_steel_gemm_msl("f16", m, n, k)
+            msl = emit_steel_gemm_msl("f16", m, n, k, accum="f32")
         assert validate_msl_gemm_structure(
-            msl, dtype="f16", shape=MslGemmShape(m, n, k)).ok
+            msl, dtype="f16", shape=MslGemmShape(m, n, k), accum="f32").ok
     else:
         with pytest.raises(ValueError):
-            emit_simdgroup_gemm_msl("f16", m, n, k)
+            emit_simdgroup_gemm_msl("f16", m, n, k, accum="f32")
 
 
 def test_single_fragment_emitter_rejects_multi_fragment_tile():
     # m/n > 8 would silently compute only the top-left 8x8 -> rejected (use steel).
     for (m, n) in [(16, 8), (8, 16), (32, 32)]:
         with pytest.raises(ValueError, match="single-output-fragment"):
-            emit_simdgroup_gemm_msl("f16", m, n, 8)
+            emit_simdgroup_gemm_msl("f16", m, n, 8, accum="f32")
     # k > 8 is fine (the K-loop handles it).
-    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 32)
-    assert validate_msl_gemm_structure(msl, dtype="f16").ok
+    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 32, accum="f32")
+    assert validate_msl_gemm_structure(msl, dtype="f16", accum="f32").ok
 
 
 def test_fragment_size_is_8():
@@ -86,30 +86,30 @@ def test_fragment_size_is_8():
 
 
 def test_validator_rejects_corrupted_msl():
-    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 8)
+    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 8, accum="f32")
     broken = msl.replace("simdgroup_multiply_accumulate", "bogus_mma")
-    v = validate_msl_gemm_structure(broken, dtype="f16")
+    v = validate_msl_gemm_structure(broken, dtype="f16", accum="f32")
     assert not v.ok
     assert any("simdgroup_multiply_accumulate" in r for r in v.reasons)
 
 
 def test_validator_rejects_wrong_dtype_fragment():
     # Emitted for f16 but validated as bf16 → fragment dtype mismatch caught.
-    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 8)
-    v = validate_msl_gemm_structure(msl, dtype="bf16")
+    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 8, accum="f32")
+    v = validate_msl_gemm_structure(msl, dtype="bf16", accum="f32")
     assert not v.ok
     assert any("bfloat" in r for r in v.reasons)
 
 
 def test_unsupported_dtype_raises():
     with pytest.raises(ValueError):
-        emit_simdgroup_gemm_msl("int8", 8, 8, 8)
+        emit_simdgroup_gemm_msl("int8", 8, 8, 8, accum="f32")
 
 
 def test_metal_compile_is_skip_clean_without_toolchain():
     # On this CommandLineTools-only arm64 Mac the offline `metal` compiler is
     # absent, so rung-3 must skip cleanly (never error), like ptxas.
-    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 8)
+    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 8, accum="f32")
     r = metal_compile(msl, dtype="f16")
     assert r.status in ("skipped", "ok", "failed")
     # If skipped, it's because the toolchain is absent — not a crash.
@@ -121,13 +121,13 @@ def test_metal_compile_is_skip_clean_without_toolchain():
 
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
 def test_steel_emit_and_validate(dtype):
-    msl = emit_steel_gemm_msl(dtype, 32, 32, 16)
-    v = validate_steel_gemm_structure(msl, dtype=dtype)
+    msl = emit_steel_gemm_msl(dtype, 32, 32, 16, accum="f32")
+    v = validate_steel_gemm_structure(msl, dtype=dtype, accum="f32")
     assert v.ok, v.reasons
 
 
 def test_steel_has_production_shape_features():
-    msl = emit_steel_gemm_msl("bf16", 32, 32, 16)
+    msl = emit_steel_gemm_msl("bf16", 32, 32, 16, accum="f32")
     # 4x4 output fragments per threadgroup.
     assert "simdgroup_matrix<float, 8, 8> acc[4 * 4]" in msl
     # threadgroup staging + barrier.
@@ -142,7 +142,7 @@ def test_steel_has_production_shape_features():
 
 def test_steel_fragment_count_scales_with_tile():
     # 64x32 tile -> 8x4 = 32 output fragments.
-    msl = emit_steel_gemm_msl("f16", 64, 32, 16)
+    msl = emit_steel_gemm_msl("f16", 64, 32, 16, accum="f32")
     assert "simdgroup_matrix<float, 8, 8> acc[8 * 4]" in msl
 
 
@@ -151,8 +151,8 @@ def test_steel_fragment_count_scales_with_tile():
 ])
 def test_steel_nondefault_raster_uses_the_shared_block_mapping(order, group):
     """The Metal source changes tile assignment, not storage or launch shape."""
-    msl = emit_steel_gemm_msl("f16", 32, 32, 16, raster_order=order, raster_group=group)
-    assert validate_steel_gemm_structure(msl, dtype="f16").ok
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, raster_order=order, raster_group=group, accum="f32")
+    assert validate_steel_gemm_structure(msl, dtype="f16", accum="f32").ok
     assert "const uint grid_m = (M + BM - 1u) / BM;" in msl
     assert "const uint grid_n = (N + BN - 1u) / BN;" in msl
     assert "tgid.y * grid_n + tgid.x" in msl
@@ -161,7 +161,7 @@ def test_steel_nondefault_raster_uses_the_shared_block_mapping(order, group):
 
 
 def test_steel_row_major_keeps_the_established_direct_coordinates():
-    msl = emit_steel_gemm_msl("f16", 32, 32, 16)
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, accum="f32")
     assert "const uint m0 = tgid.y * BM;" in msl
     assert "const uint n0 = tgid.x * BN;" in msl
     assert "const uint grid_m" not in msl
@@ -184,10 +184,10 @@ def test_every_reachable_steel_raster_consumes_the_native_rank2_plan(monkeypatch
             calls.clear()
             msl = emitter.emit_steel_gemm_msl(
                 "f16", 32, 32, 16, partial_edge=True,
-                raster_order=order, raster_group=group,
+                raster_order=order, raster_group=group, accum="f32",
             )
             assert validate_steel_gemm_structure(
-                msl, dtype="f16", partial_edge=True
+                msl, dtype="f16", partial_edge=True, accum="f32"
             ).ok
             assert {"K", "N", "BK", "BN", "F"} <= {
                 leading_dimension for _, _, leading_dimension in calls
@@ -196,13 +196,13 @@ def test_every_reachable_steel_raster_consumes_the_native_rank2_plan(monkeypatch
 
 def test_steel_rejects_non_fragment_multiple_tile():
     with pytest.raises(ValueError):
-        emit_steel_gemm_msl("f16", 20, 32, 16)   # BM not a multiple of 8
+        emit_steel_gemm_msl("f16", 20, 32, 16, accum="f32")   # BM not a multiple of 8
 
 
 def test_steel_validator_catches_dropped_staging():
-    msl = emit_steel_gemm_msl("f16", 32, 32, 16)
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, accum="f32")
     broken = msl.replace("threadgroup_barrier(mem_flags::mem_threadgroup)", "/*dropped*/")
-    v = validate_steel_gemm_structure(broken, dtype="f16")
+    v = validate_steel_gemm_structure(broken, dtype="f16", accum="f32")
     assert not v.ok
     assert any("barrier" in r for r in v.reasons)
 
@@ -218,7 +218,7 @@ def test_rung3_simdgroup_gemm_compiles_on_metal_host(dtype):
     from tests._support.apple import require_metal_compiler
 
     require_metal_compiler()
-    msl = emit_simdgroup_gemm_msl(dtype, 8, 8, 8)
+    msl = emit_simdgroup_gemm_msl(dtype, 8, 8, 8, accum="f32")
     r = metal_compile(msl, dtype=dtype)
     assert r.status == "ok", f"{dtype}: {r.detail}"
 
@@ -230,7 +230,7 @@ def test_rung3_steel_gemm_compiles_on_metal_host(dtype):
     from tests._support.apple import require_metal_compiler
 
     require_metal_compiler()
-    msl = emit_steel_gemm_msl(dtype, 32, 32, 16)
+    msl = emit_steel_gemm_msl(dtype, 32, 32, 16, accum="f32")
     r = metal_compile(msl, dtype=dtype)
     assert r.status == "ok", f"{dtype}: {r.detail}"
 
@@ -240,13 +240,13 @@ def test_rung3_steel_gemm_compiles_on_metal_host(dtype):
 def test_steel_default_path_unchanged():
     # The refinements are opt-in: default output keeps the whole-fragment store and
     # single-buffered staging (no scratch / no ping-pong).
-    msl = emit_steel_gemm_msl("bf16", 32, 32, 16)
+    msl = emit_steel_gemm_msl("bf16", 32, 32, 16, accum="f32")
     assert "Cs[" not in msl and "As[2]" not in msl
 
 
 def test_steel_partial_edge_store():
-    msl = emit_steel_gemm_msl("f16", 32, 32, 16, partial_edge=True)
-    v = validate_steel_gemm_structure(msl, dtype="f16", partial_edge=True)
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, partial_edge=True, accum="f32")
+    v = validate_steel_gemm_structure(msl, dtype="f16", partial_edge=True, accum="f32")
     assert v.ok, v.reasons
     assert "threadgroup float Cs[64]" in msl              # 8x8 scratch
     assert "uint rows = min(F, M - cr), cols = min(F, N - cc)" in msl  # valid-element bounds
@@ -256,35 +256,35 @@ def test_steel_partial_edge_store():
 
 
 def test_steel_double_buffer_staging():
-    msl = emit_steel_gemm_msl("f16", 32, 32, 16, double_buffer=True)
-    v = validate_steel_gemm_structure(msl, dtype="f16", double_buffer=True)
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, double_buffer=True, accum="f32")
+    v = validate_steel_gemm_structure(msl, dtype="f16", double_buffer=True, accum="f32")
     assert v.ok, v.reasons
     assert "threadgroup half As[2][512]" in msl           # ping-pong slots
     assert "uint buf = 0u" in msl                        # prologue index
     assert "uint nbuf = buf ^ 1u" in msl                 # alternate slot
     # double-buffer drops to ONE barrier per K-step (prologue + 1/iter) vs two.
-    single = emit_steel_gemm_msl("f16", 32, 32, 16)
+    single = emit_steel_gemm_msl("f16", 32, 32, 16, accum="f32")
     assert msl.count("threadgroup_barrier") < single.count("threadgroup_barrier") * 2
 
 
 def test_steel_partial_edge_branch_is_threadgroup_uniform():
     # The full/edge test must be keyed on tgid + uniform loop counters (not per-thread
     # data) so the scratch barriers are hit uniformly — never in divergent control flow.
-    msl = emit_steel_gemm_msl("bf16", 16, 24, 16, partial_edge=True)
+    msl = emit_steel_gemm_msl("bf16", 16, 24, 16, partial_edge=True, accum="f32")
     assert "if (cr + F <= M && cc + F <= N) {" in msl    # uniform branch (m0/n0/im/in)
 
 
 def test_steel_refinements_compose():
-    msl = emit_steel_gemm_msl("bf16", 16, 24, 16, partial_edge=True, double_buffer=True)
+    msl = emit_steel_gemm_msl("bf16", 16, 24, 16, partial_edge=True, double_buffer=True, accum="f32")
     v = validate_steel_gemm_structure(
-        msl, dtype="bf16", partial_edge=True, double_buffer=True)
+        msl, dtype="bf16", partial_edge=True, double_buffer=True, accum="f32")
     assert v.ok, v.reasons
 
 
 def test_steel_validator_catches_missing_partial_scratch():
-    msl = emit_steel_gemm_msl("f16", 32, 32, 16, partial_edge=True).replace(
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, partial_edge=True, accum="f32").replace(
         "threadgroup float Cs[64];", "/* no scratch */")
-    v = validate_steel_gemm_structure(msl, dtype="f16", partial_edge=True)
+    v = validate_steel_gemm_structure(msl, dtype="f16", partial_edge=True, accum="f32")
     assert not v.ok
     assert any("partial-edge" in r for r in v.reasons)
 
@@ -299,6 +299,6 @@ def test_rung3_steel_refinements_compile_on_metal_host(partial_edge, double_buff
 
     require_metal_compiler()
     msl = emit_steel_gemm_msl("f16", 32, 32, 16,
-                              partial_edge=partial_edge, double_buffer=double_buffer)
+                              partial_edge=partial_edge, double_buffer=double_buffer, accum="f32")
     r = metal_compile(msl, dtype="f16")
     assert r.status == "ok", r.detail

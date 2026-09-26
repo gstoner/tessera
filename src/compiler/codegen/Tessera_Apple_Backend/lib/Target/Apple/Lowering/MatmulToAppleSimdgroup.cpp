@@ -137,21 +137,28 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
       refused = true;
       return failure();
     }
-    // Result conversions with a defined, single rounding (or none): equal
-    // types store as-is; f16 -> f32 widens exactly; f32 -> f16/bf16 rounds
-    // once. f16 -> bf16 would be a second rounding of an already-rounded
-    // accumulator, so it is refused rather than silently double-rounded.
-    const bool sameResult = resElem == accElem;
-    const bool widen = accElem.isF16() && resElem.isF32();
-    const bool narrow = accElem.isF32() && (resElem.isF16() || resElem.isBF16());
-    if (!sameResult && !widen && !narrow) {
-      op->emitOpError("APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: apple_gpu has no "
-                      "single-rounding epilogue from an ")
-          << accElem << " accumulator to an " << resElem
-          << " result (storage " << elem << ")";
+    // A declared numeric_policy.storage must name the operands' element type
+    // (Decision #15a keeps storage on the tensor; a contradicting policy is
+    // refused rather than one of the two being silently believed).
+    const std::string storageRefusal = appleDeclaredStorageRefusal(op, elem);
+    if (!storageRefusal.empty()) {
+      op->emitOpError("APPLE_SIMDGROUP_STORAGE_MISMATCH: ") << storageRefusal;
       refused = true;
       return failure();
     }
+    // Result conversions with a defined, single rounding (or none) -- the
+    // rule is shared with the TILE-1 value lane (appleAccumulatorResultRefusal)
+    // so the two routes cannot disagree about a double rounding.
+    const std::string resultRefusal = appleAccumulatorResultRefusal(accElem, resElem);
+    if (!resultRefusal.empty()) {
+      op->emitOpError("APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: apple_gpu simdgroup "
+                      "lowering (storage ")
+          << elem << ", accum=\"" << declared.getValue() << "\"): " << resultRefusal;
+      refused = true;
+      return failure();
+    }
+    const bool widen = accElem.isF16() && resElem.isF32();
+    const bool narrow = accElem.isF32() && (resElem.isF16() || resElem.isBF16());
 
     Location loc = op->getLoc();
     const int64_t MP = ((M + kExtent - 1) / kExtent) * kExtent;

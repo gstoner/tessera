@@ -289,6 +289,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "APPLE_CANONICAL_GEMM_SHAPE_UNSUPPORTED",
             "APPLE_CANONICAL_GEMM_DTYPE_UNSUPPORTED",
             "APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED",
+            "APPLE_SIMDGROUP_STORAGE_MISMATCH",
         ),
         pass_kind="lowering",
         sprint="APPLE-TILE-2",
@@ -793,8 +794,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "barriers). APPLE-ACCUM-1: the accumulator is read from the op's "
             "`numeric_policy.accum` -- fp32 or fp16, each measured bit-exact "
             "on the M1 Max -- and carried as the `simdgroup_matrix` element "
-            "type; a missing accumulator, bf16/integer accumulators and "
-            "double-rounding result conversions are refused, named."
+            "type; a missing accumulator, bf16/integer accumulators, "
+            "double-rounding result conversions and a numeric_policy.storage "
+            "that contradicts the operands are refused, named."
         ),
         input_dialects=("tessera", "func"),
         output_dialects=("tessera_apple", "scf", "memref", "arith", "bufferization"),
@@ -802,6 +804,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         diagnostic_codes=(
             "APPLE_SIMDGROUP_ACCUM_MISSING",
             "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED",
+            "APPLE_SIMDGROUP_STORAGE_MISMATCH",
         ),
         pass_kind="lowering",
         sprint="APPLE-ACCUM-1",

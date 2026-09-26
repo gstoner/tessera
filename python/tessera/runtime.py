@@ -38308,10 +38308,29 @@ def _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np):
         double_buffer=(contract is None or contract["stage_depth"] == 2),
         staging_contract=contract,
     )
+    # The kernel writes an fp32 C (the TILE-1 ABI). The program's declared
+    # result dtype rides as `tessera_apple.result_dtype`; returning the fp32
+    # buffer for a declared f16/bf16 result handed users a different dtype and
+    # unrounded values (APPLE-ACCUM-1 review). Round ONCE here (RNE) to the
+    # declared type: an fp32 accumulator -> f16/bf16 is the same single rounding
+    # MatmulToAppleSimdgroup's epilogue performs, and an fp16 accumulator -> f16
+    # is exact. fp16 -> bf16 never reaches here (refused by TileToApple).
+    result_dtype = call.get("result_dtype")
+    result_np = {"fp16": np.float16, "fp32": np.float32}.get(str(result_dtype))
+    if result_dtype == "bf16":
+        result_np = _bfloat16_dtype()
+    if result_np is None:
+        raise ValueError(
+            "tile_simdgroup_gemm call carries no usable tessera_apple.result_dtype "
+            f"({result_dtype!r}); the declared result dtype is not guessed")
+    if result_dtype == "bf16" and accumulate not in ("fp32", "f32", "float32"):
+        raise ValueError(
+            "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: a bf16 result needs an fp32 "
+            f"accumulator (got {accumulate!r}); anything else rounds twice")
     out, native = dispatch_apple_simdgroup_tile_f16(art, a, b)
     if not native:
         raise ValueError("TILE-1 simdgroup ABI returned non-native dispatch")
-    return out
+    return np.asarray(out, dtype=np.float32).astype(result_np)
 
 
 def _dispatch_gpu_native_sparse_attn(inputs, call, np):

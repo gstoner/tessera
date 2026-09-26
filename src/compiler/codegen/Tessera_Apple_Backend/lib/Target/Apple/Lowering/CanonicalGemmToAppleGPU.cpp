@@ -191,6 +191,12 @@ struct CanonicalGemmToAppleGPUPass
       // type (the root's result); a `numeric_policy.accum` on the K step, when
       // present, must name the same type -- a disagreement means the nest does
       // not compute what the program declared.
+      const std::string storageRefusal = appleDeclaredStorageRefusal(matmul, storage);
+      if (!storageRefusal.empty()) {
+        root->emitOpError("APPLE_SIMDGROUP_STORAGE_MISMATCH: ") << storageRefusal;
+        signalPassFailure();
+        return;
+      }
       Type accElem = resultType.getElementType();
       if (StringAttr declared = appleDeclaredAccumulator(matmul)) {
         Type declaredType = appleAccumulatorType(&getContext(), declared.getValue());
@@ -232,6 +238,10 @@ struct CanonicalGemmToAppleGPUPass
       state.addAttribute("tessera_apple.canonical_k_loop",
                          builder.getBoolAttr(true));
       state.addAttribute("tessera_apple.accumulate",
+                         builder.getStringAttr(accumName));
+      // The canonical nest's result IS its loop-carried accumulator, so the
+      // dispatcher returns it unrounded in that type.
+      state.addAttribute("tessera_apple.result_dtype",
                          builder.getStringAttr(accumName));
       // Carry the loop's own tile decision rather than re-deriving one.
       for (StringRef tileAttr :

@@ -181,7 +181,7 @@ def emit_simdgroup_gemm_msl(
     n: int = 8,
     k: int = 8,
     *,
-    accum: str = "f32",
+    accum: str,
     entry: str | None = None,
 ) -> str:
     """Emit a structurally-valid MSL ``simdgroup_matrix`` GEMM ``C = A·B`` for an
@@ -291,7 +291,7 @@ def emit_steel_gemm_msl(
     bn: int = 32,
     bk: int = 16,
     *,
-    accum: str = "f32",
+    accum: str,
     entry: str | None = None,
     partial_edge: bool = False,
     double_buffer: bool = False,
@@ -758,7 +758,7 @@ class MslValidation:
 
 
 def validate_msl_gemm_structure(
-    msl: str, *, dtype: str = "bf16", accum: str = "f32",
+    msl: str, *, dtype: str = "bf16", accum: str,
     shape: MslGemmShape | None = None,
 ) -> MslValidation:
     """Host-free rung-2.5 check: the emitted MSL carries the documented
@@ -784,7 +784,7 @@ def validate_msl_gemm_structure(
 
 
 def validate_steel_gemm_structure(
-    msl: str, *, dtype: str = "bf16", accum: str = "f32",
+    msl: str, *, dtype: str = "bf16", accum: str,
     partial_edge: bool = False, double_buffer: bool = False,
 ) -> MslValidation:
     """Host-free rung-2.5 check for the steel-structured emit: on top of the base

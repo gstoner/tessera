@@ -88,18 +88,26 @@ def _rocm_identity(device):
 
 
 def device_clock_calibration(*, device, logical, clean_program, clean_binding, raw, grid, block,
-                             clean_event_ms, reset, verify, compiler, llvm_bin, output, run_id):
+                             reset, verify, compiler, llvm_bin, output, run_id):
     """Calibrate one process's clean SSD image with compiler-built device-clock markers.
 
-    Each window: reset the span, record a HIP event, launch the marker, launch
-    the EXACT clean image LAUNCHES times, launch the marker, record a HIP
-    event. The two markers share the span buffer, so it runs from the first
-    marker's start to the second marker's end on the device's constant-rate
-    clock -- the same stream interval the HIP events bracket, measured
-    independently of the event API. The clean image is never modified (an
-    in-kernel stamp was measured to change its codegen; see
+    Each bracketed window: reset the span, record a HIP event, launch the
+    marker, launch the EXACT clean image LAUNCHES times, launch the marker,
+    record a HIP event. The two markers share the span buffer, so it runs from
+    the first marker's start to the second marker's end on the device's
+    constant-rate clock -- the same stream interval the HIP events bracket,
+    measured independently of the event API. The clean image is never modified
+    (an in-kernel stamp was measured to change its codegen; see
     tessera.compiler.native_device_clock). The marker-bracketed / plain event
     ratio is the overhead the packet bounds on both sides.
+
+    Plain windows (the comparison row) are interleaved with the bracketed ones
+    in alternating order, each preceded by the same span-reset + synchronize
+    gap. Measured on gfx1201 (2026-09-26): with the plain windows first and
+    the marker compiled in between, the GPU idled for seconds and the
+    bracketed windows ran at a lower power state (cooperative 16.5 -> 33.8
+    us/launch), so the gate compared two device states, not the markers.
+    Returns ``(packet, plain_ms_per_launch)``.
     """
     from tessera.compiler.native_device_clock import build_device_clock_marker
     from tessera.compiler.profiler_timing import (
@@ -133,27 +141,40 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
         for event in events:
             device.check(device.event_create(ct.byref(event), 0))
         reset()  # outputs to NaN: verify() below then proves these windows computed them
-        device_ns, event_ns, host_ns = [], [], []
-        for _ in range(WINDOWS):
+        device_ns, event_ns, host_ns, plain_ms = [], [], [], []
+
+        def timed_window(bracketed):
             host_span[0], host_span[1] = (1 << 64) - 1, 0
             device.check(device.copy(span, ct.addressof(host_span), ct.sizeof(host_span), 1))
             device.check(device.sync())
             start = time.perf_counter_ns()
             device.check(device.event_record(events[0], None))
-            device.check(device.launch(marker_fn,1,1,1,1,1,1,0,None,marker_argv,None))
+            if bracketed:
+                device.check(device.launch(marker_fn,1,1,1,1,1,1,0,None,marker_argv,None))
             for _ in range(LAUNCHES):
                 device.check(device.launch(clean_binding._bound._function,*grid,*block,shared,None,argv,None))
-            device.check(device.launch(marker_fn,1,1,1,1,1,1,0,None,marker_argv,None))
+            if bracketed:
+                device.check(device.launch(marker_fn,1,1,1,1,1,1,0,None,marker_argv,None))
             device.check(device.event_record(events[1], None))
             device.check(device.event_sync(events[1]))
-            host_ns.append((time.perf_counter_ns() - start) / LAUNCHES)
+            host = (time.perf_counter_ns() - start) / LAUNCHES
             ms = ct.c_float()
             device.check(device.event_elapsed(ct.byref(ms), events[0], events[1]))
+            if not bracketed:
+                plain_ms.append(ms.value / LAUNCHES)
+                return
+            host_ns.append(host)
             event_ns.append(ms.value * 1e6 / LAUNCHES)
             device.check(device.copy(ct.addressof(host_span), span, ct.sizeof(host_span), 2))
             if host_span[0] == (1 << 64) - 1 or host_span[1] <= host_span[0]:
                 raise SystemExit(f'device-clock marker span was not written: {list(host_span)}')
             device_ns.append(wall_clock_ticks_to_ns(host_span[1] - host_span[0], rate.value) / LAUNCHES)
+
+        for window in range(WINDOWS):
+            # Alternate the order so a monotone drift within the process
+            # biases neither side of the overhead ratio.
+            for bracketed in ((False, True) if window % 2 == 0 else (True, False)):
+                timed_window(bracketed)
         verify()
         resources = _resources(device, clean_binding._bound._function)
     finally:
@@ -197,6 +218,8 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
         batch_size=LAUNCHES, warm_state='warm', synchronization='hipEventSynchronize',
         execution_environment=environment, resources={'application': resources},
         environment={'kernel_release': platform.release(), 'per_window_event_ns': event_ns,
+                     'per_window_plain_event_ns': [ms * 1e6 for ms in plain_ms],
+                     'window_protocol': 'interleaved_alternating_plain_bracketed',
                      'per_window_host_ns': host_ns, 'run_id': run_id, 'process_id': os.getpid(),
                      'device_identity': identity})
     isa = _isa_sha256(clean_program.package.image, llvm_bin)
@@ -205,7 +228,7 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
                  calibration_sample_id=sample_id, resources=resources)
     # Same image both times: "instrumented" means measured under marker
     # bracketing, and its duration ratio is the markers' overhead.
-    clean = dict(image, duration_ns=statistics.median(clean_event_ms) * 1e6, instrumented=False)
+    clean = dict(image, duration_ns=statistics.median(plain_ms) * 1e6, instrumented=False)
     probe = dict(image, duration_ns=statistics.median(event_ns), instrumented=True)
     capture = {
         'schema': 'tessera.profiler_rocm_native_capture.v1', 'provider': 'rocprofiler',
@@ -222,7 +245,7 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
     packet = build_rocm_profiler_packet(timing=timing, capture=capture, uninstrumented=clean,
                                         instrumented=probe, source={'source_commit': head, 'worktree_dirty': dirty})
     output.write_text(json.dumps(packet, indent=2) + '\n')
-    return packet
+    return packet, plain_ms
 
 
 def _empty_trace():
@@ -303,17 +326,20 @@ def main():
                 values,shared = binding._bound._launch_size(raw,grid,block)
                 argv = (ct.c_void_p*len(values))(*[ct.cast(ct.byref(v),ct.c_void_p) for v in values])
                 start,end = ct.c_void_p(),ct.c_void_p()
+                # With calibration, the plain windows are taken inside the
+                # calibration, interleaved with the bracketed ones, so both
+                # see one device power state (GFX1201-SSD-CALIBRATION-2026-09-26).
                 device.check(device.event_create(ct.byref(start),0))
                 try:
                     device.check(device.event_create(ct.byref(end),0))
-                    for _ in range(7):
+                    for _ in range(0 if args.device_clock_calibration else WINDOWS):
                         device.check(device.event_record(start,None))
-                        for _ in range(100):
+                        for _ in range(LAUNCHES):
                             device.check(device.launch(binding._bound._function,*grid,*block,shared,None,argv,None))
                         device.check(device.event_record(end,None)); device.check(device.event_sync(end))
                         ms = ct.c_float()
                         device.check(device.event_elapsed(ct.byref(ms),start,end))
-                        timings.append(ms.value/100)
+                        timings.append(ms.value/LAUNCHES)
                 finally:
                     if end.value: device.check(device.event_destroy(end))
                     device.check(device.event_destroy(start))
@@ -327,9 +353,9 @@ def main():
                             result = np.empty_like(value)
                             device.check(device.copy(result.ctypes.data,pointers[5+i],result.nbytes,2))
                             np.testing.assert_allclose(result,expected[i],rtol=1e-5,atol=1e-6)
-                    device_clock_calibration(
+                    _, timings = device_clock_calibration(
                         device=device, logical=logical, clean_program=program, clean_binding=binding,
-                        raw=raw, grid=grid, block=block, clean_event_ms=timings, reset=reset, verify=verify,
+                        raw=raw, grid=grid, block=block, reset=reset, verify=verify,
                         compiler=args.compiler, llvm_bin=_llvm_bin(),
                         output=args.device_clock_calibration, run_id=run_id)
             rows.append(dict(chunk=chunk,binding_ms=bind_ms,checked_call_ms=checked_call_ms,device_event_ms=timings,

@@ -84,8 +84,14 @@ selection 959 vs 959 passed. **No branch-only failure.** The 88 device
 failures are pre-existing on `main` on this box (84 in
 `test_e2e_spine_native.py`: `KeyError: 'nan_mode'`, "requires a supported
 native scheduled reduction", a 9e-06 vs 1e-05 tolerance literal) and are
-owed their own investigation. Also noted: the gate's `compiler` layer
-selects a single test on both trees, so it checks very little.
+owed their own investigation. The `compiler` layer's lit half
+(`check-tessera-nvidia`) passed 62/62 on both trees; its pytest half selects a
+single test on both, so that half checks very little. The gate exits after the
+first device pass fails, so `device-correctness-2` never ran on either tree.
+Re-checked at the later branch head 70d1c65e, since shared Python
+(`scheduled_matmul` split-K parsing) changed after 4e810487: the scheduled
+NVIDIA tests (`-k "scheduled and (nvidia or sm120)"`) pass 301/301 and the
+fixed benchmark's 13 rows are numerically green.
 
 Other families follow the same Python-Tile-string pattern
 (`emit_softmax/reduce/norm/paged_attention/...` in `nvidia_native.py`). They

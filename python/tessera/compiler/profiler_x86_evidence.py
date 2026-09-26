@@ -61,6 +61,78 @@ X86_INELIGIBILITY_REASONS: dict[str, str] = {
 }
 
 
+#: Clock proofs the tprof sleep probe reports as booleans. On the tsc_witness
+#: route they are SUPERSEDED by the per-row timing sample, which re-derives
+#: each of them from measured integers (invariant TSC, same logical CPU, a
+#: calibration-interval frequency, TSC-vs-raw agreement over the measured
+#: region). avx512_visible is not a clock proof and still blocks.
+_SUPERSEDED_BY_WITNESS = frozenset({
+    "monotonic_raw_valid", "rdtscp_valid", "invariant_tsc", "affinity_stable",
+    "clock_agreement_valid", "perf_event_open", "perf_sample_valid",
+})
+#: Tags about the environment or the profiler, not about whether the timing is
+#: true. On the tsc_witness route they are diagnostic gaps.
+_ENVIRONMENT_TAGS = frozenset({
+    "VIRTUALIZED_HOST", "WSL_CLOCK_DOMAIN", "SYMBOL_SAMPLING_MISSING",
+    "SYMBOL_SAMPLING_INVALID", "IMAGE_BUILD_ID_MISSING", "EVENT_MAP_MISSING",
+    "EVENT_MAP_NOT_PROMOTABLE", "SAMPLING_AFFINITY_NOT_PINNED",
+})
+X86_ROUTE_PROFILER = "profiler_correlated"
+X86_ROUTE_TSC = "tsc_witness"
+
+
+def x86_admission_route(benchmark: Mapping[str, Any]) -> str:
+    """``tsc_witness`` only when EVERY benchmark row carries a timing sample
+    whose TSC -- converted with a separate calibration interval's frequency --
+    agrees with CLOCK_MONOTONIC_RAW over that row's measured region, and the
+    sample names the row's scheduled image. Derived from the digest-bound
+    benchmark record every time; the tprof booleans play no part.
+    """
+    from .profiler_timing import (
+        ProfilerTimingError, validate_timing_sample, wsl_promotion_refusals)
+    rows = benchmark.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return X86_ROUTE_PROFILER
+    for row in rows:
+        sample = row.get("timing_witness") if isinstance(row, Mapping) else None
+        if not isinstance(sample, Mapping):
+            return X86_ROUTE_PROFILER
+        try:
+            validate_timing_sample(sample)
+        except ProfilerTimingError:
+            return X86_ROUTE_PROFILER
+        clocks = sample["clocks"]
+        tsc = clocks.get("tsc_cycles", {})
+        image = ((row.get("compile") or {}).get("digests") or {}).get("image")
+        if (sample.get("target") != "x86" or tsc.get("eligible_for_promotion") is not True
+                or wsl_promotion_refusals("x86", clocks)
+                or image not in set(sample.get("artifact_digests", {}).values())):
+            return X86_ROUTE_PROFILER
+    return X86_ROUTE_TSC
+
+
+def _split_for_route(reasons: list[str], route: str) -> tuple[list[str], list[str]]:
+    """(blocking reasons, diagnostic gaps) for a route."""
+    if route != X86_ROUTE_TSC:
+        return reasons, []
+    blocking, gaps = [], []
+    for reason in reasons:
+        tag, _, detail = reason.partition(":")
+        if tag in _ENVIRONMENT_TAGS:
+            gaps.append(reason)
+        elif tag == "TIMING_PROOF_INCOMPLETE":
+            fields = [f for f in detail.split(",") if f]
+            kept = [f for f in fields if f not in _SUPERSEDED_BY_WITNESS]
+            dropped = [f for f in fields if f in _SUPERSEDED_BY_WITNESS]
+            if kept:
+                blocking.append("TIMING_PROOF_INCOMPLETE:" + ",".join(kept))
+            if dropped:
+                gaps.append("TIMING_PROOF_INCOMPLETE:" + ",".join(dropped))
+        else:
+            blocking.append(reason)
+    return blocking, gaps
+
+
 def x86_reason_tag(reason: str) -> str:
     """The tag half of a reason, discarding any `:detail` suffix."""
     return reason.split(":", 1)[0]
@@ -80,14 +152,15 @@ def exact_zen5_cpu(cpu: Mapping[str, Any]) -> bool:
     )
 
 
-def build_x86_profiler_packet(
-    *,
-    benchmark: Mapping[str, Any],
+def _derive_reasons(
     timing_status: Mapping[str, Any],
     cpu: Mapping[str, Any],
     environment: Mapping[str, Any],
     sampling: Mapping[str, Any] | None,
-) -> dict[str, Any]:
+) -> list[str]:
+    """Every ineligibility reason the packet's own inputs imply, before the
+    route split. The validator calls this on the stored inputs, so a packet
+    cannot drop or add a reason by editing its lists."""
     reasons: list[str] = []
     if not exact_zen5_cpu(cpu):
         reasons.append("CPU_NOT_EXACT_ZEN5")
@@ -95,9 +168,6 @@ def build_x86_profiler_packet(
         reasons.append("VIRTUALIZED_HOST")
     if environment.get("wsl"):
         reasons.append("WSL_CLOCK_DOMAIN")
-    source_commit = environment.get("source_commit")
-    if not isinstance(source_commit, str) or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
-        raise X86ProfilerPacketError("Zen 5 packet requires a full source commit")
     if environment.get("worktree_dirty"):
         reasons.append("SOURCE_WORKTREE_DIRTY")
     required_timing = (
@@ -129,6 +199,21 @@ def build_x86_profiler_packet(
         affinity = sampling.get("affinity")
         if not isinstance(affinity, Mapping) or affinity.get("pinned") is not True:
             reasons.append("SAMPLING_AFFINITY_NOT_PINNED")
+    return reasons
+
+
+def build_x86_profiler_packet(
+    *,
+    benchmark: Mapping[str, Any],
+    timing_status: Mapping[str, Any],
+    cpu: Mapping[str, Any],
+    environment: Mapping[str, Any],
+    sampling: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    source_commit = environment.get("source_commit")
+    if not isinstance(source_commit, str) or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
+        raise X86ProfilerPacketError("Zen 5 packet requires a full source commit")
+    reasons = _derive_reasons(timing_status, cpu, environment, sampling)
     rows = benchmark.get("rows")
     if not isinstance(rows, list) or not rows:
         raise X86ProfilerPacketError("Zen 5 packet requires benchmark rows")
@@ -137,6 +222,8 @@ def build_x86_profiler_packet(
         raise X86ProfilerPacketError("Zen 5 packet requires aligned and ragged rows")
     if benchmark.get("architecture") != "zen5-avx512":
         raise X86ProfilerPacketError("benchmark is not the Zen 5 AVX-512 lane")
+    route = x86_admission_route(benchmark)
+    reasons, diagnostic_gaps = _split_for_route(reasons, route)
     if benchmark.get("verdict") == "reject":
         verdict = "reject"
     elif reasons:
@@ -156,6 +243,8 @@ def build_x86_profiler_packet(
         "sampling": dict(sampling) if sampling is not None else None,
         "eligible_for_promotion": not reasons and verdict == "promote",
         "ineligibility_reasons": reasons,
+        "admission_route": route,
+        "diagnostic_gaps": diagnostic_gaps,
         "verdict": verdict,
     }
     packet["packet_sha256"] = digest_json(packet)
@@ -199,6 +288,45 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
             f"something declined to vouch for")
     if payload.get("eligible_for_promotion") and reasons:
         raise X86ProfilerPacketError("promotion-eligible packet has blockers")
+    # Re-derive the route and the reason split from the stored benchmark (the
+    # same digest-bound record); a stored claim is never trusted.
+    route = x86_admission_route(payload["benchmark"])
+    if payload.get("admission_route", X86_ROUTE_PROFILER) != route:
+        raise X86ProfilerPacketError(
+            f"x86 packet claims admission route {payload.get('admission_route')!r}, "
+            f"but its benchmark supports {route!r}")
+    gaps = payload.get("diagnostic_gaps", [])
+    if not isinstance(gaps, list) or not all(isinstance(g, str) for g in gaps):
+        raise X86ProfilerPacketError("invalid x86 diagnostic gaps")
+    unknown_gaps = sorted({x86_reason_tag(g) for g in gaps} - set(X86_INELIGIBILITY_REASONS))
+    if unknown_gaps:
+        raise X86ProfilerPacketError(f"unknown x86 gap tag(s) {unknown_gaps}")
+    for field_name in ("cpu", "environment"):
+        if not isinstance(payload.get(field_name), Mapping):
+            raise X86ProfilerPacketError(f"x86 profiler packet requires {field_name}")
+    blocking, derived_gaps = _split_for_route(
+        _derive_reasons(payload["timing_status"], payload["cpu"], payload["environment"], sampling),
+        route)
+    if "admission_route" in payload:
+        # Current schema: the lists are exactly what the inputs derive.
+        if sorted(blocking) != sorted(reasons) or sorted(derived_gaps) != sorted(gaps):
+            raise X86ProfilerPacketError(
+                "x86 reasons/gaps differ from what the packet's stored inputs derive")
+    else:
+        # Packets recorded before a reason existed (e.g. the 2026-08-06 packet
+        # predates EVENT_MAP_*/SAMPLING_AFFINITY_*) may omit newer reasons;
+        # everything they DO state must still derive, and the derived blockers
+        # below still forbid promotion.
+        if not set(reasons) <= set(blocking) or gaps:
+            raise X86ProfilerPacketError(
+                "legacy x86 packet states reasons its stored inputs do not derive")
+    if payload["benchmark"].get("verdict") == "reject":
+        expected_verdict = "reject"
+    else:
+        expected_verdict = "retain" if blocking else "promote"
+    if payload.get("verdict") != expected_verdict:
+        raise X86ProfilerPacketError(
+            f"x86 packet verdict {payload.get('verdict')!r} is not the derived {expected_verdict!r}")
     if payload.get("eligible_for_promotion") and payload.get("verdict") != "promote":
         raise X86ProfilerPacketError("promotion eligibility requires promote verdict")
     unsigned = dict(payload)
@@ -209,6 +337,9 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
 
 __all__ = [
     "X86_PROFILER_PACKET_SCHEMA_VERSION",
+    "X86_ROUTE_PROFILER",
+    "X86_ROUTE_TSC",
+    "x86_admission_route",
     "X86ProfilerPacketError",
     "build_x86_profiler_packet",
     "digest_json",

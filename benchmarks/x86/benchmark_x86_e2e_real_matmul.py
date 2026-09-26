@@ -163,12 +163,17 @@ def verdict(rows: list[dict[str, Any]]) -> str:
     return "promote" if all(row["timing"]["non_regression_10pct"] for row in rows) else "retain"
 
 
-def run(*, trials: int, warmup: int) -> dict[str, Any]:
+def run(*, trials: int, warmup: int, timing_witness: bool = False) -> dict[str, Any]:
     if trials < 3 or warmup < 1:
         raise ValueError("E2E-REAL-4 requires at least three trials and one warmup")
     if not tools_available():
         raise RuntimeError("the production x86 compiler/image is unavailable")
     rng = np.random.default_rng(4004)
+    calibration = None
+    if timing_witness:
+        from tessera.compiler.profiler_x86_clock import calibrate, pin_current_cpu
+        pin_current_cpu()
+        calibration = calibrate()
     rows = []
     for shape in SHAPES:
         m, k, n = shape
@@ -191,16 +196,28 @@ def run(*, trials: int, warmup: int) -> dict[str, Any]:
         passed = max(production_error, scheduled_error) <= 3e-5
         production_samples: list[float] = []
         scheduled_samples: list[float] = []
-        for trial in range(trials):
-            routes = (
-                (production, production_args, production_samples),
-                (scheduled, scheduled_args, scheduled_samples),
-            )
-            if trial & 1:
-                routes = tuple(reversed(routes))
-            for artifact, arguments, samples in routes:
-                samples.append(_launch_ms(artifact, arguments))
-        row = {
+
+        def trials_region() -> None:
+            for trial in range(trials):
+                routes: tuple[tuple[Any, dict[str, Any], list[float]], ...] = (
+                    (production, production_args, production_samples),
+                    (scheduled, scheduled_args, scheduled_samples),
+                )
+                if trial & 1:
+                    routes = tuple(reversed(routes))
+                for artifact, arguments, samples in routes:
+                    samples.append(_launch_ms(artifact, arguments))
+
+        witness = None
+        if calibration is not None:
+            from tessera.compiler.profiler_x86_clock import measure, witness_sample
+            window = measure(trials_region, calibration)
+            witness = witness_sample(calibration, window, {
+                "image": scheduled_package.image.image_digest,
+                "production_image": production_package.image.image_digest})
+        else:
+            trials_region()
+        row: dict[str, Any] = {
             "shape_mkn": list(shape),
             "shape_class": "aligned" if all(value % 16 == 0 for value in shape) else "ragged",
             "correctness": {
@@ -219,6 +236,8 @@ def run(*, trials: int, warmup: int) -> dict[str, Any]:
             },
             "timing": _summarize(production_samples, scheduled_samples),
         }
+        if witness is not None:
+            row["timing_witness"] = witness
         rows.append(row)
         print(
             f"x86 {shape}: parity={parity_error:.3e} "
@@ -256,8 +275,11 @@ def main() -> int:
     parser.add_argument("--trials", type=int, default=21)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--timing-witness", action="store_true",
+                        help="time each shape's trials with the TSC witness "
+                             "(profiler_x86_clock); needs x86_64 Linux")
     args = parser.parse_args()
-    report = run(trials=args.trials, warmup=args.warmup)
+    report = run(trials=args.trials, warmup=args.warmup, timing_witness=args.timing_witness)
     canonical = json.dumps(report, sort_keys=True, separators=(",", ":"))
     report["report_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
     args.output.parent.mkdir(parents=True, exist_ok=True)

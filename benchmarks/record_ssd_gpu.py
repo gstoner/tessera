@@ -61,17 +61,20 @@ def _resources(device, function):
 
 
 def device_clock_calibration(*, device, logical, clean_program, clean_binding, raw, grid, block,
-                             clean_event_ms, verify, compiler, llvm_bin, cooperative, output):
-    """Calibrate one process's clean SSD image against its instrumented twin.
+                             clean_event_ms, reset, verify, compiler, llvm_bin, output):
+    """Calibrate one process's clean SSD image with compiler-built device-clock markers.
 
-    The instrumented image is the compiler's --tessera-device-clock-span build
-    of the same Schedule IR: identical arguments plus a span buffer the kernel
-    fills with the constant-rate device clock (min start / max end across
-    blocks and launches). Each window resets the span, brackets LAUNCHES
-    launches with HIP events and the host wall, then reads the span back. The
-    device span must agree with the event it runs under (profiler_timing
-    enforces 5%); the clean/instrumented duration ratio is the overhead gate.
+    Each window: reset the span, record a HIP event, launch the marker, launch
+    the EXACT clean image LAUNCHES times, launch the marker, record a HIP
+    event. The two markers share the span buffer, so it runs from the first
+    marker's start to the second marker's end on the device's constant-rate
+    clock -- the same stream interval the HIP events bracket, measured
+    independently of the event API. The clean image is never modified (an
+    in-kernel stamp was measured to change its codegen; see
+    tessera.compiler.native_device_clock). The marker-bracketed / plain event
+    ratio is the overhead the packet bounds on both sides.
     """
+    from tessera.compiler.native_device_clock import build_device_clock_marker
     from tessera.compiler.profiler_timing import (
         build_timing_sample, measured_clock, unavailable_clock, wall_clock_ticks_to_ns)
     from tessera.compiler.profiler_rocm_evidence import build_rocm_profiler_packet
@@ -84,31 +87,33 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
     device.check(get_attribute(ct.byref(rate), _hip_enum('hipDeviceAttributeWallClockRate'), 0))
     if rate.value <= 0:
         raise SystemExit('hipDeviceAttributeWallClockRate is not positive on this device')
-    instrumented = materialize_ssd(logical,compiler=compiler,llvm_bin=llvm_bin,backend='rocm',
-                                   chip='gfx1151',cooperative=cooperative,device_clock_span=True)
-    if instrumented.package.abi[:-1] != clean_program.package.abi or instrumented.package.abi[-1] != 'clock_span':
-        raise SystemExit('instrumented SSD image does not extend the clean ABI by one span buffer')
-    bound = instrumented.package.bind()
-    span = ct.c_void_p()
+    marker = build_device_clock_marker(compiler=compiler, llvm_bin=llvm_bin, backend='rocm', chip='gfx1151')
+    P = ct.c_void_p
+    module, marker_fn, span = P(), P(), P()
+    blob = ct.create_string_buffer(marker.image)
     host_span = (ct.c_uint64 * 2)()
-    events = [ct.c_void_p(), ct.c_void_p()]
+    events = [P(), P()]
     try:
+        device.check(device.load(ct.byref(module), ct.cast(blob, P)))
+        device.check(device.function(ct.byref(marker_fn), module, marker.entry.encode()))
         device.check(device.alloc(ct.byref(span), ct.sizeof(host_span)))
-        values, shared = bound._launch_size(tuple(raw) + (span.value,), grid, block)
-        _, clean_shared = clean_binding._bound._launch_size(tuple(raw), grid, block)
-        if shared != clean_shared:
-            raise SystemExit('instrumented image sizes shared memory differently from the clean image')
-        argv = (ct.c_void_p*len(values))(*[ct.cast(ct.byref(v),ct.c_void_p) for v in values])
+        marker_argv = (P * 1)(ct.cast(ct.byref(span), P))
+        values, shared = clean_binding._bound._launch_size(tuple(raw), grid, block)
+        argv = (P*len(values))(*[ct.cast(ct.byref(v),P) for v in values])
         for event in events:
             device.check(device.event_create(ct.byref(event), 0))
+        reset()  # outputs to NaN: verify() below then proves these windows computed them
         device_ns, event_ns, host_ns = [], [], []
         for _ in range(WINDOWS):
             host_span[0], host_span[1] = (1 << 64) - 1, 0
             device.check(device.copy(span, ct.addressof(host_span), ct.sizeof(host_span), 1))
+            device.check(device.sync())
             start = time.perf_counter_ns()
             device.check(device.event_record(events[0], None))
+            device.check(device.launch(marker_fn,1,1,1,1,1,1,0,None,marker_argv,None))
             for _ in range(LAUNCHES):
-                device.check(device.launch(bound._function,*grid,*block,shared,None,argv,None))
+                device.check(device.launch(clean_binding._bound._function,*grid,*block,shared,None,argv,None))
+            device.check(device.launch(marker_fn,1,1,1,1,1,1,0,None,marker_argv,None))
             device.check(device.event_record(events[1], None))
             device.check(device.event_sync(events[1]))
             host_ns.append((time.perf_counter_ns() - start) / LAUNCHES)
@@ -117,22 +122,21 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
             event_ns.append(ms.value * 1e6 / LAUNCHES)
             device.check(device.copy(ct.addressof(host_span), span, ct.sizeof(host_span), 2))
             if host_span[0] == (1 << 64) - 1 or host_span[1] <= host_span[0]:
-                raise SystemExit(f'device-clock span was not written: {list(host_span)}')
+                raise SystemExit(f'device-clock marker span was not written: {list(host_span)}')
             device_ns.append(wall_clock_ticks_to_ns(host_span[1] - host_span[0], rate.value) / LAUNCHES)
-        verify()  # the instrumented image must compute the same result
-        resources_probe = _resources(device, bound._function)
-        resources_clean = _resources(device, clean_binding._bound._function)
+        verify()
+        resources = _resources(device, clean_binding._bound._function)
     finally:
         for event in events:
             if event.value:
                 device.check(device.event_destroy(event))
         if span.value:
             device.check(device.free(span))
-        bound.close()
+        if module.value:
+            device.check(device.unload(module))
     environment = 'wsl2' if 'microsoft' in platform.release().lower() else 'bare_metal'
     sample_id = f'{output.stem}-{uuid.uuid4().hex[:12]}'
     clean_sha = hashlib.sha256(clean_program.package.image).hexdigest()
-    probe_sha = hashlib.sha256(instrumented.package.image).hexdigest()
     semantic = hashlib.sha256(logical.schedule_ir.encode()).hexdigest()
     timing = build_timing_sample(
         sample_id=sample_id, target='rocm_gfx1151',
@@ -145,29 +149,29 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
                 'device_wall_clock_ns', source='device_wall_clock',
                 value=statistics.median(device_ns), instrumented=True,
                 calibrated_against=('hip_event_ns',), eligible_for_promotion=True,
-                provenance={'clock': 'llvm.readsteadycounter', 'wall_clock_rate_khz': rate.value,
+                provenance={'method': 'compiler_built_marker_bracketing',
+                            'clock': 'llvm.readsteadycounter', 'wall_clock_rate_khz': rate.value,
                             'windows': WINDOWS, 'launches_per_window': LAUNCHES,
+                            'marker_image_sha256': marker.image_sha256,
                             'per_window_ns': device_ns}),
             'profiler_activity_ns': unavailable_clock(
                 'profiler_activity_ns', source='rocprofiler_activity',
                 reason='ROCPROFILER_UNAVAILABLE_NO_KFD' if environment == 'wsl2' else 'NOT_CAPTURED'),
         },
-        artifact_digests={'application_image': clean_sha, 'instrumented_image': probe_sha,
+        artifact_digests={'application_image': clean_sha, 'device_clock_marker': marker.image_sha256,
                           'schedule_ir': semantic},
         batch_size=LAUNCHES, warm_state='warm', synchronization='hipEventSynchronize',
-        execution_environment=environment,
-        resources={'clean': resources_clean, 'instrumented': resources_probe},
+        execution_environment=environment, resources={'application': resources},
         environment={'kernel_release': platform.release(), 'per_window_event_ns': event_ns,
                      'per_window_host_ns': host_ns})
-    isa = _isa_sha256
-    image = dict(architecture='gfx1151', kernel_name=clean_program.package.entry,
-                 semantic_sha256=semantic, clock_source='hip_event', calibration_sample_id=sample_id)
-    clean = dict(image, image_sha256=clean_sha, isa_sha256=isa(clean_program.package.image, llvm_bin),
-                 duration_ns=statistics.median(clean_event_ms) * 1e6, instrumented=False,
-                 resources=resources_clean)
-    probe = dict(image, image_sha256=probe_sha, isa_sha256=isa(instrumented.package.image, llvm_bin),
-                 duration_ns=statistics.median(event_ns), instrumented=True,
-                 resources=resources_probe)
+    isa = _isa_sha256(clean_program.package.image, llvm_bin)
+    image = dict(architecture='gfx1151', kernel_name=clean_program.package.entry, semantic_sha256=semantic,
+                 image_sha256=clean_sha, isa_sha256=isa, clock_source='hip_event',
+                 calibration_sample_id=sample_id, resources=resources)
+    # Same image both times: "instrumented" means measured under marker
+    # bracketing, and its duration ratio is the markers' overhead.
+    clean = dict(image, duration_ns=statistics.median(clean_event_ms) * 1e6, instrumented=False)
+    probe = dict(image, duration_ns=statistics.median(event_ns), instrumented=True)
     capture = {
         'schema': 'tessera.profiler_rocm_native_capture.v1', 'provider': 'rocprofiler',
         'status': 'blocked', 'fresh_process': True, 'process': {'clean_exit': True},
@@ -178,10 +182,10 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
         'requested': {'counters': [], 'pc_sampling': False},
         'provider_trace': _empty_trace(), 'eligible_for_promotion': False,
     }
-    root = subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip()
+    head = subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip()
     dirty = bool(subprocess.run(['git','status','--porcelain'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip())
     packet = build_rocm_profiler_packet(timing=timing, capture=capture, uninstrumented=clean,
-                                        instrumented=probe, source={'source_commit': root, 'worktree_dirty': dirty})
+                                        instrumented=probe, source={'source_commit': head, 'worktree_dirty': dirty})
     output.write_text(json.dumps(packet, indent=2) + '\n')
     return packet
 
@@ -201,8 +205,8 @@ def main():
     parser.add_argument('--chunk',type=int)
     parser.add_argument('--profile',action='store_true')
     parser.add_argument('--device-clock-calibration',type=Path,
-                        help='ROCm: also calibrate the clean image against its '
-                             '--tessera-device-clock-span twin and write the packet here')
+                        help='ROCm: also calibrate the clean image with compiler-built '
+                             'device-clock markers and write the packet here')
     args = parser.parse_args()
     if args.device_clock_calibration and not (args.profile and args.chunk and args.backend == 'rocm'):
         parser.error('--device-clock-calibration needs --backend rocm, --profile and one --chunk')
@@ -276,6 +280,10 @@ def main():
                     if end.value: device.check(device.event_destroy(end))
                     device.check(device.event_destroy(start))
                 if args.device_clock_calibration:
+                    def reset():
+                        for i,value in enumerate(outputs):
+                            poison = np.full_like(value,np.nan)
+                            device.check(device.copy(pointers[5+i],poison.ctypes.data,poison.nbytes,1))
                     def verify():
                         for i,value in enumerate(outputs):
                             result = np.empty_like(value)
@@ -283,9 +291,9 @@ def main():
                             np.testing.assert_allclose(result,expected[i],rtol=1e-5,atol=1e-6)
                     device_clock_calibration(
                         device=device, logical=logical, clean_program=program, clean_binding=binding,
-                        raw=raw, grid=grid, block=block, clean_event_ms=timings, verify=verify,
+                        raw=raw, grid=grid, block=block, clean_event_ms=timings, reset=reset, verify=verify,
                         compiler=args.compiler, llvm_bin=Path('/usr/lib/llvm-23/bin'),
-                        cooperative=args.cooperative, output=args.device_clock_calibration)
+                        output=args.device_clock_calibration)
             rows.append(dict(chunk=chunk,binding_ms=bind_ms,checked_call_ms=checked_call_ms,device_event_ms=timings,
                              device_event_median_ms=statistics.median(timings) if timings else None,max_abs_errors=observed,binding_digest=program.package.binding_digest,
                              image_sha256=hashlib.sha256(program.package.image).hexdigest()))

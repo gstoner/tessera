@@ -1,0 +1,105 @@
+lane,host,device,family,frontend,graph_opt,schedule_tile,native_lowering,execution,alpha_complete
+mac_cpu,Mac M1 Max,arm64 CPU,matmul,bypass,unmeasured,bypass,partial,native,no
+mac_cpu,Mac M1 Max,arm64 CPU,softmax,bypass,unmeasured,bypass,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,reduction,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,norm,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,attention,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,moe,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,linalg,bypass,unmeasured,bypass,partial,packet_pending,no
+mac_cpu,Mac M1 Max,arm64 CPU,epilogue,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,ppo,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,ebm,bypass,unmeasured,unrouted,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,clifford,bypass,unmeasured,unrouted,partial,absent,no
+mac_gpu,Mac M1 Max,Apple7 GPU,matmul,bypass,unmeasured,bypass,partial,native,no
+mac_gpu,Mac M1 Max,Apple7 GPU,softmax,bypass,unmeasured,native,partial,native,no
+mac_gpu,Mac M1 Max,Apple7 GPU,reduction,bypass,unmeasured,unrouted,partial,absent,no
+mac_gpu,Mac M1 Max,Apple7 GPU,norm,bypass,unmeasured,unrouted,partial,absent,no
+mac_gpu,Mac M1 Max,Apple7 GPU,attention,bypass,unmeasured,unrouted,partial,absent,no
+mac_gpu,Mac M1 Max,Apple7 GPU,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
+mac_gpu,Mac M1 Max,Apple7 GPU,moe,bypass,unmeasured,unrouted,partial,absent,no
+mac_gpu,Mac M1 Max,Apple7 GPU,linalg,bypass,unmeasured,bypass,partial,packet_pending,no
+mac_gpu,Mac M1 Max,Apple7 GPU,epilogue,bypass,unmeasured,unrouted,partial,absent,no
+mac_gpu,Mac M1 Max,Apple7 GPU,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
+mac_gpu,Mac M1 Max,Apple7 GPU,ppo,bypass,unmeasured,bypass,partial,packet_pending,no
+mac_gpu,Mac M1 Max,Apple7 GPU,ebm,bypass,unmeasured,bypass,partial,packet_pending,no
+mac_gpu,Mac M1 Max,Apple7 GPU,clifford,bypass,unmeasured,bypass,partial,packet_pending,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,matmul,bypass,unmeasured,native,partial,packet_pending,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,softmax,bypass,unmeasured,bypass,partial,packet_pending,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,reduction,bypass,unmeasured,bypass,partial,packet_pending,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,norm,bypass,unmeasured,unrouted,partial,absent,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,attention,bypass,unmeasured,native,partial,packet_pending,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,moe,bypass,unmeasured,unrouted,partial,absent,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,linalg,bypass,unmeasured,unrouted,partial,packet_pending,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,epilogue,bypass,unmeasured,unrouted,partial,absent,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,ppo,bypass,unmeasured,unrouted,partial,absent,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,ebm,bypass,unmeasured,unrouted,partial,absent,no
+luna_cpu,Princess-Luna,Zen 5 AVX-512,clifford,bypass,unmeasured,unrouted,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,matmul,bypass,unmeasured,unrouted,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,softmax,bypass,unmeasured,bypass,partial,native,no
+luna_gpu,Princess-Luna,gfx1151,reduction,bypass,unmeasured,bypass,partial,native,no
+luna_gpu,Princess-Luna,gfx1151,norm,bypass,unmeasured,unrouted,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,attention,bypass,unmeasured,native,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,paged_kv,bypass,unmeasured,bypass,partial,native,no
+luna_gpu,Princess-Luna,gfx1151,moe,bypass,unmeasured,bypass,partial,native,no
+luna_gpu,Princess-Luna,gfx1151,linalg,bypass,unmeasured,unrouted,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,epilogue,bypass,unmeasured,unrouted,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,ppo,bypass,unmeasured,unrouted,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,ebm,bypass,unmeasured,unrouted,partial,absent,no
+luna_gpu,Princess-Luna,gfx1151,clifford,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,matmul,bypass,unmeasured,native,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,softmax,bypass,unmeasured,bypass,partial,native,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,reduction,bypass,unmeasured,bypass,partial,native,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,norm,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,attention,bypass,unmeasured,native,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,moe,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,linalg,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,epilogue,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,ppo,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,ebm,bypass,unmeasured,unrouted,partial,absent,no
+bear_cpu,The-Super-Bear,Zen 2 AVX2,clifford,bypass,unmeasured,unrouted,partial,absent,no
+bear_gpu,The-Super-Bear,sm_120,matmul,bypass,unmeasured,native,absent,native,no
+bear_gpu,The-Super-Bear,sm_120,softmax,bypass,unmeasured,native,absent,native,no
+bear_gpu,The-Super-Bear,sm_120,reduction,bypass,unmeasured,native,absent,native,no
+bear_gpu,The-Super-Bear,sm_120,norm,bypass,unmeasured,native,absent,absent,no
+bear_gpu,The-Super-Bear,sm_120,attention,bypass,unmeasured,native,absent,native,no
+bear_gpu,The-Super-Bear,sm_120,paged_kv,bypass,unmeasured,bypass,absent,native,no
+bear_gpu,The-Super-Bear,sm_120,moe,bypass,unmeasured,unrouted,absent,native,no
+bear_gpu,The-Super-Bear,sm_120,linalg,bypass,unmeasured,unrouted,absent,absent,no
+bear_gpu,The-Super-Bear,sm_120,epilogue,bypass,unmeasured,unrouted,absent,native,no
+bear_gpu,The-Super-Bear,sm_120,replay_ssm,bypass,unmeasured,unrouted,absent,native,no
+bear_gpu,The-Super-Bear,sm_120,ppo,bypass,unmeasured,unrouted,absent,absent,no
+bear_gpu,The-Super-Bear,sm_120,ebm,bypass,unmeasured,unrouted,absent,absent,no
+bear_gpu,The-Super-Bear,sm_120,clifford,bypass,unmeasured,unrouted,absent,absent,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,matmul,bypass,unmeasured,native,partial,packet_pending,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,softmax,bypass,unmeasured,bypass,partial,packet_pending,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,reduction,bypass,unmeasured,bypass,partial,packet_pending,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,norm,bypass,unmeasured,unrouted,partial,absent,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,attention,bypass,unmeasured,native,partial,packet_pending,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,moe,bypass,unmeasured,unrouted,partial,absent,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,linalg,bypass,unmeasured,unrouted,partial,packet_pending,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,epilogue,bypass,unmeasured,unrouted,partial,absent,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,ppo,bypass,unmeasured,unrouted,partial,absent,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,ebm,bypass,unmeasured,unrouted,partial,absent,no
+taj_cpu,Tajasarus,Zen 5 AVX-512,clifford,bypass,unmeasured,unrouted,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,matmul,bypass,unmeasured,unrouted,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,softmax,bypass,unmeasured,bypass,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,reduction,bypass,unmeasured,bypass,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,norm,bypass,unmeasured,unrouted,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,attention,bypass,unmeasured,native,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,paged_kv,bypass,unmeasured,bypass,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,moe,bypass,unmeasured,bypass,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,linalg,bypass,unmeasured,unrouted,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,epilogue,bypass,unmeasured,unrouted,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,replay_ssm,bypass,unmeasured,unrouted,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,ppo,bypass,unmeasured,unrouted,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,ebm,bypass,unmeasured,unrouted,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,clifford,bypass,unmeasured,unrouted,absent,absent,no

@@ -69,6 +69,16 @@ def _r_contract_consumers_csv() -> str:
     return contract_consumers.render_csv()
 
 
+def _r_alpha_scoreboard() -> str:
+    from . import alpha_scoreboard
+    return alpha_scoreboard.render_markdown()
+
+
+def _r_alpha_scoreboard_csv() -> str:
+    from . import alpha_scoreboard
+    return alpha_scoreboard.render_csv()
+
+
 def _r_target_ir_membership() -> str:
     from . import target_ir_membership
     return target_ir_membership.render_markdown()
@@ -513,6 +523,16 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         _GEN / "compiler_progress.md", _r_compiler_progress,
         csv_path=_GEN / "compiler_progress.csv",
         render_csv=_r_compiler_progress_csv,
+        also_gate_md=True,
+    ),
+    # ── Functional-complete alpha: lane x family x stage release scoreboard ──
+    GeneratedDoc(
+        "alpha_scoreboard", "compiler_progress",
+        _GEN / "alpha_scoreboard.md", _r_alpha_scoreboard,
+        csv_path=_GEN / "alpha_scoreboard.csv",
+        render_csv=_r_alpha_scoreboard_csv,
+        # The MD carries the guard-rail counts and per-lane totals the CSV
+        # does not, so both are byte-gated.
         also_gate_md=True,
     ),
     # ── Decision #19 membership: does a Target IR op require its contract? ──

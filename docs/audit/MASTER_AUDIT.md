@@ -255,16 +255,22 @@ a family reaches the device.
 6. **Delete only after absorption.** A bypass is removed only once its
    family passes all stages on the lanes it served (Decision #31 ordering).
 
-Enforced today: 4 (per-device proof rules) and 6 (Decision #31 gates).
-**Not yet enforced:** 1–3 need the scoreboard below plus ratchet tests that
-fail CI when a bypass count rises or a lane regresses.
+**Enforcement.** 4 and 6 are enforced by the existing per-device proof rules
+and Decision #31 gates. 1–3 are enforced by
+`tests/unit/test_alpha_scoreboard.py` against
+[`alpha_scoreboard`](generated/alpha_scoreboard.md): the bypass counts
+(guard rail 1) may only fall and the per-stage / per-lane native counts
+(2–3) may only rise, both pinned exactly in
+`tests/unit/alpha_ratchet_baseline.json` so a gain must be locked in. Not
+yet measured: the Graph optimization/AD stage per family (shown
+`unmeasured`), and guard rail 3's "named refusal, never silent fallback".
 
-**Scoreboard gap.** No dashboard measures this definition yet: the spine
-inventory is per target with three levels, and the route maps are per
-family without stages or per-CPU lanes. The first deliverable toward 100% is
-a generated **lane × family × stage** scoreboard derived from those sources
-(bootstrap/route maps, frontend authority, spine, runtime ABI, execution
-matrix), so progress is measured rather than narrated.
+**Scoreboard.** [`generated/alpha_scoreboard.md`](generated/alpha_scoreboard.md)
+measures this definition: eight lanes × the alpha family set × five stages,
+derived from the frontend source, the bootstrap route map, the compilation
+spine and the E2E fleet packets. The lanes and the family set (with
+per-backend family names) are declared; a declared name that no longer
+matches its module fails generation. Read the counts there.
 
 ### Three blockers most other items wait on
 
@@ -375,9 +381,10 @@ matrix), so progress is measured rather than narrated.
 ### Grouped by what unblocks it
 
 **Software, on existing boxes**
-- Build the lane × family × stage scoreboard for functional-complete alpha,
-  with ratchet tests enforcing guard rails 1–3, so every item below is
-  measured against the release definition.
+- Make the [`alpha_scoreboard`](generated/alpha_scoreboard.md) complete:
+  derive the Graph optimization/AD stage per family; key fleet packets by
+  host so the two Zen 5 lanes are distinguished; register gfx1201 and
+  Zen 2 fleet packets (neither lane has one).
 0. Align the timing-admission code with the direction above: let
    `wall_clock64`/event-validated paired timing from the fleet hosts be
    selector-admissible instead of refusing every WSL sample
@@ -433,6 +440,7 @@ matrix), so progress is measured rather than narrated.
 | Which operation is affected? | [`generated/support_table.md`](generated/support_table.md) |
 | Which primitive contracts remain? | [`generated/s_series_status.md`](generated/s_series_status.md) |
 | Which target paths launch? | [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) |
+| How close is functional-complete alpha? | [`generated/alpha_scoreboard.md`](generated/alpha_scoreboard.md) |
 | Which ABI symbols are real? | [`generated/runtime_abi.md`](generated/runtime_abi.md) |
 | Which tests are direct or structural? | [revision-bound coverage evidence](coverage/COVERAGE_AUDIT.md#test-coverage-evidence) |
 | Which verifiers are registered? | [`generated/verifier_coverage.md`](generated/verifier_coverage.md) |

@@ -143,3 +143,60 @@ def test_timing_cli_round_trips_valid_sample(tmp_path: Path) -> None:
         check=True,
     )
     validate_timing_sample(json.loads(output.read_text(encoding="utf-8")))
+
+
+def _witnessed_wsl_sample(**device_overrides: object) -> dict[str, object]:
+    clocks = _rocm_clocks()
+    clocks["hip_event_ns"] = measured_clock("hip_event_ns", source="hip_event", value=950)
+    clocks["device_wall_clock_ns"] = measured_clock(
+        "device_wall_clock_ns",
+        source="device_wall_clock",
+        value=900,
+        instrumented=True,
+        calibrated_against=("hip_event_ns", "host_wall_ns"),
+        eligible_for_promotion=True,
+        **device_overrides,
+    )
+    return build_timing_sample(
+        sample_id="sample-wsl-witnessed",
+        target="rocm_gfx1151",
+        clocks=clocks,
+        artifact_digests={"package": "sha256:abc"},
+        batch_size=100,
+        warm_state="warm",
+        synchronization="hipEventSynchronize",
+        execution_environment="wsl2",
+    )
+
+
+def test_wsl_device_clock_with_a_valid_in_sample_witness_is_promotion_admissible() -> None:
+    """Owner direction 2026-09-25: the wall_clock64 method is performance
+    evidence without KFD or bare metal (DEVICE-CLOCK-DISCIPLINE-2026-08-31)."""
+    payload = _witnessed_wsl_sample()
+    assert payload["clocks"]["device_wall_clock_ns"]["eligible_for_promotion"] is True
+    validate_timing_sample(payload)
+
+
+def test_wsl_promotion_still_needs_a_kernel_side_clock() -> None:
+    payload = _witnessed_wsl_sample()
+    payload["clocks"]["hip_event_ns"]["eligible_for_promotion"] = True
+    payload["clocks"]["hip_event_ns"]["calibrated_against"] = ["device_wall_clock_ns"]
+    with pytest.raises(ProfilerTimingError, match="only a kernel-side clock"):
+        validate_timing_sample(payload)
+
+
+def test_wsl_witness_must_be_valid_in_the_same_sample() -> None:
+    payload = _witnessed_wsl_sample()
+    payload["clocks"]["device_wall_clock_ns"]["calibrated_against"] = ["hip_event_ns"]
+    payload["clocks"]["hip_event_ns"].update(
+        valid=False, value=None, reason="HIP_EVENT_ZERO_DURATION",
+        eligible_for_regression=False)
+    with pytest.raises(ProfilerTimingError, match="no independent witness"):
+        validate_timing_sample(payload)
+
+
+def test_bare_metal_rules_are_unchanged_by_the_wsl_admission() -> None:
+    payload = _sample(environment="bare_metal")
+    payload["clocks"]["device_wall_clock_ns"]["eligible_for_promotion"] = True
+    payload["clocks"]["device_wall_clock_ns"]["calibrated_against"] = ["hip_event_ns"]
+    validate_timing_sample(payload)

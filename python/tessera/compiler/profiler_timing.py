@@ -130,6 +130,44 @@ def measured_clock(
     return record
 
 
+#: Clocks measured on the device or core itself, independent of the host event
+#: API. Under WSL these are the only slots that may carry promotion, and only
+#: with a calibration witness that is valid in the same sample: the in-kernel
+#: ``wall_clock64`` cross-checked against HIP events and host wall agreed to
+#: four significant figures on gfx1151 (DEVICE-CLOCK-DISCIPLINE-2026-08-31), and
+#: the owner accepted that method as performance evidence without a profiler or
+#: KFD (MASTER_AUDIT, 2026-09-25). Host-wall, event and profiler slots stay
+#: regression-only under WSL: none of them is independent of the virtualized
+#: host path on its own.
+KERNEL_SIDE_CLOCKS = frozenset({"device_wall_clock_ns", "tsc_cycles"})
+
+
+def wsl_promotion_refusals(clocks: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Why each promotion-eligible slot in a WSL sample is not admissible.
+
+    Empty means every promotion claim carries the independent-witness method.
+    """
+    reasons: list[str] = []
+    for slot, record in clocks.items():
+        if not record.get("eligible_for_promotion"):
+            continue
+        if slot not in KERNEL_SIDE_CLOCKS:
+            reasons.append(
+                f"{slot}: under WSL only a kernel-side clock "
+                f"({', '.join(sorted(KERNEL_SIDE_CLOCKS))}) may carry promotion")
+            continue
+        witnesses = [
+            name for name in record.get("calibrated_against", ())
+            if name != slot and isinstance(clocks.get(name), Mapping)
+            and clocks[name].get("valid") is True
+        ]
+        if not witnesses:
+            reasons.append(
+                f"{slot}: no clock it is calibrated against is valid in this "
+                "sample, so the device clock has no independent witness")
+    return reasons
+
+
 def expected_clock_slots(target: str) -> tuple[str, ...]:
     normalized = target.strip().lower().replace("-", "_")
     if normalized.startswith("gfx") or normalized.startswith("rocm"):
@@ -275,9 +313,12 @@ def validate_timing_sample(payload: Mapping[str, Any]) -> None:
 
     environment = str(payload.get("execution_environment", "")).lower()
     if "wsl" in environment:
-        promoted = [slot for slot, record in clocks.items() if record.get("eligible_for_promotion")]
-        if promoted:
-            raise ProfilerTimingError(f"WSL timing sample cannot be promotion-eligible: {promoted}")
+        # Was a blanket ban on WSL promotion. Replaced 2026-09-25 by the
+        # independent-witness rule above; bare-metal rules are unchanged.
+        refusals = wsl_promotion_refusals(clocks)
+        if refusals:
+            raise ProfilerTimingError(
+                "WSL timing sample is not promotion-admissible: " + "; ".join(refusals))
 
 
 def wall_clock_ticks_to_ns(ticks: int, wall_clock_rate_khz: int) -> int:

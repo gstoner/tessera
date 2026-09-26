@@ -140,18 +140,22 @@ def calibrate(*, intervals: int = CALIBRATION_INTERVALS,
 
 def measure(region: Callable[[], Any], calibration: dict[str, Any]) -> dict[str, Any]:
     """Time one region with the TSC and the raw clock, on the calibrated CPU."""
+    host_start = time.perf_counter_ns()
     start = snapshot()
     region()
     end = snapshot()
+    host_end = time.perf_counter_ns()
     last = calibration["windows"][-1]
     if start.raw_ns <= last["raw_end_ns"]:
         raise X86ClockError("measurement window overlaps the calibration window")
     return {"raw_start_ns": start.raw_ns, "raw_end_ns": end.raw_ns,
             "tsc_start": start.tsc, "tsc_end": end.tsc,
-            "logical_cpu_start": start.cpu, "logical_cpu_end": end.cpu}
+            "logical_cpu_start": start.cpu, "logical_cpu_end": end.cpu,
+            "host_wall_ns": host_end - host_start}
 
 
-def witness_clocks(calibration: dict[str, Any], window: dict[str, Any]) -> dict[str, Any]:
+def witness_clocks(calibration: dict[str, Any], window: dict[str, Any], *,
+                   refused: str | None = None) -> dict[str, Any]:
     """Build the ``tsc_cycles`` / ``monotonic_raw_ns`` records for one window.
 
     ``profiler_timing`` then re-derives the TSC nanoseconds from these raw
@@ -175,17 +179,70 @@ def witness_clocks(calibration: dict[str, Any], window: dict[str, Any]) -> dict[
                         "frequency_source": "independent_calibration_interval",
                         "calibration_spread": calibration["spread"],
                         "calibration_sha256": calibration_digest,
-                        "measurement_window": window},
-            calibrated_against=("monotonic_raw_ns",), eligible_for_promotion=True),
+                        "measurement_window": window,
+                        **({"promotion_refused": refused} if refused else {})},
+            calibrated_against=("monotonic_raw_ns",), eligible_for_promotion=refused is None),
     }
+
+
+def witness_sample(calibration: dict[str, Any], window: dict[str, Any],
+                   digests: dict[str, str], *,
+                   execution_environment: str | None = None) -> dict[str, Any]:
+    """A ``tessera.profiler_timing.v1`` sample for one measured window: the
+    TSC (converted with the separate calibration interval's frequency) against
+    CLOCK_MONOTONIC_RAW over the same region, bound to ``digests`` (the row's
+    image first). The packet's ``tsc_witness`` route re-validates it."""
+    from .profiler_timing import (
+        ProfilerTimingError, build_timing_sample, measured_clock, unavailable_clock,
+        wsl_promotion_refusals)
+    if execution_environment is None:
+        execution_environment = ("wsl2" if "microsoft" in platform.release().lower()
+                                 else "bare_metal")
+
+    def build(refused: str | None) -> dict[str, Any]:
+        clocks = witness_clocks(calibration, window, refused=refused)
+        clocks["host_wall_ns"] = measured_clock(
+            "host_wall_ns", source="perf_counter", value=window["host_wall_ns"])
+        clocks["perf_task_clock_ns"] = unavailable_clock(
+            "perf_task_clock_ns", source="perf_event_task_clock",
+            reason="NOT_REQUESTED_FOR_TSC_WITNESS")
+        return build_timing_sample(
+            sample_id=f"x86-tsc-{digests['image'][:12]}-{window['raw_start_ns']}",
+            target="x86", clocks=clocks, artifact_digests=digests, batch_size=1,
+            warm_state="warm", synchronization="serial runtime.launch",
+            execution_environment=execution_environment,
+            environment={"kernel_release": platform.release()})
+
+    # A window whose TSC and raw clock disagree is a measured fact about this
+    # row, not a reason to abort the benchmark: record the sample with the
+    # TSC ineligible and the refusal named, and the packet route stays
+    # profiler_correlated. Any other invalidity is a bug and propagates.
+    try:
+        sample = build(None)
+    except ProfilerTimingError:
+        sample = build("unvalidated")
+        refusals = wsl_promotion_refusals("x86", {
+            **sample["clocks"],
+            "tsc_cycles": {**sample["clocks"]["tsc_cycles"], "eligible_for_promotion": True}})
+        if not refusals:
+            raise
+        sample = build("; ".join(refusals))
+    else:
+        refusals = wsl_promotion_refusals("x86", sample["clocks"])
+        if refusals:
+            sample = build("; ".join(refusals))
+    return sample
 
 
 def pin_current_cpu() -> int:
     """Pin to the CPU we are on now, so calibration and measurement share it."""
     cpu = snapshot().cpu
-    os.sched_setaffinity(0, {cpu})
+    setaffinity = getattr(os, "sched_setaffinity", None)
+    if setaffinity is None:
+        raise X86ClockError("this host cannot pin a process to one CPU")
+    setaffinity(0, {cpu})
     return cpu
 
 
 __all__ = ["X86ClockError", "calibrate", "invariant_tsc", "measure", "pin_current_cpu",
-           "snapshot", "witness_clocks"]
+           "snapshot", "witness_clocks", "witness_sample"]

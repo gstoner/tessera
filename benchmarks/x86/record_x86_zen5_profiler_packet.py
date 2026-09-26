@@ -80,10 +80,14 @@ def main() -> int:
     parser.add_argument("--trials", type=int, default=21)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--no-timing-witness", action="store_true",
+        help="skip the per-row TSC witness (the packet can then only take the profiler route)")
     args = parser.parse_args()
 
     benchmark_module = _load_benchmark_module()
-    benchmark = benchmark_module.run(trials=args.trials, warmup=args.warmup)
+    benchmark = benchmark_module.run(
+        trials=args.trials, warmup=args.warmup, timing_witness=not args.no_timing_witness)
     canonical = json.dumps(benchmark, sort_keys=True, separators=(",", ":"))
     benchmark["report_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
     timing_process = subprocess.run(

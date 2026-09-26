@@ -393,12 +393,15 @@ matches its module fails generation. Read the counts there.
   derive the Graph optimization/AD stage per family; key fleet packets by
   host so the two Zen 5 lanes are distinguished; register gfx1201 and
   Zen 2 fleet packets (neither lane has one).
-0. Record evidence on the new timing routes (`WSL-TIMING-ADMISSION-2026-09-26`):
-   a gfx1151 SSD calibrated-pairs packet (Princess-Luna), an SSD Nsight
-   activity-window packet on Super-Bear's WSL2, `wall_clock64` stamps in
-   `calibrate_gfx1151.py`, an independent TSC measurement in the x86 probe
-   (then its packet route), NVIDIA's `%globaltimer` witness, and gfx1201 /
-   Zen 2 packet adapters.
+0. Record evidence on the new timing routes (`WSL-TIMING-ADMISSION-2026-09-26`).
+   **Done 2026-09-26:** the gfx1151 SSD calibrated-pairs packet — the
+   production selector admits the cooperative candidate on compiler-built
+   device-clock markers, no KFD ([packet](../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md),
+   sync `DEVICE-CLOCK-MARKER-2026-09-26`). Open: validate the NVIDIA
+   `%globaltimer` marker on Super-Bear and record its SSD packet; an SSD Nsight
+   activity-window packet on Super-Bear's WSL2; marker timing in
+   `calibrate_gfx1151.py`; an independent TSC measurement in the x86 probe
+   (then its packet route); gfx1201 and Zen 2 packet adapters.
 1. RUNTIME-LIB-OPT-1 on all four backends, then re-measure affected packets.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
    dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.

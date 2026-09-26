@@ -1,0 +1,18 @@
+{
+  "decision": {
+    "admitted": true,
+    "reason": "exact-artifact paired measurements and native calibration admitted",
+    "lower_bound": 9.712158117522272
+  },
+  "admission_routes": [
+    "device_clock_witness"
+  ],
+  "selected_binding": "467de06dc9ac7db2b135fa19f18af2266e895f390424b34069c7625fe29e36f5",
+  "incumbent_binding": "5e7866cc62e790bbaee243ca918a98013057d9be3e20662ee5721f7fb812a0d0",
+  "candidate_binding": "467de06dc9ac7db2b135fa19f18af2266e895f390424b34069c7625fe29e36f5",
+  "source": {
+    "source_commit": "1c8f7551af953cbc959745eb8bd51a0932c5c281",
+    "worktree_dirty": false,
+    "execution_environment": "wsl2"
+  }
+}

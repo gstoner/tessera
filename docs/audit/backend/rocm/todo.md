@@ -7,6 +7,18 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Device-clock markers — 2026-09-26
+
+Sync `DEVICE-CLOCK-MARKER-2026-09-26` (follows `WSL-TIMING-ADMISSION-2026-09-26`). **Shared contracts changed:**
+
+- New `tessera-opt` pass `--tessera-device-clock-span{backend=rocm|nvidia}` (`src/transforms/lib/DeviceClockSpanPass.cpp`) stamps a kernel's span with the target's constant-rate device clock (ROCm `llvm.readsteadycounter` → `s_sendmsg_rtn_b64 MSG_RTN_GET_REALTIME`; NVIDIA `%globaltimer`) into an appended span buffer. It refuses kernels whose return is not the single final terminator, an alloca after work, double instrumentation, and an unnamed backend.
+- Its consumer is `tessera.compiler.native_device_clock`: an **empty marker kernel** launched before and after a timing window, so the span covers the window while the measured image stays byte-identical. Stamping the measured kernel directly was measured to change its codegen (gfx1151 serial SSD: 2512 → ~1230 instructions, 2.4× faster) and was abandoned.
+- `profiler_rocm_evidence`: the instrumentation gate is now **two-sided** — an instrumented measurement faster than the clean one by more than the band blocks as `INSTRUMENTATION_CHANGED_THE_KERNEL`.
+- `target_perf.apply_corpus`: WSL corpora must carry `measurement_digests` per device, and a witness sample counts only if its `artifact_digests` name that measurement (review of #855).
+- `benchmarks/check_ssd_admission.py` now replays calibrations carried in the comparison.
+
+**ROCm outcome: landed, with gfx1151 evidence.** [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Princess-Luna (WSL2, no KFD), every process calibrated by marker bracketing (serial 0.28–0.44%, cooperative 1.95–3.23% device-vs-event; bracketing ratio 0.9885–1.0283). The production SSD selector **admits the cooperative candidate** (lower bound 9.71×), where the 2026-09-10 packet was refused for missing calibration. Follow-ups: (1) the ROCm profiler packet and SSD adapter are gfx1151-only — gfx1201 needs its own adapter (the marker already builds for gfx1201); (2) the serial native tape GPU lowering caps temporaries at 4096 bytes, so SSD comparisons are limited to `32,2,16,4` — a real limit on the incumbent, not on the method; (3) `calibrate_gfx1151.py` can now use the marker instead of events-only timing; (4) the pass's 64-bit span atomics lower to compare-and-swap loops on gfx11 (correct; their cost is inside the bracketing ratio).
+
 ## WSL timing admission — 2026-09-26
 
 Sync `WSL-TIMING-ADMISSION-2026-09-26` (owner direction, [MASTER_AUDIT](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25), 2026-09-25). **Shared timing contract changed.** Missing `/dev/kfd` or bare metal no longer blocks promotion; the independent-witness method does:

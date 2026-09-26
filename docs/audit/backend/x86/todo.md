@@ -9,6 +9,18 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## Device-clock markers — 2026-09-26
+
+Sync `DEVICE-CLOCK-MARKER-2026-09-26` (follows `WSL-TIMING-ADMISSION-2026-09-26`). **Shared contracts changed:**
+
+- New `tessera-opt` pass `--tessera-device-clock-span{backend=rocm|nvidia}` (`src/transforms/lib/DeviceClockSpanPass.cpp`) stamps a kernel's span with the target's constant-rate device clock (ROCm `llvm.readsteadycounter` → `s_sendmsg_rtn_b64 MSG_RTN_GET_REALTIME`; NVIDIA `%globaltimer`) into an appended span buffer. It refuses kernels whose return is not the single final terminator, an alloca after work, double instrumentation, and an unnamed backend.
+- Its consumer is `tessera.compiler.native_device_clock`: an **empty marker kernel** launched before and after a timing window, so the span covers the window while the measured image stays byte-identical. Stamping the measured kernel directly was measured to change its codegen (gfx1151 serial SSD: 2512 → ~1230 instructions, 2.4× faster) and was abandoned.
+- `profiler_rocm_evidence`: the instrumentation gate is now **two-sided** — an instrumented measurement faster than the clean one by more than the band blocks as `INSTRUMENTATION_CHANGED_THE_KERNEL`.
+- `target_perf.apply_corpus`: WSL corpora must carry `measurement_digests` per device, and a witness sample counts only if its `artifact_digests` name that measurement (review of #855).
+- `benchmarks/check_ssd_admission.py` now replays calibrations carried in the comparison.
+
+**x86 outcome: not applicable (architecture-specific).** The marker is a GPU kernel; x86 timing uses `tsc_cycles` with its own open follow-up (independent TSC frequency in the probe, `WSL-TIMING-ADMISSION-2026-09-26`). The `measurement_digests` requirement applies to any future WSL x86 corpus.
+
 ## WSL timing admission — 2026-09-26
 
 Sync `WSL-TIMING-ADMISSION-2026-09-26` (owner direction, [MASTER_AUDIT](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25), 2026-09-25). **Shared timing contract changed.** Missing `/dev/kfd` or bare metal no longer blocks promotion; the independent-witness method does:

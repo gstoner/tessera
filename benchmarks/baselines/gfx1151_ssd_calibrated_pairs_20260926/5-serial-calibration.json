@@ -1,0 +1,223 @@
+{
+  "schema": "tessera.profiler_rocm_packet.v1",
+  "work_item": "TPROF-ROCM-NATIVE-1",
+  "architecture": "gfx1151",
+  "source": {
+    "source_commit": "1c8f7551af953cbc959745eb8bd51a0932c5c281",
+    "worktree_dirty": false
+  },
+  "timing": {
+    "schema": "tessera.profiler_timing.v1",
+    "sample_id": "5-serial-calibration-78f126d54f89",
+    "target": "rocm_gfx1151",
+    "execution_environment": "wsl2",
+    "batch_size": 100,
+    "warm_state": "warm",
+    "synchronization": "hipEventSynchronize",
+    "artifact_digests": {
+      "application_image": "e49e38de3b1f13be9873de8acc4c1687522f8d5568c26aa9740b0683a080859d",
+      "device_clock_marker": "86a3a31bd9c850297adf509de6eff2291153b41663ed16a1b48482e80e99409e",
+      "schedule_ir": "0288839eedf43c9b38b7d63d05aa838cab29309538388c21a16ceb4df9eded1f"
+    },
+    "resources": {
+      "application": {
+        "lds_bytes": 0,
+        "scratch_bytes": 3136,
+        "vgpr": 137
+      }
+    },
+    "environment": {
+      "kernel_release": "6.18.33.1-microsoft-standard-WSL2",
+      "per_window_event_ns": [
+        134132.2898864746,
+        134234.10415649414,
+        134334.89799499512,
+        133990.5834197998,
+        134138.22174072266,
+        134296.61750793457,
+        134191.32232666016
+      ],
+      "per_window_host_ns": [
+        134948.43,
+        135906.48,
+        135592.86,
+        135045.74,
+        135696.06,
+        135564.55,
+        135488.06
+      ]
+    },
+    "clocks": {
+      "host_wall_ns": {
+        "slot": "host_wall_ns",
+        "source": "perf_counter",
+        "value": 135564.55,
+        "unit": "ns",
+        "valid": true,
+        "reason": null,
+        "provenance": {},
+        "instrumented": false,
+        "calibrated_against": [],
+        "eligible_for_regression": true,
+        "eligible_for_promotion": false,
+        "raw_value": 135564.55
+      },
+      "hip_event_ns": {
+        "slot": "hip_event_ns",
+        "source": "hip_event",
+        "value": 134191.32232666016,
+        "unit": "ns",
+        "valid": true,
+        "reason": null,
+        "provenance": {},
+        "instrumented": false,
+        "calibrated_against": [],
+        "eligible_for_regression": true,
+        "eligible_for_promotion": false,
+        "raw_value": 134191.32232666016
+      },
+      "device_wall_clock_ns": {
+        "slot": "device_wall_clock_ns",
+        "source": "device_wall_clock",
+        "value": 133723.2,
+        "unit": "ns",
+        "valid": true,
+        "reason": null,
+        "provenance": {
+          "method": "compiler_built_marker_bracketing",
+          "clock": "llvm.readsteadycounter",
+          "wall_clock_rate_khz": 100000,
+          "windows": 7,
+          "launches_per_window": 100,
+          "marker_image_sha256": "86a3a31bd9c850297adf509de6eff2291153b41663ed16a1b48482e80e99409e",
+          "per_window_ns": [
+            133837.2,
+            133606.0,
+            133776.4,
+            133692.0,
+            133723.2,
+            133753.2,
+            133629.6
+          ]
+        },
+        "instrumented": true,
+        "calibrated_against": [
+          "hip_event_ns"
+        ],
+        "eligible_for_regression": true,
+        "eligible_for_promotion": true,
+        "raw_value": 133723.2
+      },
+      "profiler_activity_ns": {
+        "slot": "profiler_activity_ns",
+        "source": "rocprofiler_activity",
+        "value": null,
+        "unit": "ns",
+        "valid": false,
+        "reason": "ROCPROFILER_UNAVAILABLE_NO_KFD",
+        "provenance": {},
+        "instrumented": false,
+        "calibrated_against": [],
+        "eligible_for_regression": false,
+        "eligible_for_promotion": false,
+        "raw_value": null
+      }
+    }
+  },
+  "timing_sha256": "b2485b47fbef74bd9d45df8cc67ae812704af69d4c9522751cff5d92dbf6cf40",
+  "capture": {
+    "schema": "tessera.profiler_rocm_native_capture.v1",
+    "provider": "rocprofiler",
+    "status": "blocked",
+    "fresh_process": true,
+    "process": {
+      "clean_exit": true
+    },
+    "reason": "rocprofiler requires /dev/kfd; this WSL2 host exposes /dev/dxg only",
+    "proof": {
+      "dispatch_activity_seen": false,
+      "hip_callback_seen": false,
+      "counter_records_seen": false,
+      "pc_samples_seen": false
+    },
+    "requested": {
+      "counters": [],
+      "pc_sampling": false
+    },
+    "provider_trace": {
+      "schema": "tessera.profiler_provider_trace.v1",
+      "provider": "rocprofiler",
+      "source_status": "unavailable",
+      "source": null,
+      "record_source": "unknown",
+      "record_count": 0,
+      "provider_statuses": [],
+      "summary": {
+        "kinds": {},
+        "correlation_count": 0,
+        "launch_count": 0,
+        "probe_count": 0,
+        "dropped_records": 0
+      },
+      "records": [],
+      "traceEvents": []
+    },
+    "eligible_for_promotion": false
+  },
+  "capture_sha256": "29aea49e2b2a60279ff78f9bfcd06a6b4e50cd3c57a885ebd509aafc5168abe0",
+  "instrumentation_comparison": {
+    "uninstrumented": {
+      "architecture": "gfx1151",
+      "kernel_name": "product",
+      "semantic_sha256": "0288839eedf43c9b38b7d63d05aa838cab29309538388c21a16ceb4df9eded1f",
+      "image_sha256": "e49e38de3b1f13be9873de8acc4c1687522f8d5568c26aa9740b0683a080859d",
+      "isa_sha256": "26326f0a39453cc3aeadb1d5beba77c78aa421339babfe110b2f5a778521d2ea",
+      "clock_source": "hip_event",
+      "calibration_sample_id": "5-serial-calibration-78f126d54f89",
+      "resources": {
+        "lds_bytes": 0,
+        "scratch_bytes": 3136,
+        "vgpr": 137
+      },
+      "duration_ns": 134224.93934631348,
+      "instrumented": false
+    },
+    "instrumented": {
+      "architecture": "gfx1151",
+      "kernel_name": "product",
+      "semantic_sha256": "0288839eedf43c9b38b7d63d05aa838cab29309538388c21a16ceb4df9eded1f",
+      "image_sha256": "e49e38de3b1f13be9873de8acc4c1687522f8d5568c26aa9740b0683a080859d",
+      "isa_sha256": "26326f0a39453cc3aeadb1d5beba77c78aa421339babfe110b2f5a778521d2ea",
+      "clock_source": "hip_event",
+      "calibration_sample_id": "5-serial-calibration-78f126d54f89",
+      "resources": {
+        "lds_bytes": 0,
+        "scratch_bytes": 3136,
+        "vgpr": 137
+      },
+      "duration_ns": 134191.32232666016,
+      "instrumented": true
+    },
+    "duration_ratio": 0.9997495471421552,
+    "maximum_duration_ratio": 1.05,
+    "resource_delta": {
+      "vgpr": 0,
+      "sgpr": 0,
+      "lds_bytes": 0,
+      "scratch_bytes": 0,
+      "spills": 0
+    }
+  },
+  "eligible_for_regression": true,
+  "eligible_for_promotion": true,
+  "ineligibility_reasons": [],
+  "admission_route": "device_clock_witness",
+  "diagnostic_gaps": [
+    "BARE_METAL_REQUIRED",
+    "ROCPROFILER_CAPTURE_MISSING",
+    "ROCPROFILER_DISPATCH_MISSING",
+    "ROCPROFILER_RUNTIME_CALLBACK_MISSING"
+  ],
+  "calibration_status": "promotable",
+  "packet_sha256": "57e011dffbe22c44d28b83c0ba6cf05c92d48670ba869184954addb4306ea426"
+}

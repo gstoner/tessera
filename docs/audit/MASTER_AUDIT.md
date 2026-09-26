@@ -346,7 +346,11 @@ matches its module fails generation. Read the counts there.
 
 ### Per backend
 
-- **NVIDIA** ([queue](backend/nvidia/todo.md)). Absorb the remaining
+- **NVIDIA** ([queue](backend/nvidia/todo.md)). Lane-B-pattern sweep
+  (`NVIDIA-LANE-B-1`, 2026-09-26): the Graph→Tile `tessera-lower-to-gpu` /
+  `nvidia-pipeline-sm*` validation route, `@jit` matmul on the hand NVRTC
+  `nvidia_mma` kernel, and the Python-Tile `package_matmul` fallback all sit
+  beside the scheduled route. Absorb the remaining
   Graph-input families (most already build Tile IR, so this is absorption,
   not rewrite); settle the `package_matmul` fallback as oracle or retire it
   (Decision #31, coverage comparison first); the eight delegate-contract gaps
@@ -375,7 +379,11 @@ matches its module fails generation. Read the counts there.
   when a CDNA part arrives. ROCM-6, RASTER-1B and COSTMODEL-T1 proceed on
   `wall_clock64`-validated paired timing rather than waiting for KFD
   counters. Future features (not gates): gfx950/942/1250/1200 (ROCM-1/3/4).
-- **Apple** ([queue](backend/apple/todo.md)), on the shared MLIR/LLVM path. `gpu.matmul2d` still lowers to
+- **Apple** ([queue](backend/apple/todo.md)), on the shared MLIR/LLVM path.
+  Lane-B-pattern sweep (`APPLE-LANE-B-1`, 2026-09-26): the `-full` value
+  pipelines skip Schedule IR while described as Graph→Schedule→Tile→Target,
+  the matmul2d corpus measured a tiling-only route, `@jit` matmul dispatches
+  MPS/MTL4 from metadata, and the canonical route's Tile→Target step is Python. `gpu.matmul2d` still lowers to
   runtime symbols, not compiler-owned MSL (APPLE-MATMUL2D-1); simdgroup
   lowering stages per tile but lacks the cooperative K-slab copy
   (APPLE-SIMDGROUP-IR-1); F2 Schedule

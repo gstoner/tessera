@@ -3,10 +3,79 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## `NVIDIA-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
+
+Sync `LANE-B-SWEEP-2026-09-26` (ROCm owns the pattern: its Lane B was retired
+the same day, `docs/audit/backend/rocm/ROCM_LANE_MAP.md` §"Decision — Lane B
+is retired"). **Follow-up required; nothing changed on NVIDIA and nothing is
+device-proven here** (Super-Bear offline). Found by a read-only audit and
+re-checked against the tree at `dc071ae4`. The canonical route is
+`scheduled_matmul.lower_scheduled_matmul` (Graph → Schedule → Tile, replay
+checked) → `nvidia_native.package_scheduled_matmul`.
+
+Each item is a second authority for a boundary the scheduled route already
+owns (Decision #31), or a route that skips Schedule IR, so its schedule never
+enters the replayed contract:
+
+1. **Graph → Tile C++ pipelines (the Lane B pattern).**
+   `tessera-lower-to-gpu` and `tessera-nvidia-pipeline[-sm90/-sm100/-sm120]`
+   (`src/transforms/lib/Passes.cpp`, `addCUDA13PipelineForSM` and the
+   `tessera-lower-to-gpu` builder) run `createTileIRLoweringPass` straight on
+   Graph IR. `LowerMatmulToTileMMA` rewrites `tessera.matmul` to `tile.mma`,
+   taking tile M/N from the attention options `tile-q`/`tile-kv`.
+   - Production use: only `driver._try_validate_with_tessera_opt`, which runs
+     it on every NVIDIA compile and discards the output.
+   - Other appearances: lit (`nvidia_pipeline_alias.mlir`,
+   `tile_ir_lowering.mlir`) and as a `pipeline_name` label in several
+   modules.
+   - To do: retire the matmul part, or point the validation at the scheduled
+     route. A validation step that exercises a route nothing ships validates
+     the wrong compiler.
+2. **`@jit(target="nvidia_sm120")` matmul runs `nvidia_mma`.**
+   `JitFn._uses_nvidia_mma_default` → `runtime._execute_nvidia_mma_artifact`
+   → the hand-written NVRTC kernel in `libtessera_nvidia_gemm.so`. No
+   declared Target IR op sits on this path, so the scheduled route is not the
+   production `@jit` path for fp16/bf16 matmul on sm_120.
+   - Nothing previously recorded this.
+   - To do: route `@jit` through the scheduled package, or put `nvidia_mma`
+     behind a declared, arbitrated Target IR op (Decision #28 Tier 3).
+     Either way, one authority decides.
+3. **`package_matmul` / `emit_matmul_tile_ir`.** Python writes the Tile IR,
+   skipping Graph and Schedule. The schedule comes from the `nvidia_schedule`
+   option.
+   - It is the fallback when `tessera-opt` is absent, and the only route for
+     fp64/tf32/fp8/int8.
+   - Already recorded above (§ the Decision #31 follow-on to "declare or
+     retire" this fallback). This entry adds the dtype coverage: retiring it
+     first needs scheduled contracts for those dtypes.
+   - Consequence for the dashboards: `bootstrap_prune_gap` marks
+     `nvidia_sm120,matmul` **compiled**, which overstates it while these
+     dtypes have no other route.
+4. **nvfp4 / mx matmul** (`package_nvfp4_matmul`, `package_mx_matmul`): Python
+   Tile IR with no scheduled contract. They are the only route, not a
+   duplicate, but they skip Schedule IR.
+5. **Bench-only arbiter candidates.**
+   - `NvidiaMmaGemmEmittedCandidate` emits Python PTX via
+     `ptx_emit.emit_mma_sync_gemm_ptx`.
+   - `NvidiaTileMatmulCandidate` writes a Python `tile.matmul_kernel` string
+     copied from the `emit_matmul_tile_ir` template.
+   - Neither is production today; if either is ever promoted, it must enter
+     as a declared Target IR candidate.
+6. **Broken benchmark (verified by reading the code, not run):**
+   `benchmarks/nvidia/benchmark_scheduled_macro_matmul.py` calls
+   `package_scheduled_matmul(module, scheduled, pipeline_name=...)`. The
+   function takes one artifact, so this raises `TypeError`. Fix it when
+   Super-Bear is back.
+
+Other families follow the same Python-Tile-string pattern
+(`emit_softmax/reduce/norm/paged_attention/...` in `nvidia_native.py`). They
+are in scope for the same sweep, once the matmul order is settled.
+
 
 ## Device-clock markers — 2026-09-26
 

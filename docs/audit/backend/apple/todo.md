@@ -8,6 +8,70 @@ last_updated: 2026-09-26
 
 # Apple compiler, exact-device, and performance plan
 
+## `APPLE-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
+
+Sync `LANE-B-SWEEP-2026-09-26` (ROCm owns the pattern: its Lane B was retired
+the same day, `docs/audit/backend/rocm/ROCM_LANE_MAP.md` §"Decision — Lane B
+is retired"). **Follow-up required; nothing was changed here.** Found by a
+read-only audit and re-checked against the tree at `dc071ae4`. The canonical
+Apple GPU route is `lower_scheduled_matmul` (Graph → Schedule → Tile, replay
+checked) → `apple_native.package_scheduled_matmul`. It covers rank-2
+fp32→fp32 and fp16→fp32. apple_cpu has no scheduled matmul contract.
+
+1. **`tessera-lower-to-apple_{cpu,gpu}-full` skip Schedule IR, and their
+   descriptions say they do not.** `tools/tessera-opt/tessera-opt.cpp`:
+   - The pipeline is effect-annotation → reasoning prologue →
+     distribution-lowering → `createTilingPass(valueMode=true)` → Tile→Apple.
+     There is no graph-to-schedule / schedule-to-tile.
+   - Yet both registrations are described as "Full
+     Graph->Schedule->Tile->Target", and `pipeline_registry.py` repeats it.
+   - They are opt-in (`apple_target_ir_mode="value"`). For rank-2 f16 on the
+     GPU they reach the same simdgroup runtime symbol as the scheduled route,
+     so they are a second authority (Decision #31).
+   - To do: correct the descriptions now (they are false), then either route
+     the value lane through Schedule IR or declare it an oracle with a
+     differential test against the scheduled route.
+2. **The matmul2d admission corpus measured a Lane-B route.**
+   - `benchmarks/apple_gpu/benchmark_matmul2d_route_corpus.py` builds its
+     "compiled route" candidate with `PASSES = ("tessera-tiling",
+     "tessera-apple-canonical-gemm-matmul2d", ...)`, i.e. Graph → tiling → Tile
+     with no Schedule IR.
+   - The candidate is not the scheduled route, so the corpus's verdicts are
+     about a route production does not take.
+   - To do: re-point the candidate at the scheduled route (lowp has no
+     scheduled contract yet, so that comes first) and re-measure.
+3. **`@jit(target="apple_gpu")` matmul dispatches MPS/MTL4 from metadata.**
+   - The path: `build_cpu_plan` (Python Schedule/Tile/Target renderers) →
+     `jit._apple_gpu_fast_call` → `runtime._execute_apple_gpu_mps_metadata` →
+     `_apple_gpu_dispatch_matmul`.
+   - The scheduled route is therefore not the production `@jit` path for
+     rank-2 f32/f16; the same holds for `@jit(target="apple_cpu")` through
+     Accelerate.
+   - To do: one authority decides. Either `@jit` goes through the scheduled
+     package, or MPS/MTL4/Accelerate enter as declared, arbitrated Target IR
+     candidates (Decision #28 Tier 3).
+4. **Inside the canonical route, the Tile → Target step is Python.**
+   - `apple_native.package_scheduled_matmul` writes its Target IR as an
+     f-string (`tessera_apple.gpu.kernel_call @...`), and the f16 MSL is
+     generated in Python at launch from macro-tile integers
+     (`msl_gemm_emit.materialize_apple_simdgroup_tile_msl`).
+   - No C++ Tile → Target pass runs on this route.
+   - This is the seam CLAUDE.md names ("two disconnected compilers") and the
+     one to close for alpha; `MatmulToAppleSimdgroup.cpp` is the C++ producer
+     that should own it.
+5. **`tessera-lower-to-apple_gpu-runtime`** (Graph `tessera.matmul` → MPS
+   call) skips both Schedule and Tile. It runs in production only as
+   discarded-output validation (`driver._try_validate_with_tessera_opt`), so
+   it has the same "validates the wrong compiler" problem as NVIDIA item 1.
+6. **apple_cpu has three parallel matmul authorities and no canonical one:**
+   the `apple_cpu_native.package_native` descriptor, the `-full` value lane,
+   and the `@jit` Accelerate metadata path. Settle a scheduled contract first,
+   then retire or declare the rest.
+
+Dead code seen in passing: `matmul_pipeline._render_apple_gpu_target_ir` and
+`_render_apple_cpu_target_ir` have no callers (also `_render_nvidia_target_ir`).
+
+
 ## APPLE-ACCUM-1: accumulator from numeric_policy, not a default — 2026-09-26
 
 Owner decision 2026-09-26: Apple accumulation is **not fp32-only by policy**;

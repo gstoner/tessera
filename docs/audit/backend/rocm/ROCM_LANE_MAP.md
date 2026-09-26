@@ -93,6 +93,10 @@ Retired in one change:
   Delete it or declare it an oracle with a differential test; it is not
   production.
 
+Sibling sweep (sync `LANE-B-SWEEP-2026-09-26`): the same pattern exists on
+NVIDIA (`NVIDIA-LANE-B-1`) and Apple (`APPLE-LANE-B-1`); recorded in their
+queues as follow-ups, nothing changed there.
+
 ## Historical snapshot (2026-08-05)
 
 The remainder records the earlier gfx1151 directive-versus-canonical-lane

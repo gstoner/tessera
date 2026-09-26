@@ -3,10 +3,244 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## `APPLE-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
+
+Sync `LANE-B-SWEEP-2026-09-26` (ROCm owns the pattern: its Lane B was retired
+the same day, `docs/audit/backend/rocm/ROCM_LANE_MAP.md` §"Decision — Lane B
+is retired"). **Follow-up required; nothing was changed here.** Found by a
+read-only audit and re-checked against the tree at `dc071ae4`. The canonical
+Apple GPU route is `lower_scheduled_matmul` (Graph → Schedule → Tile, replay
+checked) → `apple_native.package_scheduled_matmul`. It covers rank-2
+fp32→fp32 and fp16→fp32. apple_cpu has no scheduled matmul contract.
+
+1. **`tessera-lower-to-apple_{cpu,gpu}-full` skip Schedule IR, and their
+   descriptions say they do not.** `tools/tessera-opt/tessera-opt.cpp`:
+   - The pipeline is effect-annotation → reasoning prologue →
+     distribution-lowering → `createTilingPass(valueMode=true)` → Tile→Apple.
+     There is no graph-to-schedule / schedule-to-tile.
+   - Yet both registrations are described as "Full
+     Graph->Schedule->Tile->Target", and `pipeline_registry.py` repeats it.
+   - They are opt-in (`apple_target_ir_mode="value"`). For rank-2 f16 on the
+     GPU they reach the same simdgroup runtime symbol as the scheduled route,
+     so they are a second authority (Decision #31).
+   - To do: correct the descriptions now (they are false), then either route
+     the value lane through Schedule IR or declare it an oracle with a
+     differential test against the scheduled route.
+2. **The matmul2d admission corpus measured a Lane-B route.**
+   - `benchmarks/apple_gpu/benchmark_matmul2d_route_corpus.py` builds its
+     "compiled route" candidate with `PASSES = ("tessera-tiling",
+     "tessera-apple-canonical-gemm-matmul2d", ...)`, i.e. Graph → tiling → Tile
+     with no Schedule IR.
+   - The candidate is not the scheduled route, so the corpus's verdicts are
+     about a route production does not take.
+   - To do: re-point the candidate at the scheduled route (lowp has no
+     scheduled contract yet, so that comes first) and re-measure.
+3. **`@jit(target="apple_gpu")` matmul dispatches MPS/MTL4 from metadata.**
+   - The path: `build_cpu_plan` (Python Schedule/Tile/Target renderers) →
+     `jit._apple_gpu_fast_call` → `runtime._execute_apple_gpu_mps_metadata` →
+     `_apple_gpu_dispatch_matmul`.
+   - The scheduled route is therefore not the production `@jit` path for
+     rank-2 f32/f16; the same holds for `@jit(target="apple_cpu")` through
+     Accelerate.
+   - To do: one authority decides. Either `@jit` goes through the scheduled
+     package, or MPS/MTL4/Accelerate enter as declared, arbitrated Target IR
+     candidates (Decision #28 Tier 3).
+4. **Inside the canonical route, the Tile → Target step is Python.**
+   - `apple_native.package_scheduled_matmul` writes its Target IR as an
+     f-string (`tessera_apple.gpu.kernel_call @...`), and the f16 MSL is
+     generated in Python at launch from macro-tile integers
+     (`msl_gemm_emit.materialize_apple_simdgroup_tile_msl`).
+   - No C++ Tile → Target pass runs on this route.
+   - This is the seam CLAUDE.md names ("two disconnected compilers") and the
+     one to close for alpha; `MatmulToAppleSimdgroup.cpp` is the C++ producer
+     that should own it.
+5. **`tessera-lower-to-apple_gpu-runtime`** (Graph `tessera.matmul` → MPS
+   call) skips both Schedule and Tile. It runs in production only as
+   discarded-output validation (`driver._try_validate_with_tessera_opt`), so
+   it has the same "validates the wrong compiler" problem as NVIDIA item 1.
+6. **apple_cpu has three parallel matmul authorities and no canonical one:**
+   the `apple_cpu_native.package_native` descriptor, the `-full` value lane,
+   and the `@jit` Accelerate metadata path. Settle a scheduled contract first,
+   then retire or declare the rest.
+
+Dead code seen in passing: `matmul_pipeline._render_apple_gpu_target_ir` and
+`_render_apple_cpu_target_ir` have no callers (also `_render_nvidia_target_ir`).
+
+
+## APPLE-ACCUM-1: accumulator from numeric_policy, not a default — 2026-09-26
+
+Owner decision 2026-09-26: Apple accumulation is **not fp32-only by policy**;
+the lanes support the accumulators the hardware and SDK compute faithfully and
+refuse the rest with a named reason. Host: **Mac M1 Max (Apple7), macOS 27.0,
+Xcode 27.0, Metal toolchain 32023.921**; every device result below was run
+unsandboxed on that GPU. No other backend's hardware was involved and no parity
+is claimed.
+
+**Sources.** `metal_simdgroup_matrix` (Metal toolchain headers) declares
+`simdgroup_matrix` for half/bfloat/float and constrains
+`simdgroup_multiply_accumulate` only by `is_floating_point_v`;
+`MPPTensorOpsMatMul2d.h` (macOS 27 SDK, lines 15-83) lists matmul2d
+left x right -> destination triples including half/bfloat destinations. A
+header that permits a destination type does not state the accumulation
+precision, so every entry below was compiled with `xcrun metal` at the
+runtime's language version and run on the GPU against numpy models.
+
+**Simdgroup lane (MSL 3.1).** Compile probe: all nine half/bfloat/float
+storage x accumulator pairs compile; int/short/char accumulators do not
+(`make_filled_simdgroup_matrix` has no integer overload). Device probe
+(hand-written kernels, then the Tessera steel emitter through the TILE-1
+runtime ABI):
+
+| Storage | Accum | Status | Device behaviour (bit-exact model) | K=4096 max rel. err (64x64) |
+|---|---|---|---|---|
+| f16 / bf16 | fp32 | **admitted** (unchanged) | sequential fp32 FMA chain | 1.2e-06 - 2.3e-06 |
+| f16 | fp16 | **admitted (new)** | sequential fp16 FMA chain, every step rounded to fp16 | 1.3e-02 - 1.8e-02 |
+| bf16 | fp16 | **admitted (new)** | fp32 inside each 8-deep MMA, RNE to fp16 after every MMA | 5.6e-03 |
+| f32 | fp16 | admitted in the IR lane only (the TILE-1 ABI takes 16-bit operands) | same model as bf16 x fp16 -- re-derived by a committed hand-written-kernel test (`test_f32_storage_fp16_accumulator_is_bit_exact_with_its_model`); no end-to-end route | 6.7e-03 |
+| any | bf16 | **refused** `APPLE_SIMDGROUP_ACCUM_UNSUPPORTED` / `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR` | compiles, but is fp32 accumulation over the whole K **truncated (RTZ)** to bf16 at `simdgroup_store` -- not bf16 accumulation | n/a |
+| any | int32 etc. | **refused** | no integer `simdgroup_matrix` (does not compile) | n/a |
+
+The earlier `test_apple_simdgroup_contract.py` numpy figure (5.8e-03 for f16
+accumulation) modelled one rounding per 8-deep MMA; the device rounds fp16 x
+fp16 after every FMA and is worse (1.3e-02 - 1.8e-02). Tolerances are not used
+for the admitted rows: `tests/unit/test_apple_simdgroup_accumulator_device.py`
+asserts bit-exactness against the declared model on aligned and ragged shapes,
+brackets the K=4096 error between a floor (the accumulator really is fp16) and
+a ceiling set from the measurement, and keeps the bf16 refusal live (the test
+fails if a future OS makes bfloat a genuine bf16 accumulator).
+
+**matmul2d lane (MSL 4.1).** Probed with inline tensors from device pointers
+(scratch harness, not project code): for f16 x f16 and bf16 x bf16, a half or
+bfloat destination is **bit-exact with fp32 accumulation over the whole K
+rounded once (RNE) to the destination**, with `relaxed_precision` false or
+true; bf16 x bf16 -> half and f16 x f16 -> bfloat do not compile (not in the
+header table). matmul2d therefore implements exactly one accumulator, fp32, and
+a narrow destination is an output rounding. The lane now reads a declared
+`numeric_policy.accum` and refuses anything but fp32
+(`APPLE_MATMUL2D_ACCUM_UNSUPPORTED`, negative fixture
+`apple_matmul2d_accum_invalid.mlir`). The previous hint that routed
+half/bfloat/int32 accumulation to matmul2d is withdrawn: it pointed at a lane
+that does not accumulate in those types (and whose op refuses them).
+
+**What landed.**
+
+- `apple_fragment.select_apple_simdgroup_fragment` takes a **required**
+  `accumulator_dtype` (no default) and admits `SIMDGROUP_ACCUMULATORS`
+  (fp32, fp16 for fp16/bf16 storage); refusals name storage, accumulator,
+  target and the measured reason. `materialize_apple_simdgroup_tile_msl` takes
+  the same required keyword; an fp16 accumulator reaches the fp32 TILE-1 output
+  through the edge scratch (converted per element; fp16 -> fp32 is exact), and
+  the scratch is sized by accumulator width. fp32 output is byte-identical to
+  the previous emitter (checked over 48 materializations).
+- The raw MSL emitters refuse accumulators the fragment contract refuses.
+- `tessera_apple.gpu.simdgroup_matmul`: `c`/`d` carry the accumulator (must
+  agree); f32/f16 verify, bf16/int refused with the measured reason; ODS text
+  corrected (it said the accumulator is always fp32 and that Metal's accumulate
+  form takes `simdgroup_float8x8`; `simdgroup_half8x8` accumulation compiles
+  and runs).
+- `MatmulToAppleSimdgroup` reads `numeric_policy.accum` (missing ->
+  `APPLE_SIMDGROUP_ACCUM_MISSING`), builds the accumulator tile/fill/store in
+  that type, rounds once (truncf) or widens exactly (extf), and refuses a
+  double-rounding f16 -> bf16 result.
+- `TileToApple` (TILE-1 value call) stamps `tessera_apple.accumulate` from
+  `numeric_policy.accum` and fails closed without one; the runtime dispatcher
+  reads it and refuses a call without it. `CanonicalGemmToAppleGPU` derives the
+  accumulator from the nest's loop-carried type, cross-checks a declared one,
+  and sizes edge scratch by it. The E2E-REAL-3 descriptor path reads its
+  accumulator from the ABI identity (`...f16_f32.v1`).
+- **Frontend default, made explicit.** Decision #15a and the primitive registry
+  record matmul's default as `accum=fp32`, but the canonical Graph IR render
+  never carried it (no pipeline runs `propagate_numeric_policy`, and
+  `IROp.numeric_policy` is not rendered). The Apple value-mode front door now
+  writes that registered default into the Graph IR it lowers
+  (`driver.materialize_matmul_accumulators`, on a copy; digests unchanged) for
+  matmuls that state none, so the backend reads it rather than assumes it. A
+  declared accumulator is never overwritten.
+- End to end on the GPU: Graph IR `numeric_policy = {accum = "fp16"}` ->
+  `tessera_apple.accumulate = "fp16"` -> fp16-accumulator kernel -> result
+  bit-exact with the fp16 model and different from the fp32 one
+  (`test_value_lane_executes_the_declared_fp16_accumulator`).
+- Diagnostics: `APPLE_SIMDGROUP_ACCUM_MISSING`, `APPLE_SIMDGROUP_ACCUM_UNSUPPORTED`
+  registered; `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR`,
+  `APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED`, `APPLE_MATMUL2D_ACCUM(_UNSUPPORTED)`
+  and `APPLE_CANONICAL_GEMM_DTYPE_UNSUPPORTED` texts corrected. Pass metadata
+  for `tessera-matmul-to-apple-simdgroup` added.
+
+**Pre-PR review fixes (2026-09-26, same host, device tests unsandboxed).**
+
+- **P1-1 (TILE-1 double rounding).** `TileToApple` checked only the
+  accumulator, so bf16 x bf16 -> bf16 with `accum = "fp16"` dispatched and
+  returned fp16-precision values in a bf16-declared tensor. The
+  accumulator -> result rule now lives in one helper
+  (`appleAccumulatorResultRefusal`) used by both `TileToApple` and
+  `MatmulToAppleSimdgroup`; f16 -> bf16 is refused in both
+  (`apple_tile_simdgroup_accum_invalid.mlir`,
+  `test_value_lane_refuses_an_fp16_accumulator_into_a_bf16_result`).
+  **Related, user-visible, fixed:** the TILE-1 value lane returned the
+  kernel's fp32 output buffer for every declared f16/bf16 result -- a
+  different dtype and unrounded values. `TileToApple` now stamps
+  `tessera_apple.result_dtype` (the canonical route stamps its f32
+  accumulator type) and the dispatcher returns that dtype, rounded once
+  (RNE) from the fp32 accumulator -- the same single rounding the IR lane's
+  epilogue performs -- and refuses a call without it
+  (`test_value_lane_returns_the_declared_result_dtype_rounded_once`, bit-exact
+  for f16 and bf16). The driver also now records a value-pipeline failure's
+  first `error:` line instead of the trailing `note:`, which had dropped every
+  named refusal's code.
+- **P1-2 (front-door carrier).** `materialize_matmul_accumulators` reads
+  dict and `primitive_coverage.NumericPolicy` carriers, refuses any other
+  shape with `APPLE_ACCUM_POLICY_UNRECOGNIZED` (recorded as the value-mode
+  error), and stamps the registered fp32 default only for f16/bf16/f32/f64
+  operands (an int8 matmul gets nothing and the backend refuses it, named).
+  `graph_ir.NumericPolicy` is refused on purpose: its `accum` defaults to
+  "f32", so a defaulted value would read as declared; no producer sets
+  `IROp.numeric_policy` to it today.
+- **P1-3 (hint).** `APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED` now says fp16
+  accumulation has a route only on TILE-1 and only for an f16/bf16 *result*
+  (in practice f16 -> f16, since fp16 -> bf16 is refused), and that an
+  f32-result matmul declaring fp16 (e.g. f16 x f16 -> f32) has **no** Apple
+  GPU route today.
+- **P2.** The raw MSL emitters and validators take no default accumulator.
+  One spelling map: Python uses `tessera.dtype.canonicalize_dtype`; C++
+  `appleAccumulatorType` accepts exactly its fp32/fp16/bf16 spellings
+  (case-folded), drift-gated by
+  `test_apple_accumulator_spellings_match_tessera_dtype`. A
+  `numeric_policy.storage` that contradicts the operands is refused
+  (`APPLE_SIMDGROUP_STORAGE_MISMATCH`) in `MatmulToAppleSimdgroup`,
+  `TileToApple` and `CanonicalGemmToAppleGPU`.
+
+**Still open (owned here, APPLE-ACCUM-1 follow-ups).**
+
+- The shared `TilingPass` forms the canonical nest only for f32/i32 result
+  types (the accumulator rides in the result type), so an fp16 accumulator
+  cannot reach the canonical-GEMM route; it reaches Apple only through the
+  TILE-1 value lane, and only for f16/bf16 results -- f16 x f16 -> f32 with
+  accum=fp16 has no Apple GPU route. Changing that is a shared Tile contract (sibling impact on every
+  canonical-GEMM consumer), not an Apple change.
+- `emit/apple_msl.py` fused-region kernels (`FusedRegion`, from the
+  arch-agnostic `fusion_core`) accumulate in fp32 unconditionally and
+  `FusedRegion` carries no `numeric_policy`, so a matmul that declared
+  accum=fp16 and is fused into a region would run fp32. This is a shared
+  fusion contract gap (NVIDIA/x86 emitters consume the same region); it needs a
+  `numeric_policy` field on the region and a refusal/lowering per backend.
+- The rest of the frontend still does not render `numeric_policy` into Graph
+  IR (only the Apple value-mode front door materializes the matmul default).
+- matmul2d half/bfloat **results** (fp32 accumulation, one rounding into a
+  16-bit destination) are measured faithful but not wired: the runtime view
+  entry writes an fp32 C, so a narrow result stays a cast after the call.
+  Wiring it edits `apple_gpu_runtime.mm` and re-seals the Apple E2E packet.
+- Integer (int8 x int8 -> int32) matmul2d accumulation: the header lists it, but
+  the Tessera matmul2d pair table admits no int8 pair; not probed, not enabled.
+
+**Sibling outcome.** Not applicable -- the changed contracts are Apple-owned
+(the Apple dialect, Apple lowerings, the Apple fragment, the Apple value-mode
+front door). No shared Graph/Tile contract changed; the two shared gaps above
+are recorded, not changed.
 
 ## Device-clock markers — 2026-09-26
 
@@ -58,6 +292,11 @@ after timing, as the NVIDIA and ROCm scripts now do.
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory
 lives); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+
+**Applied 2026-09-26.** The `-O2` runtime-library helper and the
+`runtime_library_build.json` record landed. Status and the owed re-measurement
+live in the x86 queue entry. Parity is not claimed on this backend: its rows
+need re-recording on its own box before this backend's numbers change.
 Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
 
 **Finding (Apple).** The Mac's `build/` is empty. `libTesseraAppleRuntime.dylib`
@@ -510,7 +749,7 @@ are emitted and unregistered:
 |---|---|
 | `APPLE_FRAGMENT_UNSUPPORTED_ARCH` | `apple_fragment.py` — the target has no `simdgroup_matrix` |
 | `APPLE_FRAGMENT_UNSUPPORTED_DTYPE` | `apple_fragment.py` — storage is not fp16/bf16 |
-| `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR` | `apple_fragment.py` — simdgroup Tile fragments require fp32 |
+| `APPLE_FRAGMENT_UNSUPPORTED_ACCUMULATOR` | `apple_fragment.py` — the requested accumulator is not one the simdgroup lane executes faithfully (since APPLE-ACCUM-1: fp32/fp16 admitted, bf16/int refused) |
 | `APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED` | `msl_gemm_emit.py` |
 | `APPLE_COUNTER_EVIDENCE_UNSUPPORTED` | `apple_counter_evidence.py` — two sites |
 
@@ -525,7 +764,16 @@ invented fix hint is worse than a missing entry — it reads as settled and send
 the next caller the wrong way.
 
 The ratchet fails if the set grows and fails again when one of the five is
-registered without being deleted from the list, so this can only shrink. Note
+registered without being deleted from the list, so this can only shrink.
+
+**Closed 2026-09-20; owner decision 2026-09-26.** All five are registered and
+the ratchet is empty. The owner has decided Apple accumulation is **not
+fp32-only by policy**. **Corrected 2026-09-26 (APPLE-ACCUM-1, measured):** the
+interim hint that routed half/bfloat/int32 accumulation to the Metal 4
+`matmul2d` lane is withdrawn -- matmul2d accumulates in fp32 only (a
+half/bfloat destination is fp32 accumulation rounded once), and its op refuses
+any other accumulator. The simdgroup lane now admits fp32 and fp16 and refuses
+bf16/int with the measured reason; see the APPLE-ACCUM-1 section. Note
 the nine ROCm siblings found in the same sweep were registered the same day;
 only Apple's are outstanding.
 
@@ -680,7 +928,8 @@ was previously noted only in `CLAUDE.md`): the Apple dialect gained its first
 machine primitives. `TesseraAppleOps.td` declares a real
 `!tessera_apple.simdgroup_matrix` type with `gpu.simdgroup_{fill,load,matmul,store}`,
 `gpu.threadgroup_alloc` and `gpu.threadgroup_barrier`; the simdgroup op carries
-the fp32-accumulator contract and limits storage to f16/bf16/f32. Producer:
+the program's accumulator (fp32-only until APPLE-ACCUM-1 2026-09-26; now fp32 or
+fp16, bf16 refused) and limits storage to f16/bf16/f32. Producer:
 `src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MatmulToAppleSimdgroup.cpp`
 (Decision #29 sequencing: op and producer landed together). **Scope limit:** it
 stages one guarded 8×8 tile per K step through `gpu.threadgroup_alloc` (ragged

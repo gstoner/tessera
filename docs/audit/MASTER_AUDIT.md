@@ -302,13 +302,20 @@ matches its module fails generation. Read the counts there.
    refuses WSL2 — its witness is the Nsight activity window, which is
    profiler-derived and unverified on WSL2. **Kept by owner decision
    (2026-09-26);** the 5% agreement gate is what rejects bad WSL2 windows. What remains: no fleet packet recorded on the new routes; the
-   x86 probe cannot yet measure TSC independently, so x86 has no packet
-   route; NVIDIA has no non-profiler witness (`%globaltimer`); event-only
+   x86 packet has a derived `tsc_witness` route since 2026-09-26 (per-row
+   TSC vs CLOCK_MONOTONIC_RAW around the real trial region, frequency from
+   separate pinned calibration intervals, the per-launch samples bound to the
+   witnessed region, everything re-derived from stored integers). **Under
+   WSL2 the raw clock is itself derived from the TSC, so the route shows a
+   stable TSC scale bracketing the samples, not agreement with an independent
+   oscillator**; its Zen 5 packet is recorded on Princess-Luna; NVIDIA has no non-profiler witness (`%globaltimer`); event-only
    recorders stay ineligible. Separately: NVIDIA timers run on the
    default stream (DEVICE-CLOCK-DISCIPLINE); Apple `kernelStartTime` does not
    measure work; and runtime libraries in empty-build-type trees compile at
-   `-O0` (RUNTIME-LIB-OPT-1, proposed, not applied), which biases every
-   comparison packet recorded from them.
+   `-O0` (RUNTIME-LIB-OPT-1, **applied 2026-09-26** as `-O2` for the runtime
+   libraries only, with a `runtime_library_build.json` stamp), which biased
+   every comparison packet recorded from them; those packets stay stale until
+   re-recorded.
 
 ### Foundation still to build, by IR level
 
@@ -333,13 +340,17 @@ matches its module fails generation. Read the counts there.
 | Analysis | W2.1 dataflow substrate, per-op memory effects, symbolic-dim equality | Value, alias, effect, memory-dependence and ordered-collective **consumers** (§3 above) |
 | Fusion | One authoritative recognizer; Apple synthesizer F0–F5 | Synthesizer not portable through IR; consumer-driven canonicalization (W5.5); ANN admission of measured candidates (MSW-9) |
 | Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log | **Decision #11 is not enforced in production**: neither cache key carries toolchain or delegate-ABI identity, and while `emit/autotune.py` can fail closed on compiler/resource fingerprints as *evidence* fields, only a benchmark script and a unit test ever pass `required_evidence` — the default warm-start loads rows unchecked; Decision #12 `route` is stamped per recorder, not a schema field; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
-| Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; the split-K predicate has no production consumer (ROCM-SPLIT-K-1) |
+| Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; split-K has a production consumer on gfx1201 f16/bf16 since 2026-09-26 (ROCM-SPLIT-K-1) -- the per-shape slice rule, fp8/int split and gfx1151 remain open |
 | Memory | `TileBufferReusePass`, `TileBufferArenaPass` on ROCm/NVIDIA | Control-flow path-max sizing; multiple dynamic arenas; measured full-model remat |
 | Cost models | `target_perf.py`, T1 GEMM model, `FusionCost` | T1 failed ranking — replace, do not coefficient-tune; per-arch correlation (NVIDIA-CALIB-1, ROCM-COSTMODEL-T1, X86-CALIB-1, APPLE-CALIB-1); sm_120 and Apple roofline peaks |
 
 ### Per backend
 
-- **NVIDIA** ([queue](backend/nvidia/todo.md)). Absorb the remaining
+- **NVIDIA** ([queue](backend/nvidia/todo.md)). Lane-B-pattern sweep
+  (`NVIDIA-LANE-B-1`, 2026-09-26): the Graph→Tile `tessera-lower-to-gpu` /
+  `nvidia-pipeline-sm*` validation route, `@jit` matmul on the hand NVRTC
+  `nvidia_mma` kernel, and the Python-Tile `package_matmul` fallback all sit
+  beside the scheduled route. Absorb the remaining
   Graph-input families (most already build Tile IR, so this is absorption,
   not rewrite); settle the `package_matmul` fallback as oracle or retire it
   (Decision #31, coverage comparison first); the eight delegate-contract gaps
@@ -350,10 +361,14 @@ matches its module fails generation. Read the counts there.
   descriptors; one block-index convention. Future features (not gates):
   sm_90 WGMMA, sm_100 tcgen05/TMEM.
 - **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
-  The broad production lane still skips Graph/Schedule/Tile; the ~58
-  `generate-*` expander adoption policy (a/b/c) and Lane B are undecided;
-  ROCM-SPLIT-K-1 needs a production consumer (the predicate is already keyed
-  on occupancy); the LDS body's remaining lever is the
+  The broad production lane still skips Graph/Schedule/Tile; the 78
+  `generate-*` expanders are decided **(a): every family is entered from Tile IR**
+  (owner, 2026-09-26; the expander stays as the Tile→Target generator, the
+  Python-built directive entry goes); Lane B (the Graph→Tile GEMM shortcut
+  that skipped Schedule IR) is **retired 2026-09-26** — see the lane map;
+  ROCM-SPLIT-K-1 landed on gfx1201 f16/bf16 (ordered cross-workgroup
+  split-K; router gate 16x256x2048 measured ~2x on Tajasarus, host wall clock)
+  and still owes a per-shape slice rule; the LDS body's remaining lever is the
   **VGPR** ceiling (the K1-blocked layout was refuted 2026-09-20 and the pad
   default corrected to 1 — see ROCM-LDS-BANKPAD-1 / ROCM-LDS-STAGE-VECTOR-1);
   `ROCM_WaitTokenOp` names a counter class but carries no count immediate, so
@@ -365,7 +380,11 @@ matches its module fails generation. Read the counts there.
   when a CDNA part arrives. ROCM-6, RASTER-1B and COSTMODEL-T1 proceed on
   `wall_clock64`-validated paired timing rather than waiting for KFD
   counters. Future features (not gates): gfx950/942/1250/1200 (ROCM-1/3/4).
-- **Apple** ([queue](backend/apple/todo.md)), on the shared MLIR/LLVM path. `gpu.matmul2d` still lowers to
+- **Apple** ([queue](backend/apple/todo.md)), on the shared MLIR/LLVM path.
+  Lane-B-pattern sweep (`APPLE-LANE-B-1`, 2026-09-26): the `-full` value
+  pipelines skip Schedule IR while described as Graph→Schedule→Tile→Target,
+  the matmul2d corpus measured a tiling-only route, `@jit` matmul dispatches
+  MPS/MTL4 from metadata, and the canonical route's Tile→Target step is Python. `gpu.matmul2d` still lowers to
   runtime symbols, not compiler-owned MSL (APPLE-MATMUL2D-1); simdgroup
   lowering stages per tile but lacks the cooperative K-slab copy
   (APPLE-SIMDGROUP-IR-1); F2 Schedule
@@ -397,12 +416,28 @@ matches its module fails generation. Read the counts there.
    **Done 2026-09-26:** the gfx1151 SSD calibrated-pairs packet — the
    production selector admits the cooperative candidate on compiler-built
    device-clock markers, no KFD ([packet](../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md),
-   sync `DEVICE-CLOCK-MARKER-2026-09-26`). Open: validate the NVIDIA
+   sync `DEVICE-CLOCK-MARKER-2026-09-26`); and the gfx1201 packet on
+   Tajasarus, where the same selector admits cooperative, lower bound 9.73×
+   ([packet](../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md),
+   sync `GFX1201-SSD-CALIBRATION-2026-09-26`). Open: validate the NVIDIA
    `%globaltimer` marker on Super-Bear and record its SSD packet; an SSD Nsight
    activity-window packet on Super-Bear's WSL2; marker timing in
-   `calibrate_gfx1151.py`; an independent TSC measurement in the x86 probe
-   (then its packet route); gfx1201 and Zen 2 packet adapters.
-1. RUNTIME-LIB-OPT-1 on all four backends, then re-measure affected packets.
+   `calibrate_gfx1151.py`; a Zen 2 packet adapter; a gfx1151 SSD re-record
+   under the interleaved protocol. **Done 2026-09-26:** the Zen 5 x86 profiler
+   packet on the `tsc_witness` route
+   (Princess-Luna, `-O2` library; environment tags are diagnostic gaps). Its
+   verdict is E2E-REAL-4's **non-regression check between the production and
+   scheduled images, which are byte-identical in both rows** — a parity check
+   under WSL2, not a performance promotion. Also host-keyed AVX-512 E2E packets
+   on both Zen 5 boxes (`AVX512-E2E-PACKETS-2026-09-26`). These were re-recorded twice per host
+   after `X86-WITNESS-PIN-1` was fixed (the timed region now runs unconfined,
+   so threaded attention is measured as in production and is stable across
+   recordings). **Open caveat (`X86-MATMUL-BIMODAL-1`):** matmul 256³
+   `kernel_wall` lands on one of two levels (~0.72 / ~1.05 ms), moving 1.48x
+   between two unpinned recordings of identical code on Princess-Luna; one
+   recording's matmul latency is not a stable number until that is explained.
+1. RUNTIME-LIB-OPT-1: applied 2026-09-26 (`-O2` runtime libraries + build
+   record); open: re-measure the affected packets on their own boxes.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
    dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.
 3. Decision #11 versioned cache key and a Decision #12 `route` schema field.
@@ -411,13 +446,11 @@ matches its module fails generation. Read the counts there.
 5. Required Target IR contracts + GOV-ODS-CONSUMER-1; extend
    `verifier_coverage` to Tile/Schedule/Target ODS.
 6. NVIDIA `tile.mma` sites (W1.1), then W3.3.
-7. ROCM-SPLIT-K-1; the LDS-body VGPR lever.
+7. ROCM-SPLIT-K-1 per-shape slice rule (landed S rule is conservative on the router gate); the LDS-body VGPR lever.
 8. `x86vector` lowering via the `tessera-jit` path.
 9. Apple `matmul2d` → compiler-owned MSL; Apple arbiter candidacy.
 
 **Needs an owner decision**
-- ROCm expander adoption (a/b/c) and Lane B's disposition.
-- Whether Apple fp32-only accumulation is permanent (gates DIAG-PY-BACKLOG-1).
 - Live-queue IDs for IR_STACK U2, U3, U5 and U6 (only U4 is routed, as W3.3).
 
 **Future features — tracked, not compiler gates**

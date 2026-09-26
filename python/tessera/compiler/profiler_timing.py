@@ -146,6 +146,12 @@ KERNEL_SIDE_CLOCKS = frozenset({"device_wall_clock_ns", "tsc_cycles"})
 #: (``rocm_timing_provider.hip`` device vs HIP event; ``tprof.cpp`` x86 clocks),
 #: so a Python-side admission cannot be looser than the probe that fed it.
 CLOCK_AGREEMENT_BAND = 0.05
+#: Kernel clocksources Linux selects only when it trusts the TSC to be
+#: synchronized across CPUs (`tsc`), or that derive time from a hypervisor-
+#: synchronized TSC page (`hyperv_clocksource_tsc_page`, WSL2). Under one of
+#: these a TSC delta read on two CPUs is meaningful; the 5% agreement with
+#: CLOCK_MONOTONIC_RAW still has to hold, so a real skew is caught.
+TSC_SYNCHRONIZED_CLOCKSOURCES = frozenset({"tsc", "hyperv_clocksource_tsc_page"})
 
 
 #: The stable reason a recorder stamps when its WSL timing cannot promote.
@@ -359,8 +365,11 @@ def validate_clock_record(record: Mapping[str, Any]) -> None:
     if slot == "tsc_cycles" and valid:
         if provenance.get("invariant_tsc") is not True:
             raise ProfilerTimingError("tsc_cycles requires invariant_tsc proof")
-        if provenance.get("logical_cpu_start") != provenance.get("logical_cpu_end"):
-            raise ProfilerTimingError("migrated tsc_cycles sample is invalid")
+        if (provenance.get("logical_cpu_start") != provenance.get("logical_cpu_end")
+                and provenance.get("clocksource") not in TSC_SYNCHRONIZED_CLOCKSOURCES):
+            raise ProfilerTimingError(
+                "tsc_cycles read on two CPUs is valid only under a TSC-synchronized "
+                f"kernel clocksource ({', '.join(sorted(TSC_SYNCHRONIZED_CLOCKSOURCES))})")
         frequency_hz = provenance.get("calibrated_frequency_hz")
         if not isinstance(frequency_hz, (int, float)) or frequency_hz <= 0:
             raise ProfilerTimingError("tsc_cycles requires a positive calibrated_frequency_hz")

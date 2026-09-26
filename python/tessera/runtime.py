@@ -4500,6 +4500,8 @@ def _submit_rocm_gfx1151_native(
                                    GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
+    split_k = 1  # ROCM-SPLIT-K-1; read from the descriptor in the matmul branch
+    split_reduce_block = 0
     depth_attention = descriptor.abi_id == GFX_DEPTH_ATTN_F32_ABI
     attention_bias = attention and bool(descriptor.provenance["bias"])
     expected_buffers = (
@@ -4589,6 +4591,49 @@ def _submit_rocm_gfx1151_native(
         macro_m, macro_n = macro_tile
         grid_x = (n + macro_n - 1) // macro_n
         grid_y = (m + macro_m - 1) // macro_m
+        # ROCM-SPLIT-K-1: a split schedule is two launches -- the partial over
+        # grid.z = S into an fp32 [S, M, N] workspace, then the ordered
+        # reduction that applies the epilogue. Every field is checked; a split
+        # descriptor missing one is refused, never run as the unsplit kernel.
+        raw_split = descriptor.provenance.get("split_k", 1)
+        if not isinstance(raw_split, int) or isinstance(raw_split, bool) or raw_split < 1:
+            raise RuntimeError("ROCm matmul descriptor split_k must be a positive int")
+        split_k = raw_split
+        if split_k > 1:
+            if (
+                descriptor.provenance.get("split_k_reduction") != "ordered"
+                or descriptor.geometry.policy != "rocm_wmma_split_k_grid"
+                or not isinstance(descriptor.provenance.get("split_k_reduce_entry"), str)
+                or matmul_integer
+                or output.dtype != np.float32
+            ):
+                raise RuntimeError(
+                    "ROCm split-K matmul descriptor requires an ordered reduction entry, "
+                    "the split-K grid policy and an fp32 output")
+            # The workspace is allocated from the TYPED descriptor field
+            # (Decision #32); provenance is a readable copy and must agree.
+            expected_bytes = split_k * m * n * 4
+            workspace_spec = descriptor.workspace
+            if (
+                workspace_spec.bytes != expected_bytes
+                or workspace_spec.lifetime != "launch"
+                or descriptor.provenance.get("split_k_workspace")
+                != {"dtype": "fp32", "shape": [split_k, m, n]}
+            ):
+                raise RuntimeError(
+                    "ROCm split-K descriptor workspace disagrees with split_k x M x N x fp32 "
+                    f"(typed {workspace_spec.bytes} B, expected {expected_bytes} B)")
+            raw_block = descriptor.provenance.get("split_k_reduce_workgroup")
+            if (
+                not isinstance(raw_block, list)
+                or len(raw_block) != 3
+                or not all(isinstance(v, int) and not isinstance(v, bool) for v in raw_block)
+                or not 1 <= raw_block[0] <= 1024
+                or raw_block[1:] != [1, 1]
+            ):
+                raise RuntimeError(
+                    "ROCm split-K reduce workgroup must be [x, 1, 1] with 1 <= x <= 1024")
+            split_reduce_block = raw_block[0]
     elif attention:
         q, key, value = (buffers[item.name] for item in ordered[:3])
         bias = buffers[ordered[3].name] if attention_bias else None
@@ -4744,6 +4789,53 @@ def _submit_rocm_gfx1151_native(
                 ctypes.c_int64(size),
                 ctypes.c_int64(1),
             ]
+
+        if matmul and split_k > 1:
+            m_, n_, k_ = dimensions
+            reduce_function = ctypes.c_void_p()
+            reduce_entry = cast(str, descriptor.provenance["split_k_reduce_entry"])
+            if hip.hipModuleGetFunction(ctypes.byref(reduce_function), module, reduce_entry.encode()) != 0:
+                raise RuntimeError(f"ROCm split-K reduce symbol {reduce_entry!r} not found")
+            workspace = ctypes.c_void_p()
+            workspace_elements = split_k * m_ * n_
+            if hip.hipMalloc(ctypes.byref(workspace), descriptor.workspace.bytes) != 0:
+                raise RuntimeError("ROCm split-K workspace hipMalloc failed")
+            if workspace.value is None or workspace.value % descriptor.workspace.alignment:
+                hip.hipFree(workspace)
+                raise RuntimeError("ROCm split-K workspace allocation violates its declared alignment")
+            device_buffers.append(workspace)
+            # Every workspace element is written by exactly one slice (the
+            # masked store covers the ragged M/N edge), so no clear is needed.
+            partial_args: list[Any] = []
+            for device, array in zip(device_inputs[:2], input_arrays[:2], strict=True):
+                partial_args.extend(memref_args(device, int(array.size)))
+            partial_args.extend(memref_args(workspace, workspace_elements))
+            partial_args.extend(ctypes.c_int64(value) for value in dimensions)
+            reduce_args: list[Any] = list(memref_args(workspace, workspace_elements))
+            if matmul_bias:
+                reduce_args.extend(memref_args(device_inputs[2], int(input_arrays[2].size)))
+            reduce_args.extend(memref_args(device_o, int(output.size)))
+            reduce_args.extend((ctypes.c_int64(m_), ctypes.c_int64(n_)))
+            reduce_block = split_reduce_block
+            launches = (
+                (function, (grid_x, grid_y, split_k),
+                 int(cast(list[int], descriptor.provenance.get("workgroup", [32]))[0]), partial_args),
+                (reduce_function, ((m_ * n_ + reduce_block - 1) // reduce_block, 1, 1), reduce_block, reduce_args),
+            )
+            for kernel, grid, block, kernel_args in launches:
+                packed = (ctypes.c_void_p * len(kernel_args))()
+                for index, value in enumerate(kernel_args):
+                    packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+                # Same (null) stream for both, so the reduction is ordered
+                # after the partial without a host synchronization between.
+                rc = hip.hipModuleLaunchKernel(kernel, *grid, block, 1, 1, 0, None, packed, None)
+                if rc != 0:
+                    raise RuntimeError(f"ROCm split-K kernel launch failed rc={rc}")
+            if hip.hipDeviceSynchronize() != 0:
+                raise RuntimeError("ROCm split-K device synchronization failed")
+            if hip.hipMemcpy(output.ctypes.data_as(ctypes.c_void_p), device_o, output_byte_count, 2) != 0:
+                raise RuntimeError("ROCm split-K device-to-host copy failed")
+            return output
 
         arguments = []
         if attention:
@@ -6000,6 +6092,7 @@ def _submit_apple_gpu_native(
         APPLE_TOPK_DYNAMIC_F32_I32_ABI,
         APPLE_TOPK_F32_SYMBOL,
         APPLE_SIMDGROUP_GEMM_F16_ABI,
+        APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
         APPLE_SIMDGROUP_GEMM_F16_SYMBOL,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
@@ -6249,8 +6342,13 @@ def _submit_apple_gpu_native(
             raise RuntimeError("Apple simdgroup GEMM requires a contiguous f32 output")
         block = cast(Sequence[int], descriptor.provenance.get("block") or [32, 32, 16])
         bm, bn, bk = (int(value) for value in block)
+        # The accumulator is part of this ABI's identity
+        # (`...simdgroup_gemm.a_b_o_m_n_k.f16_f32.v1`): the packager only emits
+        # it for a scheduled matmul whose numeric policy is storage f16 /
+        # accum f32, so it is read from the ABI, not defaulted (APPLE-ACCUM-1).
         artifact = materialize_apple_simdgroup_tile_msl(
             AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", bm, bn, bk,
+            accumulator_dtype=APPLE_SIMDGROUP_GEMM_F16_ACCUMULATOR,
             double_buffer=True,
         )
         result, native = dispatch_apple_simdgroup_tile_f16(artifact, a, b)
@@ -7320,7 +7418,6 @@ _rocm_hip_launch_lib: ctypes.CDLL | None = None
 #: chip are not listed: they are carried by the directive and by `arch`. The
 #: kernel remains shape-generic — shape never enters the directive.
 _rocm_compiled_hsaco_cache: dict[tuple[object, ...], bytes] = {}
-_rocm_canonical_gemm_hsaco_cache: dict[tuple[object, ...], bytes] = {}
 
 
 class _RocmCompiledUnavailable(RuntimeError):
@@ -7719,97 +7816,6 @@ def _build_compiled_gemm_hsaco(
     return hsaco
 
 
-def _build_canonical_gemm_hsaco(
-    m: int,
-    n: int,
-    k: int,
-    dtype: str = "f16",
-    *,
-    staging: str = "register",
-) -> bytes:
-    """Compile the shared explicit M/N/K ``scf.for`` GEMM contract to gfx11.
-
-    Unlike :func:`_build_compiled_gemm_hsaco`, this front door begins with a
-    Graph-IR matmul, runs the shared tiler and Tile async seam, then requires
-    the ROCm ownership planner to materialize the ``!tile.buffer``,
-    ``!tile.async_token``, and ``!tile.pipeline_state`` proof consumed by the
-    ROCm generator. The resulting physical kernel and ABI intentionally remain
-    the one established problem-size-generic WMMA body.
-    """
-    if min(m, n, k) <= 0:
-        raise ValueError("canonical ROCm GEMM dimensions must be positive")
-    if staging not in {"register", "lds"}:
-        raise ValueError("canonical ROCm GEMM staging must be register or lds")
-    chip = _rocm_chip()
-    if not chip.startswith("gfx11"):
-        raise _RocmCompiledUnavailable(
-            "canonical ROCm GEMM currently requires the gfx11 16x16x16 WMMA physical consumer"
-        )
-    spellings = {
-        "f16": ("f16", "f32"),
-        "bf16": ("bf16", "f32"),
-        "int8": ("i8", "i32"),
-        "i8": ("i8", "i32"),
-    }
-    if dtype not in spellings:
-        raise ValueError("canonical ROCm GEMM dtype must be f16, bf16, or int8")
-    storage, accum = spellings[dtype]
-    canonical_dtype = "int8" if dtype == "i8" else dtype
-    source = f"""module {{
-  func.func @gemm(%a: tensor<{m}x{k}x{storage}>,
-                  %b: tensor<{k}x{n}x{storage}>)
-      -> tensor<{m}x{n}x{accum}> {{
-    %0 = "tessera.matmul"(%a, %b)
-        : (tensor<{m}x{k}x{storage}>, tensor<{k}x{n}x{storage}>)
-        -> tensor<{m}x{n}x{accum}>
-    return %0 : tensor<{m}x{n}x{accum}>
-  }}
-}}
-"""
-    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
-
-    spec: dict[str, Any] = dict(
-        family="matmul",
-        input_level=ROCMInputLevel.GRAPH,
-        arch=chip,
-        staging=staging,
-    )
-    config, identity = _rocm_lane_config(**spec)
-    # Unlike the directive lanes this one is problem-size-specific: m/n/k are
-    # in the Graph IR source, so the source text is the whole "what". `chip`
-    # and `staging` are not listed separately -- the config carries both, and
-    # listing them again is the drift this keying exists to remove
-    # (ROCM-PIPELINE-KEY-1). `canonical_dtype` stays: `f16`/`bf16` spell the
-    # source identically to their aliases, but `i8` and `int8` both map to the
-    # same `i8` storage, so the source does not distinguish the request.
-    key = (canonical_dtype, source) + identity
-    cached = _rocm_canonical_gemm_hsaco_cache.get(key)
-    if cached is not None:
-        return cached
-    opt = _tessera_opt_path()
-    if opt is None:
-        raise _RocmCompiledUnavailable("tessera-opt not built — no canonical ROCm GEMM compiler")
-    if config is None:
-        ROCMExecutablePipeline(**spec)  # raises the family/arch refusal, here
-    pipeline = config.pass_pipeline()  # type: ignore[union-attr]
-    import subprocess
-
-    result = subprocess.run(
-        [str(opt), "-", f"--pass-pipeline={pipeline}"],
-        input=source,
-        capture_output=True,
-        text=True,
-        env=_rocm_serializer_env(),
-    )
-    if result.returncode != 0 or "gpu.binary" not in result.stdout:
-        _rocm_compiled_failed(f"canonical M/N/K ROCm GEMM did not serialize: {result.stderr[:400]}")
-    hsaco = _extract_hsaco_blob(result.stdout)
-    if hsaco[:4] != b"\x7fELF":
-        _rocm_compiled_failed("canonical ROCm GEMM output was not an ELF hsaco")
-    _rocm_canonical_gemm_hsaco_cache[key] = hsaco
-    return hsaco
-
-
 def _scheduled_storage_numpy_dtype(name: str):
     """The numpy dtype a scheduled-package buffer binding names, or None."""
     import numpy as np
@@ -8003,6 +8009,75 @@ def _rocm_wmma_oracle_can_stand_in(artifact: RuntimeArtifact, args: Any) -> bool
 _rocm_scheduled_gemm_packages: dict[tuple[Any, ...], Any] = {}
 
 
+#: Storage tag -> (MLIR element, canonical dtype name) for the canonical GEMM.
+_CANONICAL_GEMM_STORAGE: dict[str, tuple[str, str]] = {
+    "f16": ("f16", "fp16"), "bf16": ("bf16", "bf16"),
+    "e4m3": ("f8E4M3FN", "fp8_e4m3"), "e5m2": ("f8E5M2", "fp8_e5m2"),
+    "int8": ("i8", "int8"), "int4": ("i4", "int4"),
+}
+
+
+def build_canonical_gemm_hsaco(
+    m: int, n: int, k: int, dtype: str = "f16", *, chip: str | None = None,
+    bias: bool = False, activation: str = "none", staging: str = "register",
+) -> Any:
+    """The canonical ROCm GEMM image, built through every IR level.
+
+    One ``tessera.matmul`` Graph module (the A/B[/bias] ABI order the frontend
+    uses) goes Graph -> Schedule -> Tile through
+    ``scheduled_matmul.lower_scheduled_matmul`` (which replays Schedule->Tile
+    and refuses a mismatch), then Tile -> ``tessera_rocm`` Target IR -> HSACO
+    through ``rocm_native.package_scheduled_matmul``. Returns the
+    ``ROCMNativePackage``: ``image.payload`` is the hsaco, and the launch
+    descriptor carries the entry symbol, ABI, bindings and the ``macro_tile`` /
+    ``workgroup`` a launcher must use -- a package, not bare bytes, because
+    the hsaco alone cannot be launched correctly. The traced frontend reaches
+    the same lower-and-package authority through ``driver.py``; the
+    Graph->Tile shortcut that skipped Schedule IR (Lane B) was retired
+    2026-09-26.
+    """
+    from .compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
+    from .compiler.rocm_native import package_scheduled_matmul
+    from .compiler.scheduled_matmul import lower_scheduled_matmul
+
+    if min(m, n, k) <= 0:
+        raise ValueError("canonical ROCm GEMM dimensions must be positive")
+    if dtype not in _CANONICAL_GEMM_STORAGE:
+        raise ValueError(f"canonical ROCm GEMM storage must be one of {sorted(_CANONICAL_GEMM_STORAGE)}")
+    if staging not in {"register", "lds"}:
+        raise ValueError("canonical ROCm GEMM staging must be register or lds")
+    chip = chip or _rocm_chip()
+    ir_elem, ir_dtype = _CANONICAL_GEMM_STORAGE[dtype]
+    integer = dtype in ("int8", "int4")
+    out_elem, out_dtype_name = ("i32", "int32") if integer else ("f32", "fp32")
+    key = (chip, int(m), int(n), int(k), bool(bias), activation, dtype, staging)
+    package = _rocm_scheduled_gemm_packages.get(key)
+    if package is not None:
+        return package
+    a_type = IRType(f"tensor<{m}x{k}x{ir_elem}>", (str(m), str(k)), ir_dtype)
+    b_type = IRType(f"tensor<{k}x{n}x{ir_elem}>", (str(k), str(n)), ir_dtype)
+    out_type = IRType(f"tensor<{m}x{n}x{out_elem}>", (str(m), str(n)), out_dtype_name)
+    ir_args = [IRArg("a", a_type), IRArg("b", b_type)]
+    operands, operand_types = ["%a", "%b"], [str(a_type), str(b_type)]
+    kwargs: dict[str, object] = {"activation": activation}
+    if bias:
+        bias_type = IRType(f"tensor<{n}xf32>", (str(n),), "fp32")
+        ir_args.append(IRArg("bias", bias_type))
+        kwargs["bias"] = "%bias"
+        operands.append("%bias")
+        operand_types.append(str(bias_type))
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name="rocm_compiled_gemm", args=ir_args, result_types=[out_type],
+        body=[IROp(result="o", op_name="tessera.matmul", operands=operands,
+                   operand_types=operand_types, result_type=str(out_type), kwargs=kwargs)],
+        return_values=["%o"])])
+    artifact = lower_scheduled_matmul(module, target=f"rocm_{chip}")
+    package = package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm",
+                                       staging=staging)
+    _rocm_scheduled_gemm_packages[key] = package
+    return package
+
+
 def _rocm_compiled_gemm_via_scheduled_package(
     a: Any, b: Any, bias: Any, activation: str, m: int, n: int, k: int, chip: str,
     dtype_tag: str = "f16",
@@ -8012,17 +8087,13 @@ def _rocm_compiled_gemm_via_scheduled_package(
     tessera_rocm -> HSACO, with the typed Tile->ROCm consumer applying the
     epilogue on this chip's fragment layout. The Graph module is built the
     way the frontend builds it (one `tessera.matmul` with the A/B/bias ABI
-    order), so the package is the same product a traced program yields."""
+    order), so the package is the same product a traced program yields.
+    The package itself comes from :func:`build_canonical_gemm_hsaco`."""
     import numpy as np
-    from .compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
-    from .compiler.rocm_native import package_scheduled_matmul
-    from .compiler.scheduled_matmul import lower_scheduled_matmul
 
     has_bias = bias is not None
-    ir_elem, ir_dtype = {"f16": ("f16", "fp16"), "bf16": ("bf16", "bf16"),
-                         "e4m3": ("f8E4M3FN", "fp8_e4m3"), "e5m2": ("f8E5M2", "fp8_e5m2"),
-                         "int8": ("i8", "int8"), "int4": ("i4", "int4")}[dtype_tag]
     integer = dtype_tag in ("int8", "int4")
+    ir_dtype = _CANONICAL_GEMM_STORAGE[dtype_tag][1]
     # int4 values travel in int8 containers, one logical value per byte.
     store_dtype = _scheduled_storage_numpy_dtype("int8" if integer else ir_dtype)
     if store_dtype is None:
@@ -8033,30 +8104,9 @@ def _rocm_compiled_gemm_via_scheduled_package(
         for name, arr in (("a", np.asarray(a)), ("b", np.asarray(b))):
             if arr.dtype != np.int8 or (arr.size and (int(arr.min()) < -8 or int(arr.max()) > 7)):
                 raise ValueError(f"rocm_compiled int4 lane needs logical int8 {name} values in [-8,7]")
-    out_elem, out_dtype_name, out_np = ("i32", "int32", np.int32) if integer else ("f32", "fp32", np.float32)
-    key = (chip, int(m), int(n), int(k), has_bias, activation, dtype_tag)
-    package = _rocm_scheduled_gemm_packages.get(key)
-    if package is None:
-        a_type = IRType(f"tensor<{m}x{k}x{ir_elem}>", (str(m), str(k)), ir_dtype)
-        b_type = IRType(f"tensor<{k}x{n}x{ir_elem}>", (str(k), str(n)), ir_dtype)
-        out_type = IRType(f"tensor<{m}x{n}x{out_elem}>", (str(m), str(n)), out_dtype_name)
-        ir_args = [IRArg("a", a_type), IRArg("b", b_type)]
-        operands, operand_types = ["%a", "%b"], [str(a_type), str(b_type)]
-        kwargs: dict[str, object] = {"activation": activation}
-        if has_bias:
-            bias_type = IRType(f"tensor<{n}xf32>", (str(n),), "fp32")
-            ir_args.append(IRArg("bias", bias_type))
-            kwargs["bias"] = "%bias"
-            operands.append("%bias")
-            operand_types.append(str(bias_type))
-        module = GraphIRModule(functions=[GraphIRFunction(
-            name="rocm_compiled_gemm", args=ir_args, result_types=[out_type],
-            body=[IROp(result="o", op_name="tessera.matmul", operands=operands,
-                       operand_types=operand_types, result_type=str(out_type), kwargs=kwargs)],
-            return_values=["%o"])])
-        artifact = lower_scheduled_matmul(module, target=f"rocm_{chip}")
-        package = package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
-        _rocm_scheduled_gemm_packages[key] = package
+    out_np = np.int32 if integer else np.float32
+    package = build_canonical_gemm_hsaco(
+        m, n, k, dtype_tag, chip=chip, bias=has_bias, activation=activation)
     out = np.zeros((m, n), out_np)
     buffers: dict[str, Any] = {"a": np.ascontiguousarray(a, store_dtype),
                                "b": np.ascontiguousarray(b, store_dtype), "o": out}
@@ -37933,7 +37983,11 @@ def _apple_gpu_tile_simdgroup_gemm_available() -> bool:
             materialize_apple_simdgroup_tile_msl,
         )
 
-        art = materialize_apple_simdgroup_tile_msl(AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 8, 8, 8)
+        # Probes the f16-storage / fp32-accumulator form of the ABI; the
+        # accumulator is stated, not defaulted (APPLE-ACCUM-1).
+        art = materialize_apple_simdgroup_tile_msl(
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 8, 8, 8,
+            accumulator_dtype="fp32")
         a = _np.eye(8, dtype=_np.float16)
         out, native = dispatch_apple_simdgroup_tile_f16(art, a, a)
         return bool(native and _np.allclose(out, _np.eye(8, dtype=_np.float32)))
@@ -38267,15 +38321,44 @@ def _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np):
             ) from exc
     else:
         raise ValueError(f"tile_simdgroup_gemm has unknown staging layout owner {layout_owner!r}")
+    # APPLE-ACCUM-1: the accumulator is the one the compiler stamped from the
+    # program's numeric_policy (`tessera_apple.accumulate`). A call without one
+    # is refused -- the accumulator selects semantics (Decision #21a) and this
+    # dispatcher does not choose it.
+    accumulate = call.get("accumulate")
+    if not isinstance(accumulate, str) or not accumulate:
+        raise ValueError(
+            "APPLE_SIMDGROUP_ACCUM_MISSING: tile_simdgroup_gemm call carries no "
+            "tessera_apple.accumulate; the accumulator is not defaulted")
     art = materialize_apple_simdgroup_tile_msl(
         AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, bm, bn, bk,
+        accumulator_dtype=accumulate,
         double_buffer=(contract is None or contract["stage_depth"] == 2),
         staging_contract=contract,
     )
+    # The kernel writes an fp32 C (the TILE-1 ABI). The program's declared
+    # result dtype rides as `tessera_apple.result_dtype`; returning the fp32
+    # buffer for a declared f16/bf16 result handed users a different dtype and
+    # unrounded values (APPLE-ACCUM-1 review). Round ONCE here (RNE) to the
+    # declared type: an fp32 accumulator -> f16/bf16 is the same single rounding
+    # MatmulToAppleSimdgroup's epilogue performs, and an fp16 accumulator -> f16
+    # is exact. fp16 -> bf16 never reaches here (refused by TileToApple).
+    result_dtype = call.get("result_dtype")
+    result_np = {"fp16": np.float16, "fp32": np.float32}.get(str(result_dtype))
+    if result_dtype == "bf16":
+        result_np = _bfloat16_dtype()
+    if result_np is None:
+        raise ValueError(
+            "tile_simdgroup_gemm call carries no usable tessera_apple.result_dtype "
+            f"({result_dtype!r}); the declared result dtype is not guessed")
+    if result_dtype == "bf16" and accumulate not in ("fp32", "f32", "float32"):
+        raise ValueError(
+            "APPLE_SIMDGROUP_ACCUM_UNSUPPORTED: a bf16 result needs an fp32 "
+            f"accumulator (got {accumulate!r}); anything else rounds twice")
     out, native = dispatch_apple_simdgroup_tile_f16(art, a, b)
     if not native:
         raise ValueError("TILE-1 simdgroup ABI returned non-native dispatch")
-    return out
+    return np.asarray(out, dtype=np.float32).astype(result_np)
 
 
 def _dispatch_gpu_native_sparse_attn(inputs, call, np):

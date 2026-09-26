@@ -12,7 +12,7 @@
 
 func.func @gemm_f16_storage_f32_accum(%a: tensor<16x16xf16>, %b: tensor<16x8xf16>)
     -> tensor<16x8xf32> {
-  %c = "tessera.matmul"(%a, %b)
+  %c = "tessera.matmul"(%a, %b) {numeric_policy = {storage = "fp16", accum = "fp32"}}
       : (tensor<16x16xf16>, tensor<16x8xf16>) -> tensor<16x8xf32>
   return %c : tensor<16x8xf32>
 }
@@ -21,6 +21,8 @@ func.func @gemm_f16_storage_f32_accum(%a: tensor<16x16xf16>, %b: tensor<16x8xf16
 // per tile, which is what makes the budget check a per-kernel fact.
 // CHECK: tessera_apple.gpu.threadgroup_alloc {{.*}}elements = 64 : i64
 //
+// The accumulator is the program's numeric_policy.accum (fp32 here), read by
+// the pass rather than assumed (APPLE-ACCUM-1, Decision #21a).
 // The accumulator is filled, not loaded from memory: its initial value must
 // not depend on a buffer the compiler would then have to prove was zeroed.
 // CHECK: tessera_apple.gpu.simdgroup_fill {value = 0.000000e+00 : f32} : <f32>
@@ -48,7 +50,7 @@ func.func @gemm_f16_storage_f32_accum(%a: tensor<16x16xf16>, %b: tensor<16x8xf16
 // of the padded accumulator are simply never copied out.
 func.func @ragged_extents_stage_with_zero_padding(
     %a: tensor<17x23xf16>, %b: tensor<23x13xf16>) -> tensor<17x13xf16> {
-  %c = "tessera.matmul"(%a, %b)
+  %c = "tessera.matmul"(%a, %b) {numeric_policy = {storage = "fp16", accum = "fp32"}}
       : (tensor<17x23xf16>, tensor<23x13xf16>) -> tensor<17x13xf16>
   return %c : tensor<17x13xf16>
 }
@@ -65,14 +67,12 @@ func.func @ragged_extents_stage_with_zero_padding(
 
 // -----
 
-// An f16 result gets the rounding epilogue the MSL kernel performs: the
-// accumulator tile stays f32 and each element is rounded ONCE on the way out,
-// rather than at every K step. Measured, that is 1.7e-04 relative error
-// against 5.8e-03 for an f16 accumulator -- 34x -- which is what the extra
-// buffer buys.
+// An f16 result with accum = "fp32" gets the rounding epilogue the MSL kernel
+// performs: the accumulator tile stays f32 and each element is rounded ONCE on
+// the way out, rather than at every K step.
 func.func @f16_result_rounds_once_in_the_epilogue(
     %a: tensor<16x16xf16>, %b: tensor<16x8xf16>) -> tensor<16x8xf16> {
-  %c = "tessera.matmul"(%a, %b)
+  %c = "tessera.matmul"(%a, %b) {numeric_policy = {storage = "fp16", accum = "fp32"}}
       : (tensor<16x16xf16>, tensor<16x8xf16>) -> tensor<16x8xf16>
   return %c : tensor<16x8xf16>
 }
@@ -94,7 +94,7 @@ func.func @f16_result_rounds_once_in_the_epilogue(
 // already supported -- the exact gap these primitives exist to close.
 func.func @bf16_storage_with_fp32_accumulator(
     %a: tensor<16x16xbf16>, %b: tensor<16x8xbf16>) -> tensor<16x8xbf16> {
-  %c = "tessera.matmul"(%a, %b)
+  %c = "tessera.matmul"(%a, %b) {numeric_policy = {storage = "bf16", accum = "fp32"}}
       : (tensor<16x16xbf16>, tensor<16x8xbf16>) -> tensor<16x8xbf16>
   return %c : tensor<16x8xbf16>
 }
@@ -104,3 +104,39 @@ func.func @bf16_storage_with_fp32_accumulator(
 // fp32 accumulator matters at least as much for it.
 // CHECK: tessera_apple.gpu.simdgroup_matmul {{.*}}storage = "bf16"{{.*}} -> <f32>
 // CHECK: arith.truncf {{.*}} : f32 to bf16
+
+// -----
+
+// APPLE-ACCUM-1: accum = "fp16" is genuine fp16 accumulation on Apple7
+// (measured bit-exact with a sequential fp16 FMA chain for f16 storage, K=4096
+// max relative error 1.3e-02 to 1.8e-02 vs about 2e-06 for fp32). The accumulator tile, the
+// MMA chain and the store are all f16, and an f16 result needs no epilogue
+// rounding at all -- the accumulator IS the result.
+func.func @f16_accumulator_is_the_declared_accumulator(
+    %a: tensor<16x16xf16>, %b: tensor<16x8xf16>) -> tensor<16x8xf16> {
+  %c = "tessera.matmul"(%a, %b) {numeric_policy = {storage = "fp16", accum = "fp16"}}
+      : (tensor<16x16xf16>, tensor<16x8xf16>) -> tensor<16x8xf16>
+  return %c : tensor<16x8xf16>
+}
+// CHECK-LABEL: @f16_accumulator_is_the_declared_accumulator
+// CHECK: memref.alloc() : memref<128xf16>
+// CHECK: tessera_apple.gpu.simdgroup_fill {value = 0.000000e+00 : f32} : <f16>
+// CHECK: scf.for {{.*}} -> (!tessera_apple.simdgroup_matrix<f16>)
+// CHECK: tessera_apple.gpu.simdgroup_matmul {{.*}}storage = "f16"{{.*}} -> <f16>
+// CHECK: tessera_apple.gpu.simdgroup_store {{.*}} : <f16>, memref<128xf16>, index
+// CHECK-NOT: arith.truncf
+// CHECK: return
+
+// -----
+
+// An f16 accumulator under an f32 result widens exactly (arith.extf): the
+// returned values are the fp16 accumulator's values, not a re-accumulation.
+func.func @f16_accumulator_widens_exactly_into_an_f32_result(
+    %a: tensor<16x16xbf16>, %b: tensor<16x8xbf16>) -> tensor<16x8xf32> {
+  %c = "tessera.matmul"(%a, %b) {numeric_policy = {storage = "bf16", accum = "fp16"}}
+      : (tensor<16x16xbf16>, tensor<16x8xbf16>) -> tensor<16x8xf32>
+  return %c : tensor<16x8xf32>
+}
+// CHECK-LABEL: @f16_accumulator_widens_exactly_into_an_f32_result
+// CHECK: tessera_apple.gpu.simdgroup_matmul {{.*}}storage = "bf16"{{.*}} -> <f16>
+// CHECK: arith.extf {{.*}} : f16 to f32

@@ -1,0 +1,27 @@
+{
+  "architecture": "x86_64_avx512_strix_halo",
+  "files": {
+    "report.json": {
+      "bytes": 12285,
+      "sha256": "277e37bec23257ac1ec87077517d0a785526dbfe92c97d5ec6f4fa850877eca5"
+    },
+    "resources.json": {
+      "bytes": 921270,
+      "sha256": "94b2cc264907fff6b62e0549239c111ff2b285f90a2f4f2f80f20c00c56ea184"
+    }
+  },
+  "schema": "tessera.e2e-release-packet.v1",
+  "target": "x86",
+  "tested_commit": "dcdaf2a91a8b95a6a6e1cad154791e2b631083fe",
+  "validation": {
+    "architecture": "x86_64_avx512_strix_halo",
+    "benchmark_rows": 10,
+    "cache_proofs": 5,
+    "families": 5,
+    "fixtures": 5,
+    "level_c_fixtures": 5,
+    "maximum_absolute_error": 0.0,
+    "source_commit": "dcdaf2a91a8b95a6a6e1cad154791e2b631083fe",
+    "target": "x86"
+  }
+}

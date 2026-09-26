@@ -79,6 +79,10 @@ def Schedule_MatmulOp : Op<ScheduleDialect, "matmul", [Pure]> {
                        StrAttr:$storage,
                        DefaultValuedAttr<StrAttr, "\"\"">:$storage_b,
                        DefaultValuedAttr<I64Attr, "0">:$block_k,
+                       // ROCM-SPLIT-K-1: cross-workgroup K slices and the
+                       // order their partials are summed in. Both semantic.
+                       DefaultValuedAttr<I64Attr, "1">:$split_k,
+                       DefaultValuedAttr<StrAttr, "\"\"">:$split_k_reduction,
                        DefaultValuedAttr<I64Attr, "0">:$scale_k,
                        DefaultValuedAttr<StrAttr, "\"\"">:$scale_format,
                        DefaultValuedAttr<StrAttr, "\"\"">:$physical_contract,

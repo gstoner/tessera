@@ -786,9 +786,7 @@ def compile_graph_module(
         value_ir, value_mode_error = (
             (None, "; ".join(f"{d.code}: {d.message}" for d in unresolved))
             if unresolved
-            else _lower_apple_value_target_ir(
-                module.to_mlir(verify=False, canonical=True), target_kind
-            )
+            else _lower_apple_value_graph(module, target_kind)
         )
         if value_ir:
             target_artifact = LoweringArtifact(
@@ -1269,6 +1267,123 @@ def compile_graph_module(
     )
     _maybe_dump_debug_artifacts(bundle)
     return bundle
+
+
+#: Graph ops whose Apple value lowering selects an accumulator (the TILE-1
+#: simdgroup GEMM and the canonical GEMM routes read ``numeric_policy.accum``).
+_ACCUMULATING_GRAPH_OPS = frozenset({"tessera.matmul"})
+
+
+class AppleAccumulatorPolicyError(ValueError):
+    """The front door cannot state a matmul's accumulator faithfully."""
+
+
+#: Element types whose registered matmul default (``accum=fp32``) is the
+#: documented Decision #15a default. Anything else -- int8/int4 storage, FP8,
+#: a packed format -- has a different documented accumulator (int32, or a
+#: format-specific one) or none, so the front door does not stamp it.
+_FLOAT_STORAGE_ELEMENTS = frozenset({"f16", "bf16", "f32", "f64"})
+
+
+def _tensor_element_type(type_text: str | None) -> str | None:
+    """Element type of a ranked/unranked tensor type string, or None."""
+    if not type_text:
+        return None
+    match = re.search(r"[<x]([A-Za-z][A-Za-z0-9_]*)>\s*$", type_text.strip())
+    return match.group(1) if match else None
+
+
+def _carried_accumulator(op: Any) -> tuple[bool, str | None]:
+    """Read ``IROp.numeric_policy``'s accumulator.
+
+    Returns ``(recognized, accum)``. The recognized carrier shapes are the ones
+    ``jit._serialized_numeric_policy`` serializes: ``None``, a ``dict``, or a
+    ``primitive_coverage.NumericPolicy``. ``graph_ir.NumericPolicy`` is NOT
+    recognized even though it has an ``accum`` field: its ``accum`` defaults to
+    ``"f32"``, so a defaulted value is indistinguishable from a declared one
+    and reading it would launder a default into a declaration (#21a). No
+    producer sets ``IROp.numeric_policy`` to that class today; if one starts
+    to, this refuses instead of guessing.
+    """
+    from .primitive_coverage import NumericPolicy as RegistryNumericPolicy
+
+    carried = getattr(op, "numeric_policy", None)
+    if carried is None:
+        return True, None
+    if isinstance(carried, Mapping):
+        accum = carried.get("accum")
+        return True, (str(accum) if accum not in (None, "") else None)
+    if isinstance(carried, RegistryNumericPolicy):
+        return True, carried.accum
+    return False, None
+
+
+def materialize_matmul_accumulators(module: GraphIRModule) -> GraphIRModule:
+    """Write the frontend's accumulator into the IR the Apple backend reads.
+
+    APPLE-ACCUM-1. Decision #15a states the matmul numeric policy as
+    ``storage=<tensor dtype>, accum=fp32`` and the primitive registry
+    (``primitive_coverage._matmul_policy``) records that same default, but the
+    canonical Graph IR render never carried it: ``IROp.numeric_policy`` is not
+    rendered and no pipeline runs ``propagate_numeric_policy``. The Apple
+    backend reads the accumulator from ``numeric_policy.accum`` and refuses an
+    op without one (#21a), so the front door states it here:
+
+    * an op whose rendered ``numeric_policy`` kwarg exists is left unchanged
+      (the program declared it; the backend judges it);
+    * a carried ``IROp.numeric_policy`` (dict or registry ``NumericPolicy``)
+      that names an accumulator is rendered as declared;
+    * otherwise the registered default is stamped -- only for floating-point
+      operands (f16/bf16/f32/f64), because the registry's fp32 default ignores
+      storage and an int8 or FP8 matmul's documented accumulator is not fp32;
+      such an op is left without one and the backend refuses it, named;
+    * a carrier of any other shape raises ``AppleAccumulatorPolicyError``
+      (``APPLE_ACCUM_POLICY_UNRECOGNIZED``) rather than being overwritten.
+
+    Returns a copy; the caller's module (and the digests computed from it) is
+    not mutated.
+    """
+    import copy
+
+    from .numeric_policy_pass import _policy_for_op_name
+
+    stamped = copy.deepcopy(module)
+    for fn in stamped.functions:
+        for op in fn.body:
+            if op.op_name not in _ACCUMULATING_GRAPH_OPS:
+                continue
+            if "numeric_policy" in op.kwargs:
+                continue
+            recognized, accum = _carried_accumulator(op)
+            if not recognized:
+                raise AppleAccumulatorPolicyError(
+                    "APPLE_ACCUM_POLICY_UNRECOGNIZED: "
+                    f"{op.op_name} carries a numeric_policy of type "
+                    f"{type(op.numeric_policy).__name__}, which the Apple front "
+                    "door cannot read an accumulator from without guessing; "
+                    "state numeric_policy = {accum = ...} on the op")
+            if accum is None:
+                elements = {_tensor_element_type(t) for t in op.operand_types}
+                if not elements or not elements <= _FLOAT_STORAGE_ELEMENTS:
+                    continue  # no documented float default: backend refuses, named.
+                registered = _policy_for_op_name(op.op_name)
+                accum = getattr(registered, "accum", None)
+            if accum is None:
+                continue  # no documented default: the backend refuses, named.
+            op.kwargs["numeric_policy"] = {"accum": str(accum)}
+    return stamped
+
+
+def _lower_apple_value_graph(
+    module: GraphIRModule, target_kind: str,
+) -> tuple[str | None, str | None]:
+    """Materialize accumulators, then run the Apple value pipeline."""
+    try:
+        materialized = materialize_matmul_accumulators(module)
+    except AppleAccumulatorPolicyError as exc:
+        return None, str(exc)
+    return _lower_apple_value_target_ir(
+        materialized.to_mlir(verify=False, canonical=True), target_kind)
 
 
 def _resolve_apple_target_ir_mode(options: Mapping[str, Any]) -> str:
@@ -2222,7 +2337,11 @@ def _lower_apple_value_target_ir(graph_text: str, target_kind: str) -> tuple[str
         return None, f"tessera-opt invocation failed: {exc}"
     if proc.returncode != 0:
         detail = (proc.stderr or "").strip().splitlines()
-        tail = detail[-1] if detail else f"returncode {proc.returncode}"
+        # Record the diagnostic itself (the first `error:` line carries the
+        # stable code), not the trailing `note: see current operation` -- the
+        # tail alone dropped every named refusal's code (APPLE-ACCUM-1 review).
+        errors = [line for line in detail if " error: " in line or line.startswith("error:")]
+        tail = errors[0] if errors else (detail[-1] if detail else f"returncode {proc.returncode}")
         return None, f"{pipeline} failed: {tail}"
     if not proc.stdout.strip():
         return None, f"{pipeline} produced empty output"

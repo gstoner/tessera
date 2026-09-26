@@ -38,7 +38,7 @@ def _shape(spec: str) -> tuple[int, int, int]:
 def _sample(a: np.ndarray, b: np.ndarray, *, order: str, group: int, reps: int) -> dict[str, Any]:
     artifact = materialize_apple_simdgroup_tile_msl(
         AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", 32, 32, 16,
-        raster_order=order, raster_group=group,
+        accumulator_dtype="fp32", raster_order=order, raster_group=group,
     )
     # Compile/cache the exact source before timing its device dispatches.
     warm_output, warm_native, warm_record = dispatch_apple_simdgroup_tile_f16(

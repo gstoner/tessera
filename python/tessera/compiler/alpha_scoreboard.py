@@ -64,7 +64,7 @@ LANES: tuple[Lane, ...] = (
     Lane("mac_gpu", "Mac M1 Max", "Apple7 GPU", "apple_gpu", "apple_gpu",
          ("apple_gpu", "apple7")),
     Lane("luna_cpu", "Princess-Luna", "Zen 5 AVX-512", "x86", "x86",
-         ("x86", "x86_64_avx512")),
+         ("x86", "x86_64_avx512_strix_halo")),
     Lane("luna_gpu", "Princess-Luna", "gfx1151", "rocm_gfx1151", "rocm_gfx1151",
          ("rocm_gfx1151", "gfx1151")),
     # Zen 2 has no AVX-512; the only x86 lane it can run today is the
@@ -74,7 +74,7 @@ LANES: tuple[Lane, ...] = (
     Lane("bear_gpu", "The-Super-Bear", "sm_120", "nvidia_sm120", "nvidia_sm120",
          ("nvidia_sm120", "sm_120a")),
     Lane("taj_cpu", "Tajasarus", "Zen 5 AVX-512", "x86", "x86",
-         ("x86", "x86_64_avx512")),
+         ("x86", "x86_64_avx512_granite_ridge")),
     # rocm_native.py serves both RDNA parts; chip-specific admission is what
     # the spine and fleet columns check, and gfx1201 has no fleet packet.
     Lane("taj_gpu", "Tajasarus", "gfx1201", "rocm_gfx1151", "rocm_gfx1201", None),
@@ -301,10 +301,8 @@ def render_markdown() -> str:
                    f"| {s['lane_native'][lane.lane]} |")
     out += [
         "",
-        "Known limits: the two Zen 5 lanes read the same fleet architecture key",
-        "(`x86_64_avx512`), because release packets record architecture, not",
-        "host; `taj_gpu` shares the ROCm route module with gfx1151, so its",
-        "chip-specific state comes from the spine and fleet columns.",
+        "Known limits: `taj_gpu` shares the ROCm route module with gfx1151, so",
+        "its chip-specific state comes from the spine and fleet columns.",
         "",
         "## Cells",
         "",

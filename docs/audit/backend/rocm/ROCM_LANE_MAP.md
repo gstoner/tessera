@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-21
+last_updated: 2026-09-26
 audit_role: reference
 owning_plan_item: W1.1 / ROCm backend
 ---
@@ -31,6 +31,90 @@ reduces full load drains from 81 to 16, and improves paired device timing by
 1.284x. The [evidence packet](../../../../benchmarks/baselines/gfx12_linear_attn_load_batch_20260921/README.md)
 owns that exact claim. `gfx1200` remains unpromoted pending matching-device
 proof.
+
+## Decision — expander adoption is (a) (owner, 2026-09-26)
+
+Every ROCm family is to be entered from Tile IR, produced by the scheduled
+route (Graph → Schedule → Tile) from a Graph contract. **The expander passes
+themselves are not being rewritten away:** a `generate-*` pass remains the
+Tile → Target generator for its family. What goes is the entry point, a Target
+IR directive composed as a string in Python, which skips Graph, Schedule and
+Tile. Sequencing follows (b)'s order — GEMM, flash-attention and
+linear-attention first (the three expanders that already consume the Tile
+fragment types), then the long tail — with progress measured family by family
+by the E2E-REAL-6F route census, not asserted here. Recounted 2026-09-26: 78
+`Generate*.cpp` expanders (71 in the snapshot below); 3 consume Tile fragment
+types (0 in the snapshot).
+
+## Decision — Lane B is retired (owner, 2026-09-26)
+
+Lane B (`runtime._build_canonical_gemm_hsaco`: Graph IR → `tessera-tiling` →
+`tessera-tile-ir-lowering` → generator with `via-tile=false`) skipped Schedule
+IR, so its schedule arrived as pass options rather than a replayed Schedule
+contract, and it was a second Graph → Tile authority for GEMM beside the
+scheduled route (Decision #31). Skipping Schedule IR is not a fast path:
+compile time is negligible either way (both routes are content-cached), and
+no runtime advantage was ever measured — **the two were not measured head to
+head**. They do not produce the same kernel: Lane B entered the generator
+through the canonical `scf.for` matcher with `via-tile=false`, the scheduled
+route enters through the typed `tile.matmul_kernel` adapter with
+`via-tile=true`. Resource counts differ too (Lane B's packet: 0 spills; the
+scheduled packet: 45-48 on f16/bf16) across a toolchain change (ROCm 7.14 →
+10.0), so no regression or speed claim is made in either direction.
+Retired in one change:
+
+* **Correct path first.** `runtime.build_canonical_gemm_hsaco` builds a ROCm
+  GEMM from a Graph module (the traced frontend reaches the same
+  lower-and-package authority through `driver.py`): `lower_scheduled_matmul` (Graph → Schedule →
+  Tile, replay-checked) then `package_scheduled_matmul` (Tile → `tessera_rocm`
+  → HSACO). The runtime's compiled GEMM now builds through it.
+* **Benchmark rebuilt.** `benchmark_rocm_canonical_gemm_kloop.py` measures
+  that route, launches from the package's own descriptor, requires an explicit
+  `TESSERA_ROCM_CHIP` (gfx1151 or gfx1201), and stamps route, schedule digest
+  and image digest per row. Lane B's committed packet
+  (`rocm_gfx1151_canonical_gemm_kloop.json`) stays as that route's record and
+  is not this one's baseline.
+* **Deleted.** `_build_canonical_gemm_hsaco` and the `input=graph` matmul
+  branch of `tessera-rocm-executable`; both the Python pipeline config and the
+  C++ contract pass now refuse `family=matmul input=graph`, with a negative
+  lit fixture (`executable_pipeline_graph_matmul_options.mlir`). Attention
+  keeps its Graph entry.
+* **Census.** The E2E-REAL-6F package census and `bootstrap_prune_gap` were
+  re-run before and after: counts identical (46 graph / 14 scheduled / 15 raw)
+  and ROCm GEMM's only package is `package_scheduled_matmul` on the
+  `scheduled` boundary, so no family lost its only lowering. **This evidence
+  is weak by construction:** Lane B was never a `package_*`, so the census
+  cannot see it, and cannot show what Lane B uniquely carried.
+* **Physical consumer deleted (#29/#31), 2026-09-26.** Lane B's consumer in
+  `GenerateWMMAGemmKernel.cpp` had no production producer left: the only
+  producers of `tessera.canonical_k_step` are `TilingPass` and
+  `TileIRLoweringPass`, and no ROCm pipeline (C++ `tessera-lower-to-rocm`,
+  `tessera-rocm-executable`, or any Python pass list) runs `tessera-tiling`
+  ahead of `generate-wmma-gemm-kernel` — the scheduled route arrives as
+  `tile.matmul_kernel`, the directive route as `tessera_rocm.wmma_gemm`.
+  Deleted: the canonical-step matcher (`matchCanonicalGemmLoop`,
+  `WmmaGemmRequest::canonicalKLoop` and the fields only it filled), the
+  one-wave LDS comparison body (`emitCanonicalLdsBody` and its arch/knob
+  guards), the `canonical_mnk_scf_for` source stamp, and the two diagnostic
+  codes only that body emitted (`ROCM_CANONICAL_LDS_{ARCH,KNOB}_UNSUPPORTED`).
+  A `canonical_k_step` step that still reaches the generator is now refused
+  by name (`ROCM_CANONICAL_GEMM_LOOP_RETIRED`) instead of being matched, and
+  `canonical-staging=lds` without `via-tile=true` is refused instead of
+  silently producing the register body. Kept: the `canonical-staging` option
+  (the typed LDS body and split-K read it), `TilingPass`'s marker (Apple's
+  `tessera-apple-canonical-gemm` consumes it), and the typed, directive and
+  split-K paths. Tests: `canonical_lds_arch_guard.mlir` deleted;
+  `canonical_lds_arch_refused.mlir` → `rocm_canonical_gemm_loop_retired.mlir`
+  (the new refusal, both marker carriers); `graph_matmul_generator_knobs.mlir`
+  → `tile_matmul_generator_knobs.mlir` (the live `sched-groups` half at Tile
+  entry, plus the direct-lane `lds` refusal); in
+  `test_rocm_wmma_gemm_generated.py` the two positive canonical-loop tests are
+  deleted and the malformed-marker test asserts the new refusal. Lane B's
+  benchmark packet stays as that route's record.
+
+Sibling sweep (sync `LANE-B-SWEEP-2026-09-26`): the same pattern exists on
+NVIDIA (`NVIDIA-LANE-B-1`) and Apple (`APPLE-LANE-B-1`); recorded in their
+queues as follow-ups, nothing changed there.
 
 ## Historical snapshot (2026-08-05)
 

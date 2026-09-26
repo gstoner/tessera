@@ -153,6 +153,12 @@ _NOT_DIAGNOSTICS = frozenset({
 #: only a tensor/cooperative-tensor constraint plus `relaxed_precision`, so
 #: fp32 is the SIMDGROUP path's contract and not an Apple-wide one. The hint
 #: says exactly that, and says not to assume the other lane shares it.
+#: **Superseded 2026-09-26 (APPLE-ACCUM-1, owner decision):** the simdgroup
+#: lane now admits fp32 and fp16 accumulators, each measured bit-exact on the
+#: M1 Max, and the hint states what is supported and what is refused. The
+#: same measurement showed matmul2d's half/bfloat destinations are fp32
+#: accumulation rounded once, so the other lane is fp32-only after all -- a
+#: header that permits a destination type does not state the accumulator.
 #:
 #: History, kept because the shape recurs: opened at 15; ten closed the same day. The nine `ROCM_FRAGMENT_*` codes are
 #: registered -- one file, one exception type, one fail-closed story -- and

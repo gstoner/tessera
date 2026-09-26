@@ -1,0 +1,28 @@
+host: tajasarus
+device: gfx1201
+commit: 1387cd1b994e0645ef932de05df7fbf8fdcf4708 (tracked changes: 0)
+tessera-opt: /home/angstorms/programming/tessera-splitk/build/tools/tessera-opt/tessera-opt
+env: TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1
+command: python -m pytest "tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage" -v -p no:cacheprovider
+date: 2026-09-26T18:30:54Z
+
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0 -- /home/angstorms/programming/tessera/.venv/bin/python
+hypothesis profile 'default'
+rootdir: /home/angstorms/programming/tessera-splitk
+configfile: pyproject.toml
+plugins: xdist-3.8.0, cov-7.1.0, hypothesis-6.168.0, timeout-2.4.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 6 items
+
+tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[x86-True] PASSED [ 16%]
+tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[x86-False] PASSED [ 33%]
+tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[rocm-True] PASSED [ 50%]
+tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[rocm-False] PASSED [ 66%]
+tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[nvidia_sm120-True] SKIPPED [ 83%]
+tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[nvidia_sm120-False] SKIPPED [100%]
+
+========================= 4 passed, 2 skipped in 0.22s =========================
+exit: 0

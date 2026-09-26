@@ -82,14 +82,26 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     transcendentals lower through the same `math` → ROCDL path the flash_attn
     softmax uses. This is the `fused_epilogue` Target-IR node — matmul + bias +
     activation in one kernel, no intermediate D round-trip.
+
+    **Split-K (ROCM-SPLIT-K-1).** `split_k` (default 1) partitions the K loop
+    across a third grid dimension: slice `z` accumulates K range
+    `[z*K/S, (z+1)*K/S)` into an fp32 `[S, M, N]` workspace, and a second
+    kernel sums the slices in fixed order `0..S-1` and applies the epilogue
+    once. `split_k_reduction` names that order and is required whenever
+    `split_k > 1`; `ordered` is the only admitted value. The pair carries a
+    Tessera contract upstream ROCDL has no field for -- the determinism of
+    the reduction -- which is what earns it a place here (Decision #19).
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k,
                        DefaultValuedAttr<I64Attr, "1">:$mt,
                        DefaultValuedAttr<I64Attr, "1">:$nt,
                        DefaultValuedAttr<ROCM_GemmDTypeAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$bias,
-                       DefaultValuedAttr<StrAttr, "\"none\"">:$activation);
+                       DefaultValuedAttr<StrAttr, "\"none\"">:$activation,
+                       DefaultValuedAttr<I64Attr, "1">:$split_k,
+                       DefaultValuedAttr<StrAttr, "\"\"">:$split_k_reduction);
   let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
 }
 
 def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {

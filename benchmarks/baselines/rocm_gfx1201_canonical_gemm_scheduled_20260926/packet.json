@@ -1,0 +1,491 @@
+{
+  "all_correct": true,
+  "device": "gfx1201",
+  "physical_staging": "register",
+  "ratchet": "none: first packet on the scheduled route; Lane B's numbers are not its baseline",
+  "recorded_at": "2026-09-26T13:48:06-0500",
+  "route": "graph_schedule_tile_target",
+  "rows": [
+    {
+      "accumulate": "f32",
+      "artifact": {
+        "binary_format": "hsaco",
+        "bytes": 11896,
+        "resources": {
+          "agpr_count": null,
+          "lds_bytes": 0,
+          "max_flat_workgroup_size": 256,
+          "occupancy_model": "tessera.compiler.rocm_occupancy.allocate_vgprs: per-arch VGPR file and allocation granule, granule-rounded, capped at the per-wave budget",
+          "occupancy_model_arch": "gfx1201",
+          "private_segment_bytes": 0,
+          "scratch_bytes": 0,
+          "sgpr_count": 56,
+          "sgpr_spill_count": 0,
+          "spill_count": 0,
+          "spills": false,
+          "vgpr_count": 60,
+          "vgpr_limited_waves_per_simd": 21,
+          "vgpr_spill_count": 0,
+          "wavefront_size": 32
+        }
+      },
+      "case": "canonical_aligned:256x256x256:f16:none",
+      "correct": true,
+      "image_digest": "07ce046658289eab1613b0a10c1fd6a99f760a16e235ca3e075881cf1c28f623",
+      "k_unroll": 1,
+      "macro_tile": [
+        16,
+        16
+      ],
+      "numerics": {
+        "max_abs_error": 1.1026859283447266e-06,
+        "mismatch_count": null,
+        "normalized_error": 9.020947322348777e-07
+      },
+      "physical_route": "gfx1201_register_wmma_1x1",
+      "provenance_route": "canonical_scheduled_tile_consumer",
+      "route": "graph_schedule_tile_target",
+      "schedule_digest": "3a154b948ce93daf6e6820100582a87210db57b4bb79bd7872227dd8071eb05a",
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "split_k": 1,
+      "storage": "f16",
+      "tile_ir_digest": "64ecebccde7389cd828d60098d06cf19de9eb0f772fa5be252b8c484c37ca4a3",
+      "timing": {
+        "compiler_ms": 445.992865,
+        "kernel": {
+          "clocks": [
+            "device_event"
+          ],
+          "launches_per_round": 50,
+          "median_ms": 0.005502679944038391,
+          "method": "runtime._hip_resident_launch_latency",
+          "resident_buffers": true,
+          "resident_module": true,
+          "round_ms": [
+            0.005502679944038391,
+            0.005518500208854676,
+            0.005436679720878601,
+            0.0054224801063537595,
+            0.006272439956665039,
+            0.005438299775123596,
+            0.006934999823570252,
+            0.005440880060195923,
+            0.006707019805908203
+          ],
+          "rounds": 9,
+          "warmup_launches_per_round": 5
+        }
+      },
+      "workgroup": [
+        32,
+        1,
+        1
+      ]
+    },
+    {
+      "accumulate": "f32",
+      "artifact": {
+        "binary_format": "hsaco",
+        "bytes": 12152,
+        "resources": {
+          "agpr_count": null,
+          "lds_bytes": 0,
+          "max_flat_workgroup_size": 256,
+          "occupancy_model": "tessera.compiler.rocm_occupancy.allocate_vgprs: per-arch VGPR file and allocation granule, granule-rounded, capped at the per-wave budget",
+          "occupancy_model_arch": "gfx1201",
+          "private_segment_bytes": 0,
+          "scratch_bytes": 0,
+          "sgpr_count": 62,
+          "sgpr_spill_count": 0,
+          "spill_count": 0,
+          "spills": false,
+          "vgpr_count": 60,
+          "vgpr_limited_waves_per_simd": 21,
+          "vgpr_spill_count": 0,
+          "wavefront_size": 32
+        }
+      },
+      "case": "canonical_ragged:131x127x65:f16:none",
+      "correct": true,
+      "image_digest": "c3913a9924be18068f1ec215e1c8a1d4719b4f9c9fd3750733686a2d9a7208e5",
+      "k_unroll": 1,
+      "macro_tile": [
+        16,
+        16
+      ],
+      "numerics": {
+        "max_abs_error": 1.7881393432617188e-07,
+        "mismatch_count": null,
+        "normalized_error": 1.7881393432617188e-07
+      },
+      "physical_route": "gfx1201_register_wmma_1x1",
+      "provenance_route": "canonical_scheduled_tile_consumer",
+      "route": "graph_schedule_tile_target",
+      "schedule_digest": "7a79a821536b53c8ffd90efa864582bc2a2559e3feb6c0b6d0f4256d9b8c1d16",
+      "shape": [
+        131,
+        127,
+        65
+      ],
+      "split_k": 1,
+      "storage": "f16",
+      "tile_ir_digest": "3db722d800e912b19e5e3efa96380b595ec85105f55bef509ba3d320574edeb9",
+      "timing": {
+        "compiler_ms": 412.262285,
+        "kernel": {
+          "clocks": [
+            "device_event"
+          ],
+          "launches_per_round": 50,
+          "median_ms": 0.010813679695129395,
+          "method": "runtime._hip_resident_launch_latency",
+          "resident_buffers": true,
+          "resident_module": true,
+          "round_ms": [
+            0.011836060285568238,
+            0.01130545973777771,
+            0.01082808017730713,
+            0.010771080255508422,
+            0.010791480541229248,
+            0.010815880298614501,
+            0.010298099517822266,
+            0.010813679695129395,
+            0.010799880027770997
+          ],
+          "rounds": 9,
+          "warmup_launches_per_round": 5
+        }
+      },
+      "workgroup": [
+        32,
+        1,
+        1
+      ]
+    },
+    {
+      "accumulate": "f32",
+      "artifact": {
+        "binary_format": "hsaco",
+        "bytes": 11896,
+        "resources": {
+          "agpr_count": null,
+          "lds_bytes": 0,
+          "max_flat_workgroup_size": 256,
+          "occupancy_model": "tessera.compiler.rocm_occupancy.allocate_vgprs: per-arch VGPR file and allocation granule, granule-rounded, capped at the per-wave budget",
+          "occupancy_model_arch": "gfx1201",
+          "private_segment_bytes": 0,
+          "scratch_bytes": 0,
+          "sgpr_count": 56,
+          "sgpr_spill_count": 0,
+          "spill_count": 0,
+          "spills": false,
+          "vgpr_count": 60,
+          "vgpr_limited_waves_per_simd": 21,
+          "vgpr_spill_count": 0,
+          "wavefront_size": 32
+        }
+      },
+      "case": "canonical_aligned:256x256x256:bf16:none",
+      "correct": true,
+      "image_digest": "b4f1181ffda8490b704759207d049380add027ace8270b5d922c49b3bf17acd4",
+      "k_unroll": 1,
+      "macro_tile": [
+        16,
+        16
+      ],
+      "numerics": {
+        "max_abs_error": 4.172325134277344e-07,
+        "mismatch_count": null,
+        "normalized_error": 3.884152811893587e-07
+      },
+      "physical_route": "gfx1201_register_wmma_1x1",
+      "provenance_route": "canonical_scheduled_tile_consumer",
+      "route": "graph_schedule_tile_target",
+      "schedule_digest": "299456e0d8a345c635282f73523fb4a392f80e04fe8c84e50eefa94da331c5eb",
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "split_k": 1,
+      "storage": "bf16",
+      "tile_ir_digest": "5bd8fd17dab5054f6a32abff851ab35a63e13c71b1342f11fdf91f552caf8a73",
+      "timing": {
+        "compiler_ms": 409.980008,
+        "kernel": {
+          "clocks": [
+            "device_event"
+          ],
+          "launches_per_round": 50,
+          "median_ms": 0.010057779550552369,
+          "method": "runtime._hip_resident_launch_latency",
+          "resident_buffers": true,
+          "resident_module": true,
+          "round_ms": [
+            0.010584579706192017,
+            0.016393460035324096,
+            0.009596599936485291,
+            0.010057779550552369,
+            0.010045199394226075,
+            0.009869980216026307,
+            0.010101979970932007,
+            0.010061399936676025,
+            0.01004199981689453
+          ],
+          "rounds": 9,
+          "warmup_launches_per_round": 5
+        }
+      },
+      "workgroup": [
+        32,
+        1,
+        1
+      ]
+    },
+    {
+      "accumulate": "f32",
+      "artifact": {
+        "binary_format": "hsaco",
+        "bytes": 12152,
+        "resources": {
+          "agpr_count": null,
+          "lds_bytes": 0,
+          "max_flat_workgroup_size": 256,
+          "occupancy_model": "tessera.compiler.rocm_occupancy.allocate_vgprs: per-arch VGPR file and allocation granule, granule-rounded, capped at the per-wave budget",
+          "occupancy_model_arch": "gfx1201",
+          "private_segment_bytes": 0,
+          "scratch_bytes": 0,
+          "sgpr_count": 62,
+          "sgpr_spill_count": 0,
+          "spill_count": 0,
+          "spills": false,
+          "vgpr_count": 60,
+          "vgpr_limited_waves_per_simd": 21,
+          "vgpr_spill_count": 0,
+          "wavefront_size": 32
+        }
+      },
+      "case": "canonical_ragged:131x127x65:bf16:none",
+      "correct": true,
+      "image_digest": "654e0a369b8df99b1cf3154034b216514d60763927a6ab076e10c379a01ab88e",
+      "k_unroll": 1,
+      "macro_tile": [
+        16,
+        16
+      ],
+      "numerics": {
+        "max_abs_error": 7.450580596923828e-08,
+        "mismatch_count": null,
+        "normalized_error": 7.450580596923828e-08
+      },
+      "physical_route": "gfx1201_register_wmma_1x1",
+      "provenance_route": "canonical_scheduled_tile_consumer",
+      "route": "graph_schedule_tile_target",
+      "schedule_digest": "f21525df2fc632ac82eaa0ca105a28a47fca2f28ca0a270f5a632db42a7aedb0",
+      "shape": [
+        131,
+        127,
+        65
+      ],
+      "split_k": 1,
+      "storage": "bf16",
+      "tile_ir_digest": "9391493dda839495b87bf37fbea6f2e29003176f25d8d25e421f7123653fbf33",
+      "timing": {
+        "compiler_ms": 409.372102,
+        "kernel": {
+          "clocks": [
+            "device_event"
+          ],
+          "launches_per_round": 50,
+          "median_ms": 0.011615999937057496,
+          "method": "runtime._hip_resident_launch_latency",
+          "resident_buffers": true,
+          "resident_module": true,
+          "round_ms": [
+            0.011897200345993042,
+            0.011885399818420411,
+            0.01201200008392334,
+            0.011630799770355225,
+            0.011604000329971314,
+            0.011570999622344971,
+            0.011592799425125122,
+            0.01158619999885559,
+            0.011615999937057496
+          ],
+          "rounds": 9,
+          "warmup_launches_per_round": 5
+        }
+      },
+      "workgroup": [
+        32,
+        1,
+        1
+      ]
+    },
+    {
+      "accumulate": "i32",
+      "artifact": {
+        "binary_format": "hsaco",
+        "bytes": 13304,
+        "resources": {
+          "agpr_count": null,
+          "lds_bytes": 0,
+          "max_flat_workgroup_size": 256,
+          "occupancy_model": "tessera.compiler.rocm_occupancy.allocate_vgprs: per-arch VGPR file and allocation granule, granule-rounded, capped at the per-wave budget",
+          "occupancy_model_arch": "gfx1201",
+          "private_segment_bytes": 0,
+          "scratch_bytes": 0,
+          "sgpr_count": 54,
+          "sgpr_spill_count": 0,
+          "spill_count": 0,
+          "spills": false,
+          "vgpr_count": 58,
+          "vgpr_limited_waves_per_simd": 21,
+          "vgpr_spill_count": 0,
+          "wavefront_size": 32
+        }
+      },
+      "case": "canonical_aligned:256x256x256:int8:none",
+      "correct": true,
+      "image_digest": "d933088caea9d63042817a0f6e74bd770a7c1011f3175f7fddb175b4aac62d35",
+      "k_unroll": 1,
+      "macro_tile": [
+        16,
+        16
+      ],
+      "numerics": {
+        "max_abs_error": 0,
+        "mismatch_count": 0,
+        "normalized_error": 0.0
+      },
+      "physical_route": "gfx1201_register_wmma_1x1",
+      "provenance_route": "canonical_scheduled_tile_consumer",
+      "route": "graph_schedule_tile_target",
+      "schedule_digest": "53c3b8c70300d3d9475191e3842a2e3bdc89f7263c0136b31bf1e2cec901d5c1",
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "split_k": 1,
+      "storage": "int8",
+      "tile_ir_digest": "a17bfa2585a88b4f9d5aaf2647f9a4a1fedf3eff5f5bf4c912585201138aa2b1",
+      "timing": {
+        "compiler_ms": 421.844222,
+        "kernel": {
+          "clocks": [
+            "device_event"
+          ],
+          "launches_per_round": 50,
+          "median_ms": 0.01104841947555542,
+          "method": "runtime._hip_resident_launch_latency",
+          "resident_buffers": true,
+          "resident_module": true,
+          "round_ms": [
+            0.011955820322036743,
+            0.012069419622421265,
+            0.017029540538787843,
+            0.009799039959907531,
+            0.0108514404296875,
+            0.010850839614868164,
+            0.011224219799041748,
+            0.01104841947555542,
+            0.01087764024734497
+          ],
+          "rounds": 9,
+          "warmup_launches_per_round": 5
+        }
+      },
+      "workgroup": [
+        32,
+        1,
+        1
+      ]
+    },
+    {
+      "accumulate": "i32",
+      "artifact": {
+        "binary_format": "hsaco",
+        "bytes": 13688,
+        "resources": {
+          "agpr_count": null,
+          "lds_bytes": 0,
+          "max_flat_workgroup_size": 256,
+          "occupancy_model": "tessera.compiler.rocm_occupancy.allocate_vgprs: per-arch VGPR file and allocation granule, granule-rounded, capped at the per-wave budget",
+          "occupancy_model_arch": "gfx1201",
+          "private_segment_bytes": 0,
+          "scratch_bytes": 0,
+          "sgpr_count": 60,
+          "sgpr_spill_count": 0,
+          "spill_count": 0,
+          "spills": false,
+          "vgpr_count": 60,
+          "vgpr_limited_waves_per_simd": 21,
+          "vgpr_spill_count": 0,
+          "wavefront_size": 32
+        }
+      },
+      "case": "canonical_ragged:131x127x65:int8:none",
+      "correct": true,
+      "image_digest": "3f29b89bcca3f00c11bc15eb098e997b782a86c31875e39f53bcf8e901b40494",
+      "k_unroll": 1,
+      "macro_tile": [
+        16,
+        16
+      ],
+      "numerics": {
+        "max_abs_error": 0,
+        "mismatch_count": 0,
+        "normalized_error": 0.0
+      },
+      "physical_route": "gfx1201_register_wmma_1x1",
+      "provenance_route": "canonical_scheduled_tile_consumer",
+      "route": "graph_schedule_tile_target",
+      "schedule_digest": "99bfb6292b815bb151307d07defa57f6c4ebb03cba9f6ebbb866b1c02ce7ecc9",
+      "shape": [
+        131,
+        127,
+        65
+      ],
+      "split_k": 1,
+      "storage": "int8",
+      "tile_ir_digest": "5038f5e9df440bd68cb862761c773f7da412888e2fc5214e787f459070651cce",
+      "timing": {
+        "compiler_ms": 423.959169,
+        "kernel": {
+          "clocks": [
+            "device_event"
+          ],
+          "launches_per_round": 50,
+          "median_ms": 0.011670039892196655,
+          "method": "runtime._hip_resident_launch_latency",
+          "resident_buffers": true,
+          "resident_module": true,
+          "round_ms": [
+            0.011921039819717406,
+            0.011895459890365601,
+            0.015913000106811525,
+            0.011245460510253906,
+            0.01157364010810852,
+            0.011670039892196655,
+            0.011645259857177735,
+            0.011606659889221192,
+            0.011829439401626587
+          ],
+          "rounds": 9,
+          "warmup_launches_per_round": 5
+        }
+      },
+      "workgroup": [
+        32,
+        1,
+        1
+      ]
+    }
+  ],
+  "schema": "tessera.rocm.canonical_gemm.v2"
+}

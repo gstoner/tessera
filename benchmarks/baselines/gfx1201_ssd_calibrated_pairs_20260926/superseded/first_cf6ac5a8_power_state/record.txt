@@ -1,0 +1,14 @@
+completed pair 1/9
+completed pair 2/9
+completed pair 3/9
+completed pair 4/9
+completed pair 5/9
+completed pair 6/9
+completed pair 7/9
+completed pair 8/9
+completed pair 9/9
+{
+  "admitted": false,
+  "reason": "native calibration refuses promotion: INSTRUMENTATION_OVERHEAD_EXCEEDED",
+  "lower_bound": 9.01387072663539
+}

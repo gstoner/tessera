@@ -47,8 +47,8 @@ def test_select_seed_tile_matches_mlx_heuristic(dc, dtype, tb, large, want):
 def test_seed_tile_feeds_steel_emitter():
     # The integration the user asked for: an MLX-derived tile drives the steel GEMM.
     tile = select_seed_tile(DeviceClass.MEDIUM, "bf16")
-    msl = emit_steel_gemm_msl("bf16", tile.bm, tile.bn, tile.bk)
-    assert validate_steel_gemm_structure(msl, dtype="bf16").ok
+    msl = emit_steel_gemm_msl("bf16", tile.bm, tile.bn, tile.bk, accum="f32")
+    assert validate_steel_gemm_structure(msl, dtype="bf16", accum="f32").ok
     # 64x64 tile -> 8x8 = 64 output fragments.
     assert "simdgroup_matrix<float, 8, 8> acc[8 * 8]" in msl
 
@@ -56,9 +56,9 @@ def test_seed_tile_feeds_steel_emitter():
 def test_seed_tile_can_materialize_a_shared_grouped_m_raster():
     tile = select_seed_tile(DeviceClass.MEDIUM, "bf16")
     msl = emit_steel_gemm_msl(
-        "bf16", tile.bm, tile.bn, tile.bk, raster_order="grouped_m", raster_group=4,
+        "bf16", tile.bm, tile.bn, tile.bk, raster_order="grouped_m", raster_group=4, accum="f32",
     )
-    assert validate_steel_gemm_structure(msl, dtype="bf16").ok
+    assert validate_steel_gemm_structure(msl, dtype="bf16", accum="f32").ok
     assert "raster=grouped_m, group=4" in msl
 
 

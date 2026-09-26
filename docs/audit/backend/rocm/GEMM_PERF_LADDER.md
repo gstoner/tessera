@@ -56,6 +56,13 @@ which is not the order the work was originally framed in.
 
 ## 3. Implementation spec — `emitCanonicalLdsBody`
 
+> **Deleted 2026-09-26.** `emitCanonicalLdsBody` was reachable only through
+> Lane B's canonical `scf.for` matcher and was removed with it
+> (`ROCM_LANE_MAP.md` §"Decision — Lane B is retired"). The multi-wave LDS
+> work this section specified lives in the typed LDS body
+> (`emitTypedLdsBody`, `via-tile=true canonical-staging=lds`). The text below
+> is the historical spec.
+
 Current state: one-wave, MT=NT=1, and the caller hard-errors on `mt != 1 ||
 nt != 1`. It carries **one** accumulator through the K-loop and issues **one**
 `tessera_rocm.wmma`.

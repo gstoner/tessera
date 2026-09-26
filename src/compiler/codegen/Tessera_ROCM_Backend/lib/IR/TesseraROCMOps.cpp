@@ -57,3 +57,17 @@ mlir::LogicalResult SWMMACOp::verify() {
     return emitOpError("sparse integer width requires i8 operands and 4 or 8 bits");
   return mlir::success();
 }
+
+// ROCM-SPLIT-K-1: the slice count and the reduction order are semantic keys
+// (Decision #21a) and travel as a pair.
+mlir::LogicalResult WMMAGemmOp::verify() {
+  if (getSplitK() < 1)
+    return emitOpError("ROCM_WMMA_GEMM_SPLIT_K_BAD_CONTRACT: split_k must be >= 1");
+  if (getSplitK() == 1 && !getSplitKReduction().empty())
+    return emitOpError("ROCM_WMMA_GEMM_SPLIT_K_BAD_CONTRACT: split_k_reduction "
+                       "requires split_k > 1");
+  if (getSplitK() > 1 && getSplitKReduction() != "ordered")
+    return emitOpError("ROCM_WMMA_GEMM_SPLIT_K_BAD_CONTRACT: split_k > 1 "
+                       "requires split_k_reduction = \"ordered\"");
+  return mlir::success();
+}

@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/home/gstoner/programming/tessera-avx512/benchmarks/e2e_spine/record_x86_avx512_packet.py", line 654, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/home/gstoner/programming/tessera-avx512/benchmarks/e2e_spine/record_x86_avx512_packet.py", line 629, in main
+    report, resources = record(
+                        ~~~~~~^
+        samples=args.samples, iterations=args.iterations, allow_dirty=args.allow_dirty,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/gstoner/programming/tessera-avx512/benchmarks/e2e_spine/record_x86_avx512_packet.py", line 598, in record
+    validate_backend_report(report)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/home/gstoner/programming/tessera-avx512/python/tessera/compiler/e2e_fleet.py", line 386, in validate_backend_report
+    raise FleetEvidenceError(
+        f"{where} is not stable ({stability_delta:.3f}% > {stability_limit}%)"
+    )
+tessera.compiler.e2e_fleet.FleetEvidenceError: report.benchmarks[2] is not stable (4.194% > 4.0%)

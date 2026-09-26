@@ -80,10 +80,22 @@ def main() -> int:
     parser.add_argument("--trials", type=int, default=21)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--no-timing-witness", action="store_true",
+        help="skip the per-row TSC witness (the packet can then only take the profiler route)")
     args = parser.parse_args()
 
     benchmark_module = _load_benchmark_module()
-    benchmark = benchmark_module.run(trials=args.trials, warmup=args.warmup)
+    benchmark = benchmark_module.run(
+        trials=args.trials, warmup=args.warmup, timing_witness=not args.no_timing_witness)
+    # RUNTIME-LIB-OPT-1: say which optimization level the measured runtime
+    # library was built at, inside the digest-bound record (Decisions #11/#12).
+    from tessera.compiler.runtime_library_build import record_for_library
+    from tessera.compiler.x86_native import X86_AVX512_ARCHITECTURE, _library_path
+    library = _library_path(X86_AVX512_ARCHITECTURE)
+    if library is None:
+        raise SystemExit("the x86 AVX-512 runtime library is not built")
+    benchmark["runtime_library_build"] = record_for_library(library, "tessera_x86_elementwise")
     canonical = json.dumps(benchmark, sort_keys=True, separators=(",", ":"))
     benchmark["report_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
     timing_process = subprocess.run(

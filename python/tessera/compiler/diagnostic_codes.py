@@ -1170,48 +1170,121 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/reference/tessera_tensor_attributes.md",
         sprint="NUMPOL-CARRIER-1",
     ),
+    # ── ROCM-SPLIT-K-1: cross-workgroup split-K (2026-09-26) ──
     DiagnosticCode(
-        code="ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED",
-        pass_origin="GenerateWMMAGemmKernel",
-        severity="error",
+        code="ROCM_SPLIT_K_NOT_APPLIED",
+        pass_origin="GraphToSchedulePass",
+        severity="warning",
         summary=(
-            "the canonical LDS comparison body was requested for an "
-            "architecture whose accumulator distribution it does not write."
+            "an occupancy-short gfx1201 matmul asked for split-K, but K has no "
+            "2-way split into whole macro K blocks of the minimum slice; the "
+            "unsplit kernel was scheduled (emitted as a warning). Not emitted when K is below two minimum slices: that is outside the rule's domain, not a fallback."
         ),
         fix_hint=(
-            "That body stores its accumulator at row `2*e + lhi`, RDNA3's "
-            "wave32 distribution. gfx12 distributes the same accumulator by "
-            "column, and the `tessera_rocm.wmma` it emits resolves per arch -- "
-            "so on gfx12 the kernel would run to completion and scatter its "
-            "result to the wrong rows, with no verifier to catch it. It is a "
-            "gfx11-only comparison lane with gfx1151-only evidence. Use the "
-            "typed LDS body (`via-tile=true canonical-staging=lds`), which "
-            "resolves row and column from the fragment family, or the "
-            "register body."
+            "Split-K is a performance decision, so falling back is allowed -- "
+            "but never silently (Decision #21a). Slices must be whole macro K "
+            "blocks (block_k, ROCM-MACRO-K-TILE-1) of at least "
+            "`rocm_tiling.SPLIT_K_MIN_SLICE_K`; pad K to a multiple of "
+            "2 * block_k if the split is wanted."
         ),
-        spec="docs/backends/rocm/wmma-fragment-layout.md",
-        sprint="GFX1201-PARITY-2026-09-17",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
     ),
     DiagnosticCode(
-        code="ROCM_CANONICAL_LDS_KNOB_UNSUPPORTED",
+        code="ROCM_SPLIT_K_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",
         severity="error",
         summary=(
-            "a schedule knob was requested for the canonical LDS comparison "
-            "body, which implements none of them."
+            "a split-K matmul reached a ROCm consumer that cannot emit the "
+            "stated split (wrong route, staging, accumulator, dynamic K, a K "
+            "that does not divide into whole slices, or a reduction other than "
+            "'ordered')."
         ),
         fix_hint=(
-            "Graph-input matmul with canonical-staging=lds reaches the "
-            "one-wave, unpadded canonical LDS body (via-tile=false). It "
-            "ignores lds-waves-m/n, k-unroll, sched-groups, lds-pad-dwords, "
-            "lds-copy-width/elide/depth, lds-double-buffer, "
-            "lds-sched-valu-per-mma and lds-b-row-major, so any value other "
-            "than the default would name a kernel it cannot emit. Use the "
-            "typed LDS body (tile input, via-tile=true), which consumes them, "
-            "or leave them at their defaults."
+            "Split-K is realized only by the typed register-staged "
+            "tile.matmul_kernel body with an fp32 accumulator and a static K "
+            "that divides into split_k slices of fragK x k_blocks x k-unroll. "
+            "The split and its reduction order are semantic, so a consumer "
+            "that cannot honour them refuses rather than running unsplit. "
+            "Also emitted by LowerTileToROCM when tessera.split_k arrives "
+            "without its reduction."
         ),
-        spec="docs/backends/rocm/wmma-fragment-layout.md",
-        sprint="ROCM-EXEC-PIPELINE-2026-09-24",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
+    DiagnosticCode(
+        code="ROCM_WMMA_GEMM_SPLIT_K_BAD_CONTRACT",
+        pass_origin="tessera_rocm.wmma_gemm verifier",
+        severity="error",
+        summary=(
+            "tessera_rocm.wmma_gemm states split_k without the 'ordered' "
+            "reduction, a reduction without a split, or split_k < 1."
+        ),
+        fix_hint=(
+            "split_k and split_k_reduction are a semantic pair (Decision "
+            "#21a): state both or neither. 'ordered' (fixed slice order, "
+            "deterministic) is the only admitted reduction."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
+    DiagnosticCode(
+        code="SCHEDULE_SPLIT_K_BAD_CONTRACT",
+        pass_origin="schedule.matmul verifier",
+        severity="error",
+        summary=(
+            "schedule.matmul states an inconsistent split-K: split_k < 1, a "
+            "reduction without a split, a split without the 'ordered' "
+            "reduction or without a macro K block, or a split on a "
+            "block-scaled/physical-contract matmul."
+        ),
+        fix_hint=(
+            "The Graph->Schedule pass is the one split-K decider "
+            "(selectGfx1201SplitK). A hand-written schedule must state "
+            "split_k > 1 together with split_k_reduction = \"ordered\" and "
+            "block_k > 0, or neither."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
+    DiagnosticCode(
+        code="TILE_SPLIT_K_BAD_CONTRACT",
+        pass_origin="tile.matmul_kernel verifier",
+        severity="error",
+        summary=(
+            "tile.matmul_kernel carries tessera.split_k / "
+            "tessera.split_k_reduction inconsistently, with a non-f32 "
+            "accumulator, outside the canonical K loop, or with a static K "
+            "that does not split into whole macro K blocks."
+        ),
+        fix_hint=(
+            "State both attributes or neither; split_k >= 2; reduction "
+            "'ordered'; f32 accumulation; tessera.canonical_k_loop = true; "
+            "and K divisible by split_k x mma.k x k_blocks."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-SPLIT-K-1",
+    ),
+    DiagnosticCode(
+        code="ROCM_CANONICAL_GEMM_LOOP_RETIRED",
+        pass_origin="GenerateWMMAGemmKernel",
+        severity="error",
+        summary=(
+            "a tessera.matmul or tile.mma carrying tessera.canonical_k_step "
+            "(the tessera-tiling M/N/K scf.for nest) reached the ROCm WMMA "
+            "GEMM generator, which no longer has a canonical-loop entry."
+        ),
+        fix_hint=(
+            "The canonical-loop entry was Lane B's Graph->Tile GEMM route, "
+            "retired 2026-09-26 with its matcher and LDS comparison body "
+            "(docs/audit/backend/rocm/ROCM_LANE_MAP.md). ROCm GEMM enters at "
+            "Tile level as tile.matmul_kernel from the scheduled route "
+            "(scheduled_matmul.lower_scheduled_matmul, Graph -> Schedule -> "
+            "Tile), or as a tessera_rocm.wmma_gemm directive. Do not run "
+            "tessera-tiling ahead of generate-wmma-gemm-kernel."
+        ),
+        spec="docs/audit/backend/rocm/ROCM_LANE_MAP.md",
+        sprint="ROCM-LANE-B-RETIRE-2026-09-26",
     ),
     DiagnosticCode(
         code="SCHEDULED_MATMUL_DTYPE_CONTRACT_UNSUPPORTED",
@@ -2935,20 +3008,104 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         language="python",
         pass_origin="apple_fragment.select_apple_simdgroup_fragment",
         severity="error",
-        summary="Apple simdgroup Tile fragments accumulate in fp32 only.",
-        fix_hint=(
-            "Set accum=fp32 (Decision #15a: the accumulator is numeric_policy, "
-            "not the storage dtype). This is the SIMDGROUP path's contract and "
-            "not an Apple-wide limit -- checked against the macOS 27 SDK on "
-            "2026-09-20, MPPTensorOpsMatMul2d.h templates matmul2d on "
-            "DestinationOperandType with only a tensor/cooperative-tensor "
-            "constraint plus a relaxed_precision flag, so the cooperative-"
-            "tensor lane is NOT known to require fp32. Do not restate this "
-            "limit as architectural, and do not assume the other lane shares "
-            "it without reading that header."
+        summary=(
+            "The requested simdgroup accumulator is not one Apple7 executes "
+            "faithfully: the lane admits fp32 and fp16 (fp16/bf16 storage) and "
+            "refuses bf16, integer and any other accumulator."
         ),
-        spec="docs/audit/backend/apple/todo.md",
+        fix_hint=(
+            "Declare numeric_policy.accum as fp32 or fp16 (Decision #15a: the "
+            "accumulator is numeric_policy, not the storage dtype; #21a: it is "
+            "never defaulted). APPLE-ACCUM-1, owner decision 2026-09-26: Apple "
+            "accumulation is not fp32-only, and the simdgroup lane supports "
+            "what the device computes exactly -- fp32 and fp16 accumulators, "
+            "each measured bit-exact on the M1 Max against a model of the "
+            "declared accumulation (tests/unit/"
+            "test_apple_simdgroup_accumulator_device.py). bf16 is refused "
+            "because Metal compiles it but Apple7 carries it at fp32 and "
+            "truncates to bf16 at the store, which is not bf16 accumulation; "
+            "integer accumulators have no simdgroup_matrix element type. Do "
+            "not route bf16/int accumulation to the Metal 4 matmul2d lane "
+            "either: matmul2d accumulates in fp32 only (a half/bfloat "
+            "destination is fp32 accumulation rounded once, measured)."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
         sprint="Apple simdgroup fragment ABI",
+    ),
+    DiagnosticCode(
+        code="APPLE_SIMDGROUP_ACCUM_MISSING",
+        pass_origin="MatmulToAppleSimdgroup / TileToApple (TILE-1 value call)",
+        severity="error",
+        summary=(
+            "A GEMM reaching an Apple simdgroup lowering declares no "
+            "numeric_policy.accum, so the lane has no accumulator to lower "
+            "(APPLE-ACCUM-1)."
+        ),
+        fix_hint=(
+            "State numeric_policy = {accum = \"fp32\"} or {accum = \"fp16\"} "
+            "on the matmul. The accumulator selects semantics (Decision #21a) "
+            "and the backend does not default it; the Python front door "
+            "writes the registered matmul default (fp32) into the Apple value "
+            "lane's Graph IR (driver.materialize_matmul_accumulators) when the "
+            "program states none."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
+        sprint="APPLE-ACCUM-1",
+    ),
+    DiagnosticCode(
+        code="APPLE_SIMDGROUP_ACCUM_UNSUPPORTED",
+        pass_origin="TesseraAppleDialect verifiers / MatmulToAppleSimdgroup / TileToApple",
+        severity="error",
+        summary=(
+            "The simdgroup accumulator (or its result conversion) is not one "
+            "Apple7 executes faithfully: f32 and f16 are admitted; bf16, "
+            "integer and double-rounding result conversions are refused."
+        ),
+        fix_hint=(
+            "Use accum fp32 or fp16. bf16 compiles but Apple7 carries it at "
+            "fp32 and truncates (round-toward-zero) to bf16 at the store "
+            "(measured on the M1 Max), which is not bf16 accumulation; "
+            "simdgroup_matrix has no integer element type; an fp16 "
+            "accumulator into a bf16 result would round twice. For a bf16 "
+            "result, accumulate in fp32 and let the epilogue round once."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
+        sprint="APPLE-ACCUM-1",
+    ),
+    DiagnosticCode(
+        code="APPLE_SIMDGROUP_STORAGE_MISMATCH",
+        pass_origin="MatmulToAppleSimdgroup / TileToApple (TILE-1 value call) / CanonicalGemmToAppleGPU",
+        severity="error",
+        summary=(
+            "A declared numeric_policy.storage names a different element type "
+            "than the GEMM's operands (APPLE-ACCUM-1 review)."
+        ),
+        fix_hint=(
+            "Storage lives on the tensor (Decision #15a); make numeric_policy."
+            "storage name the operands' element type (fp16/f16/float16/half, "
+            "bf16/bfloat16, fp32/f32/float32/float) or drop it. The lowering "
+            "refuses rather than believing one of the two."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
+        sprint="APPLE-ACCUM-1",
+    ),
+    DiagnosticCode(
+        code="APPLE_ACCUM_POLICY_UNRECOGNIZED",
+        language="python",
+        pass_origin="driver.materialize_matmul_accumulators",
+        severity="error",
+        summary=(
+            "A matmul's IROp.numeric_policy carrier has a shape the Apple "
+            "value-mode front door cannot read an accumulator from."
+        ),
+        fix_hint=(
+            "Carry the policy as a dict or a primitive_coverage.NumericPolicy, "
+            "or render it explicitly as the op's numeric_policy kwarg. "
+            "graph_ir.NumericPolicy is refused on purpose: its accum defaults "
+            "to f32, so a defaulted value would read as declared (#21a)."
+        ),
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1",
+        sprint="APPLE-ACCUM-1",
     ),
     DiagnosticCode(
         code="APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED",
@@ -3163,16 +3320,16 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
         code="APPLE_CANONICAL_GEMM_DTYPE_UNSUPPORTED", pass_origin="CanonicalGemmToAppleGPU",
         severity="error",
-        summary="apple_gpu re-forms the canonical reduction only for fp16/bf16 storage; simdgroup_matrix has no f32 operand form.",
+        summary="apple_gpu re-forms the canonical reduction only for fp16/bf16 storage; the TILE-1 simdgroup runtime ABI takes 16-bit operands.",
         fix_hint="Leave f32 contractions on the incumbent Accelerate/MPS value route rather than rerouting them.",
         spec="docs/audit/backend/apple/todo.md APPLE-TILE-2", sprint="APPLE-TILE-2",
     ),
     DiagnosticCode(
         code="APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED", pass_origin="CanonicalGemmToAppleGPU",
         severity="error",
-        summary="The canonical reduction must accumulate in fp32 for the Apple simdgroup route.",
-        fix_hint="Keep numeric_policy.accum = fp32; reduced-precision accumulation is not a simdgroup_matrix contract.",
-        spec="docs/audit/backend/apple/todo.md APPLE-TILE-2", sprint="APPLE-TILE-2",
+        summary="The canonical reduction's accumulator is refused: a declared numeric_policy.accum disagrees with the nest's loop-carried accumulator, or that accumulator has no faithful simdgroup form (APPLE-ACCUM-1).",
+        fix_hint="The shared tiler carries the accumulator in the nest's result type (f32/i32 only), so this route accumulates in fp32; declare accum = fp32 here. fp16 accumulation has a route only on the TILE-1 value lane, and only when the matmul's RESULT is f16 or bf16 (tile.matmul f16/bf16 storage, numeric_policy.accum = fp16; an f16 accumulator into a bf16 result is itself refused as a double rounding, so in practice f16 storage -> f16 result). An f32-result matmul declaring accum = fp16 (e.g. f16 x f16 -> f32) has NO Apple GPU route today: TILE-1 selects only f16/bf16 results and this canonical route is fp32-only.",
+        spec="docs/audit/backend/apple/todo.md APPLE-ACCUM-1", sprint="APPLE-TILE-2",
     ),
     # APPLE-ATTN-STREAM-1 — StreamingAttentionToAppleGPUPass.
     DiagnosticCode(
@@ -3261,10 +3418,10 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/backend/apple/todo.md APPLE-MATMUL2D-1", sprint="APPLE-MATMUL2D-1",
     ),
     DiagnosticCode(
-        code="APPLE_MATMUL2D_ACCUM", pass_origin="TesseraAppleDialect verifiers",
+        code="APPLE_MATMUL2D_ACCUM", pass_origin="TesseraAppleDialect verifiers / LowerAppleMatmul2dToCall",
         severity="error",
         summary="matmul2d accumulates in fp32, but the result element type is not f32 or `accumulate` does not say f32 (Decision #15a).",
-        fix_hint="Produce a tensor<MxNxf32> result with accumulate = \"f32\" and cast afterwards if a narrower result is wanted.",
+        fix_hint="Produce a tensor<MxNxf32> result with accumulate = \"f32\" and cast afterwards if a narrower result is wanted. fp32 is the only accumulator matmul2d implements: a half/bfloat destination is bit-exact with fp32 accumulation rounded once (APPLE-ACCUM-1, measured on the M1 Max).",
         spec="docs/audit/backend/apple/todo.md APPLE-MATMUL2D-1", sprint="APPLE-MATMUL2D-1",
     ),
     DiagnosticCode(
@@ -3319,8 +3476,8 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
         code="APPLE_MATMUL2D_ACCUM_UNSUPPORTED", pass_origin="CanonicalGemmToAppleMatmul2dPass",
         severity="error",
-        summary="The canonical reduction does not accumulate in fp32, which the Metal 4 matmul2d lane requires.",
-        fix_hint="Accumulate the GEMM in fp32 (storage may stay f16/bf16/FP8/FP4) and cast the result afterwards.",
+        summary="The canonical reduction or its declared numeric_policy.accum is not fp32; the Metal 4 matmul2d lane accumulates in fp32 only.",
+        fix_hint="Accumulate the GEMM in fp32 (storage may stay f16/bf16/FP8/FP4) and cast the result afterwards. MPPTensorOpsMatMul2d.h lists half/bfloat destinations, but measured on the M1 Max (APPLE-ACCUM-1) they are fp32 accumulation rounded once to the destination, so the lane refuses accum=fp16/bf16 rather than label an fp32 accumulation with it. For fp16 accumulation use the simdgroup lane.",
         spec="docs/audit/backend/apple/todo.md APPLE-MATMUL2D-1", sprint="APPLE-MATMUL2D-1",
     ),
     DiagnosticCode(

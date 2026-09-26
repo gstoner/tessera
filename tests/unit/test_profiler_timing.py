@@ -90,7 +90,13 @@ def test_wsl_and_rtg_dispatch_are_never_promotion_evidence() -> None:
 
 
 def test_tsc_requires_invariant_frequency_and_no_cpu_migration() -> None:
-    with pytest.raises(ProfilerTimingError, match="migrated"):
+    # Two CPUs are accepted only under a TSC-synchronized kernel clocksource.
+    measured_clock(
+        "tsc_cycles", source="rdtscp", value=100,
+        provenance={"invariant_tsc": True, "logical_cpu_start": 1, "logical_cpu_end": 2,
+                    "calibrated_frequency_hz": 3_000_000_000,
+                    "clocksource": "hyperv_clocksource_tsc_page"})
+    with pytest.raises(ProfilerTimingError, match="two CPUs"):
         measured_clock(
             "tsc_cycles",
             source="rdtscp",

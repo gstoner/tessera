@@ -127,21 +127,6 @@ module {
 """
 
 
-def _canonical_gemm_module(m: int, k: int, n: int, storage: str, accum: str) -> str:
-    return f"""
-module {{
-  func.func @canonical_gemm(
-      %a: tensor<{m}x{k}x{storage}>, %b: tensor<{k}x{n}x{storage}>)
-      -> tensor<{m}x{n}x{accum}> {{
-    %0 = "tessera.matmul"(%a, %b)
-        : (tensor<{m}x{k}x{storage}>, tensor<{k}x{n}x{storage}>)
-        -> tensor<{m}x{n}x{accum}>
-    return %0 : tensor<{m}x{n}x{accum}>
-  }}
-}}
-"""
-
-
 def _find_mlir_opt():
     if env := os.environ.get("TESSERA_MLIR_OPT"):
         return env if Path(env).is_file() else None
@@ -251,46 +236,16 @@ def test_portable_tile_kernel_reuses_fragment_materialized_generator():
     assert r.stdout.count("tessera_rocm.wmma") == 32
 
 
-@pytest.mark.parametrize(
-    ("storage", "accum", "wmma"),
-    [
-        ("f16", "f32", "tessera_rocm.wmma"),
-        ("bf16", "f32", "tessera_rocm.wmma"),
-        ("i8", "i32", "tessera_rocm.wmma"),
-    ],
-)
-def test_shared_canonical_k_loop_reuses_rocm_wmma_generator(storage: str, accum: str, wmma: str) -> None:
-    """ROCm consumes the planned shared loop and its SSA ownership proof."""
-    _need_tools()
-    result = subprocess.run(
-        [
-            str(TESSERA_OPT),
-            "-",
-            "--tessera-tiling",
-            "--tessera-tile-ir-lowering",
-            "--rocm-wave-lds-pipeline",
-            "--rocm-wave-lds-legality",
-            "--generate-wmma-gemm-kernel",
-        ],
-        input=_canonical_gemm_module(31, 23, 47, storage, accum),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert "tessera.canonical_k_step" not in result.stdout
-    assert "gpu.func @canonical_gemm" in result.stdout
-    assert wmma in result.stdout
-    assert 'tessera.rocm.source = "canonical_mnk_scf_for"' in result.stdout
-    assert "tessera.rocm.canonical_k_loop = true" in result.stdout
-    assert "tessera.rocm.ssa_ownership_proof = true" in result.stdout
-    assert "tessera.rocm.ragged_zero_pad = true" in result.stdout
-    assert f'tessera.rocm.accumulate = "{accum}"' in result.stdout
-    assert "tessera.rocm.tile_k = 16" in result.stdout
+def test_canonical_k_step_is_refused_by_name() -> None:
+    """ROCm has no canonical M/N/K scf.for GEMM entry.
 
-
-def test_malformed_canonical_k_step_fails_closed() -> None:
-    """A marker without the verified loop/pipeline contract is not consumed."""
+    The matcher that consumed a `tessera.canonical_k_step` step, its LDS
+    comparison body and the `canonical_mnk_scf_for` source stamp were Lane B's
+    and were deleted with it (2026-09-26, ROCM_LANE_MAP.md). A marked step that
+    still reaches the generator is refused by name rather than passed through
+    unlowered (Decision #21). Converted from
+    `test_malformed_canonical_k_step_fails_closed`, which asserted the deleted
+    matcher's own refusal; the positive canonical-loop tests went with it."""
     _need_tools()
     source = """
 module {
@@ -316,35 +271,8 @@ module {
         check=False,
     )
     assert result.returncode != 0
-    assert "verified three-level M/N/K scf.for contract" in result.stderr
-
-
-def test_canonical_k_loop_has_explicit_compiler_owned_lds_strategy() -> None:
-    """The comparison lane is real address-space-3 staging, not an attribute."""
-    _need_tools()
-    result = subprocess.run(
-        [
-            str(TESSERA_OPT),
-            "-",
-            "--tessera-tiling",
-            "--tessera-tile-ir-lowering",
-            "--rocm-wave-lds-pipeline",
-            "--rocm-wave-lds-legality",
-            "--generate-wmma-gemm-kernel=canonical-staging=lds",
-        ],
-        input=_canonical_gemm_module(31, 47, 23, "bf16", "f32"),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    out = result.stdout
-    assert 'tessera.rocm.physical_staging = "lds"' in out
-    assert "tessera.rocm.ssa_ownership_proof = true" in out
-    assert out.count("#gpu.address_space<workgroup>") >= 2
-    assert out.count("gpu.barrier") == 2
-    assert "vector.load" in out
-    assert "tessera_rocm.wmma" in out
+    assert "ROCM_CANONICAL_GEMM_LOOP_RETIRED" in result.stderr
+    assert "gpu.func" not in result.stdout
 
 
 def test_portable_tile_epilogue_preserves_abi_and_output_conversion():

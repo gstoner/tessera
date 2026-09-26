@@ -1,0 +1,388 @@
+{
+  "architecture": "x86_64_avx512_granite_ridge",
+  "benchmarks": [
+    {
+      "discard_first": true,
+      "family": "matmul",
+      "median_ns": 1048986.6125787722,
+      "repetitions": 1500,
+      "resource_fingerprint": "c37f235b45bfa21243036e703cc76deac98b99f950152ef7dc34fe230b4f1fbe",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        1048425.0477265635,
+        1049548.1774309808
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "matmul",
+      "median_ns": 1494166.325,
+      "repetitions": 1500,
+      "resource_fingerprint": "c37f235b45bfa21243036e703cc76deac98b99f950152ef7dc34fe230b4f1fbe",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        1494118.93,
+        1494213.72
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 2966.475098416049,
+      "repetitions": 1500,
+      "resource_fingerprint": "409f3f7f5cc2172cb647d4632497ce0ac8a87061080c247995528495cf4916ab",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        2970.8333626570984,
+        2962.1168341750003
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 385979.475,
+      "repetitions": 1500,
+      "resource_fingerprint": "409f3f7f5cc2172cb647d4632497ce0ac8a87061080c247995528495cf4916ab",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        386461.75,
+        385497.2
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 745.7641351321365,
+      "repetitions": 1500,
+      "resource_fingerprint": "8efc24e83ee652c3d7d7943ca3ad9cf7c4c067441f6142b5b736e95326b916cb",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        759.9410176633647,
+        731.5872526009083
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 382062.15,
+      "repetitions": 1500,
+      "resource_fingerprint": "8efc24e83ee652c3d7d7943ca3ad9cf7c4c067441f6142b5b736e95326b916cb",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        382244.5,
+        381879.8
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "attention",
+      "median_ns": 699934.4317929517,
+      "repetitions": 1500,
+      "resource_fingerprint": "6eb022813346861b0b42f284833fb58dda1533ada6e3bf664f38c99df66478ce",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        699919.102725621,
+        699949.7608602822
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "attention",
+      "median_ns": 1145815.93,
+      "repetitions": 1500,
+      "resource_fingerprint": "6eb022813346861b0b42f284833fb58dda1533ada6e3bf664f38c99df66478ce",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        1145458.14,
+        1146173.72
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "linalg",
+      "median_ns": 62362.45312016086,
+      "repetitions": 1500,
+      "resource_fingerprint": "a83881b4d7018d203866854c4450fdb2de045e9f3e8b9dec662aeed928c6538e",
+      "route": "x86_breadth_graph_abi_c_abi",
+      "run_medians_ns": [
+        62255.0494588642,
+        62469.856781457514
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "linalg",
+      "median_ns": 447377.03500000003,
+      "repetitions": 1500,
+      "resource_fingerprint": "a83881b4d7018d203866854c4450fdb2de045e9f3e8b9dec662aeed928c6538e",
+      "route": "x86_breadth_graph_abi_c_abi",
+      "run_medians_ns": [
+        447313.01,
+        447441.06
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    }
+  ],
+  "cache_proofs": [
+    {
+      "cold": {
+        "cache_key": "e636fcd4424309296e7dac5bd28ac026be87776e4460d869cfa22a5eeb1f0dd0",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "0a7942399d5f30d27a77024581be014bf36d8f6ded74a6acbcdd1fe913de3480",
+        "image_digest": "e62fe6c149c554121a89f0456f45660aa6ca71de3be62f56996b1705a2f37feb"
+      },
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "warm": {
+        "cache_key": "e636fcd4424309296e7dac5bd28ac026be87776e4460d869cfa22a5eeb1f0dd0",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "0a7942399d5f30d27a77024581be014bf36d8f6ded74a6acbcdd1fe913de3480",
+        "image_digest": "e62fe6c149c554121a89f0456f45660aa6ca71de3be62f56996b1705a2f37feb"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "cc317d8fcd3026aee4af2ed09b571c0de492cca42d1e703dc94b9d4f6a823b2e",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "42d134b714ec9d166fc1b7e46663c03ffe6988e8066c2b57e7540e3d61b79959",
+        "image_digest": "d6610d28b510e61c877f94938b2ed373904e8e247cf6caadd7a513dfd181336e"
+      },
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "warm": {
+        "cache_key": "cc317d8fcd3026aee4af2ed09b571c0de492cca42d1e703dc94b9d4f6a823b2e",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "42d134b714ec9d166fc1b7e46663c03ffe6988e8066c2b57e7540e3d61b79959",
+        "image_digest": "d6610d28b510e61c877f94938b2ed373904e8e247cf6caadd7a513dfd181336e"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "b6cfc9061732cce0763b616d9e5f4b6cdf2fef3b6ee2df7ec11476b0f1b66d28",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "52220bc945522f2082cea6ecff57d66d636361db06e2e2909dbae90a2f9f8891",
+        "image_digest": "52be9169baea961bb57e6b10779d6988a21a1e6e3ce35e034dc33f95883e859e"
+      },
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "warm": {
+        "cache_key": "b6cfc9061732cce0763b616d9e5f4b6cdf2fef3b6ee2df7ec11476b0f1b66d28",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "52220bc945522f2082cea6ecff57d66d636361db06e2e2909dbae90a2f9f8891",
+        "image_digest": "52be9169baea961bb57e6b10779d6988a21a1e6e3ce35e034dc33f95883e859e"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "f3eb734ca32d5fd5be27b07a281705ac0c23a743969da0cfcb7ec9c794368cd9",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "1b5b0dfd94fe21a607713ef6522137ce748d3d2d3c6b9437a31918fbf4d40086",
+        "image_digest": "953d88cc48486dafe7f0c9db5e873efc2e69bb7842fb52c1276ca6d9fe037f1e"
+      },
+      "fixture_id": "attention-f32-uniform-1x1x2x2-v1",
+      "warm": {
+        "cache_key": "f3eb734ca32d5fd5be27b07a281705ac0c23a743969da0cfcb7ec9c794368cd9",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "1b5b0dfd94fe21a607713ef6522137ce748d3d2d3c6b9437a31918fbf4d40086",
+        "image_digest": "953d88cc48486dafe7f0c9db5e873efc2e69bb7842fb52c1276ca6d9fe037f1e"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "48616e5989d371e0d35157b5042b7920ebe18c6d9ead55ba2c86a26ed1fef6a2",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "043e8f6d6584de8da55a06ea6bb99086e5306169f8c0c88f0144db5d7829a8c5",
+        "image_digest": "e001f6560438902435e87b5d803fe59ff181c0407e42a063a5689985026c2741"
+      },
+      "fixture_id": "cholesky-f32-3x3-spd-v1",
+      "warm": {
+        "cache_key": "48616e5989d371e0d35157b5042b7920ebe18c6d9ead55ba2c86a26ed1fef6a2",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "043e8f6d6584de8da55a06ea6bb99086e5306169f8c0c88f0144db5d7829a8c5",
+        "image_digest": "e001f6560438902435e87b5d803fe59ff181c0407e42a063a5689985026c2741"
+      }
+    }
+  ],
+  "device": {
+    "exact": true,
+    "identity": "tajasarus | AMD Ryzen 7 9800X3D 8-Core Processor"
+  },
+  "fixtures": [
+    {
+      "actual": [
+        [
+          5.5,
+          -11.0
+        ],
+        [
+          7.0,
+          7.5
+        ]
+      ],
+      "descriptor_digest": "0a7942399d5f30d27a77024581be014bf36d8f6ded74a6acbcdd1fe913de3480",
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "image_digest": "e62fe6c149c554121a89f0456f45660aa6ca71de3be62f56996b1705a2f37feb",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          0.5,
+          0.5
+        ]
+      ],
+      "descriptor_digest": "42d134b714ec9d166fc1b7e46663c03ffe6988e8066c2b57e7540e3d61b79959",
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "image_digest": "d6610d28b510e61c877f94938b2ed373904e8e247cf6caadd7a513dfd181336e",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        2.0,
+        3.5
+      ],
+      "descriptor_digest": "52220bc945522f2082cea6ecff57d66d636361db06e2e2909dbae90a2f9f8891",
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "image_digest": "52be9169baea961bb57e6b10779d6988a21a1e6e3ce35e034dc33f95883e859e",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          [
+            [
+              2.0,
+              3.0
+            ],
+            [
+              2.0,
+              3.0
+            ]
+          ]
+        ]
+      ],
+      "descriptor_digest": "1b5b0dfd94fe21a607713ef6522137ce748d3d2d3c6b9437a31918fbf4d40086",
+      "fixture_id": "attention-f32-uniform-1x1x2x2-v1",
+      "image_digest": "953d88cc48486dafe7f0c9db5e873efc2e69bb7842fb52c1276ca6d9fe037f1e",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          2.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          3.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.5,
+          1.5
+        ]
+      ],
+      "descriptor_digest": "043e8f6d6584de8da55a06ea6bb99086e5306169f8c0c88f0144db5d7829a8c5",
+      "fixture_id": "cholesky-f32-3x3-spd-v1",
+      "image_digest": "e001f6560438902435e87b5d803fe59ff181c0407e42a063a5689985026c2741",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    }
+  ],
+  "required_timing_domains": [
+    "kernel_wall",
+    "end_to_end"
+  ],
+  "schema": "tessera.e2e-backend-report.v1",
+  "scope": [
+    "matmul",
+    "softmax",
+    "reduction",
+    "attention",
+    "linalg"
+  ],
+  "source_commit": "dcdaf2a91a8b95a6a6e1cad154791e2b631083fe",
+  "target": "x86",
+  "toolchain_fingerprint": "b67aa70609e5e1787d08b7449e988a6f7ca047259999d28df7aaafaa9dd8b0ce"
+}

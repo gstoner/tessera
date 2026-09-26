@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,115 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## AVX-512 E2E release packets, one per Zen 5 host — 2026-09-26
+
+Sync `AVX512-E2E-PACKETS-2026-09-26` (E2E-SPINE-3; uses `RUNTIME-LIB-OPT-1` and the
+x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
+
+- **Registry split.** The single `("x86", "x86_64_avx512")` fleet key is replaced by
+  two host-pinned keys, `x86_64_avx512_strix_halo` (Princess-Luna, Ryzen AI MAX+ 395)
+  and `x86_64_avx512_granite_ridge` (Tajasarus, Ryzen 7 9800X3D), each owing
+  matmul / softmax / reduction / attention / linalg. `alpha_scoreboard` `luna_cpu` /
+  `taj_cpu` read their own key; the "two Zen 5 lanes share one key" limit is gone.
+- **Recorder** `benchmarks/e2e_spine/record_x86_avx512_packet.py` maps the hostname
+  **and** CPU model (`e2e_fleet.X86_AVX512_HOSTS`, case-insensitive) to the one key that
+  host may record and refuses any other host, a host without the AVX-512 image feature
+  set, a dirty tree, any override environment (`TESSERA_X86_ELEMENTWISE_LIB`,
+  `TESSERA_BUILD_DIR`, `TESSERA_OPT`), a library or `tessera-opt` outside the checkout's
+  own `build/`, a `.so` not newer than its `runtime_library_build.json`, HEAD's commit
+  time and every tracked source that builds it (the configure-time `-O2` stamp says
+  nothing about a library that was not rebuilt), a timed image that does not embed the
+  stamped library, and a runtime library whose `record_for_library` stamp is not
+  optimized. `kernel_wall` is timed by `profiler_x86_clock.measure` / `witness_sample`
+  (TSC calibrated over separate intervals, rdtscp + `CLOCK_MONOTONIC_RAW` around each
+  window on one pinned CPU); a window whose witness is refused or does not re-verify
+  aborts the recording. Stability uses the fixed policy
+  `X86_AVX512_STABILITY_LIMIT_PCT`, not a per-row limit.
+- **Validator** `e2e_fleet.validate_x86_avx512_packet` runs at seal and at every
+  `validate_packet`: it parses `resources.json`, checks hostname + model against the
+  architecture key, checks the environment label against the recorded kernel release,
+  re-verifies every witness (`verify_witness_sample`) and recomputes agreement, re-derives
+  both domains' run medians from the stored per-window samples, applies the fixed
+  stability policy, re-hashes each resource fingerprint and requires every timed image
+  to embed the stamped library. `discover_packets` also requires a packet to sit in the
+  directory named by its target and architecture. (Review of this branch: a Tajasarus
+  packet relabelled and resealed as Strix Halo used to be accepted.)
+- **linalg fixture** `cholesky-f32-3x3-spd-v1` added to `benchmarks/e2e_spine/fixtures.json`
+  (exact float factor; runs through `x86_breadth.package_graph_breadth`).
+- **Sealed** (both at source commit `f8022572`, WSL2, each built from a fresh worktree
+  with no build type so the x86 libraries are `-O2` by `RUNTIME-LIB-OPT-1`, the libraries
+  force-rebuilt after the final configure; Tajasarus's own `build/` is Release,
+  deliberately not mirrored so both lanes are `-O2`):
+  `docs/audit/evidence/e2e_spine/x86/x86_64_avx512_strix_halo/` on Princess-Luna and
+  `.../x86_64_avx512_granite_ridge/` on Tajasarus, all five families each. Medians live
+  in the packets. Every witnessed window re-verifies and agreed with the raw clock
+  within 1.4e-4. These replace the first recordings (at `154e7fc9`), withdrawn because
+  their witnesses did not carry the calibration they were checked against.
+- **Findings, not fixed here.** (1) `end_to_end` through `runtime.launch` costs
+  ~0.39 ms (Tajasarus) to ~0.71 ms (Princess-Luna) per call even for a 1 µs reduction,
+  so the public launch path, not the kernel, dominates every small family — owed a
+  look at the x86 descriptor launch path. (2) The `-O2` `libtessera_x86_elementwise.so`
+  was byte-identical on the two hosts (same GCC 15.2.0, same detected flags), so a
+  per-host timing gap is not the build; it is not isolated further — the WSL kernels
+  (6.18.33.1 vs 6.18.33.2) and the memory systems also differ. (3) Within one recording
+  every family is stable to the 4% policy, but **across the two recordings** matmul
+  256³ kernel_wall moved ~1.5× on both hosts, in opposite directions (Tajasarus
+  0.68 → 1.05 ms on the same pinned CPU 15; Princess-Luna 1.07 → 0.71 ms, CPU 23 → 14),
+  and attention 0.71 → 0.59 ms on Tajasarus, while softmax, reduction, cholesky and
+  Princess-Luna attention stayed within ~4%. The packet's stability gate
+  does not capture recording-to-recording variance; not root-caused. **One confound
+  is confirmed by code read (2026-09-26):** the TSC witness pins the recording
+  thread to one CPU (`profiler_x86_clock.pin_current_cpu`), and
+  `avx512_flash_attn_f32.cpp` spawns `std::thread`s, which inherit that
+  single-CPU mask. So on the witness route attention's threads share one CPU,
+  which is not the production configuration. The witness therefore changes what
+  it measures for threaded kernels. No threading was found in the GEMM kernel
+  source, so the matmul shift is not explained by this.
+  **`X86-WITNESS-PIN-1` fixed 2026-09-26 (`dcdaf2a9`):** calibration pins itself and
+  restores the CPU set; the timed region runs unconfined; each window records its
+  CPU-set size, the host CPU count and the kernel clocksource, and
+  `verify_witness_sample` refuses a region that did not run on the full set (reads on
+  two CPUs are accepted only under a TSC-synchronized clocksource). Both hosts
+  re-recorded **twice** at `dcdaf2a9`; the committed packets are the second runs and
+  `x86_avx512_unpinned_variance_20260926` (`benchmarks/baselines/`) holds the first runs,
+  the one refused attempt (softmax 4.194% > 4% stability) and the run-to-run table.
+  Attention is now stable across recordings (0.993 / 1.012).
+  **`X86-MATMUL-BIMODAL-1` (open):** matmul 256³ `kernel_wall` lands on one of two
+  levels (~0.72 / ~1.05 ms). Princess-Luna moved 1.48x between two *unpinned*
+  recordings of identical code, so the pin did not cause it. Tajasarus stayed in the
+  slower mode twice. Not root-caused; a single recording's matmul latency is not a
+  stable number until it is. Also owed: `record_x86_base_packet.py` pins its whole
+  timing to one CPU the same way and should get the same fix before its threaded rows
+  are trusted.
+  **Pre-PR review (2026-09-26), open:** `validate_x86_avx512_packet` re-derives
+  witnesses, medians, stability and the environment label, but only *compares*
+  the host/model, library path, source commit, toolchain fingerprint and the
+  library digest — a resealed forgery of those passes, since the packet digest
+  is unkeyed. A packet under an unregistered key (e.g. the retired
+  `x86_64_avx512`) seals without the AVX-512 checks, though no registration
+  credits it. The recorder's freshness check is mtime-based and covers only
+  the x86 backend sources and the optimization cmake module (`tessera-opt` is
+  checked by path, not freshness). (4) Under WSL2 the raw clock is
+  itself TSC-derived; the witness shows a stable TSC scale, not an independent
+  oscillator (stated in `profiler_x86_clock`).
+- **Zen 5 profiler packet on the witness route** (Princess-Luna, clean tree `f8022572`,
+  schema v2, `-O2` library stamp, recorded after — not alongside — the E2E packet):
+  `benchmarks/baselines/x86_zen5_profiler_packet_20260926_princess_luna.json` (notes: `x86_zen5_profiler_packet_20260926_princess_luna_README.md`) came out
+  `admission_route = tsc_witness`, `verdict = promote`, no ineligibility reasons;
+  diagnostic gaps `VIRTUALIZED_HOST`, `WSL_CLOCK_DOMAIN`,
+  `TIMING_PROOF_INCOMPLETE:perf_event_open,perf_sample_valid`, `SYMBOL_SAMPLING_MISSING`.
+  Its production and scheduled images are byte-identical, so `promote` is a parity check
+  under WSL2, not a performance promotion. It replaces the v1 packet recorded at
+  `7b3094e9`. Not recorded on Tajasarus. `test_checked_in_princess_luna_packet_validates`
+  re-validates it off-host.
+
+**Sibling outcomes.** ROCm / NVIDIA: not applicable (x86 CPU packets; the only shared
+changes are the x86 registrations, a new fixture, and a directory-name check in
+`discover_packets` that every existing packet already satisfies). **Apple: follow-up
+opportunity** — `apple_cpu/apple_m1_max` registers `linalg`, and the new
+`cholesky-f32-3x3-spd-v1` fixture is the corpus entry its packet could claim; no Apple
+packet was re-recorded here.
 
 ## Device-clock markers — 2026-09-26
 
@@ -27,7 +136,7 @@ Sync `WSL-TIMING-ADMISSION-2026-09-26` (owner direction, [MASTER_AUDIT](../../MA
 
 - `profiler_timing`: on WSL, promotion is carried only by a kernel-side clock **of the sample's own target** (`promotion_clock_slots`: `device_wall_clock_ns` for ROCm, `tsc_cycles` for x86, none for NVIDIA). Its admissible witnesses are fixed per clock — HIP event or profiler activity for the device clock, `CLOCK_MONOTONIC_RAW` for the TSC, **never host wall** — at least one must be valid in the same sample, and **every** valid one it names must agree within 5% (`|witness − clock| / witness`, the providers' band). A TSC must carry a frequency from an independent source (`cpuid_leaf_0x15` or a separate calibration interval). Environments are matched exactly; an unrecognized one carries no promotion.
 - `target_perf.apply_corpus`: a WSL calibration corpus is selector authority only when `timing_witness.samples` carries at least two admissible WSL timing samples per calibrated device, of that device's target and distinct by clock content — derived evidence, not a declared method.
-- The ROCm profiler packet gains a derived `admission_route` (`device_clock_witness`); on it, environment and profiler reasons become `diagnostic_gaps`, the witness sample must name the calibrated image, and the validator re-derives reasons, gaps, route and eligibility from the packet's own inputs. SSD admission on gfx1151 consumes it. (An x86 `tsc_witness` packet route was drafted and **withdrawn**: the probe's `clock_agreement_valid` compares steady_clock with monotonic-raw, not the TSC, so it proved nothing about the TSC.)
+- The ROCm profiler packet gains a derived `admission_route` (`device_clock_witness`); on it, environment and profiler reasons become `diagnostic_gaps`, the witness sample must name the calibrated image, and the validator re-derives reasons, gaps, route and eligibility from the packet's own inputs. SSD admission on gfx1151 consumes it. (An x86 `tsc_witness` packet route was drafted and **withdrawn**: the probe's `clock_agreement_valid` compares steady_clock with monotonic-raw, not the TSC, so it proved nothing about the TSC. **Superseded the same day** by the rebuilt route: per-row TSC vs CLOCK_MONOTONIC_RAW around the real trial region, frequency from separate stored calibration intervals, everything re-derived by `profiler_x86_clock.verify_witness_sample`, and the per-launch samples bound to the witnessed region.)
 - `profiler_cuda_window` drops "bare metal required"; its activity-window / event 5% agreement and 5% overhead gates decide. This is an explicit exception recorded in MASTER_AUDIT and **kept by owner decision (2026-09-26)**: the Nsight activity window is profiler-derived, and its validity on WSL2 is unverified until a Super-Bear packet is recorded.
 - Recorders that time with events or host wall only now stamp `kernel_clock_witness_required` instead of a bare-metal reason; committed historical packets are unchanged.
 
@@ -57,6 +166,19 @@ and no x86 packet is affected. This was not re-run on a Zen 5 box.
 Owner `RUNTIME-LIB-OPT-1` (new, cross-backend; defined here and mirrored in the
 NVIDIA, ROCm and Apple queues); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
 Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
+
+**Applied 2026-09-26 (owner decision; this PR).** Items 1 and 3 landed as proposed,
+with one stated difference: the level is **`-O2`**, while the table below measured
+`-O3`, so the `-O0`→`-O2` gain on these rows is unmeasured until item 4 re-records them.
+`cmake/TesseraRuntimeLibraryOptimization.cmake` applies to the ten targets named in
+item 1. It acts only in empty-build-type trees and never defines `NDEBUG`. Configure
+writes `<build>/runtime_library_build.json` (`tessera.runtime_library_build.v1`), and
+`runtime_library_build.record_for_library` stamps it into evidence. It refuses a
+library loaded from outside a configured tree. First consumer:
+`record_x86_zen5_profiler_packet.py` puts it inside the digest-bound benchmark record.
+Verified on the Mac only (Apple runtime and `tessera_jit` compile at `-O2`;
+`tessera-opt` translation units unchanged). **Item 4 is still owed:** a packet
+recorded before this change keeps its old number until it is re-recorded on its own box.
 
 **Finding (x86).** On Princess-Luna, the primary x86 AVX-512 proof host,
 `build/` has an empty `CMAKE_BUILD_TYPE`. `libtessera_x86_elementwise.so` (47
@@ -88,7 +210,7 @@ did not. That is exactly the comparison Decision #28's arbiter relies on.
 Tajasarus x86 rows are `-O3`, so rows from the two Zen 5 boxes are not
 comparable until re-measured.
 
-**Proposal (not applied; owner decision because it moves baselines):**
+**Proposal (applied 2026-09-26, see the banner above):**
 
 1. **Per-target optimization for the runtime libraries only.** Add a
    `tessera_runtime_library_optimization(<target>)` helper under `cmake/`. It

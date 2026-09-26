@@ -1,11 +1,64 @@
 ---
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## ROCM-SPLIT-K-1: cross-workgroup split-K on gfx1201 — 2026-09-26
+
+Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-1). **Landed for gfx1201 f16/bf16; device-proven for correctness and measured on Tajasarus.**
+
+- **One decider.** `selectGfx1201SplitK` (`src/compiler/programming_model/lib/PMPasses.cpp`) decides in Graph->Schedule: split when output tiles < 32 WGPs (WGP mode, `rocm_target.dispatch_slots`), `S = ceil(32/tiles)` rounded down to a power of two while each slice stays whole `block_k=32` macro K blocks of >= 256 (the 256 is an unmeasured guard). `rocm_tiling.select_split_k` is the declared oracle; `verify_matmul_projection` refuses any package where the two disagree. The #29a UNWIRED marker on `split_k_required` is removed because this is its consumer.
+- **Semantic pair.** `split_k` + `split_k_reduction = "ordered"` on `schedule.matmul` (and in its digest, only when S>1), `tessera.split_k*` on `tile.matmul_kernel`, `split_k*` on `tessera_rocm.wmma_gemm`. Every verifier fails closed on half a pair or a non-`ordered` reduction; there is no atomic mode.
+- **Codegen.** Typed register body only: the partial runs over grid.z = S, walks `[z*K/S, (z+1)*K/S)` and stores fp32 into workspace plane z with no epilogue; `<entry>_splitk_reduce` sums slices in fixed order and applies bias/activation once (same `TileEpilogue.h` helpers as the unsplit store). The LDS body, the `wmma_gemm` directive adapter, integer/fp8/f16-accumulate contracts and dynamic K refuse (`ROCM_SPLIT_K_UNSUPPORTED`). An occupancy-short K >= 512 with no aligned split stays unsplit with a `ROCM_SPLIT_K_NOT_APPLIED` warning; K below two 256-wide slices is outside the rule and emits nothing (every 16x256x256 decode GEMM would otherwise warn).
+- **Runtime/descriptor.** `package_scheduled_matmul` adds the reduce entry (`GFX_MATMUL_SPLIT_K_REDUCE_F32_ABI`), geometry policy `rocm_wmma_split_k_grid`, provenance `split_k`/`split_k_reduction`/reduce entry/workspace, and `physical_route` suffix `_splitk{S}_ordered` (Decision #12). The launcher allocates the workspace and issues both launches on one stream.
+- **Evidence (Tajasarus, RX 9070 XT, WSL2).** Device tests `tests/unit/test_rocm_split_k.py` (router 16x256x2048 and ragged 15x200x2048, fp16/bf16, none / bias+gelu / bias+relu, bit-identical reruns, an unsplit 128x256x2048 control, forged-descriptor refusals): 41 passed at `1387cd1b`, log committed as `benchmarks/baselines/rocm_split_k_20260926/device_tests_gfx1201.txt`. Timing [`benchmarks/baselines/rocm_split_k_20260926/gfx1201.json`](../../../../benchmarks/baselines/rocm_split_k_20260926/gfx1201.json), paired and interleaved, 3 runs x 15 rounds x 200 iterations, host wall clock (not promotion-eligible): selected S=2 is **2.05x (fp16) / 2.01x (bf16)** faster than the unsplit kernel of the same Tile IR, 45/45 rounds each, both launches counted. Measurement-only sweep: S=4 2.52-2.58x, S=8 2.79-2.80x -- the rule is conservative on this shape (why is unmeasured: no counters on WSL2); not retuned from one shape (follow-up).
+- **Sibling outcome.** gfx1151: not applicable by rule (never split; no Princess-Luna run, no claim). NVIDIA / x86 / Apple: not applicable (the rule is gfx1201-only; schedule digests of every unsplit schedule are unchanged).
+- **Open.** A per-shape slice rule once more than one shape is measured; fp8/int8 split (i32 workspace would be exact); a device-clock witness for the timing; LDS-body split.
+
+## Streaming STFT on `target="rocm"` claims gfx1151 on a gfx1201 host — 2026-09-26
+
+Found while proving a sweep failure pre-existing for ROCM-SPLIT-K-1. `spectral_streaming.stream_stft_chunk(target="rocm")` hard-codes `architecture = "gfx1151"` into the artifact digest and the execution certificate, and `test_physical_streaming_broadcast_strides_and_artifact_lineage` asserts that label. On Tajasarus (gfx1201) the test **passes in isolation**, which means it certifies a run on the RX 9070 XT as a gfx1151 execution: a mislabel, not proof. In the full `-k "rocm or gfx1201 or gfx1151"` sweep the `[rocm-True]` case fails with `gfx1151 streaming STFT package failed rc=246`. It fails the same way at `054fa7c3` (before split-K) and at the split-K fixes HEAD. The logs are in `benchmarks/baselines/rocm_split_k_20260926/spectral_*.txt`. The failure depends on test order and has not been root-caused. **Owed:** derive the architecture from the live device, or refuse on a non-gfx1151 host, the way `rocm_pipeline.promoted_families` refuses. Also make the test expect the host's arch, then find what earlier test leaves the AMD composite library in a state where it returns 246. gfx1151 (Princess-Luna) is unaffected by the label, because it is the chip the label names.
+
+## gfx1201 SSD calibration and admission — 2026-09-26
+
+Sync `GFX1201-SSD-CALIBRATION-2026-09-26` (follows `DEVICE-CLOCK-MARKER-2026-09-26`; closes its follow-up 1). **Shared contracts changed:**
+
+- `profiler_rocm_evidence`: the packet's architecture is **derived** from the timing target `rocm_<arch>` over an explicit set `ROCM_PROFILER_ARCHITECTURES = (gfx1151, gfx1201)`. Both images must name that architecture. The validator re-derives it and refuses a relabelled packet. Every committed gfx1151 packet still validates (tested).
+- `ssd_performance.admit_ssd_candidate` admits either chip, but every calibration's rebuilt and stored architecture must equal the package chip, so a gfx1151 calibration cannot admit a gfx1201 package or the reverse.
+- The recorders query the chip from the active HIP device rather than assuming it, and resolve LLVM through `llvm_tools` (Tajasarus has no `/usr/lib/llvm-23`).
+- `record_ssd_gpu.py` now **interleaves** plain and marker-bracketed windows in alternating order behind one span-reset gap. It also takes `--launches` (default 100). This **changes the gfx1151 protocol** even at the default: with a calibration requested, plain windows are timed inside the interleaved loop rather than before calibration, so any new gfx1151 recording differs from the committed one (re-record owed, follow-up 1).
+
+**ROCm outcome: landed, with gfx1201 evidence.** [`benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Tajasarus (RX 9070 XT, WSL2, no KFD), `32,2,16,4` chunk 8, 1000 launches per window. All 18 packets are eligible:
+
+- Device clock below the HIP event by 0.03–0.08% (serial) and 0.29–0.61% (cooperative).
+- Bracketing ratios 0.9941–1.0043 and 0.9960–1.0034.
+- The selector **admits the cooperative candidate** (lower bound 9.73×), and `check_ssd_admission.py` replays the same decision.
+
+Two superseded attempts are kept with the evidence:
+
+- **100 launches, plain windows first: refused `INSTRUMENTATION_OVERHEAD_EXCEEDED`** (cooperative ratio ~2.0). A diagnostic traced this to the GPU idling while the marker compiled, not to the markers themselves. That is the reason for interleaving.
+- **Interleaved, 100 launches: aborted** at a 6.8% device-vs-event disagreement. The bracket offset is roughly fixed at about 60 µs per window, which is too large a share of a 1.6 ms window.
+
+The gfx1201 serial envelope matches gfx1151's: the 4096-byte native-tape limit. Follow-ups:
+
+1. The recorder changes were not re-run on gfx1151. Its committed packet stands as recorded at `54442ef5`, and a re-record on Princess-Luna is owed before claiming the new protocol there.
+2. Power state is part of these measurements: first windows run ~30% slower on gfx1201. Pinning or warm-up policy is open.
+3. Follow-ups 2–4 of `DEVICE-CLOCK-MARKER-2026-09-26` are unchanged.
+4. **Pre-PR review (2026-09-26), open:** SSD admission never checks a
+   calibration's window protocol or launch count, so a packet recorded under
+   the old, power-state-biased protocol would still admit when it passes the
+   5% overhead gate (the committed gfx1151 calibrations carry no
+   `window_protocol` field). `admit_ssd_candidate` compares backends but not
+   `package.chip` (pre-existing; the cooperative image-digest binding
+   mitigates it). **Fixed in review:** the ROCm packet validator now refuses a
+   packet whose timing target disagrees with the device identity queried at
+   record time (a relabel-and-rebuild previously validated), and the run logs
+   are committed as `record.txt`.
+
 
 ## Device-clock markers — 2026-09-26
 
@@ -118,6 +171,11 @@ unchanged.
 
 Owner `RUNTIME-LIB-OPT-1` (defined in the x86 queue, where the full inventory
 lives); sync `RUNTIME-LIB-OPT-1-2026-09-25`.
+
+**Applied 2026-09-26.** The `-O2` runtime-library helper and the
+`runtime_library_build.json` record landed. Status and the owed re-measurement
+live in the x86 queue entry. Parity is not claimed on this backend: its rows
+need re-recording on its own box before this backend's numbers change.
 Raw evidence and reproduction scripts: `benchmarks/baselines/runtime_lib_opt_20260925/`.
 
 **Finding (ROCm).** On Princess-Luna (gfx1151), `build/` is empty, and
@@ -6654,6 +6712,27 @@ fragment contract (steps 3-5) is **5 C++ `tile.mma` creation sites + the Python
 emitters**, while making the backend traverse Tile IR is **58 expanders** and is
 unpriced. Only the second scales with the expander population.
 
+**Adoption policy decided 2026-09-26 (owner): option (a).** Every family is to
+be entered from Tile IR produced by the scheduled route; each `generate-*` pass
+stays as its family's Tile → Target generator, and the Python-built directive
+entry is what gets retired. Order follows (b): GEMM, flash-attention and
+linear-attention first, then the long tail, tracked per family by the
+E2E-REAL-6F census. Record and recount: [`ROCM_LANE_MAP.md`](ROCM_LANE_MAP.md)
+§"Decision — expander adoption is (a)". **Lane B retired 2026-09-26**
+(same file, §"Decision — Lane B is retired"): `build_canonical_gemm_hsaco` is
+the one Graph entry for ROCm GEMM through the scheduled route, the benchmark
+was rebuilt on it, and `family=matmul input=graph` is refused in Python and
+C++. gfx1151 packet recorded
+(`benchmarks/baselines/rocm_gfx1151_canonical_gemm_scheduled_20260926/`) and gfx1201
+(`benchmarks/baselines/rocm_gfx1201_canonical_gemm_scheduled_20260926/`) packets recorded.
+Lane B's physical consumer in `GenerateWMMAGemmKernel.cpp` (canonical
+`scf.for` matcher, one-wave LDS comparison body, `canonical_mnk_scf_for`
+stamp, `ROCM_CANONICAL_LDS_{ARCH,KNOB}_UNSUPPORTED`) was deleted the same day
+after a producer census found no ROCm pipeline that tiles ahead of the
+generator; a marked step is now refused as `ROCM_CANONICAL_GEMM_LOOP_RETIRED`
+and `canonical-staging=lds` without `via-tile=true` is refused. Detail and the
+test conversions: `ROCM_LANE_MAP.md` §"Decision — Lane B is retired".
+
 **Step 3 pilot landed:** `GenerateWMMAGemmKernel{via-tile=true}` is the first
 C++ producer of the full typed `tile.view` -> `fragment_pack` -> `tile.mma` ->
 `fragment_unpack` -> `tile.store` chain. At production `mt=2, nt=4`, the
@@ -10421,6 +10500,10 @@ it now refuses by name (`ROCM_CANONICAL_LDS_ARCH_UNSUPPORTED`, registered)
 rather than being taught the RDNA4 layout — the typed LDS body already
 resolves row and column from the fragment family and is the arch-correct
 route. Two fixtures, one acceptance and one refusal.
+
+**Superseded 2026-09-26:** `emitCanonicalLdsBody`, its arch refusal and both
+fixtures were deleted with Lane B's physical consumer (`ROCM_LANE_MAP.md`
+§"Decision — Lane B is retired"); the typed LDS body is the only LDS body.
 
 **The lesson is about the audit, not the tool.** The first pass searched for
 one spelling of the formula, found the sites that had it, and called the file

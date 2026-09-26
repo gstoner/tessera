@@ -1,11 +1,13 @@
 """The Apple simdgroup primitives' numerics, checked rather than asserted.
 
-`tessera_apple.gpu.simdgroup_matmul` rejects an f16 accumulator and a row
-stride below the matrix width. Both rejections are only worth having if the
-thing they forbid is actually wrong, so this computes the consequence instead
-of restating the rule — a verifier that rejects something harmless is friction,
-and one that rejects something catastrophic is load-bearing. The difference is
-measurable.
+`tessera_apple.gpu.simdgroup_matmul` carries the program's accumulator
+(numeric_policy.accum) and rejects a row stride below the matrix width. The
+accumulator is a choice the program makes, not one the verifier makes for it
+(APPLE-ACCUM-1, owner decision 2026-09-26): fp32 and fp16 are admitted because
+the device computes exactly those (measured bit-exact on the M1 Max in
+test_apple_simdgroup_accumulator_device.py); bf16 is refused because the device
+does not. What this file keeps is the *cost* of the choice, computed rather
+than asserted, so the numbers a program is trading are visible.
 """
 
 from __future__ import annotations
@@ -40,10 +42,11 @@ def _mma_chain(k_slabs: int, *, accum_dtype, seed: int = 0) -> np.ndarray:
 def test_fp32_accumulator_is_load_bearing_not_stylistic():
     """An f16 accumulator loses real accuracy over a realistic K loop.
 
-    This is why `simdgroup_matmul` requires f32 for `c` and `d`. A matmul test
-    at K=8 would not show it: the divergence is cumulative, so a single MMA
-    looks fine and a 4096-deep reduction does not. That is precisely the class
-    of numerics bug a per-op test misses and a contract catches.
+    This is why accum=fp16 must be the program's explicit choice and never a
+    default. A matmul test at K=8 would not show it: the divergence is
+    cumulative, so a single MMA looks fine and a 4096-deep reduction does not.
+    (This numpy model rounds once per 8-deep MMA; the M1 Max rounds fp16 x fp16
+    after every FMA, which measured 1.3e-02 to 1.8e-02 at K=4096 -- worse.)
     """
     k_slabs = 512  # K = 4096, an ordinary transformer inner dimension
     exact = _mma_chain(k_slabs, accum_dtype=np.float64)
@@ -111,22 +114,26 @@ def test_ir_expresses_the_kernel_the_msl_synthesizer_emits():
         assert f"tessera_apple.gpu.{op}" in fixture, f"IR cannot express {msl_call}"
 
 
-def test_the_fp32_accumulator_matches_the_synthesizer_and_the_verifier():
-    """All three statements of the same contract must agree.
+def test_the_admitted_accumulators_agree_across_python_ods_and_verifier():
+    """All three statements of the same contract must agree (APPLE-ACCUM-1).
 
-    The MSL kernel declares `simdgroup_float8x8 acc`, the ODS description says
-    the accumulator is always fp32, and the C++ verifier enforces it. Three
-    places is two too many for a fact to drift in silence.
+    The Python fragment selector, the ODS description and the C++ verifier each
+    state which simdgroup accumulators exist on Apple7. Three places is two too
+    many for a fact to drift in silence, so they are checked together: f32 and
+    f16 admitted, bf16 refused for the measured reason.
     """
-    msl = (_ROOT / "python/tessera/compiler/emit/apple_msl.py").read_text()
+    from tessera.compiler.apple_fragment import SIMDGROUP_ACCUMULATORS
+
     ods = (_ROOT / "src/compiler/codegen/Tessera_Apple_Backend/include/Tessera"
            / "Target/Apple/TesseraAppleOps.td").read_text()
     cpp = (_ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple"
            / "TesseraAppleDialect.cpp").read_text()
 
-    assert "simdgroup_float8x8 acc" in msl
-    assert "accumulator is always fp32" in ods
-    assert "must be f32" in cpp
+    assert {a for accums in SIMDGROUP_ACCUMULATORS.values() for a in accums} == {
+        "fp32", "fp16"}
+    assert "numeric_policy.accum" in ods and "A **bf16**" in ods
+    assert "accum.isF32() || accum.isF16()" in cpp
+    assert "truncates (round-toward-zero) to bf16" in cpp
 
 
 @pytest.mark.parametrize("bad_extent", [4, 16, 32])

@@ -73,6 +73,9 @@ if(TESSERA_ENABLE_CUDA)
                             "${_tessera_aot_f16_manifest}")
 
   add_library(tessera_nvidia_gemm SHARED tessera_nvidia_gemm.cpp)
+  if(COMMAND tessera_runtime_library_optimization)
+    tessera_runtime_library_optimization(tessera_nvidia_gemm)  # RUNTIME-LIB-OPT-1
+  endif()
   add_dependencies(tessera_nvidia_gemm tessera_nvidia_sm120_f16_aot_artifact)
   target_include_directories(tessera_nvidia_gemm PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
   add_custom_command(TARGET tessera_nvidia_gemm POST_BUILD
@@ -121,6 +124,9 @@ if(TESSERA_ENABLE_CUDA)
   # Stateless Philox/key-counter package. This is a separate ABI from GEMM so
   # RNG consumers do not acquire MMA/NVRTC state or workspace implicitly.
   add_library(tessera_nvidia_rng SHARED tessera_nvidia_rng.cu)
+  if(COMMAND tessera_runtime_library_optimization)
+    tessera_runtime_library_optimization(tessera_nvidia_rng)  # RUNTIME-LIB-OPT-1
+  endif()
   target_link_libraries(tessera_nvidia_rng PUBLIC CUDA::cudart)
   set_target_properties(tessera_nvidia_rng PROPERTIES
     CUDA_ARCHITECTURES 120
@@ -130,6 +136,9 @@ if(TESSERA_ENABLE_CUDA)
   add_library(tessera_nvidia_fft SHARED
     tessera_nvidia_fft.cu
     tessera_nvidia_spectral.cu)
+  if(COMMAND tessera_runtime_library_optimization)
+    tessera_runtime_library_optimization(tessera_nvidia_fft)  # RUNTIME-LIB-OPT-1
+  endif()
   target_link_libraries(tessera_nvidia_fft PUBLIC CUDA::cudart CUDA::cufft)
   set_target_properties(tessera_nvidia_fft PROPERTIES
     CUDA_ARCHITECTURES 120
@@ -142,6 +151,9 @@ if(TESSERA_ENABLE_CUDA)
   # (resolved by the hosting binary — the shipped .so keeps it undefined, exactly
   # like a plugin, so the direct register/invoke path dlopens standalone).
   add_library(tessera_nvidia_ptx_launch SHARED tessera_nvidia_ptx_launch.cpp)
+  if(COMMAND tessera_runtime_library_optimization)
+    tessera_runtime_library_optimization(tessera_nvidia_ptx_launch)  # RUNTIME-LIB-OPT-1
+  endif()
   target_include_directories(tessera_nvidia_ptx_launch PUBLIC
     "${CMAKE_SOURCE_DIR}/src/runtime/include")
   if(TARGET CUDA::cuda_driver)

@@ -270,9 +270,33 @@ struct CanonicalGemmToAppleMatmul2dPass
         signalPassFailure();
         return;
       }
-      if (!resultType.getElementType().isF32()) {
-        root->emitOpError("APPLE_MATMUL2D_ACCUM_UNSUPPORTED: the canonical reduction must "
-                          "accumulate in fp32 for the Metal 4 matmul2d lane");
+      // APPLE-ACCUM-1. The accumulator is read from IR: the canonical nest's
+      // loop-carried accumulator type, cross-checked against a declared
+      // numeric_policy.accum. matmul2d accumulates in fp32 and nothing else --
+      // measured on the M1 Max (macOS 27.0), a half or bfloat destination is
+      // bit-exact with fp32 accumulation over the whole K rounded once to the
+      // destination (with relaxed_precision off or on), so a reduced-precision
+      // destination is an output rounding, never a reduced-precision
+      // accumulator. Any other declared accumulator is refused, named.
+      Type accElem = resultType.getElementType();
+      if (StringAttr declared = appleDeclaredAccumulator(matmul)) {
+        if (appleAccumulatorType(&getContext(), declared.getValue()) != accElem ||
+            !accElem.isF32()) {
+          root->emitOpError("APPLE_MATMUL2D_ACCUM_UNSUPPORTED: storage ")
+              << a.elem << " x " << b.elem << " declares accum=\""
+              << declared.getValue()
+              << "\", but the Metal 4 matmul2d lane (apple_gpu) accumulates in fp32 "
+                 "only -- a half/bfloat destination is fp32 accumulation rounded "
+                 "once (measured), not a reduced-precision accumulator";
+          signalPassFailure();
+          return;
+        }
+      }
+      if (!accElem.isF32()) {
+        root->emitOpError("APPLE_MATMUL2D_ACCUM_UNSUPPORTED: the canonical reduction "
+                          "carries a ")
+            << accElem << " accumulator; the Metal 4 matmul2d lane (apple_gpu) "
+            << "accumulates in fp32 only";
         signalPassFailure();
         return;
       }

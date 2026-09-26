@@ -194,14 +194,17 @@ def AppleGPU_SimdgroupMatmulOp : TesseraApple_Op<"gpu.simdgroup_matmul"> {
 
     Two numerical facts are contract, not convention, and both are verified:
 
-    * **The accumulator is always fp32**, whatever the inputs are. Metal's
-      accumulate form takes `simdgroup_float8x8` and `emit/apple_msl.py`
-      relies on it -- "the accumulator is always fp32, so the epilogue sees
-      full-precision matmul results". An f16 accumulator would change the
-      numerics of every kernel built on this op, so `c` and the result must be
-      f32 and an f16 accumulator is rejected rather than accepted and
-      quietly re-rounded. This is Decision #15a's storage-versus-accumulator
-      split expressed at the machine level.
+    * **The accumulator is the program's `numeric_policy.accum`**, carried as
+      the element type of `c` and the result (which must agree). This is
+      Decision #15a's storage-versus-accumulator split expressed at the
+      machine level. The admitted set is measured on Apple7 (APPLE-ACCUM-1,
+      M1 Max, macOS 27.0): **f32** (bit-exact with a sequential fp32 FMA
+      chain) and **f16** (bit-exact with genuine fp16 accumulation -- every
+      partial sum carried between MMAs is an fp16 value). A **bf16**
+      accumulator is rejected: Metal compiles it, but Apple7 carries it at
+      fp32 across the K loop and truncates to bf16 at the store, which is not
+      the bf16 accumulation the program declared. Integer accumulators have no
+      `simdgroup_matrix` element type.
     * **Both inputs carry the same storage type**, matching `storage`. Mixing
       an f16 and an f32 operand is not a Metal simdgroup MMA; it would have to
       be a convert plus an MMA, and accepting it here would hide that
@@ -520,6 +523,14 @@ def AppleGPU_Matmul2dOp : TesseraApple_Op<"gpu.matmul2d", [Pure]> {
     `accumulate` states it -- proven bit-exactly on the M1 Max for the
     448 + 127 x 0.0625 cell on every operand pair. Extents must agree on K,
     and the result shape is [a.outer, b.inner].
+
+    fp32 is the only accumulator this op models because it is the only one
+    matmul2d implements (APPLE-ACCUM-1, measured 2026-09-26 on the M1 Max,
+    macOS 27.0): the header also lists half and bfloat *destinations*, but a
+    half or bfloat destination is bit-exact with fp32 accumulation over the
+    whole K rounded once to the destination, with `relaxed_precision` off or
+    on. A narrow destination is therefore an output rounding, not a
+    reduced-precision accumulator, and `accumulate` admits only f32.
   }];
   let arguments = (ins Apple_TensorViewType:$a,
                        Apple_TensorViewType:$b,

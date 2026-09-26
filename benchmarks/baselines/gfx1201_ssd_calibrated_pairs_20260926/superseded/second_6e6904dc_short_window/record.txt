@@ -1,0 +1,40 @@
+completed pair 1/9
+Traceback (most recent call last):
+  File "/home/angstorms/programming/tessera-gfx1201/benchmarks/record_ssd_gpu.py", line 375, in <module>
+    main()
+    ~~~~^^
+  File "/home/angstorms/programming/tessera-gfx1201/benchmarks/record_ssd_gpu.py", line 356, in main
+    _, timings = device_clock_calibration(
+                 ~~~~~~~~~~~~~~~~~~~~~~~~^
+        device=device, logical=logical, clean_program=program, clean_binding=binding,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        raw=raw, grid=grid, block=block, reset=reset, verify=verify,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        compiler=args.compiler, llvm_bin=_llvm_bin(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        output=args.device_clock_calibration, run_id=run_id)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/programming/tessera-gfx1201/benchmarks/record_ssd_gpu.py", line 196, in device_clock_calibration
+    timing = build_timing_sample(
+        sample_id=sample_id, target=f'rocm_{chip}',
+    ...<25 lines>...
+                     'per_window_host_ns': host_ns, 'run_id': run_id, 'process_id': os.getpid(),
+                     'device_identity': identity})
+  File "/home/angstorms/programming/tessera-gfx1201/python/tessera/compiler/profiler_timing.py", line 305, in build_timing_sample
+    validate_timing_sample(payload)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/angstorms/programming/tessera-gfx1201/python/tessera/compiler/profiler_timing.py", line 423, in validate_timing_sample
+    raise ProfilerTimingError(
+        "WSL timing sample is not promotion-admissible: " + "; ".join(refusals))
+tessera.compiler.profiler_timing.ProfilerTimingError: WSL timing sample is not promotion-admissible: device_wall_clock_ns: witnesses disagree beyond 5%: hip_event_ns (6.8%)
+Traceback (most recent call last):
+  File "/home/angstorms/programming/tessera-gfx1201/benchmarks/record_ssd_rocm_calibrated_pairs.py", line 120, in <module>
+    main()
+    ~~~~^^
+  File "/home/angstorms/programming/tessera-gfx1201/benchmarks/record_ssd_rocm_calibrated_pairs.py", line 85, in main
+    subprocess.run(command, cwd=ROOT, env=env, check=True, timeout=900)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/home/angstorms/programming/tessera/.venv/bin/python', '/home/angstorms/programming/tessera-gfx1201/benchmarks/record_ssd_gpu.py', '--backend', 'rocm', '--compiler', '/home/angstorms/programming/tessera-gfx1201/build/tools/tessera-opt/tessera-opt', '--shape', '32', '2', '16', '4', '--chunk', '8', '--profile', '--cooperative', '--output', '/tmp/gfx1201_ssd_pairs_20260926/1-cooperative.json', '--device-clock-calibration', '/tmp/gfx1201_ssd_pairs_20260926/1-cooperative-calibration.json']' returned non-zero exit status 1.

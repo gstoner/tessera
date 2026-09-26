@@ -9,8 +9,12 @@ from tests._support.environment import require_native_storage_lane
 
 
 @pytest.mark.parametrize('cooperative',[False,True])
-@pytest.mark.parametrize('backend,chip',[('nvidia','sm_120'),('rocm','gfx1151')])
+@pytest.mark.parametrize('backend,chip',[('nvidia','sm_120'),('rocm','gfx1151'),('rocm','gfx1201')])
 def test_ssd_gpu_package_replays_schedule_and_abi(backend,chip,cooperative):
+    if chip == 'gfx1201' and os.environ.get('TESSERA_GFX1201_DEVICE_PROOF') != '1':
+        # Sync GFX1201-SSD-CALIBRATION-2026-09-26: the gfx1201 row belongs to
+        # the Tajasarus lane, never inferred from a gfx1151 host.
+        pytest.skip('gfx1201 SSD packaging runs under TESSERA_GFX1201_DEVICE_PROOF=1')
     tool = find_tessera_opt()
     llvm = Path('/usr/lib/llvm-23/bin')
     if tool is None or not (llvm/'mlir-opt').exists():

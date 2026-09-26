@@ -75,7 +75,10 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
     """Check the actual forward artifacts and independently recompute policy.
 
     Each process needs calibration of its exact measured artifact. CUDA uses
-    a launch-inclusive Nsight timeline; gfx1151 uses native ROCm calibration.
+    a launch-inclusive Nsight timeline; gfx1151 and gfx1201 use native ROCm
+    calibration, and every calibration must name the package's exact chip
+    (evidence never transfers between the two; sync
+    GFX1201-SSD-CALIBRATION-2026-09-26).
     """
     incumbent_specs = incumbent.validate()
     candidate.validate()
@@ -100,11 +103,12 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
         return SSDAdmission(False,'paired speedup bound does not exceed five percent',lower)
     if identity[0] == 'nvidia':
         return _admit_cuda_windows(comparison,calibrations,lower)
-    if identity[0] != 'rocm' or identity[1] != 'gfx1151':
+    from .profiler_rocm_evidence import ROCM_PROFILER_ARCHITECTURES, build_rocm_profiler_packet
+    if identity[0] != 'rocm' or identity[1] not in ROCM_PROFILER_ARCHITECTURES:
         return SSDAdmission(False,'target has no native calibration adapter',lower)
+    chip = identity[1]
     if identity[4] != 'HIP events' or len(calibrations) != 18:
         return SSDAdmission(False,'each measured process requires native HIP clock calibration',lower)
-    from .profiler_rocm_evidence import build_rocm_profiler_packet
     commits = {(c.get('source') or {}).get('source_commit') for c in calibrations}
     stated = (comparison.get('source') or {}).get('source_commit')
     # The comparison must state its commit (the recorder always writes it), or
@@ -135,6 +139,11 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
                 raise ValueError('SSD calibration does not describe the measured image and duration')
             rebuilt = build_rocm_profiler_packet(timing=timing,capture=packet['capture'],
                 uninstrumented=clean,instrumented=probe,source=packet['source'],maximum_instrumentation_overhead=1.05)
+            # The rebuilt architecture is derived from the timing target and
+            # both images; it and the stored claim must name the package chip.
+            if rebuilt['architecture'] != chip or packet.get('architecture') != chip:
+                raise ValueError(f'SSD calibration architecture {packet.get("architecture")!r} '
+                                 f'does not match the measured package chip {chip!r}')
             if not rebuilt['eligible_for_promotion']:
                 return SSDAdmission(False,'native calibration refuses promotion: '+', '.join(rebuilt['ineligibility_reasons']),lower)
     return SSDAdmission(True,'exact-artifact paired measurements and native calibration admitted',lower)

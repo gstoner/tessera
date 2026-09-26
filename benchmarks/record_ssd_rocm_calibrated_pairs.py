@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nine gfx1151 SSD process pairs, each process carrying its own device-clock
+"""Nine ROCm (gfx1151 or gfx1201) SSD process pairs, each process carrying its own device-clock
 calibration, then the production SSD admission decision on the result.
 
 Every process measures its clean serial or cooperative image with HIP events
@@ -13,6 +13,11 @@ no rocprofiler or /dev/kfd is needed.
 Qualification is checked before measurement: a dirty tree is refused unless
 --diagnostic, and --diagnostic output can never be promotion evidence because
 the packets record the dirty state and admission refuses it.
+
+The chip is never assumed: each child process queries the active HIP device
+and records it, and admission materializes the incumbent/candidate for the
+chip the rows name (all eighteen must agree -- ``summarize`` refuses a mixed
+identity; sync GFX1201-SSD-CALIBRATION-2026-09-26).
 """
 
 import argparse
@@ -28,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'python')]
 from tessera.compiler.native_ssd import materialize_ssd  # noqa: E402
 from tessera.compiler.scheduled_ssd import lower_scheduled_ssd  # noqa: E402
+from tessera.compiler.profiler_rocm_evidence import ROCM_PROFILER_ARCHITECTURES  # noqa: E402
 from tessera.compiler.ssd_performance import bind_measured_ssd, summarize  # noqa: E402
 
 LLVM_BIN = Path('/usr/lib/llvm-23/bin')
@@ -78,11 +84,14 @@ def main():
 
     comparison = dict(pairs=pairs, calibrations=calibrations, source=source)
     comparison.update(summarize(pairs))
+    chip = comparison['identity'][1]
+    if comparison['identity'][0] != 'rocm' or chip not in ROCM_PROFILER_ARCHITECTURES:
+        raise SystemExit(f'measured device {chip!r} has no ROCm calibration route')
     (destination / 'comparison.json').write_text(json.dumps(comparison, indent=2) + '\n')
 
     T, H, N, P = args.shape
     logical = lower_scheduled_ssd(T, H, N, P, args.chunk, compiler=args.compiler)
-    options = dict(compiler=args.compiler, llvm_bin=LLVM_BIN, backend='rocm', chip='gfx1151')
+    options = dict(compiler=args.compiler, llvm_bin=LLVM_BIN, backend='rocm', chip=chip)
     serial = materialize_ssd(logical, **options)
     cooperative = materialize_ssd(logical, cooperative=True, **options)
     bound, decision = bind_measured_ssd(serial, cooperative, comparison, calibrations)

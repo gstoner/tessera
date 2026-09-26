@@ -1,4 +1,10 @@
-"""Promotion-gated gfx1151 profiler calibration evidence."""
+"""Promotion-gated ROCm (gfx1151 / gfx1201) profiler calibration evidence.
+
+The architecture is never assumed: it is derived from the timing sample's
+exact target (``rocm_<arch>``) and must agree with both image records. Evidence
+for one architecture never admits another (gfx1151 and gfx1201 proofs do not
+transfer; sync ``GFX1201-SSD-CALIBRATION-2026-09-26``).
+"""
 
 from __future__ import annotations
 
@@ -13,9 +19,14 @@ from .profiler_timing import is_wsl_environment, validate_timing_sample, wsl_pro
 
 ROCM_PROFILER_PACKET_SCHEMA_VERSION = "tessera.profiler_rocm_packet.v1"
 
+#: Architectures with a validated device-clock marker and calibration route
+#: (``native_device_clock.build_device_clock_marker``). Explicit, not a prefix
+#: match: a new RDNA part is refused until it has its own proof.
+ROCM_PROFILER_ARCHITECTURES: tuple[str, ...] = ("gfx1151", "gfx1201")
+
 
 class ROCmProfilerPacketError(ValueError):
-    """Raised when gfx1151 profiler evidence is contradictory."""
+    """Raised when ROCm profiler evidence is contradictory."""
 
 
 def _digest(payload: Mapping[str, Any]) -> str:
@@ -87,18 +98,30 @@ def _admission_route(timing: Mapping[str, Any]) -> str:
     return ROUTE_PROFILER
 
 
+def _timing_architecture(timing: Mapping[str, Any]) -> str:
+    """The exact ROCm architecture a timing sample was taken on."""
+    target = timing.get("target")
+    arch = target[len("rocm_"):] if isinstance(target, str) and target.startswith("rocm_") else None
+    if arch not in ROCM_PROFILER_ARCHITECTURES:
+        raise ROCmProfilerPacketError(
+            f"ROCm profiler packet requires exact timing on one of "
+            f"{', '.join('rocm_' + a for a in ROCM_PROFILER_ARCHITECTURES)}; got {target!r}")
+    assert isinstance(arch, str)
+    return arch
+
+
 def _check_pairing(timing: Mapping[str, Any], clean: Mapping[str, Any],
-                   probe: Mapping[str, Any], maximum_instrumentation_overhead: Any) -> None:
+                   probe: Mapping[str, Any], maximum_instrumentation_overhead: Any) -> str:
     """The clean/probe pairing rules, run by the builder AND the validator, so a
-    stored packet cannot be mutated past them (review)."""
+    stored packet cannot be mutated past them (review). Returns the exact
+    architecture the timing target and both images agree on."""
     if (not isinstance(maximum_instrumentation_overhead, (int, float))
             or isinstance(maximum_instrumentation_overhead, bool)
             or not math.isfinite(maximum_instrumentation_overhead)
             or not 1.0 <= maximum_instrumentation_overhead <= 2.0):
         raise ROCmProfilerPacketError(
             "instrumentation overhead limit must be finite and within [1.0, 2.0]")
-    if timing.get("target") != "rocm_gfx1151":
-        raise ROCmProfilerPacketError("ROCm profiler packet requires exact gfx1151 timing")
+    arch = _timing_architecture(timing)
     if clean["clock_source"] != probe["clock_source"]:
         raise ROCmProfilerPacketError("instrumentation comparison requires one timing domain")
     clock_slot = {
@@ -114,13 +137,16 @@ def _check_pairing(timing: Mapping[str, Any], clean: Mapping[str, Any],
         raise ROCmProfilerPacketError("instrumentation comparison requires one semantic artifact")
     if clean["instrumented"] is not False or probe["instrumented"] is not True:
         raise ROCmProfilerPacketError("instrumentation roles are inconsistent")
-    if clean["architecture"] != "gfx1151" or probe["architecture"] != "gfx1151":
-        raise ROCmProfilerPacketError("instrumentation comparison requires exact gfx1151 images")
+    if clean["architecture"] != arch or probe["architecture"] != arch:
+        raise ROCmProfilerPacketError(
+            f"instrumentation comparison requires exact {arch} images matching the "
+            f"timing target; got {clean['architecture']!r}/{probe['architecture']!r}")
     if (
         clean["calibration_sample_id"] != timing.get("sample_id")
         or probe["calibration_sample_id"] != timing.get("sample_id")
     ):
         raise ROCmProfilerPacketError("application images do not bind the timing calibration sample")
+    return arch
 
 
 def _derive_eligibility(
@@ -203,7 +229,7 @@ def build_rocm_profiler_packet(
     validate_rocm_native_capture(capture)
     clean = _image_record(uninstrumented, "uninstrumented")
     probe = _image_record(instrumented, "instrumented")
-    _check_pairing(timing, clean, probe, maximum_instrumentation_overhead)
+    arch = _check_pairing(timing, clean, probe, maximum_instrumentation_overhead)
     source_commit = source.get("source_commit")
     if not isinstance(source_commit, str) or len(source_commit) != 40:
         raise ROCmProfilerPacketError("ROCm profiler packet requires full source commit")
@@ -214,7 +240,7 @@ def build_rocm_profiler_packet(
     packet = {
         "schema": ROCM_PROFILER_PACKET_SCHEMA_VERSION,
         "work_item": "TPROF-ROCM-NATIVE-1",
-        "architecture": "gfx1151",
+        "architecture": arch,
         "source": dict(source),
         "timing": dict(timing),
         "timing_sha256": _digest(timing),
@@ -247,8 +273,9 @@ def build_rocm_profiler_packet(
 def validate_rocm_profiler_packet(payload: Mapping[str, Any]) -> None:
     if payload.get("schema") != ROCM_PROFILER_PACKET_SCHEMA_VERSION:
         raise ROCmProfilerPacketError("unsupported ROCm profiler packet schema")
-    if payload.get("architecture") != "gfx1151":
-        raise ROCmProfilerPacketError("ROCm profiler packet requires gfx1151")
+    if payload.get("architecture") not in ROCM_PROFILER_ARCHITECTURES:
+        raise ROCmProfilerPacketError(
+            f"ROCm profiler packet requires one of {', '.join(ROCM_PROFILER_ARCHITECTURES)}")
     timing = payload.get("timing")
     capture = payload.get("capture")
     if not isinstance(timing, Mapping) or not isinstance(capture, Mapping):
@@ -289,7 +316,11 @@ def validate_rocm_profiler_packet(payload: Mapping[str, Any]) -> None:
     commit = source.get("source_commit")
     if not isinstance(commit, str) or len(commit) != 40:
         raise ROCmProfilerPacketError("ROCm profiler packet requires full source commit")
-    _check_pairing(timing, clean, probe, maximum)
+    arch = _check_pairing(timing, clean, probe, maximum)
+    if payload.get("architecture") != arch:
+        raise ROCmProfilerPacketError(
+            f"ROCm packet claims architecture {payload.get('architecture')!r}, but its "
+            f"timing and images are {arch!r}")
     assert isinstance(maximum, (int, float))  # _check_pairing refused anything else
     _, derived, route, gaps = _derive_eligibility(
         timing=timing, capture=capture, clean=clean, probe=probe, source=source,
@@ -313,6 +344,7 @@ def validate_rocm_profiler_packet(payload: Mapping[str, Any]) -> None:
 
 
 __all__ = [
+    "ROCM_PROFILER_ARCHITECTURES",
     "ROCM_PROFILER_PACKET_SCHEMA_VERSION",
     "ROUTE_DEVICE_CLOCK",
     "ROUTE_PROFILER",

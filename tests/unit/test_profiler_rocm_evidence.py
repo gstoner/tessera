@@ -55,9 +55,9 @@ def _capture() -> dict:
     }
 
 
-def _image(duration: int, suffix: str) -> dict:
+def _image(duration: int, suffix: str, architecture: str = "gfx1151") -> dict:
     return {
-        "architecture": "gfx1151",
+        "architecture": architecture,
         "kernel_name": "tessera_application_kernel",
         "semantic_sha256": "semantic-artifact",
         "image_sha256": "image-" + suffix,
@@ -102,13 +102,13 @@ def test_wsl_packet_remains_retain_only() -> None:
 
 
 def _wsl_witness_timing(device_ns: int = 10_000, event_ns: int = 10_100,
-                        image_sha256: str = "image-clean") -> dict:
+                        image_sha256: str = "image-clean", architecture: str = "gfx1151") -> dict:
     """WSL, no KFD: the device clock is the promotion clock, the HIP event its
     agreeing witness, and the profiler slot is unavailable."""
     from tessera.compiler.profiler_timing import unavailable_clock
     return build_timing_sample(
         sample_id="gfx1151-calibration",
-        target="rocm_gfx1151",
+        target=f"rocm_{architecture}",
         clocks={
             "host_wall_ns": measured_clock("host_wall_ns", source="steady_clock", value=12_000),
             "hip_event_ns": measured_clock("hip_event_ns", source="hip_event", value=event_ns),
@@ -287,3 +287,76 @@ def test_the_validator_reruns_the_pairing_rules_and_overhead_limit() -> None:
             timing=_wsl_witness_timing(), capture=_no_kfd_capture(),
             uninstrumented=_image(10_000, "clean"), instrumented=_image(10**400, "probe"),
             source={"source_commit": "c" * 40, "worktree_dirty": False})
+
+
+# --- gfx1201 (sync GFX1201-SSD-CALIBRATION-2026-09-26) ----------------------
+
+
+def _gfx1201_packet() -> dict:
+    return build_rocm_profiler_packet(
+        timing=_wsl_witness_timing(architecture="gfx1201"), capture=_no_kfd_capture(),
+        uninstrumented=_image(10_000, "clean", "gfx1201"),
+        instrumented=_image(10_200, "probe", "gfx1201"),
+        source={"source_commit": "d" * 40, "worktree_dirty": False})
+
+
+def test_a_gfx1201_packet_builds_and_validates_with_its_own_architecture() -> None:
+    packet = _gfx1201_packet()
+    assert packet["architecture"] == "gfx1201"
+    assert packet["admission_route"] == "device_clock_witness"
+    assert packet["eligible_for_promotion"] is True
+    validate_rocm_profiler_packet(packet)
+
+
+def test_timing_target_and_image_architecture_must_agree() -> None:
+    import pytest
+    from tessera.compiler.profiler_rocm_evidence import ROCmProfilerPacketError
+    for timing_arch, image_arch in (("gfx1201", "gfx1151"), ("gfx1151", "gfx1201")):
+        with pytest.raises(ROCmProfilerPacketError, match="images matching the timing target"):
+            build_rocm_profiler_packet(
+                timing=_wsl_witness_timing(architecture=timing_arch), capture=_no_kfd_capture(),
+                uninstrumented=_image(10_000, "clean", image_arch),
+                instrumented=_image(10_200, "probe", image_arch),
+                source={"source_commit": "d" * 40, "worktree_dirty": False})
+    # One image of each architecture is refused too.
+    with pytest.raises(ROCmProfilerPacketError, match="images matching the timing target"):
+        build_rocm_profiler_packet(
+            timing=_wsl_witness_timing(architecture="gfx1201"), capture=_no_kfd_capture(),
+            uninstrumented=_image(10_000, "clean", "gfx1201"),
+            instrumented=_image(10_200, "probe", "gfx1151"),
+            source={"source_commit": "d" * 40, "worktree_dirty": False})
+
+
+def test_an_architecture_outside_the_calibrated_set_is_refused() -> None:
+    import pytest
+    from tessera.compiler.profiler_rocm_evidence import ROCmProfilerPacketError
+    with pytest.raises(ROCmProfilerPacketError, match="exact timing on one of"):
+        build_rocm_profiler_packet(
+            timing=_wsl_witness_timing(architecture="gfx1100"), capture=_no_kfd_capture(),
+            uninstrumented=_image(10_000, "clean", "gfx1100"),
+            instrumented=_image(10_200, "probe", "gfx1100"),
+            source={"source_commit": "d" * 40, "worktree_dirty": False})
+
+
+def test_a_stored_architecture_relabel_is_refused_by_the_validator() -> None:
+    import pytest
+    from tessera.compiler.profiler_rocm_evidence import ROCmProfilerPacketError, _digest
+    packet = _gfx1201_packet()
+    packet["architecture"] = "gfx1151"
+    packet.pop("packet_sha256")
+    packet["packet_sha256"] = _digest(packet)
+    with pytest.raises(ROCmProfilerPacketError, match="claims architecture"):
+        validate_rocm_profiler_packet(packet)
+
+
+def test_every_committed_rocm_calibration_packet_still_validates() -> None:
+    """Generalizing the architecture must not invalidate recorded evidence."""
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2] / "benchmarks" / "baselines"
+    packets = sorted(root.glob("gfx1*_ssd_calibrated_pairs_*/*calibration*.json"))
+    assert packets, "no committed ROCm SSD calibration packets found"
+    for path in packets:
+        payload = json.loads(path.read_text())
+        validate_rocm_profiler_packet(payload)
+        assert payload["architecture"] == path.parent.name.split("_", 1)[0]

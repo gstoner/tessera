@@ -60,6 +60,23 @@ def _resources(device, function):
     return out
 
 
+def _rocm_identity(device):
+    """The active HIP device's identity, queried -- never the requested target.
+
+    Refuses any architecture without a device-clock calibration route; the
+    chip threads through materialization, the marker, the timing target and
+    the image records, so one process cannot mix gfx1151 and gfx1201 facts.
+    """
+    from benchmarks.calibration.calibrate_gfx1151 import _active_device_identity
+    from tessera.compiler.profiler_rocm_evidence import ROCM_PROFILER_ARCHITECTURES
+    identity = _active_device_identity(device.lib)
+    if identity['architecture'] not in ROCM_PROFILER_ARCHITECTURES:
+        raise SystemExit(f"device-clock SSD calibration supports "
+                         f"{', '.join(ROCM_PROFILER_ARCHITECTURES)}; this device is "
+                         f"{identity['architecture']}")
+    return identity
+
+
 def device_clock_calibration(*, device, logical, clean_program, clean_binding, raw, grid, block,
                              clean_event_ms, reset, verify, compiler, llvm_bin, output, run_id):
     """Calibrate one process's clean SSD image with compiler-built device-clock markers.
@@ -81,20 +98,16 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
     if device.cuda:
         raise SystemExit('device-clock calibration is implemented for ROCm here; '
                          'NVIDIA uses the Nsight activity-window recorder')
-    # Query the device rather than trusting the requested target (review):
-    # the packet and SSD adapter are gfx1151-only today.
-    from benchmarks.calibration.calibrate_gfx1151 import _active_device_identity
-    identity = _active_device_identity(device.lib)
-    if identity['architecture'] != 'gfx1151':
-        raise SystemExit(f"device-clock SSD calibration is gfx1151-only; this device is "
-                         f"{identity['architecture']}")
+    # Query the device rather than trusting the requested target (review).
+    identity = _rocm_identity(device)
+    chip = identity['architecture']
     rate = ct.c_int()
     get_attribute = device.lib.hipDeviceGetAttribute
     get_attribute.argtypes, get_attribute.restype = [ct.POINTER(ct.c_int), ct.c_int, ct.c_int], ct.c_int
     device.check(get_attribute(ct.byref(rate), _hip_enum('hipDeviceAttributeWallClockRate'), 0))
     if rate.value <= 0:
         raise SystemExit('hipDeviceAttributeWallClockRate is not positive on this device')
-    marker = build_device_clock_marker(compiler=compiler, llvm_bin=llvm_bin, backend='rocm', chip='gfx1151')
+    marker = build_device_clock_marker(compiler=compiler, llvm_bin=llvm_bin, backend='rocm', chip=chip)
     P = ct.c_void_p
     module, marker_fn, span = P(), P(), P()
     blob = ct.create_string_buffer(marker.image)
@@ -150,7 +163,7 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
     clean_sha = hashlib.sha256(clean_program.package.image).hexdigest()
     semantic = hashlib.sha256(logical.schedule_ir.encode()).hexdigest()
     timing = build_timing_sample(
-        sample_id=sample_id, target='rocm_gfx1151',
+        sample_id=sample_id, target=f'rocm_{chip}',
         clocks={
             'host_wall_ns': measured_clock('host_wall_ns', source='perf_counter',
                                            value=statistics.median(host_ns)),
@@ -177,7 +190,7 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
                      'per_window_host_ns': host_ns, 'run_id': run_id, 'process_id': os.getpid(),
                      'device_identity': identity})
     isa = _isa_sha256(clean_program.package.image, llvm_bin)
-    image = dict(architecture='gfx1151', kernel_name=clean_program.package.entry, semantic_sha256=semantic,
+    image = dict(architecture=chip, kernel_name=clean_program.package.entry, semantic_sha256=semantic,
                  image_sha256=clean_sha, isa_sha256=isa, clock_source='hip_event',
                  calibration_sample_id=sample_id, resources=resources)
     # Same image both times: "instrumented" means measured under marker
@@ -224,12 +237,15 @@ def main():
         parser.error('--device-clock-calibration needs --backend rocm, --profile and one --chunk')
     run_id = uuid.uuid4().hex
     device = Device(args.backend)
+    # The chip is the queried device's, never assumed (ROCm): it selects the
+    # image, and the row records it for the admission identity check.
+    chip = 'sm_120' if device.cuda else _rocm_identity(device)['architecture']
     rows = []
     T,H,N,P = args.shape
     for chunk in ((args.chunk,) if args.chunk else (1,2,5)):
         logical = lower_scheduled_ssd(T,H,N,P,chunk,compiler=args.compiler)
         program = materialize_ssd(logical,compiler=args.compiler,llvm_bin=Path('/usr/lib/llvm-23/bin'),
-                                  backend=args.backend,chip='sm_120' if device.cuda else 'gfx1151',cooperative=args.cooperative)
+                                  backend=args.backend,chip=chip,cooperative=args.cooperative)
         rng = np.random.default_rng(740+chunk)
         inputs = [rng.uniform(-.5,.5,shape).astype(np.float32)
                   for shape in [(T,H,P),(T,H),(T,H,N),(T,H,N),(H,N,P)]]
@@ -314,7 +330,7 @@ def main():
             for pointer in reversed(pointers):
                 device.check(device.free(pointer))
     args.output.write_text(json.dumps(dict(schema=1,backend=args.backend,process_id=os.getpid(),run_id=run_id,
-        architecture='sm_120' if device.cuda else 'gfx1151',
+        architecture=chip,
         compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
         shape=args.shape,clock='CUDA events' if device.cuda else 'HIP events',execution='native_gpu',cooperative=args.cooperative,rows=rows,promotion_eligible=False),indent=2)+'\n')
 

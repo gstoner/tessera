@@ -1,11 +1,23 @@
 ---
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## ROCM-SPLIT-K-1: cross-workgroup split-K on gfx1201 — 2026-09-26
+
+Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-1). **Landed for gfx1201 f16/bf16; device-proven for correctness and measured on Tajasarus.**
+
+- **One decider.** `selectGfx1201SplitK` (`src/compiler/programming_model/lib/PMPasses.cpp`) decides in Graph->Schedule: split when output tiles < 32 WGPs (WGP mode, `rocm_target.dispatch_slots`), `S = ceil(32/tiles)` rounded down to a power of two while each slice stays whole `block_k=32` macro K blocks of >= 256 (the 256 is an unmeasured guard). `rocm_tiling.select_split_k` is the declared oracle; `verify_matmul_projection` refuses any package where the two disagree. The #29a UNWIRED marker on `split_k_required` is removed because this is its consumer.
+- **Semantic pair.** `split_k` + `split_k_reduction = "ordered"` on `schedule.matmul` (and in its digest, only when S>1), `tessera.split_k*` on `tile.matmul_kernel`, `split_k*` on `tessera_rocm.wmma_gemm`. Every verifier fails closed on half a pair or a non-`ordered` reduction; there is no atomic mode.
+- **Codegen.** Typed register body only: the partial runs over grid.z = S, walks `[z*K/S, (z+1)*K/S)` and stores fp32 into workspace plane z with no epilogue; `<entry>_splitk_reduce` sums slices in fixed order and applies bias/activation once (same `TileEpilogue.h` helpers as the unsplit store). The LDS body, the `wmma_gemm` directive adapter, integer/fp8/f16-accumulate contracts and dynamic K refuse (`ROCM_SPLIT_K_UNSUPPORTED`). An occupancy-short K with no aligned split stays unsplit with a `ROCM_SPLIT_K_NOT_APPLIED` remark.
+- **Runtime/descriptor.** `package_scheduled_matmul` adds the reduce entry (`GFX_MATMUL_SPLIT_K_REDUCE_F32_ABI`), geometry policy `rocm_wmma_split_k_grid`, provenance `split_k`/`split_k_reduction`/reduce entry/workspace, and `physical_route` suffix `_splitk{S}_ordered` (Decision #12). The launcher allocates the workspace and issues both launches on one stream.
+- **Evidence (Tajasarus, RX 9070 XT, WSL2).** Device tests `tests/unit/test_rocm_split_k.py` (router 16x256x2048 and ragged 15x200x2048, fp16/bf16, none / bias+gelu / bias+relu, bit-identical reruns, plus an unsplit 128x256x2048 control): 14 passed. Timing [`benchmarks/baselines/rocm_split_k_20260926/gfx1201.json`](../../../../benchmarks/baselines/rocm_split_k_20260926/gfx1201.json), paired and interleaved, 3 runs x 15 rounds x 200 iterations, host wall clock (not promotion-eligible): selected S=2 is **2.05x (fp16) / 2.01x (bf16)** faster than the unsplit kernel of the same Tile IR, 45/45 rounds each, both launches counted. Measurement-only sweep: S=4 2.52-2.58x, S=8 2.79-2.80x -- the rule is conservative on this shape; not retuned from one shape (follow-up).
+- **Sibling outcome.** gfx1151: not applicable by rule (never split; no Princess-Luna run, no claim). NVIDIA / x86 / Apple: not applicable (the rule is gfx1201-only; schedule digests of every unsplit schedule are unchanged).
+- **Open.** A per-shape slice rule once more than one shape is measured; fp8/int8 split (i32 workspace would be exact); a device-clock witness for the timing; LDS-body split.
 
 ## Device-clock markers — 2026-09-26
 

@@ -581,3 +581,45 @@ def test_planner_refuses_to_inherit_another_devices_smem_budget() -> None:
         assert planner.peak_tflops == pytest.approx(2.0)
     finally:
         reset_registry()
+
+
+_WITNESS = {"clock": "device_wall_clock_ns",
+            "cross_checked_against": ["hip_event_ns", "host_wall_ns"],
+            "paired_runs": 6}
+
+
+def _wsl_corpus(**extra):
+    corpus = {"version": CORPUS_VERSION, "measured_on": "2026-09-25",
+              "host": "tajasarus-wsl2", "selector_eligible": True,
+              "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}}}
+    corpus.update(extra)
+    return corpus
+
+
+def test_wsl_corpus_with_the_accepted_timing_witness_becomes_selector_authority() -> None:
+    """Owner direction 2026-09-25: no bare metal or profiler required."""
+    try:
+        assert apply_corpus(_wsl_corpus(timing_witness=_WITNESS)) == ["radeon_8060s"]
+        assert perf_for_device("radeon_8060s").value("dram_bw_gbps") == 186.8
+    finally:
+        reset_registry()
+
+
+@pytest.mark.parametrize("witness, match", [
+    ({**_WITNESS, "clock": "host_wall_ns"}, "not a kernel-side clock"),
+    ({**_WITNESS, "cross_checked_against": []}, "cross_checked_against"),
+    ({**_WITNESS, "cross_checked_against": ["profiler_activity_ns"]}, "cross_checked_against"),
+    ({**_WITNESS, "cross_checked_against": ["device_wall_clock_ns"]}, "cross_checked_against"),
+    ({**_WITNESS, "paired_runs": 1}, "paired_runs"),
+    ({**_WITNESS, "paired_runs": True}, "paired_runs"),
+])
+def test_a_malformed_wsl_timing_witness_fails_closed(witness, match) -> None:
+    before = perf_for_device("radeon_8060s").measured
+    with pytest.raises(ValueError, match=match):
+        apply_corpus(_wsl_corpus(timing_witness=witness))
+    assert perf_for_device("radeon_8060s").measured == before
+
+
+def test_a_selector_ineligible_wsl_corpus_stays_pruning_only_even_with_a_witness() -> None:
+    with pytest.raises(ValueError, match="pruning-only"):
+        apply_corpus(_wsl_corpus(selector_eligible=False, timing_witness=_WITNESS))

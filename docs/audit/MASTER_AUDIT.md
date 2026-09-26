@@ -291,12 +291,16 @@ matches its module fails generation. Read the counts there.
    cover Tile, Schedule or Target ODS (it now fails closed on a missing mapped
    `.td`; a dead entry for the deleted Queue dialect had been skipped
    silently).
-3. **Timing the compiler can act on.** The method exists (above); the code
-   has not caught up. It still hard-codes the older "WSL never promotes"
-   rule — `profiler_timing.py` raises on any WSL sample marked
-   promotion-eligible, `target_perf.apply_corpus` rejects WSL packets, and
-   several recorders stamp `blocked_on_bare_metal` — so selection cannot use
-   the evidence the fleet can produce. Separately: NVIDIA timers run on the
+3. **Timing the compiler can act on.** The method exists (above). The two
+   generic gates now admit it (2026-09-26): `profiler_timing` accepts a WSL
+   promotion claim from a kernel-side clock with a valid in-sample witness,
+   and `target_perf.apply_corpus` accepts a WSL corpus that declares that
+   `timing_witness`. Still on the old rule: SSD candidate admission
+   (`ssd_performance` requires a rocprofiler packet on gfx1151 and a
+   bare-metal Nsight window on NVIDIA) and the benchmark recorders that stamp
+   `blocked_on_bare_metal`. NVIDIA additionally lacks the kernel-side witness
+   itself (`%globaltimer`, DEVICE-CLOCK-DISCIPLINE on Super-Bear), so its
+   rows correctly stay ineligible until that lands. Separately: NVIDIA timers run on the
    default stream (DEVICE-CLOCK-DISCIPLINE); Apple `kernelStartTime` does not
    measure work; and runtime libraries in empty-build-type trees compile at
    `-O0` (RUNTIME-LIB-OPT-1, proposed, not applied), which biases every
@@ -385,12 +389,12 @@ matches its module fails generation. Read the counts there.
   derive the Graph optimization/AD stage per family; key fleet packets by
   host so the two Zen 5 lanes are distinguished; register gfx1201 and
   Zen 2 fleet packets (neither lane has one).
-0. Align the timing-admission code with the direction above: let
-   `wall_clock64`/event-validated paired timing from the fleet hosts be
-   selector-admissible instead of refusing every WSL sample
-   (`profiler_timing.py`, `target_perf.apply_corpus`, the recorders that
-   stamp `blocked_on_bare_metal`), keeping the validity bands and paired-run
-   requirements that make it trustworthy.
+0. Finish aligning timing admission with the direction above. Done: the
+   `profiler_timing` and `target_perf.apply_corpus` gates. Open: a
+   device-clock calibration path for SSD candidate admission in place of the
+   rocprofiler / bare-metal Nsight packets; the recorders that stamp
+   `blocked_on_bare_metal`; and NVIDIA's `%globaltimer` witness, without which
+   sm_120 timing cannot meet the rule.
 1. RUNTIME-LIB-OPT-1 on all four backends, then re-measure affected packets.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
    dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.

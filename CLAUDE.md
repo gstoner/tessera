@@ -932,8 +932,10 @@ promote: bare-metal calibration is owed on every NVIDIA perf row. **Superseded
 2026-09-25 (owner):** WSL is not a blocker — device-clock timing cross-checked
 against banded events and host wall, with paired interleaved runs, is an
 accepted performance method; bare-metal and profiler counters are diagnostic
-extras. The code still enforces the old rule (`profiler_timing.py`,
-`target_perf.apply_corpus`) until the MASTER_AUDIT action-list item lands.
+extras. `profiler_timing` and `target_perf.apply_corpus` implement this since
+2026-09-26 (kernel-side clock + a witness valid in the same sample); SSD
+admission and the recorders still carry the old rule, and sm_120 still lacks
+its kernel-side witness (`%globaltimer`).
 
 ### Apple only — Mac M1 Max (Homebrew, off-venv)
 

@@ -723,6 +723,41 @@ def _check_kind(payload: Mapping[str, Any], expected: str, other: str) -> None:
         raise ValueError(f"unknown payload kind {kind!r}; expected {expected!r}")
 
 
+#: Clocks a WSL calibration may be cross-checked against. Kept in step with
+#: ``profiler_timing``'s slot names so a corpus and a timing sample describe
+#: the same method in the same words.
+_WITNESS_PARTNERS = frozenset({
+    "hip_event_ns", "cuda_event_ns", "host_wall_ns", "monotonic_raw_ns",
+})
+
+
+def _require_wsl_timing_witness(witness: Any) -> None:
+    """A WSL corpus is selector authority only with a declared, well-formed
+    independent-witness method; anything else stays pruning-only."""
+    from .profiler_timing import KERNEL_SIDE_CLOCKS
+
+    hint = (
+        "WSL calibration needs a 'timing_witness' declaring the accepted "
+        "non-profiler method: {'clock': one of "
+        f"{sorted(KERNEL_SIDE_CLOCKS)}, 'cross_checked_against': a non-empty "
+        f"subset of {sorted(_WITNESS_PARTNERS)}, 'paired_runs': >= 2}}; "
+        "without it use load_pruning_corpus()"
+    )
+    if not isinstance(witness, Mapping):
+        raise ValueError(hint)
+    clock = witness.get("clock")
+    partners = witness.get("cross_checked_against")
+    runs = witness.get("paired_runs")
+    if clock not in KERNEL_SIDE_CLOCKS:
+        raise ValueError(f"timing_witness.clock {clock!r} is not a kernel-side clock; {hint}")
+    if (not isinstance(partners, (list, tuple)) or not partners
+            or not set(partners) <= _WITNESS_PARTNERS or clock in partners):
+        raise ValueError(
+            f"timing_witness.cross_checked_against {partners!r} is invalid; {hint}")
+    if not isinstance(runs, int) or isinstance(runs, bool) or runs < 2:
+        raise ValueError(f"timing_witness.paired_runs {runs!r} must be an int >= 2; {hint}")
+
+
 def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
     """Merge a calibration corpus into the registry. Returns the device names
     updated.
@@ -738,7 +773,9 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
                                       "peak_tflops.bf16:matrix": 51.2}}}
 
     A row for an unregistered device, an unknown field, a mismatched version,
-    a WSL host, or an explicitly selector-ineligible packet raises — a
+    a WSL host without a well-formed ``timing_witness`` (kernel-side clock,
+    cross-checked, paired runs), or an explicitly selector-ineligible packet
+    raises — a
     calibration run that silently lands nowhere or promotes provisional timing
     is worse than one that fails. Use :func:`load_pruning_corpus` for the latter.
 
@@ -764,10 +801,10 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
             "mutating the measured registry"
         )
     if isinstance(host, str) and ("wsl" in host.lower() or "dxg" in host.lower()):
-        raise ValueError(
-            "WSL calibration cannot become selector authority; collect "
-            "bare-metal device-event and profiler-correlated evidence"
-        )
+        # Was an unconditional refusal. Since 2026-09-25 a WSL corpus becomes
+        # selector authority when it declares the independent-witness method
+        # the owner accepted (MASTER_AUDIT; DEVICE-CLOCK-DISCIPLINE-2026-08-31).
+        _require_wsl_timing_witness(corpus.get("timing_witness"))
     # Phase 1 — build and validate everything. perf_for_device() raises on an
     # unknown device, with_measured() raises on an unknown field.
     staged: list[TargetPerf] = [
@@ -788,8 +825,10 @@ def load_corpus(path: str | Path) -> list[str]:
 def load_pruning_corpus(path: str | Path) -> dict[str, dict[str, float]]:
     """Validate a provisional corpus without changing the measured registry.
 
-    WSL/host-wall packets are useful as candidate-pruning inputs, but they must
-    never acquire :class:`Provenance.MEASURED` through the selector registry.
+    Packets without an admissible timing method (host-wall only, or a WSL
+    packet with no ``timing_witness``) are useful as candidate-pruning inputs,
+    but they must never acquire :class:`Provenance.MEASURED` through the
+    selector registry.
     """
     corpus = _read_json(path, "calibration corpus")
     _check_kind(corpus, KIND_CORPUS, KIND_SNAPSHOT)

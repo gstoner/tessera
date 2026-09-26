@@ -173,7 +173,7 @@ def test_cross_backend_differential_compares_common_actual_values() -> None:
         "maximum_absolute_error": 0.0,
     }
     same_target = _report("x86", "x86_64_base")
-    avx512 = _report("x86", "x86_64_avx512")
+    avx512 = _report("x86", "x86_64_avx512_strix_halo")
     assert (
         compare_backend_reports(
             same_target,
@@ -406,12 +406,27 @@ def test_status_bearing_abis_exist_for_every_sealed_apple_gpu_route() -> None:
             "placement without it")
 
 
-# Sync AVX512-E2E-PACKETS-2026-09-26: the two Zen 5 hosts are separate lanes.
-_AVX512_HOSTS = {
-    "x86_64_avx512_strix_halo": "AMD RYZEN AI MAX+ 395",
-    "x86_64_avx512_granite_ridge": "AMD Ryzen 7 9800X3D",
-}
-_WITNESS_WRAPPER_KEYS = {"cohort", "sample", "iterations_in_window", "measurement_cpu"}
+# ---------------------------------------------------------------------------
+# Sync AVX512-E2E-PACKETS-2026-09-26: the two Zen 5 hosts are separate lanes,
+# and each packet's host, witness, timing and library claims are re-derived.
+# ---------------------------------------------------------------------------
+
+from tessera.compiler.e2e_fleet import (  # noqa: E402
+    X86_AVX512_HOSTS,
+    X86_AVX512_STABILITY_LIMIT_PCT,
+    x86_avx512_host_refusal,
+)
+
+
+def _recorder():
+    import importlib.util
+
+    path = REPO_ROOT / "benchmarks/e2e_spine/record_x86_avx512_packet.py"
+    spec = importlib.util.spec_from_file_location("record_x86_avx512_packet", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_x86_avx512_hosts_are_separate_registrations() -> None:
@@ -420,76 +435,217 @@ def test_x86_avx512_hosts_are_separate_registrations() -> None:
         row.architecture: row for row in FLEET_REGISTRATIONS if row.target == "x86"
     }
     assert "x86_64_avx512" not in registrations, "the shared AVX-512 key is back"
-    for architecture in _AVX512_HOSTS:
-        assert architecture in registrations
-    families = {registrations[a].families for a in _AVX512_HOSTS}
+    assert set(X86_AVX512_HOSTS) <= set(registrations)
+    families = {registrations[a].families for a in X86_AVX512_HOSTS}
     assert len(families) == 1, "the two Zen 5 lanes must owe the same families"
 
 
-def test_x86_avx512_recorder_refuses_the_other_host() -> None:
-    import importlib.util
-
-    path = REPO_ROOT / "benchmarks/e2e_spine/record_x86_avx512_packet.py"
-    spec = importlib.util.spec_from_file_location("record_x86_avx512_packet", path)
-    assert spec is not None and spec.loader is not None
-    recorder = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(recorder)
-    assert recorder.host_architecture("AMD RYZEN AI MAX+ 395 w/ Radeon 8060S") == (
-        "x86_64_avx512_strix_halo")
-    assert recorder.host_architecture("AMD Ryzen 7 9800X3D 8-Core Processor") == (
-        "x86_64_avx512_granite_ridge")
-    assert set(recorder.HOST_ARCHITECTURES.values()) == set(_AVX512_HOSTS)
+def test_x86_avx512_recorder_pins_hostname_and_model() -> None:
+    recorder = _recorder()
+    assert recorder.host_architecture(
+        "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S", "Princess-Luna") == "x86_64_avx512_strix_halo"
+    assert recorder.host_architecture(
+        "AMD Ryzen 7 9800X3D 8-Core Processor", "tajasarus") == "x86_64_avx512_granite_ridge"
+    # Case-insensitive on both fields, like the validator.
+    assert recorder.host_architecture(
+        "amd ryzen ai max+ 395 w/ radeon 8060s", "PRINCESS-LUNA") == "x86_64_avx512_strix_halo"
     with pytest.raises(RuntimeError, match="not an assigned"):
-        recorder.host_architecture("AMD Ryzen Threadripper 3970X 32-Core Processor")
+        recorder.host_architecture("AMD Ryzen Threadripper 3970X 32-Core Processor", "Super-Bear")
+    # The right CPU on the wrong host is still the wrong host.
+    with pytest.raises(RuntimeError, match="not an assigned"):
+        recorder.host_architecture("AMD Ryzen 7 9800X3D 8-Core Processor", "some-other-box")
+    assert x86_avx512_host_refusal(
+        "x86_64_avx512_strix_halo", "tajasarus", "AMD Ryzen 7 9800X3D") is not None
 
 
-@pytest.mark.parametrize("architecture", sorted(_AVX512_HOSTS))
-def test_x86_avx512_packet_is_host_pinned_witnessed_and_optimized(architecture: str) -> None:
-    """Each AVX-512 packet: its own host, registered families only, a TSC
-    witness bound to each timed image, and an optimized runtime library."""
-    from tessera.compiler.profiler_timing import validate_timing_sample
-    from tessera.compiler.runtime_library_build import is_optimized
+def _binding_tree(tmp_path: Path):
+    import os
 
+    recorder = _recorder()
+    root = tmp_path / "checkout"
+    library = root / "build" / recorder.LIBRARY_RELPATH
+    opt = root / "build" / recorder.TESSERA_OPT_RELPATH
+    record = root / "build" / "runtime_library_build.json"
+    source = root / "src/compiler/codegen/tessera_x86_backend/k.cpp"
+    for path in (library, opt, record, source):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x")
+    os.utime(source, (1_000, 1_000))
+    os.utime(record, (2_000, 2_000))
+    os.utime(library, (4_000, 4_000))
+    return recorder, root, library, opt, source
+
+
+def test_x86_avx512_recorder_binds_the_timed_library(tmp_path: Path) -> None:
+    import os
+
+    recorder, root, library, opt, source = _binding_tree(tmp_path)
+
+    def refusal(**overrides):
+        arguments = dict(environ={}, head_commit_time=3_000.0, sources=[source],
+                         resolved_library=library, resolved_opt=opt)
+        arguments.update(overrides)
+        return recorder.library_binding_refusal(root, **arguments)
+
+    assert refusal() is None
+    for name in recorder.OVERRIDE_ENVIRONMENT:
+        assert "override environment" in refusal(environ={name: "/elsewhere"})
+    other = tmp_path / "other" / "libtessera_x86_elementwise.so"
+    other.parent.mkdir()
+    other.write_text("x")
+    assert "resolves to" in refusal(resolved_library=other)
+    assert "tessera-opt resolves" in refusal(resolved_opt=other)
+    assert "older than HEAD" in refusal(head_commit_time=5_000.0)
+    os.utime(source, (4_500, 4_500))
+    assert "tracked source" in refusal()
+    os.utime(source, (1_000, 1_000))
+    os.utime(root / "build" / "runtime_library_build.json", (4_000, 4_000))
+    assert "runtime_library_build.json" in refusal()
+
+
+def _load_packet(architecture: str) -> tuple[Path, dict, dict]:
     packet = discover_packets().get(("x86", architecture))
     assert packet is not None, f"x86/{architecture} has no sealed packet"
-    packet_dir, _ = packet
+    packet_dir = packet[0]
     report = json.loads((packet_dir / "report.json").read_text(encoding="utf-8"))
     resources = json.loads((packet_dir / "resources.json").read_text(encoding="utf-8"))
+    return packet_dir, report, resources
+
+
+def _force_seal(packet_dir: Path) -> None:
+    """Seal without the attachment checks, as a tamperer would."""
+    report = json.loads((packet_dir / "report.json").read_text(encoding="utf-8"))
+    summary = validate_backend_report(report)
+    files = {
+        path.name: {"bytes": path.stat().st_size,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        for path in sorted(packet_dir.iterdir()) if path.name != "manifest.json"
+    }
+    manifest = {"schema": MANIFEST_SCHEMA, "target": summary["target"],
+                "architecture": summary["architecture"],
+                "tested_commit": summary["source_commit"], "files": files,
+                "validation": summary}
+    (packet_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def _tampered(tmp_path: Path, source_architecture: str, mutate) -> Path:
+    _, report, resources = _load_packet(source_architecture)
+    mutate(report, resources)
+    packet_dir = tmp_path / "x86" / report["architecture"]
+    packet_dir.mkdir(parents=True)
+    (packet_dir / "report.json").write_text(json.dumps(report), encoding="utf-8")
+    (packet_dir / "resources.json").write_text(json.dumps(resources), encoding="utf-8")
+    _force_seal(packet_dir)
+    return packet_dir
+
+
+def _refingerprint(report: dict, resources: dict) -> None:
+    for row in resources["rows"]:
+        fingerprint = hashlib.sha256(
+            json.dumps(row["resource"], sort_keys=True).encode()).hexdigest()
+        row["resource_fingerprint"] = fingerprint
+        for bench in report["benchmarks"]:
+            if bench["family"] == row["family"]:
+                bench["resource_fingerprint"] = fingerprint
+
+
+def _retag_as_strix_halo(report: dict, resources: dict) -> None:
+    report["architecture"] = "x86_64_avx512_strix_halo"
+    for row in resources["rows"]:
+        row["resource"]["architecture"] = "x86_64_avx512_strix_halo"
+    _refingerprint(report, resources)
+
+
+def _mislabel_environment(report: dict, resources: dict) -> None:
+    resources["execution_environment"] = "bare_metal"
+
+
+def _swap_library_digest(report: dict, resources: dict) -> None:
+    resources["rows"][0]["resource"]["image_payload_sha256"] = "0" * 64
+    _refingerprint(report, resources)
+
+
+def _halve_kernel_medians(report: dict, resources: dict) -> None:
+    for bench in report["benchmarks"]:
+        if bench["timing_domain"] == "kernel_wall":
+            bench["run_medians_ns"] = [value * 0.5 for value in bench["run_medians_ns"]]
+            bench["median_ns"] = sum(bench["run_medians_ns"]) / 2.0
+
+
+def _tamper_tsc(report: dict, resources: dict) -> None:
+    family = report["scope"][0]
+    tsc = resources["timing_witness"][family]["samples"][0]["witness"]["clocks"]["tsc_cycles"]
+    tsc["value"] = int(tsc["value"]) // 2
+
+
+def _loosen_stability(report: dict, resources: dict) -> None:
+    for bench in report["benchmarks"]:
+        bench["stability_limit_pct"] = 50.0
+
+
+def _borrow_other_hostname(report: dict, resources: dict) -> None:
+    report["device"]["identity"] = "Princess-Luna | " + resources["device"]["model"]
+    resources["device"]["host"] = "Princess-Luna"
+
+
+_TAMPERS = {
+    "environment": (_mislabel_environment, "contradicts kernel"),
+    "library": (_swap_library_digest, "does not embed the stamped library"),
+    "medians": (_halve_kernel_medians, "run medians are not the samples'"),
+    "witness": (_tamper_tsc, "does not verify|disagrees"),
+    "stability": (_loosen_stability, "chose its own stability limit"),
+    "hostname": (_borrow_other_hostname, "pinned to host"),
+    "architecture": (_retag_as_strix_halo, "pinned to host"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_TAMPERS))
+def test_x86_avx512_validator_rederives_and_refuses_tampering(tmp_path: Path, name: str) -> None:
+    mutate, message = _TAMPERS[name]
+    packet_dir = _tampered(tmp_path, "x86_64_avx512_granite_ridge", mutate)
+    with pytest.raises(FleetEvidenceError, match=message):
+        validate_packet(packet_dir)
+    with pytest.raises(FleetEvidenceError, match=message):
+        seal_packet(packet_dir)
+
+
+def test_x86_avx512_resealed_as_the_other_host_is_not_discovered(tmp_path: Path) -> None:
+    """The reviewer's attack: the Tajasarus packet relabelled and resealed as Strix Halo."""
+    packet_dir = _tampered(tmp_path, "x86_64_avx512_granite_ridge", _retag_as_strix_halo)
+    assert packet_dir.parent.name == "x86" and packet_dir.name == "x86_64_avx512_strix_halo"
+    with pytest.raises(FleetEvidenceError, match="pinned to host"):
+        discover_packets(tmp_path)
+
+
+def test_packet_directory_must_name_its_architecture(tmp_path: Path) -> None:
+    import shutil
+
+    source, _, _ = _load_packet("x86_64_avx512_granite_ridge")
+    moved = tmp_path / "x86" / "x86_64_avx512_strix_halo"
+    shutil.copytree(source, moved)
+    validate_packet(moved)  # the bytes are intact; only the location lies
+    with pytest.raises(FleetEvidenceError, match="directory named by"):
+        discover_packets(tmp_path)
+
+
+@pytest.mark.parametrize("architecture", sorted(X86_AVX512_HOSTS))
+def test_x86_avx512_packet_is_host_pinned_witnessed_and_optimized(architecture: str) -> None:
+    """Each checked-in AVX-512 packet: its own host, registered families only,
+    witnesses that carry their calibration, the fixed stability policy, and an
+    optimized library (the full re-derivation runs inside validate_packet)."""
+    _, report, resources = _load_packet(architecture)
     registered = next(
         row.families for row in FLEET_REGISTRATIONS
         if (row.target, row.architecture) == ("x86", architecture))
     assert set(report["scope"]) <= set(registered)
-    host = _AVX512_HOSTS[architecture]
-    assert report["device"]["identity"].split(" | ", 1)[1].startswith(host)
-    assert resources["device"]["model"].startswith(host)
-
-    stamp = resources["runtime_library_build"]
-    assert stamp["target"] == "tessera_x86_elementwise"
-    assert stamp["optimized"] is True and is_optimized(stamp["level"])
-
-    rows = {row["family"]: row for row in resources["rows"]}
-    assert set(rows) == set(report["scope"])
-    for row in rows.values():
-        assert row["runtime_library_build"] == stamp
-    kernel_rows = [row for row in report["benchmarks"] if row["timing_domain"] == "kernel_wall"]
-    assert {row["family"] for row in kernel_rows} == set(report["scope"])
-    for row in kernel_rows:
-        assert row["timing_source"] == "tsc_rdtscp_witnessed_by_clock_monotonic_raw"
-        assert row["resource_fingerprint"] == rows[row["family"]]["resource_fingerprint"]
-
-    environment = resources["execution_environment"]
-    assert environment in {"wsl2", "bare_metal"}
+    hostname, _, model = report["device"]["identity"].partition(" | ")
+    assert x86_avx512_host_refusal(architecture, hostname, model) is None
+    assert resources["runtime_library_build"]["optimized"] is True
+    assert resources["runtime_library_build"]["level"].startswith("O2")
+    assert all(bench["stability_limit_pct"] == X86_AVX512_STABILITY_LIMIT_PCT
+               for bench in report["benchmarks"])
     for family in report["scope"]:
-        witness = resources["timing_witness"][family]
-        assert witness["timing_domain"] == "kernel_wall"
-        agreement = witness["agreement"]
-        assert agreement["max_relative_error"] <= agreement["band"] <= 0.05
-        assert len(witness["samples"]) == agreement["windows"] >= 4
-        for sample in witness["samples"]:
-            payload = {k: v for k, v in sample.items() if k not in _WITNESS_WRAPPER_KEYS}
-            validate_timing_sample(payload)  # under WSL this re-checks TSC vs raw
-            assert payload["execution_environment"] == environment
-            assert payload["artifact_digests"]["image"] == rows[family]["image_digest"]
-            tsc = payload["clocks"]["tsc_cycles"]
-            assert tsc["valid"] is True and tsc["eligible_for_promotion"] is True
-            assert tsc["provenance"]["frequency_source"] == "independent_calibration_interval"
+        samples = resources["timing_witness"][family]["samples"]
+        assert samples and all(
+            "calibration" in s["witness"]["clocks"]["tsc_cycles"]["provenance"]
+            for s in samples), "witnesses must carry their calibration"

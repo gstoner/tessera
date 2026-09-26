@@ -284,3 +284,28 @@ def test_v1_packets_are_read_only_under_the_subset_rule() -> None:
     v1_with_route["schema"] = "tessera.profiler_x86_packet.v1"
     with pytest.raises(X86ProfilerPacketError, match="predates admission routes"):
         validate_x86_profiler_packet(_reseal(v1_with_route))
+
+
+def test_checked_in_princess_luna_packet_validates() -> None:
+    """The committed Zen 5 packet re-validates off-host (no device, no rebuild).
+
+    Its production and scheduled images are byte-identical, so its verdict is a
+    parity check under WSL2, not a performance promotion.
+    """
+    import json
+    from pathlib import Path
+
+    path = (Path(__file__).resolve().parents[2] / "benchmarks" / "baselines"
+            / "x86_zen5_profiler_packet_20260926_princess_luna.json")
+    packet = json.loads(path.read_text(encoding="utf-8"))
+    validate_x86_profiler_packet(packet)
+    assert packet["schema"] == "tessera.profiler_x86_packet.v2"
+    assert packet["admission_route"] == "tsc_witness"
+    assert packet["environment"]["worktree_dirty"] is False
+    assert packet["cpu"]["model_name"].startswith("AMD RYZEN AI MAX+ 395")
+    stamp = packet["benchmark"]["runtime_library_build"]
+    assert stamp["optimized"] is True and stamp["level"].startswith("O2")
+    for row in packet["benchmark"]["rows"]:
+        digests = row["compile"]["digests"]
+        assert digests["image"] == digests["production_image"]
+        assert row["timing_witness"]["artifact_digests"]["image"] == digests["image"]

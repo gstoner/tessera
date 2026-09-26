@@ -160,6 +160,16 @@ sequence (the [integrated plan](compiler/INTEGRATED_COMPILER_PLAN.md#live-queue)
 owns order) and it copies no totals (follow the dashboard links). Items are
 grouped by what unblocks them, and each names its owning ID.
 
+**Direction (owner decision, recorded here 2026-09-25):** every backend —
+NVIDIA, AMD, **Apple**, and **x86 / AVX-512** — builds on the same MLIR/LLVM
+compiler foundation (Graph → Schedule → Tile → contract-carrying Target IR →
+compiler-produced device code). Apple and x86 are not separate compilers
+with their own endgame; their items below are gaps on that shared path.
+The Apple queue's AIR analysis (APPLE-AOT-2) still frames joining the spine
+as an open risk-appetite call, and is superseded on that point. On x86, ACE
+is the matrix path but is **deferred until a shipping processor supports
+it**; it is not open work.
+
 ### Three blockers most other items wait on
 
 1. **One compiler authority.** Most families still reach a backend through a
@@ -176,7 +186,9 @@ grouped by what unblocks them, and each names its owning ID.
    verifier checks that `numeric_policy` / `layout` / `distribution` survive a
    lowering (IR_STACK U5); and [`verifier_coverage`](generated/verifier_coverage.md)
    scans only `TesseraOps.td` and `Attn.td`, so its closed status does not
-   cover Tile, Schedule or Target ODS.
+   cover Tile, Schedule or Target ODS (it now fails closed on a missing mapped
+   `.td`; a dead entry for the deleted Queue dialect had been skipped
+   silently).
 3. **Timing that can promote.** WSL2 wall clock does not promote; NVIDIA
    timers run on the default stream; ROCm has no `/dev/kfd` counters under
    WSL2; Apple `kernelStartTime` does not measure work; and runtime libraries
@@ -205,8 +217,8 @@ grouped by what unblocks them, and each names its owning ID.
 |---|---|---|
 | Analysis | W2.1 dataflow substrate, per-op memory effects, symbolic-dim equality | Value, alias, effect, memory-dependence and ordered-collective **consumers** (§3 above) |
 | Fusion | One authoritative recognizer; Apple synthesizer F0–F5 | Synthesizer not portable through IR; consumer-driven canonicalization (W5.5); ANN admission of measured candidates (MSW-9) |
-| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log | **Decision #11's versioned cache key is not implemented** (neither `autotune_v2.cache_key` nor `emit/autotune.py` carries toolchain or delegate-ABI identity); Decision #12 `route` is stamped per recorder, not a schema field; repeat counts too low to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
-| Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA | Apple/ROCm layout opt-in; ROCm split-K unwired and keyed on `k > 4096` instead of occupancy (ROCM-SPLIT-K-1) |
+| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log | **Decision #11 is not enforced in production**: neither cache key carries toolchain or delegate-ABI identity, and while `emit/autotune.py` can fail closed on compiler/resource fingerprints as *evidence* fields, only a benchmark script and a unit test ever pass `required_evidence` — the default warm-start loads rows unchecked; Decision #12 `route` is stamped per recorder, not a schema field; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
+| Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; the split-K predicate has no production consumer (ROCM-SPLIT-K-1) |
 | Memory | `TileBufferReusePass`, `TileBufferArenaPass` on ROCm/NVIDIA | Control-flow path-max sizing; multiple dynamic arenas; measured full-model remat |
 | Cost models | `target_perf.py`, T1 GEMM model, `FusionCost` | T1 failed ranking — replace, do not coefficient-tune; per-arch correlation (NVIDIA-CALIB-1, ROCM-COSTMODEL-T1, X86-CALIB-1, APPLE-CALIB-1); sm_120 and Apple roofline peaks |
 
@@ -217,32 +229,42 @@ grouped by what unblocks them, and each names its owning ID.
   not rewrite); settle the `package_matmul` fallback as oracle or retire it
   (Decision #31, coverage comparison first); the eight delegate-contract gaps
   in NVIDIA-DELEGATE-CONTRACT-2026-08-30, starting with non-composing
-  accuracy budgets; `NVWGMMALoweringPass` still drops the accumulator;
+  accuracy budgets; `NVWGMMALoweringPass` cannot thread the accumulator (it
+  refuses with `NVWGMMA_ACCUMULATOR_DROPPED`; W1.1 step 2b);
   DEVICE-CLOCK-DISCIPLINE before any promotion; NVIDIA-CALIB-1 corpus
   descriptors; one block-index convention. Hardware-gated: sm_90 WGMMA,
   sm_100 tcgen05/TMEM, bare-metal calibration.
 - **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
   The broad production lane still skips Graph/Schedule/Tile; the ~58
   `generate-*` expander adoption policy (a/b/c) and Lane B are undecided;
-  ROCM-SPLIT-K-1 re-keyed on occupancy; the LDS body's remaining lever is the
+  ROCM-SPLIT-K-1 needs a production consumer (the predicate is already keyed
+  on occupancy); the LDS body's remaining lever is the
   **VGPR** ceiling (the K1-blocked layout was refuted 2026-09-20 and the pad
   default corrected to 1 — see ROCM-LDS-BANKPAD-1 / ROCM-LDS-STAGE-VECTOR-1);
-  no MFMA descriptor table and no ROCm `math_mode` consumer; `ROCM_WaitTokenOp`
-  lacks a wait immediate (gfx1250 async overlap); gfx1201 native JVP beyond
-  `spectral_compound`. Hardware-gated: a native-Linux KFD host (unblocks
+  `ROCM_WaitTokenOp` names a counter class but carries no count immediate, so
+  it can only drain fully (gfx1250 async overlap); gfx1201 native JVP beyond
+  `spectral_compound`. The fleet parts are RDNA (WMMA): WMMA shape selection
+  is table-driven (`_WMMA_VARIANTS`) and `math_mode="tf32"` is correctly
+  refused there. MFMA is CDNA-only — its `mfma_table.inc` has no consumer and
+  Decision #14's `MFMAFullCoveragePass` was never built, which matters only
+  when a CDNA part arrives. Hardware-gated: a native-Linux KFD host (unblocks
   ROCM-6, RASTER-1B, COSTMODEL-T1, TPROF-ROCM-TIME-1), gfx950/942/1250/1200.
-- **Apple** ([queue](backend/apple/todo.md)). `gpu.matmul2d` still lowers to
+- **Apple** ([queue](backend/apple/todo.md)), on the shared MLIR/LLVM path. `gpu.matmul2d` still lowers to
   runtime symbols, not compiler-owned MSL (APPLE-MATMUL2D-1); simdgroup
-  lowering lacks threadgroup staging (APPLE-SIMDGROUP-IR-1); F2 Schedule
+  lowering stages per tile but lacks the cooperative K-slab copy
+  (APPLE-SIMDGROUP-IR-1); F2 Schedule
   consumers (norm, attention, unary); `FlashAttnToAppleGPU` skips Tile; AOT-2
   B/C/D; Apple into the arbiter with a device-latency witness and dual-clock
   capture (APPLE-TIMER-WITNESS, row 32); block-scaled FP8/FP4 and GPU
   packing (APPLE-DTYPE-1, row 17).
-- **x86** ([queue](backend/x86/todo.md)). `x86vector` AVX-512 lowering to
-  replace the C-shim `func.call` (unlocks a `tile.mma` consumer and compiled
-  microkernels); the `TileToX86Pass` P0 assertions-build rerun (Tajasarus);
-  packed-byte INT4/FP8 VNNI consumer (MODEL-WEIGHT-PHYS-1); no ACE/AVX10
-  capability plan exists; AVX-512 E2E packets need bare-metal Zen 5.
+- **x86 / AVX-512** ([queue](backend/x86/todo.md)), on the shared MLIR/LLVM
+  path. `x86vector` AVX-512 lowering to replace the C-shim `func.call`
+  (unlocks a `tile.mma` consumer and compiled microkernels), with the kernel
+  body compiled through the `tessera-jit` linalg/vector/LLVM lane instead of
+  packaging a prebuilt image; the `TileToX86Pass` assertions-build rerun
+  (the dependent-dialect fix is in; Tajasarus confirms it); packed-byte
+  INT4/FP8 VNNI consumer (MODEL-WEIGHT-PHYS-1); AVX-512 E2E packets need
+  bare-metal Zen 5. ACE: deferred until shipping hardware.
 
 ### Grouped by what unblocks it
 
@@ -262,9 +284,7 @@ grouped by what unblocks them, and each names its owning ID.
 
 **Needs an owner decision**
 - ROCm expander adoption (a/b/c) and Lane B's disposition.
-- Apple MLIR→AIR versus a supported MSL emitter (AOT-2).
 - Whether Apple fp32-only accumulation is permanent (gates DIAG-PY-BACKLOG-1).
-- An ACE/AVX10 capability-as-attribute plan for x86.
 - Live-queue IDs for IR_STACK U2, U3, U5 and U6 (only U4 is routed, as W3.3).
 
 **Hardware-gated**

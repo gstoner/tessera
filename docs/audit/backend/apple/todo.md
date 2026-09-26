@@ -656,9 +656,10 @@ machine primitives. `TesseraAppleOps.td` declares a real
 the fp32-accumulator contract and limits storage to f16/bf16/f32. Producer:
 `src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/MatmulToAppleSimdgroup.cpp`
 (Decision #29 sequencing: op and producer landed together). **Scope limit:** it
-is the register-level core only — no threadgroup staging and no cooperative
-K-slab copy — so it does not replace MPS or the APPLE-TILE-2 incumbent.
-Open: threadgroup staging + K-slab copy, and making the no-contract ops in
+stages one guarded 8×8 tile per K step through `gpu.threadgroup_alloc` (ragged
+bounds need it — `simdgroup_load` has no predicate) but has **no cooperative
+multi-thread K-slab copy**, so it does not replace MPS or the APPLE-TILE-2
+incumbent. Open: the cooperative K-slab copy, and making the no-contract ops in
 `generated/target_ir_membership.md` (dispatch containers, `threadgroup_alloc`,
 `simdgroup_fill`) carry a required contract.
 
@@ -3065,6 +3066,13 @@ over synthesized source — and it is the only way Apple joins the MLIR/LLVM spi
 the other three backends share. Decision #26a names exactly that condition for
 revisiting. This probe supplies the missing cost and risk numbers; the call is
 a judgement about risk appetite, not about difficulty.
+
+> **Direction settled (owner, recorded 2026-09-25):** Apple joins the same
+> MLIR/LLVM compiler foundation as NVIDIA, AMD and x86 — see
+> [MASTER_AUDIT §Consolidated action list](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25).
+> The feasibility and risk numbers above stay as the record; *whether* Apple
+> is on the shared spine is no longer the open question — *how* its device
+> code is produced from that spine is.
 
 Reproduce: `xcrun metal -S -emit-llvm <kernel>.metal` on any synthesizer output.
 

@@ -94,13 +94,6 @@ _DIALECT_FILE_MAP: tuple[tuple[Path, tuple[Path, ...]], ...] = (
             _SRC_ROOT / "compiler/tile_opt_fa4/lib/Dialect/Attn/AttnVerifiers.cpp",
         ),
     ),
-    (
-        _SRC_ROOT / "compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td",
-        (
-            _SRC_ROOT / "compiler/tile_opt_fa4/lib/Dialect/Queue/QueueOps.cpp",
-            _SRC_ROOT / "compiler/tile_opt_fa4/lib/Dialect/Queue/QueueVerifiers.cpp",
-        ),
-    ),
 )
 
 
@@ -324,7 +317,12 @@ def collect_verifier_coverage() -> tuple[VerifierEntry, ...]:
     out: list[VerifierEntry] = []
     for td_path, cpp_paths in _DIALECT_FILE_MAP:
         if not td_path.exists():
-            continue
+            # Fail closed: skipping let the Queue dialect's entry outlive its
+            # 2026-08-10 deletion unnoticed, and a moved .td would silently
+            # drop every op it declares out of the coverage count.
+            raise FileNotFoundError(
+                f"verifier_coverage: mapped ODS file {td_path} does not exist; "
+                "update _DIALECT_FILE_MAP")
         ops = _scan_td(td_path)
         impls = _scan_cpp_for_verify_impls(cpp_paths)
         for op_class, has_verifier in sorted(ops):

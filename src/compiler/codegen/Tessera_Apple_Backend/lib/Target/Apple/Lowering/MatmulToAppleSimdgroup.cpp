@@ -22,9 +22,11 @@
 // Scope, stated rather than implied
 // ---------------------------------
 // This is the register-level core, not the whole coopmat kernel. It emits the
-// tile nest and the MMA chain; it does NOT yet emit threadgroup staging or
-// the cooperative K-slab copy that `emit/apple_msl.py` performs, so it is not
-// a performance replacement for the MPS lane and does not remove it. What it
+// tile nest, the MMA chain, and a per-tile threadgroup stage (one guarded
+// 8x8 copy per K step, needed because `simdgroup_load` has no bounds
+// predicate). It does NOT yet emit the cooperative multi-thread K-slab copy
+// that `emit/apple_msl.py` performs, so it is not a performance replacement
+// for the MPS lane and does not remove it. What it
 // establishes is that the pipeline can express the computation.
 //
 // The index arithmetic is the part worth checking, because it is where a

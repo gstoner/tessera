@@ -33,7 +33,7 @@ the bootstrap row can go.
 | Lines in those modules | 10848 |
 | Classified family/target candidates (shape admission not implied) | 54 |
 | — covered by a compiled route | 6 |
-| — packager compiles only through the generic scheduled route | 4 |
+| — packager lowers only through the generic Schedule→Tile route | 4 |
 | — **gap (no declared family route)** | 44 |
 | Packagers matching no family | 9 |
 
@@ -68,11 +68,14 @@ The target module must also define the corresponding package consumer.
 Actual driver paths, shapes and policies require separate checks.
 
 `generic` means the family has no family-named route, but its
-`package_<family>` body is derived (AST) to call
-`lower_scheduled_kernel` and to return only
-`package_scheduled_kernel(...)` on every path — so its lowering
-already runs Graph → Schedule → Tile. The Graph-input wrapper is
-what remains to retire; any other return keeps the row a `gap`.
+`package_<family>` body is derived (AST) to return only
+`package_scheduled_kernel(lower_scheduled_kernel(...))` on every
+path — so its lowering runs Graph → Schedule → Tile. The Target
+stage may still bind a declared runtime delegate (Apple GPU softmax
+binds a hand-written kernel through `kernel_call`, a Decision #28
+Tier-3 candidate), so `generic` is a Schedule→Tile statement, not a
+claim of compiler-emitted device code. Any other return keeps the
+row a `gap`.
 It does **not** assert the compiled route reaches parity on
 every shape and dtype — that is per-family evidence the backend
 queues own.

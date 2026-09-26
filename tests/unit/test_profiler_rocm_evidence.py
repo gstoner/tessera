@@ -223,3 +223,67 @@ def test_a_packet_that_drops_a_timing_blocker_is_rejected() -> None:
     packet["packet_sha256"] = _digest(packet)
     with pytest.raises(ROCmProfilerPacketError, match="differ"):
         validate_rocm_profiler_packet(packet)
+
+
+def test_an_instrumented_image_faster_than_its_clean_twin_blocks() -> None:
+    """Two-sided gate: measured 2026-09-26, stamping split the gfx1151 serial
+    SSD entry block and the 'instrumented twin' ran 2.4x faster -- a different
+    program, whose clock says nothing about the clean image."""
+    packet = build_rocm_profiler_packet(
+        timing=_wsl_witness_timing(), capture=_no_kfd_capture(),
+        uninstrumented=_image(10_000, "clean"),
+        instrumented=_image(4_100, "probe"),
+        source={"source_commit": "c" * 40, "worktree_dirty": False},
+    )
+    assert packet["ineligibility_reasons"] == ["INSTRUMENTATION_CHANGED_THE_KERNEL"]
+    assert packet["eligible_for_promotion"] is False
+
+
+def test_non_finite_durations_are_refused() -> None:
+    """Review: NaN/inf compare False against both overhead bounds."""
+    import pytest
+    from tessera.compiler.profiler_rocm_evidence import ROCmProfilerPacketError
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ROCmProfilerPacketError, match="finite"):
+            build_rocm_profiler_packet(
+                timing=_wsl_witness_timing(), capture=_no_kfd_capture(),
+                uninstrumented=_image(10_000, "clean"), instrumented=_image(bad, "probe"),
+                source={"source_commit": "c" * 40, "worktree_dirty": False})
+
+
+def test_the_validator_reruns_the_pairing_rules_and_overhead_limit() -> None:
+    """Review: a stored limit of inf/nan silenced both sides of the gate, and
+    the probe's identity fields were never re-checked by the validator."""
+    import copy
+    import pytest
+    from tessera.compiler.profiler_rocm_evidence import ROCmProfilerPacketError, _digest
+    packet = build_rocm_profiler_packet(
+        timing=_wsl_witness_timing(), capture=_no_kfd_capture(),
+        uninstrumented=_image(10_000, "clean"), instrumented=_image(10_200, "probe"),
+        source={"source_commit": "c" * 40, "worktree_dirty": False})
+    def resealed(mutate):
+        bad = copy.deepcopy(packet)
+        mutate(bad)
+        bad.pop("packet_sha256")
+        bad["packet_sha256"] = _digest(bad)
+        return bad
+    for limit in (float("inf"), float("nan"), 1e9, 0.5):
+        with pytest.raises(ROCmProfilerPacketError, match="overhead limit"):
+            validate_rocm_profiler_packet(resealed(
+                lambda p: p["instrumentation_comparison"].__setitem__("maximum_duration_ratio", limit)))
+    with pytest.raises(ROCmProfilerPacketError, match="one application kernel"):
+        validate_rocm_profiler_packet(resealed(
+            lambda p: p["instrumentation_comparison"]["instrumented"].__setitem__("kernel_name", "other")))
+    with pytest.raises(ROCmProfilerPacketError, match="full source commit"):
+        validate_rocm_profiler_packet(resealed(lambda p: p["source"].__setitem__("source_commit", "short")))
+    with pytest.raises(ROCmProfilerPacketError, match="overhead limit"):
+        build_rocm_profiler_packet(
+            timing=_wsl_witness_timing(), capture=_no_kfd_capture(),
+            uninstrumented=_image(10_000, "clean"), instrumented=_image(10_200, "probe"),
+            source={"source_commit": "c" * 40, "worktree_dirty": False},
+            maximum_instrumentation_overhead=float("nan"))
+    with pytest.raises(ROCmProfilerPacketError, match="finite"):
+        build_rocm_profiler_packet(
+            timing=_wsl_witness_timing(), capture=_no_kfd_capture(),
+            uninstrumented=_image(10_000, "clean"), instrumented=_image(10**400, "probe"),
+            source={"source_commit": "c" * 40, "worktree_dirty": False})

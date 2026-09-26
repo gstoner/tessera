@@ -213,3 +213,28 @@ def test_native_gpu_pass_declares_ssd_source_contract():
     spec = pass_lookup("tessera-native-tape-to-gpu")
     assert "tessera.ssd.source" in spec.required_attrs
     assert "tessera.ssd.source" in spec.preserved_attrs
+
+
+def test_every_code_a_described_pass_emits_is_listed_in_its_metadata() -> None:
+    """Review of #856: a pass with metadata must list every registered MLIR
+    code whose origin is that pass, or passes_emitting_code() under-reports.
+    Found nine existing omissions when this gate was added (2026-09-26)."""
+    from tessera.compiler.diagnostic_codes import REGISTERED_CODES
+    by_class = {p.cpp_class: p for p in REGISTERED_PASSES}
+    missing = [
+        f"{c.code} (origin {c.pass_origin} -> {by_class[c.pass_origin].name})"
+        for c in REGISTERED_CODES
+        if c.language == "mlir" and c.pass_origin in by_class
+        and c.code not in by_class[c.pass_origin].diagnostic_codes
+    ]
+    assert not missing, "codes missing from their pass metadata: " + "; ".join(missing)
+
+
+def test_device_clock_span_pass_is_described() -> None:
+    spec = pass_lookup("tessera-device-clock-span")
+    assert spec.cpp_class == "DeviceClockSpanPass"
+    assert "tessera.device_clock_span" in spec.preserved_attrs
+    assert set(spec.diagnostic_codes) == {
+        "TESSERA_DEVICE_CLOCK_ABI", "TESSERA_DEVICE_CLOCK_ALLOCA_AFTER_WORK",
+        "TESSERA_DEVICE_CLOCK_ALREADY_INSTRUMENTED", "TESSERA_DEVICE_CLOCK_BACKEND",
+        "TESSERA_DEVICE_CLOCK_NO_KERNEL", "TESSERA_DEVICE_CLOCK_UNSTRUCTURED"}

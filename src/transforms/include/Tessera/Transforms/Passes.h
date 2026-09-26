@@ -184,6 +184,14 @@ std::unique_ptr<mlir::Pass> createNativeTapeToGPUPass();
 // cooperative kernel in the native storage ABI. Body: RowProgramToGPUPass.cpp.
 std::unique_ptr<mlir::Pass> createRowProgramToGPUPass();
 
+// DeviceClockSpanPass -- stamp each gpu.func kernel's execution span with the
+// target's constant-rate device clock (rocm: llvm.readsteadycounter; nvidia:
+// %globaltimer) into an appended span-buffer argument, giving native packages
+// a kernel-side timing witness (sync WSL-TIMING-ADMISSION-2026-09-26).
+// Registered as `--tessera-device-clock-span{backend=rocm|nvidia}`.
+// Body: DeviceClockSpanPass.cpp.
+std::unique_ptr<mlir::Pass> createDeviceClockSpanPass();
+
 // AutodiffForwardPass — AD-FWD-CORE-1. Emits a separate paired JVP:
 //   @f__jvp(inputs..., input_tangents...) -> (primals..., output_tangents...)
 // from Graph operations implementing TangentInterface.

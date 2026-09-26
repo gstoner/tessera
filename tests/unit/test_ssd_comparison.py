@@ -44,11 +44,11 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
             validate=lambda:specs,bind=lambda:name)
     incumbent,candidate = artifact(False),artifact(True)
     pairs = evidence()
-    for pair in pairs:
+    for i,pair in enumerate(pairs):
         for name,packet in pair.items():
-            packet.update(backend='rocm',architecture='gfx1151',clock='HIP events')
+            packet.update(backend='rocm',architecture='gfx1151',clock='HIP events',run_id=f'{i}-{name}')
             packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
-    comparison = dict(pairs=pairs,promotion_eligible=True,median_speedup_lower_bound=10000.)
+    comparison = dict(pairs=pairs,promotion_eligible=True,median_speedup_lower_bound=10000.,source=dict(source_commit='a'*40))
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison)
     assert bound == 'serial' and not decision.admitted
     calibrations = []
@@ -56,6 +56,7 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
         for name in ('serial','cooperative'):
             timing = _timing()
             timing['sample_id'] = f'{i}-{name}'
+            timing['environment']['run_id'] = f'{i}-{name}'
             clean,probe = _image(1,'clean'),_image(1,'probe')
             for image in (clean,probe):
                 image.update(calibration_sample_id=timing['sample_id'],semantic_sha256=hashlib.sha256(logical.schedule_ir.encode()).hexdigest(),duration_ns=pair[name]['rows'][0]['device_event_ms'][0]*1e6)
@@ -100,11 +101,11 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
             validate=lambda:specs,bind=lambda:name)
     incumbent,candidate = artifact(False),artifact(True)
     pairs = evidence()
-    for pair in pairs:
+    for i,pair in enumerate(pairs):
         for name,packet in pair.items():
-            packet.update(backend='rocm',architecture='gfx1151',clock='HIP events')
+            packet.update(backend='rocm',architecture='gfx1151',clock='HIP events',run_id=f'{i}-{name}')
             packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
-    comparison = dict(pairs=pairs,promotion_eligible=True,median_speedup_lower_bound=10000.)
+    comparison = dict(pairs=pairs,promotion_eligible=True,median_speedup_lower_bound=10000.,source=dict(source_commit='a'*40))
     def calibrations(event_ns):
         out = []
         for i,pair in enumerate(pairs):
@@ -112,6 +113,7 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
                 timing = _wsl_witness_timing(event_ns=event_ns,
                     image_sha256=pair[name]['rows'][0]['image_sha256'])
                 timing['sample_id'] = f'{i}-{name}'
+                timing['environment']['run_id'] = f'{i}-{name}'
                 clean,probe = _image(1,'clean'),_image(1,'probe')
                 for image in (clean,probe):
                     image.update(calibration_sample_id=timing['sample_id'],semantic_sha256=hashlib.sha256(logical.schedule_ir.encode()).hexdigest(),duration_ns=pair[name]['rows'][0]['device_event_ms'][0]*1e6)
@@ -122,6 +124,20 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
     assert bound == 'cooperative' and decision.admitted
     with pytest.raises(ValueError, match='disagree'):
         calibrations(20_000)
+    # A calibration naming another process's run is refused (review).
+    stolen = calibrations(10_100)
+    stolen[0]['timing']['environment']['run_id'] = 'someone-else'
+    with pytest.raises(ValueError, match='measured process run'):
+        bind_measured_ssd(incumbent,candidate,comparison,stolen)
+    # Calibrations from two source commits cannot be mixed.
+    mixed = calibrations(10_100)
+    mixed[0]['source']['source_commit'] = 'b'*40
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,mixed)
+    assert bound == 'serial' and 'source commit' in decision.reason
+    # ...and a comparison that states no commit refuses outright (review).
+    unstated = {k: v for k, v in comparison.items() if k != 'source'}
+    bound,decision = bind_measured_ssd(incumbent,candidate,unstated,calibrations(10_100))
+    assert bound == 'serial' and 'source commit' in decision.reason
 
 
 @pytest.mark.parametrize('variant', ['serial', 'cooperative'])

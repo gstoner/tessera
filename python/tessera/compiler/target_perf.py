@@ -728,7 +728,15 @@ def _check_kind(payload: Mapping[str, Any], expected: str, other: str) -> None:
 MIN_WITNESS_SAMPLES = 2
 
 
-def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> None:
+def _measurement_digest(raw: Any) -> str:
+    import hashlib
+    import json
+    return "sha256:" + hashlib.sha256(
+        json.dumps(raw, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any],
+                                measurements: Any = None) -> None:
     """A WSL corpus is selector authority only when it *carries* the evidence.
 
     ``timing_witness.samples`` holds ``tessera.profiler_timing.v1`` payloads.
@@ -738,6 +746,14 @@ def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> Non
     of that target, with a witness valid in the same sample and agreeing
     within the provider band). Derived, not declared: a corpus that merely
     names a method is refused (review of #854).
+
+    **Bound to the calibrated measurement, by derivation** (reviews of #855
+    and the SSD packet branch): the corpus carries each device's raw
+    measurement (``measurements``); its digest is computed here, never read
+    from a declared field; the device's overlay values must equal that raw
+    measurement's ``results``; and a sample counts for the device only when
+    its ``artifact_digests`` name that computed digest. Timing from an
+    unrelated workload therefore cannot authorize a device's measured values.
     """
     import hashlib
     import json
@@ -753,10 +769,24 @@ def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> Non
         "valid and agrees in the same sample; without them use "
         "load_pruning_corpus()"
     )
+    # Binding strength, stated plainly: a sample is tied to the device's raw
+    # measurement by digest (and the raw record's architecture and environment
+    # are checked by apply_corpus), not by comparing its clock values with the
+    # measured metric. No producer emits WSL witness corpora yet; value-level
+    # binding is owed with the first one (calibrate_gfx1151 marker timing).
     samples = witness.get("samples") if isinstance(witness, Mapping) else None
     if not isinstance(samples, (list, tuple)) or not samples:
         raise ValueError(hint)
-    admissible: dict[str, set[str]] = {}
+    digests: dict[str, str] = {}
+    for device, fields in devices.items():
+        raw = measurements.get(device) if isinstance(measurements, Mapping) else None
+        if not isinstance(raw, Mapping) or raw.get("results") != fields:
+            raise ValueError(
+                f"WSL calibration needs measurements[{device!r}]: the raw measurement "
+                "whose 'results' equal this device's overlay values, so the witness "
+                "samples can be bound to what was actually measured")
+        digests[device] = _measurement_digest(raw)
+    admissible: list[tuple[str, str, frozenset[str]]] = []
     for index, sample in enumerate(samples):
         if not isinstance(sample, Mapping):
             raise ValueError(f"timing_witness.samples[{index}] is not a timing sample; {hint}")
@@ -780,14 +810,17 @@ def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any]) -> Non
         # new sample_id is the same measurement and must not count twice.
         content = hashlib.sha256(
             json.dumps(clocks, sort_keys=True, default=str).encode()).hexdigest()
-        admissible.setdefault(sample["target"], set()).add(content)
+        admissible.append((sample["target"], content,
+                           frozenset(str(v) for v in sample["artifact_digests"].values())))
     for device in devices:
         target = perf_for_device(device).target
-        count = len(admissible.get(target, ()))
-        if count < MIN_WITNESS_SAMPLES:
+        digest = digests[device]
+        bound = {content for sample_target, content, digests in admissible
+                 if sample_target == target and digest in digests}
+        if len(bound) < MIN_WITNESS_SAMPLES:
             raise ValueError(
-                f"device {device!r} (target {target!r}) has {count} admissible "
-                f"timing sample(s); {hint}")
+                f"device {device!r} (target {target!r}) has {len(bound)} admissible "
+                f"timing sample(s) bound to its measurement {digest[:16]}…; {hint}")
 
 
 def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
@@ -801,6 +834,9 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
          "measured_on": "2026-07-28",
          "host": "strix-halo",
          "selector_eligible": true,
+         "execution_environment": "bare_metal",
+         "measurements": {"radeon_8060s": {<raw record>, "results": {...},
+                                           "execution_environment": "bare_metal"}},
          "devices": {"radeon_8060s": {"dram_bw_gbps": 214.3,
                                       "peak_tflops.bf16:matrix": 51.2}}}
 
@@ -832,12 +868,42 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
             "authority; use load_pruning_corpus() to inspect it without "
             "mutating the measured registry"
         )
-    if isinstance(host, str) and ("wsl" in host.lower() or "dxg" in host.lower()):
+    # The environment is derived from the carried raw measurements, not taken
+    # from a label (reviews): every selector-eligible corpus carries them, and
+    # the corpus statement, each raw record and the host label must agree.
+    environment = corpus.get("execution_environment")
+    if environment not in ("bare_metal", "wsl2"):
+        raise ValueError(
+            "selector-eligible calibration corpus must state execution_environment "
+            f"as 'bare_metal' or 'wsl2', got {environment!r}")
+    measurements = corpus.get("measurements")
+    if not isinstance(measurements, Mapping):
+        raise ValueError("selector-eligible calibration corpus must carry its raw measurements")
+    for device, fields in dict(corpus.get("devices", {})).items():
+        raw = measurements.get(device)
+        if not isinstance(raw, Mapping) or raw.get("results") != fields:
+            raise ValueError(
+                f"measurements[{device!r}] must be the raw measurement whose 'results' "
+                "equal this device's overlay values")
+        if raw.get("execution_environment") != environment:
+            raise ValueError(
+                f"measurements[{device!r}] was taken on {raw.get('execution_environment')!r} "
+                f"but the corpus states {environment!r}")
+        arch = raw.get("architecture")
+        target = perf_for_device(device).target
+        if arch is not None and not target.endswith(str(arch)):
+            raise ValueError(
+                f"measurements[{device!r}] is from {arch!r}, not the device's target {target!r}")
+    labelled_wsl = isinstance(host, str) and ("wsl" in host.lower() or "dxg" in host.lower())
+    if labelled_wsl and environment != "wsl2":
+        raise ValueError(f"host {host!r} is labelled WSL but the corpus states {environment!r}")
+    if environment == "wsl2":
         # Was an unconditional refusal. Since 2026-09-25 a WSL corpus becomes
-        # selector authority when it declares the independent-witness method
+        # selector authority when it carries the independent-witness evidence
         # the owner accepted (MASTER_AUDIT; DEVICE-CLOCK-DISCIPLINE-2026-08-31).
         _require_wsl_timing_witness(corpus.get("timing_witness"),
-                                    dict(corpus.get("devices", {})))
+                                    dict(corpus.get("devices", {})),
+                                    corpus.get("measurements"))
     # Phase 1 — build and validate everything. perf_for_device() raises on an
     # unknown device, with_measured() raises on an unknown field.
     staged: list[TargetPerf] = [

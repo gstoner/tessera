@@ -41,6 +41,7 @@ add_library(TesseraPasses
   AutodiffPass.cpp
   NativeTapeToGPUPass.cpp
   RowProgramToGPUPass.cpp
+  DeviceClockSpanPass.cpp
   AutodiffPairedPass.cpp
   AutodiffForwardPass.cpp
 

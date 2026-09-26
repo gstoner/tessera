@@ -1691,6 +1691,85 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="W1.1",
     ),
 
+    # ── DEVICE-CLOCK-MARKER-2026-09-26 — kernel-side device-clock span ──────
+    DiagnosticCode(
+        code="TESSERA_DEVICE_CLOCK_BACKEND",
+        pass_origin="DeviceClockSpanPass",
+        severity="error",
+        summary=(
+            'The device-clock span pass needs backend=rocm or backend=nvidia; the clock is a semantic key and is never defaulted.'
+        ),
+        fix_hint=(
+            'Pass --tessera-device-clock-span=backend=rocm (or nvidia).'
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="DEVICE-CLOCK-MARKER-2026-09-26",
+    ),
+    DiagnosticCode(
+        code="TESSERA_DEVICE_CLOCK_ALREADY_INSTRUMENTED",
+        pass_origin="DeviceClockSpanPass",
+        severity="error",
+        summary=(
+            'The kernel already carries tessera.device_clock_span; instrumenting twice would append a second span buffer.'
+        ),
+        fix_hint=(
+            'Run the pass once per image; build the marker from the uninstrumented module.'
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="DEVICE-CLOCK-MARKER-2026-09-26",
+    ),
+    DiagnosticCode(
+        code="TESSERA_DEVICE_CLOCK_UNSTRUCTURED",
+        pass_origin="DeviceClockSpanPass",
+        severity="error",
+        summary=(
+            "The kernel's gpu.return is not the single final terminator of a single-block body, so a barrier before it could deadlock under divergent control flow."
+        ),
+        fix_hint=(
+            'Instrument a structured kernel, or bracket it with the device-clock marker instead of stamping it.'
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="DEVICE-CLOCK-MARKER-2026-09-26",
+    ),
+    DiagnosticCode(
+        code="TESSERA_DEVICE_CLOCK_ABI",
+        pass_origin="DeviceClockSpanPass",
+        severity="error",
+        summary=(
+            'The pass could not append the span-buffer argument to the kernel.'
+        ),
+        fix_hint=(
+            'Report the kernel signature; the pass appends one !llvm.ptr<1> argument.'
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="DEVICE-CLOCK-MARKER-2026-09-26",
+    ),
+    DiagnosticCode(
+        code="TESSERA_DEVICE_CLOCK_ALLOCA_AFTER_WORK",
+        pass_origin="DeviceClockSpanPass",
+        severity="error",
+        summary=(
+            'An alloca follows an op with memory effects or regions, so the start stamp cannot both precede the work and keep every alloca in the entry block.'
+        ),
+        fix_hint=(
+            'Hoist allocas to the kernel start, or time the kernel with the device-clock marker.'
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="DEVICE-CLOCK-MARKER-2026-09-26",
+    ),
+    DiagnosticCode(
+        code="TESSERA_DEVICE_CLOCK_NO_KERNEL",
+        pass_origin="DeviceClockSpanPass",
+        severity="error",
+        summary=(
+            'The module contains no gpu.func kernel to instrument.'
+        ),
+        fix_hint=(
+            'Run the pass on a module with at least one gpu.func marked kernel.'
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="DEVICE-CLOCK-MARKER-2026-09-26",
+    ),
     # ── W1.1 step 2b (guard) — NVIDIA WGMMA accumulator ────────────────────
     DiagnosticCode(
         code="NVWGMMA_ACCUMULATOR_DROPPED",

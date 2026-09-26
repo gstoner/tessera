@@ -497,55 +497,101 @@ _RESERVED = ("lower_scheduled_kernel", "package_scheduled_kernel", "scheduled_ke
 
 
 def _import_binds_real_lowering(node: ast.AST, name: str) -> bool:
-    """The only bindings of the reserved names that keep their meaning."""
-    if not isinstance(node, ast.ImportFrom):
+    """The only bindings of the reserved names that keep their meaning.
+
+    Exact, relative imports only (review of the SSD packet branch): a module
+    whose name merely *ends* in ``scheduled_kernel`` (``legacy.scheduled_kernel``)
+    or an absolute import could supply a different function.
+    """
+    # Exactly one level: ``..scheduled_kernel`` resolves to a different package.
+    if not isinstance(node, ast.ImportFrom) or node.level != 1:
         return False
     for alias in node.names:
-        bound = alias.asname or alias.name
-        if bound != name:
+        if (alias.asname or alias.name) != name or alias.asname is not None:
             continue
         if name == "lower_scheduled_kernel":
-            return (alias.asname is None and alias.name == name
-                    and (node.module or "").split(".")[-1] == "scheduled_kernel")
+            return alias.name == name and node.module == "scheduled_kernel"
         if name == "scheduled_kernel":
-            return (alias.asname is None and alias.name == name
-                    and node.level >= 1 and not node.module)
+            return alias.name == name and not node.module
     return False
 
 
 def _names_are_the_real_lowering(tree: ast.Module, fn: ast.FunctionDef) -> bool:
-    """No module- or function-level binding may redefine the reserved names
-    (review: ``lower_scheduled_kernel = CACHE.get`` inside the packager)."""
-    scopes: tuple[list[ast.AST], ...] = (list(tree.body), list(ast.walk(fn)))
-    for scope in scopes:
-        for node in scope:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                if node.name in ("lower_scheduled_kernel", "scheduled_kernel"):
+    """No binding anywhere in the module may redefine the reserved names, and
+    every name the packager relies on must be bound to the real thing.
+
+    Walks the **whole** module. Refused: parameters, statements nested under
+    module-level control flow, assignment / loop / ``with`` / walrus /
+    ``except`` / ``match`` targets, ``global`` / ``nonlocal``, nested
+    definitions, star imports (they can supply any name), attribute or
+    subscript stores whose attribute or key is a reserved name
+    (``scheduled_kernel.lower_scheduled_kernel = ...``,
+    ``globals()['lower_scheduled_kernel'] = ...``, ``builtins.x = ...``), and
+    reserved names passed as string arguments to any call
+    (``setattr(..., 'lower_scheduled_kernel', ...)``). Permitted: the exact relative imports and this module's single,
+    undecorated top-level ``def package_scheduled_kernel``. A bare use of
+    ``lower_scheduled_kernel`` / ``scheduled_kernel`` additionally requires the
+    real import to exist, so builtins cannot supply the name.
+    """
+    top_level_defs = 0
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == "package_scheduled_kernel" and node in tree.body \
+                    and isinstance(node, ast.FunctionDef) and not node.decorator_list:
+                top_level_defs += 1
+            elif node.name in _RESERVED:
+                return False
+        elif isinstance(node, ast.arg) and node.arg in _RESERVED:
+            return False
+        elif isinstance(node, ast.Name) and node.id in _RESERVED \
+                and isinstance(node.ctx, (ast.Store, ast.Del)):
+            return False
+        elif isinstance(node, ast.Attribute) and node.attr in _RESERVED \
+                and isinstance(node.ctx, (ast.Store, ast.Del)):
+            return False
+        elif isinstance(node, ast.Subscript) and isinstance(node.ctx, (ast.Store, ast.Del)) \
+                and isinstance(node.slice, ast.Constant) and node.slice.value in _RESERVED:
+            return False
+        elif isinstance(node, ast.Call) and (
+                any(k.arg in _RESERVED for k in node.keywords)
+                or any(isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                       and arg.value in _RESERVED
+                       for arg in (*node.args, *(k.value for k in node.keywords)))
+                or any(isinstance(arg, ast.Dict) and any(
+                           isinstance(key, ast.Constant) and key.value in _RESERVED
+                           for key in arg.keys)
+                       for arg in (*node.args, *(k.value for k in node.keywords)))):
+            # setattr(mod, 'lower_scheduled_kernel', ...) and friends. A plain
+            # string elsewhere (an ``__all__`` entry) binds nothing.
+            return False
+        elif isinstance(node, (ast.Global, ast.Nonlocal)) \
+                and any(name in _RESERVED for name in node.names):
+            return False
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name in _RESERVED:
+            return False
+        elif isinstance(node, ast.MatchMapping) and node.rest in _RESERVED:
+            return False
+        elif isinstance(node, ast.ExceptHandler) and node.name in _RESERVED:
+            return False
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name == "*":
                     return False
-                continue
-            targets: list[ast.AST] = []
-            if isinstance(node, (ast.Assign,)):
-                targets = list(node.targets)
-            elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
-                targets = [node.target]
-            elif isinstance(node, (ast.For, ast.AsyncFor)):
-                targets = [node.target]
-            for t in targets:
-                for n in ast.walk(t):
-                    if isinstance(n, ast.Name) and n.id in _RESERVED:
+                bound = alias.asname or alias.name.split(".")[0]
+                if bound in _RESERVED:
+                    if not _import_binds_real_lowering(node, bound):
                         return False
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                for alias in node.names:
-                    bound = alias.asname or alias.name.split(".")[0]
-                    if bound in _RESERVED and bound != "package_scheduled_kernel" \
-                            and not _import_binds_real_lowering(node, bound):
-                        return False
-                    if bound == "package_scheduled_kernel":
-                        return False
-    # package_scheduled_kernel must be this module's own single definition.
-    defs = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and n.name == "package_scheduled_kernel"]
-    return len(defs) == 1
+                    # Only an import visible to the packager binds its name: a
+                    # module-level one, or one inside the packager itself.
+                    if node in tree.body or any(node is n for n in ast.walk(fn)):
+                        imported.add(bound)
+    for use in ("lower_scheduled_kernel", "scheduled_kernel"):
+        loaded = any(isinstance(n, ast.Name) and n.id == use and isinstance(n.ctx, ast.Load)
+                     for n in ast.walk(fn))
+        if loaded and use not in imported:
+            return False
+    return top_level_defs == 1
 
 
 def _packaged_artifact(call: ast.Call) -> ast.expr | None:
@@ -605,6 +651,9 @@ def _packager_is_generic_scheduled(target: str, family: str) -> bool:
         return False
     # Every path must end in return or raise: no implicit ``return None``.
     if not fn.body or not isinstance(fn.body[-1], (ast.Return, ast.Raise)):
+        return False
+    # A generator packager returns an iterator, not a package (review).
+    if any(isinstance(n, (ast.Yield, ast.YieldFrom, ast.Await)) for n in ast.walk(fn)):
         return False
     returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
     bindings = _local_bindings(fn)
@@ -738,7 +787,7 @@ def render_markdown() -> str:
         f"| Lines in those modules | {s['lines']} |",
         f"| Classified family/target candidates (shape admission not implied) | {s['families']} |",
         f"| — covered by a compiled route | {s['compiled']} |",
-        f"| — packager compiles only through the generic scheduled route | {s['generic_compiled']} |",
+        f"| — packager lowers only through the generic Schedule→Tile route | {s['generic_compiled']} |",
         f"| — **gap (no declared family route)** | {s['gap']} |",
         f"| Packagers matching no family | {s['orphan_packagers']} |",
         "",
@@ -775,11 +824,14 @@ def render_markdown() -> str:
         "Actual driver paths, shapes and policies require separate checks.",
         "",
         "`generic` means the family has no family-named route, but its",
-        "`package_<family>` body is derived (AST) to call",
-        "`lower_scheduled_kernel` and to return only",
-        "`package_scheduled_kernel(...)` on every path — so its lowering",
-        "already runs Graph → Schedule → Tile. The Graph-input wrapper is",
-        "what remains to retire; any other return keeps the row a `gap`.",
+        "`package_<family>` body is derived (AST) to return only",
+        "`package_scheduled_kernel(lower_scheduled_kernel(...))` on every",
+        "path — so its lowering runs Graph → Schedule → Tile. The Target",
+        "stage may still bind a declared runtime delegate (Apple GPU softmax",
+        "binds a hand-written kernel through `kernel_call`, a Decision #28",
+        "Tier-3 candidate), so `generic` is a Schedule→Tile statement, not a",
+        "claim of compiler-emitted device code. Any other return keeps the",
+        "row a `gap`.",
         "It does **not** assert the compiled route reaches parity on",
         "every shape and dtype — that is per-family evidence the backend",
         "queues own.",

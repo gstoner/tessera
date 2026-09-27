@@ -48,6 +48,35 @@ identities. Sibling outcomes: NVIDIA follow-up required (sm_120 re-record owed,
 Super-Bear offline); x86 `x86_generic_c` identified, no rows; Apple not
 applicable (no arbiter candidates).
 
+**Cache coherence (Codex review P2 on PR #861, same key).** An identity names
+the code a lane *would* compile; a runtime cache keyed on anything less than
+that code can hand the timer a different artifact. ROCm lanes after the fix
+(full cross-backend inventory in `docs/audit/backend/nvidia/todo.md`, same key):
+
+| Lane | Cache | Old key | Now |
+|---|---|---|---|
+| `rocm_generic_hip` | `kernel_cache` + `rocm_hip._LIB_CACHE` | `cache_key` (source-safe, but no offload arch / hipcc) | store key = `cache_key` + `(hipcc, --offload-arch=<arch>, flags)` (`register_compiler(build_line=)`): a `TESSERA_ROCM_ARCH` change compiles fresh; `_LIB_CACHE` is per compiled temp path (safe) |
+| `rocm_stockham` | `spectral_candidates._libs` | loaded lib, digest of the file at identity time | pinned at load (`toolchain_identity.load_library`); a rebuild after the load is a miss |
+| `rocm_wmma_gemm`, `rocm_flash_attn` | runtime hsaco/package caches + `kernel_code_identity` memo | unchanged | identity is the image the launch's own builder returns; see the open memo item below |
+
+**gfx1151 re-check at `3d4bc6a8` (Princess-Luna, `~/programming/tessera-eid`,
+`build/` no-op, `_rocm_env.sh`, under the timing lock):** focused arbiter tests
+332 passed / 3 skipped (none a device lane); the serve/miss check is unchanged
+-- **8/8 served with the same digests, 8/8 miss** after the HIP emitter change;
+and a real-device probe (real hipcc, real launch) ran `rocm_generic_hip` twice
+(one compile), perturbed `_synthesize_fused_hip`, ran again: one recompile of
+exactly the new text, still `rocm_hip`, max abs err 4.8e-7, and the stamp equal
+to the digest of the text hipcc received both times. Reports:
+`~/gate-reports/eid-3d4bc6a8-gfx1151/` on that box.
+
+Open: **`AUTOTUNE-KERNEL-IDENTITY-MEMO`** -- `kernel_code_identity`'s
+per-process memo is keyed by the lane's selectors plus the `tessera-opt`
+digest, while `_rocm_fa_hsaco_cache` keys on the directive text; an in-process
+change to the Python directive/package generator (not to `tessera-opt`) would
+launch a new image under the memoized old identity. Not reachable by any
+emitter this fix touched; close it by keying the memo on the directive/package
+content.
+
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable (no ROCm change)
 
 NVIDIA validated and admitted its `%globaltimer` device-clock marker on

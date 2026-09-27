@@ -581,3 +581,23 @@ def test_an_identity_that_moves_during_the_race_is_not_stamped():
     finally:
         C.unregister_candidate(moving)
         C.unregister_candidate(stable)
+
+
+# ── an identity's own fields cannot be overwritten ──────────────────────────
+
+@pytest.mark.parametrize("core", ["source_sha256", "build", "entry", "identity",
+                                  "normalization", "generator", "lang", "units"])
+def test_extra_fields_cannot_replace_core_identity_fields(core):
+    with pytest.raises(EI.EmittedIdentityUnavailable, match="collides"):
+        EI.source_identity(lang="c", entry="e", units=[("e", "int x;")],
+                           build=("cc",), extra={core: "forged"})
+    ok = EI.source_identity(lang="c", entry="e", units=[("e", "int x;")],
+                            build=("cc",), extra={"cache_key": "k"})
+    assert ok["cache_key"] == "k"
+
+
+def test_composite_parts_cannot_overwrite_each_other():
+    with pytest.raises(EI.EmittedIdentityUnavailable, match="twice"):
+        EI.composite_identity({"a.b": {"c": "1"}, "a": {"b.c": "2"}})
+    out = EI.composite_identity({"a": {"x": "1"}, "b": {"x": "2"}})
+    assert out["a.x"] == "1" and out["b.x"] == "2"

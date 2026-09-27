@@ -127,6 +127,12 @@ def source_identity(*, lang: str, entry: str,
         "build": " ".join(str(part) for part in build),
     }
     for key, value in (extra or {}).items():
+        # An `extra` field may add to the identity, never replace a core one:
+        # an overwritten `source_sha256` or `build` would stamp a digest of
+        # something other than the code (fail closed).
+        if str(key) in identity:
+            raise EmittedIdentityUnavailable(
+                f"extra identity field {key!r} collides with a core field")
         identity[str(key)] = str(value)
     return identity
 
@@ -304,7 +310,13 @@ def composite_identity(parts: Mapping[str, Mapping[str, str] | None]
         if part is None:
             raise EmittedIdentityUnavailable(f"part {label!r} has no identity")
         for key, value in part.items():
-            out[f"{label}.{key}"] = str(value)
+            field = f"{label}.{key}"
+            # Labels and keys may contain dots, so ("a.b", "c") and ("a", "b.c")
+            # flatten to the same field; never let one part overwrite another.
+            if field in out:
+                raise EmittedIdentityUnavailable(
+                    f"composite identity field {field!r} is produced twice")
+            out[field] = str(value)
     return out
 
 

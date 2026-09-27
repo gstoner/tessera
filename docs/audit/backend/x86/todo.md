@@ -24,6 +24,19 @@ on its MLIR program plus `libtessera_jit` by content. The committed corpus holds
 no x86 rows, so nothing needed re-recording. Unchanged and still open:
 `X86-GEMM-ALIGN-1`.
 
+**Cache coherence (Codex review P2 on PR #861, same key; inventory in the NVIDIA
+queue).** `x86_generic_c`'s `kernel_cache` store key now folds in the C
+compiler invoked and its flags, so a `TESSERA_X86_CC` change compiles fresh
+instead of serving the artifact the old compiler built. `cpu_stockham` and
+`cpu_stencil_grad` compile their checked-in file once per process; they are
+now stamped with the identity of the bytes that compile read (checked before
+and after it; an edit during the compile is a miss), not the file as it is
+later, and the identity covers local headers reached by a quoted `#include`
+(`StockhamRadix4.cpp`'s `../Common/FFTPlan.h` was outside it). `x86_aocl_dlp`
+and `libtessera_jit` (native ANN CPU) are pinned at load, so a replaced
+library after the load is a miss. Host-independent; verified on the Mac only
+(no x86 rows to re-check).
+
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
 
 NVIDIA's `%globaltimer` marker was validated on The-Super-Bear and given the

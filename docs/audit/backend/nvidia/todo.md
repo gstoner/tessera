@@ -123,6 +123,71 @@ pin without the pin moving is not caught here (the family identity's stated
 limit); host-side Python around a kernel (`_composed_operand`, layout
 materialization) is outside every identity (stated in the module docstring).
 
+### Cache coherence — Codex review P2 on PR #861 (2026-09-27)
+
+**Finding (confirmed in code).** `NvidiaMmaFusedCandidate.artifact_identity()`
+hashed the emitter's *current* output while `run` launched a function from
+`_mma_fused_fn_cache`, keyed by storage/epilogue/raster alone. After an
+in-process emitter change a re-measurement timed the OLD binary under the NEW
+source's identity; after a restart the genuinely new binary matched that stamp
+and reused a latency measured for other code. The attention, gated and
+resident-stage caches, the PTX registration set, the once-per-process library
+loads and the checked-in CPU lanes had the same shape. **Fix: every runtime
+cache behind an identified candidate is keyed by the code it holds, or the
+stamp is taken from the artifact actually loaded.** Identities of unchanged
+code are unchanged.
+
+| Lane(s) | Cache | Old key | New key / why safe |
+|---|---|---|---|
+| `nvidia_mma_fused_*` (+ device timer) | `_mma_fused_fn_cache`, `_mma_fused_device_fn_cache` | (storage, bias, act, raster, group) | (`cache_key(source, dtype=storage)` + nvcc path/flags, symbol); one artifact per source in `_EMITTED_ARTIFACTS`, shared by host entry and timer |
+| `nvidia_mma_attn_*` | `_mma_attn_fn_cache`, `_mma_attn_device_fn_cache` | storage | same |
+| `nvidia_mma_gated_*` | `_mma_gated_fn_cache`, `_mma_gated_device_fn_cache` | (storage, act, raster, group) | same |
+| `nvidia_mma_*_composed_*` stages | `_resident_ops_artifact` | none (once per process) | `_EMITTED_ARTIFACTS[source key]`; key memoized by source text for the per-stage launch path |
+| composed lanes' GEMM, `nvidia_mma_gemm_shipped`, `nvidia_nvfp4_gemm_shipped` | `runtime._nvidia_gemm_runtime` | file digest at identity time (path re-located) | pinned at load (`toolchain_identity.load_library`); identity of the *loaded* path; a rebuild after the load raises `LibraryChangedSinceLoad` (miss) |
+| `nvidia_generic_cuda`, `nvidia_flash_attn`, `nvidia_gated`, `nvidia_pointwise`, mma-attn scalar arm | `kernel_cache` + `_LIB_CACHE` | `cache_key` (source-safe; no arch/nvcc) | store key = `cache_key` + `(nvcc, -arch=…, flags)` via `register_compiler(build_line=)`; `_LIB_CACHE` is per compiled temp path |
+| `nvidia_mma_gemm_emitted`, `nvidia_nvfp4_gemm_emitted` | `runtime._nvidia_ptx_registered` (set) + bridge module cache | entry name | dict entry -> PTX the bridge holds (written only on successful registration); identity reads it -- the lane never re-registers, so the stamp names what runs |
+| `nvidia_tile_matmul_*` | `_nvidia_tile_ptx_cache` + registration | (schedule, dtype) | already safe (identity reads the same cached PTX); now also the registered text |
+| PTX bridge (every PTX lane) | `runtime._nvidia_ptx_launch_lib` | file digest at identity time | pinned at load |
+| ROCm / x86 / CPU / ANN / native storage | see the ROCm and x86 queues | | `rocm_generic_hip`, `x86_generic_c`: build line in the store key; `rocm_stockham`, `x86_aocl_dlp`, `libtessera_jit`: pinned at load; `cpu_stockham`, `cpu_stencil_grad`: stamped with the bytes compiled (+ quoted local headers); native storage / ANN GPU: identity is the immutable package `binding_digest` (already safe) |
+
+**Arbiter.** `measured_arbitrate` now computes each live candidate's identity
+before the race as well as after, and leaves unstamped (so unservable) any
+candidate whose identity moved during it: samples that straddle two kernels
+describe neither. The stamp is still computed after the race, from the same
+source-producing functions the run used, which with content-keyed caches is
+the code the last timed run executed.
+
+Tests: `tests/unit/test_autotune_identity_cache_coherence.py` (Mac, compiler /
+`dlopen` / PTX bridge intercepted) -- each lane runs, its emitter is patched,
+it runs again, and the test requires one fresh compile of exactly the new text,
+a stamp equal to the digest of what that compile received, and no recompile
+for unchanged source; the Codex cases fail on `042ef54f` with "a changed
+emitter must compile fresh".
+
+Device re-check at `3d4bc6a8` (The-Super-Bear, `~/programming/tessera-eid`,
+`build/` and `build-nvidia-cuda/` `ninja` no-op -- no C++ changed --
+`_nvidia_env.sh`, under the timing lock): **release gate `--layer device`:
+both device-correctness passes 1122 passed, 1 skipped (NCCL not installed), 0
+failed, `status=success`** (reports `~/gate-reports/eid-3d4bc6a8/` on that
+box); the sm_120 serve/miss check is **byte-identical** to the committed
+`sm120_serve_check_after_rebuild.txt` apart from host/date -- 96/96 identities
+match, 15 served, 96/96 miss with every emitter perturbed -- so the fix moved
+no identity; and a real-device probe ran `nvidia_mma_fused` and
+`nvidia_generic_cuda` twice (one nvcc compile each), perturbed the emitter,
+ran again: one recompile of exactly the new text, still `nvidia_cuda`, stamp
+equal to the digest of what nvcc received both times.
+
+Also fixed (orchestrator review N1): `source_identity`'s `extra` fields could
+overwrite a core field (`source_sha256`, `build`, ...) and
+`composite_identity` could flatten two parts onto one field (`("a.b","c")` vs
+`("a","b.c")`); both now raise `EmittedIdentityUnavailable` (a miss).
+`python_code_identity` takes no caller fields. No existing identity collided.
+
+Open: `AUTOTUNE-KERNEL-IDENTITY-MEMO` (ROCm queue): the `tessera-opt`-image
+identity memo is keyed by selectors + `tessera-opt` digest, not by the
+directive text the hsaco cache keys on -- a Python directive-generator change
+within one process is not covered. No NVIDIA lane uses that memo.
+
 ## `NVIDIA-PREPR-REVIEW-2026-09-26`: review fixes to the device-layer and marker work
 
 Branch `claude/timing-foundation-nvidia-fixes`. Host-free fixes checked on the

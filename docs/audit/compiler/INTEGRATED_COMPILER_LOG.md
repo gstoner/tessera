@@ -4885,3 +4885,25 @@ Evidence: `benchmarks/baselines/autotune_corpus_rerecord_20260927/`,
 `tests/unit/test_autotune_toolchain_key.py`.
 
 <!-- entry-fields:end -->
+
+Cache coherence (Codex review P2 on PR #861, same day). The identity named the
+code a lane *would* compile, but several runtime caches held compiled code
+under keys that did not change with it (`_mma_{fused,attn,gated}_*fn_cache`
+by storage/epilogue/raster, `_resident_ops_artifact` once per process, the
+PTX-registered set by entry name, libraries loaded once and digested later,
+checked-in CPU libraries compiled once while the identity re-read the file),
+so an in-process code change could time one kernel under another's stamp.
+Now every such cache keys on the code (`kernel_cache.cache_key` + the compile
+line; `register_compiler(build_line=)` folds arch/compiler into
+`kernel_cache.build`'s store key), or the stamp is taken from the loaded
+artifact (registered PTX text; `toolchain_identity.load_library` pins; the
+bytes a checked-in compile read, now incl. quoted local headers);
+`measured_arbitrate` leaves unstamped a candidate whose identity moved during
+the race; `source_identity`/`composite_identity` refuse field collisions.
+Full per-cache inventory: `docs/audit/backend/nvidia/todo.md` (same key).
+Verified: Mac sweep 20698 passed / 3840 skipped / 0 failed; sm_120 device gate
+1122 passed / 1 skipped both passes, serve check byte-identical (96/96 match,
+15 served, 96/96 miss), real-device recompile probes on sm_120 and gfx1151;
+gfx1151 serve check 8/8 served, 8/8 miss. No identity of unchanged code moved.
+Open: `AUTOTUNE-KERNEL-IDENTITY-MEMO` (ROCm queue). Tests:
+`tests/unit/test_autotune_identity_cache_coherence.py`.

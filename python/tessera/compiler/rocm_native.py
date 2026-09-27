@@ -1921,10 +1921,8 @@ def package_scheduled_kernel(
         raise ValueError(
             "gfx1201 scheduled semantic kernel has device proof only for the f32 rank-reducing contract"
         )
-    if (artifact.family == "softmax" and storage == "bf16") or (
-        artifact.family == "softmax" and artifact.keepdims
-    ):
-        raise ValueError("ROCm scheduled softmax requires f16/f32 storage")
+    if artifact.family == "softmax" and (storage == "bf16" or artifact.keepdims):
+        raise ValueError("ROCm scheduled softmax requires shape-preserving f16/f32 storage")
     from .native_unary_contract import verify_unary_ancestry
     verify_unary_ancestry(artifact, target="rocm", architecture=artifact.architecture)
     arch = artifact.architecture

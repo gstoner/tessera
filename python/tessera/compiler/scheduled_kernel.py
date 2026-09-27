@@ -116,7 +116,7 @@ def lower_scheduled_kernel(
         # where a Graph-owned packager used to serve it, and the Schedule record
         # names the one semantic it lowers.
         op.op_name = "tessera.softmax"
-        op.kwargs = {"axis": -1}
+        op.kwargs = {**op.kwargs, "axis": -1}
     if contract[5] == "norm":
         op.kwargs = {"eps": contract[21]}
     if contract[5] == "reduce":

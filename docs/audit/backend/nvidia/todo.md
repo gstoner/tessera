@@ -13,7 +13,14 @@ last_updated: 2026-09-27
 Owner: GOV-ODS-CONSUMER-1 (the ODS connection triage found these in passing).
 IR/lowering evidence only: TMEM is datacenter sm_100, which no fleet box has,
 so nothing here is an execution claim. Verified under the assertions-ON
-`tessera-nvidia-opt` on Tajasarus (LLVM/MLIR 23.1.1).
+`tessera-nvidia-opt` / `tessera-opt` on Tajasarus (LLVM/MLIR 23.1.1,
+`--assertion-mode ON`, fresh trees at `f9023d62`): NVIDIA backend lit 68/68,
+`lit tests/tessera-ir` 458 passed / 66 unsupported / 0 failed,
+`check-tessera-rocm` 82/82. The same new fixtures against the unfixed
+`origin/main` build (`d8da67f7`) on that box: four TMEM fixtures abort with
+`LLVM ERROR: operation destroyed but still has uses`, the unknown-op fixture
+exits 0 emitting `tessera_nvidia.tmem_store` for both ops, and
+`nvidia_marker_result_used.mlir` fails with `null operand found`.
 
 **Fixed in `LowerTileToNVIDIA` (`NVIDIALowering.cpp`, `lowerTmemOp`).**
 

@@ -371,6 +371,15 @@ def build_marker(compiler: Path):
 def paired_windows(clock: Clock, arms: dict, *, windows: int, min_window_ms: float) -> dict:
     """ABAB / BABA interleaved windows, each at least ``min_window_ms`` long."""
     counts = {}
+    # Warm every arm together first. Arms calibrated right after a host-side
+    # compile (Triton's takes seconds) were sized on a device still ramping
+    # its clock, and their measured windows then came in at 1.5-4.6 ms.
+    warm_until = time.perf_counter() + 0.5
+    while time.perf_counter() < warm_until:
+        for launch in arms.values():
+            for _ in range(20):
+                launch()
+        clock.hip.check(clock.hip.lib.hipDeviceSynchronize())
     for name, launch in arms.items():
         for _ in range(3):
             launch()
@@ -387,11 +396,22 @@ def paired_windows(clock: Clock, arms: dict, *, windows: int, min_window_ms: flo
             per = probe["device_ns"] / count
             count = max(count * 2, math.ceil(1.3 * min_window_ms * 1e6 / per))
         counts[name] = count
-    rows = {name: [] for name in arms}
     names = list(arms)
-    for index in range(windows):
-        for name in (names if index % 2 == 0 else list(reversed(names))):
-            rows[name].append(clock.window(arms[name], counts[name]))
+    for attempt in range(3):
+        rows: dict = {name: [] for name in arms}
+        for index in range(windows):
+            for name in (names if index % 2 == 0 else list(reversed(names))):
+                rows[name].append(clock.window(arms[name], counts[name]))
+        # Every window must clear the floor; an arm that fell short is
+        # re-sized from its own measured windows and the whole paired set is
+        # re-run, so the arms stay interleaved with each other.
+        short = {name: min(s["device_ns"] for s in samples) / 1e6
+                 for name, samples in rows.items()
+                 if min(s["device_ns"] for s in samples) < min_window_ms * 1e6}
+        if not short:
+            break
+        for name, shortest_ms in short.items():
+            counts[name] = math.ceil(counts[name] * 1.3 * min_window_ms / shortest_ms)
     summary = {}
     for name, samples in rows.items():
         per_device = [s["device_ns"] / s["launches"] for s in samples]
@@ -399,6 +419,7 @@ def paired_windows(clock: Clock, arms: dict, *, windows: int, min_window_ms: flo
         agreement = [abs(d - e) / e for d, e in zip(per_device, per_event)]
         summary[name] = {
             "launches_per_window": counts[name],
+            "paired_set_attempts": attempt + 1,
             "window_ms_min": min(s["device_ns"] for s in samples) / 1e6,
             "median_us": float(np.median(per_device)) / 1e3,
             "min_us": float(np.min(per_device)) / 1e3,

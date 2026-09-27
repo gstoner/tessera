@@ -939,6 +939,21 @@ def _wmma_epilogue(region: Any) -> tuple[bool, str] | None:
     return None                               # bias-after-act, or an unfusable op
 
 
+def _identity_isa() -> str | None:
+    """The ISA a kernel-code identity is stamped with: the live device's arch
+    (``runtime._rocm_device_name``, the same authority as the corpus device
+    key), and only when it is the arch the image is built for
+    (``_rocm_chip``). ``None`` -- a miss -- off a ROCm device or when the build
+    target and the device disagree, so the env default can never label an
+    image with an arch that is not the one running it."""
+    from tessera import runtime as rt
+
+    live = rt._rocm_device_name()
+    if not live or live != rt._rocm_chip():
+        return None
+    return str(live)
+
+
 class RocmGenericHipCandidate(Candidate):
     """Tier-1: the generic one-thread-per-row HIP lane (arch-agnostic synth). Serves
     any ``FusedRegion`` — the floor-raising middle ground that is correctness-first,
@@ -1060,12 +1075,19 @@ class RocmWmmaGemmCandidate(Candidate):
             generator_fingerprint,
         )
 
-        chip = rt._rocm_chip()
+        chip = _identity_isa()
+        if chip is None:
+            return None
+        # The arbiter runs this candidate with no kwargs, so the image it times
+        # and dispatches is the default raster; name it in the key rather than
+        # let a non-default `run(raster_order=...)` share this identity.
+        raster_order, raster_group = "row_major", 1
         key = (self.name, chip, m, n, k, "f16", has_bias, activation,
-               generator_fingerprint())
+               raster_order, raster_group, generator_fingerprint())
         return compiler_kernel_identity(
             key, lambda: rt._rocm_wmma_fused_image(
-                m, n, k, "f16", bias=has_bias, activation=activation),
+                m, n, k, "f16", bias=has_bias, activation=activation,
+                raster_order=raster_order, raster_group=raster_group),
             isa=chip)
 
     def available(self) -> bool:
@@ -1177,7 +1199,9 @@ class RocmFlashAttnCandidate(Candidate):
             generator_fingerprint,
         )
 
-        chip = rt._rocm_chip()
+        chip = _identity_isa()
+        if chip is None:
+            return None
         key = (self.name, chip, head_dim, "f16", generator_fingerprint())
         return compiler_kernel_identity(
             key, lambda: rt._rocm_flash_attn_image(head_dim, "f16"), isa=chip)

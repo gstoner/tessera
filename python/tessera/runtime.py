@@ -8739,9 +8739,15 @@ def _rocm_wmma_fused_image(
 ) -> tuple[bytes, str]:
     """``(hsaco, entry_symbol)`` of the fused WMMA kernel
     :func:`_rocm_wmma_fused_2d` runs for ``(m, n, k, dtype, bias, activation)``
-    on the launch chip: the gfx11 directive kernel, or on gfx12 the scheduled
-    package's image (same build call, same package cache). Raises what the
-    build raises; never launches."""
+    on the launch chip. Raises what the build raises; never launches.
+
+    * gfx11: :func:`_rocm_wmma_fused_gfx11_image` -- the one selection the
+      launch itself goes through.
+    * gfx12: NOT a shared selector. The launch goes through
+      :func:`_rocm_compiled_gemm_via_scheduled_package`, which makes the same
+      :func:`build_canonical_gemm_hsaco` call with the same arguments (and so
+      hits the same package cache); this mirrors that call. Raster options do
+      not reach the gfx12 route. Keep the two calls in step."""
     chip = _rocm_chip()
     if not chip.startswith("gfx11"):
         package = build_canonical_gemm_hsaco(

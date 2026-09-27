@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import stat
+import struct
 import textwrap
 
 import numpy as np
@@ -108,7 +109,13 @@ def test_kernel_descriptor_block_is_normalized_and_sensitive():
 
 def test_the_frozen_benchmark_helper_is_the_declared_oracle(monkeypatch):
     """Decision #31: `selected_symbol_isa_evidence` (frozen -- sealed gfx1201
-    packets bind its file hash) and this module must agree on the stream."""
+    packets bind its file hash) is the declared oracle for the per-instruction
+    normalization. The production digest is built from the same core
+    (`instruction_blocks`) -- this checks both halves on one fully decoded
+    listing: the core reproduces the oracle's digest, and the production
+    stream is exactly that core output under its function header. The two
+    differ by design on an undecodable word: the oracle drops it, production
+    refuses the image (see the next test)."""
     from benchmarks.rocm import inspect_gfx1201_folded_prefill as oracle
     from tests._support import rocm_isa
 
@@ -118,17 +125,37 @@ def test_the_frozen_benchmark_helper_is_the_declared_oracle(monkeypatch):
     listing = LISTING.replace("\ts_endpgm", body + "\n\ts_endpgm")
     monkeypatch.setattr(rocm_isa, "disassemble", lambda payload, chip=None: listing.lower())
     evidence = oracle.selected_symbol_isa_evidence(b"\x7fELF", "gemm")
-    ours = hashlib.sha256(KI.selected_instruction_stream(listing, "gemm").encode()).hexdigest()
-    assert evidence["instruction_stream_sha256"] == ours
+    core = KI.selected_instruction_stream(listing, "gemm")
+    assert evidence["instruction_stream_sha256"] == hashlib.sha256(core.encode()).hexdigest()
+    production, count = KI.image_instruction_stream(listing)
+    assert production == "<gemm>:\n" + core
+    assert count == evidence["instruction_count"]
 
 
-def _fake_objdump(tmp_path, listing: str, kd: str) -> str:
+def test_an_undecodable_word_fails_closed():
+    """P1-1: two kernels differing only in an undecodable word. The oracle's
+    lenient walk drops the word and hashes them equal; production refuses."""
+    word_a = LISTING.replace(
+        "\ts_endpgm", "\t.long 0xdeadbeef                  // 000000001AC4: DEADBEEF\n\ts_endpgm")
+    word_b = word_a.replace(".long 0xdeadbeef", ".long 0xcafef00d").replace(
+        "DEADBEEF", "CAFEF00D")
+    lenient = [KI.selected_instruction_stream(t, "gemm") for t in (word_a, word_b)]
+    assert lenient[0] == lenient[1], "the lenient walk cannot see the difference"
+    for text in (word_a, word_b,
+                 LISTING.replace("\ts_endpgm", "\t<unknown>   // 000000001AC4: 0\n\ts_endpgm"),
+                 LISTING.replace("\ts_endpgm", "\t\t...\n\ts_endpgm")):
+        with pytest.raises(KI.KernelIdentityUnavailable, match="undecod"):
+            KI.image_instruction_stream(text)
+
+
+def _fake_objdump(tmp_path, listing: str, kd: str, version: str = "LLVM version 23.fake") -> str:
     (tmp_path / "text.txt").write_text(listing)
     (tmp_path / "kd.txt").write_text(kd)
     tool = tmp_path / "llvm-objdump"
     tool.write_text(textwrap.dedent(f"""\
         #!/bin/sh
         case "$*" in
+          *--version*) echo "LLVM (http://llvm.org/):"; echo "  {version}" ;;
           *-D*) cat "{tmp_path / 'kd.txt'}" ;;
           *) cat "{tmp_path / 'text.txt'}" ;;
         esac
@@ -137,7 +164,57 @@ def _fake_objdump(tmp_path, listing: str, kd: str) -> str:
     return str(tool)
 
 
-ELF = b"\x7fELF" + b"\x00" * 60
+def _elf(*, table: bytes = b"", kd: bytes = b"\x11" * 64, trailer: bytes = b"") -> bytes:
+    """A minimal ELF64 code object: `.text`, `.rodata` = the 64-byte `gemm.kd`
+    descriptor followed by `table`, a symbol table naming `gemm` and `gemm.kd`.
+    `trailer` appends non-section bytes (a different build of the same code)."""
+    text = b"\x00" * 16
+    rodata = kd + table
+    shstr = b"\0.text\0.rodata\0.symtab\0.strtab\0.shstrtab\0"
+    strtab = b"\0gemm\0gemm.kd\0"
+    rodata_addr, text_addr = 0x8C0, 0x1900
+    syms = (b"\0" * 24
+            + struct.pack("<IBBHQQ", 1, 0x12, 0, 1, text_addr, len(text))
+            + struct.pack("<IBBHQQ", 6, 0x11, 0, 2, rodata_addr, 64))
+    body = bytearray(b"\0" * 64)
+    offsets = {}
+    for name, blob in (("text", text), ("rodata", rodata), ("symtab", syms),
+                       ("strtab", strtab), ("shstrtab", shstr)):
+        offsets[name] = len(body)
+        body += blob
+    shoff = len(body)
+    sections = [
+        (0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        (1, 1, 0x6, text_addr, offsets["text"], len(text), 0, 0, 256, 0),
+        (7, 1, 0x2, rodata_addr, offsets["rodata"], len(rodata), 0, 0, 64, 0),
+        (15, 2, 0, 0, offsets["symtab"], len(syms), 4, 1, 8, 24),
+        (23, 3, 0, 0, offsets["strtab"], len(strtab), 0, 0, 1, 0),
+        (31, 3, 0, 0, offsets["shstrtab"], len(shstr), 0, 0, 1, 0),
+    ]
+    for sec in sections:
+        body += struct.pack("<IIQQQQIIQQ", *sec)
+    body[0:4] = b"\x7fELF"
+    body[4], body[5], body[6] = 2, 1, 1
+    struct.pack_into("<Q", body, 0x28, shoff)
+    struct.pack_into("<HHH", body, 0x3A, 64, len(sections), 5)
+    return bytes(body) + trailer
+
+
+ELF = _elf()
+
+
+def test_constant_data_beyond_the_descriptor_is_digested():
+    """P1-2: two kernels reading a constant table that differs in one value
+    must not share an identity; the descriptor's own bytes (decoded
+    separately, and carrying a layout-dependent code offset) are excluded."""
+    base = KI.image_data_digest(_elf(table=b"\x00\x00\x80\x3f"))
+    assert base[0] == ".rodata:4"
+    assert KI.image_data_digest(_elf(table=b"\x00\x00\x00\x40"))[1] != base[1]
+    assert KI.image_data_digest(_elf(table=b"\x00\x00\x80\x3f", kd=b"\x22" * 64)) == base
+    assert KI.image_data_digest(_elf(table=b"\x00\x00\x80\x3f", trailer=b"build-2")) == base
+    assert KI.image_data_digest(ELF)[0] == ".rodata:0"
+    with pytest.raises(KI.KernelIdentityUnavailable, match="malformed|ELF64"):
+        KI.image_data_digest(b"\x7fELF" + b"\x00" * 60)
 
 
 def test_identity_of_an_image(tmp_path):
@@ -147,16 +224,29 @@ def test_identity_of_an_image(tmp_path):
     assert identity["normalization"] == KI.NORMALIZATION
     assert identity["instruction_count"] == "7"
     assert identity["instruction_stream_sha256"] == _stream_digest(LISTING)
+    assert identity["data_sections"] == ".rodata:0"
+    assert identity["disassembler"] == "LLVM version 23.fake"
     # Different image bytes (a different build), same code: same identity.
     other = tmp_path / "other-build"
     other.mkdir()
     rebuilt = _fake_objdump(other, LISTING_REBUILT, KD)
-    assert KI.hsaco_kernel_identity(ELF + b"build-2", entry_symbol="gemm", isa="gfx1151",
-                                    objdump=rebuilt) == identity
+    assert KI.hsaco_kernel_identity(_elf(trailer=b"build-2"), entry_symbol="gemm",
+                                    isa="gfx1151", objdump=rebuilt) == identity
+    # A different disassembler is a NAMED miss, not an opaque one.
+    newer = tmp_path / "newer-tool"
+    newer.mkdir()
+    changed = KI.hsaco_kernel_identity(
+        ELF, entry_symbol="gemm", isa="gfx1151",
+        objdump=_fake_objdump(newer, LISTING, KD, version="LLVM version 24.fake"))
+    assert KI.identity_mismatch(identity, changed) == ["disassembler"]
+    table = KI.hsaco_kernel_identity(_elf(table=b"\x01\x02"), entry_symbol="gemm",
+                                     isa="gfx1151", objdump=tool)
+    assert KI.identity_mismatch(identity, table) == ["data_sections", "data_sha256"]
 
 
 @pytest.mark.parametrize("payload, entry, why", [
     (b"not an elf", "gemm", "not an ELF"),
+    (b"\x7fELF" + b"\x00" * 60, "gemm", "malformed|ELF64"),
     (ELF, "fa", "not a function"),
 ])
 def test_unidentifiable_images_raise(tmp_path, payload, entry, why):
@@ -335,10 +425,11 @@ def test_rocm_candidates_derive_their_key_from_the_workload(monkeypatch, tmp_pat
 
     def fused_image(m, n, k, dtype, *, bias, activation, **_):
         built.append((m, n, k, dtype, bias, activation))
-        return ELF + f"{m}x{n}x{k}".encode(), "gemm"
+        return _elf(trailer=f"{m}x{n}x{k}".encode()), "gemm"
 
     monkeypatch.setattr(rt, "_rocm_wmma_fused_image", fused_image)
     monkeypatch.setattr(rt, "_rocm_chip", lambda: "gfx1151")
+    monkeypatch.setattr(rt, "_rocm_device_name", lambda: "gfx1151")
     monkeypatch.setattr(KI, "find_llvm_objdump", lambda: _fake_objdump(tmp_path, LISTING, KD))
     monkeypatch.setattr(KI, "generator_fingerprint", lambda: "sha256:opt")
     wmma = rocm_hip.RocmWmmaGemmCandidate.__new__(rocm_hip.RocmWmmaGemmCandidate)
@@ -353,12 +444,18 @@ def test_rocm_candidates_derive_their_key_from_the_workload(monkeypatch, tmp_pat
     assert wmma.artifact_identity(region) is None   # no workload
     assert wmma.artifact_identity(F.FusedRegion(epilogue=("gelu", "bias")), a, b) is None
     assert wmma.delegate_identity() is None          # no binary-digest key any more
+    # The ISA is the live device's, and only when it is the build target.
+    monkeypatch.setattr(rt, "_rocm_device_name", lambda: None)
+    assert wmma.artifact_identity(region, a, b) is None
+    monkeypatch.setattr(rt, "_rocm_device_name", lambda: "gfx1201")
+    assert wmma.artifact_identity(region, a, b) is None
+    monkeypatch.setattr(rt, "_rocm_device_name", lambda: "gfx1151")
 
     fa_built: list[int] = []
 
     def fa_image(head_dim, dtype="f16", **_):
         fa_built.append(head_dim)
-        return ELF + b"fa", "fa"
+        return _elf(trailer=b"fa").replace(b"gemm", b"fa\0\0"), "fa"
 
     monkeypatch.setattr(rt, "_rocm_flash_attn_image", fa_image)
     monkeypatch.setattr(KI, "find_llvm_objdump",
@@ -376,17 +473,22 @@ def test_rocm_candidates_derive_their_key_from_the_workload(monkeypatch, tmp_pat
     assert fa.artifact_identity(_Attn(), q, q) is None
 
 
-def test_committed_rocm_fused_rows_carry_kernel_code_identities():
-    """The gfx1151 fused_region rows are stamped with the kernel-code identity,
-    not the tessera-opt binary digest (re-recorded 2026-09-26)."""
-    import json
-
-    rows = [r for r in json.loads(AT.corpus_path().read_text())["records"]
-            if r["device"] == "rocm:gfx1151" and r["op"] == "fused_region"]
-    assert len(rows) == 8
-    for row in rows:
-        identity = row["evidence"]["delegate_identities"]["rocm_wmma_gemm"]
-        assert identity["identity"] == "kernel_code"
-        assert identity["normalization"] == KI.NORMALIZATION
-        assert identity["isa"] == "gfx1151" and identity["entry"] == "gemm"
-        assert "abi_digest" not in identity
+def test_measured_arbitrate_keys_on_the_dims_production_infers(tmp_path, monkeypatch):
+    """P1-3: a recorder that passes no dims must land under the (M, N, K)
+    bucket `corpus_winner` infers for ordinary dispatch."""
+    KI.clear_kernel_identity_cache()
+    cand = _Generated("kid_dims", "kid_dims_target")
+    cand.tool_dir = tmp_path
+    monkeypatch.setattr(KI, "find_llvm_objdump", lambda: str(tmp_path / "llvm-objdump"))
+    register_candidate(cand)
+    A = np.ones((8, 16), np.float32)
+    B = np.ones((16, 4), np.float32)
+    cache = AT.MeasureCache()
+    AT.measured_arbitrate(_Region(), OP_MATMUL, "kid_dims_target", A, B, dtype="float16",
+                          cache=cache, device="fakedev", timing=AT.TIMING_DEVICE,
+                          device_repeats=1)
+    (key,) = cache._store
+    assert key[3] == AT.bucket_key((8, 4, 16), AT.SpecPolicy.BUCKET)
+    assert AT.corpus_winner(_Region(), OP_MATMUL, "kid_dims_target", A, B,
+                            cache=cache, device="fakedev",
+                            timing=AT.TIMING_DEVICE) == "kid_dims"

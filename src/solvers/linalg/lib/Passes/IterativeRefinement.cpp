@@ -40,7 +40,11 @@ static bool isRefinableSolve(mlir::Operation *op) {
   if (mlir::isa<TrsmOp, PotrsOp, LinearSolveOp, ImplicitOp>(op))
     return true;
   mlir::StringRef name = op->getName().getStringRef();
-  return name == "tessera.tri_solve" || name == "tessera.cholesky_solve";
+  // Every op_catalog.py entry with lowering="linalg_solver" (all three produce
+  // a solution x). tests/unit/test_linalg_solver_classifiers.py fails if the
+  // catalog gains one that is not listed here.
+  return name == "tessera.solve" || name == "tessera.tri_solve" ||
+         name == "tessera.cholesky_solve";
 }
 
 struct IterativeRefinementPass

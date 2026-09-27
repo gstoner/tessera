@@ -51,7 +51,11 @@ static SolverRole classify(mlir::Operation *op) {
   if (name == "tessera.cholesky" || name == "tessera.lu" ||
       name == "tessera.qr")
     return SolverRole::Factor;
-  if (name == "tessera.tri_solve" || name == "tessera.cholesky_solve")
+  // Every op_catalog.py entry with lowering="linalg_solver" is a Solve;
+  // tests/unit/test_linalg_solver_classifiers.py keeps this list in step
+  // with the catalog.
+  if (name == "tessera.solve" || name == "tessera.tri_solve" ||
+      name == "tessera.cholesky_solve")
     return SolverRole::Solve;
   return SolverRole::None;
 }

@@ -41,6 +41,11 @@ module {
   // MP-SAME: tessera.compute_dtype = "f32"
   // MP: tessera.cholesky_solve
   // MP-SAME: tessera.compute_dtype = "f16"
+  // op_catalog lowering="linalg_solver" ops. (`tessera.solve` is classified
+  // too, but it has no ODS op and the tessera dialect rejects it on parse;
+  // tests/unit/test_linalg_solver_classifiers.py covers it.)
+  // MP: tessera.tri_solve
+  // MP-SAME: tessera.compute_dtype = "f16"
   // MP: "tessera_solver.residual"
   // MP-SAME: tessera.compute_dtype = "f32"
   // The matrix-free IFT solve is not a dense factor/solve kernel; the old
@@ -61,6 +66,8 @@ module {
   // IR-NOT: ir_annotated
   // IR: tessera.cholesky_solve
   // IR-SAME: tessera_solver.ir_annotated
+  // IR: tessera.tri_solve
+  // IR-SAME: tessera_solver.ir_annotated
   // IR: "tessera_solver.residual"
   // IR-NOT: ir_annotated
   // IR: "tessera_solver.implicit"
@@ -72,6 +79,7 @@ module {
     %y = tessera_solver.trsm %l, %b : tensor<4x4xf32>, tensor<4x2xf32> -> tensor<4x2xf32>
     %c = tessera.cholesky %a : (tensor<4x4xf32>) -> tensor<4x4xf32>
     %s = tessera.cholesky_solve %a, %b : (tensor<4x4xf32>, tensor<4x2xf32>) -> tensor<4x2xf32>
+    %p = tessera.tri_solve %a, %b : (tensor<4x4xf32>, tensor<4x2xf32>) -> tensor<4x2xf32>
     %r = "tessera_solver.residual"(%t, %t) {callee = @res} : (tensor<4xf32>, tensor<4xf32>) -> tensor<4xf32>
     %i = "tessera_solver.implicit"(%t) {residual = @res} : (tensor<4xf32>) -> tensor<4xf32>
     return

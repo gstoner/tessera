@@ -198,17 +198,27 @@ struct OptimizerShardPass
     }
 
     // Derive, don't ask (#30): when the module states its mesh, the partition
-    // count for the axis is already known and must agree.
+    // count for the axis is already known and must agree -- and the axis must
+    // be one of the mesh's dimensions (a shard axis the mesh does not have
+    // names no partition at all).
     if (auto plan = mod->getAttrOfType<DictionaryAttr>("tessera.distributed_plan"))
-      if (auto mesh = plan.getAs<DictionaryAttr>("mesh"))
-        if (auto size = mesh.getAs<IntegerAttr>(settings.axis))
-          if (size.getInt() != settings.ranks) {
-            mod.emitError("SR_ZERO_CONFIG_CONFLICT: ZeRO num_ranks = ")
-                << settings.ranks << " but tessera.distributed_plan mesh axis '"
-                << settings.axis << "' has " << size.getInt() << " ranks";
-            signalPassFailure();
-            return;
-          }
+      if (auto mesh = plan.getAs<DictionaryAttr>("mesh")) {
+        auto size = mesh.getAs<IntegerAttr>(settings.axis);
+        if (!size) {
+          mod.emitError("SR_ZERO_CONFIG_CONFLICT: ZeRO dp_axis '")
+              << settings.axis << "' is not a dimension of the "
+              << "tessera.distributed_plan mesh " << mesh;
+          signalPassFailure();
+          return;
+        }
+        if (size.getInt() != settings.ranks) {
+          mod.emitError("SR_ZERO_CONFIG_CONFLICT: ZeRO num_ranks = ")
+              << settings.ranks << " but tessera.distributed_plan mesh axis '"
+              << settings.axis << "' has " << size.getInt() << " ranks";
+          signalPassFailure();
+          return;
+        }
+      }
 
     int64_t nRanks = settings.ranks;
     StringRef axis = settings.axis;

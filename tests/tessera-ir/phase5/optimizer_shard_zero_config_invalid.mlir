@@ -56,5 +56,22 @@ module attributes {
 }
 // CHECK: SR_ZERO_CONFIG_CONFLICT: ZeRO num_ranks = 8 but tessera.distributed_plan mesh axis 'dp' has 4 ranks
 
+// -----
+
+// A configured axis the mesh does not have names no partition: refused, not
+// silently annotated (PR #867 review).
+module attributes {
+  tessera.distributed_plan = {mesh = {"dp" = 4, "tp" = 2}, total_ranks = 8},
+  tessera_sr.zero_config = {stage = 2, dp_axis = "data", num_ranks = 4}
+} {
+  func.func @axis_not_in_mesh(%m: memref<64xf32>) {
+    "opt_test.adam_step"(%m) {tessera_sr.optimizer_state = "momentum"}
+        : (memref<64xf32>) -> ()
+    return
+  }
+}
+// CHECK: SR_ZERO_CONFIG_CONFLICT: ZeRO dp_axis 'data' is not a dimension of the tessera.distributed_plan mesh
+// CHECK-NOT: tessera_sr.shard_axis = "data"
+
 // An option may restate the configuration, never override it.
 // OPTION: SR_ZERO_CONFIG_CONFLICT: --tessera-optimizer-shard num-dp-ranks=4 disagrees with tessera_sr.zero_config num-dp-ranks = 8

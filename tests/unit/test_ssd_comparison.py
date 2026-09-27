@@ -26,7 +26,14 @@ def _interleaved(timing):
     the fixtures) in the device clock's provenance."""
     from tessera.compiler.ssd_performance import SSD_CALIBRATION_WINDOW_PROTOCOL
     timing['environment']['window_protocol'] = SSD_CALIBRATION_WINDOW_PROTOCOL
-    timing['clocks']['device_wall_clock_ns']['provenance'] = {'launches_per_window': timing['batch_size']}
+    # The per-window values the recorder stores (three windows at the stored
+    # medians): the per-window rule reads them (NVIDIA pre-PR review).
+    device = timing['clocks']['device_wall_clock_ns'].get('value')
+    witness = next((timing['clocks'][s].get('value') for s in ('hip_event_ns', 'cuda_event_ns')
+                    if s in timing['clocks']), None)
+    timing['clocks']['device_wall_clock_ns']['provenance'] = {
+        'launches_per_window': timing['batch_size'], 'per_window_ns': [device] * 3}
+    timing['environment']['per_window_event_ns'] = [witness] * 3
     return timing
 
 
@@ -155,12 +162,12 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
                 clean['image_sha256'] = pair[name]['rows'][0]['image_sha256']
                 out.append(build_rocm_profiler_packet(timing=timing,capture=_no_kfd_capture(),uninstrumented=clean,instrumented=probe,source=dict(source_commit='a'*40,worktree_dirty=False)))
         return out
-    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations(10_100))
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations(1_010_000))
     assert bound == 'cooperative' and decision.admitted
     with pytest.raises(ValueError, match='disagree'):
-        calibrations(20_000)
+        calibrations(2_000_000)
     # A calibration naming another process's run is refused (review).
-    stolen = calibrations(10_100)
+    stolen = calibrations(1_010_000)
     stolen[0]['timing']['environment']['run_id'] = 'someone-else'
     # Unresealed, the stored packet's own digest refuses it first (review).
     with pytest.raises(ValueError, match='does not validate'):
@@ -170,13 +177,13 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
     with pytest.raises(ValueError, match='measured process run'):
         bind_measured_ssd(incumbent,candidate,comparison,stolen)
     # Calibrations from two source commits cannot be mixed.
-    mixed = calibrations(10_100)
+    mixed = calibrations(1_010_000)
     mixed[0]['source']['source_commit'] = 'b'*40
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison,mixed)
     assert bound == 'serial' and 'source commit' in decision.reason
     # ...and a comparison that states no commit refuses outright (review).
     unstated = {k: v for k, v in comparison.items() if k != 'source'}
-    bound,decision = bind_measured_ssd(incumbent,candidate,unstated,calibrations(10_100))
+    bound,decision = bind_measured_ssd(incumbent,candidate,unstated,calibrations(1_010_000))
     assert bound == 'serial' and 'source commit' in decision.reason
 
 
@@ -331,6 +338,15 @@ def test_ssd_admits_an_nvidia_globaltimer_calibration_and_refuses_mixtures():
     stolen[3].pop('packet_sha256'); stolen[3]['packet_sha256'] = _digest(stolen[3])
     with pytest.raises(ValueError, match='measured process run'):
         bind_measured_ssd(incumbent,candidate,comparison,stolen)   # a resealed one
+    # Eighteen packets must name one physical GPU (review): a set assembled
+    # from two cards of the same model is refused even though each packet
+    # validates on its own.
+    two_cards = calibrations()
+    two_cards[5]['timing']['environment']['device_identity']['uuid'] = 'f' * 32
+    two_cards[5]['timing_sha256'] = _digest(two_cards[5]['timing'])
+    two_cards[5].pop('packet_sha256'); two_cards[5]['packet_sha256'] = _digest(two_cards[5])
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,two_cards)
+    assert bound == 'serial' and decision.reason.startswith('DEVICE_CLOCK_PART_MISMATCH')
     legacy = calibrations()
     for packet in legacy:
         packet['timing']['environment'].pop('window_protocol')
@@ -476,3 +492,31 @@ def test_committed_sm120_calibrations_validate_and_carry_the_protocol():
             assert _calibration_protocol_refusal(calibration['timing'], row) is None
     for decision in ('admission.json', 'replay.json'):
         assert json.loads((root / decision).read_text())['decision']['admitted'] is True
+
+
+
+def test_a_committed_rocm_packet_rebuilt_with_short_windows_is_refused():
+    """The ROCm twin of the reviewer's NVIDIA forgery (the route had the same
+    median-only gap): the committed gfx1201 serial calibration rebuilt at 10
+    launches with one 18% window keeps an in-band median and is refused."""
+    import copy
+    import json
+    import statistics
+    from tessera.compiler.profiler_rocm_evidence import build_rocm_profiler_packet
+    packet = json.loads((_BASELINES / 'gfx1201_ssd_calibrated_pairs_20260926'
+                         / '0-serial-calibration.json').read_text())
+    timing = copy.deepcopy(packet['timing'])
+    events = timing['environment']['per_window_event_ns']
+    devices = [e * (1 - err) for e, err in zip(events, [0.0, 0.01, 0.01, 0.18, 0.01, 0.0, 0.01])]
+    timing['batch_size'] = 10
+    timing['clocks']['device_wall_clock_ns']['provenance']['per_window_ns'] = devices
+    timing['clocks']['device_wall_clock_ns']['provenance']['launches_per_window'] = 10
+    timing['clocks']['device_wall_clock_ns']['value'] = statistics.median(devices)
+    timing['clocks']['device_wall_clock_ns']['raw_value'] = statistics.median(devices)
+    images = packet['instrumentation_comparison']
+    rebuilt = build_rocm_profiler_packet(
+        timing=timing, capture=packet['capture'], uninstrumented=images['uninstrumented'],
+        instrumented=images['instrumented'], source=packet['source'])
+    assert not rebuilt['eligible_for_promotion']
+    assert {'DEVICE_CLOCK_WINDOW_TOO_SHORT', 'DEVICE_CLOCK_WINDOW_DISAGREES'} <= set(
+        rebuilt['ineligibility_reasons'])

@@ -101,7 +101,7 @@ def test_wsl_packet_remains_retain_only() -> None:
     assert "INSTRUMENTATION_OVERHEAD_EXCEEDED" in packet["ineligibility_reasons"]
 
 
-def _wsl_witness_timing(device_ns: int = 10_000, event_ns: int = 10_100,
+def _wsl_witness_timing(device_ns: int = 1_000_000, event_ns: int = 1_010_000,
                         image_sha256: str = "image-clean", architecture: str = "gfx1151") -> dict:
     """WSL, no KFD: the device clock is the promotion clock, the HIP event its
     agreeing witness, and the profiler slot is unavailable."""
@@ -358,9 +358,23 @@ def test_every_committed_rocm_calibration_packet_still_validates() -> None:
     assert packets, "no committed ROCm SSD calibration packets found"
     for path in packets:
         payload = json.loads(path.read_text())
-        validate_rocm_profiler_packet(payload)
         packet_dir = path.relative_to(root).parts[0]
         assert payload["architecture"] == packet_dir.split("_", 1)[0]
+        # Admission evidence (a packet directory's top level) must still
+        # validate. Two interleaved-protocol packets kept as history
+        # (`superseded/second_6e6904dc_short_window`, 100-launch windows of
+        # ~1.6 ms, and `diagnostics/launches_probe`) were stored as eligible
+        # before the per-window rule existed; their windows are shorter than
+        # the 5 ms ROCm minimum, so their stored verdict no longer derives.
+        # That is the rule working on exactly the evidence that motivated it
+        # (NVIDIA pre-PR review, 2026-09-26), not a regression.
+        if {"superseded", "diagnostics"} & set(path.relative_to(root).parts):
+            try:
+                validate_rocm_profiler_packet(payload)
+            except Exception as exc:  # noqa: BLE001 - the message is the assertion
+                assert "DEVICE_CLOCK_WINDOW" in str(exc), (path, exc)
+            continue
+        validate_rocm_profiler_packet(payload)
 
 
 def test_a_rebuilt_packet_relabelled_to_another_chip_is_refused() -> None:

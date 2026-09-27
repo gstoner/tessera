@@ -11573,8 +11573,8 @@
         64
       ],
       "candidates": {
-        "fused_paged_attention": 0.10402159690856932,
-        "staged_paged_attention": 0.8986680030822753
+        "fused_paged_attention": 0.10401840209960939,
+        "staged_paged_attention": 1.2348567962646484
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -11595,12 +11595,12 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 0.10402159690856932,
+      "latency_ms": 0.10401840209960939,
       "op": "paged_kv_decode",
       "separation": {
         "factor": 2.0,
-        "margin": 0.884249136998543,
-        "noise": 0.08083259142884525,
+        "margin": 0.9157648057537867,
+        "noise": 0.2842557790681448,
         "runner_up": "staged_paged_attention",
         "separated": true
       },
@@ -11617,8 +11617,8 @@
         64
       ],
       "candidates": {
-        "fused_paged_attention": 1.6662272453308105,
-        "staged_paged_attention": 0.9222480297088623
+        "fused_paged_attention": 1.665507984161377,
+        "staged_paged_attention": 1.2387248039245606
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -11639,14 +11639,14 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 0.9222480297088623,
+      "latency_ms": 1.2387248039245606,
       "op": "paged_kv_decode",
       "separation": {
         "factor": 2.0,
-        "margin": 0.44650525173367905,
-        "noise": 0.17480592721745744,
+        "margin": 0.2562480542245565,
+        "noise": 0.24526706461352163,
         "runner_up": "fused_paged_attention",
-        "separated": true
+        "separated": false
       },
       "target": "nvidia",
       "timing": "device",
@@ -11661,8 +11661,8 @@
         64
       ],
       "candidates": {
-        "fused_paged_attention": 0.4187448024749756,
-        "staged_paged_attention": 0.8788839817047119
+        "fused_paged_attention": 0.4184368133544922,
+        "staged_paged_attention": 1.0634352207183837
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -11683,14 +11683,14 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 0.4187448024749756,
+      "latency_ms": 0.4184368133544922,
       "op": "paged_kv_decode",
       "separation": {
         "factor": 2.0,
-        "margin": 0.5235493976545521,
-        "noise": 0.12384208584668216,
+        "margin": 0.6065234579386743,
+        "noise": 0.3839796874374416,
         "runner_up": "staged_paged_attention",
-        "separated": true
+        "separated": false
       },
       "target": "nvidia",
       "timing": "device",
@@ -11704,7 +11704,7 @@
         64
       ],
       "candidates": {
-        "async_ring": 0.1281589986756444
+        "async_ring": 0.14022599905729294
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -11725,7 +11725,7 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 0.1281589986756444,
+      "latency_ms": 0.14022599905729294,
       "op": "ssm_replay_decode",
       "target": "nvidia",
       "timing": "device",
@@ -11739,7 +11739,7 @@
         128
       ],
       "candidates": {
-        "async_ring": 0.14308499917387962
+        "async_ring": 0.16779999993741512
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -11760,7 +11760,7 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 0.14308499917387962,
+      "latency_ms": 0.16779999993741512,
       "op": "ssm_replay_decode",
       "target": "nvidia",
       "timing": "device",
@@ -12498,8 +12498,8 @@
         64
       ],
       "candidates": {
-        "fused_paged_attention": 3.766559,
-        "staged_paged_attention": 22.667997
+        "fused_paged_attention": 3.8322295,
+        "staged_paged_attention": 29.049349499999998
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -12520,14 +12520,14 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 3.766559,
+      "latency_ms": 3.8322295,
       "op": "paged_kv_decode",
       "separation": {
         "factor": 2.0,
-        "margin": 0.8338380316531716,
-        "noise": 175.19769356694886,
+        "margin": 0.8680786466492132,
+        "noise": 0.2686082407779749,
         "runner_up": "staged_paged_attention",
-        "separated": false
+        "separated": true
       },
       "target": "nvidia",
       "timing": "end_to_end",
@@ -12542,8 +12542,8 @@
         64
       ],
       "candidates": {
-        "fused_paged_attention": 43.639596,
-        "staged_paged_attention": 26.7071185
+        "fused_paged_attention": 43.886552,
+        "staged_paged_attention": 34.173638
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -12564,14 +12564,14 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 26.7071185,
+      "latency_ms": 34.173638,
       "op": "paged_kv_decode",
       "separation": {
         "factor": 2.0,
-        "margin": 0.38800720107491365,
-        "noise": 0.13590472065911072,
+        "margin": 0.22131868550530023,
+        "noise": 0.1999437355745448,
         "runner_up": "fused_paged_attention",
-        "separated": true
+        "separated": false
       },
       "target": "nvidia",
       "timing": "end_to_end",
@@ -12586,8 +12586,8 @@
         64
       ],
       "candidates": {
-        "fused_paged_attention": 12.302549500000001,
-        "staged_paged_attention": 23.352128999999998
+        "fused_paged_attention": 12.256081,
+        "staged_paged_attention": 26.731758
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -12608,14 +12608,14 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 12.302549500000001,
+      "latency_ms": 12.256081,
       "op": "paged_kv_decode",
       "separation": {
         "factor": 2.0,
-        "margin": 0.4731722533735574,
-        "noise": 0.1048094321555446,
+        "margin": 0.5415160873444986,
+        "noise": 0.32106726379707506,
         "runner_up": "staged_paged_attention",
-        "separated": true
+        "separated": false
       },
       "target": "nvidia",
       "timing": "end_to_end",
@@ -12629,7 +12629,7 @@
         64
       ],
       "candidates": {
-        "async_ring": 0.1655204375
+        "async_ring": 0.1749273125
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -12650,7 +12650,7 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 0.1655204375,
+      "latency_ms": 0.1749273125,
       "op": "ssm_replay_decode",
       "target": "nvidia",
       "timing": "end_to_end",
@@ -12664,7 +12664,7 @@
         128
       ],
       "candidates": {
-        "async_ring": 0.17477334374999998
+        "async_ring": 0.21877584375
       },
       "device": "nvidia:sm_120",
       "dtype": "f32",
@@ -12685,7 +12685,7 @@
         },
         "toolchain_digest": "sha256:0feb9fce2b583f67f23ce8f50f381294b6c5868b086fc3a743302c20324db2e4"
       },
-      "latency_ms": 0.17477334374999998,
+      "latency_ms": 0.21877584375,
       "op": "ssm_replay_decode",
       "target": "nvidia",
       "timing": "end_to_end",

@@ -26,7 +26,9 @@ _IMAGE = "f" * 64
 
 def _timing(*, environment: str = "wsl2", event: float = 24_000.0, device: float = 23_900.0,
             architecture: str = "sm_120", target: str = "nvidia_sm120",
-            digests: dict | None = None) -> dict:
+            digests: dict | None = None, name: str = "NVIDIA GeForce RTX 5070",
+            windows_device: list | None = None, windows_event: list | None = None,
+            launches: int = 1000) -> dict:
     return build_timing_sample(
         sample_id="sm120-serial-0",
         target=target,
@@ -36,15 +38,18 @@ def _timing(*, environment: str = "wsl2", event: float = 24_000.0, device: float
             "device_wall_clock_ns": measured_clock(
                 "device_wall_clock_ns", source="device_wall_clock", value=device,
                 instrumented=True, calibrated_against=("cuda_event_ns",),
-                eligible_for_promotion=True, provenance={"clock": "%globaltimer"}),
+                eligible_for_promotion=True,
+                provenance={"clock": "%globaltimer", "launches_per_window": 1000,
+                            "per_window_ns": windows_device or [device] * 7}),
             "profiler_activity_ns": unavailable_clock(
                 "profiler_activity_ns", source="cupti_activity", reason="NOT_CAPTURED"),
         },
         artifact_digests=digests if digests is not None else {"application_image": _IMAGE},
-        batch_size=1000, warm_state="warm", synchronization="cuEventSynchronize",
+        batch_size=launches, warm_state="warm", synchronization="cuEventSynchronize",
         execution_environment=environment,
-        environment={"run_id": "r0", "device_identity": {"architecture": architecture,
-                                                          "name": "NVIDIA GeForce RTX 5070"}},
+        environment={"run_id": "r0", "per_window_event_ns": windows_event or [event] * 7,
+                     "device_identity": {"architecture": architecture, "name": name,
+                                         "uuid": "cba12639821a7a104cd3f918f9c0a545"}},
     )
 
 
@@ -130,3 +135,74 @@ def test_the_validator_rederives_every_verdict() -> None:
     tampered["timing"]["clocks"]["cuda_event_ns"]["value"] = 24_001.0
     with pytest.raises(NVIDIADeviceClockPacketError, match="digest"):
         validate_nvidia_device_clock_packet(tampered)
+
+
+def _forged_short_window_timing() -> dict:
+    """The reviewer's forgery: the committed sm_120 packet rebuilt at 10
+    launches per window, per-window errors up to 18%, median error 3.5%."""
+    event = [99_000.0] * 7
+    errors = [0.035, 0.035, 0.035, 0.18, 0.18, -0.18, 0.0]
+    device = [e * (1 - err) for e, err in zip(event, errors)]
+    import statistics
+    return _timing(event=statistics.median(event), device=statistics.median(device),
+                   windows_device=device, windows_event=event, launches=10)
+
+
+def test_a_short_window_packet_with_agreeing_medians_is_refused() -> None:
+    timing = _forged_short_window_timing()
+    # The median check alone admits it: 3.5% is inside the band.
+    packet = build_nvidia_device_clock_packet(
+        timing=timing, uninstrumented=_image(99_000.0, instrumented=False),
+        instrumented=_image(99_000.0, instrumented=True),
+        source={"source_commit": _COMMIT, "worktree_dirty": False})
+    assert packet["eligible_for_promotion"] is False
+    assert "DEVICE_CLOCK_WINDOW_TOO_SHORT" in packet["ineligibility_reasons"]
+    assert "DEVICE_CLOCK_WINDOW_DISAGREES" in packet["ineligibility_reasons"]
+
+
+def test_long_windows_still_refuse_one_disagreeing_window() -> None:
+    event = [24_000.0] * 7
+    device = [24_000.0 * 0.999] * 6 + [24_000.0 * 0.82]
+    import statistics
+    packet = build_nvidia_device_clock_packet(
+        timing=_timing(event=statistics.median(event), device=statistics.median(device),
+                       windows_device=device, windows_event=event),
+        uninstrumented=_image(23_950.0, instrumented=False),
+        instrumented=_image(24_000.0, instrumented=True),
+        source={"source_commit": _COMMIT, "worktree_dirty": False})
+    assert packet["ineligibility_reasons"] == ["DEVICE_CLOCK_WINDOW_DISAGREES"]
+
+
+def test_windows_must_be_the_ones_the_medians_came_from() -> None:
+    packet = build_nvidia_device_clock_packet(
+        timing=_timing(windows_device=[30_000.0] * 7),
+        uninstrumented=_image(23_950.0, instrumented=False),
+        instrumented=_image(24_000.0, instrumented=True),
+        source={"source_commit": _COMMIT, "worktree_dirty": False})
+    assert "DEVICE_CLOCK_WINDOWS_UNBOUND" in packet["ineligibility_reasons"]
+
+
+def test_an_unvalidated_part_of_the_same_compute_capability_is_refused() -> None:
+    """The window validation came from an RTX 5070; cc 12.0 alone is not it."""
+    packet = _packet(name="NVIDIA GeForce RTX 5070 Ti")
+    assert packet["ineligibility_reasons"] == ["DEVICE_CLOCK_PART_UNVALIDATED"]
+
+
+def test_witness_refusals_keep_their_own_codes() -> None:
+    from tessera.compiler.profiler_timing import witness_refusal_codes
+    assert witness_refusal_codes([
+        "device_wall_clock_ns: no admissible witness (cuda_event_ns) is valid in the sample, "
+        "so the device clock has no independent witness"]) == ["DEVICE_CLOCK_WITNESS_MISSING"]
+    assert witness_refusal_codes([
+        "device_wall_clock_ns: witnesses disagree beyond 5%: cuda_event_ns (9.0%)"]) == [
+        "DEVICE_CLOCK_WITNESS_DISAGREES"]
+
+
+def test_the_committed_sm120_packet_still_validates_under_the_window_rule() -> None:
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2] / "benchmarks/baselines/sm120_ssd_calibrated_pairs_20260926"
+    for path in sorted(root.glob("*-calibration.json")):
+        payload = json.loads(path.read_text())
+        validate_nvidia_device_clock_packet(payload)
+        assert payload["eligible_for_promotion"] is True

@@ -628,7 +628,12 @@ def _elementwise_op(op: ScheduleOp) -> TileOp:
         "resource": _elementwise_resource_estimate(source),
     }
     if source == "tessera.reduce":
-        attrs.setdefault("op", "sum")
+        # The combiner comes from the Graph op's `kind`, never a default
+        # (Decision #21a): the old `setdefault("op", "sum")` stated a sum for
+        # every reduce, including max/min/mean.
+        from .reduction_kind import reduction_kind
+        attrs["op"] = reduction_kind(attrs, where="Tile IR lowering")
+        attrs.pop("kind", None)
         attrs.setdefault("order", "deterministic_tree")
     ops = [TileOp(tile_name, attrs)]
     if source == "tessera.rope":

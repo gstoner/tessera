@@ -743,6 +743,15 @@ def _lower_graph_ops(
                             if "reshard_plan_digest" in op.kwargs
                             else {}
                         ),
+                        # A reduce's combiner and shape keys are semantic;
+                        # dropping them here let Tile IR state op = "sum" for
+                        # every reduce (Decision #32; NVIDIA pre-PR review).
+                        **(
+                            {k: op.kwargs[k] for k in ("kind", "op", "axis", "keepdims")
+                             if k in op.kwargs}
+                            if op_name == "tessera.reduce"
+                            else {}
+                        ),
                         "vectorize": True,
                     },
                     operands=list(op.operands),

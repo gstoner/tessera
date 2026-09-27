@@ -1519,8 +1519,11 @@ def _reduction_contract(module: GraphIRModule) -> tuple[str, str, int, bool] | N
         else "mean"
     )
     if op.op_name == "tessera.reduce":
-        kind = str(op.kwargs.get("kind", "sum"))
-        if kind not in {"sum", "mean", "max", "min"}:
+        # A kind-less reduce is not a sum (Decision #21a): refuse the contract.
+        from .reduction_kind import reduction_kind
+        try:
+            kind = reduction_kind(op.kwargs, where="NVIDIA reduction contract")
+        except ValueError:
             return None
     return arg.ir_type.dtype, kind, axis, keepdims
 
@@ -2782,6 +2785,9 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     norm = artifact.family == "norm"
     # NaN policy is semantic (Decision #21a); a reduction's validated policy is
     # carried into the descriptor, not dropped at this boundary (Decision #32).
+    # Provenance parity only: the kernel honours the IR's policy either way,
+    # and today the only reader of provenance["nan_mode"] is a device test
+    # (Decision #29 -- a declaration whose sole consumer is a test).
     nan_mode: str | None = None
     if norm:
         if (artifact.kind not in {"rmsnorm", "layernorm"} or artifact.axis != -1

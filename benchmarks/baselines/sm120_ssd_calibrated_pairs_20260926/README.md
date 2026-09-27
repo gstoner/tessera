@@ -57,8 +57,9 @@ the timing lock (`globaltimer_marker_probe.{json,txt}`):
   after the same span-reset + synchronize gap
   (`window_protocol: interleaved_alternating_plain_bracketed`). The clean image
   is never modified.
-- **Windows:** serial ~99.2 us/launch (99 ms windows); cooperative 12.0-23.2
-  us/launch across processes (12-23 ms windows).
+- **Windows:** serial ~99.2 us/launch (99 ms windows); cooperative windows
+  of ~10-26 us/launch (10-26 ms), with the spread **inside** processes, not
+  between them (see "Not claimed").
 - **Per-process agreement.** All 18 packets are eligible, name their row's
   `run_id` and the measured image, and share source commit `de66d702` with the
   comparison. Device clock below the CUDA event by 0.030-0.066% (serial) and
@@ -70,10 +71,18 @@ the timing lock (`globaltimer_marker_probe.{json,txt}`):
 
 - **No kernel-only time.** The span and the event both cover the whole
   window, launch gaps included.
-- **The cooperative variant's per-process spread (12.0-23.2 us/launch) is not
-  explained.** It moved the pair ratios from 4.3x to 8.3x; the lower bound
-  uses the second-smallest ratio, so admission is conservative to it, but the
-  cause (clock/power state is the likely one on this part) is not measured.
+- **The cooperative variance is within-process and time-ordered, and its
+  cause is not measured.** Corrected 2026-09-26 (pre-PR review; the first
+  version called it per-process). In pairs 5 and 7 the windows run slow and
+  then fast inside one process -- pair 7's plain windows, in order: 23.0,
+  23.5, 26.1, 23.7, 19.5, 13.3, 13.4 us/launch; pair 5's: 14.9, 23.2, 23.7,
+  23.7, 23.7, 19.8, 17.3 -- while the other seven processes stay near 12-15
+  us/launch throughout. A GPU clock ramp or a late warm-up is the obvious
+  **hypothesis, not a finding**: no clock or power-state reading was taken.
+  Because each process's median is taken over its own windows, these two
+  processes moved the pair ratios (4.27-4.33x against 6.7-8.3x for the rest);
+  the lower bound uses the second-smallest ratio, so admission is
+  conservative to them.
 - **The lowest bracketed/plain ratio, 0.9558 (cooperative), sits close to the
   two-sided band edge (1/1.05 = 0.952).** It passed; a noisier run could refuse
   on `INSTRUMENTATION_CHANGED_THE_KERNEL` even though the image is identical,

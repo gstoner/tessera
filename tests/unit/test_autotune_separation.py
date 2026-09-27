@@ -99,14 +99,14 @@ def test_the_noisier_of_the_two_lanes_sets_the_floor():
 
 
 def test_the_runner_up_is_named():
-    v = separation_verdict({"a": 1.0, "b": 2.0, "c": 5.0}, {}, "a")
+    v = separation_verdict({"a": 1.0, "b": 2.0, "c": 5.0}, {"a": 0.01, "b": 0.01}, "a")
     assert v["runner_up"] == "b", "the margin is against the second-fastest"
 
 
 def test_the_factor_is_recorded_with_the_verdict():
     """So a later change to the bar is visible in old records rather than
     silently re-interpreting them."""
-    v = separation_verdict({"a": 1.0, "b": 2.0}, {}, "a")
+    v = separation_verdict({"a": 1.0, "b": 2.0}, {"a": 0.01, "b": 0.01}, "a")
     assert v["factor"] == SEPARATION_FACTOR
 
 
@@ -114,9 +114,13 @@ def test_the_factor_is_recorded_with_the_verdict():
 # relative_spread
 # --------------------------------------------------------------------------
 
-def test_spread_of_a_single_sample_is_zero_not_an_error():
-    assert relative_spread([1.0]) == 0.0
-    assert relative_spread([]) == 0.0
+def test_spread_of_a_single_sample_is_unmeasured_not_zero():
+    """One sample has no spread; 0.0 read as 'no noise' and separated any
+    margin (NVIDIA pre-PR review, 2026-09-26)."""
+    assert relative_spread([1.0]) is None
+    assert relative_spread([]) is None
+    assert separation_verdict({"a": 1.0, "b": 2.0}, {"a": None, "b": 0.01}, "a") is None
+    assert separation_verdict({"a": 1.0, "b": 2.0}, {"b": 0.01}, "a") is None
 
 
 def test_spread_is_relative_so_it_compares_across_magnitudes():

@@ -37,11 +37,12 @@ nvidia todos). Logs are `.txt` because the repo ignores `*.log`.
   and `nvidia_sm120_test5_route_resources.json`: the 92 recorder keys plus 6 new composed
   `end_to_end` keys. The-Super-Bear (RTX 5070, WSL2, CUDA 13.4 / driver 610.88), clean worktree
   at `4e699f7e`, every timing run under `flock /tmp/tessera-timing.lock`.
-- `sm120_serving.json` — `benchmarks/nvidia/benchmark_serving.py --update-corpus`, same host
-  and commit: the 5 `paged_kv_decode` / `ssm_replay_decode` device keys plus 5 new
-  `end_to_end` keys. Fused and staged paged routes are now measured interleaved over 20
-  reps, and each row carries its separation verdict, so the paged-attention warm start is
-  served again.
+- `sm120_serving.json` — `benchmarks/nvidia/benchmark_serving.py --update-corpus`: the 5
+  `paged_kv_decode` / `ssm_replay_decode` device keys plus 5 `end_to_end` keys. **Re-recorded
+  2026-09-26 at `9111b1b6`** after the review (untimed warm-up of both routes; one-sample
+  spreads no longer read as zero noise); only these 10 rows changed. Fused and staged are
+  measured interleaved over 20 reps and each row carries its separation verdict: 128 tokens
+  separates (fused), 512 and 2048 do not, so the warm start serves 128 only.
 - `sm120_reproducibility.txt` — `record_autotune_reproducibility.py`: 38 selector-eligible
   sm_120 rows, all admitted strictly; the refreshed
   `nvidia_sm120_autotune_reproducibility.json` is its output.

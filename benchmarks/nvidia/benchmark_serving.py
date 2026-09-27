@@ -131,7 +131,7 @@ _PAGED_ROUTES = ("fused", "staged")
 
 
 def _paged_kv_rows(tokens: int, heads: int, dim: int, page_size: int,
-                   reps: int) -> list[dict[str, Any]]:
+                   reps: int, warmup: int = 3) -> list[dict[str, Any]]:
     """Both paged routes on one problem, measured INTERLEAVED and repeated.
 
     Each rep runs both routes back to back, alternating which goes first, so a
@@ -158,6 +158,13 @@ def _paged_kv_rows(tokens: int, heads: int, dim: int, page_size: int,
         k[physical] = logical_k[logical]
         v[physical] = logical_v[logical]
     indices = np.arange(tokens, dtype=np.int64)
+    # Untimed warm-up of both routes first, so a first-call compile or module
+    # load is never a sample (review: the fused 128-token route's first
+    # end_to_end sample was 3031 ms against ~3.8 ms steady).
+    for _ in range(warmup):
+        for route in _PAGED_ROUTES:
+            run_paged_attention_resident_f32(
+                q, k, v, table, indices, scale=dim ** -.5, causal=True, route=route)
     wall: dict[str, list[float]] = {route: [] for route in _PAGED_ROUTES}
     device: dict[str, list[float]] = {route: [] for route in _PAGED_ROUTES}
     for rep in range(reps):
@@ -176,7 +183,7 @@ def _paged_kv_rows(tokens: int, heads: int, dim: int, page_size: int,
         "page_size": page_size, "page_mapping": "permuted",
         "causal_offset": tokens - 1,
         "boundary_relation": ("exact" if tokens % page_size == 0 else "ragged"),
-        "reps": reps, "sampling": "interleaved_alternating",
+        "reps": reps, "warmup": warmup, "sampling": "interleaved_alternating",
         "latency_ms": _median(wall[route]),
         "device_latency_ms": _median(device[route]),
         "end_to_end_samples_ms": wall[route],
@@ -204,7 +211,7 @@ def update_d2_corpus(rows: list[dict[str, Any]]) -> Path:
     cache = at.MeasureCache()
     at.load_corpus(cache=cache)
     groups: dict[tuple[str, str, str, str], dict[str, float]] = {}
-    spreads: dict[tuple[str, str, str, str], dict[str, float]] = {}
+    spreads: dict[tuple[str, str, str, str], dict[str, float | None]] = {}
     for row in rows:
         for timing, field, samples in (
                 (at.TIMING_DEVICE, "device_latency_ms", "device_samples_ms"),
@@ -214,6 +221,8 @@ def update_d2_corpus(rows: list[dict[str, Any]]) -> Path:
             key = (str(row["op"]), str(row["shape"]), str(row["dtype"]), timing)
             groups.setdefault(key, {})[str(row["mode"])] = float(row[field])
             if samples in row:
+                # `relative_spread` is None below two samples, and a verdict
+                # then does not exist (it used to read one sample as zero noise).
                 spreads.setdefault(key, {})[str(row["mode"])] = at.relative_spread(
                     [float(v) for v in row[samples]])
     for key, candidates in groups.items():

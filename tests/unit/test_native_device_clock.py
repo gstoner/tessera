@@ -66,7 +66,8 @@ def test_the_sass_check_requires_two_globaltimer_reads_and_two_span_atomics(
     monkeypatch.setattr(ndc.subprocess, "run", fake(good))
     ndc._require_globaltimer_and_atomics(b"fatbin")
     for bad in (good.replace("CS2R R4, SR_GLOBALTIMERLO ;\nREDG.E.MAX", "REDG.E.MAX"),
-                good.replace("REDG.E.MAX.64", "STG.E.64")):
+                good.replace("REDG.E.MAX.64", "STG.E.64"),
+                good.replace("REDG.E.MAX.64", "REDG.E.MIN.64")):   # two MINs: no end stamp
         monkeypatch.setattr(ndc.subprocess, "run", fake(bad))
         with pytest.raises(ValueError, match="must read %globaltimer twice"):
             ndc._require_globaltimer_and_atomics(b"fatbin")

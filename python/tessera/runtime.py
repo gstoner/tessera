@@ -21759,7 +21759,8 @@ def _execute_apple_gpu_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> 
     kwargs = op.get("kwargs") or {}
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
-    red_kwargs = {"axis": kwargs.get("axis", None), "keepdims": bool(kwargs.get("keepdims", False))}
+    red_kwargs = {"axis": kwargs.get("axis", None), "keepdims": bool(kwargs.get("keepdims", False)),
+                  "kind": "sum"}  # this executor accepts tessera.sum only (checked above)
     # The row describes the native MPSGraph route, but anything the dispatch
     # actually computes in numpy — an unavailable device or ABI binding, and
     # equally a non-float dtype or 0-d input — must be observable as reference
@@ -28095,7 +28096,7 @@ def _execute_apple_gpu_compiled_loss(artifact: RuntimeArtifact, args: Any) -> An
         return output if native else (output, "reference_cpu")
     # none/mean/sum reduction on the MPSGraph reduce lane (op 0 = sum, 1 = mean).
     key = "tessera.mean" if reduction == "mean" else "tessera.reduce"
-    output = np.asarray(_apple_gpu_dispatch_reduce(key, [per], {"axis": None}, np), np.float32)
+    output = np.asarray(_apple_gpu_dispatch_reduce(key, [per], {"axis": None, "kind": "sum"}, np), np.float32)
     return output if native else (output, "reference_cpu")
 
 
@@ -28173,7 +28174,7 @@ def _execute_apple_gpu_compiled_loss_family(artifact: RuntimeArtifact, args: Any
     if reduction == "none":
         return per
     key = "tessera.mean" if reduction == "mean" else "tessera.reduce"
-    return np.asarray(_apple_gpu_dispatch_reduce(key, [per], {"axis": None}, np), np.float32)
+    return np.asarray(_apple_gpu_dispatch_reduce(key, [per], {"axis": None, "kind": "sum"}, np), np.float32)
 
 
 def _execute_rocm_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -41161,6 +41162,13 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict, 
     0-d input, multi-axis arg-reduce, or an unavailable device/ABI binding."""
     x = np.asarray(operands[0])
     kind, op = _APPLE_GPU_REDUCE_OPS[op_name]
+    if op_name == "tessera.reduce":
+        # The table's code 0 (sum) is only the default spelling; the Graph op's
+        # combiner is its `kind`, and a kind-less reduce refuses rather than
+        # summing (NVIDIA pre-PR review, 2026-09-26; Decision #21a).
+        from tessera.compiler.reduction_kind import reduction_kind
+        op = {"sum": 0, "mean": 1, "max": 2, "min": 3}[
+            reduction_kind(kwargs, where="apple_gpu reduce lane")]
     axis = kwargs.get("axis", -1 if kind == "scan" else None)
     keepdims = bool(kwargs.get("keepdims", False))
     ddof = int(kwargs.get("ddof", 0))
@@ -47123,7 +47131,7 @@ def _apple_gpu_dispatch_loss(op_name: str, operands: list[Any], kwargs: dict, np
         if reduction == "none":
             return np.asarray(loss, np.float32)
         opn = "tessera.mean" if reduction == "mean" else "tessera.reduce"
-        return _apple_gpu_dispatch_reduce(opn, [np.asarray(loss, np.float32)], {"axis": None}, np)
+        return _apple_gpu_dispatch_reduce(opn, [np.asarray(loss, np.float32)], {"axis": None, "kind": "sum"}, np)
 
     short = str(op_name)
     a = np.asarray(operands[0], np.float32)
@@ -47167,11 +47175,11 @@ def _apple_gpu_dispatch_loss(op_name: str, operands: list[Any], kwargs: dict, np
             return _L.cross_entropy_loss(a, targets, reduction=reduction)  # gather → host
         lp = _apple_gpu_dispatch_rowop("tessera.log_softmax", [a], {}, np)
         prod = bb("mul", targets, lp)
-        s = _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(prod, np.float32)], {"axis": -1}, np)
+        s = _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(prod, np.float32)], {"axis": -1, "kind": "sum"}, np)
         return reduce_all(u("neg", s))
 
     def sum_last(x: Any) -> Any:
-        return _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(x, np.float32)], {"axis": -1}, np)
+        return _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(x, np.float32)], {"axis": -1, "kind": "sum"}, np)
 
     def clamp_lo(x: Any) -> Any:  # max(x, 1e-12), matches the loss reference
         return _apple_gpu_dispatch_clamp("tessera.clamp", [x], {"min": 1e-12}, np)
@@ -47248,7 +47256,7 @@ def _apple_gpu_dispatch_norm(op_name: str, operands: list[Any], kwargs: dict, np
             "tessera.mul", [np.ascontiguousarray(flat), np.ascontiguousarray(flat)], {}, np
         )
         ss = np.asarray(
-            _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(sq, np.float32)], {"axis": -1}, np), np.float32
+            _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(sq, np.float32)], {"axis": -1, "kind": "sum"}, np), np.float32
         )
         norm = np.sqrt(ss.reshape(rows, 1) + float(kwargs.get("eps", 1e-12)))
         out = (flat / norm).reshape(moved.shape)
@@ -49519,13 +49527,17 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         e = np.exp(x - np.max(x, axis=sm_axis, keepdims=True))
         return e / np.sum(e, axis=sm_axis, keepdims=True)
     if op_name == "tessera.reduce":
-        if str(kwargs.get("op", "sum")) != "sum":
-            raise ValueError("runtime CPU reduce only supports op='sum'")
+        # The combiner is the Graph op's ``kind`` (frontends canonicalize
+        # ``op=`` into it and drop ``op``); reading ``op`` here executed every
+        # reduce as a sum (NVIDIA pre-PR review, 2026-09-26).
+        from tessera.compiler.reduction_kind import apply_reduction, reduction_kind
+        red_kind = reduction_kind(kwargs, where="runtime CPU executor")
         # ``axis`` can be None (reduce over all dims), an int, or
         # a tuple of ints; widen the local variable accordingly.
         axis_raw = kwargs.get("axis", None)
         red_axis: Any = int(axis_raw) if axis_raw is not None else None
-        return np.sum(operands[0], axis=red_axis, keepdims=bool(kwargs.get("keepdims", False)))
+        return apply_reduction(np, red_kind, operands[0], axis=red_axis,
+                               keepdims=bool(kwargs.get("keepdims", False)))
     if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))

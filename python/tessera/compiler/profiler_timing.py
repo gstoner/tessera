@@ -292,6 +292,113 @@ def wsl_promotion_refusals(target: str, clocks: Mapping[str, Mapping[str, Any]])
 NVIDIA_CLOCK_TARGETS = frozenset({"nvidia_sm120"})
 
 
+#: Shortest bracketed window (ns, the whole window: per-launch value times the
+#: launch count) a device-clock calibration may use, per exact target. The
+#: span and the event interval differ by a roughly fixed per-window offset, so
+#: agreement is a property of window LENGTH, and a window short enough for the
+#: offset to dominate must not vouch for anything even if it happens to agree.
+#:
+#: * ``nvidia_sm120`` -- 1 ms. Measured on The-Super-Bear (RTX 5070, WSL2,
+#:   driver 610.88; ``benchmarks/baselines/sm120_ssd_calibrated_pairs_20260926/
+#:   diagnostics/globaltimer_marker_probe.json``): offset ~10-16 us (up to ~46
+#:   us); every window of >= ~1 ms agreed within 5% (worst 3.2%), every
+#:   configuration of <= ~0.36 ms had a window outside it.
+#: * ``rocm_gfx1151`` / ``rocm_gfx1201`` -- 5 ms. gfx1201 showed a ~60 us offset
+#:   and 1.6 ms windows disagreeing by up to 6.8%; the legacy gfx1151 packet's
+#:   1.36 ms windows reached 9.2% per window. No clean boundary was probed on
+#:   ROCm, so this is ~3x the length at which disagreement was seen, and the
+#:   committed interleaved packets' shortest windows (13.4 / 15.8 ms) clear it.
+#:
+#: A target missing here has no minimum and therefore no window route.
+MINIMUM_DEVICE_CLOCK_WINDOW_NS: dict[str, float] = {
+    "nvidia_sm120": 1_000_000.0,
+    "rocm_gfx1151": 5_000_000.0,
+    "rocm_gfx1201": 5_000_000.0,
+}
+
+#: The witness slot whose per-window values a device-clock calibration stores
+#: in ``environment.per_window_event_ns``, per target family.
+_WINDOW_WITNESS = {"nvidia": "cuda_event_ns", "rocm": "hip_event_ns"}
+
+
+def device_clock_window_refusals(timing: Mapping[str, Any]) -> list[str]:
+    """Per-window reasons a marker-bracketed calibration cannot vouch for itself.
+
+    A sample's median device clock agreeing with its median event is not
+    enough (NVIDIA pre-PR review, 2026-09-26): a packet rebuilt at 10 launches
+    per window had per-window errors up to 18% and a median error of 3.5%,
+    and was admitted. This reads the per-window values the recorder stores
+    (``clocks.device_wall_clock_ns.provenance.per_window_ns`` and
+    ``environment.per_window_event_ns``, both per launch) and requires
+
+    * both present, equal in length, finite and positive
+      (``DEVICE_CLOCK_WINDOWS_MISSING``);
+    * the stored medians to be the medians of those windows
+      (``DEVICE_CLOCK_WINDOWS_UNBOUND``);
+    * every window at least :data:`MINIMUM_DEVICE_CLOCK_WINDOW_NS` long
+      (``DEVICE_CLOCK_WINDOW_TOO_SHORT``);
+    * every window's device clock within :data:`CLOCK_AGREEMENT_BAND` of its
+      event (``DEVICE_CLOCK_WINDOW_DISAGREES``).
+    """
+    import statistics
+
+    target = str(timing.get("target", ""))
+    minimum = MINIMUM_DEVICE_CLOCK_WINDOW_NS.get(target)
+    witness = _WINDOW_WITNESS.get(target.split("_", 1)[0])
+    clocks = timing.get("clocks") or {}
+    device = clocks.get("device_wall_clock_ns") or {}
+    per_device: Any = (device.get("provenance") or {}).get("per_window_ns")
+    per_event: Any = (timing.get("environment") or {}).get("per_window_event_ns")
+    launches = timing.get("batch_size")
+
+    def usable(values: Any) -> bool:
+        return (isinstance(values, (list, tuple)) and len(values) > 0
+                and all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                        and math.isfinite(float(v)) and float(v) > 0 for v in values))
+
+    if (minimum is None or witness is None or not usable(per_device) or not usable(per_event)
+            or len(per_device) != len(per_event)
+            or not isinstance(launches, int) or isinstance(launches, bool) or launches <= 0):
+        return ["DEVICE_CLOCK_WINDOWS_MISSING"]
+    per_device = [float(v) for v in per_device]
+    per_event = [float(v) for v in per_event]
+    reasons: list[str] = []
+    stored_device = _clock_ns(device)
+    stored_event = _clock_ns(clocks.get(witness) or {})
+    if (stored_device is None or stored_event is None
+            or not math.isclose(statistics.median(per_device), stored_device, rel_tol=1e-9)
+            or not math.isclose(statistics.median(per_event), stored_event, rel_tol=1e-9)):
+        reasons.append("DEVICE_CLOCK_WINDOWS_UNBOUND")
+    if any(float(event) * launches < minimum for event in per_event):
+        reasons.append("DEVICE_CLOCK_WINDOW_TOO_SHORT")
+    if any(abs(float(event) - float(dev)) / float(event) > CLOCK_AGREEMENT_BAND
+           for dev, event in zip(per_device, per_event)):
+        reasons.append("DEVICE_CLOCK_WINDOW_DISAGREES")
+    return reasons
+
+
+def witness_refusal_codes(refusals: Iterable[str]) -> list[str]:
+    """Stable reason codes for :func:`wsl_promotion_refusals` messages.
+
+    Mapped precisely (review): a missing witness is not a disagreement.
+    """
+    codes: list[str] = []
+    for text in refusals:
+        if "witnesses disagree" in text:
+            code = "DEVICE_CLOCK_WITNESS_DISAGREES"
+        elif "no admissible witness" in text:
+            code = "DEVICE_CLOCK_WITNESS_MISSING"
+        elif "may carry promotion" in text:
+            code = "DEVICE_CLOCK_SLOT_INADMISSIBLE"
+        elif "cannot be expressed in ns" in text:
+            code = "DEVICE_CLOCK_VALUE_UNUSABLE"
+        else:
+            raise ProfilerTimingError(f"unmapped witness refusal: {text!r}")
+        if code not in codes:
+            codes.append(code)
+    return codes
+
+
 def expected_clock_slots(target: str) -> tuple[str, ...]:
     normalized = target.strip().lower().replace("-", "_")
     if normalized.startswith("gfx") or normalized.startswith("rocm"):
@@ -494,6 +601,7 @@ def measure_synchronized_host_batch(
 
 __all__ = [
     "ClockRecord",
+    "MINIMUM_DEVICE_CLOCK_WINDOW_NS",
     "NVIDIA_CLOCK_SLOTS",
     "NVIDIA_CLOCK_TARGETS",
     "PROFILER_TIMING_SCHEMA_VERSION",
@@ -501,6 +609,7 @@ __all__ = [
     "ROCM_CLOCK_SLOTS",
     "X86_CLOCK_SLOTS",
     "build_timing_sample",
+    "device_clock_window_refusals",
     "expected_clock_slots",
     "measure_synchronized_host_batch",
     "measured_clock",
@@ -508,4 +617,5 @@ __all__ = [
     "validate_clock_record",
     "validate_timing_sample",
     "wall_clock_ticks_to_ns",
+    "witness_refusal_codes",
 ]

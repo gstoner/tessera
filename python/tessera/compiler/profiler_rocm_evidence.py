@@ -14,7 +14,9 @@ import json
 from typing import Any, Mapping
 
 from .profiler_rocm_native import validate_rocm_native_capture
-from .profiler_timing import is_wsl_environment, validate_timing_sample, wsl_promotion_refusals
+from .profiler_timing import (
+    device_clock_window_refusals, is_wsl_environment, validate_timing_sample,
+    wsl_promotion_refusals)
 
 
 ROCM_PROFILER_PACKET_SCHEMA_VERSION = "tessera.profiler_rocm_packet.v1"
@@ -224,6 +226,15 @@ def _derive_eligibility(
         digests = timing.get("artifact_digests", {})
         if clean.get("image_sha256") not in set(digests.values()):
             reasons.append("CALIBRATION_IMAGE_UNBOUND")
+        # Per-window agreement and a minimum window (NVIDIA pre-PR review,
+        # 2026-09-26; the ROCm route had the same median-only gap). Applied to
+        # packets recorded under the current window protocol: legacy packets
+        # predate the per-window stamps' meaning, stay readable history, and
+        # are refused at SSD admission by name
+        # (SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY).
+        from .ssd_performance import SSD_CALIBRATION_WINDOW_PROTOCOL
+        if (timing.get("environment") or {}).get("window_protocol") == SSD_CALIBRATION_WINDOW_PROTOCOL:
+            reasons.extend(device_clock_window_refusals(timing))
         diagnostic_gaps = [r for r in reasons if r in _ENVIRONMENT_REASONS]
         reasons = [r for r in reasons if r not in _ENVIRONMENT_REASONS]
     return overhead, reasons, route, diagnostic_gaps

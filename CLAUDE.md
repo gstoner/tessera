@@ -939,7 +939,11 @@ clock of the sample's target whose admissible witnesses (never host wall) are
 valid and all agree within 5% in the same sample. sm_120 still lacks its
 non-profiler kernel-side witness (`%globaltimer`), so CUDA events alone never
 qualify; its Nsight activity-window calibration is admitted on WSL2 as a
-recorded exception.
+recorded exception. **Updated 2026-09-26:** the compiler-built `%globaltimer`
+marker was validated on this RTX 5070 and admitted for sm_120 (per-window
+agreement, windows of at least 1 ms, bound to the validated part; see
+`NVIDIA-GLOBALTIMER-MARKER-2026-09-26` in the NVIDIA plan); CUDA events alone
+still never qualify, and another cc 12.0 part needs its own validation.
 
 ### Apple only — Mac M1 Max (Homebrew, off-venv)
 

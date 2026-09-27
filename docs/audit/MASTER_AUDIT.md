@@ -339,7 +339,7 @@ matches its module fails generation. Read the counts there.
 |---|---|---|
 | Analysis | W2.1 dataflow substrate, per-op memory effects, symbolic-dim equality | Value, alias, effect, memory-dependence and ordered-collective **consumers** (§3 above) |
 | Fusion | One authoritative recognizer; Apple synthesizer F0–F5 | Synthesizer not portable through IR; consumer-driven canonicalization (W5.5); ANN admission of measured candidates (MSW-9) |
-| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log; Decision #11 toolchain/delegate identity in every autotune key and Decision #12 `route`/`route_source`/`timing_source` schema fields (2026-09-26, sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`) | The 97 `nvidia:sm_120` `autotune_corpus.json` rows were **re-recorded on Super-Bear 2026-09-26** under the Decision #11 key (108 rows now, none stale, 38 selector-eligible rows strictly admitted); the sm_120 paged-attention warm start is served again from interleaved, separation-verdicted serving rows (fused / fused / staged at 128 / 512 / 2048 tokens; 512 flipped from staged, open question in the nvidia queue); the 16 `rocm:gfx1151` rows were re-recorded on Princess-Luna 2026-09-26 with unchanged winners, and the gfx1151 paged-KV warm start selects `direct` again; Decision #12 route derivation is wired into `benchmarks/run_all.py` only, the ~35 family recorders still stamp their own route strings; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
+| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log; Decision #11 toolchain/delegate identity in every autotune key and Decision #12 `route`/`route_source`/`timing_source` schema fields (2026-09-26, sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`) | The 97 `nvidia:sm_120` `autotune_corpus.json` rows were **re-recorded on Super-Bear 2026-09-26** under the Decision #11 key (108 rows now, none stale, 38 selector-eligible rows strictly admitted); the sm_120 paged-attention warm start is served from interleaved, separation-verdicted serving rows only where the verdict separates -- after the review's warm-up and one-sample-spread fixes that is 128 tokens (fused); 512 and 2048 are unseparated because the staged route's timing is noisy and has moved (open question in the nvidia queue); the 16 `rocm:gfx1151` rows were re-recorded on Princess-Luna 2026-09-26 with unchanged winners, and the gfx1151 paged-KV warm start selects `direct` again; Decision #12 route derivation is wired into `benchmarks/run_all.py` only, the ~35 family recorders still stamp their own route strings; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
 | Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; split-K has a production consumer on gfx1201 f16/bf16 since 2026-09-26 (ROCM-SPLIT-K-1) -- the per-shape slice rule, fp8/int split and gfx1151 remain open |
 | Memory | `TileBufferReusePass`, `TileBufferArenaPass` on ROCm/NVIDIA | Control-flow path-max sizing; multiple dynamic arenas; measured full-model remat |
 | Cost models | `target_perf.py`, T1 GEMM model, `FusionCost` | T1 failed ranking — replace, do not coefficient-tune; per-arch correlation (NVIDIA-CALIB-1, ROCM-COSTMODEL-T1, X86-CALIB-1, APPLE-CALIB-1); sm_120 and Apple roofline peaks |
@@ -360,9 +360,12 @@ matches its module fails generation. Read the counts there.
   DEVICE-CLOCK-DISCIPLINE before any promotion (the sm_120 `%globaltimer`
   marker now supplies the kernel-side witness, `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`);
   NVIDIA-CALIB-1 corpus descriptors; one block-index convention. The 88
-  pre-existing device-layer failures are root-caused and fixed (one compiler
-  defect, `nan_mode` dropped from reduction provenance; the rest stale tests;
-  `NVIDIA-DEVICE-LAYER-88-2026-09-26`). Future features (not gates):
+  pre-existing device-layer failures are root-caused and fixed (no wrong
+  kernel result: one provenance-parity fix under #32 -- `nan_mode` restored to
+  reduction provenance, a field whose only consumer is a test (#29) -- and the
+  rest stale tests; `NVIDIA-DEVICE-LAYER-88-2026-09-26`). The pre-PR review
+  found a real wrong result nearby: the CPU executors ran every
+  `tessera.reduce` as a sum; fixed (`NVIDIA-PREPR-REVIEW-2026-09-26`). Future features (not gates):
   sm_90 WGMMA, sm_100 tcgen05/TMEM.
 - **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
   The broad production lane still skips Graph/Schedule/Tile; the 78
@@ -488,7 +491,7 @@ matches its module fails generation. Read the counts there.
    rows were re-recorded on Princess-Luna 2026-09-26 (winners unchanged).
    The 97 sm_120 rows were re-recorded on Super-Bear 2026-09-26 (108 rows,
    none stale, 38 strictly admitted; the paged-attention warm start is served
-   again from interleaved, separation-verdicted serving rows; NVIDIA plan under
+   where its verdict separates -- 128 tokens after the review fixes; NVIDIA plan under
    the sync key). Open: move the family recorders onto `route_provenance`.
 4. E2E-REAL-6F census review, then bootstrap absorption (NVIDIA gap families,
    ROCm softmax/reduction/paged-KV first).

@@ -155,8 +155,24 @@ LogicalResult MatmulOp::verify() {
         "scale_k must be a multiple of tile_k and divide the macro K block");
   const bool packedMxfp4 =
       getPhysicalContract() == "rocm_mxfp4_w4a8_exact_v1";
-  if (!getPhysicalContract().empty() && !packedMxfp4 && !foldedFamily)
+  // ROCM-FP8-BLOCKSCALE-1: derived by Graph->Schedule from a conforming
+  // logical scaled_matmul; never authored on the Graph op.
+  const bool fp8W8A8 =
+      getPhysicalContract() == "rocm_fp8_w8a8_blockscale_v1" ||
+      getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1";
+  if (!getPhysicalContract().empty() && !packedMxfp4 && !foldedFamily &&
+      !fp8W8A8)
     return emitOpError("unknown physical_contract");
+  if (getScaleN() < 0 || (getScaleN() > 0) != fp8W8A8)
+    return emitOpError("scale_n is stated exactly for the gfx1201 W8A8 "
+                       "block-scale contract");
+  if (fp8W8A8 &&
+      (getArch() != "gfx1201" || getStorage() != "e4m3" ||
+       getStorageB() != "e4m3" || getScaleK() <= 0 ||
+       getScaleFormat() != "fp32" || getAccum() != "f32" ||
+       getOutput() != "f32" || getBias() || getResidual() ||
+       getActivation() != "none"))
+    return emitOpError("gfx1201 FP8 W8A8 block-scale contract is inconsistent");
   if (packedMxfp4 &&
       (getArch() != "gfx1201" || getStorage() != "e4m3_raw_u8" ||
        getStorageB() != "e2m1_packed_u8" || getScaleK() != 32 ||

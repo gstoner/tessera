@@ -3,10 +3,31 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
+
+The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule
+(raster, register prefetch, vector-scale epilogue, CU mode by row blocks;
+[packet](../../../../benchmarks/baselines/gfx1201_mxfp4_prefill_20260927/README.md)).
+Not applicable here: sm_120 has no folded MXFP4 package; the new keys exist only on the gfx1201 `tessera_rocm.scaled_wmma_gemm` folded contract, and the CU/WGP rule is an RDNA workgroup-mode choice with no CUDA analogue. No shared contract changed.
+
+## `GFX1201-LANES-2026-09-27`: W8A8 block-scaled FP8 — follow-up only if sm_120 wants it
+
+Owner ROCM-FP8-BLOCKSCALE-1 (gfx1201). The logical `tessera.scaled_matmul`
+over e4m3 with fp32 scales now derives `rocm_fp8_w8a8_blockscale{,_nk}_v1` at
+Graph->Schedule, and only on `rocm`/`gfx1201`: on `nvidia_sm120` the same op
+still has no schedule and is refused, exactly as before. Two shared pieces are
+portable and have **no NVVM consumer**: the Tile op
+`tile.fragment_scaled_accumulate` (the architecture consumer owns which
+(row, col) each accumulator register holds) and the `scale_n` field on
+`schedule.matmul` (stated, and digested, only when set -- every existing
+schedule digest is unchanged). An sm_120 W8A8 route would need its own
+consumer for that op (or the native block-scale MMA where the scale format
+allows it) and its own device proof; no gfx1201 number transfers.
 
 ## `NVIDIA-PREPR-REVIEW-2026-09-26`: review fixes to the device-layer and marker work
 

@@ -107,6 +107,12 @@ struct ROCMExecutablePipelineOptions
                      "panel; 0 keeps LLVM's default drained schedule "
                      "(ROCM-SCHED-GROUP-1)"),
       llvm::cl::init(0)};
+  Option<int> scaleGroupPanels{
+      *this, "scale-group-panels",
+      llvm::cl::desc("forwarded to the WMMA GEMM generator: block-scaled "
+                     "panels issued straight-line per inner step of a scale "
+                     "group (ROCM-FP8-BLOCKSCALE-1; -1 = generator default)"),
+      llvm::cl::init(-1)};
   Option<int> kUnroll{*this, "k-unroll",
                       llvm::cl::desc("typed matmul: K slabs per loop iteration"),
                       llvm::cl::init(1)};
@@ -332,7 +338,13 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                int ldsCopyDepth = 1,
                                bool ldsDoubleBuffer = false,
                                int ldsSchedValuPerMma = 0,
-                               bool ldsBRowMajor = false) {
+                               bool ldsBRowMajor = false,
+                               int scaleGroupPanels = -1) {
+  // -1 leaves the generator's measured default in force.
+  const std::string scaleGroupPanelsOption =
+      scaleGroupPanels >= 0
+          ? " scale-group-panels=" + std::to_string(scaleGroupPanels)
+          : std::string();
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -404,6 +416,7 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " lds-waves-m=" + Twine(ldsWavesM) +
                                   " lds-waves-n=" + Twine(ldsWavesN) +
                                   " k-unroll=" + Twine(kUnroll) +
+                                  scaleGroupPanelsOption +
                                   " sched-groups=" + Twine(schedGroups) +
                                   " lds-pad-dwords=" + Twine(ldsPadDwords) +
                                   " lds-copy-width=" + Twine(ldsCopyWidth) +
@@ -581,7 +594,8 @@ static void buildROCMExecutablePipeline(
                        opts.schedGroups, opts.ldsPadDwords,
                        opts.ldsCopyWidth, opts.ldsCopyElide,
                        opts.ldsCopyDepth, opts.ldsDoubleBuffer,
-                       opts.ldsSchedValuPerMma, opts.ldsBRowMajor);
+                       opts.ldsSchedValuPerMma, opts.ldsBRowMajor,
+                       opts.scaleGroupPanels);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

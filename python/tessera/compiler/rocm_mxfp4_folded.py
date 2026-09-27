@@ -6,6 +6,7 @@ be confused with the exact packed-E2M1/K32 ABI.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 from pathlib import Path
 import subprocess
@@ -254,15 +255,260 @@ extern "C" __global__ __launch_bounds__(256) void __ENTRY__(
 '''
 
 
+FOLDED_WORKGROUP_MODES = ("wgp", "cu")
+FOLDED_STAGING_PREFETCH = ("none", "register_next_slab")
+FOLDED_EPILOGUE_SCHEDULES = (
+    "predicated_scalar_scales", "complete_tile_vector_scales",
+)
+#: Largest grouped-raster width accepted. A group at least as tall as the
+#: problem's row-block count is plain M-major order.
+MAX_RASTER_GROUP_M = 64
+
+
+@dataclass(frozen=True)
+class FoldedPrefillSchedule:
+    """Physical load schedule of the BM256/BN64/BK64, TM4/TN2 folded kernel.
+
+    Every field is a performance key (Decision #21a): none changes the tile,
+    the operand bytes, the per-lane WMMA sequence, or any output element's
+    epilogue arithmetic, so every schedule produces bitwise-identical BF16
+    output. The compiled route receives these values from Target IR
+    (``tessera_rocm.scaled_wmma_gemm``); direct packaging defaults to the
+    original schedule so historical controls stay reproducible.
+
+    * ``raster_group_m`` -- 0 launches the N-major 2-D grid; ``g > 0`` a 1-D
+      grid that visits ``g`` row blocks per column block, so CTAs sharing a
+      weight tile are dispatched together.
+    * ``workgroup_mode`` -- ``cu`` compiles with ``-mcumode`` (a workgroup's
+      waves share one CU); ``wgp`` keeps the WGP-mode default.
+    * ``staging_prefetch`` -- ``register_next_slab`` requests the next K64
+      slab's A/B vectors into registers before the current slab's WMMAs and
+      stores them to LDS at the top of the next iteration (complete K64
+      slabs only).
+    * ``epilogue`` -- ``complete_tile_vector_scales`` fetches a wave's 32
+      activation scales as eight vector loads, ahead of use, when the whole
+      CTA tile is in bounds and the scale pointer is 16-byte aligned; every
+      other launch runs the predicated per-element production epilogue.
+    """
+
+    raster_group_m: int = 0
+    workgroup_mode: str = "wgp"
+    staging_prefetch: str = "none"
+    epilogue: str = "predicated_scalar_scales"
+
+    def __post_init__(self) -> None:
+        group = self.raster_group_m
+        if (isinstance(group, bool) or not isinstance(group, int)
+                or not 0 <= group <= MAX_RASTER_GROUP_M):
+            raise ValueError(
+                "folded raster_group_m must be an int in "
+                f"[0, {MAX_RASTER_GROUP_M}] (0 = N-major 2-D grid)"
+            )
+        for name, value, legal in (
+            ("workgroup_mode", self.workgroup_mode, FOLDED_WORKGROUP_MODES),
+            ("staging_prefetch", self.staging_prefetch, FOLDED_STAGING_PREFETCH),
+            ("epilogue", self.epilogue, FOLDED_EPILOGUE_SCHEDULES),
+        ):
+            if value not in legal:
+                raise ValueError(
+                    f"folded schedule {name} must be one of {legal}, got {value!r}"
+                )
+
+    @property
+    def raster(self) -> str:
+        return (f"grouped_m{self.raster_group_m}_1d" if self.raster_group_m
+                else "n_major_2d")
+
+    def compile_flags(self) -> tuple[str, ...]:
+        return ("-mcumode",) if self.workgroup_mode == "cu" else ()
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "raster_group_m": self.raster_group_m,
+            "workgroup_mode": self.workgroup_mode,
+            "staging_prefetch": self.staging_prefetch,
+            "epilogue_schedule": self.epilogue,
+        }
+
+
+#: The schedule every folded package used before GFX1201-LANES-2026-09-27.
+FOLDED_PREFILL_SCHEDULE_V1 = FoldedPrefillSchedule()
+
+
+def folded_prefill_grid(
+    m: int, n: int, schedule: FoldedPrefillSchedule = FOLDED_PREFILL_SCHEDULE_V1,
+) -> tuple[int, int, int]:
+    """Launch grid of the BM256/BN64 kernel under ``schedule``'s raster."""
+    tiles_m, tiles_n = (m + 255) // 256, (n + 63) // 64
+    if schedule.raster_group_m:
+        return (tiles_m * tiles_n, 1, 1)
+    return (tiles_n, tiles_m, 1)
+
+
+def _replace_once(source: str, old: str, new: str, what: str) -> str:
+    if source.count(old) != 1:
+        raise RuntimeError(
+            f"folded MXFP4 template changed near the {what}; review the schedule"
+        )
+    return source.replace(old, new)
+
+
+_TILE_ORIGIN = """  const long m0 = (long)blockIdx.y * 256;
+  const long n0 = (long)blockIdx.x * 64;
+"""
+_GROUPED_TILE_ORIGIN = """  // Grouped M-major rasterization over a 1-D grid: consecutive CTAs visit
+  // up to __GROUP__ row blocks of one column block before advancing it, so
+  // CTAs that read the same weight tile are dispatched together.
+  const long tiles_m = (M + 255) / 256;
+  const long tiles_n = (N + 63) / 64;
+  const long pid = (long)blockIdx.x;
+  const long per_group = (long)__GROUP__ * tiles_n;
+  const long first_m = (pid / per_group) * __GROUP__;
+  const long group_rows =
+      tiles_m - first_m < __GROUP__ ? tiles_m - first_m : __GROUP__;
+  const long local = pid % per_group;
+  const long m0 = (first_m + local % group_rows) * 256;
+  const long n0 = (local / group_rows) * 64;
+"""
+_COPY_START = "    // Uniform, clamped vector copies keep every wave on the barrier path."
+_COPY_END = (
+    "      *reinterpret_cast<copy_u32x4 *>(sB + (tid / 4) * 80 + off) = value;\n"
+    "    }\n"
+)
+_LOOP_HEAD = "  for (long kb = 0; kb < K; kb += 64) {\n"
+_PREFETCH_DECL = """  // Register-staged next K64 slab: four A vectors and one B vector per
+  // thread, requested before the current slab's WMMAs so global latency
+  // overlaps matrix work. Complete K64 slabs only (checked at packaging).
+  copy_u32x4 next_a[4], next_b;
+  auto fetch_slab = [&](long slab_k) __attribute__((always_inline)) {
+#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      const long row = m0 + slot / 4;
+      const long safe = row < M ? row : M - 1;
+      next_a[q] = *reinterpret_cast<const copy_u32x4 *>(
+          A + safe * K + slab_k + (slot & 3) * 16);
+    }
+    const long row = n0 + tid / 4;
+    const long safe = row < N ? row : N - 1;
+    next_b = *reinterpret_cast<const copy_u32x4 *>(
+        B + safe * K + slab_k + (tid & 3) * 16);
+  };
+  fetch_slab(0);
+"""
+_PREFETCH_STASH = """    // Store the register-staged slab; the next one is requested after the
+    // barrier below.
+#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      *reinterpret_cast<copy_u32x4 *>(sA + (slot / 4) * 80 + (slot & 3) * 16) =
+          next_a[q];
+    }
+    *reinterpret_cast<copy_u32x4 *>(sB + (tid / 4) * 80 + (tid & 3) * 16) = next_b;
+"""
+_COMPUTE_ENTRY = "#endif\n    for (int step = 0; step < 4"
+_PREFETCH_ISSUE = (
+    "#endif\n    if (kb + 64 < K) fetch_slab(kb + 64);\n"
+    "    for (int step = 0; step < 4"
+)
+_EPILOGUE_ANCHOR = (
+    "#pragma unroll\n  for (int j = 0; j < 2; ++j) {\n"
+    "    const long n = n0 + wn * 32 + j * 16 + col;"
+)
+_VECTOR_EPILOGUE = """  // Complete-tile epilogue: every output row and column is in bounds, so a
+  // wave's activation scales arrive as vector loads issued ahead of use and
+  // no element is predicated. Each element's arithmetic, including the rare
+  // scale-product fallback, is the per-element expression below verbatim.
+  if (m0 + 256 <= M && n0 + 64 <= N && N <= 16777216 &&
+      (reinterpret_cast<unsigned long>(As) & 15) == 0) {
+    using scale_f32x4 = float __attribute__((ext_vector_type(4)));
+    float row_scale[2];
+#pragma unroll
+    for (int jn = 0; jn < 2; ++jn) {
+      const unsigned char exponent = Ref[n0 + wn * 32 + jn * 16 + col];
+      row_scale[jn] =
+          exponent ? __builtin_bit_cast(float, (unsigned int)exponent << 23) : 0.0f;
+    }
+    const float *As_w = As + m0 + wm * 64 + half;
+    __bf16 *O_w = O + (m0 + wm * 64 + half) * N + n0 + wn * 32 + col;
+    const int n_stride = (int)N;  // N <= 2^24, so 63 * N fits in int
+    scale_f32x4 scale_lo[4], scale_hi[4];
+#pragma unroll
+    for (int im = 0; im < 4; ++im) {
+      scale_lo[im] = *reinterpret_cast<const scale_f32x4 *>(As_w + im * 16);
+      scale_hi[im] = *reinterpret_cast<const scale_f32x4 *>(As_w + im * 16 + 4);
+    }
+#pragma unroll
+    for (int im = 0; im < 4; ++im)
+#pragma unroll
+      for (int jn = 0; jn < 2; ++jn)
+#pragma unroll
+        for (int e = 0; e < 8; ++e) {
+          const float partial = acc[im][jn][e];
+          const float activation_scale =
+              e < 4 ? scale_lo[im][e] : scale_hi[im][e - 4];
+          const float combined_scale = row_scale[jn] * activation_scale;
+          float scaled = partial * combined_scale;
+          if (__builtin_expect(
+                  !__builtin_isfinite(combined_scale) || combined_scale == 0.0f,
+                  0)) {
+            if (partial == 0.0f && __builtin_isfinite(activation_scale))
+              scaled = 0.0f;
+            else
+              scaled = (float)((double)partial * (double)row_scale[jn] *
+                               (double)activation_scale);
+          }
+          O_w[(im * 16 + e) * n_stride + jn * 16] = (__bf16)scaled;
+        }
+    return;
+  }
+"""
+
+
+def _apply_schedule(source: str, schedule: FoldedPrefillSchedule) -> str:
+    """Apply ``schedule`` to the original source through checked edits."""
+    if schedule.raster_group_m:
+        source = _replace_once(
+            source, _TILE_ORIGIN,
+            _GROUPED_TILE_ORIGIN.replace("__GROUP__", str(schedule.raster_group_m)),
+            "tile origin",
+        )
+    if schedule.staging_prefetch == "register_next_slab":
+        start = source.find(_COPY_START)
+        end = source.find(_COPY_END, start)
+        if start < 0 or end < 0 or source.count(_COPY_START) != 1:
+            raise RuntimeError(
+                "folded MXFP4 template changed near the copy block; review the schedule"
+            )
+        source = source[:start] + _PREFETCH_STASH + source[end + len(_COPY_END):]
+        source = _replace_once(source, _LOOP_HEAD, _PREFETCH_DECL + _LOOP_HEAD, "K loop")
+        source = _replace_once(source, _COMPUTE_ENTRY, _PREFETCH_ISSUE, "compute entry")
+    if schedule.epilogue == "complete_tile_vector_scales":
+        source = _replace_once(
+            source, _EPILOGUE_ANCHOR, _VECTOR_EPILOGUE + _EPILOGUE_ANCHOR, "epilogue",
+        )
+    return source
+
+
 def emit_mxfp4_folded_prefill_hip(
     entry: str = "tessera_mxfp4_folded_prefill",
     *, full_k64: bool = False, safe_epilogue: bool = False,
+    schedule: FoldedPrefillSchedule = FOLDED_PREFILL_SCHEDULE_V1,
 ) -> str:
+    """Emit the folded kernel; the default schedule is the original source."""
     if not entry.isidentifier():
         raise ValueError("folded MXFP4 entry must be a C identifier")
-    return (_FOLDED_PREFILL_HIP.replace("__ENTRY__", entry)
-            .replace("__FULL_K64__", "true" if full_k64 else "false")
-            .replace("__SAFE_EPILOGUE__", "1" if safe_epilogue else "0"))
+    if schedule.staging_prefetch != "none" and not full_k64:
+        raise ValueError("folded register prefetch requires complete K64 slabs")
+    if schedule.epilogue != "predicated_scalar_scales" and safe_epilogue:
+        raise ValueError(
+            "the complete-tile vector epilogue is defined for the default "
+            "folded ABI only, not the certified safe-scale epilogue"
+        )
+    source = (_FOLDED_PREFILL_HIP.replace("__ENTRY__", entry)
+              .replace("__FULL_K64__", "true" if full_k64 else "false")
+              .replace("__SAFE_EPILOGUE__", "1" if safe_epilogue else "0"))
+    return _apply_schedule(source, schedule)
 
 
 def package_mxfp4_folded_prefill(
@@ -270,8 +516,16 @@ def package_mxfp4_folded_prefill(
     allow_approximate: bool = False,
     entry: str = "tessera_mxfp4_folded_prefill",
     safe_epilogue_scales: np.ndarray | None = None,
+    schedule: FoldedPrefillSchedule = FOLDED_PREFILL_SCHEDULE_V1,
 ) -> ROCMNativePackage:
-    """Package the opt-in BM256/TM4 route with payload-bound error metadata."""
+    """Package the opt-in BM256/TM4 route with payload-bound error metadata.
+
+    ``schedule`` selects the physical load schedule only (see
+    :class:`FoldedPrefillSchedule`); the compiled route passes the one its
+    Target IR carries.
+    """
+    if not isinstance(schedule, FoldedPrefillSchedule):
+        raise TypeError("folded MXFP4 schedule must be a FoldedPrefillSchedule")
     if not allow_approximate or folded.approximate_policy != "explicit_allow":
         raise ValueError("folded MXFP4 requires explicit approximate policy")
     if min(m, n, k) <= 0 or k % 32:
@@ -289,6 +543,8 @@ def package_mxfp4_folded_prefill(
     # The Graph/Target carrier requires K64 slabs. Direct K32 callers retain
     # the masked final slab; never infer this property inside HIP from a shape.
     full_k64 = k % 64 == 0
+    if schedule.staging_prefetch != "none" and not full_k64:
+        raise ValueError("folded register prefetch requires K divisible by 64")
     safe_certificate = (
         certify_folded_safe_scales(safe_epilogue_scales, folded.row_reference)
         if safe_epilogue_scales is not None else None
@@ -297,6 +553,7 @@ def package_mxfp4_folded_prefill(
         raise ValueError("safe epilogue activation scales disagree with M")
     source = emit_mxfp4_folded_prefill_hip(
         entry, full_k64=full_k64, safe_epilogue=safe_certificate is not None,
+        schedule=schedule,
     )
     abi_id = (
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
@@ -312,7 +569,7 @@ def package_mxfp4_folded_prefill(
         image_path = Path(directory) / "kernel.hsaco"
         source_path.write_text(source)
         command = [
-            str(compiler), "-x", "hip", "-O3", "--genco",
+            str(compiler), "-x", "hip", "-O3", "--genco", *schedule.compile_flags(),
             "--offload-arch=gfx1201", f"--rocm-path={rocm_path}",
             str(source_path), "-o", str(bundle_path),
         ]
@@ -328,7 +585,8 @@ def package_mxfp4_folded_prefill(
         pipeline_name=HAND_EMITTED_HIP_PRODUCER,
         compiler_fingerprint=_version_fingerprint(compiler),
         toolchain_fingerprint=hashlib.sha256(
-            (str(rocm_path) + "|gfx1201|folded_bm256_tm4_v1").encode()
+            (str(rocm_path) + "|gfx1201|folded_bm256_tm4_v1"
+             + "".join("|" + flag for flag in schedule.compile_flags())).encode()
         ).hexdigest(),
         target_ir_digest=hashlib.sha256(source.encode()).hexdigest(),
         binary_format="hsaco", payload=payload,
@@ -352,6 +610,8 @@ def package_mxfp4_folded_prefill(
         "block_m": 256, "block_n": 64, "block_k": 64,
         "tile_m_per_wave": 4, "tile_n_per_wave": 2,
         "staging_policy": "unconditional_k64" if full_k64 else "guarded_k32_tail",
+        "raster": schedule.raster,
+        **schedule.as_dict(),
         "accum": "fp32", "output": "bf16",
         **({
             "epilogue_policy": "host_scale_certified_manual",
@@ -382,7 +642,7 @@ def package_mxfp4_folded_prefill(
             ShapeGuard("output", 0, "eq", m), ShapeGuard("output", 1, "eq", n),
         ),
         geometry=LaunchGeometry(
-            grid=((n + 63) // 64, (m + 255) // 256, 1),
+            grid=folded_prefill_grid(m, n, schedule),
             workgroup=(256, 1, 1),
         ),
         ordering=OrderingSemantics(
@@ -397,8 +657,11 @@ def package_mxfp4_folded_prefill(
 
 
 __all__ = [
-    "FOLDED_WEIGHT_LAYOUT", "GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI",
-    "GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI", "certify_folded_safe_scales",
-    "emit_mxfp4_folded_prefill_hip", "package_mxfp4_folded_prefill",
+    "FOLDED_EPILOGUE_SCHEDULES", "FOLDED_PREFILL_SCHEDULE_V1",
+    "FOLDED_STAGING_PREFETCH", "FOLDED_WEIGHT_LAYOUT", "FOLDED_WORKGROUP_MODES",
+    "FoldedPrefillSchedule", "GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI",
+    "GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI", "MAX_RASTER_GROUP_M",
+    "certify_folded_safe_scales", "emit_mxfp4_folded_prefill_hip",
+    "folded_prefill_grid", "package_mxfp4_folded_prefill",
     "prepare_folded_weights",
 ]

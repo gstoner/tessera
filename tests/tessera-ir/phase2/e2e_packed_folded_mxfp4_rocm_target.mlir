@@ -30,3 +30,9 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // TARGET-SAME: abi = "a_bpacked_sa_scaleplane_d_m_n_k"
 // TARGET-SAME: package_abi = "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1"
 // TARGET-SAME: physical_contract = "rocm_mxfp4_w4a8_packed_folded_prefill_v1"
+// The packed-folded kernel has its own schedule and consumes no folded
+// load-schedule key, so the lowering must not declare one (Decision #29).
+// TARGET-NOT: raster_group_m
+// TARGET-NOT: workgroup_mode
+// TARGET-NOT: staging_prefetch
+// TARGET-NOT: epilogue_schedule

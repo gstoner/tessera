@@ -8,6 +8,7 @@ import re
 from .rocm_mxfp4 import FoldedRowReference
 from .rocm_mxfp4_folded import (
     GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+    FoldedPrefillSchedule,
     package_mxfp4_folded_prefill,
 )
 from .rocm_mxfp4_native import (
@@ -93,8 +94,17 @@ def package_folded_scaled_wmma_target_ir(
     }.items():
         if _target_string_attr(policy_match.group(1), name) != expected:
             raise ValueError(f"folded Target IR requires numeric_policy.{name}={expected!r}")
+    # The physical load schedule is a Target IR contract: the lowering chooses
+    # it, the materializer only consumes it. Missing keys fail closed; values
+    # outside the declared sets are refused by FoldedPrefillSchedule.
+    schedule = FoldedPrefillSchedule(
+        raster_group_m=_target_integer_attr(operation, "raster_group_m"),
+        workgroup_mode=_target_string_attr(operation, "workgroup_mode"),
+        staging_prefetch=_target_string_attr(operation, "staging_prefetch"),
+        epilogue=_target_string_attr(operation, "epilogue_schedule"),
+    )
     package = package_mxfp4_folded_prefill(
-        m, n, k, folded, allow_approximate=allow_approximate,
+        m, n, k, folded, allow_approximate=allow_approximate, schedule=schedule,
     )
     digest = hashlib.sha256(target_ir.encode()).hexdigest()
     image = replace(package.image, target_ir_digest=digest)

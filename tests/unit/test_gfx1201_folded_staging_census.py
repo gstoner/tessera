@@ -97,13 +97,15 @@ def test_frontend_matched_packet_and_static_census_are_content_bound() -> None:
     assert matched["device"] == census["device"] == "AMD Radeon RX 9070 XT"
     assert matched["radiance"]["wperm"] == 1
     assert matched["radiance"]["weight_layout"] == "fragment_order"
-    for key, source in {
-        "frontend_sha256": "python/tessera/compiler/rocm_mxfp4_folded_frontend.py",
-        "materializer_sha256": "python/tessera/compiler/rocm_mxfp4_folded_carrier.py",
-    }.items():
-        assert matched[key] == hashlib.sha256(
-            (ROOT / source).read_bytes(),
-        ).hexdigest()
+    # Historical since GFX1201-LANES-2026-09-27: the frontend and materializer
+    # now carry the Target IR load schedule; this matched packet measured the
+    # original (V1) schedule and stays pinned to the sources it measured.
+    assert matched["frontend_sha256"] == (
+        "bedb4272bf2c9de73bfbe25367732d4038359fab7caed95934703db5f5a0750b"
+    )
+    assert matched["materializer_sha256"] == (
+        "5fa20cfe34b4df26ffe74984ac6b0536f7f91e1b6d3af0c7c84a4933c70461f2"
+    )
     assert matched["folded_generator_sha256"] == (
         "14eecec2445bc2ea4a00a4958778ab927da4354dad2e3c8a48dac59952583087"
     )

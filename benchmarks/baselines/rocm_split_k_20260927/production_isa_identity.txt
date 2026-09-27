@@ -1,0 +1,35 @@
+host=tajasarus commit=0db0def270e7eed95b9c30bc858b6d8a2cb924ad dirty=0 opt=/home/angstorms/programming/tessera-w-splitk/build/tools/tessera-opt/tessera-opt
+cmd: python benchmarks/baselines/rocm_split_k_20260927/production_isa_identity.py
+fp16 16x64x2048 S= 8 k_unroll= 1 same_isa
+fp16 16x128x2048 S= 8 k_unroll= 1 same_isa
+fp16 16x256x2048 S= 8 k_unroll= 1 same_isa
+fp16 16x256x7168 S= 16 k_unroll= 1 same_isa
+fp16 32x256x7168 S= 8 k_unroll= 1 same_isa
+fp16 64x128x4096 S= 8 k_unroll= 1 same_isa
+fp16 16x8x4096 S= 16 k_unroll= 1 same_isa
+fp16 16x256x256 S= 1 k_unroll= 1 same_isa
+fp16 32x128x512 S= 2 k_unroll= 1 same_isa
+fp16 64x64x1024 S= 4 k_unroll= 1 same_isa
+fp16 48x96x1536 S= 4 k_unroll= 1 same_isa
+fp16 16x768x2048 S= 4 k_unroll= 1 same_isa
+fp16 16x2048x768 S= 2 k_unroll= 1 same_isa
+fp16 64x512x2048 S= 2 k_unroll= 1 same_isa
+fp16 32x1536x4096 S= 1 k_unroll= 1 same_isa
+fp16 16x2048x7168 S= 2 k_unroll= 1 same_isa
+bf16 16x64x2048 S= 8 k_unroll= 1 same_isa
+bf16 16x128x2048 S= 8 k_unroll= 1 same_isa
+bf16 16x256x2048 S= 8 k_unroll= 1 same_isa
+bf16 16x256x7168 S= 16 k_unroll= 1 same_isa
+bf16 32x256x7168 S= 8 k_unroll= 1 same_isa
+bf16 64x128x4096 S= 8 k_unroll= 1 same_isa
+bf16 16x8x4096 S= 16 k_unroll= 1 same_isa
+bf16 16x256x256 S= 1 k_unroll= 1 same_isa
+bf16 32x128x512 S= 2 k_unroll= 1 same_isa
+bf16 64x64x1024 S= 4 k_unroll= 1 same_isa
+bf16 48x96x1536 S= 4 k_unroll= 1 same_isa
+bf16 16x768x2048 S= 4 k_unroll= 1 same_isa
+bf16 16x2048x768 S= 2 k_unroll= 1 same_isa
+bf16 64x512x2048 S= 2 k_unroll= 1 same_isa
+bf16 32x1536x4096 S= 1 k_unroll= 1 same_isa
+bf16 16x2048x7168 S= 2 k_unroll= 1 same_isa
+same 32 different 0

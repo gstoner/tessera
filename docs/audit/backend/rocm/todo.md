@@ -1,11 +1,64 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## GFX1201 folded MXFP4 load schedule in Target IR — 2026-09-27
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-LANES-2026-09-27`. **Shared contract
+changed (ROCm-only):** `tessera_rocm.scaled_wmma_gemm` gains four optional
+attributes that Tile→ROCm emits only for `rocm_mxfp4_w4a8_folded_prefill_v1`
+(`raster_group_m`, `workgroup_mode`, `staging_prefetch`,
+`epilogue_schedule`). The folded materializer requires all four and refuses a
+missing or undeclared value; the packed-folded fixture checks they are absent
+there (`TARGET-NOT`).
+
+- **What it selects.** Raster group 4, register-staged next K64 slab,
+  complete-tile vector-scale epilogue (16-byte-aligned scales, CTA-uniform
+  bounds; every other launch runs the predicated per-element epilogue), and
+  `-mcumode` once M spans ≥ 2 BM256 row blocks. Direct
+  `package_mxfp4_folded_prefill` keeps the original schedule, and its
+  emitted source is byte-identical to the relabel-era generator
+  (`v1_source_identity.json`; the relabel test now checks that instead of the
+  file hash).
+- **Evidence (Tajasarus RX 9070 XT, clean `61f5fd19`).** Three processes, device-clock
+  marker windows witnessed by HIP events (≤ 2.3% disagreement), all engines
+  bitwise equal to exact K32. Selected/original 0.93–0.94× (256×5120×8704)
+  and 0.79–0.80× (1024×17408×5120); selected/Radiance 1.06–1.07× and
+  0.98–1.01×. Across all ten shapes: faster than the original
+  everywhere; 0.86–1.01× Radiance at M ≥ 1024, 1.06–1.27× at M ≤ 256.
+  WMMA 32 and barriers 2+2 unchanged; VGPR 109→123; no spills/scratch.
+  [Packet](../../../../benchmarks/baselines/gfx1201_mxfp4_prefill_20260927/README.md).
+- **Measured negative.** Unconditional K16 steps (−7%/−2%), LDS fragment
+  double-buffering (−6%/−1.5% alone, ≤ +1.6% on top at 150 VGPRs), CU mode at
+  one row block (−3% to −10%). LDS-only barrier fences were neutral. Hot-operand
+  probes bound operand traffic at ≤ 4.7% on the one-row-block shape.
+- **Device proof.** Folded device file 26/26 with both normal and
+  assertions-ON `tessera-opt`. The new cases are nonuniform/ragged/lossy bitwise
+  oracle checks, the vector-epilogue extreme-scale fallback, and a misaligned
+  scale pointer. All MXFP4 device files pass 114/114. IR lit 451 pass / 66
+  unsupported, and `check-tessera-rocm` 82/82, on both trees.
+- **Open.** The one-row-block gap to Radiance is not operand traffic. CU mode's
+  mechanism is unattributed (no `/dev/kfd`). The row-block rule is fitted on
+  gfx1201 only, and gfx1151 has no folded route. Exact K32 stays default, folded
+  stays opt-in, and there is no automatic selection. The assertions tree needs
+  `CMAKE_CXX_FLAGS="-fno-rtti -UNDEBUG"`, because that LLVM prefix is RTTI-off;
+  without it every tool fails to link on `typeinfo for mlir::Pass`.
+
+## ROCM-FP8-BLOCKSCALE-1: logical W8A8 block scaling bound on gfx1201 — 2026-09-27
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1); sync `GFX1201-LANES-2026-09-27`. **Landed for gfx1201 e4m3 x e4m3 with fp32 block scales; device-proven and timed against AITER on Tajasarus.**
+
+- **Contract, derived.** Graph->Schedule turns an fp32-scale e4m3 `tessera.scaled_matmul` into `rocm_fp8_w8a8_blockscale_v1` (B `[K, N]`) or `_nk_v1` (weight `[N, K]`, `transposeB`), gfx1201 only. `scale_layout.block = [scale_n, scale_k]`; `lhs_scale` fp32 `[M, K/scale_k]`, `rhs_scale` fp32 `[K/scale_k, ceil(N/scale_n)]`; static M/N/K with K a whole number of groups; `execution_mode` absent or `exact_per_block`. Anything else with fp32 scales is `ROCM_FP8_BLOCKSCALE_CONTRACT`, never an unbound directive. MX-format logical forms are unchanged (still unbound).
+- **Codegen.** `generate-wmma-gemm-kernel` consumes `tile.scaled_matmul_kernel` under that contract: A/B/lhs_scale/rhs_scale/D/M/N/K ABI, register body only, each group a zero-initialised partial walked in `scale-group-panels` steps (performance key, default 2) and joined through `tile.fragment_scaled_accumulate`, whose TileToROCM consumer uses the same accumulator element map as the fragment store (refactored into one `accumulatorElementCoordinate`). The `_nk` weight is a column-major B view, so its fragment is one K-contiguous load. Split-K, LDS staging, fused epilogues and non-f32 stores refuse by name.
+- **Panel rule** (`selectFp8W8A8BlockScalePanel`): 32x32 when M and N are whole 32s and that gives >= 256 tiles, else 16 rows (and 16 columns when N is not a whole 32). The unscaled 64x64 panel does not transfer: a group partial per fragment doubles the live accumulators (32x32 is 231 VGPRs; 64x64 spills 337).
+- **Evidence** [`benchmarks/baselines/gfx1201_fp8_blockscale_20260927/`](../../../../benchmarks/baselines/gfx1201_fp8_blockscale_20260927/README.md): 23 device rows vs an fp64 oracle (bit-equal on exact inputs, ISA and structure asserted), both trees; lit 453 / 66 unsupported and `check-tessera-rocm` 82/82 on both trees. Device clock, paired, vs AITER's unmodified `gemm_a8w8_blockscale` (Triton 3.8 AOT, tuned gfx1201 JSON): `[N, K]` / AITER geomean **0.65 at M <= 64, 1.09 at M = 256, 1.31 at M >= 1024**. We lose large M.
+- **Sibling outcome.** gfx1151: not applicable (RDNA 3.5 has no FP8 WMMA; the derivation is gfx1201-only). NVIDIA: follow-up only if sm_120 wants W8A8 -- the new Tile op has no NVVM consumer. Apple / x86: not applicable. Every non-W8A8 schedule digest is unchanged (`scale_n` is stated only when set).
+- **Open.** Large-M W8A8 (an LDS-staged or multi-wave body; 64x32 was 13% faster at 4096^3 only); a bf16/f16 store epilogue (AITER stores bf16); AITER's split-K buckets (unmeasured); the `[K, N]` B gather; MXFP4 reuse of the same combine op.
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable (no ROCm change)
 
@@ -251,6 +304,32 @@ Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-
 - **Evidence (Tajasarus, RX 9070 XT, WSL2).** Device tests `tests/unit/test_rocm_split_k.py` (router 16x256x2048 and ragged 15x200x2048, fp16/bf16, none / bias+gelu / bias+relu, bit-identical reruns, an unsplit 128x256x2048 control, forged-descriptor refusals): 41 passed at `1387cd1b`, log committed as `benchmarks/baselines/rocm_split_k_20260926/device_tests_gfx1201.txt`. Timing [`benchmarks/baselines/rocm_split_k_20260926/gfx1201.json`](../../../../benchmarks/baselines/rocm_split_k_20260926/gfx1201.json), paired and interleaved, 3 runs x 15 rounds x 200 iterations, host wall clock (not promotion-eligible): selected S=2 is **2.05x (fp16) / 2.01x (bf16)** faster than the unsplit kernel of the same Tile IR, 45/45 rounds each, both launches counted. Measurement-only sweep: S=4 2.52-2.58x, S=8 2.79-2.80x -- the rule is conservative on this shape (why is unmeasured: no counters on WSL2); not retuned from one shape (follow-up).
 - **Sibling outcome.** gfx1151: not applicable by rule (never split; no Princess-Luna run, no claim). NVIDIA / x86 / Apple: not applicable (the rule is gfx1201-only; schedule digests of every unsplit schedule are unchanged).
 - **Open.** A per-shape slice rule once more than one shape is measured; fp8/int8 split (i32 workspace would be exact); a device-clock witness for the timing; LDS-body split.
+
+## ROCM-SPLIT-K-1 follow-on: device-clock slice sweep, measured target — 2026-09-27
+
+Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-1). Sync `GFX1201-LANES-2026-09-27`. **The slice rule is measured, and the timing is on the admitted device clock.**
+
+- **Rule changed (C++ decider and Python oracle together).** Split when `2 x tiles <= 256` (a measured workgroup target, gfx1201 only: `_SPLIT_K_TARGET_WORKGROUPS` / `kGfx1201SplitKTargetWorkgroups`). S is the largest power of two `<= min(32, 256/tiles)` whose slices are whole `block_k=32` blocks of >= 256. This replaces tiles < 32 WGPs with `S = ceil(32/tiles)`. The rule was chosen because every selection is positive in f16 and bf16, not because it hits each shape's peak. It is within ~10% of the best S on most shapes.
+- **Evidence.** [`benchmarks/baselines/rocm_split_k_20260927/`](../../../../benchmarks/baselines/rocm_split_k_20260927/README.md) has the full table, packets and device-test log.
+  - 16 shapes x 2 storages x S in {1..32}, on Tajasarus.
+  - Clock: compiler-built marker device clock with a HIP-event witness per window, `device_clock_witness` route.
+  - Protocol: 3 fresh processes x 9 interleaved rounds.
+  - Router 16x256x2048: S=2 -> 8, 2.18x -> 3.40x (fp16).
+  - Newly split: 16x768x2048 S=4 2.43x, 32x256x7168 S=8 4.80x, 64x128x4096 S=8 3.85x, 64x512x2048 S=2 1.82x.
+  - Never selected, measured negative or neutral: 192 tiles; tiles x S >= 1024; 128-wide slices at K=256.
+- **Caveats.**
+  - 16x2048x768 S=2 (1.12-1.24x) is admitted in only 1-2 of 3 runs. The two-sided marker-overhead gate refuses it sporadically.
+  - Absolute times depend on the window length (long unsplit kernels ran 25-35% slower in 50 ms windows), so ratios are compared within one sweep.
+  - Why splitting pays past one workgroup per WGP is unmeasured; there are no counters on WSL2.
+- **Open.**
+  - fp8 split: the generator gate would admit an f32-accumulate fp8 contract; no device proof.
+  - int8 split: needs an i32 workspace.
+  - gfx1151: unmeasured, never split; gfx1201 evidence does not transfer.
+  - M > 64, dynamic K, the LDS body.
+  - A workspace pool for `runtime.launch` (it allocates per call).
+- **Sibling outcomes.**
+  - gfx1151: not applicable by rule. The target table has no gfx1151 entry, so nothing splits there, which is correct for an unmeasured part.
+  - NVIDIA / Apple / x86: not applicable. The rule is gfx1201-only, and unsplit digests are unchanged.
 
 ## Streaming STFT on `target="rocm"` claims gfx1151 on a gfx1201 host — 2026-09-26
 

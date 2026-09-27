@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: root
 ---
 
@@ -331,7 +331,7 @@ matches its module fails generation. Read the counts there.
 | AD | General nested persistent tapes; native SAVE/RECOMPUTE plans; real batching; sparse coloring; native jets; KKT/IFT | [AUTODIFF plan](compiler/AUTODIFF_EXECUTION_PLAN.md): W4-PRODUCT-1 → AD-RESIDUAL-EVAL-1 → W2.4a / AD-HIGHER-1 |
 | Control flow | Source-CFG recovery, multi-block regions, Presburger constraints, scan JVP/VJP | §2 above |
 | Distributed | Typed fail-closed placement lattice, reshard insertion, native NCCL/RCCL and MPI beyond two ranks | DIST-NATIVE-1, TSOL-SHARD-1 |
-| Numeric policy | Typed carrier below Graph IR; nvfp4 vs mxfp4 distinguishable below Graph; FP8 block-scale as a schedule change | NUMPOL-CARRIER-1, ROCM-FP8-BLOCKSCALE-1 → MXFP4-W4A8 → NVFP4-INGEST; [`dtype_flow`](generated/dtype_flow.md) |
+| Numeric policy | Typed carrier below Graph IR; nvfp4 vs mxfp4 distinguishable below Graph; FP8 block-scale bound on the gfx1201 typed route (2026-09-27) but slower than AITER at M >= 256 | NUMPOL-CARRIER-1, ROCM-FP8-BLOCKSCALE-1 (large-M perf) → MXFP4-W4A8 → NVFP4-INGEST; [`dtype_flow`](generated/dtype_flow.md) |
 
 ### Optimization foundation, by layer
 

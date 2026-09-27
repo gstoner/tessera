@@ -97,7 +97,7 @@ def test_folded_materializer_refuses_exact_or_mismatched_carrier() -> None:
         allow_approximate=True,
     )
     tile = '''tile.scaled_matmul_kernel {physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", partial_accumulator = {combine = "row_reference_after_full_k", cross_step_motion = "forbid", init = "zero", instruction_steps = 4 : i64, schedule_scope = "k_stage", scope = "full_k"}, tessera.macro_tile_m = 256 : i64, tessera.macro_tile_n = 64 : i64, tessera.problem_m = 65 : i64, tessera.problem_n = 48 : i64, tessera.problem_k = 64 : i64, tessera.schedule_hash = "schedule-a", warps = 8 : i64}'''
-    target = f'''tessera_rocm.scaled_wmma_gemm {{abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 65 : i64, macro_k = 64 : i64, n = 48 : i64, numeric_policy = {{accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI}", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, tessera.schedule_hash = "schedule-a", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64}}'''
+    target = f'''tessera_rocm.scaled_wmma_gemm {{abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 65 : i64, macro_k = 64 : i64, n = 48 : i64, numeric_policy = {{accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}}, output = "bf16", package_abi = "{GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI}", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, tessera.schedule_hash = "schedule-a", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, epilogue_schedule = "complete_tile_vector_scales", raster_group_m = 4 : i64, staging_prefetch = "register_next_slab", workgroup_mode = "wgp"}}'''
     with pytest.raises(ValueError, match="schedule hashes disagree"):
         package_folded_scaled_wmma_target_ir(
             tile, target.replace('schedule_hash = "schedule-a"',
@@ -125,6 +125,33 @@ def test_folded_materializer_refuses_exact_or_mismatched_carrier() -> None:
     with pytest.raises(ValueError, match="warps"):
         package_folded_scaled_wmma_target_ir(
             tile.replace("warps = 8", "warps = 4"), target,
+            folded, allow_approximate=True,
+        )
+    # The physical load schedule is a Target IR contract: a missing key fails
+    # closed and an undeclared value is refused before any compilation.
+    with pytest.raises(ValueError, match="missing workgroup_mode"):
+        package_folded_scaled_wmma_target_ir(
+            tile, target.replace(', workgroup_mode = "wgp"', ""),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="missing raster_group_m"):
+        package_folded_scaled_wmma_target_ir(
+            tile, target.replace(", raster_group_m = 4 : i64", ""),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="workgroup_mode must be one of"):
+        package_folded_scaled_wmma_target_ir(
+            tile, target.replace('workgroup_mode = "wgp"', 'workgroup_mode = "wave"'),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="staging_prefetch must be one of"):
+        package_folded_scaled_wmma_target_ir(
+            tile, target.replace('"register_next_slab"', '"lds_double_buffer"'),
+            folded, allow_approximate=True,
+        )
+    with pytest.raises(ValueError, match="raster_group_m must be an int"):
+        package_folded_scaled_wmma_target_ir(
+            tile, target.replace("raster_group_m = 4", "raster_group_m = 65"),
             folded, allow_approximate=True,
         )
     with pytest.raises(ValueError, match="explicit approximate"):

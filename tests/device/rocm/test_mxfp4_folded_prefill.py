@@ -14,7 +14,9 @@ import pytest
 from tessera import runtime as rt
 from tessera.compiler import rocm_mxfp4 as mx
 from tessera.compiler.rocm_mxfp4_folded import (
+    FOLDED_PREFILL_SCHEDULE_V1,
     GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
+    FoldedPrefillSchedule,
     package_mxfp4_folded_prefill, prepare_folded_weights,
 )
 from tessera.compiler.rocm_mxfp4_folded_carrier import (
@@ -82,7 +84,15 @@ def test_frontend_folded_carrier_broad_and_prefill_shapes(
     assert receipt["selected_schedule"] == {
         "block_m": 256, "block_n": 64, "block_k": 64,
         "tile_m_per_wave": 4, "tile_n_per_wave": 2,
+        "raster_group_m": 4,
+        # Target IR chooses CU mode once M spans two BM256 row blocks.
+        "workgroup_mode": "cu" if m > 256 else "wgp",
+        "staging_prefetch": "register_next_slab",
+        "epilogue_schedule": "complete_tile_vector_scales",
     }
+    assert package.descriptor.geometry.grid == (
+        ((m + 255) // 256) * ((n + 63) // 64), 1, 1,
+    )
     rocm_isa.assert_selected(
         package.image.payload, chip="gfx1201",
         pattern=r"v_wmma_f32_16x16x16_\w+",
@@ -464,3 +474,245 @@ def test_folded_graph_pipeline_materializes_and_executes() -> None:
     np.testing.assert_array_equal(
         buffers["output"], np.full((m, n), 32, dtype=ml_dtypes.bfloat16),
     )
+
+
+# ---------------------------------------------------------------------------
+# Load schedule (sync GFX1201-LANES-2026-09-27). Every schedule is a set of
+# performance keys, so each must reproduce the original kernel's BF16 bits on
+# nonuniform, ragged and lossy inputs, and both must match an independent
+# oracle. Activations are drawn from {+-0.5, +-1, +-1.5, +-2} and folded
+# weights are multiples of 2^-9 bounded by 6, so every FP32 partial is exact
+# at these K and the oracle can be bitwise: FP32 partial x FP32 combined
+# scale, rounded once to BF16, exactly as the kernel computes it.
+
+_ACTIVATION_CODES = np.array(
+    [0x30, 0x38, 0x3C, 0x40, 0xB0, 0xB8, 0xBC, 0xC0], dtype=np.uint8,
+)
+_SINGLE_KEY_SCHEDULES = (
+    FoldedPrefillSchedule(raster_group_m=4),
+    FoldedPrefillSchedule(workgroup_mode="cu"),
+    FoldedPrefillSchedule(staging_prefetch="register_next_slab"),
+    FoldedPrefillSchedule(epilogue="complete_tile_vector_scales"),
+)
+
+
+def _nonuniform_case(m: int, n: int, k: int, *, lossy: bool, seed: int):
+    rng = np.random.default_rng(seed)
+    a = _ACTIVATION_CODES[rng.integers(0, len(_ACTIVATION_CODES), size=(m, k))]
+    a_scale = np.ldexp(
+        rng.uniform(1.0, 2.0, size=m), rng.integers(-4, 5, size=m),
+    ).astype(np.float32)
+    codes = rng.integers(0, 16, size=(n, k), dtype=np.uint8)
+    base = rng.integers(120, 131, size=(1, n))
+    spread = 12 if lossy else 2
+    scales = (base + rng.integers(0, spread + 1, size=(k // 32, n))).astype(np.uint8)
+    folded = prepare_folded_weights(
+        mx.pack_e2m1_codes(codes), scales, allow_approximate=True,
+    )
+    return np.ascontiguousarray(a), a_scale, folded
+
+
+def _folded_oracle(a: np.ndarray, a_scale: np.ndarray, folded) -> np.ndarray:
+    activation = a.view(ml_dtypes.float8_e4m3fn).astype(np.float64)
+    weight = folded.weight_bytes.view(ml_dtypes.float8_e4m3fn).astype(np.float64)
+    partial = activation @ weight.T
+    assert np.array_equal(partial, partial.astype(np.float32).astype(np.float64)), (
+        "the bitwise oracle requires exact FP32 partials"
+    )
+    row = np.ldexp(
+        np.float32(1), folded.row_reference.astype(np.int32) - 127,
+    ).astype(np.float32)
+    row[folded.row_reference == 0] = np.float32(0)
+    combined = (row[None, :] * a_scale[:, None]).astype(np.float32)
+    return (partial.astype(np.float32) * combined).astype(ml_dtypes.bfloat16)
+
+
+def _launch_folded(package, a, a_scale, folded) -> np.ndarray:
+    m, k = a.shape
+    n = folded.weight_bytes.shape[0]
+    output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir,
+    )
+    result = rt.launch(
+        artifact,
+        {"buffers": {
+            "a": a, "b_folded": folded.weight_bytes, "a_scale": a_scale,
+            "row_reference": folded.row_reference, "output": output,
+        }, "scalars": {"M": m, "N": n, "K": k}},
+    )
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(
+        result, default=str,
+    )
+    return output
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+@pytest.mark.parametrize("shape", [
+    (257, 80, 64),     # two row blocks (CU mode), one slab, ragged M/N
+    (300, 100, 128),   # ragged in both dimensions, two slabs
+    (256, 64, 128),    # one complete tile, WGP mode, vector epilogue
+    (512, 128, 192),   # complete tiles, CU mode, three slabs
+])
+@pytest.mark.parametrize("lossy", [False, True])
+def test_load_schedule_preserves_bits_on_nonuniform_inputs(
+    shape: tuple[int, int, int], lossy: bool,
+) -> None:
+    assert rt._rocm_live_arch() == "gfx1201"
+    tessera_opt = os.environ.get("TESSERA_OPT")
+    assert tessera_opt, "compiled-route proof requires TESSERA_OPT"
+    m, n, k = shape
+    a, a_scale, folded = _nonuniform_case(m, n, k, lossy=lossy, seed=m * 7 + n + k)
+    if lossy:
+        assert not folded.lossless and folded.inexact_value_count > 0
+    else:
+        assert folded.lossless
+    expected = _folded_oracle(a, a_scale, folded)
+    original = _launch_folded(
+        package_mxfp4_folded_prefill(
+            m, n, k, folded, allow_approximate=True,
+            schedule=FOLDED_PREFILL_SCHEDULE_V1,
+        ),
+        a, a_scale, folded,
+    )
+    np.testing.assert_array_equal(original.view(np.uint16), expected.view(np.uint16))
+    program = compile_folded_scaled_matmul(
+        a, a_scale, folded, tessera_opt=Path(tessera_opt), allow_approximate=True,
+    )
+    selected = program.route_receipt["selected_schedule"]
+    assert selected["workgroup_mode"] == ("cu" if m > 256 else "wgp")
+    assert selected["staging_prefetch"] == "register_next_slab"
+    rocm_isa.assert_selected(
+        program.package.image.payload, chip="gfx1201",
+        pattern=r"v_wmma_f32_16x16x16_\w+",
+        require="v_wmma_f32_16x16x16_fp8_fp8",
+        what="scheduled folded MXFP4 prefill",
+    )
+    compiled = _launch_folded(program.package, a, a_scale, folded)
+    np.testing.assert_array_equal(
+        compiled.view(np.uint16), original.view(np.uint16),
+        err_msg="compiled-route load schedule changed BF16 output bits",
+    )
+    if shape == (512, 128, 192):
+        for schedule in _SINGLE_KEY_SCHEDULES:
+            single = _launch_folded(
+                package_mxfp4_folded_prefill(
+                    m, n, k, folded, allow_approximate=True, schedule=schedule,
+                ),
+                a, a_scale, folded,
+            )
+            np.testing.assert_array_equal(
+                single.view(np.uint16), original.view(np.uint16),
+                err_msg=f"{schedule} changed BF16 output bits",
+            )
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+@pytest.mark.parametrize("case", ("zero_partial", "finite_after_overflow"))
+def test_vector_epilogue_keeps_extreme_scale_fallback(case: str) -> None:
+    """A complete tile takes the vector epilogue; its fallback must still run."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, n, k = 512, 64, 64
+    codes = np.zeros((n, k), dtype=np.uint8)
+    scales = np.full((2, n), 254, dtype=np.uint8)
+    if case == "finite_after_overflow":
+        codes[:, :32] = 1  # E2M1 0.5; delta 8 folds to E4M3 2^-9.
+        scales[0, :] = 246
+        activation, activation_scale = 0x01, np.float32(2.0 ** 9)
+        expected = np.float32(2.0 ** 123)
+    else:
+        activation, activation_scale = 0x38, np.float32(2.0 ** 127)
+        expected = np.float32(0)
+    folded = prepare_folded_weights(
+        mx.pack_e2m1_codes(codes), scales, allow_approximate=True,
+    )
+    schedule = FoldedPrefillSchedule(
+        raster_group_m=4, workgroup_mode="cu",
+        staging_prefetch="register_next_slab",
+        epilogue="complete_tile_vector_scales",
+    )
+    output = _launch_folded(
+        package_mxfp4_folded_prefill(
+            m, n, k, folded, allow_approximate=True, schedule=schedule,
+        ),
+        np.full((m, k), activation, dtype=np.uint8),
+        np.full(m, activation_scale, dtype=np.float32), folded,
+    )
+    np.testing.assert_array_equal(
+        output, np.full((m, n), expected, dtype=ml_dtypes.bfloat16),
+    )
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+def test_vector_epilogue_refuses_misaligned_scales_and_stays_correct() -> None:
+    """A 4-byte-offset scale pointer must take the predicated epilogue."""
+    import ctypes
+
+    assert rt._rocm_live_arch() == "gfx1201"
+    m, n, k = 256, 64, 128
+    a, a_scale, folded = _nonuniform_case(m, n, k, lossy=False, seed=11)
+    expected = _folded_oracle(a, a_scale, folded)
+    package = package_mxfp4_folded_prefill(
+        m, n, k, folded, allow_approximate=True,
+        schedule=FoldedPrefillSchedule(epilogue="complete_tile_vector_scales"),
+    )
+    hip = rt._load_hip_for_launch()
+    assert hip is not None and hip.hipInit(0) == 0
+    module, function = ctypes.c_void_p(), ctypes.c_void_p()
+    assert hip.hipModuleLoadData(ctypes.byref(module), package.image.payload) == 0
+    pointers: list[ctypes.c_void_p] = []
+    output = np.zeros((m, n), dtype=ml_dtypes.bfloat16)
+    try:
+        assert hip.hipModuleGetFunction(
+            ctypes.byref(function), module, package.descriptor.entry_symbol.encode(),
+        ) == 0
+        shifted_scale = np.zeros(m + 1, dtype=np.float32)
+        shifted_scale[1:] = a_scale
+        hosts = (a, folded.weight_bytes, shifted_scale, folded.row_reference, output)
+        for host in hosts:
+            pointer = ctypes.c_void_p()
+            assert hip.hipMalloc(ctypes.byref(pointer), int(host.nbytes)) == 0
+            pointers.append(pointer)
+            assert hip.hipMemcpy(
+                pointer, host.ctypes.data_as(ctypes.c_void_p), int(host.nbytes), 1,
+            ) == 0
+        # hipMalloc returns 256-byte-aligned memory, so +4 bytes defeats the
+        # kernel's 16-byte alignment test and forces the predicated epilogue.
+        assert pointers[2].value is not None and pointers[2].value % 16 == 0
+        values = [
+            ctypes.c_void_p(pointers[0].value), ctypes.c_void_p(pointers[1].value),
+            ctypes.c_void_p(pointers[2].value + 4), ctypes.c_void_p(pointers[3].value),
+            ctypes.c_void_p(pointers[4].value),
+            ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k),
+        ]
+        arguments = (ctypes.c_void_p * len(values))(
+            *[ctypes.cast(ctypes.byref(value), ctypes.c_void_p) for value in values]
+        )
+        grid = package.descriptor.geometry.grid
+        assert grid is not None
+        assert hip.hipModuleLaunchKernel(
+            function, *grid, 256, 1, 1, 0, None, arguments, None,
+        ) == 0
+        assert hip.hipDeviceSynchronize() == 0
+        assert hip.hipMemcpy(
+            output.ctypes.data_as(ctypes.c_void_p), pointers[4], int(output.nbytes), 2,
+        ) == 0
+    finally:
+        for pointer in pointers:
+            hip.hipFree(pointer)
+        hip.hipModuleUnload(module)
+    np.testing.assert_array_equal(output.view(np.uint16), expected.view(np.uint16))

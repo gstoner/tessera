@@ -31,6 +31,7 @@ import math
 from dataclasses import dataclass
 
 from .rocm_target import (
+    AMDArch,
     dispatch_slots,
     ROCmTargetProfile,
     TesseraROCmTargetError,
@@ -352,6 +353,30 @@ def _register_macro_tile(candidate: TileCandidate) -> tuple[int, int]:
     )
 
 
+#: Total workgroups (output tiles x slices) split-K may fill, per arch -- a
+#: MEASURED target, gfx1201 only (ROCM-SPLIT-K-1 follow-on, 2026-09-27, sync
+#: GFX1201-LANES-2026-09-27; `benchmarks/baselines/rocm_split_k_20260927/`).
+#: A device-clock slice sweep over 16 skinny shapes x {f16, bf16} x S in
+#: {1..32} found splitting pays well past one workgroup per WGP (16x768x2048,
+#: 48 tiles: 2.4x at S=4; 64x512x2048, 128 tiles: 1.8x at S=2) and stops paying
+#: past this target (32x1536x4096, 192 tiles: neutral at S=2, a loss from S=8;
+#: 16x2048x768 and 64x512x2048 lose at tiles x S = 1024 / 4096). 256 is the
+#: target positive at every measured point, not the per-shape peak. Mirrors
+#: `kGfx1201SplitKTargetWorkgroups` in PMPasses.cpp; the projection check keeps
+#: the two equal. A part missing here keeps the pre-sweep, UNMEASURED occupancy
+#: trigger (tiles < WGPs) in the ranking only: nothing splits there.
+_SPLIT_K_TARGET_WORKGROUPS: dict[AMDArch, int] = {AMDArch.GFX_1201: 256}
+
+#: The largest slice count the 2026-09-27 sweep measured. Mirrors
+#: `kSplitKMaxSlices` in PMPasses.cpp.
+SPLIT_K_MAX_SLICES = 32
+
+
+def split_k_target_workgroups(profile: ROCmTargetProfile) -> int | None:
+    """The measured split-K workgroup target for this arch, or None."""
+    return _SPLIT_K_TARGET_WORKGROUPS.get(profile.arch)
+
+
 def _split_k_required(
     candidate: TileCandidate,
     profile: ROCmTargetProfile,
@@ -362,10 +387,14 @@ def _split_k_required(
     """Whether split-K is needed, keyed on occupancy. None when undeterminable.
 
     Split-K exists to put work on units that would otherwise idle, so the
-    question is how many output tiles the problem produces against how many
-    units can run one. On RDNA a workgroup occupies a WGP, so the denominator
-    is WGPs -- `rocm_target.dispatch_slots` carries that, measured, and returns
-    None for a part nobody has measured.
+    question is how many workgroups the problem produces against how many the
+    machine keeps busy. On an arch with a measured target
+    (`_SPLIT_K_TARGET_WORKGROUPS`, gfx1201) the answer is yes when even a
+    two-way split stays within it (``2 * tiles <= target``). Elsewhere the
+    ranking keeps the pre-sweep trigger -- fewer output tiles than WGPs,
+    `rocm_target.dispatch_slots` -- which is UNMEASURED as a split rule and has
+    no split consumer (only gfx1201 splits). None for a part whose slot count
+    nobody has measured.
 
     An LDS overflow still forces it regardless of occupancy: the tile does not
     fit as configured and K must be cut.
@@ -386,15 +415,20 @@ def _split_k_required(
     if m <= 0 or n <= 0:
         return None
     tiles = _ceil_div(m, candidate.tile.m) * _ceil_div(n, candidate.tile.n)
+    target = split_k_target_workgroups(profile)
+    if target is not None:
+        return 2 * tiles <= target
     return tiles < slots
 
 
 
-#: Smallest contraction extent one split-K slice may carry. An UNMEASURED
-#: guard, stated as one: below it the second launch and the fp32 workspace
-#: round trip are not plausibly repaid, and splitting K=64 into two 32-wide
-#: slices is not what ROCM-SPLIT-K-1 exists for. Mirrors `kSplitKMinSliceK`
-#: in PMPasses.cpp; the projection check keeps the two equal.
+#: Smallest contraction extent one split-K slice may carry. Measured at its
+#: boundary on 2026-09-27 (gfx1201): K=256 split into 128-wide slices LOSES at
+#: every S (0.89-0.92x, f16 and bf16), K=512 into two 256-wide slices gains
+#: 1.16-1.18x. Narrower slices were positive at larger K (64x64x1024 at S=16),
+#: so the guard is conservative there; it is kept rather than generalized from
+#: two small-K shapes. Mirrors `kSplitKMinSliceK` in PMPasses.cpp; the
+#: projection check keeps the two equal.
 SPLIT_K_MIN_SLICE_K = 256
 
 
@@ -418,10 +452,11 @@ def select_split_k(
     `RankedTileCandidate.split_k_required`, which is why that field is no
     longer marked unwired.
 
-    Rule: the ranking says split-K is required (fewer output tiles than
-    workgroup slots, or LDS overflow). Take enough slices to give every WGP a
-    workgroup -- ``ceil(slots / tiles)`` -- rounded down to a power of two, and
-    only as far as each slice stays a whole number of macro K blocks
+    Rule (measured 2026-09-27, see `_SPLIT_K_TARGET_WORKGROUPS`): the ranking
+    says split-K is required (a two-way split fits the workgroup target, or
+    LDS overflow). Take the most slices the target allows --
+    ``min(SPLIT_K_MAX_SLICES, target // tiles)`` -- rounded down to a power of
+    two, and only as far as each slice stays a whole number of macro K blocks
     (``block_k``, ROCM-MACRO-K-TILE-1) of at least `SPLIT_K_MIN_SLICE_K`.
     A split partitions the macro K tile, so with no K block (``block_k == 0``)
     there is nothing to split.
@@ -441,11 +476,11 @@ def select_split_k(
         profile, problem=(m, n))[0]
     if ranked.split_k_required is not True:
         return 1, None
-    slots = dispatch_slots(profile.arch, WorkgroupProcessorMode.WGP)
-    if slots is None:
-        return 1, "no measured dispatch-slot count for this arch"
+    target = split_k_target_workgroups(profile)
+    if target is None:
+        return 1, "no measured split-K workgroup target for this arch"
     tiles = _ceil_div(m, tile_m) * _ceil_div(n, tile_n)
-    wanted = _ceil_div(slots, tiles)
+    wanted = min(SPLIT_K_MAX_SLICES, target // tiles)
     chosen = 1
     slices = 2
     while slices <= wanted:
@@ -458,9 +493,9 @@ def select_split_k(
         # which emits no ROCM_SPLIT_K_NOT_APPLIED warning here.
         return 1, None
     if chosen == 1:
-        return 1, (f"{tiles} output tiles on {slots} WGPs asks for split-K, but "
-                   f"K={k} has no 2-way split into whole macro K blocks "
-                   f"(block_k={block_k}) of at least {SPLIT_K_MIN_SLICE_K}")
+        return 1, (f"{tiles} output tiles under the {target}-workgroup split-K target "
+                   f"ask for split-K, but K={k} has no 2-way split into whole macro K "
+                   f"blocks (block_k={block_k}) of at least {SPLIT_K_MIN_SLICE_K}")
     return chosen, None
 
 
@@ -581,7 +616,9 @@ def rank_candidates(
         lds_margin = profile.lds_capacity_bytes - lds_with_padding
         macro_tile = _register_macro_tile(cand)
         # Re-keyed on OCCUPANCY 2026-09-20 (first half of ROCM-SPLIT-K-1);
-        # consumed by `select_split_k` since 2026-09-26 (the second half).
+        # consumed by `select_split_k` since 2026-09-26 (the second half);
+        # on gfx1201 the occupancy target is a measured 256 workgroups since
+        # 2026-09-27 (`_SPLIT_K_TARGET_WORKGROUPS`), not one per WGP.
         #
         # The old predicate was `k > 4096`, which answers False for the shape
         # that needs split-K most: the gfx1201 MoE router gate (M<=16, K=2048,

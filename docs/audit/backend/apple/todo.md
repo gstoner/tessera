@@ -3,10 +3,25 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
+
+The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule
+(raster, register prefetch, vector-scale epilogue, CU mode by row blocks;
+[packet](../../../../benchmarks/baselines/gfx1201_mxfp4_prefill_20260927/README.md)).
+Not applicable here: Apple has no MXFP4/W4A8 folded route; its Metal 4 `matmul2d` FP4/FP8 lane is a different kernel family and consumes none of these Target keys. No shared contract changed.
+
+## `GFX1201-LANES-2026-09-27`: W8A8 block-scaled FP8 — not applicable
+
+ROCM-FP8-BLOCKSCALE-1 binds the logical e4m3 block-scaled matmul on gfx1201
+only; the derivation is gated on `rocm`/`gfx1201` and Apple never schedules a
+`tessera.scaled_matmul`. The new Tile op has no Apple consumer and no Apple
+code path changed. (The Metal 4 `matmul2d` FP8 lane is emulated on macOS 27
+and is a separate item.)
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
 

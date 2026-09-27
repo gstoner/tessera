@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,19 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
+
+The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule
+(raster, register prefetch, vector-scale epilogue, CU mode by row blocks;
+[packet](../../../../benchmarks/baselines/gfx1201_mxfp4_prefill_20260927/README.md)).
+Not applicable here: no x86 MXFP4 folded route exists; the change is confined to the ROCm Target dialect, TileToROCM and the gfx1201 HIP packager. No shared contract changed.
+
+## `GFX1201-LANES-2026-09-27`: W8A8 block-scaled FP8 — not applicable
+
+ROCM-FP8-BLOCKSCALE-1 is a gfx1201 contract (FP8 WMMA). x86 has no FP8
+matmul schedule, never schedules a `tessera.scaled_matmul`, and no x86 path or
+schedule digest changed.
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
 

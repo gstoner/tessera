@@ -1,0 +1,9 @@
+host=tajasarus commit=1dfad816c1316baa706bb2f92edefe9fc32c69a2 dirty=0 opt=/home/angstorms/programming/tessera-w-splitk-base/build/tools/tessera-opt/tessera-opt
+tests/unit/test_source_completion_edges.py:74
+  /home/angstorms/programming/tessera-w-splitk-base/tests/unit/test_source_completion_edges.py:74: SyntaxWarning: 'return' in a 'finally' block
+    return x*x  # noqa: B012 - exercise Python finally overriding a return
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[rocm-True]
+1 failed, 4516 passed, 197 skipped, 20634 deselected, 1 warning in 352.30s (0:05:52)

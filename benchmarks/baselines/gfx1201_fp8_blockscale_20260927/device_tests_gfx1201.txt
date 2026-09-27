@@ -1,0 +1,71 @@
+host: tajasarus  commit: ab2f1a7ff2304f57af7c6efa3494a83ff88d7427  dirty_lines: 0
+device: gfx1201
+TESSERA_OPT (build): /home/angstorms/programming/tessera-w-blockscale/build/tools/tessera-opt/tessera-opt
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0 -- /home/angstorms/programming/tessera/.venv/bin/python
+hypothesis profile 'default'
+rootdir: /home/angstorms/programming/tessera-w-blockscale
+configfile: pyproject.toml
+plugins: xdist-3.8.0, cov-7.1.0, hypothesis-6.168.0, timeout-2.4.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 52 items
+
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_40x72x256_g128_n128-1--1-exact] PASSED [  1%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_40x72x256_g128_n128-1--1-random] PASSED [  3%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_17x19x64_g32_n16-1--1-exact] PASSED [  5%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_17x19x64_g32_n16-1--1-random] PASSED [  7%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_65x130x384_g128_n128-1-0-exact] PASSED [  9%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_65x130x384_g128_n128-1-0-random] PASSED [ 11%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_64x96x192_g64_n1-1-1-exact] PASSED [ 13%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_64x96x192_g64_n1-1-1-random] PASSED [ 15%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_128x256x512_g128_n128-1--1-exact] PASSED [ 17%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_128x256x512_g128_n128-1--1-random] PASSED [ 19%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_96x160x384_g128_n128-2--1-exact] PASSED [ 21%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_96x160x384_g128_n128-2--1-random] PASSED [ 23%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_40x72x256_g128_n128-1--1-exact] PASSED [ 25%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_40x72x256_g128_n128-1--1-random] PASSED [ 26%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_17x19x64_g32_n16-1-1-exact] PASSED [ 28%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_17x19x64_g32_n16-1-1-random] PASSED [ 30%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_65x130x384_g128_n128-1-0-exact] PASSED [ 32%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_65x130x384_g128_n128-1-0-random] PASSED [ 34%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_128x256x512_g128_n128-1--1-exact] PASSED [ 36%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_128x256x512_g128_n128-1--1-random] PASSED [ 38%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_96x160x384_g128_n128-2-4-exact] PASSED [ 40%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[nk_96x160x384_g128_n128-2-4-random] PASSED [ 42%]
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_is_not_a_single_rescale_on_gfx1201 PASSED [ 44%]
+tests/unit/test_rocm_fp8_blockscale.py::test_shape_refuses_partial_groups_and_unaligned_groups PASSED [ 46%]
+tests/unit/test_rocm_fp8_blockscale.py::test_author_states_the_logical_op_and_never_the_contract PASSED [ 48%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_accepts_the_bound_directive[kn] PASSED [ 50%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_accepts_the_bound_directive[nk] PASSED [ 51%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[scale_format = "fp32"-scale_format = "e8m0"] PASSED [ 53%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[execution_mode = "exact_per_block"-execution_mode = "folded_row_reference_explicit_approximate"] PASSED [ 55%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[scale_k = 128 : i64-scale_k = 64 : i64] PASSED [ 57%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[scale_n = 128 : i64-scale_n = 1 : i64] PASSED [ 59%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[output = "f32"-output = "bf16"] PASSED [ 61%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[partial_combine = "scale_outer_product_then_add"-partial_combine = "row_reference_after_full_k"] PASSED [ 63%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[macro_k = 128 : i64-macro_k = 96 : i64] PASSED [ 65%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[block_m = 32 : i64-block_m = 24 : i64] PASSED [ 67%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[storage = "e4m3"-storage = "e5m2"] PASSED [ 69%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[tessera.schedule_hash = "h0"-tessera.schedule_hash = "h1"] PASSED [ 71%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_every_drifted_semantic_field[m = 64 : i64-m = 65 : i64] PASSED [ 73%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_the_other_layouts_directive PASSED [ 75%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_an_unbound_logical_directive PASSED [ 76%]
+tests/unit/test_rocm_fp8_blockscale.py::test_target_check_refuses_a_tile_carrier_that_dropped_isolation PASSED [ 78%]
+tests/unit/test_rocm_fp8_blockscale.py::test_oracle_is_per_group_outer_product_scaling PASSED [ 80%]
+tests/unit/test_rocm_fp8_blockscale.py::test_oracle_refuses_mismatched_scale_extents PASSED [ 82%]
+tests/unit/test_rocm_fp8_blockscale.py::test_pipeline_knob_is_validated_and_reaches_the_pass_string PASSED [ 84%]
+tests/unit/test_rocm_fp8_blockscale.py::test_runtime_admits_both_abis_as_proved_gfx1201_launches PASSED [ 86%]
+tests/unit/test_rocm_fp8_blockscale.py::test_graph_to_tile_derives_the_named_contract[kn-rocm_fp8_w8a8_blockscale_v1] PASSED [ 88%]
+tests/unit/test_rocm_fp8_blockscale.py::test_graph_to_tile_derives_the_named_contract[nk-rocm_fp8_w8a8_blockscale_nk_v1] PASSED [ 90%]
+tests/unit/test_rocm_fp8_blockscale.py::test_w8a8_register_panel_rule[512-512-panel0] PASSED [ 92%]
+tests/unit/test_rocm_fp8_blockscale.py::test_w8a8_register_panel_rule[256-1024-panel1] PASSED [ 94%]
+tests/unit/test_rocm_fp8_blockscale.py::test_w8a8_register_panel_rule[32-4096-panel2] PASSED [ 96%]
+tests/unit/test_rocm_fp8_blockscale.py::test_w8a8_register_panel_rule[48-6144-panel3] PASSED [ 98%]
+tests/unit/test_rocm_fp8_blockscale.py::test_w8a8_register_panel_rule[512-520-panel4] PASSED [100%]
+
+============================== 52 passed in 7.53s ==============================
+== same device file, assertions-ON tessera-opt (/home/angstorms/programming/tessera-w-blockscale/build-assertions/tools/tessera-opt/tessera-opt)
+.......................                                                  [100%]
+23 passed in 10.64s

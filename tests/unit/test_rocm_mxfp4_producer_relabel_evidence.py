@@ -33,8 +33,24 @@ def _sha(path: Path) -> str:
 def test_proof_binds_current_generators_and_checkers() -> None:
     identity = _identity()
     assert identity["architecture"] == "gfx1201"
+    folded = "python/tessera/compiler/rocm_mxfp4_folded.py"
     for path, digest in identity["relabel_generator_sha256"].items():
+        if path == folded:
+            continue  # checked by emitted-source identity below
         assert _sha(ROOT / path) == digest, path
+    # GFX1201-LANES-2026-09-27 added an opt-in load schedule to the folded
+    # generator. Its default emission must still be the relabel-era source
+    # byte for byte, so every kernel this proof covers is unchanged.
+    from tessera.compiler.rocm_mxfp4_folded import emit_mxfp4_folded_prefill_hip
+
+    v1 = json.loads(
+        (BASE / "gfx1201_mxfp4_prefill_20260927/v1_source_identity.json").read_text()
+    )
+    assert v1["relabel_generator_sha256"] == identity["relabel_generator_sha256"][folded]
+    for key, digest in v1["default_emission_sha256"].items():
+        full_k64, safe = (part.split("=")[1] == "true" for part in key.split(","))
+        source = emit_mxfp4_folded_prefill_hip(full_k64=full_k64, safe_epilogue=safe)
+        assert hashlib.sha256(source.encode()).hexdigest() == digest, key
     for name, digest in identity["checker_sha256"].items():
         assert _sha(PROOF / name) == digest, name
 

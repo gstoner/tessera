@@ -3318,6 +3318,50 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/backend/nvidia/todo.md TILE-LATENT-DEFECTS-2026-09-27",
         sprint="TILE-LATENT-DEFECTS-2026-09-27",
     ),
+    # TILE-LATENT-DEFECTS-2026-09-27 — ZeRO configuration reaches the pass.
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_MISSING", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "Optimizer state is marked for sharding but the module carries no "
+            "tessera_sr.zero_config and the pass was not given all of "
+            "zero-stage / dp-axis / num-dp-ranks; the partition count is never "
+            "defaulted."
+        ),
+        fix_hint=(
+            "Attach ZeROConfig(...).to_ir_attr() to the module, or pass "
+            "--tessera-optimizer-shard=\"zero-stage=S dp-axis=A num-dp-ranks=N\"."
+        ),
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_MALFORMED", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "tessera_sr.zero_config (or the pass options) is missing or "
+            "mistypes stage / dp_axis / num_ranks, or states stage outside "
+            "{1, 2, 3}, num_ranks < 1 or an empty axis."
+        ),
+        fix_hint="Emit the attribute with ZeROConfig.to_ir_attr(), which validates all three.",
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_CONFLICT", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "A --tessera-optimizer-shard option disagrees with "
+            "tessera_sr.zero_config, or num_ranks disagrees with the "
+            "tessera.distributed_plan mesh size of the dp axis."
+        ),
+        fix_hint=(
+            "State the configuration once (the module attribute), and make "
+            "num_ranks equal the mesh size of dp_axis."
+        ),
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
     # C3 — TilePipelineLegalityPass.
     DiagnosticCode(
         code="TILE_PIPELINE_PHASE_ASYMMETRY", pass_origin="TilePipelineLegality",

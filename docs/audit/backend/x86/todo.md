@@ -13,7 +13,7 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 Decisions #11/#12 landed host-independently (MASTER_AUDIT action item 3):
 every autotune key now carries the toolchain identity, and benchmark rows carry
-a derived `route`. The committed arbiter corpus holds no x86 rows. The x86 family identity is the LLVM/MLIR pin only; an x86 measurement of a native image should pass that image's compiler/toolchain fingerprints to `toolchain_identity(..., native_image=...)`.
+a derived `route`. The committed arbiter corpus holds no x86 rows. The x86 family identity is the LLVM/MLIR pin only. The one x86 Tier-3 candidate, `x86_aocl_dlp` (latent, `_ABI_WIRED=False`), now declares its identity: the loaded AOCL-DLP library's content digest and the configured entry.
 
 ## AVX-512 E2E release packets, one per Zen 5 host — 2026-09-26
 

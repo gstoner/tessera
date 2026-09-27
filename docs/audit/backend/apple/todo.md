@@ -12,7 +12,7 @@ last_updated: 2026-09-26
 
 Decisions #11/#12 landed host-independently (MASTER_AUDIT action item 3):
 every autotune key now carries the toolchain identity, and benchmark rows carry
-a derived `route`. The committed arbiter corpus holds no Apple rows (Apple registers no arbiter candidates). The Apple family identity is the live `apple_route_selector.live_apple_route_context` (macOS, SDK, host compiler), the same context the strict route ledger already requires, so Apple rows recorded later will key on it.
+a derived `route`. The committed arbiter corpus holds no Apple rows (Apple registers no arbiter candidates). The Apple family identity reads shell-independent facts: macOS version, and via `/usr/bin/xcrun` the SDK, Metal compiler and Xcode versions, plus the Apple runtime source fingerprint (what is actually timed) and the device tag. It deliberately differs from the strict route ledger's context, which hashes a host `clang --version`. **Review fix (2026-09-26):** that ledger fingerprint used to resolve `clang` through `PATH`, so a shell with Homebrew llvm first stopped admitting the sealed ledger; `live_apple_route_context` now calls `/usr/bin/clang` / `/usr/bin/xcrun` / `/usr/sbin/sysctl` by absolute path. The default-shell value is unchanged, so the committed ledger still admits (verified on the Mac in both shells).
 
 ## `APPLE-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
 

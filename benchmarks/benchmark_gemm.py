@@ -89,6 +89,9 @@ class GEMMResult:
     route: RouteProvenance = _ROOFLINE_ROUTE
     #: Which clock produced ``latency_ms``.
     timing_source: str = "analytical_model"
+    #: The lane that executed: the JIT's ``execution_kind`` for the timed call
+    #: (``reference_cpu`` / ``native_cpu`` ...), ``none`` for a modelled row.
+    backend: str = "none"
 
     def __repr__(self) -> str:
         return (
@@ -175,8 +178,10 @@ class GEMMBenchmark:
                         compiler_path="tessera_jit_cpu" if run.is_executable else "tessera_jit_fallback",
                         compiler_lowering=run.lowering,
                         route=run.route,
-                        # One perf_counter interval around the call.
-                        timing_source="host_wall_clock",
+                        # One perf_counter interval around the FIRST call,
+                        # which includes JIT compilation -- not steady state.
+                        timing_source="host_wall_clock_first_call",
+                        backend=run.execution_kind,
                     )
                 compiler_path = "compiler_unavailable"
 
@@ -266,6 +271,7 @@ class GEMMBenchmark:
                 "compiler_lowering": r.compiler_lowering,
                 **r.route.as_fields(),
                 "timing_source": r.timing_source,
+                "backend": r.backend,
                 "timestamp": r.timestamp,
                 "telemetry": telemetry,
             })

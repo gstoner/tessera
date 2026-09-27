@@ -1,0 +1,19 @@
+== lit tests/tessera-ir with build/tools/tessera-opt, FileCheck from /home/angstorms/.local/share/tessera-toolchains/llvm-23.1.1/bin
+-- Testing: 516 tests, 16 workers --
+Testing:  0.. 10.. 20.. 30.. 40.. 50.. 60.. 70.. 80.. 90..
+
+Testing Time: 0.87s
+
+Total Discovered Tests: 516
+  Unsupported:  66 (12.79%)
+  Passed     : 450 (87.21%)
+== lit tests/tessera-ir with build-assertions/tools/tessera-opt, FileCheck from /home/angstorms/toolchains/llvm-23.1.1-assertions/bin
+-- Testing: 516 tests, 16 workers --
+Testing:  0.. 10.. 20.. 30.. 40.. 50.. 60.. 70.. 80.. 90.. 
+
+Testing Time: 0.70s
+
+Total Discovered Tests: 516
+  Unsupported:  66 (12.79%)
+  Passed     : 450 (87.21%)
+DONE

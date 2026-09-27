@@ -1,0 +1,62 @@
+host=tajasarus commit=077eabe79c7c0de3555e5ccaf151e82a678618fa dirty=1 opt=/home/angstorms/programming/tessera-w-splitk/build/tools/tessera-opt/tessera-opt chip=gfx1201 proof=1
+cmd: python -m pytest tests/unit -q -m not slow -k rocm or gfx1201 or gfx1151 or split or scheduled_matmul -p no:cacheprovider
+            raise ValueError("gfx1151 streaming STFT requires matching f16/bf16/f32 storage")
+        lib = spectral_candidates._amd_composite_lib()
+        if lib is None or not hasattr(
+            lib, "ts_streaming_stft_hostptr_broadcast_layout_storage_amd"
+        ):
+            raise RuntimeError("gfx1151 streaming STFT physical package is unavailable")
+    
+        def descriptor(array: np.ndarray) -> tuple[Any, Any]:
+            if any(stride % array.itemsize for stride in array.strides):
+                raise ValueError("streaming STFT strides must be element aligned")
+            element_strides = tuple(
+                int(stride // array.itemsize) for stride in array.strides
+            )
+            if any(stride == 0 and array.shape[dim] > 1
+                   for dim, stride in enumerate(element_strides)):
+                raise ValueError("streaming STFT overlapping layouts are unsupported")
+            return ((ctypes.c_int64 * array.ndim)(*map(int, array.shape)),
+                    (ctypes.c_int64 * array.ndim)(*element_strides))
+    
+        shape, strides = descriptor(values)
+        window_shape, window_strides = descriptor(window)
+        batch_shape = values.shape[:axis] + values.shape[axis + 1 :]
+        tail_samples = 0 if tail is None else int(tail.shape[-1])
+        if tail is not None and (tail.shape[:-1] != batch_shape or tail.dtype != values.dtype):
+            raise ValueError("streaming STFT tail ABI does not match the chunk")
+        combined = tail_samples + values.shape[axis]
+        frames = max(0, (combined - policy.n_fft) // policy.hop + 1)
+        bins = policy.n_fft // 2 + 1 if policy.onesided else policy.n_fft
+        output = np.empty(
+            values.shape[:axis] + (frames, bins) + values.shape[axis + 1 :],
+            np.complex64,
+        )
+        next_tail = np.empty(
+            batch_shape + (combined - frames * policy.hop,), dtype=values.dtype
+        )
+        empty_tail = np.empty((0,), dtype=values.dtype) if tail is None else tail
+        storage = {"float32": 0, "float16": 1, "bfloat16": 2}[str(values.dtype)]
+        rc = lib.ts_streaming_stft_hostptr_broadcast_layout_storage_amd(
+            artifact_digest.encode(), spectral_candidates._cptr(values),
+            spectral_candidates._cptr(empty_tail), spectral_candidates._cptr(window),
+            spectral_candidates._cptr(output), spectral_candidates._cptr(next_tail),
+            values.ndim, shape, strides, axis, tail_samples, window.ndim,
+            window_shape, window_strides, policy.n_fft, policy.hop, frames,
+            storage, ctypes.c_float(1.0), int(policy.onesided),
+        )
+        if rc:
+>           raise RuntimeError(f"gfx1151 streaming STFT package failed rc={rc}")
+E           RuntimeError: gfx1151 streaming STFT package failed rc=246
+
+python/tessera/compiler/spectral_streaming.py:247: RuntimeError
+=============================== warnings summary ===============================
+tests/unit/test_source_completion_edges.py:74
+  /home/angstorms/programming/tessera-w-splitk/tests/unit/test_source_completion_edges.py:74: SyntaxWarning: 'return' in a 'finally' block
+    return x*x  # noqa: B012 - exercise Python finally overriding a return
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_sparse_runtime.py::test_sparse_public_runtime_binding[True-shape0-float16]
+FAILED tests/unit/test_spectral_streaming.py::test_physical_streaming_broadcast_strides_and_artifact_lineage[rocm-True]
+2 failed, 4533 passed, 197 skipped, 20634 deselected, 1 warning in 321.80s (0:05:21)

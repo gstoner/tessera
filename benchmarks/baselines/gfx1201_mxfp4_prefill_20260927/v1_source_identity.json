@@ -1,0 +1,12 @@
+{
+  "default_emission_sha256": {
+    "full_k64=false,safe_epilogue=false": "2fc21f48bf83d8241ea78b2daba068fd1356bf9a0f6f868cf76c6fde9cbd6223",
+    "full_k64=false,safe_epilogue=true": "669698e50e62f2b7a20a9e392fb2a98571298c8982ea10a5f455e79a7fdb12cf",
+    "full_k64=true,safe_epilogue=false": "4ad019f51fd4213685c244c885a9466787f48c2f4599d25505b64b7c61bdd102",
+    "full_k64=true,safe_epilogue=true": "4728bc91ac454e10a5c5c346ba83f5c1449957d7f656ca1551de3936c28b8715"
+  },
+  "method": "emit_mxfp4_folded_prefill_hip(entry='tessera_mxfp4_folded_prefill') from the relabel-era generator and from the load-schedule generator with its default schedule; the emitted HIP sources are byte-identical, so the hipcc command and every V1 kernel are unchanged",
+  "relabel_generator_sha256": "0f57f6231677fb72a00a973ec332c5c8333016395163d67d0c940a854d9c3f53",
+  "schema": "tessera.rocm.gfx1201_mxfp4_folded_v1_source_identity.v1",
+  "sync_key": "GFX1201-LANES-2026-09-27"
+}

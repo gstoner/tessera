@@ -34,9 +34,13 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // TARGET-SAME: abi = "a_bfold_sa_rowref_d_m_n_k"
 // TARGET-SAME: block_m = 256
 // TARGET-SAME: block_n = 64
+// TARGET-SAME: epilogue_schedule = "complete_tile_vector_scales"
 // TARGET-SAME: k_step_schedule = "isolated_k_stage"
 // TARGET-SAME: package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
 // TARGET-SAME: partial_combine = "row_reference_after_full_k"
 // TARGET-SAME: physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1"
+// TARGET-SAME: raster_group_m = 4
 // TARGET-SAME: scale_k = 64
 // TARGET-SAME: stage_k = 64
+// TARGET-SAME: staging_prefetch = "register_next_slab"
+// TARGET-SAME: workgroup_mode = "wgp"

@@ -44,24 +44,49 @@ def _gfx1201(m: int, n: int, k: int, *, macro=(16, 16), block_k=32,
 # ── the oracle's behaviour ──────────────────────────────────────────────────
 
 
-def test_router_gate_shape_splits_in_two() -> None:
-    """16x256x2048: 16 output tiles against 32 WGPs -- the shape the old
-    `k > 4096` model answered False for."""
-    assert _gfx1201(16, 256, 2048) == (2, None)
-    assert _gfx1201(16, 256, 2048, dtype="bf16") == (2, None)
+def test_router_gate_shape_splits_eight_ways() -> None:
+    """16x256x2048: 16 output tiles -- the shape the old `k > 4096` model
+    answered False for. The 2026-09-27 target (256 workgroups) allows 16
+    slices; the 256-wide slice guard stops at 8 (3.40x fp16 / 3.37x bf16 on
+    the device clock, vs 2.18x for the pre-sweep S=2)."""
+    assert _gfx1201(16, 256, 2048) == (8, None)
+    assert _gfx1201(16, 256, 2048, dtype="bf16") == (8, None)
 
 
-def test_slice_count_fills_the_machine_as_a_power_of_two() -> None:
-    # One tile wants 32 slices; K=8192 gives 32 slices of exactly 256.
+@pytest.mark.parametrize("m,n,k,expected", [
+    # Every point of the 2026-09-27 device-clock sweep, with the slice count
+    # the rule selects. Each selection was measured positive in f16 AND bf16
+    # (benchmarks/baselines/rocm_split_k_20260927/README.md).
+    (16, 8, 4096, 16), (16, 64, 2048, 8), (16, 128, 2048, 8), (16, 256, 2048, 8),
+    (16, 256, 7168, 16), (32, 256, 7168, 8), (64, 128, 4096, 8), (16, 256, 256, 1),
+    (32, 128, 512, 2), (64, 64, 1024, 4), (48, 96, 1536, 4), (16, 768, 2048, 4),
+    (16, 2048, 768, 2), (64, 512, 2048, 2), (16, 2048, 7168, 2), (32, 1536, 4096, 1),
+])
+def test_rule_selects_the_measured_positive_slice_count(m, n, k, expected) -> None:
+    assert _gfx1201(m, n, k) == (expected, None)
+
+
+def test_slice_count_fills_the_target_as_a_power_of_two() -> None:
+    # One tile wants 256 slices, capped at the 32 measured; K=8192 gives 32
+    # slices of exactly 256.
     assert _gfx1201(16, 16, 8192) == (32, None)
-    # Five tiles want ceil(32/5) = 7 -> rounded down to 4.
-    assert _gfx1201(16, 80, 4096) == (4, None)
+    # ... and never more than 32, however long K is.
+    assert _gfx1201(16, 16, 65536) == (32, None)
+    # 48 tiles: 256 // 48 = 5 -> rounded down to 4.
+    assert _gfx1201(16, 768, 8192) == (4, None)
+    # 128 tiles is the last count a two-way split fits: 2 x 128 = 256.
+    assert _gfx1201(16, 2048, 4096) == (2, None)
 
 
 def test_occupied_machine_is_never_split() -> None:
-    """Negative case (Decision #10a): 256 tiles is not occupancy-short."""
+    """Negative case (Decision #10a): past 128 tiles a two-way split exceeds
+    the 256-workgroup target."""
     assert _gfx1201(1024, 1024, 2048, macro=(64, 64)) == (1, None)
     assert _gfx1201(512, 512, 4096) == (1, None)  # 32x32 = 1024 tiles
+    # Measured: 192 tiles, S=2 neutral (0.985x bf16, 9/27 rounds) -- unsplit.
+    assert _gfx1201(32, 1536, 4096) == (1, None)
+    # 129 tiles: the first count past the target.
+    assert _gfx1201(16, 2064, 4096) == (1, None)
 
 
 def test_unaligned_k_falls_back_with_a_reason_not_silently() -> None:
@@ -92,8 +117,8 @@ def test_only_gfx1201_float_storage_is_split() -> None:
     """gfx1151 has no split-K evidence and the fp8/integer storages have no
     device proof of a split; the oracle states that scope, as does C++."""
     router = dict(macro_tile=(16, 16), dynamic=False)
-    assert rocm_split_k(16, 256, 2048, target="rocm_gfx1201", storage="f16", **router) == (2, "ordered")
-    assert rocm_split_k(16, 256, 2048, target="rocm_gfx1201", storage="bf16", **router) == (2, "ordered")
+    assert rocm_split_k(16, 256, 2048, target="rocm_gfx1201", storage="f16", **router) == (8, "ordered")
+    assert rocm_split_k(16, 256, 2048, target="rocm_gfx1201", storage="bf16", **router) == (8, "ordered")
     assert rocm_split_k(16, 256, 2048, target="rocm_gfx1151", storage="f16", **router) == (1, "")
     for storage in ("e4m3", "int8", "int4"):
         assert rocm_split_k(16, 256, 2048, target="rocm_gfx1201", storage=storage, **router) == (1, "")
@@ -170,10 +195,12 @@ def _lower(shape, **kwargs):
 
 @needs_opt
 @pytest.mark.parametrize("shape,expected", [
-    ((16, 2048, 256), 2),     # (m, k, n): the router gate
+    ((16, 2048, 256), 8),     # (m, k, n): the router gate
     ((16, 2050, 256), 1),     # ragged K: occupancy asks, nothing aligns
     ((16, 8192, 16), 32),     # one tile
-    ((64, 4096, 64), 2),      # 16 tiles
+    ((64, 4096, 64), 16),     # 16 tiles
+    ((16, 2048, 768), 4),     # 48 tiles -- split only since the 2026-09-27 target
+    ((32, 4096, 1536), 1),    # 192 tiles: past the target
     ((1024, 2048, 1024), 1),  # occupied
     ((17, 19, 23), 1),        # K too small for a macro K block
 ])
@@ -202,7 +229,7 @@ def test_artifact_states_the_authority_even_when_the_oracle_disagrees(monkeypatc
     from tessera.compiler import scheduled_matmul
     monkeypatch.setattr(scheduled_matmul, "rocm_split_k", lambda *a, **k: (1, ""))
     artifact = _lower((16, 2048, 256))
-    assert (artifact.split_k, artifact.split_k_reduction) == (2, "ordered")
+    assert (artifact.split_k, artifact.split_k_reduction) == (8, "ordered")
     with pytest.raises(ValueError, match="oracle disagrees with the native Schedule"):
         scheduled_matmul.verify_matmul_projection(artifact)
 
@@ -236,7 +263,7 @@ def test_split_epilogue_stays_the_programs() -> None:
     moves it to the ordered reduction. Dropping it here would be the
     'fallback must compute the same program' failure."""
     artifact = _lower((16, 2048, 256), activation="gelu", bias=True)
-    assert artifact.split_k == 2
+    assert artifact.split_k == 8
     assert 'activation = "gelu"' in artifact.tile_ir and "bias = true" in artifact.tile_ir
 
 
@@ -301,15 +328,16 @@ def _run_split_k_package(shape, dtype, activation="none", bias=False, seed=1201)
 def test_gfx1201_split_k_matmul_executes(shape, dtype, activation, bias):
     """ROCM-SPLIT-K-1 on device: the router-gate shape (and a ragged M/N
     sibling that drives the partial's masked edge store) is scheduled with
-    split_k=2, runs as partial + ordered reduce, and matches the fused f64
+    split_k=8 (both shapes: the 256-wide slice guard binds), runs as partial +
+    ordered reduce, and matches the fused f64
     reference -- the epilogue applied ONCE, after the sum. The reduction is
     ordered, so two launches must be bit-identical."""
     from tessera import runtime as rt
     assert rt._rocm_live_arch() == "gfx1201"
     package, out, ref = _run_split_k_package(shape, dtype, activation, bias)
     provenance = package.descriptor.provenance
-    assert provenance["split_k"] == 2 and provenance["split_k_reduction"] == "ordered"
-    assert provenance["physical_route"].endswith("_splitk2_ordered")
+    assert provenance["split_k"] == 8 and provenance["split_k_reduction"] == "ordered"
+    assert provenance["physical_route"].endswith("_splitk8_ordered")
     assert package.descriptor.geometry.policy == "rocm_wmma_split_k_grid"
     assert {e.symbol for e in package.image.entry_points} == {
         package.descriptor.entry_symbol, f"{package.descriptor.entry_symbol}_splitk_reduce"}
@@ -324,9 +352,10 @@ def test_gfx1201_split_k_matmul_executes(shape, dtype, activation, bias):
 @pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
 @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
 def test_gfx1201_split_k_control_shape_stays_unsplit(dtype):
-    """Negative control: 128x256 output is 128 tiles, not occupancy-short, so
-    the same K=2048 schedules no split and runs the one-kernel route."""
-    package, out, ref = _run_split_k_package((128, 2048, 256), dtype)
+    """Negative control: a 32x1536 output is 192 tiles; a two-way split would
+    exceed the 256-workgroup target (measured neutral-to-negative, 2026-09-27),
+    so it schedules no split and runs the one-kernel route."""
+    package, out, ref = _run_split_k_package((32, 4096, 1536), dtype)
     assert package.descriptor.provenance["split_k"] == 1
     assert "split_k_reduce_entry" not in package.descriptor.provenance
     assert package.descriptor.geometry.policy == "rocm_wmma_macro_tile_grid"
@@ -346,7 +375,7 @@ def test_gfx1201_split_k_workspace_is_typed_and_the_launcher_checks_it():
     package, _, _ = _run_split_k_package((16, 2048, 256), "fp16")
     workspace = package.descriptor.workspace
     assert (workspace.bytes, workspace.alignment, workspace.lifetime, workspace.initialization) == (
-        2 * 16 * 256 * 4, 256, "launch", "undefined")
+        8 * 16 * 256 * 4, 256, "launch", "undefined")
     rng = np.random.default_rng(3)
     a = rng.normal(size=(16, 2048)).astype(np.float16)
     b = rng.normal(size=(2048, 256)).astype(np.float16)

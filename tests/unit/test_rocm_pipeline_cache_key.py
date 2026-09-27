@@ -71,6 +71,8 @@ _FIELD_ALTERNATIVES: dict[str, tuple[dict[str, object], object]] = {
     "lds_double_buffer": ({}, True),
     "lds_sched_valu_per_mma": ({}, 2),
     "lds_b_row_major": ({}, True),
+    # ROCM-FP8-BLOCKSCALE-1: panels per inner step of a scale group.
+    "scale_group_panels": ({}, 2),
     "tile_q": ({}, 128),
     "tile_kv": ({}, 128),
     "depth_cooperative": ({"family": "depth_attention"}, True),

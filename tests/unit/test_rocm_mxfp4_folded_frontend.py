@@ -91,6 +91,9 @@ def test_receipt_distinguishes_hsaco_bytes_from_composite_image_identity() -> No
         "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
         "block_m": 256, "block_n": 64, "block_k": 64,
         "tile_m_per_wave": 4, "tile_n_per_wave": 2,
+        "raster_group_m": 4, "workgroup_mode": "cu",
+        "staging_prefetch": "register_next_slab",
+        "epilogue_schedule": "complete_tile_vector_scales",
         "schedule_hash": "schedule", "tile_ir_sha256": "tile",
         "target_ir_sha256": "target",
         "numeric_policy": "folded_row_reference_explicit_approximate",
@@ -105,3 +108,9 @@ def test_receipt_distinguishes_hsaco_bytes_from_composite_image_identity() -> No
     assert receipt["hsaco_sha256"] == hashlib.sha256(payload).hexdigest()
     assert receipt["artifact_image_digest"] == image_digest
     assert receipt["graph_ir_sha256"] == hashlib.sha256(b"graph").hexdigest()
+    assert receipt["selected_schedule"]["workgroup_mode"] == "cu"
+    assert receipt["selected_schedule"]["raster_group_m"] == 4
+    assert receipt["selected_schedule"]["staging_prefetch"] == "register_next_slab"
+    assert receipt["selected_schedule"]["epilogue_schedule"] == (
+        "complete_tile_vector_scales"
+    )

@@ -651,6 +651,39 @@ LogicalResult ScaledMatmulKernelOp::verify() {
         "partial_accumulator must state the physical contract's zero-init, "
         "combination, scope, scale_k/instruction_k steps, and isolated "
         "scheduling boundary");
+  auto scaleBlockN =
+      (*this)->getAttrOfType<IntegerAttr>("tessera.scale_block_n");
+  const bool fp8W8A8 =
+      physical && (physical.getValue() == "rocm_fp8_w8a8_blockscale_v1" ||
+                   physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1");
+  if (scaleBlockN && !fp8W8A8)
+    return emitOpError("tessera.scale_block_n is stated only by the W8A8 "
+                       "block-scale contract");
+  if (fp8W8A8) {
+    // ROCM-FP8-BLOCKSCALE-1. The scales arrive here as raw pointers, so
+    // their layout is fixed by this named contract (checked against the
+    // tensor types at Graph->Schedule): lhs fp32 [M, K/scale_k], rhs fp32
+    // [K/scale_k, ceil(N/scale_n)], both row-major.
+    auto epilogue = (*this)->getAttrOfType<TileEpilogueAttr>("epilogue");
+    auto problemK = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_k");
+    if (mma.getAType() != "e4m3" || mma.getBType() != "e4m3" ||
+        mma.getAccType() != "f32" || mma.getScaleFormat() != "fp32" ||
+        // Positivity first: every `%` below divides by these.
+        mma.getK() <= 0 || mma.getScaleBlockK() <= 0 ||
+        mma.getScaleBlockK() % mma.getK() != 0 ||
+        (mma.getK() * mma.getKBlocks()) % mma.getScaleBlockK() != 0 ||
+        !scaleBlockN || scaleBlockN.getInt() <= 0 || !epilogue ||
+        epilogue.getOutputType() != "f32" || epilogue.getBias() ||
+        epilogue.getActivation() != "none" || !problemK ||
+        problemK.getInt() <= 0 ||
+        problemK.getInt() % mma.getScaleBlockK() != 0)
+      return emitOpError(
+          "gfx1201 FP8 W8A8 block-scale contract requires e4m3 x e4m3 with "
+          "f32 accumulation, fp32 scales, scale_k dividing the macro K and "
+          "the static K, a positive tessera.scale_block_n, and a plain f32 "
+          "store");
+    return success();
+  }
   if (physical) {
     auto epilogue = (*this)->getAttrOfType<TileEpilogueAttr>("epilogue");
     auto problemM = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_m");

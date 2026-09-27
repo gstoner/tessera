@@ -118,6 +118,24 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     boundaries. Backends choose their own physical scheduling primitive. This
     directive is intentionally distinct from `wmma_gemm` so an unscaled
     generator cannot consume it by accident.
+
+    The folded prefill form (`rocm_mxfp4_w4a8_folded_prefill_v1`) also
+    carries its physical load schedule, which no upstream dialect has a field
+    for: `raster_group_m` (0 = N-major 2-D grid, g > 0 = grouped M-major 1-D
+    grid), `workgroup_mode` (`wgp` | `cu`), `staging_prefetch` (`none` |
+    `register_next_slab`) and `epilogue_schedule`
+    (`predicated_scalar_scales` | `complete_tile_vector_scales`). They are
+    performance keys: none changes the tile, the per-lane WMMA order or the
+    epilogue arithmetic. The folded materializer requires all four and
+    refuses values outside those sets.
+
+    `physical_contract = "rocm_fp8_w8a8_blockscale_v1"` (ROCM-FP8-BLOCKSCALE-1)
+    is the logical W8A8 form bound to an executable ABI: e4m3 A and B stay in
+    storage into `V_WMMA_F32_16X16X16_FP8_FP8`, lhs scales are fp32
+    [M, K/scale_k], rhs scales fp32 [K/scale_k, ceil(N/scale_n)], and
+    `block_m`/`block_n` name the register panel the generator emits. It is
+    the Tessera contract upstream ROCDL cannot carry -- which scale multiplies
+    which partial -- and so earns its place here (Decision #19).
   }];
   let arguments = (ins StrAttr:$name, StrAttr:$abi,
                        I64Attr:$m, I64Attr:$n, I64Attr:$k,
@@ -128,6 +146,14 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
                        OptionalAttr<I64Attr>:$block_n,
                        OptionalAttr<I64Attr>:$tile_m_per_wave,
                        OptionalAttr<I64Attr>:$tile_n_per_wave,
+                       OptionalAttr<I64Attr>:$raster_group_m,
+                       OptionalAttr<StrAttr>:$workgroup_mode,
+                       OptionalAttr<StrAttr>:$staging_prefetch,
+                       OptionalAttr<StrAttr>:$epilogue_schedule,
+                       // ROCM-FP8-BLOCKSCALE-1: the weight scale's N block
+                       // for the W8A8 contract (one scale per scale_n
+                       // columns per K group). Absent for every MX form.
+                       OptionalAttr<I64Attr>:$scale_n,
                        StrAttr:$partial_combine,
                        StrAttr:$k_step_schedule,
                        StrAttr:$physical_contract,

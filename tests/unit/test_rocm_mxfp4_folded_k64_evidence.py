@@ -27,12 +27,18 @@ def test_k64_staging_packet_binds_selected_generator_and_exact_output() -> None:
     assert packet["folded_generator_sha256"] == (
         "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
     )
-    for key, path in {
-        "benchmark_sha256": "benchmarks/rocm/benchmark_gfx1201_mxfp4_folded.py",
-        "frontend_sha256": "python/tessera/compiler/rocm_mxfp4_folded_frontend.py",
-        "materializer_sha256": "python/tessera/compiler/rocm_mxfp4_folded_carrier.py",
-    }.items():
-        assert packet[key] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+    assert packet["benchmark_sha256"] == hashlib.sha256(
+        (ROOT / "benchmarks/rocm/benchmark_gfx1201_mxfp4_folded.py").read_bytes()
+    ).hexdigest()
+    # Historical since GFX1201-LANES-2026-09-27: the frontend and materializer
+    # now carry the Target IR load schedule. This packet records the original
+    # (V1) schedule and stays pinned to the sources it measured.
+    assert packet["frontend_sha256"] == (
+        "bedb4272bf2c9de73bfbe25367732d4038359fab7caed95934703db5f5a0750b"
+    )
+    assert packet["materializer_sha256"] == (
+        "5fa20cfe34b4df26ffe74984ac6b0536f7f91e1b6d3af0c7c84a4933c70461f2"
+    )
     for case in ("prefill_256x5120x8704", "prefill_1024x17408x5120"):
         rows = {row["engine"]: row for row in packet["rows"] if row["case"] == case}
         assert set(rows) == {"tessera", "tessera_folded", "radiance"}

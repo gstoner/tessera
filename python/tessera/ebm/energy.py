@@ -117,7 +117,7 @@ def energy(
 # Primitive 2: inner_step
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ebm.inner_step")
+@public_route("ebm:inner_step")
 def inner_step(
     y: Any,
     grad: Any,
@@ -207,7 +207,7 @@ def _try_apple_gpu_inner_step(
 # Primitive 3: langevin_step
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ebm.langevin_step")
+@public_route("ebm:langevin_step")
 def langevin_step(
     y: Any,
     energy_fn: Callable[[np.ndarray], Any],
@@ -266,7 +266,7 @@ def langevin_step(
 # Primitive 4: self_verify
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ebm.self_verify")
+@public_route("ebm:self_verify")
 def self_verify(
     energies: Any,
     candidates: Any,
@@ -324,7 +324,7 @@ def self_verify(
 # Primitive 5: decode_init
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ebm.decode_init")
+@public_route("ebm:decode_init")
 def decode_init(
     x: Any,
     *,
@@ -424,7 +424,7 @@ def decode_init(
 # EBT-style multi-step refinement (Apple GPU fast path)
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ebm.refinement")
+@public_route("ebm:refinement")
 def refinement(
     y0: Any, grad: Any, *, eta: float, T: int,
 ) -> np.ndarray:
@@ -463,7 +463,7 @@ def refinement(
 # EBT-tiny fused pipeline (Apple GPU optimization)
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ebm.ebt_tiny")
+@public_route("ebm:ebt_tiny")
 def ebt_tiny(
     y0: Any, grad: Any, *, eta: float, T: int, B: int, K: int, D: int,
 ) -> np.ndarray:
@@ -556,7 +556,7 @@ def ebt_tiny_last_route() -> str:
 # Energy specialization: quadratic (Apple GPU fast path)
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ebm.energy_quadratic")
+@public_route("ebm:energy_quadratic")
 def energy_quadratic(x: Any, y: Any) -> np.ndarray:
     """Specialized quadratic energy ``E_b = 0.5 * ||x_b - y_b||^2``.
 
@@ -903,7 +903,7 @@ def _try_apple_gpu_langevin_step_philox_f32(
     return out
 
 
-@public_route("tessera.ebm.langevin_step_philox")
+@public_route("ebm:langevin_step_philox")
 def langevin_step_philox(
     y: Any, grad: Any, *,
     eta: float, noise_scale: float,

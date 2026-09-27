@@ -70,7 +70,7 @@ def partition_function_exact(
     return math.exp(log_z)
 
 
-@public_route("tessera.ebm.partition_exact_from_energies")
+@public_route("ebm:partition_exact_from_energies")
 def partition_exact_from_energies(
     energies: Any, *, temperature: float = 1.0,
 ) -> float:

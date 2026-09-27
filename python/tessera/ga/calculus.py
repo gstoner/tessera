@@ -40,7 +40,7 @@ from tessera.ga.signature import Cl, TesseraAlgebraError
 # Pointwise HodgeStar
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ga.hodge_star")
+@public_route("ga:hodge_star")
 def hodge_star(mv: Multivector) -> Multivector:
     """Hodge star ``⋆ω = reverse(ω) · I`` where ``I`` is the pseudoscalar.
 
@@ -325,7 +325,7 @@ def _wedge_left_basis(
     return out
 
 
-@public_route("tessera.ga.ext_deriv")
+@public_route("ga:ext_deriv")
 def ext_deriv(field: MultivectorField) -> MultivectorField:
     """Exterior derivative ``dω`` of a multivector field.
 
@@ -360,7 +360,7 @@ def ext_deriv(field: MultivectorField) -> MultivectorField:
     return field.with_values(out / weights)
 
 
-@public_route("tessera.ga.vec_deriv")
+@public_route("ga:vec_deriv")
 def vec_deriv(field: MultivectorField) -> MultivectorField:
     """Geometric gradient ``∂F = Σ_i e_i · ∂_i F``.
 
@@ -439,7 +439,7 @@ def codifferential_output_signs(algebra: Cl) -> np.ndarray:
     )
 
 
-@public_route("tessera.ga.codiff")
+@public_route("ga:codiff")
 def codiff(field: MultivectorField) -> MultivectorField:
     """Codifferential ``δω = (-1)^(n(k+1)+1) ⋆d⋆ω`` for a sampled field.
 
@@ -580,7 +580,7 @@ def _try_apple_gpu_field_op_cl30_f32(
 # Integral — Riemann sum over a Manifold
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ga.integral")
+@public_route("ga:integral")
 def integral(
     integrand: Union[Callable[[np.ndarray], Multivector], MultivectorField],
     manifold: Any,

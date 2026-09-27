@@ -191,7 +191,7 @@ def _numerical_grad_mv(
 # Bivector Langevin — state lives in the grade-2 subspace
 # ---------------------------------------------------------------------------
 
-@public_route("tessera.ebm.bivector_langevin_step")
+@public_route("ebm:bivector_langevin_step")
 def bivector_langevin_step(
     state: Multivector,
     energy_fn: Callable[[Multivector], Any],
@@ -354,7 +354,7 @@ def _project_to_tangent_plane(v: np.ndarray, x: np.ndarray) -> np.ndarray:
     return v - float(np.dot(v, x)) * x
 
 
-@public_route("tessera.ebm.sphere_langevin_step")
+@public_route("ebm:sphere_langevin_step")
 def sphere_langevin_step(
     x: np.ndarray,
     energy_fn: Callable[[np.ndarray], Any],

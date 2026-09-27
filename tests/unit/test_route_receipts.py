@@ -123,6 +123,13 @@ def test_the_scanned_modules_are_every_ga_ebm_module_with_a_native_lane() -> Non
                 assert path in scanned, f"{path} has a _try_* lane but is not gated"
 
 
+def test_a_dotted_label_is_refused_so_it_cannot_vouch_for_an_ods_op() -> None:
+    """``tessera.ebm.inner_step`` is also an ODS op name; used as a label, the
+    ODS consumer audit counted it as a compiler consumer (caught 2026-09-27)."""
+    with pytest.raises(ValueError, match="no dots"):
+        rr.public_route("tessera.ebm.inner_step")
+
+
 def test_every_try_prefix_names_a_declared_target() -> None:
     assert rr.native_target_for("_try_apple_gpu_inner_step") == "apple_gpu_runtime"
     assert rr.native_target_for("_try_x86_energy_quadratic_f32") == "x86_avx512"
@@ -146,7 +153,7 @@ def _lane(name: str, returns):
 def test_outside_a_capture_nothing_is_recorded() -> None:
     lane = _lane("_try_x86_fake", 1.0)
 
-    @rr.public_route("t.op")
+    @rr.public_route("t:op")
     def op():
         return lane()
 
@@ -161,15 +168,15 @@ def test_routes_reference_native_nested_and_mixed() -> None:
     native = _lane("_try_x86_fake", 1.0)
     declined = _lane("_try_rocm_fake", None)
 
-    @rr.public_route("t.native")
+    @rr.public_route("t:native")
     def native_op():
         return native()
 
-    @rr.public_route("t.reference")
+    @rr.public_route("t:reference")
     def reference_op():
         return declined() or 0.0
 
-    @rr.public_route("t.outer")
+    @rr.public_route("t:outer")
     def outer():
         return native_op() + reference_op()
 
@@ -178,7 +185,7 @@ def test_routes_reference_native_nested_and_mixed() -> None:
         reference_op()
         outer()
     top = {r.op: r.route for r in log.top_level()}
-    assert top == {"t.native": "x86_avx512", "t.reference": "python_reference", "t.outer": "mixed"}
+    assert top == {"t:native": "x86_avx512", "t:reference": "python_reference", "t:outer": "mixed"}
     assert log.route() == "mixed"
     summary = log.summary()
     assert summary["attribution"] == "complete" and summary["calls"] == 3
@@ -189,7 +196,7 @@ def test_routes_reference_native_nested_and_mixed() -> None:
 def test_an_orphan_native_dispatch_makes_the_span_unattributed() -> None:
     lane = _lane("_try_apple_gpu_fake", 2.0)
 
-    @rr.public_route("t.op")
+    @rr.public_route("t:op")
     def op():
         return 0.0
 
@@ -203,11 +210,11 @@ def test_an_orphan_native_dispatch_makes_the_span_unattributed() -> None:
 
 
 def test_a_raising_call_leaves_no_receipt_and_restores_the_frame_stack() -> None:
-    @rr.public_route("t.boom")
+    @rr.public_route("t:boom")
     def boom():
         raise RuntimeError("x")
 
-    @rr.public_route("t.ok")
+    @rr.public_route("t:ok")
     def ok():
         return 1
 
@@ -215,13 +222,13 @@ def test_a_raising_call_leaves_no_receipt_and_restores_the_frame_stack() -> None
         with pytest.raises(RuntimeError):
             boom()
         ok()
-    assert [(r.op, r.depth) for r in log.receipts] == [("t.ok", 0)]
+    assert [(r.op, r.depth) for r in log.receipts] == [("t:ok", 0)]
 
 
 def test_captures_are_per_thread() -> None:
     lane = _lane("_try_x86_fake", 1.0)
 
-    @rr.public_route("t.op")
+    @rr.public_route("t:op")
     def op():
         return lane()
 
@@ -256,7 +263,7 @@ def test_energy_quadratic_receipt_names_the_lane_that_ran(monkeypatch) -> None:
     with rr.capture_route_receipts() as log:
         energy.energy_quadratic(x, y)
     (receipt,) = log.top_level()
-    assert receipt.op == "tessera.ebm.energy_quadratic"
+    assert receipt.op == "ebm:energy_quadratic"
     assert receipt.route == "x86_avx512"
     assert receipt.native == (("x86_avx512", "_try_x86_energy_quadratic_f32"),)
 
@@ -275,8 +282,8 @@ def test_energy_core_row_carries_its_route(monkeypatch) -> None:
     assert row["route"] == "python_reference" and row["device"] == "cpu"
     receipts = row["route_receipts"]
     assert receipts["attribution"] == "complete"
-    assert set(receipts["ops"]) >= {"tessera.ebm.langevin_step",
-                                    "tessera.ebm.partition_exact_from_energies"}
+    assert set(receipts["ops"]) >= {"ebm:langevin_step",
+                                    "ebm:partition_exact_from_energies"}
     assert row["promotion_eligible"] is False
     assert rr.validate_receipt_summary(receipts) == "python_reference"
 
@@ -326,13 +333,13 @@ def test_committed_receipts_name_the_lanes_each_host_ran() -> None:
     records = _records()
     for host in ("princess_luna", "tajasarus"):
         ops = _ops(records[host], "energy_core")
-        assert ops["tessera.ebm.energy_quadratic"] == {"x86_avx512"}
-        assert ops["tessera.ebm.partition_exact_from_energies"] == {"x86_avx512"}
-        assert ops["tessera.ebm.langevin_step"] == {"python_reference"}
+        assert ops["ebm:energy_quadratic"] == {"x86_avx512"}
+        assert ops["ebm:partition_exact_from_energies"] == {"x86_avx512"}
+        assert ops["ebm:langevin_step"] == {"python_reference"}
     bear = _ops(records["super_bear"], "energy_core")
     assert set().union(*bear.values()) == {"python_reference"}
     mac = _ops(records["mac_m1max"], "energy_core")
-    assert mac["tessera.ebm.langevin_step"] == {"apple_gpu_runtime"}
+    assert mac["ebm:langevin_step"] == {"apple_gpu_runtime"}
     for record in records.values():
         for suite in record["suites"]:
             routes = set().union(*_ops(record, suite).values())

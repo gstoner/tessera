@@ -204,7 +204,14 @@ def _route_of(frame: _Frame) -> str:
 
 
 def public_route(op: str) -> Callable[[F], F]:
-    """Decorate a public primitive so each call leaves a :class:`RouteReceipt`."""
+    """Decorate a public primitive so each call leaves a :class:`RouteReceipt`.
+
+    ``op`` is ``<package>:<name>`` (``"ebm:inner_step"``), never a dotted
+    ``tessera.ebm.inner_step``: that spelling is also an ODS op name, and the
+    ODS consumer audit would read the label as a compiler consumer of the op.
+    """
+    if "." in op or ":" not in op:
+        raise ValueError(f"public_route label {op!r} must be '<package>:<name>' with no dots")
 
     def wrap(fn: F) -> F:
         @functools.wraps(fn)

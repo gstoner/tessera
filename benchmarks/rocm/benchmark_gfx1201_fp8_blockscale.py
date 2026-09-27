@@ -19,8 +19,11 @@ one set of logical inputs, two kernels:
   measured rather than timed with a different config.
 
 Each kernel runs with its own production layouts: AITER reads the weight as
-``w[N, K]`` (``b = w.T``) and writes bf16; Tessera reads ``B[K, N]`` and writes
-f32 (its contract's plain f32 store). Both consume the same e4m3 values and
+``w[N, K]`` (``b = w.T``) and writes bf16; Tessera reads ``B[K, N]`` or the
+``[N, K]`` weight and writes f32 (its contract's plain f32 store) or, with
+``--bf16``, bf16 -- the matched-output arm (GFX1201-PERF-2026-09-27). The
+Tessera production route is whatever the Schedule selects for the shape: the
+one-wave register panel or the LDS-staged multi-wave body. Both consume the same e4m3 values and
 fp32 scales, and both are checked against an fp64 oracle of the block-scaled
 math before any timing is taken.
 
@@ -212,7 +215,7 @@ def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=
     args = (memref(device["a"], shape.m * shape.k) + memref(weight, shape.k * shape.n)
             + memref(device["sa"], shape.m * shape.groups)
             + memref(device["sb"], shape.groups * shape.n_groups)
-            + memref(device["o32"], shape.m * shape.n)
+            + memref(device["o32" if shape.output == "f32" else "o16t"], shape.m * shape.n)
             + [ct.c_int64(shape.m), ct.c_int64(shape.n), ct.c_int64(shape.k)])
     grid = ((shape.n + block_n - 1) // block_n, (shape.m + block_m - 1) // block_m, 1)
     launch = Launch(hip, package.image.payload, package.descriptor.entry_symbol, args, grid,
@@ -228,7 +231,7 @@ def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=
         "scale_group_panels": scale_group_panels, "weight_layout": shape.weight_layout,
         "hsaco_sha256": hashlib.sha256(package.image.payload).hexdigest(),
         "schedule_hash": prov["schedule_hash"], "abi_id": package.descriptor.abi_id,
-        "output": "f32",
+        "output": shape.output,
     }
     return launch, meta, package
 
@@ -470,6 +473,10 @@ def main() -> None:
                         help="NAME=PATH: a second tessera-opt a sweep variant names with a "
                              "trailing @NAME, so two compiler builds are timed paired and "
                              "interleaved in one process (diagnostic A/B)")
+    parser.add_argument("--bf16", action="store_true",
+                        help="add the production [N, K] arm with a bf16 output (AITER's output "
+                             "storage), labelled tessera_nk+bf16")
+    parser.add_argument("--sync-key", default="GFX1201-PERF-2026-09-27")
     parser.add_argument("--with-aiter", action="store_true",
                         help="also time AITER alongside --sweep variants")
     parser.add_argument("--no-production", action="store_true",
@@ -496,7 +503,7 @@ def main() -> None:
         return subprocess.check_output(["git", *cmd], cwd=ROOT, text=True).strip()
 
     record = {
-        "work_item": "ROCM-FP8-BLOCKSCALE-1", "sync_key": "GFX1201-LANES-2026-09-27",
+        "work_item": "ROCM-FP8-BLOCKSCALE-1", "sync_key": args.sync_key,
         "host": platform.node(), "kernel_release": platform.release(),
         "source_commit": git("rev-parse", "HEAD"), "worktree_dirty": bool(git("status", "--porcelain")),
         "compiler": str(args.compiler.resolve()),
@@ -524,6 +531,7 @@ def main() -> None:
             "sa": hip.upload(sa), "sb": hip.upload(sb),
             "sbt": hip.upload(np.ascontiguousarray(sb.T)),
             "o32": hip.malloc(m * n * 4), "o16": hip.malloc(m * n * 2),
+            "o16t": hip.malloc(m * n * 2),
         }
         row: dict = {"shape": [m, n, k], "scale_block": [128, 128], "flop": 2 * m * n * k}
         arms: dict = {}
@@ -537,6 +545,8 @@ def main() -> None:
             variants = [(None, 1, -1, "nk", None)]
             if not args.no_production:
                 variants.insert(0, (None, 1, -1, "kn", None))
+        if args.bf16:
+            variants.append((None, 1, -1, "nk+bf16", None))
         for spec in args.sweep:
             spec, _, alias = spec.partition("@")
             parts = spec.split(":")
@@ -561,7 +571,8 @@ def main() -> None:
                 label = f"tessera_{layout}_{panel[0]}x{panel[1]}_u{unroll}_g{group_panels}"
             if alias:
                 label += f"@{alias}"
-            shape = BlockScaleShape(m, n, k, 128, 128, layout)
+            layout, _, output = layout.partition("+")
+            shape = BlockScaleShape(m, n, k, 128, 128, layout, output or "f32")
             try:
                 launch, meta, _ = tessera_launch(hip, device, shape, panel=panel, k_unroll=unroll,
                                                  scale_group_panels=group_panels, lds=lds)
@@ -569,8 +580,14 @@ def main() -> None:
                 row[label] = {"refused": str(error)[:400]}
                 continue
             launch()
-            got = hip.download(device["o32"], np.zeros((m, n), np.float32))
-            meta["oracle_max_rel_err"] = check_close(got, want, magnitude, rel=1e-5)
+            if shape.output == "bf16":
+                got = hip.download(device["o16t"], np.zeros((m, n), ml_dtypes.bfloat16))
+                # One bf16 rounding of the fp32 result: the same bound AITER's
+                # bf16 store is held to.
+                meta["oracle_max_rel_err"] = check_close(got, want, magnitude, rel=2 ** -7)
+            else:
+                got = hip.download(device["o32"], np.zeros((m, n), np.float32))
+                meta["oracle_max_rel_err"] = check_close(got, want, magnitude, rel=1e-5)
             row[label] = meta
             arms[label] = launch
         if fn is not None:

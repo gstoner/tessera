@@ -2785,6 +2785,9 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     norm = artifact.family == "norm"
     # NaN policy is semantic (Decision #21a); a reduction's validated policy is
     # carried into the descriptor, not dropped at this boundary (Decision #32).
+    # Provenance parity only: the kernel honours the IR's policy either way,
+    # and today the only reader of provenance["nan_mode"] is a device test
+    # (Decision #29 -- a declaration whose sole consumer is a test).
     nan_mode: str | None = None
     if norm:
         if (artifact.kind not in {"rmsnorm", "layernorm"} or artifact.axis != -1

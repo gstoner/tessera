@@ -526,15 +526,20 @@ def measure_latency_samples(run_fn: Any, *, reps: int = 20,
     return samples
 
 
-def relative_spread(samples: Sequence[float]) -> float:
-    """Population sd over median, as a fraction. ``0.0`` for a single sample.
+def relative_spread(samples: Sequence[float]) -> float | None:
+    """Population sd over median, as a fraction; ``None`` below two samples.
 
     Relative rather than absolute because the arbiter compares candidates
     across four orders of magnitude of latency, and the question is always
-    "is this gap bigger than the noise", never "is it bigger than N ms"."""
+    "is this gap bigger than the noise", never "is it bigger than N ms".
+
+    One sample has no spread, and reporting it as ``0.0`` read as "no noise",
+    which earns ``separated: True`` on any margin at all (NVIDIA pre-PR
+    review, 2026-09-26). ``None`` means unmeasured, and
+    :func:`separation_verdict` then gives no verdict."""
     usable = [s for s in samples if s == s and s > 0.0]
     if len(usable) < 2:
-        return 0.0
+        return None
     med = statistics.median(usable)
     return (statistics.pstdev(usable) / med) if med > 0.0 else 0.0
 
@@ -547,7 +552,7 @@ SEPARATION_FACTOR = 2.0
 
 
 def separation_verdict(latencies: Mapping[str, float],
-                       spreads: Mapping[str, float],
+                       spreads: Mapping[str, float | None],
                        winner: str) -> dict[str, Any] | None:
     """Whether ``winner``'s margin over the runner-up exceeds measurement noise.
 
@@ -572,7 +577,12 @@ def separation_verdict(latencies: Mapping[str, float],
     ordered = sorted(timed.items(), key=lambda kv: kv[1])
     (best_name, best), (second_name, second) = ordered[0], ordered[1]
     margin = (second - best) / second if second > 0.0 else 0.0
-    noise = max(spreads.get(best_name, 0.0), spreads.get(second_name, 0.0))
+    best_noise, second_noise = spreads.get(best_name), spreads.get(second_name)
+    if best_noise is None or second_noise is None:
+        # A ranking whose noise floor was never measured has no verdict --
+        # neither separated nor tied; admission then refuses to serve it.
+        return None
+    noise = max(best_noise, second_noise)
     return {
         "separated": margin > SEPARATION_FACTOR * noise,
         "margin": margin,
@@ -850,7 +860,7 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
 
     latencies: dict[str, float] = {}
     unmeasured: dict[str, str] = {}
-    spreads: dict[str, float] = {}
+    spreads: dict[str, float | None] = {}
 
     def _measure(cand: Candidate) -> float:
         if timing == TIMING_DEVICE:

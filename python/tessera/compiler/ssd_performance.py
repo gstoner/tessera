@@ -11,6 +11,36 @@ from dataclasses import dataclass
 # component. Do not infer a relative-error allowance from these summaries.
 SSD_MAX_ABS_ERROR = 1e-6
 
+#: The only calibration window protocol admission accepts: plain (the
+#: comparison row) and marker-bracketed windows interleaved in alternating
+#: order, each behind one span-reset + synchronize gap. The recorder stamps it
+#: into ``timing.environment`` and the launch count into ``timing.batch_size``
+#: and the device clock's provenance -- all inside ``timing_sha256``. The
+#: earlier protocol (every plain window first, then the marker compiled, then
+#: the bracketed windows) compared two GPU power states on gfx1201 (sync
+#: GFX1201-SSD-CALIBRATION-2026-09-26), so a packet without this stamp stays
+#: readable history but never admits.
+SSD_CALIBRATION_WINDOW_PROTOCOL = 'interleaved_alternating_plain_bracketed'
+
+
+def _calibration_protocol_refusal(timing, row):
+    """A named refusal when ``timing`` was not recorded under the current
+    window protocol with its row's launch count, else ``None``."""
+    protocol = (timing.get('environment') or {}).get('window_protocol')
+    if protocol != SSD_CALIBRATION_WINDOW_PROTOCOL:
+        return ('SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY: calibration window protocol '
+                f'{protocol!r} is not {SSD_CALIBRATION_WINDOW_PROTOCOL!r}; re-record '
+                'under the interleaved protocol')
+    launches = row.get('launches_per_window')
+    stamped = timing.get('batch_size')
+    provenance = ((timing.get('clocks') or {}).get('device_wall_clock_ns') or {}).get('provenance') or {}
+    counts = (launches, stamped, provenance.get('launches_per_window'))
+    if any(type(v) is not int or v <= 0 for v in counts) or len(set(counts)) != 1:
+        return ('SSD_CALIBRATION_LAUNCHES_MISMATCH: launches per window disagree '
+                f'(row {launches!r}, calibration batch {stamped!r}, device clock '
+                f'{provenance.get("launches_per_window")!r})')
+    return None
+
 
 def summarize(pairs):
     if len(pairs) != 9:
@@ -78,13 +108,19 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
     a launch-inclusive Nsight timeline; gfx1151 and gfx1201 use native ROCm
     calibration, and every calibration must name the package's exact chip
     (evidence never transfers between the two; sync
-    GFX1201-SSD-CALIBRATION-2026-09-26).
+    GFX1201-SSD-CALIBRATION-2026-09-26). A ROCm calibration must also carry
+    the current window protocol and its row's launch count; a legacy packet
+    is refused with ``SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY``.
     """
     incumbent_specs = incumbent.validate()
     candidate.validate()
     if incumbent.adjoint or candidate.adjoint or incumbent.cooperative or not candidate.cooperative:
         raise ValueError('SSD selection requires serial/cooperative forward artifacts')
-    if incumbent.logical != candidate.logical or incumbent.package.backend != candidate.package.backend:
+    if (incumbent.logical != candidate.logical or incumbent.package.backend != candidate.package.backend
+            or incumbent.package.chip != candidate.package.chip):
+        # The chip is part of the target: evidence never transfers between
+        # architectures, so a candidate built for another chip cannot ride an
+        # incumbent's measurements (pre-PR review, 2026-09-26).
         raise ValueError('SSD candidates have different semantic parents or targets')
     report = summarize(comparison['pairs'])
     identity = report['identity']
@@ -128,6 +164,9 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
             run_id = pair[name].get('run_id')
             if not run_id or (timing.get('environment') or {}).get('run_id') != run_id:
                 raise ValueError('SSD calibration does not name the measured process run')
+            refusal = _calibration_protocol_refusal(timing, pair[name]['rows'][0])
+            if refusal is not None:
+                return SSDAdmission(False,refusal,lower)
             images = packet['instrumentation_comparison']
             clean,probe = images['uninstrumented'],images['instrumented']
             if any(type(im.get('duration_ns')) not in (float,int) or not math.isfinite(im['duration_ns']) or im['duration_ns'] <= 0 for im in (clean,probe)):

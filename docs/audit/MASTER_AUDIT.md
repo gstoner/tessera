@@ -422,8 +422,14 @@ matches its module fails generation. Read the counts there.
    sync `GFX1201-SSD-CALIBRATION-2026-09-26`). Open: validate the NVIDIA
    `%globaltimer` marker on Super-Bear and record its SSD packet; an SSD Nsight
    activity-window packet on Super-Bear's WSL2; marker timing in
-   `calibrate_gfx1151.py`; a Zen 2 packet adapter; a gfx1151 SSD re-record
-   under the interleaved protocol. **Done 2026-09-26:** the Zen 5 x86 profiler
+   `calibrate_gfx1151.py`; a Zen 2 packet adapter. **Done 2026-09-26:** the
+   gfx1151 SSD re-record under the interleaved protocol, at 1000 launches per
+   window, recorded on Princess-Luna. The selector admits cooperative with a
+   lower bound of 9.89×
+   ([packet](../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_interleaved_20260926/README.md)).
+   SSD admission now requires that protocol and the row's launch count, and it
+   binds the candidate's chip. The first gfx1151 packet is kept as history
+   and refused as `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`. **Done 2026-09-26:** the Zen 5 x86 profiler
    packet on the `tsc_witness` route
    (Princess-Luna, `-O2` library; environment tags are diagnostic gaps). Its
    verdict is E2E-REAL-4's **non-regression check between the production and

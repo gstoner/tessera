@@ -8,6 +8,21 @@ last_updated: 2026-09-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: committed autotune rows are stale until re-recorded
+
+Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
+item 3). **Follow-up required on Super-Bear; nothing was device-run.** The
+arbiter corpus (`benchmarks/baselines/autotune_corpus.json`; the format is now v4,
+the committed file is still v3) keys every verdict on the toolchain identity (`compiler/toolchain_identity.py`: CUDA
+13.4 / PTX 9.4 / driver 610.88 / driver-JIT PTX 9.3 / LLVM 23.1.1 pins) and,
+for `nvidia_mma_gemm_shipped`, the content digest of `libtessera_nvidia_gemm`.
+All 97 committed `nvidia:sm_120` rows predate that key, so they load as stale
+and select nothing -- including the paged-attention serving warm start
+(`emit/nvidia_cuda.py::_paged_attention_corpus_winner` now returns `None`). Re-record them with
+`benchmarks/nvidia/record_autotune_corpus.py` (and re-run
+`record_autotune_reproducibility.py`, whose strict admission fails, naming
+the stale reason, until the corpus is re-recorded).
+
 ## `NVIDIA-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
 
 Sync `LANE-B-SWEEP-2026-09-26` (ROCm owns the pattern: its Lane B was retired

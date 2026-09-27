@@ -7,6 +7,20 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: committed autotune rows are stale until re-recorded
+
+Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
+item 3). **Follow-up required on Princess-Luna; nothing was device-run.** The
+arbiter corpus (`benchmarks/baselines/autotune_corpus.json`; the format is now v4,
+the committed file is still v3) keys every verdict on the toolchain identity (`compiler/toolchain_identity.py`: ROCm 10.0 /
+HIP 7.15 / LLVM 23.1.1 pins). All 16 committed `rocm:gfx1151` rows predate that
+key, so they load as stale and select nothing — including the paged-KV
+production warm start (`cache/paged_kv.py::_rocm_paged_attention_corpus_winner`
+now falls through to the live race). Re-record with
+`benchmarks/rocm/record_paged_kv_corpus.py` and
+`benchmarks/rocm/record_autotune_separation.py`. gfx1201 has no committed
+corpus rows: not applicable.
+
 ## ROCM-SPLIT-K-1: cross-workgroup split-K on gfx1201 — 2026-09-26
 
 Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-1). **Landed for gfx1201 f16/bf16; device-proven for correctness and measured on Tajasarus.**

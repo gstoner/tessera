@@ -44,7 +44,14 @@ from benchmarks.benchmark_gemm import GEMMBenchmark, GEMMResult
 from benchmarks.benchmark_attention import FlashAttnBenchmark, AttnResult
 from benchmarks.benchmark_collective import CollectiveBenchmark, CollectiveResult, CollectiveOp
 from benchmarks.common.artifact_schema import infer_execution_kind
+from benchmarks.common.route_provenance import route_unavailable, stable_row
+from tessera import __version__ as TESSERA_VERSION
 from tessera.telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
+
+#: The collective suite is an alpha-beta model: nothing executes, so there is
+#: no artifact to derive a route from (Decision #12).
+_COLLECTIVE_ROUTE = route_unavailable(
+    "latency is the alpha-beta collective model; no artifact executed")
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +159,11 @@ class BenchmarkSuite:
             },
             "telemetry_summary": telemetry_report(self.telemetry_events()),
             "telemetry_events": self.telemetry_events(),
+            # Decision #12: the stable flat rows (`backend, op, shape, dtype,
+            # latency_ms, tflops, memory_bw_gb_s, device, tessera_version`) plus
+            # the additive `route` / `route_source` / `timing_source`. This is
+            # what `tools/roofline_tools` ingests (`--fmt benchmark`).
+            "rows": self.stable_rows(),
             "gemm": [
                 {
                     "M": r.config.M, "N": r.config.N, "K": r.config.K,
@@ -163,8 +175,11 @@ class BenchmarkSuite:
                     "compiler_path": r.compiler_path,
                     # Decision #12 (amended 2026-08-30): a latency without its route is not
                     # comparable, and a wall-clock number is not a device-clock number.
-                    "route": r.compiler_path,
-                    "latency_source": "wall_clock",
+                    # The route is read from the executed artifact, never from
+                    # `compiler_path`; a modelled latency records `unknown` + why.
+                    **r.route.as_fields(),
+                    "timing_source": r.timing_source,
+                    "latency_source": r.timing_source,
                     "runtime_status": _gemm_runtime_status(r.compiler_path),
                     "execution_kind": infer_execution_kind(r.compiler_path, _gemm_runtime_status(r.compiler_path)).value,
                     "compiler_lowering": r.compiler_lowering,
@@ -182,10 +197,10 @@ class BenchmarkSuite:
                     "tokens_per_sec": r.tokens_per_sec,
                     "tflops": r.tflops, "mfu": r.mfu,
                     "compiler_path": r.compiler_path,
-                    # Decision #12 (amended 2026-08-30): a latency without its route is not
-                    # comparable, and a wall-clock number is not a device-clock number.
-                    "route": r.compiler_path,
-                    "latency_source": "wall_clock",
+                    # Decision #12 (amended 2026-08-30): see the GEMM rows.
+                    **r.route.as_fields(),
+                    "timing_source": r.timing_source,
+                    "latency_source": r.timing_source,
                     "runtime_status": _attn_runtime_status(r.compiler_path),
                     "execution_kind": infer_execution_kind(r.compiler_path, _attn_runtime_status(r.compiler_path)).value,
                     "compiler_lowering": r.compiler_lowering,
@@ -204,6 +219,8 @@ class BenchmarkSuite:
                     "bus_bw_gbps": r.bus_bw_gbps,
                     "algbw_gbps": r.algbw_gbps,
                     "compiler_path": "mock_collective",
+                    **_COLLECTIVE_ROUTE.as_fields(),
+                    "timing_source": "analytical_model",
                     "runtime_status": "mock",
                     "execution_kind": "reference",
                     "timestamp": r.timestamp,
@@ -212,6 +229,38 @@ class BenchmarkSuite:
                 for r in self.collective_results
             ],
         }
+
+    def stable_rows(self) -> List[Dict[str, Any]]:
+        """Every result as a Decision #12 stable row with derived route."""
+        rows: List[Dict[str, Any]] = []
+        for r in self.gemm_results:
+            executed = r.route.known
+            rows.append(stable_row(
+                backend="cpu" if executed else "none",
+                op="matmul", shape=[r.config.M, r.config.N, r.config.K],
+                dtype=r.config.dtype, latency_ms=r.latency_ms, tflops=r.tflops,
+                memory_bw_gb_s=r.memory_bw_gbps,
+                device=_host_device() if executed else "none",
+                tessera_version=TESSERA_VERSION, route=r.route,
+                timing_source=r.timing_source))
+        for r in self.attn_results:
+            c = r.config
+            rows.append(stable_row(
+                backend="none", op="flash_attention",
+                shape=[c.batch, c.heads, c.seq_len, c.head_dim], dtype=c.dtype,
+                latency_ms=r.latency_ms, tflops=r.tflops,
+                memory_bw_gb_s=c.bytes_accessed() / max(r.latency_ms * 1e-3, 1e-12) / 1e9,
+                device="none", tessera_version=TESSERA_VERSION, route=r.route,
+                timing_source=r.timing_source))
+        for r in self.collective_results:
+            rows.append(stable_row(
+                backend="none", op=r.config.op.value,
+                shape=[r.config.num_ranks, r.config.message_bytes],
+                dtype=r.config.dtype, latency_ms=r.latency_ms, tflops=None,
+                memory_bw_gb_s=r.bus_bw_gbps, device="none",
+                tessera_version=TESSERA_VERSION, route=_COLLECTIVE_ROUTE,
+                timing_source="analytical_model"))
+        return rows
 
     def save(self, path: str) -> None:
         """Write the full suite to *path* as pretty-printed JSON."""
@@ -240,10 +289,9 @@ class BenchmarkSuite:
             metadata={
                 "roofline_bound": r.roofline_bound,
                 "compiler_path": r.compiler_path,
-                # Decision #12 (amended 2026-08-30): a latency without its route is not
-                # comparable, and a wall-clock number is not a device-clock number.
-                "route": r.compiler_path,
-                "latency_source": "wall_clock",
+                # Decision #12 (amended 2026-08-30): derived route + timing source.
+                **r.route.as_fields(),
+                "timing_source": r.timing_source,
                 "compiler_lowering": r.compiler_lowering,
             },
             timestamp=r.timestamp,
@@ -271,10 +319,9 @@ class BenchmarkSuite:
                 "tokens_per_sec": r.tokens_per_sec,
                 "mfu": r.mfu,
                 "compiler_path": r.compiler_path,
-                # Decision #12 (amended 2026-08-30): a latency without its route is not
-                # comparable, and a wall-clock number is not a device-clock number.
-                "route": r.compiler_path,
-                "latency_source": "wall_clock",
+                # Decision #12 (amended 2026-08-30): derived route + timing source.
+                **r.route.as_fields(),
+                "timing_source": r.timing_source,
                 "compiler_lowering": r.compiler_lowering,
             },
             timestamp=r.timestamp,
@@ -412,6 +459,12 @@ def run_all_benchmarks(
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
+
+def _host_device() -> str:
+    import platform
+
+    return f"host:{platform.machine() or 'unknown'}"
 
 
 def _gemm_runtime_status(compiler_path: str) -> str:

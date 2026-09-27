@@ -99,3 +99,61 @@ def read_nsight_compute_csv(path: str) -> List[KernelSample]:
             except: pass
         samples.append(KernelSample(name=name, flop_count=flops, dram_bytes=dram_bytes, time_ms=time_ms))
     return samples
+
+
+#: Decision #12 stable benchmark-row fields (never removed or repurposed).
+BENCHMARK_STABLE_FIELDS = (
+    "backend", "op", "shape", "dtype", "latency_ms", "tflops",
+    "memory_bw_gb_s", "device", "tessera_version",
+)
+#: The additive amendment fields. A row written before them is reported as
+#: ``unknown`` -- never guessed from ``backend``, ``compiler_path`` or a name.
+BENCHMARK_PROVENANCE_FIELDS = ("route", "route_source", "timing_source")
+UNKNOWN = "unknown"
+
+
+def _benchmark_rows(data) -> list:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in ("rows", "results"):
+            if isinstance(data.get(key), list):
+                return data[key]
+    raise ValueError("benchmark JSON must be a list of rows or carry a 'rows'/'results' list")
+
+
+def read_benchmark_json(path: str) -> List[KernelSample]:
+    """Decision #12 benchmark rows (``benchmarks/run_all.py`` ``rows``, or any
+    list of stable-schema rows) as kernel samples.
+
+    FLOPs and DRAM bytes are recovered from the stable fields
+    (``tflops * latency``, ``memory_bw_gb_s * latency``); a field that is
+    absent or null contributes 0. ``route`` / ``route_source`` /
+    ``timing_source`` land in ``meta``; an old row without them loads with
+    each set to ``"unknown"``.
+    """
+    with open(path) as f:
+        data = json.load(f)
+    samples: List[KernelSample] = []
+    for row in _benchmark_rows(data):
+        if not isinstance(row, dict) or row.get("latency_ms") is None:
+            continue
+        time_ms = float(row["latency_ms"])
+        seconds = time_ms * 1e-3
+        tflops = row.get("tflops")
+        bw = row.get("memory_bw_gb_s")
+        meta = {k: v for k, v in row.items()
+                if k not in {"latency_ms", "tflops", "memory_bw_gb_s"}}
+        for field_name in BENCHMARK_PROVENANCE_FIELDS:
+            if not meta.get(field_name):
+                meta[field_name] = UNKNOWN
+        shape = row.get("shape", "")
+        samples.append(KernelSample(
+            name=f"{row.get('op', 'kernel')}{list(shape) if isinstance(shape, (list, tuple)) else shape}",
+            flop_count=float(tflops) * 1e12 * seconds if tflops is not None else 0.0,
+            dram_bytes=float(bw) * 1e9 * seconds if bw is not None else 0.0,
+            time_ms=time_ms,
+            dtype_key=str(row.get("dtype", "fp32")),
+            meta=meta,
+        ))
+    return samples

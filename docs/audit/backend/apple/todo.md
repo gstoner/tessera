@@ -8,6 +8,12 @@ last_updated: 2026-09-26
 
 # Apple compiler, exact-device, and performance plan
 
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: not applicable (no committed Apple autotune rows)
+
+Decisions #11/#12 landed host-independently (MASTER_AUDIT action item 3):
+every autotune key now carries the toolchain identity, and benchmark rows carry
+a derived `route`. The committed arbiter corpus holds no Apple rows (Apple registers no arbiter candidates). The Apple family identity is the live `apple_route_selector.live_apple_route_context` (macOS, SDK, host compiler), the same context the strict route ledger already requires, so Apple rows recorded later will key on it.
+
 ## `APPLE-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
 
 Sync `LANE-B-SWEEP-2026-09-26` (ROCm owns the pattern: its Lane B was retired

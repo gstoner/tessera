@@ -2,7 +2,7 @@
 import argparse, os, sys, json
 sys.path.insert(0, os.path.dirname(__file__))
 from tprof_roofline.model import DevicePeaks, analyze
-from tprof_roofline.ingest import read_kernels_csv, read_perfetto_trace, read_nsight_compute_csv
+from tprof_roofline.ingest import read_benchmark_json, read_kernels_csv, read_perfetto_trace, read_nsight_compute_csv
 from tprof_roofline.report import generate_report, export_classification
 from tprof_roofline.report_multi import generate_multi
 from tprof_roofline.plot import plot_roofline_with_comm
@@ -15,7 +15,8 @@ def main():
     one = sub.add_parser("one", help="Generate one report from CSV/Perfetto/Nsight Compute")
     one.add_argument("--peaks", required=True, help="Device peaks YAML")
     one.add_argument("--input", required=True, help="Input path")
-    one.add_argument("--fmt", choices=["csv","perfetto","nsight"], default="csv")
+    one.add_argument("--fmt", choices=["csv","perfetto","nsight","benchmark"], default="csv",
+                     help="benchmark = Decision #12 stable rows (benchmarks/run_all.py JSON)")
     one.add_argument("--dtype", default="fp32")
     one.add_argument("--outdir", default="roofline_out")
     one.add_argument("--export-csv", default=None)
@@ -35,6 +36,9 @@ def main():
             comms = []
         elif args.fmt == "nsight":
             kernels = read_nsight_compute_csv(args.input)
+            comms = []
+        elif args.fmt == "benchmark":
+            kernels = read_benchmark_json(args.input)
             comms = []
         else:
             kernels, comms = read_perfetto_trace(args.input)
@@ -61,6 +65,8 @@ def main():
                 kernels = read_kernels_csv(p["input"]); comms = []
             elif fmt == "nsight":
                 kernels = read_nsight_compute_csv(p["input"]); comms = []
+            elif fmt == "benchmark":
+                kernels = read_benchmark_json(p["input"]); comms = []
             else:
                 kernels, comms = read_perfetto_trace(p["input"])
             res = analyze(kernels, device, dtype_key=dtype)

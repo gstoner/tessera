@@ -287,8 +287,10 @@ def test_a_stale_row_never_replaces_a_fresh_one():
 def test_every_hand_tuned_candidate_declares_an_artifact_identity():
     """P1-2 guard: a Tier-3 candidate is a versioned artifact (a delegate
     library, or a kernel tessera-opt generates at run time). One registered
-    without `delegate_identity()` would let a rebuilt artifact reuse a stale
-    verdict, so the registry is enumerated rather than listed by hand."""
+    without `delegate_identity()` (a library) or `artifact_identity()` (a
+    generated kernel's instruction-stream identity) would let a rebuilt
+    artifact reuse a stale verdict, so the registry is enumerated rather than
+    listed by hand."""
     import importlib
     import pkgutil
 
@@ -305,8 +307,10 @@ def test_every_hand_tuned_candidate_declares_an_artifact_identity():
                   and type(c).__module__.startswith("tessera.")]
     assert hand_tuned, "the registry enumeration found no Tier-3 candidates"
     missing = sorted(c.name for c in hand_tuned
-                     if type(c).delegate_identity is Candidate.delegate_identity)
-    assert not missing, f"Tier-3 candidates without delegate_identity(): {missing}"
+                     if type(c).delegate_identity is Candidate.delegate_identity
+                     and type(c).artifact_identity is Candidate.artifact_identity)
+    assert not missing, (
+        f"Tier-3 candidates without delegate_identity()/artifact_identity(): {missing}")
 
 
 def test_apple_identity_does_not_depend_on_path(tmp_path):

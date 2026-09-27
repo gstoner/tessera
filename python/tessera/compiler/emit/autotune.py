@@ -236,32 +236,48 @@ def _toolchain_mismatch(key: tuple[Any, ...], record: MeasureRecord) -> str | No
 
 
 def _record_matches_live_delegates(rec: MeasureRecord,
-                                   live: Mapping[str, Any]) -> bool:
-    """Whether every live identified candidate is the same build the record timed.
+                                   live: Mapping[str, Any],
+                                   region: Any = None,
+                                   inputs: tuple[Any, ...] = ()) -> bool:
+    """Whether every live identified candidate runs the artifact the record timed.
 
-    Decision #11's artifact half. Which candidates carry an identity: every
-    Tier-3 (``HAND_TUNED``) candidate -- a delegate library by content digest,
-    or a ``tessera-opt``-generated kernel by the compiler binary's digest --
-    enforced for every registered candidate by
+    Decision #11's artifact half. Each live candidate is asked for
+    ``artifact_identity(region, *inputs)`` -- the identity of what it would run
+    for *this* workload:
+
+    * a Tier-3 delegate library: its content digest (``delegate_identity``,
+      the same for every workload);
+    * a ``tessera-opt``-generated kernel (``rocm_wmma_gemm``,
+      ``rocm_flash_attn``): the digest of the normalized instruction stream
+      and kernel descriptor of the image it would run for this workload
+      (``kernel_code_identity``). This replaced the ``tessera-opt`` binary's
+      digest, which differs on every build and so served a committed row only
+      in the tree that recorded it; two builds that generate the same kernel
+      now share the verdict, and a changed kernel misses.
+
+    Which candidates must carry one is ``requires_artifact_identity()`` --
+    every ``HAND_TUNED`` candidate, enforced for the registry by
     ``tests/unit/test_autotune_toolchain_key.py``. SYNTHESIZED / EMITTED
-    candidates carry none: their code comes from this checkout's emitters under
-    the pinned toolchain, so they rely on the pin-based family identity alone.
+    candidates carry none by default: their code comes from this checkout's
+    emitters under the pinned toolchain, so they rely on the pin-based family
+    identity alone.
 
-    For each live candidate that returns an identity, the record must carry the
-    identical one under ``evidence.delegate_identities``; anything else -- a
-    rebuilt library or compiler, a record that never stamped it -- misses. A
-    live ``HAND_TUNED`` candidate that cannot identify itself (``None`` or an
-    error) also misses: it fails closed rather than reuse a verdict it cannot
-    match.
+    For each live candidate that returns an identity, the record must carry
+    the identical one under ``evidence.delegate_identities``; anything else --
+    a rebuilt library, a changed kernel, a record that never stamped it --
+    misses. A live candidate that requires an identity and cannot establish
+    one (``None`` or an error: no disassembler, no operands to derive the
+    workload from) also misses: fail closed rather than reuse a verdict it
+    cannot match.
     """
     recorded = rec.evidence.get("delegate_identities") or {}
     for name, cand in live.items():
         try:
-            identity = cand.delegate_identity()
+            identity = cand.artifact_identity(region, *inputs)
         except Exception:  # noqa: BLE001 - an unidentifiable artifact cannot match
             return False
         if identity is None:
-            if getattr(cand, "tier", None) == Tier.HAND_TUNED:
+            if _requires_identity(cand):
                 return False
             continue
         if recorded.get(name) != identity:
@@ -269,11 +285,21 @@ def _record_matches_live_delegates(rec: MeasureRecord,
     return True
 
 
-def _delegate_identities(candidates: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+def _requires_identity(cand: Any) -> bool:
+    probe = getattr(cand, "requires_artifact_identity", None)
+    if callable(probe):
+        return bool(probe())
+    return getattr(cand, "tier", None) == Tier.HAND_TUNED
+
+
+def _delegate_identities(candidates: Mapping[str, Any], region: Any = None,
+                         inputs: tuple[Any, ...] = ()) -> dict[str, dict[str, str]]:
+    """The artifact identity of every timed candidate for this workload, as
+    stamped into ``evidence.delegate_identities`` at record time."""
     out: dict[str, dict[str, str]] = {}
     for name, cand in candidates.items():
         try:
-            identity = cand.delegate_identity()
+            identity = cand.artifact_identity(region, *inputs)
         except Exception:  # noqa: BLE001 - leave it unstamped: every later hit misses
             continue
         if identity is not None:
@@ -722,8 +748,8 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
     for rec in matches:
         if not _record_raced_the_live_field(rec, live, timing):
             return None
-        # Decision #11: the delegates racing now must be the builds it timed.
-        if not _record_matches_live_delegates(rec, live):
+        # Decision #11: the artifacts racing now must be the ones it timed.
+        if not _record_matches_live_delegates(rec, live, region, inputs):
             return None
 
     # ...and only if the verdict is SUPPORTED. Without this, `separation` was
@@ -836,7 +862,7 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
     rec = cache.get(key)
     if (rec is not None and record_is_admissible(rec)
             and _record_raced_the_live_field(rec, live, timing)
-            and _record_matches_live_delegates(rec, live)):
+            and _record_matches_live_delegates(rec, live, region, inputs)):
         # The exact-key hit is only usable if it beat the field racing now.
         # Validating solely that the winner is still live -- what this did
         # before -- accepted a legacy device row, or a partial one naming a
@@ -928,12 +954,14 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         winner = live[rec.winner]
 
     # Decision #11: stamp the pin-based toolchain identity and the artifact
-    # identity of every timed candidate that has one (Tier-3 delegates and
-    # tessera-opt-generated kernels), so a pin bump, a rebuilt library or a
-    # rebuilt compiler misses. See `_record_matches_live_delegates`.
+    # identity of every timed candidate that has one (a Tier-3 delegate's
+    # library digest; a tessera-opt-generated kernel's instruction-stream
+    # digest for THIS workload), so a pin bump, a rebuilt library or a changed
+    # kernel misses. See `_record_matches_live_delegates`.
     evidence: dict[str, Any] = dict(toolchain_evidence(target))
     delegates = _delegate_identities(
-        {name: cand for name, cand in live.items() if name in latencies})
+        {name: cand for name, cand in live.items() if name in latencies},
+        region, inputs)
     if delegates:
         evidence["delegate_identities"] = delegates
     cache.put(key, MeasureRecord(

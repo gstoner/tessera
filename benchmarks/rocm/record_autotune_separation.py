@@ -143,6 +143,15 @@ def main() -> int:
             print(f"  {size}x{size} {timing:10s}: {winner.name:22s} {verdict}"
                   f"  margin={(sep.get('margin') or 0)*100:.2f}%"
                   f" noise={(sep.get('noise') or 0)*100:.2f}%")
+            # Decision #11: the artifact identity each timed candidate was
+            # stamped with -- for rocm_wmma_gemm the kernel-code identity of
+            # the image timed at this shape, not the tessera-opt binary.
+            stamped = (rec.evidence.get("delegate_identities") or {}) if rec else {}
+            for name, ident in sorted(stamped.items()):
+                print(f"      {name}: stream="
+                      f"{str(ident.get('instruction_stream_sha256', '-'))[:16]}"
+                      f" kd={str(ident.get('kernel_descriptor_sha256', '-'))[:16]}"
+                      f" n={ident.get('instruction_count', '-')}")
 
     # The gate this module's docstring promised and did not have. HIP events
     # on this fleet have been measured returning success while writing garbage,

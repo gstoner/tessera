@@ -350,17 +350,22 @@
         64
       ],
       "candidates": {
-        "rocm_generic_hip": 0.735126988729462,
-        "rocm_wmma_gemm": 1.9020135077880695
+        "rocm_generic_hip": 0.7095460023265332,
+        "rocm_wmma_gemm": 1.8876770045608282
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
           "rocm_wmma_gemm": {
-            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "entry": "gemm",
             "generator": "tessera-opt",
-            "library": "tessera-opt"
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v1"
           }
         },
         "toolchain": {
@@ -376,12 +381,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.735126988729462,
+      "latency_ms": 0.7095460023265332,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.6135006477507241,
-        "noise": 0.031500616473862084,
+        "margin": 0.6241168374609668,
+        "noise": 0.03432994495031949,
         "runner_up": "rocm_wmma_gemm",
         "separated": true
       },
@@ -396,17 +401,22 @@
         64
       ],
       "candidates": {
-        "rocm_generic_hip": 0.23017,
-        "rocm_wmma_gemm": 0.015637417013446488
+        "rocm_generic_hip": 0.23085333333333335,
+        "rocm_wmma_gemm": 0.01570741708079974
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
           "rocm_wmma_gemm": {
-            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "entry": "gemm",
             "generator": "tessera-opt",
-            "library": "tessera-opt"
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v1"
           }
         },
         "toolchain": {
@@ -422,12 +432,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.015637417013446488,
+      "latency_ms": 0.01570741708079974,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9320614458294023,
-        "noise": 0.010578739689884183,
+        "margin": 0.9319593230299191,
+        "noise": 0.011292488816554458,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -442,17 +452,22 @@
         256
       ],
       "candidates": {
-        "rocm_generic_hip": 6.84108400309924,
-        "rocm_wmma_gemm": 4.205089484457858
+        "rocm_generic_hip": 6.909496005391702,
+        "rocm_wmma_gemm": 4.322159991716035
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
           "rocm_wmma_gemm": {
-            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "entry": "gemm",
             "generator": "tessera-opt",
-            "library": "tessera-opt"
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v1"
           }
         },
         "toolchain": {
@@ -468,12 +483,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 4.205089484457858,
+      "latency_ms": 4.322159991716035,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.3853182503602044,
-        "noise": 0.055144400538413074,
+        "margin": 0.3744608885592648,
+        "noise": 0.022046978051446387,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -488,17 +503,22 @@
         256
       ],
       "candidates": {
-        "rocm_generic_hip": 4.230418333333334,
-        "rocm_wmma_gemm": 0.020944375544786453
+        "rocm_generic_hip": 4.23587,
+        "rocm_wmma_gemm": 0.02096745868523916
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
           "rocm_wmma_gemm": {
-            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "entry": "gemm",
             "generator": "tessera-opt",
-            "library": "tessera-opt"
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v1"
           }
         },
         "toolchain": {
@@ -514,12 +534,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.020944375544786453,
+      "latency_ms": 0.02096745868523916,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9950491006102739,
-        "noise": 0.01078620963659477,
+        "margin": 0.9950500230920121,
+        "noise": 0.038163634572067624,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -534,17 +554,22 @@
         512
       ],
       "candidates": {
-        "rocm_generic_hip": 29.58665299229324,
-        "rocm_wmma_gemm": 5.3820165048819035
+        "rocm_generic_hip": 29.047099989838898,
+        "rocm_wmma_gemm": 4.83152900415007
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
           "rocm_wmma_gemm": {
-            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "entry": "gemm",
             "generator": "tessera-opt",
-            "library": "tessera-opt"
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v1"
           }
         },
         "toolchain": {
@@ -560,12 +585,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 5.3820165048819035,
+      "latency_ms": 4.83152900415007,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.818093093994653,
-        "noise": 0.04639133861150837,
+        "margin": 0.8336657013663943,
+        "noise": 0.0431703151785831,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -580,17 +605,22 @@
         512
       ],
       "candidates": {
-        "rocm_generic_hip": 26.65681,
-        "rocm_wmma_gemm": 0.029901708165804546
+        "rocm_generic_hip": 26.641690000000004,
+        "rocm_wmma_gemm": 0.03009766712784767
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
           "rocm_wmma_gemm": {
-            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "entry": "gemm",
             "generator": "tessera-opt",
-            "library": "tessera-opt"
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v1"
           }
         },
         "toolchain": {
@@ -606,12 +636,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.029901708165804546,
+      "latency_ms": 0.03009766712784767,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9988782713248208,
-        "noise": 0.008868443773274328,
+        "margin": 0.9988702793581095,
+        "noise": 0.03477586879171667,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -626,17 +656,22 @@
         1024
       ],
       "candidates": {
-        "rocm_generic_hip": 191.71401900530327,
-        "rocm_wmma_gemm": 9.986229983041994
+        "rocm_generic_hip": 191.08460201823618,
+        "rocm_wmma_gemm": 10.359723994042724
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
           "rocm_wmma_gemm": {
-            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "entry": "gemm",
             "generator": "tessera-opt",
-            "library": "tessera-opt"
+            "identity": "kernel_code",
+            "instruction_count": "21744",
+            "instruction_stream_sha256": "97baa4c06a2cb0efcdf40d38e5ae578b43fa2468c990f9388a472d82582abb0c",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "2f06167e17b310b74cc3fac5936993b705cdcae96fb891e6ce64919b82d12642",
+            "normalization": "tessera.kernel_code.v1"
           }
         },
         "toolchain": {
@@ -652,12 +687,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 9.986229983041994,
+      "latency_ms": 10.359723994042724,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.947910799456112,
-        "noise": 0.03947369112850849,
+        "margin": 0.9457846216564637,
+        "noise": 0.053241839410793024,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -672,17 +707,22 @@
         1024
       ],
       "candidates": {
-        "rocm_generic_hip": 186.19184666666666,
-        "rocm_wmma_gemm": 0.17324887712796527
+        "rocm_generic_hip": 185.75822666666664,
+        "rocm_wmma_gemm": 0.172409584124883
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
           "rocm_wmma_gemm": {
-            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "entry": "gemm",
             "generator": "tessera-opt",
-            "library": "tessera-opt"
+            "identity": "kernel_code",
+            "instruction_count": "21744",
+            "instruction_stream_sha256": "97baa4c06a2cb0efcdf40d38e5ae578b43fa2468c990f9388a472d82582abb0c",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "2f06167e17b310b74cc3fac5936993b705cdcae96fb891e6ce64919b82d12642",
+            "normalization": "tessera.kernel_code.v1"
           }
         },
         "toolchain": {
@@ -698,12 +738,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.17324887712796527,
+      "latency_ms": 0.172409584124883,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9990695141584898,
-        "noise": 0.008545687037044291,
+        "margin": 0.9990718603034778,
+        "noise": 0.004701036558037798,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },

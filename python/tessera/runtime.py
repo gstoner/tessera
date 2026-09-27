@@ -8630,13 +8630,10 @@ def _rocm_wmma_fused_2d(
             np.ascontiguousarray(a, dtype=store),
             np.ascontiguousarray(b, dtype=store), bias_arr, activation, m, n, k, chip,
             dtype_tag=dtype_tag)
-    from .compiler.rocm_schedule import select_rocm_gemm_schedule
-
-    schedule = select_rocm_gemm_schedule(
-        m, n, k, dtype=dtype_tag, arch=chip,
-        raster_order=raster_order, raster_group=raster_group)
+    hsaco, schedule = _rocm_wmma_fused_gfx11_image(
+        m, n, k, dtype_tag, bias=has_bias, activation=activation,
+        raster_order=raster_order, raster_group=raster_group, chip=chip)
     mt, nt = schedule.macro_tile
-    hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag, bias=has_bias, activation=activation, schedule=schedule)
 
     hip = _load_hip_for_launch()
     if hip is None:
@@ -8715,6 +8712,45 @@ def _rocm_wmma_fused_2d(
     finally:
         for dev in devs:
             hip.hipFree(dev)
+
+
+def _rocm_wmma_fused_gfx11_image(
+    m: int, n: int, k: int, dtype_tag: str, *, bias: bool, activation: str,
+    raster_order: str = "row_major", raster_group: int = 1, chip: str | None = None,
+) -> tuple[bytes, Any]:
+    """The gfx11 fused WMMA image :func:`_rocm_wmma_fused_2d` launches for this
+    workload, and the schedule that selected it (its macro tile fixes the grid).
+    One statement of the selection, shared by the launch and by the arbiter's
+    kernel-code identity (``RocmWmmaGemmCandidate.artifact_identity``), so the
+    identity is always of the image that runs."""
+    from .compiler.rocm_schedule import select_rocm_gemm_schedule
+
+    schedule = select_rocm_gemm_schedule(
+        m, n, k, dtype=dtype_tag, arch=chip or _rocm_chip(),
+        raster_order=raster_order, raster_group=raster_group)
+    mt, nt = schedule.macro_tile
+    return _build_compiled_gemm_hsaco(
+        mt, nt, dtype_tag, bias=bias, activation=activation, schedule=schedule), schedule
+
+
+def _rocm_wmma_fused_image(
+    m: int, n: int, k: int, dtype_tag: str = "f16", *, bias: bool, activation: str,
+    raster_order: str = "row_major", raster_group: int = 1,
+) -> tuple[bytes, str]:
+    """``(hsaco, entry_symbol)`` of the fused WMMA kernel
+    :func:`_rocm_wmma_fused_2d` runs for ``(m, n, k, dtype, bias, activation)``
+    on the launch chip: the gfx11 directive kernel, or on gfx12 the scheduled
+    package's image (same build call, same package cache). Raises what the
+    build raises; never launches."""
+    chip = _rocm_chip()
+    if not chip.startswith("gfx11"):
+        package = build_canonical_gemm_hsaco(
+            m, n, k, dtype_tag, chip=chip, bias=bias, activation=activation)
+        return bytes(package.image.payload), str(package.descriptor.entry_symbol)
+    hsaco, _ = _rocm_wmma_fused_gfx11_image(
+        m, n, k, dtype_tag, bias=bias, activation=activation,
+        raster_order=raster_order, raster_group=raster_group, chip=chip)
+    return hsaco, "gemm"
 
 
 _rocm_wmma_fused_probe_ok: bool | None = None
@@ -8978,6 +9014,45 @@ def _build_compiled_flash_attn_hsaco(
     return hsaco
 
 
+def _rocm_flash_attn_two_wave(
+    head_dim: int, *, gqa: bool, sliding_window: bool, logit_softcap: bool,
+    attn_bias: bool, dropout: bool,
+) -> bool:
+    """Whether the FA-2 lane builds (and launches 64 threads for) the two-wave
+    kernel. G6-B: D=128 plain/causal attention uses two cooperating Wave32
+    groups. Nine interleaved gfx1151 trials show 2.04–2.10x paired kernel
+    speedup, eliminate 82 VGPR spills, and match within 8.4e-6. Advanced
+    semantic variants stay one-wave until their own correctness/performance
+    matrix."""
+    return head_dim == 128 and not (
+        gqa or sliding_window or logit_softcap or attn_bias or dropout)
+
+
+def _rocm_flash_attn_image(
+    head_dim: int, dtype_tag: str = "f16", *, gqa: bool = False,
+    sliding_window: bool = False, logit_softcap: bool = False,
+    attn_bias: bool = False, dropout: bool = False,
+) -> tuple[bytes, str]:
+    """``(hsaco, entry_symbol)`` of the FA-2 forward kernel the compiled
+    flash_attn lane launches for this variant -- one statement of the variant
+    selection, shared by the launch and by the arbiter's kernel-code identity
+    (``RocmFlashAttnCandidate.artifact_identity``)."""
+    two_wave = _rocm_flash_attn_two_wave(
+        head_dim, gqa=gqa, sliding_window=sliding_window,
+        logit_softcap=logit_softcap, attn_bias=attn_bias, dropout=dropout)
+    hsaco = _build_compiled_flash_attn_hsaco(
+        head_dim,
+        dtype_tag,
+        gqa,
+        sliding_window=sliding_window,
+        logit_softcap=logit_softcap,
+        attn_bias=attn_bias,
+        dropout=dropout,
+        two_wave=two_wave,
+    )
+    return hsaco, "fa"
+
+
 def _execute_rocm_compiled_flash_attn(
     artifact: RuntimeArtifact,
     args: Any,
@@ -9105,21 +9180,12 @@ def _execute_rocm_compiled_flash_attn(
             ) from exc
         bias_c = np.ascontiguousarray(bias_b, dtype=np.float32).reshape(-1)
 
-    # G6-B: D=128 plain/causal attention uses two cooperating Wave32 groups.
-    # Nine interleaved gfx1151 trials show 2.04–2.10x paired kernel speedup,
-    # eliminate 82 VGPR spills, and match within 8.4e-6.  Advanced semantic
-    # variants stay one-wave until their own correctness/performance matrix.
-    two_wave = head_dim == 128 and not (gqa or sliding or has_softcap or has_bias or has_dropout)
-    hsaco = _build_compiled_flash_attn_hsaco(
-        head_dim,
-        dtype_tag,
-        gqa,
-        sliding_window=sliding,
-        logit_softcap=has_softcap,
-        attn_bias=has_bias,
-        dropout=has_dropout,
-        two_wave=two_wave,
-    )
+    two_wave = _rocm_flash_attn_two_wave(
+        head_dim, gqa=gqa, sliding_window=sliding, logit_softcap=has_softcap,
+        attn_bias=has_bias, dropout=has_dropout)
+    hsaco, _ = _rocm_flash_attn_image(
+        head_dim, dtype_tag, gqa=gqa, sliding_window=sliding,
+        logit_softcap=has_softcap, attn_bias=has_bias, dropout=has_dropout)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable — no ROCm execution lane on this host")

@@ -339,7 +339,7 @@ matches its module fails generation. Read the counts there.
 |---|---|---|
 | Analysis | W2.1 dataflow substrate, per-op memory effects, symbolic-dim equality | Value, alias, effect, memory-dependence and ordered-collective **consumers** (§3 above) |
 | Fusion | One authoritative recognizer; Apple synthesizer F0–F5 | Synthesizer not portable through IR; consumer-driven canonicalization (W5.5); ANN admission of measured candidates (MSW-9) |
-| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log; Decision #11 toolchain/delegate identity in every autotune key and Decision #12 `route`/`route_source`/`timing_source` schema fields (2026-09-26, sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`) | The 97 `nvidia:sm_120` `autotune_corpus.json` rows were **re-recorded on Super-Bear 2026-09-26** under the Decision #11 key (108 rows now, none stale, 38 selector-eligible rows strictly admitted); the sm_120 paged-attention warm start is served again from interleaved, separation-verdicted serving rows (fused / fused / staged at 128 / 512 / 2048 tokens; 512 flipped from staged, open question in the nvidia queue); the 16 `rocm:gfx1151` rows were re-recorded on Princess-Luna 2026-09-26 with unchanged winners, and the gfx1151 paged-KV warm start selects `direct` again; Decision #12 route derivation is wired into `benchmarks/run_all.py` only, the ~35 family recorders still stamp their own route strings; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
+| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log; Decision #11 toolchain/delegate identity in every autotune key and Decision #12 `route`/`route_source`/`timing_source` schema fields (2026-09-26, sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`) | The 97 `nvidia:sm_120` `autotune_corpus.json` rows were **re-recorded on Super-Bear 2026-09-26** under the Decision #11 key (108 rows now, none stale, 38 selector-eligible rows strictly admitted); the sm_120 paged-attention warm start is served again from interleaved, separation-verdicted serving rows (fused / fused / staged at 128 / 512 / 2048 tokens; 512 flipped from staged, open question in the nvidia queue); the 16 `rocm:gfx1151` rows were re-recorded on Princess-Luna 2026-09-26 with unchanged winners (the 8 `fused_region` rows keyed on the kernel-code identity, so they serve in any build that generates the same kernel), and the gfx1151 paged-KV warm start selects `direct` again (with no artifact identity check yet, `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`); Decision #12 route derivation is wired into `benchmarks/run_all.py` only, the ~35 family recorders still stamp their own route strings; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
 | Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; split-K has a production consumer on gfx1201 f16/bf16 since 2026-09-26 (ROCM-SPLIT-K-1) -- the per-shape slice rule, fp8/int split and gfx1151 remain open |
 | Memory | `TileBufferReusePass`, `TileBufferArenaPass` on ROCm/NVIDIA | Control-flow path-max sizing; multiple dynamic arenas; measured full-model remat |
 | Cost models | `target_perf.py`, T1 GEMM model, `FusionCost` | T1 failed ranking — replace, do not coefficient-tune; per-arch correlation (NVIDIA-CALIB-1, ROCM-COSTMODEL-T1, X86-CALIB-1, APPLE-CALIB-1); sm_120 and Apple roofline peaks |
@@ -471,7 +471,8 @@ matches its module fails generation. Read the counts there.
    fingerprint and the device). The family identity is pin-based; a rebuilt
    artifact is caught per candidate instead -- every Tier-3 candidate stamps a
    delegate library digest or, for kernels `tessera-opt` generates, the
-   compiler binary's digest (a registry-enumerating test enforces it).
+   kernel-code identity of the image it ran for that workload (a
+   registry-enumerating test enforces it; see below).
    `autotune_v2` (SQLite), `tessera.autotune.cache_key`, `emit.autotune`
    (corpus v4; identity-less `put` refused unless the caller declares a fresh
    in-process measurement; stale rows never resurrected), `flywheel` (schema
@@ -480,6 +481,23 @@ matches its module fails generation. Read the counts there.
    Review fixes 2026-09-26: the 8 re-recorded gfx1151 `fused_region` rows
    predate the `rocm_wmma_gemm` tessera-opt identity, so on Princess-Luna they
    now miss for that candidate and are re-raced until re-recorded again.
+   **Kernel-code identity (2026-09-26, owner decision):** the `tessera-opt`
+   binary digest differed on every build, so a committed row served only in
+   the tree that recorded it. `rocm_wmma_gemm` and `rocm_flash_attn` are now
+   keyed on the digest of the normalized instruction stream plus decoded kernel
+   descriptor of the image they would run for the workload
+   (`compiler/kernel_code_identity.py`, `tessera.kernel_code.v1`), recomputed at
+   lookup (per-process cache, fail closed); the family pins stay in the key.
+   Proven on Princess-Luna: two fresh build trees of one commit yield different
+   `tessera-opt` binaries and identical kernel identities for all four fused
+   shapes, and the 8 re-recorded gfx1151 `fused_region` rows (winners and
+   separation unchanged) are served in a build tree that did not record them
+   (`benchmarks/baselines/autotune_corpus_rerecord_20260926/gfx1151_fused_kernel_identity.txt`).
+   Limits and open items: AMDGPU normalization only -- NVIDIA EMITTED
+   candidates carry no artifact identity (follow-up in the NVIDIA plan); the
+   gfx1151 `paged_kv_decode` rows and their warm start check no artifact
+   identity although their routes run generated kernels (ROCm plan,
+   `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`).
    `benchmarks/common/route_provenance.py` derives `route` from the executed
    artifact (`runtime_artifact.metadata.compiler_path`,
    `descriptor.provenance`) or records `unknown` with the reason;

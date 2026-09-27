@@ -236,14 +236,43 @@ class Candidate(ABC):
         identity into its record and refuses a record whose identity differs
         from the live candidate's (``autotune._record_matches_live_delegates``).
 
-        **Every ``Tier.HAND_TUNED`` candidate must override this** (a test
-        enumerates the registry): a delegate library by
+        **Every ``Tier.HAND_TUNED`` candidate must override this or
+        :meth:`artifact_identity`** (a test enumerates the registry): a
+        delegate library overrides this, by
         ``toolchain_identity.delegate_library_identity`` /
-        ``loaded_library_identity``, a tessera-opt-generated kernel by
-        ``tessera_opt_identity``. :class:`delegate_contract.DelegatedCandidate`
-        supplies one from its contract.
+        ``loaded_library_identity``; :class:`delegate_contract.DelegatedCandidate`
+        supplies one from its contract. A candidate whose kernel the compiler
+        generates (``tessera-opt``) overrides :meth:`artifact_identity`
+        instead, because the code it runs depends on the workload.
         """
         return None
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """The identity of the artifact this candidate would run for *this*
+        workload -- what the arbiter stamps at record time and matches at lookup.
+
+        Default: :meth:`delegate_identity`, which does not depend on the
+        workload (a delegate library is one artifact for every shape).
+
+        A compiler-generated candidate overrides this with the digest of the
+        normalized instruction stream of the image it would run for
+        ``(region, inputs)`` -- ``kernel_code_identity.compiler_kernel_identity``
+        -- so two builds of the compiler that generate the same kernel share a
+        verdict, and a changed kernel misses. Returning ``None`` from a
+        candidate that :meth:`requires_artifact_identity` is a miss (fail
+        closed), never a pass.
+        """
+        return self.delegate_identity()
+
+    def requires_artifact_identity(self) -> bool:
+        """Whether a verdict involving this candidate may be reused only when
+        its :meth:`artifact_identity` is established and matches.
+
+        Every ``Tier.HAND_TUNED`` candidate does (a versioned artifact). An
+        EMITTED candidate adopting the kernel-code identity (the NVIDIA
+        ``nvidia_tile_matmul_*`` lanes are the named follow-up) overrides this
+        to ``True`` so a digest it cannot compute misses rather than passes."""
+        return self.tier == Tier.HAND_TUNED
 
     @abstractmethod
     def run(self, region: Any, *inputs: Any, **kwargs: Any) -> tuple[Any, str]:

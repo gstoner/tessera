@@ -24,6 +24,10 @@ extern "C" __global__ void tessera_mbarrier_smoke_kernel(uint32_t* result) {
 }
 
 extern "C" cudaError_t tessera_mbarrier_smoke(uint32_t* host_result) {
+  // Discard a stale runtime error left on this thread by earlier code, so the
+  // post-launch cudaGetLastError() below reports only this launch
+  // (SPECTRAL-STALE-HIP-ERROR-2026-09-27).
+  (void)cudaGetLastError();
   uint32_t* device_result = nullptr;
   cudaError_t status = cudaMalloc(&device_result, sizeof(*device_result));
   if (status != cudaSuccess) return status;

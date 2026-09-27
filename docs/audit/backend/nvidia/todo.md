@@ -8,6 +8,84 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — hand-written hooks fixed on sm_120; emitted templates follow-up required
+
+**Update 2026-09-27 (same branch, PR #862) — reproduced and fixed on the RTX
+5070 for the hand-written hooks.** Both hook libraries link the shared
+`libcudart.so.13` (`nm -D`: `cudaGetLastError@libcudart.so.13`, undefined), so
+the slot is the process's per-thread one and any runtime caller on the thread
+can leave an error there. With `cudaSetDevice(97)` (returns 101, proven unread
+by `cudaPeekAtLastError`) before each call, the pre-fix libraries fail every
+checked path: host C2C inverse `rc=3`, device-pointer C2C inverse / C2R `rc=3`,
+DCT `rc=292`, STFT `rc=306`, streaming STFT `rc=306`, STFT JVP `rc=365`,
+Philox `rc=3`.
+
+Rule, as on ROCm: each exported entry that does device work calls
+`clearStaleCudaError()` once, first thing, and never between a launch and its
+check (several checks are grouped: `istft_backward_broadcast_layout_f32` reads
+the slot once after three launches). Sticky device-fault errors are not reset
+by `cudaGetLastError()` and still fail the next call.
+
+| Library / file | Entry | Clears | Reason when not |
+|---|---|---|---|
+| `tessera_nvidia_spectral.cu` | `dct_policy_layout_f32`, `stft_policy_broadcast_layout_f32`, `stft_jvp_broadcast_layout_f32`, `istft_policy_broadcast_layout_f32`, `istft_jvp_broadcast_layout_f32`, `stft_backward_broadcast_layout_f32`, `istft_backward_broadcast_layout_f32`, `spectral_conv_f32` | yes (8) | — |
+| | `spectral_package_abi`, `spectral_arch` | no | metadata; `spectral_arch` returns its own calls' statuses and never reads the slot |
+| | the seven `*_storage` wrappers, `streaming_stft_broadcast_layout_f32` | no | host packing, then a call to a clearing `_f32` entry with no CUDA call before it |
+| `tessera_nvidia_fft.cu` | `execute_{c2c,r2c,c2r}_f32` (host pointers) | yes (3) | — (`r2c` reads no slot today; cleared by the rule so a later launch check cannot inherit a stale error) |
+| | `execute_{c2c,r2c,c2r}_device_f32` (device pointers) | yes (3) | differs from ROCm on purpose: nothing in this library composes them after unchecked launches of its own; their callers are ctypes, which read every status directly. A future C++ composer would own the slot and take the clear |
+| | `package_abi`, `current_device`, `plan_create_{c2c,r2c,c2r}_f32`, `plan_destroy`, `workspace_alloc`, `workspace_free` | no | metadata / plan and workspace lifecycle: each returns its own call's status and never reads the slot |
+| `tessera_nvidia_rng.cu` | `philox_{uniform,uniform_range,normal,dropout}_f32` | yes (4) | — |
+| `src/kernels/{mbarrier,tma}_smoke.cu` | `tessera_mbarrier_smoke`, `tessera_tma_smoke` | yes (2) | — (standalone smoke executables; same rule) |
+
+Autotune identity: neither library feeds one. No candidate's
+`delegate_identity`/`loaded_library_identity` binds `libtessera_nvidia_fft` or
+`libtessera_nvidia_rng` (the only NVIDIA delegate digest is
+`libtessera_nvidia_gemm`, untouched), and no committed packet pins their
+digest, so rebuilding them unserves no corpus row.
+
+Evidence: `tests/device/nvidia/test_spectral_stale_cuda_error.py` wraps every
+checked entry to prime the slot before each call and requires each public
+path to succeed and to have reached the entries it names — 9/9 fail on the
+pre-fix libraries, 9/9 pass fixed (The-Super-Bear, own worktree and
+`build-nvidia-cuda`, loaded `.so` paths verified). Counts and the release-gate
+report are in the compiler log entry for this sync key.
+
+**Still open — emitted CUDA templates (follow-up required).** After #861
+merges, apply the entry-clear rule to the emitted CUDA templates in
+`python/tessera/compiler/emit/nvidia_cuda.py` (no entry clear before its
+post-launch `cudaGetLastError` checks) together with an sm_120 corpus
+re-record. Not done here because #861 makes an emitted lane's autotune
+identity the digest of its emitted source: editing the templates would change
+every NVIDIA emitted-lane identity and silently unserve the sm_120 corpus rows
+just re-recorded. (#861 merged while this branch was open; the follow-up is now
+unblocked but still owes the re-record.)
+`benchmarks/nvidia/record_shared_arena_rematerialization.py` embeds one more
+such source (benchmark harness, same follow-up).
+
+**Separate, pre-existing, not investigated:** `test_tma_smoke` fails on the RTX
+5070 with `cuTensorMapEncodeTiled: invalid argument` both before and after this
+change (the encode is a driver-API call ahead of any launch, so the entry clear
+cannot affect it). Owed: root-cause the descriptor (rank-1 f32, box 32).
+
+The ROCm spectral image checked its launches with `hipGetLastError()`, whose
+per-thread slot is sticky: an unrelated failed HIP call earlier on the thread
+(the probe used `hipSetDevice(97)`) made the next correct launch return
+failure — `rc=246` from the streaming STFT in the gfx1201 full sweep. The fix
+discards errors older than the call once, at the entry of every exported
+device-work function, never between launches ([ROCm queue](../rocm/todo.md)).
+
+**Follow-up required here, unproven on sm_120.** The CUDA runtime's
+`cudaGetLastError()` has the same read-and-reset contract for non-sticky
+errors, and the hand-written hooks follow the same pattern with no entry clear:
+`runtime/cuda/tessera_nvidia_spectral.cu` (21 post-launch reads),
+`tessera_nvidia_fft.cu` (4), `tessera_nvidia_rng.cu` (2), plus the emitted
+entries in `python/tessera/compiler/emit/nvidia_cuda.py` (no `(void)
+cudaGetLastError()` anywhere). Owed: reproduce on The-Super-Bear with a primed
+slot (`cudaSetDevice` on a missing ordinal, then a streaming STFT), apply the
+same per-entry rule, and keep grouped checks intact. Not changed in this PR,
+because no sm_120 run backs it. The NVIDIA streaming-STFT label is already
+derived (`tessera_nvidia_spectral_arch() == 120`).
+
 ## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: emitted-CUDA stale-error rule, scalar-lane device timers, gated dims; sm_120 rows re-recorded
 
 This section closes three items left open by the emitted-identity re-record

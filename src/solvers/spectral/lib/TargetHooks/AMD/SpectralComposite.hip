@@ -33,6 +33,23 @@ namespace {
 
 constexpr int kThreads = 256;
 
+// HIP's last-error slot is per host thread and STICKY: only a failing call
+// writes it, and only hipGetLastError() resets it. A refused call earlier on
+// the thread (another library's hipModuleLoadData, a hipSetDevice on a missing
+// ordinal) otherwise stays parked until a post-launch `hipGetLastError()`
+// check below reads it and fails a launch that succeeded -- the gfx1201 sweep
+// saw the streaming STFT return rc=246 that way (SPECTRAL-STALE-HIP-ERROR-
+// 2026-09-27). Every exported entry point that performs device work itself
+// calls this exactly once, first thing, so errors older than the call are
+// discarded and every error raised within the call still reaches a check.
+// Never call it between launches: several checks (stftThroughFFT's final one,
+// the grouped checks in the backward entries) are the only detectors for a
+// group of launches, including the unchecked Stockham launches inside
+// ts_fft_plan_execute_device_batch_amd. The storage/strided/policy wrappers do
+// only host work before delegating to an entry that clears, and the metadata
+// and plan-lifecycle entries never read the slot, so none of them call it.
+inline void clearStaleHipError() { (void)hipGetLastError(); }
+
 struct CompositePlan {
   void *workspace = nullptr;
   size_t bytes = 0;
@@ -752,6 +769,7 @@ extern "C" const char *ts_spectral_composite_arch_amd() {
 extern "C" int ts_spectral_filter_hostptr_amd(
     const float2 *aHost, const float2 *bHost, float2 *outputHost,
     long long elements) {
+  clearStaleHipError();
   if (!aHost || !bHost || !outputHost || elements <= 0) return 10;
   float2 *a = nullptr, *b = nullptr, *output = nullptr;
   size_t count = size_t(elements), bytes = count * sizeof(float2);
@@ -778,6 +796,7 @@ extern "C" int ts_dct_hostptr_batch_amd(void *forwardPlan,
                                           const float *inputHost,
                                           float *outputHost, int batch, int n,
                                           int dctType, float outputScale) {
+  clearStaleHipError();
   if (!inputHost || !outputHost || batch <= 0 || n <= 0 || dctType < 1 ||
       dctType > 4 || (dctType == 1 && n < 2) ||
       (dctType == 2 &&
@@ -825,6 +844,7 @@ extern "C" int ts_spectral_conv_hostptr_batch_amd(
     void *forwardPlan, void *inversePlan, const float *inputHost, int inputN,
     const float *kernelHost, int kernelN, float *outputHost, int batch,
     int fftN) {
+  clearStaleHipError();
   int outputN = inputN + kernelN - 1;
   if (!inputHost || !kernelHost || !outputHost || inputN <= 0 ||
       kernelN <= 0 || batch <= 0 || fftN < outputN)
@@ -897,6 +917,7 @@ extern "C" int ts_stft_hostptr_batch_amd(
     void *forwardPlan, const float *inputHost, const float *windowHost,
     float2 *outputHost, int batch, int samples, int win, int hop, int frames,
     float outputScale) {
+  clearStaleHipError();
   if (!forwardPlan || !inputHost || !windowHost || !outputHost || batch <= 0 ||
       samples <= 0 || win <= 0 || hop <= 0 || frames <= 0 ||
       ts_fft_plan_length_amd(forwardPlan) != win)
@@ -941,6 +962,7 @@ extern "C" int ts_istft_hostptr_batch_amd(
     void *inversePlan, const float2 *inputHost, const float *windowHost,
     float *outputHost, int batch, int frames, int win, int hop,
     float outputScale) {
+  clearStaleHipError();
   if (!inversePlan || !inputHost || !windowHost || !outputHost || batch <= 0 ||
       frames <= 0 || win <= 0 || hop <= 0 ||
       ts_fft_plan_length_amd(inversePlan) != win)
@@ -1018,6 +1040,7 @@ extern "C" long long ts_spectral_composite_plan_workspace_bytes_amd(void *opaque
 extern "C" int ts_spectral_filter_plan_hostptr_amd(
     void *opaque, const float2 *aHost, const float2 *bHost, float2 *outputHost,
     long long elements) {
+  clearStaleHipError();
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !aHost || !bHost || !outputHost || elements <= 0) return 70;
   WorkspaceCursor cursor(plan);
@@ -1038,6 +1061,7 @@ extern "C" int ts_spectral_filter_plan_hostptr_amd(
 extern "C" int ts_dct_plan_hostptr_batch_amd(
     void *opaque, void *forwardPlan, const float *inputHost,
     float *outputHost, int batch, int n, int dctType, float outputScale) {
+  clearStaleHipError();
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !inputHost || !outputHost || batch <= 0 || n <= 0 ||
       dctType < 1 || dctType > 4 || (dctType == 1 && n < 2) ||
@@ -1079,6 +1103,7 @@ extern "C" int ts_spectral_conv_plan_hostptr_batch_amd(
     void *opaque, void *forwardPlan, void *inversePlan, const float *inputHost,
     int inputN, const float *kernelHost, int kernelN, float *outputHost,
     int batch, int fftN) {
+  clearStaleHipError();
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   int outputN = inputN + kernelN - 1;
   if (!plan || !inputHost || !kernelHost || !outputHost || inputN <= 0 ||
@@ -1148,6 +1173,7 @@ extern "C" int ts_stft_plan_hostptr_batch_amd(
     void *opaque, void *forwardPlan, const float *inputHost,
     const float *windowHost, float2 *outputHost, int batch, int samples,
     int win, int hop, int frames, float outputScale) {
+  clearStaleHipError();
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !forwardPlan || !inputHost || !windowHost || !outputHost ||
       batch <= 0 || samples <= 0 || win <= 0 || hop <= 0 || frames <= 0 ||
@@ -1205,6 +1231,7 @@ extern "C" int ts_istft_plan_hostptr_batch_amd(
     void *opaque, void *inversePlan, const float2 *inputHost,
     const float *windowHost, float *outputHost, int batch, int frames,
     int win, int hop, float outputScale) {
+  clearStaleHipError();
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !inversePlan || !inputHost || !windowHost || !outputHost ||
       batch <= 0 || frames <= 0 || win <= 0 || hop <= 0 ||
@@ -1258,6 +1285,7 @@ extern "C" int ts_istft_jvp_plan_hostptr_batch_amd(
     const float *windowHost, const float2 *dinputHost,
     const float *dwindowHost, float *primalHost, float *tangentHost, int batch,
     int frames, int win, int hop, float outputScale) {
+  clearStaleHipError();
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !inversePlan || !inputHost || !windowHost || !dwindowHost ||
       !primalHost || !tangentHost || batch <= 0 || frames <= 0 || win <= 0 ||
@@ -1828,6 +1856,7 @@ extern "C" int ts_stft_plan_hostptr_broadcast_layout_storage_amd(
     const int64_t *windowShape, const int64_t *windowStrides, int fftN,
     int hop, int frames, int storage, float outputScale, int center,
     int padMode, int onesided) {
+  clearStaleHipError();
   if (!opaque || !inputHost || !windowHost || !outputHost ||
       !validStorage(storage) || rank <= 0 || rank > 8 || axis < 0 ||
       axis >= rank || fftN <= 0 || hop <= 0 || frames <= 0 ||
@@ -1904,6 +1933,7 @@ extern "C" int ts_istft_plan_hostptr_broadcast_layout_storage_amd(
     const int64_t *windowShape, const int64_t *windowStrides, int fftN,
     int hop, int storage, float outputScale, int center, int outputSamples,
     int onesided) {
+  clearStaleHipError();
   if (!opaque || !inputHost || !windowHost || !outputHost ||
       !validStorage(storage) || rank < 2 || rank > 8 || axis <= 0 ||
       axis >= rank || fftN <= 0 || hop <= 0 || outputSamples <= 0 ||
@@ -1998,6 +2028,7 @@ extern "C" int ts_streaming_stft_hostptr_broadcast_layout_storage_amd(
     int tailSamples, int windowRank, const int64_t *windowShape,
     const int64_t *windowStrides, int fftN, int hop, int frames, int storage,
     float outputScale, int onesided) {
+  clearStaleHipError();
   if (!validDigest(digest) || !inputHost || !windowHost || !outputHost ||
       !nextTailHost || (tailSamples && !tailHost) || !validStorage(storage) ||
       rank <= 0 || rank > 8 || axis < 0 || axis >= rank || fftN <= 0 ||
@@ -2091,6 +2122,7 @@ extern "C" int ts_stft_backward_hostptr_broadcast_layout_storage_amd(
     int windowRank, const int64_t *windowShape,
     const int64_t *windowStrides, int fftN, int hop, int storage,
     float forwardScale, int center, int padMode, int onesided) {
+  clearStaleHipError();
   if (!validDigest(digest) || !dyHost || !inputHost || !windowHost ||
       !dxHost || !dwindowHost || !validStorage(storage) || xRank <= 0 ||
       xRank > 8 || dyRank != xRank + 1 || axis < 0 || axis >= xRank ||
@@ -2221,6 +2253,7 @@ extern "C" int ts_istft_backward_hostptr_broadcast_layout_storage_amd(
     int windowRank, const int64_t *windowShape,
     const int64_t *windowStrides, int fftN, int hop, int storage,
     float inverseScale, int center, int onesided) {
+  clearStaleHipError();
   if (!validDigest(digest) || !dyHost || !spectrumHost || !windowHost ||
       !dspectrumHost || !dwindowHost || !validStorage(storage) ||
       spectrumRank != dyRank + 1 || outputAxis < 0 || outputAxis >= dyRank ||

@@ -188,9 +188,46 @@ def _stream_stft_chunk_x86(
     return output, next_tail, frames
 
 
+def _rocm_streaming_package() -> tuple[Any, str]:
+    """The live chip's composite package and the architecture it is stamped for.
+
+    The architecture is read from the loaded image's own stamp
+    (``ts_spectral_composite_arch_amd``), which ``_amd_composite_lib`` only
+    returns when it equals the selected HIP device -- never assumed. It used to
+    be the constant ``"gfx1151"`` for any ``target="rocm"``, so a gfx1201 run's
+    execution certificate and artifact/state digests named a chip that did not
+    execute them (SPECTRAL-STALE-HIP-ERROR-2026-09-27). An image whose chip has
+    no ready TSOL profile, or no resolvable device at all, fails closed.
+    """
+    from tessera.compiler.emit import spectral_candidates
+    from tessera.compiler.scheduled_spectral import spectral_architecture_profile
+
+    lib = spectral_candidates._amd_composite_lib()
+    if lib is None or not hasattr(
+        lib, "ts_streaming_stft_hostptr_broadcast_layout_storage_amd"
+    ):
+        raise RuntimeError(
+            "ROCm streaming STFT physical package is unavailable for the live "
+            f"device ({spectral_candidates._composite_host_arch()})"
+        )
+    stamp = lib.ts_spectral_composite_arch_amd()
+    architecture = stamp.decode() if isinstance(stamp, bytes) else ""
+    try:
+        profile = spectral_architecture_profile(f"rocm_{architecture}")
+    except ValueError:
+        profile = None
+    if profile is None or profile.execution_status != "ready":
+        raise RuntimeError(
+            f"ROCm streaming STFT package is stamped {architecture or 'unknown'!r}, "
+            "which has no ready spectral TSOL profile"
+        )
+    return lib, architecture
+
+
 def _stream_stft_chunk_rocm(
     values: np.ndarray, window: np.ndarray, policy: StreamingSTFTPolicy,
     axis: int, tail: np.ndarray | None, artifact_digest: str,
+    lib: Any, architecture: str,
 ) -> tuple[np.ndarray, np.ndarray, int]:
     import ctypes
     from tessera.compiler.emit import spectral_candidates
@@ -198,12 +235,9 @@ def _stream_stft_chunk_rocm(
     if str(values.dtype) not in {"float16", "bfloat16", "float32"} or (
         window.dtype != values.dtype
     ):
-        raise ValueError("gfx1151 streaming STFT requires matching f16/bf16/f32 storage")
-    lib = spectral_candidates._amd_composite_lib()
-    if lib is None or not hasattr(
-        lib, "ts_streaming_stft_hostptr_broadcast_layout_storage_amd"
-    ):
-        raise RuntimeError("gfx1151 streaming STFT physical package is unavailable")
+        raise ValueError(
+            f"{architecture} streaming STFT requires matching f16/bf16/f32 storage"
+        )
 
     def descriptor(array: np.ndarray) -> tuple[Any, Any]:
         if any(stride % array.itemsize for stride in array.strides):
@@ -244,7 +278,7 @@ def _stream_stft_chunk_rocm(
         storage, ctypes.c_float(1.0), int(policy.onesided),
     )
     if rc:
-        raise RuntimeError(f"gfx1151 streaming STFT package failed rc={rc}")
+        raise RuntimeError(f"{architecture} streaming STFT package failed rc={rc}")
     return output, next_tail, frames
 
 
@@ -334,11 +368,16 @@ def stream_stft_chunk(
         raise ValueError("streaming STFT window batch dimensions do not broadcast")
     if target not in {"reference", "x86", "rocm", "nvidia_sm120"}:
         raise ValueError("streaming STFT target is unsupported")
-    architecture = (
-        "zen5-avx512" if target == "x86" else
-        "gfx1151" if target == "rocm" else
-        "sm_120" if target == "nvidia_sm120" else "reference"
-    )
+    rocm_lib = None
+    if target == "rocm":
+        # The chip comes from the loaded package's stamp, never a constant: it
+        # is bound into the artifact and state digests below.
+        rocm_lib, architecture = _rocm_streaming_package()
+    else:
+        architecture = (
+            "zen5-avx512" if target == "x86" else
+            "sm_120" if target == "nvidia_sm120" else "reference"
+        )
     artifact_digest = digest_text(
         "schema=tessera.streaming_stft_artifact.v1;"
         f"target={target};arch={architecture};"
@@ -372,7 +411,8 @@ def stream_stft_chunk(
         )
     elif target == "rocm":
         spectra, tail, frame_count = _stream_stft_chunk_rocm(
-            values, win, policy, axis, prior_tail, artifact_digest
+            values, win, policy, axis, prior_tail, artifact_digest,
+            rocm_lib, architecture,
         )
     elif target == "nvidia_sm120":
         spectra, tail, frame_count = _stream_stft_chunk_nvidia(

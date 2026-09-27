@@ -5012,6 +5012,22 @@ correct results), serve check 8/8 served / 8/8 miss. No identity of unchanged
 code moved. Tests: `tests/unit/test_autotune_identity_memo_coherence.py`
 (the directive cases fail on `dedae4b0`). Detail: ROCm and NVIDIA queues.
 
+### 2026-09-27 — Spectral image survives a stale HIP error; streaming STFT names the chip that ran
+
+Owner: [TSOL-POLICY-PHYS-1](INTEGRATED_COMPILER_PLAN.md#tsol-policy-phys-1)
+
+PRs: branch `claude/spectral-stale-hip-error` (sync `SPECTRAL-STALE-HIP-ERROR-2026-09-27`).
+
+Outcome: the ROCm spectral image no longer fails a correct launch because of an earlier, unrelated HIP failure on the thread. HIP's last-error slot is per thread and sticky, and the image's post-launch `hipGetLastError()` checks read it; each exported host-pointer entry that performs device work now discards errors older than the call once, on entry, and never between launches, so grouped checks still see every launch of the call. The streaming STFT's `target="rocm"` architecture is read from the loaded image's stamp instead of the constant `gfx1151`, and fails closed without a ready TSOL profile. Device-proven with a primed slot on gfx1201 (Tajasarus) and gfx1151 (Princess-Luna): the pre-fix image fails with the probe's `rc=246`, the fixed image passes. Extended on the same branch to the sibling hand-written hooks: the sm_120 `libtessera_nvidia_fft.so` (spectral policy + FFT) and `libtessera_nvidia_rng.so` entries, the `tessera_gpu_backend` mbarrier/TMA smoke entries, and the gfx1151 timing probe `collect_rocm_timing_probe` follow the same once-first rule; reproduced and fixed on the RTX 5070 (pre-fix libraries fail every checked path with their own launch-check code) and on gfx1151 (a primed slot voided a valid timing sample).
+
+Remaining: the emitted CUDA templates in `emit/nvidia_cuda.py` keep the unguarded pattern; now that #861 has merged (an emitted lane's autotune identity is the digest of its emitted source), apply the rule there together with an sm_120 corpus re-record (NVIDIA queue). `test_tma_smoke` fails on the RTX 5070 before and after this change (`cuTensorMapEncodeTiled: invalid argument`, pre-existing, not investigated).
+
+Evidence: `tests/unit/test_rocm_spectral_stale_hip_error.py`, `tests/device/nvidia/test_spectral_stale_cuda_error.py`, `tests/unit/test_spectral_streaming.py`, ROCm and NVIDIA queue entries `SPECTRAL-STALE-HIP-ERROR-2026-09-27` (probe output, sweep source, per-entry classification, per-host counts).
+
+<!-- entry-fields:end -->
+
+sm_120 extension, verification (The-Super-Bear RTX 5070, own worktree and `build-nvidia-cuda`, loaded `.so` paths checked; code commit `31209ae8`): the new regression test 9 failed against the pre-fix libraries (`rc=3` host/device FFT and Philox, `rc=292` DCT, `rc=306` STFT and streaming STFT, `rc=365` STFT JVP) and 9 passed fixed; `cudaGetLastError` call sites in the images 23→37 (fft) and 4→8 (rng), matching the 14 + 4 entry clears. NVIDIA spectral/FFT/RNG device files 102 passed; `tests/unit -m "not slow" -k "spectral or stft or fft or dct or rng or philox or dropout"` 707 passed / 221 skipped. Release gate device layer (`scripts/run_nvidia_release_gate.sh --layer device` at `31209ae8`, reports `~/gate-reports/stale-nv-31209ae8` on that box): both passes 1132 tests, 1130 passed, 2 skipped (NCCL not installed; `libtessera_runtime.a` not built), 0 failed, the 9 new tests included; `status=success`. The timing probe on Princess-Luna (gfx1151): pre-fix primed → `HIP instrumented launch failed`, fixed primed → valid sample; Tajasarus (gfx1201) builds it but fails closed before any launch (`requires exact gfx1151`), so it cannot evaluate that lane.
+
 ### 2026-09-27 — sm_120 autotune follow-ups
 
 Owner: [W5.2](INTEGRATED_COMPILER_PLAN.md#w52)

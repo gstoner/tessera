@@ -358,3 +358,30 @@ def test_a_rebinding_during_the_emit_is_not_memoized():
     SM.memoized(ns, "emit")
     SM.memoized(ns, "emit")
     assert len(calls) == 2
+
+
+def test_numerically_equal_arguments_of_different_types_are_not_aliased():
+    """`1 == 1.0 == True` hash alike, but an emitter formatting them into C
+    writes different programs (`a / 2` vs `a / 2.0`); the memo key tells them
+    apart, including inside a frozen region."""
+    ns: dict = {}
+    exec("def emit(d):\n    return f'x / {d}'\n", ns)  # noqa: S102
+    assert [SM.memoized(ns, "emit", d) for d in (2, 2.0, True, 1)] == [
+        "x / 2", "x / 2.0", "x / True", "x / 1"]
+    exec("def emit_region(r):\n    return f'scale={r.scale}'\n", ns)  # noqa: S102
+    assert SM.memoized(ns, "emit_region", F.AttentionRegion(scale=1)) == "scale=1"
+    assert SM.memoized(ns, "emit_region", F.AttentionRegion(scale=1.0)) == "scale=1.0"
+
+
+def test_a_mutable_argument_is_never_memoized():
+    calls: list[int] = []
+    ns: dict = {"_calls": calls}
+    exec("def emit(o):\n    _calls.append(1)\n    return str(o.v)\n", ns)  # noqa: S102
+
+    class Box:
+        v = 1
+
+    b = Box()
+    assert SM.memoized(ns, "emit", b) == "1"
+    b.v = 2
+    assert SM.memoized(ns, "emit", b) == "2" and len(calls) == 2

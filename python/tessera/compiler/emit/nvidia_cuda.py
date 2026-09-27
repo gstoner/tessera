@@ -1205,8 +1205,9 @@ def _nvcc_cache_line() -> tuple[str, ...]:
     Memoized on the three environment variables it reads and on the helpers
     that turn them into the line (so patching one is seen), since every launch
     of an emitted lane asks for it."""
-    if _ENVB is not None and getattr(os.environ, "_data", None) is _ENVB:
-        get = _ENVB.get
+    store: Any = getattr(os.environ, "_data", None)
+    if store is not None and store is _ENVB:
+        get = store.get
         k0, k1, k2 = _NVCC_ENV_KEYS_B
         env: tuple[Any, ...] = (get(k0), get(k1), get(k2))
     else:

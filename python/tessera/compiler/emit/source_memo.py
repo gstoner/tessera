@@ -38,6 +38,8 @@ kernel's latency with another's name, and that pairing no longer exists.
 
 from __future__ import annotations
 
+import dataclasses
+import enum
 import sys
 import types
 from typing import Any, Callable, Mapping
@@ -139,6 +141,50 @@ def _snapshot(fn: Callable[..., Any], namespace: Any, name: str) -> _Snapshot:
     return tuple(entries.values())
 
 
+_SCALARS = (bool, int, float, complex)
+_FIELDS: dict[type, tuple[str, ...]] = {}
+_FROZEN_BY_OBJ: dict[int, tuple[Any, Any]] = {}
+
+
+def _freeze(x: Any) -> Any:
+    """A memo-key form of one argument that is equal only for arguments an
+    emitter cannot tell apart. Plain ``==`` is not enough: ``1 == 1.0 == True``
+    hash alike, and an emitter formatting ``{x}`` into C writes ``1``,
+    ``1.0`` or ``True`` -- different programs (``a / 2`` vs ``a / 2.0``). So
+    numbers are tagged with their type, tuples and frozen dataclasses (the
+    region objects) are frozen field by field, and anything else -- a mutable
+    object whose later state the key would not see -- raises ``TypeError``
+    (the caller is then not memoized)."""
+    t = type(x)
+    if t is str or x is None:
+        return x
+    if t is tuple:
+        return (tuple, tuple([_freeze(e) for e in x]))
+    if t in _SCALARS:
+        return (t, x)
+    if t is bytes or isinstance(x, enum.Enum):
+        return x
+    if t is frozenset:
+        return (frozenset, frozenset([_freeze(e) for e in x]))
+    # A frozen dataclass cannot change after construction, so its frozen form
+    # is computed once per object (held, so its id is not reused).
+    cached = _FROZEN_BY_OBJ.get(id(x))
+    if cached is not None and cached[0] is x:
+        return cached[1]
+    names = _FIELDS.get(t)
+    if names is None:
+        params = getattr(t, "__dataclass_params__", None)
+        if params is None or not params.frozen:
+            raise TypeError(f"{t.__name__} is not a frozen value type")
+        names = tuple(f.name for f in dataclasses.fields(x))
+        _FIELDS[t] = names
+    frozen = (t, tuple([_freeze(getattr(x, n)) for n in names]))
+    if len(_FROZEN_BY_OBJ) >= _MAX_ENTRIES:
+        _FROZEN_BY_OBJ.clear()
+    _FROZEN_BY_OBJ[id(x)] = (x, frozen)
+    return frozen
+
+
 def _still_current(snapshot: _Snapshot) -> bool:
     for ns, n, obj in snapshot:
         if ns.get(n, _MISSING) is not obj:
@@ -149,9 +195,10 @@ def _still_current(snapshot: _Snapshot) -> bool:
 def _call(scope: Any, namespace: Any, name: str, fn: Callable[..., Any],
           call: Callable[[], Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
     try:
-        key = (scope, name, args, tuple(kwargs.items()))
+        key = (scope, name, _freeze(args),
+               tuple([(k, _freeze(v)) for k, v in kwargs.items()]) if kwargs else ())
         entry = _MEMO.get(key)
-    except TypeError:                   # an unhashable argument: no memo
+    except TypeError:          # a mutable or unhashable argument: no memo
         return call()
     if entry is not None and _still_current(entry[0]):
         return entry[1]
@@ -173,9 +220,10 @@ def memoized(namespace: Mapping[str, Any], name: str, *args: Any, **kwargs: Any)
     """``namespace[name](*args, **kwargs)`` (``namespace`` is a module's
     ``globals()``), served from the memo while the emitter and everything it
     reaches by name are the objects that produced the memoized value (module
-    docstring). Arguments must be hashable to be memoized; an unhashable
-    argument, or an emitter that reads the environment, is simply called every
-    time. The value must be immutable (source text, a frozen ``KernelSource``):
+    docstring). Arguments must be immutable values (strings, typed numbers,
+    enums, tuples, frozen dataclasses -- :func:`_freeze`) to be memoized; any
+    other argument, or an emitter that reads the environment, is simply called
+    every time. The value must be immutable (source text, a frozen ``KernelSource``):
     every caller shares it."""
     fn = namespace[name]
     return _call(id(namespace), namespace, name, fn,
@@ -201,6 +249,7 @@ def memoized_method(obj: Any, name: str, *args: Any, **kwargs: Any) -> Any:
 
 def clear() -> None:
     _MEMO.clear()
+    _FROZEN_BY_OBJ.clear()
 
 
 def size() -> int:

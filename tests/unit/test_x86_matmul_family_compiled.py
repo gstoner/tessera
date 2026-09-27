@@ -201,3 +201,43 @@ def test_gemm_f32_result_independent_of_b_alignment(m, n, k):
     for out in outs[1:]:
         assert np.array_equal(out.view(np.uint32), outs[0].view(np.uint32))
     np.testing.assert_allclose(outs[0], a @ b, **_TOL)
+
+
+@pytest.mark.parametrize("case", ["c_is_a", "c_is_b", "c_inside_a", "adjacent"])
+def test_gemm_f32_overlapping_output_equals_disjoint_product(case):
+    """X86-GEMM-ALIGN-1 review: the blocked kernel writes C while A and B are
+    still read, so an overlapping C must be detected at entry and computed
+    through scratch -- the result equals the product of the inputs' values at
+    entry, bit for bit -- while a disjoint C takes the fast path."""
+    import ctypes
+
+    rt = _x86_or_skip()
+    lib = rt._load_x86_elementwise()
+    cf = ctypes.POINTER(ctypes.c_float)
+    i64 = ctypes.c_int64
+    overlap = lib.tessera_x86_avx512_gemm_f32_operands_overlap
+    overlap.argtypes = [cf, cf, i64, i64, i64, cf]
+    overlap.restype = ctypes.c_int
+    m, n, k = {"c_is_a": (24, 40, 40), "c_is_b": (40, 24, 40),
+               "c_inside_a": (16, 32, 64), "adjacent": (16, 32, 64)}[case]
+    a_off, b_off, c_off = {
+        "c_is_a": (0, 4096, 0),
+        "c_is_b": (0, 4096, 4096),
+        "c_inside_a": (0, 4096, 300),
+        "adjacent": (0, m * k + m * n, m * k),  # C between A and B, touching both
+    }[case]
+    arena = np.random.default_rng(len(case) * 101).standard_normal(16384).astype(np.float32)
+    a0 = arena[a_off:a_off + m * k].copy().reshape(m, k)
+    b0 = arena[b_off:b_off + k * n].copy().reshape(k, n)
+    want = np.zeros((m, n), np.float32)
+    lib.tessera_x86_avx512_gemm_f32(a0.ctypes.data_as(cf), b0.ctypes.data_as(cf),
+                                    i64(m), i64(n), i64(k), want.ctypes.data_as(cf))
+
+    def at(off):
+        return ctypes.cast(arena.ctypes.data + 4 * off, cf)
+
+    assert overlap(at(a_off), at(b_off), m, n, k, at(c_off)) == int(case != "adjacent")
+    lib.tessera_x86_avx512_gemm_f32(at(a_off), at(b_off), i64(m), i64(n), i64(k), at(c_off))
+    got = arena[c_off:c_off + m * n].reshape(m, n)
+    assert np.array_equal(got.view(np.uint32), want.view(np.uint32))
+    np.testing.assert_allclose(got, a0 @ b0, **_TOL)

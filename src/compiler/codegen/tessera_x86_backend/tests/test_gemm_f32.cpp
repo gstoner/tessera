@@ -8,6 +8,7 @@
 // the declared oracle (Decision #31) -- for every offset, on the packed (M > 1) and
 // direct (M == 1) paths, full and tail strips.
 #include <immintrin.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -18,6 +19,8 @@
 
 extern "C" void tessera_x86_avx512_gemm_f32(const float*, const float*, int64_t,
                                             int64_t, int64_t, float*);
+extern "C" int tessera_x86_avx512_gemm_f32_operands_overlap(
+    const float*, const float*, int64_t, int64_t, int64_t, const float*);
 
 static int g_fail = 0;
 
@@ -98,6 +101,37 @@ static void check(int64_t M, int64_t N, int64_t K) {
                 (long long)M, (long long)N, (long long)K, worst);
 }
 
+// Overlapping C (X86-GEMM-ALIGN-1 review): the kernel must return the product of
+// the inputs' values at entry -- bitwise the oracle's result on disjoint copies --
+// whatever part of A or B the output overwrites. One arena holds A, B and C at
+// float offsets (a, b, c); `expect_overlap` pins which path the entry check takes.
+static void check_overlap(const char* what, int64_t M, int64_t N, int64_t K,
+                          int64_t a, int64_t b, int64_t c, bool expect_overlap) {
+    const int64_t end = std::max({a + M * K, b + K * N, c + M * N});
+    float* arena = static_cast<float*>(std::aligned_alloc(64, (size_t(end) * 4 + 63) / 64 * 64));
+    std::mt19937 rng((unsigned)(M * 7 + N * 5 + K * 3 + a + 2 * b + 3 * c));
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+    for (int64_t i = 0; i < end; ++i) arena[i] = dist(rng);
+    std::vector<float> A(arena + a, arena + a + M * K), B(arena + b, arena + b + K * N);
+    std::vector<float> want(M * N);
+    oracle_unpacked(A.data(), B.data(), M, N, K, want.data());
+    const int overlap = tessera_x86_avx512_gemm_f32_operands_overlap(
+        arena + a, arena + b, M, N, K, arena + c);
+    tessera_x86_avx512_gemm_f32(arena + a, arena + b, M, N, K, arena + c);
+    const bool ok = overlap == int(expect_overlap) &&
+                    std::memcmp(arena + c, want.data(), want.size() * sizeof(float)) == 0;
+    // A disjoint operand must be left untouched.
+    bool inputs_ok = true;
+    if (!expect_overlap)
+        inputs_ok = std::memcmp(arena + a, A.data(), A.size() * 4) == 0 &&
+                    std::memcmp(arena + b, B.data(), B.size() * 4) == 0;
+    std::printf("%s overlap %-34s M=%lld N=%lld K=%lld detected=%d\n",
+                ok && inputs_ok ? "ok  " : "FAIL", what, (long long)M, (long long)N,
+                (long long)K, overlap);
+    if (!ok || !inputs_ok) ++g_fail;
+    std::free(arena);
+}
+
 int main() {
     check(1, 1, 1);
     check(4, 16, 8);
@@ -118,6 +152,16 @@ int main() {
     check_bitwise(2, 16, 512);   // exactly one K block
     check_bitwise(2, 16, 513);   // a one-row second K block (continues through C)
     check_bitwise(3, 130, 1100); // two full K blocks + a partial one, tail panel
+    // aliasing: arena float offsets (a, b, c)
+    check_overlap("C == A (in place, N == K)", 40, 64, 64, 0, 4096, 0, true);
+    check_overlap("C == A, M == 1 direct path", 1, 300, 300, 0, 400, 0, true);
+    check_overlap("C == B (M == K)", 48, 70, 48, 0, 4096, 4096, true);
+    check_overlap("C inside A, partial", 16, 32, 64, 0, 2048, 300, true);
+    check_overlap("C tail over B head, partial", 8, 40, 600, 0, 8000, 8000 - 100, true);
+    check_overlap("C == A, K blocked (K = 1100)", 3, 1100, 1100, 0, 4000, 0, true);
+    check_overlap("C between A and B, touching both", 16, 32, 64, 0, 16 * 64 + 16 * 32, 16 * 64, false);
+    check_overlap("C starts where B ends (fast path)", 8, 16, 24, 0, 8 * 24, 8 * 24 + 24 * 16, false);
+    check_overlap("C ends where A starts (fast path)", 8, 16, 24, 8 * 16, 8 * 16 + 8 * 24, 0, false);
     std::printf(g_fail ? "\n%d FAILED\n" : "\nALL PASSED\n", g_fail);
     return g_fail ? 1 : 0;
 }

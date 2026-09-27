@@ -12,7 +12,10 @@
 #include <immintrin.h>
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <limits>
 #include "tessera/Rank2Index.h"
 
 using tessera::layout::linearIndex2D;
@@ -34,7 +37,8 @@ using tessera::layout::Rank2Order;
 // therefore unchanged -- acc = 0, then acc = fma(A[m,k], B[k,n], acc) for
 // k = 0..K-1 in order, masked-off lanes read as zero and are never stored --
 // so the result is bitwise identical to the previous kernel for every
-// alignment. C must not alias A or B (it is read back between K blocks).
+// alignment. The blocked loop needs C disjoint from A and B; the entry point
+// enforces that (an overlapping C is computed through scratch, see below).
 //
 // M == 1 reads B directly (no pack): a GEMV never reuses the panel, so packing
 // is pure copy overhead there (measured slower than the direct read at every B
@@ -98,12 +102,9 @@ void dispatchStrips(int S, const float* A, const float* src, int64_t ld,
     }
 }
 
-} // namespace
-
-extern "C" void tessera_x86_avx512_gemm_f32(const float* A, const float* B,
-                                            int64_t M, int64_t N, int64_t K,
-                                            float* C) {
-    if (M <= 0 || N <= 0) return;
+// The blocked GEMM. Requires C not to overlap A or B (see the entry point).
+void gemmNoAlias(const float* A, const float* B, int64_t M, int64_t N,
+                 int64_t K, float* C) {
     const int64_t kBlock = std::min<int64_t>(kKBlock, K);
     // K <= 0 takes the direct path, which writes C = 0 (the empty sum) as the
     // previous kernel did.
@@ -133,6 +134,80 @@ extern "C" void tessera_x86_avx512_gemm_f32(const float* A, const float* B,
         }
     }
     std::free(panel);
+}
+
+// Byte extent of a dense row-major rows x cols f32 operand; UINT64_MAX when
+// it does not fit in 64 bits (then it overlaps everything: the safe answer).
+uint64_t operandBytes(int64_t rows, int64_t cols) {
+    if (rows <= 0 || cols <= 0) return 0;
+    const unsigned __int128 bytes = static_cast<unsigned __int128>(rows) *
+                                    static_cast<unsigned __int128>(cols) * sizeof(float);
+    return bytes > std::numeric_limits<uint64_t>::max()
+               ? std::numeric_limits<uint64_t>::max()
+               : static_cast<uint64_t>(bytes);
+}
+
+// Whether half-open byte ranges [p, p + pBytes) and [q, q + qBytes) intersect.
+bool rangesOverlap(const void* p, uint64_t pBytes, const void* q, uint64_t qBytes) {
+    if (pBytes == 0 || qBytes == 0) return false;
+    const uint64_t pa = reinterpret_cast<uintptr_t>(p);
+    const uint64_t qa = reinterpret_cast<uintptr_t>(q);
+    const uint64_t kMax = std::numeric_limits<uint64_t>::max();
+    const uint64_t pEnd = pBytes > kMax - pa ? kMax : pa + pBytes;
+    const uint64_t qEnd = qBytes > kMax - qa ? kMax : qa + qBytes;
+    return pa < qEnd && qa < pEnd;
+}
+
+} // namespace
+
+// Whether C's bytes overlap A's or B's for C[M,N] = A[M,K] @ B[K,N] in the
+// ABI's only layout (dense, row-major). The GEMM entry point consumes it; it
+// is exported so the rule is testable on its own.
+extern "C" int tessera_x86_avx512_gemm_f32_operands_overlap(
+    const float* A, const float* B, int64_t M, int64_t N, int64_t K,
+    const float* C) {
+    const uint64_t cBytes = operandBytes(M, N);
+    return rangesOverlap(C, cBytes, A, operandBytes(M, K)) ||
+           rangesOverlap(C, cBytes, B, operandBytes(K, N));
+}
+
+// C = A @ B. The blocked loop writes C while A and B are still being read and
+// reads C back between K blocks, so an overlapping C (an in-place C = A @ B,
+// or any view overlap) would return a wrong result. The entry point therefore
+// checks overlap and, when found, computes the product of the inputs' values
+// at entry into an aligned scratch C and copies it out: the result equals the
+// non-aliased product bit for bit. (The pre-2026-09-27 kernel was wrong for
+// almost every overlap too -- it was right only by accident, e.g. C == A with
+// N == K <= 16 -- so computing through scratch is strictly more correct than
+// anything a caller could have relied on.) If the scratch cannot be allocated
+// the call fails closed: C is filled with quiet NaN and the reason goes to
+// stderr, never a silently wrong product.
+extern "C" void tessera_x86_avx512_gemm_f32(const float* A, const float* B,
+                                            int64_t M, int64_t N, int64_t K,
+                                            float* C) {
+    if (M <= 0 || N <= 0) return;
+    if (!tessera_x86_avx512_gemm_f32_operands_overlap(A, B, M, N, K, C)) {
+        gemmNoAlias(A, B, M, N, K, C);
+        return;
+    }
+    const uint64_t bytes = operandBytes(M, N);
+    float* scratch = nullptr;
+    if (bytes <= std::numeric_limits<size_t>::max() - 63)
+        scratch = static_cast<float*>(std::aligned_alloc(
+            64, static_cast<size_t>((bytes + 63) / 64 * 64)));
+    if (!scratch) {
+        std::fprintf(stderr,
+                     "tessera_x86_avx512_gemm_f32: C overlaps A or B and the %llu-byte "
+                     "scratch for a non-aliased product could not be allocated; C is "
+                     "filled with NaN\n",
+                     static_cast<unsigned long long>(bytes));
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        for (int64_t i = 0; i < M * N; ++i) C[i] = nan;
+        return;
+    }
+    gemmNoAlias(A, B, M, N, K, scratch);
+    std::memcpy(C, scratch, static_cast<size_t>(bytes));
+    std::free(scratch);
 }
 
 // T1 evidence ABI: the same AVX-512 microkernel with explicit compiler-owned

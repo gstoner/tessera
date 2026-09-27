@@ -256,7 +256,8 @@ def test_w8a8_register_panel_rule(m, n, panel):
     (1024, 4096, "nk", (128, 128)),   # 256 workgroups at 128x128
     (256, 4096, "nk", (128, 128)),    # exactly 64 at 128x128
     (128, 4096, "nk", (128, 64)),     # 32 at 128x128, 64 at 128x64
-    (1000, 2048, "nk", (128, 128)),   # ragged M: 8 x 16 workgroups
+    (1000, 2048, "nk", (128, 64)),    # ragged M takes 128x64 (8 x 32 workgroups)
+    (1024, 2048, "nk", (128, 128)),   # the whole-block neighbour keeps 128x128
     (1024, 4096, "kn", None),         # [K, N] keeps the register panel
     (64, 8192, "nk", None),           # below one 128-row block
 ])

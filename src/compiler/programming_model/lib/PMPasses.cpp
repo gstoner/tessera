@@ -534,9 +534,16 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
       schedule.physicalContract == "rocm_fp8_w8a8_blockscale_nk_v1";
   // At least one whole 128-row block: below it the workgroup computes rows
   // that do not exist (M=32 would waste three quarters of every tile).
+  //
+  // A ragged M (not a whole number of 128-row blocks) takes 128x64 whenever
+  // that covers the CUs: its masked edge keeps more registers live in the
+  // 32x64-wave 128x128 body (251 vs 238 VGPRs, one wave per SIMD fewer), and
+  // 128x64 measured 0.72-0.98x of 128x128 at 19 of 20 ragged points
+  // (ragged.json; the exception, 200x4096x7168, is 1.10x).
+  const bool raggedM = schedule.m % 128 != 0;
   if (nk && schedule.m >= 128 &&
       (tiles(128, 128) >= kComputeUnits || tiles(128, 64) >= kComputeUnits)) {
-    const bool wide = tiles(128, 128) >= kComputeUnits;
+    const bool wide = !raggedM && tiles(128, 128) >= kComputeUnits;
     schedule.staging = "lds";
     schedule.warps = 8;
     schedule.pipelineDepth = 1;

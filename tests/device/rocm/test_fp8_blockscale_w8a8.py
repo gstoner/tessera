@@ -235,13 +235,14 @@ def _assert_lds_isa(package, *, spill_free: bool = True) -> None:
 
 LDS_SHAPES = [
     # (shape, expected macro tile) -- Schedule-selected: 128x128 at >= 64
-    # workgroups, else 128x64; ragged M and ragged N; both output storages.
+    # workgroups, else (and at any ragged M) 128x64; ragged M and ragged N;
+    # both output storages.
     (BlockScaleShape(256, 4096, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(128, 4096, 384, 128, 128, "nk"), (128, 64)),
-    (BlockScaleShape(200, 4096, 256, 128, 128, "nk"), (128, 128)),
+    (BlockScaleShape(200, 4096, 256, 128, 128, "nk"), (128, 64)),
     (BlockScaleShape(256, 4000, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(256, 4096, 512, 128, 128, "nk", "bf16"), (128, 128)),
-    (BlockScaleShape(200, 4000, 256, 128, 128, "nk", "bf16"), (128, 128)),
+    (BlockScaleShape(200, 4000, 256, 128, 128, "nk", "bf16"), (128, 64)),
 ]
 
 

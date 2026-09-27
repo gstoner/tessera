@@ -1838,8 +1838,9 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
 //   2  as 1 with TWO LDS buffers: the drain writes the buffer the next step
 //      computes on, so one barrier per slab suffices.
 // Only static, whole-group K reaches here (the contract's admission), and
-// the copy zero-fills rows past M / N, so ragged M and N need no second
-// path; the stores are masked only when the problem is not whole tiles.
+// the copy clamps rows past M / N to the last real one (they reach no
+// stored element), so ragged M and N need no second path; the stores are
+// masked only when the problem is not whole tiles.
 void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
                                 gpu::GPUFuncOp gpuFunc, int64_t mt, int64_t nt,
                                 int64_t wavesM, int64_t wavesN,
@@ -1888,7 +1889,6 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   Value N = gpuFunc.getArgument(6);
   Value K = gpuFunc.getArgument(7);
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
-  auto slt = arith::CmpIPredicate::slt;
   Value c0 = ci(0), c32 = ci(32);
   Value cStride = ci(ldsStride);
   const bool wholeM = staticM % wgM == 0, wholeN = staticN % wgN == 0;
@@ -1993,11 +1993,6 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   // ---- The staging copy. Each thread owns fixed (row, k) vectors of the
   // slab, so every address but the slab's K origin is loop-invariant.
   auto vecTy = VectorType::get({vecW}, T.store);
-  Value zeroVec = b.create<arith::ConstantOp>(
-      loc, vecTy,
-      DenseElementsAttr::get(
-          cast<ShapedType>(vecTy),
-          cast<FloatAttr>(b.getFloatAttr(T.store, 0.0)).getValue()));
   const int64_t vecsPerRow = stageK / vecW;
   struct CopyPlan {
     Value src;      // global memref
@@ -2005,11 +2000,10 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     int64_t bufElems;
     SmallVector<Value> rowBase;  // (row*K + kVec) in global elements
     SmallVector<Value> ldsDst;   // row*stride + kVec in LDS elements
-    SmallVector<Value> inBounds; // null when the problem is whole tiles
   };
   auto planCopy = [&](Value src, Value dst, int64_t rows, Value origin,
                       Value bound, bool whole) {
-    CopyPlan plan{src, dst, rows * ldsStride, {}, {}, {}};
+    CopyPlan plan{src, dst, rows * ldsStride, {}, {}};
     const int64_t trips = rows * vecsPerRow / nthreads;
     for (int64_t i = 0; i < trips; ++i) {
       Value e = b.create<arith::AddIOp>(loc, tx, ci(i * nthreads));
@@ -2017,17 +2011,20 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
       Value kVec = b.create<arith::MulIOp>(
           loc, b.create<arith::RemUIOp>(loc, e, ci(vecsPerRow)), ci(vecW));
       Value gr = b.create<arith::AddIOp>(loc, origin, row);
-      Value inb;
       if (!whole) {
-        inb = b.create<arith::CmpIOp>(loc, slt, gr, bound);
-        // An out-of-range row reads row 0 (always valid) and is zeroed.
-        gr = b.create<arith::SelectOp>(loc, inb, gr, c0);
+        // Clamp, never predicate: a row past the bound re-reads the last
+        // real row. Row m of the product depends only on row m of A (and
+        // column n only on row n of the [N, K] weight), and rows or columns
+        // past M / N are never stored, so what they hold cannot reach the
+        // output -- zero-filling them bought nothing and kept a mask live
+        // across the whole K loop (measured: 238 -> 251 VGPRs at M = 1000).
+        gr = b.create<arith::MinUIOp>(
+            loc, gr, b.create<arith::SubIOp>(loc, bound, ci(1)));
       }
       plan.rowBase.push_back(b.create<arith::AddIOp>(
           loc, b.create<arith::MulIOp>(loc, gr, K), kVec));
       plan.ldsDst.push_back(b.create<arith::AddIOp>(
           loc, b.create<arith::MulIOp>(loc, row, cStride), kVec));
-      plan.inBounds.push_back(inb);
     }
     return plan;
   };
@@ -2039,11 +2036,9 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     SmallVector<Value> vals;
     for (size_t i = 0; i < plan.rowBase.size(); ++i) {
       Value idx = kb.create<arith::AddIOp>(l, plan.rowBase[i], k0);
-      Value v = kb.create<vector::LoadOp>(l, vecTy, plan.src, ValueRange{idx},
-                                          /*nontemporal=*/false, align16);
-      if (plan.inBounds[i])
-        v = kb.create<arith::SelectOp>(l, plan.inBounds[i], v, zeroVec);
-      vals.push_back(v);
+      vals.push_back(kb.create<vector::LoadOp>(l, vecTy, plan.src,
+                                               ValueRange{idx},
+                                               /*nontemporal=*/false, align16));
     }
     return vals;
   };

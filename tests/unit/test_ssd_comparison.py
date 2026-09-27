@@ -305,12 +305,15 @@ _BASELINES = __import__('pathlib').Path(__file__).resolve().parents[2] / 'benchm
 
 @pytest.mark.parametrize('packet,admitted_protocol', [
     ('gfx1201_ssd_calibrated_pairs_20260926', True),
+    ('gfx1151_ssd_calibrated_pairs_interleaved_20260926', True),
     ('gfx1151_ssd_calibrated_pairs_20260926', False),
 ])
 def test_committed_calibrations_carry_the_protocol_admission_reads(packet, admitted_protocol):
-    """The committed packets, read as data: gfx1201 was recorded interleaved
-    with matching launches; the first gfx1151 packet predates the stamp and
-    stays history (validates, never admits)."""
+    """The committed packets, read as data: gfx1201 and the gfx1151 re-record
+    were recorded interleaved with matching launches; the first gfx1151
+    packet predates the stamp and stays history (validates, never admits).
+    The end-to-end replays need tessera-opt and the device, so they are
+    committed as each packet's ``replay.json`` rather than run here."""
     import json
     from tessera.compiler.profiler_rocm_evidence import validate_rocm_profiler_packet
     from tessera.compiler.ssd_performance import _calibration_protocol_refusal

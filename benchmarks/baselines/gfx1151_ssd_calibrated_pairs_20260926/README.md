@@ -1,5 +1,16 @@
 # gfx1151 SSD calibrated pairs: device-clock witness admission
 
+> **History, superseded 2026-09-26.** This packet was recorded before the
+> interleaved window protocol. Its plain windows were timed before
+> calibration, and its calibrations carry no `window_protocol`. It still
+> validates, but SSD admission now refuses it with
+> `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`. The re-record under the current
+> protocol is
+> [`../gfx1151_ssd_calibrated_pairs_interleaved_20260926/`](../gfx1151_ssd_calibrated_pairs_interleaved_20260926/README.md).
+> Its decision is admitted, with a lower bound of 9.89x at 1000 launches per
+> window. The two packets used different methods, so no ratio between them is
+> claimed.
+
 Princess-Luna, Radeon 8060S (gfx1151), Ubuntu 26.04 under **WSL2, no
 `/dev/kfd`**, ROCm 10.0. Source commit `54442ef5` (clean tree), recorded
 2026-09-26. The device architecture was queried (`hipGetDevicePropertiesR0600`

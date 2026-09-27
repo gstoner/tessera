@@ -1,0 +1,5 @@
+gfx1151 bracket-offset probe, Princess-Luna, commit 0f9c29cf (clean), one process per row; offset = (HIP event - device span) per window
+launches=100 serial      offset_us median 54.1 min 47.1 max 110.4 | window_us 13438 | median offset share 0.40% | device below event 0.40% | bracketed/plain 1.0007 | eligible True
+launches=100 cooperative offset_us median 29.9 min 29.1 max 30.4 | window_us 1376 | median offset share 2.17% | device below event 2.17% | bracketed/plain 1.0037 | eligible True
+launches=1000 serial      offset_us median 73.7 min 61.7 max 103.6 | window_us 133750 | median offset share 0.06% | device below event 0.05% | bracketed/plain 0.9996 | eligible True
+launches=1000 cooperative offset_us median 41.6 min 30.4 max 56.4 | window_us 13129 | median offset share 0.32% | device below event 0.33% | bracketed/plain 0.9946 | eligible True

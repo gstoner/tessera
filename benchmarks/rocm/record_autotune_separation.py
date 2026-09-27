@@ -109,7 +109,15 @@ def main() -> int:
                if str(k[0]) == DEVICE and k[2] == OP_FUSED_REGION]
     for key in evicted:
         del cache._store[key]
-    print(f"evicted {len(evicted)} gfx1151 fused_region rows for re-measurement")
+    # Decision #11: a row recorded under another (or no) toolchain identity is
+    # never in `_store` -- `load_dict` holds it in `stale_records()`, where it is
+    # already a miss. Count it too, or a v3 corpus reports "evicted 0" while every
+    # row it owns is in fact about to be re-raced.
+    stale_owned = [k for k in cache.stale_records()
+                   if str(k[0]) == DEVICE and k[2] == OP_FUSED_REGION]
+    print(f"evicted {len(evicted)} current gfx1151 fused_region rows; "
+          f"{len(stale_owned)} stale (pre-toolchain-identity) rows will be "
+          f"re-measured and replaced")
 
     region = F.FusedRegion(epilogue=("bias", "gelu"))
     rng = np.random.default_rng(0)
@@ -165,6 +173,17 @@ def main() -> int:
     if after["other_rows"] < before["other_rows"]:
         print("\nREFUSING TO WRITE: this run would delete another device's rows.")
         return 1
+    still_stale = sorted(
+        (k for k in cache.stale_records()
+         if str(k[0]) == DEVICE and k[2] == OP_FUSED_REGION), key=str)
+    if still_stale:
+        # A shape that produced no verified candidate leaves its stale row in
+        # place. Writing would look like a full re-record while some rows
+        # still select nothing, so say which.
+        print(f"\nWARNING: {len(still_stale)} owned gfx1151 fused_region rows "
+              f"were not re-measured and remain stale:")
+        for key in still_stale:
+            print(f"  {key}")
     if args.dry_run:
         print("\n--dry-run: corpus not written")
         return 0

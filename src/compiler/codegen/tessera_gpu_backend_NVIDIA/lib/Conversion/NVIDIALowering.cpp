@@ -4864,6 +4864,104 @@ struct LowerTileToNVIDIAPass
                     tessera::nvidia::TesseraNVIDIADialect>();
   }
 
+  // Datacenter-Blackwell tensor memory (sm_100a). The registered Tile ops are
+  // exactly `tile.tmem.allocate`, `tile.tmem.load` and `tile.tmem.store`
+  // (TileOps.td); each maps to one NVIDIA contract, and the opaque
+  // `!tile.tmem` handle becomes the 32-bit tensor-memory address that
+  // `tcgen05.alloc` publishes and `tcgen05.ld`/`tcgen05.st` take (`[taddr]`).
+  // The handle type itself is not an NVIDIA target value, so the contract ops
+  // carry the address instead. Index operands are widened to i64 because
+  // `index` is not a target value either.
+  //
+  // Fail-closed cases (Decision #21): an op under the prefix that is not one
+  // of the three; a handle consumed by an op this pass does not lower (today
+  // `tile.tcgen05.mma` has no NVIDIA lowering, so its TMEM operand cannot be
+  // rewritten onto an address); a load/store whose handle did not come from
+  // a lowered allocation; a loaded/stored value that is not a target value.
+  LogicalResult lowerTmemOp(Operation *op, OpBuilder &builder,
+                            SmallVectorImpl<NamedAttribute> &attrs,
+                            llvm::DenseMap<Value, Value> &tmemAddress,
+                            SmallVectorImpl<Operation *> &loweredAllocs) {
+    namespace tile = tessera::tile;
+    Location loc = op->getLoc();
+    int sm = smVersion;
+    auto isTargetValue = [](Type type) {
+      return isa<RankedTensorType, UnrankedTensorType, BaseMemRefType,
+                 VectorType, IntegerType, FloatType, LLVM::LLVMPointerType,
+                 LLVM::LLVMStructType>(type);
+    };
+    auto unlowered = [&](Operation *at, const Twine &why) {
+      return at->emitError("NVIDIA_TMEM_HANDLE_UNLOWERED: ")
+             << why << " (NVIDIA sm_" << sm << ")";
+    };
+    auto addressFor = [&](Value handle, Operation *user) -> Value {
+      Value address = tmemAddress.lookup(handle);
+      if (!address)
+        (void)unlowered(user, "'" + user->getName().getStringRef() +
+                                  "' reads a TMEM handle that no lowered "
+                                  "'tile.tmem.allocate' produced");
+      return address;
+    };
+    auto appendIndices = [&](SmallVectorImpl<Value> &operands,
+                             ValueRange indices) {
+      for (Value index : indices)
+        operands.push_back(arith::IndexCastOp::create(
+            builder, loc, builder.getI64Type(), index));
+    };
+
+    if (auto alloc = dyn_cast<tile::TMEMAllocOp>(op)) {
+      for (Operation *user : alloc.getHandle().getUsers())
+        if (!isa<tile::TMEMLoadOp, tile::TMEMStoreOp>(user))
+          return unlowered(user, "'" + user->getName().getStringRef() +
+                                     "' consumes a TMEM handle and has no "
+                                     "NVIDIA lowering onto a TMEM address");
+      attrs.push_back(builder.getNamedAttr("bytes", alloc.getBytesAttr()));
+      attrs.push_back(
+          builder.getNamedAttr("alignment", alloc.getAlignmentAttr()));
+      Operation *target = createContractOp(builder, loc,
+                                           "tessera_nvidia.tmem_alloc",
+                                           ValueRange{}, builder.getI32Type(),
+                                           attrs);
+      tmemAddress[alloc.getHandle()] = target->getResult(0);
+      loweredAllocs.push_back(op);
+      return success();
+    }
+    if (auto load = dyn_cast<tile::TMEMLoadOp>(op)) {
+      Value address = addressFor(load.getHandle(), op);
+      if (!address)
+        return failure();
+      Type valueType = load.getValue().getType();
+      if (!isTargetValue(valueType))
+        return unlowered(op, "'tile.tmem.load' result type is not an NVIDIA "
+                             "target value");
+      SmallVector<Value> operands{address};
+      appendIndices(operands, load.getIndices());
+      Operation *target = createContractOp(
+          builder, loc, "tessera_nvidia.tmem_load", operands, valueType, attrs);
+      load.getValue().replaceAllUsesWith(target->getResult(0));
+      op->erase();
+      return success();
+    }
+    if (auto store = dyn_cast<tile::TMEMStoreOp>(op)) {
+      Value address = addressFor(store.getHandle(), op);
+      if (!address)
+        return failure();
+      if (!isTargetValue(store.getValue().getType()))
+        return unlowered(op, "'tile.tmem.store' value type is not an NVIDIA "
+                             "target value");
+      SmallVector<Value> operands{store.getValue(), address};
+      appendIndices(operands, store.getIndices());
+      createContractOp(builder, loc, "tessera_nvidia.tmem_store", operands,
+                       TypeRange{}, attrs);
+      op->erase();
+      return success();
+    }
+    return op->emitError("NVIDIA_TMEM_UNKNOWN_OP: '")
+           << op->getName() << "' is not a declared Tile TMEM op "
+           << "(tile.tmem.allocate / tile.tmem.load / tile.tmem.store); no "
+           << "NVIDIA sm_" << sm << " lowering";
+  }
+
   void runOnOperation() final {
     MLIRContext *ctx = &getContext();
     ctx->loadDialect<tessera::nvidia::TesseraNVIDIADialect>();
@@ -4932,6 +5030,10 @@ struct LowerTileToNVIDIAPass
     });
 
     Value lastAsyncToken;
+    // `!tile.tmem` handle -> the i32 tensor-memory address its lowered
+    // `tessera_nvidia.tmem_alloc` yields (see lowerTmemOp).
+    llvm::DenseMap<Value, Value> tmemAddress;
+    SmallVector<Operation *> loweredTmemAllocs;
     for (Operation *op : worklist) {
       OpBuilder builder(op);
       Location loc = op->getLoc();
@@ -5725,15 +5827,34 @@ struct LowerTileToNVIDIAPass
       }
 
       if (name.starts_with("tile.tmem.")) {
-        StringRef contractName = "tessera_nvidia.tmem_store";
-        if (name == "tile.tmem.alloc" || name == "tile.tmem.allocate")
-          contractName = "tessera_nvidia.tmem_alloc";
-        else if (name == "tile.tmem.load")
-          contractName = "tessera_nvidia.tmem_load";
-        createContractOp(builder, loc, contractName, op->getOperands(),
-                         op->getResultTypes(), attrs);
-        op->erase();
+        // TILE-LATENT-DEFECTS-2026-09-27: every declared tile.tmem.* op is
+        // mapped by op identity, and anything else under the prefix is
+        // refused (Decision #21). This branch used to default any
+        // unrecognized tile.tmem.* op -- including the unregistered legacy
+        // spelling `tile.tmem.alloc` -- to a `tmem_store` contract, and it
+        // erased ops without wiring their results, leaving users of a load
+        // result or an allocation handle pointing at an erased op.
+        if (failed(lowerTmemOp(op, builder, attrs, tmemAddress,
+                               loweredTmemAllocs))) {
+          signalPassFailure();
+          return;
+        }
+        continue;
       }
+    }
+
+    // A TMEM allocation is erased only once every load/store that read its
+    // handle has been rewritten onto the address; the alloc validation above
+    // admits no other user, so a surviving use is a lowering bug, not input.
+    for (Operation *alloc : loweredTmemAllocs) {
+      if (!alloc->use_empty()) {
+        alloc->emitError("NVIDIA_TMEM_HANDLE_UNLOWERED: TMEM handle still "
+                         "has users after NVIDIA sm_")
+            << static_cast<int>(smVersion) << " TMEM lowering";
+        signalPassFailure();
+        return;
+      }
+      alloc->erase();
     }
 
     Operation *unloweredFragment = nullptr;
@@ -6049,7 +6170,25 @@ struct LowerNVIDIAToNVVMPass
         targetOps.push_back(op);
     });
 
+    // A void marker carries no value. Before this guard the pass dropped every
+    // use of a replaced contract's results, so a result consumed outside the
+    // contract family (a TMEM load feeding arithmetic or a return) left its
+    // user with a null operand -- an abort on an assertions-ON MLIR, undefined
+    // behavior on NDEBUG. Uses by other contracts (or by ops nested inside
+    // one) are erased together with them and stay legal.
+    llvm::SmallPtrSet<Operation *, 32> contractSet(targetOps.begin(),
+                                                   targetOps.end());
+    auto erasedWithContracts = [&](Operation *user) {
+      for (Operation *at = user; at; at = at->getParentOp())
+        if (contractSet.contains(at))
+          return true;
+      return false;
+    };
+
     for (Operation *op : targetOps) {
+      // Every path below erases `op`; drop it first so the set only ever
+      // names live, not-yet-processed contracts.
+      contractSet.erase(op);
       OpBuilder builder(op);
       if (auto cudaMath =
               dyn_cast<tessera::nvidia::CudaMathKernelOp>(op)) {
@@ -6063,6 +6202,16 @@ struct LowerNVIDIAToNVVMPass
       // marker form falls through to the void-marker path below.
       if (tryLowerMmaSyncToNVVM(op, builder))
         continue;
+      for (Operation *user : op->getUsers()) {
+        if (erasedWithContracts(user))
+          continue;
+        op->emitError("NVIDIA_MARKER_RESULT_USED: '")
+            << op->getName() << "' has no value-producing NVVM lowering, but "
+            << "its result is used by '" << user->getName()
+            << "'; a void artifact marker cannot supply it";
+        signalPassFailure();
+        return;
+      }
       auto marker = declareVoidMarker(module, markerForTargetOp(op->getName().getStringRef()));
       builder.create<LLVM::CallOp>(op->getLoc(), TypeRange{},
                                    SymbolRefAttr::get(marker), ValueRange{});

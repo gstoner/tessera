@@ -6,6 +6,7 @@
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
@@ -18,9 +19,25 @@
 #include <utility>
 
 namespace tessera::memory {
+// Datacenter-Blackwell tensor memory is allocated by the registered
+// `tile.tmem.allocate` (TileOps.td), matched by op identity. The unregistered
+// `"tile.tmem.alloc"(%memref)` marker these passes used to match was a stale
+// spelling nothing produced, so no real TMEM allocation was ever planned
+// (TILE-LATENT-DEFECTS-2026-09-27).
+inline bool isTmemAllocation(mlir::Operation *op) {
+  return mlir::isa<tessera::tile::TMEMAllocOp>(op);
+}
 inline bool isMarker(mlir::Operation *op) {
-  auto name = op->getName().getStringRef();
-  return name == "tile.alloc_shared" || name == "tile.tmem.alloc";
+  return op->getName().getStringRef() == "tile.alloc_shared" ||
+         isTmemAllocation(op);
+}
+// The SSA value naming a planned allocation: the memref operand of a
+// `tile.alloc_shared` marker, or the `!tile.tmem` handle a TMEM allocation
+// defines.
+inline mlir::Value allocatedValue(mlir::Operation *marker) {
+  if (auto tmem = mlir::dyn_cast<tessera::tile::TMEMAllocOp>(marker))
+    return tmem.getHandle();
+  return marker->getOperand(0);
 }
 inline int64_t staticBytes(mlir::Value value) {
   auto type = mlir::dyn_cast<mlir::MemRefType>(value.getType());
@@ -492,6 +509,13 @@ public:
     return std::nullopt;
   }
   Interval get(mlir::Operation *marker) const {
+    // Tensor memory is released by tcgen05 completion (`tcgen05.wait::ld/st`,
+    // `tcgen05.commit` into an mbarrier) and `tcgen05.dealloc`; Tile IR carries
+    // none of those facts yet, and `tile.tcgen05.mma` threads the region
+    // through a *new* handle, so program order over the handle's uses is not a
+    // lifetime proof. Until a completion fact exists, a TMEM allocation is live
+    // for the whole function and never shares storage (fail closed, #30).
+    if (isTmemAllocation(marker)) return Interval{0, end, false};
     if (auto pending = pendingSwap(marker)) return *pending;
     if (auto slots = permuted(marker)) return *slots;
     if (auto recurrence = rotating(marker)) return *recurrence;
@@ -567,8 +591,8 @@ public:
     return live;
   }
   bool disjoint(mlir::Operation *a, mlir::Operation *b) const {
-    if (a->getName() != b->getName() ||
-        a->getOperand(0).getType() != b->getOperand(0).getType()) return false;
+    if (a->getName() != b->getName() || isTmemAllocation(a) ||
+        allocatedValue(a).getType() != allocatedValue(b).getType()) return false;
     auto x = get(a), y = get(b);
     if (!x.reusable || !y.reusable) return false;
     if (a->getBlock() == b->getBlock()) return x.end < y.start || y.end < x.start;

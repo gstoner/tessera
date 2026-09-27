@@ -4,7 +4,7 @@
 // (the same two-sided pattern as LayoutAssignmentPass ↔ LayoutLegalityPass).
 //
 // Tiled GEMM / attention kernels stage operands through `tile.alloc_shared` (LDS)
-// and `tile.tmem.alloc` (Blackwell TMEM) buffers. When two such buffers have
+// and `tile.tmem.allocate` (Blackwell TMEM) buffers. When two such buffers have
 // **disjoint live ranges**, they can share one physical backing — cutting peak
 // shared-memory footprint, which directly gates occupancy. This pass computes a
 // conservative alias-inclusive live range (including async completion),
@@ -39,17 +39,18 @@ constexpr StringRef kBytesBefore = "tile.buffer_reuse.bytes_before";
 constexpr StringRef kBytesAfter = "tile.buffer_reuse.bytes_after";
 constexpr StringRef kGroups = "tile.buffer_reuse.groups";
 
-// Tile-IR allocation ops whose buffer this pass plans. The buffer's SSA value is
-// the memref operand (operand 0 in both ops' ODS).
-static bool isAllocOp(Operation *op) {
-  StringRef n = op->getName().getStringRef();
-  return n == "tile.alloc_shared" || n == "tile.tmem.alloc";
-}
+// Tile-IR allocation ops whose buffer this pass plans: the `tile.alloc_shared`
+// marker (its buffer is the memref operand) and the registered
+// `tile.tmem.allocate` (its buffer is the `!tile.tmem` handle it defines,
+// sized by its `bytes` attribute). Matched by op identity in
+// TileMemrefLifetime.h, shared with TileBufferArenaPass.
+static bool isAllocOp(Operation *op) { return tessera::memory::isMarker(op); }
 
-// Static byte size of a memref value, or -1 when it is not statically known (a
-// dynamic dim / non-memref) — such a buffer never joins a reuse group.
-static int64_t staticByteSize(Value v) {
-  return tessera::memory::staticBytes(v);
+// Static byte size of the planned buffer, or -1 when it is not known.
+static int64_t allocatedBytes(Operation *op) {
+  if (auto tmem = dyn_cast<tessera::tile::TMEMAllocOp>(op))
+    return static_cast<int64_t>(tmem.getBytes());
+  return tessera::memory::staticBytes(op->getOperand(0));
 }
 
 struct Buffer {
@@ -69,7 +70,9 @@ struct TileBufferReuse
   StringRef getArgument() const override { return "tessera-tile-buffer-reuse"; }
   StringRef getDescription() const override {
     return "Global buffer assignment/reuse for Tile IR — assign disjoint-live-"
-           "range tile.alloc_shared / tile.tmem.alloc buffers of identical type "
+           "range tile.alloc_shared buffers of identical type "
+           "(tile.tmem.allocate is planned but never coalesced without a "
+           "TMEM completion proof) "
            "to shared reuse groups (tile.buffer_group), cutting peak shared "
            "memory. The assignment half of shared-memory planning; "
            "TileBufferArenaPass rechecks the shared lifetime proof.";
@@ -88,15 +91,18 @@ struct TileBufferReuse
 
     SmallVector<Buffer> buffers;
     fn->walk([&](Operation *op) {
-      if (!isAllocOp(op) || op->getNumOperands() == 0)
+      if (!isAllocOp(op))
         return;
-      Value buf = op->getOperand(0);
-      if (!isa<MemRefType>(buf.getType()))
+      bool tmem = tessera::memory::isTmemAllocation(op);
+      if (!tmem && op->getNumOperands() == 0)
+        return;
+      Value buf = tessera::memory::allocatedValue(op);
+      if (!tmem && !isa<MemRefType>(buf.getType()))
         return;
       auto live = lifetimes.get(op);
       int64_t start = live.start, end = live.end;
       buffers.push_back({op, buf, op->getName().getStringRef(), start, end,
-                         staticByteSize(buf), -1});
+                         allocatedBytes(op), -1});
     });
     if (buffers.empty())
       return;
@@ -125,12 +131,14 @@ struct TileBufferReuse
       int chosen = -1;
       // GPU dynamic groups reserve the maximum member size in the arena. Two buffers
       // share a group only if their live ranges are disjoint AND they are the same
-      // alloc kind (SMEM `alloc_shared` vs TMEM `tmem.alloc` are distinct physical
-      // spaces — a backend cannot realize one group as both) AND the same memref
-      // type (identical backing size + element type + layout + memory space).
+      // alloc kind (SMEM `alloc_shared` vs TMEM `tmem.allocate` are distinct
+      // physical spaces — a backend cannot realize one group as both) AND the
+      // same memref type (identical backing size + element type + layout +
+      // memory space). A TMEM allocation never proves disjointness (see
+      // Lifetimes::get), so it always opens its own group.
       auto kernel = dyn_cast<gpu::GPUFuncOp>(fn);
-      auto memrefType = cast<MemRefType>(b.memref.getType());
-      bool dynamicGPU = kernel && kernel.isKernel() &&
+      auto memrefType = dyn_cast<MemRefType>(b.memref.getType());
+      bool dynamicGPU = kernel && kernel.isKernel() && memrefType &&
                         b.kind == "tile.alloc_shared" && memrefType.getLayout().isIdentity() &&
                         memrefType.getElementType().isIntOrFloat();
       if (b.bytes >= 0 || dynamicGPU) {

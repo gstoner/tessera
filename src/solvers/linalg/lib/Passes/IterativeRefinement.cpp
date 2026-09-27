@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "tessera/Solvers/LinalgPasses.h"
+#include "tessera/Dialect/Solver/SolverDialect.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -23,6 +24,24 @@
 
 namespace tessera {
 namespace solver {
+
+// The ops whose result is a solution x that iterative refinement can correct
+// (x += solve(A, b - A x)), matched by op identity.
+//
+// TILE-LATENT-DEFECTS-2026-09-27: this used to be
+// `opName.contains("solve") || opName.contains("factor")`, and every
+// `tessera_solver.*` name contains "solve" through its dialect prefix, so the
+// pass tagged factorizations (`getrf`, `potrf`), residual evaluators and every
+// other solver op, plus unrelated names such as `tessera.adafactor`. A
+// factorization produces no solution to refine, so it is not in the set.
+// The Graph ops are compared by exact name because this library does not link
+// the Tessera Graph dialect.
+static bool isRefinableSolve(mlir::Operation *op) {
+  if (mlir::isa<TrsmOp, PotrsOp, LinearSolveOp, ImplicitOp>(op))
+    return true;
+  mlir::StringRef name = op->getName().getStringRef();
+  return name == "tessera.tri_solve" || name == "tessera.cholesky_solve";
+}
 
 struct IterativeRefinementPass
     : public mlir::PassWrapper<IterativeRefinementPass,
@@ -58,14 +77,7 @@ struct IterativeRefinementPass
 
     // Tag each solver op in this function with the refinement loop params.
     fn.walk([&](mlir::Operation *op) {
-      mlir::StringRef opName = op->getName().getStringRef();
-
-      bool isSolverOp =
-          opName.contains("solve") || opName.contains("factor") ||
-          opName == "tessera_solver.implicit" ||
-          opName == "tessera_solver.linear_solve";
-
-      if (!isSolverOp)
+      if (!isRefinableSolve(op))
         return;
 
       // Attach iterative-refinement loop parameters.

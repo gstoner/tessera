@@ -11,8 +11,14 @@ It rebuilds the workload of every ``nvidia:sm_120`` registry row from the
 recorder's shape lists (``record_autotune_corpus.py`` defaults plus the
 ``--fused-shapes`` / ``--attention-shapes`` the re-record used) and, per row:
 
-* ``ident`` -- whether every live candidate's identity equals the one stamped
-  in the row (``autotune._record_matches_live_delegates``);
+* ``ident`` -- whether every live candidate the row TIMED carries an identity
+  equal to the one stamped in it. A live candidate the row declares
+  ``unmeasured`` (no device timer: the scalar ``nvidia_flash_attn`` /
+  ``nvidia_generic_cuda`` / ``nvidia_gated`` lanes in device timing) was never
+  timed and so never stamped; production refuses such a row anyway because it
+  did not race the live field (``_record_raced_the_live_field``), and
+  ``_record_matches_live_delegates`` fails on it too. Those rows are listed as
+  ``partial_field`` rather than counted as identity mismatches;
 * ``served`` -- what ``corpus_winner`` returns when asked the way ordinary
   ``run_arbitrated`` dispatch asks: no explicit dims (``_infer_dims`` derives
   them from the operands). A row can match its identities and still not be
@@ -125,14 +131,16 @@ def check(cache: at.MeasureCache, work: dict, keys: list) -> dict:
         _, _, op, _, dtype, timing = key
         rec = cache._store[key]
         live = live_candidates(region, op, "nvidia", inputs)
-        ident = at._record_matches_live_delegates(rec, live, region, inputs)
+        timed = {n: c for n, c in live.items() if n in rec.candidates}
+        ident = at._record_matches_live_delegates(rec, timed, region, inputs)
+        partial = sorted(n for n in live if n not in rec.candidates)
         served = at.corpus_winner(region, op, "nvidia", *inputs, dtype=dtype,
                                   cache=cache, device=DEVICE, timing=timing)
         served_dims = at.corpus_winner(region, op, "nvidia", *inputs, dims=dims,
                                        dtype=dtype, cache=cache, device=DEVICE,
                                        timing=timing)
         result[key] = (ident, served, served_dims,
-                       at.record_is_admissible(rec), rec.winner)
+                       at.record_is_admissible(rec), rec.winner, partial)
     return result
 
 
@@ -191,15 +199,20 @@ def main() -> int:
 
     before = check(cache, work, keys)
     for key in keys:
-        ident, served, served_dims, admissible, winner = before[key]
+        ident, served, served_dims, admissible, winner, partial = before[key]
         _, _, op, bucket, dtype, timing = key
         print(f"  {op:12s} {dtype:9s} {timing:10s} {list(bucket)!s:22s} "
               f"winner={winner:36s} admissible={admissible!s:5s} ident={ident!s:5s} "
-              f"served={served} served_dims={served_dims}")
+              f"served={served} served_dims={served_dims}"
+              + (f" partial_field(unmeasured)={partial}" if partial else ""))
     matched = sum(v[0] for v in before.values())
     served = sum(v[1] is not None for v in before.values())
     served_dims = sum(v[2] is not None for v in before.values())
     admissible = sum(v[3] for v in before.values())
+    partial_rows = sum(bool(v[5]) for v in before.values())
+    print(f"rows whose live field includes a lane with no device timer "
+          f"(never timed, never stamped, refused by the field check): "
+          f"{partial_rows}")
     print(f"before: identities match {matched}/{len(keys)}; admissible "
           f"{admissible}; served with inferred dims {served}; served with the "
           f"recorder's dims {served_dims}")

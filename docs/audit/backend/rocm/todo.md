@@ -1,11 +1,53 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## GFX1201 folded MXFP4 load schedule in Target IR — 2026-09-27
+
+Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-LANES-2026-09-27`. **Shared contract
+changed (ROCm-only):** `tessera_rocm.scaled_wmma_gemm` gains four optional
+attributes that Tile→ROCm emits only for `rocm_mxfp4_w4a8_folded_prefill_v1`
+(`raster_group_m`, `workgroup_mode`, `staging_prefetch`,
+`epilogue_schedule`). The folded materializer requires all four and refuses a
+missing or undeclared value; the packed-folded fixture checks they are absent
+there (`TARGET-NOT`).
+
+- **What it selects.** Raster group 4, register-staged next K64 slab,
+  complete-tile vector-scale epilogue (16-byte-aligned scales, CTA-uniform
+  bounds; every other launch runs the predicated per-element epilogue), and
+  `-mcumode` once M spans ≥ 2 BM256 row blocks. Direct
+  `package_mxfp4_folded_prefill` keeps the original schedule, and its
+  emitted source is byte-identical to the relabel-era generator
+  (`v1_source_identity.json`; the relabel test now checks that instead of the
+  file hash).
+- **Evidence (Tajasarus RX 9070 XT, clean `61f5fd19`).** Three processes, device-clock
+  marker windows witnessed by HIP events (≤ 2.3% disagreement), all engines
+  bitwise equal to exact K32. Selected/original 0.93–0.94× (256×5120×8704)
+  and 0.79–0.80× (1024×17408×5120); selected/Radiance 1.06–1.07× and
+  0.98–1.01×. Across all ten shapes: faster than the original
+  everywhere; 0.86–1.01× Radiance at M ≥ 1024, 1.06–1.27× at M ≤ 256.
+  WMMA 32 and barriers 2+2 unchanged; VGPR 109→123; no spills/scratch.
+  [Packet](../../../../benchmarks/baselines/gfx1201_mxfp4_prefill_20260927/README.md).
+- **Measured negative.** Unconditional K16 steps (−7%/−2%), LDS fragment
+  double-buffering (−6%/−1.5% alone, ≤ +1.6% on top at 150 VGPRs), CU mode at
+  one row block (−3% to −10%). LDS-only barrier fences were neutral. Hot-operand
+  probes bound operand traffic at ≤ 4.7% on the one-row-block shape.
+- **Device proof.** Folded device file 26/26 with both normal and
+  assertions-ON `tessera-opt`. The new cases are nonuniform/ragged/lossy bitwise
+  oracle checks, the vector-epilogue extreme-scale fallback, and a misaligned
+  scale pointer. All MXFP4 device files pass 114/114. IR lit 451 pass / 66
+  unsupported, and `check-tessera-rocm` 82/82, on both trees.
+- **Open.** The one-row-block gap to Radiance is not operand traffic. CU mode's
+  mechanism is unattributed (no `/dev/kfd`). The row-block rule is fitted on
+  gfx1201 only, and gfx1151 has no folded route. Exact K32 stays default, folded
+  stays opt-in, and there is no automatic selection. The assertions tree needs
+  `CMAKE_CXX_FLAGS="-fno-rtti -UNDEBUG"`, because that LLVM prefix is RTTI-off;
+  without it every tool fails to link on `typeinfo for mlir::Pass`.
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable (no ROCm change)
 

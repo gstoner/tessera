@@ -4890,3 +4890,17 @@ Details.
     does not transfer.
   - NVIDIA / Apple / x86: not applicable. The rule is gfx1201-only, and
     unsplit schedule digests are unchanged.
+
+### 2026-09-27 — GFX1201 folded MXFP4 load schedule in Target IR
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `claude/gfx1201-lanes-mxfp4` (into the consolidated `claude/gfx1201-lanes` PR; sync `GFX1201-LANES-2026-09-27`).
+
+Outcome: the opt-in folded BM256/TM4 prefill carries a four-key physical load schedule through Tile→Target: grouped M-major raster, register-staged next-slab prefetch, complete-tile vector-scale epilogue, and CU mode at two or more row blocks. The folded materializer consumes it and refuses a missing or undeclared value. Output is bitwise equal to exact K32 on matched inputs and to an independent oracle on nonuniform, ragged and lossy device cases. On Tajasarus, device-clock timing witnessed by HIP events across three processes gives 0.93–0.94×/0.79–0.80× the original schedule on the production shapes, 1.06–1.07×/0.98–1.01× pinned Radiance. Every one of ten shapes improves; Radiance is matched or passed from M=1024. Unconditional K16 steps and LDS fragment double-buffering lost; LDS-only barrier fences were neutral.
+
+Remaining: one-row-block shapes (M≤256) stay 1.06–1.27× behind Radiance and the hot-stream probes say that gap is not operand traffic. The CU-mode mechanism is unattributed (no counters on WSL2). The M rule is fitted on gfx1201 only. Exact K32 stays default; no automatic folded selection.
+
+Evidence: [load-schedule packet](../../../benchmarks/baselines/gfx1201_mxfp4_prefill_20260927/README.md), `tests/device/rocm/test_mxfp4_folded_prefill.py`, `tests/unit/test_rocm_mxfp4_folded_schedule.py`, `tests/tessera-ir/phase2/e2e_folded_mxfp4_rocm_load_schedule.mlir`.
+
+<!-- entry-fields:end -->

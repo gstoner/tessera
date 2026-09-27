@@ -3226,6 +3226,27 @@ struct LowerTileToROCMPass
           state.addAttribute("block_n", builder.getI64IntegerAttr(64));
           state.addAttribute("tile_m_per_wave", builder.getI64IntegerAttr(4));
           state.addAttribute("tile_n_per_wave", builder.getI64IntegerAttr(2));
+          if (foldedMxfp4) {
+            // Physical load schedule (performance keys; sync
+            // GFX1201-LANES-2026-09-27, measured on the RX 9070 XT with
+            // bitwise-identical BF16 output): grouped M-major rasterization,
+            // a register-staged next K64 slab and the complete-tile vector
+            // epilogue for every shape. CU workgroup mode only once the
+            // problem spans two or more BM256 row blocks: at one row block
+            // it measured 6-10% slower on N=17408, and 11-24% faster at
+            // M >= 512. The packed-folded kernel has its own schedule and
+            // does not consume these keys, so it does not receive them.
+            const int64_t rowBlocks = (problemM.getInt() + 255) / 256;
+            state.addAttribute("raster_group_m", builder.getI64IntegerAttr(4));
+            state.addAttribute(
+                "workgroup_mode",
+                builder.getStringAttr(rowBlocks >= 2 ? "cu" : "wgp"));
+            state.addAttribute("staging_prefetch",
+                               builder.getStringAttr("register_next_slab"));
+            state.addAttribute(
+                "epilogue_schedule",
+                builder.getStringAttr("complete_tile_vector_scales"));
+          }
         }
         state.addAttribute(
             "physical_contract",

@@ -3,10 +3,17 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
+
+The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule
+(raster, register prefetch, vector-scale epilogue, CU mode by row blocks;
+[packet](../../../../benchmarks/baselines/gfx1201_mxfp4_prefill_20260927/README.md)).
+Not applicable here: sm_120 has no folded MXFP4 package; the new keys exist only on the gfx1201 `tessera_rocm.scaled_wmma_gemm` folded contract, and the CU/WGP rule is an RDNA workgroup-mode choice with no CUDA analogue. No shared contract changed.
 
 ## `NVIDIA-PREPR-REVIEW-2026-09-26`: review fixes to the device-layer and marker work
 

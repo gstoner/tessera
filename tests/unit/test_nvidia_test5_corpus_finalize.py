@@ -75,3 +75,25 @@ def test_unstable_fresh_evidence_keeps_a_same_toolchain_prior_row():
     row, = out["records"]
     assert row["winner"] == "prior"
     assert row["evidence"]["selector_eligible"] is False
+
+
+def test_unstable_fresh_evidence_never_transplants_identities_onto_a_prior_row():
+    """AUTOTUNE-EMITTED-IDENTITY-2026-09-27: a prior row measured under the
+    same toolchain but stamped with other (or no) artifact identities must not
+    receive the fresh run's identities -- that would backfill a code identity
+    onto a measurement of code nobody verified. The fresh row replaces it."""
+    ids = {"direct": {"source_sha256": "new"}, "shared": {"source_sha256": "new"}}
+    prior = _row("prior")
+    prior["evidence"] = {"toolchain_digest": "sha256:now",
+                         "delegate_identities": {"shipped": {"abi_digest": "x"}}}
+    left = _row("direct")
+    left["evidence"] = {"toolchain_digest": "sha256:now", "delegate_identities": ids}
+    right = _row("shared")
+    right["evidence"] = {"toolchain_digest": "sha256:now", "delegate_identities": ids}
+    out = mod.merge({"version": 4, "records": [prior]},
+                    {"records": [left]}, {"records": [right]},
+                    {"routes": {"shared": ["sha256:r"]}})
+    row, = out["records"]
+    assert row["winner"] == "shared"
+    assert row["evidence"]["delegate_identities"] == ids
+    assert row["evidence"]["selector_eligible"] is False

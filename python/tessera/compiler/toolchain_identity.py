@@ -32,9 +32,14 @@ source of truth:
   and, for kernels ``tessera-opt`` generates, the digest of the normalized
   instruction stream of the image the candidate would run for the workload
   (:mod:`kernel_code_identity`; 2026-09-26, replacing :func:`tessera_opt_identity`,
-  whose binary digest differed on every build). These are stamped per candidate
-  by the arbiter (``Candidate.artifact_identity``) and checked against the live
-  candidate before a verdict is reused.
+  whose binary digest differed on every build); and, for every other
+  synthesized or emitted lane, the digest of the code it runs -- emitted
+  source plus the flags the pin does not fix, PTX, a checked-in source and the
+  host compiler's version, or a Python lane's source
+  (:mod:`emitted_code_identity`, 2026-09-27: every candidate of every tier now
+  carries one). These are stamped per candidate by the arbiter
+  (``Candidate.artifact_identity``) and checked against the live candidate
+  before a verdict is reused.
 
 **The family identity is pin-based.** The NVIDIA/ROCm/LLVM components are the
 pins the fleet is held to (``runtime_abi_audit`` drift-gates them, and the LLVM

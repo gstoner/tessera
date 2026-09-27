@@ -59,10 +59,19 @@ def merge(base: dict[str, Any], first: dict[str, Any], second: dict[str, Any],
         # row measured under another (or no) toolchain would serve that old
         # measurement as current. Such a prior row is replaced by the fresh,
         # selector-ineligible one instead.
-        prior_digest = (merged.get(key, {}).get("evidence") or {}).get(
-            "toolchain_digest")
+        #
+        # The same holds for the per-candidate artifact identities
+        # (AUTOTUNE-EMITTED-IDENTITY-2026-09-27): transplanting today's
+        # `delegate_identities` onto a prior row whose candidates ran other
+        # code -- or were never stamped -- would claim the old measurement
+        # timed code nobody verified it timed. Keep the prior row only when
+        # both the toolchain and every stamped identity are unchanged.
+        prior_evidence = merged.get(key, {}).get("evidence") or {}
+        prior_digest = prior_evidence.get("toolchain_digest")
         if (stable or key not in merged
-                or prior_digest != evidence.get("toolchain_digest")):
+                or prior_digest != evidence.get("toolchain_digest")
+                or (prior_evidence.get("delegate_identities") or {})
+                != (evidence.get("delegate_identities") or {})):
             merged[key] = right
         else:
             prior = dict(merged[key])

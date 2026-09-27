@@ -51,8 +51,11 @@ Re-record the sm_120 registry rows on The-Super-Bear with
 `finalize_test5_corpus.py`, under `flock /tmp/tessera-timing.lock`, from a
 clean worktree with `build-nvidia-cuda/` (the PTX bridge, the shipped GEMM and
 `tessera-nvidia-opt` must all be present, or those candidates' identities are
-`None` and their rows unservable -- the recorder must refuse such rows, as the
-gfx1151 recorder does). Gate: every timed candidate stamped; then a fresh
+`None` and their rows unservable; `record_autotune_corpus.py` now refuses to
+write such rows, as the gfx1151 recorder does, and `finalize_test5_corpus.py`
+no longer transplants a fresh run's identities onto a kept prior row whose
+stamps differ -- that would have backfilled today's identities onto the
+current unstamped rows). Gate: every timed candidate stamped; then a fresh
 process serves the admissible rows through `corpus_winner` with inferred dims,
 and a perturbed emitter makes them miss (the gfx1151 check,
 `benchmarks/baselines/autotune_corpus_rerecord_20260927/check_emitted_identity.py`,

@@ -36,6 +36,32 @@ def _other_device_rows(cache: object) -> int:
                if r["device"] != DEVICE)
 
 
+def _unstamped(cache: object, before_store: dict) -> list[str]:
+    """Rows this run measured for a registry op with a timed candidate that
+    carries no artifact identity.
+
+    Since AUTOTUNE-EMITTED-IDENTITY-2026-09-27 every live candidate of every
+    tier must match a stamped identity, so such a row can never be served:
+    writing it would replace a row with a dead one. The usual cause on the box
+    is a missing build product -- the PTX launch bridge, the shipped GEMM
+    library or ``tessera-nvidia-opt`` -- whose identity is then ``None``.
+    ``conv2d`` is not a registry op and is not checked here.
+    """
+    from tessera.compiler.emit.candidate import _CANDIDATES
+
+    missing: list[str] = []
+    for key, record in cache._store.items():  # type: ignore[attr-defined]
+        if not _owned(key) or before_store.get(key) is record:
+            continue
+        if (key[1], key[2]) not in _CANDIDATES:
+            continue
+        stamped = record.evidence.get("delegate_identities") or {}
+        for name in sorted(record.candidates):
+            if name not in stamped:
+                missing.append(f"{key}: {name}")
+    return missing
+
+
 def _candidate_descriptors(*, target: str, op: str, dims: tuple[int, ...],
                            dtype: str, names: dict[str, float]) -> dict[str, dict[str, object]]:
     """Persist each measured candidate's replay identity with its latency."""
@@ -349,6 +375,14 @@ def main() -> int:
                                        names=record.candidates)
                 if workload_shape else record.candidate_descriptors
             ))
+    unstamped = _unstamped(cache, before_store)
+    if unstamped:
+        print("REFUSING TO WRITE: timed candidates without an artifact identity "
+              "(AUTOTUNE-EMITTED-IDENTITY-2026-09-27); these rows could never be "
+              "served:")
+        for line in unstamped:
+            print(f"  {line}")
+        return 1
     if _other_device_rows(cache) < before_other:
         print("REFUSING TO WRITE: this run would delete another device's rows.")
         return 1

@@ -48,6 +48,14 @@ Normalization ``tessera.emitted_source.v1``
   kernels selected by a data-dependent branch -- carries every part, each
   field prefixed with the part's label.
 
+Limits, stated so they are not read as covered: host-side Python around a
+kernel (operand casts such as ``_composed_operand``, layout materialization,
+launch sequencing in a device session) is not digested; the toolchain *pins*
+stand for nvcc/hipcc/driver versions, so a box drifting off its pin without the
+pin moving is not caught here (the family identity's own limit); and a lane
+whose kernel is chosen by a data-dependent test carries every kernel it may
+choose (a false miss when only the untaken one changes, never a false hit).
+
 What is deliberately *not* here: loaded-library identities
 (``toolchain_identity.delegate_library_identity``), which a composite may
 include as a part, and ``tessera-opt`` images (:mod:`kernel_code_identity`).

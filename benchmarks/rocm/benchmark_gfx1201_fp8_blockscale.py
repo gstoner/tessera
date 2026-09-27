@@ -468,7 +468,9 @@ def main() -> None:
                         help="Tessera-only sweep variant PMxPN:U:G:L (register panel) or "
                              "lds:MMxMN:W:D:S:P:F:L (LDS body: macro tile, warps, pipeline "
                              "depth, stage K (-1 default), pad bytes (-1 default), prefetch "
-                             "(-1 = carrier), layout); no AITER arm unless --with-aiter")
+                             "(-1 = carrier), layout) or prod:L[+bf16] (the production route); "
+                             "a trailing @NAME compiles with --alt-compiler NAME; no AITER arm "
+                             "unless --with-aiter")
     parser.add_argument("--alt-compiler", action="append", default=[],
                         help="NAME=PATH: a second tessera-opt a sweep variant names with a "
                              "trailing @NAME, so two compiler builds are timed paired and "
@@ -550,7 +552,12 @@ def main() -> None:
         for spec in args.sweep:
             spec, _, alias = spec.partition("@")
             parts = spec.split(":")
-            if parts[0] == "lds":
+            if parts[0] == "prod":
+                # prod:LAYOUT[+bf16] -- the production route; with @NAME it is
+                # compiled by that alternate tessera-opt (e.g. the previous
+                # compiler, for a before/after pair in one process).
+                variants.append((None, 1, -1, parts[1], None, alias))
+            elif parts[0] == "lds":
                 macro = tuple(int(v) for v in parts[1].split("x"))
                 warps, depth, stage_k, pad, prefetch = (int(v) for v in parts[2:7])
                 variants.append((macro, 1, -1, parts[7], (warps, depth, stage_k, pad, prefetch),

@@ -86,6 +86,9 @@ def Schedule_MatmulOp : Op<ScheduleDialect, "matmul", [Pure]> {
                        DefaultValuedAttr<I64Attr, "0">:$scale_k,
                        DefaultValuedAttr<StrAttr, "\"\"">:$scale_format,
                        DefaultValuedAttr<StrAttr, "\"\"">:$physical_contract,
+                       // ROCM-FP8-BLOCKSCALE-1: the weight scale's N block
+                       // (0 = not a W8A8 block-scale contract).
+                       DefaultValuedAttr<I64Attr, "0">:$scale_n,
                        StrAttr:$accum,
                        BoolAttr:$bias,
                        StrAttr:$activation,

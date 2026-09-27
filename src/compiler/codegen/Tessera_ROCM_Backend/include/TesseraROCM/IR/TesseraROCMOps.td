@@ -128,6 +128,14 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     performance keys: none changes the tile, the per-lane WMMA order or the
     epilogue arithmetic. The folded materializer requires all four and
     refuses values outside those sets.
+
+    `physical_contract = "rocm_fp8_w8a8_blockscale_v1"` (ROCM-FP8-BLOCKSCALE-1)
+    is the logical W8A8 form bound to an executable ABI: e4m3 A and B stay in
+    storage into `V_WMMA_F32_16X16X16_FP8_FP8`, lhs scales are fp32
+    [M, K/scale_k], rhs scales fp32 [K/scale_k, ceil(N/scale_n)], and
+    `block_m`/`block_n` name the register panel the generator emits. It is
+    the Tessera contract upstream ROCDL cannot carry -- which scale multiplies
+    which partial -- and so earns its place here (Decision #19).
   }];
   let arguments = (ins StrAttr:$name, StrAttr:$abi,
                        I64Attr:$m, I64Attr:$n, I64Attr:$k,
@@ -142,6 +150,10 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
                        OptionalAttr<StrAttr>:$workgroup_mode,
                        OptionalAttr<StrAttr>:$staging_prefetch,
                        OptionalAttr<StrAttr>:$epilogue_schedule,
+                       // ROCM-FP8-BLOCKSCALE-1: the weight scale's N block
+                       // for the W8A8 contract (one scale per scale_n
+                       // columns per K group). Absent for every MX form.
+                       OptionalAttr<I64Attr>:$scale_n,
                        StrAttr:$partial_combine,
                        StrAttr:$k_step_schedule,
                        StrAttr:$physical_contract,

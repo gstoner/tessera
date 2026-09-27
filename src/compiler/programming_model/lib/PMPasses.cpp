@@ -251,6 +251,11 @@ struct MatmulSchedule {
   int64_t scaleBlockK = 0;
   StringRef scaleFormat;
   StringRef physicalContract;
+  //: ROCM-FP8-BLOCKSCALE-1: the B (weight) scale block along N, from
+  //: `scale_layout.block[0]`. 0 unless the logical W8A8 block-scale contract
+  //: was derived; semantic (it selects which scale multiplies a column), so it
+  //: enters the digest whenever it is set.
+  int64_t scaleBlockN = 0;
   //: The macro K tile (ROCM-MACRO-K-TILE-1). 0 means "one instruction K per
   //: block", i.e. the historical unblocked loop. `kBlocks = blockK / tileK`.
   int64_t blockK = 0;
@@ -384,6 +389,122 @@ static void selectGfx1201SplitK(MatmulSchedule &schedule) {
   schedule.splitKReduction = "ordered";
 }
 
+// ── ROCM-FP8-BLOCKSCALE-1: the logical W8A8 block-scale contract ─────────
+//
+// `tessera.scaled_matmul` with e4m3 A [M,K] and B [K,N] and fp32 scales binds
+// to one physical contract on gfx1201: operands stay e4m3 into
+// V_WMMA_F32_16X16X16_FP8_FP8, every K group of `scale_k` starts an fp32
+// partial from zero, and that partial is multiplied by
+// `lhs_scale[m, g] * rhs_scale[g, n / scale_n]` before it joins the running
+// accumulator. `scale_layout.block = [scale_n, scale_k]` is the weight block
+// (the DeepSeek/AITER `block_shape` convention, [128, 128] in the tuned
+// configs); the activation scale is per token per K group. Every extent is
+// checked here, where the tensor types still exist -- below Schedule the
+// scales are raw pointers and nothing could catch a wrong block count.
+constexpr StringLiteral kFp8W8A8BlockScaleContract =
+    "rocm_fp8_w8a8_blockscale_v1";
+constexpr StringLiteral kFp8W8A8BlockScaleNKContract =
+    "rocm_fp8_w8a8_blockscale_nk_v1";
+constexpr StringLiteral kFp8W8A8BlockScaleFormat = "fp32";
+
+static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
+                                             MatmulSchedule &schedule,
+                                             RankedTensorType lhs,
+                                             RankedTensorType rhs,
+                                             RankedTensorType out,
+                                             bool transposedB) {
+  auto refuse = [&](const Twine &why) {
+    op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: ") << why;
+    return failure();
+  };
+  if (!isa<Float8E4M3FNType>(lhs.getElementType()) ||
+      !isa<Float8E4M3FNType>(rhs.getElementType()))
+    return refuse("the W8A8 block-scale contract binds e4m3 x e4m3 only");
+  if (!out.getElementType().isF32())
+    return refuse("the W8A8 block-scale contract stores its fp32 accumulator");
+  if (schedule.dynamicM || schedule.dynamicN || schedule.dynamicK)
+    return refuse("the W8A8 block-scale contract requires static M, N and K");
+  const int64_t groupK = schedule.scaleBlockK;
+  if (groupK % schedule.tileK != 0)
+    return refuse(Twine("scale_k=") + Twine(groupK) +
+                  " is not a whole number of 16-wide WMMA K steps");
+  if (schedule.k % groupK != 0)
+    return refuse(Twine("K=") + Twine(schedule.k) +
+                  " is not a whole number of scale groups of " +
+                  Twine(groupK) +
+                  "; a partial trailing group has no defined scale");
+  auto layout = op->getAttrOfType<DictionaryAttr>("scale_layout");
+  auto block = layout ? layout.getAs<ArrayAttr>("block") : ArrayAttr();
+  auto granularity =
+      layout ? layout.getAs<StringAttr>("granularity") : StringAttr();
+  auto blockN = block && block.size() == 2
+                    ? dyn_cast<IntegerAttr>(block[0])
+                    : IntegerAttr();
+  if (!granularity || granularity.getValue() != "block" || !blockN ||
+      blockN.getInt() <= 0)
+    return refuse("scale_layout must be granularity=\"block\" with a "
+                  "positive block = [scale_n, scale_k]");
+  const int64_t groups = schedule.k / groupK;
+  const int64_t nGroups = (schedule.n + blockN.getInt() - 1) / blockN.getInt();
+  auto lhsScale = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+  auto rhsScale = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
+  if (!lhsScale || lhsScale.getRank() != 2 ||
+      !lhsScale.getElementType().isF32() ||
+      lhsScale.getDimSize(0) != schedule.m ||
+      lhsScale.getDimSize(1) != groups)
+    return refuse(Twine("lhs_scale must be fp32 [M, K/scale_k] = [") +
+                  Twine(schedule.m) + ", " + Twine(groups) + "]");
+  if (!rhsScale || rhsScale.getRank() != 2 ||
+      !rhsScale.getElementType().isF32() ||
+      rhsScale.getDimSize(0) != groups ||
+      rhsScale.getDimSize(1) != nGroups)
+    return refuse(Twine("rhs_scale must be fp32 [K/scale_k, ceil(N/scale_n)] "
+                        "= [") +
+                  Twine(groups) + ", " + Twine(nGroups) + "]");
+  if (auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy"))
+    if (auto mode = policy.getAs<StringAttr>("execution_mode");
+        mode && mode.getValue() != "exact_per_block")
+      return refuse(Twine("execution_mode=\"") + mode.getValue() +
+                    "\" is not this contract's exact per-block scaling");
+  // The weight's memory layout is part of the named contract: below
+  // Schedule the operand is a raw pointer, and [K, N] and [N, K] read the
+  // same bytes as different matrices.
+  schedule.physicalContract = transposedB ? kFp8W8A8BlockScaleNKContract
+                                          : kFp8W8A8BlockScaleContract;
+  schedule.scaleBlockN = blockN.getInt();
+  schedule.output = "f32";
+  return success();
+}
+
+// The W8A8 register panel, selected from the gfx1201 sweep in
+// `benchmarks/baselines/gfx1201_fp8_blockscale_20260927/sweep.json` (device
+// clock, Tajasarus, [N, K] weight, clean commit):
+//
+//  * 32x32 when M and N are whole 32s AND that yields at least 256 tiles. It
+//    won or came within 2% at every such shape but one (64x6144x2048 24.6 us;
+//    256x4096x1024 25.3 vs 25.0 at 32x64; 1024x4096x1024 87.0; 2048^3 152.0).
+//    64-wide panels lose -- 64x64 by 2-20x -- because the isolated group
+//    partial doubles the live accumulators: 32x32 is 231 VGPRs unspilled,
+//    64x32 256 + 54 spilled, 64x64 256 + 337.
+//  * Fewer tiles than that leaves the 64 CUs short of waves, and the
+//    half-height 16x32 panel doubles the grid: 32x4096x1024 13.7 vs 15.6 us
+//    (128 tiles at 32x32); 64x2048x2048 16.0 vs 16.7 (16x64 15.1 was best
+//    there, 6% ahead -- not worth a third branch on one shape).
+//  * A ragged M under a 32-row panel sends a whole row of tiles down the
+//    masked edge path, which is far slower than a narrower interior: M=48
+//    took 146.1 us at 32x32 against 25.9 at 16x32; M=100 158.0 against 37.5.
+//  * N that is not a whole 32 takes 16 columns for the same edge reason.
+//
+// Open, not taken: at 4096^3 the 64x32 panel measured 13% faster than 32x32
+// (1402 vs 1618 us) and 6% slower at 2048^3. One shape is not a rule.
+static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
+  constexpr int64_t kMinFullPanelTiles = 256;
+  const bool full = schedule.m % 32 == 0 && schedule.n % 32 == 0 &&
+                    (schedule.m / 32) * (schedule.n / 32) >= kMinFullPanelTiles;
+  schedule.macroTileM = full ? 32 : 16;
+  schedule.macroTileN = schedule.n % 32 == 0 ? 32 : 16;
+}
+
 //: The schedule as INFERRED from operand/result element types per target.
 //: Wrapped below so the declared policy is checked on every exit path.
 static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
@@ -402,9 +523,17 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   if (auto transpose = op->getAttrOfType<BoolAttr>("transposeA");
       transpose && transpose.getValue())
     return failure();
+  // ROCM-FP8-BLOCKSCALE-1: a block-scaled matmul may state its weight as
+  // [N, K] (`transposeB`), the layout every W8A8 checkpoint ships and the one
+  // whose K is contiguous. Only the W8A8 derivation below admits it; every
+  // other form still refuses a transpose.
+  bool transposedB = false;
   if (auto transpose = op->getAttrOfType<BoolAttr>("transposeB");
-      transpose && transpose.getValue())
-    return failure();
+      transpose && transpose.getValue()) {
+    if (!scaledMatmul || op->getAttrOfType<StringAttr>("physical_contract"))
+      return failure();
+    transposedB = true;
+  }
 
   MatmulSchedule schedule;
   if (auto physical = op->getAttrOfType<StringAttr>("physical_contract"))
@@ -454,7 +583,7 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   const bool packedFoldedMxfp4 =
       schedule.physicalContract == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
   const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
-  if (foldedFamily) {
+  if (foldedFamily || transposedB) {
     n = bounded(rhs.getDimSize(0), 1, schedule.dynamicN);
     if (failed(n))
       return failure();
@@ -463,7 +592,7 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   const bool rhsKCompatible =
       packedMxfp4
           ? compatible(rhs.getDimSize(0), (schedule.k + 1) / 2)
-          : compatible(rhs.getDimSize(foldedFamily ? 1 : 0),
+          : compatible(rhs.getDimSize(foldedFamily || transposedB ? 1 : 0),
                        packedFoldedMxfp4 ? schedule.k / 2 : schedule.k);
   if (schedule.m <= 0 || schedule.n <= 0 || schedule.k <= 0 ||
       !rhsKCompatible ||
@@ -474,6 +603,12 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   Type lhsElement = lhs.getElementType();
   Type rhsElement = rhs.getElementType();
   Type outElement = out.getElementType();
+  // A transposed weight has a bound layout only under the W8A8 contract. Any
+  // other storage would fall into a branch that knows nothing of the
+  // transpose and would read [N, K] bytes as [K, N] -- refuse it here.
+  if (transposedB && !(isa<Float8E4M3FNType>(lhsElement) &&
+                       isa<Float8E4M3FNType>(rhsElement)))
+    return failure();
   schedule.bias = bool(op->getAttrOfType<StringAttr>("bias"));
   schedule.residual = bool(op->getAttrOfType<StringAttr>("residual"));
   if (auto activation = op->getAttrOfType<StringAttr>("activation"))
@@ -746,6 +881,23 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       return failure();
     schedule.macroTileM = gfx1201StaticPanel ? 64 : 16;
     schedule.macroTileN = gfx1201StaticPanel ? 64 : 16;
+    if (transposedB && schedule.scaleFormat != kFp8W8A8BlockScaleFormat)
+      return failure();
+    if (scaledMatmul && schedule.scaleFormat == kFp8W8A8BlockScaleFormat) {
+      // ROCM-FP8-BLOCKSCALE-1: derive (Decision #30) the logical W8A8
+      // block-scale contract. fp32 is the scale format this contract names,
+      // so an fp32-format scaled fp8 matmul that does not conform is an
+      // ERROR, never a silently unbound directive: the scale layout, dtype
+      // and group are semantic keys (Decision #21a) -- a wrong one runs and
+      // returns the wrong factor on every block.
+      if (failed(deriveFp8W8A8BlockScale(op, schedule, lhs, rhs, out,
+                                         transposedB)))
+        return failure();
+      // The isolated scale-group partial doubles the live accumulator
+      // fragments, so the unscaled panel does not transfer; the W8A8 panel is
+      // selected from its own measurement.
+      selectFp8W8A8BlockScalePanel(schedule);
+    }
     return schedule;
   }
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
@@ -904,6 +1056,11 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
 }
 
 static std::string scheduleDigest(const MatmulSchedule &schedule) {
+  // Stated only when set, so every existing schedule digest is unchanged.
+  const std::string scaleN =
+      schedule.scaleBlockN > 0
+          ? ";scale_n=" + std::to_string(schedule.scaleBlockN)
+          : std::string();
   std::string contract =
       (Twine("target=") + schedule.target + ";arch=" + schedule.arch +
        ";M=" + Twine(schedule.m) + ";N=" + Twine(schedule.n) +
@@ -911,6 +1068,7 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
        ";storage_b=" + schedule.storageB + ";block_k=" +
        Twine(schedule.blockK) + ";scale_k=" + Twine(schedule.scaleBlockK) +
        ";scale_format=" + schedule.scaleFormat +
+       scaleN +
        ";physical_contract=" + schedule.physicalContract +
        ";accum=" + schedule.accum + ";tile=" + Twine(schedule.tileM) + "x" +
        Twine(schedule.tileN) + "x" + Twine(schedule.tileK) +
@@ -2464,6 +2622,10 @@ struct GraphToSchedulePass
                          builder.getStringAttr(selected->scaleFormat));
       state.addAttribute("physical_contract",
                          builder.getStringAttr(selected->physicalContract));
+      // ROCM-FP8-BLOCKSCALE-1: stated only when the W8A8 contract set it.
+      if (selected->scaleBlockN > 0)
+        state.addAttribute("scale_n",
+                           builder.getI64IntegerAttr(selected->scaleBlockN));
       state.addAttribute("accum", builder.getStringAttr(selected->accum));
       state.addAttribute("bias", builder.getBoolAttr(selected->bias));
       state.addAttribute("activation",
@@ -3486,6 +3648,7 @@ struct ScheduleToTilePass
           scheduled.getScaleK() != selected->scaleBlockK ||
           scheduled.getScaleFormat() != selected->scaleFormat ||
           scheduled.getPhysicalContract() != selected->physicalContract ||
+          scheduled.getScaleN() != selected->scaleBlockN ||
           scheduled.getAccum() != selected->accum ||
           scheduled.getBias() != selected->bias ||
           scheduled.getActivation() != selected->activation ||
@@ -4066,6 +4229,12 @@ struct ScheduleToTilePass
           kernelState.addAttribute(
               "physical_contract",
               builder.getStringAttr(selected->physicalContract));
+        // ROCM-FP8-BLOCKSCALE-1: the B scale's N block reaches the kernel,
+        // which is the only place that indexes it.
+        if (selected->scaleBlockN > 0)
+          kernelState.addAttribute(
+              "tessera.scale_block_n",
+              builder.getI64IntegerAttr(selected->scaleBlockN));
         // The Target-IR directive is a package boundary rather than a hint.
         // Keep its problem extents self-contained for both logical inspection
         // and the exact physical package. Zero remains the existing sentinel

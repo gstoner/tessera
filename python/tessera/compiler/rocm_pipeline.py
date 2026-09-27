@@ -246,6 +246,11 @@ class ROCMExecutablePipeline:
     lds_double_buffer: bool = False
     lds_sched_valu_per_mma: int = 0
     lds_b_row_major: bool = False
+    #: ROCM-FP8-BLOCKSCALE-1: instruction panels of one scale group issued
+    #: straight-line per inner step of the block-scaled body (a performance
+    #: key; the group still computes one partial). -1 keeps the generator's
+    #: measured default; 0 issues the whole group straight-line.
+    scale_group_panels: int = -1
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -321,6 +326,8 @@ class ROCMExecutablePipeline:
                              "(negative = memory-grouping control arm)")
         if type(self.lds_b_row_major) is not bool:
             raise ValueError("ROCm lds_b_row_major must be a bool")
+        if type(self.scale_group_panels) is not int or not -1 <= self.scale_group_panels <= 16:
+            raise ValueError("ROCm scale_group_panels must be an int in [-1, 16]")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -343,6 +350,7 @@ class ROCMExecutablePipeline:
             f"lds-double-buffer={str(self.lds_double_buffer).lower()} "
             f"lds-sched-valu-per-mma={self.lds_sched_valu_per_mma} "
             f"lds-b-row-major={str(self.lds_b_row_major).lower()} "
+            f"scale-group-panels={self.scale_group_panels} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"

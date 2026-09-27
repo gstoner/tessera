@@ -444,6 +444,43 @@ static FailureOr<Value> materializeFragmentPack(
   return packed;
 }
 
+// The logical (row, column) that register element `i` of this lane's
+// accumulator holds, per fragment family. The ONE place this map exists: the
+// accumulator store and the block-scale accumulate (ROCM-FP8-BLOCKSCALE-1)
+// both ask it, so a scale can never be applied to a different element than
+// the store writes.
+static std::pair<Value, Value> accumulatorElementCoordinate(
+    OpBuilder &builder, Location loc,
+    const tessera_rocm::FragmentLayoutDescriptor &physical, int64_t i,
+    Value lane, Value laneGroup, Value groupStride, Value rowOrigin,
+    Value colOrigin) {
+  Value ci = arith::ConstantIndexOp::create(builder, loc, i);
+  Value row;
+  Value col;
+  if (physical.usesGfx11AccumulatorMap()) {
+    Value two = arith::ConstantIndexOp::create(builder, loc, 2);
+    Value rowOffset = arith::AddIOp::create(
+        builder, loc, arith::MulIOp::create(builder, loc, ci, two), laneGroup);
+    row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
+    col = arith::AddIOp::create(builder, loc, colOrigin, lane);
+  } else if (physical.family == tessera_rocm::FragmentFamily::RDNA4WMMA) {
+    // gfx12 distributes output rows across registers and half-waves;
+    // the low four lane bits select the column, not the row.
+    Value rowOffset = arith::AddIOp::create(
+        builder, loc,
+        arith::MulIOp::create(builder, loc, laneGroup, groupStride), ci);
+    row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
+    col = arith::AddIOp::create(builder, loc, colOrigin, lane);
+  } else {
+    row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
+    Value colOffset = arith::AddIOp::create(
+        builder, loc,
+        arith::MulIOp::create(builder, loc, laneGroup, groupStride), ci);
+    col = arith::AddIOp::create(builder, loc, colOrigin, colOffset);
+  }
+  return {row, col};
+}
+
 // Takes the accumulator as a VALUE, not as the producing operation. The typed
 // path's accumulator may be an `scf.for` iter-arg -- a block argument with no
 // defining op -- which is precisely the case W1.1 exists to make expressible.
@@ -528,31 +565,9 @@ static LogicalResult materializeFragmentStore(
   Value groupStride = arith::ConstantIndexOp::create(
       builder, loc, physical.accumulatorElementsPerLane);
   for (int64_t i = 0; i < physical.accumulatorElementsPerLane; ++i) {
-    Value ci = arith::ConstantIndexOp::create(builder, loc, i);
-    Value row;
-    Value col;
-    if (physical.usesGfx11AccumulatorMap()) {
-      Value two = arith::ConstantIndexOp::create(builder, loc, 2);
-      Value rowOffset = arith::AddIOp::create(
-          builder, loc, arith::MulIOp::create(builder, loc, ci, two),
-          laneGroup);
-      row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
-      col = arith::AddIOp::create(builder, loc, colOrigin, lane);
-    } else if (physical.family == tessera_rocm::FragmentFamily::RDNA4WMMA) {
-      // gfx12 distributes output rows across registers and half-waves;
-      // the low four lane bits select the column, not the row.
-      Value rowOffset = arith::AddIOp::create(
-          builder, loc,
-          arith::MulIOp::create(builder, loc, laneGroup, groupStride), ci);
-      row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
-      col = arith::AddIOp::create(builder, loc, colOrigin, lane);
-    } else {
-      row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
-      Value colOffset = arith::AddIOp::create(
-          builder, loc,
-          arith::MulIOp::create(builder, loc, laneGroup, groupStride), ci);
-      col = arith::AddIOp::create(builder, loc, colOrigin, colOffset);
-    }
+    auto [row, col] = accumulatorElementCoordinate(
+        builder, loc, physical, i, lane, laneGroup, groupStride, rowOrigin,
+        colOrigin);
     Value linear = arith::AddIOp::create(
         builder, loc,
         arith::MulIOp::create(builder, loc, row, leadingDim), col);
@@ -1399,6 +1414,97 @@ private:
   FragmentLaneCoordCache &laneCoords;
 };
 
+/// ROCM-FP8-BLOCKSCALE-1: `acc + partial * lhs_scale[row] * rhs_scale[col]`
+/// per register element, with (row, col) from the SAME accumulator map the
+/// store uses. The lane's column is constant across its elements on every
+/// family that keeps the column in the low lane bits, so LLVM folds the
+/// repeated rhs-scale loads; the lhs loads walk this lane's rows.
+struct ConvertFragmentScaledAccumulate
+    : public OpConversionPattern<tessera::tile::FragmentScaledAccumulateOp> {
+  ConvertFragmentScaledAccumulate(const TypeConverter &converter,
+                                  MLIRContext *context,
+                                  FragmentLaneCoordCache &laneCoords)
+      : OpConversionPattern(converter, context), laneCoords(laneCoords) {}
+
+  LogicalResult
+  matchAndRewrite(tessera::tile::FragmentScaledAccumulateOp op,
+                  OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto f = dyn_cast<tessera::tile::FragmentType>(op.getAcc().getType());
+    const auto *converter =
+        static_cast<const TileFragmentTypeConverter *>(getTypeConverter());
+    if (!f || f.isUnknown())
+      return rewriter.notifyMatchFailure(op, "legacy bare fragment");
+    std::optional<tessera_rocm::FragmentLayoutDescriptor> physical =
+        converter->layoutFor(f);
+    auto vecTy = dyn_cast_or_null<VectorType>(
+        converter->convertType(op.getResult().getType()));
+    if (!physical || !physical->materializationReady || !vecTy ||
+        vecTy.getNumElements() != physical->accumulatorElementsPerLane ||
+        !vecTy.getElementType().isF32())
+      return emitUnresolvableFragment(op, f, converter->getArch());
+    Location loc = op.getLoc();
+    FragmentLaneCoords coords = laneCoords.get(rewriter, loc, *physical);
+    Value groupStride = arith::ConstantIndexOp::create(
+        rewriter, loc, physical->accumulatorElementsPerLane);
+    Value c0 = arith::ConstantIndexOp::create(rewriter, loc, 0);
+    Value c1 = arith::ConstantIndexOp::create(rewriter, loc, 1);
+    Value scaleN =
+        arith::ConstantIndexOp::create(rewriter, loc, op.getScaleN());
+    Value colGroups = arith::DivUIOp::create(
+        rewriter, loc,
+        arith::AddIOp::create(
+            rewriter, loc, adaptor.getCols(),
+            arith::SubIOp::create(rewriter, loc, scaleN, c1)),
+        scaleN);
+    Value lhsGroupBase = adaptor.getGroup();
+    Value rhsGroupBase =
+        arith::MulIOp::create(rewriter, loc, adaptor.getGroup(), colGroups);
+    Value acc = adaptor.getAcc();
+    Value partial = adaptor.getPartial();
+    Value result = acc;
+    auto slt = arith::CmpIPredicate::slt;
+    for (int64_t i = 0; i < physical->accumulatorElementsPerLane; ++i) {
+      auto [row, col] = accumulatorElementCoordinate(
+          rewriter, loc, *physical, i, coords.lane, coords.storeGroup,
+          groupStride, adaptor.getRowOrigin(), adaptor.getColOrigin());
+      // A row/column past the logical edge reads index 0's scale: its
+      // element is never stored, and this keeps every scale load in bounds.
+      Value rowOk =
+          arith::CmpIOp::create(rewriter, loc, slt, row, adaptor.getRows());
+      Value colOk =
+          arith::CmpIOp::create(rewriter, loc, slt, col, adaptor.getCols());
+      Value safeRow = arith::SelectOp::create(rewriter, loc, rowOk, row, c0);
+      Value safeCol = arith::SelectOp::create(rewriter, loc, colOk, col, c0);
+      Value lhsIndex = arith::AddIOp::create(
+          rewriter, loc,
+          arith::MulIOp::create(rewriter, loc, safeRow, adaptor.getGroups()),
+          lhsGroupBase);
+      Value rhsIndex = arith::AddIOp::create(
+          rewriter, loc, rhsGroupBase,
+          arith::DivUIOp::create(rewriter, loc, safeCol, scaleN));
+      Value lhsScale = memref::LoadOp::create(
+          rewriter, loc, adaptor.getLhsScale(), ValueRange{lhsIndex});
+      Value rhsScale = memref::LoadOp::create(
+          rewriter, loc, adaptor.getRhsScale(), ValueRange{rhsIndex});
+      Value scale = arith::MulFOp::create(rewriter, loc, lhsScale, rhsScale);
+      Value p = vector::ExtractOp::create(rewriter, loc, partial,
+                                          ArrayRef<int64_t>{i});
+      Value a = vector::ExtractOp::create(rewriter, loc, acc,
+                                          ArrayRef<int64_t>{i});
+      Value joined = arith::AddFOp::create(
+          rewriter, loc, a, arith::MulFOp::create(rewriter, loc, p, scale));
+      result = vector::InsertOp::create(rewriter, loc, joined, result,
+                                        ArrayRef<int64_t>{i});
+    }
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+
+private:
+  FragmentLaneCoordCache &laneCoords;
+};
+
 } // namespace
 
 /// Legalize every op that names a STATED `!tile.fragment` contract. Returns
@@ -1433,6 +1539,7 @@ static LogicalResult convertTypedFragments(Operation *root, StringRef arch) {
       converter, ctx);
   patterns.add<ConvertFragmentPack>(converter, ctx, laneCoords);
   patterns.add<ConvertFragmentUnpackStore>(converter, ctx, laneCoords);
+  patterns.add<ConvertFragmentScaledAccumulate>(converter, ctx, laneCoords);
 
   ConversionTarget target(*ctx);
   target.markUnknownOpDynamicallyLegal(
@@ -3147,6 +3254,36 @@ struct LowerTileToROCMPass
             physical && physical.getValue() ==
                             "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
         const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
+        // ROCM-FP8-BLOCKSCALE-1: the logical W8A8 contract Graph->Schedule
+        // derived from a conforming e4m3 x e4m3 / fp32-scale op.
+        const bool fp8W8A8NK =
+            physical &&
+            physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1";
+        const bool fp8W8A8 =
+            fp8W8A8NK || (physical && physical.getValue() ==
+                                          "rocm_fp8_w8a8_blockscale_v1");
+        auto scaleBlockN =
+            op->getAttrOfType<IntegerAttr>("tessera.scale_block_n");
+        if (fp8W8A8 &&
+            (!desc || !epilogue || !problemM || !problemN || !problemK ||
+             !macroM || !macroN || !scaleBlockN ||
+             desc.getAType() != "e4m3" || desc.getBType() != "e4m3" ||
+             desc.getScaleFormat() != "fp32" ||
+             epilogue.getOutputType() != "f32" || epilogue.getBias() ||
+             epilogue.getActivation() != "none" || problemM.getInt() <= 0 ||
+             problemN.getInt() <= 0 || problemK.getInt() <= 0 ||
+             desc.getScaleBlockK() <= 0 ||
+             problemK.getInt() % desc.getScaleBlockK() != 0 ||
+             (desc.getK() * desc.getKBlocks()) % desc.getScaleBlockK() != 0 ||
+             scaleBlockN.getInt() <= 0)) {
+          op->emitError(
+              "ROCM_FP8_BLOCKSCALE_CONTRACT: the gfx1201 W8A8 block-scale "
+              "directive requires e4m3 x e4m3, fp32 scales, a positive scale "
+              "N block, whole scale groups in the static K and the macro K, "
+              "and a plain f32 store");
+          signalPassFailure();
+          return;
+        }
         if (!desc || !partial || !combine || !scheduleScope ||
             !crossStepMotion || !epilogue || !parent ||
             op->getNumOperands() != 8 || arch != "gfx1201" ||
@@ -3200,7 +3337,8 @@ struct LowerTileToROCMPass
         state.addAttribute("name", builder.getStringAttr(parent.getSymName()));
         state.addAttribute(
             "abi", builder.getStringAttr(
-                       packedFoldedMxfp4 ? "a_bpacked_sa_scaleplane_d_m_n_k"
+                       fp8W8A8NK ? "a_bnk_lhs_scale_rhs_scale_d_m_n_k"
+                       : packedFoldedMxfp4 ? "a_bpacked_sa_scaleplane_d_m_n_k"
                                     : foldedMxfp4 ? "a_bfold_sa_rowref_d_m_n_k"
                                     : "a_b_lhs_scale_rhs_scale_d_m_n_k"));
         state.addAttribute("m", problemM);
@@ -3220,6 +3358,13 @@ struct LowerTileToROCMPass
                            builder.getStringAttr(
                                foldedFamily ? "isolated_k_stage"
                                             : "isolated_scale_group"));
+        if (fp8W8A8) {
+          // The register panel the generator emits, and the weight scale's
+          // N block: both are needed to launch and to index the package.
+          state.addAttribute("block_m", macroM);
+          state.addAttribute("block_n", macroN);
+          state.addAttribute("scale_n", scaleBlockN);
+        }
         if (foldedFamily) {
           state.addAttribute("stage_k", builder.getI64IntegerAttr(64));
           state.addAttribute("block_m", builder.getI64IntegerAttr(256));
@@ -3262,6 +3407,10 @@ struct LowerTileToROCMPass
                     ? "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
                     : packedMxfp4
                     ? "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1"
+                    : fp8W8A8NK
+                    ? "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+                    : fp8W8A8
+                    ? "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
                     : "unbound"));
         for (StringRef attrName : {"tessera.schedule_hash", "numeric_policy"})
           if (Attribute attr = op->getAttr(attrName))

@@ -20,14 +20,16 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
   // A larger, valid Graph scale group must enlarge macro K before Schedule
   // verification. Leaving the measured unscaled block_k=32 here constructs an
   // invalid carrier because 32 cannot contain one complete K128 scale group.
+  // fp32 scales make this the W8A8 contract (ROCM-FP8-BLOCKSCALE-1), whose
+  // rhs scale is one per [128 x 128] weight block: [K/128, ceil(N/128)].
   func.func @scaled_fp8_k128(%a: tensor<128x512xf8E4M3FN>,
                              %b: tensor<512x128xf8E4M3FN>,
                              %sa: tensor<128x4xf32>,
-                             %sb: tensor<4x128xf32>) -> tensor<128x128xf32> {
+                             %sb: tensor<4x1xf32>) -> tensor<128x128xf32> {
     %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
       scale_layout = {granularity = "block", block = [128, 128], format = "fp32"}
     } : (tensor<128x512xf8E4M3FN>, tensor<512x128xf8E4M3FN>,
-         tensor<128x4xf32>, tensor<4x128xf32>) -> tensor<128x128xf32>
+         tensor<128x4xf32>, tensor<4x1xf32>) -> tensor<128x128xf32>
     return %0 : tensor<128x128xf32>
   }
 
@@ -59,8 +61,10 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // CARRIER-LABEL: func.func @scaled_fp8_k128
 // CARRIER: schedule.matmul
 // CARRIER-SAME: block_k = 128
+// CARRIER-SAME: physical_contract = "rocm_fp8_w8a8_blockscale_v1"
 // CARRIER-SAME: scale_format = "fp32"
 // CARRIER-SAME: scale_k = 128
+// CARRIER-SAME: scale_n = 128
 // CARRIER-LABEL: func.func @scaled_mxfp4_w4a8
 // CARRIER: schedule.matmul
 // CARRIER-SAME: physical_contract = "rocm_mxfp4_w4a8_exact_v1"

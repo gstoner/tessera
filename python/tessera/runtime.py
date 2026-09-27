@@ -4180,6 +4180,9 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
+    from tessera.compiler.rocm_fp8_blockscale import (
+        GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+    )
 
     return frozenset({
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
@@ -4195,6 +4198,10 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         PACKED_FOLDED_TARGET_ABI_V1,
+        # ROCM-FP8-BLOCKSCALE-1: compiler-generated W8A8 block scaling,
+        # device rows in tests/device/rocm/test_fp8_blockscale_w8a8.py.
+        GFX_FP8_W8A8_BLOCKSCALE_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
     })
 
 
@@ -4436,6 +4443,9 @@ def _submit_rocm_gfx1151_native(
     from tessera.compiler.rocm_mxfp4_quark_native import (
         GFX1201_QUARK_W4A4_PROBE_ABI, submit_quark_w4a4_probe,
     )
+    from tessera.compiler.rocm_fp8_blockscale import (
+        GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+    )
 
     if descriptor.abi_id == GFX1201_QUARK_W4A4_PROBE_ABI:
         return submit_quark_w4a4_probe(image, descriptor, buffers, scalars)
@@ -4483,6 +4493,8 @@ def _submit_rocm_gfx1151_native(
         GFX_MATMUL_I4_I32_ABI,
         GFX_DEPTH_ATTN_F32_ABI,
         GFX_SPARSE_MATMUL_2TO4_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
     }:
         raise RuntimeError(f"unsupported ROCm descriptor ABI {descriptor.abi_id!r}")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
@@ -4497,7 +4509,14 @@ def _submit_rocm_gfx1151_native(
                                    GFX_MATMUL_E4M3_F32_ABI, GFX_MATMUL_E5M2_F32_ABI,
                                    GFX_MATMUL_E4M3_E5M2_F32_ABI,
                                    GFX_MATMUL_E5M2_E4M3_F32_ABI,
-                                   GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
+                                   GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI,
+                                   GFX_FP8_W8A8_BLOCKSCALE_ABI,
+                                   GFX_FP8_W8A8_BLOCKSCALE_NK_ABI}
+    # ROCM-FP8-BLOCKSCALE-1: A, B, lhs_scale, rhs_scale, D, M, N, K; the _NK
+    # ABI's weight is [N, K].
+    matmul_blockscale = descriptor.abi_id in {GFX_FP8_W8A8_BLOCKSCALE_ABI,
+                                              GFX_FP8_W8A8_BLOCKSCALE_NK_ABI}
+    matmul_b_nk = descriptor.abi_id == GFX_FP8_W8A8_BLOCKSCALE_NK_ABI
     matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
     split_k = 1  # ROCM-SPLIT-K-1; read from the descriptor in the matmul branch
@@ -4506,7 +4525,7 @@ def _submit_rocm_gfx1151_native(
     attention_bias = attention and bool(descriptor.provenance["bias"])
     expected_buffers = (
         5
-        if attention_bias
+        if attention_bias or matmul_blockscale
         else 4
         if attention or matmul_bias
         else 3
@@ -4561,7 +4580,7 @@ def _submit_rocm_gfx1151_native(
         expected_out = np.int32 if matmul_integer else np.float32
         if (
             tuple(a.shape) != (m, k)
-            or tuple(b_matrix.shape) != (k, n)
+            or tuple(b_matrix.shape) != ((n, k) if matmul_b_nk else (k, n))
             or tuple(output.shape) != (m, n)
             or expected_a is None
             or expected_b is None
@@ -4580,6 +4599,30 @@ def _submit_rocm_gfx1151_native(
         input_arrays = [np.ascontiguousarray(a), np.ascontiguousarray(b_matrix)]
         if bias is not None:
             input_arrays.append(np.ascontiguousarray(bias))
+        if matmul_blockscale:
+            # The scale layouts are the contract's, fixed at Graph->Schedule;
+            # a wrong block count would run and scale every block wrongly, so
+            # it is refused here rather than launched.
+            scale_k = descriptor.provenance.get("scale_k")
+            scale_n = descriptor.provenance.get("scale_n")
+            if (
+                not isinstance(scale_k, int) or not isinstance(scale_n, int)
+                or scale_k <= 0 or scale_n <= 0 or k % scale_k
+            ):
+                raise RuntimeError("ROCm W8A8 block-scale descriptor requires positive scale_k/scale_n dividing K")
+            a_scale = buffers[ordered[2].name]
+            b_scale = buffers[ordered[3].name]
+            groups = k // scale_k
+            if (
+                tuple(a_scale.shape) != (m, groups)
+                or tuple(b_scale.shape) != (groups, (n + scale_n - 1) // scale_n)
+                or a_scale.dtype != np.float32
+                or b_scale.dtype != np.float32
+            ):
+                raise RuntimeError(
+                    "ROCm W8A8 block-scale arrays must be fp32 [M, K/scale_k] and "
+                    "[K/scale_k, ceil(N/scale_n)]")
+            input_arrays.extend((np.ascontiguousarray(a_scale), np.ascontiguousarray(b_scale)))
         dimensions = (m, n, k)
         macro_tile = descriptor.provenance.get("macro_tile")
         if (
@@ -5764,6 +5807,9 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
     from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
+    from tessera.compiler.rocm_fp8_blockscale import (
+        GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+    )
 
     if (
         (target == "rocm_gfx1151"
@@ -5800,6 +5846,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
             PACKED_FOLDED_TARGET_ABI_V1,
             GFX1201_QUARK_W4A4_PROBE_ABI,
+            GFX_FP8_W8A8_BLOCKSCALE_ABI,
+            GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
         }
         and target not in _native_launchers
     ):

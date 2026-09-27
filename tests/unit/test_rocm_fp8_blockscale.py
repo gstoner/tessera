@@ -1,0 +1,195 @@
+"""Host-free contract tests for gfx1201 block-scaled FP8 W8A8 (ROCM-FP8-BLOCKSCALE-1).
+
+The device rows live in tests/device/rocm/test_fp8_blockscale_w8a8.py; these
+check the pieces that must hold on any host: the logical Graph op the author
+emits, the Target-IR check that refuses every drifted semantic field, the
+fp64 oracle itself, and the pipeline knob's validation.
+"""
+from __future__ import annotations
+
+import re
+
+import numpy as np
+import pytest
+
+from tessera.compiler.rocm_fp8_blockscale import (
+    FP8_W8A8_BLOCKSCALE_CONTRACT,
+    FP8_W8A8_BLOCKSCALE_NK_CONTRACT,
+    GFX_FP8_W8A8_BLOCKSCALE_ABI,
+    GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+    BlockScaleShape,
+    author_blockscale_graph,
+    blockscale_reference,
+    check_blockscale_target_ir,
+    lower_blockscale,
+)
+from tessera.compiler.rocm_pipeline import ROCMExecutablePipeline
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+
+def test_shape_refuses_partial_groups_and_unaligned_groups():
+    with pytest.raises(ValueError, match="whole number of scale groups"):
+        BlockScaleShape(32, 64, 192, 128, 128)
+    with pytest.raises(ValueError, match="16-wide"):
+        BlockScaleShape(32, 64, 192, 24, 128)
+    with pytest.raises(ValueError, match="weight_layout"):
+        BlockScaleShape(32, 64, 256, 128, 128, "tn")
+    shape = BlockScaleShape(40, 200, 256, 128, 128)
+    assert (shape.groups, shape.n_groups) == (2, 2)
+
+
+def test_author_states_the_logical_op_and_never_the_contract():
+    kn = author_blockscale_graph(BlockScaleShape(40, 72, 256, 128, 128))
+    nk = author_blockscale_graph(BlockScaleShape(40, 72, 256, 128, 128, "nk"))
+    for text in (kn, nk):
+        assert "tessera.scaled_matmul" in text
+        # The physical contract is derived by Graph->Schedule, never authored.
+        assert "physical_contract" not in text
+        assert 'block = [128, 128], format = "fp32"' in text
+        assert "tensor<40x2xf32>" in text and "tensor<2x1xf32>" in text
+    assert "tensor<256x72xf8E4M3FN>" in kn and "transposeB" not in kn
+    assert "tensor<72x256xf8E4M3FN>" in nk and "transposeB = true" in nk
+
+
+def _pair(layout: str = "kn") -> tuple[str, str]:
+    contract, abi, pointer = (
+        (FP8_W8A8_BLOCKSCALE_CONTRACT, GFX_FP8_W8A8_BLOCKSCALE_ABI, "a_b_lhs_scale_rhs_scale_d_m_n_k")
+        if layout == "kn" else
+        (FP8_W8A8_BLOCKSCALE_NK_CONTRACT, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+         "a_bnk_lhs_scale_rhs_scale_d_m_n_k"))
+    tile = (f'tile.scaled_matmul_kernel %a {{partial_accumulator = {{combine = "scale_outer_product_then_add", '
+            f'cross_step_motion = "forbid", init = "zero", instruction_steps = 8 : i64, '
+            f'schedule_scope = "scale_group", scope = "scale_group"}}, physical_contract = "{contract}", '
+            f'tessera.scale_block_n = 128 : i64, tessera.schedule_hash = "h0"}}')
+    target = (f'tessera_rocm.scaled_wmma_gemm {{abi = "{pointer}", block_m = 32 : i64, block_n = 32 : i64, '
+              f'instruction_k = 16 : i64, k = 256 : i64, k_step_schedule = "isolated_scale_group", '
+              f'm = 64 : i64, macro_k = 128 : i64, n = 96 : i64, name = "w", numeric_policy = '
+              f'{{accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}}, output = "f32", '
+              f'package_abi = "{abi}", partial_combine = "scale_outer_product_then_add", '
+              f'physical_contract = "{contract}", scale_format = "fp32", scale_k = 128 : i64, '
+              f'scale_n = 128 : i64, tessera.schedule_hash = "h0"}}')
+    return tile, target
+
+
+@pytest.mark.parametrize("layout", ["kn", "nk"])
+def test_target_check_accepts_the_bound_directive(layout):
+    tile, target = _pair(layout)
+    checked = check_blockscale_target_ir(BlockScaleShape(64, 96, 256, 128, 128, layout), tile, target)
+    assert (checked["block_m"], checked["block_n"], checked["macro_k"]) == (32, 32, 128)
+
+
+@pytest.mark.parametrize(("old", "new"), [
+    ('scale_format = "fp32"', 'scale_format = "e8m0"'),
+    ('execution_mode = "exact_per_block"', 'execution_mode = "folded_row_reference_explicit_approximate"'),
+    ("scale_k = 128 : i64", "scale_k = 64 : i64"),
+    ("scale_n = 128 : i64", "scale_n = 1 : i64"),
+    ('output = "f32"', 'output = "bf16"'),
+    ('partial_combine = "scale_outer_product_then_add"', 'partial_combine = "row_reference_after_full_k"'),
+    ("macro_k = 128 : i64", "macro_k = 96 : i64"),
+    ("block_m = 32 : i64", "block_m = 24 : i64"),
+    ('storage = "e4m3"', 'storage = "e5m2"'),
+    ('tessera.schedule_hash = "h0"', 'tessera.schedule_hash = "h1"'),
+    ("m = 64 : i64", "m = 65 : i64"),
+])
+def test_target_check_refuses_every_drifted_semantic_field(old, new):
+    tile, target = _pair()
+    assert old in target
+    with pytest.raises(ValueError):
+        check_blockscale_target_ir(BlockScaleShape(64, 96, 256, 128, 128), tile, target.replace(old, new, 1))
+
+
+def test_target_check_refuses_the_other_layouts_directive():
+    tile, target = _pair("nk")
+    with pytest.raises(ValueError, match="abi|physical_contract|package_abi"):
+        check_blockscale_target_ir(BlockScaleShape(64, 96, 256, 128, 128, "kn"), tile, target)
+
+
+def test_target_check_refuses_an_unbound_logical_directive():
+    tile, target = _pair()
+    unbound = re.sub(r'package_abi = "[^"]+"', 'package_abi = "unbound"', target)
+    with pytest.raises(ValueError, match="package_abi"):
+        check_blockscale_target_ir(BlockScaleShape(64, 96, 256, 128, 128), tile, unbound)
+
+
+def test_target_check_refuses_a_tile_carrier_that_dropped_isolation():
+    tile, target = _pair()
+    with pytest.raises(ValueError, match="init"):
+        check_blockscale_target_ir(BlockScaleShape(64, 96, 256, 128, 128),
+                                   tile.replace('init = "zero"', 'init = "carry"'), target)
+
+
+def test_oracle_is_per_group_outer_product_scaling():
+    rng = np.random.default_rng(7)
+    m, n, k, sk, sn = 5, 40, 64, 32, 16
+    a = rng.integers(-3, 4, (m, k)).astype(np.float32)
+    b = rng.integers(-3, 4, (k, n)).astype(np.float32)
+    sa = rng.uniform(0.25, 4.0, (m, k // sk)).astype(np.float32)
+    sb = rng.uniform(0.25, 4.0, (k // sk, (n + sn - 1) // sn)).astype(np.float32)
+    got = blockscale_reference(a, b, sa, sb, scale_k=sk, scale_n=sn)
+    # Independent spelling: dequantize both operands blockwise, then multiply.
+    a_dq = a.astype(np.float64) * np.repeat(sa, sk, axis=1)
+    b_dq = b.astype(np.float64) * np.repeat(np.repeat(sb, sk, axis=0), sn, axis=1)[:, :n]
+    np.testing.assert_allclose(got, a_dq @ b_dq, rtol=1e-12)
+    # And it is not a single rescale of the full-K product.
+    single = (a.astype(np.float64) @ b) * sa[:, :1] * sb[0, np.arange(n) // sn]
+    assert np.abs(single - got).max() > 1.0
+
+
+def test_oracle_refuses_mismatched_scale_extents():
+    a = np.zeros((4, 64), np.float32)
+    b = np.zeros((64, 8), np.float32)
+    with pytest.raises(ValueError):
+        blockscale_reference(a, b, np.zeros((4, 3), np.float32), np.zeros((2, 1), np.float32),
+                             scale_k=32, scale_n=8)
+
+
+def test_pipeline_knob_is_validated_and_reaches_the_pass_string():
+    base = ROCMExecutablePipeline(family="matmul", arch="gfx1201")
+    assert "scale-group-panels=-1" in base.pass_pipeline()
+    tuned = ROCMExecutablePipeline(family="matmul", arch="gfx1201", scale_group_panels=4)
+    assert "scale-group-panels=4" in tuned.pass_pipeline()
+    assert tuned.cache_key() != base.cache_key()
+    for bad in (-2, 17, 1.5, True):
+        with pytest.raises(ValueError, match="scale_group_panels"):
+            ROCMExecutablePipeline(family="matmul", arch="gfx1201", scale_group_panels=bad)
+
+
+def test_runtime_admits_both_abis_as_proved_gfx1201_launches():
+    from tessera import runtime as rt
+
+    proved = rt._gfx1201_proved_scheduled_abis()
+    assert {GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI} <= proved
+
+
+@pytest.mark.parametrize(("layout", "contract"), [
+    ("kn", FP8_W8A8_BLOCKSCALE_CONTRACT), ("nk", FP8_W8A8_BLOCKSCALE_NK_CONTRACT)])
+def test_graph_to_tile_derives_the_named_contract(layout, contract):
+    tool = find_tessera_opt()
+    if tool is None:
+        pytest.skip("tessera-opt is not built on this host")
+    program = lower_blockscale(BlockScaleShape(64, 96, 256, 128, 128, layout), tessera_opt=tool)
+    carrier = next(line for line in program.tile_ir.splitlines() if "tile.scaled_matmul_kernel" in line)
+    assert f'physical_contract = "{contract}"' in carrier
+    assert "tessera.scale_block_n = 128" in carrier
+    assert 'scale_fmt = "fp32"' in carrier and "scale_k = 128" in carrier
+    assert 'execution_mode = "exact_per_block"' in carrier
+    # 64x96 is whole 32s but only 6 tiles at 32x32 -- under the measured
+    # 256-tile floor -- so the half-height panel doubles the grid.
+    assert "tessera.macro_tile_m = 16" in carrier and "tessera.macro_tile_n = 32" in carrier
+
+
+@pytest.mark.parametrize(("m", "n", "panel"), [
+    (512, 512, (32, 32)),    # 256 tiles at 32x32: the full panel
+    (256, 1024, (32, 32)),
+    (32, 4096, (16, 32)),    # 128 tiles: half height doubles the grid
+    (48, 6144, (16, 32)),    # ragged M under 32 rows would run the edge path
+    (512, 520, (16, 16)),    # N not a whole 32 takes 16 columns
+])
+def test_w8a8_register_panel_rule(m, n, panel):
+    tool = find_tessera_opt()
+    if tool is None:
+        pytest.skip("tessera-opt is not built on this host")
+    program = lower_blockscale(BlockScaleShape(m, n, 256, 128, 128, "nk"), tessera_opt=tool)
+    carrier = next(line for line in program.tile_ir.splitlines() if "tile.scaled_matmul_kernel" in line)
+    assert f"tessera.macro_tile_m = {panel[0]}" in carrier
+    assert f"tessera.macro_tile_n = {panel[1]}" in carrier

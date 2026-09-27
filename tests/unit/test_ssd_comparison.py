@@ -225,3 +225,58 @@ def test_ssd_admission_refuses_a_rocm_chip_without_a_calibration_route():
             packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
     decision = admit_ssd_candidate(artifact(False),artifact(True),dict(pairs=pairs),())
     assert not decision.admitted and 'no native calibration adapter' in decision.reason
+
+
+def test_ssd_admits_an_nvidia_globaltimer_calibration_and_refuses_mixtures():
+    """NVIDIA-GLOBALTIMER-MARKER-2026-09-26: sm_120 SSD admission through the
+    compiler-built %globaltimer marker, the device-clock twin of the ROCm
+    route; a disagreeing witness refuses, and a calibration set mixing this
+    route with Nsight windows is refused rather than averaged."""
+    import hashlib
+    from types import SimpleNamespace
+    from tessera.compiler.ssd_performance import bind_measured_ssd
+    from tessera.compiler.profiler_nvidia_evidence import build_nvidia_device_clock_packet
+    from test_profiler_nvidia_evidence import _image, _timing
+    logical = SimpleNamespace(compiler_digest='compiler',schedule_ir='chunk_size = 8 : i64')
+    specs = [SimpleNamespace(shape=(32,2,4)),None,SimpleNamespace(shape=(32,2,16))]
+    def artifact(cooperative):
+        name = 'cooperative' if cooperative else 'serial'
+        return SimpleNamespace(logical=logical,adjoint=False,cooperative=cooperative,
+            package=SimpleNamespace(backend='nvidia',chip='sm_120',binding_digest=name,image=name.encode()),
+            validate=lambda:specs,bind=lambda:name)
+    incumbent,candidate = artifact(False),artifact(True)
+    pairs = evidence()
+    for i,pair in enumerate(pairs):
+        for name,packet in pair.items():
+            packet.update(run_id=f'{i}-{name}')
+            packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
+    comparison = dict(pairs=pairs,source=dict(source_commit='a'*40))
+    semantic = hashlib.sha256(logical.schedule_ir.encode()).hexdigest()
+    def calibrations(device_ratio=0.998):
+        out = []
+        for i,pair in enumerate(pairs):
+            for name in ('serial','cooperative'):
+                duration = pair[name]['rows'][0]['device_event_ms'][0]*1e6
+                image = pair[name]['rows'][0]['image_sha256']
+                timing = _timing(event=duration,device=duration*device_ratio,environment='bare_metal',
+                                 digests={'application_image': image})
+                timing['sample_id'] = f'{i}-{name}'
+                timing['environment']['run_id'] = f'{i}-{name}'
+                clean,probe = _image(duration,instrumented=False),_image(duration,instrumented=True)
+                for record in (clean,probe):
+                    record.update(calibration_sample_id=timing['sample_id'],semantic_sha256=semantic,image_sha256=image)
+                out.append(build_nvidia_device_clock_packet(timing=timing,uninstrumented=clean,instrumented=probe,
+                    source=dict(source_commit='a'*40,worktree_dirty=False)))
+        return out
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations())
+    assert bound == 'cooperative' and decision.admitted and '%globaltimer' in decision.reason
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations(device_ratio=0.8))
+    assert bound == 'serial' and 'DEVICE_CLOCK_WITNESS_DISAGREES' in decision.reason
+    mixed = calibrations()
+    mixed[0] = {'schema': 'nsight-window', 'sample_id': 'x'}
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,mixed)
+    assert bound == 'serial' and 'mix' in decision.reason
+    stolen = calibrations()
+    stolen[3]['timing']['environment']['run_id'] = 'someone-else'
+    with pytest.raises(ValueError, match='measured process run'):
+        bind_measured_ssd(incumbent,candidate,comparison,stolen)

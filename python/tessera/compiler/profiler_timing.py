@@ -29,11 +29,24 @@ X86_CLOCK_SLOTS = (
     "perf_task_clock_ns",
 )
 
+#: NVIDIA sm_120 (sync NVIDIA-GLOBALTIMER-MARKER-2026-09-26). The kernel-side
+#: clock is ``%globaltimer`` read by the compiler-built marker
+#: (``native_device_clock``), already in ns; its witness is the CUDA event
+#: bracketing the same stream interval. ``profiler_activity_ns`` is the CUPTI /
+#: Nsight activity window, recorded unavailable when not captured.
+NVIDIA_CLOCK_SLOTS = (
+    "host_wall_ns",
+    "cuda_event_ns",
+    "device_wall_clock_ns",
+    "profiler_activity_ns",
+)
+
 _ALLOWED_SOURCES: dict[str, frozenset[str]] = {
     "host_wall_ns": frozenset({"steady_clock", "perf_counter"}),
     "hip_event_ns": frozenset({"hip_event"}),
+    "cuda_event_ns": frozenset({"cuda_event"}),
     "device_wall_clock_ns": frozenset({"device_wall_clock"}),
-    "profiler_activity_ns": frozenset({"rocprofiler_activity", "rtg_hsa_dispatch"}),
+    "profiler_activity_ns": frozenset({"rocprofiler_activity", "rtg_hsa_dispatch", "cupti_activity"}),
     "monotonic_raw_ns": frozenset({"clock_monotonic_raw"}),
     "tsc_cycles": frozenset({"rdtscp"}),
     "perf_task_clock_ns": frozenset({"perf_event_task_clock"}),
@@ -176,7 +189,9 @@ WSL_ENVIRONMENTS = frozenset({"wsl", "wsl2"})
 #: (review). These are the partners ``validate_clock_record`` already demands
 #: for a promotion device clock.
 _ADMISSIBLE_WITNESSES: dict[str, frozenset[str]] = {
-    "device_wall_clock_ns": frozenset({"hip_event_ns", "profiler_activity_ns"}),
+    # Intersected with the target's own slots, so a ROCm sample cannot be
+    # vouched for by a CUDA event or an NVIDIA one by a HIP event.
+    "device_wall_clock_ns": frozenset({"hip_event_ns", "cuda_event_ns", "profiler_activity_ns"}),
     "tsc_cycles": frozenset({"monotonic_raw_ns"}),
 }
 
@@ -197,9 +212,11 @@ def promotion_clock_slots(target: str) -> frozenset[str]:
 
     Target-specific (review of #854): a ROCm sample may not promote through an
     appended ``tsc_cycles`` record, nor an x86 sample through a device clock.
-    A target with no kernel-side slot in this schema (NVIDIA: its non-profiler
-    ``%globaltimer`` witness is not implemented; its Nsight activity-window
-    calibration lives in ``profiler_cuda_window``) has none here.
+    NVIDIA sm_120 gained its slot on 2026-09-26: the ``%globaltimer`` marker
+    was validated on The-Super-Bear against CUDA events (sync
+    NVIDIA-GLOBALTIMER-MARKER-2026-09-26); its Nsight activity-window
+    calibration remains separately in ``profiler_cuda_window``. A target with
+    no kernel-side slot in this schema has none here.
     """
     return KERNEL_SIDE_CLOCKS.intersection(expected_clock_slots(target))
 
@@ -270,10 +287,17 @@ def wsl_promotion_refusals(target: str, clocks: Mapping[str, Mapping[str, Any]])
     return reasons
 
 
+#: NVIDIA targets whose device clock is validated. Exact names, not a prefix:
+#: another compute capability gets no device-clock slot until its own proof.
+NVIDIA_CLOCK_TARGETS = frozenset({"nvidia_sm120"})
+
+
 def expected_clock_slots(target: str) -> tuple[str, ...]:
     normalized = target.strip().lower().replace("-", "_")
     if normalized.startswith("gfx") or normalized.startswith("rocm"):
         return ROCM_CLOCK_SLOTS
+    if normalized in NVIDIA_CLOCK_TARGETS:
+        return NVIDIA_CLOCK_SLOTS
     if normalized in {"x86", "x86_64", "x86_avx512"} or normalized.startswith("x86_"):
         return X86_CLOCK_SLOTS
     return ("host_wall_ns",)
@@ -355,9 +379,10 @@ def validate_clock_record(record: Mapping[str, Any]) -> None:
     if (
         slot == "device_wall_clock_ns"
         and record.get("eligible_for_promotion")
-        and not {"hip_event_ns", "profiler_activity_ns"}.intersection(calibrated)
+        and not {"hip_event_ns", "cuda_event_ns", "profiler_activity_ns"}.intersection(calibrated)
     ):
-        raise ProfilerTimingError("promotion device_wall_clock_ns requires HIP-event or profiler-activity calibration")
+        raise ProfilerTimingError(
+            "promotion device_wall_clock_ns requires HIP-event, CUDA-event or profiler-activity calibration")
     if slot == "device_wall_clock_ns" and valid and not record.get("instrumented"):
         raise ProfilerTimingError("device_wall_clock_ns must be marked instrumented")
 
@@ -469,6 +494,8 @@ def measure_synchronized_host_batch(
 
 __all__ = [
     "ClockRecord",
+    "NVIDIA_CLOCK_SLOTS",
+    "NVIDIA_CLOCK_TARGETS",
     "PROFILER_TIMING_SCHEMA_VERSION",
     "ProfilerTimingError",
     "ROCM_CLOCK_SLOTS",

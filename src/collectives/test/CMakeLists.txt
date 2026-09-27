@@ -1,8 +1,9 @@
-if(NOT LLVM_EXTERNAL_LIT)
-  find_program(TESSERA_COLLECTIVES_LIT NAMES llvm-lit lit.py lit)
-  if(TESSERA_COLLECTIVES_LIT)
-    set(LLVM_EXTERNAL_LIT "${TESSERA_COLLECTIVES_LIT}")
-  endif()
+# Shared validated lit runner (cmake/TesseraLit.cmake). add_lit_testsuite reads
+# LLVM_EXTERNAL_LIT, so hand it the validated runner (directory scope only).
+include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/TesseraLit.cmake)
+tessera_lit_command(_tessera_collectives_lit)
+if(_tessera_collectives_lit)
+  set(LLVM_EXTERNAL_LIT "${_tessera_collectives_lit}")
 endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py")

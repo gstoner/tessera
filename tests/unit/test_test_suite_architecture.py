@@ -333,3 +333,40 @@ def test_migrated_child_process_guards_use_shared_import_state(filename):
     text = path.read_text(encoding="utf-8")
     assert "python_subprocess_env" in text
     assert "env=python_subprocess_env" in text
+
+
+def _active_cmake_files():
+    yield ROOT / "CMakeLists.txt"
+    for top in ("cmake", "src", "tests", "tools", "benchmarks", "examples"):
+        for pattern in ("CMakeLists.txt", "*.cmake"):
+            for path in sorted((ROOT / top).rglob(pattern)):
+                if "archive" in path.relative_to(ROOT).parts:
+                    continue
+                yield path
+
+
+def test_lit_suites_invoke_the_validated_runner_directly():
+    """No active CMake file may hand the validated lit runner to AddLLVM.
+
+    `cmake/TesseraLit.cmake` accepts a runner only if `<lit> --version` runs,
+    i.e. through its shebang. LLVM 23.1.1's `add_lit_target` (reached from
+    `add_lit_testsuite`) builds `${Python3_EXECUTABLE};<LLVM_EXTERNAL_LIT>`, so
+    it runs the script under the *configure* interpreter instead: a venv-only
+    lit (Princess-Luna) passed the probe and `check-tessera-collective` then
+    died with `No module named 'lit'`. Every suite must run the validated
+    command itself, as tests/ and the backend suites do.
+    """
+    offenders = []
+    for path in _active_cmake_files():
+        rel = path.relative_to(ROOT)
+        for lineno, line in enumerate(
+            path.read_text(errors="replace").splitlines(), 1
+        ):
+            code = line.split("#", 1)[0]
+            if re.search(r"\badd_lit_(testsuites?|target)\s*\(", code):
+                offenders.append(f"{rel}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "These CMake sites route lit through AddLLVM, which bypasses the "
+        "validated runner's interpreter; invoke tessera_lit_command()'s "
+        "result directly:\n  " + "\n  ".join(offenders)
+    )

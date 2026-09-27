@@ -55,6 +55,32 @@ selected `/opt/homebrew/bin/lit` and ran the same counts as before. NVIDIA's
 release gate passes `-DLLVM_EXTERNAL_LIT`, which is still honoured after
 validation. Apple and x86 not otherwise affected.
 
+**Review follow-up (Codex P2s on #866).** `src/collectives/test` was the one
+suite still handing the runner to LLVM's `add_lit_testsuite`. LLVM 23.1.1's
+`add_lit_target` (read in the AddLLVM.cmake on Princess-Luna and the Mac)
+runs `${Python3_EXECUTABLE} <lit script>`, bypassing the shebang the resolver
+validated, and under this tree's `cmake_minimum_required(3.20)` (CMP0126 OLD)
+its `set(LLVM_EXTERNAL_LIT "" CACHE ...)` also hides a directory-scope
+`LLVM_EXTERNAL_LIT`. It now runs the validated command directly like every
+other suite, and `test_lit_suites_invoke_the_validated_runner_directly` fails
+any active CMake file that calls `add_lit_testsuite`/`add_lit_target`. The
+committed tree has no `lit.cfg.py` there, so the target stays the explicit
+"no suite defined" echo; the proof used a scratch cfg + fixtures in a throwaway
+Princess-Luna worktree (non-activated `env -i` shell, `Python3_EXECUTABLE=/usr/bin/python3`,
+lit venv-only). Before: runner selected from the resolver's scope -> command
+`/usr/bin/python3 /llvm-lit` (rc 2); with `-DLLVM_EXTERNAL_LIT=<venv lit>` as
+the release gates pass it -> `ModuleNotFoundError: No module named 'lit'`
+(rc 1). After, both configurations: 2 discovered / 2 passed (rc 0); a third,
+failing fixture gives 2 passed / 1 failed (rc 1). The NVIDIA and Apple release
+gates' `-DLLVM_EXTERNAL_LIT` only seeds the resolver; their suites already
+invoke the validated command, so they were not affected.
+`NEIGHBORS_TOPOLOGY_UNKNOWN_KIND`'s `pass_origin` named the deleted
+`CreateTopologyOp::verify`; it now names the generated
+`NeighborsTopologyCreateOp::verifyInvariantsImpl` (ODS
+`Tessera_NeighborsTopologyKindAttr`), and
+`test_mlir_pass_origin_classes_exist_in_src` fails a `Class::member` origin
+whose class no longer exists under `src/`.
+
 ## Spectral image survives a stale HIP error; streaming STFT names the chip that ran — 2026-09-27
 
 Owner TSOL-POLICY-PHYS-1; sync `SPECTRAL-STALE-HIP-ERROR-2026-09-27`. Closes

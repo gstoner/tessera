@@ -4065,11 +4065,20 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     ),
     DiagnosticCode(
         code="NEIGHBORS_TOPOLOGY_UNKNOWN_KIND",
-        pass_origin="CreateTopologyOp::verify",
+        # Emitted by the ODS-generated verifier of the core op (the
+        # `Tessera_NeighborsTopologyKindAttr` constraint in TesseraOps.td). The
+        # hand-written `CreateTopologyOp::verify` that used to emit it was
+        # deleted with the duplicate neighbors dialect
+        # (SMALL-CORRECTNESS-GAPS-2026-09-27).
+        pass_origin=(
+            "NeighborsTopologyCreateOp::verifyInvariantsImpl "
+            "(ODS Tessera_NeighborsTopologyKindAttr)"
+        ),
         severity="error",
         summary="A topology.create operation names an unregistered topology kind.",
         fix_hint=(
-            "Use 2d_mesh, 3d_mesh, hex_2d, custom_graph, dynamic, adaptive, or fault."
+            "Use 1d_mesh, 2d_mesh, 3d_mesh, 4d_mesh, hex_2d, custom_graph, "
+            "dynamic, adaptive, or fault."
         ),
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
         sprint="W1.1b",

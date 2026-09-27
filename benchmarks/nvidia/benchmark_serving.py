@@ -197,7 +197,7 @@ def update_d2_corpus(rows: list[dict[str, Any]]) -> Path:
         winner = min(candidates, key=candidates.__getitem__)
         cache.put(("nvidia:sm_120", "nvidia", op,
                    bucket_key(dims, SpecPolicy.BUCKET), dtype, timing),
-                  at.MeasureRecord(winner, candidates[winner], candidates))
+                  at.MeasureRecord(winner, candidates[winner], candidates), fresh=True)
     return at.save_corpus(cache=cache)
 
 

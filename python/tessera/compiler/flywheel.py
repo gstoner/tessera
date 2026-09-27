@@ -344,13 +344,15 @@ def size_bucket(n: int) -> str:
     return "l"
 
 
-def _dispatch_key(op_chain: str, dtype: str, size: int, toolchain: str) -> str:
-    return f"{op_chain}|{dtype}|{size_bucket(size)}|{toolchain}"
+def _dispatch_key(device_id: str, op_chain: str, dtype: str, size: int,
+                  toolchain: str) -> str:
+    return f"{device_id}|{op_chain}|{dtype}|{size_bucket(size)}|{toolchain}"
 
 
 def distill_dispatch(records: list[AutotuneRecord]) -> dict[str, dict[str, Any]]:
     """Distill a corpus into an O(1) decision-tree: for each
-    ``(op_chain, dtype, size-bucket, toolchain)`` class, the schedule with the
+    ``(device_id, op_chain, dtype, size-bucket, toolchain)`` class, the
+    schedule with the
     lowest median latency. This is the cheap production dispatch the autotuning
     results bake down to (Triton-anatomy).
 
@@ -361,8 +363,10 @@ def distill_dispatch(records: list[AutotuneRecord]) -> dict[str, dict[str, Any]]
     for r in records:
         if r.latency is None or not r.toolchain_digest:
             continue
-        key = _dispatch_key(r.op_chain, r.dtype, r.problem_shape["M"],
-                            r.toolchain_digest)
+        # `device_id` is the partition key (module docstring): a schedule
+        # measured on one chip is never served to another.
+        key = _dispatch_key(r.device_id, r.op_chain, r.dtype,
+                            r.problem_shape["M"], r.toolchain_digest)
         ms = r.latency.median_ms
         if key not in best or ms < best[key][0]:
             best[key] = (ms, {
@@ -376,12 +380,15 @@ def distill_dispatch(records: list[AutotuneRecord]) -> dict[str, dict[str, Any]]
 
 def lookup_dispatch(
     table: dict[str, dict[str, Any]], op_chain: str, dtype: str, size: int,
-    *, toolchain: str,
+    *, device_id: str, toolchain: str,
 ) -> dict[str, Any] | None:
     """O(1) lookup into a distilled dispatch table; ``None`` if the class is
-    uncovered (caller falls back to a live search / default). ``toolchain`` is
+    uncovered (caller falls back to a live search / default). ``device_id`` is
+    the caller's device -- another chip's winner never answers. ``toolchain`` is
     the current toolchain identity digest: an entry measured under another
     toolchain misses (Decision #11), and an empty one never matches."""
     if not toolchain:
         return None
-    return table.get(_dispatch_key(op_chain, dtype, size, toolchain))
+    if not device_id:
+        return None
+    return table.get(_dispatch_key(device_id, op_chain, dtype, size, toolchain))

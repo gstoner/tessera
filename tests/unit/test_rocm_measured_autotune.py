@@ -108,8 +108,8 @@ def _seed_cache():
                      {"rocm_generic_hip": 0.8, "rocm_wmma_gemm": 1.8})
     k2, r2 = _record("rocm:gfx1151", ("512", "512"), "rocm_wmma_gemm",
                      {"rocm_generic_hip": 28.1, "rocm_wmma_gemm": 3.3})
-    cache.put(k1, r1)
-    cache.put(k2, r2)
+    cache.put(k1, r1, fresh=True)
+    cache.put(k2, r2, fresh=True)
     return cache
 
 
@@ -265,7 +265,7 @@ def test_warm_start_does_not_clobber_local_measurement():
     k = ("rocm:gfx1151", "rocm", OP_FUSED_REGION, ("64", "64"), "f16")
     local = AT.MeasureRecord(winner="rocm_wmma_gemm", latency_ms=0.5,
                              candidates={"rocm_wmma_gemm": 0.5})
-    cache.put(k, local)
+    cache.put(k, local, fresh=True)
     other = _seed_cache()          # a corpus that says generic wins the 64 bucket
     cache.load_dict(other.to_dict())
     assert cache.get(k).winner == "rocm_wmma_gemm"   # local kept, not clobbered
@@ -309,7 +309,7 @@ def test_v3_corpus_preserves_resource_and_stability_evidence():
         "selector_eligible": True, "compiler_fingerprint": "nvcc-13.3",
         "resource_fingerprint": "sha256:abc", "cache_state": "warm",
     }
-    cache.put(key, AT.MeasureRecord("winner", 1.0, {"winner": 1.0}, evidence))
+    cache.put(key, AT.MeasureRecord("winner", 1.0, {"winner": 1.0}, evidence), fresh=True)
     fresh = AT.MeasureCache()
     assert fresh.load_dict(cache.to_dict()) == 1
     assert fresh.get(key).evidence == evidence
@@ -319,7 +319,7 @@ def test_bucket_none_key_round_trips():
     # dims=None → bucket=None must survive serialization (a dynamic-shape verdict).
     cache = AT.MeasureCache()
     k = ("rocm:gfx1151", "rocm", OP_FUSED_REGION, None, "f16")
-    cache.put(k, AT.MeasureRecord(winner="w", latency_ms=1.0))
+    cache.put(k, AT.MeasureRecord(winner="w", latency_ms=1.0), fresh=True)
     fresh = AT.MeasureCache()
     fresh.load_dict(cache.to_dict())
     assert fresh.get(k) is not None

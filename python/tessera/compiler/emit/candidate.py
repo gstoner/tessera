@@ -225,16 +225,23 @@ class Candidate(ABC):
         return None
 
     def delegate_identity(self) -> "dict[str, str] | None":
-        """The versioned identity of the code this candidate delegates to, or
-        ``None`` when the candidate's code comes from the compiler itself.
+        """The versioned identity of the artifact this candidate runs that the
+        pinned toolchain does not cover, or ``None`` when its code comes from
+        this checkout's emitters.
 
-        Decision #11: a measured verdict is keyed on the toolchain *and*, for a
-        Tier-3 delegate, on the delegate's ABI identity, so a rebuilt or
-        upgraded library makes the stored verdict miss rather than lie. The
-        arbiter stamps each timed candidate's identity into its record and
-        refuses a record whose identity differs from the live candidate's
-        (``autotune._record_matches_live_delegates``). Default ``None``;
-        :class:`delegate_contract.DelegatedCandidate` supplies one.
+        Decision #11: a measured verdict is keyed on the toolchain *and* on
+        this identity, so a rebuilt or upgraded library -- or a rebuilt
+        ``tessera-opt`` that generates the kernel -- makes the stored verdict
+        miss rather than lie. The arbiter stamps each timed candidate's
+        identity into its record and refuses a record whose identity differs
+        from the live candidate's (``autotune._record_matches_live_delegates``).
+
+        **Every ``Tier.HAND_TUNED`` candidate must override this** (a test
+        enumerates the registry): a delegate library by
+        ``toolchain_identity.delegate_library_identity`` /
+        ``loaded_library_identity``, a tessera-opt-generated kernel by
+        ``tessera_opt_identity``. :class:`delegate_contract.DelegatedCandidate`
+        supplies one from its contract.
         """
         return None
 

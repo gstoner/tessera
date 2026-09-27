@@ -284,7 +284,7 @@ def test_an_unseparated_rerace_keeps_the_incumbent_instead_of_flipping():
     cache.put(key, AT.MeasureRecord(
         winner="inc_a", latency_ms=0.0100,
         candidates={"inc_a": 0.0100},      # never raced inc_b -> forces a re-race
-        unmeasured={}))
+        unmeasured={}), fresh=True)
 
     win = _arbitrate(tgt, cache)
     rec = AT.MeasureRecord.from_json(cache.to_dict()["records"][0])
@@ -304,7 +304,7 @@ def test_a_separated_rerace_does_replace_the_incumbent():
     key = ("fakedev", tgt, OP_MATMUL, AT.bucket_key((4, 4, 4), AT.SpecPolicy.BUCKET),
            "bfloat16", AT.TIMING_DEVICE)
     cache.put(key, AT.MeasureRecord(winner="dis_a", latency_ms=2.450,
-                                    candidates={"dis_a": 2.450}, unmeasured={}))
+                                    candidates={"dis_a": 2.450}, unmeasured={}), fresh=True)
     win = _arbitrate(tgt, cache)
     assert win.name == "dis_b"
     assert AT.MeasureRecord.from_json(
@@ -344,10 +344,10 @@ def test_corpus_winner_refuses_an_unseparated_verdict():
         _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4),
         dtype="bfloat16", cache=cache, device="fakedev")
 
-    cache.put(key, rec({"separated": True, "margin": 0.4, "noise": 0.01}))
+    cache.put(key, rec({"separated": True, "margin": 0.4, "noise": 0.01}), fresh=True)
     assert ask() == "cu_a", "a supported verdict must still be usable"
 
-    cache.put(key, rec({"separated": False, "margin": 0.02, "noise": 1.48}))
+    cache.put(key, rec({"separated": False, "margin": 0.02, "noise": 1.48}), fresh=True)
     assert ask() is None, (
         "a verdict the measurement says is noise must never become a dispatch "
         "hint")
@@ -371,7 +371,7 @@ def test_corpus_winner_refuses_a_selector_ineligible_row():
         winner="ci_a", latency_ms=1.0,
         candidates={"ci_a": 1.0, "ci_b": 1.2}, unmeasured={},
         separation={"separated": True, "margin": 0.4, "noise": 0.01},
-        evidence={"selector_eligible": False, "stable_winner": False}))
+        evidence={"selector_eligible": False, "stable_winner": False}), fresh=True)
     A, B = _mm()
     assert AT.corpus_winner(
         _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",
@@ -397,7 +397,7 @@ def test_a_sole_candidate_without_a_verdict_is_still_usable():
                AT.bucket_key((4, 4, 4), AT.SpecPolicy.BUCKET), "bfloat16",
                AT.TIMING_END_TO_END),
               AT.MeasureRecord(winner="sole_a", latency_ms=1.0,
-                               candidates={"sole_a": 1.0}, unmeasured={}))
+                               candidates={"sole_a": 1.0}, unmeasured={}), fresh=True)
     A, B = _mm()
     assert AT.corpus_winner(
         _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",
@@ -421,7 +421,7 @@ def test_an_unproven_ranking_is_refused():
                AT.TIMING_END_TO_END),
               AT.MeasureRecord(winner="up_a", latency_ms=1.0,
                                candidates={"up_a": 1.0, "up_b": 1.2},
-                               unmeasured={}))
+                               unmeasured={}), fresh=True)
     A, B = _mm()
     assert AT.corpus_winner(
         _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",
@@ -442,7 +442,7 @@ def test_an_untimed_candidate_does_not_make_a_row_a_ranking():
                AT.TIMING_END_TO_END),
               AT.MeasureRecord(winner="if_a", latency_ms=1.0,
                                candidates={"if_a": 1.0, "if_b": float("inf")},
-                               unmeasured={"if_b": "no device timer"}))
+                               unmeasured={"if_b": "no device timer"}), fresh=True)
     A, B = _mm()
     assert AT.corpus_winner(
         _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",
@@ -497,7 +497,7 @@ def test_the_paged_kv_lookup_refuses_an_unsupported_route(
             unmeasured={},
             separation={"separated": separated, "margin": 0.065,
                         "noise": 0.056, "runner_up": "gather_fa",
-                        "factor": 2.0}))
+                        "factor": 2.0}), fresh=True)
 
     monkeypatch.setattr(at, "load_corpus", fake_load)
     got = paged_kv._rocm_paged_attention_corpus_winner(

@@ -96,6 +96,10 @@ class _DeclinesRaggedInRun(Candidate):
             return region.reference(A, B), "reference"
         return (An @ Bn).astype(np.float32), "aligned_real_kernel"
 
+    def delegate_identity(self):
+        # Decision #11: every Tier-3 candidate identifies its artifact.
+        return {"fake_build": "aligned_only"}
+
 
 class _DeclinesRaggedUpFront(_DeclinesRaggedInRun):
     """The same lane, having adopted the hook."""
@@ -331,7 +335,10 @@ def test_a_corpus_hint_for_a_shape_it_cannot_serve_does_not_become_a_force():
                                unmeasured={},
                                separation={"separated": True, "margin": 0.5,
                                            "noise": 0.01, "factor": 2.0,
-                                           "runner_up": "generic_any_shape"}))
+                                           "runner_up": "generic_any_shape"},
+                               evidence={"delegate_identities": {
+                                   "aligned_only_declared": {
+                                       "fake_build": "aligned_only"}}}), fresh=True)
 
     A, B = _operands(RAGGED)
     assert AT.corpus_winner(region, OP_MATMUL, _TGT, A, B, dims=RAGGED,
@@ -423,7 +430,7 @@ def test_every_race_field_consumer_honours_the_workload_exclusion():
                AT.TIMING_END_TO_END),
               AT.MeasureRecord(winner="generic_any_shape", latency_ms=1.0,
                                candidates={"generic_any_shape": 1.0},
-                               unmeasured={}))
+                               unmeasured={}), fresh=True)
     assert AT.corpus_winner(region, OP_MATMUL, _TGT, A, B, dims=RAGGED,
                             dtype="float16", cache=cache,
                             device="fake:dev") == "generic_any_shape"

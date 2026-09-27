@@ -55,6 +55,10 @@ class _FakeCand(Candidate):
     def measure_device_latency(self, region, *inputs, reps=100, warmup=10):
         return self._device_ms
 
+    def delegate_identity(self):
+        # Decision #11: every Tier-3 candidate identifies its artifact.
+        return {"fake_build": self.name} if self.tier == Tier.HAND_TUNED else None
+
 
 def _mm(m=4, k=4, n=4):
     rng = np.random.default_rng(0)
@@ -200,7 +204,9 @@ def test_persisted_corpus_drives_normal_arbitrated_dispatch():
         candidates={measured.name: 0.5, crown.name: 1.0},
         unmeasured={},
         separation={"separated": True, "margin": 0.5, "noise": 0.01,
-                    "runner_up": crown.name, "factor": 2.0}))
+                    "runner_up": crown.name, "factor": 2.0},
+        evidence={"delegate_identities": {
+            crown.name: crown.delegate_identity()}}), fresh=True)
     region = _FakeRegion()
     A, B = _mm()
 
@@ -229,7 +235,7 @@ def test_corpus_admission_rejects_stale_fingerprints_and_timing_domain():
             "resource_fingerprints": ["sha256:resource-current"],
             "compile_state": "warm_after_correctness_gate",
             "cache_state": "warm",
-        }))
+        }), fresh=True)
     payload = cache.to_dict()
     policy = {
         "device": "nvidia:sm_120", "timing": "device",
@@ -262,7 +268,7 @@ def test_corpus_cold_to_warm_roundtrip_is_reproducible():
         winner="candidate", latency_ms=.1, candidates={"candidate": .1},
         evidence={"cache_state": "warm", "compile_state": "warm"})
     assert cold.get(key) is None
-    cold.put(key, record)
+    cold.put(key, record, fresh=True)
     warm = AT.MeasureCache()
     assert warm.load_dict(cold.to_dict()) == 1
     assert warm.get(key) == record
@@ -280,7 +286,7 @@ def test_corpus_preserves_candidate_schedule_descriptors():
     }
     cache.put(key, AT.MeasureRecord(
         winner="candidate", latency_ms=.1, candidates={"candidate": .1},
-        candidate_descriptors={"candidate": descriptor}))
+        candidate_descriptors={"candidate": descriptor}), fresh=True)
     restored = AT.MeasureCache()
     assert restored.load_dict(cache.to_dict()) == 1
     assert restored.get(key).candidate_descriptors == {"candidate": descriptor}
@@ -484,7 +490,7 @@ def test_the_cache_hit_path_validates_the_field_too():
     # A verdict that never raced `never_raced`, yet names a live winner.
     cache.put(key, AT.MeasureRecord(
         winner="recorded_winner", latency_ms=9.0,
-        candidates={"recorded_winner": 9.0}, unmeasured={}))
+        candidates={"recorded_winner": 9.0}, unmeasured={}), fresh=True)
 
     winner = AT.measured_arbitrate(
         _FakeRegion(), OP_MATMUL, target, *_mm(), dims=(4, 4, 4),
@@ -511,7 +517,7 @@ def test_a_legacy_device_cache_hit_is_re_measured():
     key = (AT._device_id(target), target, OP_MATMUL, (4, 4, 4), "bfloat16",
            AT.TIMING_DEVICE)
     cache.put(key, AT.MeasureRecord(winner="legacy_fast", latency_ms=99.0,
-                                    candidates={"legacy_fast": 99.0}))
+                                    candidates={"legacy_fast": 99.0}), fresh=True)
     assert cache.get(key).unmeasured is None
 
     AT.measured_arbitrate(_FakeRegion(), OP_MATMUL, target, *_mm(),
@@ -536,7 +542,7 @@ def test_exact_cache_hit_cannot_reuse_ineligible_promotion(rejection):
     cache.put(key,AT.MeasureRecord(winner=old.name,latency_ms=1.0,
         candidates={old.name:1.0,fresh.name:9.0},unmeasured={},
         separation=None if rejection=='missing_separation' else {'separated':rejection!='separation'},
-        evidence={'selector_eligible':False} if rejection=='selector' else {}))
+        evidence={'selector_eligible':False} if rejection=='selector' else {}), fresh=True)
     winner=AT.measured_arbitrate(_FakeRegion(),OP_MATMUL,target,*_mm(),dims=(4,4,4),
         dtype='bfloat16',cache=cache,reps=1,warmup=0,timing=AT.TIMING_DEVICE)
     assert winner.name==fresh.name

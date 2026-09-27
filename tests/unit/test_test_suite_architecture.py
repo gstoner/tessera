@@ -194,6 +194,8 @@ def test_resolver_ratchets_are_hermetic_under_an_exported_build_dir(
     exported = _fake_tessera_opt(
         tmp_path / "exported" / "tools" / "tessera-opt" / "tessera-opt", "canonicalize"
     )
+    for name in compiler_tool._ENV_SELECTORS:  # these outrank TESSERA_BUILD_DIR
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("TESSERA_BUILD_DIR", str(tmp_path / "exported"))
     assert compiler_tool.tessera_opt_candidates()[0] == exported, (
         "precondition: the exported build dir is honoured when not pinned"

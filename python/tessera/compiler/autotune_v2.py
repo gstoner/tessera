@@ -32,6 +32,7 @@ from .benchmark_row import MeasuredResourceVector
 from .reuse_distance_cost import estimate_gemm_reuse_distance
 from .rounding import RTNE
 from .tile_rasterization import RASTER_ORDER_CHOICES
+from .toolchain_identity import ToolchainIdentity, toolchain_identity
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +274,13 @@ class BayesianAutotuner:
     Falls back to a deterministic grid search when ``optuna`` is not installed.
     Warm-starts from an SQLite cache that shares the schema with the v1 autotuner.
 
+    Every cached row carries the toolchain identity it was measured under
+    (Decision #11): ``toolchain`` defaults to the declared pins for
+    ``workload.arch`` (:func:`toolchain_identity.toolchain_identity`); a caller
+    measuring a native image or a delegate passes the richer identity. A row
+    whose identity differs — or that predates the column — is a miss, reported
+    in :attr:`warm_start_skipped`, never a stale hit.
+
     Parameters
     ----------
     workload:
@@ -291,6 +299,9 @@ class BayesianAutotuner:
     smem_budget_bytes:
         Shared-memory budget (bytes). Configurations that exceed this are
         pruned immediately.  Default 98304 (96 KiB, A100 limit per SM).
+    toolchain:
+        The toolchain (and delegate) identity measurements are keyed on.
+        Defaults to ``toolchain_identity(workload.arch)``.
     """
 
     _TILE_CHOICES: Sequence[int] = (32, 64, 128, 256)
@@ -306,6 +317,7 @@ class BayesianAutotuner:
         cache_bytes: int = 40 * 1024 * 1024,
         seed: int = 42,
         smem_budget_bytes: int = 98_304,
+        toolchain: Optional[ToolchainIdentity] = None,
     ) -> None:
         if peak_tflops <= 0:
             raise ValueError("peak_tflops must be positive")
@@ -325,6 +337,7 @@ class BayesianAutotuner:
         self._best: Optional[TuningResult] = None
         self._rejections: List[CandidateRejection] = []
         self._warm_start_skipped: List[str] = []
+        self.toolchain = toolchain if toolchain is not None else toolchain_identity(workload.arch)
 
     # ------------------------------------------------------------------
     # Cache I/O
@@ -335,7 +348,10 @@ class BayesianAutotuner:
         Load prior results from SQLite cache.
 
         Compatible with the v1 schema; a missing table or column falls back to
-        that column's default rather than failing.
+        that column's default rather than failing — except the toolchain
+        identity (Decision #11): a row without one (written before the column
+        existed) or with a different one is a miss, never a hit, and is
+        counted in :attr:`warm_start_skipped`.
 
         Returns the number of results loaded. Rows that could **not** be loaded
         are recorded with a reason in :attr:`warm_start_skipped` — check it when
@@ -354,6 +370,7 @@ class BayesianAutotuner:
                 "raster_order": "'row_major'",
                 "raster_group": "1",
                 "timing_provenance_json": "'{}'",
+                "toolchain_digest": "''",
             }
             select_cols = [
                 "tile_m", "tile_n", "tile_k", "num_warps", "num_stages",
@@ -376,7 +393,20 @@ class BayesianAutotuner:
                 tuple(params),
             )
             count = 0
+            expected = self.toolchain.digest
+            unversioned = 0
+            foreign: dict[str, int] = {}
             for row in cur.fetchall():
+                # Decision #11: a measurement is valid only for the toolchain
+                # that produced it. Checked first — a row from another
+                # toolchain is not evidence about this one, whatever else it says.
+                recorded = str(row[15])
+                if recorded != expected:
+                    if recorded:
+                        foreign[recorded] = foreign.get(recorded, 0) + 1
+                    else:
+                        unversioned += 1
+                    continue
                 # A row written by a newer Tessera may name a rasterization order
                 # this build does not know. Its latency was measured *with* that
                 # order, so it cannot be re-labelled row_major — but dropping it
@@ -416,6 +446,15 @@ class BayesianAutotuner:
                         f"unusable cache row (tile {row[0]}x{row[1]}x{row[2]}): "
                         f"{exc}")
                     continue
+            if unversioned:
+                self._warm_start_skipped.append(
+                    f"{unversioned} row(s) carry no toolchain identity (written "
+                    "before Decision #11 keyed the cache on it); treated as "
+                    "misses, not reused")
+            for digest, n in sorted(foreign.items()):
+                self._warm_start_skipped.append(
+                    f"{n} row(s) measured under toolchain {digest[:19]}..., not "
+                    f"the current {expected[:19]}...; treated as misses")
             return count
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             return 0
@@ -434,8 +473,9 @@ class BayesianAutotuner:
                         M, N, K, dtype, arch, layout, movement_json,
                         tile_m, tile_n, tile_k, num_warps, num_stages,
                         latency_ms, tflops, sampled_at, trial_id, status, reason, method,
-                        raster_order, raster_group, timing_provenance_json
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        raster_order, raster_group, timing_provenance_json,
+                        toolchain_digest, toolchain_json
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         self.workload.M, self.workload.N,
@@ -448,6 +488,8 @@ class BayesianAutotuner:
                         r.sampled_at, r.trial_id, r.status, r.reason, r.method,
                         r.config.raster_order, r.config.raster_group,
                         json.dumps(dict(r.timing_provenance), sort_keys=True),
+                        self.toolchain.digest,
+                        json.dumps(self.toolchain.as_dict(), sort_keys=True),
                     ),
                 )
             conn.commit()
@@ -746,6 +788,10 @@ class BayesianAutotuner:
                 "accum": "f32" if self.workload.dtype != "int8" else "s32",
             },
             "movement": dict(self.workload.movement),
+            # Decision #11: the toolchain (and delegate) identity the
+            # measurement was made under — a schedule tuned under one toolkit
+            # is not the schedule for another.
+            "toolchain": self.toolchain.as_dict(),
         }
 
     @staticmethod
@@ -878,7 +924,9 @@ def _ensure_cache_schema(conn: sqlite3.Connection) -> None:
             method TEXT DEFAULT 'roofline',
             raster_order TEXT DEFAULT 'row_major',
             raster_group INT DEFAULT 1,
-            timing_provenance_json TEXT DEFAULT '{}'
+            timing_provenance_json TEXT DEFAULT '{}',
+            toolchain_digest TEXT DEFAULT '',
+            toolchain_json TEXT DEFAULT '{}'
         )
         """
     )
@@ -897,12 +945,20 @@ def _ensure_cache_schema(conn: sqlite3.Connection) -> None:
         "raster_order": "TEXT DEFAULT 'row_major'",
         "raster_group": "INT DEFAULT 1",
         "timing_provenance_json": "TEXT DEFAULT '{}'",
+        # Decision #11. Pre-existing rows migrate to '' — "no identity" — which
+        # never equals a real digest, so they become misses rather than being
+        # re-labelled with a toolchain nobody recorded.
+        "toolchain_digest": "TEXT DEFAULT ''",
+        "toolchain_json": "TEXT DEFAULT '{}'",
     }
     for name, ddl in additions.items():
         if name not in columns:
             conn.execute(f"ALTER TABLE tuning_results ADD COLUMN {name} {ddl}")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_tuning_lookup ON tuning_results(M, N, K, dtype, arch, layout)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tuning_toolchain ON tuning_results(M, N, K, dtype, arch, toolchain_digest)"
     )
 
 

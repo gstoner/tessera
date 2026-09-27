@@ -5256,6 +5256,14 @@ class NvidiaMmaGemmShippedCandidate(DelegatedCandidate):
         except Exception:
             return False
 
+    def delegate_library(self) -> "tuple[Any, str | None] | None":
+        """The shipped ``libtessera_nvidia_gemm`` this delegate binds (Decision
+        #11: its content digest keys every verdict measured against it)."""
+        from tessera import runtime as rt
+
+        path = rt._nvidia_gemm_lib_path()
+        return (path, "tessera_nvidia_gemm") if path is not None else None
+
     def applies_to(self, region: Any) -> bool:
         return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
 

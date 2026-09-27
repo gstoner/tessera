@@ -60,6 +60,18 @@ uint64_t ticks_to_ns(uint64_t ticks, int rate_khz) {
 
 rocm_timing_probe_result_t collect_rocm_timing_probe(
     const rocm_timing_probe_config_t& config) {
+  // HIP's last-error slot is per host thread and sticky: only a failing call
+  // writes it and only hipGetLastError() resets it. The two post-loop
+  // hipGetLastError() checks below are the only detectors for this probe's
+  // launches (the warmup launch's configuration error, which its
+  // hipDeviceSynchronize need not report, is read by the first of them), so an
+  // error a caller left on the thread would otherwise surface as "HIP
+  // instrumented launch failed" and void a valid sample. Discarding errors
+  // older than the call, once and first, hides nothing the timing contract
+  // rests on: every launch the contract measures happens after this line and
+  // is still checked, and no clear sits between a launch and its check
+  // (SPECTRAL-STALE-HIP-ERROR-2026-09-27).
+  (void)hipGetLastError();
   rocm_timing_probe_result_t result;
   result.repetitions = config.repetitions;
   result.threads = 256;

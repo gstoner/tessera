@@ -484,7 +484,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Reconcile current spectral policy envelopes, then close remaining target-specific strides/full-spectrum/window, broadcasting and streaming execution gaps with independent adjoint proof.
 - Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
 - Start: device
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)
+- Latest: [ROCm spectral image survives a stale HIP error; streaming STFT names the chip that ran](INTEGRATED_COMPILER_LOG.md#2026-09-27--spectral-image-survives-a-stale-hip-error-streaming-stft-names-the-chip-that-ran)
 
 ### TSOL-SCALE-1
 

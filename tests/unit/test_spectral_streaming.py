@@ -75,8 +75,20 @@ def test_physical_streaming_broadcast_strides_and_artifact_lineage(onesided, tar
 
     if target == "x86" and not runtime._x86_elementwise_available():
         pytest.skip("x86 spectral physical package is unavailable")
-    if target == "rocm" and not runtime._rocm_wmma_runtime_available():
-        pytest.skip("gfx1151 spectral physical package is unavailable")
+    rocm_arch = None
+    if target == "rocm":
+        from tessera.compiler.emit import spectral_candidates
+
+        if not runtime._rocm_wmma_runtime_available():
+            pytest.skip("ROCm spectral physical package is unavailable")
+        # The certificate must name the chip that executed, which is the one
+        # the live-arch composite image is stamped for -- not a constant.
+        rocm_arch = spectral_candidates._spectral_device_arch()
+        if (rocm_arch is None
+                or spectral_candidates._amd_composite_lib() is None):
+            pytest.skip(
+                f"no ROCm composite spectral package for the live device ({rocm_arch})"
+            )
     if target == "nvidia_sm120":
         lib = runtime._load_nvidia_fft_runtime()
         if lib is None or lib.tessera_nvidia_spectral_arch() != 120:
@@ -108,11 +120,56 @@ def test_physical_streaming_broadcast_strides_and_artifact_lineage(onesided, tar
     assert state.execution_certificate["origin"] == "runtime"
     assert state.execution_certificate["architecture_identity"] == (
         "zen5-avx512" if target == "x86" else
-        "gfx1151" if target == "rocm" else "sm_120"
+        rocm_arch if target == "rocm" else "sm_120"
     )
     with pytest.raises(ValueError, match="different physical artifact"):
         stream_stft_chunk(
             signal[:, :1, :], window, policy, state, target="reference"
+        )
+
+
+class _StampedComposite:
+    def __init__(self, stamp):
+        self._stamp = stamp
+
+    def ts_spectral_composite_arch_amd(self):
+        return self._stamp
+
+    def ts_streaming_stft_hostptr_broadcast_layout_storage_amd(self, *_args):
+        raise AssertionError("the package must not run in an identity test")
+
+
+@pytest.mark.parametrize("stamp", [b"gfx1151", b"gfx1201"])
+def test_rocm_streaming_architecture_is_the_package_stamp(monkeypatch, stamp):
+    """A gfx1201 run was certified as gfx1151 (SPECTRAL-STALE-HIP-ERROR-2026-09-27)."""
+    from tessera.compiler import spectral_streaming
+    from tessera.compiler.emit import spectral_candidates
+
+    monkeypatch.setattr(
+        spectral_candidates, "_amd_composite_lib", lambda: _StampedComposite(stamp)
+    )
+    _, architecture = spectral_streaming._rocm_streaming_package()
+    assert architecture == stamp.decode()
+
+
+@pytest.mark.parametrize("lib", [None, _StampedComposite(b"gfx1200"),
+                                 _StampedComposite(b"unknown"),
+                                 _StampedComposite(None)])
+def test_rocm_streaming_architecture_fails_closed(monkeypatch, lib):
+    from tessera.compiler import spectral_streaming
+    from tessera.compiler.emit import spectral_candidates
+
+    monkeypatch.setattr(spectral_candidates, "_amd_composite_lib", lambda: lib)
+    monkeypatch.setattr(
+        spectral_candidates, "_composite_host_arch", lambda: "unavailable"
+    )
+    with pytest.raises(RuntimeError, match="ROCm streaming STFT"):
+        spectral_streaming._rocm_streaming_package()
+    policy = StreamingSTFTPolicy(axis=-1, n_fft=8, window_length=6, hop=4)
+    with pytest.raises(RuntimeError, match="ROCm streaming STFT"):
+        stream_stft_chunk(
+            np.zeros(9, np.float32), np.hanning(6).astype(np.float32), policy,
+            target="rocm",
         )
 
 

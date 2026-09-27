@@ -10,6 +10,13 @@
 
 namespace {
 
+// Discards a stale CUDA runtime error left on this thread by earlier code (the
+// last-error slot is per thread and only cudaGetLastError() resets it), so the
+// post-launch check reports only this call's launch. Each of the four entries
+// calls it once, first thing; never between a launch and its check
+// (SPECTRAL-STALE-HIP-ERROR-2026-09-27; full rule in tessera_nvidia_spectral.cu).
+inline void clearStaleCudaError() { (void)cudaGetLastError(); }
+
 __device__ __forceinline__ float philoxUniform(uint64_t seed,
                                                 uint64_t counterBase,
                                                 uint64_t wordIndex) {
@@ -111,6 +118,7 @@ int runOutputKernel(int64_t n, float *hostOutput, Launch launch) {
 
 extern "C" int tessera_nvidia_philox_uniform_f32(
     uint64_t seed, uint64_t counter, int64_t n, float *output) {
+  clearStaleCudaError();
   return runOutputKernel(n, output, [&](float *deviceOutput, unsigned blocks) {
     uniformCoreKernel<<<blocks, 256>>>(seed, counter, n, deviceOutput);
   });
@@ -119,6 +127,7 @@ extern "C" int tessera_nvidia_philox_uniform_f32(
 extern "C" int tessera_nvidia_philox_uniform_range_f32(
     uint64_t seed, uint64_t counter, int64_t n, float low, float high,
     float *output) {
+  clearStaleCudaError();
   return runOutputKernel(n, output, [&](float *deviceOutput, unsigned blocks) {
     uniformRangeKernel<<<blocks, 256>>>(seed, counter, n, low, high,
                                         deviceOutput);
@@ -128,6 +137,7 @@ extern "C" int tessera_nvidia_philox_uniform_range_f32(
 extern "C" int tessera_nvidia_philox_normal_f32(
     uint64_t seed, uint64_t counter, int64_t n, float mean, float stddev,
     float *output) {
+  clearStaleCudaError();
   return runOutputKernel(n, output, [&](float *deviceOutput, unsigned blocks) {
     normalKernel<<<blocks, 256>>>(seed, counter, n, mean, stddev, deviceOutput);
   });
@@ -136,6 +146,7 @@ extern "C" int tessera_nvidia_philox_normal_f32(
 extern "C" int tessera_nvidia_philox_dropout_f32(
     const float *input, uint64_t seed, uint64_t counter, int64_t n,
     float probability, float *output) {
+  clearStaleCudaError();
   if (n < 0 || (n != 0 && (input == nullptr || output == nullptr)))
     return 1;
   if (n == 0)

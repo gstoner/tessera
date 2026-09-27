@@ -243,6 +243,47 @@ def test_cli_reads_committed_and_refuses_doctored(tmp_path, capsys) -> None:
     assert ee.main([str(bad)]) == 1
 
 
+def test_cli_refuses_a_misspelled_schema_instead_of_skipping_it(tmp_path, capsys) -> None:
+    """Before the Codex review of PR #869 an unregistered top-level schema was
+    filtered out, zero packets were read, and the CLI exited 0."""
+    doctored = _load(_ROCM)
+    doctored["schema"] = "tessera.profiler_rocm_pakcet.v1"
+    bad = tmp_path / "misspelled.json"
+    bad.write_text(json.dumps(doctored))
+    assert ee.main([str(bad)]) == 1
+    assert "EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("payload", [{}, [], {"rows": [1, 2]}, {"schema": 1, "runs": []}])
+def test_cli_refuses_an_input_with_no_recognized_packet(tmp_path, capsys, payload) -> None:
+    empty = tmp_path / "empty.json"
+    empty.write_text(json.dumps(payload))
+    assert ee.main([str(empty)]) == 1
+    assert "EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN: no registered evidence packet" in capsys.readouterr().out
+
+
+def test_cli_still_reads_a_schema_less_bundle(tmp_path) -> None:
+    bundle = tmp_path / "bundle.json"
+    bundle.write_text(json.dumps({"schema": 1, "calibrations": [_load(_ROCM), _load(_NVIDIA)]}))
+    assert ee.main([str(bundle)]) == 0
+
+
+def test_every_committed_packet_file_passes_the_cli() -> None:
+    """The CLI's top-level rule strands no committed packet file."""
+    paths = []
+    for path in sorted((ROOT / "benchmarks").rglob("*.json")):
+        try:
+            data = json.loads(path.read_text())
+        except (ValueError, UnicodeDecodeError):
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        if ee.iter_packets(data) and rel not in _KNOWN_INVALID:
+            assert ee.cli_packets(data), rel
+            paths.append(str(path))
+    assert len(paths) > 90
+    assert ee.main(paths) == 0
+
+
 # --------------------------------------------------------------------------
 # Drift gates: every family schema is registered, and consumers read through
 # the envelope rather than calling a family validator directly.

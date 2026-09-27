@@ -176,7 +176,12 @@ def capture_route_receipts() -> Iterator[RouteReceiptLog]:
     try:
         yield log
     finally:
-        _STATE.captures.remove(log)
+        # Stack discipline by identity: RouteReceiptLog is a dataclass, so
+        # ``list.remove`` would match an *equal* log (two empty nested
+        # captures) and pop the outer one (Codex review, PR #869).
+        if not _STATE.captures or _STATE.captures[-1] is not log:
+            raise RuntimeError("route receipt captures closed out of order")
+        _STATE.captures.pop()
 
 
 def note_native_dispatch(target: str, helper: str) -> None:

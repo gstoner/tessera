@@ -10027,3 +10027,9 @@ See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--t
 Owners: X86-EVIDENCE-VOCAB-1 / GOV-ODS-CONSUMER-1 / EVIDENCE-PACKET-1. Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
 
 Not applicable to Apple evidence: no Apple packet family carries ineligibility tags. The ODS gate waives `tessera_apple.gpu.mps_softmax` (unreferenced). No Apple lane changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility).
+
+### EVIDENCE-PACKET-1: shared envelope and GA/EBM route receipts (2026-09-27)
+
+Owner: EVIDENCE-PACKET-1. Sync: `EVIDENCE-PACKET-1-2026-09-27`.
+
+Parity validated for route receipts on the Mac (M1 Max, macOS 27, clean `eed48b9b`). The 2026-09-10 follow-up under `BENCHMARK-COMPILER-ALIGNMENT-2026-09-10` asked for per-call Metal/CPU receipts for public GA/EBM compositions; that item is closed here. Every Apple `_try_apple_gpu_*` lane in `tessera.ga`/`tessera.ebm` is `@native_attempt` and its public callers `@public_route`. In `clifford_core`, `energy_core` and `visual_complex_core`, the GA primitives, EBM `langevin_step` and the partition ran on the Apple GPU runtime. `geometric_product` split between the runtime and the reference, `rotor_sandwich` is `mixed`, and `energy_quadratic` ran on the reference (`benchmarks/baselines/ga_ebm_route_receipts_20260927/mac_m1max.json`). The runtime lane is the hand-written MSL kernels reached by ctypes, not compiler-generated code. Not applicable to the envelope: no Apple measurement-packet family exists yet. Follow-up required: an Apple device-clock packet family must register with `evidence_envelope` before its packets can admit anything. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-packet-1-shared-evidence-envelope-ga-and-ebm-route-receipts).

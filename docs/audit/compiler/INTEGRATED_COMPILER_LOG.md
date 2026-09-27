@@ -5208,7 +5208,7 @@ non-promotable. The pre-PR full sweep caught one defect in the first
 labelling. The labels were dotted (`tessera.ebm.inner_step`), and the ODS
 consumer audit read them as compiler consumers of six EBM ODS ops. Labels are
 now `ebm:inner_step`, dotted labels are refused, and the receipts were
-re-recorded.
+re-recorded. The Codex review of PR #869 found two more defects, both now fixed with tests. First, the CLI filtered out a top-level packet whose schema is unregistered, then exited 0 having read nothing; it now refuses with `EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN`, and so does an input that contains no packet at all. Second, nested receipt captures were closed with `list.remove`, which matches by dataclass equality, so an inner capture could remove an equal outer one; captures now close by identity, in stack order. Each backend outcome is recorded in `docs/audit/backend/{apple,nvidia,rocm,x86}/todo.md` under the sync key.
 
 Remaining: math probes' manufactured `RuntimeArtifact.metadata`, paired
 public-frontend runs for the direct-IR AD probes, asynchronous/multi-thread

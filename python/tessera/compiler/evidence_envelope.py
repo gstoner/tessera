@@ -483,7 +483,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     failed = 0
     for path in args.paths:
-        for packet in iter_packets(json.loads(path.read_text())):
+        packets = cli_packets(json.loads(path.read_text()))
+        if not packets:
+            # An input with nothing to read is a refusal, not an empty success.
+            failed += 1
+            print(f"REFUSED {path}: EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN: no registered "
+                  f"evidence packet found")
+            continue
+        for packet in packets:
             try:
                 env = read_evidence_packet(packet)
             except ValueError as exc:
@@ -498,6 +505,19 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"OK {path}: {env.family} {env.architecture} {env.admission_route} "
                       f"{env.timing_domain} {state}")
     return 1 if failed else 0
+
+
+def cli_packets(obj: Any) -> list[Mapping[str, Any]]:
+    """What the CLI reads from one file.
+
+    A top-level object that states a string ``schema`` *is* the packet and is
+    read as such, so a misspelled or unregistered schema is refused
+    (``EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN``) rather than filtered out. Anything
+    else is a bundle, searched with :func:`iter_packets`.
+    """
+    if isinstance(obj, Mapping) and isinstance(obj.get("schema"), str):
+        return [obj]
+    return iter_packets(obj)
 
 
 def iter_packets(obj: Any) -> list[Mapping[str, Any]]:
@@ -526,6 +546,7 @@ __all__ = [
     "EvidenceEnvelope",
     "EvidenceEnvelopeError",
     "EvidenceFamily",
+    "cli_packets",
     "evidence_families",
     "family_for_schema",
     "iter_packets",

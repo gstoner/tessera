@@ -209,6 +209,24 @@ def test_an_orphan_native_dispatch_makes_the_span_unattributed() -> None:
     assert log.summary()["attribution"] == "incomplete"
 
 
+def test_nested_equal_captures_close_by_identity() -> None:
+    """Two empty logs compare equal (dataclass ``__eq__``); closing the inner
+    one must not remove the outer (Codex review, PR #869)."""
+    @rr.public_route("t:op")
+    def op():
+        return 0.0
+
+    with rr.capture_route_receipts() as outer:
+        with rr.capture_route_receipts() as inner:
+            assert inner == outer and inner is not outer
+        op()  # after the inner closes, only the outer is live
+    assert [r.op for r in outer.receipts] == ["t:op"]
+    assert inner.receipts == []
+    with rr.capture_route_receipts() as later:
+        pass
+    assert later.receipts == [] and rr._STATE.captures == []
+
+
 def test_a_raising_call_leaves_no_receipt_and_restores_the_frame_stack() -> None:
     @rr.public_route("t:boom")
     def boom():

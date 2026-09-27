@@ -78,9 +78,14 @@ _KNOWN_FALSE_POSITIVES: frozenset[str] = frozenset({
 
 def _scan_codes_in_cpp() -> dict[str, set[Path]]:
     """Return ``code -> {paths that emit it}`` by scanning every .cpp /
-    .h / .mm / .inc under src/."""
+    .h / .mm / .inc / .td under src/.
+
+    `.td` counts: an ODS constraint's description is the message the
+    generated verifier emits. `NEIGHBORS_TOPOLOGY_UNKNOWN_KIND` is emitted
+    only that way since its hand-written C++ duplicate was deleted
+    (SMALL-CORRECTNESS-GAPS-2026-09-27)."""
     codes: dict[str, set[Path]] = {}
-    for ext in ("*.cpp", "*.h", "*.mm", "*.inc"):
+    for ext in ("*.cpp", "*.h", "*.mm", "*.inc", "*.td"):
         for path in SRC_ROOT.rglob(ext):
             try:
                 text = path.read_text(errors="replace")

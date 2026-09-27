@@ -19,24 +19,28 @@ source of truth:
 * NVIDIA — the ``gpu_target.py`` pins: toolkit, PTX ISA, driver floor, the
   driver API release and the PTX ISA the pinned driver's JIT accepts.
 * ROCm — the ``rocm_target.py`` pins: ROCm release and HIP version.
-* Apple — there is no declared Apple pin, so the family identity is the live
-  :func:`apple_route_selector.live_apple_route_context` (macOS version, SDK
-  version, host compiler fingerprint): the same identity the strict Apple route
-  ledger already requires before retained evidence may select.
-* A compiled artifact — a native image's ``compiler_fingerprint`` /
-  ``toolchain_fingerprint`` (the tessera-opt build and toolkit it was lowered
-  with), passed in by the caller that holds the image.
-* A delegate — :func:`delegate_library_identity`: the content digest of the
-  loaded shared library (its ABI hash) plus, when the library sits in a
-  configured build tree, its ``runtime_library_build`` optimization record.
+* Apple — there is no declared Apple pin, so the family identity is read from
+  the machine, from facts that do not depend on the caller's shell: the macOS
+  version, and via the system ``/usr/bin/xcrun`` (which resolves through
+  xcode-select, never ``PATH``) the SDK version, the Metal compiler version and
+  the Xcode version, plus the Apple runtime source fingerprint (the
+  hand-written MSL that is what actually gets timed on Apple) and the device
+  family tag. The first ``clang`` on ``PATH`` is deliberately *not* an input.
+* A per-candidate artifact — :func:`delegate_library_identity`: the content
+  digest of a delegate's loaded shared library (its ABI hash) plus, when it sits
+  in a configured build tree, its ``runtime_library_build`` optimization record;
+  and :func:`tessera_opt_identity` for kernels ``tessera-opt`` generates. These
+  are stamped per candidate by the arbiter (``Candidate.delegate_identity``) and
+  checked against the live candidate before a verdict is reused.
 
-**Declared pins are declared.** The NVIDIA/ROCm/LLVM components are the pins
-the fleet is held to (``runtime_abi_audit`` drift-gates them, and the LLVM pin
-is exact), so a toolkit upgrade that is *adopted* — the pin moves — invalidates
-every entry measured under the old pin. A box that drifts off its pin without
-the pin moving is not caught by the family identity; the per-artifact
-fingerprints are what catch that, which is why callers holding a native image
-should pass it.
+**The family identity is pin-based.** The NVIDIA/ROCm/LLVM components are the
+pins the fleet is held to (``runtime_abi_audit`` drift-gates them, and the LLVM
+pin is exact), so a toolkit upgrade that is *adopted* — the pin moves —
+invalidates every entry measured under the old pin. A box that drifts off its
+pin without the pin moving is **not** caught by the family identity. What does
+catch a changed artifact is the per-candidate identity above: a rebuilt
+delegate library or a rebuilt ``tessera-opt`` changes its content digest, and
+the verdict for that candidate misses.
 """
 
 from __future__ import annotations
@@ -54,6 +58,8 @@ SCHEMA = "tessera.toolchain_identity.v1"
 #: Value recorded for a component whose source of truth is absent (e.g. the
 #: CMake pin file in an installed package). Recorded, never guessed.
 UNDECLARED = "undeclared"
+#: Value recorded for a live Apple fact that could not be read on this host.
+UNAVAILABLE = "unavailable"
 
 FAMILIES = ("nvidia", "rocm", "apple", "cpu", "generic")
 
@@ -140,15 +146,32 @@ def _family_components_cached(family: str) -> tuple[tuple[str, str], ...]:
 
         components.update({"rocm": r.TESSERA_TARGET_ROCM, "hip": r.TESSERA_TARGET_HIP})
     elif family == "apple":
-        from .apple_route_selector import live_apple_route_context
-
-        ctx = live_apple_route_context()
-        components.update({
-            "macos": ctx.os_version,
-            "macos_sdk": ctx.sdk_version,
-            "host_compiler": ctx.compiler_fingerprint,
-        })
+        components.update(_apple_components())
     return tuple(sorted(components.items()))
+
+
+def _apple_components() -> dict[str, str]:
+    """Shell-independent Apple toolchain facts (see the module docstring)."""
+    import platform
+
+    from .apple_route_selector import (
+        _XCRUN,
+        _command_text,
+        _runtime_source_fingerprint,
+        live_apple_device_tag,
+    )
+
+    def first_line(text: str) -> str:
+        return text.splitlines()[0].strip() if text else UNAVAILABLE
+
+    return {
+        "macos": platform.mac_ver()[0] or UNAVAILABLE,
+        "macos_sdk": _command_text(_XCRUN, "--sdk", "macosx", "--show-sdk-version") or UNAVAILABLE,
+        "metal_compiler": first_line(_command_text(_XCRUN, "metal", "--version")),
+        "xcode": " ".join(_command_text(_XCRUN, "xcodebuild", "-version").split()) or UNAVAILABLE,
+        "apple_runtime_source": _runtime_source_fingerprint(),
+        "device": live_apple_device_tag(),
+    }
 
 
 def clear_identity_cache() -> None:
@@ -159,29 +182,15 @@ def clear_identity_cache() -> None:
 def toolchain_identity(
     arch_or_target: str,
     *,
-    native_image: Any = None,
     delegate: Mapping[str, str] | None = None,
 ) -> ToolchainIdentity:
-    """The toolchain identity a measurement on ``arch_or_target`` carries.
-
-    ``native_image`` — a :class:`native_artifact.NativeImageArtifact` (or any
-    mapping/object with ``compiler_fingerprint`` / ``toolchain_fingerprint``)
-    whose code was measured; its fingerprints join the identity so a rebuilt
-    tessera-opt or a drifted toolkit misses even when the pins did not move.
-    ``delegate`` — :func:`delegate_library_identity` of a Tier-3 delegate.
-    """
+    """The (pin-based) toolchain identity a measurement on ``arch_or_target``
+    carries. ``delegate`` — :func:`delegate_library_identity` (or
+    :func:`tessera_opt_identity`) of the artifact measured, when the cache keys
+    one measurement per artifact (``autotune_v2``). The arbiter corpus keeps
+    per-candidate identities separately (``evidence.delegate_identities``)."""
     family = target_family(arch_or_target)
-    components = _family_components(family)
-    if native_image is not None:
-        for name in ("compiler_fingerprint", "toolchain_fingerprint"):
-            value = (native_image.get(name) if isinstance(native_image, Mapping)
-                     else getattr(native_image, name, None))
-            if not value:
-                raise ValueError(
-                    f"native image carries no {name}; a measurement of it cannot "
-                    "be keyed to the toolchain that built it (Decision #11)")
-            components[f"image_{name}"] = str(value)
-    return ToolchainIdentity(family, components, dict(delegate or {}))
+    return ToolchainIdentity(family, _family_components(family), dict(delegate or {}))
 
 
 _FILE_DIGESTS: dict[tuple[str, int, int], str] = {}
@@ -201,6 +210,9 @@ def _file_digest(path: Path) -> str:
     return cached
 
 
+_IDENTITIES: dict[tuple[str, int, int, str | None], dict[str, str]] = {}
+
+
 def delegate_library_identity(
     library: str | os.PathLike[str], *, cmake_target: str | None = None,
 ) -> dict[str, str]:
@@ -217,6 +229,15 @@ def delegate_library_identity(
     path = Path(library).resolve()
     if not path.is_file():
         raise FileNotFoundError(f"delegate library {path} does not exist")
+    # Per-process cache keyed on the file's (mtime, size): the arbiter asks on
+    # every cache hit, and walking the build tree for the record each time is
+    # the cost a hit exists to avoid. A rebuilt library changes mtime/size and
+    # is re-identified.
+    st = path.stat()
+    key = (str(path), st.st_mtime_ns, st.st_size, cmake_target)
+    cached = _IDENTITIES.get(key)
+    if cached is not None:
+        return dict(cached)
     identity = {"library": path.name, "abi_digest": _file_digest(path)}
     if cmake_target is not None:
         from .runtime_library_build import RuntimeLibraryBuildError, record_for_library
@@ -229,7 +250,36 @@ def delegate_library_identity(
         else:
             identity["optimization"] = str(record["level"])
             identity["cmake_build_type"] = str(record.get("cmake_build_type", ""))
+    _IDENTITIES[key] = dict(identity)
     return identity
+
+
+def loaded_library_identity(library: Any, *, cmake_target: str | None = None,
+                            entry: str | None = None) -> dict[str, str] | None:
+    """:func:`delegate_library_identity` of a loaded ``ctypes.CDLL`` (its
+    ``_name`` is the path it was loaded from), plus the bound ``entry`` symbol.
+    ``None`` when there is no library -- a candidate that cannot load its
+    library is not available, so it is never timed."""
+    path = getattr(library, "_name", None) if library is not None else None
+    if not path:
+        return None
+    identity = delegate_library_identity(path, cmake_target=cmake_target)
+    if entry:
+        identity["entry"] = entry
+    return identity
+
+
+def tessera_opt_identity() -> dict[str, str] | None:
+    """Identity of the ``tessera-opt`` binary that generates a candidate's
+    kernel at run time: a rebuilt compiler changes generated code, so its
+    content digest keys the verdict. ``None`` when no ``tessera-opt`` is found
+    (the candidate is then unavailable)."""
+    from tessera import runtime as rt
+
+    path = rt._tessera_opt_path()
+    if path is None:
+        return None
+    return {"generator": "tessera-opt", **delegate_library_identity(path)}
 
 
 __all__ = [
@@ -237,8 +287,11 @@ __all__ = [
     "SCHEMA",
     "UNDECLARED",
     "ToolchainIdentity",
+    "UNAVAILABLE",
     "clear_identity_cache",
     "delegate_library_identity",
+    "loaded_library_identity",
     "target_family",
+    "tessera_opt_identity",
     "toolchain_identity",
 ]

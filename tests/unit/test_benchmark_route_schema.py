@@ -91,6 +91,9 @@ def test_stable_row_refuses_a_typed_route_label():
         stable_row(route="tessera_jit_cpu", **common)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="timing_source"):
         stable_row(route=route_unavailable("x"), **{**common, "timing_source": "vibes"})
+    with pytest.raises(TypeError, match="RouteProvenance"):
+        # Constructing one by hand is a typed label with extra steps.
+        stable_row(route=RouteProvenance("tessera_jit_cpu", "trust me"), **common)
     row = stable_row(route=route_unavailable("model"), **common)
     assert tuple(row)[:len(STABLE_ROW_FIELDS)] == STABLE_ROW_FIELDS
     assert set(PROVENANCE_ROW_FIELDS) <= set(row)
@@ -126,7 +129,12 @@ def test_writer_route_is_derived_not_the_benchmark_label(suite_payload):
     # built names its own path. The row carries the artifact's.
     assert gemm["route_source"] == "runtime_artifact.metadata.compiler_path"
     assert gemm["route"] != gemm["compiler_path"]
-    assert gemm["timing_source"] == "host_wall_clock"
+    # One wall-clock interval around the JIT's first call: compile included.
+    assert gemm["timing_source"] == "host_wall_clock_first_call"
+    # The stable row's backend is the lane that ran, not a hardcoded "cpu".
+    row = next(r for r in suite_payload["rows"] if r["op"] == "matmul")
+    assert row["backend"] == gemm["backend"]
+    assert row["backend"] in {"reference_cpu", "native_cpu"}
 
 
 def test_modelled_latencies_are_unknown_route_not_a_guess(suite_payload):
@@ -161,13 +169,20 @@ def test_reader_accepts_new_rows_and_keeps_their_route(tmp_path, suite_payload):
     ingest = _ingest()
     path = tmp_path / "new.json"
     path.write_text(json.dumps(suite_payload))
+    measured = [r for r in suite_payload["rows"]
+                 if r["timing_source"] != "analytical_model"]
     samples = ingest.read_benchmark_json(str(path))
-    assert len(samples) == len(suite_payload["rows"])
-    by_route = {s.meta["route"] for s in samples}
-    assert UNKNOWN_ROUTE in by_route
-    for sample, row in zip(samples, suite_payload["rows"]):
+    # Modelled latencies are not placed on a roofline by default...
+    assert len(samples) == len(measured)
+    for sample, row in zip(samples, measured):
         assert sample.meta["route"] == row["route"]
         assert sample.meta["timing_source"] == row["timing_source"]
+        assert sample.meta["modelled"] is False
+    # ...and are flagged when asked for.
+    everything = ingest.read_benchmark_json(str(path), include_modelled=True)
+    assert len(everything) == len(suite_payload["rows"])
+    assert UNKNOWN_ROUTE in {s.meta["route"] for s in everything}
+    assert any(s.meta["modelled"] for s in everything)
 
 
 def test_reader_runs_through_the_cli(tmp_path, suite_payload):

@@ -76,11 +76,17 @@ item 3). **Follow-up required on Super-Bear; no sm_120 row has been
 re-recorded.** The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`,
 written as v4 since the gfx1151 re-record) keys every verdict on the toolchain
 identity (`compiler/toolchain_identity.py`: CUDA 13.4 / PTX 9.4 / driver
-610.88 / driver-JIT PTX 9.3 / LLVM 23.1.1 pins) and, for
-`nvidia_mma_gemm_shipped`, the content digest of `libtessera_nvidia_gemm`. All
+610.88 / driver-JIT PTX 9.3 / LLVM 23.1.1 pins) and, for both Tier-3
+candidates that bind it (`nvidia_mma_gemm_shipped`, `nvidia_nvfp4_gemm_shipped`),
+the content digest of `libtessera_nvidia_gemm` plus the bound entry. EMITTED and
+SYNTHESIZED candidates carry no artifact identity (pins only). All
 97 committed `nvidia:sm_120` rows predate that key, so they load as stale and
 select nothing -- including the paged-attention serving warm start
-(`emit/nvidia_cuda.py::_paged_attention_corpus_winner` returns `None`). The 16
+(`emit/nvidia_cuda.py::_paged_attention_corpus_winner` returns `None`; since the
+2026-09-26 review it also applies `record_is_admissible`, like its ROCm twin, so
+`benchmark_serving.py --update-corpus` rows -- one latency per mode, hence no
+separation verdict -- are refused as unproven rankings until that recorder
+records spreads). The 16
 `rocm:gfx1151` rows were re-recorded on Princess-Luna on 2026-09-26 (ROCm plan,
 same key); the sm_120 rows were left byte-identical in content.
 

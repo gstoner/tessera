@@ -180,6 +180,7 @@ class BenchmarkSuite:
                     **r.route.as_fields(),
                     "timing_source": r.timing_source,
                     "latency_source": r.timing_source,
+                    "backend": r.backend,
                     "runtime_status": _gemm_runtime_status(r.compiler_path),
                     "execution_kind": infer_execution_kind(r.compiler_path, _gemm_runtime_status(r.compiler_path)).value,
                     "compiler_lowering": r.compiler_lowering,
@@ -234,9 +235,9 @@ class BenchmarkSuite:
         """Every result as a Decision #12 stable row with derived route."""
         rows: List[Dict[str, Any]] = []
         for r in self.gemm_results:
-            executed = r.route.known
+            executed = r.backend != "none"
             rows.append(stable_row(
-                backend="cpu" if executed else "none",
+                backend=r.backend,
                 op="matmul", shape=[r.config.M, r.config.N, r.config.K],
                 dtype=r.config.dtype, latency_ms=r.latency_ms, tflops=r.tflops,
                 memory_bw_gb_s=r.memory_bw_gbps,

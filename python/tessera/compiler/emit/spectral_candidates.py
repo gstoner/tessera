@@ -1118,6 +1118,15 @@ class RocmStockhamFFTCandidate(Candidate):
     target = "rocm"
     op = OP_SPECTRAL_FFT
 
+    def delegate_identity(self) -> "dict[str, str] | None":
+        """Decision #11: the Stockham image actually loaded (the chip's prebuilt
+        ``TesseraSpectralHIP`` library, else its source build) by content."""
+        from tessera.compiler.toolchain_identity import loaded_library_identity
+
+        return loaded_library_identity(
+            _amd_candidate_lib(), cmake_target="TesseraSpectralHIP",
+            entry="ts_fft_stockham_amd_hostptr")
+
     def applies_to(self, region: Any) -> bool:
         return _supported_length(getattr(region, "n", 0))
 

@@ -12,11 +12,11 @@ def test_instrumented_or_invalid_level_is_refused_at_every_entry(level):
     assert not record_is_admissible(record)
     cache = MeasureCache()
     with pytest.raises(ValueError, match='instrumented evidence'):
-        cache.put(KEY, record)
+        cache.put(KEY, record, fresh=True)
     assert cache.size == 0
     # Build a valid serialized key using the owning serializer, then inject
     # the inadmissible evidence as a foreign/persisted producer might.
-    cache.put(KEY, MeasureRecord('candidate', 1.0))
+    cache.put(KEY, MeasureRecord('candidate', 1.0), fresh=True)
     payload = cache.to_dict()
     payload['records'][0]['evidence'] = {'instr_level': level}
     loaded = MeasureCache()
@@ -29,7 +29,7 @@ def test_provider_and_legacy_measurements_remain_admissible(evidence):
     record = MeasureRecord('candidate', 1.0, evidence=evidence)
     assert record_is_admissible(record)
     cache = MeasureCache()
-    cache.put(KEY, record)
+    cache.put(KEY, record, fresh=True)
     restored = MeasureCache()
     assert restored.load_dict(cache.to_dict()) == 1
     assert restored.get(KEY).evidence == evidence
@@ -38,6 +38,6 @@ def test_provider_and_legacy_measurements_remain_admissible(evidence):
 def test_mutated_cached_evidence_cannot_bypass_admission():
     cache = MeasureCache()
     record = MeasureRecord('candidate', 1.0)
-    cache.put(KEY, record)
+    cache.put(KEY, record, fresh=True)
     record.evidence['instr_level'] = 2
     assert cache.get(KEY) is None

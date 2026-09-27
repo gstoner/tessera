@@ -343,6 +343,9 @@ static void selectGfx1201SplitK(MatmulSchedule &schedule) {
   const int64_t tiles =
       ((schedule.m + schedule.macroTileM - 1) / schedule.macroTileM) *
       ((schedule.n + schedule.macroTileN - 1) / schedule.macroTileN);
+  // An empty output has nothing to split (and must not divide by zero).
+  if (tiles <= 0)
+    return;
   // The most slices the workgroup target allows (at least two, or no split
   // is on offer), capped at the largest measured count.
   const int64_t wanted =

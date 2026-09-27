@@ -447,7 +447,7 @@ matches its module fails generation. Read the counts there.
    the recorder now places every timed buffer 64-byte aligned and the validator
    refuses otherwise. Re-recorded twice per host at `329fcbf6`: matmul moved
    1.016x (Princess-Luna) and 0.998x (Tajasarus) between runs. Open:
-   `X86-GEMM-ALIGN-1` (production callers with an unaligned B still pay ~1.5x)
+   `X86-GEMM-ALIGN-1` (production callers with an unaligned B still pay ~1.5x at 256³)
    and an uninvestigated 0.62x Princess-Luna reduction shift between the two
    re-recordings (x86 queue).
 1. RUNTIME-LIB-OPT-1: applied 2026-09-26 (`-O2` runtime libraries + build

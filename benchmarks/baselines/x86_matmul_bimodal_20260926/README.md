@@ -21,10 +21,19 @@ worktree on each host. Every timed run was wrapped in `flock /tmp/tessera-timing
 | File | What |
 |---|---|
 | `probe_matmul.py` | One fresh process: the recorder's packager, bindings (`default_rng(20260926)`), direct C-ABI call, 15 × 100 timing. Prints the median, CPUs, operand addresses, THP state of each mapping and the image base. `--offset-{a,b,o}` places one operand at a chosen byte offset from a 4096-aligned base. `--recorder-bindings` times the recorder's own (now aligned) bindings. |
-| `gemm_harness.cpp` | The kernel source linked directly, with no Python and no image load. Takes per-operand offsets and an optional `MADV_HUGEPAGE` request, and runs an ALU dependency-chain frequency probe before and after timing. |
+| `gemm_harness.cpp` | The kernel source linked directly, with no Python and no image load. Takes per-operand offsets from a 2 MiB-aligned base and a `MADV_HUGEPAGE` / `MADV_NOHUGEPAGE` switch. Runs an ALU dependency-chain frequency probe before and after timing, and prints B's `AnonHugePages` so a granted THP request is visible. The build command is in its header. |
+| `run_gemm_harness.sh` | Builds the harness against a checkout's kernel source and runs B offset {0,16,32,48,64} × THP request {0,1}, three fresh processes each, under the timing lock. The output file header records the host, kernel, source commit, compiler, exact compile command, both source sha256s and the THP mode. |
+| `gemm_harness_{princess_luna,tajasarus}.txt` | Raw harness output (at `70eee148`, 2026-09-27). |
 | `*_before_24proc.jsonl` | 24 fresh processes per host, recorder allocation (at `048fac95`). |
 | `*_toggle.jsonl` | One variable at a time, three processes per setting (at `048fac95`). |
 | `*_after_24proc.jsonl` | 24 fresh processes per host through the fixed recorder's bindings (at `329fcbf6`). |
+
+**Provenance of the JSONL rows** (the rows carry no commit field themselves):
+
+| Files | Source tree | Probe |
+|---|---|---|
+| `*_before_24proc.jsonl`, `*_toggle.jsonl` | `048fac95` | An uncommitted scratch copy, identical to the committed probe at `329fcbf6` except that it lacked `--recorder-bindings`. Its digest was not retained. |
+| `*_after_24proc.jsonl` | `329fcbf6` | `probe_matmul.py` at `329fcbf6`, sha256 `48baf482549ece5d941afd0734f657a6ab27a99f9cf2b7b8b4781151b369aafa`. The later edit at `70eee148` only splits an import line (ruff E401). |
 | `strix_halo_run1/`, `granite_ridge_run1/` | First of the two sealed re-recordings at `329fcbf6`. The second runs are the committed packets under `docs/audit/evidence/e2e_spine/x86/`. |
 
 ## Results (per-process median `kernel_wall`, µs)
@@ -38,16 +47,27 @@ worktree on each host. Every timed run was wrapped in `flock /tmp/tessera-timing
 | toggle A or O offset 16 / 32, B aligned | 699–745 | 672–702 |
 | after, 24 processes (aligned) | 24 at 693–747 | 24 at 675–696 |
 
-In the C harness, B at offset 0/64 was fast and 16/32/48 was slow on both hosts (PL
-718–747 vs 1056–1092; Taj 703–704 vs 982–1004). The frequency probe read 4.5–5.1 GHz
-(PL) and 5.1–5.2 GHz (Taj) at both levels.
+C harness (`gemm_harness_*.txt`, 30 processes per host, µs):
+
+| | Princess-Luna | Tajasarus |
+|---|---|---|
+| B at 0 or 64, THP off or on | 717.6–740.4 | 702.5–706.3 |
+| B at 16, 32 or 48, THP off or on | 1021.3–1089.3 | 991.4–1051.4 |
+| ALU-probe GHz, every process | 4.95–5.08 | 5.10–5.17 |
+| B `AnonHugePages` with THP requested / not requested | 2048 / 0 kB in every process | 2048 / 0 kB in every process |
+
+The harness was first run on 2026-09-26, before `huge_req` / `AnonHugePages` were
+printed. That output was not retained. The table above is the regenerated run at
+`70eee148`, and the two runs agree on every level.
 
 **Ruled out:**
 - CPU/CCD placement: the same CPU numbers appear at both levels.
-- THP: B's mapping had `AnonHugePages 0` in every process at both levels, and a
-  `MADV_HUGEPAGE` request did not move the level. Whether that request was granted was
-  not checked.
-- Frequency: see the probe readings above.
+- THP:
+  - In the recorder configuration, B's mapping had `AnonHugePages 0` in every process at
+    both levels.
+  - In the harness, a granted huge page (2048 kB `AnonHugePages`) did not move the level
+    in either direction.
+- Frequency: the ALU probe read the same range at both levels (harness table).
 - Threading: the kernel is single-threaded by code read.
 - Image load address and Python: the C harness reproduces both levels.
 - 4K aliasing between operands: all three at page offset 0 is fast.
@@ -83,4 +103,6 @@ recorded but not investigated:
 
 **Still open, `X86-GEMM-ALIGN-1`:** `runtime.launch` passes contiguous numpy buffers
 through unchanged. A production caller whose B is not 64-byte aligned still gets the
-slow level.
+slow level at 256³. Candidate fixes (pack B, stage, or declare 64 in the descriptor's
+per-buffer `alignment` so the call fails closed) and the other exposed x86 timers are
+listed in the x86 queue.

@@ -443,6 +443,17 @@ X86_AVX512_LIBRARY_TARGET = "tessera_x86_elementwise"
 #: Each resource row records every buffer's address modulo this value; the
 #: validator refuses any non-zero offset.
 X86_AVX512_BINDING_ALIGNMENT = 64
+#: The exact buffer bindings each family's timed call passes (the recorder's
+#: ``_family_definitions``). An alignment record must name every one of them
+#: and nothing else, so it cannot omit B or vouch for a buffer that was never
+#: timed.
+X86_AVX512_TIMED_BUFFERS: dict[str, frozenset[str]] = {
+    "matmul": frozenset({"a", "b", "o"}),
+    "softmax": frozenset({"x", "o"}),
+    "reduction": frozenset({"x", "o"}),
+    "attention": frozenset({"q", "k", "v", "o"}),
+    "linalg": frozenset({"matrix", "result"}),
+}
 
 
 def x86_avx512_host_refusal(architecture: str, hostname: str, model: str) -> str | None:
@@ -562,6 +573,14 @@ def validate_x86_avx512_packet(report: Mapping[str, Any],
             raise FleetEvidenceError(
                 f"{where} resource does not record its buffer alignment "
                 f"(X86-MATMUL-BIMODAL-1)")
+        expected_buffers = X86_AVX512_TIMED_BUFFERS.get(str(family))
+        if expected_buffers is None:
+            raise FleetEvidenceError(
+                f"{where} has no registered timed-buffer set (X86-MATMUL-BIMODAL-1)")
+        if set(offsets) != expected_buffers:
+            raise FleetEvidenceError(
+                f"{where} alignment record names buffers {sorted(offsets)}, "
+                f"not the timed buffers {sorted(expected_buffers)} (X86-MATMUL-BIMODAL-1)")
         misaligned = {name: offset for name, offset in offsets.items()
                       if not isinstance(offset, int) or isinstance(offset, bool) or offset != 0}
         if misaligned:

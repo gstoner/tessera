@@ -4,7 +4,7 @@
     "node": "Princess-Luna",
     "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
     "python": "3.14.4",
-    "source_commit": "6b438b87b08cf965653258265511077ff5d89d13",
+    "source_commit": "eed48b9b9436225ac2ebcbfbf5be12eef129d063",
     "tessera_build_dir_env": "/home/gstoner/programming/tessera/build",
     "tessera_rocm_chip_env": "gfx1151",
     "worktree_dirty": false
@@ -20,8 +20,8 @@
         "device": "cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 2.8974355082027614,
-        "memory_bw_gb_s": 9.387611880573583e-05,
+        "latency_ms": 1.1120630078949034,
+        "memory_bw_gb_s": 0.00024459045761704326,
         "op": "clifford_core_forward",
         "promotion_eligible": false,
         "route": "python_reference",
@@ -30,22 +30,22 @@
           "calls": 14,
           "native_dispatches": {},
           "ops": {
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "python_reference": 2
             },
-            "tessera.ga.geometric_product": {
+            "ga:geometric_product": {
               "python_reference": 2
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "python_reference": 4
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "python_reference": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "python_reference": 2
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "python_reference": 2
             }
           },
@@ -68,7 +68,7 @@
           "tile": 2
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0013805311589078799,
+        "throughput_msps": 0.003596918494368283,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -78,8 +78,8 @@
         "device": "cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 5.504089000169188,
-        "memory_bw_gb_s": 9.883561112170937e-05,
+        "latency_ms": 2.365594496950507,
+        "memory_bw_gb_s": 0.00022996333509452764,
         "op": "clifford_core_forward",
         "promotion_eligible": false,
         "route": "python_reference",
@@ -88,22 +88,22 @@
           "calls": 24,
           "native_dispatches": {},
           "ops": {
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "python_reference": 4
             },
-            "tessera.ga.geometric_product": {
+            "ga:geometric_product": {
               "python_reference": 4
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "python_reference": 6
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "python_reference": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "python_reference": 4
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "python_reference": 4
             }
           },
@@ -126,7 +126,7 @@
           "tile": 4
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0014534648694369025,
+        "throughput_msps": 0.003381813751390112,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -136,8 +136,8 @@
         "device": "cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 5.885555496206507,
-        "memory_bw_gb_s": 0.0001848593562156134,
+        "latency_ms": 2.6625365135259926,
+        "memory_bw_gb_s": 0.00040863289366092616,
         "op": "clifford_core_forward",
         "promotion_eligible": false,
         "route": "python_reference",
@@ -146,22 +146,22 @@
           "calls": 34,
           "native_dispatches": {},
           "ops": {
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "python_reference": 6
             },
-            "tessera.ga.geometric_product": {
+            "ga:geometric_product": {
               "python_reference": 6
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "python_reference": 8
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "python_reference": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "python_reference": 6
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "python_reference": 6
             }
           },
@@ -184,7 +184,7 @@
           "tile": 4
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0027185199443472557,
+        "throughput_msps": 0.006009307259719502,
         "timing_domain": "host_wall_composition"
       }
     ],
@@ -196,8 +196,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 0.9191925055347383,
-        "memory_bw_gb_s": 0.0002785053168498938,
+        "latency_ms": 0.4564354894682765,
+        "memory_bw_gb_s": 0.0005608678683119637,
         "op": "energy_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -209,13 +209,13 @@
             "x86_avx512:_try_x86_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.energy_quadratic": {
+            "ebm:energy_quadratic": {
               "x86_avx512": 8
             },
-            "tessera.ebm.langevin_step": {
+            "ebm:langevin_step": {
               "python_reference": 6
             },
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "x86_avx512": 2
             }
           },
@@ -237,7 +237,7 @@
           "n_steps": 3
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.004351645575779589,
+        "throughput_msps": 0.008763560442374432,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -247,8 +247,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 0.7981550006661564,
-        "memory_bw_gb_s": 0.0008018492641978601,
+        "latency_ms": 0.35798049066215754,
+        "memory_bw_gb_s": 0.0017878069243834774,
         "op": "energy_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -260,13 +260,13 @@
             "x86_avx512:_try_x86_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.energy_quadratic": {
+            "ebm:energy_quadratic": {
               "x86_avx512": 8
             },
-            "tessera.ebm.langevin_step": {
+            "ebm:langevin_step": {
               "python_reference": 8
             },
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "x86_avx512": 2
             }
           },
@@ -288,7 +288,7 @@
           "n_steps": 4
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.005011557901236625,
+        "throughput_msps": 0.011173793277396734,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -298,8 +298,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 1.2570369872264564,
-        "memory_bw_gb_s": 0.002443842171086869,
+        "latency_ms": 0.5282099882606417,
+        "memory_bw_gb_s": 0.00581586881784625,
         "op": "energy_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -311,13 +311,13 @@
             "x86_avx512:_try_x86_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.energy_quadratic": {
+            "ebm:energy_quadratic": {
               "x86_avx512": 16
             },
-            "tessera.ebm.langevin_step": {
+            "ebm:langevin_step": {
               "python_reference": 10
             },
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "x86_avx512": 2
             }
           },
@@ -339,7 +339,7 @@
           "n_steps": 5
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.006364172320538721,
+        "throughput_msps": 0.015145491713141276,
         "timing_domain": "host_wall_composition"
       }
     ],
@@ -351,8 +351,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 2.502537507098168,
-        "memory_bw_gb_s": 0.00010229616909791946,
+        "latency_ms": 1.200488506583497,
+        "memory_bw_gb_s": 0.00021324652305798196,
         "op": "visual_complex_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -363,22 +363,22 @@
             "x86_avx512:_try_x86_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "x86_avx512": 2
             },
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "python_reference": 2
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "python_reference": 4
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "python_reference": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "python_reference": 2
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "python_reference": 2
             }
           },
@@ -401,7 +401,7 @@
           "n_steps": 2
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0007991888210774956,
+        "throughput_msps": 0.001665988461390484,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -411,8 +411,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 3.871170018101111,
-        "memory_bw_gb_s": 0.00019838963321397077,
+        "latency_ms": 1.8751564784906805,
+        "memory_bw_gb_s": 0.00040956581960464747,
         "op": "visual_complex_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -423,22 +423,22 @@
             "x86_avx512:_try_x86_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "x86_avx512": 2
             },
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "python_reference": 4
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "python_reference": 6
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "python_reference": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "python_reference": 4
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "python_reference": 4
             }
           },
@@ -461,7 +461,7 @@
           "n_steps": 3
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0010332793396560977,
+        "throughput_msps": 0.002133155310440872,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -471,8 +471,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 5.556196498218924,
-        "memory_bw_gb_s": 0.00036859747502747614,
+        "latency_ms": 2.555554994614795,
+        "memory_bw_gb_s": 0.0008013914802521008,
         "op": "visual_complex_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -483,22 +483,22 @@
             "x86_avx512:_try_x86_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "x86_avx512": 2
             },
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "python_reference": 6
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "python_reference": 8
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "python_reference": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "python_reference": 6
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "python_reference": 6
             }
           },
@@ -521,7 +521,7 @@
           "n_steps": 4
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0014398338868260785,
+        "throughput_msps": 0.003130435469734769,
         "timing_domain": "host_wall_composition"
       }
     ]

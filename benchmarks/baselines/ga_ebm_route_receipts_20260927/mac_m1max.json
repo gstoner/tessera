@@ -4,7 +4,7 @@
     "node": "Gregorys-MacBook-Pro.local",
     "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
     "python": "3.14.7",
-    "source_commit": "6b438b87b08cf965653258265511077ff5d89d13",
+    "source_commit": "eed48b9b9436225ac2ebcbfbf5be12eef129d063",
     "tessera_build_dir_env": null,
     "tessera_rocm_chip_env": null,
     "worktree_dirty": false
@@ -20,8 +20,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 1.9428544910624623,
-        "memory_bw_gb_s": 0.00014000019108546574,
+        "latency_ms": 2.23912502406165,
+        "memory_bw_gb_s": 0.00012147602169467381,
         "op": "clifford_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -35,22 +35,22 @@
             "apple_gpu_runtime:_try_apple_gpu_unary_8x8_cl30_f32": 4
           },
           "ops": {
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.geometric_product": {
+            "ga:geometric_product": {
               "python_reference": 2
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "apple_gpu_runtime": 4
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "mixed": 2
             }
           },
@@ -75,7 +75,7 @@
           "tile": 2
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.002058826339492143,
+        "throughput_msps": 0.0017864120837452029,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -85,8 +85,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 3.10172897297889,
-        "memory_bw_gb_s": 0.0001753860523402031,
+        "latency_ms": 3.0024374718777835,
+        "memory_bw_gb_s": 0.00018118612130822218,
         "op": "clifford_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -101,23 +101,23 @@
             "apple_gpu_runtime:_try_apple_gpu_unary_8x8_cl30_f32": 8
           },
           "ops": {
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "apple_gpu_runtime": 4
             },
-            "tessera.ga.geometric_product": {
+            "ga:geometric_product": {
               "apple_gpu_runtime": 2,
               "python_reference": 2
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "apple_gpu_runtime": 6
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "apple_gpu_runtime": 4
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "mixed": 4
             }
           },
@@ -142,7 +142,7 @@
           "tile": 4
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.00257920665206181,
+        "throughput_msps": 0.0026645017839444438,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -152,8 +152,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 4.335437493864447,
-        "memory_bw_gb_s": 0.00025095506544374084,
+        "latency_ms": 4.527521028649062,
+        "memory_bw_gb_s": 0.0002403081052777885,
         "op": "clifford_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -168,23 +168,23 @@
             "apple_gpu_runtime:_try_apple_gpu_unary_8x8_cl30_f32": 12
           },
           "ops": {
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "apple_gpu_runtime": 6
             },
-            "tessera.ga.geometric_product": {
+            "ga:geometric_product": {
               "apple_gpu_runtime": 4,
               "python_reference": 2
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "apple_gpu_runtime": 8
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "apple_gpu_runtime": 6
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "mixed": 6
             }
           },
@@ -209,7 +209,7 @@
           "tile": 4
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.003690515668290306,
+        "throughput_msps": 0.00353394272467336,
         "timing_domain": "host_wall_composition"
       }
     ],
@@ -221,8 +221,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 2.2059999755583704,
-        "memory_bw_gb_s": 0.00011604714543806953,
+        "latency_ms": 1.8595210276544094,
+        "memory_bw_gb_s": 0.0001376698602450961,
         "op": "energy_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -234,13 +234,13 @@
             "apple_gpu_runtime:_try_apple_gpu_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.energy_quadratic": {
+            "ebm:energy_quadratic": {
               "python_reference": 8
             },
-            "tessera.ebm.langevin_step": {
+            "ebm:langevin_step": {
               "apple_gpu_runtime": 6
             },
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "apple_gpu_runtime": 2
             }
           },
@@ -262,7 +262,7 @@
           "n_steps": 3
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0018132366474698362,
+        "throughput_msps": 0.0021510915663296264,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -272,8 +272,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 1.892103988211602,
-        "memory_bw_gb_s": 0.00033824779398352293,
+        "latency_ms": 1.8409790354780853,
+        "memory_bw_gb_s": 0.0003476411125093545,
         "op": "energy_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -285,13 +285,13 @@
             "apple_gpu_runtime:_try_apple_gpu_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.energy_quadratic": {
+            "ebm:energy_quadratic": {
               "python_reference": 8
             },
-            "tessera.ebm.langevin_step": {
+            "ebm:langevin_step": {
               "apple_gpu_runtime": 8
             },
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "apple_gpu_runtime": 2
             }
           },
@@ -313,7 +313,7 @@
           "n_steps": 4
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.002114048712397018,
+        "throughput_msps": 0.002172756953183466,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -323,8 +323,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 2.629041497129947,
-        "memory_bw_gb_s": 0.0011684866911966278,
+        "latency_ms": 3.0092085362412035,
+        "memory_bw_gb_s": 0.0010208664381356665,
         "op": "energy_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -336,13 +336,13 @@
             "apple_gpu_runtime:_try_apple_gpu_partition_exact_f32": 2
           },
           "ops": {
-            "tessera.ebm.energy_quadratic": {
+            "ebm:energy_quadratic": {
               "python_reference": 16
             },
-            "tessera.ebm.langevin_step": {
+            "ebm:langevin_step": {
               "apple_gpu_runtime": 10
             },
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "apple_gpu_runtime": 2
             }
           },
@@ -364,7 +364,7 @@
           "n_steps": 5
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0030429340916578846,
+        "throughput_msps": 0.0026585063493116314,
         "timing_domain": "host_wall_composition"
       }
     ],
@@ -376,8 +376,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 1.9949374836869538,
-        "memory_bw_gb_s": 0.00012832482325555,
+        "latency_ms": 2.177208021748811,
+        "memory_bw_gb_s": 0.00011758178246760808,
         "op": "visual_complex_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -392,22 +392,22 @@
             "apple_gpu_runtime:_try_apple_gpu_unary_8x8_cl30_f32": 4
           },
           "ops": {
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "apple_gpu_runtime": 4
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "mixed": 2
             }
           },
@@ -430,7 +430,7 @@
           "n_steps": 2
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0010025376816839844,
+        "throughput_msps": 0.0009186076755281881,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -440,8 +440,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 3.1437709694728255,
-        "memory_bw_gb_s": 0.0002442926051094571,
+        "latency_ms": 3.5312710097059608,
+        "memory_bw_gb_s": 0.00021748543170124721,
         "op": "visual_complex_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -456,22 +456,22 @@
             "apple_gpu_runtime:_try_apple_gpu_unary_8x8_cl30_f32": 8
           },
           "ops": {
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "apple_gpu_runtime": 4
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "apple_gpu_runtime": 6
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "apple_gpu_runtime": 4
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "mixed": 4
             }
           },
@@ -494,7 +494,7 @@
           "n_steps": 3
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0012723573182784223,
+        "throughput_msps": 0.001132736623443996,
         "timing_domain": "host_wall_composition"
       },
       {
@@ -504,8 +504,8 @@
         "device": "mixed+cpu",
         "dtype": "fp32",
         "execution_kind": "unknown",
-        "latency_ms": 4.378708486910909,
-        "memory_bw_gb_s": 0.0004677178227602959,
+        "latency_ms": 4.621667030733079,
+        "memory_bw_gb_s": 0.00044313014900927445,
         "op": "visual_complex_core_forward",
         "promotion_eligible": false,
         "route": "mixed",
@@ -520,22 +520,22 @@
             "apple_gpu_runtime:_try_apple_gpu_unary_8x8_cl30_f32": 12
           },
           "ops": {
-            "tessera.ebm.partition_exact_from_energies": {
+            "ebm:partition_exact_from_energies": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.exp_mv": {
+            "ga:exp_mv": {
               "apple_gpu_runtime": 6
             },
-            "tessera.ga.grade_projection": {
+            "ga:grade_projection": {
               "apple_gpu_runtime": 8
             },
-            "tessera.ga.inner": {
+            "ga:inner": {
               "apple_gpu_runtime": 2
             },
-            "tessera.ga.norm": {
+            "ga:norm": {
               "apple_gpu_runtime": 6
             },
-            "tessera.ga.rotor_sandwich": {
+            "ga:rotor_sandwich": {
               "mixed": 6
             }
           },
@@ -558,7 +558,7 @@
           "n_steps": 4
         },
         "tessera_version": "pre-alpha",
-        "throughput_msps": 0.0018270227451574056,
+        "throughput_msps": 0.001730977144567478,
         "timing_domain": "host_wall_composition"
       }
     ]

@@ -5189,7 +5189,7 @@ Princess-Luna shows why that mattered: `ebm.energy_quadratic` and
 `partition_exact_from_energies` ran on the **x86 AVX-512** kernel, which the
 old trace would have reported as no native dispatch.
 
-Device receipts, all at clean `6b438b87`
+Device receipts, all at clean `eed48b9b`
 (`benchmarks/baselines/ga_ebm_route_receipts_20260927/`):
 
 - **Mac M1 Max:** the GA primitives ran on the Apple GPU runtime.
@@ -5204,7 +5204,11 @@ Device receipts, all at clean `6b438b87`
   routes are separate entry points these suites do not call.
 
 Receipts attribute routes. They are not timings, and every row stays
-non-promotable.
+non-promotable. The pre-PR full sweep caught one defect in the first
+labelling. The labels were dotted (`tessera.ebm.inner_step`), and the ODS
+consumer audit read them as compiler consumers of six EBM ODS ops. Labels are
+now `ebm:inner_step`, dotted labels are refused, and the receipts were
+re-recorded.
 
 Remaining: math probes' manufactured `RuntimeArtifact.metadata`, paired
 public-frontend runs for the direct-IR AD probes, asynchronous/multi-thread

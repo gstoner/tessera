@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from .evidence_reasons import ReasonVocabulary
 from .profiler_rocm_native import validate_rocm_native_capture
 from .profiler_timing import (
+    DEVICE_CLOCK_WINDOW_REFUSAL_CODES,
     device_clock_window_refusals, is_wsl_environment, validate_timing_sample,
     wsl_promotion_refusals)
 
@@ -70,7 +71,7 @@ def _image_record(image: Mapping[str, Any], role: str) -> dict[str, Any]:
 #: ``diagnostic_gaps`` may carry (X86-EVIDENCE-VOCAB-1's rule, applied
 #: 2026-09-27: same shape as the x86 vocabulary -- appended literals, enumerated
 #: nowhere). The shared device-clock window refusals are registered
-#: diagnostics and are named by their ``pass_origin`` instead of redeclared.
+#: diagnostics and are borrowed by name instead of redeclared.
 ROCM_PROFILER_REASONS: dict[str, str] = {
     "BARE_METAL_REQUIRED":
         "the profiler-correlated route needs bare metal; this ran under WSL2 or a VM",
@@ -102,7 +103,7 @@ ROCM_PROFILER_REASONS: dict[str, str] = {
 }
 ROCM_REASON_VOCABULARY = ReasonVocabulary(
     "ROCm profiler packet", ROCM_PROFILER_REASONS,
-    registered_origins=("tessera.compiler.profiler_timing.device_clock_window_refusals",))
+    registered=DEVICE_CLOCK_WINDOW_REFUSAL_CODES)
 
 #: Reasons that describe the *environment* (bare metal, a profiler that needs
 #: KFD) rather than whether the timing is true. On the device-clock-witness

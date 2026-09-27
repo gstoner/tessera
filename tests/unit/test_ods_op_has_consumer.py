@@ -22,9 +22,13 @@ dominant `def X : Dialect_Op<"name">` form entirely; it also counted fixtures
 and bare substrings as consumers. Rebuilt 2026-09-27 (sync
 `EVIDENCE-GOVERNANCE-GATES-2026-09-27`): a balanced TableGen reader that
 resolves class templates, cross-checked record-for-record against
-`llvm-tblgen --dump-json` (609 of 609 op records agree on name and mnemonic;
-the 14 it could not dump -- `tessera_neighbors.td` redefines `StrAttr`, and two
-solver `.td` files leave an attr/type `mnemonic` unresolved -- are read here).
+`llvm-tblgen --dump-json` once, by hand, when it landed (609 of 609 op records
+agreed on name and mnemonic; the 14 it could not dump -- `tessera_neighbors.td`
+redefines `StrAttr`, and two solver `.td` files leave an attr/type `mnemonic`
+unresolved -- are read here). No test re-runs that cross-check, since it needs
+an LLVM install; `_DECLARED_OP_RECORDS` and the per-form pins stand in for it.
+The pre-PR review found three fail-open holes (a `using` declaration, prose in a
+string, an op's own dialect arity table); each has a synthetic case below.
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ import pytest
 
 from tessera.compiler.ods_consumer_audit import (
     REPO_ROOT,
+    OdsParseError,
     build_corpus,
     classify,
     declared_ops,
@@ -101,6 +106,9 @@ _R_ATTN_RES = ("block-AttnRes state op: the Python `_block_attnres_ops` referenc
                "fixtures name it")
 _R_FIXTURE_ONLY = "named only by lit fixtures / unit tests; no compiler producer or consumer"
 _R_UNREFERENCED = "nothing outside its own .td names it"
+_R_CATALOG_ONLY = ("Graph op named by the op catalog (a list of names, which is a "
+                   "declaration, not a consumer) and by tests; no pass or emitter "
+                   "produces or consumes it")
 _R_CLIFFORD_CALCULUS = ("geometric-calculus op (derivative/integral) with no "
                         "producer and no lowering in the Clifford passes")
 _R_ATTN_MASK = "FA-4 Attn Tile IR mask/LSE op with no producer; FA-4 lowering does not emit it"
@@ -154,6 +162,22 @@ _WAIVED: dict[str, Waiver] = {
         "tessera.attn_with_stats", "tessera.softmax_merge", "tessera.softmax_finalize")},
     "tessera.guided_denoise_region": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
     "tessera.istft_jvp": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    # Added 2026-09-27 by the review that closed three fail-open holes; each
+    # was "consumed" only through one of them.
+    "tessera.arch.ste_one_hot": Waiver(
+        "unreferenced", "#29", _R_ARCH + "; its only mention was its own "
+        "dialect's arity table in TesseraOps.cpp"),
+    **{name: Waiver("fixture_only", "#29", _R_CATALOG_ONLY) for name in (
+        "tessera.cache.commit", "tessera.cache.rollback", "tessera.ntk_rope",
+        "tessera.target_verify")},
+    "tessera.ebm.langevin_step_philox": Waiver(
+        "fixture_only", "#29", _R_EBM_GRAPH + "; the runtime kernels mirror its "
+        "semantics, and its only other mention was prose in an execution-matrix "
+        "`reason=` string"),
+    "tessera_nvidia.func": Waiver(
+        "fixture_only", "#29", "NVIDIA Target IR container op named only by "
+        "fixtures; the bare `FuncOp` in PipelineOverlapPass.cpp is "
+        "`using mlir::func::FuncOp`, not this op"),
     "tessera.ring.create": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
     # Tile / Attn / domain dialects
     "tile.tmem.store": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
@@ -181,7 +205,7 @@ _WAIVED: dict[str, Waiver] = {
 
 #: The waiver may only shrink: lower this with every entry removed. Raising it
 #: is visible in review and needs a reason in the PR.
-_WAIVER_CEILING = 77
+_WAIVER_CEILING = 84
 
 #: One textual op name declared by two ODS records. `TesseraOps.td` declares
 #: the seven `tessera.neighbors.*` ops in the `tessera` dialect (the live ones:
@@ -222,9 +246,16 @@ def test_scan_parses_every_ods_form() -> None:
         "tessera.neighbors.halo.region",   # dotted dialect name
     ):
         assert expected in names, f"the ODS reader no longer parses {expected}"
-    assert len(_OPS) >= 600, (
-        f"only {len(_OPS)} ODS ops parsed (623 on 2026-09-27); the reader has "
-        f"drifted from the ODS spelling")
+    assert len(_OPS) == _DECLARED_OP_RECORDS, (
+        f"{len(_OPS)} ODS op records parsed, expected {_DECLARED_OP_RECORDS}. "
+        f"If you added or deleted ops, update _DECLARED_OP_RECORDS; otherwise the "
+        f"reader has drifted from the ODS spelling and ops are escaping the gate "
+        f"(or being invented).")
+
+
+#: Every op record under `src/`. Pinned exactly, not as a floor: a floor let
+#: the reader lose up to its slack without failing (GOV-ODS-CONSUMER-1 review).
+_DECLARED_OP_RECORDS = 623
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:
@@ -252,6 +283,11 @@ def _synthetic_repo(tmp: Path) -> None:
         def Foo_FixtureOp : Foo_Op<"fixture"> {}
         def Foo_UnusedOp : Op<Foo_Dialect, "unused", [Pure]> {}
         def Foo_YieldOp : Foo_Op<"yield"> {}
+        def Foo_FuncOp : Foo_Op<"func"> {}
+        def Foo_ProseOp : Foo_Op<"prose"> {}
+        def Foo_TableOp : Foo_Op<"table"> {}
+        def Foo_CatalogOp : Foo_Op<"catalog"> {}
+        def Foo_WildOp : Foo_Op<"wild"> {}
     '''))
     (tmp / "src/lib/Lower.cpp").write_text(textwrap.dedent('''
         // UnusedOp is mentioned in a comment, which is not a use.
@@ -259,10 +295,28 @@ def _synthetic_repo(tmp: Path) -> None:
         struct P : OpRewritePattern<UsedOp> {};
         void f() {
           auto s = "%0 = foo.textual.op";
+          auto why = "this lowering matches foo.prose.";  // prose, not IR
           scf::YieldOp y;           // a foreign YieldOp, not foo.yield
           auto t = x.foo.unused;    // member access, not a textual op name
         }
     '''))
+    (tmp / "src/lib/Other.cpp").write_text(textwrap.dedent('''
+        using mlir::func::FuncOp;
+        void g(FuncOp f) {}         // mlir's FuncOp, not foo.func
+    '''))
+    (tmp / "src/lib/Upstream.cpp").write_text(textwrap.dedent('''
+        using namespace mlir::scf;
+        void h(WildOp w) {}         // could be scf's; not evidence for foo.wild
+    '''))
+    # The dialect's own implementation: its arity table is not a consumer.
+    (tmp / "src/lib/FooOps.cpp").write_text(textwrap.dedent('''
+        static const Arity kTable[] = {{"foo.table", 1, 1}};
+        LogicalResult TableOp::verify() { return success(); }
+        #define GET_OP_CLASSES
+        #include "FooOps.cpp.inc"
+    '''))
+    (tmp / "python/tessera/compiler").mkdir(parents=True)
+    (tmp / "python/tessera/compiler/op_catalog.py").write_text('OPS = ["foo.catalog"]\n')
     (tmp / "tests/fixture.mlir").write_text("%0 = foo.fixture : i32\n")
 
 
@@ -271,15 +325,42 @@ def test_scan_on_a_synthetic_dialect(tmp_path: Path) -> None:
     _synthetic_repo(tmp_path)
     ops = declared_ops(tmp_path)
     assert sorted(op.full_name for op in ops) == [
-        "foo.fixture", "foo.textual.op", "foo.unused", "foo.used", "foo.yield"]
+        "foo.catalog", "foo.fixture", "foo.func", "foo.prose", "foo.table",
+        "foo.textual.op", "foo.unused", "foo.used", "foo.wild", "foo.yield"]
     tiers = classify(ops, build_corpus(tmp_path))
     assert tiers == {
         "foo.used": "compiler",            # OpRewritePattern<UsedOp>
-        "foo.textual.op": "compiler",      # textual name in a C++ string
+        "foo.textual.op": "compiler",      # textual name used as IR in a string
         "foo.fixture": "fixture_only",     # a lit fixture alone is not a consumer
         "foo.unused": "unreferenced",      # own verify(), a comment, member access
         "foo.yield": "unreferenced",       # scf::YieldOp is not foo's YieldOp
+        "foo.func": "unreferenced",        # `using mlir::func::FuncOp`
+        "foo.wild": "unreferenced",        # bare name under an upstream using-namespace
+        "foo.prose": "unreferenced",       # a sentence mentioning it
+        "foo.table": "unreferenced",       # its own dialect's arity table
+        "foo.catalog": "unreferenced",     # a registry lists names; it consumes none
     }
+
+
+@pytest.mark.parametrize("td_text, match", [
+    ('def D : Dialect { let name = "d"; }\ndefm X : Many<"a">;\n', "defm"),
+    ('def D : Dialect { let name = "d"; }\ndef X : Unknown_Op<"a">;\n', "not declared"),
+    ('def D : Dialect { let name = "d"; }\nclass C<string m> : Op<D, m>;\n'
+     'class C<string m> : Op<D, m>;\n', "declared twice"),
+])
+def test_the_reader_refuses_what_it_cannot_read(tmp_path: Path, td_text: str, match: str) -> None:
+    """An op the reader cannot resolve would silently leave the gate."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/X.td").write_text(td_text)
+    with pytest.raises(OdsParseError, match=match):
+        declared_ops(tmp_path)
+
+
+def test_unparseable_python_is_an_error_not_a_blanket_reference(tmp_path: Path) -> None:
+    _synthetic_repo(tmp_path)
+    (tmp_path / "python/tessera/compiler/broken.py").write_text('x = "foo.unused"(\n')
+    with pytest.raises(OdsParseError, match="cannot parse"):
+        build_corpus(tmp_path, names={"foo.unused"})
 
 
 # ─── The gate ───────────────────────────────────────────────────────────────

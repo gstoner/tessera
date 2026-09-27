@@ -22,6 +22,7 @@ never redeclared.
 
 from __future__ import annotations
 
+import ast
 import copy
 import json
 import re
@@ -32,11 +33,12 @@ import pytest
 from tessera.compiler import (
     profiler_nvidia_evidence as nvidia,
     profiler_rocm_evidence as rocm,
+    profiler_timing as timing,
     profiler_x86_event_map as event_map,
     profiler_x86_evidence as x86,
     target_perf,
 )
-from tessera.compiler.diagnostic_codes import codes_by_pass
+from tessera.compiler.diagnostic_codes import code_lookup
 from tessera.compiler.evidence_reasons import ReasonVocabulary, reason_tag
 from tessera.compiler.profiler_x86_evidence import (
     X86_INELIGIBILITY_REASONS,
@@ -48,75 +50,150 @@ from tessera.compiler.profiler_x86_evidence import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-#: `reasons.append("TAG")` and `reasons.append("TAG:" + detail)`.
-_APPENDED = re.compile(r'reasons\.append\(\s*f?"([A-Z0-9_]+)')
+_TAG = re.compile(r"[A-Z][A-Z0-9_]{2,}")
+
+
+def _string_heads(node: ast.AST) -> list[str]:
+    """The literal tag an expression starts with: `"TAG"`, `"TAG:" + x`,
+    `f"TAG:{x}"`, or each element of a list/tuple literal."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _string_heads(node.left)
+    if isinstance(node, ast.JoinedStr) and node.values:
+        return _string_heads(node.values[0])
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return [h for elt in node.elts for h in _string_heads(elt)]
+    return []
+
+
+def _emitted_tags(path: Path, lists: frozenset[str] = frozenset({"reasons", "gaps"})) -> set[str]:
+    """Every literal tag a producer puts on a reasons/gaps list, by AST.
+
+    Sees `.append(...)`, `.extend([...])`, `.insert(i, ...)`, `x += [...]` and
+    list-literal assignments, so a tag emitted in a new style cannot slip past
+    the declaration (the first version of this gate saw only
+    `reasons.append("TAG"`).
+    """
+    tags: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        heads: list[str] = []
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                and isinstance(node.func.value, ast.Name) and node.func.value.id in lists \
+                and node.func.attr in {"append", "extend", "insert"} and node.args:
+            heads = _string_heads(node.args[-1])
+        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name) \
+                and node.target.id in lists:
+            heads = _string_heads(node.value)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(t, ast.Name) and t.id in lists for t in targets) and node.value:
+                heads = _string_heads(node.value)
+        for head in heads:
+            m = _TAG.match(head)
+            if m:
+                tags.add(m.group(0))
+    return tags
+
+
+def _function_codes(path: Path, function: str) -> set[str]:
+    """String constants shaped like a code inside one function's body."""
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.FunctionDef) and node.name == function:
+            return {c.value for c in ast.walk(node)
+                    if isinstance(c, ast.Constant) and isinstance(c.value, str)
+                    and re.fullmatch(r"DEVICE_CLOCK_[A-Z_]+", c.value)}
+    raise AssertionError(f"{function} not found in {path}")
+
 
 def _module(module) -> tuple[str, Path]:
     return module.__name__, Path(module.__file__)
 
 
-#: vocabulary -> (producer's dotted name, producer source) whose appends it
-#: must match. The calibration corpus is produced by a benchmark recorder and
-#: consumed by `target_perf`, which declares its vocabulary.
+#: vocabulary -> (producer's dotted name, producer source, the call through
+#: which the producer's output meets the declaration). The calibration corpus
+#: is produced by a benchmark recorder and consumed by `target_perf`, which
+#: declares its vocabulary.
 _FAMILIES = {
-    "x86": (x86.X86_REASON_VOCABULARY, *_module(x86)),
-    "x86_event_map": (event_map.X86_EVENT_MAP_VOCABULARY, *_module(event_map)),
-    "rocm": (rocm.ROCM_REASON_VOCABULARY, *_module(rocm)),
-    "nvidia": (nvidia.NVIDIA_REASON_VOCABULARY, *_module(nvidia)),
+    "x86": (x86.X86_REASON_VOCABULARY, *_module(x86), "validate_x86_profiler_packet(packet)"),
+    "x86_event_map": (event_map.X86_EVENT_MAP_VOCABULARY, *_module(event_map),
+                      "validate_x86_event_map(body)"),
+    "rocm": (rocm.ROCM_REASON_VOCABULARY, *_module(rocm), "validate_rocm_profiler_packet(packet)"),
+    "nvidia": (nvidia.NVIDIA_REASON_VOCABULARY, *_module(nvidia),
+               "validate_nvidia_device_clock_packet(packet)"),
     "calibration_corpus": (target_perf.CALIBRATION_CORPUS_VOCABULARY, "calibrate_gfx1151",
-                           ROOT / "benchmarks/calibration/calibrate_gfx1151.py"),
+                           ROOT / "benchmarks/calibration/calibrate_gfx1151.py",
+                           "CALIBRATION_CORPUS_VOCABULARY.require_known(reasons"),
 }
 
 
-def _source(module) -> str:
-    return Path(module.__file__).read_text()
-
-
-def _produced(vocab: ReasonVocabulary, name: str, path: Path) -> set[str]:
-    """Tags the producer can emit: its own appends plus each borrowed family."""
-    produced = set(_APPENDED.findall(path.read_text()))
-    for origin in vocab.registered_origins:
-        if origin != name:
-            produced |= {code.code for code in codes_by_pass(origin)}
-    return produced
+def _produced(vocab: ReasonVocabulary, path: Path) -> set[str]:
+    """Tags the producer can emit: its own literals plus each borrowed code."""
+    return _emitted_tags(path) | set(vocab.registered)
 
 
 def test_x86_vocabulary_is_still_eleven() -> None:
     """The queue item's count, re-measured from the producer, not copied."""
-    produced = set(_APPENDED.findall(_source(x86)))
+    produced = _emitted_tags(Path(x86.__file__))
     assert len(produced) == 11 == len(X86_INELIGIBILITY_REASONS), sorted(produced)
+
+
+def test_the_producer_scan_sees_every_emission_style(tmp_path: Path) -> None:
+    src = tmp_path / "p.py"
+    src.write_text(
+        'reasons.append("A_TAG")\n'
+        'reasons.append("B_TAG:" + x)\n'
+        'reasons.append(f"C_TAG:{x}")\n'
+        'reasons.extend(["D_TAG", "E_TAG"])\n'
+        'reasons += ["F_TAG"]\n'
+        'gaps.insert(0, "G_TAG")\n'
+        'reasons = ["H_TAG"]\n'
+        'other.append("NOT_A_REASON")\n')
+    assert _emitted_tags(src) == {f"{c}_TAG" for c in "ABCDEFGH"}
 
 
 @pytest.mark.parametrize("family", sorted(_FAMILIES))
 def test_vocabulary_matches_its_producer(family: str) -> None:
     """A tag cannot appear, or linger, without the declaration moving with it."""
-    vocab, name, path = _FAMILIES[family]
-    assert _APPENDED.findall(path.read_text()), (
+    vocab, _name, path, _call = _FAMILIES[family]
+    assert _emitted_tags(path), (
         f"{family}: the producer scan matched nothing; its spelling has drifted")
-    problems = vocab.drift(_produced(vocab, name, path))
+    problems = vocab.drift(_produced(vocab, path))
     assert not problems, f"{family} vocabulary drift: {problems}"
 
 
 @pytest.mark.parametrize("family", sorted(_FAMILIES))
-def test_borrowed_families_are_actually_produced(family: str) -> None:
-    """A registered family in the vocabulary must be one the producer calls."""
-    vocab, name, path = _FAMILIES[family]
+def test_borrowed_codes_are_registered_and_actually_produced(family: str) -> None:
+    """Each borrowed code is registered, and the producer emits it itself or
+    calls the function the registry says emits it."""
+    vocab, name, path, _call = _FAMILIES[family]
     source = path.read_text()
-    for origin in vocab.registered_origins:
-        if origin == name:
+    own = _emitted_tags(path)
+    for code in vocab.registered:
+        entry = code_lookup(code)
+        assert entry is not None, f"{family}: {code} is not registered"
+        if code in own:
             continue
-        function = origin.rsplit(".", 1)[1]
+        function = entry.pass_origin.rsplit(".", 1)[1]
         assert f"{function}(" in source, (
-            f"{family} borrows {origin} but never calls {function}; drop it")
+            f"{family} borrows {code} ({entry.pass_origin}) but never calls {function}")
 
 
-def test_every_producer_checks_or_derives_through_its_vocabulary() -> None:
-    """The producer reads the declaration: a validator it calls on its own
-    output, or (for the out-of-package recorder) an explicit check."""
-    for family, (vocab, name, path) in _FAMILIES.items():
-        source = path.read_text()
-        assert "require_known" in source or "VOCABULARY" in source, (
-            f"{family}: the producer {path.name} never consults its vocabulary")
+def test_the_shared_timing_code_lists_match_their_functions() -> None:
+    """The borrowed tuples are exactly what the timing functions return."""
+    path = Path(timing.__file__)
+    assert _function_codes(path, "device_clock_window_refusals") == \
+        set(timing.DEVICE_CLOCK_WINDOW_REFUSAL_CODES)
+    assert _function_codes(path, "witness_refusal_codes") == \
+        set(timing.DEVICE_CLOCK_WITNESS_REFUSAL_CODES)
+
+
+@pytest.mark.parametrize("family", sorted(_FAMILIES))
+def test_every_producer_checks_its_output_against_the_declaration(family: str) -> None:
+    """In-package builders validate what they build; the out-of-package
+    recorder checks its tags explicitly before writing."""
+    _vocab, _name, path, call = _FAMILIES[family]
+    assert call in path.read_text(), f"{family}: {path.name} no longer calls {call}"
 
 
 def test_route_classes_read_the_declaration() -> None:
@@ -321,7 +398,9 @@ def test_every_committed_packet_still_validates() -> None:
             try:
                 validator(packet)
             except ValueError as exc:
-                if rel in _KNOWN_INVALID:
+                # Pinned to the known reason: a known-invalid packet that starts
+                # failing for a NEW reason is a new failure.
+                if rel in _KNOWN_INVALID and "DEVICE_CLOCK_WINDOW_TOO_SHORT" in str(exc):
                     stale.discard(rel)
                     continue
                 failures.append(f"{rel}: {exc}")

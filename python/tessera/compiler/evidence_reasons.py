@@ -14,9 +14,11 @@ These tags are **not diagnostic codes** and are never registered in
 `diagnostic_codes.py`: they classify a measurement, they are not raised at a
 user. A packet may *also* carry tags that are registered diagnostics (the
 shared device-clock window and witness refusals in `profiler_timing`, NVIDIA's
-`DEVICE_CLOCK_PART_UNVALIDATED`); a vocabulary names those by the registry's
-``pass_origin`` and takes their meaning from the registry, so no tag is ever
-declared twice.
+`DEVICE_CLOCK_PART_UNVALIDATED`); a vocabulary lists those codes explicitly
+in ``registered`` and takes their meaning from the registry, so no tag is ever
+declared twice. They are named one by one rather than by ``pass_origin``, so a
+later diagnostic registered under the same origin cannot silently become an
+admissible ineligibility tag (review, 2026-09-27).
 
 A tag may carry a ``:detail`` suffix (``TIMING_PROOF_INCOMPLETE:a,b``); the part
 before the first colon is the tag.
@@ -37,33 +39,36 @@ def reason_tag(reason: str) -> str:
 class ReasonVocabulary:
     """One packet family's complete set of ineligibility tags.
 
-    ``declared`` maps each packet-local tag to its meaning. ``registered_origins``
-    names `diagnostic_codes.py` ``pass_origin`` values whose codes may also
-    appear. ``reserved`` maps a declared tag that no producer emits yet to the
-    reason it is kept; the drift test accepts an unproduced tag only there.
+    ``declared`` maps each packet-local tag to its meaning. ``registered``
+    names the `diagnostic_codes.py` codes that may also appear, one by one.
+    ``reserved`` maps a declared tag that no producer emits yet to the reason
+    it is kept; the drift test accepts an unproduced tag only there.
     """
 
     owner: str
     declared: Mapping[str, str]
-    registered_origins: tuple[str, ...] = ()
+    registered: tuple[str, ...] = ()
     reserved: Mapping[str, str] = field(default_factory=dict)
 
-    def registered(self) -> dict[str, str]:
-        """Tags borrowed from the diagnostic registry, with its summaries."""
-        from .diagnostic_codes import codes_by_pass
+    def borrowed(self) -> dict[str, str]:
+        """The registered codes this family borrows, with the registry's summary.
+
+        Raises when one is not registered: a vocabulary cannot vouch for a
+        meaning nobody declared.
+        """
+        from .diagnostic_codes import code_lookup
 
         out: dict[str, str] = {}
-        for origin in self.registered_origins:
-            codes = codes_by_pass(origin)
-            if not codes:
-                raise ValueError(
-                    f"{self.owner}: no registered diagnostic has pass_origin {origin!r}")
-            out.update({code.code: code.summary for code in codes})
+        for code in self.registered:
+            entry = code_lookup(code)
+            if entry is None:
+                raise ValueError(f"{self.owner}: {code} is not a registered diagnostic")
+            out[code] = entry.summary
         return out
 
     def meanings(self) -> dict[str, str]:
         """Every tag this family may carry -> what it means."""
-        return {**self.registered(), **self.declared}
+        return {**self.borrowed(), **self.declared}
 
     def unknown(self, reasons: Iterable[str]) -> list[str]:
         known = self.meanings()

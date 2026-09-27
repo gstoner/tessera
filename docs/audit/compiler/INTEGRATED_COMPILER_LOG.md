@@ -5031,9 +5031,13 @@ reasons, now re-derives them. Registered diagnostics a packet also carries are
 borrowed by `pass_origin`, never redeclared; no tag was added to
 `diagnostic_codes.py`. **ODS consumers:** the 2026-09-20 gate parsed 286 of 623
 op records, passed fixture-only ops and matched bare substrings; the rebuilt
-scan (`ods_consumer_audit.py`, checked against `llvm-tblgen --dump-json`, 609/609
-agree) finds 546 compiler-consumed, 32 fixture-only and 45 unreferenced ops.
-The 77 are a shrink-only waiver with reasons; none meets #29a, none was deleted.
+scan (`ods_consumer_audit.py`, cross-checked once by hand against
+`llvm-tblgen --dump-json`, refusing constructs it cannot read) waives 84 ops at
+landing -- 38 fixture-only, 46 unreferenced -- each with a reason; none meets
+#29a, none was deleted. The pre-PR review found three fail-open holes (a
+`using mlir::func::FuncOp` vouching for `tessera_nvidia.func`, prose in a
+`reason=` string, an op's own dialect arity table) that had passed seven ops;
+each is closed and pinned by a synthetic test.
 Seven `tessera.neighbors.*` names are declared by two records. **Calibration
 corpus (EVIDENCE-PACKET-1 slice):** `apply_corpus` read `selector_eligible` with a
 default of `True` and never read `ineligibility_reasons`; it and

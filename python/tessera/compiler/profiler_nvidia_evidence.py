@@ -47,6 +47,7 @@ from typing import Any, Mapping
 
 from .evidence_reasons import ReasonVocabulary
 from .profiler_timing import (
+    DEVICE_CLOCK_WINDOW_REFUSAL_CODES, DEVICE_CLOCK_WITNESS_REFUSAL_CODES,
     device_clock_window_refusals, validate_timing_sample, witness_refusal_codes,
     wsl_promotion_refusals)
 
@@ -56,8 +57,8 @@ NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION = "tessera.profiler_nvidia_device_cloc
 #: Every packet-local tag an NVIDIA device-clock packet's
 #: ``ineligibility_reasons`` may carry (X86-EVIDENCE-VOCAB-1's rule, applied
 #: 2026-09-27). The witness and window refusals from `profiler_timing` and
-#: ``DEVICE_CLOCK_PART_UNVALIDATED`` are registered diagnostics, named by their
-#: ``pass_origin`` rather than redeclared here.
+#: ``DEVICE_CLOCK_PART_UNVALIDATED`` are registered diagnostics, borrowed by
+#: name rather than redeclared here.
 NVIDIA_DEVICE_CLOCK_REASONS: dict[str, str] = {
     "DEVICE_WALL_CLOCK_INVALID":
         "the %globaltimer device clock sample is not valid",
@@ -174,10 +175,10 @@ def _check_pairing(timing: Mapping[str, Any], clean: Mapping[str, Any],
 
 NVIDIA_REASON_VOCABULARY = ReasonVocabulary(
     "NVIDIA device-clock packet", NVIDIA_DEVICE_CLOCK_REASONS,
-    registered_origins=(
-        "tessera.compiler.profiler_nvidia_evidence",
-        "tessera.compiler.profiler_timing.witness_refusal_codes",
-        "tessera.compiler.profiler_timing.device_clock_window_refusals",
+    registered=(
+        "DEVICE_CLOCK_PART_UNVALIDATED",
+        *DEVICE_CLOCK_WITNESS_REFUSAL_CODES,
+        *DEVICE_CLOCK_WINDOW_REFUSAL_CODES,
     ))
 
 

@@ -321,6 +321,19 @@ MINIMUM_DEVICE_CLOCK_WINDOW_NS: dict[str, float] = {
 _WINDOW_WITNESS = {"nvidia": "cuda_event_ns", "rocm": "hip_event_ns"}
 
 
+#: Every code :func:`device_clock_window_refusals` can return (registered
+#: diagnostics); packet vocabularies borrow them by name.
+DEVICE_CLOCK_WINDOW_REFUSAL_CODES: tuple[str, ...] = (
+    "DEVICE_CLOCK_WINDOWS_MISSING", "DEVICE_CLOCK_WINDOWS_UNBOUND",
+    "DEVICE_CLOCK_WINDOW_TOO_SHORT", "DEVICE_CLOCK_WINDOW_DISAGREES",
+)
+#: Every code :func:`witness_refusal_codes` can return.
+DEVICE_CLOCK_WITNESS_REFUSAL_CODES: tuple[str, ...] = (
+    "DEVICE_CLOCK_WITNESS_DISAGREES", "DEVICE_CLOCK_WITNESS_MISSING",
+    "DEVICE_CLOCK_SLOT_INADMISSIBLE", "DEVICE_CLOCK_VALUE_UNUSABLE",
+)
+
+
 def device_clock_window_refusals(timing: Mapping[str, Any]) -> list[str]:
     """Per-window reasons a marker-bracketed calibration cannot vouch for itself.
 
@@ -601,6 +614,8 @@ def measure_synchronized_host_batch(
 
 __all__ = [
     "ClockRecord",
+    "DEVICE_CLOCK_WINDOW_REFUSAL_CODES",
+    "DEVICE_CLOCK_WITNESS_REFUSAL_CODES",
     "MINIMUM_DEVICE_CLOCK_WINDOW_NS",
     "NVIDIA_CLOCK_SLOTS",
     "NVIDIA_CLOCK_TARGETS",

@@ -89,6 +89,8 @@ def test_frontend_folded_carrier_broad_and_prefill_shapes(
         "workgroup_mode": "cu" if m > 256 else "wgp",
         "staging_prefetch": "register_next_slab",
         "epilogue_schedule": "complete_tile_vector_scales",
+        # The per-wave M guard only where a row block is partial.
+        "row_guard": "cta" if m % 256 == 0 else "wave",
     }
     assert package.descriptor.geometry.grid == (
         ((m + 255) // 256) * ((n + 63) // 64), 1, 1,

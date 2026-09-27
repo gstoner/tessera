@@ -95,6 +95,21 @@ gfx1201 host" below.
   and fixed on the RTX 5070 on the same branch (NVIDIA queue); the emitted CUDA
   templates stay a follow-up until #861 merges. Apple, x86: not applicable.
 
+## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: sibling outcome — verified (no change); one follow-up recorded
+
+The NVIDIA emitted CUDA templates adopted the stale-error rule of
+`SPECTRAL-STALE-HIP-ERROR-2026-09-27` ([NVIDIA queue](../nvidia/todo.md)). The
+ROCm emitter already follows it (read on the Mac, host-independent): every
+entry in `emit/rocm_hip.py` that reads the HIP slot clears it first (the
+generic entry, `_bench`, and replay `de`/`fu`/`bl`/`as`). Follow-up required,
+unproven on gfx1151/gfx1201: the replay `su` entry and the paged-KV /
+paged-attention entries launch without reading the slot and judge by
+`hipDeviceSynchronize` alone. On sm_120 the CUDA equivalent returned success
+after an invalid-configuration launch. ROCm behaviour is unmeasured; the
+NVIDIA item is `NVIDIA-EMITTED-UNCHECKED-LAUNCH`. The new `_infer_dims`
+gated rule does not touch the gfx1151 rows, which are byte-identical in the
+re-recorded corpus.
+
 ## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: every arbiter candidate carries a code identity; gfx1151 fused rows re-recorded
 
 Codex review P2 on PR #859: `requires_artifact_identity()` was true only for

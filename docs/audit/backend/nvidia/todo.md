@@ -86,6 +86,148 @@ same per-entry rule, and keep grouped checks intact. Not changed in this PR,
 because no sm_120 run backs it. The NVIDIA streaming-STFT label is already
 derived (`tessera_nvidia_spectral_arch() == 120`).
 
+## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: emitted-CUDA stale-error rule, scalar-lane device timers, gated dims; sm_120 rows re-recorded
+
+This section closes three items left open by the emitted-identity re-record
+below. They are in one change because each one invalidates or extends the
+same 96 sm_120 registry rows, so one re-record covers all three. Evidence and
+commands:
+[`benchmarks/baselines/autotune_corpus_rerecord_sm120_followups_20260927/`](../../../../benchmarks/baselines/autotune_corpus_rerecord_sm120_followups_20260927/README.md).
+
+**1. Emitted CUDA: the stale-error rule (the emitted half of
+`SPECTRAL-STALE-HIP-ERROR-2026-09-27`).** The hand-written hooks were fixed
+under that key. The templates in `emit/nvidia_cuda.py` were held out of that
+change because editing them changes emitted-source identities. Measured on
+The-Super-Bear with a standalone probe (CUDA 13.4 / driver 610.88):
+
+- `cudaDeviceSynchronize` and `cudaMemcpy` neither return nor reset a stale
+  error.
+- After an invalid-configuration launch, `cudaDeviceSynchronize` returns
+  **success** and the error sits only in the slot.
+- A successful `cudaFuncSetAttribute` **resets** the slot. This is
+  undocumented.
+- Every emitted `.so` links cudart statically (its `cudaGetLastError` is a
+  local `t` symbol), so each library owns a private slot. A stale error there
+  comes from an earlier call into the same library: a refused `cudaMalloc` on
+  an early-return path, or a launch nobody checked.
+
+Rule as applied:
+
+- In a source that reads the slot, every exported entry that does device work
+  clears it once, as its first statement, and nowhere else.
+- Entries that make no call do not clear.
+- Sources that never read the slot are unchanged.
+- The arbiter-raced lanes now also check each launch group through the slot,
+  as the ROCm generic lane does, so a launch that never ran can no longer be
+  reported, timed or served as a kernel. That was a fail-open before this
+  change.
+
+`emit/rocm_hip.py` already clears (verified): every entry that reads the slot
+clears it (generic, bench, replay `de`/`fu`/`bl`/`as`). The ROCm
+`su`/`paged_kv`/`paged_attention` entries launch without reading it, which is
+the same unchecked-launch gap recorded below (ROCm sibling outcome, follow-up).
+
+| Emitted source | Exported entries | Verdict |
+|---|---|---|
+| `fused`, `attention`, `gated` | host + new `_device_ms` | reads; clears first; each launch group checked |
+| `pointwise` | host | reads; clears first; launch checked |
+| `mma_fused`, `mma_attn_lowp`, `mma_gated` | host + `_device_ms` | reads; clears first; each launch group checked |
+| `mma_attn_16` | host | reads; clears first; launch checked (also masked by its `cudaFuncSetAttribute`) |
+| `resident_ops` | 11 `resident_*` device-pointer stages | reads (each checks its own launch); clears first. Callers are Python ctypes and read every status, and no stage runs after an unchecked launch in this library |
+| `flash_fwd_multiwarp` (w4/w8) | host, `_timed` | the `_timed` entry reads; both entries clear first (the host launch stays unchecked) |
+| `binary`, `solver_ift` | 1 each | reads; clears first |
+| `solver_children` | `unary`/`compare`/`where`/`diagonal_cg` | helpers read; each exported entry clears first |
+| `ssm_replay_device` | `dp`, `ps` | no call: no clear |
+| `ssm_replay_device` | 12 queue entries | no slot read: unchanged |
+| `flash_fwd{,_f16}`, `mla_fused`, `flash_bwd{,_f16}` (4+1), `linear_attn` (4 sources), `softmax{,_f16}` (2+2), `norm`, `reduce` (2), `fpquant`, `local_collective`, `optimizer`, `dequant_grouped`, `moe` (4), `deltanet`, `ssm`, `ssm_replay_decode`, `paged_kv_read` (2), `gated_epilogue` (2 per activation), `conv2d_nhwc`, `posenc` (2), `control_flow` (4) | as listed | no slot read: unchanged; **launches unchecked** (open, below) |
+
+Gate: `tests/unit/test_nvidia_emitted_stale_error_rule.py` (host-independent).
+It renders every emitter, and every `_synthesize_*` must be listed in
+`tests/_support/nvidia_emitted_sources.py`, so a new emitter cannot skip the
+gate. It also checks the two inline sources in run functions.
+
+Device proof: `tests/device/nvidia/test_emitted_stale_cuda_error.py`, 19
+passed on The-Super-Bear. It primes each library's own private slot through
+its local `cudaSetDevice` on a missing ordinal (checked with its
+`cudaPeekAtLastError`), for 18 lanes (generic, flash, gated, pointwise, mma
+fused/attn/gated host and timers, resident stages, binary, solver ift/unary,
+multiwarp timed). It also checks the realistic trigger: a refused 2 TiB
+allocation followed by an ordinary launch. Each lane first runs a **negative
+control** with the clears stripped from its emitter. That control failed
+under the prime for 16 of 18 lanes, as it must. The two mma.sync attention
+entries are masked by the `cudaFuncSetAttribute` reset, and the test records
+that exception.
+
+**2. `AUTOTUNE-GATED-INFER-DIMS` — closed.** `_infer_dims` maps `A (M,K), Wg
+(K,H), Wu (K,H)` to `(M, H, K)`, which is the recorder's order. Malformed
+operand sets stay shape-anonymous. `tests/unit/test_autotune_gated_infer_dims.py`
+covers two cases: operands built from every committed gated row's workload
+shape land in that row's own bucket, and `corpus_winner` without dims serves a
+stamped gated row. On the box, the inferred-dims and explicit-dims answers
+agree on all 96 rows. No gated row is admissible (see below).
+
+**3. Scalar lanes get a device timer — closed.** `nvidia_generic_cuda`,
+`nvidia_flash_attn` and `nvidia_gated` have a `_device_ms` entry in the same
+source and artifact that `run` launches, with the same launch configuration
+and guards. The timer is CUDA events with operands resident, the method every
+other NVIDIA lane's `measure_device_latency` uses. They are timed in device
+rows now, not recorded `unmeasured`. The "every live candidate timed" rule is
+unchanged. As before, these are selection hints: CUDA events alone never
+qualify a promotion (`WSL-TIMING-ADMISSION-2026-09-26`).
+
+**Re-record (The-Super-Bear, clean worktree at `31a58bd4`, fresh `build/` +
+`build-nvidia-cuda/`, both recorder runs, the finalizer and the checks under
+`flock /tmp/tessera-timing.lock`).**
+
+- The recorder runs and finalize returned rc 0, the two runs agreed on every
+  identity, and no key was lost or added. 98 rows changed; the 16 gfx1151 rows
+  and the serving rows are byte-identical.
+- 0 timed candidates are unstamped. **0 registry rows carry an `unmeasured`
+  candidate (was 20).** 38 rows are selector-eligible (was 31); 39/39 are
+  strictly admitted.
+- **Served with inferred dims: 13 (was 15).** The winners of the served rows
+  are unchanged. Two rows dropped out: `matmul` f16 device 256³
+  (`nvidia_mma_gemm_emitted`, margin 5.8% vs 9.6% noise) and `attention` f16
+  end-to-end 128x128x64x64 (`nvidia_mma_attn`, 19.5% vs 16.4%). Both keep
+  their winner and are now unseparated. They were not re-raced to get them
+  back.
+- All 96 miss under the emitter perturbations with pins unchanged. Every row
+  misses under at least one single perturbation, and with all perturbed 96/96
+  miss and 0 are served.
+- **10 winners changed**, none of them a served row (table in the evidence
+  README).
+- The PTX bridge is byte-identical to the one the previous re-record stamped.
+  The shipped GEMM library is a different build of unchanged source
+  (`b2191291…` vs `a00c9040…` in the previous recording tree), so its rows are
+  bound to this build.
+
+**NVIDIA release gate, device layer, at `4a275453`** (same box and worktree,
+under the timing lock,
+`TESSERA_NVIDIA_REPORT_DIR=~/gate-reports/sm120-fu-4a275453`): both device-correctness passes **1141 passed, 1 skipped, 0 failed** (junit `device-correctness-{1,2}.xml`: 1142 tests, 0 failures, 0 errors, 1 skipped each), `status=success`. The skip is NCCL not installed, so the multi-rank topology lane cannot be evaluated here. The 19 new `test_emitted_stale_cuda_error.py` cases are included; the previous gate ran 1122. A follow-up probe on this box showed that a successful `cudaEventRecord`, `cudaEventSynchronize` or `cudaEventElapsedTime` leaves a launch error in the slot, so the timers' read after the end event still sees a failed timed launch.
+
+Open, found here:
+
+- **`AUTOTUNE-SM120-ROUTE-RESOURCES`**: the 20 formerly partial-field rows now
+  race every live candidate, and the scalar lanes lost all 20 by 3–750x. They
+  are still unserved. 18 have winners (native `nvidia_mma_{attn,fused,gated}_{tf32,fp8_*}`)
+  with no entry in `nvidia_sm120_test5_route_resources.json`, so the finalizer
+  marks them `selector_eligible: false`. The other 2 are unseparated. Owed:
+  resource fingerprints for the native low-precision lanes, and more device
+  repeats where a verdict is unseparated.
+- **`NVIDIA-EMITTED-UNCHECKED-LAUNCH`**: the sync-only emitted sources in the
+  table above judge their launches by `cudaDeviceSynchronize` only. It
+  returned success after an invalid-configuration launch on this box, so a
+  launch that never ran reports `rc 1`. To fix it, add a post-launch slot read
+  to each entry and apply the same clear-first rule, with device proof. Their
+  unchecked H2D copies (`cudaMemcpy` status ignored) are the same class of
+  gap. In the raced lanes, the new post-launch read now also catches a failed
+  copy, because a failing `cudaMemcpy` writes the slot. ROCm has the same gap in
+  `su`/`paged_kv`/`paged_attention`.
+- The two mma.sync attention entries depend, in practice, on an undocumented
+  reset (`cudaFuncSetAttribute`) that masks a stale error. They clear anyway,
+  so nothing depends on the reset. Only the negative control cannot be shown
+  for them.
+
 ## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: every sm_120 candidate carries a code identity; sm_120 registry rows re-recorded
 
 Codex review P2 on PR #859: a SYNTHESIZED/EMITTED candidate was served on the
@@ -168,13 +310,13 @@ process. Evidence and commands:
 
 Open, found by the re-record (not caused by it):
 
-- **`AUTOTUNE-GATED-INFER-DIMS`** -- `autotune._infer_dims` has no
+- **`AUTOTUNE-GATED-INFER-DIMS`** (**closed 2026-09-27**, `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27` above) -- `autotune._infer_dims` had no
   `gated_matmul` rule, so the 12 gated rows (keyed on the recorder's explicit
   `(M, H, K)`) cannot be found by ordinary `run_arbitrated` dispatch. None is
   admissible today, so no served count changes; add the rule
   (`A (M,K), Wg (K,H)` -> `(M, H, K)`) with a test before a gated row becomes
   admissible.
-- 20 device rows race a scalar lane with no device timer
+- (**Timer added 2026-09-27**, `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27` above: no row races an untimed candidate now; the rows remain unserved for other reasons, see `AUTOTUNE-SM120-ROUTE-RESOURCES`.) 20 device rows race a scalar lane with no device timer
   (`nvidia_flash_attn`, `nvidia_gated`, `nvidia_generic_cuda`), recorded
   `unmeasured`; production refuses them as partial-field races
   (`_record_raced_the_live_field`), and since those lanes are never timed they

@@ -29,6 +29,7 @@ from tessera.compiler.emit.candidate import (
     Candidate,
     OP_ATTENTION,
     OP_FUSED_REGION,
+    OP_GATED_MATMUL,
     OP_MATMUL,
     _note_arbiter_dispatch,
     arbitrate,
@@ -657,6 +658,18 @@ def _infer_dims(op: str, inputs: tuple[Any, ...]) -> tuple[int, ...] | None:
             if len(q.shape) == len(k.shape) == len(v.shape) == 2:
                 return (int(q.shape[0]), int(k.shape[0]),
                         int(q.shape[1]), int(v.shape[1]))
+        if op == OP_GATED_MATMUL and len(inputs) >= 3:
+            # A (M,K), Wg (K,H), Wu (K,H) -> (M, H, K): the order the NVIDIA
+            # recorder keys its gated rows under (`--gated-shapes MxHxK`).
+            # Without this rule ordinary dispatch could not find any of them
+            # (AUTOTUNE-GATED-INFER-DIMS). Operands whose contraction or
+            # output widths disagree are not a gated workload and stay
+            # shape-anonymous, as every other malformed operand set does.
+            a, wg, wu = inputs[0], inputs[1], inputs[2]
+            if (len(a.shape) == len(wg.shape) == len(wu.shape) == 2
+                    and a.shape[1] == wg.shape[0]
+                    and tuple(wu.shape) == tuple(wg.shape)):
+                return (int(a.shape[0]), int(wg.shape[1]), int(a.shape[1]))
     except (AttributeError, IndexError, TypeError, ValueError):
         pass
     return None

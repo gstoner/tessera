@@ -361,10 +361,10 @@ remain artifact claims; exact-device execution stays backend-owned.
 **Measured schedule selection**
 
 - Owner: [OPTIMIZING_COMPILER_PLAN.md](OPTIMIZING_COMPILER_PLAN.md)
-- Gate: Connect remaining producers and target calibration to measured schedule selection; preserve inferred dependencies and select only with eligible exact-device evidence. Every arbiter candidate now carries a code identity (sync `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`); the sm_120 registry rows were re-recorded on Super-Bear (15 served; `AUTOTUNE-GATED-INFER-DIMS` open).
+- Gate: Connect remaining producers and target calibration to measured schedule selection; preserve inferred dependencies and select only with eligible exact-device evidence. Every arbiter candidate now carries a code identity (sync `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`); the sm_120 registry rows were re-recorded on Super-Bear. Follow-ups (sync `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`): the stale-error rule now holds in emitted CUDA, the scalar lanes have device timers (no registry row races an untimed candidate), and `_infer_dims` has a gated rule; after the re-record 13 rows are served. The remaining serving blockers are missing route-resource fingerprints for the native tf32/fp8 mma lanes and unseparated verdicts.
 - Depends on: [EVIDENCE-PACKET-1](#evidence-packet-1)
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-27--every-arbiter-candidate-identifies-the-code-it-runs)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-27--sm120-autotune-follow-ups)
 
 ### W5.5
 

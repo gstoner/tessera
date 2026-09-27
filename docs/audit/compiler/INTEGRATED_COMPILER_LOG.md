@@ -5079,3 +5079,57 @@ no device lane involved.
 
 Additional owners: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1),
 [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1).
+
+### 2026-09-27 — sm_120 autotune follow-ups
+
+Owner: [W5.2](INTEGRATED_COMPILER_PLAN.md#w52)
+
+PRs: branch `claude/sm120-autotune-followups`.
+Sync: `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`.
+
+Outcome: three follow-ups from the emitted-identity re-record landed together,
+since each invalidates or extends the same sm_120 rows.
+
+1. The emitted CUDA templates (`emit/nvidia_cuda.py`) now follow the
+   stale-error rule of `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: in each source
+   that reads the last-error slot, every exported device-work entry clears it
+   once, first. The raced lanes (generic fused, scalar attention, gated,
+   pointwise, mma.sync fused/attention/gated, host and timer entries) also
+   check each launch group through the slot, as the ROCm generic lane does. On
+   this box `cudaDeviceSynchronize` returned success after an
+   invalid-configuration launch, so before this change such a launch was
+   reported, and could be timed, as a kernel.
+2. `nvidia_generic_cuda`, `nvidia_flash_attn` and `nvidia_gated` have a
+   CUDA-event `_device_ms` timer.
+3. `_infer_dims` has a `gated_matmul` rule.
+
+The 96 sm_120 registry rows were re-recorded on The-Super-Bear (clean worktree
+at `31a58bd4`, fresh trees, recorder + finalizer under the timing lock). No
+row now races an untimed candidate (was 20), and 38 rows are
+selector-eligible (was 31). 13 rows are served (was 15): the two dropped rows
+keep their winner, but their re-measured margin fell under the noise. All 96
+miss after an emitter change with pins unchanged. 10 winners changed, none of
+them a served row. The gfx1151 and serving rows are byte-identical.
+
+Remaining: the 20 formerly partial rows are still not served. 18 have winners
+with no route-resource fingerprint (`selector_eligible: false`), and 2 are
+unseparated. The sync-only emitted sources keep unchecked launches (listed in
+the NVIDIA queue).
+
+Evidence: `benchmarks/baselines/autotune_corpus_rerecord_sm120_followups_20260927/`,
+`tests/unit/test_nvidia_emitted_stale_error_rule.py`,
+`tests/unit/test_autotune_gated_infer_dims.py`,
+`tests/device/nvidia/test_emitted_stale_cuda_error.py`.
+
+<!-- entry-fields:end -->
+
+Why the device proof primes through a private symbol. Each emitted `.so` links
+cudart statically, and its cudart symbols are local, so the slot these entries
+read belongs to that library alone. Priming the process's shared `libcudart`
+would not touch it. The test therefore resolves the library's own local
+`cudaSetDevice` / `cudaPeekAtLastError` from its symbol table and load base.
+Each lane runs a negative control first: with the clears stripped, the primed
+slot must fail the lane. The two mma.sync attention entries are the recorded
+exception. A successful `cudaFuncSetAttribute` resets the slot (measured on
+sm_120), which masks them; they clear anyway, because the rule must not rest on
+undocumented behaviour.

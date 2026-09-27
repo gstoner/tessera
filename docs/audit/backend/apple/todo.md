@@ -19,6 +19,13 @@ status/error), and no Apple hook reads a process- or thread-wide last-error
 slot. The streaming-STFT architecture label fix touches only `target="rocm"`.
 No shared contract changed.
 
+## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: sibling outcome — not applicable
+
+This change covers NVIDIA emitted CUDA templates, the NVIDIA scalar-lane
+device timers and a `gated_matmul` rule in `autotune._infer_dims`. Apple
+registers no arbiter candidates and has no CUDA last-error slot. Metal
+command-buffer status is per buffer, not a sticky per-thread slot.
+
 ## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: not applicable (Apple registers no arbiter candidates)
 
 Every arbiter candidate of every tier must now carry a code identity or its

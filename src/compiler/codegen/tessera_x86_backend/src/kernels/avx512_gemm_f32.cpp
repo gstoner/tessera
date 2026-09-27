@@ -79,12 +79,18 @@ void blockRows(const float* A, const float* src, int64_t ld, int64_t M,
     for (int64_t m = 0; m < M; ++m) {
         const float* a = A + linearIndex2D<Rank2Order::RowMajor>(m, k0, K);
         float* c = C + linearIndex2D<Rank2Order::RowMajor>(m, n0, N);
+        // Every j loop is fully unrolled so acc[] lives in S zmm registers. At
+        // -O2 GCC 15 left the S >= 4 loops rolled and kept acc[] on the stack
+        // (a load + FMA + store per step), which made N = 64 slower than the
+        // pre-fix kernel; see the evidence README.
         __m512 acc[S];
+#pragma GCC unroll 16
         for (int j = 0; j < S; ++j)
             acc[j] = k0 == 0 ? _mm512_setzero_ps() : _mm512_maskz_loadu_ps(mask[j], c + 16 * j);
         for (int64_t k = 0; k < kc; ++k) {
             const __m512 av = _mm512_set1_ps(a[k]);
             const float* row = src + linearIndex2D<Rank2Order::RowMajor>(k, 0, ld);
+#pragma GCC unroll 16
             for (int j = 0; j < S; ++j)
                 acc[j] = _mm512_fmadd_ps(
                     av,
@@ -92,6 +98,7 @@ void blockRows(const float* A, const float* src, int64_t ld, int64_t M,
                            : _mm512_maskz_loadu_ps(mask[j], row + 16 * j),
                     acc[j]);
         }
+#pragma GCC unroll 16
         for (int j = 0; j < S; ++j) _mm512_mask_storeu_ps(c + 16 * j, mask[j], acc[j]);
     }
 }

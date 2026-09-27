@@ -248,6 +248,14 @@ def _admit_nvidia_device_clock(incumbent, comparison, calibrations, report, lowe
     stated = (comparison.get('source') or {}).get('source_commit')
     if stated is None or commits != {stated}:
         return SSDAdmission(False,'calibrations do not share one source commit with the comparison',lower)
+    # One physical GPU across all eighteen processes (review): each packet
+    # names the part it ran on, and a set assembled from two cards of the same
+    # model would otherwise pass every per-packet check.
+    uuids = {(((c.get('timing') or {}).get('environment') or {}).get('device_identity') or {}).get('uuid')
+             for c in calibrations}
+    if len(uuids) != 1 or None in uuids or '' in uuids:
+        return SSDAdmission(False,'DEVICE_CLOCK_PART_MISMATCH: calibrations do not name one '
+                            f'device UUID ({sorted(map(str, uuids))})',lower)
     # One launch count across every row, as on the ROCm route: the bracket
     # offset's share of a window depends on its length (measured on sm_120:
     # ~10-16 us per window, 2026-09-26).

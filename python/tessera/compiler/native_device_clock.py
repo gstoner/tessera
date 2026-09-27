@@ -132,12 +132,16 @@ def _require_globaltimer_and_atomics(image: bytes) -> None:
                          + (result.stderr or result.stdout).strip()[:300])
     text = result.stdout
     reads = len(re.findall(r'\bCS2R\s+R\d+,\s*SR_GLOBALTIMERLO\b', text))
-    atomics = len(re.findall(r'\b(?:RED|ATOM)G?\.E\.(?:MIN|MAX)\.64\b', text))
-    if reads != 2 or atomics < 2:
+    # Exactly one start update (MIN into span[0]) and one end update (MAX into
+    # span[1]): two MINs would leave the end unwritten and still count two
+    # atomics (review).
+    mins = len(re.findall(r'\b(?:RED|ATOM)G?\.E\.MIN\.64\b', text))
+    maxs = len(re.findall(r'\b(?:RED|ATOM)G?\.E\.MAX\.64\b', text))
+    if reads != 2 or mins != 1 or maxs != 1:
         raise ValueError(
             f'device-clock marker must read %globaltimer twice and update the span '
-            f'atomically; found {reads} SR_GLOBALTIMERLO reads and {atomics} 64-bit '
-            'global min/max atomics')
+            f'with one 64-bit MIN and one 64-bit MAX; found {reads} SR_GLOBALTIMERLO '
+            f'reads, {mins} MIN and {maxs} MAX atomics')
 
 
 def _require_clock_and_atomics(image: bytes, llvm_bin: Path) -> None:

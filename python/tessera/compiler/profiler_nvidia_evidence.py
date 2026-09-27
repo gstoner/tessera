@@ -17,6 +17,13 @@ validator re-runs the derivation, so a stored packet cannot drop a blocker):
   and agrees with every admissible witness within the 5% band -- checked in
   **every** environment, not only WSL, because this route has no profiler
   behind it on bare metal either;
+* **every stored window** is at least 1 ms long and agrees within the band on
+  its own, and the stored medians are those windows' medians
+  (``profiler_timing.device_clock_window_refusals``; medians alone admitted a
+  10-launch forgery with per-window errors up to 18% -- review, 2026-09-26);
+* the queried part is one the window validation was measured on
+  (``NVIDIA_DEVICE_CLOCK_VALIDATED_PARTS``: the RTX 5070 only; another cc 12.0
+  part needs its own probe);
 * the marker-bracketed / plain duration ratio is inside the two-sided overhead
   band (the image is the same; the ratio bounds the markers' cost);
 * the witness sample names the calibrated image's digest; the source tree was
@@ -38,7 +45,9 @@ import json
 import math
 from typing import Any, Mapping
 
-from .profiler_timing import validate_timing_sample, wsl_promotion_refusals
+from .profiler_timing import (
+    device_clock_window_refusals, validate_timing_sample, witness_refusal_codes,
+    wsl_promotion_refusals)
 
 
 NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION = "tessera.profiler_nvidia_device_clock_packet.v1"
@@ -49,6 +58,19 @@ ROUTE_DEVICE_CLOCK = "device_clock_witness"
 #: refused until it has its own proof (a 5070 Ti is also cc 12.0 but is not
 #: the part this was measured on; its evidence would be its own packet).
 NVIDIA_DEVICE_CLOCK_ARCHITECTURES: dict[str, str] = {"sm_120": "nvidia_sm120"}
+
+#: The exact parts the marker's window-length validation was measured on, per
+#: architecture. Bound to the part (the queried device name), not to the
+#: compute capability: cc 12.0 spans the consumer Blackwell line, and the
+#: per-window span/event offset that sets the minimum window is a property of
+#: the part and its driver, measured here on one RTX 5070 (The-Super-Bear,
+#: 2026-09-26). Not bound to the UUID: a second card of the same model has the
+#: same counter and offset behaviour, and every packet re-checks per-window
+#: agreement anyway, so a UUID pin would add no evidence. Another part (a 5070
+#: Ti, 5080, 5090) needs its own probe before it is added here.
+NVIDIA_DEVICE_CLOCK_VALIDATED_PARTS: dict[str, frozenset[str]] = {
+    "sm_120": frozenset({"NVIDIA GeForce RTX 5070"}),
+}
 
 
 class NVIDIADeviceClockPacketError(ValueError):
@@ -142,8 +164,16 @@ def _derive(*, timing: Mapping[str, Any], clean: Mapping[str, Any], probe: Mappi
         reasons.append("DEVICE_WALL_CLOCK_NOT_PROMOTION_ELIGIBLE")
     # The witness agreement rule is environment-independent here: bare metal
     # adds no profiler to this route, so the same in-sample agreement decides.
-    if wsl_promotion_refusals(str(timing["target"]), clocks):
-        reasons.append("DEVICE_CLOCK_WITNESS_DISAGREES")
+    # Each refusal keeps its own code (a missing witness is not a disagreement).
+    reasons.extend(witness_refusal_codes(wsl_promotion_refusals(str(timing["target"]), clocks)))
+    # Medians agreeing is not enough: every stored window must be long enough
+    # and agree on its own (review: a 10-launch packet with per-window errors
+    # up to 18% and a 3.5% median error was admitted).
+    reasons.extend(device_clock_window_refusals(timing))
+    identity = (timing.get("environment") or {}).get("device_identity") or {}
+    arch = identity.get("architecture")
+    if identity.get("name") not in NVIDIA_DEVICE_CLOCK_VALIDATED_PARTS.get(str(arch), frozenset()):
+        reasons.append("DEVICE_CLOCK_PART_UNVALIDATED")
     if overhead > maximum:
         reasons.append("INSTRUMENTATION_OVERHEAD_EXCEEDED")
     elif overhead < 1.0 / maximum:
@@ -240,6 +270,7 @@ def validate_nvidia_device_clock_packet(payload: Mapping[str, Any]) -> None:
 __all__ = [
     "NVIDIADeviceClockPacketError",
     "NVIDIA_DEVICE_CLOCK_ARCHITECTURES",
+    "NVIDIA_DEVICE_CLOCK_VALIDATED_PARTS",
     "NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION",
     "ROUTE_DEVICE_CLOCK",
     "build_nvidia_device_clock_packet",

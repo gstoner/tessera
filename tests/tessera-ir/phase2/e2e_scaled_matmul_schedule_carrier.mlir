@@ -27,6 +27,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
                              %sa: tensor<128x4xf32>,
                              %sb: tensor<4x1xf32>) -> tensor<128x128xf32> {
     %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+      numeric_policy = {accum = "fp32", execution_mode = "exact_per_block"},
       scale_layout = {granularity = "block", block = [128, 128], format = "fp32"}
     } : (tensor<128x512xf8E4M3FN>, tensor<512x128xf8E4M3FN>,
          tensor<128x4xf32>, tensor<4x1xf32>) -> tensor<128x128xf32>

@@ -13,6 +13,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
   func.func @w8a8_kn(%a: tensor<40x256xf8E4M3FN>, %b: tensor<256x72xf8E4M3FN>,
                      %sa: tensor<40x2xf32>, %sb: tensor<2x1xf32>) -> tensor<40x72xf32> {
     %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+      numeric_policy = {accum = "fp32", execution_mode = "exact_per_block"},
       scale_layout = {granularity = "block", block = [128, 128], format = "fp32"}
     } : (tensor<40x256xf8E4M3FN>, tensor<256x72xf8E4M3FN>, tensor<40x2xf32>,
          tensor<2x1xf32>) -> tensor<40x72xf32>

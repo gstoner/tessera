@@ -461,11 +461,17 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
     return refuse(Twine("rhs_scale must be fp32 [K/scale_k, ceil(N/scale_n)] "
                         "= [") +
                   Twine(groups) + ", " + Twine(nGroups) + "]");
-  if (auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy"))
-    if (auto mode = policy.getAs<StringAttr>("execution_mode");
-        mode && mode.getValue() != "exact_per_block")
-      return refuse(Twine("execution_mode=\"") + mode.getValue() +
-                    "\" is not this contract's exact per-block scaling");
+  // `execution_mode` is a semantic key (Decision #21a): it must be STATED as
+  // exact per-block scaling, never inferred from its absence -- the MX forms
+  // beside this one require it the same way.
+  auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+  auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr();
+  if (!mode)
+    return refuse("numeric_policy.execution_mode must state "
+                  "\"exact_per_block\"; the scaling mode is never defaulted");
+  if (mode.getValue() != "exact_per_block")
+    return refuse(Twine("execution_mode=\"") + mode.getValue() +
+                  "\" is not this contract's exact per-block scaling");
   // The weight's memory layout is part of the named contract: below
   // Schedule the operand is a raw pointer, and [K, N] and [N, K] read the
   // same bytes as different matrices.

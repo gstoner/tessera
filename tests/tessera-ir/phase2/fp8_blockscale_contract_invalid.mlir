@@ -85,6 +85,23 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 
 // -----
 
+// The execution mode is a semantic key (Decision #21a): an op that states no
+// numeric_policy at all is refused, never read as exact per-block scaling.
+module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
+  func.func @unstated_mode(%a: tensor<32x128xf8E4M3FN>, %b: tensor<128x64xf8E4M3FN>,
+                           %sa: tensor<32x1xf32>, %sb: tensor<1x1xf32>) -> tensor<32x64xf32> {
+    // expected-error @+2 {{ROCM_FP8_BLOCKSCALE_CONTRACT: numeric_policy.execution_mode must state "exact_per_block"; the scaling mode is never defaulted}}
+    // expected-error @+1 {{E2E-REAL-2 Graph->Schedule requires}}
+    %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+      scale_layout = {granularity = "block", block = [128, 128], format = "fp32"}
+    } : (tensor<32x128xf8E4M3FN>, tensor<128x64xf8E4M3FN>, tensor<32x1xf32>,
+         tensor<1x1xf32>) -> tensor<32x64xf32>
+    return %0 : tensor<32x64xf32>
+  }
+}
+
+// -----
+
 // A transposed weight is admitted only by the W8A8 contract: an MX-format
 // scale over [N, K] has no bound layout and is refused.
 module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {

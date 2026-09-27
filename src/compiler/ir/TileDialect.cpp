@@ -668,6 +668,8 @@ LogicalResult ScaledMatmulKernelOp::verify() {
     auto problemK = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_k");
     if (mma.getAType() != "e4m3" || mma.getBType() != "e4m3" ||
         mma.getAccType() != "f32" || mma.getScaleFormat() != "fp32" ||
+        // Positivity first: every `%` below divides by these.
+        mma.getK() <= 0 || mma.getScaleBlockK() <= 0 ||
         mma.getScaleBlockK() % mma.getK() != 0 ||
         (mma.getK() * mma.getKBlocks()) % mma.getScaleBlockK() != 0 ||
         !scaleBlockN || scaleBlockN.getInt() <= 0 || !epilogue ||

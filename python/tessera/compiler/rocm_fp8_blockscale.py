@@ -343,11 +343,20 @@ def blockscale_reference(
     """fp64 oracle of the block-scaled math: sum_g (A_g @ B_g) * sa[:, g] * sb[g, n // scale_n]."""
     a64 = np.asarray(a, dtype=np.float64)
     b64 = np.asarray(b, dtype=np.float64)
+    if a64.ndim != 2 or b64.ndim != 2:
+        raise ValueError("block-scale reference takes rank-2 A [M, K] and B [K, N]")
     m, k = a64.shape
     n = b64.shape[1]
+    if scale_k <= 0 or scale_n <= 0:
+        raise ValueError("block-scale reference needs positive scale_k and scale_n")
     groups = k // scale_k
-    if k % scale_k or a_scale.shape != (m, groups) or b_scale.shape[0] != groups:
-        raise ValueError("block-scale reference shapes disagree with scale_k")
+    # B must be [K, N]: an [N, K] weight passed here would multiply the wrong
+    # matrix, and when N == K nothing else would notice. Transpose it first.
+    if (b64.shape[0] != k or k % scale_k or a_scale.shape != (m, groups)
+            or b_scale.shape != (groups, (n + scale_n - 1) // scale_n)):
+        raise ValueError(
+            "block-scale reference shapes disagree: A [M, K], B [K, N], "
+            "a_scale [M, K/scale_k], b_scale [K/scale_k, ceil(N/scale_n)]")
     column_block = np.arange(n) // scale_n
     out = np.zeros((m, n), dtype=np.float64)
     for g in range(groups):

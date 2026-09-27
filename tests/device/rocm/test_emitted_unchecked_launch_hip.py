@@ -1,4 +1,4 @@
-"""A HIP launch that never ran must not be reported as success (gfx1151).
+"""A HIP launch that never ran must not be reported as success (gfx1151, gfx1201).
 
 Sync ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`` (the ROCm half of
 ``NVIDIA-EMITTED-UNCHECKED-LAUNCH``). The gfx1151 paged-KV gather, the direct
@@ -28,17 +28,28 @@ import numpy as np
 import pytest
 
 
-def _gfx1151() -> bool:
+def _live_rdna_arch() -> str | None:
+    """gfx1151, or gfx1201 when its device proof is requested and the build
+    arch is set to it (so the emitted HIP compiles for the chip that runs it)."""
     from tessera import runtime as rt
 
     hipcc = shutil.which("hipcc") or "/opt/rocm/bin/hipcc"
     try:
-        return os.path.isfile(hipcc) and rt._rocm_live_arch() == "gfx1151"
+        live = rt._rocm_live_arch() if os.path.isfile(hipcc) else None
     except Exception:  # noqa: BLE001 - no ROCm runtime is "not this host"
-        return False
+        return None
+    if live == "gfx1151":
+        return live
+    if (live == "gfx1201" and os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") == "1"
+            and rt._rocm_chip() == "gfx1201"):
+        return live
+    return None
 
 
-pytestmark = pytest.mark.skipif(not _gfx1151(), reason="requires a live gfx1151 device and hipcc")
+pytestmark = pytest.mark.skipif(
+    _live_rdna_arch() is None,
+    reason="requires a live gfx1151 device (or gfx1201 with TESSERA_GFX1201_DEVICE_PROOF=1 "
+           "and TESSERA_ROCM_CHIP=gfx1201) and hipcc")
 
 
 def _invalidate_launches(source: str) -> str:

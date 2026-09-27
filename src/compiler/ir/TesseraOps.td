@@ -3053,11 +3053,16 @@ def Tessera_ArchMixedOp : Op<Tessera_Dialect, "arch.mixed", [Pure]> {
   let hasVerifier = 1;
 }
 
-// Neighbors extension marker ops. The standalone TesseraNeighbors component
-// owns semantic passes for these names; defining generic shells in the core
-// tessera dialect lets MLIR parse quoted generic IR such as
-// "tessera.neighbors.stencil.apply" while those passes remain string-name
-// driven and lightweight.
+// Neighbors (Phase 7) ops. THIS IS THE ONLY DECLARATION of the
+// `tessera.neighbors.*` op names (Decision #31): MLIR resolves
+// "tessera.neighbors.x" to the `tessera` dialect by the name's first segment,
+// so these are the ops every parser, pass and fixture actually builds. The
+// TesseraNeighbors component owns the passes (string-name driven) and declares
+// no ops. An unbuilt `tessera_neighbors.td` and a hand-written C++
+// `tessera.neighbors` dialect used to re-declare seven of these names; both
+// were deleted 2026-09-27 (SMALL-CORRECTNESS-GAPS-2026-09-27) after the
+// semantics only they stated were moved into TesseraOps.cpp (stencil.define
+// tap/coefficient well-formedness, neighbor.read's required `delta`).
 class Tessera_NeighborsGenericOp<string mnemonic>
     : Op<Tessera_Dialect, mnemonic, []> {
   let arguments = (ins Variadic<AnyType>:$inputs);
@@ -3089,9 +3094,27 @@ def Tessera_NeighborsHaloTransportOp
 def Tessera_NeighborsHaloUnpackOp
     : Tessera_NeighborsGenericOp<"neighbors.halo.unpack">;
 def Tessera_NeighborsNeighborReadOp
-    : Tessera_NeighborsGenericOp<"neighbors.neighbor.read">;
+    : Tessera_NeighborsGenericOp<"neighbors.neighbor.read"> {
+  let summary = "Read from a logical neighbor by relative delta";
+  let description = [{
+    Requires a `delta` attribute: a non-empty rank-1 dense integer vector (or
+    an array of integers), one relative offset per axis. `tessera-halo-infer`
+    derives the halo width from it, so a read without one has no meaning.
+  }];
+}
 def Tessera_NeighborsStencilDefineOp
-    : Tessera_NeighborsGenericOp<"neighbors.stencil.define">;
+    : Tessera_NeighborsGenericOp<"neighbors.stencil.define"> {
+  let summary = "Define a stencil from explicit taps and coefficients";
+  let description = [{
+    `taps` and `coeffs` are parallel, non-empty arrays. Every tap is a
+    non-empty rank-1 dense integer vector and all taps share one rank. Every
+    tap owns one explicit, finite, canonical f64 coefficient; implicit unit
+    coefficients are intentionally illegal because they cannot represent
+    derivative or PDE discretizations faithfully. Coefficients are physical
+    coefficients: a derivative of multi-order alpha must already include
+    `1 / product_d(spacing[d] ** alpha[d])`.
+  }];
+}
 def Tessera_NeighborsStencilApplyOp
     : Tessera_NeighborsGenericOp<"neighbors.stencil.apply">;
 def Tessera_NeighborsPipelineConfigOp

@@ -38,12 +38,9 @@ def test_target_kind_sites_use_closed_constraints() -> None:
 
 def test_neighbors_topology_kind_is_exact_not_substring_classified() -> None:
     core = (ROOT / "src/compiler/ir/TesseraOps.td").read_text()
-    ods = (ROOT / "src/compiler/tessera_neighbors/include/tessera/Dialect/"
-           "Neighbors/IR/tessera_neighbors.td").read_text()
     dynamic = (ROOT / "src/compiler/tessera_neighbors/lib/Dialect/Neighbors/"
                "Transforms/DynamicTopologyPass.cpp").read_text()
     assert "Tessera_NeighborsTopologyKindAttr:$kind" in core
-    assert "TopologyKindAttr:$kind" in ods
     assert 'kind.contains("dynamic")' not in dynamic
     assert 'kind == "dynamic"' in dynamic
     assert 'kind == "custom_graph"' in dynamic

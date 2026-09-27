@@ -316,8 +316,9 @@ static StringRef moduleString(ModuleOp module, StringRef primary,
 // 64x512x2048 (128 tiles) 1.8x at S=2 -- while 32x1536x4096 (192 tiles) is
 // neutral at S=2 and loses from S=8, and 16x2048x768 / 64x512x2048 lose once
 // tiles x S reaches 1024 / 4096. The rule adopted -- chosen because it is
-// positive at every measured point, not because it is the peak -- is: total workgroups tiles x S at most 256 (8 single-wave workgroups per
-// WGP), S a power of two <= 32 (the largest count measured). The reason more
+// positive at every measured point, not because it is the peak -- is: total
+// workgroups tiles x S at most 256 (8 single-wave workgroups per WGP), S a
+// power of two <= 32 (the largest count measured). The reason more
 // workgroups than WGPs help is NOT measured (no counters on WSL2); several
 // single-wave workgroups can co-reside on a WGP's four SIMDs, which is one
 // hypothesis. Mirrors `rocm_tiling._SPLIT_K_TARGET_WORKGROUPS` and

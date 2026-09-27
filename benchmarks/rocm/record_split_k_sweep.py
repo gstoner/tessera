@@ -300,6 +300,11 @@ def _packet(*, chip, identity, variant_meta, group, windows, launches, rate_khz,
         execution_environment=environment, resources={"application": resources},
         environment={"kernel_release": platform.release(), "per_window_event_ns": event_ns,
                      "per_window_plain_event_ns": plain_ns, "per_window_host_ns": host_ns,
+                     # The same interleaved, alternating plain/bracketed window
+                     # protocol the SSD recorder defined; stamping its id is
+                     # what makes the packet builder apply the per-window
+                     # agreement and minimum-window checks (the recorder also
+                     # calls device_clock_window_refusals directly).
                      "window_protocol": SSD_CALIBRATION_WINDOW_PROTOCOL, "run_id": run_id,
                      "process_id": os.getpid(), "device_identity": identity,
                      "launches_per_iteration": 2 if variant_meta["split_k"] > 1 else 1})

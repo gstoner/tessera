@@ -44,3 +44,34 @@ def test_run_winner_jitter_can_converge_inside_declared_noise_band():
     assert row["winner"] == "shipped"
     assert row["evidence"]["stable_winner"] is True
     assert row["evidence"]["near_winner_consensus"] == ["shipped"]
+
+
+def test_unstable_fresh_evidence_never_restamps_a_stale_prior_row():
+    """Decision #11: an unstable fresh pair used to copy its evidence -- now
+    carrying today's toolchain_digest -- onto the prior committed row, which
+    would serve a measurement from another (or no) toolchain as current."""
+    from tessera.compiler.emit.autotune import CORPUS_VERSION
+
+    stale_prior = _row("old_winner")            # pre-v4: no toolchain identity
+    left = _row("direct"); left["evidence"] = {"toolchain_digest": "sha256:now"}
+    right = _row("shared"); right["evidence"] = {"toolchain_digest": "sha256:now"}
+    out = mod.merge({"version": 3, "records": [stale_prior]},
+                    {"records": [left]}, {"records": [right]},
+                    {"routes": {"shared": ["sha256:r"]}})
+    row, = out["records"]
+    assert out["version"] == CORPUS_VERSION
+    assert row["winner"] == "shared"             # the fresh row, not the stale one
+    assert row["evidence"]["toolchain_digest"] == "sha256:now"
+    assert row["evidence"]["selector_eligible"] is False
+
+
+def test_unstable_fresh_evidence_keeps_a_same_toolchain_prior_row():
+    prior = _row("prior"); prior["evidence"] = {"toolchain_digest": "sha256:now"}
+    left = _row("direct"); left["evidence"] = {"toolchain_digest": "sha256:now"}
+    right = _row("shared"); right["evidence"] = {"toolchain_digest": "sha256:now"}
+    out = mod.merge({"version": 4, "records": [prior]},
+                    {"records": [left]}, {"records": [right]},
+                    {"routes": {"shared": ["sha256:r"]}})
+    row, = out["records"]
+    assert row["winner"] == "prior"
+    assert row["evidence"]["selector_eligible"] is False

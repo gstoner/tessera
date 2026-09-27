@@ -135,10 +135,11 @@ def test_reference_attention_supports_mqa_and_arbitrary_token_order():
 
 def test_rocm_route_warm_starts_from_committed_gfx1151_corpus(
         tmp_path, monkeypatch):
-    """The committed gfx1151 paged-KV row predates Decision #11's toolchain
-    identity, so it no longer selects the production route (it is stale until
-    re-recorded on Princess-Luna). The same row stamped with the current
-    toolchain identity does -- the identity is the only thing standing between
+    """The committed gfx1151 paged-KV rows were re-recorded on Princess-Luna
+    under Decision #11's toolchain identity (sync
+    AUTOTUNE-TOOLCHAIN-KEY-2026-09-26), so the committed end-to-end row selects
+    the production route again -- the winner it recorded. The same row with its
+    identity removed does not: the identity is the only thing standing between
     the committed measurement and dispatch."""
     import json
 
@@ -146,16 +147,23 @@ def test_rocm_route_warm_starts_from_committed_gfx1151_corpus(
     from tessera.compiler.emit import autotune as at
 
     monkeypatch.delenv("TESSERA_AUTOTUNE_CORPUS", raising=False)
-    assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) is None
-
     payload = json.loads(at.corpus_path().read_text())
-    for row in payload["records"]:
-        if row["device"] == "rocm:gfx1151" and row["op"] == "paged_kv_decode":
-            row.setdefault("evidence", {}).update(at.toolchain_evidence("rocm"))
-    restamped = tmp_path / "corpus.json"
-    restamped.write_text(json.dumps(payload))
-    monkeypatch.setenv("TESSERA_AUTOTUNE_CORPUS", str(restamped))
-    assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) == "direct"
+    row, = [r for r in payload["records"]
+            if r["device"] == "rocm:gfx1151" and r["op"] == "paged_kv_decode"
+            and r["bucket"] == [1, 4, 4, 512, 32, 16]
+            and r["timing"] == at.TIMING_END_TO_END]
+    assert row["evidence"]["toolchain_digest"] == \
+        at.toolchain_evidence("rocm")["toolchain_digest"]
+    assert row["winner"] in {"gather_fa", "direct"}
+    assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) == row["winner"]
+
+    for r in payload["records"]:
+        if r["device"] == "rocm:gfx1151" and r["op"] == "paged_kv_decode":
+            r["evidence"].pop("toolchain_digest", None)
+    stripped = tmp_path / "corpus.json"
+    stripped.write_text(json.dumps(payload))
+    monkeypatch.setenv("TESSERA_AUTOTUNE_CORPUS", str(stripped))
+    assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) is None
 
 
 @pytest.mark.skipif(

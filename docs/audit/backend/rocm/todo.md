@@ -7,19 +7,46 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: committed autotune rows are stale until re-recorded
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: gfx1151 corpus rows re-recorded; sm_120 owed
 
 Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
-item 3). **Follow-up required on Princess-Luna; nothing was device-run.** The
-arbiter corpus (`benchmarks/baselines/autotune_corpus.json`; the format is now v4,
-the committed file is still v3) keys every verdict on the toolchain identity (`compiler/toolchain_identity.py`: ROCm 10.0 /
-HIP 7.15 / LLVM 23.1.1 pins). All 16 committed `rocm:gfx1151` rows predate that
-key, so they load as stale and select nothing — including the paged-KV
-production warm start (`cache/paged_kv.py::_rocm_paged_attention_corpus_winner`
-now falls through to the live race). Re-record with
-`benchmarks/rocm/record_paged_kv_corpus.py` and
-`benchmarks/rocm/record_autotune_separation.py`. gfx1201 has no committed
-corpus rows: not applicable.
+item 3). The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`, now
+written as v4) keys every verdict on the toolchain identity
+(`compiler/toolchain_identity.py`: ROCm 10.0 / HIP 7.15 / LLVM 23.1.1 pins,
+digest `sha256:4f528f65...eb57728`).
+
+**gfx1151: re-recorded 2026-09-26 on Princess-Luna** (Strix Halo, WSL2), from
+a clean worktree at `82d6f1fa` on `claude/timing-foundation-corpus` with its own
+`build/` (ROCm + HIP + x86 + EBM + Clifford ON, empty `CMAKE_BUILD_TYPE`, the
+same configuration as that box's main tree), `scripts/_rocm_env.sh` sourced,
+each run under `flock /tmp/tessera-timing.lock`. All 16 `rocm:gfx1151` keys
+were replaced by rows carrying `evidence.toolchain_digest`; no row was
+hand-edited, and the 97 `nvidia:sm_120` rows are byte-identical in content (held
+stale, written back by `MeasureCache.to_dict`). Recorders and logs
+(`benchmarks/baselines/autotune_corpus_rerecord_20260926/`):
+
+- `benchmarks/rocm/record_paged_kv_corpus.py` (defaults: tokens 128/512/2048/8192,
+  4 heads, 4 KV heads, dim 32, page 16, 7 repeats): 8 `paged_kv_decode` f32 rows.
+  Winners unchanged from the pre-schema rows: `gather_fa` in the device domain,
+  `direct` end to end, at every token count. Every row is now `separated`;
+  the 8192-token end-to-end row, previously `separated: false` (6.52% margin
+  vs 5.59% noise) and therefore refused at dispatch, now separates.
+- `benchmarks/rocm/record_autotune_separation.py` (64/256/512/1024 square,
+  bias+gelu, f16, timer source `device_event`): 8 `fused_region` rows. Winners
+  unchanged: `rocm_generic_hip` at 64x64 end to end, `rocm_wmma_gemm`
+  everywhere else; all separated.
+
+The production warm start `cache/paged_kv.py::_rocm_paged_attention_corpus_winner`
+(end-to-end domain) selects **`direct`** again, the same route as before the
+schema change; `tests/unit/test_paged_kv_rocm_abi.py` now asserts the committed
+row selects its recorded winner and that the same row without its identity
+selects nothing. The separation recorder was fixed to count stale rows it will
+replace (it printed "evicted 0" on a v3 corpus) and to name any owned row a run
+leaves stale.
+
+**sm_120: owed on Super-Bear** (97 rows; see the NVIDIA plan's entry under the
+same key for the commands). gfx1201 has no committed corpus rows: not
+applicable.
 
 ## ROCM-SPLIT-K-1: cross-workgroup split-K on gfx1201 — 2026-09-26
 

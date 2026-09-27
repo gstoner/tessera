@@ -5133,3 +5133,90 @@ slot must fail the lane. The two mma.sync attention entries are the recorded
 exception. A successful `cudaFuncSetAttribute` resets the slot (measured on
 sm_120), which masks them; they clear anyway, because the rule must not rest on
 undocumented behaviour.
+
+### 2026-09-27 — EVIDENCE-PACKET-1: shared evidence envelope, GA and EBM route receipts
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: branch `claude/evidence-packet-1-envelope`.
+Sync: `EVIDENCE-PACKET-1-2026-09-27`.
+
+Outcome: two slices. **Shared envelope** (`compiler/evidence_envelope.py`):
+`read_evidence_packet` dispatches on `schema` to one of three registered
+families (x86 Zen 5 profiler v1/v2, ROCm gfx1151/gfx1201 profiler, NVIDIA
+sm_120 device clock) and runs the family validator unchanged. It then projects
+the packet onto one envelope: artifact identity (image, ISA and semantic
+digests, the timing sample's digests, x86 per-row images), compiler identity
+where a family records it, timing domain, clock validity, execution
+environment, source commit and worktree state, sample ids, route, eligibility
+and refusal causes. A missing or malformed field is refused, never defaulted
+(`EVIDENCE_ENVELOPE_INCOMPLETE`). The envelope also enforces invariants no
+family may waive (`EVIDENCE_ENVELOPE_CONTRADICTED`): a packet is eligible
+exactly when it names no refusal cause (the x86 benchmark's own retain/reject
+verdict counts as a cause), and an eligible packet has a valid clock, a clean
+tree, a sample id, and a measured image its timing sample names. The last
+rule was checked only on the ROCm device-clock route before; now it applies
+on every route. An unregistered schema refuses (`EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN`).
+
+Two fail-open derivations were closed at the family, not only in the
+envelope. `profiler_rocm_evidence` read `if source.get("worktree_dirty")`, and
+`profiler_x86_evidence` read `environment.get("virtualized"/"wsl"/"worktree_dirty")`,
+so a packet that omitted a field (or stored the string `"false"`) derived no
+`SOURCE_WORKTREE_DIRTY` / `VIRTUALIZED_HOST` / `WSL_CLOCK_DOMAIN`. Both now
+require bools. NVIDIA already refused (`is not False`). The SSD admission loops
+(`ssd_performance`, ROCm and NVIDIA device-clock routes) read calibrations
+through the envelope, pinned to their family. A drift test refuses any
+production module that calls a family validator directly. Committed evidence:
+188 packets found under `benchmarks/`; 186 read. Those are 36 NVIDIA, 75
+gfx1151, 73 gfx1201 and 2 x86 packets; 149 are promotable. The 37 retained are
+36 gfx1201 packets (`INSTRUMENTATION_OVERHEAD_EXCEEDED`) and the 2026-08-06 x86
+packet (`VIRTUALIZED_HOST`, ..., `benchmark_verdict=retain`). The 2 refused
+are the pre-existing `DEVICE_CLOCK_WINDOW_TOO_SHORT` pair. No committed packet
+changed state.
+
+**GA/EBM route receipts** (`tessera/_route_receipts.py`): each of the 32
+`_try_<target>_*` native-lane helpers in `tessera.ga` and `tessera.ebm` is
+`@native_attempt` (target from its name: `apple_gpu_runtime`, `x86_avx512`,
+`rocm`, `cuda`), and each of the 29 public primitives that reaches one is
+`@public_route`. Inside `capture_route_receipts()` every public call leaves a
+receipt naming its route. A native dispatch outside any receipt frame (an
+orphan), or a capture with no receipts, makes the span `unattributed`
+(`ROUTE_RECEIPT_ORPHAN_DISPATCH`, `ROUTE_RECEIPT_EMPTY`). `clifford_core`,
+`energy_core` and `visual_complex_core` rows now carry `route` and
+`route_receipts` over the timed span, and derive `device` from them. The
+jit_bridge trace had covered only the Apple manifest lane. A receipt run on
+Princess-Luna shows why that mattered: `ebm.energy_quadratic` and
+`partition_exact_from_energies` ran on the **x86 AVX-512** kernel, which the
+old trace would have reported as no native dispatch.
+
+Device receipts, all at clean `6b438b87`
+(`benchmarks/baselines/ga_ebm_route_receipts_20260927/`):
+
+- **Mac M1 Max:** the GA primitives ran on the Apple GPU runtime.
+  `geometric_product` split between that runtime and the reference, and
+  `rotor_sandwich` is `mixed`. EBM `langevin_step` and the partition ran on
+  the Apple GPU; `energy_quadratic` ran on the reference.
+- **Princess-Luna and Tajasarus (Zen 5):** EBM energy and partition ran on
+  x86 AVX-512. `langevin_step` and all GA ran on the reference.
+- **The-Super-Bear (Zen 2):** everything ran on the reference.
+- **No host:** no composition reached a ROCm or CUDA GPU lane. The x86 lane
+  precedes ROCm in those primitives, and the native Langevin/Clifford GPU
+  routes are separate entry points these suites do not call.
+
+Receipts attribute routes. They are not timings, and every row stays
+non-promotable.
+
+Remaining: math probes' manufactured `RuntimeArtifact.metadata`, paired
+public-frontend runs for the direct-IR AD probes, asynchronous/multi-thread
+attribution, DLOP profiler receipts and clean performance admission (plan
+record). Also open: the GPU families record no compiler build identity, and
+the CUDA activity-window calibration, the calibration corpus and E2E-spine
+packets are not yet envelope families.
+
+Evidence: `tests/unit/test_evidence_envelope.py`,
+`tests/unit/test_route_receipts.py`, `tests/unit/test_ssd_comparison.py`,
+`benchmarks/baselines/ga_ebm_route_receipts_20260927/`; hosts: Mac (M1 Max,
+macOS 27) for the envelope and the unit gates, and one receipt record each from
+Mac, Princess-Luna, Tajasarus and The-Super-Bear.
+
+<!-- entry-fields:end -->

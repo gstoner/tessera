@@ -12,39 +12,117 @@
 #include <immintrin.h>
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include "tessera/Rank2Index.h"
 
 using tessera::layout::linearIndex2D;
 using tessera::layout::Rank2Order;
 
+// X86-GEMM-ALIGN-1 (2026-09-27). The kernel used to issue one 64-byte
+// `_mm512_loadu_ps` of B per FMA straight from the caller's buffer. When B's
+// address is not 64-byte aligned every such load spans two cache lines, and at
+// 256^3 the kernel ran ~1.5x slower (X86-MATMUL-BIMODAL-1). numpy guarantees
+// only 16-byte alignment, so the level was decided by the caller's heap.
+//
+// The kernel now owns B's alignment: for each block of up to kStrips 16-column
+// strips it copies B[:, n0 : n0 + 16*kStrips] into a 64-byte-aligned
+// K x (16*S) panel (row k contiguous, so each B row segment is read once), and
+// every FMA reads the panel with an aligned load. The S strips of a panel row
+// are kept in S independent accumulators. Per output element the FMA sequence
+// is unchanged -- acc = 0, then acc = fma(A[m,k], B[k,n], acc) for k = 0..K-1
+// in order, masked-off lanes read as zero and are never stored -- so the
+// result is bitwise identical to the previous kernel for every alignment.
+//
+// M == 1 reads B directly (no pack): a GEMV never reuses the panel, so packing
+// is pure copy overhead there (measured slower than the direct read at every B
+// alignment; evidence in benchmarks/baselines/x86_gemm_align_20260927/). If
+// the panel cannot be allocated the direct path runs too -- same result, only
+// slower -- so the kernel never fails for want of scratch memory.
+namespace {
+
+constexpr int kStrips = 8;         // 16-float strips per panel row (128 floats)
+constexpr int64_t kPanelRowFloats = 16 * kStrips;
+
+inline __mmask16 stripMask(int64_t width) {
+    return width >= 16 ? static_cast<__mmask16>(0xffffu)
+                       : static_cast<__mmask16>((1u << static_cast<unsigned>(width)) - 1u);
+}
+
+// C[:, n0 : n0 + 16*S] for every row of A. `src` row k starts at src + k*ld.
+// Packed: `src` is the aligned panel (tail lanes zero-filled). Direct: `src`
+// is B + n0 and masked loads zero the lanes past N.
+template <int S, bool Packed>
+void blockRows(const float* A, const float* src, int64_t ld, int64_t M,
+               int64_t N, int64_t K, float* C, int64_t n0,
+               const __mmask16* mask) {
+    for (int64_t m = 0; m < M; ++m) {
+        const float* a = A + linearIndex2D<Rank2Order::RowMajor>(m, 0, K);
+        __m512 acc[S];
+        for (int j = 0; j < S; ++j) acc[j] = _mm512_setzero_ps();
+        for (int64_t k = 0; k < K; ++k) {
+            const __m512 av = _mm512_set1_ps(a[k]);
+            const float* row = src + linearIndex2D<Rank2Order::RowMajor>(k, 0, ld);
+            for (int j = 0; j < S; ++j)
+                acc[j] = _mm512_fmadd_ps(
+                    av,
+                    Packed ? _mm512_load_ps(row + 16 * j)
+                           : _mm512_maskz_loadu_ps(mask[j], row + 16 * j),
+                    acc[j]);
+        }
+        float* c = C + linearIndex2D<Rank2Order::RowMajor>(m, n0, N);
+        for (int j = 0; j < S; ++j) _mm512_mask_storeu_ps(c + 16 * j, mask[j], acc[j]);
+    }
+}
+
+// S is a template parameter so acc[] stays in registers (a runtime strip count
+// spilled the accumulators and ran 4x slower at 32^3 in the design sweep).
+template <bool Packed>
+void dispatchStrips(int S, const float* A, const float* src, int64_t ld,
+                    int64_t M, int64_t N, int64_t K, float* C, int64_t n0,
+                    const __mmask16* mask) {
+    switch (S) {
+    case 1: blockRows<1, Packed>(A, src, ld, M, N, K, C, n0, mask); break;
+    case 2: blockRows<2, Packed>(A, src, ld, M, N, K, C, n0, mask); break;
+    case 3: blockRows<3, Packed>(A, src, ld, M, N, K, C, n0, mask); break;
+    case 4: blockRows<4, Packed>(A, src, ld, M, N, K, C, n0, mask); break;
+    case 5: blockRows<5, Packed>(A, src, ld, M, N, K, C, n0, mask); break;
+    case 6: blockRows<6, Packed>(A, src, ld, M, N, K, C, n0, mask); break;
+    case 7: blockRows<7, Packed>(A, src, ld, M, N, K, C, n0, mask); break;
+    default: blockRows<kStrips, Packed>(A, src, ld, M, N, K, C, n0, mask); break;
+    }
+}
+
+} // namespace
+
 extern "C" void tessera_x86_avx512_gemm_f32(const float* A, const float* B,
                                             int64_t M, int64_t N, int64_t K,
                                             float* C) {
-    for (int64_t m = 0; m < M; ++m) {
-        const float* a = A + linearIndex2D<Rank2Order::RowMajor>(m, 0, K);
-        float* c = C + linearIndex2D<Rank2Order::RowMajor>(m, 0, N);
-        int64_t n = 0;
-        for (; n + 16 <= N; n += 16) {
-            __m512 acc = _mm512_setzero_ps();
-            for (int64_t k = 0; k < K; ++k)
-                acc = _mm512_fmadd_ps(_mm512_set1_ps(a[k]),
-                                      _mm512_loadu_ps(
-                                          B + linearIndex2D<Rank2Order::RowMajor>(k, n, N)),
-                                      acc);
-            _mm512_storeu_ps(c + n, acc);
+    if (M <= 0 || N <= 0) return;
+    // K <= 0 still writes C = 0 (the empty sum), as the previous kernel did.
+    float* panel = nullptr;
+    if (M > 1 && K > 0 &&
+        static_cast<uint64_t>(K) <= UINT64_MAX / (sizeof(float) * kPanelRowFloats))
+        panel = static_cast<float*>(std::aligned_alloc(
+            64, static_cast<size_t>(K) * sizeof(float) * kPanelRowFloats));
+    for (int64_t n0 = 0; n0 < N; n0 += kPanelRowFloats) {
+        const int S = static_cast<int>(std::min<int64_t>(kStrips, (N - n0 + 15) / 16));
+        __mmask16 mask[kStrips];
+        for (int j = 0; j < kStrips; ++j)
+            mask[j] = j < S ? stripMask(N - n0 - 16 * j) : static_cast<__mmask16>(0);
+        if (!panel) {
+            dispatchStrips<false>(S, A, B + n0, N, M, N, K, C, n0, mask);
+            continue;
         }
-        if (n < N) {
-            __mmask16 tail = (__mmask16)((1u << (unsigned)(N - n)) - 1u);
-            __m512 acc = _mm512_setzero_ps();
-            for (int64_t k = 0; k < K; ++k)
-                acc = _mm512_fmadd_ps(
-                    _mm512_set1_ps(a[k]),
-                    _mm512_maskz_loadu_ps(
-                        tail, B + linearIndex2D<Rank2Order::RowMajor>(k, n, N)),
-                    acc);
-            _mm512_mask_storeu_ps(c + n, tail, acc);
+        const int64_t ld = 16 * S;
+        for (int64_t k = 0; k < K; ++k) {
+            const float* row = B + linearIndex2D<Rank2Order::RowMajor>(k, n0, N);
+            float* dst = panel + linearIndex2D<Rank2Order::RowMajor>(k, 0, ld);
+            for (int j = 0; j < S; ++j)
+                _mm512_store_ps(dst + 16 * j, _mm512_maskz_loadu_ps(mask[j], row + 16 * j));
         }
+        dispatchStrips<true>(S, A, panel, ld, M, N, K, C, n0, mask);
     }
+    std::free(panel);
 }
 
 // T1 evidence ABI: the same AVX-512 microkernel with explicit compiler-owned

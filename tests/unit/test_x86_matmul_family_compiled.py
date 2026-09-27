@@ -159,3 +159,44 @@ def test_matmul_family_unknown_op_rejected():
     with pytest.raises(ValueError, match="x86_matmul_family_compiled executor"):
         rt._execute_x86_compiled_matmul_family(
             _artifact(rt, "tessera.softmax", ("a",)), (a,))
+
+
+def _at_offset(src: np.ndarray, offset: int) -> np.ndarray:
+    """A C-contiguous copy of ``src`` whose data sits ``offset`` bytes past a
+    64-byte boundary (numpy itself guarantees only 16)."""
+    raw = np.empty(src.nbytes + 128, dtype=np.uint8)
+    start = (-raw.ctypes.data) % 64 + offset
+    view = raw[start:start + src.nbytes].view(src.dtype).reshape(src.shape)
+    view[...] = src
+    assert view.ctypes.data % 64 == offset
+    return view
+
+
+@pytest.mark.parametrize("m,n,k", [
+    (1, 250, 33),     # M == 1: the direct (unpacked) path, tail strip
+    (7, 129, 17),     # one full 8-strip panel + a 1-wide tail panel
+    (64, 256, 64),
+    (33, 100, 3),     # 7-strip block, last strip 4 wide
+])
+def test_gemm_f32_result_independent_of_b_alignment(m, n, k):
+    """X86-GEMM-ALIGN-1: the kernel packs B into its own 64-byte-aligned panel,
+    so the caller's B%64 must not change a single bit of the result."""
+    import ctypes
+
+    rt = _x86_or_skip()
+    lib = rt._load_x86_elementwise()
+    rng = np.random.default_rng(m * 1000 + n + k)
+    a = rng.standard_normal((m, k)).astype(np.float32)
+    b = rng.standard_normal((k, n)).astype(np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    outs = []
+    for offset in (0, 4, 16, 32, 48, 60):
+        bb = _at_offset(b, offset)
+        out = np.full((m, n), np.nan, dtype=np.float32)
+        lib.tessera_x86_avx512_gemm_f32(
+            a.ctypes.data_as(cf), bb.ctypes.data_as(cf), ctypes.c_int64(m),
+            ctypes.c_int64(n), ctypes.c_int64(k), out.ctypes.data_as(cf))
+        outs.append(out)
+    for out in outs[1:]:
+        assert np.array_equal(out.view(np.uint32), outs[0].view(np.uint32))
+    np.testing.assert_allclose(outs[0], a @ b, **_TOL)

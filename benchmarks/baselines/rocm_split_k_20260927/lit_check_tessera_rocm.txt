@@ -1,0 +1,23 @@
+== build
+[2/3] Linking CXX static library src/compiler/programming_model/libTesseraPM.a
+[3/3] Linking CXX executable tools/tessera-opt/tessera-opt
+lit-ir build
+Traceback (most recent call last):
+  File "/home/angstorms/.local/share/tessera-toolchains/llvm-23.1.1/bin/lit", line 6, in <module>
+    from lit.main import main
+ModuleNotFoundError: No module named 'lit'
+lit-ir-exit=0
+
+Total Discovered Tests: 82
+  Passed: 82 (100.00%)
+== build-assertions
+[2/3] Linking CXX static library src/compiler/programming_model/libTesseraPM.a
+[3/3] Linking CXX executable tools/tessera-opt/tessera-opt
+lit-ir build-assertions
+-- Testing: 516 tests, 16 workers --
+
+Total Discovered Tests: 516
+lit-ir-exit=0
+
+Total Discovered Tests: 82
+  Passed: 82 (100.00%)

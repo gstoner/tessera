@@ -252,6 +252,32 @@ Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-
 - **Sibling outcome.** gfx1151: not applicable by rule (never split; no Princess-Luna run, no claim). NVIDIA / x86 / Apple: not applicable (the rule is gfx1201-only; schedule digests of every unsplit schedule are unchanged).
 - **Open.** A per-shape slice rule once more than one shape is measured; fp8/int8 split (i32 workspace would be exact); a device-clock witness for the timing; LDS-body split.
 
+## ROCM-SPLIT-K-1 follow-on: device-clock slice sweep, measured target — 2026-09-27
+
+Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-1). Sync `GFX1201-LANES-2026-09-27`. **The slice rule is measured, and the timing is on the admitted device clock.**
+
+- **Rule changed (C++ decider and Python oracle together).** Split when `2 x tiles <= 256` (a measured workgroup target, gfx1201 only: `_SPLIT_K_TARGET_WORKGROUPS` / `kGfx1201SplitKTargetWorkgroups`). S is the largest power of two `<= min(32, 256/tiles)` whose slices are whole `block_k=32` blocks of >= 256. This replaces tiles < 32 WGPs with `S = ceil(32/tiles)`. The rule was chosen because every selection is positive in f16 and bf16, not because it hits each shape's peak. It is within ~10% of the best S on most shapes.
+- **Evidence.** [`benchmarks/baselines/rocm_split_k_20260927/`](../../../../benchmarks/baselines/rocm_split_k_20260927/README.md) has the full table, packets and device-test log.
+  - 16 shapes x 2 storages x S in {1..32}, on Tajasarus.
+  - Clock: compiler-built marker device clock with a HIP-event witness per window, `device_clock_witness` route.
+  - Protocol: 3 fresh processes x 9 interleaved rounds.
+  - Router 16x256x2048: S=2 -> 8, 2.18x -> 3.40x (fp16).
+  - Newly split: 16x768x2048 S=4 2.43x, 32x256x7168 S=8 4.80x, 64x128x4096 S=8 3.85x, 64x512x2048 S=2 1.82x.
+  - Never selected, measured negative or neutral: 192 tiles; tiles x S >= 1024; 128-wide slices at K=256.
+- **Caveats.**
+  - 16x2048x768 S=2 (1.12-1.24x) is admitted in only 1-2 of 3 runs. The two-sided marker-overhead gate refuses it sporadically.
+  - Absolute times depend on the window length (long unsplit kernels ran 25-35% slower in 50 ms windows), so ratios are compared within one sweep.
+  - Why splitting pays past one workgroup per WGP is unmeasured; there are no counters on WSL2.
+- **Open.**
+  - fp8 split: the generator gate would admit an f32-accumulate fp8 contract; no device proof.
+  - int8 split: needs an i32 workspace.
+  - gfx1151: unmeasured, never split; gfx1201 evidence does not transfer.
+  - M > 64, dynamic K, the LDS body.
+  - A workspace pool for `runtime.launch` (it allocates per call).
+- **Sibling outcomes.**
+  - gfx1151: not applicable by rule. The target table has no gfx1151 entry, so nothing splits there, which is correct for an unmeasured part.
+  - NVIDIA / Apple / x86: not applicable. The rule is gfx1201-only, and unsplit digests are unchanged.
+
 ## Streaming STFT on `target="rocm"` claims gfx1151 on a gfx1201 host — 2026-09-26
 
 Found while proving a sweep failure pre-existing for ROCM-SPLIT-K-1. `spectral_streaming.stream_stft_chunk(target="rocm")` hard-codes `architecture = "gfx1151"` into the artifact digest and the execution certificate, and `test_physical_streaming_broadcast_strides_and_artifact_lineage` asserts that label. On Tajasarus (gfx1201) the test **passes in isolation**, which means it certifies a run on the RX 9070 XT as a gfx1151 execution: a mislabel, not proof. In the full `-k "rocm or gfx1201 or gfx1151"` sweep the `[rocm-True]` case fails with `gfx1151 streaming STFT package failed rc=246`. It fails the same way at `054fa7c3` (before split-K) and at the split-K fixes HEAD. The logs are in `benchmarks/baselines/rocm_split_k_20260926/spectral_*.txt`. The failure depends on test order and has not been root-caused. **Owed:** derive the architecture from the live device, or refuse on a non-gfx1151 host, the way `rocm_pipeline.promoted_families` refuses. Also make the test expect the host's arch, then find what earlier test leaves the AMD composite library in a state where it returns 246. gfx1151 (Princess-Luna) is unaffected by the label, because it is the chip the label names.

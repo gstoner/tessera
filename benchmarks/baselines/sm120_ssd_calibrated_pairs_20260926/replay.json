@@ -1,0 +1,10 @@
+{
+  "decision": {
+    "admitted": true,
+    "reason": "exact-artifact paired measurements and %globaltimer device-clock calibration admitted",
+    "lower_bound": 4.325140604432862
+  },
+  "selected_binding": "103f6dde5d9568b74a786f15c7702fd794d0e711378597a42919d1032d0bef4a",
+  "incumbent_binding": "4067787231edc3764585374e98743fcc4994e1686817657f0ceb8f87916f1681",
+  "candidate_binding": "103f6dde5d9568b74a786f15c7702fd794d0e711378597a42919d1032d0bef4a"
+}

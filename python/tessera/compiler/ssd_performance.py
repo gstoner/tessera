@@ -250,7 +250,7 @@ def _admit_nvidia_device_clock(incumbent, comparison, calibrations, report, lowe
         return SSDAdmission(False,'calibrations do not share one source commit with the comparison',lower)
     # One launch count across every row, as on the ROCm route: the bracket
     # offset's share of a window depends on its length (measured on sm_120:
-    # ~10-30 us per window, 2026-09-26).
+    # ~10-16 us per window, 2026-09-26).
     counts = {pair[name]['rows'][0].get('launches_per_window')
               for pair in comparison['pairs'] for name in ('serial', 'cooperative')}
     if len(counts) != 1:

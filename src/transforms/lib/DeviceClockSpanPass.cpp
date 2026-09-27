@@ -43,7 +43,7 @@
 //             `REDG.E.MIN/MAX.64.STRONG.SYS`; the counter advances in 32 ns
 //             steps, and a marker-bracketed span agrees with CUDA events
 //             within 5% once the window is about 1 ms or longer (a
-//             ~10-30 us per-window offset dominates shorter ones).
+//             ~10-16 us per-window offset dominates shorter ones).
 // Both are emitted as `llvm.call_intrinsic`, so no extra dialect is needed.
 //
 // The start stamp is placed AFTER the entry block's last alloca, never before

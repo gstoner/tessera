@@ -447,3 +447,32 @@ def test_rows_recorded_at_different_launch_counts_are_one_measurement_refused(mo
     bound, decision = _witness_admission('gfx1151', 'gfx1151')
     assert bound == 'serial' and not decision.admitted
     assert 'different launch counts' in decision.reason
+
+
+def test_committed_sm120_calibrations_validate_and_carry_the_protocol():
+    """The sm_120 %globaltimer packet, read as data (NVIDIA-GLOBALTIMER-MARKER-
+    2026-09-26): every calibration re-derives as eligible on the device-clock
+    route, names the queried RTX 5070, carries the interleaved protocol at the
+    row's launch count, and binds its row's run and image. The end-to-end
+    replay needs tessera-opt and the GPU; it is committed as ``replay.json``."""
+    import json
+    from tessera.compiler.profiler_nvidia_evidence import validate_nvidia_device_clock_packet
+    from tessera.compiler.ssd_performance import _calibration_protocol_refusal
+    root = _BASELINES / 'sm120_ssd_calibrated_pairs_20260926'
+    comparison = json.loads((root / 'comparison.json').read_text())
+    assert tuple(summarize(comparison['pairs'])['identity'][:2]) == ('nvidia', 'sm_120')
+    for i in range(9):
+        for name in ('serial', 'cooperative'):
+            row_packet = json.loads((root / f'{i}-{name}.json').read_text())
+            calibration = json.loads((root / f'{i}-{name}-calibration.json').read_text())
+            validate_nvidia_device_clock_packet(calibration)
+            assert calibration['eligible_for_promotion'] is True
+            assert calibration['admission_route'] == 'device_clock_witness'
+            identity = calibration['timing']['environment']['device_identity']
+            assert identity['architecture'] == 'sm_120' and identity['name'] == 'NVIDIA GeForce RTX 5070'
+            assert calibration['timing']['environment']['run_id'] == row_packet['run_id']
+            row = row_packet['rows'][0]
+            assert calibration['instrumentation_comparison']['uninstrumented']['image_sha256'] == row['image_sha256']
+            assert _calibration_protocol_refusal(calibration['timing'], row) is None
+    for decision in ('admission.json', 'replay.json'):
+        assert json.loads((root / decision).read_text())['decision']['admitted'] is True

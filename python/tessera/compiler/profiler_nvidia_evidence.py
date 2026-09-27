@@ -24,9 +24,10 @@ validator re-runs the derivation, so a stored packet cannot drop a blocker):
 
 Measured validation behind admitting this route (The-Super-Bear, RTX 5070,
 WSL2, driver 610.88, 2026-09-26): ``%globaltimer`` advances in exact 32 ns
-steps; span and CUDA events differ by a roughly fixed ~10-30 us per window,
-so windows of about 1 ms and longer agree within the band and shorter ones do
-not -- which is why the recorder's window length is a recorded parameter.
+steps; span and CUDA events differ by a roughly fixed ~10-16 us per window
+(~46 us at most), so windows of about 1 ms and longer agree within the band
+and shorter ones do not -- which is why the recorder's window length is a
+recorded parameter.
 Evidence: ``benchmarks/baselines/sm120_ssd_calibrated_pairs_20260926/``.
 """
 

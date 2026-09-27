@@ -229,7 +229,7 @@ def test_artifact_states_the_authority_even_when_the_oracle_disagrees(monkeypatc
     from tessera.compiler import scheduled_matmul
     monkeypatch.setattr(scheduled_matmul, "rocm_split_k", lambda *a, **k: (1, ""))
     artifact = _lower((16, 2048, 256))
-    assert (artifact.split_k, artifact.split_k_reduction) == (2, "ordered")
+    assert (artifact.split_k, artifact.split_k_reduction) == (8, "ordered")
     with pytest.raises(ValueError, match="oracle disagrees with the native Schedule"):
         scheduled_matmul.verify_matmul_projection(artifact)
 
@@ -375,7 +375,7 @@ def test_gfx1201_split_k_workspace_is_typed_and_the_launcher_checks_it():
     package, _, _ = _run_split_k_package((16, 2048, 256), "fp16")
     workspace = package.descriptor.workspace
     assert (workspace.bytes, workspace.alignment, workspace.lifetime, workspace.initialization) == (
-        2 * 16 * 256 * 4, 256, "launch", "undefined")
+        8 * 16 * 256 * 4, 256, "launch", "undefined")
     rng = np.random.default_rng(3)
     a = rng.normal(size=(16, 2048)).astype(np.float16)
     b = rng.normal(size=(2048, 256)).astype(np.float16)

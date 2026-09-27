@@ -8,20 +8,105 @@ last_updated: 2026-09-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: committed autotune rows are stale until re-recorded
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: sm_120 corpus rows owed; gfx1151 re-recorded
 
 Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
-item 3). **Follow-up required on Super-Bear; nothing was device-run.** The
-arbiter corpus (`benchmarks/baselines/autotune_corpus.json`; the format is now v4,
-the committed file is still v3) keys every verdict on the toolchain identity (`compiler/toolchain_identity.py`: CUDA
-13.4 / PTX 9.4 / driver 610.88 / driver-JIT PTX 9.3 / LLVM 23.1.1 pins) and,
-for `nvidia_mma_gemm_shipped`, the content digest of `libtessera_nvidia_gemm`.
-All 97 committed `nvidia:sm_120` rows predate that key, so they load as stale
-and select nothing -- including the paged-attention serving warm start
-(`emit/nvidia_cuda.py::_paged_attention_corpus_winner` now returns `None`). Re-record them with
-`benchmarks/nvidia/record_autotune_corpus.py` (and re-run
-`record_autotune_reproducibility.py`, whose strict admission fails, naming
-the stale reason, until the corpus is re-recorded).
+item 3). **Follow-up required on Super-Bear; no sm_120 row has been
+re-recorded.** The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`,
+written as v4 since the gfx1151 re-record) keys every verdict on the toolchain
+identity (`compiler/toolchain_identity.py`: CUDA 13.4 / PTX 9.4 / driver
+610.88 / driver-JIT PTX 9.3 / LLVM 23.1.1 pins) and, for
+`nvidia_mma_gemm_shipped`, the content digest of `libtessera_nvidia_gemm`. All
+97 committed `nvidia:sm_120` rows predate that key, so they load as stale and
+select nothing -- including the paged-attention serving warm start
+(`emit/nvidia_cuda.py::_paged_attention_corpus_winner` returns `None`). The 16
+`rocm:gfx1151` rows were re-recorded on Princess-Luna on 2026-09-26 (ROCm plan,
+same key); the sm_120 rows were left byte-identical in content.
+
+**Recorder fixes landed host-free (Mac), so the re-record cannot destroy
+evidence:**
+
+- `record_autotune_corpus.py` always loads the corpus now. Before, a run without
+  `--warm-start` started empty and `save_corpus` deleted every other device's
+  rows (it would have deleted the re-recorded gfx1151 rows); with
+  `--warm-start` it stamped the nvcc evidence block onto every row in `_store`,
+  which after Decision #11 includes current gfx1151 rows on any host. It now
+  evicts only its own current sm_120 rows (`matmul`, `fused_region`,
+  `attention`, `gated_matmul`, `conv2d`) unless `--warm-start`, stamps only rows
+  this run measured, refuses to write if another device loses rows, and names
+  owned rows left stale. Test: `tests/unit/test_nvidia_autotune_corpus_recorder.py`.
+- `finalize_test5_corpus.py` wrote `"version": 3` and, for an unstable pair,
+  copied the fresh evidence -- now carrying today's `toolchain_digest` -- onto
+  the prior committed row. With a stale prior row that serves a pre-key
+  measurement as current. It now replaces a prior row from a different (or no)
+  toolchain with the fresh selector-ineligible one, and writes
+  `CORPUS_VERSION`. Tests: `tests/unit/test_nvidia_test5_corpus_finalize.py`.
+
+**The 97 keys and who writes them.** 92 are `record_autotune_corpus.py` keys
+followed by `finalize_test5_corpus.py` (two runs; the stability/resource
+evidence `stable_runs`, `run_winners`, `selector_eligible`,
+`resource_fingerprints` comes from the finalizer, not the recorder):
+
+- `matmul`, `float16` and `bfloat16`, both timings (28): 64³, 256³, 512³, 1024³,
+  2048³, 128x256x64, 127x259x63.
+- `fused_region` bias+gelu: `f16` end_to_end at 64³, 256³, 128x512x256,
+  127x259x63, 128x256x256 (5); `f32`/`fp8_e4m3`/`fp8_e5m2` both timings at
+  64³, 256³, 128x512x256, 127x259x63 (24), plus device-only at 128x256x256 (3).
+- `attention` causal: `f16` end_to_end at 128x128x64x64, 64x512x64x64,
+  64x256x64x64 (3); `f32`/`fp8_e4m3`/`fp8_e5m2` both timings at
+  128x128x64x64, 64x512x64x64 (12), plus device-only at 64x256x64x64 (3).
+- `gated_matmul` silu, `f32`/`fp8_e4m3`/`fp8_e5m2`, both timings, 64x256x256
+  and 128x512x512 (12).
+- `conv2d` f32 device, 1x32x32x32x3x3x64 and 1x64x64x64x3x3x64 (2).
+
+The remaining 5 are `benchmark_serving.py --update-corpus` keys, device timing:
+`paged_kv_decode` f32 buckets `[1,8,128,64]`, `[1,8,512,64]`, `[1,8,2048,64]`
+and `ssm_replay_decode` f32 `[1,128,64]`, `[1,256,128]`.
+
+Adding 128x256x256 / 64x256x64x64 to the recorder's shape lists covers the 8
+keys the defaults miss; the current recorder races composed dtypes in both
+timings, so it also writes 6 composed `end_to_end` rows at those two shapes,
+and the serving recorder writes 5 `end_to_end` rows beside its device rows --
+11 keys the committed corpus does not have today. Those are additive, not a
+loss.
+
+**Commands (Super-Bear, `ssh bear`; a fresh worktree of the branch with its
+own `build/` and `build-nvidia-cuda/` both fully built -- see the stale
+`build-nvidia-cuda` trap; every timing run under the shared lock):**
+
+```bash
+source .venv/bin/activate && source scripts/_nvidia_env.sh
+export PYTHONPATH=python
+SHAPES=(--fused-shapes 64x64x64 256x256x256 128x512x256 127x259x63 128x256x256
+        --attention-shapes 128x128x64x64 64x512x64x64 64x256x64x64)
+# Two independent fresh runs into scratch corpora (absent file => empty cache).
+for run in 1 2; do
+  rm -f /tmp/sm120_run$run.json
+  TESSERA_AUTOTUNE_CORPUS=/tmp/sm120_run$run.json \
+    flock /tmp/tessera-timing.lock \
+    python benchmarks/nvidia/record_autotune_corpus.py "${SHAPES[@]}"
+done
+# Merge: replaces a stale row with the fresh one; stable pairs become eligible.
+python benchmarks/nvidia/finalize_test5_corpus.py \
+  --base benchmarks/baselines/autotune_corpus.json \
+  --first /tmp/sm120_run1.json --second /tmp/sm120_run2.json \
+  --resources benchmarks/baselines/nvidia_sm120_test5_route_resources.json \
+  --output benchmarks/baselines/autotune_corpus.json
+# Serving rows (loads the committed corpus, replaces its 5 stale device rows).
+flock /tmp/tessera-timing.lock python benchmarks/nvidia/benchmark_serving.py \
+  --update-corpus --output /tmp/sm120_serving.json
+# Strict admission of every selector-eligible row.
+python benchmarks/nvidia/record_autotune_reproducibility.py
+```
+
+Before committing, diff rows and evidence against the previous corpus: 16
+`rocm:gfx1151` rows unchanged, no sm_120 key lost, every sm_120 row carrying
+`evidence.toolchain_digest`, and
+`MeasureCache().stale_records()` empty (or naming exactly the keys the run
+could not re-race). `resource_fingerprints` in
+`nvidia_sm120_test5_route_resources.json` are from the earlier TEST-5 run; if
+`record_autotune_reproducibility.py` refuses a row as a stale resource
+fingerprint, regenerate that manifest first rather than dropping the row.
 
 ## `NVIDIA-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
 

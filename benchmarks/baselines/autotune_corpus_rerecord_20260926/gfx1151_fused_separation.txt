@@ -1,0 +1,18 @@
+racing 2 candidates: rocm_generic_hip, rocm_wmma_gemm
+evicted 0 current gfx1151 fused_region rows; 8 stale (pre-toolchain-identity) rows will be re-measured and replaced
+  64x64 end_to_end: rocm_generic_hip       separated  margin=59.18% noise=6.86%
+  64x64 device    : rocm_wmma_gemm         separated  margin=93.24% noise=10.72%
+  256x256 end_to_end: rocm_wmma_gemm         separated  margin=45.40% noise=3.09%
+  256x256 device    : rocm_wmma_gemm         separated  margin=99.51% noise=0.28%
+  512x512 end_to_end: rocm_wmma_gemm         separated  margin=81.19% noise=4.11%
+  512x512 device    : rocm_wmma_gemm         separated  margin=99.89% noise=1.62%
+  1024x1024 end_to_end: rocm_wmma_gemm         separated  margin=94.81% noise=3.69%
+  1024x1024 device    : rocm_wmma_gemm         separated  margin=99.91% noise=0.64%
+
+device rows timed by: device_event
+
+           rows  rocm  other  ranked  separated  unseparated  never_asked
+  before   113    16     97     101         35           55           11
+  after    113    16     97     101         35           55           11
+
+wrote /home/gstoner/programming/tessera-corpus/benchmarks/baselines/autotune_corpus.json

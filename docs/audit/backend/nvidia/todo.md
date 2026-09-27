@@ -125,7 +125,7 @@ qualify a promotion (`WSL-TIMING-ADMISSION-2026-09-26`).
 
 **NVIDIA release gate, device layer, at `4a275453`** (same box and worktree,
 under the timing lock,
-`TESSERA_NVIDIA_REPORT_DIR=~/gate-reports/sm120-fu-4a275453`): GATE_RESULT.
+`TESSERA_NVIDIA_REPORT_DIR=~/gate-reports/sm120-fu-4a275453`): both device-correctness passes **1141 passed, 1 skipped, 0 failed** (junit `device-correctness-{1,2}.xml`: 1142 tests, 0 failures, 0 errors, 1 skipped each), `status=success`. The skip is NCCL not installed, so the multi-rank topology lane cannot be evaluated here. The 19 new `test_emitted_stale_cuda_error.py` cases are included; the previous gate ran 1122. A follow-up probe on this box showed that a successful `cudaEventRecord`, `cudaEventSynchronize` or `cudaEventElapsedTime` leaves a launch error in the slot, so the timers' read after the end event still sees a failed timed launch.
 
 Open, found here:
 
@@ -141,8 +141,9 @@ Open, found here:
   returned success after an invalid-configuration launch on this box, so a
   launch that never ran reports `rc 1`. To fix it, add a post-launch slot read
   to each entry and apply the same clear-first rule, with device proof. Their
-  unchecked H2D copies (`cudaMemcpy` status ignored, e.g. the generic fused
-  entry's) are the same class of gap. ROCm has the same gap in
+  unchecked H2D copies (`cudaMemcpy` status ignored) are the same class of
+  gap. In the raced lanes, the new post-launch read now also catches a failed
+  copy, because a failing `cudaMemcpy` writes the slot. ROCm has the same gap in
   `su`/`paged_kv`/`paged_attention`.
 - The two mma.sync attention entries depend, in practice, on an undocumented
   reset (`cudaFuncSetAttribute`) that masks a stale error. They clear anyway,

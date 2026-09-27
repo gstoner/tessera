@@ -147,9 +147,14 @@ with no route-resource entry, or its verdict is unseparated.
 previous re-record, every change is at a small or ragged shape, or is a
 native-vs-composed pair whose verdict is unseparated or finalizer-ineligible.
 
-**Release gate.** The results of `scripts/run_nvidia_release_gate.sh --layer
-device` on this tree are recorded in the NVIDIA queue under the same sync key,
-with the report directory.
+**Release gate.** `scripts/run_nvidia_release_gate.sh --layer device` ran at
+`4a275453` (this corpus commit) on the same box and worktree, under the timing
+lock, with `TESSERA_NVIDIA_REPORT_DIR=~/gate-reports/sm120-fu-4a275453` (which
+holds `device-correctness-{1,2}.xml`). Both passes: **1141 passed, 1 skipped,
+0 failed** (junit: 1142 tests, 0 failures, 0 errors, 1 skipped). The skip is
+NCCL not installed, so the multi-rank topology lane cannot be evaluated here.
+`status=success`. The gate's re-configure of `build-nvidia-cuda/` was a no-op
+for the bridge.
 
 **Stated limits.**
 

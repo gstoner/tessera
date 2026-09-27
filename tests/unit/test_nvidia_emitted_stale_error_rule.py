@@ -112,6 +112,15 @@ def test_raced_lanes_check_every_launch_group_after_launching():
                            if m.start() > last_launch]
             if not reads_after:
                 bad.append(f"{label}:{entry.name} never reads the slot after its last launch")
+            if groups == 2:
+                # A timer checks its warm-up group before it starts timing:
+                # a read strictly between its first and last launch.
+                first_launch = body.find("<<<")
+                between = [m.start() for m in re.finditer(r"cudaGetLastError\(\)", body)
+                           if first_launch < m.start() < last_launch]
+                if not between:
+                    bad.append(f"{label}:{entry.name} does not check its warm-up "
+                               "launches before the timed group")
     assert not bad, "\n".join(bad)
     assert seen == set(_RACED), f"raced entries not rendered: {sorted(set(_RACED) - seen)}"
 

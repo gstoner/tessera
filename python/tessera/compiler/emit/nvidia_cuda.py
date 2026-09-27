@@ -178,9 +178,10 @@ _SHIPPED_GEMM_CALLEES = {
 #   recorded gap (a launch-configuration error reaches only the slot, so
 #   `cudaDeviceSynchronize` returns success over a launch that never ran).
 #
-# The arbiter-raced lanes -- generic fused, scalar flash attention, gated,
-# pointwise, and the mma.sync fused / attention / gated lanes, host and
-# device-timer entries -- now also CHECK each launch through the slot (as the
+# The arbiter-raced lanes -- generic fused, scalar flash attention, gated and
+# the mma.sync fused / attention / gated lanes (host and device-timer entries),
+# and the host-only pointwise lane -- now also CHECK each launch through the
+# slot (as the
 # ROCm generic lane does), so a launch that never ran cannot be timed or served
 # as a kernel. `tests/unit/test_nvidia_emitted_stale_error_rule.py` gates the
 # rule on every emitted source; `tests/device/nvidia/

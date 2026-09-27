@@ -620,6 +620,12 @@ def _finalize(
     source = raw.get("source", {})
     if not isinstance(source, dict) or source.get("worktree_dirty") is not False:
         reasons.append("SOURCE_WORKTREE_DIRTY")
+    # The corpus's consumer (target_perf.corpus_selector_eligibility) refuses a
+    # tag it has not declared, so check here rather than write a corpus nothing
+    # will read.
+    from tessera.compiler.target_perf import CALIBRATION_CORPUS_VOCABULARY
+
+    CALIBRATION_CORPUS_VOCABULARY.require_known(reasons, ValueError)
     selector_eligible = not reasons
     if reasons and not allow_provisional:
         raise ValueError("calibration is not selector-eligible: " + ", ".join(reasons))

@@ -1,183 +1,468 @@
-"""Host-free: Decision #29's op-level clause, gated at last.
+"""Host-free: Decision #29's op-level clause (GOV-ODS-CONSUMER-1).
 
 #29 says a declared ODS op must have a named consumer or be deleted, and cites
-`test_governance_declarations.py` as its drift gate. Measured 2026-09-19, that
-file checks coverage *axes* and duplicate *dialect names* — and nothing mapped
-an op to a consumer. Confirmed the expensive way: `tessera.scaled_matmul` was
-committed with no consumer and all fourteen governance tests passed.
+`test_governance_declarations.py` as its drift gate -- which checks coverage
+*axes* and duplicate *dialect names*, and never mapped an op to a consumer.
+Confirmed the expensive way: `tessera.scaled_matmul` was committed with no
+consumer and every governance test passed.
 
-That absence also explains #29's own history. Every instance it cites —
-`manifold` reaching no backend, `MultivectorSpec.grades`, nine `!tile.*` types,
-`numeric_policy` with no carrier, `TilingInterface` — was found **by hand**,
-which is what an ungated rule produces.
+The scan lives in `tessera.compiler.ods_consumer_audit`; read its docstring for
+what counts as a reference. The short version:
 
-An op counts as consumed when something outside its own `.td` mentions either
-its generated C++ class or its full `dialect.mnemonic` name: a pass, a
-lowering, a verifier, a fixture. That is deliberately generous. The failure
-this catches is a declaration nothing anywhere refers to, which reads in review
-as a closed contract while carrying nothing; distinguishing a *good* consumer
-from a nominal one is a judgement no scan should be trusted with.
+* a reference by **shipped compiler code** (a pass, lowering, verifier, or a
+  Python producer/consumer) satisfies #29;
+* a reference **only by tests or lit fixtures does not** -- a fixture proves the
+  op parses, not that the compiler produces or consumes it -- so a
+  fixture-only op must be waived and is listed here, never passed;
+* an op nothing names is waived as `unreferenced`.
 
-Declarations held deliberately under Decision #29a stay in the waiver below,
-which may only shrink.
+History: the first version of this gate (2026-09-20) matched only
+`def X : Op<Dialect, "name">`, so it parsed 286 of 623 records and skipped the
+dominant `def X : Dialect_Op<"name">` form entirely; it also counted fixtures
+and bare substrings as consumers. Rebuilt 2026-09-27 (sync
+`EVIDENCE-GOVERNANCE-GATES-2026-09-27`): a balanced TableGen reader that
+resolves class templates, cross-checked record-for-record against
+`llvm-tblgen --dump-json` once, by hand, when it landed (609 of 609 op records
+agreed on name and mnemonic; the 14 it could not dump -- `tessera_neighbors.td`
+redefines `StrAttr`, and two solver `.td` files leave an attr/type `mnemonic`
+unresolved -- are read here). No test re-runs that cross-check, since it needs
+an LLVM install; `_DECLARED_OP_RECORDS` and the per-form pins stand in for it.
+The pre-PR review found three fail-open holes (a `using` declaration, prose in a
+string, an op's own dialect arity table); each has a synthetic case below.
 """
 
 from __future__ import annotations
 
 import re
-import subprocess
+import textwrap
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+from tessera.compiler.ods_consumer_audit import (
+    REPO_ROOT,
+    OdsParseError,
+    build_corpus,
+    classify,
+    declared_ops,
+    duplicate_names,
+)
 
-#: `def Foo_BarOp : Op<Foo_Dialect, "bar", [...]>` and its ODS variants.
-_OP_DEF = re.compile(
-    r"^def\s+(\w+)\s*:\s*(?:\w*Op|Op)\s*<\s*\n?\s*(\w+)\s*,\s*\"([^\"]+)\"", re.M)
-_DIALECT_DEF = re.compile(r"^def\s+(\w+)\s*:\s*Dialect\s*\{(.*?)\n\}", re.M | re.S)
-_DIALECT_NAME = re.compile(r'let\s+name\s*=\s*"([^"]+)"')
-
-#: Only the shipped compiler. `examples/` and `research/` carry their own
-#: dialects as worked demonstrations; holding them to the product's consumer
-#: rule would either delete illustrations or pad the waiver with entries nobody
-#: intends to close.
-_SCOPES = ("src",)
-_SEARCH_ROOTS = ("src", "python", "tools", "tests")
-
-
-def _td_files() -> list[Path]:
-    return sorted(
-        p for scope in _SCOPES for p in (ROOT / scope).rglob("*.td")
-        if "archive" not in p.parts and "build" not in str(p)
-    )
-
-
-def _declared_ops() -> list[tuple[Path, str, str, str]]:
-    names: dict[str, str] = {}
-    for td in _td_files():
-        for m in _DIALECT_DEF.finditer(td.read_text(errors="ignore")):
-            found = _DIALECT_NAME.search(m.group(2))
-            if found:
-                names[m.group(1)] = found.group(1)
-    ops: list[tuple[Path, str, str, str]] = []
-    for td in _td_files():
-        for m in _OP_DEF.finditer(td.read_text(errors="ignore")):
-            record, dialect, mnemonic = m.group(1), m.group(2), m.group(3)
-            cpp = re.sub(r"^[A-Za-z0-9]+_", "", record)   # Tessera_MatmulOp -> MatmulOp
-            ops.append((td, record, cpp, f"{names.get(dialect, '?')}.{mnemonic}"))
-    return ops
-
-
-#: This file names every waived op as a string, so a naive search would find
-#: each one here and call it consumed -- adding an entry to the waiver would
-#: silently remove the op from the gate. Caught by `test_unconsumed_waiver_only
-#: _shrinks` on the first run, which is the only reason the gate is not hollow.
 _SELF = Path(__file__).resolve()
 
+#: The waiver file names every waived op, so it is excluded from the corpus:
+#: otherwise writing an op into the waiver would make it look referenced.
+_OPS = declared_ops()
+_TIERS = classify(_OPS, build_corpus(exclude=[_SELF], names={op.full_name for op in _OPS}))
+_BY_KEY = {op.key: op for op in _OPS}
 
-def _has_consumer(td: Path, cpp_class: str, full_name: str) -> bool:
-    # A colliding class name belongs to more than one dialect; see
-    # `_AMBIGUOUS_CPP`. Fall back to the fully qualified mnemonic alone.
-    needles = (full_name,) if cpp_class in _AMBIGUOUS_CPP else (cpp_class, full_name)
-    for needle in needles:
-        result = subprocess.run(
-            ["grep", "-rlF", "--include=*.cpp", "--include=*.h", "--include=*.py",
-             "--include=*.td", "--include=*.mlir", needle,
-             *(str(ROOT / r) for r in _SEARCH_ROOTS)],
-            capture_output=True, text=True)
-        for hit in result.stdout.split():
-            path = Path(hit).resolve()
-            if path != td.resolve() and path != _SELF and "build" not in hit:
-                return True
+
+class Waiver(NamedTuple):
+    """One declared op held without a compiler consumer.
+
+    ``decision`` is ``"#29"`` for a plain violation (unfinished wiring or an op
+    that should go -- the owner decides which) or ``"#29a"`` for a declared
+    debt, which must also name ``owner``: a queue item that exists with a gate,
+    and whose ID is written at the op's declaration site (#29a conditions 1-2;
+    this file is condition 4, the count).
+    """
+
+    tier: str
+    decision: str
+    reason: str
+    owner: str | None = None
+
+
+# Family reasons, measured 2026-09-27. "No static reference" leaves one door
+# open that no scan can close: a name assembled at run time
+# (`f"tessera.{kind}"`) is invisible here, so confirm before deleting.
+_R_CACHE = ("cache dialect KV/page/ring ops: no pass, lowering, verifier or Python "
+            "emitter names them; the KV cache lowers through `tessera.kv_cache.*` "
+            "and runtime handles instead")
+_R_TESSERA_CACHE = "Graph-level page lookup with no producer or lowering"
+_R_SOLVER_CORE = ("solvers/core dialect (`trng`/`tsl`/`tss`): its .td is built by "
+                  "CMake, but no C++ outside `solvers/core/dialects` and no Python "
+                  "names these ops")
+_R_SOLVER_LINALG = ("linalg solver op with no producer or lowering; `potrf`/`potrs` "
+                    "appear only in the `spd_solve.mlir` fixture")
+_R_COLLECTIVE = ("collective dialect op with no producer or lowering in the "
+                 "collective passes or the Python collectives surface")
+_R_SCHEDULE = "Schedule IR op with no producer and no lowering"
+_R_ARCH = ("architecture-search (`tessera.arch.*`) Graph op; neither the Python "
+           "`tessera.arch` surface nor any pass names it statically")
+_R_AMX = ("retired AMX ISA contract (Decision #19: AMX is a dead end, superseded by "
+          "ACE); kept as an IR contract with no producer and no `amx.*` lowering")
+_R_X86_DIRECTIVE = ("x86 Target IR directive with no producer: `TileToX86Pass` lowers to "
+                    "`func.call` on the C shim and the Python x86 emitter emits "
+                    "`tessera_x86.kernel`; named only by `x86_target_ir.mlir`")
+_R_NVIDIA = ("sm_120 differentiation Target IR op named only by "
+             "`sm120_differentiation_target_ir.mlir`; no C++ or Python producer")
+_R_EBM_GRAPH = ("Graph-level EBM op: the Python `tessera.ebm` surface and the "
+                "runtime kernels exist, but no frontend emits this op and no pass "
+                "lowers it; named only by the `ga_ebm_graph_ops` fixtures")
+_R_ATTN_RES = ("block-AttnRes state op: the Python `_block_attnres_ops` reference "
+               "exists, but no frontend emits this op; only `depth_attn_verifier` "
+               "fixtures name it")
+_R_FIXTURE_ONLY = "named only by lit fixtures / unit tests; no compiler producer or consumer"
+_R_UNREFERENCED = "nothing outside its own .td names it"
+_R_CATALOG_ONLY = ("Graph op named by the op catalog (a list of names, which is a "
+                   "declaration, not a consumer) and by tests; no pass or emitter "
+                   "produces or consumes it")
+_R_CLIFFORD_CALCULUS = ("geometric-calculus op (derivative/integral) with no "
+                        "producer and no lowering in the Clifford passes")
+_R_ATTN_MASK = "FA-4 Attn Tile IR mask/LSE op with no producer; FA-4 lowering does not emit it"
+_R_MOE = ("programming-model MoE op with no producer or lowering; the MoE "
+          "transport tests exercise the Python API, not this op")
+
+
+#: Shrink-only (ceiling below). Seeded 2026-09-27 from the first scan that
+#: parsed every op; the 2026-09-20 list (20 names) was a subset of this, since
+#: it parsed a third of the ops and passed fixture-only ones. **None of these
+#: meets Decision #29a today** -- none is marked at its site with an owning
+#: item -- so every entry is a plain #29 violation: wiring that was never
+#: finished, or an op that should go. This PR deletes none of them; which
+#: answer applies needs the person who owns each dialect.
+_WAIVED: dict[str, Waiver] = {
+    # cache dialect
+    **{name: Waiver("unreferenced", "#29", _R_CACHE) for name in (
+        "cache.kv.create", "cache.page.lookup", "cache.page.read", "cache.page.write",
+        "cache.pt.create", "cache.ring.create", "cache.ring.pop", "cache.ring.push")},
+    "tessera.cache.page_lookup": Waiver("unreferenced", "#29", _R_TESSERA_CACHE),
+    # solver dialects
+    **{name: Waiver("unreferenced", "#29", _R_SOLVER_CORE) for name in (
+        "trng.create_state", "trng.uniform", "trng.normal", "tsl.root.brent",
+        "tsl.root.newton", "tsl.solve_trig", "tss.spmv", "tss.spmm", "tss.cg", "tss.gmres")},
+    **{name: Waiver("unreferenced", "#29", _R_SOLVER_LINALG) for name in (
+        "tessera_solver.getrf", "tessera_solver.trsm", "tessera_solver.ir_step")},
+    **{name: Waiver("fixture_only", "#29", _R_SOLVER_LINALG) for name in (
+        "tessera_solver.potrf", "tessera_solver.potrs")},
+    "tessera_sr.export_manifest": Waiver("unreferenced", "#29", _R_UNREFERENCED),
+    "tessera_spectral.twiddle_table": Waiver("unreferenced", "#29", _R_UNREFERENCED),
+    # collectives
+    **{name: Waiver("unreferenced", "#29", _R_COLLECTIVE) for name in (
+        "tessera_collective.pack_cast", "tessera_collective.shard_view",
+        "tessera_collective.materialize_shard", "tessera_collective.qos.acquire",
+        "tessera_collective.qos.release")},
+    "tessera_collective.qos.limit": Waiver("fixture_only", "#29", _R_COLLECTIVE),
+    # schedule / programming model
+    **{name: Waiver("unreferenced", "#29", _R_SCHEDULE) for name in (
+        "schedule.optimizer_shard", "schedule.async_copy", "schedule.await_movement")},
+    **{name: Waiver("fixture_only", "#29", _R_MOE) for name in (
+        "moe.plan", "moe.token_limiter.create")},
+    "moe.dispatch": Waiver("unreferenced", "#29", _R_MOE),
+    # Graph IR
+    **{name: Waiver("unreferenced", "#29", _R_ARCH) for name in (
+        "tessera.arch.weighted_sum", "tessera.arch.switch", "tessera.arch.mixed")},
+    "tessera.arch.parameter": Waiver("fixture_only", "#29", _R_ARCH),
+    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH) for name in (
+        "tessera.ebm.inner_step", "tessera.ebm.decode_init", "tessera.ebm.self_verify",
+        "tessera.ebm.bivector_langevin_step", "tessera.ebm.sphere_langevin_step")},
+    **{name: Waiver("fixture_only", "#29", _R_ATTN_RES) for name in (
+        "tessera.attn_with_stats", "tessera.softmax_merge", "tessera.softmax_finalize")},
+    "tessera.guided_denoise_region": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    "tessera.istft_jvp": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    # Added 2026-09-27 by the review that closed three fail-open holes; each
+    # was "consumed" only through one of them.
+    "tessera.arch.ste_one_hot": Waiver(
+        "unreferenced", "#29", _R_ARCH + "; its only mention was its own "
+        "dialect's arity table in TesseraOps.cpp"),
+    **{name: Waiver("fixture_only", "#29", _R_CATALOG_ONLY) for name in (
+        "tessera.cache.commit", "tessera.cache.rollback", "tessera.ntk_rope",
+        "tessera.target_verify")},
+    "tessera.ebm.langevin_step_philox": Waiver(
+        "fixture_only", "#29", _R_EBM_GRAPH + "; the runtime kernels mirror its "
+        "semantics, and its only other mention was prose in an execution-matrix "
+        "`reason=` string"),
+    "tessera_nvidia.func": Waiver(
+        "fixture_only", "#29", "NVIDIA Target IR container op named only by "
+        "fixtures; the bare `FuncOp` in PipelineOverlapPass.cpp is "
+        "`using mlir::func::FuncOp`, not this op"),
+    "tessera.ring.create": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    # Tile / Attn / domain dialects
+    "tile.tmem.store": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    **{name: Waiver("fixture_only", "#29", _R_ATTN_MASK) for name in (
+        "tessera_attn.lse.save", "tessera_attn.lse.load", "tessera_attn.causal_mask")},
+    "tessera_attn.dropout_mask": Waiver("unreferenced", "#29", _R_ATTN_MASK),
+    **{name: Waiver("unreferenced", "#29", _R_CLIFFORD_CALCULUS) for name in (
+        "tessera_clifford.ext_deriv", "tessera_clifford.codiff",
+        "tessera_clifford.vec_deriv", "tessera_clifford.integral")},
+    "tessera_ebm.partition_z": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    # Target IR
+    "tessera_apple.gpu.mps_softmax": Waiver("unreferenced", "#29", _R_UNREFERENCED),
+    **{name: Waiver("unreferenced", "#29", _R_UNREFERENCED) for name in (
+        "tessera_rocm.memcpy", "tessera_rocm.emit")},
+    **{name: Waiver("fixture_only", "#29", _R_NVIDIA) for name in (
+        "tessera_nvidia.mma_fused", "tessera_nvidia.mma_attention", "tessera_nvidia.fpquant")},
+    **{name: Waiver("fixture_only", "#29", _R_AMX) for name in (
+        "tessera_x86.amx_tile_load", "tessera_x86.amx_tile_store",
+        "tessera_x86.amx_tile_zero", "tessera_x86.amx_dpbf16ps")},
+    "tessera_x86.amx_dpbusd": Waiver("unreferenced", "#29", _R_AMX),
+    **{name: Waiver("fixture_only", "#29", _R_X86_DIRECTIVE) for name in (
+        "tessera_x86.avx512_gemm_microkernel", "tessera_x86.pack_b_panel",
+        "tessera_x86.elementwise")},
+}
+
+#: The waiver may only shrink: lower this with every entry removed. Raising it
+#: is visible in review and needs a reason in the PR.
+_WAIVER_CEILING = 84
+
+#: One textual op name declared by two ODS records. `TesseraOps.td` declares
+#: the seven `tessera.neighbors.*` ops in the `tessera` dialect (the live ones:
+#: MLIR resolves `tessera.neighbors.x` by its first segment); the unbuilt
+#: `tessera_neighbors.td` redeclares them for a hand-written neighbors dialect
+#: (`TesseraNeighbors.cpp` defines `struct HaloRegionOp` etc. by hand), and
+#: `llvm-tblgen` cannot even dump that file. Three declarations of one op is
+#: Decision #31's duplicate authority in ODS form. Shrink-only.
+_DUPLICATE_NAMES_ON_2026_09_27: frozenset[str] = frozenset({
+    "tessera.neighbors.halo.exchange",
+    "tessera.neighbors.halo.region",
+    "tessera.neighbors.neighbor.read",
+    "tessera.neighbors.pipeline.config",
+    "tessera.neighbors.stencil.apply",
+    "tessera.neighbors.stencil.define",
+    "tessera.neighbors.topology.create",
+})
+
+
+# ─── The scan itself ────────────────────────────────────────────────────────
+
+
+def test_scan_parses_every_ods_form() -> None:
+    """A scan that silently skips a declaration form passes every other test.
+
+    Pins one op per form: the class-template form that the 2026-09-20 regex
+    missed, a two-level class chain, the direct `Op<Dialect, "name">` form, a
+    dotted dialect name, and a dotted mnemonic.
+    """
+    names = {op.full_name for op in _OPS}
+    for expected in (
+        "tile.view",                       # def Tile_ViewOp : Tile_Op<"view", [Pure]>
+        "tile.tri_solve",                  # Tile_LinalgOp -> Tile_Op -> Op
+        "tessera_solver.trsm",             # def TrsmOp : Op<Tessera_Solver_Dialect, "trsm">
+        "tessera.matmul",
+        "tessera_rocm.swmmac",
+        "tile.tmem.store",                 # dotted mnemonic
+        "tessera.neighbors.halo.region",   # dotted dialect name
+    ):
+        assert expected in names, f"the ODS reader no longer parses {expected}"
+    assert len(_OPS) == _DECLARED_OP_RECORDS, (
+        f"{len(_OPS)} ODS op records parsed, expected {_DECLARED_OP_RECORDS}. "
+        f"If you added or deleted ops, update _DECLARED_OP_RECORDS; otherwise the "
+        f"reader has drifted from the ODS spelling and ops are escaping the gate "
+        f"(or being invented).")
+
+
+#: Every op record under `src/`. Pinned exactly, not as a floor: a floor let
+#: the reader lose up to its slack without failing (GOV-ODS-CONSUMER-1 review).
+_DECLARED_OP_RECORDS = 623
+
+
+def test_scan_calls_a_known_consumed_op_consumed() -> None:
+    assert _TIERS["tessera.matmul"] == "compiler"
+    assert _TIERS["tessera_rocm.swmmac"] == "compiler"
+
+
+def _synthetic_repo(tmp: Path) -> None:
+    (tmp / "src/d").mkdir(parents=True)
+    (tmp / "src/lib").mkdir(parents=True)
+    (tmp / "tests").mkdir()
+    (tmp / "src/d/Foo.td").write_text(textwrap.dedent('''
+        // def Commented_Op : Op<Foo_Dialect, "ghost">;
+        def Foo_Dialect : Dialect {
+          let name = "foo";
+          let cppNamespace = "::acme::foo";
+        }
+        class Foo_Op<string mnemonic, list<Trait> traits = []> :
+            Op<Foo_Dialect, mnemonic, traits>;
+        class Foo_PureOp<string m> : Foo_Op<m, [Pure]> {
+          let summary = [{ a code block naming foo.unused, which is not a use }];
+        }
+        def Foo_UsedOp : Foo_Op<"used"> {}
+        def Foo_TextualOp : Foo_PureOp<"textual.op">;
+        def Foo_FixtureOp : Foo_Op<"fixture"> {}
+        def Foo_UnusedOp : Op<Foo_Dialect, "unused", [Pure]> {}
+        def Foo_YieldOp : Foo_Op<"yield"> {}
+        def Foo_FuncOp : Foo_Op<"func"> {}
+        def Foo_ProseOp : Foo_Op<"prose"> {}
+        def Foo_TableOp : Foo_Op<"table"> {}
+        def Foo_CatalogOp : Foo_Op<"catalog"> {}
+        def Foo_WildOp : Foo_Op<"wild"> {}
+    '''))
+    (tmp / "src/lib/Lower.cpp").write_text(textwrap.dedent('''
+        // UnusedOp is mentioned in a comment, which is not a use.
+        LogicalResult UnusedOp::verify() { return success(); }
+        struct P : OpRewritePattern<UsedOp> {};
+        void f() {
+          auto s = "%0 = foo.textual.op";
+          auto why = "this lowering matches foo.prose.";  // prose, not IR
+          scf::YieldOp y;           // a foreign YieldOp, not foo.yield
+          auto t = x.foo.unused;    // member access, not a textual op name
+        }
+    '''))
+    (tmp / "src/lib/Other.cpp").write_text(textwrap.dedent('''
+        using mlir::func::FuncOp;
+        void g(FuncOp f) {}         // mlir's FuncOp, not foo.func
+    '''))
+    (tmp / "src/lib/Upstream.cpp").write_text(textwrap.dedent('''
+        using namespace mlir::scf;
+        void h(WildOp w) {}         // could be scf's; not evidence for foo.wild
+    '''))
+    # The dialect's own implementation: its arity table is not a consumer.
+    (tmp / "src/lib/FooOps.cpp").write_text(textwrap.dedent('''
+        static const Arity kTable[] = {{"foo.table", 1, 1}};
+        LogicalResult TableOp::verify() { return success(); }
+        #define GET_OP_CLASSES
+        #include "FooOps.cpp.inc"
+    '''))
+    (tmp / "python/tessera/compiler").mkdir(parents=True)
+    (tmp / "python/tessera/compiler/op_catalog.py").write_text('OPS = ["foo.catalog"]\n')
+    (tmp / "tests/fixture.mlir").write_text("%0 = foo.fixture : i32\n")
+
+
+def test_scan_on_a_synthetic_dialect(tmp_path: Path) -> None:
+    """Every rule in one place: tier, template resolution, and each non-use."""
+    _synthetic_repo(tmp_path)
+    ops = declared_ops(tmp_path)
+    assert sorted(op.full_name for op in ops) == [
+        "foo.catalog", "foo.fixture", "foo.func", "foo.prose", "foo.table",
+        "foo.textual.op", "foo.unused", "foo.used", "foo.wild", "foo.yield"]
+    tiers = classify(ops, build_corpus(tmp_path))
+    assert tiers == {
+        "foo.used": "compiler",            # OpRewritePattern<UsedOp>
+        "foo.textual.op": "compiler",      # textual name used as IR in a string
+        "foo.fixture": "fixture_only",     # a lit fixture alone is not a consumer
+        "foo.unused": "unreferenced",      # own verify(), a comment, member access
+        "foo.yield": "unreferenced",       # scf::YieldOp is not foo's YieldOp
+        "foo.func": "unreferenced",        # `using mlir::func::FuncOp`
+        "foo.wild": "unreferenced",        # bare name under an upstream using-namespace
+        "foo.prose": "unreferenced",       # a sentence mentioning it
+        "foo.table": "unreferenced",       # its own dialect's arity table
+        "foo.catalog": "unreferenced",     # a registry lists names; it consumes none
+    }
+
+
+@pytest.mark.parametrize("td_text, match", [
+    ('def D : Dialect { let name = "d"; }\ndefm X : Many<"a">;\n', "defm"),
+    ('def D : Dialect { let name = "d"; }\ndef X : Unknown_Op<"a">;\n', "not declared"),
+    ('def D : Dialect { let name = "d"; }\nclass C<string m> : Op<D, m>;\n'
+     'class C<string m> : Op<D, m>;\n', "declared twice"),
+])
+def test_the_reader_refuses_what_it_cannot_read(tmp_path: Path, td_text: str, match: str) -> None:
+    """An op the reader cannot resolve would silently leave the gate."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/X.td").write_text(td_text)
+    with pytest.raises(OdsParseError, match=match):
+        declared_ops(tmp_path)
+
+
+def test_unparseable_python_is_an_error_not_a_blanket_reference(tmp_path: Path) -> None:
+    _synthetic_repo(tmp_path)
+    (tmp_path / "python/tessera/compiler/broken.py").write_text('x = "foo.unused"(\n')
+    with pytest.raises(OdsParseError, match="cannot parse"):
+        build_corpus(tmp_path, names={"foo.unused"})
+
+
+# ─── The gate ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("key", sorted(_TIERS), ids=sorted(_TIERS))
+def test_declared_op_has_a_compiler_consumer(key: str) -> None:
+    tier = _TIERS[key]
+    if tier == "compiler":
+        return
+    op = _BY_KEY[key]
+    where = op.td.relative_to(REPO_ROOT)
+    assert key in _WAIVED, (
+        f"{key} ({op.record}, {where}) is {tier.replace('_', '-')}: no pass, "
+        f"lowering, verifier or Python producer/consumer names it"
+        + (" -- only tests do, and a fixture proves the op parses, not that "
+           "the compiler uses it" if tier == "fixture_only" else "")
+        + ". Decision #29: give it a consumer or delete it. If it is deliberate "
+          "debt, Decision #29a requires it be marked AT THE SITE with the "
+          "owning queue item before it is added to _WAIVED.")
+    assert _WAIVED[key].tier == tier, (
+        f"_WAIVED[{key!r}] says {_WAIVED[key].tier} but the scan measures {tier}; "
+        f"update the entry so the waiver states the current fact")
+
+
+def test_waiver_only_shrinks() -> None:
+    stale = []
+    for key in sorted(_WAIVED):
+        if key not in _TIERS:
+            stale.append(f"{key} (no longer declared)")
+        elif _TIERS[key] == "compiler":
+            stale.append(f"{key} (now has a compiler consumer)")
+    assert not stale, f"remove from _WAIVED: {stale}"
+    assert len(_WAIVED) <= _WAIVER_CEILING, (
+        f"_WAIVED grew to {len(_WAIVED)} past its ceiling {_WAIVER_CEILING}; a "
+        f"new op needs a consumer, not a waiver")
+    assert len(_WAIVED) == _WAIVER_CEILING, (
+        f"_WAIVED shrank to {len(_WAIVED)}: lower _WAIVER_CEILING to match so the "
+        f"freed slot cannot be reused")
+
+
+def _plan_has_item(item: str) -> bool:
+    heading = re.compile(rf"^#+\s+.*\b{re.escape(item)}\b", re.M)
+    plans = [REPO_ROOT / "docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+             *sorted((REPO_ROOT / "docs/audit/backend").glob("*/todo.md"))]
+    return any(heading.search(p.read_text(errors="replace")) for p in plans if p.exists())
+
+
+def _marked_at_site(td: Path, record: str, owner: str) -> bool:
+    """The owner ID appears in the record's definition or its leading comment."""
+    lines = td.read_text(errors="replace").splitlines()
+    for i, line in enumerate(lines):
+        if re.match(rf"\s*def\s+{re.escape(record)}\b", line):
+            start = i
+            while start > 0 and lines[start - 1].lstrip().startswith("//"):
+                start -= 1
+            end = i
+            while end < len(lines) and not lines[end].startswith("}") \
+                    and not lines[end].rstrip().endswith(";"):
+                end += 1
+            return owner in "\n".join(lines[start:end + 1])
     return False
 
 
-_OPS = _declared_ops()
-
-#: ODS strips the record's dialect prefix to name the generated C++ class, so
-#: `Cache_RingCreateOp` and `Tessera_RingCreateOp` BOTH generate `RingCreateOp`
-#: (in different namespaces). Searching the bare class name therefore lets one
-#: dialect's consumer vouch for another dialect's op. Measured 2026-09-20: 11
-#: stripped names collide across 22 ops, and exactly one op -- `cache.ring.create`
-#: -- was passing this gate solely on a hit belonging to `tessera.ring.create`.
-#: For a colliding name the bare class is not evidence, so only the unambiguous
-#: `dialect.mnemonic` counts. That fails closed, which is the right direction
-#: for a governance gate: it can call a consumed op unconsumed, never the
-#: reverse.
-_AMBIGUOUS_CPP: frozenset[str] = frozenset(
-    cpp for cpp in {c for _, _, c, _ in _OPS}
-    if len({f for _, _, c2, f in _OPS if c2 == cpp}) > 1
-)
-
-
-def test_ods_scan_finds_ops_at_all() -> None:
-    """A scan that silently matches nothing would pass every other test here."""
-    assert len(_OPS) > 150, (
-        f"only {len(_OPS)} ODS ops parsed; the regex has drifted from the ODS "
-        f"spelling and this gate is now vacuous"
-    )
-
-
-@pytest.mark.parametrize(
-    "td,record,cpp,full", _OPS,
-    ids=[f"{full}" for _, _, _, full in _OPS])
-def test_declared_op_has_a_consumer(td: Path, record: str, cpp: str, full: str) -> None:
-    if _has_consumer(td, cpp, full):
+@pytest.mark.parametrize("key", sorted(_WAIVED))
+def test_each_waiver_is_well_formed(key: str) -> None:
+    waiver = _WAIVED[key]
+    assert waiver.tier in ("fixture_only", "unreferenced")
+    assert len(waiver.reason) >= 25, f"{key}: a waiver must say why"
+    assert waiver.decision in ("#29", "#29a")
+    if waiver.decision == "#29":
+        assert waiver.owner is None, f"{key}: a plain #29 violation has no owning debt item"
         return
-    assert full in _UNCONSUMED_ON_2026_09_20, (
-        f"{full} ({record}, {td.relative_to(ROOT)}) is declared in ODS and "
-        f"nothing outside its own .td refers to it — no pass, lowering, "
-        f"verifier or fixture. Decision #29: give it a consumer or delete it. "
-        f"If it is deliberate debt, Decision #29a requires it be marked AT THE "
-        f"SITE with the queue item that owns the wiring, and only then added "
-        f"here."
-    )
+    # Decision #29a, conditions 1 and 2. (3, a behavioural test, is the
+    # owner's; 4, being counted, is this list.)
+    assert waiver.owner, f"{key}: a #29a debt must name its owning queue item"
+    assert _plan_has_item(waiver.owner), (
+        f"{key}: owner {waiver.owner} is not a queue item with a heading")
+    op = _BY_KEY[key]
+    assert _marked_at_site(op.td, op.record, waiver.owner), (
+        f"{key}: #29a requires {op.record} be marked at its declaration with "
+        f"{waiver.owner}; otherwise it is a plain #29 violation")
 
 
-def test_unconsumed_waiver_only_shrinks() -> None:
-    """A stale waiver re-permits a name that has since been wired."""
-    stale = []
-    for name in sorted(_UNCONSUMED_ON_2026_09_20):
-        match = [(td, c, f) for td, _, c, f in _OPS if f == name]
-        if not match:
-            stale.append(f"{name} (no longer declared)")
-        elif _has_consumer(*match[0]):
-            stale.append(f"{name} (now has a consumer)")
-    assert not stale, (
-        f"remove from _UNCONSUMED_ON_2026_09_20: {stale}")
+def test_marked_at_site_reads_the_definition(tmp_path: Path) -> None:
+    """The #29a site check itself, so an unused branch cannot be vacuous."""
+    td = tmp_path / "X.td"
+    td.write_text("// Unwired: owned by GOV-ODS-CONSUMER-1.\n"
+                  "def Foo_BarOp : Foo_Op<\"bar\"> {\n}\n"
+                  "def Foo_BazOp : Foo_Op<\"baz\">;\n")
+    assert _marked_at_site(td, "Foo_BarOp", "GOV-ODS-CONSUMER-1")
+    assert not _marked_at_site(td, "Foo_BazOp", "GOV-ODS-CONSUMER-1")
+    assert _plan_has_item("GOV-ODS-CONSUMER-1")
+    assert not _plan_has_item("NO-SUCH-ITEM-9")
 
 
-#: Shrink-only. Seeded 2026-09-20 from the first scan that ever ran: 23 of 291
-#: declared ops had no consumer anywhere, 19 of them under `src/`. They are
-#: listed rather than deleted because #29a's exemption may apply to some, but
-#: NONE of them currently satisfies its conditions — none is marked at its site
-#: with an owning queue item. Each entry is either wiring that was never
-#: finished or an op that should go; both answers need the person who knows
-#: which, so the list starts full and empties as they are worked.
-_UNCONSUMED_ON_2026_09_20: frozenset[str] = frozenset({
-    "cache.kv.create",
-    "cache.page.read",
-    "cache.page.write",
-    "cache.pt.create",
-    # Added 2026-09-20 when the ambiguity fix above stopped
-    # `tessera.ring.create`'s consumer from vouching for this op. Its two
-    # siblings were already here; this completes the family rather than
-    # recording new debt.
-    "cache.ring.create",
-    "cache.ring.pop",
-    "cache.ring.push",
-    "tessera_collective.pack_cast",
-    "tessera_collective.qos.acquire",
-    "tessera_collective.qos.release",
-    "tessera_solver.ir_step",
-    "tessera_solver.trsm",
-    "trng.create_state",
-    "tsl.root.brent",
-    "tsl.root.newton",
-    "tsl.solve_trig",
-    "tss.cg",
-    "tss.gmres",
-    "tss.spmm",
-    "tss.spmv",
-})
+def test_no_two_records_declare_one_op_name() -> None:
+    dups = duplicate_names(_OPS)
+    new = sorted(set(dups) - _DUPLICATE_NAMES_ON_2026_09_27)
+    assert not new, (
+        f"these op names are declared by more than one ODS record: "
+        f"{ {n: dups[n] for n in new} }. MLIR resolves a name by its first "
+        f"segment, so at most one can be live; delete the other declaration")
+    stale = sorted(_DUPLICATE_NAMES_ON_2026_09_27 - set(dups))
+    assert not stale, f"no longer duplicated; remove from the ratchet: {stale}"

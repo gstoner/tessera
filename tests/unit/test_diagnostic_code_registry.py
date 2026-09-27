@@ -133,8 +133,10 @@ _PYTHON_CODE_PATTERNS = (
 #: would imply the other ten need entries too, which they do not.
 #:
 #: That vocabulary does need an owner, just not this one: eleven tags gate x86
-#: performance promotion, nothing enumerates them, and a consumer reading
-#: `reasons` cannot know when a twelfth is added. Tracked as X86-EVIDENCE-VOCAB-1.
+#: performance promotion. X86-EVIDENCE-VOCAB-1 (closed 2026-09-27) declares
+#: them -- and the ROCm, NVIDIA, x86 event-map and calibration-corpus tags --
+#: through `evidence_reasons.ReasonVocabulary`, drift-gated by
+#: `test_x86_evidence_vocabulary.py`; validators refuse an undeclared tag.
 _NOT_DIAGNOSTICS = frozenset({
     "GRAPH_IR_SCHEMA_VERSION", "DESIL", "DRIFT", "TIMING_PROOF_INCOMPLETE",
 })

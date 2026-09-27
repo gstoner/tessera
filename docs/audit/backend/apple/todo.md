@@ -10014,3 +10014,9 @@ Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
 Parity validated on the M1 Max CPU lane (11/11). Follow-up unchanged: the Apple GPU EBM kernels (`apple_gpu` EBM rows) are hand-written MSL; no native package route for the loop.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-quadratic-energy-loop-executes-through-the-mlirllvm-backbone).
+
+### Evidence governance gates (2026-09-27)
+
+Owners: X86-EVIDENCE-VOCAB-1 / GOV-ODS-CONSUMER-1 / EVIDENCE-PACKET-1. Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
+
+Not applicable to Apple evidence: no Apple packet family carries ineligibility tags. The ODS gate waives `tessera_apple.gpu.mps_softmax` (unreferenced). No Apple lane changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility).

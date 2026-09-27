@@ -9,6 +9,7 @@ import re
 import statistics
 from typing import Any, Mapping
 
+from .evidence_reasons import ReasonVocabulary, reason_tag
 from .profiler_symbol_sampling import validate_symbol_sampling_artifact
 
 
@@ -67,6 +68,8 @@ X86_INELIGIBILITY_REASONS: dict[str, str] = {
     "SAMPLING_AFFINITY_NOT_PINNED":
         "sampling ran without pinned affinity, so samples may cross cores",
 }
+#: The declaration every reader goes through (`evidence_reasons`).
+X86_REASON_VOCABULARY = ReasonVocabulary("x86", X86_INELIGIBILITY_REASONS)
 
 
 #: Clock proofs the tprof sleep probe reports as booleans. On the tsc_witness
@@ -212,7 +215,7 @@ def _split_for_route(reasons: list[str], route: str) -> tuple[list[str], list[st
 
 def x86_reason_tag(reason: str) -> str:
     """The tag half of a reason, discarding any `:detail` suffix."""
-    return reason.split(":", 1)[0]
+    return reason_tag(reason)
 
 
 def digest_json(payload: Mapping[str, Any]) -> str:
@@ -368,13 +371,7 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
     # Fail CLOSED on an unknown tag (Decision #21a). A reason decides whether a
     # measurement may be promoted, so a tag no consumer knows must stop the
     # packet rather than be carried past readers that will ignore it.
-    unknown = sorted({x86_reason_tag(r) for r in reasons} - set(X86_INELIGIBILITY_REASONS))
-    if unknown:
-        raise X86ProfilerPacketError(
-            f"unknown x86 ineligibility reason(s) {unknown}; declare them in "
-            f"X86_INELIGIBILITY_REASONS with a meaning, or the packet's readers "
-            f"will treat an unknown reason as no reason and promote a result "
-            f"something declined to vouch for")
+    X86_REASON_VOCABULARY.require_known(reasons, X86ProfilerPacketError)
     if payload.get("eligible_for_promotion") and reasons:
         raise X86ProfilerPacketError("promotion-eligible packet has blockers")
     # Re-derive the route and the reason split from the stored benchmark (the
@@ -389,9 +386,7 @@ def validate_x86_profiler_packet(payload: Mapping[str, Any]) -> None:
     gaps = payload.get("diagnostic_gaps", [])
     if not isinstance(gaps, list) or not all(isinstance(g, str) for g in gaps):
         raise X86ProfilerPacketError("invalid x86 diagnostic gaps")
-    unknown_gaps = sorted({x86_reason_tag(g) for g in gaps} - set(X86_INELIGIBILITY_REASONS))
-    if unknown_gaps:
-        raise X86ProfilerPacketError(f"unknown x86 gap tag(s) {unknown_gaps}")
+    X86_REASON_VOCABULARY.require_known(gaps, X86ProfilerPacketError, "diagnostic gap")
     for field_name in ("cpu", "environment"):
         if not isinstance(payload.get(field_name), Mapping):
             raise X86ProfilerPacketError(f"x86 profiler packet requires {field_name}")
@@ -442,8 +437,11 @@ __all__ = [
     "benchmark_verdict",
     "x86_admission_route",
     "X86ProfilerPacketError",
+    "X86_INELIGIBILITY_REASONS",
+    "X86_REASON_VOCABULARY",
     "build_x86_profiler_packet",
     "digest_json",
     "exact_zen5_cpu",
     "validate_x86_profiler_packet",
+    "x86_reason_tag",
 ]

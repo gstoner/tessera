@@ -5027,3 +5027,55 @@ Evidence: `tests/unit/test_rocm_spectral_stale_hip_error.py`, `tests/device/nvid
 <!-- entry-fields:end -->
 
 sm_120 extension, verification (The-Super-Bear RTX 5070, own worktree and `build-nvidia-cuda`, loaded `.so` paths checked; code commit `31209ae8`): the new regression test 9 failed against the pre-fix libraries (`rc=3` host/device FFT and Philox, `rc=292` DCT, `rc=306` STFT and streaming STFT, `rc=365` STFT JVP) and 9 passed fixed; `cudaGetLastError` call sites in the images 23→37 (fft) and 4→8 (rng), matching the 14 + 4 entry clears. NVIDIA spectral/FFT/RNG device files 102 passed; `tests/unit -m "not slow" -k "spectral or stft or fft or dct or rng or philox or dropout"` 707 passed / 221 skipped. Release gate device layer (`scripts/run_nvidia_release_gate.sh --layer device` at `31209ae8`, reports `~/gate-reports/stale-nv-31209ae8` on that box): both passes 1132 tests, 1130 passed, 2 skipped (NCCL not installed; `libtessera_runtime.a` not built), 0 failed, the 9 new tests included; `status=success`. The timing probe on Princess-Luna (gfx1151): pre-fix primed → `HIP instrumented launch failed`, fixed primed → valid sample; Tajasarus (gfx1201) builds it but fails closed before any launch (`requires exact gfx1151`), so it cannot evaluate that lane.
+
+
+### 2026-09-27 — Evidence governance gates: reason vocabularies, ODS consumers, corpus eligibility
+
+Owner: [X86-EVIDENCE-VOCAB-1](INTEGRATED_COMPILER_PLAN.md#x86-evidence-vocab-1)
+
+PRs: branch `claude/evidence-governance-gates`.
+Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
+
+Outcome: Three host-free governance gates. **Reason vocabularies:** the x86
+packet's eleven promotion-ineligibility tags (re-counted from the producer: still
+eleven) and four sibling families with the same shape -- the ROCm profiler
+packet, the NVIDIA device-clock packet, the x86 PMU event map and the
+calibration corpus -- are each declared once through
+`evidence_reasons.ReasonVocabulary`, with a meaning per tag; validators refuse
+an undeclared tag, and the event-map validator, which only type-checked its
+reasons, now re-derives them. Registered diagnostics a packet also carries are
+borrowed by `pass_origin`, never redeclared; no tag was added to
+`diagnostic_codes.py`. **ODS consumers:** the 2026-09-20 gate parsed 286 of 623
+op records, passed fixture-only ops and matched bare substrings; the rebuilt
+scan (`ods_consumer_audit.py`, cross-checked once by hand against
+`llvm-tblgen --dump-json`, refusing constructs it cannot read) waives 84 ops at
+landing -- 38 fixture-only, 46 unreferenced -- each with a reason; none meets
+#29a, none was deleted. The pre-PR review found three fail-open holes (a
+`using mlir::func::FuncOp` vouching for `tessera_nvidia.func`, prose in a
+`reason=` string, an op's own dialect arity table) that had passed seven ops;
+each is closed and pinned by a synthetic test.
+Seven `tessera.neighbors.*` names are declared by two records. **Calibration
+corpus (EVIDENCE-PACKET-1 slice):** `apply_corpus` read `selector_eligible` with a
+default of `True` and never read `ineligibility_reasons`; it and
+`load_pruning_corpus` now refuse missing, contradicted or undeclared eligibility
+evidence by three registered codes, and the committed 2026-08-15 corpus still
+reads and still cannot promote.
+
+Remaining: the 77 waived ops need consume-or-delete decisions per dialect
+owner, and the `tessera.neighbors` double declaration needs one authority;
+EVIDENCE-PACKET-1's shared evidence envelope, GA/EBM route receipts, public-
+frontend AD pairing, asynchronous attribution and clean performance admission
+stay open (plan gate text). `profiler_cuda_window` reasons are prose, not tags,
+and were not changed.
+
+Evidence: `tests/unit/test_x86_evidence_vocabulary.py`,
+`tests/unit/test_ods_op_has_consumer.py`,
+`tests/unit/test_calibration_corpus_eligibility.py`,
+`python/tessera/compiler/evidence_reasons.py`,
+`python/tessera/compiler/ods_consumer_audit.py`; host: Mac (M1 Max, macOS 27),
+no device lane involved.
+
+<!-- entry-fields:end -->
+
+Additional owners: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1),
+[EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1).

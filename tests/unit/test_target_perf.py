@@ -281,6 +281,11 @@ def test_measured_overlay_requires_a_date() -> None:
 # --- calibration corpus ------------------------------------------------------
 
 
+#: Every corpus states its eligibility (EVIDENCE-PACKET-1, 2026-09-27): an
+#: omitted `selector_eligible` used to be read as True.
+_ELIGIBLE = {"selector_eligible": True, "ineligibility_reasons": []}
+
+
 def _raw(devices, environment="bare_metal"):
     """The raw measurement records a corpus must carry: apply_corpus checks
     each overlay equals its record's results and derives the environment."""
@@ -292,7 +297,7 @@ def test_apply_corpus_merges_and_reports_updated_devices() -> None:
     try:
         updated = apply_corpus(
             {
-                "version": CORPUS_VERSION,
+                "version": CORPUS_VERSION, **_ELIGIBLE,
                 "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                 "host": "test-host",
                 "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
@@ -313,10 +318,11 @@ def test_provisional_wsl_corpus_is_pruning_only(tmp_path) -> None:
         json.dumps(
             {
                 "kind": "calibration_corpus",
-                "version": CORPUS_VERSION,
+                "version": CORPUS_VERSION, **_ELIGIBLE,
                 "measured_on": "2026-08-15",
                 "host": "strix-halo-wsl2",
                 "selector_eligible": False,
+                "ineligibility_reasons": ["KERNEL_CLOCK_WITNESS_REQUIRED"],
                 "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}},
             }
         )
@@ -334,7 +340,7 @@ def test_wsl_host_cannot_claim_selector_eligibility() -> None:
     with pytest.raises(ValueError, match="WSL calibration"):
         apply_corpus(
             {
-                "version": CORPUS_VERSION,
+                "version": CORPUS_VERSION, **_ELIGIBLE,
                 "measured_on": "2026-08-15",
                 "execution_environment": "wsl2",
                 "measurements": _raw({"radeon_8060s": {"dram_bw_gbps": 186.8}}, "wsl2"),
@@ -352,7 +358,7 @@ def test_reset_registry_undoes_a_corpus_merge() -> None:
     original = perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps")
     apply_corpus(
         {
-            "version": CORPUS_VERSION,
+            "version": CORPUS_VERSION, **_ELIGIBLE,
             "measured_on": "2026-07-28", "execution_environment": "bare_metal",
             "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
                 "measurements": _raw({"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}}),
@@ -375,10 +381,10 @@ def test_corpus_rejects_version_skew_unknown_device_and_missing_date() -> None:
     with pytest.raises(ValueError, match="version"):
         apply_corpus({"version": 999, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {}})
     with pytest.raises(ValueError, match="measured_on"):
-        apply_corpus({"version": CORPUS_VERSION, "devices": {}})
+        apply_corpus({"version": CORPUS_VERSION, **_ELIGIBLE, "devices": {}})
     with pytest.raises(TargetPerfError, match="registered:"):
         apply_corpus(
-            {"version": CORPUS_VERSION, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {"no_such_gpu": {"dram_bw_gbps": 1.0}}, "measurements": _raw({"no_such_gpu": {"dram_bw_gbps": 1.0}})}
+            {"version": CORPUS_VERSION, **_ELIGIBLE, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {"no_such_gpu": {"dram_bw_gbps": 1.0}}, "measurements": _raw({"no_such_gpu": {"dram_bw_gbps": 1.0}})}
         )
 
 
@@ -397,7 +403,7 @@ def test_apply_corpus_is_atomic_across_devices() -> None:
         with pytest.raises(TargetPerfError, match="registered:"):
             apply_corpus(
                 {
-                    "version": CORPUS_VERSION,
+                    "version": CORPUS_VERSION, **_ELIGIBLE,
                     "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                     "devices": {
                         "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},  # valid, first
@@ -421,7 +427,7 @@ def test_apply_corpus_is_atomic_across_bad_fields() -> None:
         with pytest.raises(ValueError, match="unknown measured field"):
             apply_corpus(
                 {
-                    "version": CORPUS_VERSION,
+                    "version": CORPUS_VERSION, **_ELIGIBLE,
                     "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                     "devices": {
                         "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},
@@ -466,7 +472,7 @@ def test_snapshot_survives_a_calibration_overlay() -> None:
     try:
         apply_corpus(
             {
-                "version": CORPUS_VERSION,
+                "version": CORPUS_VERSION, **_ELIGIBLE,
                 "measured_on": "2026-07-28", "execution_environment": "bare_metal",
                 "host": "test-host",
                 "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
@@ -493,7 +499,7 @@ def test_each_loader_refuses_the_other_artifact_by_name() -> None:
     with pytest.raises(ValueError, match="apply_registry_snapshot"):
         apply_corpus(snap)
 
-    corpus = {"kind": KIND_CORPUS, "version": CORPUS_VERSION, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {}}
+    corpus = {"kind": KIND_CORPUS, "version": CORPUS_VERSION, **_ELIGIBLE, "measured_on": "2026-07-28", "execution_environment": "bare_metal", "devices": {}}
     with pytest.raises(ValueError, match="apply_corpus"):
         apply_registry_snapshot(corpus)
 
@@ -626,7 +632,7 @@ def _timing_sample(sample_id: str, *, device_ns: float = 900, event_ns: float = 
 
 
 def _wsl_corpus(**extra):
-    corpus = {"version": CORPUS_VERSION, "measured_on": "2026-09-26",
+    corpus = {"version": CORPUS_VERSION, **_ELIGIBLE, "measured_on": "2026-09-26",
               "host": "princess-luna-wsl2", "selector_eligible": True,
               "execution_environment": "wsl2",
               "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}},
@@ -722,7 +728,9 @@ def test_samples_must_be_the_calibrated_devices_own_target() -> None:
 
 def test_a_selector_ineligible_wsl_corpus_stays_pruning_only_even_with_samples() -> None:
     with pytest.raises(ValueError, match="pruning-only"):
-        apply_corpus(_wsl_corpus(selector_eligible=False, timing_witness=_witness()))
+        apply_corpus(_wsl_corpus(selector_eligible=False,
+                                 ineligibility_reasons=["KERNEL_CLOCK_WITNESS_REQUIRED"],
+                                 timing_witness=_witness()))
 
 
 def test_a_wsl_measurement_cannot_be_relabelled_bare_metal() -> None:

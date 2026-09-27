@@ -195,6 +195,10 @@ def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=
         tile_ir = re.sub(r"tessera\.macro_tile_m = \d+", f"tessera.macro_tile_m = {panel[0]}", tile_ir)
         tile_ir = re.sub(r"tessera\.macro_tile_n = \d+", f"tessera.macro_tile_n = {panel[1]}", tile_ir)
     stage_k = pad = prefetch = -1
+    if panel is not None and lds is None:
+        # A register-panel spec means the one-wave register body even where
+        # the Schedule chose the LDS body for this shape.
+        lds = (1, 1, -1, -1, -1)
     if lds is not None:
         warps, depth, stage_k, pad, prefetch, *raster = lds
         staging = "lds" if warps > 1 or depth > 1 else "global"

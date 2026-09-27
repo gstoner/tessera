@@ -8,6 +8,52 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: `test_tma_smoke` root-caused and passing on sm_120
+
+The TMA smoke (`src/compiler/codegen/tessera_gpu_backend_NVIDIA/`
+`src/kernels/tma_smoke.cu`, one rank-1 f32 box of 32) had **two** defects; the
+first hid the second.
+
+1. **Encode: `globalStrides == nullptr`.** For a rank-1 map `globalStrides`
+   has `tensorRank - 1 == 0` entries and the CUDA 13.4 `cuda.h` comment states
+   no requirement on the pointer, but driver 610.88 (`cuDriverGetVersion`
+   13030) returns `CUDA_ERROR_INVALID_VALUE` for a null pointer and ignores the
+   contents. Probe matrix on the RTX 5070 (every other documented
+   precondition held: `CUtensorMap` 64-byte aligned (alignof 128), global
+   address 256-byte aligned, `boxDim[0] * 4 = 128` a multiple of 16, rank 1,
+   interleave/swizzle NONE, `elementStrides` 1): rank-1 with `nullptr` fails
+   for f32 dim 32 / box 32, f32 dim 1024 / box 32 and u8 dim 128 / box 128,
+   also through `cudaGetDriverEntryPointByVersion(..., 12000)`; rank-1 with a
+   non-null array succeeds whether it holds 128, 0, 7 or 2^41; rank-2 with a
+   real stride succeeds. Fix: pass `{globalDim[0] * sizeof(float)}`.
+2. **Launch: the descriptor was read from local memory.** With the encode
+   fixed, the launch failed with `an illegal memory access`. The kernel took
+   `CUtensorMap` by value without `__grid_constant__`; the PTX shows nvcc
+   copying the parameter into `__local_depot0` (eight `st.local.v2.b64`) and
+   handing `cp.async.bulk.tensor` the generic address of that copy, while PTX
+   requires the tensor-map operand in `.param`, `.const` or `.global`. With
+   `const __grid_constant__` the PTX has no local depot, the instruction
+   addresses the parameter directly, and the smoke passes. `compute-sanitizer`
+   cannot attach under WSL2 ("Failed to initialize WDDM debugger interface"),
+   so the fault's cause rests on the PTX difference plus the fault
+   disappearing with exactly that change, not on a sanitizer report.
+
+Also added `fence.proxy.async.shared::cta` after `mbarrier.init` (the CUDA
+programming guide's TMA pattern). It is not shown necessary here: the smoke
+passed 6/6 with `__grid_constant__` alone.
+
+Evidence (The-Super-Bear, RTX 5070, CUDA 13.4.59 / driver 610.88, own
+worktree, `flock /tmp/tessera-timing.lock` around every device run): the
+unmodified `build-nvidia-cuda` binary fails (`cuTensorMapEncodeTiled: invalid
+argument`); strides-only fails (`illegal memory access`); the fixed source
+passes 3/3 at `-arch=sm_120a` and 3/3 at `sm_120` standalone, and the
+CMake-built `test_tma_smoke` (fresh tree, `TESSERA_CUDA_ARCH=sm_120a`) passes
+5/5 and compares all 32 values. `test_tma_smoke` is a standalone executable
+with no ctest/pytest wrapper, so no automated lane runs it; that is unchanged.
+
+Sibling outcome: ROCm not applicable (no TMA; `cuTensorMap*` is CUDA-only);
+Apple not applicable; x86 not applicable.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — hand-written hooks fixed on sm_120; emitted templates follow-up required
 
 **Update 2026-09-27 (same branch, PR #862) — reproduced and fixed on the RTX
@@ -66,6 +112,9 @@ such source (benchmark harness, same follow-up).
 5070 with `cuTensorMapEncodeTiled: invalid argument` both before and after this
 change (the encode is a driver-API call ahead of any launch, so the entry clear
 cannot affect it). Owed: root-cause the descriptor (rank-1 f32, box 32).
+**Resolved 2026-09-27** (`SMALL-CORRECTNESS-GAPS-2026-09-27`, top of this
+queue): a null rank-1 `globalStrides` the driver rejects, then a by-value
+descriptor read from local memory.
 
 The ROCm spectral image checked its launches with `hipGetLastError()`, whose
 per-thread slot is sticky: an unrelated failed HIP call earlier on the thread

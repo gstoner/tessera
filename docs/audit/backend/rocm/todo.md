@@ -7,6 +7,54 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: Tajasarus lit runs again; resolver ratchets hermetic
+
+**Lit runner.** On Tajasarus `ninja check-tessera-ir` ran zero fixtures: every
+lit selector in the tree (`tests/`, the ROCm/NVIDIA backend suites,
+collectives, EBM/Clifford/spectral -- seven `find_program` calls, three cache
+variables) took the first `lit`/`llvm-lit` file it found, and under
+`~/.config/tessera/env.sh` that was the assertions prefix's `bin/llvm-lit`, a
+wrapper whose `import lit` points at `../../llvm-project-23.1.1-assertions/llvm/utils/lit`,
+which the relocated prefix does not have (`ModuleNotFoundError: No module
+named 'lit'`). `build/` had cached the non-assertions prefix's `bin/lit`, which
+points at the apt path `/usr/lib/llvm-23/utils/lit`, also absent. Only
+`check-tessera-rocm` worked there, because its own selector searched the venv
+first. Now `cmake/TesseraLit.cmake` resolves one runner for every suite and
+selects a candidate only if `<lit> --version` runs (explicit `TESSERA_LIT` /
+`LLVM_EXTERNAL_LIT`, then the repo venv, `$VIRTUAL_ENV`, the matched LLVM's
+tools dir, `$PATH`); each broken candidate is a configure warning naming its
+error; `check-tessera-ir` fails configure when nothing works, and the backend
+suites fail (not "skipping", exit 0) at run time. A stale broken cache entry is
+rejected and replaced on the next reconfigure, so existing trees heal without
+editing the cache. **No box file was changed**; the two broken wrappers remain
+in the toolchain prefixes and are now reported rather than used.
+
+Evidence (Tajasarus, own worktree `build-wb`, configured like `build/`, under
+`env.sh`): before -- `check-tessera-ir`, `check-ebm` and `check-tessera-rocm`
+each die in `llvm-lit` with the `ModuleNotFoundError` (rc 1, no fixture run);
+after -- configure reports `rejected lit runner .../llvm-23.1.1-assertions/bin/llvm-lit
+... ModuleNotFoundError` then selects `.venv/bin/lit (lit 23.1.1)`;
+`check-tessera-ir` 520 discovered / 454 passed / 66 unsupported,
+`check-tessera-rocm` 82/82, `check-ebm` 18/18, `check-clifford` 22/22,
+`check-spectral` 11/11 (same counts after the neighbors change below).
+
+**Resolver ratchets.** `test_capable_driver_outranks_a_preferred_build_that_lacks_the_pass`
+and `test_toolchain_fixture_reaches_the_capable_driver_too` failed on
+Tajasarus only when `TESSERA_BUILD_DIR` was exported (reproduced: 2 failed /
+13 passed with it, 15/15 without, under `env.sh` either way). The tests pinned
+the candidate list but cleared only `TESSERA_OPT`/`TESSERA_OPT_BIN`, while
+`tessera_opt_candidates` honours `TESSERA_BUILD_DIR` ahead of the defaults --
+the tests were wrong, the environment legitimate. `compiler_tool.DRIVER_SELECTION_ENVIRONMENT`
+now lists every variable the resolver reads, a helper clears all of them, a
+ratchet re-derives the list from the resolver's source, and a regression test
+exports a build dir. Tajasarus: 17/17 under `env.sh`, with `TESSERA_BUILD_DIR`
+exported, and under `env -i`.
+
+Sibling outcome: the lit runner change is shared CMake (every host); Mac
+selected `/opt/homebrew/bin/lit` and ran the same counts as before. NVIDIA's
+release gate passes `-DLLVM_EXTERNAL_LIT`, which is still honoured after
+validation. Apple and x86 not otherwise affected.
+
 ## Spectral image survives a stale HIP error; streaming STFT names the chip that ran — 2026-09-27
 
 Owner TSOL-POLICY-PHYS-1; sync `SPECTRAL-STALE-HIP-ERROR-2026-09-27`. Closes

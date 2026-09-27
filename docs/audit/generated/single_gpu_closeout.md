@@ -17,8 +17,8 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | 420 | backend_pathway_owned=405, multi_gpu_deferred=15 | backend_codegen=405, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 59 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=49, single_device_identity=7 | compiler_middle_end=1, distributed_validation=2, primitive_registry=56 |
-| `target_ir` | 24 | architecture_evidence_gated=20, multi_gpu_deferred=4 | backend_codegen=20, distributed_validation=4 |
-| `tile_ir` | 20 | architecture_evidence_gated=20 | backend_codegen=20 |
+| `target_ir` | 25 | architecture_evidence_gated=20, multi_gpu_deferred=4, single_gpu_promote=1 | backend_codegen=21, distributed_validation=4 |
+| `tile_ir` | 21 | architecture_evidence_gated=20, single_gpu_closeable=1 | backend_codegen=20, compiler_middle_end=1 |
 
 ## Rows
 
@@ -526,6 +526,7 @@ test, ABI, and surface dashboards.
 | `target_ir` | `kron` | linalg_multilinear | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
 | `target_ir` | `trace` | linalg_multilinear | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
 | `target_ir` | `solve` | linalg_solver | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `ntk_rope` | position_encoding | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `game_mex` | segment_reduce | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_coalition_marginal` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `tile_ir` | `depth_attn` | attention | partial | `architecture_evidence_gated` | backend_codegen | Shared Graph/AD contract is closed; wait for the named architecture-owned physical phase and device packet. |
@@ -546,5 +547,6 @@ test, ABI, and surface dashboards.
 | `tile_ir` | `kron` | linalg_multilinear | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
 | `tile_ir` | `trace` | linalg_multilinear | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
 | `tile_ir` | `solve` | linalg_solver | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `ntk_rope` | position_encoding | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `game_mex` | segment_reduce | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_coalition_marginal` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |

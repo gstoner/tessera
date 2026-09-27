@@ -8,6 +8,14 @@ last_updated: 2026-09-27
 
 # Apple compiler, exact-device, and performance plan
 
+## `TILE-LATENT-DEFECTS-2026-09-27`: sibling outcome — not applicable (verified on the Mac)
+
+The shared arena/reuse passes now recognise the registered
+`tile.tmem.allocate`; Apple has no tensor memory and rejects `tile.tmem.*`
+(`ThreadgroupPipelineToApple.cpp`), and the arena's `emit-apple-msl`
+materialization covers `tile.alloc_shared` only, which is unchanged. The Mac
+`lit tests/tessera-ir/` run (including the Apple arena fixtures) passes.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
 
 The ROCm spectral image read HIP's per-thread, sticky last-error slot after

@@ -482,13 +482,22 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     # Block AttnRes Phase 1: exact fp32 host semantics and property tests are
     # closed. Graph operations, autodiff products, and physical packages are
     # deliberately retained as planned/partial work for Phases 3 and 4.
+    #
+    # lowering_rule corrected complete -> partial 2026-09-27
+    # (TILE-LATENT-DEFECTS-2026-09-27). The axis means "a Graph/Tile/Target
+    # lowering exists". For these three the registered Graph ops exist and
+    # verify, but nothing lowers them: they are fixture-only (ODS triage
+    # GOV-ODS-CONSUMER-1), and the gfx1151 lane runs the monolithic
+    # `tessera.depth_attn` with the stats/merge recurrence inline in
+    # GenerateROCMDepthAttentionKernel.cpp. The wiring is owned by
+    # BLOCK-ATTNRES-1 (BLOCK_ATTNRES_ROCM_PLAN.md §III.1/§III.4).
     "attn_with_stats": {
         "math_semantics": "complete",
         "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "masking_effect_rule": "complete",
-        "lowering_rule": "complete",
+        "lowering_rule": "partial",
         "tests": "complete",
     },
     "softmax_merge": {
@@ -497,7 +506,7 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "masking_effect_rule": "complete",
-        "lowering_rule": "complete",
+        "lowering_rule": "partial",
         "tests": "complete",
     },
     "softmax_finalize": {
@@ -506,7 +515,7 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "masking_effect_rule": "complete",
-        "lowering_rule": "complete",
+        "lowering_rule": "partial",
         "tests": "complete",
     },
     # Phase 3: the public primitive now has a typed Graph op, an explicit

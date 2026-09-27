@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `TILE-LATENT-DEFECTS-2026-09-27`: sibling outcome — not applicable
+
+The linalg solver annotation passes (`tessera-linalg-mixed-precision`,
+`tessera-linalg-iterative-refinement`) now select ops by identity instead of
+`contains("solve")` / `contains("lu")`. No x86 pipeline runs them; the x86
+linalg lane lowers Graph `cholesky`/`lu`/`tri_solve` through `TilingPass` to
+the AVX-512 kernels, untouched here. x86 has no TMEM.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
 
 The ROCm spectral image read HIP's per-thread, sticky last-error slot after

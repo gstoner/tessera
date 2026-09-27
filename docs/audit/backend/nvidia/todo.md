@@ -8,6 +8,69 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `TILE-LATENT-DEFECTS-2026-09-27`: Tile TMEM lowering fails closed and wires its results; the sm_120 dashboard stops citing fixture-only Target ops
+
+Owner: GOV-ODS-CONSUMER-1 (the ODS connection triage found these in passing).
+IR/lowering evidence only: TMEM is datacenter sm_100, which no fleet box has,
+so nothing here is an execution claim. Verified under the assertions-ON
+`tessera-nvidia-opt` on Tajasarus (LLVM/MLIR 23.1.1).
+
+**Fixed in `LowerTileToNVIDIA` (`NVIDIALowering.cpp`, `lowerTmemOp`).**
+
+- The branch matched `starts_with("tile.tmem.")` and defaulted anything that
+  was not alloc/load to a `tessera_nvidia.tmem_store` contract, so a new or
+  misspelled op silently became a store. The three registered ops
+  (`tile.tmem.allocate` / `load` / `store`, `TileOps.td`) now map by op
+  identity; anything else under the prefix fails with
+  `NVIDIA_TMEM_UNKNOWN_OP` (Decision #21). The unregistered legacy spelling
+  `tile.tmem.alloc` is no longer accepted as an alias.
+- Every op was erased without replacing its results. On the unfixed
+  assertions-ON driver, every new fixture with a used handle or load result
+  aborts with `LLVM ERROR: operation destroyed but still has uses`. Now the
+  `!tile.tmem` handle lowers to the i32 tensor-memory address
+  (`tessera_nvidia.tmem_alloc ... -> i32`, the `[taddr]` that `tcgen05.ld/st`
+  take), `index` operands are widened to i64 (neither type is an NVIDIA target
+  value), load results are replaced, and the allocation is erased only once it
+  has no users.
+- A handle consumed by an op this pass does not lower (today
+  `tile.tcgen05.mma`) is refused with `NVIDIA_TMEM_HANDLE_UNLOWERED` rather
+  than erased under a live use.
+
+**Fixed in `LowerNVIDIAToNVVM`.** A contract with no value-producing NVVM
+lowering becomes a void marker, and the pass called `dropAllUses()`. A result
+used outside the contract family left its user with a null operand (unfixed:
+`error: null operand found` on `func.return`). It now fails with
+`NVIDIA_MARKER_RESULT_USED`. Uses by other contracts, or by ops nested inside
+one, are erased with them as before.
+
+Fixtures (`src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/`):
+`tmem_tile_to_nvidia.mlir` (used load result and handle),
+`tmem_unknown_op_rejected.mlir` (legacy spelling + invented op),
+`tmem_handle_unlowered.mlir` (`tcgen05.mma` consumer),
+`tmem_to_nvvm_contract.mlir` / `tmem_to_nvvm_result_used.mlir`, and
+`nvidia_marker_result_used.mlir` (the NVVM stage alone).
+
+**Dashboard correction (`SM120_DIFFERENTIATION_DASHBOARD.md`).** The four
+promoted rows' “Typed IR + verifier” cells cited
+`sm120_differentiation_target_ir.mlir` / `tessera_nvidia.fpquant`. No compiler
+path produces `mma_fused`, `mma_attention` or `fpquant`; the lanes execute
+through Python candidates that bypass Target IR. The cells now say
+fixture-only, and the statuses now read **runtime-promoted … Target-IR column
+open** (the dashboard's own rule requires all six columns). Runtime,
+provenance and benchmark evidence is unchanged.
+`test_nvidia_sm120_promotion_gate.py` asserts the honest state.
+
+Open (not in this change):
+
+- `tile.tcgen05.mma` has no NVIDIA lowering, so a TMEM handle that feeds it
+  cannot lower yet. It is the next sm_100 slice, and it needs no hardware for
+  its IR half.
+- The NVVM stage lowers TMEM contracts to void markers only. A real
+  `tcgen05.alloc/ld/st` emission is sm_100 work and is hardware-gated for
+  execution.
+- WIRE slice 7 of the ODS triage: producers for `mma_fused` /
+  `mma_attention` / `fpquant` so the dashboard's Target-IR column can close.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — hand-written hooks fixed on sm_120; emitted templates follow-up required
 
 **Update 2026-09-27 (same branch, PR #862) — reproduced and fixed on the RTX

@@ -7,6 +7,19 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `TILE-LATENT-DEFECTS-2026-09-27`: sibling outcome — verified, no ROCm change
+
+The shared Tile passes changed: `TileBufferReusePass`, `TileBufferArenaPass`
+and `TileMemrefLifetime.h` now match the registered `tile.tmem.allocate` by op
+identity (they matched an unregistered `"tile.tmem.alloc"` marker nothing
+produced), and a TMEM allocation never shares a reuse group. `tile.alloc_shared`
+(LDS) planning is unchanged: same code path, same fixtures. ROCm already
+rejects every `tile.tmem.*` op by prefix (`TileToROCM.cpp`,
+`ROCMWaveLdsPipeline.cpp`); that is a refusal, not a default, so it stays.
+Verified on Tajasarus under the assertions-ON build: `check-tessera-rocm` and
+`lit tests/tessera-ir/` (counts in the NVIDIA queue entry and the PR). No
+gfx1151/gfx1201 device lane is affected: no ROCm producer emits TMEM.
+
 ## Spectral image survives a stale HIP error; streaming STFT names the chip that ran — 2026-09-27
 
 Owner TSOL-POLICY-PHYS-1; sync `SPECTRAL-STALE-HIP-ERROR-2026-09-27`. Closes

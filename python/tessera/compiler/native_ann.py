@@ -401,6 +401,35 @@ class NativeANNCandidate(Candidate):
         except (ValueError, RuntimeError):
             return False
 
+    def artifact_identity(self, region, *inputs):
+        """Decision #11: the MLIR program this candidate hands the CPU JIT
+        (original or rewritten) by content, plus the ``libtessera_jit`` build
+        that compiles it by content -- the same ``jit_digest`` the native ANN
+        admission records. ``None`` without the JIT library."""
+        from tessera import _jit_boundary as jit
+        from tessera.compiler.emitted_code_identity import identify
+        from tessera.compiler.toolchain_identity import delegate_library_identity
+
+        registered = self.region
+        if registered is None:
+            return None
+
+        def build_identity():
+            dylib = jit._find_dylib()
+            if dylib is None:
+                return None
+            source = (registered.pair.transformed if self.transformed
+                      else registered.pair.original)
+            text = source if isinstance(source, (str, bytes)) else str(source)
+            data = text.encode() if isinstance(text, str) else text
+            return {"identity": "jit_program",
+                    "program_sha256": hashlib.sha256(data).hexdigest(),
+                    "program": "transformed" if self.transformed else "original",
+                    **{f"jit.{k}": v for k, v in delegate_library_identity(
+                        getattr(dylib, "_name", dylib)).items()}}
+
+        return identify(self.name, build_identity)
+
     def applies_to_inputs(self, region, *inputs):
         shape = _affine(region.pair.original)[1]
         return (len(inputs) == 1 and isinstance(inputs[0], np.ndarray) and

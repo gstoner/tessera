@@ -163,6 +163,13 @@ def _cc() -> str:
             or shutil.which("gcc") or "cc")
 
 
+#: Every C-compiler flag that shapes the generic lane's binary: ahead of the
+#: source, and the link inputs after it. The compile step and the lane's
+#: Decision #11 identity both read these.
+_CC_FLAGS = ("-O3", f"-march={_MARCH}", "-fPIC", "-shared")
+_CC_LINK_FLAGS = ("-lm",)
+
+
 def _x86_compile_fn(source: KernelSource) -> str:
     """Compile the emitted C to a shared object and return its path. Raises on a
     toolchain/compile failure; ``build`` wraps it in ``CompileError`` (never a
@@ -173,7 +180,7 @@ def _x86_compile_fn(source: KernelSource) -> str:
     with open(src, "w") as f:
         f.write(source.source)
     subprocess.run(
-        [_cc(), "-O3", f"-march={_MARCH}", "-fPIC", "-shared", src, "-o", so, "-lm"],
+        [_cc(), *_CC_FLAGS, src, "-o", so, *_CC_LINK_FLAGS],
         check=True, capture_output=True, text=True)
     return so
 
@@ -294,6 +301,39 @@ class X86GenericCCandidate(Candidate):
     tier = Tier.SYNTHESIZED
     target = _CANDIDATE_TARGET
     op = OP_FUSED_REGION
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the C source ``run`` compiles for this workload -- the
+        guarded DYNAMIC ``KernelSource`` with its binding layouts and
+        ``kernel_cache.cache_key`` -- the ``-O3 -march=x86-64-v4`` flags, and
+        the C compiler's ``--version`` line. No pin fixes the host C compiler
+        (the ``cpu`` family pins only LLVM/MLIR), so it is named here; a host
+        whose compiler cannot report a version has no identity and misses
+        (it cannot compile the lane either). ``None`` without the two matrix
+        operands to take M/N/K from."""
+        if len(inputs) < 2:
+            return None
+        from tessera.compiler.emit.kernel_emitter import emit_kernel
+        from tessera.compiler.emitted_code_identity import (
+            compiler_version,
+            identify,
+            kernel_source_identity,
+        )
+
+        def build_identity() -> "dict[str, str] | None":
+            a_shape, b_shape = tuple(inputs[0].shape), tuple(inputs[1].shape)
+            if len(a_shape) != 2 or len(b_shape) != 2:
+                return None
+            dims = (int(a_shape[0]), int(b_shape[1]), int(a_shape[1]))
+            source = emit_kernel(region, _TARGET, SpecPolicy.DYNAMIC,
+                                 dtype="f32", dims=dims)
+            identity = kernel_source_identity(
+                source, dtype="f32", target=_TARGET,
+                build=("cc", *_CC_FLAGS, *_CC_LINK_FLAGS))
+            identity["compiler"] = compiler_version(_cc())
+            return identity
+
+        return identify(self.name, build_identity)
 
     def run(self, region: Any, A: Any, B: Any, bias: Any = None,
             residual: Any = None, *a: Any, **k: Any) -> tuple[Any, str]:

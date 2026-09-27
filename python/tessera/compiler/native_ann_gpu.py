@@ -294,6 +294,17 @@ class NativeANNDeviceCandidate(Candidate):
     def available(self):
         return not self.registration.closed and not self.registration.runner.closed
 
+    def artifact_identity(self,region,*inputs):
+        """Decision #11: the ``binding_digest`` of the native package this
+        candidate launches (original or rewritten) -- a content digest over
+        its device image, host binding and the compiler that built them."""
+        device_region=self.registration.region
+        digest=(device_region.transformed_digest if self.transformed
+                else device_region.original_digest)
+        return {"identity":"native_package","binding_digest":str(digest),
+                "backend":str(device_region.backend),"chip":str(device_region.chip),
+                "program":"transformed" if self.transformed else "original"}
+
     def applies_to(self,region):
         return (self.available() and isinstance(region,ANNDeviceRegion) and
                 region.digest==self.registration.region.digest and

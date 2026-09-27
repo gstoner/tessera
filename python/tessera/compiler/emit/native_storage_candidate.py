@@ -41,6 +41,22 @@ class NativeStorageCandidate(Candidate):
     def applies_to(self, region):
         return not self.closed and region == self.binding.package.binding_digest
 
+    def artifact_identity(self, region, *inputs):
+        """Decision #11: the package's ``binding_digest`` -- a content digest
+        over the compiled device image, the host binding library, the ABI and
+        the compiler/LLVM digests that built them -- is exactly the code this
+        candidate launches. ``None`` once closed."""
+        if self.closed:
+            return None
+        package = self.binding.package
+        digest = getattr(package, "binding_digest", None)
+        if not digest:
+            return None
+        return {"identity": "native_package", "binding_digest": str(digest),
+                "backend": str(package.backend),
+                "chip": str(getattr(package, "chip", "")),
+                "entry": str(getattr(package, "entry", ""))}
+
     def applies_to_inputs(self, region, *inputs):
         if not self.applies_to(region):
             return False

@@ -374,6 +374,13 @@ def _rocm_arch() -> str:
     return str(chip)
 
 
+def _hipcc_flags(arch: str) -> tuple[str, ...]:
+    """Every hipcc flag that shapes the generic lane's binary. The one list both
+    the compile step and the lane's Decision #11 identity read, so the identity
+    cannot describe a build the compiler was not given."""
+    return (f"--offload-arch={arch}", "-O3", "-fPIC", "-shared")
+
+
 def _rocm_hip_compile_fn(source: KernelSource) -> str:
     """Compile the emitted HIP to a shared object with hipcc and return its path.
     Raises on a missing toolchain/compile failure; ``build`` wraps in
@@ -388,8 +395,7 @@ def _rocm_hip_compile_fn(source: KernelSource) -> str:
     with open(src, "w") as f:
         f.write(source.source)
     subprocess.run(
-        [hipcc, f"--offload-arch={arch}", "-O3", "-fPIC", "-shared",
-         src, "-o", so],
+        [hipcc, *_hipcc_flags(arch), src, "-o", so],
         check=True, capture_output=True, text=True)
     return so
 
@@ -963,6 +969,32 @@ class RocmGenericHipCandidate(Candidate):
     tier = Tier.SYNTHESIZED
     target = _TARGET
     op = OP_FUSED_REGION
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the HIP source this lane compiles for ``region`` and
+        how it is compiled.
+
+        ``run`` and ``measure_device_latency`` both go through
+        ``build(region, "rocm", dtype="f32", dims=None)``, whose source is
+        dims-invariant (M/N/K are runtime arguments), so the identity is the
+        emitted ``KernelSource`` -- text plus its ``kernel_cache.cache_key`` --
+        and the hipcc flags incl. the offload arch the image is built for.
+        The hipcc/ROCm version is the family pin. Host-computable: no device,
+        no hipcc. ``None`` (a miss) for a region the emitter refuses."""
+        from tessera.compiler.emit.kernel_emitter import emit_kernel
+        from tessera.compiler.emitted_code_identity import (
+            identify,
+            kernel_source_identity,
+        )
+
+        def build_identity() -> "dict[str, str]":
+            source = emit_kernel(region, _TARGET, SpecPolicy.BUCKET,
+                                 dtype="f32", dims=None)
+            return kernel_source_identity(
+                source, dtype="f32", target=_TARGET,
+                build=("hipcc", *_hipcc_flags(_rocm_arch())))
+
+        return identify(self.name, build_identity)
 
     def run(self, region: Any, A: Any, B: Any, bias: Any = None,
             residual: Any = None, *a: Any, **k: Any) -> tuple[Any, str]:

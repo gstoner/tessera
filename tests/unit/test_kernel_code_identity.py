@@ -393,23 +393,26 @@ def test_verdict_is_served_across_builds_and_misses_on_a_changed_kernel(tmp_path
         cache=cache, device="fakedev", timing=AT.TIMING_DEVICE) is None
 
 
-def test_hand_tuned_requires_an_identity_and_emitted_can_opt_in():
+def test_every_tier_requires_an_identity_and_none_cannot_opt_out():
+    """AUTOTUNE-EMITTED-IDENTITY-2026-09-27: an EMITTED candidate with no
+    identity used to be served on the pin alone. It now misses, and an
+    override of `requires_artifact_identity` returning False does not change
+    that -- the arbiter no longer asks."""
     class _Emitted(Candidate):
         name, target, op, tier = "kid_emitted", "kid_t2", OP_MATMUL, Tier.EMITTED
 
         def run(self, region, *inputs, **kwargs):
             return None, "x"
 
-    class _Adopter(_Emitted):
+    class _OptOut(_Emitted):
         def requires_artifact_identity(self):
-            return True
+            return False
 
-    assert not _Emitted().requires_artifact_identity()
-    assert _Adopter().requires_artifact_identity()
+    assert _Emitted().requires_artifact_identity()
     rec = AT.MeasureRecord(winner="kid_emitted", latency_ms=1.0,
                            candidates={"kid_emitted": 1.0}, unmeasured={})
-    assert AT._record_matches_live_delegates(rec, {"kid_emitted": _Emitted()})
-    assert not AT._record_matches_live_delegates(rec, {"kid_emitted": _Adopter()})
+    assert not AT._record_matches_live_delegates(rec, {"kid_emitted": _Emitted()})
+    assert not AT._record_matches_live_delegates(rec, {"kid_emitted": _OptOut()})
 
 
 def test_rocm_candidates_derive_their_key_from_the_workload(monkeypatch, tmp_path):

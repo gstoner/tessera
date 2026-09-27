@@ -129,6 +129,11 @@ def _build_dir(prefix: str) -> str:
     return d
 
 
+#: The flags `_cpu_lib` compiles the checked-in Stockham kernel with; also read
+#: by the candidate's Decision #11 identity.
+_CPU_CXX_FLAGS = ("-O2", "-std=c++17", "-shared", "-fPIC")
+
+
 def _cpu_lib() -> ctypes.CDLL | None:
     if "cpu" in _libs:
         return _libs["cpu"]
@@ -138,8 +143,7 @@ def _cpu_lib() -> ctypes.CDLL | None:
         return _libs.get("cpu")
     d = _build_dir("tessera_spectral_cpu_")
     so = os.path.join(d, "libspectral_cpu.so")
-    lib = _compile("cpu", [cxx, "-O2", "-std=c++17", "-shared", "-fPIC",
-                          str(_CPU_SRC), "-o", so], so)
+    lib = _compile("cpu", [cxx, *_CPU_CXX_FLAGS, str(_CPU_SRC), "-o", so], so)
     if lib is not None:
         lib.ts_fft_stockham_cpu.restype = None
         lib.ts_fft_stockham_cpu.argtypes = [
@@ -1069,6 +1073,20 @@ class CpuStockhamFFTCandidate(Candidate):
     target = "cpu"
     op = OP_SPECTRAL_FFT
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the checked-in ``StockhamRadix4.cpp`` `_cpu_lib`
+        compiles, the flags, and the ``$CXX --version`` line (no pin fixes the
+        host C++ compiler). One image serves every supported length."""
+        from tessera.compiler.emitted_code_identity import (
+            identify,
+            source_file_identity,
+        )
+
+        cxx = os.environ.get("CXX", "c++")
+        return identify(self.name, lambda: source_file_identity(
+            _CPU_SRC, lang="c++", entry="ts_fft_stockham_cpu",
+            build=("c++", *_CPU_CXX_FLAGS), compiler=cxx))
+
     def available(self) -> bool:
         return _cpu_lib() is not None
 
@@ -1553,6 +1571,40 @@ class _ComposedSpectralCandidate(Candidate):
     #: Attribute on the region giving the length of the INNER complex
     #: transform. For the framed ops that is the window, not the signal.
     inner_len_attr = "n"
+    #: Direction of the inner transform (forward for rfft/stft, inverse for
+    #: irfft/istft) -- selects the inner lane's region for the identity.
+    inner_sign = -1
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the composing Python (this class's ``run`` and the
+        framing / Hermitian / lane-selection helpers it calls) plus the
+        identity of the inner FFT lane `_inner_fft` / `_inner_fft_rows` would
+        pick for this region -- the first applicable, available
+        ``spectral_fft`` candidate for this target, in registration order.
+        The Python part is an approximation: numpy itself is not covered."""
+        from tessera.compiler.emit.candidate import candidates_for
+        from tessera.compiler.emitted_code_identity import (
+            composite_identity,
+            identify,
+            python_code_identity,
+        )
+
+        def build_identity() -> "dict[str, str] | None":
+            n = int(getattr(region, self.inner_len_attr, 0) or 0)
+            inner_region = SpectralFFTRegion(n=n, sign=self.inner_sign)
+            inner = next((c for c in candidates_for(self.target, OP_SPECTRAL_FFT)
+                          if c.applies_to(inner_region) and c.available()), None)
+            if inner is None:
+                return None
+            return composite_identity({
+                "compose": python_code_identity(
+                    type(self).run, _hermitian_full, _inner_fft,
+                    _inner_fft_rows, lane=self.name),
+                "inner": inner.artifact_identity(inner_region),
+                "inner_lane": {"name": inner.name},
+            })
+
+        return identify(self.name, build_identity)
 
     def applies_to(self, region: Any) -> bool:
         """Decline whatever the inner FFT would decline.
@@ -1607,6 +1659,7 @@ class IRFFTCandidate(_ComposedSpectralCandidate):
     """
 
     op = OP_SPECTRAL_IRFFT
+    inner_sign = +1
 
     def run(self, region: SpectralIRFFTRegion, xf: np.ndarray, *a: Any,
             **k: Any) -> tuple[Any, str]:
@@ -1661,6 +1714,7 @@ class ISTFTCandidate(_ComposedSpectralCandidate):
 
     op = OP_SPECTRAL_ISTFT
     inner_len_attr = "win"
+    inner_sign = +1
 
     def run(self, region: SpectralISTFTRegion, xf: np.ndarray,
             win: np.ndarray, *a: Any, **k: Any) -> tuple[Any, str]:
@@ -1702,6 +1756,17 @@ class SpectralFilterCandidate(Candidate):
 
     def available(self) -> bool:
         return True
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: this lane is a numpy product, so its identity is the
+        source of ``run`` (an approximation: numpy itself is not covered)."""
+        from tessera.compiler.emitted_code_identity import (
+            identify,
+            python_code_identity,
+        )
+
+        return identify(self.name, lambda: python_code_identity(
+            type(self).run, lane=self.name))
 
     def run(self, region: SpectralFilterRegion, xf: np.ndarray,
             hf: np.ndarray, *a: Any, **k: Any) -> tuple[Any, str]:

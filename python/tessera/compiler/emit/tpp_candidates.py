@@ -117,6 +117,9 @@ register_op_kind(OP_TPP_STENCIL, _verify_stencil)
 
 # --- compile cache -----------------------------------------------------------
 _lib: list[ctypes.CDLL | None] = []
+#: The flags `_cpu_lib` compiles the checked-in stencil hook with; also read by
+#: the candidate's Decision #11 identity.
+_CXX_FLAGS = ("-O2", "-std=c++17", "-shared", "-fPIC")
 
 
 def _cpu_lib() -> ctypes.CDLL | None:
@@ -129,7 +132,7 @@ def _cpu_lib() -> ctypes.CDLL | None:
             d = tempfile.mkdtemp(prefix="tessera_tpp_stencil_")
             so = os.path.join(d, "libtpp_stencil.so")
             subprocess.check_call(
-                [cxx, "-O2", "-std=c++17", "-shared", "-fPIC", str(_CPU_SRC),
+                [cxx, *_CXX_FLAGS, str(_CPU_SRC),
                  "-o", so], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             lib = ctypes.CDLL(so)
             lib.ts_stencil_grad_cpu.restype = ctypes.c_int
@@ -159,6 +162,20 @@ class CpuStencilGradCandidate(Candidate):
     tier = Tier.SYNTHESIZED
     target = "cpu"
     op = OP_TPP_STENCIL
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the checked-in ``Stencil.cpp`` `_cpu_lib` compiles, the
+        flags, and the ``$CXX --version`` line (no pin fixes the host C++
+        compiler). The same image serves every order/axis/shape."""
+        from tessera.compiler.emitted_code_identity import (
+            identify,
+            source_file_identity,
+        )
+
+        cxx = os.environ.get("CXX", "c++")
+        return identify(self.name, lambda: source_file_identity(
+            _CPU_SRC, lang="c++", entry="ts_stencil_grad_cpu",
+            build=("c++", *_CXX_FLAGS), compiler=cxx))
 
     def available(self) -> bool:
         return _cpu_lib() is not None

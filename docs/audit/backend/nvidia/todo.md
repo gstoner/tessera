@@ -69,11 +69,45 @@ Evidence: [`benchmarks/baselines/sm120_ssd_calibrated_pairs_20260926/`](../../..
   event-only recorders (`phase5_ingest`, `record_packed_storage_foundation`)
   do not use the marker yet.
 
-## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: sm_120 corpus rows owed; gfx1151 re-recorded
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: sm_120 and gfx1151 corpus rows re-recorded
+
+**sm_120 re-recorded 2026-09-26 on The-Super-Bear** (RTX 5070, WSL2, CUDA 13.4 /
+driver 610.88), clean worktree at `4e699f7e`, with the commands below; logs in
+`benchmarks/baselines/autotune_corpus_rerecord_20260926/sm120_*`.
+
+- **Checks before commit:** the 16 `rocm:gfx1151` rows are unchanged (and
+  textually untouched: the finalized file was re-ordered to the prior record
+  order, content verbatim); sm_120 keys 97 -> 108, none lost, the 11 additions
+  being the predicted composed / serving `end_to_end` keys; every sm_120 row
+  carries one `toolchain_digest`; all 28 rows that race a shipped delegate
+  carry `delegate_identities`; `MeasureCache().stale_records()` is empty (124
+  served).
+- **Strict admission:** `record_autotune_reproducibility.py` considered and
+  admitted 38 selector-eligible sm_120 rows (was 20), no stale resource
+  fingerprint, so the route-resources manifest did not need regenerating.
+  21 winners changed against the pre-schema rows (listed by `git diff`); 23 of
+  108 sm_120 rows are admissible dispatch hints under `record_is_admissible`,
+  the rest are unseparated or finalizer-ineligible and are kept, not served.
+- **The paged-attention warm start is served again.** The review made it apply
+  `record_is_admissible`, so `benchmark_serving.py` now measures fused and staged
+  **interleaved** over 20 reps, keeps every rep, and writes a separation
+  verdict (as `record_paged_kv_corpus.py` does). Served winners, device timing:
+  128 tokens `fused` (margin 88%, noise 8%), 512 `fused` (52% vs 12%), 2048
+  `staged` (45% vs 17%); all separated. **Pre-schema winners were fused /
+  staged / staged, so 512 tokens flipped.** Cause: the staged route's device
+  latency rose from 0.25 ms (pre-schema row) to 0.72-0.90 ms at 128 and 512
+  tokens (four runs, two without a corpus update), while fused is
+  unchanged (0.104 / 0.42 ms). **Not investigated** -- recorded as an open
+  question, not a regression claim, because the pre-schema row's toolchain
+  and runtime-library build are unknown (RUNTIME-LIB-OPT-1 changed those
+  libraries' `-O` level since).
+- **Test fix:** `test_committed_corpus_has_sm120_matmul_comparisons` required the
+  emitted GEMM in every end_to_end matmul row; it cannot serve odd K and is
+  removed from the 127x259x63 race before timing, so that row must not list it.
 
 Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
 item 3). **Follow-up required on Super-Bear; no sm_120 row has been
-re-recorded.** The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`,
+re-recorded** (history; done above). The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`,
 written as v4 since the gfx1151 re-record) keys every verdict on the toolchain
 identity (`compiler/toolchain_identity.py`: CUDA 13.4 / PTX 9.4 / driver
 610.88 / driver-JIT PTX 9.3 / LLVM 23.1.1 pins) and, for both Tier-3

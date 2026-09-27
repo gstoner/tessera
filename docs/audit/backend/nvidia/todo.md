@@ -8,6 +8,89 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`: checked emitted launches, route resources, reproducible shipped GEMM, route identities; sm_120 rows re-recorded
+
+Four items, one change, because each one moves the same sm_120 corpus rows and
+one re-record covers them. Evidence and commands:
+[`benchmarks/baselines/autotune_corpus_rerecord_sm120_launch_integrity_20260927/`](../../../../benchmarks/baselines/autotune_corpus_rerecord_sm120_launch_integrity_20260927/README.md).
+
+**1. `NVIDIA-EMITTED-UNCHECKED-LAUNCH` — closed.** All 55 sync-only entries,
+and the two inline sources (now the emitters `_synthesize_relu_bias_cuda` /
+`_synthesize_fused_epilogue_cuda`), read the last-error slot after each launch
+group, clear it once on entry, and consume every allocation / copy / memset /
+event status; the raced lanes' unchecked H2D/D2H copies are checked too. The
+ReplaySSM ring runtime launches through the driver and checks each
+`CUresult`, so it is the one `status-checked` source. The host-independent
+gate (`tests/unit/test_nvidia_emitted_stale_error_rule.py` +
+`tests/_support/nvidia_emitted_sources.py`) no longer accepts `sync-only`: it
+parses every host function and requires a slot read after the last launch, a
+read before a timer's timing boundary, no `cudaFuncSetAttribute` between a
+launch and its read, and every status in `STATUS_CALLS` consumed; no kernel
+source may live outside an emitter. Device proof on The-Super-Bear
+(`tests/device/nvidia/test_emitted_unchecked_launch.py`, 17 lanes: flash
+fwd/bwd, softmax, norm, reduce + timer, linear attention, MoE, paged-KV read +
+timer, relu-bias, fused/gated epilogue + timer, conv2d, rope, control-for):
+with every launch made invalid (grid `dim3(0u)`) the old sync-only judgment
+returned success on all 17 (the defect, observed), the shipped entries raise on
+all 17, and the unmodified lanes run; 17 + the 19
+`test_emitted_stale_cuda_error.py` cases passed. All 64 distinct rendered
+sources compile with the lane's own nvcc line. ROCm half: see the ROCm queue.
+
+**2. `AUTOTUNE-SM120-ROUTE-RESOURCES` — closed.** The route-resource manifest
+attests Nsight Compute launch facts per route (registers, shared memory,
+theoretical/achieved occupancy, spill requests; `parse_ncu_resources.py`); the
+finalizer admits a stable winner only when its route has an entry. The 17
+missing routes (native tf32/fp8 fused/attention/gated, composed fp8, and the
+scalar `nvidia_flash_attn` / `nvidia_gated`) were captured by the same method,
+one route per `ncu --set full` report so same-named tf32/fp8 builds stay apart
+(`profile_route_resources.py` brackets one timed invocation with
+`cuProfilerStart/Stop`; `build_test5_resource_manifest.py --route`). After the
+re-record 91 registry rows are selector-eligible (was 38). Of the 20 formerly
+partial rows **4 are now served** (attention fp8_e5m2 device 128x128, gated tf32
+and fp8_e5m2 device rows); 15 stay out as unseparated (device-event noise
+33–332% between repeats) and 1 because the two runs disagreed. None is blocked
+by missing resources any more.
+
+**3. Shipped GEMM byte-reproducibility — closed.** Root cause measured on
+Super-Bear: tree paths never mattered (two worktrees, same configure, identical
+bytes); the CUDA discovery path did. Linking the imported `CUDA::nvrtc` wrote
+the toolkit directory CMake found into DT_RUNPATH (`/usr/local/cuda/lib64` with
+`CUDAToolkit_ROOT=/usr/local/cuda` — reproducing the old `a00c9040…` exactly —
+vs `/usr/local/cuda-13.4/targets/x86_64-linux/lib`); `.text`/`.rodata`/`.data`
+were identical, only `.dynstr`/`.dynamic`/build-id differed. The library now
+builds with `SKIP_BUILD_RPATH` (every loader preloads the driver and NVRTC);
+four builds across two worktrees and both configures are byte-identical
+(`198b85b3…`). Identity scheme unchanged; the committed rows serve with the
+library built in another worktree under the other configure (96/96 match, 20
+served).
+
+**4. `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV` — closed (sm_120 half).** Non-registry
+rows get the registry contract (`autotune.RouteIdentity`, `route_identities`,
+`route_record_matches`, fail closed). sm_120: the paged-attention routes are the
+resident-stage source plus the entries each launches, and
+`_paged_attention_corpus_winner` refuses a row whose live identities differ;
+`conv2d` rows stamp `direct`/`shared` (resident stages) and `im2col_tf32`
+(resident stages + the shipped GEMM tf32 device entry) — no production path
+reads them yet, stated; `ssm_replay_decode` rows stamp the `async_ring` (ring
+runtime source + the `tessera-nvidia-opt` decode/flush images) — no reader
+either. The ring runtime and the paged HIP artifacts are cached by source
+content now.
+
+**Re-record (The-Super-Bear, own worktree at `fcfa3677`, fresh `build/` +
+`build-nvidia-cuda/`, everything under the timing lock).** Two recorder runs
+and the finalizer (rc 0, identities agreed), the serving recorder, then the
+order restored: 108 sm_120 rows changed, no key lost or added, every timed
+candidate of all 124 rows stamped. **Served registry rows: 20 (was 13)**; the
+two `matmul` end-to-end 2048³ shipped-GEMM rows dropped out (winner unchanged,
+now unseparated). Route rows match 12/12; the paged-KV warm start serves the
+128-token device row. Every one of the 108 rows misses under some single
+emitter perturbation with pins unchanged, and all 108 with all perturbed. 11
+winners changed, none served. Reproducibility: 92/92 strict records admitted.
+
+Open, found here: the `ncu`-only exit abort of a process holding a
+generic-lane library (recorded in the evidence README, not root-caused);
+route-resource entries are keyed by route, not by code identity or storage.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — hand-written hooks fixed on sm_120; emitted templates follow-up required
 
 **Update 2026-09-27 (same branch, PR #862) — reproduced and fixed on the RTX
@@ -207,14 +290,14 @@ under the timing lock,
 
 Open, found here:
 
-- **`AUTOTUNE-SM120-ROUTE-RESOURCES`**: the 20 formerly partial-field rows now
+- **`AUTOTUNE-SM120-ROUTE-RESOURCES`** (**closed 2026-09-27**, `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27` at the top of this file): the 20 formerly partial-field rows now
   race every live candidate, and the scalar lanes lost all 20 by 3–750x. They
   are still unserved. 18 have winners (native `nvidia_mma_{attn,fused,gated}_{tf32,fp8_*}`)
   with no entry in `nvidia_sm120_test5_route_resources.json`, so the finalizer
   marks them `selector_eligible: false`. The other 2 are unseparated. Owed:
   resource fingerprints for the native low-precision lanes, and more device
   repeats where a verdict is unseparated.
-- **`NVIDIA-EMITTED-UNCHECKED-LAUNCH`**: the sync-only emitted sources in the
+- **`NVIDIA-EMITTED-UNCHECKED-LAUNCH`** (**closed 2026-09-27**, `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`): the sync-only emitted sources in the
   table above judge their launches by `cudaDeviceSynchronize` only. It
   returned success after an invalid-configuration launch on this box, so a
   launch that never ran reports `rc 1`. To fix it, add a post-launch slot read

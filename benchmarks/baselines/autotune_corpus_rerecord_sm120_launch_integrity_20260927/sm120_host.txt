@@ -1,0 +1,6 @@
+HEAD fcfa3677065f0f0b883e01741d2f42416d2a1cdd dirty=0
+build/: ninja: no work to do.
+build-nvidia-cuda/: ninja: no work to do.
+gemm /home/angstorms/programming/tessera-w-a/build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so sha256:198b85b39049ca92884df8628b764441b4340a3113dac3486552626e2ac7fbd0
+ptx bridge /home/angstorms/programming/tessera-w-a/build-nvidia-cuda/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so sha256:1bcb4967119dbc67868163b1932b18973eb405374fe5279694898a4dde1953f6
+compute apps before recording: 0

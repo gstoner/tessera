@@ -19,6 +19,13 @@ streaming-STFT label fix changes only `target="rocm"`; the x86 label stays the
 constant `zen5-avx512`, which is truthful only while the x86 streaming package
 loads solely on the Zen 5 hosts — not re-verified by this change.
 
+## `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`: sibling outcome — not applicable
+
+The change checks emitted CUDA/HIP launches and gives the non-registry
+autotune rows (paged-KV, conv2d, ReplaySSM) route identities (NVIDIA and ROCm
+queues). `x86_generic_c` makes no device launch, and x86 has no committed
+corpus rows of either kind.
+
 ## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: sibling outcome — not applicable
 
 This change covers NVIDIA emitted CUDA templates, the NVIDIA scalar-lane

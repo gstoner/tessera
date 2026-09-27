@@ -1,0 +1,15 @@
+loaded 124 rows; 8 gfx1151 paged-KV rows; rocm toolchain sha256:4f528f652905f48c...; tessera-opt /home/gstoner/programming/tessera-w-a/build-alt/tools/tessera-opt/tessera-opt
+  device     [1, 4, 4, 128, 32, 16]     winner=gather_fa admissible=True  routes_match=True  warm_start=None
+  end_to_end [1, 4, 4, 128, 32, 16]     winner=direct    admissible=True  routes_match=True  warm_start=direct
+  device     [1, 4, 4, 2048, 32, 16]    winner=gather_fa admissible=True  routes_match=True  warm_start=None
+  end_to_end [1, 4, 4, 2048, 32, 16]    winner=direct    admissible=True  routes_match=True  warm_start=direct
+  device     [1, 4, 4, 512, 32, 16]     winner=gather_fa admissible=True  routes_match=True  warm_start=None
+  end_to_end [1, 4, 4, 512, 32, 16]     winner=direct    admissible=True  routes_match=True  warm_start=direct
+  device     [1, 4, 4, 8192, 32, 16]    winner=gather_fa admissible=True  routes_match=True  warm_start=None
+  end_to_end [1, 4, 4, 8192, 32, 16]    winner=direct    admissible=False routes_match=True  warm_start=None
+identities match 8/8; warm start served 3 (end-to-end rows; the reader does not consult device rows); warm-start answers that disagree with the row's admission: 0
+perturb _synthesize_paged_kv_read_hip           : 8 rows now miss; served 0
+perturb _synthesize_paged_attention_direct_hip  : 8 rows now miss; served 0
+perturb FA-2 image (gather_fa)                  : 8 rows now miss; served 0
+every row missed under some single perturbation: 8/8
+check rc=0

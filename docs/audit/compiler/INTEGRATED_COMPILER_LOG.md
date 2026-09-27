@@ -5133,3 +5133,51 @@ slot must fail the lane. The two mma.sync attention entries are the recorded
 exception. A successful `cudaFuncSetAttribute` resets the slot (measured on
 sm_120), which masks them; they clear anyway, because the rule must not rest on
 undocumented behaviour.
+
+### 2026-09-27 — Autotune launch integrity
+
+Owner: [W5.2](INTEGRATED_COMPILER_PLAN.md#w52)
+
+PRs: branch `claude/autotune-launch-integrity`.
+Sync: `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`.
+
+Outcome: four items that each move the same corpus rows landed together.
+
+1. `NVIDIA-EMITTED-UNCHECKED-LAUNCH`: every emitted CUDA source (55 sync-only
+   entries and two inline sources, now emitters) and the three sync-only HIP
+   entries (paged-KV gather, direct paged attention, ReplaySSM `su`) read the
+   last-error slot after each launch group and consume every
+   allocation/copy/memset/event status. The host-independent gates reject a
+   sync-only entry. With every launch made invalid, the sync-only judgment
+   reported success on sm_120 (17/17 lanes), gfx1151 and gfx1201 (3/3 each);
+   the fixed entries fail.
+2. `AUTOTUNE-SM120-ROUTE-RESOURCES`: the 17 routes without Nsight route
+   resources were captured one route per report; 91 registry rows are
+   selector-eligible (was 38).
+3. The shipped `libtessera_nvidia_gemm` was not byte-reproducible because its
+   DT_RUNPATH recorded how CMake discovered CUDA; it now builds without one and
+   four builds across two worktrees and both configures are identical.
+4. `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`: `autotune.RouteIdentity` gives the
+   non-registry rows the registry's Decision #11 contract; both paged-KV warm
+   starts refuse a changed route.
+
+Re-records: 108 sm_120 rows on The-Super-Bear (20 registry rows served, was
+13; all 108 miss after an emitter change with pins unchanged) and the 8 gfx1151
+paged-KV rows on Princess-Luna (winners unchanged, 3 served in two build
+trees). No row was backfilled.
+
+Remaining: 15 of the 20 formerly partial sm_120 rows are unseparated and 1 is
+unstable; an `ncu`-only exit abort of processes holding a generic-lane library
+is recorded, not root-caused.
+
+Evidence: `benchmarks/baselines/autotune_corpus_rerecord_sm120_launch_integrity_20260927/`,
+`benchmarks/baselines/autotune_corpus_rerecord_gfx1151_paged_kv_20260927/`,
+`tests/unit/test_nvidia_emitted_stale_error_rule.py`,
+`tests/unit/test_rocm_emitted_launch_rule.py`,
+`tests/unit/test_autotune_route_identity.py`,
+`tests/device/nvidia/test_emitted_unchecked_launch.py`,
+`tests/device/rocm/test_emitted_unchecked_launch_hip.py`.
+
+<!-- entry-fields:end -->
+
+Additional owners: the NVIDIA and ROCm backend queues (same sync key).

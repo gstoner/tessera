@@ -19,6 +19,13 @@ status/error), and no Apple hook reads a process- or thread-wide last-error
 slot. The streaming-STFT architecture label fix touches only `target="rocm"`.
 No shared contract changed.
 
+## `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`: sibling outcome — not applicable
+
+The change checks emitted CUDA/HIP launches, adds sm_120 route resources, makes
+the shipped NVIDIA GEMM byte-reproducible and gives the non-registry autotune
+rows (paged-KV, conv2d, ReplaySSM) route identities (NVIDIA and ROCm queues).
+Apple registers no arbiter candidates and has no committed corpus rows.
+
 ## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: sibling outcome — not applicable
 
 This change covers NVIDIA emitted CUDA templates, the NVIDIA scalar-lane

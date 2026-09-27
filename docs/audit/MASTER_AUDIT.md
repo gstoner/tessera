@@ -308,7 +308,7 @@ matches its module fails generation. Read the counts there.
    witnessed region, everything re-derived from stored integers). **Under
    WSL2 the raw clock is itself derived from the TSC, so the route shows a
    stable TSC scale bracketing the samples, not agreement with an independent
-   oscillator**; its Zen 5 packet is recorded on Princess-Luna; NVIDIA has no non-profiler witness (`%globaltimer`); event-only
+   oscillator**; its Zen 5 packet is recorded on Princess-Luna; NVIDIA sm_120 has its non-profiler witness since 2026-09-26 (`%globaltimer` marker, `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`; `profiler_timing` gives `nvidia_sm120` the device-clock slot); event-only
    recorders stay ineligible. Separately: NVIDIA timers run on the
    default stream (DEVICE-CLOCK-DISCIPLINE); Apple `kernelStartTime` does not
    measure work; and runtime libraries in empty-build-type trees compile at
@@ -357,8 +357,12 @@ matches its module fails generation. Read the counts there.
   in NVIDIA-DELEGATE-CONTRACT-2026-08-30, starting with non-composing
   accuracy budgets; `NVWGMMALoweringPass` cannot thread the accumulator (it
   refuses with `NVWGMMA_ACCUMULATOR_DROPPED`; W1.1 step 2b);
-  DEVICE-CLOCK-DISCIPLINE before any promotion; NVIDIA-CALIB-1 corpus
-  descriptors; one block-index convention. Future features (not gates):
+  DEVICE-CLOCK-DISCIPLINE before any promotion (the sm_120 `%globaltimer`
+  marker now supplies the kernel-side witness, `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`);
+  NVIDIA-CALIB-1 corpus descriptors; one block-index convention. The 88
+  pre-existing device-layer failures are root-caused and fixed (one compiler
+  defect, `nan_mode` dropped from reduction provenance; the rest stale tests;
+  `NVIDIA-DEVICE-LAYER-88-2026-09-26`). Future features (not gates):
   sm_90 WGMMA, sm_100 tcgen05/TMEM.
 - **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
   The broad production lane still skips Graph/Schedule/Tile; the 78
@@ -422,8 +426,12 @@ matches its module fails generation. Read the counts there.
    sync `DEVICE-CLOCK-MARKER-2026-09-26`); and the gfx1201 packet on
    Tajasarus, where the same selector admits cooperative, lower bound 9.73×
    ([packet](../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md),
-   sync `GFX1201-SSD-CALIBRATION-2026-09-26`). Open: validate the NVIDIA
-   `%globaltimer` marker on Super-Bear and record its SSD packet; an SSD Nsight
+   sync `GFX1201-SSD-CALIBRATION-2026-09-26`); and the sm_120 packet on
+   Super-Bear, after validating the NVIDIA `%globaltimer` marker there (32 ns
+   steps; agrees with CUDA events within 5% for windows of ~1 ms and longer):
+   the selector admits cooperative, lower bound 4.33×
+   ([packet](../../benchmarks/baselines/sm120_ssd_calibrated_pairs_20260926/README.md),
+   sync `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`). Open: an SSD Nsight
    activity-window packet on Super-Bear's WSL2; marker timing in
    `calibrate_gfx1151.py`; a Zen 2 packet adapter. **Done 2026-09-26:** the
    gfx1151 SSD re-record under the interleaved protocol, at 1000 launches per

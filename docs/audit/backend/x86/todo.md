@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
+
+NVIDIA's `%globaltimer` marker was validated on The-Super-Bear and given the
+`nvidia_sm120` device-clock slot in `profiler_timing`. The x86 slots
+(`X86_CLOCK_SLOTS`, `tsc_cycles` witnessed by `monotonic_raw_ns`) and their
+witness rules are unchanged; witnesses stay intersected with each target's
+own slots.
+
 ## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: not applicable (no committed x86 autotune rows)
 
 Decisions #11/#12 landed host-independently (MASTER_AUDIT action item 3):

@@ -8,6 +8,13 @@ last_updated: 2026-09-26
 
 # Apple compiler, exact-device, and performance plan
 
+## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
+
+NVIDIA's `%globaltimer` marker was validated on The-Super-Bear and given the
+`nvidia_sm120` device-clock slot in `profiler_timing`. No Apple recorder
+produces `profiler_timing` samples (Apple device timing is the Metal timestamp heap),
+and no Apple code path changed.
+
 ## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: not applicable (no committed Apple autotune rows)
 
 Decisions #11/#12 landed host-independently (MASTER_AUDIT action item 3):

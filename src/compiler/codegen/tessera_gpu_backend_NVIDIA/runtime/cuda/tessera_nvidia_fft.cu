@@ -9,6 +9,18 @@
 
 namespace {
 
+// Discards a stale CUDA runtime error left on this thread by earlier code (the
+// last-error slot is per thread and only cudaGetLastError() resets it), so a
+// post-launch check reports only this call's launches. Called once, first
+// thing, by every execute entry; never between a launch and its check. Plan
+// create/destroy, workspace alloc/free and the device query return their own
+// call's status and never read the slot, so they make no extra runtime call.
+// The device-pointer executes clear too: nothing in this library composes them
+// after unchecked launches of its own -- their callers are ctypes, which read
+// every status directly. See tessera_nvidia_spectral.cu for the full rule
+// (SPECTRAL-STALE-HIP-ERROR-2026-09-27).
+inline void clearStaleCudaError() { (void)cudaGetLastError(); }
+
 enum class FFTKind { C2C, R2C, C2R };
 
 struct FFTPlan {
@@ -167,6 +179,7 @@ extern "C" int tessera_nvidia_fft_workspace_free(void *workspace) {
 extern "C" int tessera_nvidia_fft_execute_c2c_f32(
     void *opaquePlan, const float *input, float *output, void *workspace,
     size_t workspaceBytes, int inverse) {
+  clearStaleCudaError();
   if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
       workspace == nullptr || (inverse != 0 && inverse != 1))
     return 1;
@@ -207,6 +220,7 @@ extern "C" int tessera_nvidia_fft_execute_c2c_f32(
 extern "C" int tessera_nvidia_fft_execute_r2c_f32(
     void *opaquePlan, const float *input, float *output, void *workspace,
     size_t workspaceBytes) {
+  clearStaleCudaError();
   if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
       workspace == nullptr)
     return 1;
@@ -243,6 +257,7 @@ extern "C" int tessera_nvidia_fft_execute_r2c_f32(
 extern "C" int tessera_nvidia_fft_execute_c2r_f32(
     void *opaquePlan, const float *input, float *output, void *workspace,
     size_t workspaceBytes) {
+  clearStaleCudaError();
   if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
       workspace == nullptr)
     return 1;
@@ -302,6 +317,7 @@ cufftResult bindStream(FFTPlan *plan, void *workspace, void *stream) {
 extern "C" int tessera_nvidia_fft_execute_c2c_device_f32(
     void *opaquePlan, const void *input, void *output, void *workspace,
     size_t workspaceBytes, int inverse, void *stream) {
+  clearStaleCudaError();
   if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
       workspace == nullptr || (inverse != 0 && inverse != 1))
     return 1;
@@ -333,6 +349,7 @@ extern "C" int tessera_nvidia_fft_execute_c2c_device_f32(
 extern "C" int tessera_nvidia_fft_execute_r2c_device_f32(
     void *opaquePlan, const void *input, void *output, void *workspace,
     size_t workspaceBytes, void *stream) {
+  clearStaleCudaError();
   if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
       workspace == nullptr)
     return 1;
@@ -355,6 +372,7 @@ extern "C" int tessera_nvidia_fft_execute_r2c_device_f32(
 extern "C" int tessera_nvidia_fft_execute_c2r_device_f32(
     void *opaquePlan, void *input, void *output, void *workspace,
     size_t workspaceBytes, void *stream) {
+  clearStaleCudaError();
   if (opaquePlan == nullptr || input == nullptr || output == nullptr ||
       workspace == nullptr)
     return 1;

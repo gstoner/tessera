@@ -15,6 +15,28 @@
 
 namespace {
 
+// The CUDA runtime keeps one last-error slot per host thread (per runtime
+// instance; this library links the shared libcudart, so it is the process's).
+// Any failing runtime call writes it -- a cudaMalloc refused for size, a
+// cudaSetDevice on a missing ordinal, another library's launch -- and only
+// cudaGetLastError() resets it. A post-launch `cudaGetLastError()` check here
+// would therefore report a stale error left by unrelated earlier code as the
+// failure of a launch that succeeded (the HIP twin of this trap is
+// SPECTRAL-STALE-HIP-ERROR-2026-09-27, found as rc=246 on gfx1201).
+//
+// Rule: each exported entry that does device work calls
+// clearStaleCudaError() exactly once, as its first statement. That discards
+// only errors older than the call; every error raised inside it -- including
+// launches covered by one grouped check -- is still detected, so no clear ever
+// goes between a launch and its check. Sticky (device-fault) errors cannot be
+// reset by cudaGetLastError() and still fail the next call. Metadata entries
+// (ABI/arch) make no extra runtime call, and the storage and streaming
+// wrappers do host work and then call a clearing entry, so they do not clear.
+// No C++ code in this library calls an entry after unchecked launches of its
+// own; if a composer is ever added, it owns the slot and the clear moves to it
+// (the ROCm device-pointer primitives are that case).
+inline void clearStaleCudaError() { (void)cudaGetLastError(); }
+
 constexpr int kThreads = 256;
 
 bool validDigest(const char *digest) {
@@ -1102,6 +1124,7 @@ extern "C" int tessera_nvidia_dct_policy_layout_f32(
     const char *digest, const float *inputHost, float *outputHost, int rank,
     const int64_t *shape, const int64_t *strides, int axis, int dctType,
     float outputScale) {
+  clearStaleCudaError();
   if (!validDigest(digest) || !inputHost || !outputHost || !shape ||
       !strides || rank <= 0 || rank > 8 || axis < 0 || axis >= rank ||
       dctType < 1 || dctType > 4 ||
@@ -1192,6 +1215,7 @@ extern "C" int tessera_nvidia_stft_policy_broadcast_layout_f32(
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, int frames, float outputScale, int center, int padMode,
     int onesided) {
+  clearStaleCudaError();
   if (!validDigest(digest) || !inputHost || !windowHost || !outputHost ||
       !shape || !strides || rank <= 0 || rank > 8 || axis < 0 ||
       axis >= rank || nfft <= 0 || hop <= 0 || frames <= 0 || (center != 0 && center != 1) ||
@@ -1312,6 +1336,7 @@ extern "C" int tessera_nvidia_stft_jvp_broadcast_layout_f32(
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, int frames, float outputScale, int center, int padMode,
     int onesided) {
+  clearStaleCudaError();
   if (!validDigest(digest) || !inputHost || !windowHost || !primalHost ||
       !tangentHost || !shape || !strides || rank <= 0 || rank > 8 ||
       axis < 0 || axis >= rank || nfft <= 0 || hop <= 0 || frames <= 0 ||
@@ -1471,6 +1496,7 @@ extern "C" int tessera_nvidia_istft_policy_broadcast_layout_f32(
     const int64_t *strides, int axis, int windowRank,
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, float outputScale, int center, int outputSamples, int onesided) {
+  clearStaleCudaError();
   if (!validDigest(digest) || !inputHost || !windowHost || !outputHost ||
       !shape || !strides || rank < 2 || rank > 8 || axis <= 0 ||
       axis >= rank || nfft <= 0 ||
@@ -1600,6 +1626,7 @@ extern "C" int tessera_nvidia_spectral_conv_f32(
     const char *digest, const float *xHost, int rows, int xLength,
     const float *wHost, int kernelRows, int kernelLength, float *outHost,
     int nfft, float scale) {
+  clearStaleCudaError();
   if (!validDigest(digest) || !xHost || !wHost || !outHost || rows <= 0 ||
       xLength <= 0 || kernelLength <= 0 ||
       (kernelRows != 1 && kernelRows != rows) || nfft <= 0)
@@ -1801,6 +1828,7 @@ extern "C" int tessera_nvidia_istft_jvp_broadcast_layout_f32(
     const int64_t *strides, int axis, int windowRank,
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, float outputScale, int center, int outputSamples, int onesided) {
+  clearStaleCudaError();
   if (!validDigest(digest) || !inputHost || !windowHost || !primalHost ||
       !tangentHost || !shape || !strides || rank < 2 || rank > 8 ||
       axis <= 0 || axis >= rank ||
@@ -2167,6 +2195,7 @@ extern "C" int tessera_nvidia_stft_backward_broadcast_layout_f32(
     const int64_t *dyShape, const int64_t *dyStrides, int windowRank,
     const int64_t *windowShape, const int64_t *windowStrides, int nfft,
     int hop, float forwardScale, int center, int padMode, int onesided) {
+  clearStaleCudaError();
   if (!validDigest(digest) || !dyHost || !inputHost || !windowHost ||
       !dxHost || !dwindowHost || !xShape || !xStrides || !dyShape ||
       !dyStrides || xRank <= 0 || xRank > 8 ||
@@ -2310,6 +2339,7 @@ extern "C" int tessera_nvidia_istft_backward_broadcast_layout_f32(
     int windowRank, const int64_t *windowShape,
     const int64_t *windowStrides, int nfft, int hop, float inverseScale,
     int center, int onesided) {
+  clearStaleCudaError();
   if (!validDigest(digest) || !dyHost || !spectrumHost || !windowHost ||
       !dspectrumHost || !dwindowHost || !dyShape || !dyStrides ||
       !spectrumShape || !spectrumStrides || dyRank <= 0 || dyRank > 7 ||

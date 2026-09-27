@@ -39,13 +39,14 @@ def _row(device, target, op, bucket, dtype, timing, winner, evidence=None):
 
 
 @pytest.fixture
-def recorder_env(tmp_path, monkeypatch):
+def recorder_env(tmp_path, monkeypatch, request):
     from tessera import runtime as rt
     from tessera.compiler.emit import autotune as at
     from tessera.compiler.emit import nvidia_cuda
     from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
 
     rocm_evidence = {"separation_note": "rocm-owned", **at.toolchain_evidence("rocm")}
+    unstamped_winner = request.param if hasattr(request, "param") else False
     mm_bucket = list(bucket_key((64, 64, 64), SpecPolicy.BUCKET))
     corpus = tmp_path / "corpus.json"
     corpus.write_text(json.dumps({"version": 3, "records": [
@@ -72,8 +73,10 @@ def recorder_env(tmp_path, monkeypatch):
         key = ("nvidia:sm_120", target, op,
                bucket_key(dims, SpecPolicy.BUCKET), dtype, timing)
         if cache.get(key) is None:
-            cache.put(key, at.MeasureRecord("fresh_winner", 1.0,
-                                            {"fresh_winner": 1.0}), fresh=True)
+            cache.put(key, at.MeasureRecord(
+                "fresh_winner", 1.0, {"fresh_winner": 1.0},
+                evidence=({} if unstamped_winner else {"delegate_identities": {
+                    "fresh_winner": {"fake_build": "fresh_winner"}}})), fresh=True)
         return SimpleNamespace(name="fresh_winner")
 
     monkeypatch.setattr(at, "measured_arbitrate", fake_arbitrate)
@@ -135,3 +138,19 @@ def test_recorder_keeps_other_devices_and_replaces_stale_rows(
     assert served_owned
     for key in served_owned:
         assert "compiler_fingerprint" in cache._store[key].evidence
+
+
+@pytest.mark.parametrize("recorder_env", [True], indirect=True)
+def test_recorder_refuses_rows_with_an_unstamped_candidate(
+        recorder_env, monkeypatch, capsys):
+    """AUTOTUNE-EMITTED-IDENTITY-2026-09-27: a registry row whose timed
+    candidate carries no identity is never served, so it must not be written
+    over the corpus (the gfx1151 recorder refuses the same way)."""
+    corpus, _, _ = recorder_env
+    before = corpus.read_text()
+    recorder = _load_recorder()
+    monkeypatch.setattr(sys, "argv", ["record_autotune_corpus.py", *_ARGS])
+    assert recorder.main() == 1
+    out = capsys.readouterr().out
+    assert "REFUSING TO WRITE" in out and "fresh_winner" in out
+    assert corpus.read_text() == before

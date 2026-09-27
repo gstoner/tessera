@@ -106,6 +106,9 @@ class AppleAIREmitter(KernelEmitter):
 
     target = AIR_TARGET
     lang = "msl"
+    #: `emit` delegates to the `apple_gpu` emitter *object*, which the
+    #: `source_memo` name walk cannot follow; never serve it from that memo.
+    source_memo_safe = False
 
     def _msl(self) -> KernelEmitter:
         return get_emitter("apple_gpu")

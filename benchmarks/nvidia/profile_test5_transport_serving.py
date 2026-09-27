@@ -18,7 +18,12 @@ def main() -> int:
     if artifact_file := os.environ.get("TESSERA_TEST5_PROFILE_ARTIFACTS"):
         artifacts = json.loads(Path(artifact_file).read_text())
         nv._moe_artifact = artifacts.get("moe")
-        nv._resident_ops_artifact = artifacts.get("resident_ops")
+        # Seed the precompiled resident stages only under the key of the
+        # source this checkout would compile; a stale artifact is recompiled.
+        resident = artifacts.get("resident_ops")
+        key = nv._emitted_key(nv._resident_ops_source(), "f32")
+        if resident and artifacts.get("resident_ops_key") == key:
+            nv._EMITTED_ARTIFACTS[key] = resident
     rng = np.random.default_rng(5)
     x = (rng.standard_normal((257, 193)) * .1).astype(np.float32)
     tok = np.arange(257, dtype=np.int32)[::-1]

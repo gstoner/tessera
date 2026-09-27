@@ -179,9 +179,17 @@ def main() -> int:
                   f" noise={(sep.get('noise') or 0)*100:.2f}%")
             # Decision #11: the artifact identity each timed candidate was
             # stamped with -- for rocm_wmma_gemm the kernel-code identity of
-            # the image timed at this shape, not the tessera-opt binary.
+            # the image timed at this shape, not the tessera-opt binary; for
+            # rocm_generic_hip the emitted-source identity (HIP text, its
+            # kernel_cache key and the hipcc flags incl. offload arch).
             stamped = (rec.evidence.get("delegate_identities") or {}) if rec else {}
             for name, ident in sorted(stamped.items()):
+                if ident.get("identity") == "emitted_source":
+                    print(f"      {name}: source="
+                          f"{str(ident.get('source_sha256', '-'))[:16]}"
+                          f" cache_key={str(ident.get('cache_key', '-'))[:16]}"
+                          f" build={ident.get('build', '-')!r}")
+                    continue
                 print(f"      {name}: stream="
                       f"{str(ident.get('instruction_stream_sha256', '-'))[:16]}"
                       f" data={ident.get('data_sections', '-')}"

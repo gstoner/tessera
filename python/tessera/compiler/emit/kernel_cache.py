@@ -43,6 +43,16 @@ from tessera.compiler.emit.kernel_emitter import (
 _SEP = "\x1f"  # unit separator — matches apple_gpu_runtime.mm's cache-key joiner
 
 
+#: `cache_key` by source *object*: (id, dtype, target) -> (that object, key).
+#: The generic lanes get the same memoized `KernelSource` back from
+#: `emit_kernel` on every launch (`source_memo`); re-hashing its text per call
+#: was most of the remaining dispatch cost. The object is held, so its id is
+#: never reused, and the `is` check means another object never reads its key.
+_KEYS_BY_OBJ: dict[tuple[int, str, str], tuple[KernelSource, str]] = {}
+#: `store_key` by (cache key, build line) -- a pure function of both.
+_STORE_KEYS: dict[tuple[str, tuple[str, ...]], str] = {}
+
+
 def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
     """Content-addressed key for a compiled kernel: sha256 over the source text +
     entry point + the specialization metadata that makes two *sources-equal*
@@ -52,6 +62,9 @@ def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
     Mirrors ``apple_gpu_runtime.mm``'s ``source + '\\x1f' + entry`` map key, so
     the Python cache and the runtime's internal pipeline cache agree on identity,
     then extends it so a bucket/dtype/target variant is not aliased to another."""
+    fast = _KEYS_BY_OBJ.get((id(source), dtype, target))
+    if fast is not None and fast[0] is source:
+        return fast[1]
     h = hashlib.sha256()
     for part in (
         source.source,
@@ -65,7 +78,11 @@ def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
     ):
         h.update(part.encode("utf-8"))
         h.update(_SEP.encode("utf-8"))
-    return h.hexdigest()
+    key = h.hexdigest()
+    if len(_KEYS_BY_OBJ) >= 4096:
+        _KEYS_BY_OBJ.clear()
+    _KEYS_BY_OBJ[(id(source), dtype, target)] = (source, key)
+    return key
 
 
 @dataclass(frozen=True)
@@ -97,14 +114,54 @@ CompileFn = Callable[[KernelSource], Any]
 
 _COMPILERS: dict[str, CompileFn] = {}
 
+#: Per-target build line: every compile input outside the source that shapes
+#: the artifact (flags, offload arch, the compiler invoked). Folded into the
+#: cache's store key by :func:`build`, so an environment change that changes
+#: how a source is compiled (``TESSERA_NVIDIA_ARCH``, ``TESSERA_ROCM_ARCH``,
+#: ``TESSERA_X86_CC``) compiles fresh instead of serving the artifact built the
+#: old way -- the lanes' Decision #11 identities carry the same build line, so
+#: without this a verdict could be stamped with one build and time another
+#: (sync AUTOTUNE-EMITTED-IDENTITY-2026-09-27).
+BuildLineFn = Callable[[], "tuple[str, ...]"]
+_BUILD_LINES: dict[str, BuildLineFn] = {}
 
-def register_compiler(target: str, compile_fn: CompileFn) -> None:
+
+def register_compiler(target: str, compile_fn: CompileFn, *,
+                      build_line: BuildLineFn | None = None) -> None:
     """Register the per-arch compile step for ``target`` (the plugin seam
     Workstream C fills with ``ptxas``/``hipcc``/``clang``). Re-registering
-    replaces it."""
+    replaces it. ``build_line`` returns the compile inputs outside the source
+    (see :data:`_BUILD_LINES`); re-registering without one clears it."""
     if not target:
         raise ValueError("compiler target must be a non-empty backend id")
     _COMPILERS[target] = compile_fn
+    if build_line is None:
+        _BUILD_LINES.pop(target, None)
+    else:
+        _BUILD_LINES[target] = build_line
+
+
+def store_key(source: KernelSource, *, dtype: str, target: str) -> str:
+    """The key :func:`build` caches a compiled kernel under: the content-
+    addressed :func:`cache_key` plus the target's registered build line. Equal
+    to :func:`cache_key` for a target that registers none."""
+    key = cache_key(source, dtype=dtype, target=target)
+    line_fn = _BUILD_LINES.get(target)
+    if line_fn is None:
+        return key
+    try:
+        line = tuple(str(part) for part in line_fn())
+    except Exception as exc:  # the compile step would fail the same way
+        raise CompileError(
+            f"build line for target {target!r} could not be resolved: {exc}") from exc
+    stored = _STORE_KEYS.get((key, line))
+    if stored is None:
+        stored = hashlib.sha256(
+            (key + _SEP + _SEP.join(line)).encode("utf-8")).hexdigest()
+        if len(_STORE_KEYS) >= 4096:
+            _STORE_KEYS.clear()
+        _STORE_KEYS[(key, line)] = stored
+    return stored
 
 
 def get_compiler(target: str) -> CompileFn:
@@ -144,8 +201,10 @@ class KernelCache:
             self.misses += 1
         return hit
 
-    def put(self, kernel: CompiledKernel) -> None:
-        self._store[kernel.key] = kernel
+    def put(self, kernel: CompiledKernel, *, key: str | None = None) -> None:
+        """Store ``kernel`` under ``key`` (default: its :func:`cache_key`;
+        :func:`build` passes the :func:`store_key`)."""
+        self._store[kernel.key if key is None else key] = kernel
 
     def clear(self) -> None:
         self._store.clear()
@@ -185,8 +244,9 @@ def build(
     cache = cache if cache is not None else _DEFAULT_CACHE
     source = emit_kernel(region, target, spec, dtype=dtype, dims=dims)
     key = cache_key(source, dtype=dtype, target=target)
+    stored_under = store_key(source, dtype=dtype, target=target)
 
-    cached = cache.get(key)
+    cached = cache.get(stored_under)
     if cached is not None:
         return cached
 
@@ -202,5 +262,5 @@ def build(
     compiled = CompiledKernel(
         key=key, source=source, target=target, entry=source.entry,
         artifact=artifact, deferred=artifact is None)
-    cache.put(compiled)
+    cache.put(compiled, key=stored_under)
     return compiled

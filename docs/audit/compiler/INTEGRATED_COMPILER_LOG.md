@@ -4922,3 +4922,92 @@ Evidence: `benchmarks/baselines/gfx1201_fp8_blockscale_20260927/` (comparison + 
 Why the W8A8 panel is not the unscaled one: each group's partial is a second live accumulator per fragment, so the unscaled 4x4 panel would carry 32 fragments -- 256 VGPRs before any operand. Measured at 1024x4096x1024: 32x32 231 VGPRs unspilled, 64x32 256 + 54 spilled, 64x64 256 + 337. A first cut that issued a whole K128 group (eight panels) straight-line spilled even at 32x32; the inner panel loop fixed that without changing what a group computes. The `[N, K]` weight is what made the route competitive: its B fragment is one K-contiguous vector load where `[K, N]` is a strided per-element gather (1.8-3x slower here).
 
 Two measurement corrections before the recorded packet: the harness first read `hipDeviceAttributeWallClockRate` by parsing the HIP header and got the wrong enumerator (1 kHz); it now compiles a probe against the header, as `record_ssd_gpu.py` does. And windows sized on one cold probe came in at 1.5-4.6 ms, under the 5 ms admission floor; the harness now warms every arm together and re-runs any paired set whose windows fall short (every arm of the recorded packet cleared on the first attempt).
+
+### 2026-09-27 — Every arbiter candidate identifies the code it runs
+
+Owner: [W5.2](INTEGRATED_COMPILER_PLAN.md#w52)
+
+PRs: branch `claude/autotune-emitted-identity` (Codex review P2 on PR #859).
+Sync: `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`.
+
+Outcome: `Candidate.requires_artifact_identity()` was `tier == HAND_TUNED`, so
+a SYNTHESIZED/EMITTED lane with no identity was served on the pin-based
+toolchain identity alone, and a changed emitter kept a verdict measured for
+its old kernel. Now every live candidate must match a stamped identity or the
+verdict misses; the arbiter consults no opt-out. `compiler/emitted_code_identity.py`
+(`tessera.emitted_source.v1`) identifies Python-emitted source (text +
+`kernel_cache.cache_key` + the compile flags the pin does not fix, read from the
+same flag list the compile step uses), PTX, checked-in sources plus the host
+compiler's version, and Python/numpy lanes; `tessera-opt` images keep
+`kernel_code.v2`. gfx1151 `fused_region` rows re-recorded on Princess-Luna
+(winners unchanged; served, and missed after an emitter change with pins
+unchanged). The 96 sm_120 registry rows were re-recorded on The-Super-Bear
+(clean worktree at `1a737129`, fresh `build/` + `build-nvidia-cuda/`, under the
+timing lock): every timed candidate stamped, 15 rows served by production
+lookup with inferred dims (the 14 admissible before plus one f16 attention
+row), all 96 miss when an NVIDIA emitter changes with the pins unchanged; 15
+winners changed, none of them served (inadmissible before and after). An
+independent review fixed three gaps: the finalizer merged two runs that timed
+different code (now refused), an empty identity `{}` matched like a real one
+(now a miss), and composed spectral lanes did not cover the inner FFT lane
+they fall through to; new tests require each emitted lane's identity to equal
+the digest of the exact source and command line its compiler receives.
+
+Remaining: `AUTOTUNE-GATED-INFER-DIMS` (`_infer_dims` has no gated rule; no
+gated row admissible today); `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`; host launch
+code in runtime libraries behind tessera-opt images stays outside
+`kernel_code.v2`.
+
+Evidence: `benchmarks/baselines/autotune_corpus_rerecord_20260927/`,
+`benchmarks/baselines/autotune_corpus_rerecord_sm120_20260927/`,
+`tests/unit/test_autotune_emitted_identity.py`,
+`tests/unit/test_autotune_toolchain_key.py`.
+
+<!-- entry-fields:end -->
+
+Cache coherence (Codex review P2 on PR #861, same day). The identity named the
+code a lane *would* compile, but several runtime caches held compiled code
+under keys that did not change with it (`_mma_{fused,attn,gated}_*fn_cache`
+by storage/epilogue/raster, `_resident_ops_artifact` once per process, the
+PTX-registered set by entry name, libraries loaded once and digested later,
+checked-in CPU libraries compiled once while the identity re-read the file),
+so an in-process code change could time one kernel under another's stamp.
+Now every such cache keys on the code (`kernel_cache.cache_key` + the compile
+line; `register_compiler(build_line=)` folds arch/compiler into
+`kernel_cache.build`'s store key), or the stamp is taken from the loaded
+artifact (registered PTX text; `toolchain_identity.load_library` pins; the
+bytes a checked-in compile read, now incl. quoted local headers);
+`measured_arbitrate` leaves unstamped a candidate whose identity moved during
+the race; `source_identity`/`composite_identity` refuse field collisions.
+Full per-cache inventory: `docs/audit/backend/nvidia/todo.md` (same key).
+Verified: Mac sweep 20698 passed / 3840 skipped / 0 failed; sm_120 device gate
+1122 passed / 1 skipped both passes, serve check byte-identical (96/96 match,
+15 served, 96/96 miss), real-device recompile probes on sm_120 and gfx1151;
+gfx1151 serve check 8/8 served, 8/8 miss. No identity of unchanged code moved.
+Open: `AUTOTUNE-KERNEL-IDENTITY-MEMO` (ROCm queue). Tests:
+`tests/unit/test_autotune_identity_cache_coherence.py`.
+
+Follow-ups before merge (same day, same key). **`AUTOTUNE-KERNEL-IDENTITY-MEMO`
+closed:** `kernel_code_identity.compiler_kernel_identity` memoized a
+`tessera-opt` image's identity by selectors + `tessera-opt` digest while the
+hsaco caches key on the directive text, so an in-process directive-generator
+change launched a new image under the old identity; it now consults the
+launch's own build path on every lookup and reuses the memo only for a
+byte-identical image (cost moves to the served-verdict check: Mac
+`rocm_wmma_gemm` 4.9 -> 24.3 us, `rocm_flash_attn` 1.9 -> 11.4 us per lookup).
+**Hot path:** keying caches by source had made every emitted-lane launch
+re-run its Python emitter (~10 us); `emit/source_memo.py` memoizes the source
+against the emitter function object and every global it reaches by name (a
+patch, reload or patched helper re-emits; env-reading, stateful or opted-out
+emitters and mutable arguments are never memoized; numbers keyed with their
+type), and launch and identity read the same memoized object. Mac per-call
+lookup: `_mma_fused_fn` 10.60 -> 2.42 us, `_mma_attn_fn` 9.43 -> 1.78,
+`_mma_gated_fn` 10.52 -> 2.32, `_resident_ops_lib` 3.66 -> 1.38, generic
+`kernel_cache.build` 10.50 -> 4.19, `nvidia_mma_fused.artifact_identity`
+16.91 -> 3.51. Verified at `946530a8`: Mac sweep 20794 passed / 3840 skipped /
+0 failed; sm_120 device gate 1122 passed / 1 skipped both passes, serve check
+byte-identical (96/96 match, 15 served, 96/96 miss), real-device memo probe;
+gfx1151 real-device directive-change probe (fresh image, identity names it,
+correct results), serve check 8/8 served / 8/8 miss. No identity of unchanged
+code moved. Tests: `tests/unit/test_autotune_identity_memo_coherence.py`
+(the directive cases fail on `dedae4b0`). Detail: ROCm and NVIDIA queues.

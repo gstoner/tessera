@@ -47,6 +47,7 @@ from tessera.compiler.emit.candidate import (
     register_op_kind,
     verify_by_reference,
 )
+from tessera.compiler.toolchain_identity import load_library
 
 #: op-kind tag emitted by LowerSpectralToTargetIR (tessera.target_ir.arbiter_op).
 OP_SPECTRAL_FFT = "spectral_fft"
@@ -111,7 +112,7 @@ def _compile(key: str, argv: list[str], out: str) -> ctypes.CDLL | None:
     try:
         subprocess.check_call(argv, stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL)
-        lib = ctypes.CDLL(out)
+        lib = load_library(out)
     except Exception:
         lib = None
     _libs[key] = lib
@@ -129,6 +130,30 @@ def _build_dir(prefix: str) -> str:
     return d
 
 
+#: The flags `_cpu_lib` compiles the checked-in Stockham kernel with; also read
+#: by the candidate's Decision #11 identity.
+_CPU_CXX_FLAGS = ("-O2", "-std=c++17", "-shared", "-fPIC")
+
+
+#: Decision #11 identity of the bytes the loaded CPU Stockham library was
+#: compiled from (``None``: unknown -- the source changed during the compile).
+#: The library is compiled once per process, so after the load this, not the
+#: file on disk, names the code `cpu_stockham` runs.
+#: Keyed by the loaded library's path (a fresh temp path per compile), so a
+#: reset of `_libs` can never pair one compile's library with another's record.
+_cpu_compiled_identity: dict[str, dict[str, str] | None] = {}
+
+
+def _cpu_source_identity() -> dict[str, str]:
+    """What `_cpu_lib` would compile now: `StockhamRadix4.cpp`, the local
+    headers it includes, the flags and ``$CXX --version``."""
+    from tessera.compiler.emitted_code_identity import source_file_identity
+
+    return source_file_identity(
+        _CPU_SRC, lang="c++", entry="ts_fft_stockham_cpu",
+        build=("c++", *_CPU_CXX_FLAGS), compiler=os.environ.get("CXX", "c++"))
+
+
 def _cpu_lib() -> ctypes.CDLL | None:
     if "cpu" in _libs:
         return _libs["cpu"]
@@ -136,10 +161,15 @@ def _cpu_lib() -> ctypes.CDLL | None:
     if not shutil.which(cxx) or not _CPU_SRC.exists():
         _libs["cpu"] = _libs.get("cpu")
         return _libs.get("cpu")
+    from tessera.compiler.emitted_code_identity import identify_compilation
+
     d = _build_dir("tessera_spectral_cpu_")
     so = os.path.join(d, "libspectral_cpu.so")
-    lib = _compile("cpu", [cxx, "-O2", "-std=c++17", "-shared", "-fPIC",
-                          str(_CPU_SRC), "-o", so], so)
+    lib, compiled = identify_compilation(
+        lambda: _compile("cpu", [cxx, *_CPU_CXX_FLAGS, str(_CPU_SRC), "-o", so], so),
+        _cpu_source_identity)
+    if lib is not None:
+        _cpu_compiled_identity[str(lib._name)] = compiled
     if lib is not None:
         lib.ts_fft_stockham_cpu.restype = None
         lib.ts_fft_stockham_cpu.argtypes = [
@@ -429,7 +459,9 @@ def _load_prebuilt_fft(path: Path) -> ctypes.CDLL | None:
     if not path.is_file():
         return None
     try:
-        lib = _configure_amd_lib(ctypes.CDLL(str(path)))
+        # Pinned at load: `RocmStockhamFFTCandidate.delegate_identity` names
+        # this image, and a rebuild after the load must miss (Decision #11).
+        lib = _configure_amd_lib(load_library(str(path)))
     except OSError:
         return None
     required = (
@@ -1069,6 +1101,23 @@ class CpuStockhamFFTCandidate(Candidate):
     target = "cpu"
     op = OP_SPECTRAL_FFT
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the checked-in ``StockhamRadix4.cpp`` (and the local
+        headers it includes) `_cpu_lib` compiles, the flags, and the ``$CXX
+        --version`` line (no pin fixes the host C++ compiler). One image serves
+        every supported length. Once the library is loaded it is the bytes it
+        was compiled from -- the process never recompiles, so an edit to the
+        file afterwards does not change what runs, and must not change the
+        stamp either."""
+        from tessera.compiler.emitted_code_identity import identify, loaded_identity
+
+        loaded = _libs.get("cpu")
+        if loaded is not None:
+            return identify(self.name, lambda: loaded_identity(
+                _cpu_compiled_identity.get(str(getattr(loaded, "_name", ""))),
+                "libspectral_cpu"))
+        return identify(self.name, _cpu_source_identity)
+
     def available(self) -> bool:
         return _cpu_lib() is not None
 
@@ -1553,6 +1602,50 @@ class _ComposedSpectralCandidate(Candidate):
     #: Attribute on the region giving the length of the INNER complex
     #: transform. For the framed ops that is the window, not the signal.
     inner_len_attr = "n"
+    #: Direction of the inner transform (forward for rfft/stft, inverse for
+    #: irfft/istft) -- selects the inner lane's region for the identity.
+    inner_sign = -1
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the composing Python (this class's ``run`` and the
+        framing / Hermitian / lane-selection helpers it calls) plus the
+        identity of the inner FFT lane `_inner_fft` / `_inner_fft_rows` would
+        pick for this region -- the first applicable, available
+        ``spectral_fft`` candidate for this target, in registration order.
+        Those helpers fall through to the NEXT such candidate when one raises
+        or declines at run time (a data-dependent branch), so every later
+        applicable, available candidate is carried too, as ``inner_fallback<i>``
+        -- a false miss when only an untaken one changes, never a false hit.
+        The Python part is an approximation: numpy itself is not covered."""
+        from tessera.compiler.emit.candidate import candidates_for
+        from tessera.compiler.emitted_code_identity import (
+            composite_identity,
+            identify,
+            python_code_identity,
+        )
+
+        def build_identity() -> "dict[str, str] | None":
+            n = int(getattr(region, self.inner_len_attr, 0) or 0)
+            inner_region = SpectralFFTRegion(n=n, sign=self.inner_sign)
+            inners = [c for c in candidates_for(self.target, OP_SPECTRAL_FFT)
+                      if c.applies_to(inner_region) and c.available()]
+            if not inners:
+                return None
+            inner, fallbacks = inners[0], inners[1:]
+            parts: dict[str, Any] = {
+                "compose": python_code_identity(
+                    type(self).run, _hermitian_full, _inner_fft,
+                    _inner_fft_rows, lane=self.name),
+                "inner": inner.artifact_identity(inner_region),
+                "inner_lane": {"name": inner.name},
+            }
+            for i, other in enumerate(fallbacks):
+                ident = other.artifact_identity(inner_region)
+                parts[f"inner_fallback{i}"] = (
+                    None if ident is None else {"name": other.name, **ident})
+            return composite_identity(parts)
+
+        return identify(self.name, build_identity)
 
     def applies_to(self, region: Any) -> bool:
         """Decline whatever the inner FFT would decline.
@@ -1607,6 +1700,7 @@ class IRFFTCandidate(_ComposedSpectralCandidate):
     """
 
     op = OP_SPECTRAL_IRFFT
+    inner_sign = +1
 
     def run(self, region: SpectralIRFFTRegion, xf: np.ndarray, *a: Any,
             **k: Any) -> tuple[Any, str]:
@@ -1661,6 +1755,7 @@ class ISTFTCandidate(_ComposedSpectralCandidate):
 
     op = OP_SPECTRAL_ISTFT
     inner_len_attr = "win"
+    inner_sign = +1
 
     def run(self, region: SpectralISTFTRegion, xf: np.ndarray,
             win: np.ndarray, *a: Any, **k: Any) -> tuple[Any, str]:
@@ -1702,6 +1797,17 @@ class SpectralFilterCandidate(Candidate):
 
     def available(self) -> bool:
         return True
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: this lane is a numpy product, so its identity is the
+        source of ``run`` (an approximation: numpy itself is not covered)."""
+        from tessera.compiler.emitted_code_identity import (
+            identify,
+            python_code_identity,
+        )
+
+        return identify(self.name, lambda: python_code_identity(
+            type(self).run, lane=self.name))
 
     def run(self, region: SpectralFilterRegion, xf: np.ndarray,
             hf: np.ndarray, *a: Any, **k: Any) -> tuple[Any, str]:

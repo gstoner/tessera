@@ -37,6 +37,7 @@ kernel. The Tier-2 ``ptx_emit.py`` (``mma.sync``/``wgmma``) emit lane and its
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import os
 import re
 import shutil
@@ -62,6 +63,7 @@ from tessera.compiler.emit.delegate_contract import (
     DelegatedCandidate,
 )
 from tessera.compiler.emit.kernel_cache import build, register_compiler
+from tessera.compiler.emit.source_memo import memoized
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
     KernelEmitter,
@@ -1129,11 +1131,19 @@ def _nvidia_arch() -> str:
     return os.environ.get("TESSERA_NVIDIA_ARCH") or "sm_120a"
 
 
+_NVCC_BY_ENV: dict[tuple[str | None, str | None], str] = {}
+
+
 def _nvcc() -> str:
     """The CUDA compiler: ``$TESSERA_NVCC`` override, else nvcc on PATH, else the
-    default toolkit location."""
-    return (os.environ.get("TESSERA_NVCC")
-            or shutil.which("nvcc") or "/usr/local/cuda/bin/nvcc")
+    default toolkit location. The PATH lookup is memoized per (override, PATH):
+    artifact caches consult this on every launch."""
+    env = (os.environ.get("TESSERA_NVCC"), os.environ.get("PATH"))
+    found = _NVCC_BY_ENV.get(env)
+    if found is None:
+        found = env[0] or shutil.which("nvcc") or "/usr/local/cuda/bin/nvcc"
+        _NVCC_BY_ENV[env] = found
+    return found
 
 
 def _nvidia_cuda_compile_fn(source: KernelSource) -> str:
@@ -1146,10 +1156,256 @@ def _nvidia_cuda_compile_fn(source: KernelSource) -> str:
     with open(src, "w") as f:
         f.write(source.source)
     subprocess.run(
-        [_nvcc(), f"-arch={_nvidia_arch()}", "-O3", "--shared",
-         "-Xcompiler", "-fPIC", src, "-lcuda", "-o", so],
+        [_nvcc(), *_nvcc_compile_flags(), src, *_NVCC_LINK_FLAGS, "-o", so],
         check=True, capture_output=True, text=True)
     return so
+
+
+# ── Decision #11 identities of the code each NVIDIA lane runs ─────────────────
+#
+# Every arbiter candidate must name the code it would run for a workload
+# (sync AUTOTUNE-EMITTED-IDENTITY-2026-09-27). The flag lists below are the
+# ones `_nvidia_cuda_compile_fn` passes, so an identity cannot describe a build
+# nvcc was not given. nvcc's version is the family pin (`cuda_toolkit`), and
+# the driver-JIT PTX ISA re-stamp is pinned too (`driver_jit_ptx_isa`).
+
+#: Link inputs that follow the source on the nvcc line.
+_NVCC_LINK_FLAGS = ("-lcuda",)
+
+
+def _nvcc_compile_flags() -> tuple[str, ...]:
+    """Every nvcc flag ahead of the source that shapes an emitted lane's .so."""
+    return (f"-arch={_nvidia_arch()}", "-O3", "--shared", "-Xcompiler", "-fPIC")
+
+
+def _nvcc_build() -> tuple[str, ...]:
+    """The build line an emitted-source identity carries (compiler by name)."""
+    return ("nvcc", *_nvcc_compile_flags(), *_NVCC_LINK_FLAGS)
+
+
+_NVCC_CACHE_LINES: dict[tuple[Any, ...], tuple[str, ...]] = {}
+#: The environment's own store where it is a bytes-keyed dict (CPython on
+#: POSIX): reading `os.environ` decodes a fresh `str` per call, so hashing a
+#: long PATH for the memo key cost more than the rest of the lookup, and even
+#: `os.environb.get` is ~0.3 us of Mapping machinery. Every `os.environ` /
+#: `os.environb` write (incl. `monkeypatch.setenv`) goes through this dict, so
+#: nothing is missed; elsewhere -- or if `os.environ` itself was replaced --
+#: the portable `os.environ` read is used.
+_ENV_STORE: Any = getattr(os.environ, "_data", None)
+_ENVB: Any = (_ENV_STORE if os.name == "posix" and isinstance(_ENV_STORE, dict)
+              and all(isinstance(k, bytes) for k in list(_ENV_STORE)[:1]) else None)
+_NVCC_ENV_KEYS = ("TESSERA_NVCC", "PATH", "TESSERA_NVIDIA_ARCH")
+_NVCC_ENV_KEYS_B = tuple(k.encode() for k in _NVCC_ENV_KEYS)
+
+
+def _nvcc_cache_line() -> tuple[str, ...]:
+    """What a compiled-artifact cache keys on beyond the source: the build line
+    the identity carries plus the nvcc actually invoked (by path -- a cache is
+    per process, so a path is exact here where an identity must be portable).
+    Memoized on the three environment variables it reads and on the helpers
+    that turn them into the line (so patching one is seen), since every launch
+    of an emitted lane asks for it."""
+    store: Any = getattr(os.environ, "_data", None)
+    if store is not None and store is _ENVB:
+        get = store.get
+        k0, k1, k2 = _NVCC_ENV_KEYS_B
+        env: tuple[Any, ...] = (get(k0), get(k1), get(k2))
+    else:
+        env = tuple(os.environ.get(k) for k in _NVCC_ENV_KEYS)
+    env += (_nvcc, _nvcc_build, _nvcc_compile_flags, _nvidia_arch)
+    line = _NVCC_CACHE_LINES.get(env)
+    if line is None:
+        line = (_nvcc(), *_nvcc_build())
+        _NVCC_CACHE_LINES[env] = line
+    return line
+
+
+# ── emitted-lane artifact caches, keyed by the code they hold ─────────────────
+#
+# Every compiled emitted-lane symbol is cached under the content address of the
+# source actually compiled (`kernel_cache.cache_key` at the dtype the lane's
+# Decision #11 identity uses) plus the build line, never under the lane's
+# selectors alone. A selector-keyed cache kept serving the binary compiled from
+# an emitter's OLD output after the emitter changed within a process, while
+# the arbiter stamped the NEW source's identity -- a latency for one kernel
+# recorded under another's name (Codex review P2 on PR #861). Now a changed
+# emitter compiles fresh, and an unchanged one still hits.
+
+#: Artifact paths by (store key) -- shared by the host and device-timer entries
+#: of one source, which previously compiled the same text twice.
+_EMITTED_ARTIFACTS: dict[str, str] = {}
+
+
+#: Memo of `_emitted_key` by the exact inputs it hashes. Keyed on the full
+#: source text (compared by value), so it can never answer for different text;
+#: it only saves re-hashing when a lane asks again for the same source -- the
+#: composed lanes ask once per stage launch inside their timed loops.
+_EMITTED_KEYS: dict[tuple[Any, ...], str] = {}
+#: Fast path of `_EMITTED_KEYS` for the memoized `KernelSource` objects the
+#: lanes hand back on every launch (`source_memo`): (id, dtype, line) ->
+#: (that object, key). The object is held, so its id cannot be reused, and the
+#: `is` check means a different object never reads another's key.
+_EMITTED_KEYS_BY_OBJ: dict[tuple[int, str, tuple[str, ...]], tuple[KernelSource, str]] = {}
+
+
+def _emitted_key(src: KernelSource, dtype: str) -> str:
+    """The cache key of one emitted-lane source: its `kernel_cache.cache_key`
+    (the one the identity records) folded with the nvcc cache line."""
+    line = _nvcc_cache_line()
+    fast = _EMITTED_KEYS_BY_OBJ.get((id(src), dtype, line))
+    if fast is not None and fast[0] is src:
+        return fast[1]
+    memo = (src.source, src.entry, src.lang, src.spec.value, repr(src.shape_key),
+            repr(src.layouts), dtype, line)
+    key = _EMITTED_KEYS.get(memo)
+    if key is None:
+        from tessera.compiler.emit.kernel_cache import cache_key
+
+        ident = cache_key(src, dtype=dtype, target=_TARGET)
+        key = hashlib.sha256(
+            "\x1f".join((ident, *line)).encode("utf-8")).hexdigest()
+        _EMITTED_KEYS[memo] = key
+    if len(_EMITTED_KEYS_BY_OBJ) >= 4096:
+        _EMITTED_KEYS_BY_OBJ.clear()
+    _EMITTED_KEYS_BY_OBJ[(id(src), dtype, line)] = (src, key)
+    return key
+
+
+def _emitted_artifact(src: KernelSource, dtype: str) -> str:
+    """The shared object compiled from exactly ``src`` (compiled on a miss)."""
+    key = _emitted_key(src, dtype)
+    artifact = _EMITTED_ARTIFACTS.get(key)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(src)
+        _EMITTED_ARTIFACTS[key] = artifact
+    return artifact
+
+
+def _emitted_symbol(cache: dict[Any, Any], src: KernelSource, dtype: str,
+                    symbol: str, restype: Any, argtypes: list[Any]) -> Any:
+    """``symbol`` bound from the artifact compiled from exactly ``src``,
+    cached in ``cache`` under ``(source key, symbol)``."""
+    key = (_emitted_key(src, dtype), symbol)
+    fn = cache.get(key)
+    if fn is None:
+        fn = getattr(_load_lib(_emitted_artifact(src, dtype)), symbol)
+        fn.restype = restype
+        fn.argtypes = argtypes
+        cache[key] = fn
+    return fn
+
+
+#: `_cuda_source_identity` by source object (same scheme as
+#: `_EMITTED_KEYS_BY_OBJ`): the arbiter asks every live candidate for its
+#: identity on each served verdict, and the memoized source is one object.
+_IDENTITIES_BY_OBJ: dict[tuple[int, str, tuple[str, ...]],
+                         tuple[KernelSource, dict[str, str]]] = {}
+
+
+def _cuda_source_identity(source: KernelSource, dtype: str) -> dict[str, str]:
+    """Identity of one Python-emitted CUDA source compiled by
+    `_nvidia_cuda_compile_fn`: text, `kernel_cache.cache_key`, nvcc flags."""
+    from tessera.compiler.emitted_code_identity import kernel_source_identity
+
+    line = _nvcc_cache_line()
+    fast = _IDENTITIES_BY_OBJ.get((id(source), dtype, line))
+    if fast is not None and fast[0] is source:
+        return dict(fast[1])
+    identity = kernel_source_identity(source, dtype=dtype, target=_TARGET,
+                                      build=line[1:])
+    if len(_IDENTITIES_BY_OBJ) >= 4096:
+        _IDENTITIES_BY_OBJ.clear()
+    _IDENTITIES_BY_OBJ[(id(source), dtype, line)] = (source, dict(identity))
+    return identity
+
+
+def _generic_lane_source(region: Any) -> KernelSource:
+    """The source the generic runner's `build(region, "nvidia", dtype="f32",
+    dims=None)` compiles for ``region``."""
+    from tessera.compiler.emit.kernel_emitter import emit_kernel
+
+    return emit_kernel(region, _TARGET, SpecPolicy.BUCKET, dtype="f32", dims=None)
+
+
+def _generic_lane_identity(owner: str, region: Any) -> dict[str, str] | None:
+    """A Tier-1 generic lane (fused / attention / gated / pointwise): the
+    emitted CUDA source for ``region`` -- dims-invariant, M/N/K are runtime
+    arguments -- plus the nvcc flags."""
+    from tessera.compiler.emitted_code_identity import identify
+
+    return identify(owner, lambda: _cuda_source_identity(
+        _generic_lane_source(region), "f32"))
+
+
+def _ptx_bridge_identity() -> dict[str, str] | None:
+    """The PTX launch bridge (`libtessera_nvidia_ptx_launch`) by content.
+
+    The bridge registers PTX with the driver and computes the launch grid and
+    block for every PTX lane, so a change to it changes the timed code as
+    surely as a change to the PTX. It is compiled into a library rather than
+    emitted, so it is identified the way a delegate library is: its content
+    digest, which changes on any rebuild (a false miss at worst, never a false
+    hit). Once loaded, the loaded image -- and a rebuild after the load is a
+    miss (`toolchain_identity.load_library`). ``None`` when the bridge is not
+    built here -- no PTX lane can run."""
+    from tessera import runtime as rt
+    from tessera.compiler.toolchain_identity import delegate_library_identity
+
+    path = _loaded_or(rt._nvidia_ptx_launch_lib, rt._nvidia_ptx_launch_lib_path)
+    return None if path is None else delegate_library_identity(path)
+
+
+def _loaded_or(lib: Any, locate: Any) -> Any:
+    """The path a runtime library was loaded from in this process, else where
+    it would be loaded from. A library is loaded once and the process runs
+    that image, so an identity must name it -- not whatever the locator (an
+    env override, a build-tree probe) would pick today."""
+    loaded = getattr(lib, "_name", None) if lib is not None else None
+    return loaded if loaded else locate()
+
+
+def _gemm_runtime_path() -> Any:
+    from tessera import runtime as rt
+
+    return _loaded_or(rt._nvidia_gemm_runtime, rt._nvidia_gemm_lib_path)
+
+
+def _gemm_runtime_identity(entry: str) -> dict[str, str] | None:
+    """The shipped `libtessera_nvidia_gemm` by content plus the entry a lane
+    binds -- the same identity the shipped GEMM delegate carries."""
+    from tessera.compiler.toolchain_identity import delegate_library_identity
+
+    path = _gemm_runtime_path()
+    if path is None:
+        return None
+    return {**delegate_library_identity(path, cmake_target="tessera_nvidia_gemm"),
+            "entry": entry}
+
+
+def _ptx_lane_identity(owner: str, entry: str, ptx: Any,
+                       generator: str) -> dict[str, str] | None:
+    """A PTX lane: the PTX text plus the launch bridge.
+
+    The text is what the bridge holds for ``entry`` when this process has
+    registered it -- the launch registers an entry once and then only invokes
+    it, so after a registration that text, not the emitter's current output, is
+    what runs -- else what ``ptx`` (a zero-argument producer; a failure to
+    produce is a miss) would register now."""
+    from tessera import runtime as rt
+    from tessera.compiler.emitted_code_identity import (
+        composite_identity,
+        identify,
+        ptx_identity,
+    )
+
+    def kernel_text() -> str:
+        registered = rt._nvidia_ptx_registered.get(entry)
+        return registered if registered is not None else ptx()
+
+    return identify(owner, lambda: composite_identity({
+        "kernel": ptx_identity(kernel_text(), entry=entry, generator=generator),
+        "bridge": _ptx_bridge_identity(),
+    }))
 
 
 # ── standalone row-softmax (CUDA parity P1) ──────────────────────────────────
@@ -3134,13 +3390,27 @@ extern "C" int tessera_nvidia_resident_paged_attention(const float*q,const float
 '''
 
 
+def _resident_ops_source() -> KernelSource:
+    """The resident-stage source `_resident_ops_lib` compiles (and the composed
+    lanes' Decision #11 identity digests), memoized while its emitter is
+    unchanged (`source_memo`): every stage launch asks for it."""
+    return memoized(globals(), "_resident_ops_source_uncached")
+
+
+def _resident_ops_source_uncached() -> KernelSource:
+    return KernelSource(
+        source=_synthesize_resident_ops_cuda(),
+        entry="tessera_nvidia_resident_epilogue", lang=_LANG,
+        spec=SpecPolicy.DYNAMIC, shape_key=("resident-ops-v1",))
+
+
 def _resident_ops_lib() -> Any:
+    """The resident-stage library compiled from exactly the source
+    `_resident_ops_source` produces now -- cached by that source's content
+    (`_emitted_artifact`), not once per process, so the composed lanes'
+    identity always names the stages that run."""
     global _resident_ops_artifact
-    if _resident_ops_artifact is None:
-        _resident_ops_artifact = _nvidia_cuda_compile_fn(KernelSource(
-            source=_synthesize_resident_ops_cuda(),
-            entry="tessera_nvidia_resident_epilogue", lang=_LANG,
-            spec=SpecPolicy.DYNAMIC, shape_key=("resident-ops-v1",)))
+    _resident_ops_artifact = _emitted_artifact(_resident_ops_source(), "f32")
     return _load_lib(_resident_ops_artifact)
 
 
@@ -3827,6 +4097,17 @@ class NvidiaGenericCudaCandidate(Candidate):
     target = _TARGET
     op = OP_FUSED_REGION
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the emitted CUDA this lane compiles for ``region``.
+        ``None`` for a region the epilogue contract routes elsewhere, where
+        ``run`` declines."""
+        try:
+            if nvidia_epilogue_execution_contract(region)["candidate"] != self.name:
+                return None
+        except ValueError:
+            return None
+        return _generic_lane_identity(self.name, region)
+
     def applies_to(self, region: Any) -> bool:
         try:
             return (nvidia_epilogue_execution_contract(region)["candidate"] ==
@@ -3860,6 +4141,10 @@ class NvidiaFlashAttnCandidate(Candidate):
     target = _TARGET
     op = OP_ATTENTION
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the emitted CUDA this lane compiles for ``region``."""
+        return _generic_lane_identity(self.name, region)
+
     def run(self, region: Any, Q: Any, K: Any, V: Any,
             *a: Any, **k: Any) -> tuple[Any, str]:
         return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
@@ -3874,6 +4159,10 @@ class NvidiaGatedCandidate(Candidate):
     target = _TARGET
     op = OP_GATED_MATMUL
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the emitted CUDA this lane compiles for ``region``."""
+        return _generic_lane_identity(self.name, region)
+
     def run(self, region: Any, A: Any, Wg: Any, Wu: Any,
             *a: Any, **k: Any) -> tuple[Any, str]:
         return _SHARED_RUNNER.run_gated_matmul_region(region, A, Wg, Wu)
@@ -3887,6 +4176,10 @@ class NvidiaPointwiseCandidate(Candidate):
     tier = Tier.SYNTHESIZED
     target = _TARGET
     op = OP_POINTWISE
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the emitted CUDA this lane compiles for ``region``."""
+        return _generic_lane_identity(self.name, region)
 
     def run(self, region: Any, arrays: Any, *a: Any, **k: Any) -> tuple[Any, str]:
         return _SHARED_RUNNER.run_pointwise_graph(region, arrays)
@@ -3905,8 +4198,9 @@ class NvidiaPointwiseCandidate(Candidate):
 _MMA_FUSED_ENTRY = "tessera_nvidia_mma_fused"
 #: Activations the mma.sync fused epilogue applies after the (optional) bias add.
 _MMA_FUSED_ACTS = ("relu", "gelu", "silu", "sigmoid", "tanh")
-_mma_fused_fn_cache: dict[tuple[str, bool, str | None, str, int], Any] = {}
-_mma_fused_device_fn_cache: dict[tuple[str, bool, str | None, str, int], Any] = {}
+#: Bound symbols keyed by ``(source key, symbol)`` (`_emitted_symbol`).
+_mma_fused_fn_cache: dict[tuple[str, str], Any] = {}
+_mma_fused_device_fn_cache: dict[tuple[str, str], Any] = {}
 
 
 def _raster_launch(order: str, group: int, *, m: str, n: str) -> tuple[str, str, str]:
@@ -4152,46 +4446,48 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
     )
 
 
+def _mma_fused_source(has_bias: bool, act: str | None, storage: str = "f16", *,
+                      raster_order: str = "row_major",
+                      raster_group: int = 1) -> KernelSource:
+    """The mma.sync fused source for one epilogue signature -- the one text both
+    the launch caches and `NvidiaMmaFusedCandidate.artifact_identity` read.
+    Memoized while the emitter and everything it reaches by name are unchanged
+    (`source_memo`), so a launch costs a lookup, not a re-emission."""
+    return memoized(globals(), "_mma_fused_source_uncached", has_bias, act,
+                    storage, raster_order=raster_order, raster_group=raster_group)
+
+
+def _mma_fused_source_uncached(has_bias: bool, act: str | None, storage: str, *,
+                               raster_order: str, raster_group: int) -> KernelSource:
+    return KernelSource(source=_synthesize_mma_fused_cuda(
+                            has_bias, act, storage,
+                            raster_order=RasterOrder(raster_order).value,
+                            raster_group=raster_group),
+                        entry=_MMA_FUSED_ENTRY, lang=_LANG)
+
+
 def _mma_fused_fn(has_bias: bool, act: str | None, storage: str = "f16", *,
                   raster_order: str = "row_major", raster_group: int = 1):
-    """Compile (once per epilogue signature) the mma.sync fused kernel and return
-    its bound entry symbol: ``int(A bf16, B bf16, bias f32|NULL, D f32, M,N,K)``."""
-    sig = (storage, has_bias, act, RasterOrder(raster_order).value, raster_group)
-    fn = _mma_fused_fn_cache.get(sig)
-    if fn is not None:
-        return fn
-    from tessera.compiler.emit.kernel_emitter import KernelSource
-    src = KernelSource(source=_synthesize_mma_fused_cuda(
-                           has_bias, act, storage, raster_order=sig[3],
-                           raster_group=raster_group),
-                       entry=_MMA_FUSED_ENTRY, lang=_LANG)
-    artifact = _nvidia_cuda_compile_fn(src)
-    lib = _load_lib(artifact)
-    fn = getattr(lib, _MMA_FUSED_ENTRY)
-    fn.restype = ctypes.c_int
-    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3
-    _mma_fused_fn_cache[sig] = fn
-    return fn
+    """The mma.sync fused kernel's bound entry symbol, compiled from exactly the
+    source the emitter produces now (cached by that source's content):
+    ``int(A bf16, B bf16, bias f32|NULL, D f32, M,N,K)``."""
+    return _emitted_symbol(
+        _mma_fused_fn_cache,
+        _mma_fused_source(has_bias, act, storage, raster_order=raster_order,
+                          raster_group=raster_group),
+        storage, _MMA_FUSED_ENTRY, ctypes.c_int,
+        [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3)
 
 
 def _mma_fused_device_fn(has_bias: bool, act: str | None,
                          storage: str = "f16", *, raster_order: str = "row_major",
                          raster_group: int = 1):
-    sig = (storage, has_bias, act, RasterOrder(raster_order).value, raster_group)
-    fn = _mma_fused_device_fn_cache.get(sig)
-    if fn is not None:
-        return fn
-    from tessera.compiler.emit.kernel_emitter import KernelSource
-    src = KernelSource(source=_synthesize_mma_fused_cuda(
-                           has_bias, act, storage, raster_order=sig[3],
-                           raster_group=raster_group),
-                       entry=_MMA_FUSED_ENTRY, lang=_LANG)
-    artifact = _nvidia_cuda_compile_fn(src)
-    fn = getattr(_load_lib(artifact), f"{_MMA_FUSED_ENTRY}_device_ms")
-    fn.restype = ctypes.c_float
-    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 5
-    _mma_fused_device_fn_cache[sig] = fn
-    return fn
+    return _emitted_symbol(
+        _mma_fused_device_fn_cache,
+        _mma_fused_source(has_bias, act, storage, raster_order=raster_order,
+                          raster_group=raster_group),
+        storage, f"{_MMA_FUSED_ENTRY}_device_ms", ctypes.c_float,
+        [ctypes.c_void_p] * 3 + [ctypes.c_int] * 5)
 
 
 class NvidiaMmaFusedCandidate(Candidate):
@@ -4223,6 +4519,21 @@ class NvidiaMmaFusedCandidate(Candidate):
     def applies_to(self, region: Any) -> bool:
         return (_mma_fused_epilogue(region) is not None
                 and getattr(region, "storage_dtype", "f16") == self.storage)
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the mma.sync fused CUDA source ``run`` and the device
+        timer compile for this region's epilogue at this storage, at the
+        default raster the arbiter dispatches (it calls ``run`` without
+        kwargs), plus the nvcc flags. The host-side operand conversion
+        (`_composed_operand`) is Python and not covered."""
+        epi = _mma_fused_epilogue(region)
+        if epi is None:
+            return None
+        has_bias, act = epi
+        from tessera.compiler.emitted_code_identity import identify
+
+        return identify(self.name, lambda: _cuda_source_identity(
+            _mma_fused_source(has_bias, act, self.storage), self.storage))
 
     def run(self, region: Any, A: Any, B: Any, bias: Any = None,
             *a: Any, residual: Any = None, **k: Any) -> tuple[Any, str]:
@@ -4329,8 +4640,9 @@ _MMA_ATTN_NK_CAP = 1536
 #: error under the 5e-3 budget across scale/D/magnitude).
 _MMA_ATTN_ABS_CAP = 5.0
 _MMA_ATTN_SHARPNESS_CAP = 500.0
-_mma_attn_fn_cache: dict[str, Any] = {}
-_mma_attn_device_fn_cache: dict[str, Any] = {}
+#: Bound symbols keyed by ``(source key, symbol)`` (`_emitted_symbol`).
+_mma_attn_fn_cache: dict[tuple[str, str], Any] = {}
+_mma_attn_device_fn_cache: dict[tuple[str, str], Any] = {}
 
 
 def _synthesize_mma_attn_16_cuda(storage: str = "f16") -> str:
@@ -4522,36 +4834,36 @@ def _synthesize_mma_attn_cuda(storage: str = "f16") -> str:
     return _synthesize_mma_attn_lowp_cuda(storage)
 
 
+def _mma_attn_source(storage: str = "f16") -> KernelSource:
+    """The mma.sync attention source at ``storage`` -- the one text both the
+    launch caches and `NvidiaMmaAttnCandidate.artifact_identity` read, memoized
+    while its emitter is unchanged (`source_memo`)."""
+    return memoized(globals(), "_mma_attn_source_uncached", storage)
+
+
+def _mma_attn_source_uncached(storage: str) -> KernelSource:
+    return KernelSource(source=_synthesize_mma_attn_cuda(storage),
+                        entry=_MMA_ATTN_ENTRY, lang=_LANG)
+
+
 def _mma_attn_fn(storage: str = "f16"):
-    """Compile (once) the mma.sync attention kernel and return its bound entry:
+    """The mma.sync attention kernel's bound entry, compiled from exactly the
+    source the emitter produces now (cached by that source's content):
     ``int(Q f16, K f16, V f16, O f32, M,Nk,D,Dv, scale, causal)``."""
-    if storage in _mma_attn_fn_cache:
-        return _mma_attn_fn_cache[storage]
-    from tessera.compiler.emit.kernel_emitter import KernelSource
-    src = KernelSource(source=_synthesize_mma_attn_cuda(storage), entry=_MMA_ATTN_ENTRY,
-                       lang=_LANG)
-    fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)), _MMA_ATTN_ENTRY)
-    fn.restype = ctypes.c_int
-    fn.argtypes = ([ctypes.c_void_p] * 4 + [ctypes.c_int] * 4
-                   + [ctypes.c_float, ctypes.c_int])
-    _mma_attn_fn_cache[storage] = fn
-    return fn
+    return _emitted_symbol(
+        _mma_attn_fn_cache, _mma_attn_source(storage), storage,
+        _MMA_ATTN_ENTRY, ctypes.c_int,
+        [ctypes.c_void_p] * 4 + [ctypes.c_int] * 4 + [ctypes.c_float, ctypes.c_int])
 
 
 def _mma_attn_device_fn(storage: str):
-    if storage in _mma_attn_device_fn_cache:
-        return _mma_attn_device_fn_cache[storage]
     if storage in ("f16", "bf16"):
         return None
-    src = KernelSource(source=_synthesize_mma_attn_cuda(storage),
-                       entry=_MMA_ATTN_ENTRY, lang=_LANG)
-    fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)),
-                 f"{_MMA_ATTN_ENTRY}_device_ms")
-    fn.restype = ctypes.c_float
-    fn.argtypes = ([ctypes.c_void_p] * 3 + [ctypes.c_int] * 4
-                   + [ctypes.c_float] + [ctypes.c_int] * 3)
-    _mma_attn_device_fn_cache[storage] = fn
-    return fn
+    return _emitted_symbol(
+        _mma_attn_device_fn_cache, _mma_attn_source(storage), storage,
+        f"{_MMA_ATTN_ENTRY}_device_ms", ctypes.c_float,
+        [ctypes.c_void_p] * 3 + [ctypes.c_int] * 4 + [ctypes.c_float]
+        + [ctypes.c_int] * 3)
 
 
 class NvidiaMmaAttnCandidate(Candidate):
@@ -4574,6 +4886,24 @@ class NvidiaMmaAttnCandidate(Candidate):
 
     def applies_to(self, region: Any) -> bool:
         return getattr(region, "storage_dtype", "f16") == self.storage
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: BOTH sources ``run`` may compile -- the mma.sync
+        attention kernel at this storage, and the scalar flash lane it hands
+        a workload to when the KV length or the operand magnitude (a
+        data-dependent test) is past the tensor-core envelope. Either one
+        changing changes what may be timed, so both are covered."""
+        from tessera.compiler.emitted_code_identity import (
+            composite_identity,
+            identify,
+        )
+
+        return identify(self.name, lambda: composite_identity({
+            "mma": _cuda_source_identity(_mma_attn_source(self.storage),
+                                         self.storage),
+            "scalar_fallback": _cuda_source_identity(
+                _generic_lane_source(region), "f32"),
+        }))
 
     def available(self) -> bool:
         try:
@@ -4656,8 +4986,9 @@ class NvidiaMmaAttnCandidate(Candidate):
 # ── tensor-core GATED lane — paired mma.sync projections + gate epilogue ─────
 
 _MMA_GATED_ENTRY = "tessera_nvidia_mma_gated"
-_mma_gated_fn_cache: dict[tuple[str, str, str, int], Any] = {}
-_mma_gated_device_fn_cache: dict[tuple[str, str, str, int], Any] = {}
+#: Bound symbols keyed by ``(source key, symbol)`` (`_emitted_symbol`).
+_mma_gated_fn_cache: dict[tuple[str, str], Any] = {}
+_mma_gated_device_fn_cache: dict[tuple[str, str], Any] = {}
 
 
 def _synthesize_mma_gated_cuda(storage: str, act: str, *,
@@ -4735,35 +5066,42 @@ def _synthesize_mma_gated_cuda(storage: str, act: str, *,
     )
 
 
+def _mma_gated_source(storage: str, act: str, *, raster_order: str = "row_major",
+                      raster_group: int = 1) -> KernelSource:
+    """The paired-projection mma.sync source -- the one text both the launch
+    caches and `NvidiaMmaGatedCandidate.artifact_identity` read, memoized while
+    its emitter is unchanged (`source_memo`)."""
+    return memoized(globals(), "_mma_gated_source_uncached", storage, act,
+                    raster_order=raster_order, raster_group=raster_group)
+
+
+def _mma_gated_source_uncached(storage: str, act: str, *, raster_order: str,
+                               raster_group: int) -> KernelSource:
+    return KernelSource(source=_synthesize_mma_gated_cuda(
+                            storage, act,
+                            raster_order=RasterOrder(raster_order).value,
+                            raster_group=raster_group),
+                        entry=_MMA_GATED_ENTRY, lang=_LANG)
+
+
 def _mma_gated_fn(storage: str, act: str, *, raster_order: str = "row_major",
                   raster_group: int = 1):
-    key = (storage, act, RasterOrder(raster_order).value, raster_group)
-    if key in _mma_gated_fn_cache:
-        return _mma_gated_fn_cache[key]
-    src = KernelSource(source=_synthesize_mma_gated_cuda(
-                           storage, act, raster_order=key[2], raster_group=raster_group),
-                       entry=_MMA_GATED_ENTRY, lang=_LANG)
-    fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)), _MMA_GATED_ENTRY)
-    fn.restype = ctypes.c_int
-    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3
-    _mma_gated_fn_cache[key] = fn
-    return fn
+    return _emitted_symbol(
+        _mma_gated_fn_cache,
+        _mma_gated_source(storage, act, raster_order=raster_order,
+                          raster_group=raster_group),
+        storage, _MMA_GATED_ENTRY, ctypes.c_int,
+        [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3)
 
 
 def _mma_gated_device_fn(storage: str, act: str, *, raster_order: str = "row_major",
                          raster_group: int = 1):
-    key = (storage, act, RasterOrder(raster_order).value, raster_group)
-    if key in _mma_gated_device_fn_cache:
-        return _mma_gated_device_fn_cache[key]
-    src = KernelSource(source=_synthesize_mma_gated_cuda(
-                           storage, act, raster_order=key[2], raster_group=raster_group),
-                       entry=_MMA_GATED_ENTRY, lang=_LANG)
-    fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)),
-                 f"{_MMA_GATED_ENTRY}_device_ms")
-    fn.restype = ctypes.c_float
-    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 5
-    _mma_gated_device_fn_cache[key] = fn
-    return fn
+    return _emitted_symbol(
+        _mma_gated_device_fn_cache,
+        _mma_gated_source(storage, act, raster_order=raster_order,
+                          raster_group=raster_group),
+        storage, f"{_MMA_GATED_ENTRY}_device_ms", ctypes.c_float,
+        [ctypes.c_void_p] * 3 + [ctypes.c_int] * 5)
 
 
 class NvidiaMmaGatedCandidate(Candidate):
@@ -4789,6 +5127,16 @@ class NvidiaMmaGatedCandidate(Candidate):
     def applies_to(self, region: Any) -> bool:
         return (isinstance(region, GatedMatmulRegion)
                 and region.storage_dtype == self.storage)
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the paired-projection mma.sync CUDA source for this
+        gate activation and storage, at the default raster, plus nvcc flags."""
+        if not isinstance(region, GatedMatmulRegion):
+            return None
+        from tessera.compiler.emitted_code_identity import identify
+
+        return identify(self.name, lambda: _cuda_source_identity(
+            _mma_gated_source(self.storage, region.gate_act), self.storage))
 
     def run(self, region: Any, A: Any, Wg: Any, Wu: Any,
             *a: Any, **k: Any) -> tuple[Any, str]:
@@ -4872,6 +5220,25 @@ def _composed_operand(x: Any, storage: str) -> Any:
     return np.ascontiguousarray(x, dtype=dtype)
 
 
+def _composed_identity(owner: str, dtype_key: str) -> "dict[str, str] | None":
+    """Decision #11 for a composed lane: it runs two artifacts, so it carries
+    both -- the shipped ``libtessera_nvidia_gemm`` by content with the
+    resident-GEMM entry it binds (a hand-written kernel in a runtime library,
+    identified exactly as the shipped GEMM delegate is), and the Python-emitted
+    resident-stage CUDA (epilogue / gate / scale-mask / softmax / FP8 cast)."""
+    from tessera import runtime as rt
+    from tessera.compiler.emitted_code_identity import (
+        composite_identity,
+        identify,
+    )
+
+    return identify(owner, lambda: composite_identity({
+        "gemm": _gemm_runtime_identity(
+            rt._NVIDIA_GEMM_SYMBOLS[dtype_key] + "_device"),
+        "stages": _cuda_source_identity(_resident_ops_source(), "f32"),
+    }))
+
+
 class NvidiaMmaAttnComposedCandidate(Candidate):
     """Correctness-first TF32/FP8 attention composition.
 
@@ -4892,6 +5259,11 @@ class NvidiaMmaAttnComposedCandidate(Candidate):
         self.name = f"nvidia_mma_attn_composed_{suffix}"
         self.accuracy_atol = atol
         self.accuracy_rtol = atol
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the shipped GEMM library + the emitted resident
+        stages (`_composed_identity`)."""
+        return _composed_identity(self.name, self.dtype_key)
 
     def available(self) -> bool:
         try:
@@ -4988,6 +5360,11 @@ class NvidiaMmaFusedComposedCandidate(Candidate):
         self.accuracy_atol = atol
         self.accuracy_rtol = atol
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the shipped GEMM library + the emitted resident
+        stages (`_composed_identity`)."""
+        return _composed_identity(self.name, self.dtype_key)
+
     def available(self) -> bool:
         try:
             from tessera import runtime as rt
@@ -5073,6 +5450,11 @@ class NvidiaMmaGatedComposedCandidate(Candidate):
         # error grows with activation magnitude; use the same declared storage
         # budget relatively as well as absolutely in the universal F4 oracle.
         self.accuracy_rtol = atol
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the shipped GEMM library + the emitted resident
+        stages (`_composed_identity`)."""
+        return _composed_identity(self.name, self.dtype_key)
 
     def available(self) -> bool:
         try:
@@ -5263,9 +5645,7 @@ class NvidiaMmaGemmShippedCandidate(DelegatedCandidate):
     def delegate_library(self) -> "tuple[Any, str | None] | None":
         """The shipped ``libtessera_nvidia_gemm`` this delegate binds (Decision
         #11: its content digest keys every verdict measured against it)."""
-        from tessera import runtime as rt
-
-        path = rt._nvidia_gemm_lib_path()
+        path = _gemm_runtime_path()
         return (path, "tessera_nvidia_gemm") if path is not None else None
 
     def applies_to(self, region: Any) -> bool:
@@ -5327,6 +5707,19 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
 
     def applies_to(self, region: Any) -> bool:
         return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the ``ptx_emit`` mma.sync GEMM PTX for this dtype --
+        one general-shape kernel, M/N/K are launch arguments -- plus the PTX
+        launch bridge that registers it and picks its grid."""
+        if not self.applies_to(region):
+            return None
+        from tessera.compiler import ptx_emit as pe
+
+        edt = "f16" if region.dtype == "float16" else "bf16"
+        return _ptx_lane_identity(
+            self.name, pe.MMA_SYNC_GEMM_ENTRY[edt],
+            lambda: pe.emit_mma_sync_gemm_ptx(dtype=edt), "tessera.ptx_emit")
 
     def applies_to_inputs(self, region: Any, *inputs: Any) -> bool:
         """Decline a ragged workload *before* selection, not inside ``run``.
@@ -5435,6 +5828,24 @@ class NvidiaTileMatmulCandidate(Candidate):
     def applies_to(self, region: Any) -> bool:
         return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the PTX ``tessera-nvidia-opt`` -> mlir-opt ->
+        mlir-translate -> llc generates for this schedule and dtype (the same
+        `_nvidia_tile_matmul_ptx` the launch registers), normalized, plus the
+        PTX launch bridge. The generated PTX, not the tool binaries, is what
+        is timed -- the same choice ``kernel_code_identity`` makes for
+        ``tessera-opt`` images. A host without the Tile tools cannot produce
+        it and misses (it cannot run the lane either)."""
+        if not self.applies_to(region):
+            return None
+        from tessera import runtime as rt
+
+        short = "f16" if region.dtype == "float16" else "bf16"
+        return _ptx_lane_identity(
+            self.name, f"tessera_tile_matmul_{self.schedule}_{short}",
+            lambda: rt._nvidia_tile_matmul_ptx(self.schedule, region.dtype)[1],
+            "tessera-nvidia-opt")
+
     def run(self, region: Any, A: Any, B: Any, *a: Any,
             **k: Any) -> tuple[Any, str]:
         try:
@@ -5463,7 +5874,7 @@ class NvidiaTileMatmulCandidate(Candidate):
 
 # ── registration (import side effect, exactly like rocm_hip / x86_c) ───────────
 register_emitter(NvidiaCudaEmitter())
-register_compiler(_TARGET, _nvidia_cuda_compile_fn)
+register_compiler(_TARGET, _nvidia_cuda_compile_fn, build_line=_nvcc_cache_line)
 register_runner(NvidiaCudaRunner(), default=False)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5561,6 +5972,17 @@ class NvidiaNvfp4GemmEmittedCandidate(_Nvfp4Candidate):
     name = "nvidia_nvfp4_gemm_emitted"
     tier = Tier.EMITTED
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the ``ptx_emit`` general-shape NVFP4 GEMM PTX (M/N/K
+        are launch arguments) plus the PTX launch bridge."""
+        if not isinstance(region, Nvfp4MatmulRegion):
+            return None
+        from tessera.compiler import ptx_emit as pe
+
+        return _ptx_lane_identity(
+            self.name, pe.TESSERA_NVFP4_GEMM_ENTRY, pe.emit_nvfp4_gemm_ptx,
+            "tessera.ptx_emit")
+
     def available(self) -> bool:
         from tessera import runtime as rt
         return rt._load_nvidia_ptx_launch() is not None
@@ -5612,7 +6034,7 @@ class NvidiaNvfp4GemmShippedCandidate(_Nvfp4Candidate):
         from tessera import runtime as rt
         from tessera.compiler.toolchain_identity import delegate_library_identity
 
-        path = rt._nvidia_gemm_lib_path()
+        path = _gemm_runtime_path()
         if path is None:
             return None
         return {**delegate_library_identity(path, cmake_target="tessera_nvidia_gemm"),

@@ -8,6 +8,24 @@ last_updated: 2026-09-27
 
 # Apple compiler, exact-device, and performance plan
 
+## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: not applicable (Apple registers no arbiter candidates)
+
+Every arbiter candidate of every tier must now carry a code identity or its
+verdict misses (ROCm/NVIDIA queues, same key). Apple registers no arbiter
+candidates and the committed corpus holds no Apple rows, so nothing changed
+here. When Apple arbiter candidacy lands (MASTER_AUDIT action item 9) each
+candidate must declare one: an emitted-MSL lane its `emitted_code_identity`
+source digest plus the Metal compile options, a runtime-library kernel the
+library (or its MSL source) by content.
+
+**Source memo (hot-path follow-up, same key, 2026-09-27).** `emit_kernel` now
+serves a memoized `KernelSource` while the emitter and every global it reaches
+by name are unchanged (`emit/source_memo.py`, NVIDIA queue). Not applied to
+Apple: the `apple_gpu` emitter's reachable code reads the environment
+(`_candidate_libraries`), so it is never memoized, and `AppleAIREmitter` sets
+`source_memo_safe = False` because it delegates to the `apple_gpu` emitter
+object, which the name walk cannot follow. Apple emission is unchanged.
+
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

@@ -201,6 +201,12 @@ class _Region:
         return np.asarray(A, np.float32) @ np.asarray(B, np.float32)
 
 
+def _stamps(*names):
+    """The identities `_Cand` reports, as a recorder would have stamped them
+    (every candidate must carry one -- AUTOTUNE-EMITTED-IDENTITY-2026-09-27)."""
+    return {name: {"fake_build": name} for name in names}
+
+
 class _Cand(Candidate):
     """A candidate whose device timer reports a scripted sequence.
 
@@ -220,6 +226,10 @@ class _Cand(Candidate):
 
     def run(self, region, A, B, *a, **k):
         return region.reference(A, B), "fake"
+
+    def delegate_identity(self):
+        # Decision #11: every candidate identifies the code it runs.
+        return {"fake_build": self.name}
 
     def measure_device_latency(self, region, *inputs, reps=100, warmup=10):
         v = self._series[self._i % len(self._series)]
@@ -341,7 +351,8 @@ def test_corpus_winner_refuses_an_unseparated_verdict():
            AT.TIMING_END_TO_END)
     rec = lambda sep: AT.MeasureRecord(                       # noqa: E731
         winner="cu_a", latency_ms=1.0,
-        candidates={"cu_a": 1.0, "cu_b": 1.2}, unmeasured={}, separation=sep)
+        candidates={"cu_a": 1.0, "cu_b": 1.2}, unmeasured={}, separation=sep,
+        evidence={"delegate_identities": _stamps("cu_a", "cu_b")})
 
     A, B = _mm()
     ask = lambda: AT.corpus_winner(                            # noqa: E731
@@ -401,7 +412,9 @@ def test_a_sole_candidate_without_a_verdict_is_still_usable():
                AT.bucket_key((4, 4, 4), AT.SpecPolicy.BUCKET), "bfloat16",
                AT.TIMING_END_TO_END),
               AT.MeasureRecord(winner="sole_a", latency_ms=1.0,
-                               candidates={"sole_a": 1.0}, unmeasured={}), fresh=True)
+                               candidates={"sole_a": 1.0}, unmeasured={},
+                               evidence={"delegate_identities": _stamps("sole_a")}),
+              fresh=True)
     A, B = _mm()
     assert AT.corpus_winner(
         _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",
@@ -446,7 +459,9 @@ def test_an_untimed_candidate_does_not_make_a_row_a_ranking():
                AT.TIMING_END_TO_END),
               AT.MeasureRecord(winner="if_a", latency_ms=1.0,
                                candidates={"if_a": 1.0, "if_b": float("inf")},
-                               unmeasured={"if_b": "no device timer"}), fresh=True)
+                               unmeasured={"if_b": "no device timer"},
+                               evidence={"delegate_identities": _stamps("if_a")}),
+              fresh=True)
     A, B = _mm()
     assert AT.corpus_winner(
         _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",

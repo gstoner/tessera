@@ -1,0 +1,38 @@
+host=Princess-Luna commit=61ff8b90cb491d608decd6d4028925783d859eab dirty=0
+date=2026-09-27T12:26:46Z
+racing 2 candidates: rocm_generic_hip, rocm_wmma_gemm
+evicted 8 current gfx1151 fused_region rows; 0 stale (pre-toolchain-identity) rows will be re-measured and replaced
+device key rocm:gfx1151; disassembler /opt/rocm/core/llvm/bin/llvm-objdump
+  64x64 end_to_end: rocm_generic_hip       separated  margin=62.00% noise=4.59%
+      rocm_generic_hip: source=7c0d3bcb6d508c70 cache_key=5fddd0986b2ddc87 build='hipcc --offload-arch=gfx1151 -O3 -fPIC -shared'
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  64x64 device    : rocm_wmma_gemm         separated  margin=93.17% noise=1.06%
+      rocm_generic_hip: source=7c0d3bcb6d508c70 cache_key=5fddd0986b2ddc87 build='hipcc --offload-arch=gfx1151 -O3 -fPIC -shared'
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  256x256 end_to_end: rocm_wmma_gemm         separated  margin=43.62% noise=2.12%
+      rocm_generic_hip: source=7c0d3bcb6d508c70 cache_key=5fddd0986b2ddc87 build='hipcc --offload-arch=gfx1151 -O3 -fPIC -shared'
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  256x256 device    : rocm_wmma_gemm         separated  margin=99.51% noise=0.54%
+      rocm_generic_hip: source=7c0d3bcb6d508c70 cache_key=5fddd0986b2ddc87 build='hipcc --offload-arch=gfx1151 -O3 -fPIC -shared'
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  512x512 end_to_end: rocm_wmma_gemm         separated  margin=81.48% noise=4.95%
+      rocm_generic_hip: source=7c0d3bcb6d508c70 cache_key=5fddd0986b2ddc87 build='hipcc --offload-arch=gfx1151 -O3 -fPIC -shared'
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  512x512 device    : rocm_wmma_gemm         separated  margin=99.89% noise=1.76%
+      rocm_generic_hip: source=7c0d3bcb6d508c70 cache_key=5fddd0986b2ddc87 build='hipcc --offload-arch=gfx1151 -O3 -fPIC -shared'
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  1024x1024 end_to_end: rocm_wmma_gemm         separated  margin=95.07% noise=4.31%
+      rocm_generic_hip: source=7c0d3bcb6d508c70 cache_key=5fddd0986b2ddc87 build='hipcc --offload-arch=gfx1151 -O3 -fPIC -shared'
+      rocm_wmma_gemm: stream=97baa4c06a2cb0ef data=.rodata:0 kd=2f06167e17b310b7 n=21744
+  1024x1024 device    : rocm_wmma_gemm         separated  margin=99.91% noise=1.15%
+      rocm_generic_hip: source=7c0d3bcb6d508c70 cache_key=5fddd0986b2ddc87 build='hipcc --offload-arch=gfx1151 -O3 -fPIC -shared'
+      rocm_wmma_gemm: stream=97baa4c06a2cb0ef data=.rodata:0 kd=2f06167e17b310b7 n=21744
+
+device rows timed by: device_event
+
+           rows  rocm  other  ranked  separated  unseparated  never_asked
+  before   124    16    108     115         40           73            2
+  after    124    16    108     115         40           73            2
+
+wrote /home/gstoner/programming/tessera-eid/benchmarks/baselines/autotune_corpus.json
+recorder rc=0

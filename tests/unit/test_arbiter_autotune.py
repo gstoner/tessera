@@ -56,8 +56,9 @@ class _FakeCand(Candidate):
         return self._device_ms
 
     def delegate_identity(self):
-        # Decision #11: every Tier-3 candidate identifies its artifact.
-        return {"fake_build": self.name} if self.tier == Tier.HAND_TUNED else None
+        # Decision #11: every candidate, of every tier, identifies the code it
+        # runs (AUTOTUNE-EMITTED-IDENTITY-2026-09-27).
+        return {"fake_build": self.name}
 
 
 def _mm(m=4, k=4, n=4):
@@ -206,7 +207,8 @@ def test_persisted_corpus_drives_normal_arbitrated_dispatch():
         separation={"separated": True, "margin": 0.5, "noise": 0.01,
                     "runner_up": crown.name, "factor": 2.0},
         evidence={"delegate_identities": {
-            crown.name: crown.delegate_identity()}}), fresh=True)
+            crown.name: crown.delegate_identity(),
+            measured.name: measured.delegate_identity()}}), fresh=True)
     region = _FakeRegion()
     A, B = _mm()
 

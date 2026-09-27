@@ -274,7 +274,12 @@ def test_a_missing_image_is_a_miss():
     assert "tessera-opt not built" in KI.miss_reason(key)
 
 
-def test_the_lookup_cache_builds_and_disassembles_once(monkeypatch):
+def test_the_lookup_disassembles_each_image_once(monkeypatch):
+    """Every lookup asks the build path for the image the launch would run
+    (its own content-addressed cache), and an unchanged image is served its
+    memoized identity without disassembling again (AUTOTUNE-KERNEL-IDENTITY-MEMO:
+    the build is no longer skipped, or a changed image would read the old
+    identity)."""
     KI.clear_kernel_identity_cache()
     calls = {"build": 0, "disasm": 0}
 
@@ -290,11 +295,11 @@ def test_the_lookup_cache_builds_and_disassembles_once(monkeypatch):
     first = KI.compiler_kernel_identity(("c", 1, "opt-A"), build, isa="gfx1151")
     for _ in range(5):
         assert KI.compiler_kernel_identity(("c", 1, "opt-A"), build, isa="gfx1151") == first
-    assert calls == {"build": 1, "disasm": 1}
-    # A rebuilt compiler is a new key: re-built, but the same image bytes are
-    # not disassembled twice.
+    assert calls == {"build": 6, "disasm": 1}
+    # A rebuilt compiler is a new key, but the same image bytes are not
+    # disassembled twice.
     assert KI.compiler_kernel_identity(("c", 1, "opt-B"), build, isa="gfx1151") == first
-    assert calls == {"build": 2, "disasm": 1}
+    assert calls == {"build": 7, "disasm": 1}
     assert first["generator"] == "tessera-opt"
 
 
@@ -393,23 +398,26 @@ def test_verdict_is_served_across_builds_and_misses_on_a_changed_kernel(tmp_path
         cache=cache, device="fakedev", timing=AT.TIMING_DEVICE) is None
 
 
-def test_hand_tuned_requires_an_identity_and_emitted_can_opt_in():
+def test_every_tier_requires_an_identity_and_none_cannot_opt_out():
+    """AUTOTUNE-EMITTED-IDENTITY-2026-09-27: an EMITTED candidate with no
+    identity used to be served on the pin alone. It now misses, and an
+    override of `requires_artifact_identity` returning False does not change
+    that -- the arbiter no longer asks."""
     class _Emitted(Candidate):
         name, target, op, tier = "kid_emitted", "kid_t2", OP_MATMUL, Tier.EMITTED
 
         def run(self, region, *inputs, **kwargs):
             return None, "x"
 
-    class _Adopter(_Emitted):
+    class _OptOut(_Emitted):
         def requires_artifact_identity(self):
-            return True
+            return False
 
-    assert not _Emitted().requires_artifact_identity()
-    assert _Adopter().requires_artifact_identity()
+    assert _Emitted().requires_artifact_identity()
     rec = AT.MeasureRecord(winner="kid_emitted", latency_ms=1.0,
                            candidates={"kid_emitted": 1.0}, unmeasured={})
-    assert AT._record_matches_live_delegates(rec, {"kid_emitted": _Emitted()})
-    assert not AT._record_matches_live_delegates(rec, {"kid_emitted": _Adopter()})
+    assert not AT._record_matches_live_delegates(rec, {"kid_emitted": _Emitted()})
+    assert not AT._record_matches_live_delegates(rec, {"kid_emitted": _OptOut()})
 
 
 def test_rocm_candidates_derive_their_key_from_the_workload(monkeypatch, tmp_path):
@@ -439,8 +447,11 @@ def test_rocm_candidates_derive_their_key_from_the_workload(monkeypatch, tmp_pat
     identity = wmma.artifact_identity(region, a, b, np.zeros(48, np.float32))
     assert identity is not None and identity["entry"] == "gemm"
     assert built == [(64, 48, 32, "f16", True, "gelu")]
-    wmma.artifact_identity(region, a, b)
-    assert len(built) == 1                          # cached per process
+    assert wmma.artifact_identity(region, a, b) == identity
+    # Each lookup asks the launch's own build path for the image (which is
+    # where an in-process generator change would show up); the identity of an
+    # unchanged image is served from the memo.
+    assert built == [(64, 48, 32, "f16", True, "gelu")] * 2
     assert wmma.artifact_identity(region) is None   # no workload
     assert wmma.artifact_identity(F.FusedRegion(epilogue=("gelu", "bias")), a, b) is None
     assert wmma.delegate_identity() is None          # no binary-digest key any more

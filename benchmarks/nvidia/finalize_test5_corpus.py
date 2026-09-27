@@ -26,6 +26,18 @@ def merge(base: dict[str, Any], first: dict[str, Any], second: dict[str, Any],
     merged = {_key(r): dict(r) for r in base.get("records", [])}
     for key in sorted(a.keys() & b.keys(), key=str):
         left, right = a[key], dict(b[key])
+        # The two runs must have timed the same code. The merged row takes its
+        # latencies and stamps from `right` but its winner from both, so a
+        # pair recorded across a rebuild, an emitter change or a toolchain
+        # move would publish one run's code identities over a consensus that
+        # partly measured other code (AUTOTUNE-EMITTED-IDENTITY-2026-09-27).
+        for field in ("toolchain_digest", "delegate_identities"):
+            if ((left.get("evidence") or {}).get(field)
+                    != (right.get("evidence") or {}).get(field)):
+                raise ValueError(
+                    f"{key}: the two runs disagree on {field}; they did not "
+                    "time the same code and cannot be merged -- re-record both "
+                    "from one tree")
         raw_winners = [left["winner"], right["winner"]]
         def near(row: dict[str, Any]) -> set[str]:
             candidates = {str(k): float(v) for k, v in row["candidates"].items()}
@@ -59,10 +71,19 @@ def merge(base: dict[str, Any], first: dict[str, Any], second: dict[str, Any],
         # row measured under another (or no) toolchain would serve that old
         # measurement as current. Such a prior row is replaced by the fresh,
         # selector-ineligible one instead.
-        prior_digest = (merged.get(key, {}).get("evidence") or {}).get(
-            "toolchain_digest")
+        #
+        # The same holds for the per-candidate artifact identities
+        # (AUTOTUNE-EMITTED-IDENTITY-2026-09-27): transplanting today's
+        # `delegate_identities` onto a prior row whose candidates ran other
+        # code -- or were never stamped -- would claim the old measurement
+        # timed code nobody verified it timed. Keep the prior row only when
+        # both the toolchain and every stamped identity are unchanged.
+        prior_evidence = merged.get(key, {}).get("evidence") or {}
+        prior_digest = prior_evidence.get("toolchain_digest")
         if (stable or key not in merged
-                or prior_digest != evidence.get("toolchain_digest")):
+                or prior_digest != evidence.get("toolchain_digest")
+                or (prior_evidence.get("delegate_identities") or {})
+                != (evidence.get("delegate_identities") or {})):
             merged[key] = right
         else:
             prior = dict(merged[key])

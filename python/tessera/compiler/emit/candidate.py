@@ -225,54 +225,57 @@ class Candidate(ABC):
         return None
 
     def delegate_identity(self) -> "dict[str, str] | None":
-        """The versioned identity of the artifact this candidate runs that the
-        pinned toolchain does not cover, or ``None`` when its code comes from
-        this checkout's emitters.
+        """The versioned identity of a workload-independent artifact this
+        candidate runs -- a delegate library -- or ``None`` when it has none.
 
-        Decision #11: a measured verdict is keyed on the toolchain *and* on
-        this identity, so a rebuilt or upgraded library -- or a rebuilt
-        ``tessera-opt`` that generates the kernel -- makes the stored verdict
-        miss rather than lie. The arbiter stamps each timed candidate's
-        identity into its record and refuses a record whose identity differs
-        from the live candidate's (``autotune._record_matches_live_delegates``).
+        Decision #11: a measured verdict is keyed on the toolchain *and* on the
+        code each candidate ran, so a rebuilt or upgraded library makes the
+        stored verdict miss rather than lie. The arbiter stamps each timed
+        candidate's :meth:`artifact_identity` into its record and refuses a
+        record whose identity differs from the live candidate's
+        (``autotune._record_matches_live_delegates``).
 
-        **Every ``Tier.HAND_TUNED`` candidate must override this or
-        :meth:`artifact_identity`** (a test enumerates the registry): a
-        delegate library overrides this, by
+        A delegate library overrides this, by
         ``toolchain_identity.delegate_library_identity`` /
         ``loaded_library_identity``; :class:`delegate_contract.DelegatedCandidate`
-        supplies one from its contract. A candidate whose kernel the compiler
-        generates (``tessera-opt``) overrides :meth:`artifact_identity`
-        instead, because the code it runs depends on the workload.
+        supplies one from its contract. A candidate whose code depends on the
+        workload overrides :meth:`artifact_identity` instead.
         """
         return None
 
     def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
-        """The identity of the artifact this candidate would run for *this*
+        """The identity of the code this candidate would run for *this*
         workload -- what the arbiter stamps at record time and matches at lookup.
 
-        Default: :meth:`delegate_identity`, which does not depend on the
-        workload (a delegate library is one artifact for every shape).
+        **Every candidate, of every tier, must establish one** (owner decision
+        2026-09-27, sync ``AUTOTUNE-EMITTED-IDENTITY-2026-09-27``; a test
+        enumerates the registry). ``None`` is a miss, never a pass. By how the
+        candidate produces code:
 
-        A compiler-generated candidate overrides this with the digest of the
-        normalized instruction stream of the image it would run for
-        ``(region, inputs)`` -- ``kernel_code_identity.compiler_kernel_identity``
-        -- so two builds of the compiler that generate the same kernel share a
-        verdict, and a changed kernel misses. Returning ``None`` from a
-        candidate that :meth:`requires_artifact_identity` is a miss (fail
-        closed), never a pass.
+        * a delegate library: :meth:`delegate_identity` (the default here);
+        * a ``tessera-opt`` image: the normalized instruction stream of the
+          image for ``(region, inputs)``
+          (``kernel_code_identity.compiler_kernel_identity``);
+        * Python-emitted CUDA/HIP/C source, PTX, a checked-in file compiled at
+          run time, or a Python/numpy lane: the digest of that code plus what
+          the toolchain pin does not fix (``emitted_code_identity``).
+
+        SYNTHESIZED and EMITTED lanes used to carry none and be served on the
+        pin-based family identity alone. The emitters change without a pin
+        moving, so a verdict for yesterday's generated kernel kept selecting
+        today's (Codex review P2 on PR #859).
         """
         return self.delegate_identity()
 
     def requires_artifact_identity(self) -> bool:
-        """Whether a verdict involving this candidate may be reused only when
-        its :meth:`artifact_identity` is established and matches.
+        """Always ``True``: a verdict involving this candidate is reused only
+        when its :meth:`artifact_identity` is established and matches.
 
-        Every ``Tier.HAND_TUNED`` candidate does (a versioned artifact). An
-        EMITTED candidate adopting the kernel-code identity (the NVIDIA
-        ``nvidia_tile_matmul_*`` lanes are the named follow-up) overrides this
-        to ``True`` so a digest it cannot compute misses rather than passes."""
-        return self.tier == Tier.HAND_TUNED
+        Kept as a method because recorders ask it; the arbiter no longer
+        consults it, so an override returning ``False`` cannot opt a candidate
+        out -- it would only make a recorder willing to write a row that can
+        never be served."""
+        return True
 
     @abstractmethod
     def run(self, region: Any, *inputs: Any, **kwargs: Any) -> tuple[Any, str]:

@@ -1,0 +1,111 @@
+loaded 124 rows, 0 stale; 96 sm_120 registry rows; nvidia toolchain sha256:0feb9fce2b583f67...
+  attention    f16       end_to_end [128, 128, 64, 64]     winner=nvidia_mma_attn                      admissible=True  ident=True  served=nvidia_mma_attn served_dims=nvidia_mma_attn
+  attention    f32       device     [128, 128, 64, 64]     winner=nvidia_mma_attn_tf32                 admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    f32       end_to_end [128, 128, 64, 64]     winner=nvidia_mma_attn_tf32                 admissible=False ident=True  served=None served_dims=None
+  attention    fp8_e4m3  device     [128, 128, 64, 64]     winner=nvidia_mma_attn_fp8_e4m3             admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    fp8_e4m3  end_to_end [128, 128, 64, 64]     winner=nvidia_mma_attn_fp8_e4m3             admissible=False ident=True  served=None served_dims=None
+  attention    fp8_e5m2  device     [128, 128, 64, 64]     winner=nvidia_mma_attn_fp8_e5m2             admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    fp8_e5m2  end_to_end [128, 128, 64, 64]     winner=nvidia_mma_attn_fp8_e5m2             admissible=False ident=True  served=None served_dims=None
+  attention    f16       end_to_end [64, 256, 64, 64]      winner=nvidia_flash_attn                    admissible=False ident=True  served=None served_dims=None
+  attention    f32       device     [64, 256, 64, 64]      winner=nvidia_mma_attn_tf32                 admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    f32       end_to_end [64, 256, 64, 64]      winner=nvidia_mma_attn_tf32                 admissible=False ident=True  served=None served_dims=None
+  attention    fp8_e4m3  device     [64, 256, 64, 64]      winner=nvidia_mma_attn_fp8_e4m3             admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    fp8_e4m3  end_to_end [64, 256, 64, 64]      winner=nvidia_flash_attn                    admissible=False ident=True  served=None served_dims=None
+  attention    fp8_e5m2  device     [64, 256, 64, 64]      winner=nvidia_mma_attn_fp8_e5m2             admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    fp8_e5m2  end_to_end [64, 256, 64, 64]      winner=nvidia_flash_attn                    admissible=False ident=True  served=None served_dims=None
+  attention    f16       end_to_end [64, 512, 64, 64]      winner=nvidia_flash_attn                    admissible=False ident=True  served=None served_dims=None
+  attention    f32       device     [64, 512, 64, 64]      winner=nvidia_mma_attn_composed_tf32        admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    f32       end_to_end [64, 512, 64, 64]      winner=nvidia_mma_attn_composed_tf32        admissible=False ident=True  served=None served_dims=None
+  attention    fp8_e4m3  device     [64, 512, 64, 64]      winner=nvidia_mma_attn_fp8_e4m3             admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    fp8_e4m3  end_to_end [64, 512, 64, 64]      winner=nvidia_flash_attn                    admissible=False ident=True  served=None served_dims=None
+  attention    fp8_e5m2  device     [64, 512, 64, 64]      winner=nvidia_mma_attn_composed_fp8_e5m2    admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_flash_attn']
+  attention    fp8_e5m2  end_to_end [64, 512, 64, 64]      winner=nvidia_flash_attn                    admissible=False ident=True  served=None served_dims=None
+  fused_region f16       end_to_end [128, 256, 256]        winner=nvidia_mma_fused                     admissible=True  ident=True  served=nvidia_mma_fused served_dims=nvidia_mma_fused
+  fused_region f32       device     [128, 256, 256]        winner=nvidia_mma_fused_tf32                admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_generic_cuda']
+  fused_region f32       end_to_end [128, 256, 256]        winner=nvidia_mma_fused_tf32                admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  device     [128, 256, 256]        winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  end_to_end [128, 256, 256]        winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  device     [128, 256, 256]        winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  end_to_end [128, 256, 256]        winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region f16       end_to_end [128, 512, 256]        winner=nvidia_mma_fused                     admissible=True  ident=True  served=nvidia_mma_fused served_dims=nvidia_mma_fused
+  fused_region f32       device     [128, 512, 256]        winner=nvidia_mma_fused_tf32                admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_generic_cuda']
+  fused_region f32       end_to_end [128, 512, 256]        winner=nvidia_mma_fused_tf32                admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  device     [128, 512, 256]        winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  end_to_end [128, 512, 256]        winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  device     [128, 512, 256]        winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  end_to_end [128, 512, 256]        winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region f16       end_to_end [128, 512, 64]         winner=nvidia_mma_fused                     admissible=True  ident=True  served=nvidia_mma_fused served_dims=nvidia_mma_fused
+  fused_region f32       device     [128, 512, 64]         winner=nvidia_mma_fused_tf32                admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_generic_cuda']
+  fused_region f32       end_to_end [128, 512, 64]         winner=nvidia_mma_fused_tf32                admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  device     [128, 512, 64]         winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  end_to_end [128, 512, 64]         winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  device     [128, 512, 64]         winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  end_to_end [128, 512, 64]         winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region f16       end_to_end [256, 256, 256]        winner=nvidia_mma_fused                     admissible=True  ident=True  served=nvidia_mma_fused served_dims=nvidia_mma_fused
+  fused_region f32       device     [256, 256, 256]        winner=nvidia_mma_fused_tf32                admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_generic_cuda']
+  fused_region f32       end_to_end [256, 256, 256]        winner=nvidia_mma_fused_composed_tf32       admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  device     [256, 256, 256]        winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  end_to_end [256, 256, 256]        winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  device     [256, 256, 256]        winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  end_to_end [256, 256, 256]        winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region f16       end_to_end [64, 64, 64]           winner=nvidia_mma_fused                     admissible=True  ident=True  served=nvidia_mma_fused served_dims=nvidia_mma_fused
+  fused_region f32       device     [64, 64, 64]           winner=nvidia_mma_fused_tf32                admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_generic_cuda']
+  fused_region f32       end_to_end [64, 64, 64]           winner=nvidia_mma_fused_composed_tf32       admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  device     [64, 64, 64]           winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e4m3  end_to_end [64, 64, 64]           winner=nvidia_mma_fused_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  device     [64, 64, 64]           winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  fused_region fp8_e5m2  end_to_end [64, 64, 64]           winner=nvidia_mma_fused_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  gated_matmul f32       device     [128, 512, 512]        winner=nvidia_mma_gated_tf32                admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_gated']
+  gated_matmul f32       end_to_end [128, 512, 512]        winner=nvidia_mma_gated_composed_tf32       admissible=False ident=True  served=None served_dims=None
+  gated_matmul fp8_e4m3  device     [128, 512, 512]        winner=nvidia_mma_gated_fp8_e4m3            admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_gated']
+  gated_matmul fp8_e4m3  end_to_end [128, 512, 512]        winner=nvidia_mma_gated_composed_fp8_e4m3   admissible=False ident=True  served=None served_dims=None
+  gated_matmul fp8_e5m2  device     [128, 512, 512]        winner=nvidia_mma_gated_fp8_e5m2            admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_gated']
+  gated_matmul fp8_e5m2  end_to_end [128, 512, 512]        winner=nvidia_mma_gated_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  gated_matmul f32       device     [64, 256, 256]         winner=nvidia_mma_gated_tf32                admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_gated']
+  gated_matmul f32       end_to_end [64, 256, 256]         winner=nvidia_mma_gated_tf32                admissible=False ident=True  served=None served_dims=None
+  gated_matmul fp8_e4m3  device     [64, 256, 256]         winner=nvidia_mma_gated_fp8_e4m3            admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_gated']
+  gated_matmul fp8_e4m3  end_to_end [64, 256, 256]         winner=nvidia_mma_gated_fp8_e4m3            admissible=False ident=True  served=None served_dims=None
+  gated_matmul fp8_e5m2  device     [64, 256, 256]         winner=nvidia_mma_gated_fp8_e5m2            admissible=False ident=True  served=None served_dims=None partial_field(unmeasured)=['nvidia_gated']
+  gated_matmul fp8_e5m2  end_to_end [64, 256, 256]         winner=nvidia_mma_gated_fp8_e5m2            admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  device     [1024, 1024, 1024]     winner=nvidia_mma_gemm_emitted              admissible=True  ident=True  served=nvidia_mma_gemm_emitted served_dims=nvidia_mma_gemm_emitted
+  matmul       bfloat16  end_to_end [1024, 1024, 1024]     winner=nvidia_mma_gemm_shipped              admissible=False ident=True  served=None served_dims=None
+  matmul       float16   device     [1024, 1024, 1024]     winner=nvidia_mma_gemm_emitted              admissible=True  ident=True  served=nvidia_mma_gemm_emitted served_dims=nvidia_mma_gemm_emitted
+  matmul       float16   end_to_end [1024, 1024, 1024]     winner=nvidia_mma_gemm_shipped              admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  device     [128, 256, 64]         winner=nvidia_mma_gemm_emitted              admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  end_to_end [128, 256, 64]         winner=nvidia_tile_matmul_direct            admissible=False ident=True  served=None served_dims=None
+  matmul       float16   device     [128, 256, 64]         winner=nvidia_tile_matmul_direct            admissible=False ident=True  served=None served_dims=None
+  matmul       float16   end_to_end [128, 256, 64]         winner=nvidia_tile_matmul_shared            admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  device     [128, 512, 64]         winner=nvidia_tile_matmul_shared            admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  end_to_end [128, 512, 64]         winner=nvidia_tile_matmul_shared            admissible=False ident=True  served=None served_dims=None
+  matmul       float16   device     [128, 512, 64]         winner=nvidia_mma_gemm_shipped              admissible=False ident=True  served=None served_dims=None
+  matmul       float16   end_to_end [128, 512, 64]         winner=nvidia_tile_matmul_shared            admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  device     [2048, 2048, 2048]     winner=nvidia_mma_gemm_emitted              admissible=True  ident=True  served=nvidia_mma_gemm_emitted served_dims=nvidia_mma_gemm_emitted
+  matmul       bfloat16  end_to_end [2048, 2048, 2048]     winner=nvidia_mma_gemm_shipped              admissible=True  ident=True  served=nvidia_mma_gemm_shipped served_dims=nvidia_mma_gemm_shipped
+  matmul       float16   device     [2048, 2048, 2048]     winner=nvidia_mma_gemm_emitted              admissible=True  ident=True  served=nvidia_mma_gemm_emitted served_dims=nvidia_mma_gemm_emitted
+  matmul       float16   end_to_end [2048, 2048, 2048]     winner=nvidia_mma_gemm_shipped              admissible=True  ident=True  served=nvidia_mma_gemm_shipped served_dims=nvidia_mma_gemm_shipped
+  matmul       bfloat16  device     [256, 256, 256]        winner=nvidia_mma_gemm_emitted              admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  end_to_end [256, 256, 256]        winner=nvidia_tile_matmul_direct            admissible=False ident=True  served=None served_dims=None
+  matmul       float16   device     [256, 256, 256]        winner=nvidia_mma_gemm_emitted              admissible=True  ident=True  served=nvidia_mma_gemm_emitted served_dims=nvidia_mma_gemm_emitted
+  matmul       float16   end_to_end [256, 256, 256]        winner=nvidia_mma_gemm_shipped              admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  device     [512, 512, 512]        winner=nvidia_mma_gemm_emitted              admissible=True  ident=True  served=nvidia_mma_gemm_emitted served_dims=nvidia_mma_gemm_emitted
+  matmul       bfloat16  end_to_end [512, 512, 512]        winner=nvidia_mma_gemm_emitted              admissible=False ident=True  served=None served_dims=None
+  matmul       float16   device     [512, 512, 512]        winner=nvidia_mma_gemm_emitted              admissible=True  ident=True  served=nvidia_mma_gemm_emitted served_dims=nvidia_mma_gemm_emitted
+  matmul       float16   end_to_end [512, 512, 512]        winner=nvidia_mma_gemm_emitted              admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  device     [64, 64, 64]           winner=nvidia_tile_matmul_direct            admissible=False ident=True  served=None served_dims=None
+  matmul       bfloat16  end_to_end [64, 64, 64]           winner=nvidia_mma_gemm_emitted              admissible=False ident=True  served=None served_dims=None
+  matmul       float16   device     [64, 64, 64]           winner=nvidia_tile_matmul_shared            admissible=False ident=True  served=None served_dims=None
+  matmul       float16   end_to_end [64, 64, 64]           winner=nvidia_mma_gemm_emitted              admissible=False ident=True  served=None served_dims=None
+rows whose live field includes a lane with no device timer (never timed, never stamped, refused by the field check): 20
+before: identities match 96/96; admissible 15; served with inferred dims 15; served with the recorder's dims 15
+perturb _synthesize_fused_cuda            :   5 rows now miss; served (dims) 15
+perturb _synthesize_attention_cuda        :  21 rows now miss; served (dims) 14
+perturb _synthesize_gated_cuda            :   6 rows now miss; served (dims) 15
+perturb _synthesize_mma_fused_cuda        :  35 rows now miss; served (dims) 10
+perturb _synthesize_mma_attn_cuda         :  21 rows now miss; served (dims) 14
+perturb _synthesize_mma_gated_cuda        :  12 rows now miss; served (dims) 15
+perturb _synthesize_resident_ops_cuda     :  60 rows now miss; served (dims) 15
+perturb ptx_emit.emit_mma_sync_gemm_ptx   :  24 rows now miss; served (dims) 6
+perturb tessera-nvidia-opt Tile PTX       :  28 rows now miss; served (dims) 6
+all emitters perturbed (pins unchanged): 96/96 miss their identity; 0 served
+every row missed under some single perturbation: 96/96
+rc=0

@@ -122,7 +122,12 @@ def _benchmark_rows(data) -> list:
     raise ValueError("benchmark JSON must be a list of rows or carry a 'rows'/'results' list")
 
 
-def read_benchmark_json(path: str) -> List[KernelSample]:
+#: A latency no clock measured. Placing it on a roofline would plot the model
+#: against itself, so the reader drops these rows unless asked.
+MODELLED_TIMING = "analytical_model"
+
+
+def read_benchmark_json(path: str, include_modelled: bool = False) -> List[KernelSample]:
     """Decision #12 benchmark rows (``benchmarks/run_all.py`` ``rows``, or any
     list of stable-schema rows) as kernel samples.
 
@@ -131,12 +136,18 @@ def read_benchmark_json(path: str) -> List[KernelSample]:
     absent or null contributes 0. ``route`` / ``route_source`` /
     ``timing_source`` land in ``meta``; an old row without them loads with
     each set to ``"unknown"``.
+
+    Rows whose ``timing_source`` is ``analytical_model`` are excluded unless
+    ``include_modelled`` is set; included ones carry ``meta["modelled"] = True``.
     """
     with open(path) as f:
         data = json.load(f)
     samples: List[KernelSample] = []
     for row in _benchmark_rows(data):
         if not isinstance(row, dict) or row.get("latency_ms") is None:
+            continue
+        modelled = row.get("timing_source") == MODELLED_TIMING
+        if modelled and not include_modelled:
             continue
         time_ms = float(row["latency_ms"])
         seconds = time_ms * 1e-3
@@ -147,6 +158,7 @@ def read_benchmark_json(path: str) -> List[KernelSample]:
         for field_name in BENCHMARK_PROVENANCE_FIELDS:
             if not meta.get(field_name):
                 meta[field_name] = UNKNOWN
+        meta["modelled"] = modelled
         shape = row.get("shape", "")
         samples.append(KernelSample(
             name=f"{row.get('op', 'kernel')}{list(shape) if isinstance(shape, (list, tuple)) else shape}",

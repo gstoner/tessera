@@ -30,6 +30,7 @@ from tessera.compiler.emit.candidate import (
     OP_ATTENTION,
     OP_FUSED_REGION,
     OP_MATMUL,
+    Tier,
     _note_arbiter_dispatch,
     arbitrate,
     live_candidates,
@@ -236,24 +237,32 @@ def _toolchain_mismatch(key: tuple[Any, ...], record: MeasureRecord) -> str | No
 
 def _record_matches_live_delegates(rec: MeasureRecord,
                                    live: Mapping[str, Any]) -> bool:
-    """Whether every live delegate candidate is the same build the record timed.
+    """Whether every live identified candidate is the same build the record timed.
 
-    Decision #11's delegate half: a Tier-3 delegate is a versioned artifact, so a
-    verdict measured against one library build says nothing about the next. For
-    each live candidate with a :meth:`Candidate.delegate_identity`, the record
-    must carry the identical identity under ``evidence.delegate_identities``;
-    anything else — a rebuilt library, a record that never stamped it — misses.
+    Decision #11's artifact half. Which candidates carry an identity: every
+    Tier-3 (``HAND_TUNED``) candidate -- a delegate library by content digest,
+    or a ``tessera-opt``-generated kernel by the compiler binary's digest --
+    enforced for every registered candidate by
+    ``tests/unit/test_autotune_toolchain_key.py``. SYNTHESIZED / EMITTED
+    candidates carry none: their code comes from this checkout's emitters under
+    the pinned toolchain, so they rely on the pin-based family identity alone.
+
+    For each live candidate that returns an identity, the record must carry the
+    identical one under ``evidence.delegate_identities``; anything else -- a
+    rebuilt library or compiler, a record that never stamped it -- misses. A
+    live ``HAND_TUNED`` candidate that cannot identify itself (``None`` or an
+    error) also misses: it fails closed rather than reuse a verdict it cannot
+    match.
     """
     recorded = rec.evidence.get("delegate_identities") or {}
     for name, cand in live.items():
-        identity_fn = getattr(cand, "delegate_identity", None)
-        if identity_fn is None:
-            continue
         try:
-            identity = identity_fn()
-        except Exception:  # noqa: BLE001 - an unidentifiable delegate cannot match
+            identity = cand.delegate_identity()
+        except Exception:  # noqa: BLE001 - an unidentifiable artifact cannot match
             return False
         if identity is None:
+            if getattr(cand, "tier", None) == Tier.HAND_TUNED:
+                return False
             continue
         if recorded.get(name) != identity:
             return False
@@ -263,10 +272,10 @@ def _record_matches_live_delegates(rec: MeasureRecord,
 def _delegate_identities(candidates: Mapping[str, Any]) -> dict[str, dict[str, str]]:
     out: dict[str, dict[str, str]] = {}
     for name, cand in candidates.items():
-        identity_fn = getattr(cand, "delegate_identity", None)
-        if identity_fn is None:
+        try:
+            identity = cand.delegate_identity()
+        except Exception:  # noqa: BLE001 - leave it unstamped: every later hit misses
             continue
-        identity = identity_fn()
         if identity is not None:
             out[name] = dict(identity)
     return out
@@ -299,24 +308,44 @@ class MeasureCache:
             self.misses += 1
         return rec
 
-    def put(self, key: tuple[Any, ...], rec: MeasureRecord) -> None:
-        """Store a verdict measured *in this process*.
+    def put(self, key: tuple[Any, ...], rec: MeasureRecord, *,
+            fresh: bool = False) -> None:
+        """Store a verdict.
 
-        A record without a toolchain identity is stamped with the current one
-        for its target — ``put`` is the in-process measurement path, so the
-        current toolchain is the one that produced it (Decision #11). A record
-        that names a *different* identity is refused: that is a persisted row
-        being smuggled past the load-time check.
+        Decision #11: a stored verdict must carry the identity of the toolchain
+        that measured it, and ``put`` never infers one.
+
+        * A record that already carries the **current** identity for its target
+          is stored (``measured_arbitrate`` stamps before it puts).
+        * A record with **no** identity is refused unless the caller passes
+          ``fresh=True`` -- the caller's statement that it measured this record
+          in this process, under this toolchain. Only then is it stamped. The
+          flag is for measurement code (``measured_arbitrate``, the corpus
+          recorders, tests that simulate a measurement); a record taken from a
+          loaded corpus is not fresh, and stamping it would serve an old
+          measurement as current.
+        * A record carrying a **different** identity is refused.
+        * A record this cache holds as stale (:meth:`stale_records`) is refused
+          outright, ``fresh`` or not -- that is the resurrection path.
 
         The stamp is written into ``rec.evidence`` in place (the record is
         frozen, its evidence dict is not) so the stored record stays the
         caller's object: evidence mutated after ``put`` is still what admission
-        reads, as it was before the stamp existed.
+        reads.
         """
         if not _uninstrumented_measurement(rec):
             raise ValueError("intra-kernel instrumented evidence cannot select a kernel")
         key = _normalize_key(key)
+        if any(rec is stale for stale, _ in self._stale.values()):
+            raise ValueError(
+                "refusing to re-store a record this cache holds as stale; "
+                "re-measure it instead (Decision #11)")
         if not rec.evidence.get("toolchain_digest"):
+            if not fresh:
+                raise ValueError(
+                    "refusing a verdict with no toolchain identity; pass "
+                    "fresh=True only for a measurement made in this process "
+                    "(Decision #11)")
             rec.evidence.update(toolchain_evidence(str(key[1])))
         else:
             reason = _toolchain_mismatch(key, rec)
@@ -898,8 +927,10 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         # still says the verdict was unseparated, so nothing reads it as a win.
         winner = live[rec.winner]
 
-    # Decision #11: stamp the toolchain and every timed delegate's ABI
-    # identity, so a later toolkit upgrade or library rebuild misses.
+    # Decision #11: stamp the pin-based toolchain identity and the artifact
+    # identity of every timed candidate that has one (Tier-3 delegates and
+    # tessera-opt-generated kernels), so a pin bump, a rebuilt library or a
+    # rebuilt compiler misses. See `_record_matches_live_delegates`.
     evidence: dict[str, Any] = dict(toolchain_evidence(target))
     delegates = _delegate_identities(
         {name: cand for name, cand in live.items() if name in latencies})

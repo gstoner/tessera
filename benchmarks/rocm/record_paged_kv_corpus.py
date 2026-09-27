@@ -101,7 +101,7 @@ def main() -> int:
                            winner, candidates[winner], candidates,
                            unmeasured={},
                            separation=at.separation_verdict(
-                               candidates, spreads, winner)))
+                               candidates, spreads, winner)), fresh=True)
         rows.append({"backend": "rocm", "device": chip,
                      "op": "paged_kv_decode", "tokens": tokens,
                      "heads": args.heads, "kv_heads": args.kv_heads,

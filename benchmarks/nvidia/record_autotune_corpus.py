@@ -308,7 +308,7 @@ def main() -> int:
         winner = min(timings, key=timings.__getitem__)
         cache.put(("nvidia:sm_120", "nvidia", "conv2d",
                    (B, IH, IW, CI, KH, KW, CO), "f32", "device"),
-                  at.MeasureRecord(winner, timings[winner], timings))
+                  at.MeasureRecord(winner, timings[winner], timings), fresh=True)
         print(f"conv2d-device {shape_text}: {winner}")
     evidence = {
         "compiler_fingerprint": compiler_fingerprint,

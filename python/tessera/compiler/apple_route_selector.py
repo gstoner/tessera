@@ -52,6 +52,10 @@ def live_apple_device_tag() -> str:
             else "apple_silicon_metal_unknown_family")
 
 
+#: The system xcrun (resolves through xcode-select / DEVELOPER_DIR, not PATH).
+_XCRUN = "/usr/bin/xcrun"
+
+
 def _command_text(*args: str) -> str:
     try:
         return subprocess.run(
@@ -127,13 +131,18 @@ def live_apple_route_context() -> AppleRouteContext:
     """
     physical = os.environ.get("TESSERA_APPLE_PHYSICAL_DEVICE")
     if not physical:
-        physical = _command_text("sysctl", "-n", "machdep.cpu.brand_string")
+        physical = _command_text("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string")
+    # Absolute system paths, never a PATH lookup: a shell with Homebrew llvm
+    # first on PATH resolved `clang` to Homebrew's and changed this fingerprint,
+    # so a ledger sealed in the default shell stopped admitting in that one.
+    # `/usr/bin/clang` is the xcode-select shim the default shell already
+    # resolves, so the fingerprint recorded there is unchanged.
     sdk = os.environ.get("TESSERA_APPLE_SDK_VERSION") or _command_text(
-        "xcrun", "--sdk", "macosx", "--show-sdk-version")
+        _XCRUN, "--sdk", "macosx", "--show-sdk-version")
     compiler = os.environ.get("TESSERA_APPLE_COMPILER_FINGERPRINT")
     if not compiler:
         compiler_text = "\n".join(filter(None, (
-            _command_text("clang", "--version"),
+            _command_text("/usr/bin/clang", "--version"),
             _configured_llvm_dir(),
         )))
         compiler = (

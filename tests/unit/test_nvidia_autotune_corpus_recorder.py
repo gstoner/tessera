@@ -73,7 +73,7 @@ def recorder_env(tmp_path, monkeypatch):
                bucket_key(dims, SpecPolicy.BUCKET), dtype, timing)
         if cache.get(key) is None:
             cache.put(key, at.MeasureRecord("fresh_winner", 1.0,
-                                            {"fresh_winner": 1.0}))
+                                            {"fresh_winner": 1.0}), fresh=True)
         return SimpleNamespace(name="fresh_winner")
 
     monkeypatch.setattr(at, "measured_arbitrate", fake_arbitrate)

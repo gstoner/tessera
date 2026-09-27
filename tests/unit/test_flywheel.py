@@ -35,14 +35,15 @@ from tessera.compiler.flywheel import (
 
 
 TC = "sha256:toolchain-a"
+DEV = "apple_gpu:apple-m1-max"
 
 
 def _rec(size, dtype, median_ms, *, sched=None, op="matmul", native=True,
-         toolchain=TC):
+         device_id=DEV, toolchain=TC):
     """Synthetic record helper for portable tests."""
     return AutotuneRecord(
         2, op, {"M": size, "N": size, "K": size}, dtype, "apple_gpu",
-        "apple_gpu:apple-m1-max", sched or {"dtype": dtype, "size": size}, True, "",
+        device_id, sched or {"dtype": dtype, "size": size}, True, "",
         LatencyStats(median_ms, median_ms, median_ms, 5) if native else None,
         1.0 if native else None, 0.1, None, "sweep", toolchain,
     )
@@ -159,28 +160,46 @@ def test_distill_picks_lowest_latency_per_class():
         _rec(512, "f16", 0.8, sched={"variant": "f16"}),
     ]
     table = distill_dispatch(corpus)
-    win = lookup_dispatch(table, "matmul", "f32", 512, toolchain=TC)
+    win = lookup_dispatch(table, "matmul", "f32", 512, device_id=DEV, toolchain=TC)
     assert win is not None and win["schedule"]["variant"] == "fast"
     assert win["median_ms"] == 1.0
     # f16 is a distinct class
     assert lookup_dispatch(table, "matmul", "f16", 512,
-                           toolchain=TC)["schedule"]["variant"] == "f16"
+                           device_id=DEV, toolchain=TC)["schedule"]["variant"] == "f16"
     # uncovered class → None (caller falls back)
-    assert lookup_dispatch(table, "matmul", "f32", 99999, toolchain=TC) is None
+    assert lookup_dispatch(table, "matmul", "f32", 99999, device_id=DEV, toolchain=TC) is None
 
 
 def test_dispatch_is_keyed_on_the_toolchain():
     """Decision #11: a winner measured under one toolchain is not the winner
     under another, and a record with no toolchain identity never dispatches."""
     table = distill_dispatch([
-        _rec(512, "f32", 1.0, sched={"variant": "old"}, toolchain=TC),
+        _rec(512, "f32", 1.0, sched={"variant": "old"}, device_id=DEV, toolchain=TC),
         _rec(512, "f32", 0.5, sched={"variant": "legacy"}, toolchain=""),
     ])
     assert lookup_dispatch(table, "matmul", "f32", 512,
-                           toolchain=TC)["schedule"]["variant"] == "old"
+                           device_id=DEV, toolchain=TC)["schedule"]["variant"] == "old"
     assert lookup_dispatch(table, "matmul", "f32", 512,
-                           toolchain="sha256:toolchain-b") is None
-    assert lookup_dispatch(table, "matmul", "f32", 512, toolchain="") is None
+                           device_id=DEV, toolchain="sha256:toolchain-b") is None
+    assert lookup_dispatch(table, "matmul", "f32", 512, device_id=DEV,
+                           toolchain="") is None
+
+
+def test_dispatch_never_crosses_device_id():
+    """Reviewer's repro: a faster gfx1201 schedule was served to a gfx1151
+    caller because the key had no device. Each chip gets its own winner."""
+    table = distill_dispatch([
+        _rec(512, "f32", 0.5, sched={"variant": "rdna4"}, device_id="rocm:gfx1201"),
+        _rec(512, "f32", 2.0, sched={"variant": "rdna35"}, device_id="rocm:gfx1151"),
+    ])
+    assert lookup_dispatch(table, "matmul", "f32", 512, device_id="rocm:gfx1151",
+                           toolchain=TC)["schedule"]["variant"] == "rdna35"
+    assert lookup_dispatch(table, "matmul", "f32", 512, device_id="rocm:gfx1201",
+                           toolchain=TC)["schedule"]["variant"] == "rdna4"
+    assert lookup_dispatch(table, "matmul", "f32", 512, device_id="nvidia:sm_120",
+                           toolchain=TC) is None
+    assert lookup_dispatch(table, "matmul", "f32", 512, device_id="",
+                           toolchain=TC) is None
 
 
 def test_legacy_corpus_rows_load_unversioned(tmp_path):

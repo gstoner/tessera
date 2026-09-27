@@ -66,15 +66,20 @@ def test_a_pin_bump_changes_the_digest(monkeypatch):
     assert TI.toolchain_identity("rocm").digest == TI.toolchain_identity("gfx1151").digest
 
 
-def test_native_image_and_delegate_join_the_identity(tmp_path):
+def test_artifact_identities_key_rebuilds(tmp_path, monkeypatch):
+    """P1-4: identity is pin-based; what catches a rebuilt artifact is the
+    per-candidate identity -- a delegate library's or tessera-opt's digest."""
     base = TI.toolchain_identity("rocm")
-    image = TI.toolchain_identity("rocm", native_image={
-        "compiler_fingerprint": "sha256:opt-a", "toolchain_fingerprint": "sha256:tc-a"})
-    rebuilt = TI.toolchain_identity("rocm", native_image={
-        "compiler_fingerprint": "sha256:opt-b", "toolchain_fingerprint": "sha256:tc-a"})
-    assert len({base.digest, image.digest, rebuilt.digest}) == 3
-    with pytest.raises(ValueError, match="compiler_fingerprint"):
-        TI.toolchain_identity("rocm", native_image={"toolchain_fingerprint": "x"})
+    opt = tmp_path / "tessera-opt"
+    opt.write_bytes(b"compiler-build-1")
+    from tessera import runtime as rt
+    monkeypatch.setattr(rt, "_tessera_opt_path", lambda: opt)
+    first = TI.tessera_opt_identity()
+    assert first["generator"] == "tessera-opt"
+    opt.write_bytes(b"compiler-build-2-rebuilt")
+    assert TI.tessera_opt_identity()["abi_digest"] != first["abi_digest"]
+    monkeypatch.setattr(rt, "_tessera_opt_path", lambda: None)
+    assert TI.tessera_opt_identity() is None
 
     lib = tmp_path / "libdelegate.so"
     lib.write_bytes(b"v1")
@@ -185,7 +190,7 @@ def _record():
 
 def test_corpus_unchanged_toolchain_hits():
     cache = AT.MeasureCache()
-    cache.put(KEY, _record())
+    cache.put(KEY, _record(), fresh=True)
     assert cache.get(KEY).evidence["toolchain_digest"] == TI.toolchain_identity("nvidia").digest
     warm = AT.MeasureCache()
     assert warm.load_dict(cache.to_dict()) == 1
@@ -194,7 +199,7 @@ def test_corpus_unchanged_toolchain_hits():
 
 def test_corpus_changed_toolchain_misses_but_is_kept(monkeypatch):
     cache = AT.MeasureCache()
-    cache.put(KEY, _record())
+    cache.put(KEY, _record(), fresh=True)
     payload = cache.to_dict()
     monkeypatch.setattr(gpu_target, "TESSERA_TARGET_CUDA_TOOLKIT", "13.5")
     TI.clear_identity_cache()
@@ -206,7 +211,7 @@ def test_corpus_changed_toolchain_misses_but_is_kept(monkeypatch):
     # A recorder that loads and re-saves does not delete the old evidence.
     assert upgraded.to_dict()["records"] == payload["records"]
     # A fresh measurement under the new toolchain supersedes it.
-    upgraded.put(KEY, _record())
+    upgraded.put(KEY, _record(), fresh=True)
     assert upgraded.get(KEY) is not None and not upgraded.stale_records()
     assert len(upgraded.to_dict()["records"]) == 1
 
@@ -239,11 +244,102 @@ def test_committed_corpus_serves_only_current_toolchain_rows():
         assert rec.evidence["toolchain_digest"] == TI.toolchain_identity(key[1]).digest
 
 
+def test_put_never_resurrects_a_stale_row():
+    """Reviewer's repro (P1-1): load the committed corpus, take a row from
+    `stale_records()`, `put` it. It used to be stamped current, served, and
+    re-saved as fresh v4."""
+    cache = AT.MeasureCache()
+    AT.load_corpus(cache=cache)
+    stale = cache.stale_records()
+    if not stale:
+        pytest.skip("the committed corpus holds no stale rows to resurrect")
+    key, (record, _) = next(iter(stale.items()))
+    with pytest.raises(ValueError, match="no toolchain identity|stale"):
+        cache.put(key, record)
+    with pytest.raises(ValueError, match="stale"):
+        cache.put(key, record, fresh=True)          # not even when vouched for
+    assert cache.get(key) is None
+    assert key in cache.stale_records()
+    saved = {AT._key_from_json(r): r for r in cache.to_dict()["records"]}
+    assert "toolchain_digest" not in saved[key].get("evidence", {})
+
+
+def test_identity_less_record_needs_an_explicit_fresh_measurement():
+    with pytest.raises(ValueError, match="fresh=True"):
+        AT.MeasureCache().put(KEY, _record())
+    cache = AT.MeasureCache()
+    cache.put(KEY, _record(), fresh=True)
+    assert cache.get(KEY) is not None
+
+
+def test_a_stale_row_never_replaces_a_fresh_one():
+    cache = AT.MeasureCache()
+    cache.put(KEY, _record(), fresh=True)
+    fresh = cache.get(KEY)
+    old = {"version": 3, "records": [{**AT._key_to_json(KEY), "winner": "old",
+                                      "latency_ms": 9.0, "candidates": {"old": 9.0}}]}
+    for overwrite in (False, True):
+        assert cache.load_dict(old, overwrite=overwrite) == 0
+        assert cache.get(KEY) is fresh
+    assert [r["winner"] for r in cache.to_dict()["records"]] == ["w"]
+
+
+def test_every_hand_tuned_candidate_declares_an_artifact_identity():
+    """P1-2 guard: a Tier-3 candidate is a versioned artifact (a delegate
+    library, or a kernel tessera-opt generates at run time). One registered
+    without `delegate_identity()` would let a rebuilt artifact reuse a stale
+    verdict, so the registry is enumerated rather than listed by hand."""
+    import importlib
+    import pkgutil
+
+    import tessera.compiler.emit as emit_pkg
+    from tessera.compiler.emit.candidate import _CANDIDATES
+
+    for mod in pkgutil.iter_modules(emit_pkg.__path__):
+        importlib.import_module(f"tessera.compiler.emit.{mod.name}")
+    for extra in ("tessera.compiler.native_ann", "tessera.compiler.native_ann_gpu"):
+        importlib.import_module(extra)
+
+    hand_tuned = [c for cands in _CANDIDATES.values() for c in cands
+                  if c.tier == Tier.HAND_TUNED and not type(c).__module__.startswith("tests")
+                  and type(c).__module__.startswith("tessera.")]
+    assert hand_tuned, "the registry enumeration found no Tier-3 candidates"
+    missing = sorted(c.name for c in hand_tuned
+                     if type(c).delegate_identity is Candidate.delegate_identity)
+    assert not missing, f"Tier-3 candidates without delegate_identity(): {missing}"
+
+
+def test_apple_identity_does_not_depend_on_path(tmp_path):
+    """P1-3: the digest must not move when Homebrew llvm is first on PATH."""
+    import os
+    import subprocess
+    import sys
+
+    from tests._support.apple import require_apple_metal
+
+    require_apple_metal()
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    clang = fake / "clang"
+    clang.write_text("#!/bin/sh\necho 'not Apple clang 99.9'\n")
+    clang.chmod(0o755)
+    code = ("from tessera.compiler.toolchain_identity import toolchain_identity;"
+            "print(toolchain_identity('apple_gpu').digest)")
+    env = dict(os.environ, PYTHONPATH="python")
+
+    def digest(path_prefix):
+        run_env = dict(env, PATH=path_prefix + os.pathsep + env.get("PATH", ""))
+        return subprocess.run([sys.executable, "-c", code], env=run_env, check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    assert digest(str(fake)) == digest("/usr/bin")
+
+
 def test_put_refuses_a_foreign_toolchain_record():
     rec = _record()
     rec.evidence.update({"toolchain_digest": "sha256:someone-elses"})
     with pytest.raises(ValueError, match="Decision #11"):
-        AT.MeasureCache().put(KEY, rec)
+        AT.MeasureCache().put(KEY, rec, fresh=True)
 
 
 class _Region:

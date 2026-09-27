@@ -44,6 +44,18 @@ selects nothing. The separation recorder was fixed to count stale rows it will
 replace (it printed "evicted 0" on a v3 corpus) and to name any owned row a run
 leaves stale.
 
+**Review follow-up (2026-09-26, Mac, host-free): the 8 `fused_region` rows
+need one more re-record.** Every Tier-3 candidate now carries an artifact
+identity checked against the live candidate: `rocm_wmma_gemm` and
+`rocm_flash_attn` by the digest of the `tessera-opt` binary that generates
+their kernels, `rocm_stockham` by its loaded library's digest. The rows
+recorded at `82d6f1fa` predate that stamp, so on Princess-Luna (where
+`rocm_wmma_gemm` is live) they miss and fail closed to a live race. Re-run
+`benchmarks/rocm/record_autotune_separation.py` there. Standing cost: a
+`tessera-opt` rebuild on that box invalidates those verdicts again -- by
+design, since the compiler generates the kernel. The 8 `paged_kv_decode` rows
+are unaffected (their lookup applies no candidate identity).
+
 **sm_120: owed on Super-Bear** (97 rows; see the NVIDIA plan's entry under the
 same key for the commands). gfx1201 has no committed corpus rows: not
 applicable.

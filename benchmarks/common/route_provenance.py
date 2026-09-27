@@ -12,8 +12,10 @@ artifact that actually executed -- the runtime artifact's compiler-stamped
 latency did not come from an executed artifact (an analytical roofline, a mock
 collective) has no route to derive, so it records :data:`UNKNOWN_ROUTE` and
 says why in ``route_source`` -- it is never guessed from a benchmark's own
-label. :func:`stable_row` only accepts a :class:`RouteProvenance`, so a caller
-cannot hand it a typed string.
+label. :func:`stable_row` only accepts a :class:`RouteProvenance` produced by
+one of the helpers below: each helper marks what it returns as derived, and a
+``RouteProvenance`` a caller constructs directly is refused -- so neither a
+typed string nor a hand-built object can stand in for a derived route.
 
 This module imports nothing from ``tessera`` so the analytical benchmarks stay
 runnable without the package.
@@ -21,7 +23,7 @@ runnable without the package.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 #: The stable Decision #12 fields. Never removed, renamed or repurposed.
@@ -37,12 +39,18 @@ PROVENANCE_ROW_FIELDS: tuple[str, ...] = ("route", "route_source", "timing_sourc
 UNKNOWN_ROUTE = "unknown"
 
 #: Timing sources a row may name. ``analytical_model`` marks a latency that no
-#: clock measured; ``unknown`` is what a reader reports for a row that predates
-#: the field.
+#: clock measured; ``host_wall_clock_first_call`` a single wall-clock interval
+#: around a JIT function's first call, which includes compilation and is not a
+#: steady-state latency; ``unknown`` is what a reader reports for a row that
+#: predates the field.
 TIMING_SOURCES: frozenset[str] = frozenset({
-    "host_wall_clock", "device_clock", "cuda_event", "hip_event",
-    "metal4_timestamp_heap", "analytical_model", "unknown",
+    "host_wall_clock", "host_wall_clock_first_call", "device_clock",
+    "cuda_event", "hip_event", "metal4_timestamp_heap", "analytical_model",
+    "unknown",
 })
+
+#: Marks a RouteProvenance built by a derivation helper in this module.
+_DERIVED = object()
 
 
 @dataclass(frozen=True)
@@ -51,6 +59,12 @@ class RouteProvenance:
 
     route: str
     source: str
+    #: Set only by this module's helpers; not part of equality or repr.
+    _origin: object = field(default=None, repr=False, compare=False)
+
+    @property
+    def derived(self) -> bool:
+        return self._origin is _DERIVED
 
     @property
     def known(self) -> bool:
@@ -64,7 +78,11 @@ def route_unavailable(reason: str) -> RouteProvenance:
     """No executed artifact: the route is unknown, and ``reason`` says why."""
     if not reason:
         raise ValueError("an unknown route must say why it is unknown")
-    return RouteProvenance(UNKNOWN_ROUTE, f"unavailable: {reason}")
+    return _derived(UNKNOWN_ROUTE, f"unavailable: {reason}")
+
+
+def _derived(route: str, source: str) -> RouteProvenance:
+    return RouteProvenance(route, source, _DERIVED)
 
 
 def route_from_runtime_artifact(artifact: Any) -> RouteProvenance:
@@ -78,7 +96,7 @@ def route_from_runtime_artifact(artifact: Any) -> RouteProvenance:
     path = (metadata or {}).get("compiler_path")
     if not path:
         return route_unavailable("runtime artifact carries no compiler_path")
-    return RouteProvenance(str(path), "runtime_artifact.metadata.compiler_path")
+    return _derived(str(path), "runtime_artifact.metadata.compiler_path")
 
 
 def route_from_descriptor(descriptor: Any) -> RouteProvenance:
@@ -91,7 +109,7 @@ def route_from_descriptor(descriptor: Any) -> RouteProvenance:
     for key in ("schedule", "route"):
         value = provenance.get(key)
         if value:
-            return RouteProvenance(str(value), f"descriptor.provenance.{key}")
+            return _derived(str(value), f"descriptor.provenance.{key}")
     return route_unavailable("launch descriptor provenance names no route")
 
 
@@ -116,7 +134,7 @@ def stable_row(
     helpers above -- a bare string is refused, because a label the caller
     typed is exactly what the amendment says a route is not.
     """
-    if not isinstance(route, RouteProvenance):
+    if not isinstance(route, RouteProvenance) or not route.derived:
         raise TypeError(
             "route must be a RouteProvenance derived from the executed artifact "
             "(route_from_runtime_artifact / route_from_descriptor / "

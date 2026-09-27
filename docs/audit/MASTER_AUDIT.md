@@ -458,12 +458,20 @@ matches its module fails generation. Read the counts there.
    **Landed 2026-09-26** (sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`, Mac,
    host-independent). `compiler/toolchain_identity.py` is the one identity
    source (declared pins via `gpu_target`/`rocm_target` and
-   `runtime_abi_audit.cmake_toolchain_pins`; live context for Apple;
-   native-image fingerprints and delegate library ABI digests when the caller
-   has them); `autotune_v2` (SQLite), `tessera.autotune.cache_key`,
-   `emit.autotune` (corpus v4, delegate identity checked against the live
-   candidate), `flywheel` (schema v2) and `tuned_dispatch` key on it, and an
+   `runtime_abi_audit.cmake_toolchain_pins`; for Apple, shell-independent
+   macOS/SDK/Metal/Xcode versions via `/usr/bin/xcrun`, the runtime source
+   fingerprint and the device). The family identity is pin-based; a rebuilt
+   artifact is caught per candidate instead -- every Tier-3 candidate stamps a
+   delegate library digest or, for kernels `tessera-opt` generates, the
+   compiler binary's digest (a registry-enumerating test enforces it).
+   `autotune_v2` (SQLite), `tessera.autotune.cache_key`, `emit.autotune`
+   (corpus v4; identity-less `put` refused unless the caller declares a fresh
+   in-process measurement; stale rows never resurrected), `flywheel` (schema
+   v2, keyed by device and toolchain) and `tuned_dispatch` key on it, and an
    unversioned or differing row misses, with the reason recorded.
+   Review fixes 2026-09-26: the 8 re-recorded gfx1151 `fused_region` rows
+   predate the `rocm_wmma_gemm` tessera-opt identity, so on Princess-Luna they
+   now miss for that candidate and are re-raced until re-recorded again.
    `benchmarks/common/route_provenance.py` derives `route` from the executed
    artifact (`runtime_artifact.metadata.compiler_path`,
    `descriptor.provenance`) or records `unknown` with the reason;

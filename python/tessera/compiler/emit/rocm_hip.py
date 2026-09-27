@@ -1035,6 +1035,14 @@ class RocmWmmaGemmCandidate(Candidate):
     def mma_dtype(self, region: Any) -> str | None:
         return "fp16"
 
+    def delegate_identity(self) -> "dict[str, str] | None":
+        """Decision #11: this kernel is generated at run time by ``tessera-opt``;
+        a rebuilt compiler generates different code, so its binary digest keys
+        the verdict."""
+        from tessera.compiler.toolchain_identity import tessera_opt_identity
+
+        return tessera_opt_identity()
+
     def available(self) -> bool:
         # Probe the ACTUAL fused path (tessera-opt + generated kernel), not just
         # the shipped GEMM symbol — else this could win arbitration on a host where
@@ -1120,6 +1128,14 @@ class RocmFlashAttnCandidate(Candidate):
     target = _TARGET
     op = OP_ATTENTION
     accuracy_atol = _F16_ATOL
+
+    def delegate_identity(self) -> "dict[str, str] | None":
+        """Decision #11: this kernel is generated at run time by ``tessera-opt``;
+        a rebuilt compiler generates different code, so its binary digest keys
+        the verdict."""
+        from tessera.compiler.toolchain_identity import tessera_opt_identity
+
+        return tessera_opt_identity()
 
     def available(self) -> bool:
         try:

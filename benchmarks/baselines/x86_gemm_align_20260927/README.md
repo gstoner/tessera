@@ -44,8 +44,45 @@ and are never stored. The tests pin this:
   (`bitwise`), and the `runtime.launch` output against the direct call
   (`launch=direct`).
 
-**Contract note:** C must not alias A or B. C is read back between K blocks. The
-old kernel also produced garbage under aliasing.
+**Overlapping C (added after review).** The blocked loop writes C while A and B are
+still being read, and it reads C back between K blocks. So the entry point now checks
+whether C's byte range overlaps A's or B's, using the dense row-major extents computed
+from M/N/K (`tessera_x86_avx512_gemm_f32_operands_overlap`, exported so the rule can
+be tested).
+
+- **On overlap:** the product is computed into an aligned scratch C and copied out.
+  The result equals the product of the inputs as they were at entry, bit for bit, so
+  an in-place `C = A @ B` or any overlapping view is correct.
+- **Scratch allocation failure:** the call fails closed. C is filled with NaN and a
+  message goes to stderr.
+- **Disjoint operands** take the unchanged fast path. That includes C exactly
+  adjacent to A or B.
+- **Why scratch, not a refusal:** the ABI is `void`, so a refusal could not reach any
+  of the three callers. Computing through scratch keeps every caller working and gives
+  the mathematically correct answer.
+
+**The old kernel was not safe under overlap either.** With the new test's overlap
+cases linked against the old kernel sources:
+
+- The `d8da67f7` kernel failed all 6 overlap cases.
+- The `de914e51` kernel (before the entry check) failed 3.
+- Both passed the 3 adjacent cases.
+- The old kernel was right only by accident, for example C == A with N == K ≤ 16:
+  that case passed, and N == K == 17 failed.
+
+So no caller could have been relying on aliasing.
+
+The check's cost was measured with `princess_luna_overlap_check_cost.jsonl`: the same
+paired probe, run on de914e51 (no check) against 1102a32f (check), three processes per
+cell. The after/before ratio was 1.00 at 256³. At 32³, 8×64×64 and 1×256×256 it read
+0.86–1.10, which is noise, with no slowdown. All outputs were bitwise identical.
+
+Tests (all pass on Princess-Luna):
+- `check_overlap` in `test_gemm_f32.cpp` covers C == A, C == A on the M == 1 path,
+  C == B, C inside A, C's tail over B's head, and in-place C == A with K = 1100
+  (K-blocked). It also covers three adjacent-not-overlapping layouts, which must take
+  the fast path and leave A and B untouched.
+- `test_gemm_f32_overlapping_output_equals_disjoint_product` does the same in Python.
 
 ### Why this design (from measurement)
 

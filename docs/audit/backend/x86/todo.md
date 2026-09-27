@@ -39,7 +39,18 @@ the per-element FMA order is unchanged. The checks:
 - `test_x86_matmul_family_compiled.py::test_gemm_f32_result_independent_of_b_alignment`.
 - Every probe row compares the old and new builds' outputs bit for bit.
 
-C must not alias A or B.
+**Overlap is enforced, not documented.** The blocked loop cannot run with C
+overlapping A or B, so the entry point checks byte-range overlap
+(`tessera_x86_avx512_gemm_f32_operands_overlap`).
+
+- **On overlap:** it computes into scratch and copies out, bitwise the product of the
+  inputs at entry.
+- **If scratch allocation fails:** C is filled with NaN and a message goes to stderr.
+- **Disjoint operands, including adjacent ones:** they take the fast path. The check
+  cost is not measurable: after/before 1.00 at 256³, and noise at 32³.
+
+The pre-fix kernel failed all six overlap test cases (C == A, C == B, partial), so no
+caller could have relied on aliasing.
 
 **Measured before/after** with a paired interleaved probe on the TSC witness route.
 It loads both builds into one process, uses fresh processes per (shape, B%64), runs

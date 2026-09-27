@@ -350,12 +350,19 @@
         64
       ],
       "candidates": {
-        "rocm_generic_hip": 0.7402025075862184,
-        "rocm_wmma_gemm": 1.8134980055037886
+        "rocm_generic_hip": 0.735126988729462,
+        "rocm_wmma_gemm": 1.9020135077880695
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "generator": "tessera-opt",
+            "library": "tessera-opt"
+          }
+        },
         "toolchain": {
           "delegate": {},
           "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
@@ -369,12 +376,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.7402025075862184,
+      "latency_ms": 0.735126988729462,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.591837153754911,
-        "noise": 0.06864887999485637,
+        "margin": 0.6135006477507241,
+        "noise": 0.031500616473862084,
         "runner_up": "rocm_wmma_gemm",
         "separated": true
       },
@@ -389,12 +396,19 @@
         64
       ],
       "candidates": {
-        "rocm_generic_hip": 0.23108333333333334,
-        "rocm_wmma_gemm": 0.01563050039112568
+        "rocm_generic_hip": 0.23017,
+        "rocm_wmma_gemm": 0.015637417013446488
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "generator": "tessera-opt",
+            "library": "tessera-opt"
+          }
+        },
         "toolchain": {
           "delegate": {},
           "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
@@ -408,12 +422,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.01563050039112568,
+      "latency_ms": 0.015637417013446488,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9323598973337511,
-        "noise": 0.10720803807795667,
+        "margin": 0.9320614458294023,
+        "noise": 0.010578739689884183,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -428,12 +442,19 @@
         256
       ],
       "candidates": {
-        "rocm_generic_hip": 6.95972450193949,
-        "rocm_wmma_gemm": 3.800267993938178
+        "rocm_generic_hip": 6.84108400309924,
+        "rocm_wmma_gemm": 4.205089484457858
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "generator": "tessera-opt",
+            "library": "tessera-opt"
+          }
+        },
         "toolchain": {
           "delegate": {},
           "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
@@ -447,12 +468,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 3.800267993938178,
+      "latency_ms": 4.205089484457858,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.4539628698119956,
-        "noise": 0.030894107050249996,
+        "margin": 0.3853182503602044,
+        "noise": 0.055144400538413074,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -467,12 +488,19 @@
         256
       ],
       "candidates": {
-        "rocm_generic_hip": 4.23191,
-        "rocm_wmma_gemm": 0.020859166979789734
+        "rocm_generic_hip": 4.230418333333334,
+        "rocm_wmma_gemm": 0.020944375544786453
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "generator": "tessera-opt",
+            "library": "tessera-opt"
+          }
+        },
         "toolchain": {
           "delegate": {},
           "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
@@ -486,12 +514,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.020859166979789734,
+      "latency_ms": 0.020944375544786453,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9950709804840392,
-        "noise": 0.002812782098651713,
+        "margin": 0.9950491006102739,
+        "noise": 0.01078620963659477,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -506,12 +534,19 @@
         512
       ],
       "candidates": {
-        "rocm_generic_hip": 29.92593648377806,
-        "rocm_wmma_gemm": 5.629207502352074
+        "rocm_generic_hip": 29.58665299229324,
+        "rocm_wmma_gemm": 5.3820165048819035
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "generator": "tessera-opt",
+            "library": "tessera-opt"
+          }
+        },
         "toolchain": {
           "delegate": {},
           "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
@@ -525,12 +560,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 5.629207502352074,
+      "latency_ms": 5.3820165048819035,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.8118953602202726,
-        "noise": 0.041103713184416496,
+        "margin": 0.818093093994653,
+        "noise": 0.04639133861150837,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -545,12 +580,19 @@
         512
       ],
       "candidates": {
-        "rocm_generic_hip": 26.644796666666664,
-        "rocm_wmma_gemm": 0.030172333121299744
+        "rocm_generic_hip": 26.65681,
+        "rocm_wmma_gemm": 0.029901708165804546
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "generator": "tessera-opt",
+            "library": "tessera-opt"
+          }
+        },
         "toolchain": {
           "delegate": {},
           "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
@@ -564,12 +606,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.030172333121299744,
+      "latency_ms": 0.029901708165804546,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.998867608805623,
-        "noise": 0.01624831615337674,
+        "margin": 0.9988782713248208,
+        "noise": 0.008868443773274328,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -584,12 +626,19 @@
         1024
       ],
       "candidates": {
-        "rocm_generic_hip": 191.62963300186675,
-        "rocm_wmma_gemm": 9.946481004590169
+        "rocm_generic_hip": 191.71401900530327,
+        "rocm_wmma_gemm": 9.986229983041994
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "generator": "tessera-opt",
+            "library": "tessera-opt"
+          }
+        },
         "toolchain": {
           "delegate": {},
           "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
@@ -603,12 +652,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 9.946481004590169,
+      "latency_ms": 9.986229983041994,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9480952875148841,
-        "noise": 0.03692201153427962,
+        "margin": 0.947910799456112,
+        "noise": 0.03947369112850849,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -623,12 +672,19 @@
         1024
       ],
       "candidates": {
-        "rocm_generic_hip": 185.72697,
-        "rocm_wmma_gemm": 0.17156808574994406
+        "rocm_generic_hip": 186.19184666666666,
+        "rocm_wmma_gemm": 0.17324887712796527
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "abi_digest": "sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87",
+            "generator": "tessera-opt",
+            "library": "tessera-opt"
+          }
+        },
         "toolchain": {
           "delegate": {},
           "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
@@ -642,12 +698,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.17156808574994406,
+      "latency_ms": 0.17324887712796527,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9990762349391155,
-        "noise": 0.006435693419358187,
+        "margin": 0.9990695141584898,
+        "noise": 0.008545687037044291,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },

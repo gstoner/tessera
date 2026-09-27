@@ -44,17 +44,28 @@ selects nothing. The separation recorder was fixed to count stale rows it will
 replace (it printed "evicted 0" on a v3 corpus) and to name any owned row a run
 leaves stale.
 
-**Review follow-up (2026-09-26, Mac, host-free): the 8 `fused_region` rows
-need one more re-record.** Every Tier-3 candidate now carries an artifact
-identity checked against the live candidate: `rocm_wmma_gemm` and
+**Review follow-up (2026-09-26): the 8 `fused_region` rows were re-recorded
+with the `tessera-opt` artifact identity.** Every Tier-3 candidate now carries
+an artifact identity checked against the live candidate: `rocm_wmma_gemm` and
 `rocm_flash_attn` by the digest of the `tessera-opt` binary that generates
-their kernels, `rocm_stockham` by its loaded library's digest. The rows
-recorded at `82d6f1fa` predate that stamp, so on Princess-Luna (where
-`rocm_wmma_gemm` is live) they miss and fail closed to a live race. Re-run
-`benchmarks/rocm/record_autotune_separation.py` there. Standing cost: a
-`tessera-opt` rebuild on that box invalidates those verdicts again -- by
-design, since the compiler generates the kernel. The 8 `paged_kv_decode` rows
-are unaffected (their lookup applies no candidate identity).
+their kernels, `rocm_stockham` by its loaded library's digest. The rows from
+`82d6f1fa` lacked that stamp and, on Princess-Luna, all 8 missed (checked: none
+passed the served-hit predicate before the re-run). Re-run on Princess-Luna
+from the same worktree, clean at `59ecd215` on
+`claude/timing-foundation-corpus2`, `ninja -C build` (all targets, no work to
+do: the review fixes touched no C++), `scripts/_rocm_env.sh` sourced, under
+`flock /tmp/tessera-timing.lock`: `record_autotune_separation.py`, timer source
+`device_event`, log `autotune_corpus_rerecord_20260926/gfx1151_fused_separation_opt_identity.txt`.
+Only those 8 rows changed. Each carries
+`evidence.delegate_identities.rocm_wmma_gemm` = that tree's `tessera-opt`
+(`sha256:701ee098...35f20c87`), and after the re-run all 8 are served hits on
+Princess-Luna. Winners unchanged and all separated: `rocm_generic_hip` at
+64x64 end to end, `rocm_wmma_gemm` at 64x64 device and at 256/512/1024 in both
+domains. Standing cost: these verdicts serve only with that `tessera-opt`
+binary. The box's main tree, or any rebuild, has a different digest and
+falls back to a live race. That is by design, because the compiler generates
+the kernel. The 8 `paged_kv_decode` rows are unaffected (their lookup applies
+no candidate identity).
 
 **sm_120: owed on Super-Bear** (97 rows; see the NVIDIA plan's entry under the
 same key for the commands). gfx1201 has no committed corpus rows: not

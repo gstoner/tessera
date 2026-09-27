@@ -110,6 +110,13 @@ def lower_scheduled_kernel(
 
     targeted = copy.deepcopy(module)
     op = targeted.functions[0].body[0]
+    if op.op_name == "tessera.softmax_safe":
+        # The public ``softmax_safe`` *is* ``softmax`` (``tessera.softmax_safe``
+        # is defined as the max-subtracted softmax). The contract admits it only
+        # where a Graph-owned packager used to serve it, and the Schedule record
+        # names the one semantic it lowers.
+        op.op_name = "tessera.softmax"
+        op.kwargs = {"axis": -1}
     if contract[5] == "norm":
         op.kwargs = {"eps": contract[21]}
     if contract[5] == "reduce":
@@ -117,6 +124,10 @@ def lower_scheduled_kernel(
         op.kwargs = {"kind": contract[6], "axis": contract[14]}
         if target in {"nvidia_sm120", "x86"}:
             op.kwargs.update(keepdims=contract[15], schedule=contract[20])
+        elif contract[15]:
+            # gfx1151 keepdims (E2E-REAL-6). Only a true value is spelled so the
+            # established rank-reducing f32 Graph text is byte-identical.
+            op.kwargs["keepdims"] = True
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
     graph_ir = targeted.to_mlir(target=target, canonical=True)
@@ -180,7 +191,21 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         raise ValueError("scheduled semantic kernel requires a non-empty positive shape")
     dtype = args[input_name].ir_type.dtype
     output_dtype = function.result_types[0].dtype
-    if target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name == "tessera.softmax"):
+    # E2E-REAL-6 (ROCm unary family): gfx1151 carries the envelope the retired
+    # Graph-owned ``rocm_native.package_{softmax,reduction}`` constructors served
+    # with device proof -- f16/f32 softmax (incl. ``softmax_safe``), f16/bf16/f32
+    # sum/mean/max with f32 output, keepdims. gfx1201 keeps its proved f32
+    # rank-reducing envelope: evidence never transfers between the two chips.
+    rocm_unary = target == "rocm_gfx1151"
+    if op.op_name == "tessera.softmax_safe" and not rocm_unary:
+        raise ValueError("scheduled softmax_safe is admitted only where it has a proved consumer")
+    if rocm_unary:
+        softmax_like = op.op_name in {"tessera.softmax", "tessera.softmax_safe"}
+        if softmax_like and (dtype not in {"fp16", "fp32"} or output_dtype != dtype):
+            raise ValueError("gfx1151 scheduled softmax requires f16/f32 storage preserved to the output")
+        if not softmax_like and (dtype not in {"fp16", "bf16", "fp32"} or output_dtype != "fp32"):
+            raise ValueError("gfx1151 scheduled reduction requires f16/bf16/f32 storage and f32 output")
+    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name == "tessera.softmax"):
         expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"} else "fp32"
         if dtype not in {"fp16", "bf16", "fp32"} or output_dtype != expected_dtype:
             raise ValueError("NVIDIA scheduled unary storage contract is unsupported")
@@ -217,7 +242,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         family, kind, axis, keepdims = "norm", norm[1], -1, False
         rows, columns = math.prod(input_shape[:-1]), input_shape[-1]
         outer = axis_extent = inner = 1
-    elif op.op_name == "tessera.softmax":
+    elif op.op_name in {"tessera.softmax", "tessera.softmax_safe"}:
         if mode != "serial":
             raise ValueError("reduction scheduling policy is not applicable to softmax")
         if op.kwargs.get("axis", -1) != -1 or output_shape != input_shape:
@@ -237,7 +262,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         if not isinstance(keepdims, bool):
             raise ValueError("scheduled reduction keepdims must be boolean")
         allowed = {"sum", "mean", "max", "min"} if target == "nvidia_sm120" else {"sum", "mean", "max"}
-        if kind not in allowed or (keepdims and target not in {"nvidia_sm120", "x86"}):
+        if kind not in allowed or (keepdims and target not in {"nvidia_sm120", "x86", "rocm_gfx1151"}):
             raise ValueError("scheduled reduction requires rank-reducing sum/mean/max")
         raw_axis = op.kwargs.get("axis", -1)
         if not isinstance(raw_axis, int) or isinstance(raw_axis, bool):

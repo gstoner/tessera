@@ -31,8 +31,6 @@ def verify_unary_projection(artifact, parent: str) -> None:
     if len(functions) != 1 or parent.count('func.func ') != 1:
         raise ValueError('Native unary descriptor requires one static f32 native function')
     name, input_dims, storage, output_dims, output_storage = functions[0]
-    if storage != output_storage:
-        raise ValueError('Native unary input/output storage disagrees')
     input_shape = tuple(int(d) for d in input_dims.split('x') if d)
     output_shape = tuple(int(d) for d in output_dims.split('x') if d)
     ops = re.findall(r' = schedule\.(softmax|reduce) %\w+ \{([^{}]*)\}', parent)
@@ -40,6 +38,14 @@ def verify_unary_projection(artifact, parent: str) -> None:
         raise ValueError('Native unary descriptor requires one native unary schedule')
     family, attrs = ops[0]
     rocm = artifact.target == "rocm" and artifact.architecture in {"gfx1151", "gfx1201"}
+    # gfx1151 carries the narrow-storage/keepdims envelope (E2E-REAL-6); a
+    # reduction always accumulates into f32 storage, softmax preserves storage.
+    rocm_unary = artifact.target == "rocm" and artifact.architecture == "gfx1151"
+    if family == 'reduce' and rocm_unary:
+        if output_storage != 'f32':
+            raise ValueError('Native unary reduction output must be f32 storage')
+    elif storage != output_storage:
+        raise ValueError('Native unary input/output storage disagrees')
     workgroup = 256 if rocm else 1
     required = ['accum = "f32"', f'storage = "{storage}"', f'workgroup_size = {workgroup} : i64']
     if family == 'softmax':
@@ -66,8 +72,8 @@ def verify_unary_projection(artifact, parent: str) -> None:
         kind = re.search(r'(?:^|, )kind = "(' + kind_pattern + r')"(?:,|$)', attrs)
         keep = re.search(r'(?:^|, )keepdims = (true|false)(?:,|$)', attrs)
         keepdims = keep is not None and keep[1] == 'true'
-        if keepdims and artifact.target != 'x86':
-            raise ValueError('native keepdims projection requires x86')
+        if keepdims and artifact.target != 'x86' and not rocm_unary:
+            raise ValueError('native keepdims projection requires x86 or gfx1151')
         expected['keepdims'] = keepdims
         expected_shape = input_shape[:axis] + ((1,) if keepdims else ()) + input_shape[axis+1:]
         if (not 0 <= axis < len(input_shape) or (not rocm and axis != len(input_shape)-1)

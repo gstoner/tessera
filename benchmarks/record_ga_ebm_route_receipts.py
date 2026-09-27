@@ -60,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     import benchmarks.clifford_core.core as clifford
     import benchmarks.energy_core.core as energy
     import benchmarks.visual_complex_core.core as visual
+    from tessera._route_receipts import device_label, validate_receipt_summary
 
     suites = {
         "clifford_core": (clifford.CliffordCoreBenchmark, clifford.default_sweep()),
@@ -71,6 +72,11 @@ def main(argv: list[str] | None = None) -> int:
     for name, (bench_cls, sweep) in suites.items():
         bench = bench_cls(warmup=args.warmup, reps=args.reps)
         rows[name] = [r.to_dict() for r in bench.run(sweep)]
+        for row in rows[name]:
+            # The same re-derivation a reader of this file runs.
+            route = validate_receipt_summary(row["route_receipts"])
+            if row["route"] != route or row["device"] != device_label(route):
+                raise SystemExit(f"{name}: row route/device disagree with its receipts")
         incomplete += sum(r["route_receipts"]["attribution"] != "complete" for r in rows[name])
     record = {
         "schema": SCHEMA,

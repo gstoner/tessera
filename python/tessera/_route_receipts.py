@@ -251,6 +251,49 @@ def native_attempt(fn: F) -> F:
     return inner  # type: ignore[return-value]
 
 
+def validate_receipt_summary(summary: Any) -> str:
+    """Re-derive a stored :meth:`RouteReceiptLog.summary` and return its route.
+
+    A consumer of a recorded row calls this instead of trusting its ``route``:
+    the route, attribution and call count must follow from the per-route and
+    per-op counts it states, every route must be declared, and a complete
+    attribution may carry no orphan dispatch. Raises ``ValueError``.
+    """
+    if not isinstance(summary, dict) or summary.get("schema") != ROUTE_RECEIPT_SCHEMA:
+        raise ValueError("route receipts: not a tessera.route_receipts.v1 summary")
+    declared = {ROUTE_PYTHON_REFERENCE, ROUTE_MIXED} | {t for _, t in NATIVE_TARGETS}
+    routes, ops = summary.get("routes"), summary.get("ops")
+    if not isinstance(routes, dict) or not isinstance(ops, dict):
+        raise ValueError("route receipts: routes and ops must be objects")
+    if set(routes) - declared:
+        raise ValueError(f"route receipts: undeclared route(s) {sorted(set(routes) - declared)}")
+    counts = [v for v in routes.values()]
+    if not all(type(v) is int and v > 0 for v in counts):
+        raise ValueError("route receipts: route counts must be positive integers")
+    per_op: Counter[str] = Counter()
+    for op, by_route in ops.items():
+        if not isinstance(by_route, dict):
+            raise ValueError(f"route receipts: op {op!r} has no route counts")
+        per_op.update(by_route)
+    if dict(per_op) != routes:
+        raise ValueError("route receipts: per-op counts do not sum to the route counts")
+    orphans = summary.get("orphan_dispatches")
+    if type(orphans) is not int or orphans < 0:
+        raise ValueError("route receipts: orphan_dispatches must be a count")
+    if summary.get("calls") != sum(counts):
+        raise ValueError("route receipts: calls differ from the route counts")
+    complete = bool(counts) and orphans == 0
+    expected = (ROUTE_UNATTRIBUTED if not complete
+                else next(iter(routes)) if len(routes) == 1 else ROUTE_MIXED)
+    if summary.get("attribution") != ("complete" if complete else "incomplete"):
+        raise ValueError("route receipts: attribution differs from what the counts derive")
+    if (summary.get("refusal") is None) != complete:
+        raise ValueError("route receipts: refusal present exactly when attribution is incomplete")
+    if summary.get("route") != expected:
+        raise ValueError(f"route receipts: route {summary.get('route')!r} is not the derived {expected!r}")
+    return expected
+
+
 def device_label(route: str) -> str:
     """The benchmark ``device`` a composition's route supports.
 
@@ -280,4 +323,5 @@ __all__ = [
     "native_target_for",
     "note_native_dispatch",
     "public_route",
+    "validate_receipt_summary",
 ]

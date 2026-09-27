@@ -8,7 +8,9 @@ which silicon this host has. Sync ``EVIDENCE-PACKET-1-2026-09-27``.
 from __future__ import annotations
 
 import ast
+import copy
 import importlib
+import json
 import threading
 from pathlib import Path
 
@@ -276,3 +278,78 @@ def test_energy_core_row_carries_its_route(monkeypatch) -> None:
     assert set(receipts["ops"]) >= {"tessera.ebm.langevin_step",
                                     "tessera.ebm.partition_exact_from_energies"}
     assert row["promotion_eligible"] is False
+    assert rr.validate_receipt_summary(receipts) == "python_reference"
+
+
+# --------------------------------------------------------------------------
+# Committed receipts (benchmarks/baselines/ga_ebm_route_receipts_20260927):
+# one record per fleet host, recorded at one clean commit.
+# --------------------------------------------------------------------------
+
+_RECEIPTS = ROOT / "benchmarks" / "baselines" / "ga_ebm_route_receipts_20260927"
+
+
+def _records() -> dict[str, dict]:
+    return {p.stem: json.loads(p.read_text()) for p in sorted(_RECEIPTS.glob("*.json"))}
+
+
+def test_every_committed_receipt_row_rederives() -> None:
+    records = _records()
+    assert set(records) == {"mac_m1max", "princess_luna", "tajasarus", "super_bear"}
+    for host, record in records.items():
+        assert record["host"]["worktree_dirty"] is False, host
+        assert record["promotion_eligible"] is False
+        for suite, rows in record["suites"].items():
+            for row in rows:
+                route = rr.validate_receipt_summary(row["route_receipts"])
+                assert row["route"] == route and row["device"] == rr.device_label(route)
+                assert row["route_receipts"]["attribution"] == "complete", (host, suite)
+                assert row["promotion_eligible"] is False
+
+
+def _ops(record: dict, suite: str) -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {}
+    for row in record["suites"][suite]:
+        for op, by_route in row["route_receipts"]["ops"].items():
+            out.setdefault(op, set()).update(by_route)
+    return out
+
+
+def test_committed_receipts_name_the_lanes_each_host_ran() -> None:
+    """What the receipts established, per host (sync EVIDENCE-PACKET-1-2026-09-27).
+
+    The Zen 5 hosts ran the EBM energy and partition primitives on the x86
+    AVX-512 lane; the Zen 2 CUDA host has no such lane and ran the reference;
+    only the Mac reached the Apple GPU runtime. No composition reached a ROCm
+    or CUDA GPU lane on any host.
+    """
+    records = _records()
+    for host in ("princess_luna", "tajasarus"):
+        ops = _ops(records[host], "energy_core")
+        assert ops["tessera.ebm.energy_quadratic"] == {"x86_avx512"}
+        assert ops["tessera.ebm.partition_exact_from_energies"] == {"x86_avx512"}
+        assert ops["tessera.ebm.langevin_step"] == {"python_reference"}
+    bear = _ops(records["super_bear"], "energy_core")
+    assert set().union(*bear.values()) == {"python_reference"}
+    mac = _ops(records["mac_m1max"], "energy_core")
+    assert mac["tessera.ebm.langevin_step"] == {"apple_gpu_runtime"}
+    for record in records.values():
+        for suite in record["suites"]:
+            routes = set().union(*_ops(record, suite).values())
+            assert not routes & {"rocm", "cuda"}
+
+
+@pytest.mark.parametrize("edit,match", [
+    (lambda s: s.update(route="x86_avx512"), "not the derived"),
+    (lambda s: s["routes"].update(python_reference=999), "per-op counts"),
+    (lambda s: s.update(orphan_dispatches=1), "attribution differs"),
+    (lambda s: s["routes"].update(npu=1), "undeclared route"),
+    (lambda s: s.update(schema="other"), "not a tessera.route_receipts.v1"),
+])
+def test_a_doctored_receipt_summary_refuses(edit, match) -> None:
+    row = _records()["princess_luna"]["suites"]["energy_core"][0]
+    summary = copy.deepcopy(row["route_receipts"])
+    rr.validate_receipt_summary(summary)
+    edit(summary)
+    with pytest.raises(ValueError, match=match):
+        rr.validate_receipt_summary(summary)

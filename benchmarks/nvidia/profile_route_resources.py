@@ -25,6 +25,7 @@ attributes them to it. Sync ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27``
 from __future__ import annotations
 
 import argparse
+import os
 import ctypes
 import sys
 from pathlib import Path
@@ -108,4 +109,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    rc = main()
+    # Skip interpreter teardown. Under `ncu` (2026.3, WSL2) a process that
+    # loaded a generic-lane library (`nvidia_generic_cuda`, `nvidia_flash_attn`,
+    # `nvidia_gated`) aborts in glibc at exit ("double free or corruption")
+    # AFTER the profiled window closed and the report was written; the same
+    # process exits 0 without the profiler (measured on The-Super-Bear,
+    # 2026-09-27). The report is complete by then, so the exit status is made
+    # to reflect the profiled work, not the injected teardown.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(rc)

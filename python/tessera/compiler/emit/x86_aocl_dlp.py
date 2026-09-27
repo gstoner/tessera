@@ -85,7 +85,11 @@ def _aocl_dlp_lib() -> Any | None:
     lib = _lib_cache.get(path)
     if lib is None:
         try:
-            lib = ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+            # Pinned at load: `delegate_identity` names this image, and a
+            # replaced install after the load must miss (Decision #11).
+            from tessera.compiler.toolchain_identity import load_library
+
+            lib = load_library(path, mode=ctypes.RTLD_GLOBAL)
         except OSError:
             return None
         _lib_cache[path] = lib

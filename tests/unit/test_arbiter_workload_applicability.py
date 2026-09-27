@@ -76,6 +76,10 @@ class _WorksAnyShape(Candidate):
         An, Bn = region._natural(A, B)
         return (An @ Bn).astype(np.float32), "generic_real_kernel"
 
+    def delegate_identity(self):
+        # Decision #11: every candidate identifies the code it runs.
+        return {"fake_build": "generic_any_shape"}
+
 
 class _DeclinesRaggedInRun(Candidate):
     """Aligned-only, and says so ONLY at run time.
@@ -338,7 +342,10 @@ def test_a_corpus_hint_for_a_shape_it_cannot_serve_does_not_become_a_force():
                                            "runner_up": "generic_any_shape"},
                                evidence={"delegate_identities": {
                                    "aligned_only_declared": {
-                                       "fake_build": "aligned_only"}}}), fresh=True)
+                                       "fake_build": "aligned_only"},
+                                   "generic_any_shape": {
+                                       "fake_build": "generic_any_shape"}}}),
+              fresh=True)
 
     A, B = _operands(RAGGED)
     assert AT.corpus_winner(region, OP_MATMUL, _TGT, A, B, dims=RAGGED,
@@ -430,7 +437,11 @@ def test_every_race_field_consumer_honours_the_workload_exclusion():
                AT.TIMING_END_TO_END),
               AT.MeasureRecord(winner="generic_any_shape", latency_ms=1.0,
                                candidates={"generic_any_shape": 1.0},
-                               unmeasured={}), fresh=True)
+                               unmeasured={},
+                               evidence={"delegate_identities": {
+                                   "generic_any_shape": {
+                                       "fake_build": "generic_any_shape"}}}),
+              fresh=True)
     assert AT.corpus_winner(region, OP_MATMUL, _TGT, A, B, dims=RAGGED,
                             dtype="float16", cache=cache,
                             device="fake:dev") == "generic_any_shape"

@@ -284,13 +284,14 @@ def test_a_stale_row_never_replaces_a_fresh_one():
     assert [r["winner"] for r in cache.to_dict()["records"]] == ["w"]
 
 
-def test_every_hand_tuned_candidate_declares_an_artifact_identity():
-    """P1-2 guard: a Tier-3 candidate is a versioned artifact (a delegate
-    library, or a kernel tessera-opt generates at run time). One registered
-    without `delegate_identity()` (a library) or `artifact_identity()` (a
-    generated kernel's instruction-stream identity) would let a rebuilt
-    artifact reuse a stale verdict, so the registry is enumerated rather than
-    listed by hand."""
+def test_every_candidate_declares_an_artifact_identity():
+    """P1-2 guard, widened 2026-09-27 (AUTOTUNE-EMITTED-IDENTITY-2026-09-27):
+    every candidate of every tier identifies the code it runs -- a delegate
+    library, a tessera-opt image's instruction stream, or an emitted lane's
+    source digest. One registered without `delegate_identity()` or
+    `artifact_identity()` would let changed code reuse a stale verdict (for a
+    SYNTHESIZED/EMITTED lane, on the toolchain pins alone -- Codex review P2 on
+    PR #859), so the registry is enumerated rather than listed by hand."""
     import importlib
     import pkgutil
 
@@ -302,15 +303,16 @@ def test_every_hand_tuned_candidate_declares_an_artifact_identity():
     for extra in ("tessera.compiler.native_ann", "tessera.compiler.native_ann_gpu"):
         importlib.import_module(extra)
 
-    hand_tuned = [c for cands in _CANDIDATES.values() for c in cands
-                  if c.tier == Tier.HAND_TUNED and not type(c).__module__.startswith("tests")
-                  and type(c).__module__.startswith("tessera.")]
-    assert hand_tuned, "the registry enumeration found no Tier-3 candidates"
-    missing = sorted(c.name for c in hand_tuned
+    registered = [c for cands in _CANDIDATES.values() for c in cands
+                  if type(c).__module__.startswith("tessera.")]
+    assert {c.tier for c in registered} == set(Tier), \
+        "the registry enumeration should reach candidates of every tier"
+    missing = sorted(c.name for c in registered
                      if type(c).delegate_identity is Candidate.delegate_identity
                      and type(c).artifact_identity is Candidate.artifact_identity)
     assert not missing, (
-        f"Tier-3 candidates without delegate_identity()/artifact_identity(): {missing}")
+        f"candidates without delegate_identity()/artifact_identity(): {missing}")
+    assert all(c.requires_artifact_identity() for c in registered)
 
 
 def test_apple_identity_does_not_depend_on_path(tmp_path):

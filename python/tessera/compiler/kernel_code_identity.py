@@ -334,8 +334,10 @@ def hsaco_kernel_identity(payload: bytes, *, entry_symbol: str, isa: str,
     }
 
 
-#: Per-process identity cache: caller key -> identity (or ``None`` for a miss).
-_IDENTITIES: dict[Hashable, dict[str, str] | None] = {}
+#: Per-process identity memo: caller key -> the image it was computed from and
+#: its identity, or ``None`` for a miss. The image is kept so a lookup can
+#: prove the launch would still run *that* image (below).
+_IDENTITIES: dict[Hashable, tuple[bytes, str, dict[str, str]] | None] = {}
 #: payload sha256 -> identity, so two keys that build one image disassemble once.
 _BY_PAYLOAD: dict[tuple[str, str, str, str], dict[str, str]] = {}
 _MISS_REASONS: dict[Hashable, str] = {}
@@ -348,32 +350,48 @@ def compiler_kernel_identity(
     isa: str,
     generator: str = "tessera-opt",
 ) -> dict[str, str] | None:
-    """The kernel-code identity for one compiler-generated candidate and key,
-    cached for the life of the process.
+    """The kernel-code identity of the image ``build_image`` returns now.
 
-    ``key`` must name everything that selects the image: the candidate, the
-    workload's kernel-selecting facts (shape, dtype, epilogue, chip) and the
-    generator binary's identity -- a rebuilt ``tessera-opt`` is a new key, so it
-    is re-identified rather than served a cached digest. ``build_image`` returns
-    ``(payload, entry_symbol)`` through the candidate's own build path (and so
-    through its content-addressed compile cache); it is called at most once per
-    key. Any failure is a cached ``None``: a miss, with :func:`miss_reason`."""
-    if key in _IDENTITIES:
-        cached = _IDENTITIES[key]
-        return None if cached is None else dict(cached)
+    ``build_image`` returns ``(payload, entry_symbol)`` through the candidate's
+    own build path -- the statement of the selection its launch goes through,
+    and so its content-addressed image cache (the hsaco caches key on the
+    directive text the Python generator produced). **It is called on every
+    lookup**, and the identity is of the image it returns: the memo under
+    ``key`` is reused only when that image is byte-identical to the one the
+    memo was computed from. ``key`` still names the candidate, the workload's
+    kernel-selecting facts and the generator binary, but it no longer has to
+    name everything that selects the image -- an in-process change to the
+    Python directive generator builds a new image, and a new image is
+    re-identified rather than served the old digest
+    (``AUTOTUNE-KERNEL-IDENTITY-MEMO``, closed 2026-09-27). The per-lookup cost
+    is the launch's own cache lookup plus a byte compare; the disassembler runs
+    once per distinct image.
+
+    Any failure is a ``None``: a miss, with :func:`miss_reason`. A key whose
+    build or identification failed stays a miss for the process (a cached
+    ``None`` can never serve a verdict, so it cannot be a false hit)."""
+    if key in _IDENTITIES and _IDENTITIES[key] is None:
+        return None
     try:
         payload, entry = build_image()
+        payload = bytes(payload)
+        memo = _IDENTITIES.get(key)
+        if memo is not None and memo[1] == entry and (
+                memo[0] is payload or memo[0] == payload):
+            return dict(memo[2])
         digest_key = (hashlib.sha256(payload).hexdigest(), entry, isa,
                       find_llvm_objdump() or "")
         identity = _BY_PAYLOAD.get(digest_key)
         if identity is None:
             identity = hsaco_kernel_identity(payload, entry_symbol=entry, isa=isa)
             _BY_PAYLOAD[digest_key] = identity
-        result: dict[str, str] | None = {"generator": generator, **identity}
+        result = {"generator": generator, **identity}
     except Exception as exc:  # noqa: BLE001 - any failure to identify is a miss
         _MISS_REASONS[key] = f"{type(exc).__name__}: {exc}"
-        result = None
-    _IDENTITIES[key] = None if result is None else dict(result)
+        _IDENTITIES[key] = None
+        return None
+    _MISS_REASONS.pop(key, None)
+    _IDENTITIES[key] = (payload, entry, dict(result))
     return result
 
 

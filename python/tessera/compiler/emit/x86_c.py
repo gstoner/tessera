@@ -156,11 +156,27 @@ class X86CEmitter(KernelEmitter):
 
 # ── Seam 2: compile_fn (source → .so) ─────────────────────────────────────────
 
+_CC_BY_ENV: dict[tuple[str | None, str | None], str] = {}
+
+
 def _cc() -> str:
-    """The C compiler to use: ``$TESSERA_X86_CC`` override, else clang/cc."""
-    return (os.environ.get("TESSERA_X86_CC")
-            or shutil.which("clang") or shutil.which("cc")
-            or shutil.which("gcc") or "cc")
+    """The C compiler to use: ``$TESSERA_X86_CC`` override, else clang/cc. The
+    PATH lookup is memoized per (override, PATH): `kernel_cache.build` keys the
+    artifact on it at every launch."""
+    env = (os.environ.get("TESSERA_X86_CC"), os.environ.get("PATH"))
+    found = _CC_BY_ENV.get(env)
+    if found is None:
+        found = (env[0] or shutil.which("clang") or shutil.which("cc")
+                 or shutil.which("gcc") or "cc")
+        _CC_BY_ENV[env] = found
+    return found
+
+
+#: Every C-compiler flag that shapes the generic lane's binary: ahead of the
+#: source, and the link inputs after it. The compile step and the lane's
+#: Decision #11 identity both read these.
+_CC_FLAGS = ("-O3", f"-march={_MARCH}", "-fPIC", "-shared")
+_CC_LINK_FLAGS = ("-lm",)
 
 
 def _x86_compile_fn(source: KernelSource) -> str:
@@ -173,7 +189,7 @@ def _x86_compile_fn(source: KernelSource) -> str:
     with open(src, "w") as f:
         f.write(source.source)
     subprocess.run(
-        [_cc(), "-O3", f"-march={_MARCH}", "-fPIC", "-shared", src, "-o", so, "-lm"],
+        [_cc(), *_CC_FLAGS, src, "-o", so, *_CC_LINK_FLAGS],
         check=True, capture_output=True, text=True)
     return so
 
@@ -295,6 +311,39 @@ class X86GenericCCandidate(Candidate):
     target = _CANDIDATE_TARGET
     op = OP_FUSED_REGION
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the C source ``run`` compiles for this workload -- the
+        guarded DYNAMIC ``KernelSource`` with its binding layouts and
+        ``kernel_cache.cache_key`` -- the ``-O3 -march=x86-64-v4`` flags, and
+        the C compiler's ``--version`` line. No pin fixes the host C compiler
+        (the ``cpu`` family pins only LLVM/MLIR), so it is named here; a host
+        whose compiler cannot report a version has no identity and misses
+        (it cannot compile the lane either). ``None`` without the two matrix
+        operands to take M/N/K from."""
+        if len(inputs) < 2:
+            return None
+        from tessera.compiler.emit.kernel_emitter import emit_kernel
+        from tessera.compiler.emitted_code_identity import (
+            compiler_version,
+            identify,
+            kernel_source_identity,
+        )
+
+        def build_identity() -> "dict[str, str] | None":
+            a_shape, b_shape = tuple(inputs[0].shape), tuple(inputs[1].shape)
+            if len(a_shape) != 2 or len(b_shape) != 2:
+                return None
+            dims = (int(a_shape[0]), int(b_shape[1]), int(a_shape[1]))
+            source = emit_kernel(region, _TARGET, SpecPolicy.DYNAMIC,
+                                 dtype="f32", dims=dims)
+            identity = kernel_source_identity(
+                source, dtype="f32", target=_TARGET,
+                build=("cc", *_CC_FLAGS, *_CC_LINK_FLAGS))
+            identity["compiler"] = compiler_version(_cc())
+            return identity
+
+        return identify(self.name, build_identity)
+
     def run(self, region: Any, A: Any, B: Any, bias: Any = None,
             residual: Any = None, *a: Any, **k: Any) -> tuple[Any, str]:
         # residual positional-or-keyword so the arbiter's positional inputs
@@ -305,7 +354,8 @@ class X86GenericCCandidate(Candidate):
 
 # ── registration (import side effect, exactly like apple_msl) ─────────────────
 register_emitter(X86CEmitter())
-register_compiler(_TARGET, _x86_compile_fn)
+register_compiler(_TARGET, _x86_compile_fn,
+                  build_line=lambda: (_cc(), *_CC_FLAGS, *_CC_LINK_FLAGS))
 register_runner(X86CRunner(), default=False)
 
 # D1 arbiter candidates: the generic C lane (Tier 1) + the opt-in AOCL-DLP lane

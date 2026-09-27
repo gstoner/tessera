@@ -19,6 +19,43 @@ streaming-STFT label fix changes only `target="rocm"`; the x86 label stays the
 constant `zen5-avx512`, which is truthful only while the x86 streaming package
 loads solely on the Zen 5 hosts — not re-verified by this change.
 
+## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: `x86_generic_c` carries a code identity (no committed x86 rows)
+
+Every arbiter candidate of every tier must now carry a code identity or its
+verdict misses (ROCm/NVIDIA queues, same key). `x86_generic_c` (T1) is keyed on
+the guarded DYNAMIC C source `run` compiles for the workload (with its binding
+layouts and `kernel_cache.cache_key`), `-O3 -march=x86-64-v4 -fPIC -shared -lm`
+(one flag list, shared with `_x86_compile_fn`), and the host C compiler's
+`--version` line -- no pin fixes the host C compiler (the `cpu` family pins only
+LLVM/MLIR), so a clang upgrade on a Zen 5 box now misses. `x86_aocl_dlp` keeps
+its library identity; the CPU `cpu_stockham` / `cpu_stencil_grad` lanes are keyed
+on their checked-in `.cpp`, flags and `$CXX --version`; the native ANN CPU lane
+on its MLIR program plus `libtessera_jit` by content. The committed corpus holds
+no x86 rows, so nothing needed re-recording. Unchanged and still open:
+`X86-GEMM-ALIGN-1`.
+
+**Cache coherence (Codex review P2 on PR #861, same key; inventory in the NVIDIA
+queue).** `x86_generic_c`'s `kernel_cache` store key now folds in the C
+compiler invoked and its flags, so a `TESSERA_X86_CC` change compiles fresh
+instead of serving the artifact the old compiler built. `cpu_stockham` and
+`cpu_stencil_grad` compile their checked-in file once per process; they are
+now stamped with the identity of the bytes that compile read (checked before
+and after it; an edit during the compile is a miss), not the file as it is
+later, and the identity covers local headers reached by a quoted `#include`
+(`StockhamRadix4.cpp`'s `../Common/FFTPlan.h` was outside it). `x86_aocl_dlp`
+and `libtessera_jit` (native ANN CPU) are pinned at load, so a replaced
+library after the load is a miss. Host-independent; verified on the Mac only
+(no x86 rows to re-check).
+
+
+**Source memo (hot-path follow-up, same key, 2026-09-27).** `x86_generic_c`'s
+`kernel_cache.build` no longer re-runs the C emitter per launch:
+`emit_kernel` serves a memoized source while `X86CEmitter.emit` and every
+global it reaches by name (`_synthesize_fused_c`, the snippet helpers,
+`_MARCH`, ...) are the same objects, and `cache_key` / the store key are
+memoized per source object (NVIDIA queue for the mechanism and the Mac
+numbers). Sibling outcome: host-independent, covered by the Mac tests; no x86
+device claim.
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

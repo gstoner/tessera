@@ -148,7 +148,12 @@ def _load() -> ctypes.CDLL:
     if path is None:
         raise TesseraJitError("libtessera_jit not built; run `ninja -C build tessera_jit` (or set TESSERA_JIT_LIB)")
     try:
-        lib = ctypes.CDLL(path)
+        # Pinned at load (Decision #11): the native ANN candidates identify the
+        # libtessera_jit that compiles their programs, and a rebuild after this
+        # load must make that identity a miss, not name bytes that do not run.
+        from tessera.compiler.toolchain_identity import load_library
+
+        lib = load_library(path)
     except OSError as exc:
         raise TesseraJitError(
             f"failed to load libtessera_jit at {path}: {exc}; rebuild the "

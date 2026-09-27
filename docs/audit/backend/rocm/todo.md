@@ -95,6 +95,126 @@ gfx1201 host" below.
   and fixed on the RTX 5070 on the same branch (NVIDIA queue); the emitted CUDA
   templates stay a follow-up until #861 merges. Apple, x86: not applicable.
 
+## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: every arbiter candidate carries a code identity; gfx1151 fused rows re-recorded
+
+Codex review P2 on PR #859: `requires_artifact_identity()` was true only for
+`HAND_TUNED`, so `rocm_generic_hip` (SYNTHESIZED) was served on the ROCm/HIP/LLVM
+pins alone and a changed HIP emitter kept a verdict measured for its old kernel.
+**Owner decision: every candidate, every tier, establishes a workload-specific
+code identity or the verdict misses.** The arbiter no longer consults a
+per-candidate opt-out (`autotune._record_matches_live_delegates`).
+
+ROCm identities, by how each lane produces code:
+
+| Candidate | Identity |
+|---|---|
+| `rocm_generic_hip` (T1) | **new** — emitted-source (`compiler/emitted_code_identity.py`, `tessera.emitted_source.v1`): the HIP text `build(region, "rocm", dtype="f32", dims=None)` compiles (dims-invariant), its `kernel_cache.cache_key`, and `hipcc --offload-arch=<arch> -O3 -fPIC -shared` (the one flag list `_rocm_hip_compile_fn` also uses). Host-computable; no device, no hipcc. |
+| `rocm_wmma_gemm`, `rocm_flash_attn` (T3) | unchanged — kernel-code v2 (normalized instruction stream of the image for the workload) |
+| `rocm_stockham` (T3) | unchanged — loaded `TesseraSpectralHIP` library by content |
+| `rocm_{rfft,irfft,stft,istft}` (T1, composed) | **new** — composing Python source + the identity of the inner `spectral_fft` lane `_inner_fft` would pick |
+| `rocm_spectral_filter` (T1) | **new** — source of its numpy `run` (approximation: numpy not covered) |
+| native storage / ANN GPU (T2/T1, scoped) | **new** — the package `binding_digest` (image + host binding + compiler digests) |
+
+**gfx1151 re-recorded 2026-09-27 on Princess-Luna** (clean worktree
+`~/programming/tessera-eid` at `61ff8b90`, own `build/`, `_rocm_env.sh`, under
+`flock /tmp/tessera-timing.lock`), `benchmarks/rocm/record_autotune_separation.py`
+defaults, timer `device_event`. The 8 `fused_region` rows now stamp both
+candidates; **winners unchanged** (`rocm_generic_hip` at 64³ end to end,
+`rocm_wmma_gemm` elsewhere), all separated; the `rocm_wmma_gemm` identities
+equal the `1dfad816` rows' (same images). A fresh process serves all 8 by
+`corpus_winner` with inferred dims, and all 8 miss after perturbing
+`_synthesize_fused_hip` with the pins asserted unchanged; the `1dfad816` corpus
+serves 0/8 under the new rule. The HIP source digest the box stamped equals the
+Mac's for the same region. Evidence:
+`benchmarks/baselines/autotune_corpus_rerecord_20260927/`. No row was
+backfilled; only these 8 records changed.
+
+Still open, unchanged: `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV` (the 8 paged-KV rows
+are read by `cache/paged_kv.py`, not the registry, and check no artifact
+identity). gfx1201 has no committed arbiter rows; its lanes carry the same
+identities. Sibling outcomes: NVIDIA follow-up required (sm_120 re-record owed,
+Super-Bear offline); x86 `x86_generic_c` identified, no rows; Apple not
+applicable (no arbiter candidates).
+
+**Cache coherence (Codex review P2 on PR #861, same key).** An identity names
+the code a lane *would* compile; a runtime cache keyed on anything less than
+that code can hand the timer a different artifact. ROCm lanes after the fix
+(full cross-backend inventory in `docs/audit/backend/nvidia/todo.md`, same key):
+
+| Lane | Cache | Old key | Now |
+|---|---|---|---|
+| `rocm_generic_hip` | `kernel_cache` + `rocm_hip._LIB_CACHE` | `cache_key` (source-safe, but no offload arch / hipcc) | store key = `cache_key` + `(hipcc, --offload-arch=<arch>, flags)` (`register_compiler(build_line=)`): a `TESSERA_ROCM_ARCH` change compiles fresh; `_LIB_CACHE` is per compiled temp path (safe) |
+| `rocm_stockham` | `spectral_candidates._libs` | loaded lib, digest of the file at identity time | pinned at load (`toolchain_identity.load_library`); a rebuild after the load is a miss |
+| `rocm_wmma_gemm`, `rocm_flash_attn` | runtime hsaco/package caches + `kernel_code_identity` memo | memo by selectors + `tessera-opt` digest | identity is the image the launch's own builder returns *now*; the memo is reused only for a byte-identical image (`AUTOTUNE-KERNEL-IDENTITY-MEMO`, closed below) |
+
+**gfx1151 re-check at `3d4bc6a8` (Princess-Luna, `~/programming/tessera-eid`,
+`build/` no-op, `_rocm_env.sh`, under the timing lock):** focused arbiter tests
+332 passed / 3 skipped (none a device lane); the serve/miss check is unchanged
+-- **8/8 served with the same digests, 8/8 miss** after the HIP emitter change;
+and a real-device probe (real hipcc, real launch) ran `rocm_generic_hip` twice
+(one compile), perturbed `_synthesize_fused_hip`, ran again: one recompile of
+exactly the new text, still `rocm_hip`, max abs err 4.8e-7, and the stamp equal
+to the digest of the text hipcc received both times. Reports:
+`~/gate-reports/eid-3d4bc6a8-gfx1151/` on that box.
+
+### `AUTOTUNE-KERNEL-IDENTITY-MEMO` — closed 2026-09-27 (Mac + Princess-Luna)
+
+**Finding (confirmed in code, both lanes).** `compiler_kernel_identity`
+memoized an image's identity under the caller's key -- the lane's selectors
+plus the `tessera-opt` digest -- and never called the build again for that
+key. The images themselves are cached on what is compiled:
+`_build_compiled_gemm_hsaco` (the gfx11 `rocm_wmma_gemm` image, reached by
+both `_rocm_wmma_fused_2d` and `_rocm_wmma_fused_image` through
+`_rocm_wmma_fused_gfx11_image`) keys `_rocm_compiled_hsaco_cache` on
+`(schedule.cache_key(), directive) + pipeline identity`, and
+`_build_compiled_flash_attn_hsaco` keys `_rocm_fa_hsaco_cache` on
+`(directive,) + pipeline identity`. So an in-process change to the Python that
+produces the directive (the schedule selection it projects, the two-wave
+variant choice) built and launched a new image while the arbiter kept stamping
+the memoized identity of the old one -- the Codex P2 shape. (gfx12's
+`build_canonical_gemm_hsaco` package cache is keyed by selectors, so there the
+launch and the identity both keep the first package; they cannot diverge.)
+
+**Fix.** `compiler_kernel_identity` now calls `build_image` -- the launch's own
+selection, through its image cache -- on every lookup and reuses the memo only
+when the returned image is byte-identical (`is`, else `==`) to the one the
+memo was computed from; a new image is re-identified (each distinct image is
+still disassembled once, via the payload-digest table). A key whose build or
+identification failed stays a cached miss (a `None` never serves). **Cost:**
+the serve-time identity check now pays the launch's image-selection path
+instead of a dict lookup -- measured on the Mac with `tessera-opt` intercepted,
+`rocm_wmma_gemm` 4.9 -> 24.3 us and `rocm_flash_attn` 1.9 -> 11.4 us per
+lookup. That is in the arbiter's served-verdict check, not in the kernel
+launch (which already paid the same selection).
+
+**Evidence.**
+- Mac (host-independent): `tests/unit/test_autotune_identity_memo_coherence.py`
+  drives the real `_rocm_wmma_fused_image` / `_rocm_wmma_fused_gfx11_image` /
+  `_rocm_flash_attn_image` with `tessera-opt` and the disassembler
+  intercepted, changes the directive generator in-process
+  (`select_rocm_gemm_schedule` returns another pipeline depth; the two-wave
+  choice flips), and requires a fresh image, an identity that moves and names
+  the launched image, one shared image between identity and launch, and no
+  rebuild / re-disassembly while unchanged. Both directive cases **fail on
+  `dedae4b0`** ("the memoized identity of the OLD image was served").
+  `test_kernel_code_identity.py`'s "builds once" test now asserts
+  "disassembles each image once".
+- **Princess-Luna gfx1151, real device** (`~/programming/tessera-eid` at
+  `946530a8`, `build/` rebuilt -- it predated the `scale-group-panels` option
+  from #860 and refused every directive -- `_rocm_env.sh`, under the timing
+  lock): a probe with real `tessera-opt`, real `llvm-objdump` and real HIP
+  launches changed the wmma directive in-process (raster `column_major`,
+  group 2) and the flash-attn variant choice (head_dim 128 one-wave): each
+  launch built exactly one fresh image, stayed correct (max err 1.1e-5 /
+  1.9e-5), and the identity moved to the digest of the image just launched;
+  restoring the generator restored the original identity with no rebuild
+  (18/18 checks, `~/gate-reports/eid-946530a8-gfx1151/probe_directive_change.txt`).
+  The gfx1151 serve check is unchanged: **8/8 served with the recorded
+  digests, 8/8 miss** after the HIP emitter change (`serve_check.txt`, same
+  dir, identical to the committed `gfx1151_serve_and_miss_check.txt` rows);
+  focused arbiter/identity tests 269 passed / 3 skipped (none a device lane)
+  and the ROCm wmma/flash/arbiter unit subset 379 passed / 18 skipped.
+
 ## GFX1201 folded MXFP4 load schedule in Target IR — 2026-09-27
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-LANES-2026-09-27`. **Shared contract

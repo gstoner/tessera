@@ -87,6 +87,15 @@ now unseparated). Route rows match 12/12; the paged-KV warm start serves the
 emitter perturbation with pins unchanged, and all 108 with all perturbed. 11
 winners changed, none served. Reproducibility: 92/92 strict records admitted.
 
+**NVIDIA release gate, device layer, at `71e1e81e`** (same box and worktree,
+under the timing lock, `TESSERA_NVIDIA_REPORT_DIR=~/gate-reports/a-71e1e81ea`):
+both device-correctness passes **1167 passed, 1 skipped, 0 failed** (junit:
+1168 tests, 0 failures, 0 errors, 1 skipped each), `status=success`. The skip
+is NCCL not installed (multi-rank topology lane not evaluable here). The 17
+new `test_emitted_unchecked_launch.py` cases are included. After the gate's
+re-configure the bridge (`1bcb4967…`) and `build/`'s GEMM (`198b85b3…`) are
+unchanged.
+
 Open, found here: the `ncu`-only exit abort of a process holding a
 generic-lane library (recorded in the evidence README, not root-caused);
 route-resource entries are keyed by route, not by code identity or storage.

@@ -191,3 +191,13 @@ different identity; the runtime loads `build/` first.
   identity covers its source (embedded, with its sha256, which the loader
   checks) but not the cubin's nvcc flags.
 - CUDA events are selection hints only (`WSL-TIMING-ADMISSION-2026-09-26`).
+
+## Release gate
+
+`scripts/run_nvidia_release_gate.sh --layer device` at `71e1e81e` (this
+evidence commit's successor, docs only) on the same box and worktree, under the
+timing lock, `TESSERA_NVIDIA_REPORT_DIR=~/gate-reports/a-71e1e81ea`: both
+passes **1167 passed, 1 skipped, 0 failed** (junit 1168 tests each); the skip
+is NCCL not installed, so the multi-rank topology lane cannot be evaluated
+here. `status=success`. The bridge and `build/` GEMM digests are unchanged
+after the gate's re-configure.

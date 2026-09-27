@@ -457,10 +457,16 @@ matches its module fails generation. Read the counts there.
    by B's address mod 64 (toggled on demand, both ways, on both Zen 5 hosts);
    the recorder now places every timed buffer 64-byte aligned and the validator
    refuses otherwise. Re-recorded twice per host at `329fcbf6`: matmul moved
-   1.016x (Princess-Luna) and 0.998x (Tajasarus) between runs. Open:
-   `X86-GEMM-ALIGN-1` (production callers with an unaligned B still pay ~1.5x at 256³)
-   and an uninvestigated 0.62x Princess-Luna reduction shift between the two
-   re-recordings (x86 queue).
+   1.016x (Princess-Luna) and 0.998x (Tajasarus) between runs.
+   **`X86-GEMM-ALIGN-1` closed 2026-09-27** (sync `X86-GEMM-ALIGN-2026-09-27`):
+   the f32 GEMM packs B into its own 64-byte-aligned, K-blocked panels, bitwise
+   identical to the old kernel; B%64's effect on the best process fell from
+   1.2–3.3x to ≤ 1.04x for M > 1 on both Zen 5 hosts (paired TSC-witnessed
+   probe; M == 1 keeps a 1.25x effect by design), and both AVX-512 packets were
+   re-recorded at `de914e51` (matmul 256³ ~0.73 / ~0.70 ms → ~0.45 / ~0.43 ms).
+   Open: an uninvestigated 0.62x Princess-Luna reduction shift between the two
+   `329fcbf6` re-recordings, and a ~7% per-process level on Princess-Luna that
+   does not follow B%64 (x86 queue).
 1. RUNTIME-LIB-OPT-1: applied 2026-09-26 (`-O2` runtime libraries + build
    record); open: re-measure the affected packets on their own boxes.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),

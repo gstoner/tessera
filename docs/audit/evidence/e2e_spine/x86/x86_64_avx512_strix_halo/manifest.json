@@ -2,17 +2,17 @@
   "architecture": "x86_64_avx512_strix_halo",
   "files": {
     "report.json": {
-      "bytes": 12274,
-      "sha256": "bb36a65df1c8e4eee921edc88680ced2230c2f865f43e3b886d16658bc09c826"
+      "bytes": 12289,
+      "sha256": "1a29560fc717a59e680cfbfe85e1d7bbddb622a4e7bc89336131fb6243f633df"
     },
     "resources.json": {
-      "bytes": 921486,
-      "sha256": "4ed9a3a2251c8c2cfbd00e739a56f9dbbe2079050e3151e09bf9c706fe5982d8"
+      "bytes": 922740,
+      "sha256": "8c847bf50155f2bc4d8db75a27a6747d5e2619d22dd5059610499b5922dbc33d"
     }
   },
   "schema": "tessera.e2e-release-packet.v1",
   "target": "x86",
-  "tested_commit": "329fcbf6d441de51c6c504922267d7d63660e53e",
+  "tested_commit": "de914e51c4201327bdacf1dcdaa9a9e557f61fc3",
   "validation": {
     "architecture": "x86_64_avx512_strix_halo",
     "benchmark_rows": 10,
@@ -21,7 +21,7 @@
     "fixtures": 5,
     "level_c_fixtures": 5,
     "maximum_absolute_error": 0.0,
-    "source_commit": "329fcbf6d441de51c6c504922267d7d63660e53e",
+    "source_commit": "de914e51c4201327bdacf1dcdaa9a9e557f61fc3",
     "target": "x86"
   }
 }

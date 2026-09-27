@@ -9,6 +9,100 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `X86-GEMM-ALIGN-2026-09-27`: `X86-GEMM-ALIGN-1` closed — the f32 GEMM packs B itself
+
+**The fix is in the kernel.** `tessera_x86_avx512_gemm_f32`
+(`src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f32.cpp`) now
+copies each block of up to eight 16-column strips × 512 rows of B into its own
+64-byte-aligned panel (≤ 256 KiB, L2-resident) and runs eight accumulators over it
+with aligned loads. Between K blocks the sum continues through C. So the caller's
+B%64 no longer decides the level.
+
+Why the kernel and not the other options:
+
+- It covers every caller: `runtime.launch`, the matmul-family lane
+  (`runtime._x86_gemm_2d`) and `TileToX86Pass`'s `func.call`.
+- Staging in the launch path would have covered only `runtime.launch`.
+- Declaring `alignment = 64` in the descriptor would have refused misaligned callers
+  rather than fixing them.
+
+`M == 1` reads B directly with the same blocking: a GEMV never reuses the panel. A
+failed panel allocation falls back to that path.
+
+**Numerics: bitwise identical to the previous kernel** at every alignment, because
+the per-element FMA order is unchanged. The checks:
+
+- `test_gemm_f32.cpp` `check_bitwise` compares against the pre-fix kernel, kept in
+  the test as the declared oracle, at every 4-byte B offset. It covers K-block
+  boundaries and K = 0. A mutation that restarts accumulators at each K block fails
+  it.
+- `test_x86_matmul_family_compiled.py::test_gemm_f32_result_independent_of_b_alignment`.
+- Every probe row compares the old and new builds' outputs bit for bit.
+
+C must not alias A or B.
+
+**Measured before/after** with a paired interleaved probe on the TSC witness route.
+It loads both builds into one process, uses fresh processes per (shape, B%64), runs
+under the timing lock, and packages the fixed build through
+`package_matmul` → `runtime.launch`. Evidence:
+`benchmarks/baselines/x86_gemm_align_20260927/`.
+
+The alignment effect is the best process at the worst B%64 divided by the best at
+the best B%64:
+
+| Shape | Princess-Luna, before → after | Tajasarus, before → after |
+|---|---|---|
+| 256³ | 1.52 → 1.00 | 1.56 → 1.01 |
+| 64×1024×1024 | 1.66 → 1.03 | 3.29 → 1.03 |
+| 1024³ | 1.68 → 1.04 | — |
+| 256×256×4096 | 1.31 → 1.01 | 1.31 → 1.03 |
+| 64×128×16384 | 1.22 → 1.01 | 1.20 → 1.01 |
+
+After/before at 256³:
+
+| B%64 | Princess-Luna | Tajasarus |
+|---|---|---|
+| 0 (aligned) | 0.62–0.66 | 0.62–0.66 |
+| 16 / 32 / 48 | 0.41–0.42 | 0.41–0.43 |
+
+Aligned performance did not regress for any M > 1 shape: 0.09–0.69x of before.
+Calls under ~10 µs are dominated by the ctypes call and read 0.88–1.00x.
+
+**Still alignment-sensitive, recorded not fixed:**
+
+- `M == 1`: 1.25–1.28x between aligned and misaligned B. It is faster than packing
+  at every alignment, and 0.12–0.18x of before.
+- `tessera_x86_avx512_gemm_f32_tiled` (the T1 evidence ABI) is unchanged, because its
+  committed baselines measure that loop nest.
+- The bf16 / f64 / u8s8 GEMMs are unchanged and their sensitivity is unmeasured.
+
+**Not investigated:** a per-process level that does not follow B%64 remains, before
+and after the fix: ~7% on Princess-Luna (256³: 448–479 µs), ≤ 4% on Tajasarus.
+
+**Re-recorded AVX-512 E2E packets.** Both hosts were re-recorded twice at
+`de914e51`, because the committed matmul row pinned the old kernel. matmul 256³
+`kernel_wall`:
+
+| Host | Before (`329fcbf6`) | Run 1 → run 2 (`de914e51`) |
+|---|---|---|
+| Princess-Luna | 731.6 µs | 480.1 → 446.7 µs (0.93, the per-process level above) |
+| Tajasarus | 695.3 µs | 436.4 → 434.1 µs |
+
+The other four families moved ≤ 4.5% against the `329fcbf6` packets. The second runs
+are committed; the first runs are `*_run1/` in the evidence directory.
+
+Not re-recorded:
+
+- `x86_zen5_profiler_packet_20260926_princess_luna`. Its verdict is
+  production/scheduled parity of byte-identical images at launch-dominated shapes,
+  and it does not pin the alignment level.
+- The `benchmark_x86_t1_cache_model` / `benchmark_x86_e2e_real_matmul` /
+  `benchmark_x86_e2e_dtype_matmul` baselines listed below. The first times `_tiled`
+  (unchanged). The committed absolute f32 GEMM latencies of the other two time the old
+  kernel; their production/scheduled ratios share one image and are unaffected.
+
+Sibling backends: not applicable (the change is x86 kernel code only).
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
 
 The ROCm spectral image read HIP's per-thread, sticky last-error slot after
@@ -40,7 +134,7 @@ its library identity; the CPU `cpu_stockham` / `cpu_stencil_grad` lanes are keye
 on their checked-in `.cpp`, flags and `$CXX --version`; the native ANN CPU lane
 on its MLIR program plus `libtessera_jit` by content. The committed corpus holds
 no x86 rows, so nothing needed re-recording. Unchanged and still open:
-`X86-GEMM-ALIGN-1`.
+`X86-GEMM-ALIGN-1` (since closed by `X86-GEMM-ALIGN-2026-09-27`).
 
 **Cache coherence (Codex review P2 on PR #861, same key; inventory in the NVIDIA
 queue).** `x86_generic_c`'s `kernel_cache` store key now folds in the C
@@ -166,7 +260,7 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   the one refused attempt (softmax 4.194% > 4% stability) and the run-to-run table.
   Attention is now stable across recordings (0.993 / 1.012).
   **`X86-MATMUL-BIMODAL-1` root-caused; measurement fixed 2026-09-26 (`329fcbf6`; production
-  exposure open as `X86-GEMM-ALIGN-1`):** the level
+  exposure open as `X86-GEMM-ALIGN-1`, closed 2026-09-27):** the level
   is decided by **B's address modulo 64**. `tessera_x86_avx512_gemm_f32` issues one
   64-byte `_mm512_loadu_ps` of B per FMA (A is a scalar broadcast, C is stored once
   per 256 FMAs); a 64-byte load from an address that is not 64-byte aligned spans
@@ -204,7 +298,9 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   processes (Tajasarus ~3%); that spread is not investigated. Both packets
   re-recorded twice at `329fcbf6`; matmul `kernel_wall` run 1 → run 2: Princess-Luna
   720.0 → 731.6 µs (1.016), Tajasarus 696.6 → 695.3 µs (0.998).
-  **Open (`X86-GEMM-ALIGN-1`):** the production path still inherits the caller's
+  **Closed 2026-09-27 (`X86-GEMM-ALIGN-2026-09-27`, top of this file): the kernel now
+  packs B into its own aligned panels; the three candidates below are kept as the record.**
+  **Was open (`X86-GEMM-ALIGN-1`):** the production path still inherits the caller's
   alignment — `runtime.launch` passes contiguous numpy buffers through unchanged —
   so any caller whose B is not 64-byte aligned runs this GEMM ~1.5x slower at 256³
   (only that shape and the f32 kernel were measured). Three candidates:

@@ -1,0 +1,149 @@
+# host=Princess-Luna cpu=AMD RYZEN AI MAX+ 395 w/ Radeon 8060S; 2026-09-27; every process under flock /tmp/tessera-timing.lock
+# K-block screen: v7 (unblocked K x 128 panel) vs v9 (panel blocked by KC rows, KC=256 or 512 via env KC); 3 fresh processes per (shape, B%64, variant)
+# compile: g++ -O2 -mavx512f -mavx512bw -mavx512dq -mavx512vl -std=gnu++17 kblock_variants.cpp (g++ 15.2.0-16ubuntu1)
+# kblock_variants.cpp sha256=524387bc74ce6920b934186368ae6e1cdc344fb2b88a8551dc2a737a2d6b1bb7 (design_variants.cpp + v9)
+# timing: CLOCK_MONOTONIC_RAW, median of 9 samples; lines prefixed kc=N are v9 with that KC
+nb=8 v7 M=64 N=128 K=16384 offB=0 med_us=4590.24 min_us=4517.43 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=0 med_us=3682.67 min_us=3658.97 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=0 med_us=3657.68 min_us=3643.19 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=0 med_us=8290.18 min_us=8231.15 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=0 med_us=7163.50 min_us=7126.10 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=0 med_us=7552.54 min_us=7192.35 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=0 med_us=476.61 min_us=466.16 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=0 med_us=441.63 min_us=437.71 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=0 med_us=442.25 min_us=440.53 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=0 med_us=28668.79 min_us=28562.40 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=0 med_us=30696.65 min_us=30553.27 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=0 med_us=28325.97 min_us=28244.84 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=16 med_us=4850.43 min_us=4795.43 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=16 med_us=3669.26 min_us=3648.75 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=16 med_us=3664.78 min_us=3634.71 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=16 med_us=8406.44 min_us=8342.31 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=16 med_us=7167.27 min_us=7148.60 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=16 med_us=7139.65 min_us=7115.82 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=16 med_us=446.15 min_us=443.57 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=16 med_us=446.16 min_us=445.52 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=16 med_us=444.02 min_us=441.16 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=16 med_us=28996.55 min_us=28887.45 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=16 med_us=28803.94 min_us=28700.69 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=16 med_us=30487.21 min_us=30412.75 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=32 med_us=5344.83 min_us=5323.16 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=32 med_us=3962.17 min_us=3930.57 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=32 med_us=3921.10 min_us=3912.00 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=32 med_us=8977.25 min_us=8935.67 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=32 med_us=7147.96 min_us=7075.80 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=32 med_us=7128.11 min_us=7110.34 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=32 med_us=445.52 min_us=444.15 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=32 med_us=443.74 min_us=442.34 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=32 med_us=468.94 min_us=440.75 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=32 med_us=30566.79 min_us=30382.78 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=32 med_us=30867.97 min_us=30824.41 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=32 med_us=30776.43 min_us=30665.72 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=48 med_us=5131.43 min_us=5040.88 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=48 med_us=3950.93 min_us=3602.69 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=48 med_us=3640.22 min_us=3610.94 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=48 med_us=8126.26 min_us=8101.13 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=48 med_us=7636.04 min_us=7399.17 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=48 med_us=7109.09 min_us=7081.14 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=48 med_us=472.08 min_us=443.94 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=48 med_us=476.16 min_us=469.28 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=48 med_us=446.37 min_us=441.94 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=48 med_us=28608.14 min_us=28509.48 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=48 med_us=31010.67 min_us=30979.82 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=48 med_us=30879.19 min_us=30760.91 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=0 med_us=5572.16 min_us=5523.01 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=0 med_us=3655.90 min_us=3622.08 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=0 med_us=3885.53 min_us=3730.32 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=0 med_us=9048.66 min_us=8968.19 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=0 med_us=7973.80 min_us=7924.95 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=0 med_us=7692.83 min_us=7668.69 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=0 med_us=478.64 min_us=467.05 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=0 med_us=477.82 min_us=471.54 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=0 med_us=477.93 min_us=466.06 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=0 med_us=30622.69 min_us=30377.35 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=0 med_us=30794.60 min_us=30655.75 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=0 med_us=28300.04 min_us=28252.68 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=16 med_us=4467.08 min_us=4446.12 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=16 med_us=3888.38 min_us=3714.12 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=16 med_us=3944.69 min_us=3849.52 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=16 med_us=8235.70 min_us=8202.83 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=16 med_us=7564.73 min_us=7178.94 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=16 med_us=7142.04 min_us=7107.35 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=16 med_us=446.75 min_us=444.89 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=16 med_us=443.63 min_us=441.66 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=16 med_us=469.75 min_us=440.56 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=16 med_us=30454.15 min_us=30386.69 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=16 med_us=30789.47 min_us=30575.28 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=16 med_us=30805.92 min_us=30749.58 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=32 med_us=5266.89 min_us=5236.31 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=32 med_us=3949.51 min_us=3932.34 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=32 med_us=3935.93 min_us=3919.61 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=32 med_us=9159.05 min_us=9125.88 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=32 med_us=7755.72 min_us=7725.06 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=32 med_us=7683.94 min_us=7676.08 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=32 med_us=479.05 min_us=469.25 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=32 med_us=477.51 min_us=467.57 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=32 med_us=479.61 min_us=470.35 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=32 med_us=31295.14 min_us=31242.50 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=32 med_us=28742.25 min_us=28690.29 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=32 med_us=28389.19 min_us=28293.62 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=48 med_us=5150.18 min_us=5060.65 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=48 med_us=3922.99 min_us=3870.87 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=48 med_us=3919.62 min_us=3903.50 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=48 med_us=8220.57 min_us=8199.02 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=48 med_us=7238.42 min_us=7197.04 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=48 med_us=7164.13 min_us=7130.08 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=48 med_us=446.99 min_us=444.79 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=48 med_us=445.45 min_us=444.14 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=48 med_us=443.57 min_us=442.44 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=48 med_us=28296.23 min_us=28237.33 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=48 med_us=28886.03 min_us=28849.44 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=48 med_us=28488.24 min_us=28330.80 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=0 med_us=4602.60 min_us=4465.39 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=0 med_us=3676.20 min_us=3656.24 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=0 med_us=3869.55 min_us=3723.33 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=0 med_us=8739.19 min_us=8707.43 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=0 med_us=7689.06 min_us=7660.81 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=0 med_us=7676.16 min_us=7643.67 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=0 med_us=479.11 min_us=470.62 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=0 med_us=444.14 min_us=439.69 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=0 med_us=444.39 min_us=440.88 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=0 med_us=28224.77 min_us=28176.49 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=0 med_us=30939.24 min_us=30725.40 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=0 med_us=30624.85 min_us=30343.94 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=16 med_us=5356.42 min_us=5318.00 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=16 med_us=3936.97 min_us=3925.70 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=16 med_us=3633.01 min_us=3613.05 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=16 med_us=9084.43 min_us=8991.59 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=16 med_us=7129.93 min_us=7112.89 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=16 med_us=7124.74 min_us=7113.26 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=16 med_us=446.40 min_us=443.59 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=16 med_us=444.80 min_us=443.53 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=16 med_us=444.32 min_us=442.53 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=16 med_us=28668.15 min_us=28579.44 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=16 med_us=28816.61 min_us=28738.88 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=16 med_us=30696.70 min_us=30659.15 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=32 med_us=5417.00 min_us=5337.25 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=32 med_us=3961.54 min_us=3941.16 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=32 med_us=3929.69 min_us=3922.47 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=32 med_us=8783.72 min_us=8758.67 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=32 med_us=7742.85 min_us=7701.98 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=32 med_us=7672.74 min_us=7650.99 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=32 med_us=480.69 min_us=470.63 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=32 med_us=478.01 min_us=467.57 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=32 med_us=478.48 min_us=470.77 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=32 med_us=30687.53 min_us=30525.50 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=32 med_us=31042.80 min_us=31010.32 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=32 med_us=28652.50 min_us=28587.06 bitwise=1
+nb=8 v7 M=64 N=128 K=16384 offB=48 med_us=5168.17 min_us=5063.64 bitwise=1
+kc=256 nb=8 v9 M=64 N=128 K=16384 offB=48 med_us=3966.97 min_us=3924.33 bitwise=1
+kc=512 nb=8 v9 M=64 N=128 K=16384 offB=48 med_us=3642.83 min_us=3615.62 bitwise=1
+nb=8 v7 M=256 N=256 K=4096 offB=48 med_us=8393.84 min_us=8377.12 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=4096 offB=48 med_us=7640.50 min_us=7420.27 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=4096 offB=48 med_us=7126.97 min_us=7094.43 bitwise=1
+nb=8 v7 M=256 N=256 K=256 offB=48 med_us=470.52 min_us=440.66 bitwise=1
+kc=256 nb=8 v9 M=256 N=256 K=256 offB=48 med_us=477.28 min_us=468.11 bitwise=1
+kc=512 nb=8 v9 M=256 N=256 K=256 offB=48 med_us=478.31 min_us=465.31 bitwise=1
+nb=8 v7 M=1024 N=1024 K=1024 offB=48 med_us=30844.61 min_us=30799.15 bitwise=1
+kc=256 nb=8 v9 M=1024 N=1024 K=1024 offB=48 med_us=30880.94 min_us=30798.72 bitwise=1
+kc=512 nb=8 v9 M=1024 N=1024 K=1024 offB=48 med_us=28589.18 min_us=28549.16 bitwise=1

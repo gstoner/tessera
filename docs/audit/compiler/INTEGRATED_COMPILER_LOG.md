@@ -5133,3 +5133,40 @@ slot must fail the lane. The two mma.sync attention entries are the recorded
 exception. A successful `cudaFuncSetAttribute` resets the slot (measured on
 sm_120), which masks them; they clear anyway, because the rule must not rest on
 undocumented behaviour.
+
+### 2026-09-27 — The x86 f32 GEMM packs B itself: alignment no longer sets its speed
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: branch `claude/x86-gemm-align`.
+Sync: `X86-GEMM-ALIGN-2026-09-27` (closes `X86-GEMM-ALIGN-1`).
+
+Outcome: `tessera_x86_avx512_gemm_f32` read B with one unaligned 64-byte load per
+FMA, so any caller whose B was not 64-byte aligned (numpy guarantees 16) ran it
+~1.5x slower at 256³ (`X86-MATMUL-BIMODAL-1`); the recorder had been aligned, the
+production path had not. The kernel now copies up-to-8-strip × 512-row blocks of B
+into its own 64-byte-aligned L2-resident panel and runs eight accumulators over it;
+the sum continues through C between K blocks; `M == 1` reads B directly (no reuse
+to amortize a copy). Fixed in the kernel rather than in `runtime.launch` because
+the matmul-family lane and `TileToX86Pass`'s `func.call` reach the symbol
+directly. Results are bitwise identical to the pre-fix kernel at every alignment
+(declared oracle in `test_gemm_f32.cpp`, checked by `memcmp` at every 4-byte B
+offset; a K-block mutation fails it). Measured with a paired interleaved
+before/after probe (both builds in one process, TSC witness, timing lock,
+production package asserted to embed the timed library) at B%64 ∈ {0,16,32,48}:
+best-process alignment effect 1.2–3.3x → ≤ 1.04x for M > 1 on Princess-Luna and
+Tajasarus; 256³ 0.41–0.42x of before when misaligned, 0.62–0.66x when aligned; no
+M > 1 shape slower. Both AVX-512 E2E packets re-recorded twice at `de914e51`
+(matmul 256³ ~0.73 / ~0.70 ms → ~0.45 / ~0.43 ms; other families within 4.5%).
+
+Remaining: `M == 1` keeps a 1.25x alignment effect (faster than packing at every
+alignment); `_tiled` and the bf16 / f64 / u8s8 GEMMs unchanged (sensitivity of the
+latter unmeasured); a ~7% per-process level on Princess-Luna that does not follow
+B%64, not investigated.
+
+Evidence: `benchmarks/baselines/x86_gemm_align_20260927/`,
+`docs/audit/evidence/e2e_spine/x86/x86_64_avx512_{strix_halo,granite_ridge}/`,
+`src/compiler/codegen/tessera_x86_backend/tests/test_gemm_f32.cpp`,
+`tests/unit/test_x86_matmul_family_compiled.py`.
+
+<!-- entry-fields:end -->

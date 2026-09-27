@@ -8,10 +8,10 @@ The build tree is chosen with ``TESSERA_BUILD_DIR`` (``runtime._tessera_opt_path
                binary digest, the fused image's payload and per-section
                digests, and the kernel-code identity. JSON on stdout.
   compare   -- two ``identity`` outputs: which fields differ between the trees.
-  served    -- load the committed corpus and ask ``corpus_winner`` and
-               ``measured_arbitrate`` for each key, with timing disabled: a
-               re-measure raises instead of running, so a returned winner was
-               served from the record.
+  served    -- load the committed corpus and ask for each key the way
+               production does (no explicit dims): ordinary ``run_arbitrated``
+               dispatch, ``corpus_winner``, and ``measured_arbitrate`` with
+               re-measurement disabled (a miss raises instead of timing).
 """
 from __future__ import annotations
 
@@ -93,49 +93,98 @@ def compare(path_a: str, path_b: str) -> int:
               f" sections varied={varied or 'none'} kernel identity identical={bool(same_kid)}"
               f" stream={kid.get('instruction_stream_sha256', 'NONE')[:16]}"
               f" kd={kid.get('kernel_descriptor_sha256', 'NONE')[:16]}"
-              f" n={kid.get('instruction_count')}")
+              f" n={kid.get('instruction_count')} data={kid.get('data_sections')}"
+              f" disassembler={kid.get('disassembler')!r}")
     return 1 if bad else 0
 
 
 def served() -> int:
+    """Each committed row, asked for the way production asks: no explicit dims.
+
+    * ``run_arbitrated(region, op, "rocm", a, b, bias)`` -- ordinary dispatch.
+      ``corpus_winner`` is wrapped only to record what it returned; dispatch
+      consults the device row first, so this shows the device row serving.
+    * ``corpus_winner`` for each timing, dims inferred.
+    * ``measured_arbitrate`` for each timing, dims inferred, with its miss path
+      (``arbitrate``) replaced by a raise: a returned winner came from the row.
+    """
     from tessera.compiler import fusion as F
+    from tessera.compiler import kernel_code_identity as KI
     from tessera.compiler.emit import autotune as at
+    from tessera.compiler.emit import candidate as C
     from tessera.compiler.emit import rocm_hip  # noqa: F401 - registers candidates
     from tessera.compiler.emit.candidate import OP_FUSED_REGION
     from tessera.compiler.toolchain_identity import tessera_opt_identity
 
-    def refuse(*args, **kwargs):
-        raise RuntimeError("re-measure attempted: the row was NOT served")
-
-    at.arbitrate = refuse                  # measured_arbitrate's miss path
     region = F.FusedRegion(epilogue=("bias", "gelu"))
-    print(f"serving tree tessera-opt abi_digest {tessera_opt_identity()['abi_digest']}")
+    print(f"serving tessera-opt abi_digest {tessera_opt_identity()['abi_digest']}; "
+          f"device key {at._device_id('rocm')}; disassembler {KI.find_llvm_objdump()}")
+    committed = at.MeasureCache()
+    at.load_corpus(cache=committed)
+    real_corpus_winner = at.corpus_winner
+    real_arbitrate = at.arbitrate
     bad = 0
     for size in SHAPES:
         a, b, bias = _workload(size)
+        dims = at._infer_dims(OP_FUSED_REGION, (a, b, bias))
         live = rocm_hip.RocmWmmaGemmCandidate().artifact_identity(region, a, b, bias)
+        recs = {}
         for timing in (at.TIMING_END_TO_END, at.TIMING_DEVICE):
-            cache = at.MeasureCache()
-            at.load_corpus(cache=cache)
             key = ("rocm:gfx1151", "rocm", OP_FUSED_REGION,
-                   at.bucket_key((size, size), at.SpecPolicy.BUCKET), "f16", timing)
-            rec = cache.get(key)
+                   at.bucket_key(dims, at.SpecPolicy.BUCKET), "f16", timing)
+            recs[timing] = committed._store.get(key)
+
+        # 1. ordinary dispatch
+        answers: list[tuple[str, object]] = []
+
+        def recording(*args, **kwargs):
+            result = real_corpus_winner(*args, **kwargs)
+            answers.append((kwargs.get("timing"), result))
+            return result
+
+        at.corpus_winner = recording
+        C.reset_arbiter_dispatch_log()
+        try:
+            _, tag = C.run_arbitrated(region, OP_FUSED_REGION, "rocm", a, b, bias)
+        finally:
+            at.corpus_winner = real_corpus_winner
+        selected = C.arbiter_dispatch_log()[-1][2]
+        device_rec = recs[at.TIMING_DEVICE]
+        dispatch_ok = (device_rec is not None and answers
+                       and answers[0] == (at.TIMING_DEVICE, device_rec.winner)
+                       and selected == device_rec.winner and tag != "reference")
+        print(f"{size}^3 dims={dims} run_arbitrated: corpus_winner answers={answers} "
+              f"selected={selected} tag={tag} -> "
+              f"{'SERVED (device row)' if dispatch_ok else 'NOT SERVED'}")
+        bad += not dispatch_ok
+
+        # 2./3. each row, both lookups, dims inferred
+        for timing, rec in recs.items():
             recorded = (rec.evidence.get("delegate_identities", {}).get("rocm_wmma_gemm")
                         if rec else None)
+            cache = at.MeasureCache()
+            at.load_corpus(cache=cache)
             hint = at.corpus_winner(region, OP_FUSED_REGION, "rocm", a, b, bias,
-                                    dims=(size, size), dtype="f16", cache=cache,
-                                    timing=timing)
+                                    dtype="f16", cache=cache, timing=timing)
+
+            def refuse(*args, **kwargs):
+                raise RuntimeError("re-measure attempted: the row was NOT served")
+
+            at.arbitrate = refuse
             try:
                 chosen = at.measured_arbitrate(
-                    region, OP_FUSED_REGION, "rocm", a, b, bias, dims=(size, size),
+                    region, OP_FUSED_REGION, "rocm", a, b, bias,
                     dtype="f16", cache=cache, timing=timing).name
             except RuntimeError as exc:
                 chosen = f"MISS ({exc})"
+            finally:
+                at.arbitrate = real_arbitrate
             ok = rec is not None and hint == rec.winner and chosen == rec.winner
             bad += not ok
             sep = (rec.separation or {}) if rec else {}
-            print(f"{size}^3 {timing:10s} recorded={rec.winner if rec else None}"
-                  f" separated={sep.get('separated')} identity_match={recorded == live}"
+            print(f"    {timing:10s} recorded={rec.winner if rec else None}"
+                  f" separated={sep.get('separated')}"
+                  f" identity_mismatch={KI.identity_mismatch(recorded, live)}"
                   f" corpus_winner={hint} measured_arbitrate={chosen}"
                   f" -> {'SERVED' if ok else 'NOT SERVED'}")
     return 1 if bad else 0

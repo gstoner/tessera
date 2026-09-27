@@ -190,9 +190,11 @@ def toolchain_identity(
     delegate: Mapping[str, str] | None = None,
 ) -> ToolchainIdentity:
     """The (pin-based) toolchain identity a measurement on ``arch_or_target``
-    carries. ``delegate`` — :func:`delegate_library_identity` (or
-    :func:`tessera_opt_identity`) of the artifact measured, when the cache keys
-    one measurement per artifact (``autotune_v2``). The arbiter corpus keeps
+    carries. ``delegate`` — :func:`delegate_library_identity` of the delegate
+    library measured, or the ``kernel_code_identity`` of a compiler-generated
+    kernel, when the cache keys one measurement per artifact (``autotune_v2``).
+    Not :func:`tessera_opt_identity`: a compiler binary's digest differs on
+    every build and is only a cache key now. The arbiter corpus keeps
     per-candidate identities separately (``evidence.delegate_identities``)."""
     family = target_family(arch_or_target)
     return ToolchainIdentity(family, _family_components(family), dict(delegate or {}))

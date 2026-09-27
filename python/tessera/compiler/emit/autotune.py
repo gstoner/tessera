@@ -852,6 +852,13 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
     cache = cache if cache is not None else _DEFAULT_CACHE
     _maybe_warm_start(cache)
     dev = device or _device_id(target)
+    # The same dims authority `corpus_winner` uses, so a verdict recorded
+    # without explicit dims lands under the key ordinary dispatch looks up.
+    # A recorder that passed hand-built dims could key a row where production
+    # never looks: the gfx1151 fused rows were written under a 2-D (M, N)
+    # bucket while `run_arbitrated` infers (M, N, K), so none was ever served.
+    if dims is None:
+        dims = _infer_dims(op, inputs)
     bucket = bucket_key(dims, SpecPolicy.BUCKET) if dims is not None else None
     if timing not in _TIMING_MODES:
         raise ValueError(f"unknown autotune timing mode {timing!r}")

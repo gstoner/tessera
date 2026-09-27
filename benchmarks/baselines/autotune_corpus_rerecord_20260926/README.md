@@ -47,3 +47,13 @@ nvidia todos). Logs are `.txt` because the repo ignores `*.log`.
   `nvidia_sm120_autotune_reproducibility.json` is its output.
 - The file was re-ordered to the prior committed record order after finalizing (content
   verbatim), so the 16 gfx1151 rows are textually untouched.
+- `gfx1151_fused_kernel_identity_v2.txt` — review fixes, same host and worktree, clean at
+  `41c4feb4` (`claude/timing-foundation-kernel-identity-fixes`), `build-a/`/`build-b/` rebuilt
+  there. Supersedes the rows of the file above, which used a 2-D `(M, N)` bucket that ordinary
+  `run_arbitrated` dispatch never looked up and the v1 identity (undecodable words dropped,
+  `.rodata` tables not digested). Contents: real-tool checks of the v2 fail-closed and data
+  rules on assembled gfx1151 kernels; v2 identities equal across the two trees and the
+  `59ecd215` `tessera-opt`; the old rows not served when asked without dims; the re-record in
+  `build-a` with no explicit dims (winners and separation unchanged); all 8 rows served by
+  ordinary `run_arbitrated`, `corpus_winner` and `measured_arbitrate` (dims inferred,
+  re-measurement disabled) in `build-b`, with the `59ecd215` `tessera-opt`, and in `build-a`.

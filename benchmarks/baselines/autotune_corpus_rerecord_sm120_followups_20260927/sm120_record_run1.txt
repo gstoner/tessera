@@ -1,0 +1,108 @@
+host=The-Super-Bear commit=31a58bd49be8e099d167ad9e30dc3227f5838747 dirty=0
+NVIDIA GeForce RTX 5070, 610.88
+Cuda compilation tools, release 13.4, V13.4.59
+Build cuda_13.4.r13.4/compiler.38657139_0
+/usr/local/cuda/bin/nvcc
+/home/angstorms/programming/tessera/.venv/bin/python
+lock acquired 2026-09-27T18:13:24Z; compute apps: 0
+matmul float16 64x64x64: nvidia_tile_matmul_shared
+matmul-device float16 64x64x64: nvidia_mma_gemm_emitted
+matmul float16 256x256x256: nvidia_mma_gemm_shipped
+matmul-device float16 256x256x256: nvidia_mma_gemm_emitted
+matmul float16 512x512x512: nvidia_mma_gemm_emitted
+matmul-device float16 512x512x512: nvidia_mma_gemm_emitted
+matmul float16 1024x1024x1024: nvidia_mma_gemm_shipped
+matmul-device float16 1024x1024x1024: nvidia_mma_gemm_emitted
+matmul float16 2048x2048x2048: nvidia_mma_gemm_shipped
+matmul-device float16 2048x2048x2048: nvidia_mma_gemm_emitted
+matmul float16 128x256x64: nvidia_tile_matmul_shared
+matmul-device float16 128x256x64: nvidia_tile_matmul_direct
+matmul float16 127x259x63: nvidia_tile_matmul_direct
+matmul-device float16 127x259x63: nvidia_tile_matmul_direct
+matmul bfloat16 64x64x64: nvidia_tile_matmul_direct
+matmul-device bfloat16 64x64x64: nvidia_mma_gemm_emitted
+matmul bfloat16 256x256x256: nvidia_tile_matmul_direct
+matmul-device bfloat16 256x256x256: nvidia_mma_gemm_shipped
+matmul bfloat16 512x512x512: nvidia_mma_gemm_emitted
+matmul-device bfloat16 512x512x512: nvidia_mma_gemm_emitted
+matmul bfloat16 1024x1024x1024: nvidia_mma_gemm_shipped
+matmul-device bfloat16 1024x1024x1024: nvidia_mma_gemm_emitted
+matmul bfloat16 2048x2048x2048: nvidia_mma_gemm_shipped
+matmul-device bfloat16 2048x2048x2048: nvidia_mma_gemm_emitted
+matmul bfloat16 128x256x64: nvidia_mma_gemm_emitted
+matmul-device bfloat16 128x256x64: nvidia_mma_gemm_emitted
+matmul bfloat16 127x259x63: nvidia_tile_matmul_direct
+matmul-device bfloat16 127x259x63: nvidia_tile_matmul_shared
+fused 64x64x64: nvidia_mma_fused
+fused 256x256x256: nvidia_mma_fused
+fused 128x512x256: nvidia_mma_fused
+fused 127x259x63: nvidia_mma_fused
+fused 128x256x256: nvidia_mma_fused
+attention 128x128x64x64: nvidia_mma_attn
+attention 64x512x64x64: nvidia_flash_attn
+attention 64x256x64x64: nvidia_flash_attn
+fused-end_to_end f32 64x64x64: nvidia_mma_fused_composed_tf32
+fused-device f32 64x64x64: nvidia_mma_fused_tf32
+fused-end_to_end f32 256x256x256: nvidia_mma_fused_composed_tf32
+fused-device f32 256x256x256: nvidia_mma_fused_tf32
+fused-end_to_end f32 128x512x256: nvidia_mma_fused_tf32
+fused-device f32 128x512x256: nvidia_mma_fused_tf32
+fused-end_to_end f32 127x259x63: nvidia_mma_fused_tf32
+fused-device f32 127x259x63: nvidia_mma_fused_tf32
+fused-end_to_end f32 128x256x256: nvidia_mma_fused_composed_tf32
+fused-device f32 128x256x256: nvidia_mma_fused_tf32
+attention-end_to_end f32 128x128x64x64: nvidia_mma_attn_tf32
+attention-device f32 128x128x64x64: nvidia_mma_attn_tf32
+attention-end_to_end f32 64x512x64x64: nvidia_mma_attn_composed_tf32
+attention-device f32 64x512x64x64: nvidia_mma_attn_composed_tf32
+attention-end_to_end f32 64x256x64x64: nvidia_mma_attn_tf32
+attention-device f32 64x256x64x64: nvidia_mma_attn_composed_tf32
+gated-end_to_end f32 64x256x256: nvidia_mma_gated_tf32
+gated-device f32 64x256x256: nvidia_mma_gated_tf32
+gated-end_to_end f32 128x512x512: nvidia_mma_gated_composed_tf32
+gated-device f32 128x512x512: nvidia_mma_gated_tf32
+fused-end_to_end fp8_e4m3 64x64x64: nvidia_mma_fused_fp8_e4m3
+fused-device fp8_e4m3 64x64x64: nvidia_mma_fused_fp8_e4m3
+fused-end_to_end fp8_e4m3 256x256x256: nvidia_mma_fused_fp8_e4m3
+fused-device fp8_e4m3 256x256x256: nvidia_mma_fused_fp8_e4m3
+fused-end_to_end fp8_e4m3 128x512x256: nvidia_mma_fused_composed_fp8_e4m3
+fused-device fp8_e4m3 128x512x256: nvidia_mma_fused_fp8_e4m3
+fused-end_to_end fp8_e4m3 127x259x63: nvidia_mma_fused_fp8_e4m3
+fused-device fp8_e4m3 127x259x63: nvidia_mma_fused_fp8_e4m3
+fused-end_to_end fp8_e4m3 128x256x256: nvidia_mma_fused_fp8_e4m3
+fused-device fp8_e4m3 128x256x256: nvidia_mma_fused_fp8_e4m3
+attention-end_to_end fp8_e4m3 128x128x64x64: nvidia_mma_attn_fp8_e4m3
+attention-device fp8_e4m3 128x128x64x64: nvidia_mma_attn_fp8_e4m3
+attention-end_to_end fp8_e4m3 64x512x64x64: nvidia_flash_attn
+attention-device fp8_e4m3 64x512x64x64: nvidia_mma_attn_composed_fp8_e4m3
+attention-end_to_end fp8_e4m3 64x256x64x64: nvidia_flash_attn
+attention-device fp8_e4m3 64x256x64x64: nvidia_mma_attn_fp8_e4m3
+gated-end_to_end fp8_e4m3 64x256x256: nvidia_mma_gated_fp8_e4m3
+gated-device fp8_e4m3 64x256x256: nvidia_mma_gated_fp8_e4m3
+gated-end_to_end fp8_e4m3 128x512x512: nvidia_mma_gated_fp8_e4m3
+gated-device fp8_e4m3 128x512x512: nvidia_mma_gated_fp8_e4m3
+fused-end_to_end fp8_e5m2 64x64x64: nvidia_mma_fused_fp8_e5m2
+fused-device fp8_e5m2 64x64x64: nvidia_mma_fused_fp8_e5m2
+fused-end_to_end fp8_e5m2 256x256x256: nvidia_mma_fused_fp8_e5m2
+fused-device fp8_e5m2 256x256x256: nvidia_mma_fused_fp8_e5m2
+fused-end_to_end fp8_e5m2 128x512x256: nvidia_mma_fused_fp8_e5m2
+fused-device fp8_e5m2 128x512x256: nvidia_mma_fused_fp8_e5m2
+fused-end_to_end fp8_e5m2 127x259x63: nvidia_mma_fused_fp8_e5m2
+fused-device fp8_e5m2 127x259x63: nvidia_mma_fused_fp8_e5m2
+fused-end_to_end fp8_e5m2 128x256x256: nvidia_mma_fused_fp8_e5m2
+fused-device fp8_e5m2 128x256x256: nvidia_mma_fused_fp8_e5m2
+attention-end_to_end fp8_e5m2 128x128x64x64: nvidia_mma_attn_fp8_e5m2
+attention-device fp8_e5m2 128x128x64x64: nvidia_mma_attn_fp8_e5m2
+attention-end_to_end fp8_e5m2 64x512x64x64: nvidia_flash_attn
+attention-device fp8_e5m2 64x512x64x64: nvidia_mma_attn_composed_fp8_e5m2
+attention-end_to_end fp8_e5m2 64x256x64x64: nvidia_flash_attn
+attention-device fp8_e5m2 64x256x64x64: nvidia_mma_attn_fp8_e5m2
+gated-end_to_end fp8_e5m2 64x256x256: nvidia_mma_gated_fp8_e5m2
+gated-device fp8_e5m2 64x256x256: nvidia_mma_gated_fp8_e5m2
+gated-end_to_end fp8_e5m2 128x512x512: nvidia_mma_gated_fp8_e5m2
+gated-device fp8_e5m2 128x512x512: nvidia_mma_gated_fp8_e5m2
+conv2d-device 1x32x32x32x3x3x64: direct
+conv2d-device 1x64x64x64x3x3x64: im2col_tf32
+wrote /home/angstorms/sm120fu-rec/run1.json
+recorder rc=0 end 2026-09-27T18:15:57Z
+run 1 flock rc=0

@@ -1,0 +1,20 @@
+lost []
+new []
+rows changed 98 unchanged 26
+changed by device/op: {('nvidia:sm_120', 'attention'): 21, ('nvidia:sm_120', 'conv2d'): 2, ('nvidia:sm_120', 'fused_region'): 35, ('nvidia:sm_120', 'gated_matmul'): 12, ('nvidia:sm_120', 'matmul'): 28}
+non-sm_120 rows byte-identical: True 16
+serving rows identical: True 18
+winner changes 10
+   attention f32 device [64, 256, 64, 64] nvidia_mma_attn_tf32 -> nvidia_mma_attn_composed_tf32
+   attention fp8_e4m3 device [64, 512, 64, 64] nvidia_mma_attn_fp8_e4m3 -> nvidia_mma_attn_composed_fp8_e4m3
+   fused_region f32 end_to_end [256, 256, 256] nvidia_mma_fused_composed_tf32 -> nvidia_mma_fused_tf32
+   gated_matmul fp8_e4m3 end_to_end [128, 512, 512] nvidia_mma_gated_composed_fp8_e4m3 -> nvidia_mma_gated_fp8_e4m3
+   matmul bfloat16 end_to_end [128, 512, 64] nvidia_tile_matmul_shared -> nvidia_tile_matmul_direct
+   matmul float16 device [128, 512, 64] nvidia_mma_gemm_shipped -> nvidia_tile_matmul_direct
+   matmul float16 end_to_end [128, 512, 64] nvidia_tile_matmul_shared -> nvidia_tile_matmul_direct
+   matmul bfloat16 device [64, 64, 64] nvidia_tile_matmul_direct -> nvidia_mma_gemm_emitted
+   matmul float16 device [64, 64, 64] nvidia_tile_matmul_shared -> nvidia_mma_gemm_emitted
+   matmul float16 end_to_end [64, 64, 64] nvidia_mma_gemm_emitted -> nvidia_tile_matmul_direct
+sm120 registry rows 96 selector_eligible 38
+unstamped timed candidates in sm120 registry rows 0
+sm120 registry rows with unmeasured candidates 0

@@ -432,10 +432,15 @@ matches its module fails generation. Read the counts there.
    on both Zen 5 boxes (`AVX512-E2E-PACKETS-2026-09-26`). These were re-recorded twice per host
    after `X86-WITNESS-PIN-1` was fixed (the timed region now runs unconfined,
    so threaded attention is measured as in production and is stable across
-   recordings). **Open caveat (`X86-MATMUL-BIMODAL-1`):** matmul 256³
-   `kernel_wall` lands on one of two levels (~0.72 / ~1.05 ms), moving 1.48x
-   between two unpinned recordings of identical code on Princess-Luna; one
-   recording's matmul latency is not a stable number until that is explained.
+   recordings). **`X86-MATMUL-BIMODAL-1` root-caused (2026-09-26):** matmul
+   256³ `kernel_wall`'s two levels (~0.70 / ~1.05 ms) were decided per process
+   by B's address mod 64 (toggled on demand, both ways, on both Zen 5 hosts);
+   the recorder now places every timed buffer 64-byte aligned and the validator
+   refuses otherwise. Re-recorded twice per host at `329fcbf6`: matmul moved
+   1.016x (Princess-Luna) and 0.998x (Tajasarus) between runs. Open:
+   `X86-GEMM-ALIGN-1` (production callers with an unaligned B still pay ~1.5x)
+   and an uninvestigated 0.62x Princess-Luna reduction shift between the two
+   re-recordings (x86 queue).
 1. RUNTIME-LIB-OPT-1: applied 2026-09-26 (`-O2` runtime libraries + build
    record); open: re-measure the affected packets on their own boxes.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),

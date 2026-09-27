@@ -1,16 +1,16 @@
 {
-  "architecture": "x86_64_avx512_granite_ridge",
+  "architecture": "x86_64_avx512_strix_halo",
   "benchmarks": [
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 695278.6371667578,
+      "median_ns": 719962.103391224,
       "repetitions": 1500,
-      "resource_fingerprint": "a3cf05146dd34a2ae44131f8a70827de7b52d04581fd86d3311d9806c8d1a487",
+      "resource_fingerprint": "dcac1a9d931e9f21445bf4f2986b72a20cc762cfb54ce9f08578940e70f34a36",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        695377.3743922585,
-        695179.8999412571
+        719906.9002472861,
+        720017.3065351619
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -22,13 +22,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1117512.52,
+      "median_ns": 1466459.205,
       "repetitions": 1500,
-      "resource_fingerprint": "a3cf05146dd34a2ae44131f8a70827de7b52d04581fd86d3311d9806c8d1a487",
+      "resource_fingerprint": "dcac1a9d931e9f21445bf4f2986b72a20cc762cfb54ce9f08578940e70f34a36",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1117344.04,
-        1117681.0
+        1467016.33,
+        1465902.08
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -40,13 +40,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 2851.8576917962055,
+      "median_ns": 2909.1156803987287,
       "repetitions": 1500,
-      "resource_fingerprint": "2121d1eca64b4e28b3bdfcc7a5c6a369b81227f101ef1c1f65e1c6b1a8dd097f",
+      "resource_fingerprint": "c228dbded2826ef93a57ab163cee9ebbb5416ce0f1e4d215c74fa4997dea9d2e",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        2849.202657320539,
-        2854.5127262718715
+        2901.1652276033315,
+        2917.0661331941255
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -58,13 +58,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 387213.24,
+      "median_ns": 721341.44,
       "repetitions": 1500,
-      "resource_fingerprint": "2121d1eca64b4e28b3bdfcc7a5c6a369b81227f101ef1c1f65e1c6b1a8dd097f",
+      "resource_fingerprint": "c228dbded2826ef93a57ab163cee9ebbb5416ce0f1e4d215c74fa4997dea9d2e",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        386872.34,
-        387554.14
+        721567.65,
+        721115.23
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -76,13 +76,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 721.5682374999128,
+      "median_ns": 1174.0668656347161,
       "repetitions": 1500,
-      "resource_fingerprint": "c754cfbf229019826b5b730132458327e70f291196e3ed60639785f9ad17ebe1",
+      "resource_fingerprint": "5b816f21574cdf9631947d4169710650b57fe424fcdee56fc67303417aa86308",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        728.681726095094,
-        714.4547489047318
+        1167.366484033564,
+        1180.7672472358681
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -94,13 +94,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 386627.725,
+      "median_ns": 709144.11,
       "repetitions": 1500,
-      "resource_fingerprint": "c754cfbf229019826b5b730132458327e70f291196e3ed60639785f9ad17ebe1",
+      "resource_fingerprint": "5b816f21574cdf9631947d4169710650b57fe424fcdee56fc67303417aa86308",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        386745.55,
-        386509.9
+        709564.63,
+        708723.59
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -112,13 +112,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 520058.8855203178,
+      "median_ns": 544808.8780380916,
       "repetitions": 1500,
-      "resource_fingerprint": "73995a352e18576328c5736b3c8d4d754fb5b5b2c8636193b0fdff72264da91a",
+      "resource_fingerprint": "55de73cc8c19b59c7964ff9cd2622b93b856067fc5c2f825fff1b2ac74782f66",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        520004.8330259925,
-        520112.9380146432
+        545086.4438460617,
+        544531.3122301215
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -130,13 +130,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 967919.335,
+      "median_ns": 1313670.9,
       "repetitions": 1500,
-      "resource_fingerprint": "73995a352e18576328c5736b3c8d4d754fb5b5b2c8636193b0fdff72264da91a",
+      "resource_fingerprint": "55de73cc8c19b59c7964ff9cd2622b93b856067fc5c2f825fff1b2ac74782f66",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        968291.69,
-        967546.98
+        1314272.23,
+        1313069.57
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -148,13 +148,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 62222.58645187045,
+      "median_ns": 65252.466268384305,
       "repetitions": 1500,
-      "resource_fingerprint": "496bd31c02cc6b2636de01ae7005c063d2e646b680befda7afa2498cd55e0f91",
+      "resource_fingerprint": "9dea6fcb0f5f06288579e8fd7d89e6f4d97b811f540ac1bf3c610a0f091db4f3",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        62171.28918200097,
-        62273.88372173992
+        65263.31688635035,
+        65241.61565041826
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -166,13 +166,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 455837.82999999996,
+      "median_ns": 796176.85,
       "repetitions": 1500,
-      "resource_fingerprint": "496bd31c02cc6b2636de01ae7005c063d2e646b680befda7afa2498cd55e0f91",
+      "resource_fingerprint": "9dea6fcb0f5f06288579e8fd7d89e6f4d97b811f540ac1bf3c610a0f091db4f3",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        455963.12,
-        455712.54
+        796890.34,
+        795463.36
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -261,7 +261,7 @@
   ],
   "device": {
     "exact": true,
-    "identity": "tajasarus | AMD Ryzen 7 9800X3D 8-Core Processor"
+    "identity": "Princess-Luna | AMD RYZEN AI MAX+ 395 w/ Radeon 8060S"
   },
   "fixtures": [
     {

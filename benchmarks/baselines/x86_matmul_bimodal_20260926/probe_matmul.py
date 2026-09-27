@@ -8,7 +8,7 @@ Prints one JSON line with the per-process median and per-process variables.
 
 Toggles (one at a time): --offset-b/--offset-a/--offset-o BYTES place the
 array at that byte offset from a 4096-aligned base (default: numpy's own
-allocation, i.e. the recorder's behaviour); --cpu N pins the timed region.
+allocation, i.e. the pre-fix recorder's behaviour); --cpu N pins the timed region.
 """
 from __future__ import annotations
 

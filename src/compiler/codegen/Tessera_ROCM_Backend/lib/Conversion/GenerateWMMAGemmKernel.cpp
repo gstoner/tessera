@@ -158,6 +158,13 @@ struct WmmaGemmRequest {
   int64_t scaleN = 0;
   // The weight arrives [N, K] (the `_nk` contract) rather than [K, N].
   bool bTransposed = false;
+  // ROCM-FP8-BLOCKSCALE-1 large-M body: the carrier's physical schedule.
+  // "global" is the one-wave register panel; "lds" is the multi-wave
+  // LDS-staged workgroup of `warps` waves over the macro tile, staged
+  // single- (pipelineDepth 1) or double-buffered (2).
+  std::string staging = "global";
+  int64_t warps = 1;
+  int64_t pipelineDepth = 1;
 };
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
@@ -1803,6 +1810,392 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   b.create<gpu::ReturnOp>(loc);
 }
 
+// ROCM-FP8-BLOCKSCALE-1, large-M body (sync GFX1201-PERF-2026-09-27). The W8A8
+// block-scale contract on a MULTI-WAVE, LDS-staged workgroup: `wavesM x
+// wavesN` waves, each owning an `mt x nt` fragment panel, share one staged
+// K slab of A [wgM][stageK] and of the [N, K] weight [wgN][stageK] (K
+// contiguous per row in both, so the global read, the LDS write and every
+// fragment read are contiguous 16- or 8-byte accesses). The register panel
+// reads A and B straight from global per wave, so every wave re-fetches the
+// rows its neighbours also need; this body fetches each workgroup tile once
+// per slab, which is the reuse AITER's LDS-staged multi-warp tiles get on
+// the same chip.
+//
+// The block-scale semantics are exactly the register body's: every
+// `scaleK` group starts a ZERO partial, walks its `scaleK / 16` instruction
+// panels in ascending K (across `scaleK / stageK` staged slabs), and joins the
+// running accumulator through `tile.fragment_scaled_accumulate`, once. Same
+// partial order, same join op -- so the result is bitwise the register
+// body's, which the device test asserts.
+//
+// Staging schedule (`prefetch`, a performance key):
+//   0  barrier; copy slab -> LDS; barrier; compute             (no overlap)
+//   1  prologue copy; loop { issue next slab's global loads to registers;
+//      compute from LDS; barrier; drain registers -> LDS; barrier }
+//   2  as 1 with TWO LDS buffers: the drain writes the buffer the next step
+//      computes on, so one barrier per slab suffices.
+// Only static, whole-group K reaches here (the contract's admission), and
+// the copy zero-fills rows past M / N, so ragged M and N need no second
+// path; the stores are masked only when the problem is not whole tiles.
+void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+                                gpu::GPUFuncOp gpuFunc, int64_t mt, int64_t nt,
+                                int64_t wavesM, int64_t wavesN,
+                                const WmmaTypes &T, int64_t staticM,
+                                int64_t staticN, int64_t staticK,
+                                int64_t scaleK, int64_t scaleN, int64_t stageK,
+                                int64_t padBytes, int64_t prefetch,
+                                StringRef rasterOrder, int64_t rasterGroup) {
+  MLIRContext *ctx = b.getContext();
+  const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
+  const int64_t nthreads = wavesM * wavesN * 32;
+  // e4m3 is one byte per element, so element and byte offsets coincide; the
+  // 16-element copy vector is exactly one 128-bit access.
+  const int64_t vecW = 16;
+  const int64_t ldsStride = stageK + padBytes;
+  const int64_t nbuf = prefetch == 2 ? 2 : 1;
+  auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+  Value ldsA = gpuFunc.addWorkgroupAttribution(
+      MemRefType::get({nbuf * wgM * ldsStride}, T.store,
+                      MemRefLayoutAttrInterface(), ws),
+      loc);
+  Value ldsB = gpuFunc.addWorkgroupAttribution(
+      MemRefType::get({nbuf * wgN * ldsStride}, T.store,
+                      MemRefLayoutAttrInterface(), ws),
+      loc);
+  gpuFunc.setKnownBlockSize(ArrayRef<int32_t>{int32_t(nthreads), 1, 1});
+  gpuFunc->setAttr("tessera.rocm.lds_bytes",
+                   b.getI64IntegerAttr(nbuf * (wgM + wgN) * ldsStride));
+  gpuFunc->setAttr("tessera.rocm.lds_waves",
+                   b.getDenseI64ArrayAttr({wavesM, wavesN}));
+  gpuFunc->setAttr("tessera.rocm.blockscale_stage_k",
+                   b.getI64IntegerAttr(stageK));
+  gpuFunc->setAttr("tessera.rocm.blockscale_lds_pad_bytes",
+                   b.getI64IntegerAttr(padBytes));
+  gpuFunc->setAttr("tessera.rocm.blockscale_prefetch",
+                   b.getI64IntegerAttr(prefetch));
+
+  b.setInsertionPointToStart(&gpuFunc.getBody().front());
+  Value A = gpuFunc.getArgument(0);
+  Value B = gpuFunc.getArgument(1);
+  Value lhsScale = gpuFunc.getArgument(2);
+  Value rhsScale = gpuFunc.getArgument(3);
+  Value D = gpuFunc.getArgument(4);
+  Value M = gpuFunc.getArgument(5);
+  Value N = gpuFunc.getArgument(6);
+  Value K = gpuFunc.getArgument(7);
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  auto slt = arith::CmpIPredicate::slt;
+  Value c0 = ci(0), c32 = ci(32);
+  Value cStride = ci(ldsStride);
+  const bool wholeM = staticM % wgM == 0, wholeN = staticN % wgN == 0;
+
+  Value tx = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value waveId = b.create<arith::DivUIOp>(loc, tx, c32);
+  Value waveRow = b.create<arith::DivUIOp>(loc, waveId, ci(wavesN));
+  Value waveCol = b.create<arith::RemUIOp>(loc, waveId, ci(wavesN));
+
+  // Workgroup-tile origin, with the raster contract the other bodies honour.
+  Value bidX = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value bidY = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
+  Value tileM = bidY, tileN = bidX;
+  if (rasterOrder != "row_major") {
+    Value gridM = ci((staticM + wgM - 1) / wgM);
+    Value gridN = ci((staticN + wgN - 1) / wgN);
+    Value flat = b.create<arith::AddIOp>(
+        loc, b.create<arith::MulIOp>(loc, bidY, gridN), bidX);
+    if (rasterOrder == "column_major") {
+      tileM = b.create<arith::RemUIOp>(loc, flat, gridM);
+      tileN = b.create<arith::DivUIOp>(loc, flat, gridM);
+    } else {
+      bool groupM = rasterOrder == "grouped_m";
+      Value gridMajor = groupM ? gridM : gridN;
+      Value gridMinor = groupM ? gridN : gridM;
+      Value group = ci(rasterGroup);
+      Value perPanel = b.create<arith::MulIOp>(loc, group, gridMinor);
+      Value panel = b.create<arith::DivUIOp>(loc, flat, perPanel);
+      Value firstMajor = b.create<arith::MulIOp>(loc, panel, group);
+      Value remaining = b.create<arith::SubIOp>(loc, gridMajor, firstMajor);
+      Value shortPanel = b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::ult, remaining, group);
+      Value panelRows =
+          b.create<arith::SelectOp>(loc, shortPanel, remaining, group);
+      Value within = b.create<arith::RemUIOp>(loc, flat, perPanel);
+      Value major = b.create<arith::AddIOp>(
+          loc, firstMajor, b.create<arith::RemUIOp>(loc, within, panelRows));
+      Value minor = b.create<arith::DivUIOp>(loc, within, panelRows);
+      tileM = groupM ? major : minor;
+      tileN = groupM ? minor : major;
+    }
+  }
+  Value baseRow = b.create<arith::MulIOp>(loc, tileM, ci(wgM));
+  Value baseCol = b.create<arith::MulIOp>(loc, tileN, ci(wgN));
+  Value waveRowOff = b.create<arith::MulIOp>(loc, waveRow, ci(mt * 16));
+  Value waveColOff = b.create<arith::MulIOp>(loc, waveCol, ci(nt * 16));
+  SmallVector<Value> rowOrigin(mt), lrow(mt), colOrigin(nt), lcol(nt);
+  for (int64_t mi = 0; mi < mt; ++mi) {
+    lrow[mi] = b.create<arith::AddIOp>(loc, waveRowOff, ci(mi * 16));
+    rowOrigin[mi] = b.create<arith::AddIOp>(loc, baseRow, lrow[mi]);
+  }
+  for (int64_t ni = 0; ni < nt; ++ni) {
+    lcol[ni] = b.create<arith::AddIOp>(loc, waveColOff, ci(ni * 16));
+    colOrigin[ni] = b.create<arith::AddIOp>(loc, baseCol, lcol[ni]);
+  }
+
+  // Typed fragment vocabulary: identical to the register body's, except the
+  // source views name the `lds` space.
+  SmallVector<StringAttr> tileAxes{b.getStringAttr("tlane"),
+                                   b.getStringAttr("reg")};
+  auto tileLayout = tessera::tile::TileLayoutAttr::get(
+      ctx, {16, 16}, {16, 1}, tileAxes, {}, {}, {}, 0,
+      tessera::tile::TileSwizzleAttr());
+  auto gmemRowMajor =
+      tessera::tile::TileMemoryLayoutAttr::get(ctx, "gmem", "row_major", 0);
+  auto ldsRowMajor =
+      tessera::tile::TileMemoryLayoutAttr::get(ctx, "lds", "row_major", 0);
+  auto ldsColMajor =
+      tessera::tile::TileMemoryLayoutAttr::get(ctx, "lds", "col_major", 0);
+  auto tileValueTy = tessera::tile::TileValueType::get(ctx);
+  auto aFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, "e4m3", "f32", "a", "row_major", "wmma");
+  auto bFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, "e4m3", "f32", "b", "col_major", "wmma");
+  auto accFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, "f32", "f32", "acc", "row_major", "wmma");
+  auto ldsView = [&](OpBuilder &bb, Location l, Value base, Value row,
+                     Value col, Attribute memory) -> Value {
+    OperationState state(l, "tile.view");
+    state.addOperands({base, row, col, cStride});
+    state.addTypes(tileValueTy);
+    state.addAttribute("tile.layout", tileLayout);
+    state.addAttribute("tile.memory", memory);
+    return bb.create(state)->getResult(0);
+  };
+  auto packFragment = [&](OpBuilder &bb, Location l, Value view, Type type) {
+    OperationState state(l, "tile.fragment_pack");
+    state.addOperands(view);
+    state.addTypes(type);
+    return bb.create(state)->getResult(0);
+  };
+  auto zeroFragments = [&](OpBuilder &bb, Location l) {
+    SmallVector<Value> zeros;
+    for (int64_t i = 0; i < mt * nt; ++i) {
+      OperationState zero(l, "tile.fragment_zero");
+      zero.addTypes(accFragmentTy);
+      zeros.push_back(bb.create(zero)->getResult(0));
+    }
+    return zeros;
+  };
+
+  // ---- The staging copy. Each thread owns fixed (row, k) vectors of the
+  // slab, so every address but the slab's K origin is loop-invariant.
+  auto vecTy = VectorType::get({vecW}, T.store);
+  Value zeroVec = b.create<arith::ConstantOp>(
+      loc, vecTy,
+      DenseElementsAttr::get(
+          cast<ShapedType>(vecTy),
+          cast<FloatAttr>(b.getFloatAttr(T.store, 0.0)).getValue()));
+  const int64_t vecsPerRow = stageK / vecW;
+  struct CopyPlan {
+    Value src;      // global memref
+    Value dst;      // LDS memref
+    int64_t bufElems;
+    SmallVector<Value> rowBase;  // (row*K + kVec) in global elements
+    SmallVector<Value> ldsDst;   // row*stride + kVec in LDS elements
+    SmallVector<Value> inBounds; // null when the problem is whole tiles
+  };
+  auto planCopy = [&](Value src, Value dst, int64_t rows, Value origin,
+                      Value bound, bool whole) {
+    CopyPlan plan{src, dst, rows * ldsStride, {}, {}, {}};
+    const int64_t trips = rows * vecsPerRow / nthreads;
+    for (int64_t i = 0; i < trips; ++i) {
+      Value e = b.create<arith::AddIOp>(loc, tx, ci(i * nthreads));
+      Value row = b.create<arith::DivUIOp>(loc, e, ci(vecsPerRow));
+      Value kVec = b.create<arith::MulIOp>(
+          loc, b.create<arith::RemUIOp>(loc, e, ci(vecsPerRow)), ci(vecW));
+      Value gr = b.create<arith::AddIOp>(loc, origin, row);
+      Value inb;
+      if (!whole) {
+        inb = b.create<arith::CmpIOp>(loc, slt, gr, bound);
+        // An out-of-range row reads row 0 (always valid) and is zeroed.
+        gr = b.create<arith::SelectOp>(loc, inb, gr, c0);
+      }
+      plan.rowBase.push_back(b.create<arith::AddIOp>(
+          loc, b.create<arith::MulIOp>(loc, gr, K), kVec));
+      plan.ldsDst.push_back(b.create<arith::AddIOp>(
+          loc, b.create<arith::MulIOp>(loc, row, cStride), kVec));
+      plan.inBounds.push_back(inb);
+    }
+    return plan;
+  };
+  CopyPlan planA = planCopy(A, ldsA, wgM, baseRow, M, wholeM);
+  CopyPlan planB = planCopy(B, ldsB, wgN, baseCol, N, wholeN);
+  const llvm::MaybeAlign align16(16);
+
+  auto issue = [&](OpBuilder &kb, Location l, const CopyPlan &plan, Value k0) {
+    SmallVector<Value> vals;
+    for (size_t i = 0; i < plan.rowBase.size(); ++i) {
+      Value idx = kb.create<arith::AddIOp>(l, plan.rowBase[i], k0);
+      Value v = kb.create<vector::LoadOp>(l, vecTy, plan.src, ValueRange{idx},
+                                          /*nontemporal=*/false, align16);
+      if (plan.inBounds[i])
+        v = kb.create<arith::SelectOp>(l, plan.inBounds[i], v, zeroVec);
+      vals.push_back(v);
+    }
+    return vals;
+  };
+  auto drain = [&](OpBuilder &kb, Location l, const CopyPlan &plan,
+                   ArrayRef<Value> vals, Value buf) {
+    for (size_t i = 0; i < vals.size(); ++i) {
+      Value dst = plan.ldsDst[i];
+      if (buf)
+        dst = kb.create<arith::AddIOp>(
+            l, dst, kb.create<arith::MulIOp>(l, buf, ci(plan.bufElems)));
+      // The row stride is a multiple of 16 bytes (checked at admission),
+      // so every LDS vector is 16-byte aligned: one ds_store_b128.
+      kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
+                                 /*nontemporal=*/false, align16);
+    }
+  };
+
+  // ---- One slab's MMA chain on the partial, from LDS buffer `buf`.
+  auto compute = [&](OpBuilder &kb, Location l, Value buf,
+                     SmallVector<Value> partial) {
+    Value aRow = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgM))) : c0;
+    Value bCol = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgN))) : c0;
+    for (int64_t p = 0; p < stageK / 16; ++p) {
+      Value kOff = ci(p * 16);
+      SmallVector<Value> af(mt), bf(nt);
+      for (int64_t mi = 0; mi < mt; ++mi) {
+        Value r = buf ? Value(kb.create<arith::AddIOp>(l, lrow[mi], aRow))
+                      : lrow[mi];
+        af[mi] = packFragment(kb, l, ldsView(kb, l, ldsA, r, kOff, ldsRowMajor),
+                              aFragmentTy);
+      }
+      for (int64_t ni = 0; ni < nt; ++ni) {
+        Value c = buf ? Value(kb.create<arith::AddIOp>(l, lcol[ni], bCol))
+                      : lcol[ni];
+        // col_major B view: `row` is K, `col` is N (K contiguous per column).
+        bf[ni] = packFragment(kb, l, ldsView(kb, l, ldsB, kOff, c, ldsColMajor),
+                              bFragmentTy);
+      }
+      for (int64_t mi = 0; mi < mt; ++mi)
+        for (int64_t ni = 0; ni < nt; ++ni) {
+          OperationState mma(l, "tile.mma");
+          mma.addOperands({af[mi], bf[ni], partial[mi * nt + ni]});
+          mma.addTypes(accFragmentTy);
+          partial[mi * nt + ni] = kb.create(mma)->getResult(0);
+        }
+    }
+    return partial;
+  };
+
+  const int64_t groups = staticK / scaleK;
+  const int64_t stagesPerGroup = scaleK / stageK;
+  const int64_t lastStageK = staticK - stageK;
+  Value cStageK = ci(stageK);
+  // The slab the step after `k0` computes on. Past the end it re-reads the
+  // last slab (in bounds, never consumed), so the issue needs no guard.
+  auto nextK = [&](OpBuilder &kb, Location l, Value k0) {
+    Value next = kb.create<arith::AddIOp>(l, k0, cStageK);
+    return Value(kb.create<arith::MinUIOp>(l, next, ci(lastStageK)));
+  };
+  // Buffer parity of the slab at `k0` (double-buffered only).
+  auto parity = [&](OpBuilder &kb, Location l, Value k0) {
+    return Value(kb.create<arith::RemUIOp>(
+        l, kb.create<arith::DivUIOp>(l, k0, cStageK), ci(2)));
+  };
+
+  if (prefetch != 0) {
+    // Prologue: slab 0 into buffer 0.
+    drain(b, loc, planA, issue(b, loc, planA, c0), Value());
+    drain(b, loc, planB, issue(b, loc, planB, c0), Value());
+    b.create<gpu::BarrierOp>(loc);
+  }
+  auto stage = [&](OpBuilder &kb, Location l, Value k0,
+                   SmallVector<Value> partial) {
+    if (prefetch == 0) {
+      kb.create<gpu::BarrierOp>(l);
+      drain(kb, l, planA, issue(kb, l, planA, k0), Value());
+      drain(kb, l, planB, issue(kb, l, planB, k0), Value());
+      kb.create<gpu::BarrierOp>(l);
+      return compute(kb, l, Value(), std::move(partial));
+    }
+    Value kn = nextK(kb, l, k0);
+    SmallVector<Value> nextA = issue(kb, l, planA, kn);
+    SmallVector<Value> nextB = issue(kb, l, planB, kn);
+    if (prefetch == 1) {
+      partial = compute(kb, l, Value(), std::move(partial));
+      kb.create<gpu::BarrierOp>(l);
+      drain(kb, l, planA, nextA, Value());
+      drain(kb, l, planB, nextB, Value());
+      kb.create<gpu::BarrierOp>(l);
+      return partial;
+    }
+    Value cur = parity(kb, l, k0);
+    Value nxt = kb.create<arith::SubIOp>(l, ci(1), cur);
+    partial = compute(kb, l, cur, std::move(partial));
+    drain(kb, l, planA, nextA, nxt);
+    drain(kb, l, planB, nextB, nxt);
+    kb.create<gpu::BarrierOp>(l);
+    return partial;
+  };
+
+  SmallVector<Value> initAccs = zeroFragments(b, loc);
+  Value cGroups = ci(groups);
+  auto groupLoop = b.create<scf::ForOp>(
+      loc, c0, cGroups, ci(1), initAccs,
+      [&](OpBuilder &gb, Location l, Value g, ValueRange iter) {
+        SmallVector<Value> accs(iter.begin(), iter.end());
+        Value kGroup = gb.create<arith::MulIOp>(l, g, ci(scaleK));
+        SmallVector<Value> partial = zeroFragments(gb, l);
+        if (stagesPerGroup == 1) {
+          partial = stage(gb, l, kGroup, std::move(partial));
+        } else {
+          auto inner = gb.create<scf::ForOp>(
+              l, kGroup, gb.create<arith::AddIOp>(l, kGroup, ci(scaleK)),
+              cStageK, partial,
+              [&](OpBuilder &ib, Location il, Value k0, ValueRange piter) {
+                ib.create<scf::YieldOp>(
+                    il, stage(ib, il, k0,
+                              SmallVector<Value>(piter.begin(), piter.end())));
+              });
+          partial.assign(inner.getResults().begin(), inner.getResults().end());
+        }
+        SmallVector<Value> joined(mt * nt);
+        for (int64_t mi = 0; mi < mt; ++mi)
+          for (int64_t ni = 0; ni < nt; ++ni) {
+            OperationState join(l, "tile.fragment_scaled_accumulate");
+            join.addOperands({accs[mi * nt + ni], partial[mi * nt + ni],
+                              lhsScale, rhsScale, rowOrigin[mi], colOrigin[ni],
+                              g, cGroups, M, N});
+            join.addTypes(accFragmentTy);
+            join.addAttribute("scale_n", gb.getI64IntegerAttr(scaleN));
+            joined[mi * nt + ni] = gb.create(join)->getResult(0);
+          }
+        gb.create<scf::YieldOp>(l, joined);
+      });
+
+  ValueRange accs = groupLoop.getResults();
+  const bool masked = !wholeM || !wholeN;
+  for (int64_t ni = 0; ni < nt; ++ni)
+    for (int64_t mi = 0; mi < mt; ++mi) {
+      OperationState unpack(loc, "tile.fragment_unpack");
+      unpack.addOperands(accs[mi * nt + ni]);
+      unpack.addTypes(tileValueTy);
+      unpack.addAttribute("tile.layout", tileLayout);
+      Value tile = b.create(unpack)->getResult(0);
+      OperationState store(loc, "tile.store");
+      if (masked)
+        store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], M, N, N});
+      else
+        store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], N});
+      store.addAttribute("tile.layout", tileLayout);
+      store.addAttribute("tile.memory", gmemRowMajor);
+      b.create(store);
+    }
+  b.create<gpu::ReturnOp>(loc);
+}
+
 // Schedule-knob defaults for the option declarations below. Keep these equal
 // to tessera-rocm-executable's defaults (Passes.cpp) and
 // ROCMExecutablePipeline's (rocm_pipeline.py), which serialize every knob at
@@ -1816,6 +2209,9 @@ constexpr int kDefaultKUnroll = 1;
 // -- so 2 is kept. (On a ragged M the 32x32 edge path is far faster at 1, but
 // the Schedule never picks 32 rows for a ragged M.)
 constexpr int kDefaultScaleGroupPanels = 2;
+// ROCM-FP8-BLOCKSCALE-1 large-M LDS body defaults (see the sweep packet).
+constexpr int kDefaultBlockscaleStageK = 0;
+constexpr int kDefaultBlockscaleLdsPadBytes = 16;
 constexpr int kDefaultSchedGroups = 0;
 constexpr int kDefaultLdsPadDwords = 1;
 constexpr int kDefaultLdsCopyWidth = 1;
@@ -1939,6 +2335,28 @@ struct GenerateWMMAGemmKernelPass
                      "straight-line per inner step of a scale group (0 = "
                      "whole group)"),
       llvm::cl::init(kDefaultScaleGroupPanels)};
+  // ROCM-FP8-BLOCKSCALE-1 large-M body: performance keys of the LDS-staged
+  // block-scale body, selected nowhere but in the recorded sweep
+  // (benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/). The
+  // defaults are the measured choice; the body's existence and its wave
+  // grid come from the carrier, never from these.
+  Option<int> blockscaleStageK{
+      *this, "blockscale-stage-k",
+      llvm::cl::desc("LDS-staged block-scale body: K bytes staged per slab "
+                     "(0 = one scale group per slab)"),
+      llvm::cl::init(kDefaultBlockscaleStageK)};
+  Option<int> blockscaleLdsPadBytes{
+      *this, "blockscale-lds-pad-bytes",
+      llvm::cl::desc("LDS-staged block-scale body: bytes of padding per LDS "
+                     "row (a multiple of 16 keeps the 128-bit copy aligned)"),
+      llvm::cl::init(kDefaultBlockscaleLdsPadBytes)};
+  Option<int> blockscalePrefetch{
+      *this, "blockscale-prefetch",
+      llvm::cl::desc("LDS-staged block-scale body: -1 takes the carrier's "
+                     "pipeline_depth (1 = no overlap, 2 = double-buffered); "
+                     "0/1/2 force no overlap / register prefetch into one "
+                     "buffer / double-buffered"),
+      llvm::cl::init(-1)};
   Option<int> schedGroups{
       *this, "sched-groups",
       llvm::cl::desc("rocdl.sched.group.barrier granularity for the panel: "
@@ -2293,6 +2711,15 @@ struct GenerateWMMAGemmKernelPass
         request.rasterOrder = a.getValue().str();
       if (auto a = op->getAttrOfType<IntegerAttr>("tessera.raster_group"))
         request.rasterGroup = a.getInt();
+      // The physical schedule the Schedule chose (performance keys). Absent
+      // means the register panel, which is what every carrier authored
+      // before the LDS body existed states.
+      if (auto a = op->getAttrOfType<StringAttr>("staging"))
+        request.staging = a.getValue().str();
+      if (auto a = op->getAttrOfType<IntegerAttr>("warps"))
+        request.warps = a.getInt();
+      if (auto a = op->getAttrOfType<IntegerAttr>("tessera.pipeline_depth"))
+        request.pipelineDepth = a.getInt();
       auto staticExtent = [&](unsigned operand) -> std::optional<int64_t> {
         if (auto constant =
                 op->getOperand(operand).getDefiningOp<arith::ConstantIntOp>())
@@ -2770,6 +3197,83 @@ struct GenerateWMMAGemmKernelPass
           return signalPassFailure();
         }
       }
+      // ROCM-FP8-BLOCKSCALE-1 large-M body: admission of the carrier's
+      // LDS-staged multi-wave schedule. Each wave owns 32 rows (the register
+      // panel's measured height) and the carrier's `warps` fix the wave grid,
+      // so nothing here is chosen -- only checked. Every refusal is named;
+      // none falls back to the register panel under an lds label (#21a).
+      int64_t ldsWavesMScaled = 0, ldsWavesNScaled = 0, blockscaleStage = 0,
+              blockscalePrefetchMode = 0;
+      const bool scaledLds = scaled && request.staging == "lds";
+      if (scaled) {
+        std::string why;
+        if (request.staging != "global" && request.staging != "lds")
+          why = "the carrier's staging must be global or lds";
+        else if (!scaledLds && request.warps != 1)
+          why = "the register panel is one wave; warps > 1 needs lds staging";
+        if (scaledLds && why.empty()) {
+          const int64_t macroM = mt * 16, macroN = nt * 16;
+          blockscaleStage =
+              blockscaleStageK > 0 ? int64_t(blockscaleStageK) : request.scaleK;
+          if (blockscalePrefetch >= 0)
+            blockscalePrefetchMode = blockscalePrefetch;
+          else
+            blockscalePrefetchMode = request.pipelineDepth == 2 ? 2 : 0;
+          if (!request.bTransposed)
+            why = "the LDS-staged block-scale body reads the [N, K] weight "
+                  "(the _nk contract) only";
+          else if (macroM % 32 != 0 || request.warps < 1 ||
+                   request.warps > 16 || request.warps % (macroM / 32) != 0)
+            why = (Twine("warps=") + Twine(request.warps) +
+                   " must be a whole multiple of the macro tile's 32-row "
+                   "wave rows (macro M=" + Twine(macroM) + ", at most 16 "
+                   "waves)")
+                      .str();
+          else {
+            ldsWavesMScaled = macroM / 32;
+            ldsWavesNScaled = request.warps / ldsWavesMScaled;
+            if (macroN % (16 * ldsWavesNScaled) != 0)
+              why = (Twine("macro N=") + Twine(macroN) +
+                     " does not split into " + Twine(ldsWavesNScaled) +
+                     " whole 16-column wave panels")
+                        .str();
+          }
+          const int64_t wgM = mt * 16, wgN = nt * 16;
+          const int64_t threads = request.warps * 32;
+          const int64_t nbuf = blockscalePrefetchMode == 2 ? 2 : 1;
+          const int64_t stride = blockscaleStage + blockscaleLdsPadBytes;
+          if (!why.empty()) {
+          } else if (request.pipelineDepth != 1 && request.pipelineDepth != 2)
+            why = "the LDS-staged body is single- (pipeline_depth 1) or "
+                  "double-buffered (2)";
+          else if (blockscalePrefetchMode > 2)
+            why = "blockscale-prefetch must be -1 (carrier), 0, 1 or 2";
+          else if (blockscaleStage % 16 != 0 ||
+                   request.scaleK % blockscaleStage != 0)
+            why = (Twine("stage K=") + Twine(blockscaleStage) +
+                   " must be whole 16-byte vectors dividing scale_k=" +
+                   Twine(request.scaleK))
+                      .str();
+          else if (blockscaleLdsPadBytes < 0 || blockscaleLdsPadBytes % 16 != 0)
+            why = "blockscale-lds-pad-bytes must be a non-negative multiple "
+                  "of 16 so every LDS row stays 16-byte aligned";
+          else if ((wgM * blockscaleStage / 16) % threads != 0 ||
+                   (wgN * blockscaleStage / 16) % threads != 0)
+            why = (Twine("a ") + Twine(wgM) + "x" + Twine(wgN) + " tile at "
+                   "stage K=" + Twine(blockscaleStage) + " does not divide "
+                   "into whole 16-byte copies for " + Twine(threads) +
+                   " threads")
+                      .str();
+          else if (nbuf * (wgM + wgN) * stride > 65536)
+            why = (Twine(nbuf * (wgM + wgN) * stride) +
+                   " LDS bytes exceed the 64 KiB workgroup limit")
+                      .str();
+        }
+        if (!why.empty()) {
+          op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: ") << why;
+          return signalPassFailure();
+        }
+      }
 
       // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K[,bias]) kernel }
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
@@ -2945,6 +3449,19 @@ struct GenerateWMMAGemmKernelPass
         OpBuilder reduceB(reduceFunc.getContext());
         emitSplitKReduceBody(reduceB, loc, reduceFunc, request.splitK, hasBias,
                              activation, outputTy);
+      } else if (scaledLds) {
+        gpuFunc->setAttr("tessera.rocm.block_scale_contract",
+                         b.getStringAttr("rocm_fp8_w8a8_blockscale_nk_v1"));
+        gpuFunc->setAttr("tessera.rocm.scale_k",
+                         b.getI64IntegerAttr(request.scaleK));
+        gpuFunc->setAttr("tessera.rocm.scale_n",
+                         b.getI64IntegerAttr(request.scaleN));
+        emitTypedLdsBlockScaleBody(
+            bodyB, loc, gpuFunc, /*mt=*/2,
+            /*nt=*/nt / ldsWavesNScaled, ldsWavesMScaled, ldsWavesNScaled, T,
+            request.staticM, request.staticN, request.staticK, request.scaleK,
+            request.scaleN, blockscaleStage, blockscaleLdsPadBytes,
+            blockscalePrefetchMode, request.rasterOrder, request.rasterGroup);
       } else if (scaled) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(request.bTransposed

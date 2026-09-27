@@ -251,6 +251,15 @@ class ROCMExecutablePipeline:
     #: key; the group still computes one partial). -1 keeps the generator's
     #: measured default; 0 issues the whole group straight-line.
     scale_group_panels: int = -1
+    #: ROCM-FP8-BLOCKSCALE-1 large-M body (GFX1201-PERF-2026-09-27):
+    #: performance keys of the LDS-staged block-scale body, for the recorded
+    #: sweep only. -1 keeps the generator's measured default (stage K = one
+    #: scale group, 16 bytes of LDS row padding) and the carrier's
+    #: pipeline_depth for the staging schedule. Whether the body is used at
+    #: all, and its wave grid, come from the carrier, never from these.
+    blockscale_stage_k: int = -1
+    blockscale_lds_pad_bytes: int = -1
+    blockscale_prefetch: int = -1
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
@@ -328,6 +337,12 @@ class ROCMExecutablePipeline:
             raise ValueError("ROCm lds_b_row_major must be a bool")
         if type(self.scale_group_panels) is not int or not -1 <= self.scale_group_panels <= 16:
             raise ValueError("ROCm scale_group_panels must be an int in [-1, 16]")
+        if type(self.blockscale_stage_k) is not int or not -1 <= self.blockscale_stage_k <= 512:
+            raise ValueError("ROCm blockscale_stage_k must be an int in [-1, 512]")
+        if type(self.blockscale_lds_pad_bytes) is not int or not -1 <= self.blockscale_lds_pad_bytes <= 64:
+            raise ValueError("ROCm blockscale_lds_pad_bytes must be an int in [-1, 64]")
+        if type(self.blockscale_prefetch) is not int or self.blockscale_prefetch not in (-1, 0, 1, 2):
+            raise ValueError("ROCm blockscale_prefetch must be -1 (carrier), 0, 1 or 2")
         if self.tile_q <= 0 or self.tile_kv <= 0:
             raise ValueError("ROCm attention tile sizes must be positive")
 
@@ -351,6 +366,9 @@ class ROCMExecutablePipeline:
             f"lds-sched-valu-per-mma={self.lds_sched_valu_per_mma} "
             f"lds-b-row-major={str(self.lds_b_row_major).lower()} "
             f"scale-group-panels={self.scale_group_panels} "
+            f"blockscale-stage-k={self.blockscale_stage_k} "
+            f"blockscale-lds-pad-bytes={self.blockscale_lds_pad_bytes} "
+            f"blockscale-prefetch={self.blockscale_prefetch} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"

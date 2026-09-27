@@ -173,6 +173,10 @@ class CheckedDirective(TypedDict):
     block_n: int
     macro_k: int
     schedule_hash: str
+    #: "global" (one-wave register panel) or "lds" (multi-wave LDS-staged).
+    staging: str
+    warps: int
+    pipeline_depth: int
 
 
 def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: str) -> CheckedDirective:
@@ -209,6 +213,23 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     block_m, block_n = _int_attr(directive, "block_m"), _int_attr(directive, "block_n")
     if block_m <= 0 or block_n <= 0 or block_m % 16 or block_n % 16:
         raise ValueError("W8A8 Target IR register panel must be 16-aligned")
+    # The physical schedule decides the launch geometry, so it is read from
+    # Target IR and never assumed (GFX1201-PERF-2026-09-27).
+    staging = _string_attr(directive, "staging")
+    warps = _int_attr(directive, "warps")
+    pipeline_depth = _int_attr(directive, "pipeline_depth")
+    if staging not in ("global", "lds"):
+        raise ValueError("W8A8 Target IR staging must be global or lds")
+    if staging == "global" and warps != 1:
+        raise ValueError("W8A8 Target IR register panel is one wave")
+    if staging == "lds" and (not 1 <= warps <= 16 or block_m % 32
+                             or warps % (block_m // 32)
+                             or shape.weight_layout != "nk"):
+        raise ValueError(
+            "W8A8 Target IR LDS body needs the [N, K] weight and warps a whole "
+            "multiple of its 32-row wave rows (at most 16 waves)")
+    if pipeline_depth not in (1, 2):
+        raise ValueError("W8A8 Target IR pipeline_depth must be 1 or 2")
     policy = re.search(r"\bnumeric_policy\s*=\s*\{([^}]*)\}", directive)
     if policy is None:
         raise ValueError("W8A8 Target IR is missing numeric_policy")
@@ -230,19 +251,23 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     if _string_attr(directive, "tessera.schedule_hash") != tile_hash:
         raise ValueError("W8A8 Tile/Target tessera.schedule_hash mismatch")
     return CheckedDirective(block_m=block_m, block_n=block_n, macro_k=macro_k,
-                            schedule_hash=tile_hash)
+                            schedule_hash=tile_hash, staging=staging, warps=warps,
+                            pipeline_depth=pipeline_depth)
 
 
 def package_blockscale(
     program: BlockScaleProgram, *, pipeline_name: str = "tessera-lower-to-rocm", k_unroll: int = 1,
-    scale_group_panels: int = -1,
+    scale_group_panels: int = -1, blockscale_stage_k: int = -1,
+    blockscale_lds_pad_bytes: int = -1, blockscale_prefetch: int = -1,
 ) -> ROCMNativePackage:
     """Compile the Tile program to a gfx1201 HSACO and bind its launch ABI.
 
     ``k_unroll`` (whole scale groups per loop iteration) and
     ``scale_group_panels`` (panels per inner step of one group) are
-    performance keys; neither changes what a group computes. -1 keeps the
-    generator's measured default."""
+    performance keys of the register panel; ``blockscale_*`` are those of the
+    LDS-staged multi-wave body the Schedule selects at large M. None changes
+    what a group computes. -1 keeps the generator's measured default (and,
+    for ``blockscale_prefetch``, the carrier's pipeline depth)."""
     shape = program.shape
     contract, package_abi, _ = WEIGHT_LAYOUTS[shape.weight_layout]
     target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries, compile_state = (
@@ -250,6 +275,9 @@ def package_blockscale(
             program.tile_ir, directive=_DIRECTIVE, family="matmul", architecture="gfx1201",
             staging="register", k_unroll=int(k_unroll),
             scale_group_panels=int(scale_group_panels),
+            blockscale_stage_k=int(blockscale_stage_k),
+            blockscale_lds_pad_bytes=int(blockscale_lds_pad_bytes),
+            blockscale_prefetch=int(blockscale_prefetch),
         )
     )
     checked = check_blockscale_target_ir(shape, program.tile_ir, target_ir)
@@ -301,17 +329,28 @@ def package_blockscale(
             "materializer": "generate-wmma-gemm-kernel",
             "b_layout": shape.weight_layout,
             "scale_group_panels": int(scale_group_panels),
-            "physical_route": (f"gfx1201_register_wmma_blockscale_{shape.weight_layout}_"
-                               f"{checked['block_m'] // 16}x"
-                               f"{checked['block_n'] // 16}_k{checked['macro_k']}"
-                               + (f"_u{k_unroll}" if k_unroll > 1 else "")),
+            "staging": checked["staging"],
+            "warps": checked["warps"],
+            "pipeline_depth": checked["pipeline_depth"],
+            "blockscale_stage_k": int(blockscale_stage_k),
+            "blockscale_lds_pad_bytes": int(blockscale_lds_pad_bytes),
+            "blockscale_prefetch": int(blockscale_prefetch),
+            "physical_route": (
+                (f"gfx1201_lds_wmma_blockscale_{shape.weight_layout}_"
+                 f"{checked['block_m']}x{checked['block_n']}_w{checked['warps']}"
+                 f"_d{checked['pipeline_depth']}_k{checked['macro_k']}")
+                if checked["staging"] == "lds" else
+                (f"gfx1201_register_wmma_blockscale_{shape.weight_layout}_"
+                 f"{checked['block_m'] // 16}x"
+                 f"{checked['block_n'] // 16}_k{checked['macro_k']}"
+                 + (f"_u{k_unroll}" if k_unroll > 1 else ""))),
             "shape": [m, n, k],
             "scale_k": shape.scale_k,
             "scale_n": shape.scale_n,
             "macro_k": checked["macro_k"],
             "k_unroll": int(k_unroll),
             "macro_tile": [checked["block_m"], checked["block_n"]],
-            "workgroup": [32, 1, 1],
+            "workgroup": [32 * checked["warps"], 1, 1],
             "a_storage": "e4m3",
             "b_storage": "e4m3",
             "accum": "f32",
@@ -331,7 +370,10 @@ def compile_blockscale(
     shape: BlockScaleShape, *, entry: str = "w8a8_blockscale", k_unroll: int = 1,
     scale_group_panels: int = -1, tessera_opt: Path | None = None,
 ) -> ROCMNativePackage:
-    """Graph -> Schedule -> Tile -> Target -> HSACO for one static problem."""
+    """Graph -> Schedule -> Tile -> Target -> HSACO for one static problem.
+
+    The register panel or the LDS-staged multi-wave body is the Schedule's
+    measured choice for this (M, N, K); nothing here selects it."""
     return package_blockscale(lower_blockscale(shape, entry=entry, tessera_opt=tessera_opt),
                               k_unroll=k_unroll, scale_group_panels=scale_group_panels)
 

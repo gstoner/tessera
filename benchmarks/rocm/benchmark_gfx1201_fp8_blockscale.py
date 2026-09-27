@@ -179,20 +179,35 @@ def memref(pointer: P, size: int) -> list:
 
 
 def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=1,
-                   scale_group_panels=-1):
+                   scale_group_panels=-1, lds=None):
+    """``panel`` overrides the carrier's macro tile; ``lds`` =
+    (warps, pipeline_depth, stage_k, pad_bytes, prefetch) additionally
+    overrides its staging to the LDS-staged multi-wave body. Both are
+    sweep-only: such a row is labelled ``panel_override`` and never stands
+    for the production route, which is whatever the Schedule chose."""
     program = lower_blockscale(shape)
-    overridden = panel is not None
+    overridden = panel is not None or lds is not None
     tile_ir = program.tile_ir
-    if overridden:
-        # Sweep-only override of the Schedule's register panel. The row is
-        # labelled `panel_override` and never stands for the production route.
+    if panel is not None:
         tile_ir = re.sub(r"tessera\.macro_tile_m = \d+", f"tessera.macro_tile_m = {panel[0]}", tile_ir)
         tile_ir = re.sub(r"tessera\.macro_tile_n = \d+", f"tessera.macro_tile_n = {panel[1]}", tile_ir)
+    stage_k = pad = prefetch = -1
+    if lds is not None:
+        warps, depth, stage_k, pad, prefetch = lds
+        staging = "lds" if warps > 1 or depth > 1 else "global"
+        tile_ir = re.sub(r'staging = "\w+"', f'staging = "{staging}"', tile_ir)
+        tile_ir = re.sub(r"(?<![\w.])warps = \d+", f"warps = {warps}", tile_ir)
+        tile_ir = re.sub(r"tessera\.pipeline_depth = \d+", f"tessera.pipeline_depth = {depth}",
+                         tile_ir)
+    if overridden:
         program = type(program)(program.shape, program.entry, program.graph_ir,
                                 program.schedule_ir, tile_ir)
-    package = package_blockscale(program, k_unroll=k_unroll, scale_group_panels=scale_group_panels)
+    package = package_blockscale(program, k_unroll=k_unroll, scale_group_panels=scale_group_panels,
+                                 blockscale_stage_k=stage_k, blockscale_lds_pad_bytes=pad,
+                                 blockscale_prefetch=prefetch)
     prov = package.descriptor.provenance
     block_m, block_n = prov["macro_tile"]
+    threads = int(prov["workgroup"][0])
     weight = device["wt"] if shape.weight_layout == "nk" else device["b"]
     args = (memref(device["a"], shape.m * shape.k) + memref(weight, shape.k * shape.n)
             + memref(device["sa"], shape.m * shape.groups)
@@ -200,10 +215,15 @@ def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=
             + memref(device["o32"], shape.m * shape.n)
             + [ct.c_int64(shape.m), ct.c_int64(shape.n), ct.c_int64(shape.k)])
     grid = ((shape.n + block_n - 1) // block_n, (shape.m + block_m - 1) // block_m, 1)
-    launch = Launch(hip, package.image.payload, package.descriptor.entry_symbol, args, grid, (32, 1, 1))
+    launch = Launch(hip, package.image.payload, package.descriptor.entry_symbol, args, grid,
+                    (threads, 1, 1))
     meta = {
         "route": prov["route"], "physical_route": prov["physical_route"],
         "panel_override": overridden, "macro_tile": [block_m, block_n],
+        "staging": prov["staging"], "warps": prov["warps"],
+        "pipeline_depth": prov["pipeline_depth"], "workgroup_threads": threads,
+        "blockscale_stage_k": stage_k, "blockscale_lds_pad_bytes": pad,
+        "blockscale_prefetch": prefetch,
         "macro_k": prov["macro_k"], "k_unroll": k_unroll,
         "scale_group_panels": scale_group_panels, "weight_layout": shape.weight_layout,
         "hsaco_sha256": hashlib.sha256(package.image.payload).hexdigest(),
@@ -442,7 +462,14 @@ def main() -> None:
     parser.add_argument("--shape", action="append", default=[],
                         help="M,N,K (repeatable); K and N multiples of 128")
     parser.add_argument("--sweep", action="append", default=[],
-                        help="Tessera-only sweep variant PMxPN:U (e.g. 32x32:1); no AITER arm")
+                        help="Tessera-only sweep variant PMxPN:U:G:L (register panel) or "
+                             "lds:MMxMN:W:D:S:P:F:L (LDS body: macro tile, warps, pipeline "
+                             "depth, stage K (-1 default), pad bytes (-1 default), prefetch "
+                             "(-1 = carrier), layout); no AITER arm unless --with-aiter")
+    parser.add_argument("--with-aiter", action="store_true",
+                        help="also time AITER alongside --sweep variants")
+    parser.add_argument("--no-production", action="store_true",
+                        help="omit the production kn arm (the nk production arm is always kept)")
     parser.add_argument("--windows", type=int, default=10)
     parser.add_argument("--min-window-ms", type=float, default=6.0)
     parser.add_argument("--output", type=Path, required=True)
@@ -452,7 +479,8 @@ def main() -> None:
     hip = Hip()
     marker = build_marker(args.compiler)
     clock = Clock(hip, marker.image, marker.entry)
-    fn, aiter_source_sha = (None, None) if args.sweep else _aiter_kernel(args.aiter_root)
+    fn, aiter_source_sha = ((None, None) if args.sweep and not args.with_aiter
+                            else _aiter_kernel(args.aiter_root))
 
     def git(*cmd):
         return subprocess.check_output(["git", *cmd], cwd=ROOT, text=True).strip()
@@ -489,17 +517,34 @@ def main() -> None:
         # Production arms: both named weight layouts, generator defaults.
         # Sweep spec: PMxPN:U:G:L -- panel, whole groups per iteration, panels
         # per inner group step (-1 = default), weight layout kn|nk.
-        variants = [(None, 1, -1, "kn"), (None, 1, -1, "nk")] if not args.sweep else [
-            (tuple(int(v) for v in spec.split(":")[0].split("x")), int(spec.split(":")[1]),
-             int(spec.split(":")[2]), spec.split(":")[3])
-            for spec in args.sweep]
-        for panel, unroll, group_panels, layout in variants:
-            label = (f"tessera_{layout}" if panel is None else
-                     f"tessera_{layout}_{panel[0]}x{panel[1]}_u{unroll}_g{group_panels}")
+        variants: list = []
+        if not args.sweep:
+            variants = [(None, 1, -1, "kn", None), (None, 1, -1, "nk", None)]
+        elif args.with_aiter:
+            variants = [(None, 1, -1, "nk", None)]
+            if not args.no_production:
+                variants.insert(0, (None, 1, -1, "kn", None))
+        for spec in args.sweep:
+            parts = spec.split(":")
+            if parts[0] == "lds":
+                macro = tuple(int(v) for v in parts[1].split("x"))
+                warps, depth, stage_k, pad, prefetch = (int(v) for v in parts[2:7])
+                variants.append((macro, 1, -1, parts[7], (warps, depth, stage_k, pad, prefetch)))
+            else:
+                variants.append((tuple(int(v) for v in parts[0].split("x")), int(parts[1]),
+                                 int(parts[2]), parts[3], None))
+        for panel, unroll, group_panels, layout, lds in variants:
+            if lds is not None:
+                label = (f"tessera_{layout}_lds{panel[0]}x{panel[1]}_w{lds[0]}_d{lds[1]}"
+                         f"_s{lds[2]}_p{lds[3]}_f{lds[4]}")
+            elif panel is None:
+                label = f"tessera_{layout}"
+            else:
+                label = f"tessera_{layout}_{panel[0]}x{panel[1]}_u{unroll}_g{group_panels}"
             shape = BlockScaleShape(m, n, k, 128, 128, layout)
             try:
                 launch, meta, _ = tessera_launch(hip, device, shape, panel=panel, k_unroll=unroll,
-                                                 scale_group_panels=group_panels)
+                                                 scale_group_panels=group_panels, lds=lds)
             except Exception as error:  # a variant the generator refuses is a result, not a crash
                 row[label] = {"refused": str(error)[:400]}
                 continue

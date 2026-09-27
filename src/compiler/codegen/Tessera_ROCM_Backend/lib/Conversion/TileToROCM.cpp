@@ -3364,6 +3364,20 @@ struct LowerTileToROCMPass
           state.addAttribute("block_m", macroM);
           state.addAttribute("block_n", macroN);
           state.addAttribute("scale_n", scaleBlockN);
+          // The physical schedule the Schedule chose: the one-wave register
+          // panel ("global") or the multi-wave LDS-staged workgroup ("lds",
+          // `warps` waves, single- or double-buffered by pipeline_depth).
+          // Stated so the package binds the workgroup size it launches from
+          // Target IR rather than assuming one wave.
+          auto staging = op->getAttrOfType<StringAttr>("staging");
+          auto depth =
+              op->getAttrOfType<IntegerAttr>("tessera.pipeline_depth");
+          state.addAttribute(
+              "staging", staging ? staging : builder.getStringAttr("global"));
+          state.addAttribute("warps",
+                             warps ? warps : builder.getI64IntegerAttr(1));
+          state.addAttribute("pipeline_depth",
+                             depth ? depth : builder.getI64IntegerAttr(1));
         }
         if (foldedFamily) {
           state.addAttribute("stage_k", builder.getI64IntegerAttr(64));

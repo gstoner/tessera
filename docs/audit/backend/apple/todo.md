@@ -8,6 +8,17 @@ last_updated: 2026-09-27
 
 # Apple compiler, exact-device, and performance plan
 
+## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
+
+The ROCm spectral image read HIP's per-thread, sticky last-error slot after
+its launches, so an unrelated earlier HIP failure on the thread failed a
+correct launch; each device-work entry now discards errors older than the
+call once, on entry ([ROCm queue](../rocm/todo.md)). Not applicable here:
+Apple's runtime reports kernel failure per command buffer (`MTLCommandBuffer`
+status/error), and no Apple hook reads a process- or thread-wide last-error
+slot. The streaming-STFT architecture label fix touches only `target="rocm"`.
+No shared contract changed.
+
 ## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: not applicable (Apple registers no arbiter candidates)
 
 Every arbiter candidate of every tier must now carry a code identity or its

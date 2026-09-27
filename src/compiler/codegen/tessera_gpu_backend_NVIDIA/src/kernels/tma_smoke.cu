@@ -33,6 +33,10 @@ extern "C" __global__ void tessera_tma_smoke_kernel(
 }
 
 extern "C" cudaError_t tessera_tma_smoke(float* host_output, std::uint32_t count) {
+  // Discard a stale runtime error left on this thread by earlier code, so the
+  // post-launch cudaGetLastError() below reports only this launch
+  // (SPECTRAL-STALE-HIP-ERROR-2026-09-27).
+  (void)cudaGetLastError();
   if (count != 32) return cudaErrorInvalidValue;
   if (cuInit(0) != CUDA_SUCCESS) return cudaErrorInitializationError;
   float *source = nullptr, *output = nullptr;

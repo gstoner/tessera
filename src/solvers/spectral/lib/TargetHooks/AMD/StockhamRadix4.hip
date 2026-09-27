@@ -38,6 +38,23 @@
 #include <mutex>
 #include <new>
 
+// HIP's last-error slot is per host thread and STICKY: only a failing call
+// writes it, and nothing but hipGetLastError() resets it. A refused call
+// anywhere earlier on the thread -- another library's hipModuleLoadData, a
+// hipSetDevice on a missing ordinal -- therefore stays parked there until the
+// next post-launch `hipGetLastError()` check in this file reads it and reports
+// a launch that actually succeeded as failed (SPECTRAL-STALE-HIP-ERROR-
+// 2026-09-27). Each host-pointer entry point below discards errors older than
+// the call exactly once, first thing; every error raised inside the call is
+// still detected by the checks that follow. The device-pointer primitives
+// (`ts_fft_stockham_amd`, `ts_fft_stockham_fused_lds_launch_amd`,
+// `ts_fft_plan_execute_*_device_batch_amd`) deliberately do NOT clear: they
+// are composed inside SpectralComposite entry points after unchecked launches
+// of the caller's own, and their check is the only detector of those. Their
+// caller owns the thread's error slot. Metadata and plan-lifecycle entries
+// never read the slot and make no extra HIP call.
+static inline void clearStaleHipError() { (void)hipGetLastError(); }
+
 __device__ __forceinline__ float2 cmul(float2 a, float2 b) {
   return make_float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
 }
@@ -871,6 +888,7 @@ extern "C" int ts_fft_plan_execute_c2r_packed_device_batch_amd(
 
 extern "C" int ts_fft_plan_execute_hostptr_batch_amd(
     void *handle, const float2 *inputHost, float2 *outputHost, int batch) {
+  clearStaleHipError();
   auto *plan = static_cast<TSFFTPlanAMD *>(handle);
   if (!plan || !inputHost || !outputHost || batch <= 0) return 20;
   std::lock_guard<std::mutex> guard(plan->mutex);
@@ -897,6 +915,7 @@ extern "C" int ts_fft_plan_execute_hostptr_batch_amd(
 extern "C" int ts_fft_plan_execute_r2c_packed_hostptr_amd(
     void *handle, const float *inputHost, float2 *outputHost, int batch,
     int logicalN) {
+  clearStaleHipError();
   auto *plan = static_cast<TSFFTPlanAMD *>(handle);
   if (!plan || !inputHost || !outputHost || batch <= 0 || logicalN < 2 ||
       (logicalN & 1) || plan->n != logicalN / 2 || plan->sign != -1)
@@ -940,6 +959,7 @@ extern "C" int ts_fft_plan_execute_r2c_packed_hostptr_amd(
 extern "C" int ts_fft_plan_execute_c2r_packed_hostptr_amd(
     void *handle, const float2 *inputHost, float *outputHost, int batch,
     int logicalN) {
+  clearStaleHipError();
   auto *plan = static_cast<TSFFTPlanAMD *>(handle);
   if (!plan || !inputHost || !outputHost || batch <= 0 || logicalN < 2 ||
       (logicalN & 1) || plan->n != logicalN / 2 || plan->sign != 1)
@@ -1011,6 +1031,7 @@ extern "C" void ts_fft_plan_destroy_amd(void *handle) {
 // kernel with plain host complex64 arrays.
 extern "C" int ts_fft_stockham_amd_hostptr(const float2 *in_host,
                                            float2 *out_host, int N, int sign) {
+  clearStaleHipError();
   float2 *d_in = nullptr, *d_out = nullptr, *d_scr = nullptr;
   int rc = 0;
   size_t bytes = size_t(N) * sizeof(float2);
@@ -1053,6 +1074,7 @@ cleanup:
 extern "C" int ts_fft_stockham_amd_hostptr_batch(const float2 *in_host,
                                                  float2 *out_host, int batch,
                                                  int N, int sign) {
+  clearStaleHipError();
   if (batch <= 0 || N <= 0)
     return 6;
   float2 *d_in = nullptr, *d_out = nullptr, *d_scr = nullptr;

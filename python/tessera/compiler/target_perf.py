@@ -43,6 +43,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from .evidence_reasons import ReasonVocabulary
+
 
 class Provenance(str, Enum):
     """Where a performance number came from. Ordered worst-to-best by trust."""
@@ -823,6 +825,83 @@ def _require_wsl_timing_witness(witness: Any, devices: Mapping[str, Any],
                 f"timing sample(s) bound to its measurement {digest[:16]}…; {hint}")
 
 
+#: Every tag a calibration corpus's ``ineligibility_reasons`` may carry.
+#: Produced by `benchmarks/calibration/calibrate_gfx1151.py`, which checks its
+#: reasons against this declaration before writing; read by
+#: :func:`corpus_selector_eligibility`. Declared 2026-09-27
+#: (EVIDENCE-PACKET-1 / X86-EVIDENCE-VOCAB-1's rule).
+CALIBRATION_CORPUS_REASONS: dict[str, str] = {
+    "KERNEL_CLOCK_WITNESS_REQUIRED":
+        "a WSL measurement took no kernel-side clock witness, so its HIP-event "
+        "latency cannot be admitted",
+    "HIP_DEVICE_EVENT_INVALID":
+        "the named kernel's HIP event timing is invalid (the detail names the kernel)",
+    "HOST_DEVICE_CLOCK_DISAGREEMENT":
+        "the named kernel's HIP event and host wall clock disagree by more than 10%",
+    "ROCPROFILER_ACTIVITY_NOT_COLLECTED":
+        "no rocprofiler capture was taken, so no dispatch is attributed",
+    "ROCPROFILER_CAPTURE_MISSING":
+        "a rocprofiler capture was supplied but is not a collected rocprofiler capture",
+    "ROCPROFILER_DISPATCH_MISSING":
+        "the rocprofiler capture saw no dispatch activity",
+    "ROCPROFILER_RUNTIME_CALLBACK_MISSING":
+        "the rocprofiler capture saw neither a HIP nor an HSA runtime callback",
+    "ROCPROFILER_MEASUREMENT_LINEAGE_MISSING":
+        "the profiled application did not run this measurement file in "
+        "--measurement-only mode, so the capture is not of this measurement",
+    "ROCPROFILER_KERNEL_CORRELATION_MISSING":
+        "the capture has no device activity for the named calibration kernels",
+    "ROCPROFILER_DISPATCH_CARDINALITY_MISSING":
+        "the capture holds fewer calibration-kernel dispatches than the run launched",
+    "SOURCE_WORKTREE_DIRTY":
+        "the measured tree is not recorded clean, so the result names no revision",
+    "BARE_METAL_REQUIRED":
+        "legacy (2026-08-15 recorder): the corpus was not measured on bare metal",
+    "HIP_DEVICE_EVENT_INVALID_UNDER_WSL":
+        "legacy (2026-08-15 recorder): HIP device events were invalid under WSL2",
+}
+CALIBRATION_CORPUS_VOCABULARY = ReasonVocabulary(
+    "calibration corpus", CALIBRATION_CORPUS_REASONS,
+    reserved={
+        "BARE_METAL_REQUIRED":
+            "emitted by the 2026-08-15 recorder only (retired 2026-09-25, when WSL "
+            "stopped being a blocker); kept so the committed corpus reads",
+        "HIP_DEVICE_EVENT_INVALID_UNDER_WSL":
+            "emitted by the 2026-08-15 recorder only, superseded by the per-kernel "
+            "HIP_DEVICE_EVENT_INVALID; kept so the committed corpus reads",
+    })
+
+
+def corpus_selector_eligibility(corpus: Mapping[str, Any]) -> bool:
+    """A corpus's stated eligibility, refused unless complete and consistent.
+
+    ``selector_eligible`` decides whether measured values become selector
+    authority, which makes it a semantic key (Decision #21a). Until 2026-09-27
+    :func:`apply_corpus` read it as ``corpus.get("selector_eligible", True)``:
+    a corpus that omitted the field -- the one statement that it may be
+    trusted -- was trusted, and ``ineligibility_reasons`` was never read, so a
+    corpus could say ``selector_eligible: true`` beside a list of reasons it
+    was not. Both are now refused by name (EVIDENCE-PACKET-1).
+    """
+    eligible = corpus.get("selector_eligible")
+    reasons = corpus.get("ineligibility_reasons")
+    if not isinstance(eligible, bool) or not isinstance(reasons, list) \
+            or not all(isinstance(r, str) and r for r in reasons):
+        raise ValueError(
+            "CALIBRATION_CORPUS_ELIGIBILITY_INCOMPLETE: a calibration corpus must "
+            "state selector_eligible (a bool) and ineligibility_reasons (a list of "
+            f"tags); got {eligible!r} / {reasons!r}. An unstated eligibility is "
+            "never read as eligible")
+    CALIBRATION_CORPUS_VOCABULARY.require_known(
+        reasons, ValueError, code="CALIBRATION_CORPUS_REASON_UNKNOWN")
+    if eligible == bool(reasons):
+        raise ValueError(
+            "CALIBRATION_CORPUS_ELIGIBILITY_CONTRADICTED: selector_eligible="
+            f"{eligible} contradicts ineligibility_reasons={reasons}; an eligible "
+            "corpus states no reason, an ineligible one states at least one")
+    return eligible
+
+
 def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
     """Merge a calibration corpus into the registry. Returns the device names
     updated.
@@ -861,7 +940,7 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
     if not on:
         raise ValueError("calibration corpus requires a 'measured_on' date")
     host = corpus.get("host")
-    selector_eligible = corpus.get("selector_eligible", True)
+    selector_eligible = corpus_selector_eligibility(corpus)
     if selector_eligible is not True:
         raise ValueError(
             "calibration corpus is pruning-only and cannot become selector "
@@ -937,6 +1016,9 @@ def load_pruning_corpus(path: str | Path) -> dict[str, dict[str, float]]:
         )
     if not corpus.get("measured_on"):
         raise ValueError("calibration corpus requires a 'measured_on' date")
+    # Inspection only, but a corpus whose eligibility is missing, contradicted
+    # or phrased in undeclared tags is malformed evidence either way.
+    corpus_selector_eligibility(corpus)
     fields_by_device: dict[str, dict[str, float]] = {}
     for device, fields in dict(corpus.get("devices", {})).items():
         if not isinstance(fields, Mapping):
@@ -1019,7 +1101,10 @@ __all__ = [
     "TargetPerfError",
     "UNIT_MATRIX",
     "UNIT_VECTOR",
+    "CALIBRATION_CORPUS_REASONS",
+    "CALIBRATION_CORPUS_VOCABULARY",
     "apply_corpus",
+    "corpus_selector_eligibility",
     "apply_registry_snapshot",
     "devices_for_target",
     "load_corpus",

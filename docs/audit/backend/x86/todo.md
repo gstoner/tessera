@@ -6149,3 +6149,9 @@ Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
 Parity validated on Princess-Luna (Zen 5): the quadratic-energy Langevin loop compiles as one function through libtessera_jit with the compiler-derived gradient and on-device Philox noise; forward/gradient match the independent formulas and fixed-key samples are bit-exact with the declared policy for 1/5/12 steps; JIT + autodiff suites 174 passed; EBM lit 14/14; autodiff fixtures 21/21. Super-Bear (Zen 2) passes the same EBM and autodiff suites; its bf16 JIT tests fail independent of this branch (bisected against main's JIT sources; Zen 2 has no AVX512-BF16). The Python-emitted `x86_ebm_langevin_compiled` AVX-512 kernel is unchanged; no performance claim.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-quadratic-energy-loop-executes-through-the-mlirllvm-backbone).
+
+### Evidence governance gates (2026-09-27)
+
+Owners: X86-EVIDENCE-VOCAB-1 / GOV-ODS-CONSUMER-1 / EVIDENCE-PACKET-1. Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
+
+Parity validated host-free (Mac). The x86 packet's ineligibility tags and the PMU event map's are declared through `evidence_reasons.ReasonVocabulary`; the event-map validator now re-derives its reasons from the stored cpu/environment/perf inputs instead of only type-checking them. The committed 2026-08-06/2026-09-26 packets and the 2026-08-07 event map still validate. The ODS gate waives `tessera_x86.amx_*` (retired ISA) and three fixture-only directives (`avx512_gemm_microkernel`, `pack_b_panel`, `elementwise`): no producer exists. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility).

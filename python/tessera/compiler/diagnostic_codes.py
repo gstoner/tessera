@@ -4232,6 +4232,53 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="GFX1201-SSD-CALIBRATION-2026-09-26",
         language="python", status="implemented",
     ),
+    DiagnosticCode(
+        code="CALIBRATION_CORPUS_ELIGIBILITY_INCOMPLETE",
+        pass_origin="tessera.compiler.target_perf.corpus_selector_eligibility",
+        severity="error",
+        summary=(
+            "A calibration corpus does not state selector_eligible as a bool and "
+            "ineligibility_reasons as a list of tags. Until 2026-09-27 a missing "
+            "selector_eligible was read as True."
+        ),
+        fix_hint=(
+            "Re-record with benchmarks/calibration/calibrate_gfx1151.py, which "
+            "writes both fields; never add selector_eligible by hand."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-GOVERNANCE-GATES-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="CALIBRATION_CORPUS_ELIGIBILITY_CONTRADICTED",
+        pass_origin="tessera.compiler.target_perf.corpus_selector_eligibility",
+        severity="error",
+        summary=(
+            "A calibration corpus claims selector eligibility while listing "
+            "ineligibility reasons, or claims ineligibility with none."
+        ),
+        fix_hint="Do not edit a corpus's eligibility; re-record it.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-GOVERNANCE-GATES-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="CALIBRATION_CORPUS_REASON_UNKNOWN",
+        pass_origin="tessera.compiler.target_perf.corpus_selector_eligibility",
+        severity="error",
+        summary=(
+            "A calibration corpus carries an ineligibility tag that "
+            "CALIBRATION_CORPUS_REASONS does not declare; an unknown reason is "
+            "refused rather than read as no reason."
+        ),
+        fix_hint=(
+            "Declare the tag with a meaning in target_perf.CALIBRATION_CORPUS_REASONS "
+            "(the recorder checks against it), or fix the recorder."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-GOVERNANCE-GATES-2026-09-27",
+        language="python", status="implemented",
+    ),
 )
 
 

@@ -9602,3 +9602,9 @@ Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
 Follow-up required: CPU-lane only; no sm_120 EBM lane exists and none is claimed. EBM lit 14/14 on Super-Bear.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-quadratic-energy-loop-executes-through-the-mlirllvm-backbone).
+
+### Evidence governance gates (2026-09-27)
+
+Owners: X86-EVIDENCE-VOCAB-1 / GOV-ODS-CONSUMER-1 / EVIDENCE-PACKET-1. Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
+
+Parity validated host-free (Mac). The device-clock packet's packet-local tags are declared (witness/window/part codes borrowed from the registry by name) and the validator refuses an undeclared tag; every committed sm_120 packet still validates. The ODS gate waives `tessera_nvidia.{mma_fused,mma_attention,fpquant}` (named only by `sm120_differentiation_target_ir.mlir`) and `tessera_nvidia.func` (fixtures only; the bare `FuncOp` in `PipelineOverlapPass.cpp` is `mlir::func::FuncOp`). No device run, measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility).

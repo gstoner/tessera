@@ -493,6 +493,7 @@ _SINGLE_KEY_SCHEDULES = (
     FoldedPrefillSchedule(workgroup_mode="cu"),
     FoldedPrefillSchedule(staging_prefetch="register_next_slab"),
     FoldedPrefillSchedule(epilogue="complete_tile_vector_scales"),
+    FoldedPrefillSchedule(row_guard="wave"),
 )
 
 
@@ -559,6 +560,10 @@ def _launch_folded(package, a, a_scale, folded) -> np.ndarray:
     (300, 100, 128),   # ragged in both dimensions, two slabs
     (256, 64, 128),    # one complete tile, WGP mode, vector epilogue
     (512, 128, 192),   # complete tiles, CU mode, three slabs
+    # GFX1201-PERF-2026-09-27 per-wave M guard: idle waves and partial waves.
+    (100, 80, 128),    # waves 2-3 hold no row; wave 1 is partial
+    (192, 64, 64),     # wave 3 idle; waves 0-2 complete -> per-wave vector epilogue
+    (65, 48, 64),      # one live row in wave 1; waves 2-3 idle
 ])
 @pytest.mark.parametrize("lossy", [False, True])
 def test_load_schedule_preserves_bits_on_nonuniform_inputs(
@@ -588,6 +593,7 @@ def test_load_schedule_preserves_bits_on_nonuniform_inputs(
     selected = program.route_receipt["selected_schedule"]
     assert selected["workgroup_mode"] == ("cu" if m > 256 else "wgp")
     assert selected["staging_prefetch"] == "register_next_slab"
+    assert selected["row_guard"] == ("cta" if m % 256 == 0 else "wave")
     rocm_isa.assert_selected(
         program.package.image.payload, chip="gfx1201",
         pattern=r"v_wmma_f32_16x16x16_\w+",
@@ -599,7 +605,7 @@ def test_load_schedule_preserves_bits_on_nonuniform_inputs(
         compiled.view(np.uint16), original.view(np.uint16),
         err_msg="compiled-route load schedule changed BF16 output bits",
     )
-    if shape == (512, 128, 192):
+    if shape in ((512, 128, 192), (100, 80, 128)):
         for schedule in _SINGLE_KEY_SCHEDULES:
             single = _launch_folded(
                 package_mxfp4_folded_prefill(

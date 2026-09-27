@@ -260,6 +260,7 @@ FOLDED_STAGING_PREFETCH = ("none", "register_next_slab")
 FOLDED_EPILOGUE_SCHEDULES = (
     "predicated_scalar_scales", "complete_tile_vector_scales",
 )
+FOLDED_ROW_GUARDS = ("cta", "wave")
 #: Largest grouped-raster width accepted. A group at least as tall as the
 #: problem's row-block count is plain M-major order.
 MAX_RASTER_GROUP_M = 64
@@ -289,12 +290,21 @@ class FoldedPrefillSchedule:
       activation scales as eight vector loads, ahead of use, when the whole
       CTA tile is in bounds and the scale pointer is 16-byte aligned; every
       other launch runs the predicated per-element production epilogue.
+    * ``row_guard`` (GFX1201-PERF-2026-09-27) -- ``wave`` takes the M bound
+      per wave instead of per CTA: a wave whose 64 rows all lie at or past M
+      issues no WMMAs and no epilogue (it still stages its share of the slab
+      and meets every barrier; the branch is wave-uniform), and the vector
+      epilogue's completeness test covers the wave's own 64 x 32 block. On a
+      partial row block -- every M <= 192 in particular -- the BM256 tile
+      otherwise multiplies rows that are never stored. ``cta`` is the
+      original kernel.
     """
 
     raster_group_m: int = 0
     workgroup_mode: str = "wgp"
     staging_prefetch: str = "none"
     epilogue: str = "predicated_scalar_scales"
+    row_guard: str = "cta"
 
     def __post_init__(self) -> None:
         group = self.raster_group_m
@@ -308,6 +318,7 @@ class FoldedPrefillSchedule:
             ("workgroup_mode", self.workgroup_mode, FOLDED_WORKGROUP_MODES),
             ("staging_prefetch", self.staging_prefetch, FOLDED_STAGING_PREFETCH),
             ("epilogue", self.epilogue, FOLDED_EPILOGUE_SCHEDULES),
+            ("row_guard", self.row_guard, FOLDED_ROW_GUARDS),
         ):
             if value not in legal:
                 raise ValueError(
@@ -328,6 +339,7 @@ class FoldedPrefillSchedule:
             "workgroup_mode": self.workgroup_mode,
             "staging_prefetch": self.staging_prefetch,
             "epilogue_schedule": self.epilogue,
+            "row_guard": self.row_guard,
         }
 
 
@@ -465,6 +477,20 @@ _VECTOR_EPILOGUE = """  // Complete-tile epilogue: every output row and column i
 """
 
 
+_ROW_LIVE_DECL = """  // Wave-uniform M guard (row_guard = wave): does any of this wave's 64 rows
+  // exist? A wave with none still stages its share and meets every barrier.
+  const bool wave_rows_live = m0 + wm * 64 < M;
+"""
+_STEP_LOOP = "    for (int step = 0; step < 4 && kb + step * 16 < K; ++step) {"
+_STEP_LOOP_LIVE = (
+    "    for (int step = 0; wave_rows_live && step < 4 && kb + step * 16 < K; ++step) {"
+)
+_VECTOR_EPILOGUE_HEAD = "  // Complete-tile epilogue: every output row and column is in bounds"
+_CTA_COMPLETE = "  if (m0 + 256 <= M && n0 + 64 <= N && N <= 16777216 &&"
+_WAVE_COMPLETE = "  if (m0 + wm * 64 + 64 <= M && n0 + wn * 32 + 32 <= N && N <= 16777216 &&"
+_IDLE_WAVE_RETURN = "  if (!wave_rows_live) return;  // no row of this wave is stored\n"
+
+
 def _apply_schedule(source: str, schedule: FoldedPrefillSchedule) -> str:
     """Apply ``schedule`` to the original source through checked edits."""
     if schedule.raster_group_m:
@@ -487,6 +513,17 @@ def _apply_schedule(source: str, schedule: FoldedPrefillSchedule) -> str:
         source = _replace_once(
             source, _EPILOGUE_ANCHOR, _VECTOR_EPILOGUE + _EPILOGUE_ANCHOR, "epilogue",
         )
+    if schedule.row_guard == "wave":
+        source = _replace_once(source, _LOOP_HEAD, _ROW_LIVE_DECL + _LOOP_HEAD, "K loop head")
+        source = _replace_once(source, _STEP_LOOP, _STEP_LOOP_LIVE, "K16 step loop")
+        if schedule.epilogue == "complete_tile_vector_scales":
+            source = _replace_once(source, _CTA_COMPLETE, _WAVE_COMPLETE,
+                                   "vector epilogue condition")
+            source = _replace_once(source, _VECTOR_EPILOGUE_HEAD,
+                                   _IDLE_WAVE_RETURN + _VECTOR_EPILOGUE_HEAD, "epilogue")
+        else:
+            source = _replace_once(source, _EPILOGUE_ANCHOR,
+                                   _IDLE_WAVE_RETURN + _EPILOGUE_ANCHOR, "epilogue")
     return source
 
 
@@ -657,7 +694,7 @@ def package_mxfp4_folded_prefill(
 
 
 __all__ = [
-    "FOLDED_EPILOGUE_SCHEDULES", "FOLDED_PREFILL_SCHEDULE_V1",
+    "FOLDED_EPILOGUE_SCHEDULES", "FOLDED_PREFILL_SCHEDULE_V1", "FOLDED_ROW_GUARDS",
     "FOLDED_STAGING_PREFETCH", "FOLDED_WEIGHT_LAYOUT", "FOLDED_WORKGROUP_MODES",
     "FoldedPrefillSchedule", "GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI",
     "GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI", "MAX_RASTER_GROUP_M",

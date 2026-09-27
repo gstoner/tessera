@@ -43,6 +43,7 @@ class FoldedScaledMatmulProgram:
                 "workgroup_mode": provenance["workgroup_mode"],
                 "staging_prefetch": provenance["staging_prefetch"],
                 "epilogue_schedule": provenance["epilogue_schedule"],
+                "row_guard": provenance["row_guard"],
             },
             "schedule_hash": provenance["schedule_hash"],
             "abi_id": package.descriptor.abi_id,

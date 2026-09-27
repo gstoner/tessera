@@ -3419,6 +3419,16 @@ struct LowerTileToROCMPass
             state.addAttribute(
                 "epilogue_schedule",
                 builder.getStringAttr("complete_tile_vector_scales"));
+            // GFX1201-PERF-2026-09-27: on a partial row block the BM256 tile
+            // would multiply rows that are never stored; the per-wave M
+            // guard skips those waves' WMMAs and epilogue (bitwise-identical
+            // output). Measured 0.68x (M=128, N=5120) and 0.85x (N=17408);
+            // at whole row blocks it is a runtime no-op, so they keep the
+            // original CTA-level guard and their exact kernel.
+            state.addAttribute(
+                "row_guard",
+                builder.getStringAttr(problemM.getInt() % 256 != 0 ? "wave"
+                                                                    : "cta"));
           }
         }
         state.addAttribute(

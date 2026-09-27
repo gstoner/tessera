@@ -95,9 +95,48 @@ def test_schedule_refuses_incompatible_or_undeclared_choices() -> None:
         {"raster_group_m": -1}, {"raster_group_m": MAX_RASTER_GROUP_M + 1},
         {"raster_group_m": True}, {"workgroup_mode": "wave"},
         {"staging_prefetch": "lds_double_buffer"}, {"epilogue": "fast"},
+        {"row_guard": "lane"},
     ):
         with pytest.raises(ValueError):
             FoldedPrefillSchedule(**bad)  # type: ignore[arg-type]
+
+
+def test_wave_row_guard_skips_only_waves_with_no_stored_row() -> None:
+    """GFX1201-PERF-2026-09-27: the per-wave M guard is wave-uniform, keeps
+    every barrier and the staging, and changes no element expression."""
+    selected = FoldedPrefillSchedule(
+        raster_group_m=4, staging_prefetch="register_next_slab",
+        epilogue="complete_tile_vector_scales",
+    )
+    guarded = FoldedPrefillSchedule(
+        raster_group_m=4, staging_prefetch="register_next_slab",
+        epilogue="complete_tile_vector_scales", row_guard="wave",
+    )
+    base = emit_mxfp4_folded_prefill_hip(full_k64=True, schedule=selected)
+    source = emit_mxfp4_folded_prefill_hip(full_k64=True, schedule=guarded)
+    assert "wave_rows_live" not in base
+    assert source.count("const bool wave_rows_live = m0 + wm * 64 < M;") == 1
+    # Only the WMMA step loop and the epilogue are guarded; the slab copy,
+    # the prefetch and both barriers are unchanged.
+    assert "for (int step = 0; wave_rows_live && step < 4" in source
+    assert source.count("__syncthreads()") == base.count("__syncthreads()")
+    assert source.count("fetch_slab(") == base.count("fetch_slab(")
+    assert source.index("if (!wave_rows_live) return;") > source.rindex("__syncthreads()")
+    # The vector epilogue's completeness test is the wave's own block.
+    assert "m0 + wm * 64 + 64 <= M && n0 + wn * 32 + 32 <= N" in source
+    assert "m0 + 256 <= M && n0 + 64 <= N" not in source
+    # Every element expression is the base kernel's.
+    for expression in ("float scaled = partial * combined_scale;",
+                       "(double)partial * (double)row_scale[jn] *",
+                       "O[m * N + n] = (__bf16)scaled;"):
+        assert source.count(expression) == base.count(expression)
+    # Without the vector epilogue the guard still returns before the
+    # predicated epilogue, and the default stays the original kernel.
+    scalar = emit_mxfp4_folded_prefill_hip(
+        full_k64=True, schedule=FoldedPrefillSchedule(row_guard="wave"))
+    assert scalar.count("if (!wave_rows_live) return;") == 1
+    assert FOLDED_PREFILL_SCHEDULE_V1.row_guard == "cta"
+    assert guarded.as_dict()["row_guard"] == "wave"
 
 
 def _grouped_origin(pid: int, m: int, n: int, group: int) -> tuple[int, int]:

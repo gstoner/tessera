@@ -200,13 +200,14 @@ def _schedule_from(receipt: dict[str, Any]) -> FoldedPrefillSchedule:
         workgroup_mode=str(selected["workgroup_mode"]),
         staging_prefetch=str(selected["staging_prefetch"]),
         epilogue=str(selected["epilogue_schedule"]),
+        row_guard=str(selected["row_guard"]),
     )
 
 
 def _decomposition(selected: FoldedPrefillSchedule) -> list[tuple[str, FoldedPrefillSchedule]]:
     """Single-key additions to V1 and leave-one-out removals from ``selected``."""
     defaults = FOLDED_PREFILL_SCHEDULE_V1
-    keys = ("raster_group_m", "workgroup_mode", "staging_prefetch", "epilogue")
+    keys = ("raster_group_m", "workgroup_mode", "staging_prefetch", "epilogue", "row_guard")
     changed = [key for key in keys if getattr(selected, key) != getattr(defaults, key)]
     out: list[tuple[str, FoldedPrefillSchedule]] = []
     for key in changed:

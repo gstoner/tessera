@@ -94,6 +94,7 @@ def test_receipt_distinguishes_hsaco_bytes_from_composite_image_identity() -> No
         "raster_group_m": 4, "workgroup_mode": "cu",
         "staging_prefetch": "register_next_slab",
         "epilogue_schedule": "complete_tile_vector_scales",
+        "row_guard": "wave",
         "schedule_hash": "schedule", "tile_ir_sha256": "tile",
         "target_ir_sha256": "target",
         "numeric_policy": "folded_row_reference_explicit_approximate",
@@ -114,3 +115,4 @@ def test_receipt_distinguishes_hsaco_bytes_from_composite_image_identity() -> No
     assert receipt["selected_schedule"]["epilogue_schedule"] == (
         "complete_tile_vector_scales"
     )
+    assert receipt["selected_schedule"]["row_guard"] == "wave"

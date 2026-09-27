@@ -102,6 +102,7 @@ def package_folded_scaled_wmma_target_ir(
         workgroup_mode=_target_string_attr(operation, "workgroup_mode"),
         staging_prefetch=_target_string_attr(operation, "staging_prefetch"),
         epilogue=_target_string_attr(operation, "epilogue_schedule"),
+        row_guard=_target_string_attr(operation, "row_guard"),
     )
     package = package_mxfp4_folded_prefill(
         m, n, k, folded, allow_approximate=allow_approximate, schedule=schedule,

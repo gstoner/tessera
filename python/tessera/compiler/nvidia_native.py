@@ -1519,8 +1519,11 @@ def _reduction_contract(module: GraphIRModule) -> tuple[str, str, int, bool] | N
         else "mean"
     )
     if op.op_name == "tessera.reduce":
-        kind = str(op.kwargs.get("kind", "sum"))
-        if kind not in {"sum", "mean", "max", "min"}:
+        # A kind-less reduce is not a sum (Decision #21a): refuse the contract.
+        from .reduction_kind import reduction_kind
+        try:
+            kind = reduction_kind(op.kwargs, where="NVIDIA reduction contract")
+        except ValueError:
             return None
     return arg.ir_type.dtype, kind, axis, keepdims
 

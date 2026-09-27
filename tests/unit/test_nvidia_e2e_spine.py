@@ -597,7 +597,9 @@ def _reduction_module(
                         operands=["%x"],
                         operand_types=[str(x)],
                         result_type=str(out),
-                        kwargs={"axis": axis, "keepdims": keepdims},
+                        # `tessera.reduce` requires its kind (ODS; #21a).
+                        kwargs={"axis": axis, "keepdims": keepdims,
+                                **({"kind": "sum"} if kind == "sum" else {})},
                     )
                 ],
                 return_values=["%o"],

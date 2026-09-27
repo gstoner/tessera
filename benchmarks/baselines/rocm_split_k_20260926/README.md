@@ -1,5 +1,10 @@
 # ROCM-SPLIT-K-1 — gfx1201 router-gate split-K, 2026-09-26
 
+> **History (2026-09-27).** The selection rule measured here (S=2 for this
+> shape) was superseded by the device-clock slice sweep in
+> [`../rocm_split_k_20260927/`](../rocm_split_k_20260927/README.md), which selects
+> S=8. The numbers below are host wall clock and are not comparable with it.
+
 Host **Tajasarus** (RX 9070 XT, gfx1201, WSL2 `/dev/dxg`, ROCm 10.0 / HIP 7.15),
 `tessera-opt` from the branch's assertions-ON LLVM/MLIR 23.1.1 build
 (`build/`, `-fno-rtti -UNDEBUG`). Source revision in `gfx1201.json`

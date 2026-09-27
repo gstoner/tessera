@@ -63,6 +63,7 @@ from tessera.compiler.emit.delegate_contract import (
     DelegatedCandidate,
 )
 from tessera.compiler.emit.kernel_cache import build, register_compiler
+from tessera.compiler.emit.source_memo import memoized
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
     KernelEmitter,
@@ -1182,11 +1183,40 @@ def _nvcc_build() -> tuple[str, ...]:
     return ("nvcc", *_nvcc_compile_flags(), *_NVCC_LINK_FLAGS)
 
 
+_NVCC_CACHE_LINES: dict[tuple[Any, ...], tuple[str, ...]] = {}
+#: The environment's own store where it is a bytes-keyed dict (CPython on
+#: POSIX): reading `os.environ` decodes a fresh `str` per call, so hashing a
+#: long PATH for the memo key cost more than the rest of the lookup, and even
+#: `os.environb.get` is ~0.3 us of Mapping machinery. Every `os.environ` /
+#: `os.environb` write (incl. `monkeypatch.setenv`) goes through this dict, so
+#: nothing is missed; elsewhere -- or if `os.environ` itself was replaced --
+#: the portable `os.environ` read is used.
+_ENV_STORE: Any = getattr(os.environ, "_data", None)
+_ENVB: Any = (_ENV_STORE if os.name == "posix" and isinstance(_ENV_STORE, dict)
+              and all(isinstance(k, bytes) for k in list(_ENV_STORE)[:1]) else None)
+_NVCC_ENV_KEYS = ("TESSERA_NVCC", "PATH", "TESSERA_NVIDIA_ARCH")
+_NVCC_ENV_KEYS_B = tuple(k.encode() for k in _NVCC_ENV_KEYS)
+
+
 def _nvcc_cache_line() -> tuple[str, ...]:
     """What a compiled-artifact cache keys on beyond the source: the build line
     the identity carries plus the nvcc actually invoked (by path -- a cache is
-    per process, so a path is exact here where an identity must be portable)."""
-    return (_nvcc(), *_nvcc_build())
+    per process, so a path is exact here where an identity must be portable).
+    Memoized on the three environment variables it reads and on the helpers
+    that turn them into the line (so patching one is seen), since every launch
+    of an emitted lane asks for it."""
+    if _ENVB is not None and getattr(os.environ, "_data", None) is _ENVB:
+        get = _ENVB.get
+        k0, k1, k2 = _NVCC_ENV_KEYS_B
+        env: tuple[Any, ...] = (get(k0), get(k1), get(k2))
+    else:
+        env = tuple(os.environ.get(k) for k in _NVCC_ENV_KEYS)
+    env += (_nvcc, _nvcc_build, _nvcc_compile_flags, _nvidia_arch)
+    line = _NVCC_CACHE_LINES.get(env)
+    if line is None:
+        line = (_nvcc(), *_nvcc_build())
+        _NVCC_CACHE_LINES[env] = line
+    return line
 
 
 # ── emitted-lane artifact caches, keyed by the code they hold ─────────────────
@@ -1210,12 +1240,20 @@ _EMITTED_ARTIFACTS: dict[str, str] = {}
 #: it only saves re-hashing when a lane asks again for the same source -- the
 #: composed lanes ask once per stage launch inside their timed loops.
 _EMITTED_KEYS: dict[tuple[Any, ...], str] = {}
+#: Fast path of `_EMITTED_KEYS` for the memoized `KernelSource` objects the
+#: lanes hand back on every launch (`source_memo`): (id, dtype, line) ->
+#: (that object, key). The object is held, so its id cannot be reused, and the
+#: `is` check means a different object never reads another's key.
+_EMITTED_KEYS_BY_OBJ: dict[tuple[int, str, tuple[str, ...]], tuple[KernelSource, str]] = {}
 
 
 def _emitted_key(src: KernelSource, dtype: str) -> str:
     """The cache key of one emitted-lane source: its `kernel_cache.cache_key`
     (the one the identity records) folded with the nvcc cache line."""
     line = _nvcc_cache_line()
+    fast = _EMITTED_KEYS_BY_OBJ.get((id(src), dtype, line))
+    if fast is not None and fast[0] is src:
+        return fast[1]
     memo = (src.source, src.entry, src.lang, src.spec.value, repr(src.shape_key),
             repr(src.layouts), dtype, line)
     key = _EMITTED_KEYS.get(memo)
@@ -1226,6 +1264,9 @@ def _emitted_key(src: KernelSource, dtype: str) -> str:
         key = hashlib.sha256(
             "\x1f".join((ident, *line)).encode("utf-8")).hexdigest()
         _EMITTED_KEYS[memo] = key
+    if len(_EMITTED_KEYS_BY_OBJ) >= 4096:
+        _EMITTED_KEYS_BY_OBJ.clear()
+    _EMITTED_KEYS_BY_OBJ[(id(src), dtype, line)] = (src, key)
     return key
 
 
@@ -1253,13 +1294,28 @@ def _emitted_symbol(cache: dict[Any, Any], src: KernelSource, dtype: str,
     return fn
 
 
+#: `_cuda_source_identity` by source object (same scheme as
+#: `_EMITTED_KEYS_BY_OBJ`): the arbiter asks every live candidate for its
+#: identity on each served verdict, and the memoized source is one object.
+_IDENTITIES_BY_OBJ: dict[tuple[int, str, tuple[str, ...]],
+                         tuple[KernelSource, dict[str, str]]] = {}
+
+
 def _cuda_source_identity(source: KernelSource, dtype: str) -> dict[str, str]:
     """Identity of one Python-emitted CUDA source compiled by
     `_nvidia_cuda_compile_fn`: text, `kernel_cache.cache_key`, nvcc flags."""
     from tessera.compiler.emitted_code_identity import kernel_source_identity
 
-    return kernel_source_identity(source, dtype=dtype, target=_TARGET,
-                                  build=_nvcc_build())
+    line = _nvcc_cache_line()
+    fast = _IDENTITIES_BY_OBJ.get((id(source), dtype, line))
+    if fast is not None and fast[0] is source:
+        return dict(fast[1])
+    identity = kernel_source_identity(source, dtype=dtype, target=_TARGET,
+                                      build=line[1:])
+    if len(_IDENTITIES_BY_OBJ) >= 4096:
+        _IDENTITIES_BY_OBJ.clear()
+    _IDENTITIES_BY_OBJ[(id(source), dtype, line)] = (source, dict(identity))
+    return identity
 
 
 def _generic_lane_source(region: Any) -> KernelSource:
@@ -3335,7 +3391,12 @@ extern "C" int tessera_nvidia_resident_paged_attention(const float*q,const float
 
 def _resident_ops_source() -> KernelSource:
     """The resident-stage source `_resident_ops_lib` compiles (and the composed
-    lanes' Decision #11 identity digests)."""
+    lanes' Decision #11 identity digests), memoized while its emitter is
+    unchanged (`source_memo`): every stage launch asks for it."""
+    return memoized(globals(), "_resident_ops_source_uncached")
+
+
+def _resident_ops_source_uncached() -> KernelSource:
     return KernelSource(
         source=_synthesize_resident_ops_cuda(),
         entry="tessera_nvidia_resident_epilogue", lang=_LANG,
@@ -4388,7 +4449,15 @@ def _mma_fused_source(has_bias: bool, act: str | None, storage: str = "f16", *,
                       raster_order: str = "row_major",
                       raster_group: int = 1) -> KernelSource:
     """The mma.sync fused source for one epilogue signature -- the one text both
-    the launch caches and `NvidiaMmaFusedCandidate.artifact_identity` read."""
+    the launch caches and `NvidiaMmaFusedCandidate.artifact_identity` read.
+    Memoized while the emitter and everything it reaches by name are unchanged
+    (`source_memo`), so a launch costs a lookup, not a re-emission."""
+    return memoized(globals(), "_mma_fused_source_uncached", has_bias, act,
+                    storage, raster_order=raster_order, raster_group=raster_group)
+
+
+def _mma_fused_source_uncached(has_bias: bool, act: str | None, storage: str, *,
+                               raster_order: str, raster_group: int) -> KernelSource:
     return KernelSource(source=_synthesize_mma_fused_cuda(
                             has_bias, act, storage,
                             raster_order=RasterOrder(raster_order).value,
@@ -4766,7 +4835,12 @@ def _synthesize_mma_attn_cuda(storage: str = "f16") -> str:
 
 def _mma_attn_source(storage: str = "f16") -> KernelSource:
     """The mma.sync attention source at ``storage`` -- the one text both the
-    launch caches and `NvidiaMmaAttnCandidate.artifact_identity` read."""
+    launch caches and `NvidiaMmaAttnCandidate.artifact_identity` read, memoized
+    while its emitter is unchanged (`source_memo`)."""
+    return memoized(globals(), "_mma_attn_source_uncached", storage)
+
+
+def _mma_attn_source_uncached(storage: str) -> KernelSource:
     return KernelSource(source=_synthesize_mma_attn_cuda(storage),
                         entry=_MMA_ATTN_ENTRY, lang=_LANG)
 
@@ -4994,7 +5068,14 @@ def _synthesize_mma_gated_cuda(storage: str, act: str, *,
 def _mma_gated_source(storage: str, act: str, *, raster_order: str = "row_major",
                       raster_group: int = 1) -> KernelSource:
     """The paired-projection mma.sync source -- the one text both the launch
-    caches and `NvidiaMmaGatedCandidate.artifact_identity` read."""
+    caches and `NvidiaMmaGatedCandidate.artifact_identity` read, memoized while
+    its emitter is unchanged (`source_memo`)."""
+    return memoized(globals(), "_mma_gated_source_uncached", storage, act,
+                    raster_order=raster_order, raster_group=raster_group)
+
+
+def _mma_gated_source_uncached(storage: str, act: str, *, raster_order: str,
+                               raster_group: int) -> KernelSource:
     return KernelSource(source=_synthesize_mma_gated_cuda(
                             storage, act,
                             raster_order=RasterOrder(raster_order).value,

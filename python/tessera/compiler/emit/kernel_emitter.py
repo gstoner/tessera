@@ -212,8 +212,16 @@ def emit_kernel(
 ) -> KernelSource:
     """The plan's ``KernelEmitter.emit(region, target, spec)`` — dispatch ``region``
     to the emitter registered for ``target``. ``dims`` (concrete shape) is threaded
-    so the returned :class:`KernelSource` records its :func:`bucket_key`."""
-    return get_emitter(target).emit(region, spec=spec, dtype=dtype, dims=dims)
+    so the returned :class:`KernelSource` records its :func:`bucket_key`.
+
+    Memoized while the emitter's ``emit`` and everything it reaches by name are
+    unchanged (``source_memo``): the generic lanes call this on every launch to
+    find their compiled artifact, and re-running the Python emitter there cost
+    ~10 us per call. A patched or reloaded emitter re-emits."""
+    from tessera.compiler.emit.source_memo import memoized_method
+
+    return memoized_method(get_emitter(target), "emit", region, spec=spec,
+                           dtype=dtype, dims=dims)
 
 
 #: Target aliases that mean "Apple GPU / Metal Shading Language" — shared by the

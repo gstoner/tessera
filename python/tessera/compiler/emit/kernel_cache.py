@@ -43,6 +43,16 @@ from tessera.compiler.emit.kernel_emitter import (
 _SEP = "\x1f"  # unit separator — matches apple_gpu_runtime.mm's cache-key joiner
 
 
+#: `cache_key` by source *object*: (id, dtype, target) -> (that object, key).
+#: The generic lanes get the same memoized `KernelSource` back from
+#: `emit_kernel` on every launch (`source_memo`); re-hashing its text per call
+#: was most of the remaining dispatch cost. The object is held, so its id is
+#: never reused, and the `is` check means another object never reads its key.
+_KEYS_BY_OBJ: dict[tuple[int, str, str], tuple[KernelSource, str]] = {}
+#: `store_key` by (cache key, build line) -- a pure function of both.
+_STORE_KEYS: dict[tuple[str, tuple[str, ...]], str] = {}
+
+
 def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
     """Content-addressed key for a compiled kernel: sha256 over the source text +
     entry point + the specialization metadata that makes two *sources-equal*
@@ -52,6 +62,9 @@ def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
     Mirrors ``apple_gpu_runtime.mm``'s ``source + '\\x1f' + entry`` map key, so
     the Python cache and the runtime's internal pipeline cache agree on identity,
     then extends it so a bucket/dtype/target variant is not aliased to another."""
+    fast = _KEYS_BY_OBJ.get((id(source), dtype, target))
+    if fast is not None and fast[0] is source:
+        return fast[1]
     h = hashlib.sha256()
     for part in (
         source.source,
@@ -65,7 +78,11 @@ def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
     ):
         h.update(part.encode("utf-8"))
         h.update(_SEP.encode("utf-8"))
-    return h.hexdigest()
+    key = h.hexdigest()
+    if len(_KEYS_BY_OBJ) >= 4096:
+        _KEYS_BY_OBJ.clear()
+    _KEYS_BY_OBJ[(id(source), dtype, target)] = (source, key)
+    return key
 
 
 @dataclass(frozen=True)
@@ -137,8 +154,14 @@ def store_key(source: KernelSource, *, dtype: str, target: str) -> str:
     except Exception as exc:  # the compile step would fail the same way
         raise CompileError(
             f"build line for target {target!r} could not be resolved: {exc}") from exc
-    return hashlib.sha256(
-        (key + _SEP + _SEP.join(line)).encode("utf-8")).hexdigest()
+    stored = _STORE_KEYS.get((key, line))
+    if stored is None:
+        stored = hashlib.sha256(
+            (key + _SEP + _SEP.join(line)).encode("utf-8")).hexdigest()
+        if len(_STORE_KEYS) >= 4096:
+            _STORE_KEYS.clear()
+        _STORE_KEYS[(key, line)] = stored
+    return stored
 
 
 def get_compiler(target: str) -> CompileFn:

@@ -5211,7 +5211,10 @@ public-frontend runs for the direct-IR AD probes, asynchronous/multi-thread
 attribution, DLOP profiler receipts and clean performance admission (plan
 record). Also open: the GPU families record no compiler build identity, and
 the CUDA activity-window calibration, the calibration corpus and E2E-spine
-packets are not yet envelope families.
+packets are not yet envelope families. The image-binding rule means a future
+bare-metal x86 packet on the profiler route can promote only if its rows also
+carry timing witnesses that name their images. No such packet exists, since
+every fleet host is WSL2.
 
 Evidence: `tests/unit/test_evidence_envelope.py`,
 `tests/unit/test_route_receipts.py`, `tests/unit/test_ssd_comparison.py`,

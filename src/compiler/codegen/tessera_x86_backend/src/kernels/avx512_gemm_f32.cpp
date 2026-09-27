@@ -51,6 +51,18 @@ constexpr int kStrips = 8;         // 16-float strips per panel row (128 floats)
 constexpr int64_t kPanelRowFloats = 16 * kStrips;
 constexpr int64_t kKBlock = 512;   // panel rows per K block (256 KiB panel)
 
+// Measurement hooks: benchmarks/baselines/x86_gemm_align_20260927/run_path_crossover.sh
+// rewrites these two lines to build forced-path variants. Production leaves them false.
+constexpr bool kForcePath = false;     // PATH-PROBE
+constexpr bool kForcedPacked = false;  // PATH-PROBE
+
+// Whether packing B pays for itself for this shape. PROVISIONAL (M > 1).
+bool packedPathWins(int64_t M, int64_t N, int64_t K) {
+    (void)N;
+    if (kForcePath) return kForcedPacked;
+    return M > 1 && K > 0;
+}
+
 inline __mmask16 stripMask(int64_t width) {
     return width >= 16 ? static_cast<__mmask16>(0xffffu)
                        : static_cast<__mmask16>((1u << static_cast<unsigned>(width)) - 1u);
@@ -109,7 +121,7 @@ void gemmNoAlias(const float* A, const float* B, int64_t M, int64_t N,
     // K <= 0 takes the direct path, which writes C = 0 (the empty sum) as the
     // previous kernel did.
     float* panel = nullptr;
-    if (M > 1 && K > 0)
+    if (K > 0 && packedPathWins(M, N, K))
         panel = static_cast<float*>(std::aligned_alloc(
             64, static_cast<size_t>(kBlock) * sizeof(float) * kPanelRowFloats));
     for (int64_t n0 = 0; n0 < N; n0 += kPanelRowFloats) {

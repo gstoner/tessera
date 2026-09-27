@@ -212,11 +212,15 @@ def test_wsl_witness_must_be_valid_in_the_same_sample() -> None:
 
 
 def test_promotion_clocks_are_target_specific() -> None:
-    """Review of #854: a ROCm sample cannot promote through an appended TSC,
-    and a target without a kernel-side slot (NVIDIA today) has none."""
+    """Review of #854: a ROCm sample cannot promote through an appended TSC.
+    NVIDIA sm_120 has the %globaltimer device-clock slot since its marker was
+    validated on The-Super-Bear (NVIDIA-GLOBALTIMER-MARKER-2026-09-26); any
+    other compute capability still has none."""
     assert promotion_clock_slots("rocm_gfx1151") == {"device_wall_clock_ns"}
     assert promotion_clock_slots("x86") == {"tsc_cycles"}
-    assert promotion_clock_slots("nvidia_sm120") == frozenset()
+    assert promotion_clock_slots("nvidia_sm120") == {"device_wall_clock_ns"}
+    assert promotion_clock_slots("nvidia_sm90") == frozenset()
+    assert promotion_clock_slots("nvidia_sm121") == frozenset()
 
     payload = _witnessed_wsl_sample()
     payload["clocks"]["device_wall_clock_ns"]["eligible_for_promotion"] = False
@@ -301,3 +305,38 @@ def test_bare_metal_rules_are_unchanged_by_the_wsl_admission() -> None:
     payload["clocks"]["device_wall_clock_ns"]["eligible_for_promotion"] = True
     payload["clocks"]["device_wall_clock_ns"]["calibrated_against"] = ["hip_event_ns"]
     validate_timing_sample(payload)
+
+
+def _nvidia_wsl_sample(*, event_ns: float = 1000.0, device_ns: float = 990.0,
+                       witness: str = "cuda_event_ns") -> dict[str, object]:
+    clocks = {
+        "host_wall_ns": measured_clock("host_wall_ns", source="perf_counter", value=1100),
+        "cuda_event_ns": measured_clock("cuda_event_ns", source="cuda_event", value=event_ns),
+        "device_wall_clock_ns": measured_clock(
+            "device_wall_clock_ns", source="device_wall_clock", value=device_ns,
+            instrumented=True, calibrated_against=(witness,), eligible_for_promotion=True,
+            provenance={"clock": "%globaltimer"}),
+        "profiler_activity_ns": unavailable_clock(
+            "profiler_activity_ns", source="cupti_activity", reason="NOT_CAPTURED"),
+    }
+    return build_timing_sample(
+        sample_id="sm120", target="nvidia_sm120", clocks=clocks,
+        artifact_digests={"application_image": "abc"}, batch_size=10,
+        warm_state="warm", synchronization="cuEventSynchronize",
+        execution_environment="wsl2")
+
+
+def test_nvidia_globaltimer_promotes_only_with_an_agreeing_cuda_event() -> None:
+    """The sm_120 device clock is witnessed by the CUDA event of the same
+    window; a 1% agreement admits, a 10% disagreement refuses."""
+    sample = _nvidia_wsl_sample()
+    assert sample["target"] == "nvidia_sm120"
+    with pytest.raises(ProfilerTimingError, match="witnesses disagree"):
+        _nvidia_wsl_sample(device_ns=900.0)
+
+
+def test_nvidia_device_clock_cannot_be_witnessed_by_a_hip_event() -> None:
+    """Witnesses are intersected with the target's own slots: a HIP-event
+    slot on an NVIDIA sample vouches for nothing."""
+    with pytest.raises(ProfilerTimingError, match="no admissible witness"):
+        _nvidia_wsl_sample(witness="hip_event_ns")

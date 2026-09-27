@@ -308,7 +308,7 @@ matches its module fails generation. Read the counts there.
    witnessed region, everything re-derived from stored integers). **Under
    WSL2 the raw clock is itself derived from the TSC, so the route shows a
    stable TSC scale bracketing the samples, not agreement with an independent
-   oscillator**; its Zen 5 packet is recorded on Princess-Luna; NVIDIA has no non-profiler witness (`%globaltimer`); event-only
+   oscillator**; its Zen 5 packet is recorded on Princess-Luna; NVIDIA sm_120 has its non-profiler witness since 2026-09-26 (`%globaltimer` marker, `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`; `profiler_timing` gives `nvidia_sm120` the device-clock slot); event-only
    recorders stay ineligible. Separately: NVIDIA timers run on the
    default stream (DEVICE-CLOCK-DISCIPLINE); Apple `kernelStartTime` does not
    measure work; and runtime libraries in empty-build-type trees compile at
@@ -339,7 +339,7 @@ matches its module fails generation. Read the counts there.
 |---|---|---|
 | Analysis | W2.1 dataflow substrate, per-op memory effects, symbolic-dim equality | Value, alias, effect, memory-dependence and ordered-collective **consumers** (§3 above) |
 | Fusion | One authoritative recognizer; Apple synthesizer F0–F5 | Synthesizer not portable through IR; consumer-driven canonicalization (W5.5); ANN admission of measured candidates (MSW-9) |
-| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log; Decision #11 toolchain/delegate identity in every autotune key and Decision #12 `route`/`route_source`/`timing_source` schema fields (2026-09-26, sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`) | **The 97 committed `nvidia:sm_120` `autotune_corpus.json` rows predate the Decision #11 key and are held stale — never served, kept on re-save — so no sm_120 verdict (the paged-attention serving warm start included) selects a route until they are re-recorded on Super-Bear**; the 16 `rocm:gfx1151` rows were re-recorded on Princess-Luna 2026-09-26 with unchanged winners, and the gfx1151 paged-KV warm start selects `direct` again; Decision #12 route derivation is wired into `benchmarks/run_all.py` only, the ~35 family recorders still stamp their own route strings; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
+| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log; Decision #11 toolchain/delegate identity in every autotune key and Decision #12 `route`/`route_source`/`timing_source` schema fields (2026-09-26, sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`) | The 97 `nvidia:sm_120` `autotune_corpus.json` rows were **re-recorded on Super-Bear 2026-09-26** under the Decision #11 key (108 rows now, none stale, 38 selector-eligible rows strictly admitted); the sm_120 paged-attention warm start is served again from interleaved, separation-verdicted serving rows (fused / fused / staged at 128 / 512 / 2048 tokens; 512 flipped from staged, open question in the nvidia queue); the 16 `rocm:gfx1151` rows were re-recorded on Princess-Luna 2026-09-26 with unchanged winners, and the gfx1151 paged-KV warm start selects `direct` again; Decision #12 route derivation is wired into `benchmarks/run_all.py` only, the ~35 family recorders still stamp their own route strings; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
 | Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; split-K has a production consumer on gfx1201 f16/bf16 since 2026-09-26 (ROCM-SPLIT-K-1) -- the per-shape slice rule, fp8/int split and gfx1151 remain open |
 | Memory | `TileBufferReusePass`, `TileBufferArenaPass` on ROCm/NVIDIA | Control-flow path-max sizing; multiple dynamic arenas; measured full-model remat |
 | Cost models | `target_perf.py`, T1 GEMM model, `FusionCost` | T1 failed ranking — replace, do not coefficient-tune; per-arch correlation (NVIDIA-CALIB-1, ROCM-COSTMODEL-T1, X86-CALIB-1, APPLE-CALIB-1); sm_120 and Apple roofline peaks |
@@ -357,8 +357,12 @@ matches its module fails generation. Read the counts there.
   in NVIDIA-DELEGATE-CONTRACT-2026-08-30, starting with non-composing
   accuracy budgets; `NVWGMMALoweringPass` cannot thread the accumulator (it
   refuses with `NVWGMMA_ACCUMULATOR_DROPPED`; W1.1 step 2b);
-  DEVICE-CLOCK-DISCIPLINE before any promotion; NVIDIA-CALIB-1 corpus
-  descriptors; one block-index convention. Future features (not gates):
+  DEVICE-CLOCK-DISCIPLINE before any promotion (the sm_120 `%globaltimer`
+  marker now supplies the kernel-side witness, `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`);
+  NVIDIA-CALIB-1 corpus descriptors; one block-index convention. The 88
+  pre-existing device-layer failures are root-caused and fixed (one compiler
+  defect, `nan_mode` dropped from reduction provenance; the rest stale tests;
+  `NVIDIA-DEVICE-LAYER-88-2026-09-26`). Future features (not gates):
   sm_90 WGMMA, sm_100 tcgen05/TMEM.
 - **ROCm** ([queue](backend/rocm/todo.md), [lane map](backend/rocm/ROCM_LANE_MAP.md)).
   The broad production lane still skips Graph/Schedule/Tile; the 78
@@ -422,8 +426,12 @@ matches its module fails generation. Read the counts there.
    sync `DEVICE-CLOCK-MARKER-2026-09-26`); and the gfx1201 packet on
    Tajasarus, where the same selector admits cooperative, lower bound 9.73×
    ([packet](../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md),
-   sync `GFX1201-SSD-CALIBRATION-2026-09-26`). Open: validate the NVIDIA
-   `%globaltimer` marker on Super-Bear and record its SSD packet; an SSD Nsight
+   sync `GFX1201-SSD-CALIBRATION-2026-09-26`); and the sm_120 packet on
+   Super-Bear, after validating the NVIDIA `%globaltimer` marker there (32 ns
+   steps; agrees with CUDA events within 5% for windows of ~1 ms and longer):
+   the selector admits cooperative, lower bound 4.33×
+   ([packet](../../benchmarks/baselines/sm120_ssd_calibrated_pairs_20260926/README.md),
+   sync `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`). Open: an SSD Nsight
    activity-window packet on Super-Bear's WSL2; marker timing in
    `calibrate_gfx1151.py`; a Zen 2 packet adapter. **Done 2026-09-26:** the
    gfx1151 SSD re-record under the interleaved protocol, at 1000 launches per
@@ -478,9 +486,10 @@ matches its module fails generation. Read the counts there.
    `run_all.py` emits Decision #12 `rows`, and `tools/roofline_tools` reads
    them (`--fmt benchmark`; old rows load as `unknown`). The gfx1151 corpus
    rows were re-recorded on Princess-Luna 2026-09-26 (winners unchanged).
-   Open: re-record the 97 sm_120 rows on Super-Bear (commands in the NVIDIA
-   plan under the sync key); move the family recorders onto
-   `route_provenance`.
+   The 97 sm_120 rows were re-recorded on Super-Bear 2026-09-26 (108 rows,
+   none stale, 38 strictly admitted; the paged-attention warm start is served
+   again from interleaved, separation-verdicted serving rows; NVIDIA plan under
+   the sync key). Open: move the family recorders onto `route_provenance`.
 4. E2E-REAL-6F census review, then bootstrap absorption (NVIDIA gap families,
    ROCm softmax/reduction/paged-KV first).
 5. Required Target IR contracts + GOV-ODS-CONSUMER-1; extend

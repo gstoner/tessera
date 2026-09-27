@@ -111,12 +111,14 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
     """Check the actual forward artifacts and independently recompute policy.
 
     Each process needs calibration of its exact measured artifact. CUDA uses
-    a launch-inclusive Nsight timeline; gfx1151 and gfx1201 use native ROCm
-    calibration, and every calibration must name the package's exact chip
-    (evidence never transfers between the two; sync
-    GFX1201-SSD-CALIBRATION-2026-09-26). A ROCm calibration must also carry
-    the current window protocol and its row's launch count; a legacy packet
-    is refused with ``SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY``.
+    either the compiler-built ``%globaltimer`` marker witness (sm_120; sync
+    NVIDIA-GLOBALTIMER-MARKER-2026-09-26) or a launch-inclusive Nsight
+    timeline; gfx1151 and gfx1201 use native ROCm calibration, and every
+    calibration must name the package's exact chip (evidence never transfers
+    between parts; sync GFX1201-SSD-CALIBRATION-2026-09-26). A device-clock
+    calibration (ROCm or NVIDIA) must also carry the current window protocol
+    and its row's launch count; a legacy packet is refused with
+    ``SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY``.
     """
     incumbent_specs = incumbent.validate()
     candidate.validate()
@@ -144,6 +146,14 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
     if lower <= 1.05:
         return SSDAdmission(False,'paired speedup bound does not exceed five percent',lower)
     if identity[0] == 'nvidia':
+        from .profiler_nvidia_evidence import NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION
+        # The route is chosen by what every calibration IS (its schema), never
+        # by a flag; a mixture of the two routes is refused, not averaged.
+        schemas = {c.get('schema') for c in calibrations} if calibrations else set()
+        if schemas == {NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION}:
+            return _admit_nvidia_device_clock(incumbent,comparison,calibrations,report,lower)
+        if NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION in schemas:
+            return SSDAdmission(False,'CUDA calibrations mix the device-clock and Nsight routes',lower)
         return _admit_cuda_windows(comparison,calibrations,lower)
     from .profiler_rocm_evidence import (
         ROCM_PROFILER_ARCHITECTURES, ROCmProfilerPacketError, build_rocm_profiler_packet,
@@ -220,6 +230,67 @@ def bind_measured_ssd(incumbent, candidate, comparison, calibrations=()):
     selected,decision = select_ssd_candidate(incumbent,candidate,comparison,calibrations)
     return selected.bind(),decision
 
+
+
+def _admit_nvidia_device_clock(incumbent, comparison, calibrations, report, lower):
+    """The ROCm device-clock loop's NVIDIA twin: every process's CUDA-event
+    duration calibrated by its own ``%globaltimer`` marker packet, each packet
+    re-derived from its inputs, named to its row's run and to the measured
+    image, and on the package's exact architecture."""
+    from .profiler_nvidia_evidence import (
+        NVIDIADeviceClockPacketError, build_nvidia_device_clock_packet,
+        validate_nvidia_device_clock_packet)
+    identity = report['identity']
+    chip = identity[1]
+    if identity[4] != 'CUDA events' or len(calibrations) != 18:
+        return SSDAdmission(False,'each measured process requires CUDA-event device-clock calibration',lower)
+    commits = {(c.get('source') or {}).get('source_commit') for c in calibrations}
+    stated = (comparison.get('source') or {}).get('source_commit')
+    if stated is None or commits != {stated}:
+        return SSDAdmission(False,'calibrations do not share one source commit with the comparison',lower)
+    # One launch count across every row, as on the ROCm route: the bracket
+    # offset's share of a window depends on its length (measured on sm_120:
+    # ~10-16 us per window, 2026-09-26).
+    counts = {pair[name]['rows'][0].get('launches_per_window')
+              for pair in comparison['pairs'] for name in ('serial', 'cooperative')}
+    if len(counts) != 1:
+        return SSDAdmission(False, 'SSD_CALIBRATION_LAUNCHES_MISMATCH: rows were recorded at '
+                            f'different launch counts {sorted(map(str, counts))}', lower)
+    semantic = hashlib.sha256(incumbent.logical.schedule_ir.encode()).hexdigest()
+    seen = set()
+    for index,pair in enumerate(comparison['pairs']):
+        for offset,name in enumerate(('serial','cooperative')):
+            packet = calibrations[2*index+offset]
+            try:
+                validate_nvidia_device_clock_packet(packet)
+            except NVIDIADeviceClockPacketError as exc:
+                raise ValueError(f'stored SSD calibration does not validate: {exc}') from exc
+            timing = packet['timing']
+            if timing['sample_id'] in seen:
+                raise ValueError('SSD calibration sample was reused across process runs')
+            seen.add(timing['sample_id'])
+            run_id = pair[name].get('run_id')
+            if not run_id or (timing.get('environment') or {}).get('run_id') != run_id:
+                raise ValueError('SSD calibration does not name the measured process run')
+            refusal = _calibration_protocol_refusal(timing, pair[name]['rows'][0])
+            if refusal is not None:
+                return SSDAdmission(False,refusal,lower)
+            images = packet['instrumentation_comparison']
+            clean,probe = images['uninstrumented'],images['instrumented']
+            if any(type(im.get('duration_ns')) not in (float,int) or not math.isfinite(im['duration_ns']) or im['duration_ns'] <= 0 for im in (clean,probe)):
+                raise ValueError('SSD calibrated durations must be finite positive numbers')
+            expected = statistics.median(pair[name]['rows'][0]['device_event_ms'])*1e6
+            if (clean['image_sha256'] != report['variants'][name][2] or clean['semantic_sha256'] != semantic
+                    or clean['clock_source'] != 'cuda_event' or not math.isclose(clean['duration_ns'],expected,rel_tol=1e-9)):
+                raise ValueError('SSD calibration does not describe the measured image and duration')
+            rebuilt = build_nvidia_device_clock_packet(timing=timing,uninstrumented=clean,instrumented=probe,
+                source=packet['source'],maximum_instrumentation_overhead=1.05)
+            if rebuilt['architecture'] != chip or packet.get('architecture') != chip:
+                raise ValueError(f'SSD calibration architecture {packet.get("architecture")!r} '
+                                 f'does not match the measured package chip {chip!r}')
+            if not rebuilt['eligible_for_promotion']:
+                return SSDAdmission(False,'native calibration refuses promotion: '+', '.join(rebuilt['ineligibility_reasons']),lower)
+    return SSDAdmission(True,'exact-artifact paired measurements and %globaltimer device-clock calibration admitted',lower)
 
 
 def _admit_cuda_windows(comparison, calibrations, lower):

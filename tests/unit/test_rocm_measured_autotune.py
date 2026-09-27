@@ -165,8 +165,14 @@ def test_committed_corpus_has_sm120_matmul_comparisons():
         (512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)
     }
     for row in rows:
-        assert {"nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted"} <= set(
-            row["candidates"])
+        assert "nvidia_mma_gemm_shipped" in row["candidates"]
+        # The emitted mma.sync lane cannot serve an odd K (`_aligned_2d`: a
+        # hardware alignment limit) and `applies_to_inputs` removes it from
+        # that race before timing, so the 127x259x63 workload (bucket
+        # 128x512x64) must NOT list it; every other workload must.
+        shape = (row.get("evidence") or {}).get("workload_shape")
+        odd_k = shape is not None and shape[2] % 2 == 1
+        assert ("nvidia_mma_gemm_emitted" in row["candidates"]) is not odd_k, row["bucket"]
         if tuple(row["bucket"]) in {
                 (512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)}:
             assert {"nvidia_tile_matmul_direct",

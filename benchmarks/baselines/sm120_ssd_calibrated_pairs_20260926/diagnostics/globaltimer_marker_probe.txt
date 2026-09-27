@@ -1,0 +1,159 @@
+{
+ "resolution": [
+  {
+   "reads": 65536,
+   "elapsed_ns": 640192,
+   "changes": 20006,
+   "zero_delta_fraction": 0.6947280079346914,
+   "min_nonzero_delta_ns": 32,
+   "median_nonzero_delta_ns": 32.0,
+   "max_delta_ns": 32,
+   "mean_update_period_ns": 32.0,
+   "ns_per_read": 9.768703746089876
+  },
+  {
+   "reads": 65536,
+   "elapsed_ns": 646816,
+   "changes": 20213,
+   "zero_delta_fraction": 0.6915693904020752,
+   "min_nonzero_delta_ns": 32,
+   "median_nonzero_delta_ns": 32,
+   "max_delta_ns": 32,
+   "mean_update_period_ns": 32.0,
+   "ns_per_read": 9.869779507133593
+  },
+  {
+   "reads": 65536,
+   "elapsed_ns": 646944,
+   "changes": 20217,
+   "zero_delta_fraction": 0.6915083543144884,
+   "min_nonzero_delta_ns": 32,
+   "median_nonzero_delta_ns": 32,
+   "max_delta_ns": 32,
+   "mean_update_period_ns": 32.0,
+   "ns_per_read": 9.87173266193637
+  }
+ ],
+ "windows": [
+  {
+   "launches": 1,
+   "spin_iterations": 64,
+   "median_event_ns": 69311.99878454208,
+   "median_span_ns": 57312,
+   "median_event_minus_span_ns": 27680.000643253326,
+   "median_relative_error": 0.48553847215302576,
+   "max_relative_error": 0.7627866003248541,
+   "within_band_all_windows": false
+  },
+  {
+   "launches": 10,
+   "spin_iterations": 64,
+   "median_event_ns": 360415.9951210022,
+   "median_span_ns": 347904,
+   "median_event_minus_span_ns": 11328.008520126343,
+   "median_relative_error": 0.034715426868892306,
+   "max_relative_error": 0.1794466139022939,
+   "within_band_all_windows": false
+  },
+  {
+   "launches": 100,
+   "spin_iterations": 64,
+   "median_event_ns": 2596415.9965515137,
+   "median_span_ns": 2584800,
+   "median_event_minus_span_ns": 11360.072692871094,
+   "median_relative_error": 0.004473858028506106,
+   "max_relative_error": 0.03213279072275943,
+   "within_band_all_windows": true
+  },
+  {
+   "launches": 1000,
+   "spin_iterations": 64,
+   "median_event_ns": 26959583.282470703,
+   "median_span_ns": 26948512,
+   "median_event_minus_span_ns": 11839.232177734375,
+   "median_relative_error": 0.0004754498007637937,
+   "max_relative_error": 0.004188620855946789,
+   "within_band_all_windows": true
+  },
+  {
+   "launches": 1,
+   "spin_iterations": 4096,
+   "median_event_ns": 78368.00068616867,
+   "median_span_ns": 68480,
+   "median_event_minus_span_ns": 9600.00068616867,
+   "median_relative_error": 0.12249898685833126,
+   "max_relative_error": 0.4260354847523822,
+   "within_band_all_windows": false
+  },
+  {
+   "launches": 10,
+   "spin_iterations": 4096,
+   "median_event_ns": 283104.0024757385,
+   "median_span_ns": 271968,
+   "median_event_minus_span_ns": 9375.993055343628,
+   "median_relative_error": 0.04544084497612698,
+   "max_relative_error": 0.22622602028479252,
+   "within_band_all_windows": false
+  },
+  {
+   "launches": 100,
+   "spin_iterations": 4096,
+   "median_event_ns": 2309439.8975372314,
+   "median_span_ns": 2299744,
+   "median_event_minus_span_ns": 11072.075897216797,
+   "median_relative_error": 0.004568033427381621,
+   "max_relative_error": 0.009239711988389817,
+   "within_band_all_windows": true
+  },
+  {
+   "launches": 1000,
+   "spin_iterations": 4096,
+   "median_event_ns": 22597055.435180664,
+   "median_span_ns": 22587296,
+   "median_event_minus_span_ns": 16095.139404296875,
+   "median_relative_error": 0.0007375513251993537,
+   "max_relative_error": 0.003709681977274878,
+   "within_band_all_windows": true
+  },
+  {
+   "launches": 1,
+   "spin_iterations": 65536,
+   "median_event_ns": 120063.99780511856,
+   "median_span_ns": 111616,
+   "median_event_minus_span_ns": 9535.999445438385,
+   "median_relative_error": 0.07654183725150601,
+   "max_relative_error": 0.4488860796172645,
+   "within_band_all_windows": false
+  },
+  {
+   "launches": 10,
+   "spin_iterations": 65536,
+   "median_event_ns": 1026816.0104751587,
+   "median_span_ns": 1013056,
+   "median_event_minus_span_ns": 10624.056465148926,
+   "median_relative_error": 0.009972585517458119,
+   "max_relative_error": 0.03128829773124992,
+   "within_band_all_windows": true
+  },
+  {
+   "launches": 100,
+   "spin_iterations": 65536,
+   "median_event_ns": 10141311.645507812,
+   "median_span_ns": 10111072,
+   "median_event_minus_span_ns": 12287.64306640625,
+   "median_relative_error": 0.0012118311665314553,
+   "max_relative_error": 0.009293450995324755,
+   "within_band_all_windows": true
+  },
+  {
+   "launches": 1000,
+   "spin_iterations": 65536,
+   "median_event_ns": 101121116.6381836,
+   "median_span_ns": 101033600,
+   "median_event_minus_span_ns": 45756.83203125,
+   "median_relative_error": 0.0004530081014301227,
+   "max_relative_error": 0.0015607893477372265,
+   "within_band_all_windows": true
+  }
+ ]
+}

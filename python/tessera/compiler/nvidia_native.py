@@ -2780,6 +2780,9 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         raise ValueError("NVIDIA scheduled unary contract requires positive static shapes")
     scalar_names: tuple[str, ...]
     norm = artifact.family == "norm"
+    # NaN policy is semantic (Decision #21a); a reduction's validated policy is
+    # carried into the descriptor, not dropped at this boundary (Decision #32).
+    nan_mode: str | None = None
     if norm:
         if (artifact.kind not in {"rmsnorm", "layernorm"} or artifact.axis != -1
                 or output_shape != shape or artifact.schedule != "serial"
@@ -2815,8 +2818,9 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         abi = {"f16": SM120_REDUCE_F16_ABI, "bf16": SM120_REDUCE_BF16_ABI, "f32": SM120_REDUCE_F32_ABI}[storage]
         scalar_names = ("Outer", "AxisExtent", "Inner")
         geometry = f"sm120_reduce_{artifact.schedule}"
+        nan_mode = "propagate"
         required = {'kind': f'"{artifact.kind}"', 'schedule': f'"{artifact.schedule}"',
-                    'nan_mode': '"propagate"', 'keepdims': str(artifact.keepdims).lower()}
+                    'nan_mode': f'"{nan_mode}"', 'keepdims': str(artifact.keepdims).lower()}
     required.update({'storage': f'"{storage}"', 'accum': '"f32"',
                      'axis': f'{artifact.axis} : i64'})
     for field, value in required.items():
@@ -2866,6 +2870,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
                     "shape": list(shape), "storage": storage, "accum": "f32",
                     "axis": artifact.axis, "kind": artifact.kind, "keepdims": artifact.keepdims,
                     "epsilon": artifact.epsilon,
+                    **({"nan_mode": nan_mode} if nan_mode is not None else {}),
                     "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest},
     )
     return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)

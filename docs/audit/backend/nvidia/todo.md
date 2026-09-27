@@ -8,11 +8,108 @@ last_updated: 2026-09-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: sm_120 corpus rows owed; gfx1151 re-recorded
+## `NVIDIA-DEVICE-LAYER-88-2026-09-26`: the 88 pre-existing device-layer failures, root-caused
+
+The-Super-Bear (RTX 5070, WSL2), `scripts/run_nvidia_release_gate.sh --layer
+device`, fresh worktree with `build/` and `build-nvidia-cuda/` both fully
+built. **Before** (branch at `048fac95`, = `claude/timing-foundation`): 1035
+passed / 88 failed, the identical failure set to `main` `b5da0a4e`.
+**After** (`aa6fac65`): `device-correctness-1` 1122 passed / 1 skipped /
+0 failed, and `device-correctness-2` (never reached before) also 1122 / 1 / 0. Re-run at the
+final branch head `49a3d4b1` (after the timing-foundation merges and the sm_120
+corpus re-record): both passes again 1122 passed / 1 skipped / 0 failed.
+One compiler defect; the rest were tests asserting behaviour the compiler had
+correctly moved past.
+
+| Group | n | Cause | Fix |
+|---|---|---|---|
+| `KeyError: 'nan_mode'` (reduction mean/max/min/amax/amin) | 45 | **Compiler (Decision #32).** `package_scheduled_kernel` validated `nan_mode = "propagate"` in Schedule and Tile IR, then left it out of the launch descriptor's provenance; the retired Python constructor used to carry it. | Carry the validated policy into provenance for reductions. |
+| "requires a supported native scheduled reduction" (`sum`) | 21 | **Stale test.** The test built `tessera.reduce` with no `kind`; ODS makes `kind` a required `ReductionKindAttr`, and Decision #21a forbids defaulting it. The pre-Schedule constructor read kind-less `tessera.reduce` as sum (fail-open); the scheduled contract refuses it. | Test passes `kind="sum"`; a unit test pins that a kind-less reduce fails closed on nvidia/rocm/x86/apple. |
+| `9.999999747378752e-06 == 1e-05` (norm epsilon) | 18 | **Stale test.** The descriptor carries the f32 epsilon the kernel uses and whose bits the packager checks against Schedule and Tile IR; 1e-5 is not representable in f32. | Compare against `float(np.float32(1e-5))`, not a looser tolerance. |
+| LSE saved-checkpoint forward, max abs 0.136 | 1 | **Stale oracle, not wrong numerics.** Tessera's causal mask is bottom-right aligned (`tessera.ops.flash_attn`: `triu(k=1+max(Sk-Sq,0))`); the test's oracle masked top-left. At Sq=3 < Sk=4 they differ; the failing device values equal the bottom-right reference (first row to 4e-8). | Oracle uses bottom-right alignment: it matches `tessera.ops.flash_attn` to 6e-8 and its own finite-difference dq to 6e-6 (Mac), and the device forward/backward now pass the test's 3e-5/4e-5 tolerances. |
+| NCCL topology message | 1 | **Host cannot evaluate.** No `libnccl` on Super-Bear, so the probe refuses on libraries before device enumeration. | Assert the executor also refuses, then skip ("host cannot evaluate"), never pass. |
+| `test_live_nvidia_emitted_ragged_degrade_is_logged` | 1 | **Stale test.** Since `982f5225` the emitted GEMM predicates ragged M/N and runs them; odd K is refused before selection by `applies_to_inputs`, so a forced dispatch can no longer degrade silently. | Renamed `..._ragged_served_odd_k_refused`: M=24 runs natively (`won`), odd K raises `ArbiterError`. Degrade bookkeeping stays unit-covered. |
+| `test_the_delegate_wins_on_device_only_at_small_shapes` | 1 | **Test asserted a ranking, not Decision #28.** The emitted PTX lane gained a device timer, joined the race and measured fastest at 512³ (0.0285 ms vs shipped 0.0455). | Replaced by `test_the_measured_arbiter_selects_the_fastest_in_budget_candidate`: at 512³ and 2048³ the device-timed arbiter races a complete field incl. the delegate, its verdict is the minimum of its own measurements, and the winner meets the delegate's declared `tolerance`/`tolerance_rel`. `_NO_DEVICE_TIMER` is now empty. |
+
+The one skip in the after-run is the NCCL lane. Unit additions: a kind-less
+reduce is refused on every scheduled target.
+
+## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: the `%globaltimer` device-clock witness, validated and admitted
+
+Sync key (follows `DEVICE-CLOCK-MARKER-2026-09-26`). **Validated on The-Super-Bear
+(RTX 5070, cc 12.0, WSL2, driver 610.88) and admitted for `nvidia_sm120` only.**
+Evidence: [`benchmarks/baselines/sm120_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/sm120_ssd_calibrated_pairs_20260926/README.md).
+
+- **Builds, two reads into one span.** `build_device_clock_marker(backend='nvidia',
+  chip='sm_120')` goes through `tessera-opt` -> NVVM -> `gpu-module-to-binary`; its
+  SASS is two `CS2R Rn, SR_GLOBALTIMERLO` and two `REDG.E.MIN/MAX.64.STRONG.SYS`,
+  and the builder refuses an image without them (`cuobjdump --dump-sass`).
+- **Resolution: exactly 32 ns** per `%globaltimer` step (65,536 back-to-back
+  reads x3, ~9.8 ns per read). Not coarse on WSL2.
+- **Agreement with CUDA events:** a roughly fixed ~10-16 us per-window offset
+  (up to ~46 us). Every window of about 1 ms or longer agreed within 5% (worst
+  3.2%); every configuration of ~0.36 ms or less had a window outside it. The
+  window length is therefore a recorded, admission-checked parameter.
+- **SSD packet** (`32,2,16,4` chunk 8, nine interleaved pairs, 7 x 1000-launch
+  windows, source `de66d702` clean): the production selector **admits
+  cooperative**, lower bound **4.33x** (median 7.48x, pairs 4.27-8.29x), all 18
+  calibrations eligible (device clock 0.03-0.29% below the event;
+  bracketed/plain 0.956-1.013), max abs error 0; `replay.json` reproduces it.
+  Not claimed: the cooperative variant's 12.0-23.2 us/launch per-process spread
+  is unexplained, and its lowest ratio (0.956) sits near the two-sided band edge.
+- **Contracts changed:** `native_device_clock.VALIDATED_MARKER_TARGETS` adds
+  `('nvidia','sm_120')`; `profiler_timing` gains `NVIDIA_CLOCK_SLOTS` for
+  `nvidia_sm120` (`cuda_event_ns` witnesses `device_wall_clock_ns`; witnesses
+  stay intersected with the target's own slots); new
+  `profiler_nvidia_evidence` packet (witness agreement enforced in every
+  environment, verdicts re-derived by the validator, queried identity
+  required); `ssd_performance` admits sm_120 on these packets and refuses a mix
+  with Nsight windows; `record_ssd_gpu.py` / `record_ssd_rocm_calibrated_pairs.py
+  --backend nvidia`. No functional C++ change was needed; the pass comment
+  records the validation.
+- **Open:** the Nsight activity-window packet on WSL2 (a separate route);
+  event-only recorders (`phase5_ingest`, `record_packed_storage_foundation`)
+  do not use the marker yet.
+
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: sm_120 and gfx1151 corpus rows re-recorded
+
+**sm_120 re-recorded 2026-09-26 on The-Super-Bear** (RTX 5070, WSL2, CUDA 13.4 /
+driver 610.88), clean worktree at `4e699f7e`, with the commands below; logs in
+`benchmarks/baselines/autotune_corpus_rerecord_20260926/sm120_*`.
+
+- **Checks before commit:** the 16 `rocm:gfx1151` rows are unchanged (and
+  textually untouched: the finalized file was re-ordered to the prior record
+  order, content verbatim); sm_120 keys 97 -> 108, none lost, the 11 additions
+  being the predicted composed / serving `end_to_end` keys; every sm_120 row
+  carries one `toolchain_digest`; all 28 rows that race a shipped delegate
+  carry `delegate_identities`; `MeasureCache().stale_records()` is empty (124
+  served).
+- **Strict admission:** `record_autotune_reproducibility.py` considered and
+  admitted 38 selector-eligible sm_120 rows (was 20), no stale resource
+  fingerprint, so the route-resources manifest did not need regenerating.
+  21 winners changed against the pre-schema rows (listed by `git diff`); 23 of
+  108 sm_120 rows are admissible dispatch hints under `record_is_admissible`,
+  the rest are unseparated or finalizer-ineligible and are kept, not served.
+- **The paged-attention warm start is served again.** The review made it apply
+  `record_is_admissible`, so `benchmark_serving.py` now measures fused and staged
+  **interleaved** over 20 reps, keeps every rep, and writes a separation
+  verdict (as `record_paged_kv_corpus.py` does). Served winners, device timing:
+  128 tokens `fused` (margin 88%, noise 8%), 512 `fused` (52% vs 12%), 2048
+  `staged` (45% vs 17%); all separated. **Pre-schema winners were fused /
+  staged / staged, so 512 tokens flipped.** Cause: the staged route's device
+  latency rose from 0.25 ms (pre-schema row) to 0.72-0.90 ms at 128 and 512
+  tokens (four runs, two without a corpus update), while fused is
+  unchanged (0.104 / 0.42 ms). **Not investigated** -- recorded as an open
+  question, not a regression claim, because the pre-schema row's toolchain
+  and runtime-library build are unknown (RUNTIME-LIB-OPT-1 changed those
+  libraries' `-O` level since).
+- **Test fix:** `test_committed_corpus_has_sm120_matmul_comparisons` required the
+  emitted GEMM in every end_to_end matmul row; it cannot serve odd K and is
+  removed from the 127x259x63 race before timing, so that row must not list it.
 
 Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
 item 3). **Follow-up required on Super-Bear; no sm_120 row has been
-re-recorded.** The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`,
+re-recorded** (history; done above). The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`,
 written as v4 since the gfx1151 re-record) keys every verdict on the toolchain
 identity (`compiler/toolchain_identity.py`: CUDA 13.4 / PTX 9.4 / driver
 610.88 / driver-JIT PTX 9.3 / LLVM 23.1.1 pins) and, for both Tier-3
@@ -190,7 +287,9 @@ selection 959 vs 959 passed. **No branch-only failure.** The 88 device
 failures are pre-existing on `main` on this box (84 in
 `test_e2e_spine_native.py`: `KeyError: 'nan_mode'`, "requires a supported
 native scheduled reduction", a 9e-06 vs 1e-05 tolerance literal) and are
-owed their own investigation. The `compiler` layer's lit half
+owed their own investigation (**root-caused 2026-09-26:
+`NVIDIA-DEVICE-LAYER-88-2026-09-26` below; one compiler defect, the rest stale
+tests**). The `compiler` layer's lit half
 (`check-tessera-nvidia`) passed 62/62 on both trees; its pytest half selects a
 single test on both, so that half checks very little. The gate exits after the
 first device pass fails, so `device-correctness-2` never ran on either tree.
@@ -216,6 +315,8 @@ Sync `DEVICE-CLOCK-MARKER-2026-09-26` (follows `WSL-TIMING-ADMISSION-2026-09-26`
 
 **NVIDIA outcome: follow-up required.** The pass already emits the NVIDIA form (`%globaltimer` reads, native `atom.min/max.u64`, `bar.sync` — checked by lowering to sm_120 PTX on the Mac), which is the missing **non-profiler** NVIDIA witness. The marker builder refuses NVIDIA until it is validated on Super-Bear: build the marker there, record an SSD calibrated-pairs packet, and add the NVIDIA packet route. No NVIDIA evidence is claimed.
 
+**Closed 2026-09-26 by `NVIDIA-GLOBALTIMER-MARKER-2026-09-26` (below): validated on The-Super-Bear and admitted for sm_120 only.**
+
 ## WSL timing admission — 2026-09-26
 
 Sync `WSL-TIMING-ADMISSION-2026-09-26` (owner direction, [MASTER_AUDIT](../../MASTER_AUDIT.md#consolidated-action-list-2026-09-25), 2026-09-25). **Shared timing contract changed.** Missing `/dev/kfd` or bare metal no longer blocks promotion; the independent-witness method does:
@@ -229,6 +330,8 @@ Sync `WSL-TIMING-ADMISSION-2026-09-26` (owner direction, [MASTER_AUDIT](../../MA
 This supersedes the WSL half of `GFX1151-CALIB-BAREMETAL-2026-08-16`.
 
 **NVIDIA outcome: follow-up required.** `profiler_timing` has no NVIDIA kernel-side slot, so sm_120 timing samples cannot promote through it until the non-profiler `%globaltimer` witness lands (DEVICE-CLOCK-DISCIPLINE, owed on Super-Bear); CUDA events alone do not qualify and were not loosened. The CUDA activity-window calibration no longer refuses WSL2 by environment — **whether Nsight on Super-Bear's WSL2 yields valid activity windows is unverified**; recording an SSD calibrated-pairs packet there (`benchmarks/record_ssd_calibrated_pairs.py`, which now accepts WSL2) is the test. `phase5_ingest` and `record_packed_storage_foundation` now state the witness as the blocker.
+
+**Updated 2026-09-26 (`NVIDIA-GLOBALTIMER-MARKER-2026-09-26`):** the `%globaltimer` witness landed and validated, so `promotion_clock_slots("nvidia_sm120")` is now `{device_wall_clock_ns}`, witnessed by `cuda_event_ns` (other compute capabilities still have none). The Nsight activity-window packet on WSL2 is still unrecorded, and `phase5_ingest` / `record_packed_storage_foundation` still time with events only, so their `kernel_clock_witness_required` stamp stays true for them.
 
 
 ## gfx1201 native spectral JVP — sibling outcome — 2026-09-25

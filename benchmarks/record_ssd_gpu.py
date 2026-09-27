@@ -51,23 +51,64 @@ def _hip_enum(name):
         return int(subprocess.run([str(exe)],check=True,capture_output=True,text=True,timeout=30).stdout)
 
 
-def _isa_sha256(image, llvm_bin):
+def _isa_sha256(image, llvm_bin, *, cuda=False):
+    """Digest of the instruction stream (a fatbin/hsaco container is not
+    byte-deterministic across rebuilds of an unchanged kernel)."""
     with tempfile.TemporaryDirectory(prefix='ssd-isa-') as tmp:
-        obj = Path(tmp)/'image.hsaco'
+        obj = Path(tmp)/('image.fatbin' if cuda else 'image.hsaco')
         obj.write_bytes(image)
-        text = subprocess.run([str(llvm_bin/'llvm-objdump'),'-d',str(obj)],check=True,
-                              capture_output=True,text=True,timeout=120).stdout
-    body = '\n'.join(line for line in text.splitlines() if not line.startswith(str(obj)))
+        if cuda:
+            from tessera.compiler.native_gpu_storage import _cuda_disassembler
+            tool = _cuda_disassembler()
+            if tool is None:
+                raise SystemExit('cuobjdump is required to digest the CUDA image (source scripts/_nvidia_env.sh)')
+            command = [str(tool), '--dump-sass', str(obj)]
+        else:
+            command = [str(llvm_bin/'llvm-objdump'), '-d', str(obj)]
+        text = subprocess.run(command,check=True,capture_output=True,text=True,timeout=120).stdout
+    body = '\n'.join(line for line in text.splitlines() if str(obj) not in line)
     return hashlib.sha256(body.encode()).hexdigest()
 
 
 def _resources(device, function):
+    # cuFuncGetAttribute and hipFuncGetAttribute share these numbers; the keys
+    # name what each backend calls them.
+    names = (('shared_bytes', 1), ('local_bytes', 3), ('registers', 4)) if device.cuda else \
+        (('lds_bytes', 1), ('scratch_bytes', 3), ('vgpr', 4))
     out = {}
-    for key, attribute in (('lds_bytes', 1), ('scratch_bytes', 3), ('vgpr', 4)):
+    for key, attribute in names:
         value = ct.c_int()
         device.check(device.attribute(ct.byref(value), attribute, function))
         out[key] = value.value
     return out
+
+
+def _cuda_identity(device):
+    """The current CUDA device's identity, queried -- never the requested target.
+
+    Refuses any architecture without a validated %globaltimer marker
+    (sync NVIDIA-GLOBALTIMER-MARKER-2026-09-26).
+    """
+    from tessera.compiler.profiler_nvidia_evidence import NVIDIA_DEVICE_CLOCK_ARCHITECTURES
+    lib = device.lib
+    dev = ct.c_int()
+    device.check(lib.cuCtxGetDevice(ct.byref(dev)))
+    name = ct.create_string_buffer(256)
+    device.check(lib.cuDeviceGetName(name, 256, dev))
+    major, minor, driver = ct.c_int(), ct.c_int(), ct.c_int()
+    device.check(lib.cuDeviceGetAttribute(ct.byref(major), 75, dev))  # COMPUTE_CAPABILITY_MAJOR
+    device.check(lib.cuDeviceGetAttribute(ct.byref(minor), 76, dev))  # COMPUTE_CAPABILITY_MINOR
+    device.check(lib.cuDriverGetVersion(ct.byref(driver)))
+    uuid = (ct.c_ubyte * 16)()
+    device.check(lib.cuDeviceGetUuid_v2(uuid, dev))
+    identity = {'name': name.value.decode(), 'ordinal': dev.value,
+                'compute_capability': f'{major.value}.{minor.value}',
+                'architecture': f'sm_{major.value}{minor.value}',
+                'driver_api_version': driver.value, 'uuid': bytes(uuid).hex()}
+    if identity['architecture'] not in NVIDIA_DEVICE_CLOCK_ARCHITECTURES:
+        raise SystemExit(f"NVIDIA SSD recording supports {sorted(NVIDIA_DEVICE_CLOCK_ARCHITECTURES)}; "
+                         f"this device is {identity}")
+    return identity
 
 
 def _rocm_identity(device):
@@ -113,20 +154,28 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
     from tessera.compiler.profiler_timing import (
         build_timing_sample, measured_clock, unavailable_clock, wall_clock_ticks_to_ns)
     from tessera.compiler.profiler_rocm_evidence import build_rocm_profiler_packet
+    from tessera.compiler.profiler_nvidia_evidence import build_nvidia_device_clock_packet
     from tessera.compiler.ssd_performance import SSD_CALIBRATION_WINDOW_PROTOCOL
-    if device.cuda:
-        raise SystemExit('device-clock calibration is implemented for ROCm here; '
-                         'NVIDIA uses the Nsight activity-window recorder')
     # Query the device rather than trusting the requested target (review).
-    identity = _rocm_identity(device)
+    cuda = device.cuda
+    identity = _cuda_identity(device) if cuda else _rocm_identity(device)
     chip = identity['architecture']
     rate = ct.c_int()
-    get_attribute = device.lib.hipDeviceGetAttribute
-    get_attribute.argtypes, get_attribute.restype = [ct.POINTER(ct.c_int), ct.c_int, ct.c_int], ct.c_int
-    device.check(get_attribute(ct.byref(rate), _hip_enum('hipDeviceAttributeWallClockRate'), 0))
-    if rate.value <= 0:
-        raise SystemExit('hipDeviceAttributeWallClockRate is not positive on this device')
-    marker = build_device_clock_marker(compiler=compiler, llvm_bin=llvm_bin, backend='rocm', chip=chip)
+    if not cuda:
+        get_attribute = device.lib.hipDeviceGetAttribute
+        get_attribute.argtypes, get_attribute.restype = [ct.POINTER(ct.c_int), ct.c_int, ct.c_int], ct.c_int
+        device.check(get_attribute(ct.byref(rate), _hip_enum('hipDeviceAttributeWallClockRate'), 0))
+        if rate.value <= 0:
+            raise SystemExit('hipDeviceAttributeWallClockRate is not positive on this device')
+
+    def to_device(dst, src, size):
+        return device.htod(dst, src, size) if cuda else device.copy(dst, src, size, 1)
+
+    def to_host(dst, src, size):
+        return device.dtoh(dst, src, size) if cuda else device.copy(dst, src, size, 2)
+
+    marker = build_device_clock_marker(compiler=compiler, llvm_bin=llvm_bin,
+                                       backend='nvidia' if cuda else 'rocm', chip=chip)
     P = ct.c_void_p
     module, marker_fn, span = P(), P(), P()
     blob = ct.create_string_buffer(marker.image)
@@ -146,7 +195,7 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
 
         def timed_window(bracketed):
             host_span[0], host_span[1] = (1 << 64) - 1, 0
-            device.check(device.copy(span, ct.addressof(host_span), ct.sizeof(host_span), 1))
+            device.check(to_device(span, ct.addressof(host_span), ct.sizeof(host_span)))
             device.check(device.sync())
             start = time.perf_counter_ns()
             device.check(device.event_record(events[0], None))
@@ -166,10 +215,13 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
                 return
             host_ns.append(host)
             event_ns.append(ms.value * 1e6 / LAUNCHES)
-            device.check(device.copy(ct.addressof(host_span), span, ct.sizeof(host_span), 2))
+            device.check(to_host(ct.addressof(host_span), span, ct.sizeof(host_span)))
             if host_span[0] == (1 << 64) - 1 or host_span[1] <= host_span[0]:
                 raise SystemExit(f'device-clock marker span was not written: {list(host_span)}')
-            device_ns.append(wall_clock_ticks_to_ns(host_span[1] - host_span[0], rate.value) / LAUNCHES)
+            ticks = host_span[1] - host_span[0]
+            # %globaltimer counts nanoseconds; the ROCm steady counter ticks at
+            # hipDeviceAttributeWallClockRate.
+            device_ns.append((ticks if cuda else wall_clock_ticks_to_ns(ticks, rate.value)) / LAUNCHES)
 
         for window in range(WINDOWS):
             # Alternate the order so a monotone drift within the process
@@ -194,29 +246,33 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
     sample_id = f'{output.stem}-{uuid.uuid4().hex[:12]}'
     clean_sha = hashlib.sha256(clean_program.package.image).hexdigest()
     semantic = hashlib.sha256(logical.schedule_ir.encode()).hexdigest()
+    event_slot = 'cuda_event_ns' if cuda else 'hip_event_ns'
+    clock_provenance = {'method': 'compiler_built_marker_bracketing',
+                        'windows': WINDOWS, 'launches_per_window': LAUNCHES,
+                        'marker_image_sha256': marker.image_sha256, 'per_window_ns': device_ns}
+    clock_provenance.update({'clock': '%globaltimer', 'unit': 'ns'} if cuda else
+                            {'clock': 'llvm.readsteadycounter', 'wall_clock_rate_khz': rate.value})
     timing = build_timing_sample(
-        sample_id=sample_id, target=f'rocm_{chip}',
+        sample_id=sample_id, target='nvidia_sm120' if cuda else f'rocm_{chip}',
         clocks={
             'host_wall_ns': measured_clock('host_wall_ns', source='perf_counter',
                                            value=statistics.median(host_ns)),
-            'hip_event_ns': measured_clock('hip_event_ns', source='hip_event',
-                                           value=statistics.median(event_ns)),
+            event_slot: measured_clock(event_slot, source='cuda_event' if cuda else 'hip_event',
+                                       value=statistics.median(event_ns)),
             'device_wall_clock_ns': measured_clock(
                 'device_wall_clock_ns', source='device_wall_clock',
                 value=statistics.median(device_ns), instrumented=True,
-                calibrated_against=('hip_event_ns',), eligible_for_promotion=True,
-                provenance={'method': 'compiler_built_marker_bracketing',
-                            'clock': 'llvm.readsteadycounter', 'wall_clock_rate_khz': rate.value,
-                            'windows': WINDOWS, 'launches_per_window': LAUNCHES,
-                            'marker_image_sha256': marker.image_sha256,
-                            'per_window_ns': device_ns}),
+                calibrated_against=(event_slot,), eligible_for_promotion=True,
+                provenance=clock_provenance),
             'profiler_activity_ns': unavailable_clock(
-                'profiler_activity_ns', source='rocprofiler_activity',
-                reason='ROCPROFILER_UNAVAILABLE_NO_KFD' if environment == 'wsl2' else 'NOT_CAPTURED'),
+                'profiler_activity_ns', source='cupti_activity' if cuda else 'rocprofiler_activity',
+                reason='NOT_CAPTURED' if cuda else
+                ('ROCPROFILER_UNAVAILABLE_NO_KFD' if environment == 'wsl2' else 'NOT_CAPTURED')),
         },
         artifact_digests={'application_image': clean_sha, 'device_clock_marker': marker.image_sha256,
                           'schedule_ir': semantic},
-        batch_size=LAUNCHES, warm_state='warm', synchronization='hipEventSynchronize',
+        batch_size=LAUNCHES, warm_state='warm',
+        synchronization='cuEventSynchronize' if cuda else 'hipEventSynchronize',
         execution_environment=environment, resources={'application': resources},
         environment={'kernel_release': platform.release(), 'per_window_event_ns': event_ns,
                      'per_window_plain_event_ns': [ms * 1e6 for ms in plain_ms],
@@ -228,14 +284,21 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
                      'window_protocol': SSD_CALIBRATION_WINDOW_PROTOCOL,
                      'per_window_host_ns': host_ns, 'run_id': run_id, 'process_id': os.getpid(),
                      'device_identity': identity})
-    isa = _isa_sha256(clean_program.package.image, llvm_bin)
+    isa = _isa_sha256(clean_program.package.image, llvm_bin, cuda=cuda)
     image = dict(architecture=chip, kernel_name=clean_program.package.entry, semantic_sha256=semantic,
-                 image_sha256=clean_sha, isa_sha256=isa, clock_source='hip_event',
+                 image_sha256=clean_sha, isa_sha256=isa, clock_source='cuda_event' if cuda else 'hip_event',
                  calibration_sample_id=sample_id, resources=resources)
     # Same image both times: "instrumented" means measured under marker
     # bracketing, and its duration ratio is the markers' overhead.
     clean = dict(image, duration_ns=statistics.median(plain_ms) * 1e6, instrumented=False)
     probe = dict(image, duration_ns=statistics.median(event_ns), instrumented=True)
+    head = subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip()
+    dirty = bool(subprocess.run(['git','status','--porcelain'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip())
+    if cuda:
+        packet = build_nvidia_device_clock_packet(timing=timing, uninstrumented=clean, instrumented=probe,
+                                                  source={'source_commit': head, 'worktree_dirty': dirty})
+        output.write_text(json.dumps(packet, indent=2) + '\n')
+        return packet, plain_ms
     capture = {
         'schema': 'tessera.profiler_rocm_native_capture.v1', 'provider': 'rocprofiler',
         'status': 'blocked', 'fresh_process': True, 'process': {'clean_exit': True},
@@ -246,8 +309,6 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
         'requested': {'counters': [], 'pc_sampling': False},
         'provider_trace': _empty_trace(), 'eligible_for_promotion': False,
     }
-    head = subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip()
-    dirty = bool(subprocess.run(['git','status','--porcelain'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.strip())
     packet = build_rocm_profiler_packet(timing=timing, capture=capture, uninstrumented=clean,
                                         instrumented=probe, source={'source_commit': head, 'worktree_dirty': dirty})
     output.write_text(json.dumps(packet, indent=2) + '\n')
@@ -275,19 +336,20 @@ def main():
                              '5%% clock-agreement band (measured gfx1201, 2026-09-26)')
     parser.add_argument('--profile',action='store_true')
     parser.add_argument('--device-clock-calibration',type=Path,
-                        help='ROCm: also calibrate the clean image with compiler-built '
-                             'device-clock markers and write the packet here')
+                        help='also calibrate the clean image with compiler-built device-clock '
+                             'markers (ROCm steady counter; NVIDIA %%globaltimer) and write the '
+                             'packet here')
     args = parser.parse_args()
     if args.launches <= 0:
         parser.error('--launches must be positive')
     LAUNCHES = args.launches
-    if args.device_clock_calibration and not (args.profile and args.chunk and args.backend == 'rocm'):
-        parser.error('--device-clock-calibration needs --backend rocm, --profile and one --chunk')
+    if args.device_clock_calibration and not (args.profile and args.chunk):
+        parser.error('--device-clock-calibration needs --profile and one --chunk')
     run_id = uuid.uuid4().hex
     device = Device(args.backend)
     # The chip is the queried device's, never assumed (ROCm): it selects the
     # image, and the row records it for the admission identity check.
-    chip = 'sm_120' if device.cuda else _rocm_identity(device)['architecture']
+    chip = (_cuda_identity(device) if device.cuda else _rocm_identity(device))['architecture']
     rows = []
     T,H,N,P = args.shape
     for chunk in ((args.chunk,) if args.chunk else (1,2,5)):
@@ -362,11 +424,13 @@ def main():
                     def reset():
                         for i,value in enumerate(outputs):
                             poison = np.full_like(value,np.nan)
-                            device.check(device.copy(pointers[5+i],poison.ctypes.data,poison.nbytes,1))
+                            device.check(device.htod(pointers[5+i],poison.ctypes.data,poison.nbytes) if device.cuda
+                                         else device.copy(pointers[5+i],poison.ctypes.data,poison.nbytes,1))
                     def verify():
                         for i,value in enumerate(outputs):
                             result = np.empty_like(value)
-                            device.check(device.copy(result.ctypes.data,pointers[5+i],result.nbytes,2))
+                            device.check(device.dtoh(result.ctypes.data,pointers[5+i],result.nbytes) if device.cuda
+                                         else device.copy(result.ctypes.data,pointers[5+i],result.nbytes,2))
                             np.testing.assert_allclose(result,expected[i],rtol=1e-5,atol=1e-6)
                     _, timings = device_clock_calibration(
                         device=device, logical=logical, clean_program=program, clean_binding=binding,

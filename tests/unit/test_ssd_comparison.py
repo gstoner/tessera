@@ -271,6 +271,75 @@ def test_ssd_admission_refuses_a_rocm_chip_without_a_calibration_route():
     assert not decision.admitted and 'no native calibration adapter' in decision.reason
 
 
+def test_ssd_admits_an_nvidia_globaltimer_calibration_and_refuses_mixtures():
+    """NVIDIA-GLOBALTIMER-MARKER-2026-09-26: sm_120 SSD admission through the
+    compiler-built %globaltimer marker, the device-clock twin of the ROCm
+    route; a disagreeing witness refuses, and a calibration set mixing this
+    route with Nsight windows is refused rather than averaged."""
+    import hashlib
+    from types import SimpleNamespace
+    from tessera.compiler.ssd_performance import bind_measured_ssd
+    from tessera.compiler.profiler_nvidia_evidence import build_nvidia_device_clock_packet
+    from test_profiler_nvidia_evidence import _image, _timing
+    logical = SimpleNamespace(compiler_digest='compiler',schedule_ir='chunk_size = 8 : i64')
+    specs = [SimpleNamespace(shape=(32,2,4)),None,SimpleNamespace(shape=(32,2,16))]
+    def artifact(cooperative):
+        name = 'cooperative' if cooperative else 'serial'
+        return SimpleNamespace(logical=logical,adjoint=False,cooperative=cooperative,
+            package=SimpleNamespace(backend='nvidia',chip='sm_120',binding_digest=name,image=name.encode()),
+            validate=lambda:specs,bind=lambda:name)
+    incumbent,candidate = artifact(False),artifact(True)
+    pairs = evidence()
+    for i,pair in enumerate(pairs):
+        for name,packet in pair.items():
+            packet.update(run_id=f'{i}-{name}')
+            packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
+    comparison = dict(pairs=pairs,source=dict(source_commit='a'*40))
+    semantic = hashlib.sha256(logical.schedule_ir.encode()).hexdigest()
+    def calibrations(device_ratio=0.998):
+        out = []
+        for i,pair in enumerate(pairs):
+            for name in ('serial','cooperative'):
+                duration = pair[name]['rows'][0]['device_event_ms'][0]*1e6
+                image = pair[name]['rows'][0]['image_sha256']
+                timing = _timing(event=duration,device=duration*device_ratio,environment='bare_metal',
+                                 digests={'application_image': image})
+                timing['sample_id'] = f'{i}-{name}'
+                timing['environment']['run_id'] = f'{i}-{name}'
+                timing['batch_size'] = pair[name]['rows'][0]['launches_per_window']
+                _interleaved(timing)
+                clean,probe = _image(duration,instrumented=False),_image(duration,instrumented=True)
+                for record in (clean,probe):
+                    record.update(calibration_sample_id=timing['sample_id'],semantic_sha256=semantic,image_sha256=image)
+                out.append(build_nvidia_device_clock_packet(timing=timing,uninstrumented=clean,instrumented=probe,
+                    source=dict(source_commit='a'*40,worktree_dirty=False)))
+        return out
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations())
+    assert bound == 'cooperative' and decision.admitted and '%globaltimer' in decision.reason
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations(device_ratio=0.8))
+    assert bound == 'serial' and 'DEVICE_CLOCK_WITNESS_DISAGREES' in decision.reason
+    mixed = calibrations()
+    mixed[0] = {'schema': 'nsight-window', 'sample_id': 'x'}
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,mixed)
+    assert bound == 'serial' and 'mix' in decision.reason
+    stolen = calibrations()
+    stolen[3]['timing']['environment']['run_id'] = 'someone-else'
+    with pytest.raises(ValueError, match='does not validate'):
+        bind_measured_ssd(incumbent,candidate,comparison,stolen)   # an unresealed edit
+    from tessera.compiler.profiler_nvidia_evidence import _digest
+    stolen[3]['timing_sha256'] = _digest(stolen[3]['timing'])
+    stolen[3].pop('packet_sha256'); stolen[3]['packet_sha256'] = _digest(stolen[3])
+    with pytest.raises(ValueError, match='measured process run'):
+        bind_measured_ssd(incumbent,candidate,comparison,stolen)   # a resealed one
+    legacy = calibrations()
+    for packet in legacy:
+        packet['timing']['environment'].pop('window_protocol')
+        packet['timing_sha256'] = _digest(packet['timing'])
+        packet.pop('packet_sha256'); packet['packet_sha256'] = _digest(packet)
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,legacy)
+    assert bound == 'serial' and decision.reason.startswith('SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY')
+
+
 def _legacy(timing):
     """The committed pre-interleaving gfx1151 packets: no ``window_protocol``."""
     timing['clocks']['device_wall_clock_ns']['provenance'] = {'launches_per_window': timing['batch_size']}
@@ -378,3 +447,32 @@ def test_rows_recorded_at_different_launch_counts_are_one_measurement_refused(mo
     bound, decision = _witness_admission('gfx1151', 'gfx1151')
     assert bound == 'serial' and not decision.admitted
     assert 'different launch counts' in decision.reason
+
+
+def test_committed_sm120_calibrations_validate_and_carry_the_protocol():
+    """The sm_120 %globaltimer packet, read as data (NVIDIA-GLOBALTIMER-MARKER-
+    2026-09-26): every calibration re-derives as eligible on the device-clock
+    route, names the queried RTX 5070, carries the interleaved protocol at the
+    row's launch count, and binds its row's run and image. The end-to-end
+    replay needs tessera-opt and the GPU; it is committed as ``replay.json``."""
+    import json
+    from tessera.compiler.profiler_nvidia_evidence import validate_nvidia_device_clock_packet
+    from tessera.compiler.ssd_performance import _calibration_protocol_refusal
+    root = _BASELINES / 'sm120_ssd_calibrated_pairs_20260926'
+    comparison = json.loads((root / 'comparison.json').read_text())
+    assert tuple(summarize(comparison['pairs'])['identity'][:2]) == ('nvidia', 'sm_120')
+    for i in range(9):
+        for name in ('serial', 'cooperative'):
+            row_packet = json.loads((root / f'{i}-{name}.json').read_text())
+            calibration = json.loads((root / f'{i}-{name}-calibration.json').read_text())
+            validate_nvidia_device_clock_packet(calibration)
+            assert calibration['eligible_for_promotion'] is True
+            assert calibration['admission_route'] == 'device_clock_witness'
+            identity = calibration['timing']['environment']['device_identity']
+            assert identity['architecture'] == 'sm_120' and identity['name'] == 'NVIDIA GeForce RTX 5070'
+            assert calibration['timing']['environment']['run_id'] == row_packet['run_id']
+            row = row_packet['rows'][0]
+            assert calibration['instrumentation_comparison']['uninstrumented']['image_sha256'] == row['image_sha256']
+            assert _calibration_protocol_refusal(calibration['timing'], row) is None
+    for decision in ('admission.json', 'replay.json'):
+        assert json.loads((root / decision).read_text())['decision']['admitted'] is True

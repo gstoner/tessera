@@ -223,6 +223,23 @@ def test_apple_gpu_scheduled_reduce_envelope_fails_closed() -> None:
     assert supports(_reduce_module((2, 3, 5), (2, 5), axis=1), target="rocm_gfx1151")
 
 
+def test_kindless_generic_reduce_fails_closed_on_every_target() -> None:
+    """`tessera.reduce` without `kind` is not a sum (Decision #21a).
+
+    The ODS makes `kind` a required ReductionKindAttr, so a kind-less generic
+    reduce is malformed Graph IR. The pre-Schedule NVIDIA constructor used to
+    read it as a sum; the scheduled contract refuses it, and a device test that
+    relied on the old default is what surfaced this (NVIDIA device layer,
+    2026-09-26).
+    """
+    supports = scheduled_kernel.supports_scheduled_kernel
+    kindless = _reduce_module((2, 3, 5), (2, 3))
+    kindless.functions[0].body[0].kwargs.pop("kind")
+    for target in ("nvidia_sm120", "rocm_gfx1151", "x86", "apple_gpu"):
+        assert not supports(kindless, target=target), target
+        assert supports(_reduce_module((2, 3, 5), (2, 3), kind="sum"), target=target), target
+
+
 def test_apple_gpu_scheduled_reduce_is_compiler_synthesized(monkeypatch, tmp_path) -> None:
     """The reduce family is emitted by the compiler, not delegated to a vendor.
 

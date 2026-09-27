@@ -108,20 +108,15 @@ def test_the_delegate_binds_the_symbol_it_declared():
 
 # ── claim 2: the comparison Decision #28 requires can be performed ───────────
 
-#: The one matmul candidate that still has no device timer, and why.
+#: Matmul candidates allowed to lack a device timer, each with its reason.
 #:
-#: `benchmarkTileGemm16` in the launch bridge launches `gx = ceil(N/tileN)`,
-#: `gy = ceil(M/tileM)` -- x maps to N -- and the NVIDIA Tile lowering agrees
-#: (`NVIDIALowering.cpp`: `mt = blockY*16`, `nt = blockX*8`), which is why both
-#: Tile candidates time correctly through it. `ptx_emit` uses the opposite
-#: convention (`mt = ctaid.x*16`, `nt = ctaid.y*8`). Driving it through the
-#: harness returns rc=5, and forcing it would launch a transposed grid: at
-#: 512x512 that covers rows to 1024 and columns only to 256, leaving half the
-#: output unwritten while still reporting a plausible latency.
-#:
-#: Named here rather than silently tolerated: an unexplained `None` in this
-#: list is a regression, an explained one is a tracked gap.
-_NO_DEVICE_TIMER = {"nvidia_mma_gemm_emitted"}
+#: Empty since the emitted lane gained one: `ptx_emit`'s block-index
+#: convention (`mt = ctaid.x*16`) is now carried to the launch bridge as a
+#: `tileLaunchConfig` flag (`NvidiaMmaGemmEmittedCandidate.measure_device_latency`),
+#: and on 2026-09-26 it timed 0.0285 ms at 512^3 on the RTX 5070. It used to be
+#: listed here, which let a race that silently lacked the fastest kernel pass.
+#: An unexplained `None` is a regression; add an entry only with its reason.
+_NO_DEVICE_TIMER: frozenset[str] = frozenset()
 
 
 def test_the_delegate_and_its_compiled_rivals_all_report_device_latency():
@@ -219,23 +214,6 @@ def test_tier_priority_selects_the_delegate_regardless_of_shape():
         assert int(winner.tier) == int(Tier.HAND_TUNED)
 
 
-#: The exact GPU the crossover below was measured on.
-#:
-#: A compute-capability tag (`sm_120`) is NOT specific enough to gate a
-#: performance ranking, which was the first fix's mistake: cc 12.0 spans the
-#: whole consumer Blackwell line, so an RTX 5070 Ti, 5080 or 5090 all pass an
-#: `sm_120` check while differing in SM count, cache and bandwidth by more than
-#: the 16% margin this test asserts. The gate has to be the model.
-_MEASURED_DEVICE = "NVIDIA GeForce RTX 5070"
-
-
-def _measured_host() -> bool:
-    """Whether this is the exact GPU the ranking below was measured on."""
-    from tests._support.nvidia import nvidia_device_model
-
-    return nvidia_device_model() == _MEASURED_DEVICE
-
-
 def test_a_compiled_candidate_can_be_compared_to_the_delegate_in_budget():
     """Device-independent half: the comparison is *performable*, and whichever
     lane is faster here is no less accurate.
@@ -265,63 +243,60 @@ def test_a_compiled_candidate_can_be_compared_to_the_delegate_in_budget():
         "so 'faster' is not a Decision #28 displacement argument")
 
 
-@pytest.mark.skipif(
-    not _measured_host(),
-    reason=f"the crossover below was measured on a {_MEASURED_DEVICE}; a "
-           "ranking is a property of the specific part and does not transfer "
-           "— not even to another compute-capability 12.0 GPU")
-def test_the_delegate_wins_on_device_only_at_small_shapes():
-    """The measurement the device timer exists to produce -- and it does not
-    say what tier priority assumes.
+def test_the_measured_arbiter_selects_the_fastest_in_budget_candidate():
+    """What Decision #28 actually asks of this lane -- not which kernel wins.
 
-    Measured on an RTX 5070 (sm_120), f16, spreads of 0.000-0.008 ms across
-    repeats:
+    Replaces `test_the_delegate_wins_on_device_only_at_small_shapes`, which
+    pinned a *ranking* (delegate fastest at 512^3, a compiled lane at 2048^3)
+    to the RTX 5070. The ranking was never the contract, and it went stale the
+    moment the field changed: once the emitted PTX lane gained a device timer
+    it joined the race and measured fastest at 512^3 too (2026-09-26, this
+    box, f16, device-resident CUDA events: emitted 0.0285 ms, shipped 0.0455,
+    tile_direct 0.0524, tile_shared 0.0590). A test that fails when a
+    compiled kernel starts beating the hand-tuned one is asserting against the
+    arbiter's purpose.
 
-        shape    shipped(T3)   tile_shared(T2)   winner
-        512^3      0.043 ms       0.059 ms       delegate, by 37%
-        1024^3     0.320 ms       0.312 ms       compiled, by 2.3%
-        2048^3     2.448 ms       2.051 ms       compiled, by 16.2%
+    Decision #28's contract is: among candidates that pass the F4 oracle, the
+    measured arbiter picks the fastest, and a hand-tuned delegate is displaced
+    only by one that is faster *and* in budget. So, at a small and a large
+    shape, on whatever NVIDIA part runs this:
 
-    with max|err| identical between the two lanes at every shape. So at 1024^3
-    and above a compiled kernel measures **faster and in budget**, which is
-    exactly Decision #28's condition for displacing a hand-tuned candidate --
-    and the arbiter still selects the delegate, because tier priority is the
-    default and the measured loop is not wired into this path.
+    * the delegate is in the race and every live candidate was device-timed
+      (an untimed candidate cannot win or lose honestly);
+    * the verdict is the minimum of its own recorded measurements;
+    * the winner executes a kernel (no reference fallback) and meets the
+      delegate's own declared budget (`tolerance` + `tolerance_rel`) -- the
+      budget it must match to displace the delegate.
 
-    Only the 512^3 and 2048^3 rows are asserted. The 1024^3 crossover is 2.3%,
-    inside the range a driver or power-limit change can move, so it is recorded
-    as the shape where the inversion begins and not used as a gate.
-
-    **Pinned to the exact GPU model, not to `sm_120`.** This asserts a
-    performance *ranking*, and a ranking belongs to the specific part:
-    occupancy, L2 size, SM count and clock behaviour all move the crossover.
-    Compute capability is the wrong key -- cc 12.0 spans the whole consumer
-    Blackwell line, so a 5070 Ti, 5080 or 5090 would pass an `sm_120` check
-    while differing by more than the 16% margin asserted here. (The first
-    version of this gate made exactly that mistake.) The suite's own gate
-    (`nvidia_mma_ptx_launch_available`) checks only that nvcc, the MMA runtime
-    and the PTX bridge load, so without this skip the test would fail on a
-    healthy machine and read as a kernel regression.
-
-    Its device-independent half lives in the test above and still runs on every
-    NVIDIA host: that the comparison is performable at all, and that whichever
-    lane is fastest there is no less accurate.
-
-    The earlier version of this test checked only 512^3, where the delegate
-    does win, and so would have reported green for a default that is wrong at
-    scale.
+    No ranking is asserted, so the model pin the old test needed is gone.
     """
+    from tessera.compiler.emit import autotune as AT
+    from tessera.compiler.emit.candidate import OP_MATMUL
     from tessera.compiler.fusion_core import MatmulRegion
 
     region = MatmulRegion(dtype="float16")
-
-    small = _device_timings(region, *_operands(512, 512, 512, "float16"))
-    assert min(small, key=small.__getitem__) == SHIPPED, (
-        f"the delegate no longer wins at 512^3 on {_MEASURED_DEVICE}: {small}")
-
-    large = _device_timings(region, *_operands(2048, 2048, 2048, "float16"))
-    fastest = min(large, key=large.__getitem__)
-    assert fastest != SHIPPED, (
-        "the delegate now wins at 2048^3 too, which would remove the "
-        f"motivation for shape-bucketed measured selection: {large}")
-    assert large[fastest] < large[SHIPPED], large
+    budget = _shipped().contract_for(region)
+    for size in (512, 2048):
+        A, B = _operands(size, size, size, "float16")
+        cache = AT.MeasureCache()
+        winner = AT.measured_arbitrate(
+            region, OP_MATMUL, "nvidia", A, B, dims=(size, size, size),
+            dtype="float16", cache=cache, reps=25, warmup=10,
+            timing=AT.TIMING_DEVICE)
+        assert winner is not None, f"no in-budget candidate at {size}^3"
+        [row] = cache.to_dict()["records"]
+        assert SHIPPED in row["candidates"], (
+            f"the delegate was not raced at {size}^3: {row}")
+        assert set(row.get("unmeasured") or {}) <= _NO_DEVICE_TIMER, (
+            f"an untimed candidate at {size}^3: {row.get('unmeasured')}")
+        fastest = min(row["candidates"], key=row["candidates"].__getitem__)
+        assert row["winner"] == winner.name == fastest, (
+            f"at {size}^3 the verdict is not the measured minimum: {row}")
+        out, tag = winner.run(region, A, B)
+        assert tag != "reference", f"{winner.name} declined at {size}^3"
+        np.testing.assert_allclose(
+            np.asarray(out, np.float64),
+            np.asarray(region.reference(A, B), np.float64),
+            atol=budget.tolerance, rtol=budget.tolerance_rel,
+            err_msg=f"{winner.name} measured fastest at {size}^3 but is out "
+                    "of the delegate's declared budget")

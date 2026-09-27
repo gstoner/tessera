@@ -7,6 +7,19 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable (no ROCm change)
+
+NVIDIA validated and admitted its `%globaltimer` device-clock marker on
+The-Super-Bear (NVIDIA queue, same key). Shared code touched, ROCm behaviour
+unchanged: `profiler_timing` gains `NVIDIA_CLOCK_SLOTS` for `nvidia_sm120` and
+`cuda_event_ns` as a witness, but witnesses are intersected with the target's
+own slots, so a ROCm sample still admits only `hip_event_ns` /
+`profiler_activity_ns` (unit-tested); `native_device_clock` keeps the gfx1151 /
+gfx1201 image check; `ssd_performance` adds an NVIDIA branch before the ROCm
+one; `record_ssd_rocm_calibrated_pairs.py` gains `--backend` (default `rocm`,
+so every committed ROCm reproduce line is unchanged). No ROCm packet was
+re-recorded and none is affected.
+
 ## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: gfx1151 corpus rows re-recorded; sm_120 owed
 
 Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action

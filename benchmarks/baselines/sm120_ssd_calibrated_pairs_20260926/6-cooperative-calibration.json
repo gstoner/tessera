@@ -1,0 +1,189 @@
+{
+  "schema": "tessera.profiler_nvidia_device_clock_packet.v1",
+  "work_item": "NVIDIA-GLOBALTIMER-MARKER-2026-09-26",
+  "architecture": "sm_120",
+  "source": {
+    "source_commit": "de66d702891b648af776c97162194b13a3e96944",
+    "worktree_dirty": false
+  },
+  "timing": {
+    "schema": "tessera.profiler_timing.v1",
+    "sample_id": "6-cooperative-calibration-c406b65b2cbd",
+    "target": "nvidia_sm120",
+    "execution_environment": "wsl2",
+    "batch_size": 1000,
+    "warm_state": "warm",
+    "synchronization": "cuEventSynchronize",
+    "artifact_digests": {
+      "application_image": "5ef831f8f2cd9f7630a82254d3d902e894de701034e0d9e642d048c688538c7c",
+      "device_clock_marker": "a945e343f609d4ad6e005dec2babb68e3092da6627456dc017eb6ecd3c72ed93",
+      "schedule_ir": "0288839eedf43c9b38b7d63d05aa838cab29309538388c21a16ceb4df9eded1f"
+    },
+    "resources": {
+      "application": {
+        "shared_bytes": 64,
+        "local_bytes": 0,
+        "registers": 42
+      }
+    },
+    "environment": {
+      "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+      "per_window_event_ns": [
+        11803.96842956543,
+        12937.472343444824,
+        13210.176467895508,
+        13235.391616821289,
+        12768.735885620117,
+        12866.20807647705,
+        13280.54428100586
+      ],
+      "per_window_plain_event_ns": [
+        12443.296432495117,
+        12868.800163269043,
+        15575.551986694336,
+        13018.112182617188,
+        12841.919898986816,
+        13192.543983459473,
+        12801.888465881348
+      ],
+      "window_protocol": "interleaved_alternating_plain_bracketed",
+      "per_window_host_ns": [
+        11834.557,
+        13026.872,
+        13283.694,
+        13264.375,
+        12793.56,
+        12937.671,
+        13309.524
+      ],
+      "run_id": "4bb2520c4f884672a11bb20130f683ef",
+      "process_id": 152675,
+      "device_identity": {
+        "name": "NVIDIA GeForce RTX 5070",
+        "ordinal": 0,
+        "compute_capability": "12.0",
+        "architecture": "sm_120",
+        "driver_api_version": 13030,
+        "uuid": "cba12639821a7a104cd3f918f9c0a545"
+      }
+    },
+    "clocks": {
+      "host_wall_ns": {
+        "slot": "host_wall_ns",
+        "source": "perf_counter",
+        "value": 13026.872,
+        "unit": "ns",
+        "valid": true,
+        "reason": null,
+        "provenance": {},
+        "instrumented": false,
+        "calibrated_against": [],
+        "eligible_for_regression": true,
+        "eligible_for_promotion": false,
+        "raw_value": 13026.872
+      },
+      "cuda_event_ns": {
+        "slot": "cuda_event_ns",
+        "source": "cuda_event",
+        "value": 12937.472343444824,
+        "unit": "ns",
+        "valid": true,
+        "reason": null,
+        "provenance": {},
+        "instrumented": false,
+        "calibrated_against": [],
+        "eligible_for_regression": true,
+        "eligible_for_promotion": false,
+        "raw_value": 12937.472343444824
+      },
+      "device_wall_clock_ns": {
+        "slot": "device_wall_clock_ns",
+        "source": "device_wall_clock",
+        "value": 12914.688,
+        "unit": "ns",
+        "valid": true,
+        "reason": null,
+        "provenance": {
+          "method": "compiler_built_marker_bracketing",
+          "windows": 7,
+          "launches_per_window": 1000,
+          "marker_image_sha256": "a945e343f609d4ad6e005dec2babb68e3092da6627456dc017eb6ecd3c72ed93",
+          "per_window_ns": [
+            11781.6,
+            12914.688,
+            13200.768,
+            13225.216,
+            12751.04,
+            12860.704,
+            13275.328
+          ],
+          "clock": "%globaltimer",
+          "unit": "ns"
+        },
+        "instrumented": true,
+        "calibrated_against": [
+          "cuda_event_ns"
+        ],
+        "eligible_for_regression": true,
+        "eligible_for_promotion": true,
+        "raw_value": 12914.688
+      },
+      "profiler_activity_ns": {
+        "slot": "profiler_activity_ns",
+        "source": "cupti_activity",
+        "value": null,
+        "unit": "ns",
+        "valid": false,
+        "reason": "NOT_CAPTURED",
+        "provenance": {},
+        "instrumented": false,
+        "calibrated_against": [],
+        "eligible_for_regression": false,
+        "eligible_for_promotion": false,
+        "raw_value": null
+      }
+    }
+  },
+  "timing_sha256": "e2bdf693a5df2a393ff8f9db13060abc4519a15a35e26f4939db4c886159ae3f",
+  "instrumentation_comparison": {
+    "uninstrumented": {
+      "architecture": "sm_120",
+      "kernel_name": "product",
+      "semantic_sha256": "0288839eedf43c9b38b7d63d05aa838cab29309538388c21a16ceb4df9eded1f",
+      "image_sha256": "5ef831f8f2cd9f7630a82254d3d902e894de701034e0d9e642d048c688538c7c",
+      "isa_sha256": "8038f36edf0239c9de1b9c47fc2928ee10890ef97c97f58e42fb3df028780f61",
+      "clock_source": "cuda_event",
+      "calibration_sample_id": "6-cooperative-calibration-c406b65b2cbd",
+      "resources": {
+        "shared_bytes": 64,
+        "local_bytes": 0,
+        "registers": 42
+      },
+      "duration_ns": 12868.800163269043,
+      "instrumented": false
+    },
+    "instrumented": {
+      "architecture": "sm_120",
+      "kernel_name": "product",
+      "semantic_sha256": "0288839eedf43c9b38b7d63d05aa838cab29309538388c21a16ceb4df9eded1f",
+      "image_sha256": "5ef831f8f2cd9f7630a82254d3d902e894de701034e0d9e642d048c688538c7c",
+      "isa_sha256": "8038f36edf0239c9de1b9c47fc2928ee10890ef97c97f58e42fb3df028780f61",
+      "clock_source": "cuda_event",
+      "calibration_sample_id": "6-cooperative-calibration-c406b65b2cbd",
+      "resources": {
+        "shared_bytes": 64,
+        "local_bytes": 0,
+        "registers": 42
+      },
+      "duration_ns": 12937.472343444824,
+      "instrumented": true
+    },
+    "duration_ratio": 1.0053363312278163,
+    "maximum_duration_ratio": 1.05
+  },
+  "eligible_for_promotion": true,
+  "ineligibility_reasons": [],
+  "admission_route": "device_clock_witness",
+  "calibration_status": "promotable",
+  "packet_sha256": "1e54aa44f80a499fe9387ee5d8ed4645f3ca1d1c793a8b71ef5047793de91456"
+}

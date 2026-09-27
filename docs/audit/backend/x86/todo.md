@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: sibling outcome — not applicable
+
+This change covers NVIDIA emitted CUDA templates, the NVIDIA scalar-lane
+device timers and a `gated_matmul` rule in `autotune._infer_dims`.
+`x86_generic_c` has no device runtime error slot and no committed corpus
+rows. The gated rule would apply to an x86 gated candidate, but none is
+registered.
+
 ## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: `x86_generic_c` carries a code identity (no committed x86 rows)
 
 Every arbiter candidate of every tier must now carry a code identity or its

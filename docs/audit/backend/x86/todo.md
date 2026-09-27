@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,21 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: `x86_generic_c` carries a code identity (no committed x86 rows)
+
+Every arbiter candidate of every tier must now carry a code identity or its
+verdict misses (ROCm/NVIDIA queues, same key). `x86_generic_c` (T1) is keyed on
+the guarded DYNAMIC C source `run` compiles for the workload (with its binding
+layouts and `kernel_cache.cache_key`), `-O3 -march=x86-64-v4 -fPIC -shared -lm`
+(one flag list, shared with `_x86_compile_fn`), and the host C compiler's
+`--version` line -- no pin fixes the host C compiler (the `cpu` family pins only
+LLVM/MLIR), so a clang upgrade on a Zen 5 box now misses. `x86_aocl_dlp` keeps
+its library identity; the CPU `cpu_stockham` / `cpu_stencil_grad` lanes are keyed
+on their checked-in `.cpp`, flags and `$CXX --version`; the native ANN CPU lane
+on its MLIR program plus `libtessera_jit` by content. The committed corpus holds
+no x86 rows, so nothing needed re-recording. Unchanged and still open:
+`X86-GEMM-ALIGN-1`.
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
 

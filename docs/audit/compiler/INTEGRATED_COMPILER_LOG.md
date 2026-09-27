@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: reference
 ---
 
@@ -4843,3 +4843,33 @@ Evidence: `benchmarks/baselines/rocm_split_k_20260926/` (timing packet, README, 
 <!-- entry-fields:end -->
 
 Review fixes (2026-09-26). (1) The S*M*N*4 scratch was only in untyped provenance -- a Decision #32 under-declaration; it is now `LaunchDescriptor.workspace` (256-aligned, launch lifetime, uninitialized because every element is written by exactly one slice), and the launcher allocates from it and refuses a provenance disagreement. **Not moved to `ROCMNativeProgram`:** that type is consumed only by the attention-backward launcher and would change `package_scheduled_matmul`'s return type for every caller (runtime `RuntimeArtifact`, the canonical GEMM benchmark, the gap recorder) for one extra entry; the reduce entry stays a declared second image entry point with its own ABI id. (2) The artifact now states the split the C++ Schedule wrote (`schedule_split_k`), so an oracle defect reports as oracle-vs-authority. (3) `k_unroll` is a performance key and yields: a derived unroll that does not divide the slice falls back to 1 and is recorded; a pinned one is refused. (8) `ROCM_SPLIT_K_NOT_APPLIED` is a registered warning and is emitted as one, and only when K >= 512 is misaligned: firing on every 16x256x256 decode GEMM was noise about a split that was never on offer. The "three idle SIMDs" explanation of S=4/8 is a hypothesis, not a measurement (no counters on WSL2).
+
+### 2026-09-27 — Every arbiter candidate identifies the code it runs
+
+Owner: [W5.2](INTEGRATED_COMPILER_PLAN.md#w52)
+
+PRs: branch `claude/autotune-emitted-identity` (Codex review P2 on PR #859).
+Sync: `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`.
+
+Outcome: `Candidate.requires_artifact_identity()` was `tier == HAND_TUNED`, so
+a SYNTHESIZED/EMITTED lane with no identity was served on the pin-based
+toolchain identity alone, and a changed emitter kept a verdict measured for
+its old kernel. Now every live candidate must match a stamped identity or the
+verdict misses; the arbiter consults no opt-out. `compiler/emitted_code_identity.py`
+(`tessera.emitted_source.v1`) identifies Python-emitted source (text +
+`kernel_cache.cache_key` + the compile flags the pin does not fix, read from the
+same flag list the compile step uses), PTX, checked-in sources plus the host
+compiler's version, and Python/numpy lanes; `tessera-opt` images keep
+`kernel_code.v2`. gfx1151 `fused_region` rows re-recorded on Princess-Luna
+(winners unchanged; served, and missed after an emitter change with pins
+unchanged). sm_120 registry rows stamp only the shipped delegate and are unserved.
+
+Remaining: `AUTOTUNE-EMITTED-IDENTITY-SM120-RERECORD` (Super-Bear offline);
+`AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`; host launch code in runtime libraries
+behind tessera-opt images stays outside `kernel_code.v2`.
+
+Evidence: `benchmarks/baselines/autotune_corpus_rerecord_20260927/`,
+`tests/unit/test_autotune_emitted_identity.py`,
+`tests/unit/test_autotune_toolchain_key.py`.
+
+<!-- entry-fields:end -->

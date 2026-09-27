@@ -3,10 +3,20 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: not applicable (Apple registers no arbiter candidates)
+
+Every arbiter candidate of every tier must now carry a code identity or its
+verdict misses (ROCm/NVIDIA queues, same key). Apple registers no arbiter
+candidates and the committed corpus holds no Apple rows, so nothing changed
+here. When Apple arbiter candidacy lands (MASTER_AUDIT action item 9) each
+candidate must declare one: an emitted-MSL lane its `emitted_code_identity`
+source digest plus the Metal compile options, a runtime-library kernel the
+library (or its MSL source) by content.
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
 

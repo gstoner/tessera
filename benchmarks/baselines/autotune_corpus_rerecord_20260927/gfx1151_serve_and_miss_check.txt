@@ -1,0 +1,44 @@
+host=Princess-Luna commit=61ff8b90cb491d608decd6d4028925783d859eab worktree=~/programming/tessera-eid date=2026-09-27T12:28:22Z
+corpus: re-recorded benchmarks/baselines/autotune_corpus.json (uncommitted in this worktree)
+loaded 124 rows, 0 stale; device rocm:gfx1151; rocm toolchain sha256:4f528f652905f48c...
+  64^3 end_to_end served=rocm_generic_hip  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  64^3 device     served=rocm_wmma_gemm  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  256^3 end_to_end served=rocm_wmma_gemm  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  256^3 device     served=rocm_wmma_gemm  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  512^3 end_to_end served=rocm_wmma_gemm  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  512^3 device     served=rocm_wmma_gemm  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  1024^3 end_to_end served=rocm_wmma_gemm  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=97baa4c06a2cb0ef
+  1024^3 device     served=rocm_wmma_gemm  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=97baa4c06a2cb0ef
+served before the emitter change: 8/8
+  64^3 end_to_end served=None  rocm_generic_hip=38cec9b782d350e0
+  64^3 device     served=None  rocm_generic_hip=38cec9b782d350e0
+  256^3 end_to_end served=None  rocm_generic_hip=38cec9b782d350e0
+  256^3 device     served=None  rocm_generic_hip=38cec9b782d350e0
+  512^3 end_to_end served=None  rocm_generic_hip=38cec9b782d350e0
+  512^3 device     served=None  rocm_generic_hip=38cec9b782d350e0
+  1024^3 end_to_end served=None  rocm_generic_hip=38cec9b782d350e0
+  1024^3 device     served=None  rocm_generic_hip=38cec9b782d350e0
+missed after the emitter change (pins unchanged): 8/8
+rc=0
+
+=== control: the committed pre-re-record corpus (HEAD) under the same code -- expected served 0/8, rc=1 ===
+loaded 124 rows, 0 stale; device rocm:gfx1151; rocm toolchain sha256:4f528f652905f48c...
+  64^3 end_to_end served=None  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  64^3 device     served=None  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  256^3 end_to_end served=None  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  256^3 device     served=None  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  512^3 end_to_end served=None  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  512^3 device     served=None  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=cc3dbae2ae69ee17
+  1024^3 end_to_end served=None  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=97baa4c06a2cb0ef
+  1024^3 device     served=None  rocm_generic_hip=7c0d3bcb6d508c70 rocm_wmma_gemm=97baa4c06a2cb0ef
+served before the emitter change: 0/8
+  64^3 end_to_end served=None  rocm_generic_hip=38cec9b782d350e0
+  64^3 device     served=None  rocm_generic_hip=38cec9b782d350e0
+  256^3 end_to_end served=None  rocm_generic_hip=38cec9b782d350e0
+  256^3 device     served=None  rocm_generic_hip=38cec9b782d350e0
+  512^3 end_to_end served=None  rocm_generic_hip=38cec9b782d350e0
+  512^3 device     served=None  rocm_generic_hip=38cec9b782d350e0
+  1024^3 end_to_end served=None  rocm_generic_hip=38cec9b782d350e0
+  1024^3 device     served=None  rocm_generic_hip=38cec9b782d350e0
+missed after the emitter change (pins unchanged): 8/8
+rc=1

@@ -12699,13 +12699,24 @@
         64
       ],
       "candidates": {
-        "rocm_generic_hip": 0.7039404881652445,
-        "rocm_wmma_gemm": 1.8882610311266035
+        "rocm_generic_hip": 0.7334100373554975,
+        "rocm_wmma_gemm": 1.9301749707665294
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
+          "rocm_generic_hip": {
+            "build": "hipcc --offload-arch=gfx1151 -O3 -fPIC -shared",
+            "cache_key": "5fddd0986b2ddc873ab0b2c1b74165890b3322224a3293bd15831766f4d9262d",
+            "entry": "tessera_rocm_fused",
+            "generator": "tessera.emit",
+            "identity": "emitted_source",
+            "lang": "hip",
+            "normalization": "tessera.emitted_source.v1",
+            "source_sha256": "7c0d3bcb6d508c706d91f02d4098cf97e5a36d4b23a105eeae030a120124b517",
+            "units": "tessera_rocm_fused"
+          },
           "rocm_wmma_gemm": {
             "data_sections": ".rodata:0",
             "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
@@ -12733,12 +12744,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.7039404881652445,
+      "latency_ms": 0.7334100373554975,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.627201707517499,
-        "noise": 0.032352362974258655,
+        "margin": 0.6200292468489327,
+        "noise": 0.04592061385684639,
         "runner_up": "rocm_wmma_gemm",
         "separated": true
       },
@@ -12754,13 +12765,24 @@
         64
       ],
       "candidates": {
-        "rocm_generic_hip": 0.23140333333333332,
-        "rocm_wmma_gemm": 0.01569258297483126
+        "rocm_generic_hip": 0.23005166666666668,
+        "rocm_wmma_gemm": 0.01570733326176802
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
+          "rocm_generic_hip": {
+            "build": "hipcc --offload-arch=gfx1151 -O3 -fPIC -shared",
+            "cache_key": "5fddd0986b2ddc873ab0b2c1b74165890b3322224a3293bd15831766f4d9262d",
+            "entry": "tessera_rocm_fused",
+            "generator": "tessera.emit",
+            "identity": "emitted_source",
+            "lang": "hip",
+            "normalization": "tessera.emitted_source.v1",
+            "source_sha256": "7c0d3bcb6d508c706d91f02d4098cf97e5a36d4b23a105eeae030a120124b517",
+            "units": "tessera_rocm_fused"
+          },
           "rocm_wmma_gemm": {
             "data_sections": ".rodata:0",
             "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
@@ -12788,12 +12810,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.01569258297483126,
+      "latency_ms": 0.01570733326176802,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9321851472544421,
-        "noise": 0.006891178874696915,
+        "margin": 0.9317225843682883,
+        "noise": 0.010596146253946866,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -12809,13 +12831,24 @@
         256
       ],
       "candidates": {
-        "rocm_generic_hip": 6.877856969367713,
-        "rocm_wmma_gemm": 4.227132478263229
+        "rocm_generic_hip": 6.474915018770844,
+        "rocm_wmma_gemm": 3.6505380121525377
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
+          "rocm_generic_hip": {
+            "build": "hipcc --offload-arch=gfx1151 -O3 -fPIC -shared",
+            "cache_key": "5fddd0986b2ddc873ab0b2c1b74165890b3322224a3293bd15831766f4d9262d",
+            "entry": "tessera_rocm_fused",
+            "generator": "tessera.emit",
+            "identity": "emitted_source",
+            "lang": "hip",
+            "normalization": "tessera.emitted_source.v1",
+            "source_sha256": "7c0d3bcb6d508c706d91f02d4098cf97e5a36d4b23a105eeae030a120124b517",
+            "units": "tessera_rocm_fused"
+          },
           "rocm_wmma_gemm": {
             "data_sections": ".rodata:0",
             "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
@@ -12843,12 +12876,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 4.227132478263229,
+      "latency_ms": 3.6505380121525377,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.3853997695663286,
-        "noise": 0.020492600822440078,
+        "margin": 0.4362029460510924,
+        "noise": 0.02117800369398159,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -12864,13 +12897,24 @@
         256
       ],
       "candidates": {
-        "rocm_generic_hip": 4.229526666666667,
-        "rocm_wmma_gemm": 0.020931250105301537
+        "rocm_generic_hip": 4.230861666666667,
+        "rocm_wmma_gemm": 0.020930875092744827
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
+          "rocm_generic_hip": {
+            "build": "hipcc --offload-arch=gfx1151 -O3 -fPIC -shared",
+            "cache_key": "5fddd0986b2ddc873ab0b2c1b74165890b3322224a3293bd15831766f4d9262d",
+            "entry": "tessera_rocm_fused",
+            "generator": "tessera.emit",
+            "identity": "emitted_source",
+            "lang": "hip",
+            "normalization": "tessera.emitted_source.v1",
+            "source_sha256": "7c0d3bcb6d508c706d91f02d4098cf97e5a36d4b23a105eeae030a120124b517",
+            "units": "tessera_rocm_fused"
+          },
           "rocm_wmma_gemm": {
             "data_sections": ".rodata:0",
             "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
@@ -12898,12 +12942,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.020931250105301537,
+      "latency_ms": 0.020930875092744827,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9950511601522073,
-        "noise": 0.0016440362400256187,
+        "margin": 0.9950528103394041,
+        "noise": 0.005429443273232668,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -12919,13 +12963,24 @@
         512
       ],
       "candidates": {
-        "rocm_generic_hip": 29.85675196396187,
-        "rocm_wmma_gemm": 4.789065016666427
+        "rocm_generic_hip": 30.0028454803396,
+        "rocm_wmma_gemm": 5.557266005780548
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
+          "rocm_generic_hip": {
+            "build": "hipcc --offload-arch=gfx1151 -O3 -fPIC -shared",
+            "cache_key": "5fddd0986b2ddc873ab0b2c1b74165890b3322224a3293bd15831766f4d9262d",
+            "entry": "tessera_rocm_fused",
+            "generator": "tessera.emit",
+            "identity": "emitted_source",
+            "lang": "hip",
+            "normalization": "tessera.emitted_source.v1",
+            "source_sha256": "7c0d3bcb6d508c706d91f02d4098cf97e5a36d4b23a105eeae030a120124b517",
+            "units": "tessera_rocm_fused"
+          },
           "rocm_wmma_gemm": {
             "data_sections": ".rodata:0",
             "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
@@ -12953,12 +13008,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 4.789065016666427,
+      "latency_ms": 5.557266005780548,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.839598593227857,
-        "noise": 0.045330384564315505,
+        "margin": 0.8147753682422509,
+        "noise": 0.049489844213552306,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -12974,13 +13029,24 @@
         512
       ],
       "candidates": {
-        "rocm_generic_hip": 26.698963333333335,
-        "rocm_wmma_gemm": 0.029825833936532337
+        "rocm_generic_hip": 26.647911666666666,
+        "rocm_wmma_gemm": 0.0299944169819355
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
+          "rocm_generic_hip": {
+            "build": "hipcc --offload-arch=gfx1151 -O3 -fPIC -shared",
+            "cache_key": "5fddd0986b2ddc873ab0b2c1b74165890b3322224a3293bd15831766f4d9262d",
+            "entry": "tessera_rocm_fused",
+            "generator": "tessera.emit",
+            "identity": "emitted_source",
+            "lang": "hip",
+            "normalization": "tessera.emitted_source.v1",
+            "source_sha256": "7c0d3bcb6d508c706d91f02d4098cf97e5a36d4b23a105eeae030a120124b517",
+            "units": "tessera_rocm_fused"
+          },
           "rocm_wmma_gemm": {
             "data_sections": ".rodata:0",
             "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
@@ -13008,12 +13074,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.029825833936532337,
+      "latency_ms": 0.0299944169819355,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9988828841942603,
-        "noise": 0.018739659444160523,
+        "margin": 0.9988744177270951,
+        "noise": 0.017642220094088844,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -13029,13 +13095,24 @@
         1024
       ],
       "candidates": {
-        "rocm_generic_hip": 191.00430750404485,
-        "rocm_wmma_gemm": 10.340085485950112
+        "rocm_generic_hip": 191.51312950998545,
+        "rocm_wmma_gemm": 9.450236015254632
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
+          "rocm_generic_hip": {
+            "build": "hipcc --offload-arch=gfx1151 -O3 -fPIC -shared",
+            "cache_key": "5fddd0986b2ddc873ab0b2c1b74165890b3322224a3293bd15831766f4d9262d",
+            "entry": "tessera_rocm_fused",
+            "generator": "tessera.emit",
+            "identity": "emitted_source",
+            "lang": "hip",
+            "normalization": "tessera.emitted_source.v1",
+            "source_sha256": "7c0d3bcb6d508c706d91f02d4098cf97e5a36d4b23a105eeae030a120124b517",
+            "units": "tessera_rocm_fused"
+          },
           "rocm_wmma_gemm": {
             "data_sections": ".rodata:0",
             "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
@@ -13063,12 +13140,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 10.340085485950112,
+      "latency_ms": 9.450236015254632,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9458646476560161,
-        "noise": 0.05294247571476084,
+        "margin": 0.9506548922288803,
+        "noise": 0.04308606060697738,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },
@@ -13084,13 +13161,24 @@
         1024
       ],
       "candidates": {
-        "rocm_generic_hip": 186.03481,
-        "rocm_wmma_gemm": 0.1727675000826518
+        "rocm_generic_hip": 186.0744633333333,
+        "rocm_wmma_gemm": 0.17239800095558167
       },
       "device": "rocm:gfx1151",
       "dtype": "f16",
       "evidence": {
         "delegate_identities": {
+          "rocm_generic_hip": {
+            "build": "hipcc --offload-arch=gfx1151 -O3 -fPIC -shared",
+            "cache_key": "5fddd0986b2ddc873ab0b2c1b74165890b3322224a3293bd15831766f4d9262d",
+            "entry": "tessera_rocm_fused",
+            "generator": "tessera.emit",
+            "identity": "emitted_source",
+            "lang": "hip",
+            "normalization": "tessera.emitted_source.v1",
+            "source_sha256": "7c0d3bcb6d508c706d91f02d4098cf97e5a36d4b23a105eeae030a120124b517",
+            "units": "tessera_rocm_fused"
+          },
           "rocm_wmma_gemm": {
             "data_sections": ".rodata:0",
             "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
@@ -13118,12 +13206,12 @@
         },
         "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
       },
-      "latency_ms": 0.1727675000826518,
+      "latency_ms": 0.17239800095558167,
       "op": "fused_region",
       "separation": {
         "factor": 2.0,
-        "margin": 0.9990713162763322,
-        "noise": 0.00473851752969066,
+        "margin": 0.9990734999426184,
+        "noise": 0.011512148183132,
         "runner_up": "rocm_generic_hip",
         "separated": true
       },

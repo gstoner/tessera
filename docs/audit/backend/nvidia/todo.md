@@ -3,10 +3,60 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: every sm_120 candidate carries a code identity; `AUTOTUNE-EMITTED-IDENTITY-SM120-RERECORD` owed
+
+Codex review P2 on PR #859: a SYNTHESIZED/EMITTED candidate was served on the
+CUDA/PTX/driver/LLVM pins alone, so a changed emitter kept a verdict measured
+for its old kernel. Owner decision: every candidate of every tier carries a
+workload-specific code identity or the verdict misses (no opt-out). Mac,
+host-independent; **no sm_120 device work was done (Super-Bear offline).**
+
+NVIDIA identities (`compiler/emitted_code_identity.py`, `tessera.emitted_source.v1`):
+
+| Candidates | Identity |
+|---|---|
+| `nvidia_generic_cuda`, `nvidia_flash_attn`, `nvidia_gated`, `nvidia_pointwise` | emitted CUDA for the region (`build(..., dims=None)`, dims-invariant) + `kernel_cache.cache_key` + `nvcc -arch=<arch> -O3 --shared -Xcompiler -fPIC -lcuda` (the flag list `_nvidia_cuda_compile_fn` uses; nvcc by name, version is the pin) |
+| `nvidia_mma_fused_*`, `nvidia_mma_gated_*` | the `_synthesize_mma_*` source `run` and the device timer compile at the default raster the arbiter dispatches, + nvcc flags |
+| `nvidia_mma_attn_*` | composite: the mma.sync source **and** the scalar flash source it hands large/sharp workloads to (a data-dependent branch, so both are covered) |
+| `nvidia_mma_{fused,attn,gated}_composed_*` | composite: shipped `libtessera_nvidia_gemm` by content + the `_device` entry bound (identified as the shipped delegate is) and the emitted resident-stage CUDA |
+| `nvidia_mma_gemm_emitted`, `nvidia_nvfp4_gemm_emitted` | composite: `ptx_emit` PTX (full-line comments/blank lines dropped) + the PTX launch bridge `libtessera_nvidia_ptx_launch` by content (it registers the PTX and computes the grid) |
+| `nvidia_tile_matmul_{direct,shared}` | composite: the PTX `tessera-nvidia-opt` -> mlir-opt -> mlir-translate -> llc generates for the schedule/dtype (`_nvidia_tile_matmul_ptx`) + the bridge; a host without the tools misses |
+| `nvidia_mma_gemm_shipped`, `nvidia_nvfp4_gemm_shipped` | unchanged (delegate library) |
+
+The bridge and GEMM library identities are content digests, so a rebuild of
+either misses every row that raced a lane using it (a false miss at worst).
+
+**Consequence for the committed corpus.** The 96 `nvidia:sm_120` registry rows
+(`fused_region` / `attention` / `gated_matmul` / `matmul`) stamp only
+`nvidia_mma_gemm_shipped`, so under the new rule **none is servable**: the 14
+that were admissible dispatch hints before (5 `fused_region` end-to-end ->
+`nvidia_mma_fused`; 7 `matmul` device -> `nvidia_mma_gemm_emitted`, the
+1.5-1.7x emitted-PTX win; 2 `matmul` end-to-end -> the shipped delegate) now
+miss, and dispatch falls back to lead-safe tier priority until re-recorded.
+**They were deliberately not backfilled** -- a backfilled identity would claim
+the recorded runs used code nobody verified. The 12 non-registry rows
+(`paged_kv_decode`, `ssm_replay_decode`, `conv2d`) are read by their own
+consumers and are unaffected.
+
+### `AUTOTUNE-EMITTED-IDENTITY-SM120-RERECORD` — open (owed; Super-Bear offline 2026-09-27)
+
+Re-record the sm_120 registry rows on The-Super-Bear with
+`benchmarks/nvidia/record_autotune_corpus.py` (`--fused-shapes` /
+`--attention-shapes` as in `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26` below) and
+`finalize_test5_corpus.py`, under `flock /tmp/tessera-timing.lock`, from a
+clean worktree with `build-nvidia-cuda/` (the PTX bridge, the shipped GEMM and
+`tessera-nvidia-opt` must all be present, or those candidates' identities are
+`None` and their rows unservable -- the recorder must refuse such rows, as the
+gfx1151 recorder does). Gate: every timed candidate stamped; then a fresh
+process serves the admissible rows through `corpus_winner` with inferred dims,
+and a perturbed emitter makes them miss (the gfx1151 check,
+`benchmarks/baselines/autotune_corpus_rerecord_20260927/check_emitted_identity.py`,
+is the template). Until then the sm_120 registry rows are **unserved**.
 
 ## `NVIDIA-PREPR-REVIEW-2026-09-26`: review fixes to the device-layer and marker work
 

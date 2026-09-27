@@ -1,11 +1,52 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: every arbiter candidate carries a code identity; gfx1151 fused rows re-recorded
+
+Codex review P2 on PR #859: `requires_artifact_identity()` was true only for
+`HAND_TUNED`, so `rocm_generic_hip` (SYNTHESIZED) was served on the ROCm/HIP/LLVM
+pins alone and a changed HIP emitter kept a verdict measured for its old kernel.
+**Owner decision: every candidate, every tier, establishes a workload-specific
+code identity or the verdict misses.** The arbiter no longer consults a
+per-candidate opt-out (`autotune._record_matches_live_delegates`).
+
+ROCm identities, by how each lane produces code:
+
+| Candidate | Identity |
+|---|---|
+| `rocm_generic_hip` (T1) | **new** — emitted-source (`compiler/emitted_code_identity.py`, `tessera.emitted_source.v1`): the HIP text `build(region, "rocm", dtype="f32", dims=None)` compiles (dims-invariant), its `kernel_cache.cache_key`, and `hipcc --offload-arch=<arch> -O3 -fPIC -shared` (the one flag list `_rocm_hip_compile_fn` also uses). Host-computable; no device, no hipcc. |
+| `rocm_wmma_gemm`, `rocm_flash_attn` (T3) | unchanged — kernel-code v2 (normalized instruction stream of the image for the workload) |
+| `rocm_stockham` (T3) | unchanged — loaded `TesseraSpectralHIP` library by content |
+| `rocm_{rfft,irfft,stft,istft}` (T1, composed) | **new** — composing Python source + the identity of the inner `spectral_fft` lane `_inner_fft` would pick |
+| `rocm_spectral_filter` (T1) | **new** — source of its numpy `run` (approximation: numpy not covered) |
+| native storage / ANN GPU (T2/T1, scoped) | **new** — the package `binding_digest` (image + host binding + compiler digests) |
+
+**gfx1151 re-recorded 2026-09-27 on Princess-Luna** (clean worktree
+`~/programming/tessera-eid` at `61ff8b90`, own `build/`, `_rocm_env.sh`, under
+`flock /tmp/tessera-timing.lock`), `benchmarks/rocm/record_autotune_separation.py`
+defaults, timer `device_event`. The 8 `fused_region` rows now stamp both
+candidates; **winners unchanged** (`rocm_generic_hip` at 64³ end to end,
+`rocm_wmma_gemm` elsewhere), all separated; the `rocm_wmma_gemm` identities
+equal the `1dfad816` rows' (same images). A fresh process serves all 8 by
+`corpus_winner` with inferred dims, and all 8 miss after perturbing
+`_synthesize_fused_hip` with the pins asserted unchanged; the `1dfad816` corpus
+serves 0/8 under the new rule. The HIP source digest the box stamped equals the
+Mac's for the same region. Evidence:
+`benchmarks/baselines/autotune_corpus_rerecord_20260927/`. No row was
+backfilled; only these 8 records changed.
+
+Still open, unchanged: `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV` (the 8 paged-KV rows
+are read by `cache/paged_kv.py`, not the registry, and check no artifact
+identity). gfx1201 has no committed arbiter rows; its lanes carry the same
+identities. Sibling outcomes: NVIDIA follow-up required (sm_120 re-record owed,
+Super-Bear offline); x86 `x86_generic_c` identified, no rows; Apple not
+applicable (no arbiter candidates).
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable (no ROCm change)
 

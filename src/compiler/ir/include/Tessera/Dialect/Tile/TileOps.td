@@ -795,6 +795,39 @@ def Tile_FragmentZeroOp : Tile_Op<"fragment_zero", [Pure]> {
   let hasVerifier = 1;
 }
 
+// ROCM-FP8-BLOCKSCALE-1: join one isolated scale group's fp32 partial into the
+// running accumulator. Element (r, c) of the result is
+//
+//   acc[r, c] + partial[r, c] * lhs_scale[r * groups + group]
+//                             * rhs_scale[group * ceil(cols / scale_n) + c / scale_n]
+//
+// -- the per-block outer product of the two scale vectors applied to the
+// partial BEFORE the add, which is what makes block scaling exact per group
+// rather than a post-hoc rescale. Rows/columns past `rows`/`cols` read the
+// scale of row/column 0 (never out of bounds); their elements are masked at
+// the store. The architecture consumer owns which (r, c) each register
+// element holds -- the same map `tile.store` uses -- so the producer states
+// only logical origins, exactly as for `tile.view`.
+def Tile_FragmentScaledAccumulateOp
+    : Tile_Op<"fragment_scaled_accumulate",
+              [MemoryEffects<[MemRead]>,
+               AllTypesMatch<["acc", "partial", "result"]>]> {
+  let summary = "Scale an isolated partial by a block-scale outer product and accumulate";
+  let arguments = (ins Tile_FragmentType:$acc, Tile_FragmentType:$partial,
+                       AnyMemRef:$lhs_scale, AnyMemRef:$rhs_scale,
+                       Index:$row_origin, Index:$col_origin, Index:$group,
+                       Index:$groups, Index:$rows, Index:$cols,
+                       I64Attr:$scale_n);
+  let results = (outs Tile_FragmentType:$result);
+  let assemblyFormat = [{
+    $acc `,` $partial `scales` `(` $lhs_scale `,` $rhs_scale `)`
+    `at` `(` $row_origin `,` $col_origin `)` `group` `(` $group `,` $groups `)`
+    `bounds` `(` $rows `,` $cols `)` attr-dict `:` type($acc) `,`
+    type($lhs_scale) `,` type($rhs_scale)
+  }];
+  let hasVerifier = 1;
+}
+
 // Convert an accumulator fragment back to a logical tile for an epilogue or
 // store. Target lowering owns the register unpack; Tile IR owns the logical
 // result layout and descriptor compatibility.

@@ -151,6 +151,13 @@ struct WmmaGemmRequest {
   int64_t splitK = 1;
   std::string splitKReduction;
   tessera::tile::TilePackedFormatAttr storagePack;
+  // ROCM-FP8-BLOCKSCALE-1: the W8A8 block-scale contract's K group and the
+  // weight scale's N block. 0 = unscaled. A scaled request takes the
+  // A, B, lhs_scale, rhs_scale, D, M, N, K ABI.
+  int64_t scaleK = 0;
+  int64_t scaleN = 0;
+  // The weight arrives [N, K] (the `_nk` contract) rather than [K, N].
+  bool bTransposed = false;
 };
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
@@ -165,13 +172,20 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      int64_t rasterGroup = 1, int64_t staticM = 0,
                      int64_t staticN = 0, int64_t staticK = 0,
                      int64_t kUnroll = 1, int64_t schedGroups = 0,
-                     int64_t splitK = 1, int64_t sliceK = 0) {
+                     int64_t splitK = 1, int64_t sliceK = 0,
+                     int64_t scaleK = 0, int64_t scaleN = 0,
+                     bool bTransposed = false, int64_t scaleGroupPanels = 0) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
+  // ROCM-FP8-BLOCKSCALE-1: a block-scaled body takes (A, B, lhs_scale,
+  // rhs_scale, D, M, N, K); the caller admits it on the typed route only.
+  const bool scaled = scaleK > 0;
+  Value lhsScale = scaled ? gpuFunc.getArgument(2) : Value();
+  Value rhsScale = scaled ? gpuFunc.getArgument(3) : Value();
   // Preserve the portable Tile ABI (A, B, bias, D, M, N, K). The legacy
   // backend directive retains its historical (A, B, D, M, N, K, bias) ABI.
-  unsigned dIndex = portableABI && hasBias ? 3 : 2;
+  unsigned dIndex = scaled ? 4 : portableABI && hasBias ? 3 : 2;
   Value D = gpuFunc.getArgument(dIndex);
   Value M = gpuFunc.getArgument(dIndex + 1);
   Value N = gpuFunc.getArgument(dIndex + 2);
@@ -318,6 +332,12 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto accTileLayout = layoutFor(16, 16);     // {M, N}, independent of K
   auto dynamicRowMajor = tessera::tile::TileMemoryLayoutAttr::get(
       ctx, "gmem", "row_major", 0);
+  // ROCM-FP8-BLOCKSCALE-1: a weight stored [N, K] is B read column-major --
+  // K contiguous -- which `materializeFragmentPack` turns into one vector
+  // load per lane instead of a strided gather. Only the block-scaled
+  // contract states it today.
+  auto dynamicColMajor = tessera::tile::TileMemoryLayoutAttr::get(
+      ctx, "gmem", "col_major", 0);
   auto tileValueTy = tessera::tile::TileValueType::get(ctx);
   StringRef fragmentElem = T.store.isF16()                 ? "f16"
                            : T.store.isBF16()                ? "bf16"
@@ -346,7 +366,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto makeTileView = [&](OpBuilder &bb, Location l, Value base, Value row,
                           Value col, Value linearBase, Value rowBound,
                           Value colBound, Value leadingDim, bool bounded,
-                          tessera::tile::TileLayoutAttr layout) -> Value {
+                          tessera::tile::TileLayoutAttr layout,
+                          tessera::tile::TileMemoryLayoutAttr memory =
+                              {}) -> Value {
     OperationState state(l, "tile.view");
     if (bounded)
       state.addOperands(
@@ -355,7 +377,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       state.addOperands({base, linearBase, row, col, leadingDim});
     state.addTypes(tileValueTy);
     state.addAttribute("tile.layout", layout);
-    state.addAttribute("tile.memory", dynamicRowMajor);
+    state.addAttribute("tile.memory", memory ? memory : dynamicRowMajor);
     state.addAttribute("tile.linear_base", bb.getUnitAttr());
     return bb.create(state)->getResult(0);
   };
@@ -380,7 +402,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      ? makeStaticRowMajorLayout(staticM, staticK)
                      : tessera::tile::TileComposedLayoutAttr();
   auto bLayout = materializeComposedBases
-                     ? makeStaticRowMajorLayout(staticK, staticN)
+                     ? (bTransposed ? makeStaticRowMajorLayout(staticN, staticK)
+                                    : makeStaticRowMajorLayout(staticK, staticN))
                      : tessera::tile::TileComposedLayoutAttr();
   auto materializeBase = [&](OpBuilder &bb, Location l,
                              tessera::tile::TileComposedLayoutAttr layout,
@@ -557,13 +580,25 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       af[mi] = packFragment(bb, l, view, aFragmentTy);
     }
     for (int64_t ni = 0; ni < nt; ++ni) {
-      Value linearBase = materializeComposedBases
-                             ? materializeBase(bb, l, bLayout, k0, colN[ni])
-                             : *tessera::tile::materializeLinearIndex(
-                                   bb, l, k0, colN[ni], N, "row_major");
+      Value linearBase;
+      if (bTransposed)
+        linearBase = materializeComposedBases
+                         ? materializeBase(bb, l, bLayout, colN[ni], k0)
+                         : bb.create<arith::AddIOp>(
+                               l, bb.create<arith::MulIOp>(l, colN[ni], K), k0);
+      else
+        linearBase = materializeComposedBases
+                         ? materializeBase(bb, l, bLayout, k0, colN[ni])
+                         : *tessera::tile::materializeLinearIndex(
+                               bb, l, k0, colN[ni], N, "row_major");
+      // The view stays in logical B coordinates (k, n) with (K, N) bounds; the
+      // memory order is what says where (k, n) lives.
       Value view =
-          makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, N,
-                       bounded, bTileLayout);
+          bTransposed
+              ? makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, K,
+                             bounded, bTileLayout, dynamicColMajor)
+              : makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, N,
+                             bounded, bTileLayout);
       bf[ni] = packFragment(bb, l, view, bFragmentTy);
     }
     SmallVector<Value> next(mt * nt);
@@ -806,10 +841,128 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
 
   // Run the aligned main K-loop with `mainPanel`, fold the ragged-K tail (when
   // present) through `maskedPanel`, and store (masked iff ragged M/N).
+  // ROCM-FP8-BLOCKSCALE-1: the isolated scale-group K loop. Each group of
+  // `scaleK / fragK` panels accumulates into a partial that starts from ZERO,
+  // and only that partial is scaled by the per-block outer product and joined
+  // to the running accumulator (`tile.fragment_scaled_accumulate`). The macro
+  // K tile (`k_blocks`) and `kUnroll` stay independent knobs: they decide how
+  // many whole groups one loop iteration issues, never how big a group is.
+  // The caller admits only a static K made of whole groups, so there is no
+  // ragged tail to scale.
+  auto runScaledPath = [&](OpBuilder &rb,
+                           function_ref<SmallVector<Value>(
+                               OpBuilder &, Location, Value, ValueRange)>
+                               mainPanel) {
+    const int64_t groupPanels = scaleK / T.fragK;
+    const int64_t blocks = std::max<int64_t>(T.kBlocks, 1);
+    const int64_t iterationPanels = std::max<int64_t>(kUnroll, 1) * blocks;
+    const int64_t groupsPerIteration = iterationPanels / groupPanels;
+    Value cScaleK = rb.create<arith::ConstantIndexOp>(loc, scaleK);
+    Value groups = rb.create<arith::DivUIOp>(loc, K, cScaleK);
+    Value kGroupsEnd = rb.create<arith::MulIOp>(loc, groups, cScaleK);
+    auto oneGroup = [&](OpBuilder &bb, Location l, Value kStart,
+                        ValueRange accs) -> SmallVector<Value> {
+      SmallVector<Value> partial;
+      partial.reserve(mt * nt);
+      for (int64_t i = 0; i < mt * nt; ++i) {
+        OperationState zero(l, "tile.fragment_zero");
+        zero.addTypes(accFragmentTy);
+        partial.push_back(bb.create(zero)->getResult(0));
+      }
+      // `scaleGroupPanels` panels are issued straight-line per step; a group
+      // longer than that walks an inner loop. Straight-line issue of a whole
+      // K128 group (eight panels) lets the scheduler hoist every panel's
+      // fragment loads, which spilled the 2x2 panel on gfx1201; the inner
+      // loop bounds the loads in flight without touching what the group
+      // computes -- it is still one zero-initialised partial.
+      const int64_t step =
+          scaleGroupPanels > 0 ? std::min(scaleGroupPanels, groupPanels)
+                               : groupPanels;
+      auto straightLine = [&](OpBuilder &sb, Location sl, Value kFirst,
+                              SmallVector<Value> acc) {
+        for (int64_t p = 0; p < step; ++p) {
+          Value kp = p == 0 ? kFirst
+                            : sb.create<arith::AddIOp>(
+                                  sl, kFirst,
+                                  sb.create<arith::ConstantIndexOp>(
+                                      sl, T.fragK * p));
+          acc = mainPanel(sb, sl, kp, acc);
+        }
+        return acc;
+      };
+      if (step == groupPanels) {
+        partial = straightLine(bb, l, kStart, partial);
+      } else {
+        Value groupEnd = bb.create<arith::AddIOp>(
+            l, kStart, bb.create<arith::ConstantIndexOp>(l, scaleK));
+        auto inner = bb.create<scf::ForOp>(
+            l, kStart, groupEnd,
+            bb.create<arith::ConstantIndexOp>(l, T.fragK * step), partial,
+            [&](OpBuilder &ib, Location il, Value kp, ValueRange iter) {
+              ib.create<scf::YieldOp>(
+                  il, straightLine(ib, il, kp,
+                                   SmallVector<Value>(iter.begin(), iter.end())));
+            });
+        partial.assign(inner.getResults().begin(), inner.getResults().end());
+      }
+      Value group = bb.create<arith::DivUIOp>(
+          l, kStart, bb.create<arith::ConstantIndexOp>(l, scaleK));
+      SmallVector<Value> joined(mt * nt);
+      for (int64_t mi = 0; mi < mt; ++mi)
+        for (int64_t ni = 0; ni < nt; ++ni) {
+          OperationState join(l, "tile.fragment_scaled_accumulate");
+          join.addOperands({accs[mi * nt + ni], partial[mi * nt + ni],
+                            lhsScale, rhsScale, rowOrigin[mi], colOrigin[ni],
+                            group, groups, M, N});
+          join.addTypes(accFragmentTy);
+          join.addAttribute("scale_n", bb.getI64IntegerAttr(scaleN));
+          joined[mi * nt + ni] = bb.create(join)->getResult(0);
+        }
+      return joined;
+    };
+    Value kStep =
+        rb.create<arith::ConstantIndexOp>(loc, T.fragK * iterationPanels);
+    Value kMainU = kGroupsEnd;
+    if (groupsPerIteration > 1) {
+      Value remU = rb.create<arith::RemUIOp>(loc, kGroupsEnd, kStep);
+      kMainU = rb.create<arith::SubIOp>(loc, kGroupsEnd, remU);
+    }
+    auto kLoop = rb.create<scf::ForOp>(
+        loc, c0, kMainU, kStep, initAccs,
+        [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
+          SmallVector<Value> accs(iter.begin(), iter.end());
+          for (int64_t g = 0; g < groupsPerIteration; ++g) {
+            Value kg = g == 0 ? k0
+                              : bb.create<arith::AddIOp>(
+                                    l, k0,
+                                    bb.create<arith::ConstantIndexOp>(
+                                        l, scaleK * g));
+            accs = oneGroup(bb, l, kg, accs);
+          }
+          bb.create<scf::YieldOp>(l, accs);
+        });
+    ValueRange results = kLoop.getResults();
+    scf::ForOp remainder;
+    if (groupsPerIteration > 1) {
+      // The whole groups an unrolled iteration could not take.
+      remainder = rb.create<scf::ForOp>(
+          loc, kMainU, kGroupsEnd, cScaleK, results,
+          [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
+            bb.create<scf::YieldOp>(l, oneGroup(bb, l, k0, iter));
+          });
+      results = remainder.getResults();
+    }
+    return SmallVector<Value>(results.begin(), results.end());
+  };
+
   auto runPath = [&](OpBuilder &rb, function_ref<SmallVector<Value>(
                                         OpBuilder &, Location, Value, ValueRange)>
                                         mainPanel,
                      bool masked) {
+    if (scaled) {
+      emitStore(rb, runScaledPath(rb, mainPanel), masked);
+      return;
+    }
     // K unrolling (2026-09-18): issue `kUnroll` full slabs per iteration, so
     // this iteration's fragment loads for slab j+1 are in flight while the
     // MMAs of slab j retire. It costs no extra registers beyond the extra
@@ -1656,6 +1809,9 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
 // every input level.
 constexpr int kDefaultLdsWaves = 2;
 constexpr int kDefaultKUnroll = 1;
+// ROCM-FP8-BLOCKSCALE-1: panels per inner step of a scale group. Measured on
+// gfx1201 (benchmarks/baselines/gfx1201_fp8_blockscale_20260927/sweep.json).
+constexpr int kDefaultScaleGroupPanels = 2;
 constexpr int kDefaultSchedGroups = 0;
 constexpr int kDefaultLdsPadDwords = 1;
 constexpr int kDefaultLdsCopyWidth = 1;
@@ -1767,6 +1923,18 @@ struct GenerateWMMAGemmKernelPass
                                      "per loop iteration (latency hiding; 1 = "
                                      "the established one-slab loop)"),
                       llvm::cl::init(kDefaultKUnroll)};
+  // ROCM-FP8-BLOCKSCALE-1: a PERFORMANCE key -- how many instruction panels
+  // of one scale group are issued straight-line before the group's inner
+  // loop steps. It never changes what a group computes (one zero-initialised
+  // partial, scaled once). 0 = the whole group straight-line. The default is
+  // the gfx1201 measurement recorded in
+  // benchmarks/baselines/gfx1201_fp8_blockscale_20260927/.
+  Option<int> scaleGroupPanels{
+      *this, "scale-group-panels",
+      llvm::cl::desc("block-scaled body: instruction panels issued "
+                     "straight-line per inner step of a scale group (0 = "
+                     "whole group)"),
+      llvm::cl::init(kDefaultScaleGroupPanels)};
   Option<int> schedGroups{
       *this, "sched-groups",
       llvm::cl::desc("rocdl.sched.group.barrier granularity for the panel: "
@@ -2056,6 +2224,91 @@ struct GenerateWMMAGemmKernelPass
         request.staticN = *staticN;
         request.staticK = *staticK;
       }
+      requests.push_back(std::move(request));
+    }
+
+    // ROCM-FP8-BLOCKSCALE-1: the logical W8A8 block-scale contract on the
+    // typed route. Only the contract Graph->Schedule DERIVED is consumed
+    // here; every other scaled kernel (the MX physical packages, a logical
+    // form with no bound contract) is left for TileToROCM, which turns it
+    // into a directive the strict executable boundary then refuses rather
+    // than this pass answering it with an unscaled GEMM.
+    SmallVector<tessera::tile::ScaledMatmulKernelOp> scaledKernels;
+    module.walk([&](tessera::tile::ScaledMatmulKernelOp op) {
+      auto physical = op->getAttrOfType<StringAttr>("physical_contract");
+      if (physical &&
+          (physical.getValue() == "rocm_fp8_w8a8_blockscale_v1" ||
+           physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1"))
+        scaledKernels.push_back(op);
+    });
+    for (tessera::tile::ScaledMatmulKernelOp kernel : scaledKernels) {
+      Operation *op = kernel.getOperation();
+      auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+      auto epilogue =
+          op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+      auto scaleN = op->getAttrOfType<IntegerAttr>("tessera.scale_block_n");
+      auto logicalM = op->getAttrOfType<IntegerAttr>("tessera.macro_tile_m");
+      auto logicalN = op->getAttrOfType<IntegerAttr>("tessera.macro_tile_n");
+      auto problemK = op->getAttrOfType<IntegerAttr>("tessera.problem_k");
+      auto parent = op->getParentOfType<func::FuncOp>();
+      if (!desc || !epilogue || !scaleN || !logicalM || !logicalN ||
+          !problemK || !parent || desc.getFamily() != "wmma" ||
+          desc.getM() != 16 || desc.getN() != 16 || desc.getK() != 16 ||
+          desc.getAType() != "e4m3" || desc.getBType() != "e4m3" ||
+          desc.getAccType() != "f32" || desc.getScaleFormat() != "fp32" ||
+          desc.getScaleBlockK() <= 0 || desc.getScaleBlockK() % 16 != 0 ||
+          (16 * desc.getKBlocks()) % desc.getScaleBlockK() != 0 ||
+          scaleN.getInt() <= 0 || epilogue.getOutputType() != "f32" ||
+          epilogue.getBias() || epilogue.getActivation() != "none" ||
+          logicalM.getInt() < 16 || logicalN.getInt() < 16 ||
+          logicalM.getInt() % 16 != 0 || logicalN.getInt() % 16 != 0 ||
+          op->getNumOperands() != 8) {
+        op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: generate-wmma-gemm-kernel "
+                      "requires the gfx1201 W8A8 block-scale carrier: e4m3 x "
+                      "e4m3 m16n16k16 WMMA with f32 accumulation, fp32 scales "
+                      "whose K group divides the macro K, a positive scale N "
+                      "block, a 16-aligned macro tile and a plain f32 store");
+        return signalPassFailure();
+      }
+      WmmaGemmRequest request;
+      request.anchor = op;
+      request.eraseOwner = parent;
+      request.name = parent.getSymName().str();
+      request.mt = logicalM.getInt() / 16;
+      request.nt = logicalN.getInt() / 16;
+      request.dtype = "e4m3";
+      request.kBlocks = std::max<int64_t>(desc.getKBlocks(), 1);
+      request.output = "f32";
+      request.portableABI = true;
+      request.scaleK = desc.getScaleBlockK();
+      request.scaleN = scaleN.getInt();
+      request.bTransposed =
+          op->getAttrOfType<StringAttr>("physical_contract").getValue() ==
+          "rocm_fp8_w8a8_blockscale_nk_v1";
+      if (auto a = op->getAttrOfType<StringAttr>("tessera.raster_order"))
+        request.rasterOrder = a.getValue().str();
+      if (auto a = op->getAttrOfType<IntegerAttr>("tessera.raster_group"))
+        request.rasterGroup = a.getInt();
+      auto staticExtent = [&](unsigned operand) -> std::optional<int64_t> {
+        if (auto constant =
+                op->getOperand(operand).getDefiningOp<arith::ConstantIntOp>())
+          return constant.value();
+        return std::nullopt;
+      };
+      auto staticM = staticExtent(5);
+      auto staticN = staticExtent(6);
+      auto staticK = staticExtent(7);
+      if (!staticM || !staticN || !staticK || *staticK != problemK.getInt() ||
+          *staticM <= 0 || *staticN <= 0 ||
+          *staticK % desc.getScaleBlockK() != 0) {
+        op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: the W8A8 block-scale "
+                      "kernel needs static M/N/K with K a whole number of "
+                      "scale groups; a partial group has no defined scale");
+        return signalPassFailure();
+      }
+      request.staticM = *staticM;
+      request.staticN = *staticN;
+      request.staticK = *staticK;
       requests.push_back(std::move(request));
     }
 
@@ -2473,6 +2726,47 @@ struct GenerateWMMAGemmKernelPass
         sliceK = request.staticK / request.splitK;
       }
 
+      // ROCM-FP8-BLOCKSCALE-1: admission of the block-scaled body. Every
+      // refusal names what it cannot emit; none falls back to an unscaled
+      // GEMM, which would run and silently drop every block's scale.
+      const bool scaled = request.scaleK > 0;
+      if (scaled) {
+        const int64_t iterationK = T.fragK * std::max<int64_t>(T.kBlocks, 1) *
+                                   std::max<int64_t>(int64_t(kUnroll), 1);
+        std::string why;
+        if (!viaTile || !portableContract)
+          why = "the block-scaled body is emitted on the typed route only";
+        else if (canonicalStaging != "register")
+          why = "the block-scaled body is implemented on the register-staged "
+                "body only";
+        else if (splitK)
+          why = "split-K is not defined for a block-scaled matmul";
+        else if (T.isInt || T.halfAccumulator || !T.accElem.isF32() ||
+                 outputTy != T.accElem || hasBias || activation != "none")
+          why = "the block-scaled contract accumulates and stores fp32 with "
+                "no fused epilogue";
+        else if (request.scaleK % T.fragK != 0 ||
+                 iterationK % request.scaleK != 0)
+          why = (Twine("scale_k=") + Twine(request.scaleK) +
+                 " must be a whole number of instruction K steps that divides "
+                 "the iteration's K (" + Twine(iterationK) +
+                 " = fragK x k_blocks x k-unroll)")
+                    .str();
+        else if (request.scaleN <= 0)
+          why = "the weight scale's N block must be positive";
+        else if (scaleGroupPanels < 0 ||
+                 (scaleGroupPanels > 0 &&
+                  (request.scaleK / T.fragK) % scaleGroupPanels != 0))
+          why = (Twine("scale-group-panels=") + Twine(int(scaleGroupPanels)) +
+                 " must divide the group's " +
+                 Twine(request.scaleK / T.fragK) + " instruction panels")
+                    .str();
+        if (!why.empty()) {
+          op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: ") << why;
+          return signalPassFailure();
+        }
+      }
+
       // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K[,bias]) kernel }
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -2496,6 +2790,10 @@ struct GenerateWMMAGemmKernelPass
       // A split partial takes no bias: the epilogue belongs to the reduction.
       if (hasBias && portableContract && !splitK)
         argTys.push_back(biasTy);
+      if (scaled) {
+        auto scaleTy = MemRefType::get({ShapedType::kDynamic}, f32Ty);
+        argTys.append({scaleTy, scaleTy});
+      }
       argTys.append({dTy, idxTy, idxTy, idxTy});
       if (hasBias && !portableContract)
         argTys.push_back(biasTy); // legacy directive ABI: trailing bias
@@ -2643,6 +2941,24 @@ struct GenerateWMMAGemmKernelPass
         OpBuilder reduceB(reduceFunc.getContext());
         emitSplitKReduceBody(reduceB, loc, reduceFunc, request.splitK, hasBias,
                              activation, outputTy);
+      } else if (scaled) {
+        gpuFunc->setAttr("tessera.rocm.block_scale_contract",
+                         b.getStringAttr(request.bTransposed
+                                             ? "rocm_fp8_w8a8_blockscale_nk_v1"
+                                             : "rocm_fp8_w8a8_blockscale_v1"));
+        gpuFunc->setAttr("tessera.rocm.scale_group_panels",
+                         b.getI64IntegerAttr(scaleGroupPanels));
+        gpuFunc->setAttr("tessera.rocm.scale_k",
+                         b.getI64IntegerAttr(request.scaleK));
+        gpuFunc->setAttr("tessera.rocm.scale_n",
+                         b.getI64IntegerAttr(request.scaleN));
+        emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
+                        portableContract, viaTile, /*hasBias=*/false, "none",
+                        /*packedInt4Memory=*/false, request.rasterOrder,
+                        request.rasterGroup, request.staticM, request.staticN,
+                        request.staticK, kUnroll, schedGroups, /*splitK=*/1,
+                        /*sliceK=*/0, request.scaleK, request.scaleN,
+                        request.bTransposed, scaleGroupPanels);
       } else {
         emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
                         portableContract, viaTile, hasBias, activation,

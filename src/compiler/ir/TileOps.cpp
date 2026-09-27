@@ -1072,6 +1072,25 @@ LogicalResult FragmentPackOp::verify() {
   return success();
 }
 
+LogicalResult FragmentScaledAccumulateOp::verify() {
+  auto acc = dyn_cast<FragmentType>(getAcc().getType());
+  if (!acc || acc.isUnknown() || acc.getRole() != "acc" || acc.getAcc() != "f32")
+    return emitOpError(
+        "TILE_FRAGMENT_SCALED_ACCUMULATE_TYPE: accumulates a stated f32 "
+        "accumulator fragment");
+  for (Value scale : {getLhsScale(), getRhsScale()}) {
+    auto type = dyn_cast<MemRefType>(scale.getType());
+    if (!type || type.getRank() != 1 || !type.getElementType().isF32())
+      return emitOpError(
+          "TILE_FRAGMENT_SCALED_ACCUMULATE_SCALE: scales are rank-1 f32 "
+          "memrefs (row-major [rows, groups] and [groups, ceil(cols/scale_n)])");
+  }
+  if (getScaleN() <= 0)
+    return emitOpError("TILE_FRAGMENT_SCALED_ACCUMULATE_SCALE: scale_n must "
+                       "be positive");
+  return success();
+}
+
 LogicalResult FragmentZeroOp::verify() {
   if (getOperation()->getNumResults() == 1)
     if (FragmentType typed = typedFragment(getOperation()->getResult(0))) {

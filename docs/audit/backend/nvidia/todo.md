@@ -183,10 +183,86 @@ overwrite a core field (`source_sha256`, `build`, ...) and
 `("a","b.c")`); both now raise `EmittedIdentityUnavailable` (a miss).
 `python_code_identity` takes no caller fields. No existing identity collided.
 
-Open: `AUTOTUNE-KERNEL-IDENTITY-MEMO` (ROCm queue): the `tessera-opt`-image
-identity memo is keyed by selectors + `tessera-opt` digest, not by the
-directive text the hsaco cache keys on -- a Python directive-generator change
-within one process is not covered. No NVIDIA lane uses that memo.
+`AUTOTUNE-KERNEL-IDENTITY-MEMO` (ROCm queue) -- **closed 2026-09-27**: the
+`tessera-opt`-image identity memo is now reused only for a byte-identical
+image returned by the launch's own build path, so a Python directive-generator
+change within one process re-identifies (Mac tests + gfx1151 real-device
+probe; ROCm queue). No NVIDIA lane uses that memo.
+
+### Hot path: no per-launch re-synthesis (follow-up, 2026-09-27)
+
+**Finding.** Keying the emitted lanes' caches by their source (above) made
+every `mma.sync` fused/attn/gated launch, every resident-stage launch of the
+composed lanes, and every generic-lane `kernel_cache.build` re-run its Python
+emitter and hash the text just to find the key -- ~10 us per call on the Mac,
+the order of an sm_120 kernel (2-20 us), so it landed in production dispatch
+and biased every end-to-end race.
+
+**Fix.** `python/tessera/compiler/emit/source_memo.py`: the source is
+memoized against the emitter *function object*, looked up by name at call
+time, **and every global it reaches by name** (functions followed into their
+own modules, classes, constants, `<tessera module>.<fn>` and function-local
+`from tessera... import` references, `self.<method>` on the emitter class).
+Replacing any of them -- `monkeypatch`, assignment, `importlib.reload` --
+misses and re-emits; an unchanged emitter costs a dict lookup plus an identity
+check of its bindings. Never memoized: an emitter whose reachable code reads
+the environment (`environ`/`getenv`), a stateful emitter object, a class
+marked `source_memo_safe = False` (`AppleAIREmitter` delegates through an
+object), and any mutable argument; numbers in the key are tagged with their
+type (`1`, `1.0`, `True` emit different C). A rebinding *during* an emit is
+not stored. Applied to `_mma_{fused,attn,gated}_source`, `_resident_ops_source`
+and `emit_kernel` (all generic lanes: NVIDIA/ROCm/x86; Apple's emitter reads
+the environment and is not memoized). `artifact_identity` reads the same
+memoized object as the launch, so identity and launch still read one text --
+and a change the walk cannot see (a method on the region, in-place mutation of
+a module-level table) leaves *both* on the old text, which is what runs, so it
+cannot stamp one kernel with another's name. The remaining per-call work is
+memoized by object: the nvcc cache line (on the three env vars it reads, from
+`os.environ`'s own store, and the helper objects that build it),
+`_emitted_key`, `kernel_cache.cache_key`/`store_key`, and the CUDA source
+identity.
+
+**Measured (Mac, compile and `dlopen` intercepted, best of 5 x 20000 calls):**
+| Per-call path | before (`dedae4b0`) | after |
+|---|---|---|
+| `_mma_fused_fn(bias, relu, f16)` (host entry lookup) | 10.60 us | 2.42 us |
+| `_mma_fused_device_fn` (device-timer entry) | 10.67 us | 2.48 us |
+| `_mma_attn_fn(fp8_e4m3)` | 9.43 us | 1.78 us |
+| `_mma_gated_fn(bf16, silu)` | 10.52 us | 2.32 us |
+| `_resident_ops_lib()` (per composed stage launch) | 3.66 us | 1.38 us |
+| `kernel_cache.build` (generic NVIDIA fused lane) | 10.50 us | 4.19 us |
+| `nvidia_mma_fused.artifact_identity` (served-verdict check) | 16.91 us | 3.51 us |
+| `nvidia_generic_cuda.artifact_identity` | 10.82 us | 5.40 us |
+
+What remains per call is the memo's binding check (~1 us for the ~15 bindings
+an mma emitter reaches), the env-store reads, and the symbol/argtypes lookup.
+Mac M1 Max host timings; the sm_120 host (Zen 2) differs in absolute terms.
+
+**Tests.** `tests/unit/test_autotune_identity_memo_coherence.py`: an
+unchanged emitter runs once across repeated launches (fused/attn/gated/
+resident, `_mma_fused_fn` end to end with one compile, generic `emit_kernel`);
+a patched emitter, a patched helper, and `emit` patched on the class re-emit;
+env-reading / stateful / opted-out / mutable-argument cases are called every
+time; `1`/`1.0`/`True` are not aliased. The existing coherence tests
+(`test_autotune_identity_cache_coherence.py`, which patch the emitter) pass
+unchanged.
+
+**Device evidence at `946530a8` (The-Super-Bear, RTX 5070, `~/programming/tessera-eid`,
+`_nvidia_env.sh`, under the timing lock).** Release gate `--layer device`: **both
+device-correctness passes 1122 passed, 1 skipped (NCCL not installed), 0 failed**
+(`device-correctness-{1,2}.xml`: 1123 tests, 0 failures, 0 errors, 1 skipped;
+`status=success`; reports `~/gate-reports/eid-946530a8/` on that box). The
+sm_120 serve/miss check is **byte-identical** to the committed
+`sm120_serve_check_after_rebuild.txt` (only its trailing `rc=0` line differs):
+96/96 identities match, 15 served, 96/96 miss with every emitter perturbed --
+the memo moved no identity, and every `setattr` perturbation and its restore
+were seen through it. A real-device probe (`probe_source_memo.txt`, same dir):
+`nvidia_mma_fused` run 20 times synthesized and compiled once; a patched
+emitter compiled exactly the new text, ran correctly on device and was stamped
+with the digest of what nvcc received; restoring the emitter reused the
+original artifact and stamp with no compile; `nvidia_generic_cuda` (through
+`kernel_cache.build`) compiled once for 10 runs and recompiled exactly the
+patched text. `_mma_fused_fn` lookup on that host: 3.0 us per call.
 
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 

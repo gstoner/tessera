@@ -4986,3 +4986,28 @@ Verified: Mac sweep 20698 passed / 3840 skipped / 0 failed; sm_120 device gate
 gfx1151 serve check 8/8 served, 8/8 miss. No identity of unchanged code moved.
 Open: `AUTOTUNE-KERNEL-IDENTITY-MEMO` (ROCm queue). Tests:
 `tests/unit/test_autotune_identity_cache_coherence.py`.
+
+Follow-ups before merge (same day, same key). **`AUTOTUNE-KERNEL-IDENTITY-MEMO`
+closed:** `kernel_code_identity.compiler_kernel_identity` memoized a
+`tessera-opt` image's identity by selectors + `tessera-opt` digest while the
+hsaco caches key on the directive text, so an in-process directive-generator
+change launched a new image under the old identity; it now consults the
+launch's own build path on every lookup and reuses the memo only for a
+byte-identical image (cost moves to the served-verdict check: Mac
+`rocm_wmma_gemm` 4.9 -> 24.3 us, `rocm_flash_attn` 1.9 -> 11.4 us per lookup).
+**Hot path:** keying caches by source had made every emitted-lane launch
+re-run its Python emitter (~10 us); `emit/source_memo.py` memoizes the source
+against the emitter function object and every global it reaches by name (a
+patch, reload or patched helper re-emits; env-reading, stateful or opted-out
+emitters and mutable arguments are never memoized; numbers keyed with their
+type), and launch and identity read the same memoized object. Mac per-call
+lookup: `_mma_fused_fn` 10.60 -> 2.42 us, `_mma_attn_fn` 9.43 -> 1.78,
+`_mma_gated_fn` 10.52 -> 2.32, `_resident_ops_lib` 3.66 -> 1.38, generic
+`kernel_cache.build` 10.50 -> 4.19, `nvidia_mma_fused.artifact_identity`
+16.91 -> 3.51. Verified at `946530a8`: Mac sweep 20794 passed / 3840 skipped /
+0 failed; sm_120 device gate 1122 passed / 1 skipped both passes, serve check
+byte-identical (96/96 match, 15 served, 96/96 miss), real-device memo probe;
+gfx1151 real-device directive-change probe (fresh image, identity names it,
+correct results), serve check 8/8 served / 8/8 miss. No identity of unchanged
+code moved. Tests: `tests/unit/test_autotune_identity_memo_coherence.py`
+(the directive cases fail on `dedae4b0`). Detail: ROCm and NVIDIA queues.

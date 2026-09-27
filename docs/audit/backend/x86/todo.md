@@ -37,6 +37,15 @@ and `libtessera_jit` (native ANN CPU) are pinned at load, so a replaced
 library after the load is a miss. Host-independent; verified on the Mac only
 (no x86 rows to re-check).
 
+
+**Source memo (hot-path follow-up, same key, 2026-09-27).** `x86_generic_c`'s
+`kernel_cache.build` no longer re-runs the C emitter per launch:
+`emit_kernel` serves a memoized source while `X86CEmitter.emit` and every
+global it reaches by name (`_synthesize_fused_c`, the snippet helpers,
+`_MARCH`, ...) are the same objects, and `cache_key` / the store key are
+memoized per source object (NVIDIA queue for the mechanism and the Mac
+numbers). Sibling outcome: host-independent, covered by the Mac tests; no x86
+device claim.
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

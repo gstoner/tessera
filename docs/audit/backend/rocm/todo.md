@@ -7,6 +7,79 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Spectral image survives a stale HIP error; streaming STFT names the chip that ran — 2026-09-27
+
+Owner TSOL-POLICY-PHYS-1; sync `SPECTRAL-STALE-HIP-ERROR-2026-09-27`. Closes
+the 2026-09-26 entry "Streaming STFT on `target="rocm"` claims gfx1151 on a
+gfx1201 host" below.
+
+- **Mechanism (root-caused, device-reproduced on both chips).** HIP's
+  last-error slot is per host thread and sticky: only a failing call writes it,
+  and only `hipGetLastError()` resets it. `SpectralComposite.hip` and
+  `StockhamRadix4.hip` check launches with a post-launch `hipGetLastError()`,
+  so any refused HIP call earlier on the thread was read back as the failure of
+  a correct launch. `rc=246` is `stftThroughFFT` returning its launch-check
+  code inside `ts_streaming_stft_hostptr_broadcast_layout_storage_amd`. Probe,
+  one process, the test's 3-chunk stream: clean passes; `hipSetDevice(97)`
+  (returns 101, never read) before chunk 1 makes chunk 1 fail with exactly
+  `rc=246`; a fresh process passes again. Same result on gfx1201 (Tajasarus)
+  and gfx1151 (Princess-Luna) with the pre-fix library, and the primed run
+  passes on both with the fixed one.
+- **Sweep source.** A peek-only pytest plugin (`hipPeekAtLastError` after
+  every test, never resetting the slot) over the full gfx1201 sweep logged one
+  transition: `tests/unit/test_scheduled_matmul_consumers.py::test_gfx1151_scheduled_matmul_executes_exact_artifact[shape0]`
+  leaves `209` (`hipErrorNoBinaryForGpu`: its gfx1151 image refused by
+  `hipModuleLoadData` on gfx1201, which the conftest correctly reports as a
+  skip). Nothing reads the slot again until the next spectral package call.
+  The test is right to try that load; the defect was the image reading an
+  error it did not raise, so the test is unchanged.
+- **Per-entry rule.** Every exported host-pointer entry that performs device
+  work calls `clearStaleHipError()` exactly once, first thing: 16 of 31
+  `extern "C"` entries in `SpectralComposite.hip`, 5 of 19 in
+  `StockhamRadix4.hip`. Never between launches, because several checks cover a
+  group of launches (`stftThroughFFT`'s last check is the only detector for the
+  unchecked Stockham stages inside `ts_fft_plan_execute_device_batch_amd`; the
+  backward entries' grouped checks cover two or three). No clear in: ABI/arch
+  metadata; plan create/destroy (they never read the slot, and
+  `ts_fft_plan_create_for_artifact_amd` runs nested inside composite entries
+  via `policyForwardPlan`); the storage/strided/policy wrappers (host work,
+  then a clearing entry); and the device-pointer primitives
+  (`ts_fft_stockham_amd`, `ts_fft_stockham_fused_lds_launch_amd`,
+  `ts_fft_plan_execute_*_device_batch_amd`), which are composed inside
+  composite entries after the caller's own unchecked launches (e.g.
+  `mirrorRealForDCT`, `padRealScalar`) — a clear there would hide those.
+  `emit/rocm_hip.py` was already complete: every emitted entry that reads the
+  slot clears it first. `tools/profiler/src/runtime/rocm_timing_provider.hip`
+  has the same unguarded pattern in a standalone probe and is left as a
+  follow-up.
+- **Architecture label.** `spectral_streaming.stream_stft_chunk(target="rocm")`
+  hard-coded `architecture="gfx1151"`, so gfx1201 execution certificates and
+  artifact/state digests named a chip that did not run them. It now reads the
+  loaded composite image's stamp (`ts_spectral_composite_arch_amd`, which
+  `_amd_composite_lib` returns only when it equals the live device) and fails
+  closed unless that chip has a ready spectral TSOL profile. gfx1151 digests are
+  unchanged (same string); gfx1201 artifact/state digests change from the false
+  label, so a gfx1201 stream state recorded before this change is refused as a
+  different physical artifact. No committed packet pins a streaming digest.
+- **Evidence.** `tests/unit/test_rocm_spectral_stale_hip_error.py` primes the
+  slot (asserted with `hipPeekAtLastError`) before the streaming STFT, the FFT
+  plan host entries and the broadcast STFT/ISTFT; against the pre-fix library
+  all three fail (`rc=246`, `rc=8`, `rc=226`) on both chips, and pass with the
+  fix. Host-free label tests in `tests/unit/test_spectral_streaming.py`.
+  Tajasarus (gfx1201, own tree `bebf9090`, `TESSERA_ROCM_CHIP=gfx1201`):
+  spectral subset `-k "spectral or stft or fft"` over `tests/unit` +
+  `tests/device/rocm` 665 passed / 18 skipped; `tests/device/rocm` 141 passed;
+  full `tests/unit -m "not slow"` 21279 passed / 3275 skipped / 2 failed — the
+  two are `test_test_suite_architecture.py` driver-preference tests that fail
+  identically at base `72ec510e` under the same exported toolchain env and pass
+  in a clean env (15/15), so environment-induced and pre-existing; no
+  spectral test is among the failures. Princess-Luna (gfx1151): same spectral
+  subset 665 passed / 18 skipped; `tests/device/rocm` 5 passed / 136 skipped
+  (gfx1201-only lanes).
+- **Sibling outcomes.** NVIDIA: follow-up required (same unguarded
+  `cudaGetLastError()` pattern in the hand-written sm_120 hooks and the CUDA
+  emitter; unproven on sm_120). Apple, x86: not applicable.
+
 ## GFX1201 folded MXFP4 load schedule in Target IR — 2026-09-27
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-LANES-2026-09-27`. **Shared contract
@@ -332,6 +405,10 @@ Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-
   - NVIDIA / Apple / x86: not applicable. The rule is gfx1201-only, and unsplit digests are unchanged.
 
 ## Streaming STFT on `target="rocm"` claims gfx1151 on a gfx1201 host — 2026-09-26
+
+**Closed 2026-09-27** (`SPECTRAL-STALE-HIP-ERROR-2026-09-27`, top of this
+file): the label is derived from the loaded image's stamp, and `rc=246` was a
+stale HIP error read by the package's launch check, not a library state.
 
 Found while proving a sweep failure pre-existing for ROCM-SPLIT-K-1. `spectral_streaming.stream_stft_chunk(target="rocm")` hard-codes `architecture = "gfx1151"` into the artifact digest and the execution certificate, and `test_physical_streaming_broadcast_strides_and_artifact_lineage` asserts that label. On Tajasarus (gfx1201) the test **passes in isolation**, which means it certifies a run on the RX 9070 XT as a gfx1151 execution: a mislabel, not proof. In the full `-k "rocm or gfx1201 or gfx1151"` sweep the `[rocm-True]` case fails with `gfx1151 streaming STFT package failed rc=246`. It fails the same way at `054fa7c3` (before split-K) and at the split-K fixes HEAD. The logs are in `benchmarks/baselines/rocm_split_k_20260926/spectral_*.txt`. The failure depends on test order and has not been root-caused. **Owed:** derive the architecture from the live device, or refuse on a non-gfx1151 host, the way `rocm_pipeline.promoted_families` refuses. Also make the test expect the host's arch, then find what earlier test leaves the AMD composite library in a state where it returns 246. gfx1151 (Princess-Luna) is unaffected by the label, because it is the chip the label names.
 

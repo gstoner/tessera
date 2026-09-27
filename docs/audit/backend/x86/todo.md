@@ -9,6 +9,16 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
+
+The ROCm spectral image read HIP's per-thread, sticky last-error slot after
+its launches; each device-work entry now discards errors older than the call
+once, on entry ([ROCm queue](../rocm/todo.md)). Not applicable: the x86
+spectral package makes no HIP/CUDA calls and has no last-error slot. The
+streaming-STFT label fix changes only `target="rocm"`; the x86 label stays the
+constant `zen5-avx512`, which is truthful only while the x86 streaming package
+loads solely on the Zen 5 hosts — not re-verified by this change.
+
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

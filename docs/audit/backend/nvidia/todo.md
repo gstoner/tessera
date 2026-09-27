@@ -8,6 +8,27 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — follow-up required
+
+The ROCm spectral image checked its launches with `hipGetLastError()`, whose
+per-thread slot is sticky: an unrelated failed HIP call earlier on the thread
+(the probe used `hipSetDevice(97)`) made the next correct launch return
+failure — `rc=246` from the streaming STFT in the gfx1201 full sweep. The fix
+discards errors older than the call once, at the entry of every exported
+device-work function, never between launches ([ROCm queue](../rocm/todo.md)).
+
+**Follow-up required here, unproven on sm_120.** The CUDA runtime's
+`cudaGetLastError()` has the same read-and-reset contract for non-sticky
+errors, and the hand-written hooks follow the same pattern with no entry clear:
+`runtime/cuda/tessera_nvidia_spectral.cu` (21 post-launch reads),
+`tessera_nvidia_fft.cu` (4), `tessera_nvidia_rng.cu` (2), plus the emitted
+entries in `python/tessera/compiler/emit/nvidia_cuda.py` (no `(void)
+cudaGetLastError()` anywhere). Owed: reproduce on The-Super-Bear with a primed
+slot (`cudaSetDevice` on a missing ordinal, then a streaming STFT), apply the
+same per-entry rule, and keep grouped checks intact. Not changed in this PR,
+because no sm_120 run backs it. The NVIDIA streaming-STFT label is already
+derived (`tessera_nvidia_spectral_arch() == 120`).
+
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

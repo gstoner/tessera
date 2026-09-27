@@ -8,6 +8,17 @@ last_updated: 2026-09-27
 
 # Apple compiler, exact-device, and performance plan
 
+## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
+
+The ROCm spectral image read HIP's per-thread, sticky last-error slot after
+its launches, so an unrelated earlier HIP failure on the thread failed a
+correct launch; each device-work entry now discards errors older than the
+call once, on entry ([ROCm queue](../rocm/todo.md)). Not applicable here:
+Apple's runtime reports kernel failure per command buffer (`MTLCommandBuffer`
+status/error), and no Apple hook reads a process- or thread-wide last-error
+slot. The streaming-STFT architecture label fix touches only `target="rocm"`.
+No shared contract changed.
+
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

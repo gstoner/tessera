@@ -4922,3 +4922,17 @@ Evidence: `benchmarks/baselines/gfx1201_fp8_blockscale_20260927/` (comparison + 
 Why the W8A8 panel is not the unscaled one: each group's partial is a second live accumulator per fragment, so the unscaled 4x4 panel would carry 32 fragments -- 256 VGPRs before any operand. Measured at 1024x4096x1024: 32x32 231 VGPRs unspilled, 64x32 256 + 54 spilled, 64x64 256 + 337. A first cut that issued a whole K128 group (eight panels) straight-line spilled even at 32x32; the inner panel loop fixed that without changing what a group computes. The `[N, K]` weight is what made the route competitive: its B fragment is one K-contiguous vector load where `[K, N]` is a strided per-element gather (1.8-3x slower here).
 
 Two measurement corrections before the recorded packet: the harness first read `hipDeviceAttributeWallClockRate` by parsing the HIP header and got the wrong enumerator (1 kHz); it now compiles a probe against the header, as `record_ssd_gpu.py` does. And windows sized on one cold probe came in at 1.5-4.6 ms, under the 5 ms admission floor; the harness now warms every arm together and re-runs any paired set whose windows fall short (every arm of the recorded packet cleared on the first attempt).
+
+### 2026-09-27 — Spectral image survives a stale HIP error; streaming STFT names the chip that ran
+
+Owner: [TSOL-POLICY-PHYS-1](INTEGRATED_COMPILER_PLAN.md#tsol-policy-phys-1)
+
+PRs: branch `claude/spectral-stale-hip-error` (sync `SPECTRAL-STALE-HIP-ERROR-2026-09-27`).
+
+Outcome: the ROCm spectral image no longer fails a correct launch because of an earlier, unrelated HIP failure on the thread. HIP's last-error slot is per thread and sticky, and the image's post-launch `hipGetLastError()` checks read it; each exported host-pointer entry that performs device work now discards errors older than the call once, on entry, and never between launches, so grouped checks still see every launch of the call. The streaming STFT's `target="rocm"` architecture is read from the loaded image's stamp instead of the constant `gfx1151`, and fails closed without a ready TSOL profile. Device-proven with a primed slot on gfx1201 (Tajasarus) and gfx1151 (Princess-Luna): the pre-fix image fails with the probe's `rc=246`, the fixed image passes.
+
+Remaining: the same unguarded `cudaGetLastError()` pattern in the sm_120 hooks and CUDA emitter (NVIDIA queue, unproven); the standalone ROCm timing probe `tools/profiler/src/runtime/rocm_timing_provider.hip`.
+
+Evidence: `tests/unit/test_rocm_spectral_stale_hip_error.py`, `tests/unit/test_spectral_streaming.py`, ROCm queue entry `SPECTRAL-STALE-HIP-ERROR-2026-09-27` (probe output, sweep source, per-host counts).
+
+<!-- entry-fields:end -->

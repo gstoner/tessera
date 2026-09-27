@@ -110,7 +110,7 @@ def _isa_sha256(image: bytes, llvm_bin: Path) -> str:
 def _with_split(tile_ir: str, slices: int) -> str:
     """The Tile IR with its split pair set to ``slices`` (1 removes it)."""
     stripped = SPLIT_PAIR.sub("", tile_ir)
-    if "split_k" in stripped:
+    if "tessera.split_k" in stripped:
         raise RuntimeError("the Tile IR carries a split attribute this recorder cannot parse")
     if slices == 1:
         return stripped
@@ -404,7 +404,9 @@ def worker(manifest_path: Path, rounds: int, window_ms: float):
                 for _r, _m, variant, _o in loaded:
                     variant.launch()
             hip.hipDeviceSynchronize()
-            fastest = min(v.time_batch(50) for _r, _m, v, _o in loaded) * 1e6  # ns / iter
+            # Host wall over a synchronized batch overstates the steady per-launch
+            # time, so this only errs toward LONGER windows than asked for.
+            fastest = min(v.time_batch(200) for _r, _m, v, _o in loaded) * 1e6  # ns / iter
             launches = int(min(20000, max(100, math.ceil(window_ms * 1e6 / fastest))))
             windows = {id(row): [] for row, *_ in loaded}
             for r in range(rounds):
@@ -582,10 +584,10 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--shapes", default=DEFAULT_SHAPES)
     parser.add_argument("--dtypes", default="fp16,bf16")
-    parser.add_argument("--slices", default="1,2,4,8,16")
+    parser.add_argument("--slices", default="1,2,4,8,16,32")
     parser.add_argument("--rounds", type=int, default=9)
     parser.add_argument("--runs", type=int, default=3)
-    parser.add_argument("--window-ms", type=float, default=10.0)
+    parser.add_argument("--window-ms", type=float, default=20.0)
     parser.add_argument("--diagnostic", action="store_true",
                         help="allow a dirty tree (packets record it and cannot promote)")
     args = parser.parse_args()

@@ -146,6 +146,43 @@ _SHIPPED_GEMM_CALLEES = {
 }
 
 
+# ── the CUDA last-error slot in emitted sources ───────────────────────────────
+#
+# Sync SPECTRAL-STALE-HIP-ERROR-2026-09-27 (hand-written hooks) and
+# SM120-AUTOTUNE-FOLLOWUPS-2026-09-27 (these templates). The CUDA runtime keeps
+# one last-error slot per host thread and per runtime INSTANCE; any failing
+# runtime call writes it and only `cudaGetLastError()` resets it. Every library
+# `_nvidia_cuda_compile_fn` builds links cudart statically (nvcc's default; the
+# symbols are local), so each emitted .so owns a private instance: what can
+# leave a stale error there is an earlier call into the SAME library -- a
+# refused `cudaMalloc` on an early-return path, a launch its entry never
+# checked. A later entry that reads the slot after its own launch would then
+# report that old error as its own failure, and the runner would fall back to
+# the reference over a correct launch (a lane timed or served as "declined").
+#
+# Rule, the same one the hand-written hooks follow:
+#
+# * an exported entry that does device work in a source that reads the slot
+#   clears it exactly once, as its FIRST statement: `(void)cudaGetLastError();`.
+#   That discards only errors older than the call; every error raised inside it
+#   -- including launches covered by one grouped check -- is still detected, so
+#   no clear ever sits between a launch and its check;
+# * entries that make no runtime call (pointer/metadata getters) do not clear;
+# * a source that never reads the slot (its entries judge by
+#   `cudaDeviceSynchronize` / copy status only) cannot be misled by it and is
+#   left unchanged here. Its launches are unchecked, which is a separate,
+#   recorded gap (a launch-configuration error reaches only the slot, so
+#   `cudaDeviceSynchronize` returns success over a launch that never ran).
+#
+# The arbiter-raced lanes -- generic fused, scalar flash attention, gated,
+# pointwise, and the mma.sync fused / attention / gated lanes, host and
+# device-timer entries -- now also CHECK each launch through the slot (as the
+# ROCm generic lane does), so a launch that never ran cannot be timed or served
+# as a kernel. `tests/unit/test_nvidia_emitted_stale_error_rule.py` gates the
+# rule on every emitted source; `tests/device/nvidia/
+# test_emitted_stale_cuda_error.py` proves it on sm_120.
+
+
 # ── CUDA source synthesis (generic FusedRegion lane) ──────────────────────────
 
 def _synthesize_fused_cuda(region: FusedRegion) -> str:
@@ -167,6 +204,7 @@ def _synthesize_fused_cuda(region: FusedRegion) -> str:
         f'extern "C" int {_ENTRY}(const float* hA, const float* hB,\n'
         "        const float* hbias, const float* hresidual, float* hout,\n"
         "        int M, int N, int K) {\n"
+        "    (void)cudaGetLastError();\n"
         "    size_t szA=(size_t)M*K*sizeof(float), szB=(size_t)K*N*sizeof(float),\n"
         "           szO=(size_t)M*N*sizeof(float);\n"
         "    float *dA=0,*dB=0,*dbias=0,*dres=0,*dO=0;\n"
@@ -182,12 +220,58 @@ def _synthesize_fused_cuda(region: FusedRegion) -> str:
         "    int t=64, b=(M+t-1)/t;\n"
         f"    {_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(\n"
         "        dA,dB,dbias,dres,dO,M,N,K);\n"
-        "    int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "    int ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "              cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
         "    if (ok==1) cudaMemcpy(hout,dO,szO,cudaMemcpyDeviceToHost);\n"
         "    cudaFree(dA); cudaFree(dB); cudaFree(dO);\n"
         "    if (dbias) cudaFree(dbias);\n"
         "    if (dres) cudaFree(dres);\n"
         "    return ok;\n"
+        "}\n"
+        # Device-resident timing of the SAME kernel and launch the entry above
+        # runs (operands resident; `warmup` then `reps` launches between two
+        # events; ms per launch, or -1 on any failure) -- the CUDA-event method
+        # every NVIDIA lane's `measure_device_latency` uses. Without it the
+        # lane was `unmeasured` in device rows, which production refuses.
+        f'extern "C" float {_ENTRY}_device_ms(const float* hA, const float* hB,\n'
+        "        const float* hbias, const float* hresidual, int M, int N, int K,\n"
+        "        int warmup, int reps) {\n"
+        "    (void)cudaGetLastError();\n"
+        "    size_t szA=(size_t)M*K*sizeof(float), szB=(size_t)K*N*sizeof(float),\n"
+        "           szO=(size_t)M*N*sizeof(float), szBias=(size_t)N*sizeof(float);\n"
+        "    float *dA=0,*dB=0,*dbias=0,*dres=0,*dO=0, ms=0.0f;\n"
+        "    cudaEvent_t beg=0,end=0; int t=64, b=(M+t-1)/t;\n"
+        "    if (warmup<0 || reps<1 || !hA || !hB) return -1.0f;\n"
+        "    if (cudaMalloc(&dA,szA) || cudaMalloc(&dB,szB) || cudaMalloc(&dO,szO) ||\n"
+        "        cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice) ||\n"
+        "        cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice)) goto fail;\n"
+        "    if (hbias && (cudaMalloc(&dbias,szBias) ||\n"
+        "        cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice))) goto fail;\n"
+        "    if (hresidual && (cudaMalloc(&dres,szO) ||\n"
+        "        cudaMemcpy(dres,hresidual,szO,cudaMemcpyHostToDevice))) goto fail;\n"
+        "    for (int i=0;i<warmup;i++)\n"
+        f"        {_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dA,dB,dbias,dres,dO,M,N,K);\n"
+        "    if (cudaGetLastError() || cudaDeviceSynchronize() ||\n"
+        "        cudaEventCreate(&beg) || cudaEventCreate(&end) ||\n"
+        "        cudaEventRecord(beg)) goto fail;\n"
+        "    for (int i=0;i<reps;i++)\n"
+        f"        {_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dA,dB,dbias,dres,dO,M,N,K);\n"
+        "    if (cudaEventRecord(end) || cudaEventSynchronize(end) ||\n"
+        "        cudaGetLastError() || cudaEventElapsedTime(&ms,beg,end)) goto fail;\n"
+        "    cudaEventDestroy(beg); cudaEventDestroy(end);\n"
+        "    cudaFree(dA); cudaFree(dB); cudaFree(dO);\n"
+        "    if (dbias) cudaFree(dbias);\n"
+        "    if (dres) cudaFree(dres);\n"
+        "    return ms/reps;\n"
+        "fail:\n"
+        "    if (beg) cudaEventDestroy(beg);\n"
+        "    if (end) cudaEventDestroy(end);\n"
+        "    if (dA) cudaFree(dA);\n"
+        "    if (dB) cudaFree(dB);\n"
+        "    if (dO) cudaFree(dO);\n"
+        "    if (dbias) cudaFree(dbias);\n"
+        "    if (dres) cudaFree(dres);\n"
+        "    return -1.0f;\n"
         "}\n"
     )
 
@@ -230,6 +314,7 @@ def _synthesize_attention_cuda() -> str:
         f'extern "C" int {_ATTN_ENTRY}(const float* hQ, const float* hK,\n'
         "        const float* hV, float* hO, int M, int Nk, int D, int Dv,\n"
         "        float scale, int causal) {\n"
+        "    (void)cudaGetLastError();\n"
         "    if (Dv > DV_CAP) return 2;\n"
         "    size_t szQ=(size_t)M*D*4, szK=(size_t)Nk*D*4, szV=(size_t)Nk*Dv*4,\n"
         "           szO=(size_t)M*Dv*4;\n"
@@ -244,10 +329,47 @@ def _synthesize_attention_cuda() -> str:
         "    int t=128, b=(M+t-1)/t;\n"
         f"    {_ATTN_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(\n"
         "        dQ,dK,dV,dO,M,Nk,D,Dv,scale,causal);\n"
-        "    int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "    int ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "              cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
         "    if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
         "    cudaFree(dQ); cudaFree(dK); cudaFree(dV); cudaFree(dO);\n"
         "    return ok;\n"
+        "}\n"
+        # Device-resident timing of the same kernel and launch (see the fused
+        # lane's `_device_ms`); -1 on any failure or a head dim past the cap.
+        f'extern "C" float {_ATTN_ENTRY}_device_ms(const float* hQ, const float* hK,\n'
+        "        const float* hV, int M, int Nk, int D, int Dv, float scale,\n"
+        "        int causal, int warmup, int reps) {\n"
+        "    (void)cudaGetLastError();\n"
+        "    size_t szQ=(size_t)M*D*4, szK=(size_t)Nk*D*4, szV=(size_t)Nk*Dv*4,\n"
+        "           szO=(size_t)M*Dv*4;\n"
+        "    float *dQ=0,*dK=0,*dV=0,*dO=0, ms=0.0f;\n"
+        "    cudaEvent_t beg=0,end=0; int t=128, b=(M+t-1)/t;\n"
+        "    if (Dv > DV_CAP || warmup<0 || reps<1 || !hQ || !hK || !hV) return -1.0f;\n"
+        "    if (cudaMalloc(&dQ,szQ) || cudaMalloc(&dK,szK) || cudaMalloc(&dV,szV) ||\n"
+        "        cudaMalloc(&dO,szO) || cudaMemcpy(dQ,hQ,szQ,cudaMemcpyHostToDevice) ||\n"
+        "        cudaMemcpy(dK,hK,szK,cudaMemcpyHostToDevice) ||\n"
+        "        cudaMemcpy(dV,hV,szV,cudaMemcpyHostToDevice)) goto fail;\n"
+        "    for (int i=0;i<warmup;i++)\n"
+        f"        {_ATTN_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dQ,dK,dV,dO,M,Nk,D,Dv,scale,causal);\n"
+        "    if (cudaGetLastError() || cudaDeviceSynchronize() ||\n"
+        "        cudaEventCreate(&beg) || cudaEventCreate(&end) ||\n"
+        "        cudaEventRecord(beg)) goto fail;\n"
+        "    for (int i=0;i<reps;i++)\n"
+        f"        {_ATTN_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dQ,dK,dV,dO,M,Nk,D,Dv,scale,causal);\n"
+        "    if (cudaEventRecord(end) || cudaEventSynchronize(end) ||\n"
+        "        cudaGetLastError() || cudaEventElapsedTime(&ms,beg,end)) goto fail;\n"
+        "    cudaEventDestroy(beg); cudaEventDestroy(end);\n"
+        "    cudaFree(dQ); cudaFree(dK); cudaFree(dV); cudaFree(dO);\n"
+        "    return ms/reps;\n"
+        "fail:\n"
+        "    if (beg) cudaEventDestroy(beg);\n"
+        "    if (end) cudaEventDestroy(end);\n"
+        "    if (dQ) cudaFree(dQ);\n"
+        "    if (dK) cudaFree(dK);\n"
+        "    if (dV) cudaFree(dV);\n"
+        "    if (dO) cudaFree(dO);\n"
+        "    return -1.0f;\n"
         "}\n"
     )
 
@@ -457,6 +579,7 @@ static void release_inputs(float*q,float*k,float*v,float*b,float*o){{
 extern "C" int {entry}(const float*hq,const float*hk,const float*hv,
     const float*hb,float*ho,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,
     float scale,int causal,long wl,long wr,float softcap){{
+  (void)cudaGetLastError();
   if(!hq||!hk||!hv||!ho||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||
      D<=0||Dv<=0||D>128||Dv>DV_CAP)return 2;
   float *q=0,*k=0,*v=0,*b=0,*o=0;
@@ -470,6 +593,7 @@ extern "C" int {entry}(const float*hq,const float*hk,const float*hv,
 extern "C" int {entry}_timed(const float*hq,const float*hk,const float*hv,
     const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,
     int causal,long wl,long wr,float softcap,int warmup,int reps,float*out_ms){{
+  (void)cudaGetLastError();
   if(!out_ms||warmup<0||reps<1||D>128||Dv>DV_CAP)return 2;
   float *q=0,*k=0,*v=0,*b=0,*o=0;
   if(!alloc_inputs(hq,hk,hv,hb,&q,&k,&v,&b,&o,B,Hq,Hkv,Sq,Sk,D,Dv)){{release_inputs(q,k,v,b,o);return 3;}}
@@ -993,6 +1117,7 @@ def _synthesize_gated_cuda(region: GatedMatmulRegion) -> str:
         "}\n"
         f'extern "C" int {_GATED_ENTRY}(const float* hA, const float* hWg,\n'
         "        const float* hWu, float* hO, int M, int K, int H) {\n"
+        "    (void)cudaGetLastError();\n"
         "    size_t szA=(size_t)M*K*4, szW=(size_t)K*H*4, szO=(size_t)M*H*4;\n"
         "    float *dA=0,*dWg=0,*dWu=0,*dO=0;\n"
         "    if (cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
@@ -1004,10 +1129,45 @@ def _synthesize_gated_cuda(region: GatedMatmulRegion) -> str:
         "    cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice);\n"
         "    int t=128, b=(M+t-1)/t;\n"
         f"    {_GATED_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dA,dWg,dWu,dO,M,K,H);\n"
-        "    int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "    int ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "              cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
         "    if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
         "    cudaFree(dA); cudaFree(dWg); cudaFree(dWu); cudaFree(dO);\n"
         "    return ok;\n"
+        "}\n"
+        # Device-resident timing of the same kernel and launch (see the fused
+        # lane's `_device_ms`); -1 on any failure.
+        f'extern "C" float {_GATED_ENTRY}_device_ms(const float* hA, const float* hWg,\n'
+        "        const float* hWu, int M, int K, int H, int warmup, int reps) {\n"
+        "    (void)cudaGetLastError();\n"
+        "    size_t szA=(size_t)M*K*4, szW=(size_t)K*H*4, szO=(size_t)M*H*4;\n"
+        "    float *dA=0,*dWg=0,*dWu=0,*dO=0, ms=0.0f;\n"
+        "    cudaEvent_t beg=0,end=0; int t=128, b=(M+t-1)/t;\n"
+        "    if (warmup<0 || reps<1 || !hA || !hWg || !hWu) return -1.0f;\n"
+        "    if (cudaMalloc(&dA,szA) || cudaMalloc(&dWg,szW) || cudaMalloc(&dWu,szW) ||\n"
+        "        cudaMalloc(&dO,szO) || cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice) ||\n"
+        "        cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice) ||\n"
+        "        cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice)) goto fail;\n"
+        "    for (int i=0;i<warmup;i++)\n"
+        f"        {_GATED_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dA,dWg,dWu,dO,M,K,H);\n"
+        "    if (cudaGetLastError() || cudaDeviceSynchronize() ||\n"
+        "        cudaEventCreate(&beg) || cudaEventCreate(&end) ||\n"
+        "        cudaEventRecord(beg)) goto fail;\n"
+        "    for (int i=0;i<reps;i++)\n"
+        f"        {_GATED_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dA,dWg,dWu,dO,M,K,H);\n"
+        "    if (cudaEventRecord(end) || cudaEventSynchronize(end) ||\n"
+        "        cudaGetLastError() || cudaEventElapsedTime(&ms,beg,end)) goto fail;\n"
+        "    cudaEventDestroy(beg); cudaEventDestroy(end);\n"
+        "    cudaFree(dA); cudaFree(dWg); cudaFree(dWu); cudaFree(dO);\n"
+        "    return ms/reps;\n"
+        "fail:\n"
+        "    if (beg) cudaEventDestroy(beg);\n"
+        "    if (end) cudaEventDestroy(end);\n"
+        "    if (dA) cudaFree(dA);\n"
+        "    if (dWg) cudaFree(dWg);\n"
+        "    if (dWu) cudaFree(dWu);\n"
+        "    if (dO) cudaFree(dO);\n"
+        "    return -1.0f;\n"
         "}\n"
     )
 
@@ -1065,12 +1225,14 @@ def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
         f"    out[idx] = {_pw_cvar(region.output)};\n"
         "}\n"
         f'extern "C" int {_PW_ENTRY}({hparams}, float* hout, long numel) {{\n'
+        "    (void)cudaGetLastError();\n"
         "    size_t sz=(size_t)numel*4;\n"
         f"{allocs}"
         f"    float* dout=0; if (cudaMalloc(&dout,sz)!=cudaSuccess) {{ {all_free} return 3; }}\n"
         "    int t=256; long b=(numel+t-1)/t;\n"
         f"    {_PW_ENTRY}_kernel<<<dim3((unsigned)b), dim3(t)>>>({dargs}, dout, numel);\n"
-        "    int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "    int ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "              cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
         "    if (ok==1) cudaMemcpy(hout,dout,sz,cudaMemcpyDeviceToHost);\n"
         f"    {all_free} cudaFree(dout);\n"
         "    return ok;\n"
@@ -1325,6 +1487,19 @@ def _generic_lane_source(region: Any) -> KernelSource:
     from tessera.compiler.emit.kernel_emitter import emit_kernel
 
     return emit_kernel(region, _TARGET, SpecPolicy.BUCKET, dtype="f32", dims=None)
+
+
+def _generic_lane_device_fn(region: Any, symbol: str,
+                            argtypes: list[Any]) -> Any:
+    """The ``*_device_ms`` timer entry of the generic lane's library for
+    ``region`` -- the SAME artifact ``NvidiaCudaRunner`` launches
+    (``build(region, "nvidia", dtype="f32", dims=None)``), so the timer and
+    ``run`` cannot time and execute different code."""
+    compiled = build(region, _TARGET, dtype="f32", dims=None)
+    fn = getattr(_load_lib(compiled.artifact), symbol)
+    fn.restype = ctypes.c_float
+    fn.argtypes = argtypes
+    return fn
 
 
 def _generic_lane_identity(owner: str, region: Any) -> dict[str, str] | None:
@@ -1821,6 +1996,7 @@ __global__ void tsr_binary_kernel(const T *a, const T *b, T *o, long n, int kind
 
 extern "C" int tessera_nvidia_binary(const void *ha, const void *hb, void *ho,
                                       long n, int kind, int storage) {
+  (void)cudaGetLastError();
   if (!ha || !hb || !ho || n <= 0 || kind < 0 || kind > 8 ||
       storage < 0 || storage > 2) return 2;
   size_t bytes = (size_t)n * (storage == 0 ? 4 : 2);
@@ -1908,6 +2084,7 @@ __global__ void tessera_solver_ift_kernel(
 extern "C" int tessera_nvidia_solver_ift_f32(
     const float *htheta, const float *hsolution, const float *hproduct,
     float *hresidual, float *hlinear, float *hparameter, long n) {
+  (void)cudaGetLastError();
   if (!htheta || !hsolution || !hproduct || !hresidual || !hlinear ||
       !hparameter || n <= 0) return 2;
   size_t bytes = (size_t)n * sizeof(float);
@@ -2056,6 +2233,7 @@ done: if (p) cudaFree(p); if (a) cudaFree(a); if (b) cudaFree(b); if (o) cudaFre
 
 extern "C" int tessera_nvidia_solver_unary(
     const void *x, void *o, long n, int kind, int storage) {
+  (void)cudaGetLastError();
   if (!x || !o || n <= 0 || kind < 0 || kind > 7 || storage < 0 || storage > 2) return 2;
   if (storage == 0) return tsr_unary_host<float>(x, o, n, kind);
   if (storage == 1) return tsr_unary_host<__half>(x, o, n, kind);
@@ -2063,6 +2241,7 @@ extern "C" int tessera_nvidia_solver_unary(
 }
 extern "C" int tessera_nvidia_solver_compare(
     const void *a, const void *b, void *o, long n, int kind, int storage) {
+  (void)cudaGetLastError();
   if (!a || !b || !o || n <= 0 || kind < 0 || kind > 5 || storage < 0 || storage > 2) return 2;
   if (storage == 0) return tsr_compare_host<float>(a, b, o, n, kind);
   if (storage == 1) return tsr_compare_host<__half>(a, b, o, n, kind);
@@ -2070,6 +2249,7 @@ extern "C" int tessera_nvidia_solver_compare(
 }
 extern "C" int tessera_nvidia_solver_where(
     const void *p, const void *a, const void *b, void *o, long n, int storage) {
+  (void)cudaGetLastError();
   if (!p || !a || !b || !o || n <= 0 || storage < 0 || storage > 2) return 2;
   if (storage == 0) return tsr_where_host<float>(p, a, b, o, n);
   if (storage == 1) return tsr_where_host<__half>(p, a, b, o, n);
@@ -2165,6 +2345,7 @@ extern "C" int tessera_nvidia_solver_diagonal_cg(
     const void *diagonal, const void *rhs, float *x, float *r, float *p, float *ap,
     long n, float tolerance, int max_iterations, int storage, int *iterations,
     int *status, float *residual_norm) {
+  (void)cudaGetLastError();
   if (!diagonal || !rhs || !x || !r || !p || !ap || !iterations || !status ||
       !residual_norm || n <= 0 || tolerance <= 0.0f || max_iterations <= 0 ||
       storage < 0 || storage > 2) return 2;
@@ -3376,17 +3557,17 @@ __global__ void cast_e4(const float*x,__nv_fp8_e4m3*o,long n){long i=(long)block
 __global__ void cast_e5(const float*x,__nv_fp8_e5m2*o,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)o[i]=__nv_fp8_e5m2(x[i]);}
 __global__ void paged(const float*p,const int*t,const long long*idx,float*o,long T,int L,int H,int D,int transpose){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=T*H*D;if(z<n){int d=z%D,h=(z/D)%H;long x=z/(D*H),tok=idx[x];int lp=tok/L,off=tok%L,pp=t[lp];long dst=transpose?((long)h*D+d)*T+x:((long)h*T+x)*D+d;o[dst]=p[(((long)pp*L+off)*H+h)*D+d];}}
 __global__ void paged_attn(const float*q,const float*kp,const float*vp,const int*table,const long long*idx,float*out,int T,int L,int H,int D,int Q,float scale,int causal){int qi=blockIdx.x%Q,h=blockIdx.x/Q,t=threadIdx.x;extern __shared__ float scores[];__shared__ float red[128];int limit=qi+(T>Q?T-Q:0);for(int j=0;j<T;j++){float v=0.f;if(!causal||j<=limit){long tok=idx[j];int pp=table[tok/L],off=tok%L;const float*k=kp+(((long)pp*L+off)*H+h)*D;const float*qr=q+((long)h*Q+qi)*D;for(int d=t;d<D;d+=128)v+=qr[d]*k[d];}red[t]=v;__syncthreads();for(int s=64;s;s>>=1){if(t<s)red[t]+=red[t+s];__syncthreads();}if(t==0)scores[j]=(causal&&j>limit)?-INFINITY:red[0]*scale;__syncthreads();}float m=-FLT_MAX;for(int j=t;j<T;j+=128)m=fmaxf(m,scores[j]);red[t]=m;__syncthreads();for(int s=64;s;s>>=1){if(t<s)red[t]=fmaxf(red[t],red[t+s]);__syncthreads();}m=red[0];float z=0.f;for(int j=t;j<T;j+=128)z+=expf(scores[j]-m);red[t]=z;__syncthreads();for(int s=64;s;s>>=1){if(t<s)red[t]+=red[t+s];__syncthreads();}z=red[0];for(int d=t;d<D;d+=128){float acc=0.f;for(int j=0;j<T;j++){long tok=idx[j];int pp=table[tok/L],off=tok%L;const float*v=vp+(((long)pp*L+off)*H+h)*D;acc+=expf(scores[j]-m)/z*v[d];}out[((long)h*Q+qi)*D+d]=acc;}}
-extern "C" int tessera_nvidia_resident_epilogue(const float*x,const float*b,float*o,long n,int N,int a,void*s){epi<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,b,o,n,N,a);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_gated(const float*g,const float*u,float*o,long n,int a,void*s){gate<<<(n+255)/256,256,0,(cudaStream_t)s>>>(g,u,o,n,a);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_matmul_f32(const float*a,const float*b,float*c,int M,int N,int K,void*s){long n=(long)M*N;mm_f32<<<(n+255)/256,256,0,(cudaStream_t)s>>>(a,b,c,M,N,K);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_im2col(const float*x,float*c,int B,int IH,int IW,int CI,int KH,int KW,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){long n=(long)B*OH*OW*KH*KW*CI;im2col<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,c,B,IH,IW,CI,KH,KW,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_conv_shared(const float*x,const float*w,const float*b,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){long p=(long)B*OH*OW;conv_shared<<<dim3((p+7)/8,(CO+7)/8),64,0,(cudaStream_t)s>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_conv_direct(const float*x,const float*w,const float*b,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){long n=(long)B*OH*OW*CO;conv_direct<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_scale_mask(float*x,int M,int N,float scale,int causal,int off,void*s){long n=(long)M*N;scale_mask<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,M,N,scale,causal,off);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_softmax(const float*x,float*o,int M,int N,void*s){softmax<<<M,256,0,(cudaStream_t)s>>>(x,o,N);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_cast_fp8(const float*x,void*o,long n,int kind,void*s){if(kind==4)cast_e4<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,(__nv_fp8_e4m3*)o,n);else cast_e5<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,(__nv_fp8_e5m2*)o,n);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_paged(const float*p,const int*t,const long long*i,float*o,long T,int L,int H,int D,int transpose,void*s){long n=T*H*D;paged<<<(n+255)/256,256,0,(cudaStream_t)s>>>(p,t,i,o,T,L,H,D,transpose);return cudaGetLastError()==cudaSuccess?1:3;}
-extern "C" int tessera_nvidia_resident_paged_attention(const float*q,const float*kp,const float*vp,const int*t,const long long*i,float*o,int T,int L,int H,int D,int Q,float scale,int causal,void*s){if(T<1||T>8192)return 2;paged_attn<<<H*Q,128,(size_t)T*sizeof(float),(cudaStream_t)s>>>(q,kp,vp,t,i,o,T,L,H,D,Q,scale,causal);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_epilogue(const float*x,const float*b,float*o,long n,int N,int a,void*s){(void)cudaGetLastError();epi<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,b,o,n,N,a);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_gated(const float*g,const float*u,float*o,long n,int a,void*s){(void)cudaGetLastError();gate<<<(n+255)/256,256,0,(cudaStream_t)s>>>(g,u,o,n,a);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_matmul_f32(const float*a,const float*b,float*c,int M,int N,int K,void*s){(void)cudaGetLastError();long n=(long)M*N;mm_f32<<<(n+255)/256,256,0,(cudaStream_t)s>>>(a,b,c,M,N,K);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_im2col(const float*x,float*c,int B,int IH,int IW,int CI,int KH,int KW,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){(void)cudaGetLastError();long n=(long)B*OH*OW*KH*KW*CI;im2col<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,c,B,IH,IW,CI,KH,KW,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_conv_shared(const float*x,const float*w,const float*b,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){(void)cudaGetLastError();long p=(long)B*OH*OW;conv_shared<<<dim3((p+7)/8,(CO+7)/8),64,0,(cudaStream_t)s>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_conv_direct(const float*x,const float*w,const float*b,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){(void)cudaGetLastError();long n=(long)B*OH*OW*CO;conv_direct<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_scale_mask(float*x,int M,int N,float scale,int causal,int off,void*s){(void)cudaGetLastError();long n=(long)M*N;scale_mask<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,M,N,scale,causal,off);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_softmax(const float*x,float*o,int M,int N,void*s){(void)cudaGetLastError();softmax<<<M,256,0,(cudaStream_t)s>>>(x,o,N);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_cast_fp8(const float*x,void*o,long n,int kind,void*s){(void)cudaGetLastError();if(kind==4)cast_e4<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,(__nv_fp8_e4m3*)o,n);else cast_e5<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,(__nv_fp8_e5m2*)o,n);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_paged(const float*p,const int*t,const long long*i,float*o,long T,int L,int H,int D,int transpose,void*s){(void)cudaGetLastError();long n=T*H*D;paged<<<(n+255)/256,256,0,(cudaStream_t)s>>>(p,t,i,o,T,L,H,D,transpose);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_paged_attention(const float*q,const float*kp,const float*vp,const int*t,const long long*i,float*o,int T,int L,int H,int D,int Q,float scale,int causal,void*s){(void)cudaGetLastError();if(T<1||T>8192)return 2;paged_attn<<<H*Q,128,(size_t)T*sizeof(float),(cudaStream_t)s>>>(q,kp,vp,t,i,o,T,L,H,D,Q,scale,causal);return cudaGetLastError()==cudaSuccess?1:3;}
 '''
 
 
@@ -4127,6 +4308,46 @@ class NvidiaGenericCudaCandidate(Candidate):
         return _SHARED_RUNNER.run_fused_region(region, A, B, bias,
                                                residual=residual)
 
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """CUDA-event latency of the kernel ``run`` launches, operands resident
+        (the entry's ``_device_ms``). ``None`` wherever ``run`` would decline,
+        so a declined workload is recorded ``unmeasured``, never timed."""
+        import numpy as np
+        try:
+            if nvidia_epilogue_execution_contract(region)["candidate"] != self.name:
+                return None
+            if len(inputs) < 2:
+                return None
+            bias = inputs[2] if len(inputs) > 2 else None
+            residual = inputs[3] if len(inputs) > 3 else None
+            if ((region.has_bias and bias is None)
+                    or (region.has_residual and residual is None)):
+                return None
+            a = np.ascontiguousarray(inputs[0], np.float32)
+            b = np.ascontiguousarray(inputs[1], np.float32)
+            if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+                return None
+            M, K = a.shape
+            N = b.shape[1]
+            bias_arr = (np.ascontiguousarray(bias, np.float32)
+                        if bias is not None else None)
+            res_arr = (np.ascontiguousarray(residual, np.float32)
+                       if residual is not None else None)
+            if bias_arr is not None and bias_arr.shape != (N,):
+                return None
+            if res_arr is not None and res_arr.shape != (M, N):
+                return None
+            fn = _generic_lane_device_fn(
+                region, f"{_ENTRY}_device_ms",
+                [ctypes.c_void_p] * 4 + [ctypes.c_int] * 5)
+            ms = float(fn(_ptr(a), _ptr(b), _ptr(bias_arr), _ptr(res_arr),
+                          M, N, K, warmup, reps))
+            return ms if ms >= 0 else None
+        except Exception:
+            return None
+
 
 class NvidiaFlashAttnCandidate(Candidate):
     """Tier-1 (C4): the synthesized flash-attention CUDA lane
@@ -4149,6 +4370,37 @@ class NvidiaFlashAttnCandidate(Candidate):
             *a: Any, **k: Any) -> tuple[Any, str]:
         return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
 
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """CUDA-event latency of the kernel ``run`` launches (same orientation,
+        same guards), operands resident. ``None`` where ``run`` declines."""
+        if len(inputs) != 3:
+            return None
+        import numpy as np
+        try:
+            qn, kn = region._natural(inputs[0], inputs[1])
+            q = np.ascontiguousarray(qn, np.float32)
+            k = np.ascontiguousarray(kn, np.float32)
+            v = np.ascontiguousarray(inputs[2], np.float32)
+            if q.ndim != 2 or k.ndim != 2 or v.ndim != 2:
+                return None
+            M, D = q.shape
+            Nk, Dk = k.shape
+            Nkv, Dv = v.shape
+            if Dk != D or Nkv != Nk or Dv > _ATTN_DV_CAP:
+                return None
+            fn = _generic_lane_device_fn(
+                region, f"{_ATTN_ENTRY}_device_ms",
+                [ctypes.c_void_p] * 3 + [ctypes.c_int] * 4
+                + [ctypes.c_float] + [ctypes.c_int] * 3)
+            ms = float(fn(_ptr(q), _ptr(k), _ptr(v), M, Nk, D, Dv,
+                          ctypes.c_float(float(region.scale)),
+                          1 if region.causal else 0, warmup, reps))
+            return ms if ms >= 0 else None
+        except Exception:
+            return None
+
 
 class NvidiaGatedCandidate(Candidate):
     """Tier-1 (C5): the synthesized SwiGLU-gate CUDA lane
@@ -4166,6 +4418,32 @@ class NvidiaGatedCandidate(Candidate):
     def run(self, region: Any, A: Any, Wg: Any, Wu: Any,
             *a: Any, **k: Any) -> tuple[Any, str]:
         return _SHARED_RUNNER.run_gated_matmul_region(region, A, Wg, Wu)
+
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """CUDA-event latency of the kernel ``run`` launches, operands
+        resident. ``None`` where ``run`` declines."""
+        if len(inputs) != 3:
+            return None
+        import numpy as np
+        try:
+            a = np.ascontiguousarray(inputs[0], np.float32)
+            wg = np.ascontiguousarray(inputs[1], np.float32)
+            wu = np.ascontiguousarray(inputs[2], np.float32)
+            if a.ndim != 2 or wg.ndim != 2:
+                return None
+            M, K = a.shape
+            Kg, H = wg.shape
+            if Kg != K or wu.shape != (K, H):
+                return None
+            fn = _generic_lane_device_fn(
+                region, f"{_GATED_ENTRY}_device_ms",
+                [ctypes.c_void_p] * 3 + [ctypes.c_int] * 5)
+            ms = float(fn(_ptr(a), _ptr(wg), _ptr(wu), M, K, H, warmup, reps))
+            return ms if ms >= 0 else None
+        except Exception:
+            return None
 
 
 class NvidiaPointwiseCandidate(Candidate):
@@ -4401,6 +4679,7 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         f'extern "C" int {_MMA_FUSED_ENTRY}(const unsigned short* hA,\n'
         "    const unsigned short* hB, const float* hbias, float* hD,\n"
         "    int M, int N, int K) {\n"
+        "  (void)cudaGetLastError();\n"
         f"  size_t szA=(size_t)M*K*{elem_bytes}, szB=(size_t)K*N*{elem_bytes}, szO=(size_t)M*N*4, szBias=(size_t)N*4;\n"
         f"  {ctype} *dA=0,*dB=0; float *dbias=0,*dD=0;\n"
         "  if (cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
@@ -4412,7 +4691,8 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         "    cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice); }\n"
         f"  {launch};\n"
         f"  {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
-        "  int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "  int ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "            cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
         "  if (ok==1) cudaMemcpy(hD,dD,szO,cudaMemcpyDeviceToHost);\n"
         "  cudaFree(dA); cudaFree(dB); cudaFree(dD); if (dbias) cudaFree(dbias);\n"
         "  return ok;\n"
@@ -4420,6 +4700,7 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         f'extern "C" float {_MMA_FUSED_ENTRY}_device_ms(const unsigned short* hA,\n'
         "    const unsigned short* hB, const float* hbias, int M, int N, int K,\n"
         "    int warmup, int reps) {\n"
+        "  (void)cudaGetLastError();\n"
         "  if (warmup < 0 || reps < 1) return -1.0f;\n"
         f"  size_t szA=(size_t)M*K*{elem_bytes}, szB=(size_t)K*N*{elem_bytes}, szO=(size_t)M*N*4, szBias=(size_t)N*4;\n"
         f"  {ctype} *dA=0,*dB=0; float *dbias=0,*dD=0; cudaEvent_t beg=0,end=0;\n"
@@ -4431,10 +4712,12 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         "      cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice)!=cudaSuccess) goto fail; }\n"
         f"  {{ {launch};\n"
         f"    for(int i=0;i<warmup;i++) {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
-        "    if (cudaDeviceSynchronize()!=cudaSuccess || cudaEventCreate(&beg)!=cudaSuccess ||\n"
+        "    if (cudaGetLastError()!=cudaSuccess ||\n"
+        "        cudaDeviceSynchronize()!=cudaSuccess || cudaEventCreate(&beg)!=cudaSuccess ||\n"
         "        cudaEventCreate(&end)!=cudaSuccess || cudaEventRecord(beg)!=cudaSuccess) goto fail;\n"
         f"    for(int i=0;i<reps;i++) {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
-        "    if (cudaEventRecord(end)!=cudaSuccess || cudaEventSynchronize(end)!=cudaSuccess) goto fail;\n"
+        "    if (cudaEventRecord(end)!=cudaSuccess || cudaEventSynchronize(end)!=cudaSuccess ||\n"
+        "        cudaGetLastError()!=cudaSuccess) goto fail;\n"
         "    float elapsed=0.0f; if (cudaEventElapsedTime(&elapsed,beg,end)!=cudaSuccess) goto fail;\n"
         "    cudaEventDestroy(beg); cudaEventDestroy(end); cudaFree(dA); cudaFree(dB);\n"
         "    cudaFree(dD); if(dbias) cudaFree(dbias); return elapsed/reps; }\n"
@@ -4710,6 +4993,7 @@ def _synthesize_mma_attn_16_cuda(storage: str = "f16") -> str:
         f'extern "C" int {e}(const unsigned short* hQ, const unsigned short* hK,\n'
         "    const unsigned short* hV, float* hO, int M, int Nk, int D, int Dv,\n"
         "    float scale, int causal) {\n"
+        "  (void)cudaGetLastError();\n"
         "  size_t szQ=(size_t)M*D*2, szK=(size_t)Nk*D*2, szV=(size_t)Nk*Dv*2, szO=(size_t)M*Dv*4;\n"
         "  int smem=16*Nk*4;\n"
         "  unsigned short *dQ=0,*dK=0,*dV=0; float* dO=0;\n"
@@ -4722,7 +5006,8 @@ def _synthesize_mma_attn_16_cuda(storage: str = "f16") -> str:
         "  cudaMemcpy(dV,hV,szV,cudaMemcpyHostToDevice);\n"
         f"  cudaFuncSetAttribute({e}_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem);\n"
         f"  {e}_kernel<<<dim3((M+15)/16),dim3(32),smem>>>(dQ,dK,dV,dO,M,Nk,D,Dv,scale,causal);\n"
-        "  int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "  int ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "            cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
         "  if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
         "  cudaFree(dQ); cudaFree(dK); cudaFree(dV); cudaFree(dO);\n"
         "  return ok;\n"
@@ -4796,7 +5081,7 @@ def _synthesize_mma_attn_lowp_cuda(storage: str) -> str:
         "  auto st=[&](int r,int c,float v){int rr=mt+r,cc=nt+c;if(rr<M&&cc<Dv)O[rr*Dv+cc]=v;};"
         "st(gid,2*tig,d0);st(gid,2*tig+1,d1);st(gid+8,2*tig,d2);st(gid+8,2*tig+1,d3);}\n}\n"
         f'extern "C" int {e}(const {ctype}*q,const {ctype}*k,const {ctype}*v,float*o,'
-        "int M,int Nk,int D,int Dv,float scale,int causal){"
+        "int M,int Nk,int D,int Dv,float scale,int causal){(void)cudaGetLastError();"
         f"size_t nq=(size_t)M*D*{elem_bytes},nk=(size_t)Nk*D*{elem_bytes},"
         f"nv=(size_t)Nk*Dv*{elem_bytes},no=(size_t)M*Dv*4;"
         f"{ctype}*dq=0,*dk=0,*dv=0;float*dout=0;"
@@ -4808,10 +5093,11 @@ def _synthesize_mma_attn_lowp_cuda(storage: str) -> str:
         "cudaFree(dout);return 3;}int sh=16*Nk*4;"
         f"cudaFuncSetAttribute({e}_kernel,cudaFuncAttributeMaxDynamicSharedMemorySize,sh);"
         f"{e}_kernel<<<(M+15)/16,32,sh>>>(dq,dk,dv,dout,M,Nk,D,Dv,scale,causal);"
-        "int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1)cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost);"
+        "int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess?1:3;"
+        "if(ok==1)cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost);"
         "cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);return ok;}\n"
         f'extern "C" float {e}_device_ms(const {ctype}*q,const {ctype}*k,const {ctype}*v,'
-        "int M,int Nk,int D,int Dv,float scale,int causal,int warmup,int reps){"
+        "int M,int Nk,int D,int Dv,float scale,int causal,int warmup,int reps){(void)cudaGetLastError();"
         f"size_t nq=(size_t)M*D*{elem_bytes},nk=(size_t)Nk*D*{elem_bytes},"
         f"nv=(size_t)Nk*Dv*{elem_bytes},no=(size_t)M*Dv*4;"
         f"{ctype}*dq=0,*dk=0,*dv=0;float*o=0;float ms=0;cudaEvent_t x=0,y=0;int sh=16*Nk*4;"
@@ -4820,9 +5106,9 @@ def _synthesize_mma_attn_lowp_cuda(storage: str) -> str:
         "cudaMemcpy(dv,v,nv,cudaMemcpyHostToDevice))goto fail;"
         f"cudaFuncSetAttribute({e}_kernel,cudaFuncAttributeMaxDynamicSharedMemorySize,sh);"
         f"for(int i=0;i<warmup;i++){e}_kernel<<<(M+15)/16,32,sh>>>(dq,dk,dv,o,M,Nk,D,Dv,scale,causal);"
-        "if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&x)||cudaEventCreate(&y)||cudaEventRecord(x))goto fail;"
+        "if(cudaGetLastError()||cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&x)||cudaEventCreate(&y)||cudaEventRecord(x))goto fail;"
         f"for(int i=0;i<reps;i++){e}_kernel<<<(M+15)/16,32,sh>>>(dq,dk,dv,o,M,Nk,D,Dv,scale,causal);"
-        "if(cudaEventRecord(y)||cudaEventSynchronize(y)||cudaEventElapsedTime(&ms,x,y))goto fail;"
+        "if(cudaEventRecord(y)||cudaEventSynchronize(y)||cudaGetLastError()||cudaEventElapsedTime(&ms,x,y))goto fail;"
         "cudaEventDestroy(x);cudaEventDestroy(y);cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(o);return ms/reps;"
         "fail:if(x)cudaEventDestroy(x);if(y)cudaEventDestroy(y);if(dq)cudaFree(dq);if(dk)cudaFree(dk);"
         "if(dv)cudaFree(dv);if(o)cudaFree(o);return -1.f;}\n")
@@ -5041,25 +5327,27 @@ def _synthesize_mma_gated_cuda(storage: str, act: str, *,
         "}\n"
         f'extern "C" int {e}(const {ctype}* hA, const {ctype}* hWg,\n'
         f"    const {ctype}* hWu, float* hO, int M, int H, int K) {{\n"
+        "  (void)cudaGetLastError();\n"
         f"  size_t szA=(size_t)M*K*{elem_bytes}, szW=(size_t)K*H*{elem_bytes}, szO=(size_t)M*H*4;\n"
         f"  {ctype} *dA=0,*dWg=0,*dWu=0; float* dO=0;\n"
         "  if(cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
         "  if(cudaMalloc(&dWg,szW)!=cudaSuccess||cudaMalloc(&dWu,szW)!=cudaSuccess||cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return 3;}\n"
         "  cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice);cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice);\n"
         f"  {launch}; {e}_kernel<<<{launch_args}>>>(dA,dWg,dWu,dO,M,H,K);\n"
-        "  int ok=(cudaDeviceSynchronize()==cudaSuccess)?1:3;if(ok==1)cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "  int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;\n"
+        "  if(ok==1)cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
         "  cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return ok;\n}\n"
         f'extern "C" float {e}_device_ms(const {ctype}*hA,const {ctype}*hWg,'
-        f'const {ctype}*hWu,int M,int H,int K,int warmup,int reps){{'
+        f'const {ctype}*hWu,int M,int H,int K,int warmup,int reps){{(void)cudaGetLastError();'
         f"size_t za=(size_t)M*K*{elem_bytes},zw=(size_t)K*H*{elem_bytes},zo=(size_t)M*H*4;"
         f"{ctype}*a=0,*g=0,*u=0;float*o=0;float ms=0;cudaEvent_t x=0,y=0;"
         "if(reps<1||warmup<0||cudaMalloc(&a,za)||cudaMalloc(&g,zw)||cudaMalloc(&u,zw)||"
         "cudaMalloc(&o,zo)||cudaMemcpy(a,hA,za,cudaMemcpyHostToDevice)||"
         "cudaMemcpy(g,hWg,zw,cudaMemcpyHostToDevice)||cudaMemcpy(u,hWu,zw,cudaMemcpyHostToDevice))goto fail;"
         f"for(int i=0;i<warmup;i++){e}_kernel<<<{launch_args}>>>(a,g,u,o,M,H,K);"
-        "if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&x)||cudaEventCreate(&y)||cudaEventRecord(x))goto fail;"
+        "if(cudaGetLastError()||cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&x)||cudaEventCreate(&y)||cudaEventRecord(x))goto fail;"
         f"for(int i=0;i<reps;i++){e}_kernel<<<{launch_args}>>>(a,g,u,o,M,H,K);"
-        "if(cudaEventRecord(y)||cudaEventSynchronize(y))goto fail;if(cudaEventElapsedTime(&ms,x,y))goto fail;"
+        "if(cudaEventRecord(y)||cudaEventSynchronize(y)||cudaGetLastError())goto fail;if(cudaEventElapsedTime(&ms,x,y))goto fail;"
         "cudaEventDestroy(x);cudaEventDestroy(y);cudaFree(a);cudaFree(g);cudaFree(u);cudaFree(o);return ms/reps;"
         "fail:if(x)cudaEventDestroy(x);if(y)cudaEventDestroy(y);if(a)cudaFree(a);if(g)cudaFree(g);"
         "if(u)cudaFree(u);if(o)cudaFree(o);return -1.f;}\n"

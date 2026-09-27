@@ -153,8 +153,11 @@ lock, with `TESSERA_NVIDIA_REPORT_DIR=~/gate-reports/sm120-fu-4a275453` (which
 holds `device-correctness-{1,2}.xml`). Both passes: **1141 passed, 1 skipped,
 0 failed** (junit: 1142 tests, 0 failures, 0 errors, 1 skipped). The skip is
 NCCL not installed, so the multi-rank topology lane cannot be evaluated here.
-`status=success`. The gate's re-configure of `build-nvidia-cuda/` was a no-op
-for the bridge.
+`status=success`. After the gate, the bridge and GEMM library digests were
+unchanged. `sm120_serve_check_at_final_head.txt` is the same serve/miss
+check re-run at the PR head `21acda21` (after the review commit, which
+changed only tests, docs and a Python comment). It matches the check above
+line for line: 96/96 match, 13 served, 96/96 miss.
 
 **Stated limits.**
 

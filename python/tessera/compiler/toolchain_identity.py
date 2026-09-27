@@ -29,9 +29,12 @@ source of truth:
 * A per-candidate artifact — :func:`delegate_library_identity`: the content
   digest of a delegate's loaded shared library (its ABI hash) plus, when it sits
   in a configured build tree, its ``runtime_library_build`` optimization record;
-  and :func:`tessera_opt_identity` for kernels ``tessera-opt`` generates. These
-  are stamped per candidate by the arbiter (``Candidate.delegate_identity``) and
-  checked against the live candidate before a verdict is reused.
+  and, for kernels ``tessera-opt`` generates, the digest of the normalized
+  instruction stream of the image the candidate would run for the workload
+  (:mod:`kernel_code_identity`; 2026-09-26, replacing :func:`tessera_opt_identity`,
+  whose binary digest differed on every build). These are stamped per candidate
+  by the arbiter (``Candidate.artifact_identity``) and checked against the live
+  candidate before a verdict is reused.
 
 **The family identity is pin-based.** The NVIDIA/ROCm/LLVM components are the
 pins the fleet is held to (``runtime_abi_audit`` drift-gates them, and the LLVM
@@ -39,8 +42,10 @@ pin is exact), so a toolkit upgrade that is *adopted* — the pin moves —
 invalidates every entry measured under the old pin. A box that drifts off its
 pin without the pin moving is **not** caught by the family identity. What does
 catch a changed artifact is the per-candidate identity above: a rebuilt
-delegate library or a rebuilt ``tessera-opt`` changes its content digest, and
-the verdict for that candidate misses.
+delegate library changes its content digest, and a generated kernel whose
+instructions change changes its instruction-stream digest, and the verdict for
+that candidate misses. A rebuilt ``tessera-opt`` that generates the *same*
+kernel keeps the verdict -- the point of keying on the code that was timed.
 """
 
 from __future__ import annotations
@@ -270,10 +275,14 @@ def loaded_library_identity(library: Any, *, cmake_target: str | None = None,
 
 
 def tessera_opt_identity() -> dict[str, str] | None:
-    """Identity of the ``tessera-opt`` binary that generates a candidate's
-    kernel at run time: a rebuilt compiler changes generated code, so its
-    content digest keys the verdict. ``None`` when no ``tessera-opt`` is found
-    (the candidate is then unavailable)."""
+    """Identity of the ``tessera-opt`` binary (its content digest). ``None``
+    when no ``tessera-opt`` is found.
+
+    No longer a verdict key (2026-09-26): the binary's bytes differ between any
+    two builds, so keying on it served a committed row only in the tree that
+    recorded it. It is now a *cache* key: ``kernel_code_identity`` folds it into
+    its per-process identity cache so a rebuilt compiler is re-identified
+    rather than served a cached digest."""
     from tessera import runtime as rt
 
     path = rt._tessera_opt_path()

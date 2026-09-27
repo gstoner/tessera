@@ -1035,13 +1035,38 @@ class RocmWmmaGemmCandidate(Candidate):
     def mma_dtype(self, region: Any) -> str | None:
         return "fp16"
 
-    def delegate_identity(self) -> "dict[str, str] | None":
-        """Decision #11: this kernel is generated at run time by ``tessera-opt``;
-        a rebuilt compiler generates different code, so its binary digest keys
-        the verdict."""
-        from tessera.compiler.toolchain_identity import tessera_opt_identity
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the kernel-code identity of the fused image this
+        candidate runs for this workload -- ``(M, N, K)`` from the operands
+        (the schedule, hence the image, is selected per shape), the fused
+        epilogue from the region, f16 storage (``run`` casts to it), on the
+        launch chip. ``None`` (a miss) when there is no workload to derive it
+        from or the region is not one this kernel runs."""
+        epi = _wmma_epilogue(region)
+        if epi is None or len(inputs) < 2:
+            return None
+        try:
+            a_shape, b_shape = tuple(inputs[0].shape), tuple(inputs[1].shape)
+        except AttributeError:
+            return None
+        if len(a_shape) != 2 or len(b_shape) != 2 or a_shape[1] != b_shape[0]:
+            return None
+        m, k = (int(x) for x in a_shape)
+        n = int(b_shape[1])
+        has_bias, activation = epi
+        from tessera import runtime as rt
+        from tessera.compiler.kernel_code_identity import (
+            compiler_kernel_identity,
+            generator_fingerprint,
+        )
 
-        return tessera_opt_identity()
+        chip = rt._rocm_chip()
+        key = (self.name, chip, m, n, k, "f16", has_bias, activation,
+               generator_fingerprint())
+        return compiler_kernel_identity(
+            key, lambda: rt._rocm_wmma_fused_image(
+                m, n, k, "f16", bias=has_bias, activation=activation),
+            isa=chip)
 
     def available(self) -> bool:
         # Probe the ACTUAL fused path (tessera-opt + generated kernel), not just
@@ -1129,13 +1154,33 @@ class RocmFlashAttnCandidate(Candidate):
     op = OP_ATTENTION
     accuracy_atol = _F16_ATOL
 
-    def delegate_identity(self) -> "dict[str, str] | None":
-        """Decision #11: this kernel is generated at run time by ``tessera-opt``;
-        a rebuilt compiler generates different code, so its binary digest keys
-        the verdict."""
-        from tessera.compiler.toolchain_identity import tessera_opt_identity
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the kernel-code identity of the FA-2 image ``run``
+        launches for this workload: the plain (non-GQA, unwindowed, uncapped,
+        unbiased, no-dropout) f16 kernel at Q's head_dim, on the launch chip.
+        Causality and scale are runtime arguments, not image variants. ``None``
+        (a miss) without Q/K operands to read head_dim from."""
+        if len(inputs) < 3:
+            return None
+        try:
+            import numpy as np
+            Qn, Kn = region._natural(inputs[0], inputs[1])
+            q_shape, k_shape = np.shape(Qn), np.shape(Kn)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return None
+        if len(q_shape) != 2 or len(k_shape) != 2 or q_shape[1] != k_shape[1]:
+            return None
+        head_dim = int(q_shape[1])
+        from tessera import runtime as rt
+        from tessera.compiler.kernel_code_identity import (
+            compiler_kernel_identity,
+            generator_fingerprint,
+        )
 
-        return tessera_opt_identity()
+        chip = rt._rocm_chip()
+        key = (self.name, chip, head_dim, "f16", generator_fingerprint())
+        return compiler_kernel_identity(
+            key, lambda: rt._rocm_flash_attn_image(head_dim, "f16"), isa=chip)
 
     def available(self) -> bool:
         try:

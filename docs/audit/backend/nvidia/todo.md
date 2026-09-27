@@ -15,7 +15,9 @@ device`, fresh worktree with `build/` and `build-nvidia-cuda/` both fully
 built. **Before** (branch at `048fac95`, = `claude/timing-foundation`): 1035
 passed / 88 failed, the identical failure set to `main` `b5da0a4e`.
 **After** (`aa6fac65`): `device-correctness-1` 1122 passed / 1 skipped /
-0 failed, and `device-correctness-2` (never reached before) also 1122 / 1 / 0.
+0 failed, and `device-correctness-2` (never reached before) also 1122 / 1 / 0. Re-run at the
+final branch head `49a3d4b1` (after the timing-foundation merges and the sm_120
+corpus re-record): both passes again 1122 passed / 1 skipped / 0 failed.
 One compiler defect; the rest were tests asserting behaviour the compiler had
 correctly moved past.
 

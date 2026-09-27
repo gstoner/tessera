@@ -307,16 +307,29 @@ static StringRef moduleString(ModuleOp module, StringRef primary,
 // tile (`rocm_tiling.select_macro_tile`).
 //
 // Keyed on OCCUPANCY, not K magnitude: split-K exists to put work on units
-// that would otherwise idle, so the trigger is "fewer output tiles than
-// workgroup slots". A workgroup occupies a WGP in WGP mode, which is what our
-// kernels emit (COMPUTE_PGM_RSRC1 bit 29, measured 2026-09-20). The slot count
-// mirrors `rocm_target._DISPATCH_SLOTS[GFX_1201]` (32 WGPs on the RX 9070 XT,
-// three sources agreeing); the projection check is what keeps the two equal.
-constexpr int64_t kGfx1201DispatchSlotsWgp = 32;
-// Smallest contraction extent one slice may carry. UNMEASURED guard, stated
-// as such: below it the second launch and the fp32 workspace round trip are
-// not plausibly repaid, and splitting a K=64 problem into two 32-wide slices
-// is not what this item exists for. Mirrors `rocm_tiling.SPLIT_K_MIN_SLICE_K`.
+// that would otherwise idle, so the trigger is "too few workgroups to occupy
+// the machine". The target is MEASURED (ROCM-SPLIT-K-1 follow-on, 2026-09-27,
+// sync GFX1201-LANES-2026-09-27): a device-clock slice sweep over 16 skinny
+// shapes x {f16, bf16} x S in {1..32} on Tajasarus
+// (benchmarks/baselines/rocm_split_k_20260927/) found splitting pays well past
+// one workgroup per WGP -- 16x768x2048 (48 tiles) gains 2.4x at S=4, and
+// 64x512x2048 (128 tiles) 1.8x at S=2 -- while 32x1536x4096 (192 tiles) is
+// neutral at S=2 and loses from S=8, and 16x2048x768 / 64x512x2048 lose once
+// tiles x S reaches 1024 / 4096. The rule adopted -- chosen because it is
+// positive at every measured point, not because it is the peak -- is: total workgroups tiles x S at most 256 (8 single-wave workgroups per
+// WGP), S a power of two <= 32 (the largest count measured). The reason more
+// workgroups than WGPs help is NOT measured (no counters on WSL2); several
+// single-wave workgroups can co-reside on a WGP's four SIMDs, which is one
+// hypothesis. Mirrors `rocm_tiling._SPLIT_K_TARGET_WORKGROUPS` and
+// `SPLIT_K_MAX_SLICES`; the projection check keeps the two equal.
+constexpr int64_t kGfx1201SplitKTargetWorkgroups = 256;
+constexpr int64_t kSplitKMaxSlices = 32;
+// Smallest contraction extent one slice may carry. Measured at its boundary
+// on 2026-09-27: K=256 split into 128-wide slices LOSES at every S (0.89-0.92x,
+// f16 and bf16), K=512 into two 256-wide slices gains 1.16-1.18x. Slices
+// narrower than 256 were positive at larger K (e.g. 64x64x1024 at S=16), so the
+// guard is conservative there; it is kept rather than generalized from two
+// small-K shapes. Mirrors `rocm_tiling.SPLIT_K_MIN_SLICE_K`.
 constexpr int64_t kSplitKMinSliceK = 256;
 
 static void selectGfx1201SplitK(MatmulSchedule &schedule) {
@@ -330,14 +343,15 @@ static void selectGfx1201SplitK(MatmulSchedule &schedule) {
   const int64_t tiles =
       ((schedule.m + schedule.macroTileM - 1) / schedule.macroTileM) *
       ((schedule.n + schedule.macroTileN - 1) / schedule.macroTileN);
-  if (tiles >= kGfx1201DispatchSlotsWgp)
-    return;
-  // Enough slices to give every WGP a workgroup, rounded down to a power of
-  // two, and only as far as every slice stays a whole number of macro K
-  // blocks of at least kSplitKMinSliceK. Divisibility is monotone in S, so
-  // the first failure ends the search.
+  // The most slices the workgroup target allows (at least two, or no split
+  // is on offer), capped at the largest measured count.
   const int64_t wanted =
-      (kGfx1201DispatchSlotsWgp + tiles - 1) / tiles;
+      std::min(kSplitKMaxSlices, kGfx1201SplitKTargetWorkgroups / tiles);
+  if (wanted < 2)
+    return;
+  // A power of two, and only as far as every slice stays a whole number of
+  // macro K blocks of at least kSplitKMinSliceK. Divisibility is monotone in
+  // S, so the first failure ends the search.
   int64_t chosen = 1;
   for (int64_t slices = 2; slices <= wanted; slices *= 2) {
     if (schedule.k % (slices * schedule.blockK) != 0 ||
@@ -353,8 +367,10 @@ static void selectGfx1201SplitK(MatmulSchedule &schedule) {
     return;
   if (chosen == 1) {
     schedule.splitKFallback =
-        (Twine(tiles) + " output tiles on " + Twine(kGfx1201DispatchSlotsWgp) +
-         " WGPs asks for split-K, but K=" + Twine(schedule.k) +
+        (Twine(tiles) + " output tiles under the " +
+         Twine(kGfx1201SplitKTargetWorkgroups) +
+         "-workgroup split-K target ask for split-K, but K=" +
+         Twine(schedule.k) +
          " has no 2-way split into whole macro K blocks (block_k=" +
          Twine(schedule.blockK) + ") of at least " + Twine(kSplitKMinSliceK))
             .str();

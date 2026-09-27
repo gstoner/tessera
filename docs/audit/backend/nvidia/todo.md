@@ -22,8 +22,8 @@ Philox `rc=3`.
 
 Rule, as on ROCm: each exported entry that does device work calls
 `clearStaleCudaError()` once, first thing, and never between a launch and its
-check (several checks are grouped: the STFT forward's second read covers the
-frame kernel and the scale kernel). Sticky device-fault errors are not reset
+check (several checks are grouped: `istft_backward_broadcast_layout_f32` reads
+the slot once after three launches). Sticky device-fault errors are not reset
 by `cudaGetLastError()` and still fail the next call.
 
 | Library / file | Entry | Clears | Reason when not |
@@ -52,11 +52,13 @@ report are in the compiler log entry for this sync key.
 
 **Still open — emitted CUDA templates (follow-up required).** After #861
 merges, apply the entry-clear rule to the emitted CUDA templates in
-`python/tessera/compiler/emit/nvidia_cuda.py` (18 `cudaGetLastError` sites, no
-entry clear) together with an sm_120 corpus re-record. Not done here because
-#861 makes an emitted lane's autotune identity the digest of its emitted
-source: editing the templates now would change every NVIDIA emitted-lane
-identity and silently unserve the sm_120 corpus rows just re-recorded.
+`python/tessera/compiler/emit/nvidia_cuda.py` (no entry clear before its
+post-launch `cudaGetLastError` checks) together with an sm_120 corpus
+re-record. Not done here because #861 makes an emitted lane's autotune
+identity the digest of its emitted source: editing the templates would change
+every NVIDIA emitted-lane identity and silently unserve the sm_120 corpus rows
+just re-recorded. (#861 merged while this branch was open; the follow-up is now
+unblocked but still owes the re-record.)
 `benchmarks/nvidia/record_shared_arena_rematerialization.py` embeds one more
 such source (benchmark harness, same follow-up).
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import ctypes
 import functools
+import os
 from collections import Counter
 
 import numpy as np
@@ -109,7 +110,7 @@ def _loaded_cudart() -> ctypes.CDLL:
     library itself, and there must be exactly one.
     """
     with open("/proc/self/maps", encoding="utf-8") as maps:
-        paths = {line.split()[-1] for line in maps
+        paths = {os.path.realpath(line.split()[-1]) for line in maps
                  if "libcudart.so" in line and line.split()[-1].startswith("/")}
     assert len(paths) == 1, f"expected one CUDA runtime instance, found {sorted(paths)}"
     cudart = ctypes.CDLL(paths.pop())

@@ -177,6 +177,7 @@ def _at_offset(src: np.ndarray, offset: int) -> np.ndarray:
     (7, 129, 17),     # one full 8-strip panel + a 1-wide tail panel
     (64, 256, 64),
     (33, 100, 3),     # 7-strip block, last strip 4 wide
+    (3, 130, 1100),   # K blocks of 512: two full + one partial (C carries the sum)
 ])
 def test_gemm_f32_result_independent_of_b_alignment(m, n, k):
     """X86-GEMM-ALIGN-1: the kernel packs B into its own 64-byte-aligned panel,

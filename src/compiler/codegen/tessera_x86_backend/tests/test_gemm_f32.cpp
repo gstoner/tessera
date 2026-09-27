@@ -2,7 +2,7 @@
 // reference (same accumulation, exact match) across square + rectangular +
 // tail-N shapes.
 //
-// X86-GEMM-ALIGN-1: the kernel packs B into a 64-byte-aligned panel. check_bitwise()
+// X86-GEMM-ALIGN-1: the kernel packs B into 64-byte-aligned K-blocked panels. check_bitwise()
 // places B at every 4-byte offset within a cache line and requires the output to be
 // bitwise identical to `oracle_unpacked` -- the pre-2026-09-27 kernel, kept here as
 // the declared oracle (Decision #31) -- for every offset, on the packed (M > 1) and
@@ -115,6 +115,9 @@ int main() {
     check_bitwise(16, 256, 64);
     check_bitwise(33, 100, 3);   // 7-strip block, last strip 4 wide
     check_bitwise(4, 16, 0);     // K == 0: C must be the empty sum (zeros)
+    check_bitwise(2, 16, 512);   // exactly one K block
+    check_bitwise(2, 16, 513);   // a one-row second K block (continues through C)
+    check_bitwise(3, 130, 1100); // two full K blocks + a partial one, tail panel
     std::printf(g_fail ? "\n%d FAILED\n" : "\nALL PASSED\n", g_fail);
     return g_fail ? 1 : 0;
 }

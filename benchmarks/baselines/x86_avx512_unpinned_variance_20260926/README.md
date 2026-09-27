@@ -38,3 +38,14 @@ What this shows:
   is, a single recording's matmul `kernel_wall` is **not a stable latency**.
 - Softmax (~3 µs) varies most within a recording once unpinned; its gate failure is recorded
   above rather than retried away.
+
+## Resolved 2026-09-26: `X86-MATMUL-BIMODAL-1`
+
+The matmul level was decided per process by **B's address modulo 64**: numpy placed the
+256 KiB B at a heap offset that varied per process in 16-byte steps, and the f32 GEMM
+runs ~1.5x slower when B is not 64-byte aligned. Toggling only B's offset moved the level
+on demand, both ways, on both hosts. The recorder now places every timed buffer 64-byte
+aligned (resource schema v3; the validator refuses otherwise), and the packets were
+re-recorded twice per host at `329fcbf6`. The packets in this directory are the
+unaligned `dcdaf2a9` recordings and stay as provenance. Evidence, the probe and the
+re-recording's first runs: `../x86_matmul_bimodal_20260926/`.

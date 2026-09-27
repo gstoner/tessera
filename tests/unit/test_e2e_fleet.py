@@ -503,6 +503,48 @@ def test_x86_avx512_recorder_binds_the_timed_library(tmp_path: Path) -> None:
     assert "runtime_library_build.json" in refusal()
 
 
+def test_x86_avx512_aligned_placement_is_64_byte_for_any_source_offset() -> None:
+    """X86-MATMUL-BIMODAL-1: the recorder places each timed buffer itself.
+
+    numpy guarantees 16-byte alignment only; the f32 GEMM ran ~1.5x slower on
+    both Zen 5 hosts whenever B was not 64-byte aligned, and the heap offset
+    of a 256 KiB array varies per process. Host-independent: the placement is
+    checked from source buffers at every 4-byte offset within a cache line.
+    """
+    import numpy as np
+
+    recorder = _recorder()
+    values = np.arange(256 * 256, dtype=np.float32).reshape(256, 256)
+    for shift in range(0, 64, 4):
+        raw = np.empty(values.nbytes + 128, dtype=np.uint8)
+        start = (-raw.ctypes.data) % 64 + shift
+        source = raw[start:start + values.nbytes].view(np.float32).reshape(256, 256)
+        source[...] = values
+        placed = recorder._aligned(source)
+        assert placed.ctypes.data % 64 == 0
+        assert placed.flags.c_contiguous and placed.dtype == np.float32
+        assert placed.shape == values.shape and np.array_equal(placed, values)
+    record = recorder.binding_alignment({"b": recorder._aligned(values), "N": 256})
+    assert record == {"required_bytes": 64, "offsets": {"b": 0}}
+
+
+def test_x86_avx512_recorder_aligns_every_timed_binding() -> None:
+    """Every family's timed buffers leave _family_definitions 64-byte aligned."""
+    import numpy as np
+
+    recorder = _recorder()
+    definitions = recorder._family_definitions(load_fixture_corpus())
+    assert {spec["family"] for spec in definitions} >= {"matmul"}
+    for spec in definitions:
+        arrays = {name: value for name, value in spec["timing_bindings"].items()
+                  if isinstance(value, np.ndarray)}
+        assert arrays, spec["family"]
+        assert all(a.ctypes.data % 64 == 0 for a in arrays.values()), spec["family"]
+        record = recorder.binding_alignment(spec["timing_bindings"])
+        assert set(record["offsets"]) == set(arrays)
+        assert not any(record["offsets"].values())
+
+
 def _load_packet(architecture: str) -> tuple[Path, dict, dict]:
     packet = discover_packets().get(("x86", architecture))
     assert packet is not None, f"x86/{architecture} has no sealed packet"
@@ -588,7 +630,20 @@ def _borrow_other_hostname(report: dict, resources: dict) -> None:
     resources["device"]["host"] = "Princess-Luna"
 
 
+def _misalign_matmul_b(report: dict, resources: dict) -> None:
+    row = next(r for r in resources["rows"] if r["family"] == "matmul")
+    row["resource"]["binding_alignment"]["offsets"]["b"] = 16
+    _refingerprint(report, resources)
+
+
+def _drop_binding_alignment(report: dict, resources: dict) -> None:
+    del resources["rows"][0]["resource"]["binding_alignment"]
+    _refingerprint(report, resources)
+
+
 _TAMPERS = {
+    "alignment": (_misalign_matmul_b, "not 64-byte aligned"),
+    "alignment_missing": (_drop_binding_alignment, "does not record its buffer alignment"),
     "environment": (_mislabel_environment, "contradicts kernel"),
     "library": (_swap_library_digest, "does not embed the stamped library"),
     "medians": (_halve_kernel_medians, "run medians are not the samples'"),

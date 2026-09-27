@@ -30,7 +30,9 @@ import time
 from dataclasses import asdict, dataclass, fields
 from typing import Any
 
-SCHEMA_VERSION = 1
+#: v2 (Decision #11): records carry ``toolchain_digest``; v1 records load with
+#: it empty and never enter a distilled dispatch table.
+SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -138,6 +140,11 @@ class AutotuneRecord:
     roofline_predicted_ms: float
     model_predicted_ms: float | None     # filled once a learned scorer exists
     search_method: str
+    #: Toolchain identity digest the latency was measured under (Decision #11,
+    #: ``toolchain_identity.toolchain_identity(target).digest``). ``""`` = a
+    #: record written before the field existed: kept for inspection, never
+    #: distilled into dispatch.
+    toolchain_digest: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -222,7 +229,10 @@ def record_matmul(
 ) -> AutotuneRecord:
     """Measure one matmul candidate and build its deterministic record (measured
     latency + analytical roofline on the same row). ``device_id`` and ``peak``
-    default to the calibrated chip + its family anchors."""
+    default to the calibrated chip + its family anchors. The record is stamped
+    with the toolchain identity of ``target`` (Decision #11)."""
+    from tessera.compiler.toolchain_identity import toolchain_identity
+
     did = device_id or detect_device_id(target)
     use_peak = peak or peak_for_device(did)
     dtype_bytes = 2 if dtype in ("f16", "bf16") else 4
@@ -247,6 +257,7 @@ def record_matmul(
         roofline_predicted_ms=predicted,
         model_predicted_ms=None,
         search_method=search_method,
+        toolchain_digest=toolchain_identity(target).digest,
     )
 
 
@@ -333,33 +344,44 @@ def size_bucket(n: int) -> str:
     return "l"
 
 
-def _dispatch_key(op_chain: str, dtype: str, size: int) -> str:
-    return f"{op_chain}|{dtype}|{size_bucket(size)}"
+def _dispatch_key(op_chain: str, dtype: str, size: int, toolchain: str) -> str:
+    return f"{op_chain}|{dtype}|{size_bucket(size)}|{toolchain}"
 
 
 def distill_dispatch(records: list[AutotuneRecord]) -> dict[str, dict[str, Any]]:
     """Distill a corpus into an O(1) decision-tree: for each
-    ``(op_chain, dtype, size-bucket)`` class, the schedule with the lowest median
-    latency. This is the cheap production dispatch the autotuning results bake
-    down to (Triton-anatomy)."""
+    ``(op_chain, dtype, size-bucket, toolchain)`` class, the schedule with the
+    lowest median latency. This is the cheap production dispatch the autotuning
+    results bake down to (Triton-anatomy).
+
+    Records without a toolchain identity (schema v1) are skipped: a latency
+    whose toolchain is unknown cannot be matched to the toolchain dispatching
+    now (Decision #11)."""
     best: dict[str, tuple[float, dict[str, Any]]] = {}
     for r in records:
-        if r.latency is None:
+        if r.latency is None or not r.toolchain_digest:
             continue
-        key = _dispatch_key(r.op_chain, r.dtype, r.problem_shape["M"])
+        key = _dispatch_key(r.op_chain, r.dtype, r.problem_shape["M"],
+                            r.toolchain_digest)
         ms = r.latency.median_ms
         if key not in best or ms < best[key][0]:
             best[key] = (ms, {
                 "schedule": r.schedule,
                 "median_ms": ms,
                 "device_id": r.device_id,
+                "toolchain_digest": r.toolchain_digest,
             })
     return {k: v for k, (_, v) in best.items()}
 
 
 def lookup_dispatch(
-    table: dict[str, dict[str, Any]], op_chain: str, dtype: str, size: int
+    table: dict[str, dict[str, Any]], op_chain: str, dtype: str, size: int,
+    *, toolchain: str,
 ) -> dict[str, Any] | None:
     """O(1) lookup into a distilled dispatch table; ``None`` if the class is
-    uncovered (caller falls back to a live search / default)."""
-    return table.get(_dispatch_key(op_chain, dtype, size))
+    uncovered (caller falls back to a live search / default). ``toolchain`` is
+    the current toolchain identity digest: an entry measured under another
+    toolchain misses (Decision #11), and an empty one never matches."""
+    if not toolchain:
+        return None
+    return table.get(_dispatch_key(op_chain, dtype, size, toolchain))

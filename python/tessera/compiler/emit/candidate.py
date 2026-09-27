@@ -224,6 +224,20 @@ class Candidate(ABC):
         """
         return None
 
+    def delegate_identity(self) -> "dict[str, str] | None":
+        """The versioned identity of the code this candidate delegates to, or
+        ``None`` when the candidate's code comes from the compiler itself.
+
+        Decision #11: a measured verdict is keyed on the toolchain *and*, for a
+        Tier-3 delegate, on the delegate's ABI identity, so a rebuilt or
+        upgraded library makes the stored verdict miss rather than lie. The
+        arbiter stamps each timed candidate's identity into its record and
+        refuses a record whose identity differs from the live candidate's
+        (``autotune._record_matches_live_delegates``). Default ``None``;
+        :class:`delegate_contract.DelegatedCandidate` supplies one.
+        """
+        return None
+
     @abstractmethod
     def run(self, region: Any, *inputs: Any, **kwargs: Any) -> tuple[Any, str]:
         """Execute ``region`` on ``inputs`` → ``(output, execution_tag)``. The tag

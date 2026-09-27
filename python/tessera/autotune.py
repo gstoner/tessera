@@ -140,7 +140,14 @@ def cache_key(
     numeric_policy: Mapping[str, object] | None = None,
     movement: Mapping[str, object] | None = None,
 ) -> tuple:
-    """Stable public cache key tuple including compiler-relevant tuning inputs."""
+    """Stable public cache key tuple including compiler-relevant tuning inputs.
+
+    The last element is the toolchain identity digest for ``arch`` (Decision
+    #11): a toolkit or LLVM pin bump changes the key, so a measurement made
+    under the old toolchain misses rather than being reused.
+    """
+
+    from .compiler.toolchain_identity import toolchain_identity
 
     policy = dict(numeric_policy or {"storage": dtype, "accum": "f32" if dtype != "int8" else "s32"})
     move = dict(movement or {"prefetch": "auto", "overlap": "compute"})
@@ -152,6 +159,7 @@ def cache_key(
         layout,
         json.dumps(policy, sort_keys=True),
         json.dumps(move, sort_keys=True),
+        toolchain_identity(arch).digest,
     )
 
 

@@ -1,0 +1,25 @@
+host Princess-Luna commit 0f9c29cf710bc5fa02fa4f876c0acd6b3ebad355 dirty=[] ROCM_PATH=/opt/rocm/core date 2026-09-26T19:05:39-05:00
+completed pair 1/9
+completed pair 2/9
+completed pair 3/9
+completed pair 4/9
+completed pair 5/9
+completed pair 6/9
+completed pair 7/9
+completed pair 8/9
+completed pair 9/9
+{
+  "admitted": true,
+  "reason": "exact-artifact paired measurements and native calibration admitted",
+  "lower_bound": 9.894377119275415
+}
+{
+  "decision": {
+    "admitted": true,
+    "reason": "exact-artifact paired measurements and native calibration admitted",
+    "lower_bound": 9.894377119275415
+  },
+  "selected_binding": "de4efaa32089c16bc32794d3ef1acc8f3ff72120a19f989efee99cb528649cb8",
+  "incumbent_binding": "40a29b3c070c9713f5646579cb59c0fc3db83c3cf1425ab1d4e5a22eed456e02",
+  "candidate_binding": "de4efaa32089c16bc32794d3ef1acc8f3ff72120a19f989efee99cb528649cb8"
+}

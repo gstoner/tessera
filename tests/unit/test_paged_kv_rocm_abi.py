@@ -133,8 +133,28 @@ def test_reference_attention_supports_mqa_and_arbitrary_token_order():
     np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
 
 
-def test_rocm_route_warm_starts_from_committed_gfx1151_corpus():
+def test_rocm_route_warm_starts_from_committed_gfx1151_corpus(
+        tmp_path, monkeypatch):
+    """The committed gfx1151 paged-KV row predates Decision #11's toolchain
+    identity, so it no longer selects the production route (it is stale until
+    re-recorded on Princess-Luna). The same row stamped with the current
+    toolchain identity does -- the identity is the only thing standing between
+    the committed measurement and dispatch."""
+    import json
+
     from tessera.cache.paged_kv import _rocm_paged_attention_corpus_winner
+    from tessera.compiler.emit import autotune as at
+
+    monkeypatch.delenv("TESSERA_AUTOTUNE_CORPUS", raising=False)
+    assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) is None
+
+    payload = json.loads(at.corpus_path().read_text())
+    for row in payload["records"]:
+        if row["device"] == "rocm:gfx1151" and row["op"] == "paged_kv_decode":
+            row.setdefault("evidence", {}).update(at.toolchain_evidence("rocm"))
+    restamped = tmp_path / "corpus.json"
+    restamped.write_text(json.dumps(payload))
+    monkeypatch.setenv("TESSERA_AUTOTUNE_CORPUS", str(restamped))
     assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) == "direct"
 
 

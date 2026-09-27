@@ -1,0 +1,27 @@
+{
+  "architecture": "x86_64_avx512_granite_ridge",
+  "files": {
+    "report.json": {
+      "bytes": 12308,
+      "sha256": "0251dd486f286d4f889adff21c6c4539ba89100e8ce7ade484c24b26facc0a04"
+    },
+    "resources.json": {
+      "bytes": 923052,
+      "sha256": "8445f1ef1ff357a7a1d9c8e46f6d255c67fdcfe41516016355e7cfd34ce35626"
+    }
+  },
+  "schema": "tessera.e2e-release-packet.v1",
+  "target": "x86",
+  "tested_commit": "329fcbf6d441de51c6c504922267d7d63660e53e",
+  "validation": {
+    "architecture": "x86_64_avx512_granite_ridge",
+    "benchmark_rows": 10,
+    "cache_proofs": 5,
+    "families": 5,
+    "fixtures": 5,
+    "level_c_fixtures": 5,
+    "maximum_absolute_error": 0.0,
+    "source_commit": "329fcbf6d441de51c6c504922267d7d63660e53e",
+    "target": "x86"
+  }
+}

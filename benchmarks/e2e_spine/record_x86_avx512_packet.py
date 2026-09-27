@@ -23,6 +23,12 @@ Further refusals keep the packet comparable across the two hosts:
   ``tessera.profiler_timing.v1`` sample that must build (under WSL the
   builder itself refuses a TSC that disagrees with the raw clock by more
   than 5%). The recorder applies the same 5% band on bare metal;
+* every timed buffer binding starts on a 64-byte boundary
+  (``e2e_fleet.X86_AVX512_BINDING_ALIGNMENT``, X86-MATMUL-BIMODAL-1): numpy
+  places a 256 KiB array at a heap offset that varies per process in 16-byte
+  steps, and the f32 GEMM runs ~1.5x slower whenever B is not 64-byte
+  aligned, so an unaligned recording picked its matmul level per process.
+  Each resource row records every buffer's address modulo 64;
 * the source tree must be clean, so ``source_commit`` names what ran;
 * the assembled packet must pass ``e2e_fleet.validate_x86_avx512_packet``,
   the same re-derivation the portable validator runs, before it is sealed.
@@ -277,6 +283,42 @@ def _witnessed_medians_ns(
     return [list(c) for c in cohorts], witnesses, agreement
 
 
+def _aligned(array: np.ndarray, alignment: int | None = None) -> np.ndarray:
+    """A C-contiguous copy of ``array`` whose data starts on ``alignment`` bytes.
+
+    X86-MATMUL-BIMODAL-1: numpy guarantees only 16-byte alignment, and the
+    offset of a large heap array varies per process, which decided the f32
+    GEMM's timing level per process. Timed bindings are placed explicitly.
+    """
+    from tessera.compiler.e2e_fleet import X86_AVX512_BINDING_ALIGNMENT
+
+    alignment = X86_AVX512_BINDING_ALIGNMENT if alignment is None else alignment
+    source = np.ascontiguousarray(array)
+    raw = np.empty(source.nbytes + alignment, dtype=np.uint8)
+    start = (-raw.ctypes.data) % alignment
+    placed = raw[start:start + source.nbytes].view(source.dtype).reshape(source.shape)
+    placed[...] = source
+    if placed.ctypes.data % alignment or not placed.flags.c_contiguous:
+        raise RuntimeError(f"could not place a {alignment}-byte aligned buffer")
+    return placed
+
+
+def _aligned_bindings(bindings: dict[str, Any]) -> dict[str, Any]:
+    """Every array binding replaced by a 64-byte-aligned copy; scalars kept."""
+    return {name: _aligned(value) if isinstance(value, np.ndarray) else value
+            for name, value in bindings.items()}
+
+
+def binding_alignment(bindings: dict[str, Any]) -> dict[str, Any]:
+    """Each buffer binding's address modulo the required alignment, for the resource row."""
+    from tessera.compiler.e2e_fleet import X86_AVX512_BINDING_ALIGNMENT
+
+    return {"required_bytes": X86_AVX512_BINDING_ALIGNMENT,
+            "offsets": {name: int(value.ctypes.data % X86_AVX512_BINDING_ALIGNMENT)
+                        for name, value in sorted(bindings.items())
+                        if isinstance(value, np.ndarray)}}
+
+
 def _stability(run_medians: list[float]) -> float:
     return (max(run_medians) - min(run_medians)) / min(run_medians) * 100.0
 
@@ -289,7 +331,10 @@ def _spd(batch: int, n: int, seed: int) -> np.ndarray:
 
 
 def _family_definitions(fixtures: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    """Fixture module/bindings and timing module/bindings per family."""
+    """Fixture module/bindings and timing module/bindings per family.
+
+    Every timing binding is placed 64-byte aligned (X86-MATMUL-BIMODAL-1).
+    """
     from tessera.compiler.x86_breadth import package_graph_breadth
     from tessera.compiler.x86_native import (
         X86_AVX512_ARCHITECTURE, package_attention, package_matmul,
@@ -377,6 +422,8 @@ def _family_definitions(fixtures: dict[str, dict[str, Any]]) -> list[dict[str, A
         "timing_shape": [8, 64, 64], "timing_module": _cholesky_module((8, 64, 64)),
         "timing_bindings": {"matrix": tm, "result": np.zeros_like(tm), "Batch": 8, "N": 64},
     })
+    for spec in definitions:
+        spec["timing_bindings"] = _aligned_bindings(spec["timing_bindings"])
     return definitions
 
 
@@ -549,6 +596,7 @@ def record(*, samples: int, iterations: int,
             "instruction_envelope": "x86-64 AVX-512 (avx512f/bw/cd/dq/vl/vnni/bf16/vpopcntdq)",
             "runtime_library_build": library_record,
             "image_payload_sha256": payload_sha256,
+            "binding_alignment": binding_alignment(timing_bindings),
         }
         resource_fingerprint = hashlib.sha256(
             json.dumps(resource, sort_keys=True).encode()).hexdigest()

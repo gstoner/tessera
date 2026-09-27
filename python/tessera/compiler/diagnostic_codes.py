@@ -4026,6 +4026,44 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="SM120-STAGING-ROUTING",
         language="python", status="implemented",
     ),
+    DiagnosticCode(
+        code="SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY",
+        pass_origin="tessera.compiler.ssd_performance.admit_ssd_candidate",
+        severity="error",
+        summary=(
+            "A ROCm SSD calibration packet does not carry the current window "
+            "protocol (plain and marker-bracketed windows interleaved), so "
+            "admission refuses it; it stays readable history."
+        ),
+        fix_hint=(
+            "Re-record with benchmarks/record_ssd_rocm_calibrated_pairs.py at a "
+            "commit whose recorder stamps "
+            "timing.environment.window_protocol = "
+            "'interleaved_alternating_plain_bracketed'. The plain-first "
+            "protocol compared two GPU power states on gfx1201."
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="GFX1201-SSD-CALIBRATION-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="SSD_CALIBRATION_LAUNCHES_MISMATCH",
+        pass_origin="tessera.compiler.ssd_performance.admit_ssd_candidate",
+        severity="error",
+        summary=(
+            "A ROCm SSD calibration's launches per window (timing.batch_size "
+            "and the device clock's provenance) disagree with its comparison "
+            "row's launches_per_window, or one of them is missing."
+        ),
+        fix_hint=(
+            "Record the row and its calibration in one process with the same "
+            "--launches; the fixed per-window bracket offset makes a "
+            "calibration at one window length say nothing about another."
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="GFX1201-SSD-CALIBRATION-2026-09-26",
+        language="python", status="implemented",
+    ),
 )
 
 

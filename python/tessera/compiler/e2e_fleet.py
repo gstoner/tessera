@@ -432,8 +432,17 @@ X86_AVX512_HOSTS: dict[str, tuple[str, str]] = {
 X86_AVX512_STABILITY_LIMIT_PCT = 4.0
 #: TSC vs CLOCK_MONOTONIC_RAW agreement band, re-derived from the samples.
 X86_AVX512_AGREEMENT_BAND = 0.05
-X86_AVX512_RESOURCE_SCHEMA = "tessera.e2e-x86-avx512-resource-record.v2"
+X86_AVX512_RESOURCE_SCHEMA = "tessera.e2e-x86-avx512-resource-record.v3"
 X86_AVX512_LIBRARY_TARGET = "tessera_x86_elementwise"
+#: Byte alignment every timed buffer binding must start on
+#: (X86-MATMUL-BIMODAL-1). The f32 GEMM issues one 64-byte unaligned load of B
+#: per FMA; when B is not 64-byte aligned every load splits across two cache
+#: lines and kernel_wall moves from ~0.70 to ~1.05 ms at 256^3 on both Zen 5
+#: hosts. numpy places a 256 KiB array at a 16-byte-granular heap offset that
+#: varies per process, so an unaligned recorder picked the level per process.
+#: Each resource row records every buffer's address modulo this value; the
+#: validator refuses any non-zero offset.
+X86_AVX512_BINDING_ALIGNMENT = 64
 
 
 def x86_avx512_host_refusal(architecture: str, hostname: str, model: str) -> str | None:
@@ -474,8 +483,10 @@ def validate_x86_avx512_packet(report: Mapping[str, Any],
     environment label against the kernel release. What is only compared, not
     re-derived (a resealed forgery of these passes; review, 2026-09-26): the
     host and model against the architecture key, the library path, the source
-    commit, the toolchain fingerprint, and the stamped library digest against
-    the digest recorded for each timed image. The packet digest detects
+    commit, the toolchain fingerprint, the stamped library digest against
+    the digest recorded for each timed image, and the recorded buffer
+    alignment offsets (which must all be zero modulo
+    ``X86_AVX512_BINDING_ALIGNMENT``). The packet digest detects
     accidental edits, not forgery, because it is unkeyed.
     """
     from .profiler_x86_clock import verify_witness_sample
@@ -543,6 +554,20 @@ def validate_x86_avx512_packet(report: Mapping[str, Any],
         if resource.get("image_payload_sha256") != stamp["library_sha256"]:
             raise FleetEvidenceError(
                 f"{where} timed image does not embed the stamped library")
+        alignment = resource.get("binding_alignment")
+        offsets = alignment.get("offsets") if isinstance(alignment, dict) else None
+        if (not isinstance(alignment, dict)
+                or alignment.get("required_bytes") != X86_AVX512_BINDING_ALIGNMENT
+                or not isinstance(offsets, dict) or not offsets):
+            raise FleetEvidenceError(
+                f"{where} resource does not record its buffer alignment "
+                f"(X86-MATMUL-BIMODAL-1)")
+        misaligned = {name: offset for name, offset in offsets.items()
+                      if not isinstance(offset, int) or isinstance(offset, bool) or offset != 0}
+        if misaligned:
+            raise FleetEvidenceError(
+                f"{where} timed buffers are not {X86_AVX512_BINDING_ALIGNMENT}-byte "
+                f"aligned: {misaligned} (X86-MATMUL-BIMODAL-1)")
 
         kernel = benchmarks.get((family, "kernel_wall"))
         e2e = benchmarks.get((family, "end_to_end"))

@@ -7,6 +7,20 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: committed autotune rows are stale until re-recorded
+
+Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
+item 3). **Follow-up required on Princess-Luna; nothing was device-run.** The
+arbiter corpus (`benchmarks/baselines/autotune_corpus.json`; the format is now v4,
+the committed file is still v3) keys every verdict on the toolchain identity (`compiler/toolchain_identity.py`: ROCm 10.0 /
+HIP 7.15 / LLVM 23.1.1 pins). All 16 committed `rocm:gfx1151` rows predate that
+key, so they load as stale and select nothing — including the paged-KV
+production warm start (`cache/paged_kv.py::_rocm_paged_attention_corpus_winner`
+now falls through to the live race). Re-record with
+`benchmarks/rocm/record_paged_kv_corpus.py` and
+`benchmarks/rocm/record_autotune_separation.py`. gfx1201 has no committed
+corpus rows: not applicable.
+
 ## ROCM-SPLIT-K-1: cross-workgroup split-K on gfx1201 — 2026-09-26
 
 Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-1). **Landed for gfx1201 f16/bf16; device-proven for correctness and measured on Tajasarus.**
@@ -30,7 +44,7 @@ Sync `GFX1201-SSD-CALIBRATION-2026-09-26` (follows `DEVICE-CLOCK-MARKER-2026-09-
 - `profiler_rocm_evidence`: the packet's architecture is **derived** from the timing target `rocm_<arch>` over an explicit set `ROCM_PROFILER_ARCHITECTURES = (gfx1151, gfx1201)`. Both images must name that architecture. The validator re-derives it and refuses a relabelled packet. Every committed gfx1151 packet still validates (tested).
 - `ssd_performance.admit_ssd_candidate` admits either chip, but every calibration's rebuilt and stored architecture must equal the package chip, so a gfx1151 calibration cannot admit a gfx1201 package or the reverse.
 - The recorders query the chip from the active HIP device rather than assuming it, and resolve LLVM through `llvm_tools` (Tajasarus has no `/usr/lib/llvm-23`).
-- `record_ssd_gpu.py` now **interleaves** plain and marker-bracketed windows in alternating order behind one span-reset gap. It also takes `--launches` (default 100). This **changes the gfx1151 protocol** even at the default: with a calibration requested, plain windows are timed inside the interleaved loop rather than before calibration, so any new gfx1151 recording differs from the committed one (re-record owed, follow-up 1).
+- `record_ssd_gpu.py` now **interleaves** plain and marker-bracketed windows in alternating order behind one span-reset gap. It also takes `--launches` (default 100). This **changes the gfx1151 protocol** even at the default: with a calibration requested, plain windows are timed inside the interleaved loop rather than before calibration, so any new gfx1151 recording differs from the committed one (re-recorded 2026-09-26, follow-up 1).
 
 **ROCm outcome: landed, with gfx1201 evidence.** [`benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Tajasarus (RX 9070 XT, WSL2, no KFD), `32,2,16,4` chunk 8, 1000 launches per window. All 18 packets are eligible:
 
@@ -45,16 +59,41 @@ Two superseded attempts are kept with the evidence:
 
 The gfx1201 serial envelope matches gfx1151's: the 4096-byte native-tape limit. Follow-ups:
 
-1. The recorder changes were not re-run on gfx1151. Its committed packet stands as recorded at `54442ef5`, and a re-record on Princess-Luna is owed before claiming the new protocol there.
+1. **Closed 2026-09-26.** gfx1151 was re-recorded under the interleaved protocol on Princess-Luna. The packet is [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_interleaved_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_interleaved_20260926/README.md), recorded at `0f9c29cf` (clean) under `flock /tmp/tessera-timing.lock`.
+   - **Structure.** Nine pairs at `32,2,16,4` chunk 8, `--launches 1000`.
+   - **Why 1000.** The per-window bracket offset was measured on gfx1151 at about 30–74 µs. At 100 launches that is 2.17% of a 1.38 ms cooperative window; at 1000 it is 0.32% (`diagnostics/launches_probe/`).
+   - **Calibrations.** All 18 are `promotable` on `device_clock_witness`:
+     - serial: device clock 0.04–0.08% below the event, bracketed/plain ratio 0.9997–1.0001;
+     - cooperative: 0.29–0.62% below, ratio 0.9975–1.0020.
+   - **Decision.** The selector **admits cooperative** with a lower bound of 9.89×, and `check_ssd_admission.py` replays the same decision.
+   - **The `54442ef5` packet** stays as history. It validates, but it is now refused as `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`, so no ratio is claimed between the two packets.
 2. Power state is part of these measurements: first windows run ~30% slower on gfx1201. Pinning or warm-up policy is open.
 3. Follow-ups 2–4 of `DEVICE-CLOCK-MARKER-2026-09-26` are unchanged.
-4. **Pre-PR review (2026-09-26), open:** SSD admission never checks a
-   calibration's window protocol or launch count, so a packet recorded under
-   the old, power-state-biased protocol would still admit when it passes the
-   5% overhead gate (the committed gfx1151 calibrations carry no
-   `window_protocol` field). `admit_ssd_candidate` compares backends but not
-   `package.chip` (pre-existing; the cooperative image-digest binding
-   mitigates it). **Fixed in review:** the ROCm packet validator now refuses a
+4. **Pre-PR review (2026-09-26), closed 2026-09-26 (both gaps):**
+   - **Protocol and launch count.** `admit_ssd_candidate` now requires every
+     ROCm calibration to carry `timing.environment.window_protocol ==
+     SSD_CALIBRATION_WINDOW_PROTOCOL` (`interleaved_alternating_plain_bracketed`,
+     which the recorder stamps from the same constant). It also requires a
+     launch count that equals the row's `launches_per_window` in both places
+     it appears: `timing.batch_size` and the device clock's
+     `provenance.launches_per_window`, and one launch count across all 18
+     rows. **Integrity (corrected in review):** admission first validates each
+     stored calibration packet, so an edit that was not resealed is refused;
+     the digests are unkeyed SHA-256, so this is not protection against a
+     deliberate reseal, and the row's own count is not digest-covered. The
+     count is checked for consistency, not against the per-launch durations.
+   - **Refusals.** Admission refuses `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`
+     or `SSD_CALIBRATION_LAUNCHES_MISMATCH`; both codes are registered in
+     `diagnostic_codes.py`. Legacy packets still validate as history.
+   - **Chip.** A candidate whose `package.chip` differs from the
+     incumbent's is refused.
+   - **Tests** (`tests/unit/test_ssd_comparison.py`): legacy and
+     other-protocol refusal on both chips, three launch-mismatch forms, a row
+     with no launch count, cross-chip candidates, and the committed packets
+     read as data. gfx1201 and the gfx1151 re-record pass the protocol check;
+     the `54442ef5` gfx1151 packet is refused as legacy.
+
+   Earlier finding, **fixed in the first review:** the ROCm packet validator now refuses a
    packet whose timing target disagrees with the device identity queried at
    record time (a relabel-and-rebuild previously validated), and the run logs
    are committed as `record.txt`.
@@ -70,7 +109,7 @@ Sync `DEVICE-CLOCK-MARKER-2026-09-26` (follows `WSL-TIMING-ADMISSION-2026-09-26`
 - `target_perf.apply_corpus`: every selector-eligible corpus carries its raw measurements; the environment is derived from them (a WSL measurement cannot be relabelled bare metal), each overlay must equal its raw record's `results`, the raw architecture must match the device target, and a WSL witness sample counts only if its `artifact_digests` name the computed raw-measurement digest (reviews of #855 and this branch). Binding is by digest, not yet by comparing sample clocks with the measured metric — owed with the first WSL corpus producer.
 - `benchmarks/check_ssd_admission.py` now replays calibrations carried in the comparison.
 
-**ROCm outcome: landed, with gfx1151 evidence.** [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Princess-Luna (WSL2, no KFD), every process calibrated by marker bracketing (serial 0.30–0.51%, cooperative 2.05–3.12% device-vs-event; bracketing ratio 0.9965–1.0083; each calibration bound to its row `run_id`). The production SSD selector **admits the cooperative candidate** (lower bound 9.75×), where the 2026-09-10 packet was refused for missing calibration. Follow-ups: (1) the ROCm profiler packet and SSD adapter are gfx1151-only — gfx1201 needs its own adapter (the marker already builds for gfx1201); (2) the serial native tape GPU lowering caps temporaries at 4096 bytes, so SSD comparisons are limited to `32,2,16,4` — a real limit on the incumbent, not on the method; (3) `calibrate_gfx1151.py` can now use the marker instead of events-only timing; (4) the pass's 64-bit span atomics lower to compare-and-swap loops on gfx11 (correct; their cost is inside the bracketing ratio).
+**ROCm outcome: landed, with gfx1151 evidence.** [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Princess-Luna (WSL2, no KFD), every process calibrated by marker bracketing (serial 0.30–0.51%, cooperative 2.05–3.12% device-vs-event; bracketing ratio 0.9965–1.0083; each calibration bound to its row `run_id`). The production SSD selector **admitted the cooperative candidate** (lower bound 9.75×) at the time, where the 2026-09-10 packet was refused for missing calibration. **Superseded 2026-09-26:** this packet predates the interleaved window protocol and is now refused by admission as `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`; the current gfx1151 evidence is `gfx1151_ssd_calibrated_pairs_interleaved_20260926` (admits cooperative, lower bound 9.89×). Follow-ups: (1) the ROCm profiler packet and SSD adapter are gfx1151-only — gfx1201 needs its own adapter (the marker already builds for gfx1201); (2) the serial native tape GPU lowering caps temporaries at 4096 bytes, so SSD comparisons are limited to `32,2,16,4` — a real limit on the incumbent, not on the method; (3) `calibrate_gfx1151.py` can now use the marker instead of events-only timing; (4) the pass's 64-bit span atomics lower to compare-and-swap loops on gfx11 (correct; their cost is inside the bracketing ratio).
 
 ## WSL timing admission — 2026-09-26
 

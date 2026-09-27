@@ -31,6 +31,7 @@ Python a budget it did not declare in IR.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -347,6 +348,26 @@ class DelegatedCandidate(Candidate):
         self.tier = contract.arbiter_tier()
         self.accuracy_atol = contract.arbiter_accuracy_atol()
         self.accuracy_rtol = contract.arbiter_accuracy_rtol()
+
+    def delegate_library(self) -> "tuple[str | os.PathLike[str], str | None] | None":
+        """``(path, cmake_target)`` of the shared library this delegate binds,
+        or ``None`` when it binds none (inline PTX) or the library is absent.
+        ``cmake_target`` names the RUNTIME-LIB-OPT-1 build record entry, if any.
+        """
+        return None
+
+    def delegate_identity(self) -> "dict[str, str] | None":
+        """Decision #11 delegate identity: the contract identity (callee + arch)
+        plus, when the delegate binds a shared library, that library's content
+        digest (its ABI hash) and build record."""
+        identity = {"contract": self.delegate_contract.identity()}
+        library = self.delegate_library()
+        if library is not None:
+            from tessera.compiler.toolchain_identity import delegate_library_identity
+
+            path, cmake_target = library
+            identity.update(delegate_library_identity(path, cmake_target=cmake_target))
+        return identity
 
     #: Fields whose presence means a `FusedRegion` is more than its root.
     _FUSED_STRUCTURE = ("epilogue", "reduction", "prologue", "residual")

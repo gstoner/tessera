@@ -24,6 +24,10 @@ def main() -> int:
     args.output.write_text(json.dumps({
         "moe": nv._moe_artifact,
         "resident_ops": nv._resident_ops_artifact,
+        # The resident-stage cache is keyed by the source it was compiled from
+        # (sync AUTOTUNE-EMITTED-IDENTITY-2026-09-27); the launcher seeds the
+        # artifact only under the key of the source it would compile now.
+        "resident_ops_key": nv._emitted_key(nv._resident_ops_source(), "f32"),
     }) + "\n")
     return 0
 

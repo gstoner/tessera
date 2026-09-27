@@ -2276,6 +2276,16 @@ def _nvidia_gemm_lib_path() -> Optional[Path]:
     return None
 
 
+def _load_pinned_library(path: Any, *, mode: int) -> ctypes.CDLL:
+    """``ctypes.CDLL`` that records the loaded file for Decision #11: a library
+    an arbiter candidate runs is identified as the image this process loaded,
+    and a rebuild after the load makes its identity a miss instead of a digest
+    of bytes that are not running (`toolchain_identity.load_library`)."""
+    from .compiler.toolchain_identity import load_library
+
+    return load_library(str(path), mode=mode)
+
+
 def _load_nvidia_gemm_runtime() -> ctypes.CDLL | None:
     """Load libtessera_nvidia_gemm.so once, binding the GEMM symbol signatures.
     Preloads the CUDA driver + NVRTC globally so the lib resolves them. Returns
@@ -2298,7 +2308,7 @@ def _load_nvidia_gemm_runtime() -> ctypes.CDLL | None:
                     pass
                 break
     try:
-        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_GLOBAL)
+        lib = _load_pinned_library(path, mode=ctypes.RTLD_GLOBAL)
     except OSError:
         return None
     for sym in _NVIDIA_GEMM_SYMBOLS.values():
@@ -2776,7 +2786,15 @@ def _nvidia_nvfp4_gemm_2d(A_packed: Any, B_packed: Any, scale_a: Any, scale_b: A
 
 
 _nvidia_ptx_launch_lib: ctypes.CDLL | None = None
-_nvidia_ptx_registered: set[str] = set()
+#: entry -> the PTX text the launch bridge holds for it, as last registered
+#: (before the driver-JIT `.version` re-stamp, which the pinned driver ISA
+#: fixes). Written only by `_register_nvidia_ptx` on success, so it is always
+#: the code a launch of `entry` runs. The PTX lanes' Decision #11 identities
+#: read it (`nvidia_cuda._ptx_lane_identity`): a lane that registered its PTX
+#: once and then saw its emitter change keeps running -- and is stamped with --
+#: the registered text, never the emitter's new output (Codex review P2 on
+#: PR #861, sync AUTOTUNE-EMITTED-IDENTITY-2026-09-27).
+_nvidia_ptx_registered: dict[str, str] = {}
 _nvidia_tile_ptx_cache: dict[tuple[str, str], tuple[str, str]] = {}
 
 
@@ -2813,7 +2831,10 @@ def _register_nvidia_ptx(lib: Any, entry: str, ptx: str) -> int:
     text, lowered_from = ptx_for_driver_jit(ptx)
     if lowered_from is not None:
         _nvidia_ptx_version_rewrites[entry] = lowered_from
-    return int(lib.tessera_nvidia_ptx_register(entry.encode(), text.encode()))
+    rc = int(lib.tessera_nvidia_ptx_register(entry.encode(), text.encode()))
+    if rc == 0:
+        _nvidia_ptx_registered[entry] = ptx
+    return rc
 
 
 #: entry symbol -> the `.version` its PTX carried before it was lowered for the
@@ -2858,7 +2879,7 @@ def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
                     pass
                 break
     try:
-        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_GLOBAL)
+        lib = _load_pinned_library(path, mode=ctypes.RTLD_GLOBAL)
     except OSError:
         return None
     lib.tessera_nvidia_ptx_register.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
@@ -6828,7 +6849,6 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
         ptx = pe.emit_mma_sync_gemm_ptx(dtype=edt)
         if _register_nvidia_ptx(lib, entry, ptx) != 0:
             raise RuntimeError(f"ptx register failed for {entry}")
-        _nvidia_ptx_registered.add(entry)
     store = np.float16 if dtype == "float16" else _bfloat16_dtype()
     if store is None:
         raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
@@ -6863,7 +6883,6 @@ def _nvidia_nvfp4_emitted_mma(a_codes: Any, b_codes: Any, scale_a: Any, scale_b:
     if entry not in _nvidia_ptx_registered:
         if _register_nvidia_ptx(lib, entry, pe.emit_nvfp4_block_scale_mma_ptx()) != 0:
             raise RuntimeError(f"ptx register failed for {entry}")
-        _nvidia_ptx_registered.add(entry)
     a_words, b_words, sfa, sfb = nf.pack_nvfp4_mma_fragments(a_codes, b_codes, scale_a, scale_b)
     a_words = np.ascontiguousarray(a_words, np.uint32)
     b_words = np.ascontiguousarray(b_words, np.uint32)
@@ -6916,7 +6935,6 @@ def _nvidia_nvfp4_gemm_emitted_2d(A_packed: Any, B_packed: Any, scale_a: Any, sc
     if entry not in _nvidia_ptx_registered:
         if _register_nvidia_ptx(lib, entry, pe.emit_nvfp4_gemm_ptx()) != 0:
             raise RuntimeError(f"ptx register failed for {entry}")
-        _nvidia_ptx_registered.add(entry)
     out = np.zeros((M, N), np.float32)
     bufs = (ctypes.c_void_p * 5)(ap.ctypes.data, bp.ctypes.data, sa.ctypes.data, sb.ctypes.data, out.ctypes.data)
     dims = (ctypes.c_int64 * 3)(M, N, K)
@@ -6941,7 +6959,6 @@ def _nvidia_nvfp4_gemm_device_latency(entry: str, A_packed: Any, B_packed: Any, 
     if entry == pe.TESSERA_NVFP4_GEMM_ENTRY and entry not in _nvidia_ptx_registered:
         if _register_nvidia_ptx(lib, entry, pe.emit_nvfp4_gemm_ptx()) != 0:
             raise RuntimeError(f"ptx register failed for {entry}")
-        _nvidia_ptx_registered.add(entry)
     import numpy as np
     out = np.zeros((M, N), np.float32)
     bufs = (ctypes.c_void_p * 5)(ap.ctypes.data, bp.ctypes.data, sa.ctypes.data, sb.ctypes.data, out.ctypes.data)
@@ -6986,7 +7003,6 @@ def _nvidia_ptx_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
         ptx = pe.emit_mma_sync_gemm_ptx(dtype=edt)
         if _register_nvidia_ptx(lib, entry, ptx) != 0:
             raise RuntimeError(f"ptx register failed for {entry}")
-        _nvidia_ptx_registered.add(entry)
     store = _nvidia_gemm_storage_dtype(dtype)
     Ac = np.ascontiguousarray(Aa, store)
     Bc = np.asfortranarray(np.ascontiguousarray(Ba, store))
@@ -7124,7 +7140,6 @@ def _nvidia_tile_matmul_2d(A: Any, B: Any, dtype: str, schedule: str) -> Any:
     if entry not in _nvidia_ptx_registered:
         if _register_nvidia_ptx(lib, entry, ptx) != 0:
             raise RuntimeError(f"PTX register failed for {entry}")
-        _nvidia_ptx_registered.add(entry)
     store = np.float16 if dtype == "float16" else _bfloat16_dtype()
     if store is None:
         raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
@@ -7157,7 +7172,6 @@ def _nvidia_tile_matmul_device_latency(
     if entry not in _nvidia_ptx_registered:
         if _register_nvidia_ptx(lib, entry, ptx) != 0:
             raise RuntimeError(f"PTX register failed for {entry}")
-        _nvidia_ptx_registered.add(entry)
     store = np.float16 if dtype == "float16" else _bfloat16_dtype()
     if store is None:
         raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")

@@ -33,7 +33,12 @@ Normalization ``tessera.emitted_source.v1``
   :func:`compiler_version`): a checked-in C/C++ file compiled at run time by
   the host C compiler. No pin fixes that compiler (the ``cpu`` family pins only
   LLVM/MLIR), so its ``--version`` line is part of the identity; a host with no
-  compiler has no identity -- and cannot run the lane either.
+  compiler has no identity -- and cannot run the lane either. Every local
+  header the file reaches through a quoted ``#include`` is a unit too (added
+  2026-09-27 without a normalization bump: it changes only the digest of a file
+  that has such headers, and that digest was missing code the file compiles).
+  A lane that compiles such a file once per process is identified by the bytes
+  it compiled (:func:`identify_compilation`), not by the file as it is later.
 * **PTX handed to the driver JIT** (:func:`ptx_identity`): the PTX text with
   full-line ``//`` comments and blank lines dropped (llc and the Python
   emitters put only banners there), every other line kept verbatim. The
@@ -71,6 +76,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -184,19 +190,83 @@ def compiler_version(command: str) -> str:
     return lines[0]
 
 
+_QUOTED_INCLUDE = re.compile(rb'^[ \t]*#[ \t]*include[ \t]*"([^"]+)"', re.MULTILINE)
+
+
+def _local_include_units(path: Path, data: bytes,
+                         seen: set[Path]) -> list[tuple[str, bytes]]:
+    """Every ``#include "..."`` reachable from ``path`` that resolves next to
+    the including file, depth-first, each once, labelled by its path relative
+    to the root file's directory. A quoted include that does not resolve there
+    is left to the compiler's search path and is not covered (stated, not
+    guessed)."""
+    units: list[tuple[str, bytes]] = []
+    for match in _QUOTED_INCLUDE.finditer(data):
+        target = (path.parent / match.group(1).decode("utf-8", "replace")).resolve()
+        if target in seen or not target.is_file():
+            continue
+        seen.add(target)
+        try:
+            text = target.read_bytes()
+        except OSError as exc:
+            raise EmittedIdentityUnavailable(f"cannot read {target}: {exc}") from exc
+        units.append((match.group(1).decode("utf-8", "replace"), text))
+        units.extend(_local_include_units(target, text, seen))
+    return units
+
+
 def source_file_identity(path: str | Path, *, lang: str, entry: str,
                          build: Sequence[str], compiler: str) -> dict[str, str]:
     """A checked-in source file compiled by the host ``compiler``: the file's
-    bytes, the flags, and the compiler's version line."""
+    bytes and those of every local header it includes by a quoted
+    ``#include`` (2026-09-27: `StockhamRadix4.cpp` includes
+    ``../Common/FFTPlan.h``, whose code the digest used to miss), the flags,
+    and the compiler's version line."""
     p = Path(path)
     try:
         data = p.read_bytes()
     except OSError as exc:
         raise EmittedIdentityUnavailable(f"cannot read {p}: {exc}") from exc
+    units: list[tuple[str, str | bytes]] = [(p.name, data)]
+    units.extend(_local_include_units(p, data, {p.resolve()}))
     return source_identity(
-        lang=lang, entry=entry, units=[(p.name, data)], build=build,
+        lang=lang, entry=entry, units=units, build=build,
         generator="checked_in_source",
         extra={"compiler": compiler_version(compiler)})
+
+
+def identify_compilation(compile_step: Callable[[], Any],
+                         build_identity: Callable[[], Mapping[str, str]]
+                         ) -> tuple[Any, dict[str, str] | None]:
+    """Run ``compile_step`` between two computations of the identity of what it
+    compiles, and return ``(its result, that identity)``.
+
+    For a lane that compiles once per process and reuses the loaded artifact:
+    the artifact is then identified by the code it was compiled from, not by
+    the file on disk later (which may have been edited since). The identity is
+    ``None`` -- a miss -- when it cannot be computed or when it differs before
+    and after (the source changed during the compile, so which bytes the
+    artifact holds is unknown)."""
+    try:
+        before: dict[str, str] | None = dict(build_identity())
+    except Exception:  # noqa: BLE001 - an unidentifiable compile is a miss
+        before = None
+    result = compile_step()
+    try:
+        after: dict[str, str] | None = dict(build_identity())
+    except Exception:  # noqa: BLE001
+        after = None
+    return result, (before if before is not None and before == after else None)
+
+
+def loaded_identity(recorded: Mapping[str, str] | None, what: str) -> dict[str, str]:
+    """The identity :func:`identify_compilation` recorded for a loaded
+    artifact, or :class:`EmittedIdentityUnavailable` when it recorded none."""
+    if not recorded:
+        raise EmittedIdentityUnavailable(
+            f"{what} is loaded but the code it was compiled from is unknown "
+            "(its source changed during the compile, or could not be identified)")
+    return dict(recorded)
 
 
 def python_code_identity(*objects: Any, lane: str) -> dict[str, str]:
@@ -277,7 +347,9 @@ __all__ = [
     "compiler_version",
     "composite_identity",
     "identify",
+    "identify_compilation",
     "kernel_source_identity",
+    "loaded_identity",
     "miss_reason",
     "normalized_ptx",
     "ptx_identity",

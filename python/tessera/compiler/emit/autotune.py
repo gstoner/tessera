@@ -947,6 +947,16 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         latencies[cand.name] = t
         return t
 
+    # The identity of every live candidate's code BEFORE it is timed. Each lane
+    # compiles and caches by the content of what it runs (sync
+    # AUTOTUNE-EMITTED-IDENTITY-2026-09-27), so the identity computed after the
+    # race names what the race compiled -- unless the code changed DURING the
+    # race (an emitter patched or a library rebuilt mid-measurement), in which
+    # case the samples straddle two kernels. A candidate whose identity differs
+    # across the race is therefore left unstamped below: the row cannot be
+    # served, rather than attributing mixed samples to either kernel.
+    identities_before = _delegate_identities(live, region, inputs)
+
     winner = arbitrate(region, op, target, verify=True, measure=_measure,
                        inputs=inputs)
     if winner is None or winner.name not in latencies:
@@ -976,9 +986,11 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
     # unservable -- recorders refuse to write that. See
     # `_record_matches_live_delegates`.
     evidence: dict[str, Any] = dict(toolchain_evidence(target))
-    delegates = _delegate_identities(
-        {name: cand for name, cand in live.items() if name in latencies},
-        region, inputs)
+    delegates = {
+        name: identity for name, identity in _delegate_identities(
+            {name: cand for name, cand in live.items() if name in latencies},
+            region, inputs).items()
+        if identities_before.get(name) == identity}
     if delegates:
         evidence["delegate_identities"] = delegates
     cache.put(key, MeasureRecord(

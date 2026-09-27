@@ -156,11 +156,20 @@ class X86CEmitter(KernelEmitter):
 
 # ── Seam 2: compile_fn (source → .so) ─────────────────────────────────────────
 
+_CC_BY_ENV: dict[tuple[str | None, str | None], str] = {}
+
+
 def _cc() -> str:
-    """The C compiler to use: ``$TESSERA_X86_CC`` override, else clang/cc."""
-    return (os.environ.get("TESSERA_X86_CC")
-            or shutil.which("clang") or shutil.which("cc")
-            or shutil.which("gcc") or "cc")
+    """The C compiler to use: ``$TESSERA_X86_CC`` override, else clang/cc. The
+    PATH lookup is memoized per (override, PATH): `kernel_cache.build` keys the
+    artifact on it at every launch."""
+    env = (os.environ.get("TESSERA_X86_CC"), os.environ.get("PATH"))
+    found = _CC_BY_ENV.get(env)
+    if found is None:
+        found = (env[0] or shutil.which("clang") or shutil.which("cc")
+                 or shutil.which("gcc") or "cc")
+        _CC_BY_ENV[env] = found
+    return found
 
 
 #: Every C-compiler flag that shapes the generic lane's binary: ahead of the
@@ -345,7 +354,8 @@ class X86GenericCCandidate(Candidate):
 
 # ── registration (import side effect, exactly like apple_msl) ─────────────────
 register_emitter(X86CEmitter())
-register_compiler(_TARGET, _x86_compile_fn)
+register_compiler(_TARGET, _x86_compile_fn,
+                  build_line=lambda: (_cc(), *_CC_FLAGS, *_CC_LINK_FLAGS))
 register_runner(X86CRunner(), default=False)
 
 # D1 arbiter candidates: the generic C lane (Tier 1) + the opt-in AOCL-DLP lane

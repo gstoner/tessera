@@ -122,25 +122,54 @@ _lib: list[ctypes.CDLL | None] = []
 _CXX_FLAGS = ("-O2", "-std=c++17", "-shared", "-fPIC")
 
 
+#: Decision #11 identity of the bytes the loaded stencil library was compiled
+#: from (``None``: unknown -- the source changed during the compile). The
+#: library is compiled once per process, so after the load this, not the file
+#: on disk, names the code `cpu_stencil_grad` runs.
+#: Keyed by the loaded library's path (a fresh temp path per compile), so a
+#: reset of `_lib` can never pair one compile's library with another's record.
+_compiled_identity: dict[str, dict[str, str] | None] = {}
+
+
+def _cpu_source_identity() -> dict[str, str]:
+    """What `_cpu_lib` would compile now: `Stencil.cpp` (and any local header
+    it includes), the flags and ``$CXX --version``."""
+    from tessera.compiler.emitted_code_identity import source_file_identity
+
+    return source_file_identity(
+        _CPU_SRC, lang="c++", entry="ts_stencil_grad_cpu",
+        build=("c++", *_CXX_FLAGS), compiler=os.environ.get("CXX", "c++"))
+
+
+def _compile_cpu_lib(cxx: str) -> ctypes.CDLL | None:
+    try:
+        d = tempfile.mkdtemp(prefix="tessera_tpp_stencil_")
+        so = os.path.join(d, "libtpp_stencil.so")
+        subprocess.check_call(
+            [cxx, *_CXX_FLAGS, str(_CPU_SRC),
+             "-o", so], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        lib = ctypes.CDLL(so)
+        lib.ts_stencil_grad_cpu.restype = ctypes.c_int
+        lib.ts_stencil_grad_cpu.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float]
+        return lib
+    except Exception:
+        return None
+
+
 def _cpu_lib() -> ctypes.CDLL | None:
     if _lib:
         return _lib[0]
     lib: ctypes.CDLL | None = None
     cxx = os.environ.get("CXX", "c++")
     if shutil.which(cxx) and _CPU_SRC.exists():
-        try:
-            d = tempfile.mkdtemp(prefix="tessera_tpp_stencil_")
-            so = os.path.join(d, "libtpp_stencil.so")
-            subprocess.check_call(
-                [cxx, *_CXX_FLAGS, str(_CPU_SRC),
-                 "-o", so], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            lib = ctypes.CDLL(so)
-            lib.ts_stencil_grad_cpu.restype = ctypes.c_int
-            lib.ts_stencil_grad_cpu.argtypes = [
-                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
-                ctypes.c_int, ctypes.c_int, ctypes.c_float]
-        except Exception:
-            lib = None
+        from tessera.compiler.emitted_code_identity import identify_compilation
+
+        lib, compiled = identify_compilation(lambda: _compile_cpu_lib(cxx),
+                                             _cpu_source_identity)
+        if lib is not None:
+            _compiled_identity[str(lib._name)] = compiled
     _lib.append(lib)
     return lib
 
@@ -166,16 +195,18 @@ class CpuStencilGradCandidate(Candidate):
     def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
         """Decision #11: the checked-in ``Stencil.cpp`` `_cpu_lib` compiles, the
         flags, and the ``$CXX --version`` line (no pin fixes the host C++
-        compiler). The same image serves every order/axis/shape."""
-        from tessera.compiler.emitted_code_identity import (
-            identify,
-            source_file_identity,
-        )
+        compiler). The same image serves every order/axis/shape. Once the
+        library is loaded it is the bytes it was compiled from -- the process
+        never recompiles, so a later edit to the file does not change what
+        runs, and must not change the stamp either."""
+        from tessera.compiler.emitted_code_identity import identify, loaded_identity
 
-        cxx = os.environ.get("CXX", "c++")
-        return identify(self.name, lambda: source_file_identity(
-            _CPU_SRC, lang="c++", entry="ts_stencil_grad_cpu",
-            build=("c++", *_CXX_FLAGS), compiler=cxx))
+        if _lib and _lib[0] is not None:
+            loaded = _lib[0]
+            return identify(self.name, lambda: loaded_identity(
+                _compiled_identity.get(str(getattr(loaded, "_name", ""))),
+                "libtpp_stencil"))
+        return identify(self.name, _cpu_source_identity)
 
     def available(self) -> bool:
         return _cpu_lib() is not None

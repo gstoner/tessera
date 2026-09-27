@@ -324,6 +324,14 @@ def test_x86_generic_c_lane_identity(monkeypatch):
     assert other is not None and other["compiler"] != first["compiler"]
 
 
+def _unload_cpu_lib(mod, monkeypatch):
+    """Make the checked-in CPU lane's library look not yet compiled here."""
+    if hasattr(mod, "_libs"):
+        monkeypatch.setattr(mod, "_libs", {})
+    else:
+        monkeypatch.setattr(mod, "_lib", [])
+
+
 @pytest.mark.parametrize("module,target,op,name,region", [
     ("tessera.compiler.emit.spectral_candidates", "cpu", "spectral_fft",
      "cpu_stockham", lambda m: m.SpectralFFTRegion(64)),
@@ -339,13 +347,20 @@ def test_checked_in_source_lane_identity(tmp_path, monkeypatch, module, target, 
         EI.compiler_version(os.environ.get("CXX", "c++"))
     except EI.EmittedIdentityUnavailable:
         pytest.skip("no host C++ compiler to name")
+    # Not loaded in this process: the identity is what `_cpu_lib` would
+    # compile from the file now (a loaded library is identified by the bytes it
+    # was compiled from -- see the rebuild tests below).
+    _unload_cpu_lib(mod, monkeypatch)
     cand = _candidate(target, op, name)
     reg = region(mod)
     first = cand.artifact_identity(reg)
     assert first is not None, EI.miss_reason(name)
     assert first == cand.artifact_identity(reg)
-    copy = tmp_path / mod._CPU_SRC.name
-    copy.write_bytes(mod._CPU_SRC.read_bytes())
+    # Copy the whole TargetHooks tree so the file's quoted local includes
+    # (`../Common/FFTPlan.h`) resolve as they do in the checkout.
+    hooks = mod._CPU_SRC.parent.parent
+    shutil.copytree(hooks, tmp_path / hooks.name)
+    copy = tmp_path / hooks.name / mod._CPU_SRC.parent.name / mod._CPU_SRC.name
     monkeypatch.setattr(mod, "_CPU_SRC", copy)
     assert cand.artifact_identity(reg) == first, "same bytes, same identity"
     copy.write_bytes(copy.read_bytes() + b"\n// changed\n")

@@ -415,7 +415,10 @@ class NativeANNCandidate(Candidate):
             return None
 
         def build_identity():
-            dylib = jit._find_dylib()
+            # The library this process loaded, once loaded (it is never
+            # reloaded); else the one `_load` would pick.
+            loaded = getattr(jit, "_LIB", None)
+            dylib = getattr(loaded, "_name", None) or jit._find_dylib()
             if dylib is None:
                 return None
             source = (registered.pair.transformed if self.transformed

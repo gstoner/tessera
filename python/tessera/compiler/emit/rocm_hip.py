@@ -381,11 +381,33 @@ def _hipcc_flags(arch: str) -> tuple[str, ...]:
     return (f"--offload-arch={arch}", "-O3", "-fPIC", "-shared")
 
 
+_HIPCC_BY_PATH: dict[str | None, str] = {}
+
+
+def _hipcc() -> str:
+    """hipcc on PATH, else the default ROCm location (memoized per PATH:
+    `kernel_cache.build` keys the artifact on it at every launch)."""
+    path = os.environ.get("PATH")
+    found = _HIPCC_BY_PATH.get(path)
+    if found is None:
+        found = shutil.which("hipcc") or "/opt/rocm/bin/hipcc"
+        _HIPCC_BY_PATH[path] = found
+    return found
+
+
+def _hipcc_cache_line() -> tuple[str, ...]:
+    """What `kernel_cache.build` keys the generic lane's artifact on beyond the
+    source: the hipcc invoked and every flag incl. the offload arch -- the same
+    flags the lane's Decision #11 identity carries, so an arch change compiles
+    fresh instead of serving the image built for the old arch."""
+    return (_hipcc(), *_hipcc_flags(_rocm_arch()))
+
+
 def _rocm_hip_compile_fn(source: KernelSource) -> str:
     """Compile the emitted HIP to a shared object with hipcc and return its path.
     Raises on a missing toolchain/compile failure; ``build`` wraps in
     ``CompileError`` (never a silent no-op)."""
-    hipcc = shutil.which("hipcc") or "/opt/rocm/bin/hipcc"
+    hipcc = _hipcc()
     arch = _rocm_arch()
     d = tempfile.mkdtemp(prefix="tessera_rocm_")
     src = os.path.join(d, "kernel.hip")
@@ -1308,7 +1330,7 @@ class RocmFlashAttnCandidate(Candidate):
 
 # ── registration ──────────────────────────────────────────────────────────────
 register_emitter(RocmHipEmitter())
-register_compiler(_TARGET, _rocm_hip_compile_fn)
+register_compiler(_TARGET, _rocm_hip_compile_fn, build_line=_hipcc_cache_line)
 register_runner(RocmHipRunner(), default=False)
 
 # D1 arbiter candidates — the generic lane and the crown-jewel WMMA/flash lanes

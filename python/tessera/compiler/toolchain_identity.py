@@ -225,6 +225,85 @@ def _file_digest(path: Path) -> str:
 _IDENTITIES: dict[tuple[str, int, int, str | None], dict[str, str]] = {}
 
 
+# ── libraries pinned at load (sync AUTOTUNE-EMITTED-IDENTITY-2026-09-27) ──────
+#
+# A library identity is a digest of the file on disk, but a process runs the
+# image it dlopened. Once a name is loaded, `dlopen` of the same name returns
+# that image for the life of the process, so a library rebuilt in place after
+# the load would be stamped with the NEW bytes while the OLD ones are timed --
+# and after a restart the genuinely new library would match a latency measured
+# for different code (Codex review P2 on PR #861). `load_library` records the
+# file's stat signature at the load; `delegate_library_identity` of a loaded
+# library then answers only while the file still carries that signature, and
+# raises -- a miss -- once it does not. Nothing is digested at load time, so a
+# process that never asks for an identity pays two `stat` calls per load.
+
+#: `stat` fields that change when a file is rewritten or replaced.
+_StatSig = tuple[int, int, int, int]
+#: Sentinel: the file changed while it was being loaded (or could not be
+#: stat'ed), so which bytes the process runs is unknown.
+_CHANGED_DURING_LOAD: _StatSig = (-1, -1, -1, -1)
+#: abspath / realpath of a loaded library -> (realpath, signature at load).
+_LOADED: dict[str, tuple[str, _StatSig]] = {}
+
+
+class LibraryChangedSinceLoad(RuntimeError):
+    """The library file is no longer the image this process loaded from it, so
+    no identity names the code that runs (fail closed: a miss)."""
+
+
+def _stat_sig(path: str) -> _StatSig:
+    st = os.stat(path)
+    return (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size)
+
+
+def load_library(path: str | os.PathLike[str], *, mode: int | None = None) -> Any:
+    """``ctypes.CDLL(path, mode)`` that pins the loaded file for
+    :func:`delegate_library_identity`. Raises ``OSError`` exactly as
+    ``ctypes.CDLL`` does. The first load of a name pins it: a later ``dlopen``
+    of the same name returns the image already mapped."""
+    import ctypes
+
+    text = os.fspath(path)
+    real = os.path.realpath(text)
+    try:
+        before: _StatSig | None = _stat_sig(real)
+    except OSError:
+        before = None
+    lib = ctypes.CDLL(text) if mode is None else ctypes.CDLL(text, mode=mode)
+    try:
+        after: _StatSig | None = _stat_sig(real)
+    except OSError:
+        after = None
+    sig = before if (before is not None and before == after) else _CHANGED_DURING_LOAD
+    for name in {os.path.abspath(text), real}:
+        _LOADED.setdefault(name, (real, sig))
+    return lib
+
+
+def loaded_pin(path: str | os.PathLike[str]) -> tuple[str, _StatSig] | None:
+    """``(realpath, stat signature)`` recorded when ``path`` was loaded through
+    :func:`load_library` in this process, else ``None``."""
+    text = os.fspath(path)
+    return _LOADED.get(os.path.abspath(text)) or _LOADED.get(os.path.realpath(text))
+
+
+def _check_pin(pin: tuple[str, _StatSig]) -> None:
+    real, sig = pin
+    if sig == _CHANGED_DURING_LOAD:
+        raise LibraryChangedSinceLoad(
+            f"{real} changed while it was being loaded; the loaded bytes are unknown")
+    try:
+        now = _stat_sig(real)
+    except OSError as exc:
+        raise LibraryChangedSinceLoad(
+            f"{real} was loaded but can no longer be read: {exc}") from exc
+    if now != sig:
+        raise LibraryChangedSinceLoad(
+            f"{real} was rebuilt or replaced after this process loaded it; the "
+            "file on disk is not the code that runs")
+
+
 def delegate_library_identity(
     library: str | os.PathLike[str], *, cmake_target: str | None = None,
 ) -> dict[str, str]:
@@ -237,8 +316,19 @@ def delegate_library_identity(
     optimization level it was built at; a library outside a build tree records
     ``build_record=unrecorded`` rather than failing, because its digest still
     identifies it — only its optimization level is unknown.
+
+    A library this process loaded through :func:`load_library` is identified
+    as the image that was loaded, and only while the file still is that image:
+    a rebuild or replacement after the load raises
+    :class:`LibraryChangedSinceLoad` (checked before and after digesting), so
+    a verdict can never be stamped with bytes the process is not running.
     """
-    path = Path(library).resolve()
+    pin = loaded_pin(library)
+    if pin is not None:
+        _check_pin(pin)
+        path = Path(pin[0])
+    else:
+        path = Path(library).resolve()
     if not path.is_file():
         raise FileNotFoundError(f"delegate library {path} does not exist")
     # Per-process cache keyed on the file's (mtime, size): the arbiter asks on
@@ -249,6 +339,8 @@ def delegate_library_identity(
     key = (str(path), st.st_mtime_ns, st.st_size, cmake_target)
     cached = _IDENTITIES.get(key)
     if cached is not None:
+        if pin is not None:
+            _check_pin(pin)
         return dict(cached)
     identity = {"library": path.name, "abi_digest": _file_digest(path)}
     if cmake_target is not None:
@@ -263,6 +355,8 @@ def delegate_library_identity(
             identity["optimization"] = str(record["level"])
             identity["cmake_build_type"] = str(record.get("cmake_build_type", ""))
     _IDENTITIES[key] = dict(identity)
+    if pin is not None:
+        _check_pin(pin)
     return identity
 
 
@@ -305,8 +399,11 @@ __all__ = [
     "ToolchainIdentity",
     "UNAVAILABLE",
     "clear_identity_cache",
+    "LibraryChangedSinceLoad",
     "delegate_library_identity",
+    "load_library",
     "loaded_library_identity",
+    "loaded_pin",
     "target_family",
     "tessera_opt_identity",
     "toolchain_identity",

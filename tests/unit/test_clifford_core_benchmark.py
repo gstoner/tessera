@@ -177,7 +177,16 @@ class TestCliffordCoreBenchmark:
         ):
             assert field in d
         assert d["backend"] == "tessera-library"
-        assert d["device"] == "unattributed"
+        # EVIDENCE-PACKET-1: device comes from per-call route receipts over
+        # the timed span, never a fixed label. Host-dependent: the Mac may run
+        # the Cl(3,0) primitives on the Apple GPU runtime, other hosts on the
+        # NumPy reference.
+        receipts = d["route_receipts"]
+        assert receipts["attribution"] == "complete", receipts
+        assert receipts["calls"] > 0 and receipts["orphan_dispatches"] == 0
+        assert d["route"] == receipts["route"]
+        assert d["route"] in ("python_reference", "apple_gpu_runtime", "mixed")
+        assert d["device"] == ("cpu" if d["route"] == "python_reference" else f"{d['route']}+cpu")
         assert d["promotion_eligible"] is False
         assert d["op"] == "clifford_core_forward"
         assert d["dtype"] == "fp32"

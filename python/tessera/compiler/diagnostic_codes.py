@@ -4326,6 +4326,36 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="EVIDENCE-PACKET-1-2026-09-27",
         language="python", status="implemented",
     ),
+    DiagnosticCode(
+        code="ROUTE_RECEIPT_ORPHAN_DISPATCH",
+        pass_origin="tessera._route_receipts.RouteReceiptLog.refusal",
+        severity="error",
+        summary=(
+            "A native GA/EBM dispatch ran while no public primitive's receipt "
+            "frame was open, so the captured span cannot say which call it "
+            "served; the span's route is reported as unattributed."
+        ),
+        fix_hint=(
+            "Decorate the public caller with @public_route (test_route_receipts "
+            "names undecorated callers of _try_* helpers)."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="ROUTE_RECEIPT_EMPTY",
+        pass_origin="tessera._route_receipts.RouteReceiptLog.refusal",
+        severity="error",
+        summary=(
+            "A route-receipt capture saw no public GA/EBM primitive call, so it "
+            "attributes nothing; an empty capture is never read as a reference route."
+        ),
+        fix_hint="Capture around the calls being attributed.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
 )
 
 

@@ -20,6 +20,8 @@ from typing import Any, Callable, Iterable, Optional, Tuple
 
 import numpy as np
 
+from tessera._route_receipts import native_attempt, public_route
+
 from tessera.rng import RNGKey, _hmc_leapfrog, normal
 
 
@@ -68,6 +70,7 @@ def partition_function_exact(
     return math.exp(log_z)
 
 
+@public_route("tessera.ebm.partition_exact_from_energies")
 def partition_exact_from_energies(
     energies: Any, *, temperature: float = 1.0,
 ) -> float:
@@ -116,6 +119,7 @@ def partition_exact_from_energies(
     return float(math.exp(max_neg + math.log(float(np.exp(neg - max_neg).sum()))))
 
 
+@native_attempt
 def _try_apple_gpu_partition_exact_f32(
     energies: np.ndarray, temperature: float,
 ) -> Optional[float]:
@@ -150,6 +154,7 @@ def _try_apple_gpu_partition_exact_f32(
     return float(out[0])
 
 
+@native_attempt
 def _try_x86_partition_exact_f32(
     energies: np.ndarray, temperature: float,
 ) -> Optional[float]:
@@ -163,6 +168,7 @@ def _try_x86_partition_exact_f32(
         return None
 
 
+@native_attempt
 def _try_rocm_partition_exact_f32(
     energies: np.ndarray, temperature: float,
 ) -> Optional[float]:

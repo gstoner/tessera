@@ -20,6 +20,8 @@ from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
 
+from tessera._route_receipts import native_attempt, public_route
+
 from tessera.rng import RNGKey, normal
 
 
@@ -115,6 +117,7 @@ def energy(
 # Primitive 2: inner_step
 # ---------------------------------------------------------------------------
 
+@public_route("tessera.ebm.inner_step")
 def inner_step(
     y: Any,
     grad: Any,
@@ -158,6 +161,7 @@ def inner_step(
     return out.astype(y_arr.dtype, copy=False)
 
 
+@native_attempt
 def _try_apple_gpu_inner_step(
     y: np.ndarray, grad: np.ndarray, eta: float,
 ) -> Optional[np.ndarray]:
@@ -203,6 +207,7 @@ def _try_apple_gpu_inner_step(
 # Primitive 3: langevin_step
 # ---------------------------------------------------------------------------
 
+@public_route("tessera.ebm.langevin_step")
 def langevin_step(
     y: Any,
     energy_fn: Callable[[np.ndarray], Any],
@@ -261,6 +266,7 @@ def langevin_step(
 # Primitive 4: self_verify
 # ---------------------------------------------------------------------------
 
+@public_route("tessera.ebm.self_verify")
 def self_verify(
     energies: Any,
     candidates: Any,
@@ -318,6 +324,7 @@ def self_verify(
 # Primitive 5: decode_init
 # ---------------------------------------------------------------------------
 
+@public_route("tessera.ebm.decode_init")
 def decode_init(
     x: Any,
     *,
@@ -417,6 +424,7 @@ def decode_init(
 # EBT-style multi-step refinement (Apple GPU fast path)
 # ---------------------------------------------------------------------------
 
+@public_route("tessera.ebm.refinement")
 def refinement(
     y0: Any, grad: Any, *, eta: float, T: int,
 ) -> np.ndarray:
@@ -455,6 +463,7 @@ def refinement(
 # EBT-tiny fused pipeline (Apple GPU optimization)
 # ---------------------------------------------------------------------------
 
+@public_route("tessera.ebm.ebt_tiny")
 def ebt_tiny(
     y0: Any, grad: Any, *, eta: float, T: int, B: int, K: int, D: int,
 ) -> np.ndarray:
@@ -547,6 +556,7 @@ def ebt_tiny_last_route() -> str:
 # Energy specialization: quadratic (Apple GPU fast path)
 # ---------------------------------------------------------------------------
 
+@public_route("tessera.ebm.energy_quadratic")
 def energy_quadratic(x: Any, y: Any) -> np.ndarray:
     """Specialized quadratic energy ``E_b = 0.5 * ||x_b - y_b||^2``.
 
@@ -587,6 +597,7 @@ def energy_quadratic(x: Any, y: Any) -> np.ndarray:
 # Each returns the GPU output or ``None``; callers fall back to numpy.
 # ---------------------------------------------------------------------------
 
+@native_attempt
 def _try_apple_gpu_ebt_tiny_f32(
     y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
     B: int, K: int, D: int,
@@ -636,6 +647,7 @@ def _try_apple_gpu_ebt_tiny_f32(
     return out
 
 
+@native_attempt
 def _try_apple_gpu_langevin_step_f32(
     y: np.ndarray, grad: np.ndarray, noise: np.ndarray,
     eta: float, noise_scale: float, *,
@@ -684,6 +696,7 @@ def _try_apple_gpu_langevin_step_f32(
     return out
 
 
+@native_attempt
 def _try_x86_ebm_affine_langevin_step_f32(
     y: np.ndarray, grad: np.ndarray, noise: np.ndarray,
     eta: float, noise_scale: float,
@@ -705,6 +718,7 @@ def _try_x86_ebm_affine_langevin_step_f32(
         return None
 
 
+@native_attempt
 def _try_rocm_ebm_affine_langevin_step_f32(
     y: np.ndarray, grad: np.ndarray, noise: np.ndarray,
     eta: float, noise_scale: float,
@@ -729,6 +743,7 @@ def _try_rocm_ebm_affine_langevin_step_f32(
 _CUDA_SPHERE_STATE: dict[int, str] = {}
 
 
+@native_attempt
 def _try_cuda_gpu_sphere_langevin_step_f32(
     x: np.ndarray, grad: np.ndarray, noise: np.ndarray,
     eta: float, noise_scale: float,
@@ -773,6 +788,7 @@ def _try_cuda_gpu_sphere_langevin_step_f32(
         return None
 
 
+@native_attempt
 def _try_x86_langevin_step_philox_f32(
     y: np.ndarray, grad: np.ndarray,
     eta: float, noise_scale: float,
@@ -802,6 +818,7 @@ def _try_x86_langevin_step_philox_f32(
         return None
 
 
+@native_attempt
 def _try_rocm_langevin_step_philox_f32(
     y: np.ndarray, grad: np.ndarray,
     eta: float, noise_scale: float,
@@ -830,6 +847,7 @@ def _try_rocm_langevin_step_philox_f32(
         return None
 
 
+@native_attempt
 def _try_apple_gpu_langevin_step_philox_f32(
     y: np.ndarray, grad: np.ndarray,
     eta: float, noise_scale: float,
@@ -885,6 +903,7 @@ def _try_apple_gpu_langevin_step_philox_f32(
     return out
 
 
+@public_route("tessera.ebm.langevin_step_philox")
 def langevin_step_philox(
     y: Any, grad: Any, *,
     eta: float, noise_scale: float,
@@ -947,6 +966,7 @@ def langevin_step_philox(
     return out.reshape(y_arr.shape).astype(np.float32)
 
 
+@native_attempt
 def _try_apple_gpu_sphere_langevin_step_f32(
     x: np.ndarray, grad: np.ndarray, noise: np.ndarray,
     eta: float, noise_scale: float,
@@ -990,6 +1010,7 @@ def _try_apple_gpu_sphere_langevin_step_f32(
     return out
 
 
+@native_attempt
 def _try_apple_gpu_refinement_fused_f32(
     y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
 ) -> Optional[np.ndarray]:
@@ -1028,6 +1049,7 @@ def _try_apple_gpu_refinement_fused_f32(
     return out
 
 
+@native_attempt
 def _try_apple_gpu_self_verify_hard_argmin_f32(
     energies: np.ndarray, candidates: np.ndarray,
 ) -> Optional[np.ndarray]:
@@ -1067,6 +1089,7 @@ def _try_apple_gpu_self_verify_hard_argmin_f32(
     return out
 
 
+@native_attempt
 def _try_x86_energy_quadratic_f32(
     x: np.ndarray, y: np.ndarray,
 ) -> Optional[np.ndarray]:
@@ -1083,6 +1106,7 @@ def _try_x86_energy_quadratic_f32(
         return None
 
 
+@native_attempt
 def _try_rocm_energy_quadratic_f32(
     x: np.ndarray, y: np.ndarray,
 ) -> Optional[np.ndarray]:
@@ -1099,6 +1123,7 @@ def _try_rocm_energy_quadratic_f32(
         return None
 
 
+@native_attempt
 def _try_x86_ebt_tiny_f32(
     y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
     B: int, K: int, D: int,
@@ -1118,6 +1143,7 @@ def _try_x86_ebt_tiny_f32(
         return None
 
 
+@native_attempt
 def _try_rocm_ebt_tiny_f32(
     y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
     B: int, K: int, D: int,
@@ -1137,6 +1163,7 @@ def _try_rocm_ebt_tiny_f32(
         return None
 
 
+@native_attempt
 def _try_apple_gpu_energy_quadratic_f32(
     x: np.ndarray, y: np.ndarray,
 ) -> Optional[np.ndarray]:
@@ -1173,6 +1200,7 @@ def _try_apple_gpu_energy_quadratic_f32(
     return out
 
 
+@native_attempt
 def _try_x86_decode_init_noise_apply_f32(
     base: np.ndarray, noise: np.ndarray, std: float,
 ) -> Optional[np.ndarray]:
@@ -1189,6 +1217,7 @@ def _try_x86_decode_init_noise_apply_f32(
         return None
 
 
+@native_attempt
 def _try_rocm_decode_init_noise_apply_f32(
     base: np.ndarray, noise: np.ndarray, std: float,
 ) -> Optional[np.ndarray]:
@@ -1205,6 +1234,7 @@ def _try_rocm_decode_init_noise_apply_f32(
         return None
 
 
+@native_attempt
 def _try_apple_gpu_decode_init_noise_apply_f32(
     base: np.ndarray, noise: np.ndarray, std: float,
 ) -> Optional[np.ndarray]:

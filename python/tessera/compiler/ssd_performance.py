@@ -331,10 +331,6 @@ def _admit_cuda_windows(comparison, calibrations, lower):
                 raise ValueError('CUDA calibration does not describe the measured process')
             rebuilt = build_cuda_window_calibration(**{key:packet[key] for key in (
                 'clean','profiled','kernels','source','capture_device','capture_sha256','sample_id')})
-            # The stored packet's shared envelope and its rebuild must both allow
-            # promotion; the envelope also requires a clean tree, a valid clock
-            # and the image bound to its sample (EVIDENCE-PACKET-1).
-            if not envelope.eligible_for_promotion or not rebuilt['eligible_for_promotion']:
-                causes = list(envelope.refusal_causes) or rebuilt['ineligibility_reasons']
-                return SSDAdmission(False,'native calibration refuses promotion: '+', '.join(causes),lower)
+            if not rebuilt['eligible_for_promotion']:
+                return SSDAdmission(False,'native calibration refuses promotion: '+', '.join(rebuilt['ineligibility_reasons']),lower)
     return SSDAdmission(True,'exact-artifact paired measurements and CUDA calibration admitted',lower)

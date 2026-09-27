@@ -5168,12 +5168,22 @@ Found on the way: the retired constructor derived the combiner from the op
 *name*, so `tessera.reduce {kind = "max"}` (what `ts.reduce(x, op="max")`
 traces to) was packaged and executed as a **sum**. The compiled route reads
 `kind`; `min`/`prod` are refused instead of summed. Kept verbatim in the
-baseline as evidence, with a device test.
+baseline as evidence, with a device test. The same review listed every other
+case the retired contract admitted and the compiled one refuses, each on
+purpose and each pinned by a test: an integer `keepdims`, a combiner-less
+`tessera.reduce` (summed before), a reduction `schedule` hint on softmax, and a
+softmax whose declared output shape differs from its input (the retired route
+guarded the output with the input shape). `nan_mode` in the descriptor is now
+read from the replayed Tile op, not written as a literal. A knock-on: the native
+JVP reduce child (`native_jvp_plugins._scheduled_reduce_step`) now accepts
+keepdims on gfx1151 through the same contract -- same device-proven kernel, not
+separately device-tested through the JVP entry.
 
 Measured cost (Princess-Luna, not a promotion): the HSACO is shape-invariant on
-both routes, but the compiled route's cache key binds the shape through the
-Schedule digest, so each new shape is a cold compile (~370 ms) where the retired
-route hit its cache (~186 ms). The f32 envelope has had this since 2026-08-05.
+both routes, but the compiled route's cache key is its Tile text, which binds
+the shape (through the Schedule digest and constants) and the Graph function
+name, so each new shape or function name is a cold compile (~370 ms) where the
+retired route hit its cache (~186 ms). The f32 envelope has had this since 2026-08-05.
 `benchmarks/rocm/measure_rocm_unary_route_cache.py` reproduces it.
 
 Remaining: E2E-REAL-6 still owns ROCm paged-KV, MoE dispatch and forward

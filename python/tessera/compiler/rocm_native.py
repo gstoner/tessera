@@ -1942,9 +1942,13 @@ def package_scheduled_kernel(
         abi = {"f16": GFX_REDUCE_F16_ABI, "bf16": GFX_REDUCE_BF16_ABI, "f32": GFX_REDUCE_F32_ABI}[storage]
         # A reduction accumulates and stores f32 whatever its input storage.
         output_dtype, output_alignment = "fp32", 4
-        # NaN policy is semantic (Decision #21a); carry the replayed policy
-        # into the descriptor rather than dropping it here (Decision #32).
-        semantic_provenance = {"nan_mode": "propagate"}
+        # NaN policy is semantic (Decision #21a): read it from the replayed
+        # Tile op and carry it into the descriptor (Decision #32). The gfx1151
+        # kernel implements only ``propagate``; anything else fails closed.
+        nan_modes = re.findall(r'\bnan_mode = "([a-z_]+)"', artifact.tile_ir)
+        if nan_modes != ["propagate"]:
+            raise ValueError("ROCm scheduled reduction requires one replayed nan_mode = \"propagate\"")
+        semantic_provenance = {"nan_mode": nan_modes[0]}
         compile_result = (_compile_reduction_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
                           _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.reduce",
                                                   family="reduction", architecture=arch))

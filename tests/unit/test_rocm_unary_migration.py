@@ -213,6 +213,39 @@ def test_retired_refusals_still_refuse(case) -> None:
         rocm_native.package_native(module, pipeline_name=PIPELINE)
 
 
+def _tightened_modules():
+    int_keepdims = _reduction()
+    int_keepdims.functions[0].body[0].kwargs["keepdims"] = 0
+    no_kind = _reduction(op_name="tessera.reduce")
+    del no_kind.functions[0].body[0].kwargs["kind"]
+    schedule_hint = _softmax()
+    schedule_hint.functions[0].body[0].kwargs["schedule"] = "cooperative_128"
+    short_output = _softmax()
+    short_output.functions[0].result_types[0] = _type((3, 16), "fp32")
+    return {
+        # A semantic key must be typed (#21a); the tracer emits a bool.
+        "reduction_int_keepdims": int_keepdims,
+        # The retired route summed a combiner-less ``tessera.reduce``.
+        "reduction_missing_kind": no_kind,
+        # A reduction-schedule hint is not a softmax policy.
+        "softmax_schedule_hint": schedule_hint,
+        # The retired route guarded the output with the *input* shape.
+        "softmax_output_shape": short_output,
+    }
+
+
+@pytest.mark.parametrize("case", sorted(_tightened_modules()))
+def test_retired_admissions_the_compiled_route_refuses_by_design(case) -> None:
+    """Old-admitted, new-refused: every such case is listed and intended."""
+    module = _tightened_modules()[case]
+    old_contract = baseline._softmax_contract if case.startswith("softmax") else baseline._reduction_contract
+    assert old_contract(module) is not None, "the retired constructor admitted this"
+    assert not rocm_native.supports_native_package(module)
+    packager = rocm_native.package_softmax if case.startswith("softmax") else rocm_native.package_reduction
+    with pytest.raises(ValueError):
+        packager(module, pipeline_name=PIPELINE)
+
+
 @pytest.mark.parametrize("module", [_softmax("fp16"), _reduction("bf16"), _reduction("fp32", keepdims=True)],
                          ids=["softmax_f16", "reduce_bf16", "reduce_keepdims"])
 def test_gfx1201_keeps_its_proved_f32_envelope(module) -> None:

@@ -34,11 +34,16 @@ Owner E2E-REAL-6 (ROCM-E2E-1/-2 route); sync `E2E-REAL-6-rocm-unary-2026-09-27`.
 - **Defect retired.** The constructor took the combiner from the op name, so
   `tessera.reduce {kind = "max"}` ran as a sum on gfx1151
   (`test_exact_gfx1151_reduce_kind_max_now_computes_max` shows both).
-- **Open, measured.** The compiled route's image cache is keyed by shape (the
-  Schedule digest binds it) though the HSACO is shape-invariant: ~370 ms cold
-  per new shape vs ~186 ms warm on the retired route
-  (`benchmarks/rocm/measure_rocm_unary_route_cache.py`, Princess-Luna). Key the
-  cache on the shape-free kernel. Not a runtime-latency claim.
+- **Open, measured.** The compiled route's image cache is keyed by its Tile
+  text, which binds the shape and the Graph function name, though the HSACO is
+  shape-invariant: ~370 ms cold per new shape vs ~186 ms warm on the retired
+  route (`benchmarks/rocm/measure_rocm_unary_route_cache.py`, Princess-Luna).
+  Key the cache on the shape-free kernel. Not a runtime-latency claim.
+- **Recorder label.** `benchmarks/e2e_spine/record_rocm_gfx1151_packet.py`
+  derives `route` from `provenance["schedule"]`, falling back to the geometry
+  policy; the next softmax/reduction packet will read
+  `gfx1151_*_workgroup_per_*_256` where the committed one reads
+  `workgroup_per_*_256`. That packet was not re-recorded here.
 
 ## Spectral image survives a stale HIP error; streaming STFT names the chip that ran — 2026-09-27
 

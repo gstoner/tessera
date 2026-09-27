@@ -497,10 +497,18 @@ def test_live_nvidia_device_timing_records_fastest_tile_schedule():
 @pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_matmul_live(),
                     reason="live NVIDIA GPU + shipped GEMM + PTX launch bridge required")
-def test_live_nvidia_emitted_ragged_degrade_is_logged():
-    # D3: force the emitted lane on a RAGGED shape it verifies (on the aligned
-    # probe) but cannot run — it declines to the reference at execution time, which
-    # the arbiter log records as a silent degrade (selected != reference tag).
+def test_live_nvidia_emitted_ragged_served_odd_k_refused():
+    # Was `..._ragged_degrade_is_logged` (D3): force the emitted lane on a
+    # ragged shape, expect it to decline to the reference at execution time and
+    # the arbiter log to record a silent degrade. Both halves went stale:
+    #   * since 982f5225 (2026-09-01) the emitted kernel predicates its own M/N
+    #     boundaries, so a ragged M runs natively and nothing degrades;
+    #   * the one shape it still cannot run is odd K (`ld.global.b32` over
+    #     2-byte elements needs an even `row*K + k`; `nvidia_cuda._aligned_2d`),
+    #     and `applies_to_inputs` now refuses that BEFORE selection, so even a
+    #     forced dispatch fails loudly instead of degrading silently.
+    # The degrade bookkeeping itself stays covered host-free in
+    # `tests/unit/test_arbiter_autotune.py::test_dispatch_log_records_won_degraded_no_candidate`.
     F.clear_verification_cache()
     region = F.MatmulRegion(dtype="bfloat16")
     rng = np.random.default_rng(0)
@@ -509,10 +517,18 @@ def test_live_nvidia_emitted_ragged_degrade_is_logged():
     C.reset_arbiter_dispatch_log()
     out, tag = C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B,
                                 force="nvidia_mma_gemm_emitted")
-    assert tag == "reference"                                # declined (ragged)
+    assert tag == "nvidia_ptx_gemm"                          # ragged M served
     np.testing.assert_allclose(out, region.reference(A, B), atol=5e-3)
     hist = C.arbiter_dispatch_histogram(target="nvidia", op=OP_MATMUL)
-    assert hist[("nvidia", OP_MATMUL)]["degraded"] == 1
+    assert hist[("nvidia", OP_MATMUL)] == {"won": 1, "degraded": 0, "no_candidate": 0}
+
+    A = (rng.standard_normal((16, 15)) * 0.4).astype(np.float32)   # K=15 odd
+    B = (rng.standard_normal((15, 8)) * 0.4).astype(np.float32)
+    C.reset_arbiter_dispatch_log()
+    with pytest.raises(C.ArbiterError, match="declines this workload"):
+        C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B,
+                         force="nvidia_mma_gemm_emitted")
+    assert C.arbiter_dispatch_histogram(target="nvidia", op=OP_MATMUL) == {}
 
 
 @pytest.mark.slow

@@ -83,18 +83,24 @@ def _reference(q: np.ndarray, k: np.ndarray, v: np.ndarray, do: np.ndarray):
     out = np.empty((b, hq, sq, dv), dtype=np.float32)
     lse = np.empty((b, hq, sq), dtype=np.float32)
     dq = np.zeros_like(q); dk = np.zeros_like(k); dv_out = np.zeros_like(v)
+    # Tessera's causal mask is bottom-right aligned (`tessera.ops.flash_attn`:
+    # `np.triu(..., k=1 + max(Sk - Sq, 0))`): query row r sees keys
+    # 0..r + (Sk - Sq). This oracle used top-left alignment, which differs
+    # whenever Sq < Sk (here 3 < 4) and failed a correct kernel.
+    offset = max(sk - sq, 0)
     for batch in range(b):
         for head in range(hq):
             kv_head = head * hkv // hq
             for row in range(sq):
+                visible = min(row + 1 + offset, sk)
                 scores = 0.5 * (k[batch, kv_head] @ q[batch, head, row])
-                scores[row + 1 :] = -np.inf
+                scores[visible:] = -np.inf
                 row_lse = np.log(np.exp(scores - np.max(scores)).sum()) + np.max(scores)
                 p = np.exp(scores - row_lse)
                 out[batch, head, row] = p @ v[batch, kv_head]
                 lse[batch, head, row] = row_lse
                 delta = do[batch, head, row] @ out[batch, head, row]
-                for key in range(row + 1):
+                for key in range(visible):
                     ds = p[key] * (do[batch, head, row] @ v[batch, kv_head, key] - delta)
                     dq[batch, head, row] += 0.5 * ds * k[batch, kv_head, key]
                     dk[batch, kv_head, key] += 0.5 * ds * q[batch, head, row]

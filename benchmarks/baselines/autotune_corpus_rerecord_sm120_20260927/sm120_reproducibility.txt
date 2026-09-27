@@ -1,0 +1,2 @@
+wrote /home/angstorms/programming/tessera-eid/benchmarks/baselines/nvidia_sm120_autotune_reproducibility.json
+rc=0

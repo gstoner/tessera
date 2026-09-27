@@ -4862,13 +4862,25 @@ same flag list the compile step uses), PTX, checked-in sources plus the host
 compiler's version, and Python/numpy lanes; `tessera-opt` images keep
 `kernel_code.v2`. gfx1151 `fused_region` rows re-recorded on Princess-Luna
 (winners unchanged; served, and missed after an emitter change with pins
-unchanged). sm_120 registry rows stamp only the shipped delegate and are unserved.
+unchanged). The 96 sm_120 registry rows were re-recorded on The-Super-Bear
+(clean worktree at `1a737129`, fresh `build/` + `build-nvidia-cuda/`, under the
+timing lock): every timed candidate stamped, 15 rows served by production
+lookup with inferred dims (the 14 admissible before plus one f16 attention
+row), all 96 miss when an NVIDIA emitter changes with the pins unchanged; 15
+winners changed, none of them served (inadmissible before and after). An
+independent review fixed three gaps: the finalizer merged two runs that timed
+different code (now refused), an empty identity `{}` matched like a real one
+(now a miss), and composed spectral lanes did not cover the inner FFT lane
+they fall through to; new tests require each emitted lane's identity to equal
+the digest of the exact source and command line its compiler receives.
 
-Remaining: `AUTOTUNE-EMITTED-IDENTITY-SM120-RERECORD` (Super-Bear offline);
-`AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`; host launch code in runtime libraries
-behind tessera-opt images stays outside `kernel_code.v2`.
+Remaining: `AUTOTUNE-GATED-INFER-DIMS` (`_infer_dims` has no gated rule; no
+gated row admissible today); `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`; host launch
+code in runtime libraries behind tessera-opt images stays outside
+`kernel_code.v2`.
 
 Evidence: `benchmarks/baselines/autotune_corpus_rerecord_20260927/`,
+`benchmarks/baselines/autotune_corpus_rerecord_sm120_20260927/`,
 `tests/unit/test_autotune_emitted_identity.py`,
 `tests/unit/test_autotune_toolchain_key.py`.
 

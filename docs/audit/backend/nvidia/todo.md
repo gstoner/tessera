@@ -8,13 +8,14 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: every sm_120 candidate carries a code identity; `AUTOTUNE-EMITTED-IDENTITY-SM120-RERECORD` owed
+## `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`: every sm_120 candidate carries a code identity; sm_120 registry rows re-recorded
 
 Codex review P2 on PR #859: a SYNTHESIZED/EMITTED candidate was served on the
 CUDA/PTX/driver/LLVM pins alone, so a changed emitter kept a verdict measured
 for its old kernel. Owner decision: every candidate of every tier carries a
-workload-specific code identity or the verdict misses (no opt-out). Mac,
-host-independent; **no sm_120 device work was done (Super-Bear offline).**
+workload-specific code identity or the verdict misses (no opt-out). The
+mechanism landed on the Mac, host-independent; the sm_120 re-record below ran
+on The-Super-Bear the same day.
 
 NVIDIA identities (`compiler/emitted_code_identity.py`, `tessera.emitted_source.v1`):
 
@@ -31,9 +32,10 @@ NVIDIA identities (`compiler/emitted_code_identity.py`, `tessera.emitted_source.
 The bridge and GEMM library identities are content digests, so a rebuild of
 either misses every row that raced a lane using it (a false miss at worst).
 
-**Consequence for the committed corpus.** The 96 `nvidia:sm_120` registry rows
-(`fused_region` / `attention` / `gated_matmul` / `matmul`) stamp only
-`nvidia_mma_gemm_shipped`, so under the new rule **none is servable**: the 14
+**Consequence for the committed corpus (history -- superseded by the re-record
+below).** The 96 `nvidia:sm_120` registry rows
+(`fused_region` / `attention` / `gated_matmul` / `matmul`) stamped only
+`nvidia_mma_gemm_shipped`, so under the new rule **none was servable**: the 14
 that were admissible dispatch hints before (5 `fused_region` end-to-end ->
 `nvidia_mma_fused`; 7 `matmul` device -> `nvidia_mma_gemm_emitted`, the
 1.5-1.7x emitted-PTX win; 2 `matmul` end-to-end -> the shipped delegate) now
@@ -43,23 +45,76 @@ the recorded runs used code nobody verified. The 12 non-registry rows
 (`paged_kv_decode`, `ssm_replay_decode`, `conv2d`) are read by their own
 consumers and are unaffected.
 
-### `AUTOTUNE-EMITTED-IDENTITY-SM120-RERECORD` — open (owed; Super-Bear offline 2026-09-27)
+### `AUTOTUNE-EMITTED-IDENTITY-SM120-RERECORD` — closed 2026-09-27 (The-Super-Bear)
 
-Re-record the sm_120 registry rows on The-Super-Bear with
-`benchmarks/nvidia/record_autotune_corpus.py` (`--fused-shapes` /
-`--attention-shapes` as in `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26` below) and
-`finalize_test5_corpus.py`, under `flock /tmp/tessera-timing.lock`, from a
-clean worktree with `build-nvidia-cuda/` (the PTX bridge, the shipped GEMM and
-`tessera-nvidia-opt` must all be present, or those candidates' identities are
-`None` and their rows unservable; `record_autotune_corpus.py` now refuses to
-write such rows, as the gfx1151 recorder does, and `finalize_test5_corpus.py`
-no longer transplants a fresh run's identities onto a kept prior row whose
-stamps differ -- that would have backfilled today's identities onto the
-current unstamped rows). Gate: every timed candidate stamped; then a fresh
-process serves the admissible rows through `corpus_winner` with inferred dims,
-and a perturbed emitter makes them miss (the gfx1151 check,
-`benchmarks/baselines/autotune_corpus_rerecord_20260927/check_emitted_identity.py`,
-is the template). Until then the sm_120 registry rows are **unserved**.
+**All 96 sm_120 registry rows re-recorded, every timed candidate stamped; 15
+served by production lookup; every row misses when an NVIDIA emitter changes
+with the pins unchanged.** The-Super-Bear (RTX 5070, WSL2, CUDA 13.4 / driver
+610.88), fresh clean worktree at `1a737129` with its own `build/` and
+`build-nvidia-cuda/` configured from scratch and fully built, both recorder
+runs and the checks under `flock /tmp/tessera-timing.lock`, no other GPU
+process. Evidence and commands:
+`benchmarks/baselines/autotune_corpus_rerecord_sm120_20260927/` (README).
+
+- `record_autotune_corpus.py` (the shape lists of `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`)
+  twice, then `finalize_test5_corpus.py`: neither run refused (0 unstamped
+  timed candidates), the two runs agreed on toolchain and every identity at
+  every key (the finalizer now refuses otherwise), no key lost or added, 98
+  rows changed (96 registry + 2 `conv2d`), the 16 `rocm:gfx1151` rows and 10
+  serving rows byte-identical. 31 registry rows selector-eligible (was 38),
+  all 31 admitted strictly by `record_autotune_reproducibility.py`.
+- **Served (fresh process, `corpus_winner` with inferred dims): 15**, exactly
+  the admissible rows -- 7 `matmul` device -> `nvidia_mma_gemm_emitted` (the
+  emitted-PTX win is back in production dispatch), 2 `matmul` end-to-end 2048
+  -> `nvidia_mma_gemm_shipped`, 5 `fused_region` f16 end-to-end ->
+  `nvidia_mma_fused`, and 1 new, `attention` f16 end-to-end 128x128x64x64 ->
+  `nvidia_mma_attn`. Perturbing each emitter in turn (CUDA synthesizers,
+  resident stages, `ptx_emit` GEMM PTX, `tessera-nvidia-opt` Tile PTX) with
+  the toolchain digest asserted unchanged makes every row miss under at least
+  one; with all perturbed, 96/96 miss and 0 are served.
+- **15 winners changed**, all at small or ragged shapes (64³, 128x256x64, the
+  127x259x63 bucket, bf16 256³ end-to-end; three composed-vs-native attention /
+  gated rows) whose verdicts are inadmissible (unseparated or
+  finalizer-ineligible) in both the old and new corpus, so no served winner
+  changed. Table in the evidence README.
+- The PTX bridge and `build/`'s shipped GEMM library are byte-identical to
+  another tree's build of the same source, so these content digests are
+  reproducible across trees, not per-build.
+
+Open, found by the re-record (not caused by it):
+
+- **`AUTOTUNE-GATED-INFER-DIMS`** -- `autotune._infer_dims` has no
+  `gated_matmul` rule, so the 12 gated rows (keyed on the recorder's explicit
+  `(M, H, K)`) cannot be found by ordinary `run_arbitrated` dispatch. None is
+  admissible today, so no served count changes; add the rule
+  (`A (M,K), Wg (K,H)` -> `(M, H, K)`) with a test before a gated row becomes
+  admissible.
+- 20 device rows race a scalar lane with no device timer
+  (`nvidia_flash_attn`, `nvidia_gated`, `nvidia_generic_cuda`), recorded
+  `unmeasured`; production refuses them as partial-field races
+  (`_record_raced_the_live_field`), and since those lanes are never timed they
+  are never stamped either. Pre-existing; a device timer for the scalar lanes
+  is what would make those rows servable.
+
+**Review of the mechanism (2026-09-27, independent, Mac).** Fixed on the branch
+with tests: the finalizer merged two runs that timed different code (it took
+the winner from both runs but the stamps from the second) and now refuses a
+pair whose toolchain digest or identities differ; an empty identity `{}` was
+stamped and matched like a real one and is now a miss everywhere; the composed
+spectral lanes covered only the first inner FFT lane although `_inner_fft`
+falls through to the next on a run-time decline (latent: one FFT lane per
+target today). New tests run each emitted lane's real `run` with the compiler
+intercepted and require its identity to equal the digest of the exact source
+and command line the compiler received (NVIDIA generic / mma fused incl. fp8 /
+gated / both arms of mma attention, ROCm generic HIP, x86 generic C): no
+mismatch was found. Not changed, with reasons: production dispatch now
+recomputes every live candidate's identity per lookup (re-emits source and
+hashes it; `python_code_identity` calls `inspect.getsource`) -- correct, and
+cheap next to a kernel launch, but unmeasured; nvcc/hipcc appear by name
+with their version taken from the pin, so a box whose `nvcc` drifts off the
+pin without the pin moving is not caught here (the family identity's stated
+limit); host-side Python around a kernel (`_composed_operand`, layout
+materialization) is outside every identity (stated in the module docstring).
 
 ## `NVIDIA-PREPR-REVIEW-2026-09-26`: review fixes to the device-layer and marker work
 

@@ -355,7 +355,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 **Measured schedule selection**
 
 - Owner: [OPTIMIZING_COMPILER_PLAN.md](OPTIMIZING_COMPILER_PLAN.md)
-- Gate: Connect remaining producers and target calibration to measured schedule selection; preserve inferred dependencies and select only with eligible exact-device evidence. Every arbiter candidate now carries a code identity (sync `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`); the sm_120 registry rows stay unserved until re-recorded on Super-Bear.
+- Gate: Connect remaining producers and target calibration to measured schedule selection; preserve inferred dependencies and select only with eligible exact-device evidence. Every arbiter candidate now carries a code identity (sync `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`); the sm_120 registry rows were re-recorded on Super-Bear (15 served; `AUTOTUNE-GATED-INFER-DIMS` open).
 - Depends on: [EVIDENCE-PACKET-1](#evidence-packet-1)
 - Start: host-free
 - Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-27--every-arbiter-candidate-identifies-the-code-it-runs)

@@ -1,0 +1,31 @@
+host=The-Super-Bear commit=1a73712994a6f973b29cb2529ef96d4b32f39769 dirty=0
+NVIDIA GeForce RTX 5070, 610.88
+Cuda compilation tools, release 13.4, V13.4.59
+Build cuda_13.4.r13.4/compiler.38657139_0
+/usr/local/cuda/bin/nvcc
+/home/angstorms/programming/tessera/.venv/bin/python
+
+finalize: finalize_test5_corpus.py --base <committed corpus> --first run1 --second run2 --resources nvidia_sm120_test5_route_resources.json (rc 0), then re-ordered to the prior record order
+lost []
+new []
+rows changed 98 unchanged 26
+changed by device/op:
+{('nvidia:sm_120', 'attention'): 21, ('nvidia:sm_120', 'conv2d'): 2, ('nvidia:sm_120', 'fused_region'): 35, ('nvidia:sm_120', 'gated_matmul'): 12, ('nvidia:sm_120', 'matmul'): 28}
+winner changes 15
+   attention f16 end_to_end [64, 256, 64, 64] nvidia_mma_attn -> nvidia_flash_attn
+   attention f32 device [64, 256, 64, 64] nvidia_mma_attn_composed_tf32 -> nvidia_mma_attn_tf32
+   attention fp8_e4m3 device [64, 512, 64, 64] nvidia_mma_attn_composed_fp8_e4m3 -> nvidia_mma_attn_fp8_e4m3
+   gated_matmul fp8_e4m3 end_to_end [128, 512, 512] nvidia_mma_gated_fp8_e4m3 -> nvidia_mma_gated_composed_fp8_e4m3
+   matmul bfloat16 end_to_end [128, 256, 64] nvidia_tile_matmul_shared -> nvidia_tile_matmul_direct
+   matmul float16 end_to_end [128, 256, 64] nvidia_tile_matmul_direct -> nvidia_tile_matmul_shared
+   matmul bfloat16 device [128, 512, 64] nvidia_tile_matmul_direct -> nvidia_tile_matmul_shared
+   matmul bfloat16 end_to_end [128, 512, 64] nvidia_tile_matmul_direct -> nvidia_tile_matmul_shared
+   matmul float16 device [128, 512, 64] nvidia_tile_matmul_direct -> nvidia_mma_gemm_shipped
+   matmul float16 end_to_end [128, 512, 64] nvidia_tile_matmul_direct -> nvidia_tile_matmul_shared
+   matmul bfloat16 end_to_end [256, 256, 256] nvidia_mma_gemm_emitted -> nvidia_tile_matmul_direct
+   matmul bfloat16 device [64, 64, 64] nvidia_mma_gemm_emitted -> nvidia_tile_matmul_direct
+   matmul bfloat16 end_to_end [64, 64, 64] nvidia_tile_matmul_direct -> nvidia_mma_gemm_emitted
+   matmul float16 device [64, 64, 64] nvidia_tile_matmul_direct -> nvidia_tile_matmul_shared
+   matmul float16 end_to_end [64, 64, 64] nvidia_tile_matmul_shared -> nvidia_mma_gemm_emitted
+sm120 registry selector_eligible 31
+unstamped timed candidates in sm120 registry rows 0

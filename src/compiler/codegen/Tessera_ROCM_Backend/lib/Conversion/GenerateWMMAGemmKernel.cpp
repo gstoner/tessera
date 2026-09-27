@@ -1809,8 +1809,12 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
 // every input level.
 constexpr int kDefaultLdsWaves = 2;
 constexpr int kDefaultKUnroll = 1;
-// ROCM-FP8-BLOCKSCALE-1: panels per inner step of a scale group. Measured on
-// gfx1201 (benchmarks/baselines/gfx1201_fp8_blockscale_20260927/sweep.json).
+// ROCM-FP8-BLOCKSCALE-1: panels per inner step of a scale group. Swept on
+// gfx1201 at {0 (whole K128 group), 1, 2, 4} on the 32x32 panel
+// (benchmarks/baselines/gfx1201_fp8_blockscale_20260927/sweep.json): no value
+// wins stably -- the spread is within run-to-run noise (~5%) at every shape
+// but 4096^3, where the straight-line group was 7% faster once. 2 is kept
+// rather than retuned on one shape.
 constexpr int kDefaultScaleGroupPanels = 2;
 constexpr int kDefaultSchedGroups = 0;
 constexpr int kDefaultLdsPadDwords = 1;

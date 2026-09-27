@@ -473,6 +473,9 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
 //    masked edge path, which is far slower than a narrower interior: M=48
 //    took 145.5 us at 32x32 against 25.6 at 16x32; M=100 75.9 against 37.2.
 //  * N that is not a whole 32 takes 16 columns for the same edge reason.
+//
+// Open, not taken: at 4096^3 the 64x32 panel measured 14% faster than 32x32
+// (and lost 9% at 2048^3). One shape is not a rule.
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   constexpr int64_t kMinFullPanelTiles = 256;
   const bool full = schedule.m % 32 == 0 && schedule.n % 32 == 0 &&

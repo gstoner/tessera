@@ -374,11 +374,19 @@ def paired_windows(clock: Clock, arms: dict, *, windows: int, min_window_ms: flo
     for name, launch in arms.items():
         for _ in range(3):
             launch()
-        probe = clock.window(launch, 50)
-        per = probe["device_ns"] / 50
-        # 1.3x headroom: the probe window carries the markers' fixed cost, so
-        # sizing on it exactly lands short of the admission floor.
-        counts[name] = max(10, math.ceil(1.3 * min_window_ms * 1e6 / per))
+        # Size each arm's window on a WARM probe and then confirm it: a single
+        # cold probe overestimated the per-launch time (the device was still
+        # ramping) and left short kernels' windows at 2-4 ms, under the ROCm
+        # device-clock admission floor. Grow until a confirmation window
+        # clears the floor with 20% headroom.
+        count = 50
+        for _ in range(6):
+            probe = clock.window(launch, count)
+            if probe["device_ns"] >= 1.2 * min_window_ms * 1e6:
+                break
+            per = probe["device_ns"] / count
+            count = max(count * 2, math.ceil(1.3 * min_window_ms * 1e6 / per))
+        counts[name] = count
     rows = {name: [] for name in arms}
     names = list(arms)
     for index in range(windows):
@@ -396,6 +404,10 @@ def paired_windows(clock: Clock, arms: dict, *, windows: int, min_window_ms: flo
             "min_us": float(np.min(per_device)) / 1e3,
             "event_median_us": float(np.median(per_event)) / 1e3,
             "device_event_disagreement_max": max(agreement),
+            # The ROCm device-clock witness is admitted for windows of at least
+            # 5 ms whose clocks agree within 5% (WSL-TIMING-ADMISSION-2026-09-26).
+            "admissible": (min(s["device_ns"] for s in samples) >= 5e6
+                           and max(agreement) <= 0.05),
             "windows": samples,
         }
     return summary

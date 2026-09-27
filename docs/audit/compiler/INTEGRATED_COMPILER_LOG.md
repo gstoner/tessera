@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: reference
 ---
 
@@ -4843,3 +4843,21 @@ Evidence: `benchmarks/baselines/rocm_split_k_20260926/` (timing packet, README, 
 <!-- entry-fields:end -->
 
 Review fixes (2026-09-26). (1) The S*M*N*4 scratch was only in untyped provenance -- a Decision #32 under-declaration; it is now `LaunchDescriptor.workspace` (256-aligned, launch lifetime, uninitialized because every element is written by exactly one slice), and the launcher allocates from it and refuses a provenance disagreement. **Not moved to `ROCMNativeProgram`:** that type is consumed only by the attention-backward launcher and would change `package_scheduled_matmul`'s return type for every caller (runtime `RuntimeArtifact`, the canonical GEMM benchmark, the gap recorder) for one extra entry; the reduce entry stays a declared second image entry point with its own ABI id. (2) The artifact now states the split the C++ Schedule wrote (`schedule_split_k`), so an oracle defect reports as oracle-vs-authority. (3) `k_unroll` is a performance key and yields: a derived unroll that does not divide the slice falls back to 1 and is recorded; a pinned one is refused. (8) `ROCM_SPLIT_K_NOT_APPLIED` is a registered warning and is emitted as one, and only when K >= 512 is misaligned: firing on every 16x256x256 decode GEMM was noise about a split that was never on offer. The "three idle SIMDs" explanation of S=4/8 is a hypothesis, not a measurement (no counters on WSL2).
+
+### 2026-09-27 — ROCM-FP8-BLOCKSCALE-1: logical W8A8 block scaling binds on the typed gfx1201 route
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+
+PRs: sub-branch `claude/gfx1201-lanes-blockscale` of the consolidated `claude/gfx1201-lanes` PR (sync `GFX1201-LANES-2026-09-27`).
+
+Outcome: the logical W8A8 block-scale directive is bound on the typed gfx1201 route. Graph->Schedule derives `rocm_fp8_w8a8_blockscale{,_nk}_v1` from an fp32-scale e4m3 `tessera.scaled_matmul` (refusing a nonconforming one as `ROCM_FP8_BLOCKSCALE_CONTRACT`), `generate-wmma-gemm-kernel` emits the isolated scale-group body joined through the new `tile.fragment_scaled_accumulate`, TileToROCM binds the directive's `package_abi`, and `rocm_fp8_blockscale.py` binds the HSACO to a launch descriptor after checking every Target field. Device-proven on Tajasarus against an fp64 oracle (23 rows, both trees). Against AITER's unmodified Triton kernel with its tuned gfx1201 configs, device clock, paired: Tessera `[N, K]` / AITER geomean 0.65 at M <= 64, 1.09 at M = 256, 1.31 at M >= 1024.
+
+Remaining: large-M performance (LDS-staged or multi-wave W8A8 body), bf16/f16 store epilogue, AITER split-K buckets unmeasured, `[K, N]` B gather.
+
+Evidence: `benchmarks/baselines/gfx1201_fp8_blockscale_20260927/` (comparison + sweep JSON, device-test and lit logs, README naming host, commits, trees and timing source).
+
+<!-- entry-fields:end -->
+
+Why the W8A8 panel is not the unscaled one: each group's partial is a second live accumulator per fragment, so the unscaled 4x4 panel would carry 32 fragments -- 256 VGPRs before any operand. Measured at 1024x4096x1024: 32x32 231 VGPRs unspilled, 64x32 256 + 54 spilled, 64x64 256 + 337. A first cut that issued a whole K128 group (eight panels) straight-line spilled even at 32x32; the inner panel loop fixed that without changing what a group computes. The `[N, K]` weight is what made the route competitive: its B fragment is one K-contiguous vector load where `[K, N]` is a strided per-element gather (1.8-3x slower here).
+
+Two measurement corrections before the recorded packet: the harness first read `hipDeviceAttributeWallClockRate` by parsing the HIP header and got the wrong enumerator (1 kHz); it now compiles a probe against the header, as `record_ssd_gpu.py` does. And windows sized on one cold probe came in at 1.5-4.6 ms, under the 5 ms admission floor; the harness now warms every arm together and re-runs any paired set whose windows fall short (every arm of the recorded packet cleared on the first attempt).

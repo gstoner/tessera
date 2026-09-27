@@ -456,26 +456,27 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
   return success();
 }
 
-// The W8A8 register panel, selected from the gfx1201 sweeps recorded in
-// `benchmarks/baselines/gfx1201_fp8_blockscale_20260927/` (device clock,
-// Tajasarus, [N, K] weight):
+// The W8A8 register panel, selected from the gfx1201 sweep in
+// `benchmarks/baselines/gfx1201_fp8_blockscale_20260927/sweep.json` (device
+// clock, Tajasarus, [N, K] weight, clean commit):
 //
-//  * 32x32 when M and N are whole 32s AND that yields at least 256 tiles.
-//    It won every such shape measured (64x6144x2048: 21.8 us vs 23.3 for the
-//    next panel; 1024x4096x1024 and larger). 64-wide panels lose -- 64x64 by
-//    2-20x -- because the isolated group partial doubles the live
-//    accumulators (the unscaled 4x4 panel's 16 fragments become 32 x 8
-//    VGPRs, past the 256-VGPR ceiling).
+//  * 32x32 when M and N are whole 32s AND that yields at least 256 tiles. It
+//    won or came within 2% at every such shape but one (64x6144x2048 24.6 us;
+//    256x4096x1024 25.3 vs 25.0 at 32x64; 1024x4096x1024 87.0; 2048^3 152.0).
+//    64-wide panels lose -- 64x64 by 2-20x -- because the isolated group
+//    partial doubles the live accumulators: 32x32 is 231 VGPRs unspilled,
+//    64x32 256 + 54 spilled, 64x64 256 + 337.
 //  * Fewer tiles than that leaves the 64 CUs short of waves, and the
-//    half-height 16x32 panel wins by doubling the grid: 32x4096x1024 13.6 vs
-//    15.7 us (128 tiles at 32x32), 64x2048x2048 12.3 vs 14.0.
+//    half-height 16x32 panel doubles the grid: 32x4096x1024 13.7 vs 15.6 us
+//    (128 tiles at 32x32); 64x2048x2048 16.0 vs 16.7 (16x64 15.1 was best
+//    there, 6% ahead -- not worth a third branch on one shape).
 //  * A ragged M under a 32-row panel sends a whole row of tiles down the
 //    masked edge path, which is far slower than a narrower interior: M=48
-//    took 145.5 us at 32x32 against 25.6 at 16x32; M=100 75.9 against 37.2.
+//    took 146.1 us at 32x32 against 25.9 at 16x32; M=100 158.0 against 37.5.
 //  * N that is not a whole 32 takes 16 columns for the same edge reason.
 //
-// Open, not taken: at 4096^3 the 64x32 panel measured 14% faster than 32x32
-// (and lost 9% at 2048^3). One shape is not a rule.
+// Open, not taken: at 4096^3 the 64x32 panel measured 13% faster than 32x32
+// (1402 vs 1618 us) and 6% slower at 2048^3. One shape is not a rule.
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   constexpr int64_t kMinFullPanelTiles = 256;
   const bool full = schedule.m % 32 == 0 && schedule.n % 32 == 0 &&

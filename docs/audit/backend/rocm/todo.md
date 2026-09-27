@@ -1,11 +1,22 @@
 ---
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## ROCM-FP8-BLOCKSCALE-1: logical W8A8 block scaling bound on gfx1201 — 2026-09-27
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1); sync `GFX1201-LANES-2026-09-27`. **Landed for gfx1201 e4m3 x e4m3 with fp32 block scales; device-proven and timed against AITER on Tajasarus.**
+
+- **Contract, derived.** Graph->Schedule turns an fp32-scale e4m3 `tessera.scaled_matmul` into `rocm_fp8_w8a8_blockscale_v1` (B `[K, N]`) or `_nk_v1` (weight `[N, K]`, `transposeB`), gfx1201 only. `scale_layout.block = [scale_n, scale_k]`; `lhs_scale` fp32 `[M, K/scale_k]`, `rhs_scale` fp32 `[K/scale_k, ceil(N/scale_n)]`; static M/N/K with K a whole number of groups; `execution_mode` absent or `exact_per_block`. Anything else with fp32 scales is `ROCM_FP8_BLOCKSCALE_CONTRACT`, never an unbound directive. MX-format logical forms are unchanged (still unbound).
+- **Codegen.** `generate-wmma-gemm-kernel` consumes `tile.scaled_matmul_kernel` under that contract: A/B/lhs_scale/rhs_scale/D/M/N/K ABI, register body only, each group a zero-initialised partial walked in `scale-group-panels` steps (performance key, default 2) and joined through `tile.fragment_scaled_accumulate`, whose TileToROCM consumer uses the same accumulator element map as the fragment store (refactored into one `accumulatorElementCoordinate`). The `_nk` weight is a column-major B view, so its fragment is one K-contiguous load. Split-K, LDS staging, fused epilogues and non-f32 stores refuse by name.
+- **Panel rule** (`selectFp8W8A8BlockScalePanel`): 32x32 when M and N are whole 32s and that gives >= 256 tiles, else 16 rows (and 16 columns when N is not a whole 32). The unscaled 64x64 panel does not transfer: a group partial per fragment doubles the live accumulators (32x32 is 231 VGPRs; 64x64 spills 337).
+- **Evidence** [`benchmarks/baselines/gfx1201_fp8_blockscale_20260927/`](../../../../benchmarks/baselines/gfx1201_fp8_blockscale_20260927/README.md): 23 device rows vs an fp64 oracle (bit-equal on exact inputs, ISA and structure asserted), both trees; lit 453 / 66 unsupported and `check-tessera-rocm` 82/82 on both trees. Device clock, paired, vs AITER's unmodified `gemm_a8w8_blockscale` (Triton 3.8 AOT, tuned gfx1201 JSON): `[N, K]` / AITER geomean **0.65 at M <= 64, 1.09 at M = 256, 1.31 at M >= 1024**. We lose large M.
+- **Sibling outcome.** gfx1151: not applicable (RDNA 3.5 has no FP8 WMMA; the derivation is gfx1201-only). NVIDIA: follow-up only if sm_120 wants W8A8 -- the new Tile op has no NVVM consumer. Apple / x86: not applicable. Every non-W8A8 schedule digest is unchanged (`scale_n` is stated only when set).
+- **Open.** Large-M W8A8 (an LDS-staged or multi-wave body; 64x32 was 13% faster at 4096^3 only); a bf16/f16 store epilogue (AITER stores bf16); AITER's split-K buckets (unmeasured); the `[K, N]` B gather; MXFP4 reuse of the same combine op.
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable (no ROCm change)
 

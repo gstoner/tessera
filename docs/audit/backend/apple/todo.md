@@ -3,10 +3,18 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-26
+last_updated: 2026-09-27
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## `GFX1201-LANES-2026-09-27`: W8A8 block-scaled FP8 — not applicable
+
+ROCM-FP8-BLOCKSCALE-1 binds the logical e4m3 block-scaled matmul on gfx1201
+only; the derivation is gated on `rocm`/`gfx1201` and Apple never schedules a
+`tessera.scaled_matmul`. The new Tile op has no Apple consumer and no Apple
+code path changed. (The Metal 4 `matmul2d` FP8 lane is emulated on macOS 27
+and is a separate item.)
 
 ## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
 

@@ -12,7 +12,13 @@ allocation, i.e. the pre-fix recorder's behaviour); --cpu N pins the timed regio
 """
 from __future__ import annotations
 
-import argparse, ctypes, json, os, statistics, sys, time
+import argparse
+import ctypes
+import json
+import os
+import statistics
+import sys
+import time
 from pathlib import Path
 
 import numpy as np

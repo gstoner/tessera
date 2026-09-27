@@ -89,7 +89,8 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   `x86_avx512_unpinned_variance_20260926` (`benchmarks/baselines/`) holds the first runs,
   the one refused attempt (softmax 4.194% > 4% stability) and the run-to-run table.
   Attention is now stable across recordings (0.993 / 1.012).
-  **`X86-MATMUL-BIMODAL-1` root-caused and fixed 2026-09-26 (`329fcbf6`):** the level
+  **`X86-MATMUL-BIMODAL-1` root-caused; measurement fixed 2026-09-26 (`329fcbf6`; production
+  exposure open as `X86-GEMM-ALIGN-1`):** the level
   is decided by **B's address modulo 64**. `tessera_x86_avx512_gemm_f32` issues one
   64-byte `_mm512_loadu_ps` of B per FMA (A is a scalar broadcast, C is stored once
   per 256 FMAs); a 64-byte load from an address that is not 64-byte aligned spans
@@ -104,12 +105,16 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   B at offset 0 / 64 / 4096 → fast (PL 693–740, Taj 677–696 µs); B at 16 / 32 / 48 →
   slow (PL 1080–1117, Taj 1051–1054 µs); A or O at 16 / 32 with B aligned → fast. The
   same toggle in a standalone C harness (the kernel source linked directly, no
-  Python, no image load) reproduces both levels on both hosts. **Ruled out:** CPU/CCD
-  placement (the same CPU numbers appear at both levels in (a)); THP (B's mapping had
-  `AnonHugePages 0` in every process at both levels; a `MADV_HUGEPAGE` request in the
-  C harness did not move the level, and whether it was granted was not checked);
-  frequency (an ALU dependency-chain probe read 4.5–5.2 GHz at both levels on both
-  hosts); threading (the kernel is single-threaded by code read, and the C harness
+  Python, no image load) reproduces both levels on both hosts: B at 0/64 → PL
+  717.6–740.4, Taj 702.5–706.3 µs; B at 16/32/48 → PL 1021.3–1089.3, Taj
+  991.4–1051.4 µs (30 processes per host, raw output with the compile command in
+  `gemm_harness_{princess_luna,tajasarus}.txt`, regenerated at `70eee148` because the
+  first run's output was not retained). **Ruled out:** CPU/CCD placement (the same
+  CPU numbers appear at both levels in (a)); THP (B's mapping had `AnonHugePages 0`
+  in every recorder-configuration process at both levels; in the harness a
+  `MADV_HUGEPAGE` request that was granted — 2048 kB `AnonHugePages` — did not move
+  the level either way); frequency (the harness ALU dependency-chain probe read
+  4.95–5.08 GHz on PL and 5.10–5.17 GHz on Taj at both levels); threading (the kernel is single-threaded by code read, and the C harness
   reproduces it); image load address (the C harness loads no image); 4K aliasing
   between A/B/O (all three at page offset 0 is fast); data values (identical data
   gives both levels by B's offset alone). Not measured: why a line-split B load costs
@@ -125,10 +130,29 @@ x86 TSC witness of `WSL-TIMING-ADMISSION-2026-09-26`).
   720.0 → 731.6 µs (1.016), Tajasarus 696.6 → 695.3 µs (0.998).
   **Open (`X86-GEMM-ALIGN-1`):** the production path still inherits the caller's
   alignment — `runtime.launch` passes contiguous numpy buffers through unchanged —
-  so any caller whose B is not 64-byte aligned runs this GEMM ~1.5x slower at 256³.
-  Candidates: pack B into an aligned panel inside the kernel, or have the x86 launch
-  path stage misaligned operands; either needs its own cross-shape measurement
-  (packing is not free at small M). **New observation, not investigated:** in the
+  so any caller whose B is not 64-byte aligned runs this GEMM ~1.5x slower at 256³
+  (only that shape and the f32 kernel were measured). Three candidates:
+  - **pack B** into an aligned panel inside the kernel;
+  - **stage** misaligned operands in the x86 launch path;
+  - **declare it:** the launch descriptor already carries a per-buffer `alignment`
+    (`native_artifact.py` `BufferBinding.alignment`, default 1). The runtime derives
+    each argument's `address_alignment` (`runtime.py` `_native_buffer_value`) and
+    refuses a binding below the declared value (`E_LAUNCH_BINDING_MISMATCH`,
+    `native_artifact.py` binding check). x86 descriptors leave it at 1, so declaring
+    64 on B would make a misaligned production call fail closed instead of running
+    slow. That changes the call contract for every existing caller.
+
+  Pack and stage need their own cross-shape measurement (packing is not free at
+  small M). **Other timers exposed to the same per-process lottery on Linux** (their
+  absolute numbers; not aligned here, because doing so changes what their committed
+  baselines measure and needs a re-recording on both hosts):
+  - `benchmarks/x86/benchmark_x86_t1_cache_model.py` — f32 `_tiled` GEMM, A/B from
+    `np.ascontiguousarray` (~line 176).
+  - `benchmarks/x86/benchmark_x86_e2e_real_matmul.py` — f32 GEMM (~line 184).
+    Production and scheduled rows share one A/B, so their ratio shares the draw; the
+    absolute latencies do not escape it.
+  - `benchmarks/x86/benchmark_x86_e2e_dtype_matmul.py` — the bf16, u8s8 and f64 GEMMs.
+    Their alignment sensitivity is unmeasured. **New observation, not investigated:** in the
   re-recording, Princess-Luna reduction `kernel_wall` moved 1.17 → 0.73 µs between
   the two runs (0.62x; each run stable within itself), while the `dcdaf2a9`
   recordings read 0.76 / 0.75 µs; attention read 541 µs (PL) / 520 µs (Taj) against

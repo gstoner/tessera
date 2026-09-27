@@ -528,18 +528,41 @@ def test_x86_avx512_aligned_placement_is_64_byte_for_any_source_offset() -> None
     assert record == {"required_bytes": 64, "offsets": {"b": 0}}
 
 
-def test_x86_avx512_recorder_aligns_every_timed_binding() -> None:
-    """Every family's timed buffers leave _family_definitions 64-byte aligned."""
+def test_x86_avx512_recorder_aligns_every_timed_binding(monkeypatch) -> None:
+    """Every family's timed buffers leave _family_definitions placed by _aligned.
+
+    An address check alone cannot fail on hosts whose allocator already
+    returns 64-byte-aligned buffers (macOS numpy does), so the test also
+    requires each buffer to be a view of _aligned's uint8 backing store, and
+    counts that _aligned placed exactly the registered timed buffers.
+    """
     import numpy as np
 
+    from tessera.compiler.e2e_fleet import X86_AVX512_TIMED_BUFFERS
+
     recorder = _recorder()
+    placed: list[int] = []
+    original = recorder._aligned
+
+    def counting(array, alignment=None):
+        result = original(array, alignment)
+        placed.append(id(result))
+        return result
+
+    monkeypatch.setattr(recorder, "_aligned", counting)
     definitions = recorder._family_definitions(load_fixture_corpus())
-    assert {spec["family"] for spec in definitions} >= {"matmul"}
+    assert {spec["family"] for spec in definitions} == set(X86_AVX512_TIMED_BUFFERS)
+    assert len(placed) == sum(len(names) for names in X86_AVX512_TIMED_BUFFERS.values())
     for spec in definitions:
         arrays = {name: value for name, value in spec["timing_bindings"].items()
                   if isinstance(value, np.ndarray)}
-        assert arrays, spec["family"]
-        assert all(a.ctypes.data % 64 == 0 for a in arrays.values()), spec["family"]
+        assert set(arrays) == X86_AVX512_TIMED_BUFFERS[spec["family"]], spec["family"]
+        for name, array in arrays.items():
+            where = f"{spec['family']}.{name}"
+            assert id(array) in placed, f"{where} was not placed by _aligned"
+            assert isinstance(array.base, np.ndarray) and array.base.dtype == np.uint8, where
+            assert array.base.nbytes == array.nbytes + 64, where
+            assert array.ctypes.data % 64 == 0, where
         record = recorder.binding_alignment(spec["timing_bindings"])
         assert set(record["offsets"]) == set(arrays)
         assert not any(record["offsets"].values())
@@ -636,6 +659,24 @@ def _misalign_matmul_b(report: dict, resources: dict) -> None:
     _refingerprint(report, resources)
 
 
+def _omit_matmul_b_alignment(report: dict, resources: dict) -> None:
+    row = next(r for r in resources["rows"] if r["family"] == "matmul")
+    del row["resource"]["binding_alignment"]["offsets"]["b"]
+    _refingerprint(report, resources)
+
+
+def _name_unknown_buffer(report: dict, resources: dict) -> None:
+    row = next(r for r in resources["rows"] if r["family"] == "matmul")
+    row["resource"]["binding_alignment"]["offsets"] = {"nonexistent": 0}
+    _refingerprint(report, resources)
+
+
+def _add_unknown_buffer(report: dict, resources: dict) -> None:
+    row = next(r for r in resources["rows"] if r["family"] == "matmul")
+    row["resource"]["binding_alignment"]["offsets"]["nonexistent"] = 0
+    _refingerprint(report, resources)
+
+
 def _drop_binding_alignment(report: dict, resources: dict) -> None:
     del resources["rows"][0]["resource"]["binding_alignment"]
     _refingerprint(report, resources)
@@ -644,6 +685,9 @@ def _drop_binding_alignment(report: dict, resources: dict) -> None:
 _TAMPERS = {
     "alignment": (_misalign_matmul_b, "not 64-byte aligned"),
     "alignment_missing": (_drop_binding_alignment, "does not record its buffer alignment"),
+    "alignment_omits_b": (_omit_matmul_b_alignment, "not the timed buffers"),
+    "alignment_unknown_only": (_name_unknown_buffer, "not the timed buffers"),
+    "alignment_unknown_extra": (_add_unknown_buffer, "not the timed buffers"),
     "environment": (_mislabel_environment, "contradicts kernel"),
     "library": (_swap_library_digest, "does not embed the stamped library"),
     "medians": (_halve_kernel_medians, "run medians are not the samples'"),

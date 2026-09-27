@@ -12,9 +12,12 @@ comparable with these (different clock, different window protocol).
   `/dev/dxg`, no `/dev/kfd`, ROCm 10.0 / HIP 7.15.
 - **Source:** both sweeps at commit `ca2653ec` with a clean tree (`git_dirty:
   false` in `sweep.json`; every packet's `source.worktree_dirty` is false). The
-  rule change (`077eabe7`) came **after** these measurements and does not
-  change any image in them. Every timed image was compiled by the Tile IR route
-  at that commit, so the evidence is valid for the new rule's selections.
+  rule change (`077eabe7`) came **after** these measurements.
+  - **Checked, not assumed.** `production_isa_identity.py` rebuilds every swept
+    shape's production package after the rule change, at `0db0def2`.
+  - All 32 (shape, dtype) selections compile to the **same instruction stream**
+    (llvm-objdump digest) that the sweep timed for that slice count
+    (`production_isa_identity.txt`: same 32, different 0).
 - **Tree:** a private worktree (`~/programming/tessera-w-splitk`) with its own
   Release `build/` (NDEBUG LLVM/MLIR 23.1.1). `tessera_opt` and its sha256 are
   in `sweep.json`; `TESSERA_OPT`, `PYTHONPATH` and `PATH` were re-pointed at that
@@ -166,3 +169,35 @@ What bounds the rule (the negative side, all in `sweep_20ms/sweep.json`):
 - **No production promotion is claimed.** These rows are admissible
   device-clock evidence for the slice rule's selections. They are not a
   promotion packet for a route.
+
+## Gates run on Tajasarus (gfx1201, `TESSERA_ROCM_CHIP=gfx1201`, `TESSERA_GFX1201_DEVICE_PROOF=1`)
+
+Each log starts with host, commit, a dirty-file count, and the `tessera-opt`
+path.
+
+- `unit_sweep_head_0db0def2.txt` covers
+  `-k "rocm or gfx1201 or gfx1151 or split or scheduled_matmul"`, which
+  includes every device test in `tests/unit/test_rocm_split_k.py`. Result: 4534
+  passed, 197 skipped, **1 failed**. The failure is
+  `test_spectral_streaming.py::...[rocm-True]` (`rc=246`), pre-existing.
+  `unit_sweep_base_1dfad816.txt` (base `1dfad816`, its own clean build) fails
+  the same test and nothing else; the 09-26 packet recorded it too.
+- `unit_sweep_head_077eabe7_first.txt` is the first head run. It was taken with
+  the test fix of `957c3634` copied into the tree, hence dirty=1. It also
+  failed `test_rocm_sparse_runtime.py::test_sparse_public_runtime_binding[True-shape0-float16]`.
+  That failure did not recur:
+  - it passes in isolation (the file is 14/14);
+  - it passed in the second head run;
+  - it did not fail at base.
+  So it is recorded as **intermittent and unexplained, not proven
+  pre-existing**. The sparse runtime does not use the split-K decider.
+- `lit_tessera_ir.txt` runs `lit tests/tessera-ir` against both trees. The
+  Release (NDEBUG) `build/` and the **assertions-ON** `build-assertions/` (LLVM
+  23.1.1 assertions, `-fno-rtti -UNDEBUG`) each give 450 passed, 66
+  unsupported, 0 failed.
+- `lit_check_tessera_rocm.txt` runs `ninja check-tessera-rocm` in both trees:
+  82/82 each. The `check-tessera-ir` attempts in that log failed before running
+  anything, because the toolchain's `llvm-lit` has no `lit` module. They were
+  re-run through the venv `lit` in `lit_tessera_ir.txt`.
+- `mypy python/tessera/` passes: no issues in 590 files. That run is not
+  logged here.

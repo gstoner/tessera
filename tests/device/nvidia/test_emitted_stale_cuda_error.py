@@ -18,7 +18,10 @@ For every emitted source that reads the slot, each test:
 1. **negative control** -- runs the lane with the entry clears stripped from
    the emitter (a different source, so a different artifact) under a primed
    slot and requires it to FAIL: the prime demonstrably reaches the slot the
-   lane reads, so the positive half cannot pass by not priming anything;
+   lane reads, so the positive half cannot pass by not priming anything.
+   Exception, recorded per lane: the two mma.sync attention entries call
+   ``cudaFuncSetAttribute`` before launching, and a successful call RESETS the
+   slot (measured on this box), so their stripped variants are masked;
 2. runs the shipped emitter under a primed slot and requires the real kernel
    to run, agree with the reference, and leave the slot clean.
 
@@ -129,7 +132,14 @@ class _Lane:
     library: Callable[[], str]
     run: Callable[[], Any]           # returns the result, or raises / declines
     ok: Callable[[Any], bool]        # the run produced the real kernel's answer
-    reset: tuple[tuple[str, Any], ...] = ()   # per-process artifact globals
+    #: per-process artifact globals, as (name, factory): a fresh value per use
+    reset: tuple[tuple[str, Callable[[], Any]], ...] = ()
+    #: Why the negative control cannot bite for this lane, or None. A
+    #: successful `cudaFuncSetAttribute` RESETS the last-error slot (measured
+    #: on sm_120, CUDA 13.4 / driver 610.88), so an entry that calls it before
+    #: its launch is masked from a stale error by that call. The entry still
+    #: clears (the rule must not depend on undocumented reset behaviour).
+    masked: str | None = None
 
 
 def _rng(*shape: int, scale: float = .1) -> np.ndarray:
@@ -226,12 +236,13 @@ def _lanes() -> dict[str, _Lane]:
             ("_synthesize_mma_attn_16_cuda",),
             lambda: N._emitted_artifact(N._mma_attn_source("f16"), "f16"),
             lambda: ma.run(attn, q, k, v),
-            _real(lambda: attn.reference(q, k, v), 5e-3)),
+            _real(lambda: attn.reference(q, k, v), 5e-3),
+            masked="cudaFuncSetAttribute precedes the launch"),
         "mma_attn_fp8_device_ms": _Lane(
             ("_synthesize_mma_attn_lowp_cuda",),
             lambda: N._emitted_artifact(N._mma_attn_source("fp8_e4m3"), "fp8_e4m3"),
             lambda: ma8.measure_device_latency(lowp_attn, q, k, v, reps=3, warmup=1),
-            _timed),
+            _timed, masked="cudaFuncSetAttribute precedes the launches"),
         "mma_gated": _Lane(
             ("_synthesize_mma_gated_cuda",),
             lambda: N._emitted_artifact(N._mma_gated_source("f16", "silu"), "f16"),
@@ -249,26 +260,26 @@ def _lanes() -> dict[str, _Lane]:
             _real(lambda: composed.reference(fa, fb, fbias), 2e-2)),
         "binary": _Lane(
             ("_synthesize_binary_cuda",), lambda: N._binary_artifact,
-            lambda: N.run_binary_arithmetic(px, py, 0),
+            lambda: N.run_binary_arithmetic(px, py, 5),          # kind 5: a + b
             lambda out: np.allclose(out, px + py, atol=1e-6),
-            reset=(("_binary_artifact", None),)),
+            reset=(("_binary_artifact", lambda: None),)),
         "solver_ift": _Lane(
             ("_synthesize_solver_ift_cuda",), lambda: N._solver_ift_artifact,
             lambda: N.run_solver_ift_f32(np.abs(px) + 1, np.sqrt(np.abs(px) + 1), px),
             lambda out: all(np.all(np.isfinite(o)) for o in out),
-            reset=(("_solver_ift_artifact", None),)),
+            reset=(("_solver_ift_artifact", lambda: None),)),
         "solver_unary": _Lane(
             ("_synthesize_solver_children_cuda",), lambda: N._solver_child_artifact,
-            lambda: N.run_solver_unary(px, 0),
-            lambda out: out.shape == px.shape and np.all(np.isfinite(out)),
-            reset=(("_solver_child_artifact", None),)),
+            lambda: N.run_solver_unary(px, 4),                   # kind 4: tanh
+            lambda out: np.allclose(out, np.tanh(px), atol=1e-6),
+            reset=(("_solver_child_artifact", lambda: None),)),
         "flash_multiwarp_timed": _Lane(
             ("_synthesize_flash_fwd_multiwarp_cuda",),
             lambda: N._flash_fwd_schedule_artifact[4],
             lambda: N.measure_flash_attention_forward_schedule_device(
                 x4, x4, x4, scale=.25, warps_per_cta=4, warmup=1, reps=3),
             lambda ms: ms >= 0,
-            reset=(("_flash_fwd_schedule_artifact", {}),)),
+            reset=(("_flash_fwd_schedule_artifact", dict),)),
     }
 
 
@@ -296,8 +307,8 @@ def test_primed_stale_error_does_not_fail_the_lane(monkeypatch, name):
 
     # 1. Negative control: without the entry clear the prime must bite.
     with monkeypatch.context() as patched:
-        for attr, value in lane.reset:
-            patched.setattr(N, attr, value)
+        for attr, fresh in lane.reset:
+            patched.setattr(N, attr, fresh())
         _strip_clears(patched, *lane.emitters)
         ok, result = _attempt(lane)          # compile + load the stripped lane
         assert ok, f"{name}: the stripped lane must work on a clean slot: {result!r}"
@@ -305,14 +316,14 @@ def test_primed_stale_error_does_not_fail_the_lane(monkeypatch, name):
         runtime = _prime(stripped_lib)
         ok, result = _attempt(lane)
         runtime.get_last()                   # leave nothing behind either way
-        assert not ok, (
+        assert lane.masked or not ok, (
             f"{name}: with the clear stripped a primed slot did not fail the lane "
             f"({result!r}) -- the prime does not reach the slot it reads, so the "
             "positive half below would prove nothing")
 
     # 2. The shipped emitter under the same prime.
-    for attr, value in lane.reset:
-        monkeypatch.setattr(N, attr, value)
+    for attr, fresh in lane.reset:
+        monkeypatch.setattr(N, attr, fresh())
     ok, result = _attempt(lane)
     assert ok, f"{name}: the shipped lane fails on a clean slot: {result!r}"
     library = lane.library()

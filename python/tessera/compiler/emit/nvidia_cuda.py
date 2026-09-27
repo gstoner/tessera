@@ -159,6 +159,10 @@ _SHIPPED_GEMM_CALLEES = {
 # checked. A later entry that reads the slot after its own launch would then
 # report that old error as its own failure, and the runner would fall back to
 # the reference over a correct launch (a lane timed or served as "declined").
+# (Measured on sm_120, CUDA 13.4 / driver 610.88: `cudaDeviceSynchronize` and
+# `cudaMemcpy` neither return nor reset a stale error; a successful
+# `cudaFuncSetAttribute` does reset it -- undocumented, so no entry relies on
+# it.)
 #
 # Rule, the same one the hand-written hooks follow:
 #

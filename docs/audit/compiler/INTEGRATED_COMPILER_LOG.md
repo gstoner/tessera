@@ -5188,7 +5188,13 @@ the [NVIDIA queue](../backend/nvidia/todo.md); pre-fix binary fails, fixed
 17/17 under `env.sh`, with `TESSERA_BUILD_DIR` and under `env -i`
 ([ROCm queue](../backend/rocm/todo.md)). Neighbors: the new negative fixture
 fails all nine expected diagnostics on the pre-change binary and passes after;
-Mac lit 520 / 471 passed / 49 unsupported; Tajasarus as above;
+Mac lit 520 / 471 passed / 49 unsupported; Tajasarus as above, and the same
+counts (454 / 66, `check-tessera-rocm` 82/82) from an assertions-ON LLVM 23.1.1
+tree built from this branch; Super-Bear reconfigured through the validator
+(selects `/usr/lib/llvm-23/bin/lit`), `check-tessera-nvidia` 62/62. Mac full
+unit sweep 21306 passed / 3821 skipped / 0 failed (the first sweep caught
+`NEIGHBORS_TOPOLOGY_UNKNOWN_KIND` losing its only C++ occurrence; the registry
+scan now reads the `.td` constraint that emits it);
 `tests/unit/test_ods_op_has_consumer.py`, `test_neighbors_*.py`,
 `test_tessera_opt_build.py`, `test_test_suite_architecture.py`.
 

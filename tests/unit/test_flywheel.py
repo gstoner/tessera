@@ -34,13 +34,17 @@ from tessera.compiler.flywheel import (
 )
 
 
-def _rec(size, dtype, median_ms, *, sched=None, op="matmul", native=True):
+TC = "sha256:toolchain-a"
+
+
+def _rec(size, dtype, median_ms, *, sched=None, op="matmul", native=True,
+         toolchain=TC):
     """Synthetic record helper for portable tests."""
     return AutotuneRecord(
-        1, op, {"M": size, "N": size, "K": size}, dtype, "apple_gpu",
+        2, op, {"M": size, "N": size, "K": size}, dtype, "apple_gpu",
         "apple_gpu:apple-m1-max", sched or {"dtype": dtype, "size": size}, True, "",
         LatencyStats(median_ms, median_ms, median_ms, 5) if native else None,
-        1.0 if native else None, 0.1, None, "sweep",
+        1.0 if native else None, 0.1, None, "sweep", toolchain,
     )
 
 
@@ -155,13 +159,41 @@ def test_distill_picks_lowest_latency_per_class():
         _rec(512, "f16", 0.8, sched={"variant": "f16"}),
     ]
     table = distill_dispatch(corpus)
-    win = lookup_dispatch(table, "matmul", "f32", 512)
+    win = lookup_dispatch(table, "matmul", "f32", 512, toolchain=TC)
     assert win is not None and win["schedule"]["variant"] == "fast"
     assert win["median_ms"] == 1.0
     # f16 is a distinct class
-    assert lookup_dispatch(table, "matmul", "f16", 512)["schedule"]["variant"] == "f16"
+    assert lookup_dispatch(table, "matmul", "f16", 512,
+                           toolchain=TC)["schedule"]["variant"] == "f16"
     # uncovered class → None (caller falls back)
-    assert lookup_dispatch(table, "matmul", "f32", 99999) is None
+    assert lookup_dispatch(table, "matmul", "f32", 99999, toolchain=TC) is None
+
+
+def test_dispatch_is_keyed_on_the_toolchain():
+    """Decision #11: a winner measured under one toolchain is not the winner
+    under another, and a record with no toolchain identity never dispatches."""
+    table = distill_dispatch([
+        _rec(512, "f32", 1.0, sched={"variant": "old"}, toolchain=TC),
+        _rec(512, "f32", 0.5, sched={"variant": "legacy"}, toolchain=""),
+    ])
+    assert lookup_dispatch(table, "matmul", "f32", 512,
+                           toolchain=TC)["schedule"]["variant"] == "old"
+    assert lookup_dispatch(table, "matmul", "f32", 512,
+                           toolchain="sha256:toolchain-b") is None
+    assert lookup_dispatch(table, "matmul", "f32", 512, toolchain="") is None
+
+
+def test_legacy_corpus_rows_load_unversioned(tmp_path):
+    path = tmp_path / "v1.json"
+    save_corpus([_rec(512, "f32", 1.0)], str(path))
+    import json
+    rows = json.loads(path.read_text())
+    del rows[0]["toolchain_digest"]
+    rows[0]["schema_version"] = 1
+    path.write_text(json.dumps(rows))
+    back = load_corpus(str(path))
+    assert back[0].toolchain_digest == ""
+    assert distill_dispatch(back) == {}
 
 
 def test_distill_skips_non_native_records():

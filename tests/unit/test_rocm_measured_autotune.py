@@ -135,10 +135,16 @@ def test_corpus_save_load_disk(tmp_path):
 
 
 def test_committed_corpus_contains_live_device_records_and_loads():
-    # The corpus carries only device-keyed, measured records and warm-starts.
+    # The corpus carries only device-keyed, measured records. Rows recorded
+    # before Decision #11 carry no toolchain identity: they load as STALE --
+    # never served, but kept and written back -- so every row is accounted for.
     fresh = AT.MeasureCache()
     n = AT.load_corpus(cache=fresh)
-    assert n >= 1
+    stale = fresh.stale_records()
+    assert n + len(stale) >= 1
+    assert n + len(stale) == len(fresh.to_dict()["records"])
+    for _, reason in stale.values():
+        assert "toolchain" in reason
     for rec in fresh.to_dict()["records"]:
         assert rec["device"] in ("rocm:gfx1151", "nvidia:sm_120")
         # Candidate names grow as new measured lanes land.  The durable corpus
@@ -278,14 +284,20 @@ def test_corpus_version_mismatch_loads_nothing():
 
 
 def test_v1_corpus_rows_migrate_to_end_to_end_timing():
+    # A v1 row still parses (timing migrates to end_to_end), but it carries no
+    # toolchain identity, so Decision #11 holds it as stale rather than serving
+    # it -- and a re-save keeps it rather than silently deleting the evidence.
     fresh = AT.MeasureCache()
     assert fresh.load_dict({"version": 1, "records": [
         {"device": "d", "target": "rocm", "op": OP_FUSED_REGION,
          "bucket": None, "dtype": "f16", "winner": "w", "latency_ms": 1.0,
-         "candidates": {"w": 1.0}}]}) == 1
+         "candidates": {"w": 1.0}}]}) == 0
+    assert fresh.get(("d", "rocm", OP_FUSED_REGION, None, "f16")) is None
+    (_, reason), = fresh.stale_records().values()
+    assert "no toolchain identity" in reason
     row = fresh.to_dict()["records"][0]
     assert row["timing"] == "end_to_end"
-    assert fresh.to_dict()["version"] == AT.CORPUS_VERSION == 3
+    assert fresh.to_dict()["version"] == AT.CORPUS_VERSION == 4
 
 
 def test_v3_corpus_preserves_resource_and_stability_evidence():

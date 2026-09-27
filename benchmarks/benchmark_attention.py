@@ -22,8 +22,10 @@ from typing import List, Optional, Sequence, Tuple
 
 try:
     from benchmarks.compiler_support import compiler_flash_attention_ir
+    from benchmarks.common.route_provenance import RouteProvenance, route_unavailable
 except ImportError:
     from compiler_support import compiler_flash_attention_ir
+    from common.route_provenance import RouteProvenance, route_unavailable
 
 try:
     from tessera.telemetry import make_event, telemetry_report
@@ -82,6 +84,13 @@ class AttnResult:
     compiler_path: str = "roofline_model"
     compiler_lowering: str = ""
     timestamp: float = field(default_factory=time.time)
+    #: Decision #12. Every attention latency here is the analytical roofline:
+    #: ``emit_compiler_ir`` builds IR but never times it, so there is no
+    #: executed artifact to take a route from -- whatever ``compiler_path`` says.
+    route: RouteProvenance = field(default_factory=lambda: route_unavailable(
+        "latency is the analytical roofline model; compiler IR, if emitted, "
+        "was not the thing timed"))
+    timing_source: str = "analytical_model"
 
     def __repr__(self) -> str:
         return (
@@ -206,6 +215,8 @@ class FlashAttnBenchmark:
                 "tflops": r.tflops, "mfu": r.mfu,
                 "compiler_path": r.compiler_path,
                 "compiler_lowering": r.compiler_lowering,
+                **r.route.as_fields(),
+                "timing_source": r.timing_source,
                 "timestamp": r.timestamp,
                 "telemetry": telemetry,
             })

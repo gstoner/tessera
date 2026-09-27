@@ -94,7 +94,12 @@ def record() -> dict[str, Any]:
             {"version": payload["version"], "records": [row]},
             required_evidence=policy)
         if cache.size != 1:
-            raise RuntimeError("selector-eligible autotune row failed strict admission")
+            # Decision #11: a row without the current toolchain identity is
+            # held stale, not admitted -- name that rather than a bare failure.
+            reasons = [reason for _, reason in cache.stale_records().values()]
+            raise RuntimeError(
+                "selector-eligible autotune row failed strict admission"
+                + (f": {reasons[0]}" if reasons else ""))
 
     sample = eligible[0]
     sample_resources = sample["evidence"]["resource_fingerprints"]

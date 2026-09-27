@@ -23,8 +23,13 @@ from tessera.compiler.tuned_dispatch import (
 
 
 # ── ProblemSignature ────────────────────────────────────────────────────────
-def _sig(m: int = 64, n: int = 64, k: int = 64, dtype: str = "bf16") -> ProblemSignature:
-    return ProblemSignature(gfx="gfx942", cu_num=304, m=m, n=n, k=k, dtype=dtype)
+TOOLCHAIN = "sha256:tc-a"
+
+
+def _sig(m: int = 64, n: int = 64, k: int = 64, dtype: str = "bf16",
+         toolchain: str = TOOLCHAIN) -> ProblemSignature:
+    return ProblemSignature(gfx="gfx942", cu_num=304, m=m, n=n, k=k, dtype=dtype,
+                            toolchain=toolchain)
 
 
 def test_signature_validation_rejects_bad_fields() -> None:
@@ -57,10 +62,32 @@ def test_signature_hashing_and_equality() -> None:
 
 def test_signature_as_key_and_metadata() -> None:
     a = _sig()
-    assert a.as_key() == ("gfx942", 304, 64, 64, 64, "bf16")
+    assert a.as_key() == ("gfx942", 304, 64, 64, 64, "bf16", TOOLCHAIN)
     meta = a.as_metadata_dict()
     assert meta == {"gfx": "gfx942", "cu_num": 304, "M": 64, "N": 64, "K": 64,
-                    "dtype": "bf16"}
+                    "dtype": "bf16", "toolchain": TOOLCHAIN}
+
+
+# ── Decision #11: the toolchain is part of the key ─────────────────────────
+def test_changed_toolchain_misses_unchanged_hits() -> None:
+    table = TunedDispatchTable([_cfg(4.0, _sig(), kernel_name="k")])
+    assert table.lookup(_sig()) is not None                      # unchanged: hit
+    assert table.lookup(_sig(toolchain="sha256:tc-b")) is None   # upgraded: miss
+    assert _sig(toolchain="sha256:tc-b") not in table
+
+
+def test_unversioned_rows_never_dispatch() -> None:
+    # A stock AITER CSV has no toolchain column: it loads, but nothing in it
+    # can be selected — neither by a versioned query nor an unversioned one.
+    legacy = TunedDispatchTable.load_csv_string(
+        "gfx,cu_num,M,N,K,dtype,libtype,solidx,splitK,kernelName,latency_us\n"
+        "gfx942,304,64,64,64,bf16,hipblaslt,1,1,old,20.0\n")
+    assert len(legacy) == 1
+    assert legacy.configs()[0].signature.toolchain == ""
+    assert legacy.lookup(_sig()) is None
+    assert legacy.lookup(_sig(toolchain="")) is None
+    fallback = _cfg(9.0, _sig(), kernel_name="default")
+    assert legacy.lookup_or_default(_sig(toolchain=""), fallback) is fallback
 
 
 # ── TunedConfig ─────────────────────────────────────────────────────────────
@@ -179,9 +206,9 @@ def test_load_csv_dedups_duplicate_signatures(tmp_path) -> None:
     # Hand-written CSV with two rows for the same signature — load must keep min.
     path = tmp_path / "dupes.csv"
     path.write_text(
-        "gfx,cu_num,M,N,K,dtype,libtype,solidx,splitK,kernelName,latency_us\n"
-        "gfx942,304,64,64,64,bf16,hipblaslt,1,1,slow,20.0\n"
-        "gfx942,304,64,64,64,bf16,triton,2,1,fast,4.0\n"
+        "gfx,cu_num,M,N,K,dtype,toolchain,libtype,solidx,splitK,kernelName,latency_us\n"
+        f"gfx942,304,64,64,64,bf16,{TOOLCHAIN},hipblaslt,1,1,slow,20.0\n"
+        f"gfx942,304,64,64,64,bf16,{TOOLCHAIN},triton,2,1,fast,4.0\n"
     )
     loaded = TunedDispatchTable.load_csv(path)
     assert len(loaded) == 1

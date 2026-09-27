@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-25
+last_updated: 2026-09-26
 audit_role: root
 ---
 
@@ -339,7 +339,7 @@ matches its module fails generation. Read the counts there.
 |---|---|---|
 | Analysis | W2.1 dataflow substrate, per-op memory effects, symbolic-dim equality | Value, alias, effect, memory-dependence and ordered-collective **consumers** (§3 above) |
 | Fusion | One authoritative recognizer; Apple synthesizer F0–F5 | Synthesizer not portable through IR; consumer-driven canonicalization (W5.5); ANN admission of measured candidates (MSW-9) |
-| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log | **Decision #11 is not enforced in production**: neither cache key carries toolchain or delegate-ABI identity, and while `emit/autotune.py` can fail closed on compiler/resource fingerprints as *evidence* fields, only a benchmark script and a unit test ever pass `required_evidence` — the default warm-start loads rows unchecked; Decision #12 `route` is stamped per recorder, not a schema field; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
+| Arbiter / autotune | D1 registry, D2 `measured_arbitrate`, D3 fallback log; Decision #11 toolchain/delegate identity in every autotune key and Decision #12 `route`/`route_source`/`timing_source` schema fields (2026-09-26, sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`) | **Every committed `autotune_corpus.json` row predates the Decision #11 key and is now held stale — never served, kept on re-save — so no committed verdict selects a route until the sm_120 rows are re-recorded on Super-Bear and the gfx1151 rows on Princess-Luna** (the gfx1151 paged-KV warm start included); Decision #12 route derivation is wired into `benchmarks/run_all.py` only, the ~35 family recorders still stamp their own route strings; `measured_arbitrate` defaults to `device_repeats=3`, too few to separate candidates (AUTOTUNE-SEPARATION-NVIDIA); Apple registers no arbiter candidates; W5.2 waits on EVIDENCE-PACKET-1 + TPROF-NATIVE-1 |
 | Tiling / layout | M/N/K K-loop; LayoutAssignment default-on for x86 and NVIDIA; ROCm split-K predicate keyed on occupancy (2026-09-20) | Apple/ROCm layout opt-in; split-K has a production consumer on gfx1201 f16/bf16 since 2026-09-26 (ROCM-SPLIT-K-1) -- the per-shape slice rule, fp8/int split and gfx1151 remain open |
 | Memory | `TileBufferReusePass`, `TileBufferArenaPass` on ROCm/NVIDIA | Control-flow path-max sizing; multiple dynamic arenas; measured full-model remat |
 | Cost models | `target_perf.py`, T1 GEMM model, `FusionCost` | T1 failed ranking — replace, do not coefficient-tune; per-arch correlation (NVIDIA-CALIB-1, ROCM-COSTMODEL-T1, X86-CALIB-1, APPLE-CALIB-1); sm_120 and Apple roofline peaks |
@@ -455,6 +455,22 @@ matches its module fails generation. Read the counts there.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
    dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.
 3. Decision #11 versioned cache key and a Decision #12 `route` schema field.
+   **Landed 2026-09-26** (sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`, Mac,
+   host-independent). `compiler/toolchain_identity.py` is the one identity
+   source (declared pins via `gpu_target`/`rocm_target` and
+   `runtime_abi_audit.cmake_toolchain_pins`; live context for Apple;
+   native-image fingerprints and delegate library ABI digests when the caller
+   has them); `autotune_v2` (SQLite), `tessera.autotune.cache_key`,
+   `emit.autotune` (corpus v4, delegate identity checked against the live
+   candidate), `flywheel` (schema v2) and `tuned_dispatch` key on it, and an
+   unversioned or differing row misses, with the reason recorded.
+   `benchmarks/common/route_provenance.py` derives `route` from the executed
+   artifact (`runtime_artifact.metadata.compiler_path`,
+   `descriptor.provenance`) or records `unknown` with the reason;
+   `run_all.py` emits Decision #12 `rows`, and `tools/roofline_tools` reads
+   them (`--fmt benchmark`; old rows load as `unknown`). Open: re-record the
+   committed autotune corpus on Super-Bear and Princess-Luna; move the family
+   recorders onto `route_provenance`.
 4. E2E-REAL-6F census review, then bootstrap absorption (NVIDIA gap families,
    ROCm softmax/reduction/paged-KV first).
 5. Required Target IR contracts + GOV-ODS-CONSUMER-1; extend

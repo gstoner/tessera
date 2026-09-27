@@ -343,6 +343,29 @@ def _version_pin_consistency() -> dict[str, dict[str, str | None]]:
     return out
 
 
+_CMAKE_PINS_PATH = _REPO_ROOT / "cmake" / "TesseraToolchainPins.cmake"
+_CMAKE_PIN_RE = re.compile(r'^\s*set\(TESSERA_REQUIRED_([A-Z0-9_]+)\s+"([^"]*)"', re.MULTILINE)
+
+
+def cmake_toolchain_pins(path: Path | None = None) -> dict[str, str]:
+    """Every ``TESSERA_REQUIRED_<NAME>`` pin in ``TesseraToolchainPins.cmake``.
+
+    Keys are the lower-cased ``<NAME>`` (``llvm_version``, ``cuda_version``,
+    ``rocm_version`` …).  This is the one reader of the CMake pin file for
+    consumers outside this audit — Decision #11's autotune identity reads the
+    LLVM/MLIR pin through it (``toolchain_identity.py``) rather than parsing the
+    file a second time.  An absent or unreadable file (an installed package
+    without the source tree) returns ``{}``; the caller decides what an
+    undeclared pin means, this function never invents one.
+    """
+    target = path or _CMAKE_PINS_PATH
+    try:
+        text = target.read_text(errors="replace")
+    except OSError:
+        return {}
+    return {name.lower(): value for name, value in _CMAKE_PIN_RE.findall(text)}
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Dashboard render
 # ─────────────────────────────────────────────────────────────────────────
@@ -510,6 +533,7 @@ __all__ = [
     "unique_symbols_per_backend",
     "core_runtime_headers_present",
     "apple_gpu_kernel_families",
+    "cmake_toolchain_pins",
     "render_csv",
     "render_dashboard",
     "write_dashboard",

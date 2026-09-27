@@ -45,12 +45,36 @@ import json
 import math
 from typing import Any, Mapping
 
+from .evidence_reasons import ReasonVocabulary
 from .profiler_timing import (
     device_clock_window_refusals, validate_timing_sample, witness_refusal_codes,
     wsl_promotion_refusals)
 
 
 NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION = "tessera.profiler_nvidia_device_clock_packet.v1"
+
+#: Every packet-local tag an NVIDIA device-clock packet's
+#: ``ineligibility_reasons`` may carry (X86-EVIDENCE-VOCAB-1's rule, applied
+#: 2026-09-27). The witness and window refusals from `profiler_timing` and
+#: ``DEVICE_CLOCK_PART_UNVALIDATED`` are registered diagnostics, named by their
+#: ``pass_origin`` rather than redeclared here.
+NVIDIA_DEVICE_CLOCK_REASONS: dict[str, str] = {
+    "DEVICE_WALL_CLOCK_INVALID":
+        "the %globaltimer device clock sample is not valid",
+    "DEVICE_WALL_CLOCK_UNCALIBRATED":
+        "the device clock is valid but was not calibrated against a CUDA event",
+    "DEVICE_WALL_CLOCK_NOT_PROMOTION_ELIGIBLE":
+        "the device clock record itself declines promotion eligibility",
+    "INSTRUMENTATION_OVERHEAD_EXCEEDED":
+        "the instrumented image is slower than its clean twin beyond the allowed ratio",
+    "INSTRUMENTATION_CHANGED_THE_KERNEL":
+        "the instrumented image is materially faster than its clean twin, so it is "
+        "a different program and its clock says nothing about the clean one",
+    "CALIBRATION_IMAGE_UNBOUND":
+        "the timing sample's artifact digests do not name the calibrated clean image",
+    "SOURCE_WORKTREE_DIRTY":
+        "the measured tree is not recorded clean, so the result names no revision",
+}
 ROUTE_DEVICE_CLOCK = "device_clock_witness"
 
 #: Architectures whose ``%globaltimer`` marker has exact-device validation, and
@@ -146,6 +170,15 @@ def _check_pairing(timing: Mapping[str, Any], clean: Mapping[str, Any],
             or probe["calibration_sample_id"] != timing.get("sample_id")):
         raise NVIDIADeviceClockPacketError("application images do not bind the timing calibration sample")
     return arch
+
+
+NVIDIA_REASON_VOCABULARY = ReasonVocabulary(
+    "NVIDIA device-clock packet", NVIDIA_DEVICE_CLOCK_REASONS,
+    registered_origins=(
+        "tessera.compiler.profiler_nvidia_evidence",
+        "tessera.compiler.profiler_timing.witness_refusal_codes",
+        "tessera.compiler.profiler_timing.device_clock_window_refusals",
+    ))
 
 
 def _derive(*, timing: Mapping[str, Any], clean: Mapping[str, Any], probe: Mapping[str, Any],
@@ -253,7 +286,11 @@ def validate_nvidia_device_clock_packet(payload: Mapping[str, Any]) -> None:
     ratio = comparison.get("duration_ratio")
     if not isinstance(ratio, (int, float)) or abs(float(ratio) - overhead) > 1e-12:
         raise NVIDIADeviceClockPacketError("instrumentation duration ratio mismatch")
-    if payload.get("ineligibility_reasons") != derived:
+    stored = payload.get("ineligibility_reasons")
+    if not isinstance(stored, list) or not all(isinstance(r, str) for r in stored):
+        raise NVIDIADeviceClockPacketError("invalid NVIDIA ineligibility reasons")
+    NVIDIA_REASON_VOCABULARY.require_known(stored, NVIDIADeviceClockPacketError)
+    if stored != derived:
         raise NVIDIADeviceClockPacketError(
             f"packet reasons {payload.get('ineligibility_reasons')} differ from those its "
             f"inputs derive {derived}")
@@ -272,6 +309,8 @@ __all__ = [
     "NVIDIA_DEVICE_CLOCK_ARCHITECTURES",
     "NVIDIA_DEVICE_CLOCK_VALIDATED_PARTS",
     "NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION",
+    "NVIDIA_DEVICE_CLOCK_REASONS",
+    "NVIDIA_REASON_VOCABULARY",
     "ROUTE_DEVICE_CLOCK",
     "build_nvidia_device_clock_packet",
     "validate_nvidia_device_clock_packet",

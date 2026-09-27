@@ -13,6 +13,7 @@ import math
 import json
 from typing import Any, Mapping
 
+from .evidence_reasons import ReasonVocabulary
 from .profiler_rocm_native import validate_rocm_native_capture
 from .profiler_timing import (
     device_clock_window_refusals, is_wsl_environment, validate_timing_sample,
@@ -64,6 +65,44 @@ def _image_record(image: Mapping[str, Any], role: str) -> dict[str, Any]:
         raise ROCmProfilerPacketError(f"{role} image requires resources")
     return dict(image)
 
+
+#: Every tag a ROCm profiler packet's ``ineligibility_reasons`` or
+#: ``diagnostic_gaps`` may carry (X86-EVIDENCE-VOCAB-1's rule, applied
+#: 2026-09-27: same shape as the x86 vocabulary -- appended literals, enumerated
+#: nowhere). The shared device-clock window refusals are registered
+#: diagnostics and are named by their ``pass_origin`` instead of redeclared.
+ROCM_PROFILER_REASONS: dict[str, str] = {
+    "BARE_METAL_REQUIRED":
+        "the profiler-correlated route needs bare metal; this ran under WSL2 or a VM",
+    "DEVICE_WALL_CLOCK_INVALID":
+        "the device wall clock sample is not valid",
+    "INDEPENDENT_DEVICE_CLOCK_MISSING":
+        "neither a HIP event nor profiler activity is valid to witness the device clock",
+    "DEVICE_WALL_CLOCK_UNCALIBRATED":
+        "the device clock is valid but was not calibrated against a HIP event or activity",
+    "ROCPROFILER_CAPTURE_MISSING":
+        "no collected rocprofiler capture accompanies the measurement",
+    "ROCPROFILER_DISPATCH_MISSING":
+        "the rocprofiler capture saw no dispatch activity for the kernel",
+    "ROCPROFILER_RUNTIME_CALLBACK_MISSING":
+        "the rocprofiler capture saw neither a HIP nor an HSA runtime callback",
+    "ROCPROFILER_COUNTERS_MISSING":
+        "counters were requested but the capture holds no counter records",
+    "ROCPROFILER_PC_SAMPLES_MISSING":
+        "PC sampling was requested but the capture holds no PC samples",
+    "INSTRUMENTATION_OVERHEAD_EXCEEDED":
+        "the instrumented image is slower than its clean twin beyond the allowed ratio",
+    "INSTRUMENTATION_CHANGED_THE_KERNEL":
+        "the instrumented image is materially faster than its clean twin, so it is "
+        "a different program and its clock says nothing about the clean one",
+    "SOURCE_WORKTREE_DIRTY":
+        "the measured tree has uncommitted changes, so the result names no revision",
+    "CALIBRATION_IMAGE_UNBOUND":
+        "the witness sample's artifact digests do not name the calibrated clean image",
+}
+ROCM_REASON_VOCABULARY = ReasonVocabulary(
+    "ROCm profiler packet", ROCM_PROFILER_REASONS,
+    registered_origins=("tessera.compiler.profiler_timing.device_clock_window_refusals",))
 
 #: Reasons that describe the *environment* (bare metal, a profiler that needs
 #: KFD) rather than whether the timing is true. On the device-clock-witness
@@ -331,6 +370,13 @@ def validate_rocm_profiler_packet(payload: Mapping[str, Any]) -> None:
     reasons = payload.get("ineligibility_reasons")
     if not isinstance(reasons, list) or not all(isinstance(reason, str) for reason in reasons):
         raise ROCmProfilerPacketError("invalid ROCm profiler ineligibility reasons")
+    # Fail CLOSED on an undeclared tag before comparing with the derivation, so
+    # the refusal names the vocabulary gap rather than a generic mismatch.
+    ROCM_REASON_VOCABULARY.require_known(reasons, ROCmProfilerPacketError)
+    stored_gaps = payload.get("diagnostic_gaps", [])
+    if not isinstance(stored_gaps, list) or not all(isinstance(g, str) for g in stored_gaps):
+        raise ROCmProfilerPacketError("invalid ROCm diagnostic gaps")
+    ROCM_REASON_VOCABULARY.require_known(stored_gaps, ROCmProfilerPacketError, "diagnostic gap")
     if payload.get("eligible_for_promotion") and reasons:
         raise ROCmProfilerPacketError("promotion-eligible ROCm packet has blockers")
     source = payload.get("source")
@@ -370,6 +416,8 @@ def validate_rocm_profiler_packet(payload: Mapping[str, Any]) -> None:
 __all__ = [
     "ROCM_PROFILER_ARCHITECTURES",
     "ROCM_PROFILER_PACKET_SCHEMA_VERSION",
+    "ROCM_PROFILER_REASONS",
+    "ROCM_REASON_VOCABULARY",
     "ROUTE_DEVICE_CLOCK",
     "ROUTE_PROFILER",
     "ROCmProfilerPacketError",

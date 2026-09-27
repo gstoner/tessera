@@ -4918,6 +4918,12 @@ struct LowerTileToNVIDIAPass
       attrs.push_back(builder.getNamedAttr("bytes", alloc.getBytesAttr()));
       attrs.push_back(
           builder.getNamedAttr("alignment", alloc.getAlignmentAttr()));
+      // The NVIDIA pipeline runs TileBufferReuse/TileBufferArena first; carry
+      // their placement (`tile.buffer_group`, `tile.tmem_offset`) onto the
+      // contract rather than dropping it at the boundary (Decision #32).
+      for (StringRef planned : {"tile.buffer_group", "tile.tmem_offset"})
+        if (Attribute value = op->getAttr(planned))
+          attrs.push_back(builder.getNamedAttr(planned, value));
       Operation *target = createContractOp(builder, loc,
                                            "tessera_nvidia.tmem_alloc",
                                            ValueRange{}, builder.getI32Type(),

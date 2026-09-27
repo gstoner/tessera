@@ -10,7 +10,8 @@
 
 module {
   func.func @tmem_roundtrip(%i: index, %j: index, %bias: f32) {
-    %tmem = tile.tmem.allocate {bytes = 16384 : i64, alignment = 128 : i64}
+    %tmem = tile.tmem.allocate {bytes = 16384 : i64, alignment = 128 : i64,
+                             tile.buffer_group = 0 : i64, tile.tmem_offset = 0 : i64}
         : !tile.tmem
     %v = tile.tmem.load %tmem, %i, %j : (!tile.tmem, index, index) -> f32
     %w = arith.addf %v, %bias : f32
@@ -25,6 +26,8 @@ module {
 // CHECK-SAME: alignment = 128 : i64
 // CHECK-SAME: arch = "sm_100a"
 // CHECK-SAME: bytes = 16384 : i64
+// The arena placement planned before this pass survives the boundary (#32).
+// CHECK-SAME: tile.buffer_group = 0 : i64, tile.tmem_offset = 0 : i64
 // CHECK-SAME: : () -> i32
 // CHECK: %[[I64:.*]] = arith.index_cast %[[I]] : index to i64
 // CHECK: %[[J64:.*]] = arith.index_cast %[[J]] : index to i64

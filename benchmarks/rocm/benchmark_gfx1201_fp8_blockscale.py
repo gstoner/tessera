@@ -196,12 +196,19 @@ def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=
         tile_ir = re.sub(r"tessera\.macro_tile_n = \d+", f"tessera.macro_tile_n = {panel[1]}", tile_ir)
     stage_k = pad = prefetch = -1
     if lds is not None:
-        warps, depth, stage_k, pad, prefetch = lds
+        warps, depth, stage_k, pad, prefetch, *raster = lds
         staging = "lds" if warps > 1 or depth > 1 else "global"
         tile_ir = re.sub(r'staging = "\w+"', f'staging = "{staging}"', tile_ir)
         tile_ir = re.sub(r"(?<![\w.])warps = \d+", f"warps = {warps}", tile_ir)
         tile_ir = re.sub(r"tessera\.pipeline_depth = \d+", f"tessera.pipeline_depth = {depth}",
                          tile_ir)
+        if raster and raster[0]:
+            # gmG / gnG: grouped_m / grouped_n raster with group G.
+            order = {"gm": "grouped_m", "gn": "grouped_n"}[raster[0][:2]]
+            tile_ir = re.sub(r'tessera\.raster_order = "\w+"',
+                             f'tessera.raster_order = "{order}"', tile_ir)
+            tile_ir = re.sub(r"tessera\.raster_group = \d+",
+                             f"tessera.raster_group = {int(raster[0][2:])}", tile_ir)
     if overridden:
         program = type(program)(program.shape, program.entry, program.graph_ir,
                                 program.schedule_ir, tile_ir)
@@ -560,8 +567,9 @@ def main() -> None:
             elif parts[0] == "lds":
                 macro = tuple(int(v) for v in parts[1].split("x"))
                 warps, depth, stage_k, pad, prefetch = (int(v) for v in parts[2:7])
-                variants.append((macro, 1, -1, parts[7], (warps, depth, stage_k, pad, prefetch),
-                                 alias))
+                raster = parts[8] if len(parts) > 8 else ""
+                variants.append((macro, 1, -1, parts[7],
+                                 (warps, depth, stage_k, pad, prefetch, raster), alias))
             else:
                 variants.append((tuple(int(v) for v in parts[0].split("x")), int(parts[1]),
                                  int(parts[2]), parts[3], None, alias))
@@ -571,7 +579,7 @@ def main() -> None:
                                             args.compiler.resolve())
             if lds is not None:
                 label = (f"tessera_{layout}_lds{panel[0]}x{panel[1]}_w{lds[0]}_d{lds[1]}"
-                         f"_s{lds[2]}_p{lds[3]}_f{lds[4]}")
+                         f"_s{lds[2]}_p{lds[3]}_f{lds[4]}" + (f"_{lds[5]}" if lds[5] else ""))
             elif panel is None:
                 label = f"tessera_{layout}"
             else:

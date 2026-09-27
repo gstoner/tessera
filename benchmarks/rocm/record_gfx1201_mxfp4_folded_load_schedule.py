@@ -67,6 +67,9 @@ SYNC_KEY = "GFX1201-LANES-2026-09-27"
 AGREEMENT_BAND = 0.05
 MIN_WINDOW_MS = 5.0
 PRODUCTION = ((256, 5120, 8704), (1024, 17408, 5120))
+#: One-row-block prefill (M <= 256): the band still behind Radiance
+#: (GFX1201-PERF-2026-09-27).
+SMALL = ((128, 5120, 8704), (128, 17408, 5120), (256, 5120, 8704), (256, 17408, 5120))
 SWEEP = (
     (128, 5120, 8704), (128, 17408, 5120), (256, 17408, 5120),
     (512, 5120, 8704), (512, 17408, 5120), (1024, 5120, 8704),
@@ -224,6 +227,7 @@ def _engine_evidence(engine: base._Engine) -> dict[str, Any]:
 def run_case(
     hip: ctypes.CDLL, clock: DeviceClock, case: base.Case, *, tessera_opt: Path,
     radiance: Any, decomposition: bool, trials: int, order_seed: int,
+    diagnostics: tuple[tuple[str, tuple[str, ...]], ...] = (),
 ) -> dict[str, Any]:
     inputs = base._logical_inputs(case)
     exact = base._tessera_engine(hip, case, inputs, 3, None, None, name="tessera_exact_k32")
@@ -246,6 +250,12 @@ def run_case(
                 engines.append(ls.schedule_engine(
                     hip, case, inputs, folded, variant, name=f"tessera_{label}",
                 ))
+        # Diagnostic source edits on top of the selected schedule; each must
+        # still produce the exact route's BF16 bits (checked below).
+        for label, edits in diagnostics:
+            engines.append(ls.schedule_engine(
+                hip, case, inputs, folded, schedule, edits, name=f"tessera_selected+{label}",
+            ))
         engines.append(base._radiance_engine(hip, radiance, case, inputs, 3))
         outputs = {engine.name: engine.output() for engine in [exact, *engines]}
         rows, cols, reference = base._sampled_exact_reference(case, inputs)
@@ -334,6 +344,7 @@ def _child(args: argparse.Namespace) -> None:
                 hip, clock, base.Case("prefill", m, n, k), tessera_opt=args.tessera_opt,
                 radiance=radiance, decomposition=args.decomposition,
                 trials=args.trials, order_seed=args.order_seed,
+                diagnostics=_diagnostic_specs(args.diagnostics),
             ))
             print(f"completed {m}x{n}x{k}", flush=True)
         packet = {
@@ -347,6 +358,16 @@ def _child(args: argparse.Namespace) -> None:
     finally:
         clock.close()
     args.child_output.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n")
+
+
+def _diagnostic_specs(items: list[str]) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    specs = []
+    for item in items:
+        label, _, edits = item.partition("=")
+        if not label or not edits:
+            raise SystemExit(f"--diagnostics wants LABEL=edit[+edit...], got {item!r}")
+        specs.append((label, tuple(edits.split("+"))))
+    return tuple(specs)
 
 
 def _summarize(processes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -368,6 +389,11 @@ def _summarize(processes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "selected_over_v1": [s / b for s, b in zip(selected, v1)],
             "selected_over_radiance": [s / r for s, r in zip(selected, radiance)],
             "v1_over_radiance": [b / r for b, r in zip(v1, radiance)],
+            # Diagnostic engines (selected schedule + source edits), if any.
+            "over_selected": {
+                name: [t / s for t, s in zip(times, selected)]
+                for name, times in engines.items() if name.startswith("tessera_selected+")
+            },
         })
     return summary
 
@@ -378,9 +404,14 @@ def main() -> None:
     parser.add_argument("--radiance-revision", required=True)
     parser.add_argument("--tessera-opt", type=Path, required=True)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--shapes", choices=("production", "sweep", "all"), default="production")
+    parser.add_argument("--shapes", choices=("production", "sweep", "all", "small"),
+                        default="production")
     parser.add_argument("--decomposition", action="store_true")
+    parser.add_argument("--diagnostics", action="append", default=[],
+                        help="LABEL=edit[+edit...]: an extra engine of the selected schedule "
+                             "with those diagnostic source edits (see ablate module)")
     parser.add_argument("--processes", type=int, default=3)
+    parser.add_argument("--sync-key", default=SYNC_KEY)
     parser.add_argument("--trials", type=int, default=11)
     parser.add_argument("--diagnostic", action="store_true",
                         help="allow a dirty tree; the packet records it and is not evidence")
@@ -406,7 +437,8 @@ def main() -> None:
     source = _source_state()
     if source["worktree_dirty"] and not args.diagnostic:
         raise SystemExit("source tree has uncommitted changes; commit first or pass --diagnostic")
-    shapes = {"production": PRODUCTION, "sweep": SWEEP, "all": PRODUCTION + SWEEP}[args.shapes]
+    shapes = {"production": PRODUCTION, "sweep": SWEEP, "all": PRODUCTION + SWEEP,
+              "small": SMALL}[args.shapes]
     output.parent.mkdir(parents=True, exist_ok=True)
     processes = []
     for index in range(args.processes):
@@ -419,14 +451,16 @@ def main() -> None:
             "--trials", str(args.trials), "--order-seed", str(index),
             "--child-output", str(child),
             "--child-shapes", ",".join(f"{m}x{n}x{k}" for m, n, k in shapes),
-        ] + (["--decomposition"] if args.decomposition else [])
+        ] + (["--decomposition"] if args.decomposition else []) + [
+            f"--diagnostics={item}" for item in args.diagnostics]
         subprocess.run(command, cwd=ROOT, check=True, timeout=7200)
         processes.append(json.loads(child.read_text()))
         print(f"completed process {index + 1}/{args.processes}", flush=True)
     if _source_state()["source_sha256"] != source["source_sha256"]:
         raise SystemExit("source changed while collecting evidence")
     packet = {
-        "schema": SCHEMA, "sync_key": SYNC_KEY, "work_item": "ROCM-MXFP4-W4A8-1",
+        "schema": SCHEMA, "sync_key": args.sync_key, "work_item": "ROCM-MXFP4-W4A8-1",
+        "diagnostics": args.diagnostics,
         "source": source,
         "tessera_opt_sha256": base._sha256(args.tessera_opt),
         "radiance": {

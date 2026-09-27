@@ -113,6 +113,7 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
     from tessera.compiler.profiler_timing import (
         build_timing_sample, measured_clock, unavailable_clock, wall_clock_ticks_to_ns)
     from tessera.compiler.profiler_rocm_evidence import build_rocm_profiler_packet
+    from tessera.compiler.ssd_performance import SSD_CALIBRATION_WINDOW_PROTOCOL
     if device.cuda:
         raise SystemExit('device-clock calibration is implemented for ROCm here; '
                          'NVIDIA uses the Nsight activity-window recorder')
@@ -219,7 +220,10 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
         execution_environment=environment, resources={'application': resources},
         environment={'kernel_release': platform.release(), 'per_window_event_ns': event_ns,
                      'per_window_plain_event_ns': [ms * 1e6 for ms in plain_ms],
-                     'window_protocol': 'interleaved_alternating_plain_bracketed',
+                     # Admission requires this stamp and checks the launch
+                     # count (batch_size, provenance) against the row; all of
+                     # it is inside timing_sha256.
+                     'window_protocol': SSD_CALIBRATION_WINDOW_PROTOCOL,
                      'per_window_host_ns': host_ns, 'run_id': run_id, 'process_id': os.getpid(),
                      'device_identity': identity})
     isa = _isa_sha256(clean_program.package.image, llvm_bin)

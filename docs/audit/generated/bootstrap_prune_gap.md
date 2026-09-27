@@ -24,17 +24,17 @@ the bootstrap row can go.
 | Backends with a bootstrap module | 5 |
 | `package_*` functions total | 73 |
 | — Graph-input boundaries (including scheduled wrappers) | 45 |
-|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 11 |
+|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 10 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 2 |
 |   ·  of the bootstrap, both | 1 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 31 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 32 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 14 |
 | — unclassified/raw inputs (not assumed compiled) | 14 |
-| Lines in those modules | 10964 |
+| Lines in those modules | 10750 |
 | Classified family/target candidates (shape admission not implied) | 54 |
 | — covered by a compiled route | 6 |
-| — packager lowers only through the generic Schedule→Tile route | 4 |
-| — **gap (no declared family route)** | 44 |
+| — packager lowers only through the generic Schedule→Tile route | 6 |
+| — **gap (no declared family route)** | 42 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -46,7 +46,7 @@ exact artifacts before treating a row as a constructor deletion target.
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
 | `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 11 | 12 | 3841 |
-| `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3402 |
+| `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3188 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1691 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1815 |
@@ -94,8 +94,8 @@ queues own.
 | `nvidia_sm120` | `int4_matmul` | — | 🔴 **gap** |
 | `nvidia_sm120` | `mx_matmul` | — | 🔴 **gap** |
 | `nvidia_sm120` | `matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |
-| `rocm_gfx1151` | `softmax` | — | 🔴 **gap** |
-| `rocm_gfx1151` | `reduction` | — | 🔴 **gap** |
+| `rocm_gfx1151` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
+| `rocm_gfx1151` | `reduction` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `rocm_gfx1151` | `paged_kv` | — | 🔴 **gap** |
 | `rocm_gfx1151` | `attention` | `scheduled_attention.supports_scheduled_attention` | ✅ compiled |
 | `rocm_gfx1151` | `moe_dispatch` | — | 🔴 **gap** |

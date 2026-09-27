@@ -6,11 +6,11 @@
     "bear_cpu": 4,
     "bear_gpu": 13,
     "luna_cpu": 7,
-    "luna_gpu": 5,
+    "luna_gpu": 7,
     "mac_cpu": 1,
     "mac_gpu": 3,
     "taj_cpu": 7,
-    "taj_gpu": 1
+    "taj_gpu": 3
   },
   "source_emitters": 5,
   "stage_native": {
@@ -18,7 +18,7 @@
     "frontend": 0,
     "graph_opt": 0,
     "native_lowering": 0,
-    "schedule_tile": 14
+    "schedule_tile": 18
   },
   "target_ops_without_required_contract": 104
 }

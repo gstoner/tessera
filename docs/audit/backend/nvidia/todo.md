@@ -231,6 +231,20 @@ trivial, so not done here. The two shipped Tier-3 delegates
 (`nvidia_mma_gemm_shipped`, `nvidia_nvfp4_gemm_shipped`) keep their library
 digest. No sm_120 row was touched.
 
+**Review fixes (2026-09-26, ROCm plan same key) that an NVIDIA adopter
+inherits:** the identity is now `tessera.kernel_code.v2` -- it fails closed on
+any undecodable word, digests non-code data sections, and names its
+disassembler; a PTX/SASS normalization must meet the same bar.
+`measured_arbitrate` now infers dims with `_infer_dims` when none are given, so
+recorders that pass none land on the key `corpus_winner` looks up. **Dims
+mismatch found in the sweep, not fixed (NVIDIA-owned rows):** the sm_120
+`gated_matmul` (`dims=(m, h, k)`) and `conv2d` rows are recorded with explicit
+dims, but `_infer_dims` returns `None` for those ops, so ordinary
+`run_arbitrated` dispatch never consults them -- they select only for a caller
+that passes dims. Fix by teaching `_infer_dims` those ops (one authority) and
+re-recording; matmul, fused_region, attention and the serving paged-attention
+rows agree with their lookups.
+
 ## `NVIDIA-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
 
 Sync `LANE-B-SWEEP-2026-09-26` (ROCm owns the pattern: its Lane B was retired

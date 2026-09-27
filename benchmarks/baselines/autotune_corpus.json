@@ -346,414 +346,6 @@
     },
     {
       "bucket": [
-        64,
-        64
-      ],
-      "candidates": {
-        "rocm_generic_hip": 0.7095460023265332,
-        "rocm_wmma_gemm": 1.8876770045608282
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "evidence": {
-        "delegate_identities": {
-          "rocm_wmma_gemm": {
-            "entry": "gemm",
-            "generator": "tessera-opt",
-            "identity": "kernel_code",
-            "instruction_count": "11560",
-            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
-            "isa": "gfx1151",
-            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
-            "normalization": "tessera.kernel_code.v1"
-          }
-        },
-        "toolchain": {
-          "delegate": {},
-          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
-          "family": "rocm",
-          "schema": "tessera.toolchain_identity.v1",
-          "toolchain": {
-            "hip": "7.15",
-            "llvm_mlir": "23.1.1",
-            "rocm": "10.0"
-          }
-        },
-        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
-      },
-      "latency_ms": 0.7095460023265332,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.6241168374609668,
-        "noise": 0.03432994495031949,
-        "runner_up": "rocm_wmma_gemm",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "rocm_generic_hip"
-    },
-    {
-      "bucket": [
-        64,
-        64
-      ],
-      "candidates": {
-        "rocm_generic_hip": 0.23085333333333335,
-        "rocm_wmma_gemm": 0.01570741708079974
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "evidence": {
-        "delegate_identities": {
-          "rocm_wmma_gemm": {
-            "entry": "gemm",
-            "generator": "tessera-opt",
-            "identity": "kernel_code",
-            "instruction_count": "11560",
-            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
-            "isa": "gfx1151",
-            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
-            "normalization": "tessera.kernel_code.v1"
-          }
-        },
-        "toolchain": {
-          "delegate": {},
-          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
-          "family": "rocm",
-          "schema": "tessera.toolchain_identity.v1",
-          "toolchain": {
-            "hip": "7.15",
-            "llvm_mlir": "23.1.1",
-            "rocm": "10.0"
-          }
-        },
-        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
-      },
-      "latency_ms": 0.01570741708079974,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9319593230299191,
-        "noise": 0.011292488816554458,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        256,
-        256
-      ],
-      "candidates": {
-        "rocm_generic_hip": 6.909496005391702,
-        "rocm_wmma_gemm": 4.322159991716035
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "evidence": {
-        "delegate_identities": {
-          "rocm_wmma_gemm": {
-            "entry": "gemm",
-            "generator": "tessera-opt",
-            "identity": "kernel_code",
-            "instruction_count": "11560",
-            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
-            "isa": "gfx1151",
-            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
-            "normalization": "tessera.kernel_code.v1"
-          }
-        },
-        "toolchain": {
-          "delegate": {},
-          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
-          "family": "rocm",
-          "schema": "tessera.toolchain_identity.v1",
-          "toolchain": {
-            "hip": "7.15",
-            "llvm_mlir": "23.1.1",
-            "rocm": "10.0"
-          }
-        },
-        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
-      },
-      "latency_ms": 4.322159991716035,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.3744608885592648,
-        "noise": 0.022046978051446387,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        256,
-        256
-      ],
-      "candidates": {
-        "rocm_generic_hip": 4.23587,
-        "rocm_wmma_gemm": 0.02096745868523916
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "evidence": {
-        "delegate_identities": {
-          "rocm_wmma_gemm": {
-            "entry": "gemm",
-            "generator": "tessera-opt",
-            "identity": "kernel_code",
-            "instruction_count": "11560",
-            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
-            "isa": "gfx1151",
-            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
-            "normalization": "tessera.kernel_code.v1"
-          }
-        },
-        "toolchain": {
-          "delegate": {},
-          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
-          "family": "rocm",
-          "schema": "tessera.toolchain_identity.v1",
-          "toolchain": {
-            "hip": "7.15",
-            "llvm_mlir": "23.1.1",
-            "rocm": "10.0"
-          }
-        },
-        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
-      },
-      "latency_ms": 0.02096745868523916,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9950500230920121,
-        "noise": 0.038163634572067624,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        512,
-        512
-      ],
-      "candidates": {
-        "rocm_generic_hip": 29.047099989838898,
-        "rocm_wmma_gemm": 4.83152900415007
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "evidence": {
-        "delegate_identities": {
-          "rocm_wmma_gemm": {
-            "entry": "gemm",
-            "generator": "tessera-opt",
-            "identity": "kernel_code",
-            "instruction_count": "11560",
-            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
-            "isa": "gfx1151",
-            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
-            "normalization": "tessera.kernel_code.v1"
-          }
-        },
-        "toolchain": {
-          "delegate": {},
-          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
-          "family": "rocm",
-          "schema": "tessera.toolchain_identity.v1",
-          "toolchain": {
-            "hip": "7.15",
-            "llvm_mlir": "23.1.1",
-            "rocm": "10.0"
-          }
-        },
-        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
-      },
-      "latency_ms": 4.83152900415007,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.8336657013663943,
-        "noise": 0.0431703151785831,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        512,
-        512
-      ],
-      "candidates": {
-        "rocm_generic_hip": 26.641690000000004,
-        "rocm_wmma_gemm": 0.03009766712784767
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "evidence": {
-        "delegate_identities": {
-          "rocm_wmma_gemm": {
-            "entry": "gemm",
-            "generator": "tessera-opt",
-            "identity": "kernel_code",
-            "instruction_count": "11560",
-            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
-            "isa": "gfx1151",
-            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
-            "normalization": "tessera.kernel_code.v1"
-          }
-        },
-        "toolchain": {
-          "delegate": {},
-          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
-          "family": "rocm",
-          "schema": "tessera.toolchain_identity.v1",
-          "toolchain": {
-            "hip": "7.15",
-            "llvm_mlir": "23.1.1",
-            "rocm": "10.0"
-          }
-        },
-        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
-      },
-      "latency_ms": 0.03009766712784767,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9988702793581095,
-        "noise": 0.03477586879171667,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        1024,
-        1024
-      ],
-      "candidates": {
-        "rocm_generic_hip": 191.08460201823618,
-        "rocm_wmma_gemm": 10.359723994042724
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "evidence": {
-        "delegate_identities": {
-          "rocm_wmma_gemm": {
-            "entry": "gemm",
-            "generator": "tessera-opt",
-            "identity": "kernel_code",
-            "instruction_count": "21744",
-            "instruction_stream_sha256": "97baa4c06a2cb0efcdf40d38e5ae578b43fa2468c990f9388a472d82582abb0c",
-            "isa": "gfx1151",
-            "kernel_descriptor_sha256": "2f06167e17b310b74cc3fac5936993b705cdcae96fb891e6ce64919b82d12642",
-            "normalization": "tessera.kernel_code.v1"
-          }
-        },
-        "toolchain": {
-          "delegate": {},
-          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
-          "family": "rocm",
-          "schema": "tessera.toolchain_identity.v1",
-          "toolchain": {
-            "hip": "7.15",
-            "llvm_mlir": "23.1.1",
-            "rocm": "10.0"
-          }
-        },
-        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
-      },
-      "latency_ms": 10.359723994042724,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9457846216564637,
-        "noise": 0.053241839410793024,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        1024,
-        1024
-      ],
-      "candidates": {
-        "rocm_generic_hip": 185.75822666666664,
-        "rocm_wmma_gemm": 0.172409584124883
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "evidence": {
-        "delegate_identities": {
-          "rocm_wmma_gemm": {
-            "entry": "gemm",
-            "generator": "tessera-opt",
-            "identity": "kernel_code",
-            "instruction_count": "21744",
-            "instruction_stream_sha256": "97baa4c06a2cb0efcdf40d38e5ae578b43fa2468c990f9388a472d82582abb0c",
-            "isa": "gfx1151",
-            "kernel_descriptor_sha256": "2f06167e17b310b74cc3fac5936993b705cdcae96fb891e6ce64919b82d12642",
-            "normalization": "tessera.kernel_code.v1"
-          }
-        },
-        "toolchain": {
-          "delegate": {},
-          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
-          "family": "rocm",
-          "schema": "tessera.toolchain_identity.v1",
-          "toolchain": {
-            "hip": "7.15",
-            "llvm_mlir": "23.1.1",
-            "rocm": "10.0"
-          }
-        },
-        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
-      },
-      "latency_ms": 0.172409584124883,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9990718603034778,
-        "noise": 0.004701036558037798,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
         128,
         128,
         64,
@@ -13099,6 +12691,446 @@
       "timing": "end_to_end",
       "unmeasured": {},
       "winner": "async_ring"
+    },
+    {
+      "bucket": [
+        64,
+        64,
+        64
+      ],
+      "candidates": {
+        "rocm_generic_hip": 0.7039404881652445,
+        "rocm_wmma_gemm": 1.8882610311266035
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "data_sections": ".rodata:0",
+            "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
+            "disassembler": "AMD LLVM version 23.0.0git",
+            "entry": "gemm",
+            "generator": "tessera-opt",
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v2"
+          }
+        },
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.7039404881652445,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.627201707517499,
+        "noise": 0.032352362974258655,
+        "runner_up": "rocm_wmma_gemm",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_generic_hip"
+    },
+    {
+      "bucket": [
+        64,
+        64,
+        64
+      ],
+      "candidates": {
+        "rocm_generic_hip": 0.23140333333333332,
+        "rocm_wmma_gemm": 0.01569258297483126
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "data_sections": ".rodata:0",
+            "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
+            "disassembler": "AMD LLVM version 23.0.0git",
+            "entry": "gemm",
+            "generator": "tessera-opt",
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v2"
+          }
+        },
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.01569258297483126,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9321851472544421,
+        "noise": 0.006891178874696915,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        256,
+        256,
+        256
+      ],
+      "candidates": {
+        "rocm_generic_hip": 6.877856969367713,
+        "rocm_wmma_gemm": 4.227132478263229
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "data_sections": ".rodata:0",
+            "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
+            "disassembler": "AMD LLVM version 23.0.0git",
+            "entry": "gemm",
+            "generator": "tessera-opt",
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v2"
+          }
+        },
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 4.227132478263229,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.3853997695663286,
+        "noise": 0.020492600822440078,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        256,
+        256,
+        256
+      ],
+      "candidates": {
+        "rocm_generic_hip": 4.229526666666667,
+        "rocm_wmma_gemm": 0.020931250105301537
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "data_sections": ".rodata:0",
+            "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
+            "disassembler": "AMD LLVM version 23.0.0git",
+            "entry": "gemm",
+            "generator": "tessera-opt",
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v2"
+          }
+        },
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.020931250105301537,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9950511601522073,
+        "noise": 0.0016440362400256187,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        512,
+        512,
+        512
+      ],
+      "candidates": {
+        "rocm_generic_hip": 29.85675196396187,
+        "rocm_wmma_gemm": 4.789065016666427
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "data_sections": ".rodata:0",
+            "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
+            "disassembler": "AMD LLVM version 23.0.0git",
+            "entry": "gemm",
+            "generator": "tessera-opt",
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v2"
+          }
+        },
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 4.789065016666427,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.839598593227857,
+        "noise": 0.045330384564315505,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        512,
+        512,
+        512
+      ],
+      "candidates": {
+        "rocm_generic_hip": 26.698963333333335,
+        "rocm_wmma_gemm": 0.029825833936532337
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "data_sections": ".rodata:0",
+            "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
+            "disassembler": "AMD LLVM version 23.0.0git",
+            "entry": "gemm",
+            "generator": "tessera-opt",
+            "identity": "kernel_code",
+            "instruction_count": "11560",
+            "instruction_stream_sha256": "cc3dbae2ae69ee17690586cf58d564f38579df06ab94c8ed1d49e074ceab9a33",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "94ce3bee15c3e350affe823d852a2da697c9cb780c88d557626c5c358f482bf0",
+            "normalization": "tessera.kernel_code.v2"
+          }
+        },
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.029825833936532337,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9988828841942603,
+        "noise": 0.018739659444160523,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        1024,
+        1024,
+        1024
+      ],
+      "candidates": {
+        "rocm_generic_hip": 191.00430750404485,
+        "rocm_wmma_gemm": 10.340085485950112
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "data_sections": ".rodata:0",
+            "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
+            "disassembler": "AMD LLVM version 23.0.0git",
+            "entry": "gemm",
+            "generator": "tessera-opt",
+            "identity": "kernel_code",
+            "instruction_count": "21744",
+            "instruction_stream_sha256": "97baa4c06a2cb0efcdf40d38e5ae578b43fa2468c990f9388a472d82582abb0c",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "2f06167e17b310b74cc3fac5936993b705cdcae96fb891e6ce64919b82d12642",
+            "normalization": "tessera.kernel_code.v2"
+          }
+        },
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 10.340085485950112,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9458646476560161,
+        "noise": 0.05294247571476084,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        1024,
+        1024,
+        1024
+      ],
+      "candidates": {
+        "rocm_generic_hip": 186.03481,
+        "rocm_wmma_gemm": 0.1727675000826518
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "delegate_identities": {
+          "rocm_wmma_gemm": {
+            "data_sections": ".rodata:0",
+            "data_sha256": "8fb6043d6c9264c3f42cbd97d2f8c6ddecb1470812a26b8b31ce8e93ba225215",
+            "disassembler": "AMD LLVM version 23.0.0git",
+            "entry": "gemm",
+            "generator": "tessera-opt",
+            "identity": "kernel_code",
+            "instruction_count": "21744",
+            "instruction_stream_sha256": "97baa4c06a2cb0efcdf40d38e5ae578b43fa2468c990f9388a472d82582abb0c",
+            "isa": "gfx1151",
+            "kernel_descriptor_sha256": "2f06167e17b310b74cc3fac5936993b705cdcae96fb891e6ce64919b82d12642",
+            "normalization": "tessera.kernel_code.v2"
+          }
+        },
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.1727675000826518,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9990713162763322,
+        "noise": 0.00473851752969066,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
     }
   ],
   "version": 4

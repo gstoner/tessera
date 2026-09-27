@@ -492,3 +492,23 @@ def test_measured_arbitrate_keys_on_the_dims_production_infers(tmp_path, monkeyp
     assert AT.corpus_winner(_Region(), OP_MATMUL, "kid_dims_target", A, B,
                             cache=cache, device="fakedev",
                             timing=AT.TIMING_DEVICE) == "kid_dims"
+
+
+def test_committed_rocm_fused_rows_carry_kernel_code_identities():
+    """The gfx1151 fused_region rows are stamped with the v2 kernel-code
+    identity and keyed on the (M, N, K) bucket ordinary dispatch infers
+    (re-recorded 2026-09-26 on Princess-Luna)."""
+    import json
+
+    rows = [r for r in json.loads(AT.corpus_path().read_text())["records"]
+            if r["device"] == "rocm:gfx1151" and r["op"] == "fused_region"]
+    assert len(rows) == 8
+    for row in rows:
+        assert len(row["bucket"]) == 3, "a 2-D bucket is never looked up by dispatch"
+        identity = row["evidence"]["delegate_identities"]["rocm_wmma_gemm"]
+        assert identity["identity"] == "kernel_code"
+        assert identity["normalization"] == KI.NORMALIZATION
+        assert identity["isa"] == "gfx1151" and identity["entry"] == "gemm"
+        assert identity["data_sections"] == ".rodata:0"
+        assert identity["disassembler"]
+        assert "abi_digest" not in identity

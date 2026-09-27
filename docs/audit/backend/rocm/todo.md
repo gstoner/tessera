@@ -96,10 +96,16 @@ package); `rocm_flash_attn` the FA-2 image at Q's head_dim via
 on a match. Per-process cache keyed by (candidate, kernel-selecting facts,
 `tessera-opt` digest), building through the lane's own compile cache; any
 failure (no `llvm-objdump`, no image, no operands) is a miss. The family pins
-stay in the key. The normalization mirrors
+stay in the key. The per-instruction rule is that of
 `benchmarks/rocm/inspect_gfx1201_folded_prefill.selected_symbol_isa_evidence`,
 which sealed gfx1201 packets freeze by hash, so that function is kept as a
-declared oracle with a differential test (`tests/unit/test_kernel_code_identity.py`).
+declared oracle. What `tests/unit/test_kernel_code_identity.py` checks is
+narrower than "the two agree": on one constructed, fully decoded listing, the
+shared core (`instruction_blocks`) reproduces the oracle's digest and the
+production stream is that core's output under its function header. The two
+deliberately differ on an undecodable word (the oracle drops it, production
+refuses the image), and the test monkeypatches the oracle's disassembly, so it
+does not cover the oracle's own `llvm-objdump` call.
 **Proof on Princess-Luna** (log + script
 `benchmarks/baselines/autotune_corpus_rerecord_20260926/gfx1151_fused_kernel_identity.txt`,
 `check_kernel_identity.py`): worktree `~/programming/tessera-kid` clean at
@@ -110,13 +116,91 @@ so are their identities (64/256/512 share one kernel, stream
 `cc3dbae2ae69ee17…`, 11560 instructions; 1024 selects another, `97baa4c06a2cb0ef…`,
 21744). Before the re-record the committed rows (stamped with the `59ecd215`
 binary's digest) were not served in `build-b` (all 8 missed); re-recorded in `build-a` under the lock
-(timer `device_event`); after it all 8 rows are **served** by `corpus_winner`
+(timer `device_event`); after it all 8 rows were served by `corpus_winner`
 and `measured_arbitrate` (re-measurement disabled) in `build-b`, with the
-`59ecd215` `tessera-opt`, and in `build-a`. Winners and separation unchanged
-(all separated): `rocm_generic_hip` at 64 end to end (margin 62.41% vs noise
-3.43%), `rocm_wmma_gemm` at 64 device (93.20/1.13), 256 (37.45/2.20 e2e,
-99.51/3.82 device), 512 (83.37/4.32, 99.89/3.48) and 1024 (94.58/5.32,
-99.91/0.47). Only these 8 rows changed.
+`59ecd215` `tessera-opt`, and in `build-a` -- **but only when the caller
+passed `dims=(size, size)` explicitly; see the correction below.**
+
+**Corrected 2026-09-26 (pre-PR review, branch
+`claude/timing-foundation-kernel-identity-fixes`): the rows above were never
+reachable from production dispatch, and the v1 identity had two holes.**
+
+- *Unreachable rows (pre-existing).* `record_autotune_separation.py` passed
+  `dims=(size, size)`, a 2-D `(M, N)` bucket, while `run_arbitrated` ->
+  `corpus_winner` infers `(M, N, K)`; ordinary dispatch looked up a key no row
+  had and fell to tier priority. The 2-D bucket also dropped K. Now
+  `measured_arbitrate` infers dims with `_infer_dims` when none are given (the
+  one authority `corpus_winner` uses) and the recorder passes none.
+- *Undecodable words (P1-1).* v1 kept only lines starting with a mnemonic, so a
+  `.long 0x...` the disassembler could not decode vanished: two kernels
+  differing only in that word hashed equal. v2 refuses the image (fail closed)
+  on any non-decoded line inside a function (`.long`, `<unknown>`, `...`).
+- *Constant data (P1-2).* v1 digested no `.rodata` beyond the descriptor and
+  enforced nothing. v2 digests every allocatable, non-executable, non-loader
+  section with the `.kd` ranges removed, and names what it digested
+  (`data_sections`, `.rodata:0` for these images).
+- Also: the identity carries the `llvm-objdump --version` line
+  (`identity_mismatch()` names differing fields, so a tool change reads as
+  `["disassembler"]`); its ISA is the live device's (`_rocm_device_name`) and
+  must equal the build chip; raster order/group are in its cache key (the
+  arbiter runs the default raster); the recorder refuses an unqualified device
+  key and any row whose required identity was not stamped (a host without
+  `llvm-objdump` used to evict good rows and write unservable ones, exit 0).
+  The gfx12 image helper mirrors the launch's `build_canonical_gemm_hsaco`
+  call -- it is not a shared selector there (it is on gfx11).
+  `tests/_support/rocm_isa` now resolves `llvm-objdump` through the library
+  list, which adds `/opt/rocm/core/llvm/bin` before `/opt/rocm/llvm/bin`; on
+  Princess-Luna both resolve to the same `/opt/rocm/core-10.0/lib/llvm/bin/llvm-objdump`,
+  so the fixture helper's tool did not move there.
+
+**Proof of the fixes on Princess-Luna** (log
+`autotune_corpus_rerecord_20260926/gfx1151_fused_kernel_identity_v2.txt`):
+worktree `~/programming/tessera-kid` clean at `41c4feb4`, the same
+`build-a/`/`build-b/` rebuilt at that commit (`tessera-opt` still differs,
+`4ba11580…` vs `c83eb30d…`).
+1. Real-tool checks, kernels assembled with ROCm clang + ld.lld for gfx1151:
+   two kernels differing only in `.long 0xdeadbeef` / `.long 0xcafef00d` hash
+   equal under the lenient (oracle) walk and are both refused by v2; two
+   kernels differing only in a 4-byte `.rodata` table (1.0f vs 2.0f) differ in
+   `data_sha256` alone.
+2. v2 identities of the four fused images are identical across `build-a`,
+   `build-b` and the `59ecd215` `tessera-opt`; `data_sections=.rodata:0`,
+   disassembler `AMD LLVM version 23.0.0git`.
+3. Before: asked the way production asks (no dims), in `build-b`, every row
+   missed and ordinary `run_arbitrated` fell to tier priority.
+4. Re-recorded in `build-a`, no explicit dims, timer `device_event`; the 8 rows
+   now key on `(64,64,64)` ... `(1024,1024,1024)`. Winners and separation
+   unchanged (all separated): `rocm_generic_hip` at 64 end to end (margin
+   62.72% vs noise 3.24%), `rocm_wmma_gemm` at 64 device (93.22/0.69), 256
+   (38.54/2.05 e2e, 99.51/0.16 device), 512 (83.96/4.53, 99.89/1.87), 1024
+   (94.59/5.29, 99.91/0.47). Only these 8 rows changed (their 2-D keys removed,
+   3-D keys added; the 108 sm_120 and 8 paged-KV rows untouched).
+5. After, in `build-b`, with the `59ecd215` `tessera-opt`, and in `build-a`:
+   ordinary `run_arbitrated(region, op, "rocm", a, b, bias)` with no dims
+   consults the device row, which answers its recorded winner, and dispatches
+   it on the device (tag `rocm_wmma`); `corpus_winner` and `measured_arbitrate`
+   (re-measurement disabled), dims inferred, serve all 8 rows with an empty
+   `identity_mismatch`.
+
+**Dims-mismatch sweep of the other recorders.** `record_paged_kv_corpus.py`
+and `cache/paged_kv.py::_rocm_paged_attention_corpus_winner` both build
+`(q_len, q_heads, kv_heads, tokens, dim, page_size)` with `q_len = 1`: they
+agree. NVIDIA `record_autotune_corpus.py` passes `(m, n, k)` for matmul and
+fused_region and `(m, nk, d, dv)` for attention, which match `_infer_dims`;
+NVIDIA `benchmark_serving.py` writes `1xHxTxD` and
+`_paged_attention_corpus_winner` looks up `(q_len, H, T, D)`: they agree. **But
+`gated_matmul` `(m, h, k)` and `conv2d` rows are written with explicit dims
+while `_infer_dims` returns `None` for those ops, so ordinary
+`run_arbitrated` dispatch never consults them** (it reaches them only when a
+caller passes dims). NVIDIA-owned; recorded in the NVIDIA plan, not changed
+here.
+
+Also recorded, not fixed (pre-existing): `RocmFlashAttnCandidate.measure_device_latency`
+passes raw Q/K/V to `_rocm_flash_attn` without `region._natural`, while `run`
+and `artifact_identity` orient them; for a transposed attention region the
+device timing would measure a different problem than the one run and
+identified. No committed attention row exists on gfx1151. Owner: this queue,
+alongside `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`.
 
 Limits: the WMMA images here are byte-deterministic, so this proof shows the
 identity survives a rebuild but does not itself exercise the normalization
@@ -127,15 +211,34 @@ images have none); host launch geometry is outside the image (it derives from
 the same schedule the key selects); a disassembler that printed two encodings
 identically would conflate them. gfx1201 `rocm_wmma_gemm` identity goes through
 the scheduled package's image but has no committed rows and no device proof of
-the identity path. **Open:** the 8 `paged_kv_decode` rows and
-`cache/paged_kv.py::_rocm_paged_attention_corpus_winner` carry and check no
-artifact identity at all, although both routes run `tessera-opt`-generated
-kernels (`direct`; `gather_fa` = two paged-KV reads + FA-2 with bias): a
-multi-kernel identity plus a re-record is owed (`AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`).
+the identity path. (The sentence "non-descriptor data sections are not
+digested" above describes v1; v2 digests them -- see the correction.)
 
-**sm_120: owed on Super-Bear** (97 rows; see the NVIDIA plan's entry under the
-same key for the commands). gfx1201 has no committed corpus rows: not
-applicable.
+**sm_120:** re-recorded on Super-Bear (NVIDIA plan, same key). gfx1201 has no
+committed corpus rows: not applicable.
+
+## `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`: artifact identity for the gfx1151 paged-KV warm start — open
+
+Owner: this queue (sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`). The 8
+`rocm:gfx1151` `paged_kv_decode` rows and their production reader
+`cache/paged_kv.py::_rocm_paged_attention_corpus_winner` carry and check **no
+artifact identity**, although both routes run `tessera-opt`-generated kernels:
+`direct` (one paged-attention kernel) and `gather_fa` (two paged-KV reads plus
+the FA-2 forward with an additive bias). A rebuilt compiler that changes any of
+those kernels still serves the old ranking.
+
+Work: a multi-kernel identity per route (the `kernel_code_identity` digest of
+every image the route launches, ordered), stamped by
+`benchmarks/rocm/record_paged_kv_corpus.py`, and checked by the warm start
+before it returns a winner (fail closed: no identity, no hint); then
+re-record the 8 rows on Princess-Luna under the lock.
+
+**Gate:** a unit test that a paged-KV row whose stamped route identity differs
+from the live one is not served by `_rocm_paged_attention_corpus_winner`, and
+one that a row without a stamp is not served; plus a Princess-Luna log showing
+the re-recorded rows served by the warm start in a build tree other than the
+recording one. Until then, the paged-KV warm start is keyed on the toolchain
+pins only.
 
 ## ROCM-SPLIT-K-1: cross-workgroup split-K on gfx1201 — 2026-09-26
 

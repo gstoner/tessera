@@ -162,8 +162,14 @@ _WAIVED: dict[str, Waiver] = {
     **{name: Waiver("unreferenced", "#29", _R_ARCH) for name in (
         "tessera.arch.weighted_sum", "tessera.arch.switch", "tessera.arch.mixed")},
     "tessera.arch.parameter": Waiver("fixture_only", "#29", _R_ARCH),
-    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH) for name in (
-        "tessera.ebm.inner_step", "tessera.ebm.decode_init", "tessera.ebm.self_verify",
+    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH + "; the frontend emits the "
+                    "flat spelling (`tessera.ebm_inner_step` / `ebm_self_verify`) the "
+                    "runtime consumes instead (triage: merge/supersede)") for name in (
+        "tessera.ebm.inner_step", "tessera.ebm.self_verify")},
+    "tessera.ebm.decode_init": Waiver("fixture_only", "#29", _R_EBM_GRAPH),
+    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH + "; the compiled capability "
+                    "is `tessera_ebm.langevin_step{manifold}` (native_langevin.py -> "
+                    "LowerLangevin), triage: merge/supersede") for name in (
         "tessera.ebm.bivector_langevin_step", "tessera.ebm.sphere_langevin_step")},
     **{name: Waiver("fixture_only", "#29", _R_ATTN_RES) for name in (
         "tessera.attn_with_stats", "tessera.softmax_merge", "tessera.softmax_finalize")},

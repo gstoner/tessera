@@ -4,13 +4,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1052027.5059279567,
+      "median_ns": 695278.6371667578,
       "repetitions": 1500,
-      "resource_fingerprint": "c37f235b45bfa21243036e703cc76deac98b99f950152ef7dc34fe230b4f1fbe",
+      "resource_fingerprint": "a3cf05146dd34a2ae44131f8a70827de7b52d04581fd86d3311d9806c8d1a487",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1051866.8512944311,
-        1052188.1605614822
+        695377.3743922585,
+        695179.8999412571
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -22,13 +22,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1497640.4500000002,
+      "median_ns": 1117512.52,
       "repetitions": 1500,
-      "resource_fingerprint": "c37f235b45bfa21243036e703cc76deac98b99f950152ef7dc34fe230b4f1fbe",
+      "resource_fingerprint": "a3cf05146dd34a2ae44131f8a70827de7b52d04581fd86d3311d9806c8d1a487",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1497111.59,
-        1498169.31
+        1117344.04,
+        1117681.0
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -40,13 +40,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 2875.1518667171513,
+      "median_ns": 2851.8576917962055,
       "repetitions": 1500,
-      "resource_fingerprint": "409f3f7f5cc2172cb647d4632497ce0ac8a87061080c247995528495cf4916ab",
+      "resource_fingerprint": "2121d1eca64b4e28b3bdfcc7a5c6a369b81227f101ef1c1f65e1c6b1a8dd097f",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        2882.465735284261,
-        2867.8379981500416
+        2849.202657320539,
+        2854.5127262718715
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -58,13 +58,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 385351.605,
+      "median_ns": 387213.24,
       "repetitions": 1500,
-      "resource_fingerprint": "409f3f7f5cc2172cb647d4632497ce0ac8a87061080c247995528495cf4916ab",
+      "resource_fingerprint": "2121d1eca64b4e28b3bdfcc7a5c6a369b81227f101ef1c1f65e1c6b1a8dd097f",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        385725.07,
-        384978.14
+        386872.34,
+        387554.14
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -76,13 +76,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 730.2847669269024,
+      "median_ns": 721.5682374999128,
       "repetitions": 1500,
-      "resource_fingerprint": "8efc24e83ee652c3d7d7943ca3ad9cf7c4c067441f6142b5b736e95326b916cb",
+      "resource_fingerprint": "c754cfbf229019826b5b730132458327e70f291196e3ed60639785f9ad17ebe1",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        728.6817272409604,
-        731.8878066128443
+        728.681726095094,
+        714.4547489047318
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -94,13 +94,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 386348.965,
+      "median_ns": 386627.725,
       "repetitions": 1500,
-      "resource_fingerprint": "8efc24e83ee652c3d7d7943ca3ad9cf7c4c067441f6142b5b736e95326b916cb",
+      "resource_fingerprint": "c754cfbf229019826b5b730132458327e70f291196e3ed60639785f9ad17ebe1",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        386645.03,
-        386052.9
+        386745.55,
+        386509.9
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -112,13 +112,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 708097.3451087316,
+      "median_ns": 520058.8855203178,
       "repetitions": 1500,
-      "resource_fingerprint": "6eb022813346861b0b42f284833fb58dda1533ada6e3bf664f38c99df66478ce",
+      "resource_fingerprint": "73995a352e18576328c5736b3c8d4d754fb5b5b2c8636193b0fdff72264da91a",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        707988.7892649992,
-        708205.9009524641
+        520004.8330259925,
+        520112.9380146432
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -130,13 +130,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 1153295.95,
+      "median_ns": 967919.335,
       "repetitions": 1500,
-      "resource_fingerprint": "6eb022813346861b0b42f284833fb58dda1533ada6e3bf664f38c99df66478ce",
+      "resource_fingerprint": "73995a352e18576328c5736b3c8d4d754fb5b5b2c8636193b0fdff72264da91a",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1153173.77,
-        1153418.13
+        968291.69,
+        967546.98
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -148,13 +148,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 62279.59464854801,
+      "median_ns": 62222.58645187045,
       "repetitions": 1500,
-      "resource_fingerprint": "a83881b4d7018d203866854c4450fdb2de045e9f3e8b9dec662aeed928c6538e",
+      "resource_fingerprint": "496bd31c02cc6b2636de01ae7005c063d2e646b680befda7afa2498cd55e0f91",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        62291.61744619257,
-        62267.57185090344
+        62171.28918200097,
+        62273.88372173992
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -166,13 +166,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 449167.51,
+      "median_ns": 455837.82999999996,
       "repetitions": 1500,
-      "resource_fingerprint": "a83881b4d7018d203866854c4450fdb2de045e9f3e8b9dec662aeed928c6538e",
+      "resource_fingerprint": "496bd31c02cc6b2636de01ae7005c063d2e646b680befda7afa2498cd55e0f91",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        449517.73,
-        448817.29
+        455963.12,
+        455712.54
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -382,7 +382,7 @@
     "attention",
     "linalg"
   ],
-  "source_commit": "dcdaf2a91a8b95a6a6e1cad154791e2b631083fe",
+  "source_commit": "329fcbf6d441de51c6c504922267d7d63660e53e",
   "target": "x86",
   "toolchain_fingerprint": "b67aa70609e5e1787d08b7449e988a6f7ca047259999d28df7aaafaa9dd8b0ce"
 }

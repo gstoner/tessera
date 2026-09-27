@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 
+from benchmarks.common.route_provenance import RouteProvenance, route_from_runtime_artifact
+
 
 @dataclass(frozen=True)
 class CompilerRun:
@@ -21,6 +23,9 @@ class CompilerRun:
     tile_ir: str | None
     target_ir: str | None
     lowering: str
+    #: Decision #12: which lowering produced ``latency_ms``, read from the
+    #: runtime artifact the JIT built for the call that was timed.
+    route: RouteProvenance
 
     @property
     def artifact_hash(self) -> str:
@@ -80,6 +85,7 @@ def compiler_matmul_relu_target(
         tile_ir=bench_kernel.tile_ir,
         target_ir=bench_kernel.target_ir,
         lowering=bench_kernel.explain_lowering(),
+        route=route_from_runtime_artifact(bench_kernel.runtime_artifact()),
     )
 
 

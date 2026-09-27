@@ -162,7 +162,7 @@
     "tests/unit/test_nvidia_tile_fragment_compiler_path.py::test_sm120_tile_int8_fragment_path_matches_numpy": "tests/device/nvidia/test_tile_fragment_compiler_path.py::test_sm120_tile_int8_fragment_path_matches_numpy",
     "tests/unit/test_nvidia_tile_fragment_compiler_path.py::test_sm120_launch_level_matmul_handles_grid_and_ragged_k": "tests/device/nvidia/test_tile_fragment_compiler_path.py::test_sm120_launch_level_matmul_handles_grid_and_ragged_k",
     "tests/unit/test_nvidia_plugin.py::test_live_nvidia_arbitrated_residual_executes": "tests/device/nvidia/test_plugin.py::test_live_nvidia_arbitrated_residual_executes",
-    "tests/unit/test_nvidia_plugin.py::test_live_nvidia_emitted_ragged_degrade_is_logged": "tests/device/nvidia/test_plugin.py::test_live_nvidia_emitted_ragged_degrade_is_logged",
+    "tests/unit/test_nvidia_plugin.py::test_live_nvidia_emitted_ragged_degrade_is_logged": "tests/device/nvidia/test_plugin.py::test_live_nvidia_emitted_ragged_served_odd_k_refused",
     "tests/unit/test_nvidia_plugin.py::test_live_nvidia_pointwise_dag": "tests/device/nvidia/test_plugin.py::test_live_nvidia_pointwise_dag",
     "tests/unit/test_nvidia_plugin.py::test_live_nvidia_pointwise_max_min_preserve_nan": "tests/device/nvidia/test_plugin.py::test_live_nvidia_pointwise_max_min_preserve_nan",
     "tests/unit/test_nvidia_plugin.py::test_live_nvidia_pointwise_gelu_and_nan_sign": "tests/device/nvidia/test_plugin.py::test_live_nvidia_pointwise_gelu_and_nan_sign",

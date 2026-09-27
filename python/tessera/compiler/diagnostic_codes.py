@@ -317,6 +317,24 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="NVIDIA-PARITY-EPILOGUE", language="python",
     ),
     DiagnosticCode(
+        code="E_REDUCTION_KIND_MISSING",
+        pass_origin="tessera.compiler.reduction_kind",
+        severity="error",
+        summary="A tessera.reduce reached an executor or lowering with no 'kind' (and no legacy 'op'); its combiner is a semantic key and is never defaulted to sum.",
+        fix_hint="State kind= one of sum/max/min/mean (the ODS ReductionKindAttr set), or use tessera.ops.reduce(op=...), which the frontends canonicalize into kind.",
+        spec="src/compiler/ir/TesseraOps.td (Tessera_ReductionKindAttr)",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26", language="python",
+    ),
+    DiagnosticCode(
+        code="E_REDUCTION_KIND_UNSUPPORTED",
+        pass_origin="tessera.compiler.reduction_kind",
+        severity="error",
+        summary="A tessera.reduce states a kind outside the ODS set (sum/max/min/mean), or a 'kind' and a legacy 'op' that disagree.",
+        fix_hint="Use one of sum/max/min/mean; drop the conflicting legacy 'op' spelling.",
+        spec="src/compiler/ir/TesseraOps.td (Tessera_ReductionKindAttr)",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26", language="python",
+    ),
+    DiagnosticCode(
         code="E_LAUNCH_BINDING_MISMATCH",
         pass_origin="tessera.compiler.native_artifact.LaunchDescriptor",
         severity="error",
@@ -4024,6 +4042,144 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         ),
         spec="docs/audit/backend/nvidia/todo.md",
         sprint="SM120-STAGING-ROUTING",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_WITNESS_DISAGREES",
+        pass_origin="tessera.compiler.profiler_timing.witness_refusal_codes",
+        severity="error",
+        summary="A device-clock calibration's promotion clock and one of its admissible witnesses disagree beyond the 5% band.",
+        fix_hint="Re-record; if it persists, the marker span and the event do not bracket the same interval.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_WITNESS_MISSING",
+        pass_origin="tessera.compiler.profiler_timing.witness_refusal_codes",
+        severity="error",
+        summary="A device-clock calibration names no admissible witness that is valid in the same sample.",
+        fix_hint="Record the target's event clock (CUDA or HIP event) in the same sample and name it in calibrated_against.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_SLOT_INADMISSIBLE",
+        pass_origin="tessera.compiler.profiler_timing.witness_refusal_codes",
+        severity="error",
+        summary="A clock marked promotion-eligible is not a kernel-side clock of the sample's own target.",
+        fix_hint="Promote only through promotion_clock_slots(target).",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_VALUE_UNUSABLE",
+        pass_origin="tessera.compiler.profiler_timing.witness_refusal_codes",
+        severity="error",
+        summary="A promotion clock's value cannot be expressed in nanoseconds (e.g. a TSC without an independent frequency).",
+        fix_hint="Record the value in ns, or a TSC with a frequency from an independent source.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_WINDOWS_MISSING",
+        pass_origin="tessera.compiler.profiler_timing.device_clock_window_refusals",
+        severity="error",
+        summary="A marker-bracketed calibration does not store usable per-window device-clock and event values, or its target has no minimum window.",
+        fix_hint="Record with the current recorder (record_ssd_gpu.py), which stores per_window_ns and per_window_event_ns.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_WINDOWS_UNBOUND",
+        pass_origin="tessera.compiler.profiler_timing.device_clock_window_refusals",
+        severity="error",
+        summary="The stored median device clock or event is not the median of the stored per-window values.",
+        fix_hint="Do not edit a packet; re-record it.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_WINDOW_TOO_SHORT",
+        pass_origin="tessera.compiler.profiler_timing.device_clock_window_refusals",
+        severity="error",
+        summary="A calibration window is shorter than the target's measured minimum (sm_120 1 ms; gfx1151/gfx1201 5 ms), where the fixed span/event offset dominates.",
+        fix_hint="Raise --launches so every window clears MINIMUM_DEVICE_CLOCK_WINDOW_NS.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_WINDOW_DISAGREES",
+        pass_origin="tessera.compiler.profiler_timing.device_clock_window_refusals",
+        severity="error",
+        summary="At least one calibration window's device clock disagrees with its event beyond the 5% band, even if the medians agree.",
+        fix_hint="Re-record with longer windows; a single disagreeing window means the span does not track the event.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_PART_UNVALIDATED",
+        pass_origin="tessera.compiler.profiler_nvidia_evidence",
+        severity="error",
+        summary="The queried NVIDIA part is not one the %globaltimer window validation was measured on (the validation is per part, not per compute capability).",
+        fix_hint="Run benchmarks/probe_nvidia_globaltimer_marker.py on the part and add it to NVIDIA_DEVICE_CLOCK_VALIDATED_PARTS with its evidence.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="DEVICE_CLOCK_PART_MISMATCH",
+        pass_origin="tessera.compiler.ssd_performance.admit_ssd_candidate",
+        severity="error",
+        summary="The eighteen SSD calibrations do not all name one device UUID.",
+        fix_hint="Record every process of a comparison on one GPU.",
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="NVIDIA-PREPR-REVIEW-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY",
+        pass_origin="tessera.compiler.ssd_performance.admit_ssd_candidate",
+        severity="error",
+        summary=(
+            "A ROCm SSD calibration packet does not carry the current window "
+            "protocol (plain and marker-bracketed windows interleaved), so "
+            "admission refuses it; it stays readable history."
+        ),
+        fix_hint=(
+            "Re-record with benchmarks/record_ssd_rocm_calibrated_pairs.py at a "
+            "commit whose recorder stamps "
+            "timing.environment.window_protocol = "
+            "'interleaved_alternating_plain_bracketed'. The plain-first "
+            "protocol compared two GPU power states on gfx1201."
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="GFX1201-SSD-CALIBRATION-2026-09-26",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="SSD_CALIBRATION_LAUNCHES_MISMATCH",
+        pass_origin="tessera.compiler.ssd_performance.admit_ssd_candidate",
+        severity="error",
+        summary=(
+            "A ROCm SSD calibration's launches per window (timing.batch_size "
+            "and the device clock's provenance) disagree with its comparison "
+            "row's launches_per_window, or one of them is missing."
+        ),
+        fix_hint=(
+            "Record the row and its calibration in one process with the same "
+            "--launches; the fixed per-window bracket offset makes a "
+            "calibration at one window length say nothing about another."
+        ),
+        spec="docs/audit/backend/rocm/todo.md",
+        sprint="GFX1201-SSD-CALIBRATION-2026-09-26",
         language="python", status="implemented",
     ),
 )

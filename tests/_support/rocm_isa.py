@@ -36,21 +36,15 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-#: Where an LLVM 23 `llvm-objdump` lives on the fleet, most explicit first.
 def _candidates() -> list[Path]:
-    found: list[Path] = []
-    explicit = os.environ.get("TESSERA_LLVM_BIN")
-    if explicit:
-        found.append(Path(explicit) / "llvm-objdump")
-    rocm = os.environ.get("ROCM_PATH")
-    if rocm:
-        found.append(Path(rocm) / "llvm" / "bin" / "llvm-objdump")
-    found += [
-        Path.home() / ".local/share/tessera-toolchains/llvm-23.1.1/bin/llvm-objdump",
-        Path("/opt/rocm/llvm/bin/llvm-objdump"),
-        Path("/usr/lib/llvm-23/bin/llvm-objdump"),
-    ]
-    return found
+    """Where an LLVM 23 `llvm-objdump` lives on the fleet, most explicit first.
+
+    One list, owned by `tessera.compiler.kernel_code_identity` (the autotune
+    kernel-code identity disassembles with the same tool), so the fixture helper
+    and the production identity cannot resolve different disassemblers."""
+    from tessera.compiler.kernel_code_identity import llvm_objdump_candidates
+
+    return llvm_objdump_candidates()
 
 
 def llvm_objdump() -> str:

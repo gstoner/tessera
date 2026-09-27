@@ -42,8 +42,26 @@ _REDUCERS = [
 def test_reduce_axis_variants(op_name, npf, axis):
     rng = np.random.RandomState(0)
     x = rng.randn(4, 6, 5).astype(np.float32)
-    np.testing.assert_allclose(_disp(op_name, x, axis=axis),
+    # `tessera.reduce` states its combiner as `kind` (no default: #21a).
+    kw = {"kind": "sum"} if op_name == "tessera.reduce" else {}
+    np.testing.assert_allclose(_disp(op_name, x, axis=axis, **kw),
                                npf(x, axis=axis), rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("kind,npf", [("sum", np.sum), ("max", np.amax),
+                                      ("min", np.amin), ("mean", np.mean)])
+def test_generic_reduce_executes_its_kind(kind, npf):
+    """The lane used to map `tessera.reduce` to its sum code whatever the op's
+    `kind` said (NVIDIA pre-PR review, 2026-09-26)."""
+    x = np.random.RandomState(3).randn(4, 6).astype(np.float32)
+    np.testing.assert_allclose(_disp("tessera.reduce", x, axis=1, kind=kind),
+                               npf(x, axis=1), rtol=1e-4, atol=1e-4)
+
+
+def test_generic_reduce_without_kind_is_refused():
+    x = np.ones((2, 3), np.float32)
+    with pytest.raises(ValueError, match="E_REDUCTION_KIND_MISSING"):
+        _disp("tessera.reduce", x, axis=1)
 
 
 @pytest.mark.parametrize("axis", [-1, 1, (1, 2)])
@@ -87,7 +105,7 @@ def test_reduce_no_n_limit():
     # N>256 proves the MPSGraph reduce has no per-thread envelope limit.
     rng = np.random.RandomState(5)
     x = rng.randn(3, 1024).astype(np.float32)
-    np.testing.assert_allclose(_disp("tessera.sum" if False else "tessera.reduce", x, axis=-1),
+    np.testing.assert_allclose(_disp("tessera.reduce", x, axis=-1, kind="sum"),
                                x.sum(-1), rtol=1e-4, atol=1e-3)
 
 

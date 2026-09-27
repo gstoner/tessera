@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "process_id": 137613,
+  "run_id": "28ef6854e86d4394aaf1d2a3961f70f2",
+  "architecture": "gfx1151",
+  "compiler_sha256": "053d08742bf5b4788d10b875248bf05ca43316b0820a6e355e5ff197986321df",
+  "shape": [
+    32,
+    2,
+    16,
+    4
+  ],
+  "clock": "HIP events",
+  "execution": "native_gpu",
+  "cooperative": true,
+  "rows": [
+    {
+      "chunk": 8,
+      "binding_ms": 192.25065200589597,
+      "checked_call_ms": 2.9032919846940786,
+      "device_event_ms": [
+        0.013546387672424316,
+        0.013482354164123534,
+        0.013489355087280273,
+        0.013525364875793457,
+        0.01353692626953125,
+        0.013507492065429687,
+        0.013419435501098633
+      ],
+      "device_event_median_ms": 0.013507492065429687,
+      "launches_per_window": 1000,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "de4efaa32089c16bc32794d3ef1acc8f3ff72120a19f989efee99cb528649cb8",
+      "image_sha256": "4777f16059df03487ad8537326bd48e0a121200166747fcc456bcdda36268f90"
+    }
+  ],
+  "promotion_eligible": false
+}

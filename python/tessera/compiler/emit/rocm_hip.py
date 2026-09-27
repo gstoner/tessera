@@ -939,6 +939,21 @@ def _wmma_epilogue(region: Any) -> tuple[bool, str] | None:
     return None                               # bias-after-act, or an unfusable op
 
 
+def _identity_isa() -> str | None:
+    """The ISA a kernel-code identity is stamped with: the live device's arch
+    (``runtime._rocm_device_name``, the same authority as the corpus device
+    key), and only when it is the arch the image is built for
+    (``_rocm_chip``). ``None`` -- a miss -- off a ROCm device or when the build
+    target and the device disagree, so the env default can never label an
+    image with an arch that is not the one running it."""
+    from tessera import runtime as rt
+
+    live = rt._rocm_device_name()
+    if not live or live != rt._rocm_chip():
+        return None
+    return str(live)
+
+
 class RocmGenericHipCandidate(Candidate):
     """Tier-1: the generic one-thread-per-row HIP lane (arch-agnostic synth). Serves
     any ``FusedRegion`` — the floor-raising middle ground that is correctness-first,
@@ -1035,6 +1050,46 @@ class RocmWmmaGemmCandidate(Candidate):
     def mma_dtype(self, region: Any) -> str | None:
         return "fp16"
 
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the kernel-code identity of the fused image this
+        candidate runs for this workload -- ``(M, N, K)`` from the operands
+        (the schedule, hence the image, is selected per shape), the fused
+        epilogue from the region, f16 storage (``run`` casts to it), on the
+        launch chip. ``None`` (a miss) when there is no workload to derive it
+        from or the region is not one this kernel runs."""
+        epi = _wmma_epilogue(region)
+        if epi is None or len(inputs) < 2:
+            return None
+        try:
+            a_shape, b_shape = tuple(inputs[0].shape), tuple(inputs[1].shape)
+        except AttributeError:
+            return None
+        if len(a_shape) != 2 or len(b_shape) != 2 or a_shape[1] != b_shape[0]:
+            return None
+        m, k = (int(x) for x in a_shape)
+        n = int(b_shape[1])
+        has_bias, activation = epi
+        from tessera import runtime as rt
+        from tessera.compiler.kernel_code_identity import (
+            compiler_kernel_identity,
+            generator_fingerprint,
+        )
+
+        chip = _identity_isa()
+        if chip is None:
+            return None
+        # The arbiter runs this candidate with no kwargs, so the image it times
+        # and dispatches is the default raster; name it in the key rather than
+        # let a non-default `run(raster_order=...)` share this identity.
+        raster_order, raster_group = "row_major", 1
+        key = (self.name, chip, m, n, k, "f16", has_bias, activation,
+               raster_order, raster_group, generator_fingerprint())
+        return compiler_kernel_identity(
+            key, lambda: rt._rocm_wmma_fused_image(
+                m, n, k, "f16", bias=has_bias, activation=activation,
+                raster_order=raster_order, raster_group=raster_group),
+            isa=chip)
+
     def available(self) -> bool:
         # Probe the ACTUAL fused path (tessera-opt + generated kernel), not just
         # the shipped GEMM symbol — else this could win arbitration on a host where
@@ -1120,6 +1175,36 @@ class RocmFlashAttnCandidate(Candidate):
     target = _TARGET
     op = OP_ATTENTION
     accuracy_atol = _F16_ATOL
+
+    def artifact_identity(self, region: Any, *inputs: Any) -> "dict[str, str] | None":
+        """Decision #11: the kernel-code identity of the FA-2 image ``run``
+        launches for this workload: the plain (non-GQA, unwindowed, uncapped,
+        unbiased, no-dropout) f16 kernel at Q's head_dim, on the launch chip.
+        Causality and scale are runtime arguments, not image variants. ``None``
+        (a miss) without Q/K operands to read head_dim from."""
+        if len(inputs) < 3:
+            return None
+        try:
+            import numpy as np
+            Qn, Kn = region._natural(inputs[0], inputs[1])
+            q_shape, k_shape = np.shape(Qn), np.shape(Kn)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return None
+        if len(q_shape) != 2 or len(k_shape) != 2 or q_shape[1] != k_shape[1]:
+            return None
+        head_dim = int(q_shape[1])
+        from tessera import runtime as rt
+        from tessera.compiler.kernel_code_identity import (
+            compiler_kernel_identity,
+            generator_fingerprint,
+        )
+
+        chip = _identity_isa()
+        if chip is None:
+            return None
+        key = (self.name, chip, head_dim, "f16", generator_fingerprint())
+        return compiler_kernel_identity(
+            key, lambda: rt._rocm_flash_attn_image(head_dim, "f16"), isa=chip)
 
     def available(self) -> bool:
         try:

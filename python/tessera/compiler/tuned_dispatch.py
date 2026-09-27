@@ -18,6 +18,16 @@ are non-portable across arch / library version — they are payload, not key.  K
 on them would silently mis-dispatch after a library bump.  Here the key is the
 :class:`ProblemSignature` and the ``solidx`` rides only inside :class:`TunedConfig`.
 
+TOOLCHAIN IN THE KEY (Decision #11, amended 2026-08-30): AITER keys on the problem
+signature alone, and the same lesson that keeps ``solidx`` out of the key puts the
+toolchain *in* it — a row measured under one library/toolkit build is not a
+measurement of another.  :class:`ProblemSignature` therefore carries ``toolchain``
+(a digest from ``tessera.compiler.toolchain_identity``, passed in by the caller —
+this module stays stdlib-only).  A row whose toolchain differs misses; an
+**unversioned** signature (``toolchain=""``, e.g. every row of a stock AITER CSV,
+which has no such column) never matches at all, so a legacy table loads for
+inspection but cannot dispatch.
+
 Two-tier override (hipBLASLt model): a runtime-loadable override table wins over the
 base table per matching signature without recompiling — :meth:`TunedDispatchTable.with_override`.
 
@@ -40,7 +50,8 @@ from typing import Any, Callable, Iterable
 # winning config), never part of the dispatch key.
 LIBTYPES = ("hipblaslt", "asm", "triton", "flydsl", "ck", "cktile")
 
-# The flat CSV column order (AITER's tuned-config schema).
+# The flat CSV column order (AITER's tuned-config schema, plus the additive
+# ``toolchain`` signature column — Decision #11).
 CSV_COLUMNS = (
     "gfx",
     "cu_num",
@@ -48,6 +59,7 @@ CSV_COLUMNS = (
     "N",
     "K",
     "dtype",
+    "toolchain",
     "libtype",
     "solidx",
     "splitK",
@@ -56,19 +68,21 @@ CSV_COLUMNS = (
 )
 
 # Worklist CSV is just the signature columns.
-WORKLIST_COLUMNS = ("gfx", "cu_num", "M", "N", "K", "dtype")
+WORKLIST_COLUMNS = ("gfx", "cu_num", "M", "N", "K", "dtype", "toolchain")
 
 
-SignatureKey = tuple[str, int, int, int, int, str]
+SignatureKey = tuple[str, int, int, int, int, str, str]
 
 
 @dataclass(frozen=True)
 class ProblemSignature:
     """The dispatch KEY: the problem signature a tuned config is selected for.
 
-    ``(gfx, cu_num, M, N, K, dtype)`` — the architecture + compute-unit count + the
-    GEMM problem dims + the dtype.  Frozen, so it is hashable and usable as a dict
-    key.  This — and **never** the opaque ``solidx`` — is what the table keys on.
+    ``(gfx, cu_num, M, N, K, dtype, toolchain)`` — the architecture + compute-unit
+    count + the GEMM problem dims + the dtype + the toolchain identity digest the
+    measurement was made under (Decision #11; ``""`` = unversioned, which never
+    dispatches).  Frozen, so it is hashable and usable as a dict key.  This — and
+    **never** the opaque ``solidx`` — is what the table keys on.
     """
 
     gfx: str
@@ -77,6 +91,7 @@ class ProblemSignature:
     n: int
     k: int
     dtype: str
+    toolchain: str = ""
 
     def __post_init__(self) -> None:
         if not self.gfx:
@@ -93,7 +108,13 @@ class ProblemSignature:
 
     def as_key(self) -> SignatureKey:
         """The hashable tuple key used for table lookup."""
-        return (self.gfx, self.cu_num, self.m, self.n, self.k, self.dtype)
+        return (self.gfx, self.cu_num, self.m, self.n, self.k, self.dtype,
+                self.toolchain)
+
+    @property
+    def versioned(self) -> bool:
+        """Whether this signature names the toolchain it was measured under."""
+        return bool(self.toolchain)
 
     def as_metadata_dict(self) -> dict[str, Any]:
         return {
@@ -103,7 +124,22 @@ class ProblemSignature:
             "N": self.n,
             "K": self.k,
             "dtype": self.dtype,
+            "toolchain": self.toolchain,
         }
+
+
+def _signature_from_row(row: dict[str, Any]) -> ProblemSignature:
+    # ``toolchain`` is additive: a stock AITER CSV has no such column, and its
+    # rows load as unversioned — inspectable, never dispatched.
+    return ProblemSignature(
+        gfx=str(row["gfx"]),
+        cu_num=int(row["cu_num"]),
+        m=int(row["M"]),
+        n=int(row["N"]),
+        k=int(row["K"]),
+        dtype=str(row["dtype"]),
+        toolchain=str(row.get("toolchain") or ""),
+    )
 
 
 @dataclass(frozen=True)
@@ -137,7 +173,7 @@ class TunedConfig:
             raise ValueError("TunedConfig.kernel_name must be a non-empty string")
 
     def to_row(self) -> dict[str, Any]:
-        """The flat 11-column CSV row (signature columns + payload columns)."""
+        """The flat CSV row (signature columns + payload columns)."""
         return {
             "gfx": self.signature.gfx,
             "cu_num": self.signature.cu_num,
@@ -145,6 +181,7 @@ class TunedConfig:
             "N": self.signature.n,
             "K": self.signature.k,
             "dtype": self.signature.dtype,
+            "toolchain": self.signature.toolchain,
             "libtype": self.libtype,
             "solidx": self.solidx,
             "splitK": self.split_k,
@@ -154,16 +191,9 @@ class TunedConfig:
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "TunedConfig":
-        """Parse a flat 11-column CSV row back into a :class:`TunedConfig`."""
+        """Parse a flat CSV row back into a :class:`TunedConfig`."""
         try:
-            sig = ProblemSignature(
-                gfx=str(row["gfx"]),
-                cu_num=int(row["cu_num"]),
-                m=int(row["M"]),
-                n=int(row["N"]),
-                k=int(row["K"]),
-                dtype=str(row["dtype"]),
-            )
+            sig = _signature_from_row(row)
             return cls(
                 signature=sig,
                 libtype=str(row["libtype"]),
@@ -204,7 +234,13 @@ class TunedDispatchTable:
 
     def lookup(self, sig: ProblemSignature) -> TunedConfig | None:
         """The tuned config for ``sig``, or ``None`` if untuned.  Keys on the
-        signature — never on the opaque ``solidx``."""
+        signature — never on the opaque ``solidx``.
+
+        An unversioned ``sig`` (no toolchain) is always ``None``: without a
+        toolchain in the key a stale row would match exactly as well as a
+        current one (Decision #11)."""
+        if not sig.versioned:
+            return None
         return self._by_key.get(sig.as_key())
 
     def lookup_or_default(
@@ -212,7 +248,7 @@ class TunedDispatchTable:
     ) -> TunedConfig:
         """The tuned config for ``sig`` if present, else ``default`` (the fallback
         kernel the runtime uses for an untuned shape)."""
-        found = self._by_key.get(sig.as_key())
+        found = self.lookup(sig)
         return found if found is not None else default
 
     def signatures(self) -> list[ProblemSignature]:
@@ -243,7 +279,8 @@ class TunedDispatchTable:
         """Write the table to a tuned-config CSV (deterministic row order)."""
         rows = sorted(
             (cfg.to_row() for cfg in self._by_key.values()),
-            key=lambda r: (r["gfx"], r["cu_num"], r["M"], r["N"], r["K"], r["dtype"]),
+            key=lambda r: (r["gfx"], r["cu_num"], r["M"], r["N"], r["K"], r["dtype"],
+                           r["toolchain"]),
         )
         with open(path, "w", newline="") as fh:
             writer = csv.DictWriter(fh, fieldnames=list(CSV_COLUMNS))
@@ -255,7 +292,8 @@ class TunedDispatchTable:
         buf = io.StringIO()
         rows = sorted(
             (cfg.to_row() for cfg in self._by_key.values()),
-            key=lambda r: (r["gfx"], r["cu_num"], r["M"], r["N"], r["K"], r["dtype"]),
+            key=lambda r: (r["gfx"], r["cu_num"], r["M"], r["N"], r["K"], r["dtype"],
+                           r["toolchain"]),
         )
         writer = csv.DictWriter(buf, fieldnames=list(CSV_COLUMNS))
         writer.writeheader()
@@ -289,7 +327,7 @@ class TunedDispatchTable:
     def __contains__(self, sig: object) -> bool:
         if not isinstance(sig, ProblemSignature):
             return False
-        return sig.as_key() in self._by_key
+        return self.lookup(sig) is not None
 
     def __repr__(self) -> str:  # pragma: no cover - cosmetic
         return f"TunedDispatchTable({len(self._by_key)} signatures)"
@@ -441,7 +479,8 @@ class UntunedWorklist:
         """Write the worklist signatures to a CSV (deterministic row order)."""
         rows = sorted(
             (sig.as_metadata_dict() for sig in self.signatures),
-            key=lambda r: (r["gfx"], r["cu_num"], r["M"], r["N"], r["K"], r["dtype"]),
+            key=lambda r: (r["gfx"], r["cu_num"], r["M"], r["N"], r["K"], r["dtype"],
+                           r["toolchain"]),
         )
         with open(path, "w", newline="") as fh:
             writer = csv.DictWriter(fh, fieldnames=list(WORKLIST_COLUMNS))
@@ -455,16 +494,7 @@ class UntunedWorklist:
         with open(path, newline="") as fh:
             reader = csv.DictReader(fh)
             for row in reader:
-                sigs.append(
-                    ProblemSignature(
-                        gfx=str(row["gfx"]),
-                        cu_num=int(row["cu_num"]),
-                        m=int(row["M"]),
-                        n=int(row["N"]),
-                        k=int(row["K"]),
-                        dtype=str(row["dtype"]),
-                    )
-                )
+                sigs.append(_signature_from_row(row))
         return cls(signatures=sigs)
 
     def __len__(self) -> int:

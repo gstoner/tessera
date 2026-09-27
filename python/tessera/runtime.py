@@ -8630,13 +8630,10 @@ def _rocm_wmma_fused_2d(
             np.ascontiguousarray(a, dtype=store),
             np.ascontiguousarray(b, dtype=store), bias_arr, activation, m, n, k, chip,
             dtype_tag=dtype_tag)
-    from .compiler.rocm_schedule import select_rocm_gemm_schedule
-
-    schedule = select_rocm_gemm_schedule(
-        m, n, k, dtype=dtype_tag, arch=chip,
-        raster_order=raster_order, raster_group=raster_group)
+    hsaco, schedule = _rocm_wmma_fused_gfx11_image(
+        m, n, k, dtype_tag, bias=has_bias, activation=activation,
+        raster_order=raster_order, raster_group=raster_group, chip=chip)
     mt, nt = schedule.macro_tile
-    hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag, bias=has_bias, activation=activation, schedule=schedule)
 
     hip = _load_hip_for_launch()
     if hip is None:
@@ -8715,6 +8712,51 @@ def _rocm_wmma_fused_2d(
     finally:
         for dev in devs:
             hip.hipFree(dev)
+
+
+def _rocm_wmma_fused_gfx11_image(
+    m: int, n: int, k: int, dtype_tag: str, *, bias: bool, activation: str,
+    raster_order: str = "row_major", raster_group: int = 1, chip: str | None = None,
+) -> tuple[bytes, Any]:
+    """The gfx11 fused WMMA image :func:`_rocm_wmma_fused_2d` launches for this
+    workload, and the schedule that selected it (its macro tile fixes the grid).
+    One statement of the selection, shared by the launch and by the arbiter's
+    kernel-code identity (``RocmWmmaGemmCandidate.artifact_identity``), so the
+    identity is always of the image that runs."""
+    from .compiler.rocm_schedule import select_rocm_gemm_schedule
+
+    schedule = select_rocm_gemm_schedule(
+        m, n, k, dtype=dtype_tag, arch=chip or _rocm_chip(),
+        raster_order=raster_order, raster_group=raster_group)
+    mt, nt = schedule.macro_tile
+    return _build_compiled_gemm_hsaco(
+        mt, nt, dtype_tag, bias=bias, activation=activation, schedule=schedule), schedule
+
+
+def _rocm_wmma_fused_image(
+    m: int, n: int, k: int, dtype_tag: str = "f16", *, bias: bool, activation: str,
+    raster_order: str = "row_major", raster_group: int = 1,
+) -> tuple[bytes, str]:
+    """``(hsaco, entry_symbol)`` of the fused WMMA kernel
+    :func:`_rocm_wmma_fused_2d` runs for ``(m, n, k, dtype, bias, activation)``
+    on the launch chip. Raises what the build raises; never launches.
+
+    * gfx11: :func:`_rocm_wmma_fused_gfx11_image` -- the one selection the
+      launch itself goes through.
+    * gfx12: NOT a shared selector. The launch goes through
+      :func:`_rocm_compiled_gemm_via_scheduled_package`, which makes the same
+      :func:`build_canonical_gemm_hsaco` call with the same arguments (and so
+      hits the same package cache); this mirrors that call. Raster options do
+      not reach the gfx12 route. Keep the two calls in step."""
+    chip = _rocm_chip()
+    if not chip.startswith("gfx11"):
+        package = build_canonical_gemm_hsaco(
+            m, n, k, dtype_tag, chip=chip, bias=bias, activation=activation)
+        return bytes(package.image.payload), str(package.descriptor.entry_symbol)
+    hsaco, _ = _rocm_wmma_fused_gfx11_image(
+        m, n, k, dtype_tag, bias=bias, activation=activation,
+        raster_order=raster_order, raster_group=raster_group, chip=chip)
+    return hsaco, "gemm"
 
 
 _rocm_wmma_fused_probe_ok: bool | None = None
@@ -8978,6 +9020,45 @@ def _build_compiled_flash_attn_hsaco(
     return hsaco
 
 
+def _rocm_flash_attn_two_wave(
+    head_dim: int, *, gqa: bool, sliding_window: bool, logit_softcap: bool,
+    attn_bias: bool, dropout: bool,
+) -> bool:
+    """Whether the FA-2 lane builds (and launches 64 threads for) the two-wave
+    kernel. G6-B: D=128 plain/causal attention uses two cooperating Wave32
+    groups. Nine interleaved gfx1151 trials show 2.04–2.10x paired kernel
+    speedup, eliminate 82 VGPR spills, and match within 8.4e-6. Advanced
+    semantic variants stay one-wave until their own correctness/performance
+    matrix."""
+    return head_dim == 128 and not (
+        gqa or sliding_window or logit_softcap or attn_bias or dropout)
+
+
+def _rocm_flash_attn_image(
+    head_dim: int, dtype_tag: str = "f16", *, gqa: bool = False,
+    sliding_window: bool = False, logit_softcap: bool = False,
+    attn_bias: bool = False, dropout: bool = False,
+) -> tuple[bytes, str]:
+    """``(hsaco, entry_symbol)`` of the FA-2 forward kernel the compiled
+    flash_attn lane launches for this variant -- one statement of the variant
+    selection, shared by the launch and by the arbiter's kernel-code identity
+    (``RocmFlashAttnCandidate.artifact_identity``)."""
+    two_wave = _rocm_flash_attn_two_wave(
+        head_dim, gqa=gqa, sliding_window=sliding_window,
+        logit_softcap=logit_softcap, attn_bias=attn_bias, dropout=dropout)
+    hsaco = _build_compiled_flash_attn_hsaco(
+        head_dim,
+        dtype_tag,
+        gqa,
+        sliding_window=sliding_window,
+        logit_softcap=logit_softcap,
+        attn_bias=attn_bias,
+        dropout=dropout,
+        two_wave=two_wave,
+    )
+    return hsaco, "fa"
+
+
 def _execute_rocm_compiled_flash_attn(
     artifact: RuntimeArtifact,
     args: Any,
@@ -9105,21 +9186,12 @@ def _execute_rocm_compiled_flash_attn(
             ) from exc
         bias_c = np.ascontiguousarray(bias_b, dtype=np.float32).reshape(-1)
 
-    # G6-B: D=128 plain/causal attention uses two cooperating Wave32 groups.
-    # Nine interleaved gfx1151 trials show 2.04–2.10x paired kernel speedup,
-    # eliminate 82 VGPR spills, and match within 8.4e-6.  Advanced semantic
-    # variants stay one-wave until their own correctness/performance matrix.
-    two_wave = head_dim == 128 and not (gqa or sliding or has_softcap or has_bias or has_dropout)
-    hsaco = _build_compiled_flash_attn_hsaco(
-        head_dim,
-        dtype_tag,
-        gqa,
-        sliding_window=sliding,
-        logit_softcap=has_softcap,
-        attn_bias=has_bias,
-        dropout=has_dropout,
-        two_wave=two_wave,
-    )
+    two_wave = _rocm_flash_attn_two_wave(
+        head_dim, gqa=gqa, sliding_window=sliding, logit_softcap=has_softcap,
+        attn_bias=has_bias, dropout=has_dropout)
+    hsaco, _ = _rocm_flash_attn_image(
+        head_dim, dtype_tag, gqa=gqa, sliding_window=sliding,
+        logit_softcap=has_softcap, attn_bias=has_bias, dropout=has_dropout)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable — no ROCm execution lane on this host")
@@ -21687,7 +21759,8 @@ def _execute_apple_gpu_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> 
     kwargs = op.get("kwargs") or {}
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
-    red_kwargs = {"axis": kwargs.get("axis", None), "keepdims": bool(kwargs.get("keepdims", False))}
+    red_kwargs = {"axis": kwargs.get("axis", None), "keepdims": bool(kwargs.get("keepdims", False)),
+                  "kind": "sum"}  # this executor accepts tessera.sum only (checked above)
     # The row describes the native MPSGraph route, but anything the dispatch
     # actually computes in numpy — an unavailable device or ABI binding, and
     # equally a non-float dtype or 0-d input — must be observable as reference
@@ -28023,7 +28096,7 @@ def _execute_apple_gpu_compiled_loss(artifact: RuntimeArtifact, args: Any) -> An
         return output if native else (output, "reference_cpu")
     # none/mean/sum reduction on the MPSGraph reduce lane (op 0 = sum, 1 = mean).
     key = "tessera.mean" if reduction == "mean" else "tessera.reduce"
-    output = np.asarray(_apple_gpu_dispatch_reduce(key, [per], {"axis": None}, np), np.float32)
+    output = np.asarray(_apple_gpu_dispatch_reduce(key, [per], {"axis": None, "kind": "sum"}, np), np.float32)
     return output if native else (output, "reference_cpu")
 
 
@@ -28101,7 +28174,7 @@ def _execute_apple_gpu_compiled_loss_family(artifact: RuntimeArtifact, args: Any
     if reduction == "none":
         return per
     key = "tessera.mean" if reduction == "mean" else "tessera.reduce"
-    return np.asarray(_apple_gpu_dispatch_reduce(key, [per], {"axis": None}, np), np.float32)
+    return np.asarray(_apple_gpu_dispatch_reduce(key, [per], {"axis": None, "kind": "sum"}, np), np.float32)
 
 
 def _execute_rocm_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -41089,6 +41162,13 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict, 
     0-d input, multi-axis arg-reduce, or an unavailable device/ABI binding."""
     x = np.asarray(operands[0])
     kind, op = _APPLE_GPU_REDUCE_OPS[op_name]
+    if op_name == "tessera.reduce":
+        # The table's code 0 (sum) is only the default spelling; the Graph op's
+        # combiner is its `kind`, and a kind-less reduce refuses rather than
+        # summing (NVIDIA pre-PR review, 2026-09-26; Decision #21a).
+        from tessera.compiler.reduction_kind import reduction_kind
+        op = {"sum": 0, "mean": 1, "max": 2, "min": 3}[
+            reduction_kind(kwargs, where="apple_gpu reduce lane")]
     axis = kwargs.get("axis", -1 if kind == "scan" else None)
     keepdims = bool(kwargs.get("keepdims", False))
     ddof = int(kwargs.get("ddof", 0))
@@ -47051,7 +47131,7 @@ def _apple_gpu_dispatch_loss(op_name: str, operands: list[Any], kwargs: dict, np
         if reduction == "none":
             return np.asarray(loss, np.float32)
         opn = "tessera.mean" if reduction == "mean" else "tessera.reduce"
-        return _apple_gpu_dispatch_reduce(opn, [np.asarray(loss, np.float32)], {"axis": None}, np)
+        return _apple_gpu_dispatch_reduce(opn, [np.asarray(loss, np.float32)], {"axis": None, "kind": "sum"}, np)
 
     short = str(op_name)
     a = np.asarray(operands[0], np.float32)
@@ -47095,11 +47175,11 @@ def _apple_gpu_dispatch_loss(op_name: str, operands: list[Any], kwargs: dict, np
             return _L.cross_entropy_loss(a, targets, reduction=reduction)  # gather → host
         lp = _apple_gpu_dispatch_rowop("tessera.log_softmax", [a], {}, np)
         prod = bb("mul", targets, lp)
-        s = _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(prod, np.float32)], {"axis": -1}, np)
+        s = _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(prod, np.float32)], {"axis": -1, "kind": "sum"}, np)
         return reduce_all(u("neg", s))
 
     def sum_last(x: Any) -> Any:
-        return _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(x, np.float32)], {"axis": -1}, np)
+        return _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(x, np.float32)], {"axis": -1, "kind": "sum"}, np)
 
     def clamp_lo(x: Any) -> Any:  # max(x, 1e-12), matches the loss reference
         return _apple_gpu_dispatch_clamp("tessera.clamp", [x], {"min": 1e-12}, np)
@@ -47176,7 +47256,7 @@ def _apple_gpu_dispatch_norm(op_name: str, operands: list[Any], kwargs: dict, np
             "tessera.mul", [np.ascontiguousarray(flat), np.ascontiguousarray(flat)], {}, np
         )
         ss = np.asarray(
-            _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(sq, np.float32)], {"axis": -1}, np), np.float32
+            _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(sq, np.float32)], {"axis": -1, "kind": "sum"}, np), np.float32
         )
         norm = np.sqrt(ss.reshape(rows, 1) + float(kwargs.get("eps", 1e-12)))
         out = (flat / norm).reshape(moved.shape)
@@ -49447,13 +49527,17 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         e = np.exp(x - np.max(x, axis=sm_axis, keepdims=True))
         return e / np.sum(e, axis=sm_axis, keepdims=True)
     if op_name == "tessera.reduce":
-        if str(kwargs.get("op", "sum")) != "sum":
-            raise ValueError("runtime CPU reduce only supports op='sum'")
+        # The combiner is the Graph op's ``kind`` (frontends canonicalize
+        # ``op=`` into it and drop ``op``); reading ``op`` here executed every
+        # reduce as a sum (NVIDIA pre-PR review, 2026-09-26).
+        from tessera.compiler.reduction_kind import apply_reduction, reduction_kind
+        red_kind = reduction_kind(kwargs, where="runtime CPU executor")
         # ``axis`` can be None (reduce over all dims), an int, or
         # a tuple of ints; widen the local variable accordingly.
         axis_raw = kwargs.get("axis", None)
         red_axis: Any = int(axis_raw) if axis_raw is not None else None
-        return np.sum(operands[0], axis=red_axis, keepdims=bool(kwargs.get("keepdims", False)))
+        return apply_reduction(np, red_kind, operands[0], axis=red_axis,
+                               keepdims=bool(kwargs.get("keepdims", False)))
     if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))

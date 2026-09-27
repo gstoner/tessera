@@ -8,6 +8,19 @@ last_updated: 2026-09-26
 
 # Apple compiler, exact-device, and performance plan
 
+## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable
+
+NVIDIA's `%globaltimer` marker was validated on The-Super-Bear and given the
+`nvidia_sm120` device-clock slot in `profiler_timing`. No Apple recorder
+produces `profiler_timing` samples (Apple device timing is the Metal timestamp heap),
+and no Apple code path changed.
+
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: not applicable (no committed Apple autotune rows)
+
+Decisions #11/#12 landed host-independently (MASTER_AUDIT action item 3):
+every autotune key now carries the toolchain identity, and benchmark rows carry
+a derived `route`. The committed arbiter corpus holds no Apple rows (Apple registers no arbiter candidates). The Apple family identity reads shell-independent facts: macOS version, and via `/usr/bin/xcrun` the SDK, Metal compiler and Xcode versions, plus the Apple runtime source fingerprint (what is actually timed) and the device tag. It deliberately differs from the strict route ledger's context, which hashes a host `clang --version`. **Review fix (2026-09-26):** that ledger fingerprint used to resolve `clang` through `PATH`, so a shell with Homebrew llvm first stopped admitting the sealed ledger; `live_apple_route_context` now calls `/usr/bin/clang` / `/usr/bin/xcrun` / `/usr/sbin/sysctl` by absolute path. The default-shell value is unchanged, so the committed ledger still admits (verified on the Mac in both shells).
+
 ## `APPLE-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
 
 Sync `LANE-B-SWEEP-2026-09-26` (ROCm owns the pattern: its Lane B was retired

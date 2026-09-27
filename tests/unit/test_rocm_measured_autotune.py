@@ -108,8 +108,8 @@ def _seed_cache():
                      {"rocm_generic_hip": 0.8, "rocm_wmma_gemm": 1.8})
     k2, r2 = _record("rocm:gfx1151", ("512", "512"), "rocm_wmma_gemm",
                      {"rocm_generic_hip": 28.1, "rocm_wmma_gemm": 3.3})
-    cache.put(k1, r1)
-    cache.put(k2, r2)
+    cache.put(k1, r1, fresh=True)
+    cache.put(k2, r2, fresh=True)
     return cache
 
 
@@ -135,10 +135,16 @@ def test_corpus_save_load_disk(tmp_path):
 
 
 def test_committed_corpus_contains_live_device_records_and_loads():
-    # The corpus carries only device-keyed, measured records and warm-starts.
+    # The corpus carries only device-keyed, measured records. Rows recorded
+    # before Decision #11 carry no toolchain identity: they load as STALE --
+    # never served, but kept and written back -- so every row is accounted for.
     fresh = AT.MeasureCache()
     n = AT.load_corpus(cache=fresh)
-    assert n >= 1
+    stale = fresh.stale_records()
+    assert n + len(stale) >= 1
+    assert n + len(stale) == len(fresh.to_dict()["records"])
+    for _, reason in stale.values():
+        assert "toolchain" in reason
     for rec in fresh.to_dict()["records"]:
         assert rec["device"] in ("rocm:gfx1151", "nvidia:sm_120")
         # Candidate names grow as new measured lanes land.  The durable corpus
@@ -159,8 +165,14 @@ def test_committed_corpus_has_sm120_matmul_comparisons():
         (512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)
     }
     for row in rows:
-        assert {"nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted"} <= set(
-            row["candidates"])
+        assert "nvidia_mma_gemm_shipped" in row["candidates"]
+        # The emitted mma.sync lane cannot serve an odd K (`_aligned_2d`: a
+        # hardware alignment limit) and `applies_to_inputs` removes it from
+        # that race before timing, so the 127x259x63 workload (bucket
+        # 128x512x64) must NOT list it; every other workload must.
+        shape = (row.get("evidence") or {}).get("workload_shape")
+        odd_k = shape is not None and shape[2] % 2 == 1
+        assert ("nvidia_mma_gemm_emitted" in row["candidates"]) is not odd_k, row["bucket"]
         if tuple(row["bucket"]) in {
                 (512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)}:
             assert {"nvidia_tile_matmul_direct",
@@ -259,7 +271,7 @@ def test_warm_start_does_not_clobber_local_measurement():
     k = ("rocm:gfx1151", "rocm", OP_FUSED_REGION, ("64", "64"), "f16")
     local = AT.MeasureRecord(winner="rocm_wmma_gemm", latency_ms=0.5,
                              candidates={"rocm_wmma_gemm": 0.5})
-    cache.put(k, local)
+    cache.put(k, local, fresh=True)
     other = _seed_cache()          # a corpus that says generic wins the 64 bucket
     cache.load_dict(other.to_dict())
     assert cache.get(k).winner == "rocm_wmma_gemm"   # local kept, not clobbered
@@ -278,14 +290,20 @@ def test_corpus_version_mismatch_loads_nothing():
 
 
 def test_v1_corpus_rows_migrate_to_end_to_end_timing():
+    # A v1 row still parses (timing migrates to end_to_end), but it carries no
+    # toolchain identity, so Decision #11 holds it as stale rather than serving
+    # it -- and a re-save keeps it rather than silently deleting the evidence.
     fresh = AT.MeasureCache()
     assert fresh.load_dict({"version": 1, "records": [
         {"device": "d", "target": "rocm", "op": OP_FUSED_REGION,
          "bucket": None, "dtype": "f16", "winner": "w", "latency_ms": 1.0,
-         "candidates": {"w": 1.0}}]}) == 1
+         "candidates": {"w": 1.0}}]}) == 0
+    assert fresh.get(("d", "rocm", OP_FUSED_REGION, None, "f16")) is None
+    (_, reason), = fresh.stale_records().values()
+    assert "no toolchain identity" in reason
     row = fresh.to_dict()["records"][0]
     assert row["timing"] == "end_to_end"
-    assert fresh.to_dict()["version"] == AT.CORPUS_VERSION == 3
+    assert fresh.to_dict()["version"] == AT.CORPUS_VERSION == 4
 
 
 def test_v3_corpus_preserves_resource_and_stability_evidence():
@@ -297,7 +315,7 @@ def test_v3_corpus_preserves_resource_and_stability_evidence():
         "selector_eligible": True, "compiler_fingerprint": "nvcc-13.3",
         "resource_fingerprint": "sha256:abc", "cache_state": "warm",
     }
-    cache.put(key, AT.MeasureRecord("winner", 1.0, {"winner": 1.0}, evidence))
+    cache.put(key, AT.MeasureRecord("winner", 1.0, {"winner": 1.0}, evidence), fresh=True)
     fresh = AT.MeasureCache()
     assert fresh.load_dict(cache.to_dict()) == 1
     assert fresh.get(key).evidence == evidence
@@ -307,7 +325,7 @@ def test_bucket_none_key_round_trips():
     # dims=None → bucket=None must survive serialization (a dynamic-shape verdict).
     cache = AT.MeasureCache()
     k = ("rocm:gfx1151", "rocm", OP_FUSED_REGION, None, "f16")
-    cache.put(k, AT.MeasureRecord(winner="w", latency_ms=1.0))
+    cache.put(k, AT.MeasureRecord(winner="w", latency_ms=1.0), fresh=True)
     fresh = AT.MeasureCache()
     fresh.load_dict(cache.to_dict())
     assert fresh.get(k) is not None

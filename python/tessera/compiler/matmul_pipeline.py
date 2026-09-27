@@ -1056,14 +1056,13 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         e = np.exp(x - np.max(x, axis=axis, keepdims=True))
         return e / np.sum(e, axis=axis, keepdims=True)
     if op_name == "tessera.reduce":
-        if str(kwargs.get("op", "sum")) != "sum":
-            raise ValueError("CPU compiler path only supports tessera.reduce op='sum'")
+        from .reduction_kind import apply_reduction, reduction_kind
+        kind = reduction_kind(kwargs, where="CPU compiler path")
         axis = kwargs.get("axis", None)
         if axis is not None:
             axis = int(axis)
-        if bool(kwargs.get("keepdims", False)):
-            return np.sum(operands[0], axis=axis, keepdims=True)
-        return np.sum(operands[0], axis=axis, keepdims=False)
+        return apply_reduction(np, kind, operands[0], axis=axis,
+                               keepdims=bool(kwargs.get("keepdims", False)))
     if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))

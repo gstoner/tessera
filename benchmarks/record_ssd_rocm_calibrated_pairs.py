@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
-"""Nine ROCm (gfx1151 or gfx1201) SSD process pairs, each process carrying its own device-clock
-calibration, then the production SSD admission decision on the result.
+"""Nine SSD process pairs on ROCm (gfx1151 or gfx1201) or NVIDIA (sm_120), each
+process carrying its own device-clock calibration, then the production SSD
+admission decision on the result.
+
+``--backend nvidia`` (sync NVIDIA-GLOBALTIMER-MARKER-2026-09-26) runs the same
+protocol with the ``%globaltimer`` marker and CUDA events in place of the
+steady counter and HIP events; the file keeps its historical name because the
+ROCm packets' reproduce lines cite it. The Nsight activity-window route is a
+different recorder (``record_ssd_calibrated_pairs.py``).
 
 Every process measures its clean serial or cooperative image with HIP events
 (the comparison row) and calibrates that image against its compiler-built
@@ -34,6 +41,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'python')]
 from tessera.compiler.native_ssd import materialize_ssd  # noqa: E402
 from tessera.compiler.scheduled_ssd import lower_scheduled_ssd  # noqa: E402
 from tessera.compiler.profiler_rocm_evidence import ROCM_PROFILER_ARCHITECTURES  # noqa: E402
+from tessera.compiler.profiler_nvidia_evidence import NVIDIA_DEVICE_CLOCK_ARCHITECTURES  # noqa: E402
 from tessera.compiler.ssd_performance import bind_measured_ssd, summarize  # noqa: E402
 
 
@@ -50,6 +58,7 @@ def _llvm_bin():
 
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument('--backend', choices=('rocm', 'nvidia'), default='rocm')
     p.add_argument('--compiler', required=True, type=Path)
     p.add_argument('--output-dir', required=True, type=Path)
     p.add_argument('--shape', type=int, nargs=4, default=(512, 2, 32, 8))
@@ -73,7 +82,7 @@ def main():
     destination.mkdir(parents=True, exist_ok=False)
     env = {**os.environ, 'PYTHONPATH': str(ROOT / 'python')}
     recorder = ROOT / 'benchmarks' / 'record_ssd_gpu.py'
-    base = [sys.executable, str(recorder), '--backend', 'rocm', '--compiler', str(args.compiler.resolve()),
+    base = [sys.executable, str(recorder), '--backend', args.backend, '--compiler', str(args.compiler.resolve()),
             '--shape', *map(str, args.shape), '--chunk', str(args.chunk), '--profile',
             '--launches', str(args.launches)]
 
@@ -97,13 +106,14 @@ def main():
     comparison = dict(pairs=pairs, calibrations=calibrations, source=source)
     comparison.update(summarize(pairs))
     chip = comparison['identity'][1]
-    if comparison['identity'][0] != 'rocm' or chip not in ROCM_PROFILER_ARCHITECTURES:
-        raise SystemExit(f'measured device {chip!r} has no ROCm calibration route')
+    routes = {'rocm': ROCM_PROFILER_ARCHITECTURES, 'nvidia': tuple(NVIDIA_DEVICE_CLOCK_ARCHITECTURES)}
+    if comparison['identity'][0] != args.backend or chip not in routes[args.backend]:
+        raise SystemExit(f'measured device {chip!r} has no {args.backend} device-clock calibration route')
     (destination / 'comparison.json').write_text(json.dumps(comparison, indent=2) + '\n')
 
     T, H, N, P = args.shape
     logical = lower_scheduled_ssd(T, H, N, P, args.chunk, compiler=args.compiler)
-    options = dict(compiler=args.compiler, llvm_bin=_llvm_bin(), backend='rocm', chip=chip)
+    options = dict(compiler=args.compiler, llvm_bin=_llvm_bin(), backend=args.backend, chip=chip)
     serial = materialize_ssd(logical, **options)
     cooperative = materialize_ssd(logical, cooperative=True, **options)
     bound, decision = bind_measured_ssd(serial, cooperative, comparison, calibrations)

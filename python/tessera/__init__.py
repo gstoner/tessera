@@ -499,14 +499,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if hasattr(x, "_data"):
             x = x._data
         x = np.asarray(x)
-        if op == "sum":
-            return np.sum(x, axis=axis, keepdims=keepdims)
-        if op == "mean":
-            return np.mean(x, axis=axis, keepdims=keepdims)
-        raise ValueError(
-            f"reduce(op={op!r}) not supported in the CPU reference path; "
-            f"use op in {{'sum','mean'}} or ops.amax/amin for max/min reductions"
-        )
+        # The reference evaluates exactly the ODS ReductionKindAttr set
+        # (sum/max/min/mean), the same set every executor reads through
+        # `reduction_kind`; anything else refuses with a registered code.
+        from .compiler.reduction_kind import apply_reduction, reduction_kind
+        kind = reduction_kind({"kind": op}, where="tessera.ops.reduce reference")
+        return apply_reduction(np, kind, x, axis=axis, keepdims=keepdims)
 
     def sum(x, axis=None, keepdims: bool = False):
         return reduce(x, op="sum", axis=axis, keepdims=keepdims)

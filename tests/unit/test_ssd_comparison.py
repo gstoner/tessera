@@ -1,5 +1,13 @@
 import copy
 import pytest
+
+
+def _reseal_rocm(packet):
+    """Recompute a ROCm calibration's digests after an edit, as a forger would."""
+    from tessera.compiler.profiler_rocm_evidence import _digest
+    packet['timing_sha256'] = _digest(packet['timing'])
+    packet.pop('packet_sha256', None)
+    packet['packet_sha256'] = _digest(packet)
 from benchmarks.compare_ssd_variants import summarize
 
 
@@ -7,8 +15,26 @@ def evidence():
     return [{name:dict(backend='nvidia',architecture='sm_120',compiler_sha256='compiler',shape=[32,2,16,4],
                       clock='CUDA events',execution='native_gpu',cooperative=name=='cooperative',
                       rows=[dict(chunk=8,binding_digest=name,image_sha256=name,device_event_ms=[time]*7,
-                                 max_abs_errors=[0.,0.,0.])]) for name,time in [('serial',2.),('cooperative',1.)]}
+                                 launches_per_window=10,max_abs_errors=[0.,0.,0.])])
+                 for name,time in [('serial',2.),('cooperative',1.)]}
             for _ in range(9)]
+
+
+def _interleaved(timing):
+    """Stamp a fixture timing sample the way the current recorder does: the
+    interleaved window protocol, and the launch count (``batch_size``, 10 in
+    the fixtures) in the device clock's provenance."""
+    from tessera.compiler.ssd_performance import SSD_CALIBRATION_WINDOW_PROTOCOL
+    timing['environment']['window_protocol'] = SSD_CALIBRATION_WINDOW_PROTOCOL
+    # The per-window values the recorder stores (three windows at the stored
+    # medians): the per-window rule reads them (NVIDIA pre-PR review).
+    device = timing['clocks']['device_wall_clock_ns'].get('value')
+    witness = next((timing['clocks'][s].get('value') for s in ('hip_event_ns', 'cuda_event_ns')
+                    if s in timing['clocks']), None)
+    timing['clocks']['device_wall_clock_ns']['provenance'] = {
+        'launches_per_window': timing['batch_size'], 'per_window_ns': [device] * 3}
+    timing['environment']['per_window_event_ns'] = [witness] * 3
+    return timing
 
 
 def test_ssd_paired_bound_and_single_outlier():
@@ -54,7 +80,7 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
     calibrations = []
     for i,pair in enumerate(pairs):
         for name in ('serial','cooperative'):
-            timing = _timing()
+            timing = _interleaved(_timing())
             timing['sample_id'] = f'{i}-{name}'
             timing['environment']['run_id'] = f'{i}-{name}'
             clean,probe = _image(1,'clean'),_image(1,'probe')
@@ -70,12 +96,28 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
     with pytest.raises(ValueError, match='absolute admission tolerance'):
         bind_measured_ssd(incumbent,candidate,bad,calibrations)
     # Altering the eligibility bit cannot bypass the native environment gate.
+    # Each edit is resealed (the unkeyed digest would refuse it first); the
+    # stored packet's own validation then re-derives its reasons, so a forged
+    # eligibility bit is refused before the rebuild even runs.
+    pristine = copy.deepcopy(calibrations)
     calibrations[0]['timing']['execution_environment'] = 'wsl2'
     calibrations[0]['eligible_for_promotion'] = True
-    with pytest.raises(ValueError,match='WSL'):
+    _reseal_rocm(calibrations[0])
+    with pytest.raises(ValueError,match='WSL|BARE_METAL_REQUIRED'):
         bind_measured_ssd(incumbent,candidate,comparison,calibrations)
-    for clock in calibrations[0]['timing']['clocks'].values():
+    # An honestly ineligible calibration (WSL environment, no clock eligible
+    # for promotion), built by the builder rather than hand-edited, is a
+    # consistent packet that validates -- and admission refuses it.
+    calibrations = copy.deepcopy(pristine)
+    ineligible = copy.deepcopy(calibrations[0]['timing'])
+    ineligible['execution_environment'] = 'wsl2'
+    for clock in ineligible['clocks'].values():
         clock['eligible_for_promotion'] = False
+    images = calibrations[0]['instrumentation_comparison']
+    calibrations[0] = build_rocm_profiler_packet(
+        timing=ineligible, capture=calibrations[0]['capture'],
+        uninstrumented=images['uninstrumented'], instrumented=images['instrumented'],
+        source=calibrations[0]['source'])
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations)
     assert bound == 'serial' and not decision.admitted
     comparison['pairs'][0]['cooperative']['rows'][0]['image_sha256'] = 'foreign'
@@ -110,8 +152,8 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
         out = []
         for i,pair in enumerate(pairs):
             for name in ('serial','cooperative'):
-                timing = _wsl_witness_timing(event_ns=event_ns,
-                    image_sha256=pair[name]['rows'][0]['image_sha256'])
+                timing = _interleaved(_wsl_witness_timing(event_ns=event_ns,
+                    image_sha256=pair[name]['rows'][0]['image_sha256']))
                 timing['sample_id'] = f'{i}-{name}'
                 timing['environment']['run_id'] = f'{i}-{name}'
                 clean,probe = _image(1,'clean'),_image(1,'probe')
@@ -120,23 +162,28 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
                 clean['image_sha256'] = pair[name]['rows'][0]['image_sha256']
                 out.append(build_rocm_profiler_packet(timing=timing,capture=_no_kfd_capture(),uninstrumented=clean,instrumented=probe,source=dict(source_commit='a'*40,worktree_dirty=False)))
         return out
-    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations(10_100))
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations(1_010_000))
     assert bound == 'cooperative' and decision.admitted
     with pytest.raises(ValueError, match='disagree'):
-        calibrations(20_000)
+        calibrations(2_000_000)
     # A calibration naming another process's run is refused (review).
-    stolen = calibrations(10_100)
+    stolen = calibrations(1_010_000)
     stolen[0]['timing']['environment']['run_id'] = 'someone-else'
+    # Unresealed, the stored packet's own digest refuses it first (review).
+    with pytest.raises(ValueError, match='does not validate'):
+        bind_measured_ssd(incumbent,candidate,comparison,stolen)
+    # Resealed (the digests are unkeyed), the run binding still refuses it.
+    _reseal_rocm(stolen[0])
     with pytest.raises(ValueError, match='measured process run'):
         bind_measured_ssd(incumbent,candidate,comparison,stolen)
     # Calibrations from two source commits cannot be mixed.
-    mixed = calibrations(10_100)
+    mixed = calibrations(1_010_000)
     mixed[0]['source']['source_commit'] = 'b'*40
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison,mixed)
     assert bound == 'serial' and 'source commit' in decision.reason
     # ...and a comparison that states no commit refuses outright (review).
     unstated = {k: v for k, v in comparison.items() if k != 'source'}
-    bound,decision = bind_measured_ssd(incumbent,candidate,unstated,calibrations(10_100))
+    bound,decision = bind_measured_ssd(incumbent,candidate,unstated,calibrations(1_010_000))
     assert bound == 'serial' and 'source commit' in decision.reason
 
 
@@ -154,9 +201,11 @@ def test_ssd_absolute_correctness_gate_boundary(variant, output):
         summarize(pairs)
 
 
-def _witness_admission(package_chip, calibration_chip):
+def _witness_admission(package_chip, calibration_chip, *, candidate_chip=None, stamp=None):
     """One SSD admission over nine witness-calibrated pairs, where the rows and
-    packages name ``package_chip`` and every calibration ``calibration_chip``."""
+    packages name ``package_chip`` and every calibration ``calibration_chip``.
+    ``candidate_chip`` overrides the cooperative package's chip; ``stamp``
+    replaces the current-protocol stamp on every calibration timing."""
     import hashlib
     from types import SimpleNamespace
     from tessera.compiler.ssd_performance import bind_measured_ssd
@@ -166,8 +215,9 @@ def _witness_admission(package_chip, calibration_chip):
     specs = [SimpleNamespace(shape=(32,2,4)),None,SimpleNamespace(shape=(32,2,16))]
     def artifact(cooperative):
         name = 'cooperative' if cooperative else 'serial'
+        chip = (candidate_chip or package_chip) if cooperative else package_chip
         return SimpleNamespace(logical=logical,adjoint=False,cooperative=cooperative,
-            package=SimpleNamespace(backend='rocm',chip=package_chip,binding_digest=name,image=name.encode()),
+            package=SimpleNamespace(backend='rocm',chip=chip,binding_digest=name,image=name.encode()),
             validate=lambda:specs,bind=lambda:name)
     pairs = evidence()
     for i,pair in enumerate(pairs):
@@ -179,7 +229,8 @@ def _witness_admission(package_chip, calibration_chip):
     for i,pair in enumerate(pairs):
         for name in ('serial','cooperative'):
             row = pair[name]['rows'][0]
-            timing = _wsl_witness_timing(image_sha256=row['image_sha256'],architecture=calibration_chip)
+            timing = (stamp or _interleaved)(
+                _wsl_witness_timing(image_sha256=row['image_sha256'],architecture=calibration_chip))
             timing['sample_id'] = f'{i}-{name}'
             timing['environment']['run_id'] = f'{i}-{name}'
             clean,probe = _image(1,'clean',calibration_chip),_image(1,'probe',calibration_chip)
@@ -225,3 +276,247 @@ def test_ssd_admission_refuses_a_rocm_chip_without_a_calibration_route():
             packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
     decision = admit_ssd_candidate(artifact(False),artifact(True),dict(pairs=pairs),())
     assert not decision.admitted and 'no native calibration adapter' in decision.reason
+
+
+def test_ssd_admits_an_nvidia_globaltimer_calibration_and_refuses_mixtures():
+    """NVIDIA-GLOBALTIMER-MARKER-2026-09-26: sm_120 SSD admission through the
+    compiler-built %globaltimer marker, the device-clock twin of the ROCm
+    route; a disagreeing witness refuses, and a calibration set mixing this
+    route with Nsight windows is refused rather than averaged."""
+    import hashlib
+    from types import SimpleNamespace
+    from tessera.compiler.ssd_performance import bind_measured_ssd
+    from tessera.compiler.profiler_nvidia_evidence import build_nvidia_device_clock_packet
+    from test_profiler_nvidia_evidence import _image, _timing
+    logical = SimpleNamespace(compiler_digest='compiler',schedule_ir='chunk_size = 8 : i64')
+    specs = [SimpleNamespace(shape=(32,2,4)),None,SimpleNamespace(shape=(32,2,16))]
+    def artifact(cooperative):
+        name = 'cooperative' if cooperative else 'serial'
+        return SimpleNamespace(logical=logical,adjoint=False,cooperative=cooperative,
+            package=SimpleNamespace(backend='nvidia',chip='sm_120',binding_digest=name,image=name.encode()),
+            validate=lambda:specs,bind=lambda:name)
+    incumbent,candidate = artifact(False),artifact(True)
+    pairs = evidence()
+    for i,pair in enumerate(pairs):
+        for name,packet in pair.items():
+            packet.update(run_id=f'{i}-{name}')
+            packet['rows'][0]['image_sha256'] = hashlib.sha256(name.encode()).hexdigest()
+    comparison = dict(pairs=pairs,source=dict(source_commit='a'*40))
+    semantic = hashlib.sha256(logical.schedule_ir.encode()).hexdigest()
+    def calibrations(device_ratio=0.998):
+        out = []
+        for i,pair in enumerate(pairs):
+            for name in ('serial','cooperative'):
+                duration = pair[name]['rows'][0]['device_event_ms'][0]*1e6
+                image = pair[name]['rows'][0]['image_sha256']
+                timing = _timing(event=duration,device=duration*device_ratio,environment='bare_metal',
+                                 digests={'application_image': image})
+                timing['sample_id'] = f'{i}-{name}'
+                timing['environment']['run_id'] = f'{i}-{name}'
+                timing['batch_size'] = pair[name]['rows'][0]['launches_per_window']
+                _interleaved(timing)
+                clean,probe = _image(duration,instrumented=False),_image(duration,instrumented=True)
+                for record in (clean,probe):
+                    record.update(calibration_sample_id=timing['sample_id'],semantic_sha256=semantic,image_sha256=image)
+                out.append(build_nvidia_device_clock_packet(timing=timing,uninstrumented=clean,instrumented=probe,
+                    source=dict(source_commit='a'*40,worktree_dirty=False)))
+        return out
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations())
+    assert bound == 'cooperative' and decision.admitted and '%globaltimer' in decision.reason
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations(device_ratio=0.8))
+    assert bound == 'serial' and 'DEVICE_CLOCK_WITNESS_DISAGREES' in decision.reason
+    mixed = calibrations()
+    mixed[0] = {'schema': 'nsight-window', 'sample_id': 'x'}
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,mixed)
+    assert bound == 'serial' and 'mix' in decision.reason
+    stolen = calibrations()
+    stolen[3]['timing']['environment']['run_id'] = 'someone-else'
+    with pytest.raises(ValueError, match='does not validate'):
+        bind_measured_ssd(incumbent,candidate,comparison,stolen)   # an unresealed edit
+    from tessera.compiler.profiler_nvidia_evidence import _digest
+    stolen[3]['timing_sha256'] = _digest(stolen[3]['timing'])
+    stolen[3].pop('packet_sha256'); stolen[3]['packet_sha256'] = _digest(stolen[3])
+    with pytest.raises(ValueError, match='measured process run'):
+        bind_measured_ssd(incumbent,candidate,comparison,stolen)   # a resealed one
+    # Eighteen packets must name one physical GPU (review): a set assembled
+    # from two cards of the same model is refused even though each packet
+    # validates on its own.
+    two_cards = calibrations()
+    two_cards[5]['timing']['environment']['device_identity']['uuid'] = 'f' * 32
+    two_cards[5]['timing_sha256'] = _digest(two_cards[5]['timing'])
+    two_cards[5].pop('packet_sha256'); two_cards[5]['packet_sha256'] = _digest(two_cards[5])
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,two_cards)
+    assert bound == 'serial' and decision.reason.startswith('DEVICE_CLOCK_PART_MISMATCH')
+    legacy = calibrations()
+    for packet in legacy:
+        packet['timing']['environment'].pop('window_protocol')
+        packet['timing_sha256'] = _digest(packet['timing'])
+        packet.pop('packet_sha256'); packet['packet_sha256'] = _digest(packet)
+    bound,decision = bind_measured_ssd(incumbent,candidate,comparison,legacy)
+    assert bound == 'serial' and decision.reason.startswith('SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY')
+
+
+def _legacy(timing):
+    """The committed pre-interleaving gfx1151 packets: no ``window_protocol``."""
+    timing['clocks']['device_wall_clock_ns']['provenance'] = {'launches_per_window': timing['batch_size']}
+    return timing
+
+
+@pytest.mark.parametrize('chip', ['gfx1151', 'gfx1201'])
+def test_ssd_admission_refuses_a_legacy_window_protocol(chip):
+    """Pre-PR review item 4 (GFX1201-SSD-CALIBRATION-2026-09-26): a packet
+    recorded before interleaving would pass every other gate, so admission
+    refuses it by name rather than admitting a power-state-biased ratio."""
+    bound,decision = _witness_admission(chip, chip, stamp=_legacy)
+    assert bound == 'serial' and not decision.admitted
+    assert decision.reason.startswith('SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY')
+    # Any other protocol name is legacy too; only the current one admits.
+    def other(timing):
+        _interleaved(timing)['environment']['window_protocol'] = 'plain_first_then_bracketed'
+        return timing
+    bound,decision = _witness_admission(chip, chip, stamp=other)
+    assert not decision.admitted and 'WINDOW_PROTOCOL_LEGACY' in decision.reason
+
+
+@pytest.mark.parametrize('field', ['batch_size', 'provenance', 'missing_provenance'])
+def test_ssd_admission_refuses_a_mismatched_launch_count(field):
+    """The calibration's launches (batch and device-clock provenance) must
+    equal the row's ``launches_per_window``: the fixed per-window bracket
+    offset makes a calibration at one window length say nothing about another."""
+    def mismatched(timing):
+        _interleaved(timing)
+        if field == 'batch_size':
+            timing['batch_size'] = 1000
+            timing['clocks']['device_wall_clock_ns']['provenance']['launches_per_window'] = 1000
+        elif field == 'provenance':
+            timing['clocks']['device_wall_clock_ns']['provenance']['launches_per_window'] = 1000
+        else:
+            del timing['clocks']['device_wall_clock_ns']['provenance']['launches_per_window']
+        return timing
+    bound,decision = _witness_admission('gfx1151', 'gfx1151', stamp=mismatched)
+    assert bound == 'serial' and not decision.admitted
+    assert decision.reason.startswith('SSD_CALIBRATION_LAUNCHES_MISMATCH')
+
+
+def test_ssd_admission_refuses_a_row_without_a_launch_count():
+    """A row recorded before ``launches_per_window`` existed cannot be matched."""
+    import tessera.compiler.ssd_performance as ssd
+    assert ssd._calibration_protocol_refusal(
+        _interleaved({'environment': {}, 'batch_size': 10,
+                      'clocks': {'device_wall_clock_ns': {}}}),
+        {}).startswith('SSD_CALIBRATION_LAUNCHES_MISMATCH')
+
+
+@pytest.mark.parametrize('package_chip,candidate_chip', [('gfx1151','gfx1201'),('gfx1201','gfx1151')])
+def test_ssd_admission_refuses_a_cross_chip_candidate(package_chip, candidate_chip):
+    """Pre-existing gap: backends were compared but not ``package.chip``."""
+    with pytest.raises(ValueError, match='different semantic parents or targets'):
+        _witness_admission(package_chip, package_chip, candidate_chip=candidate_chip)
+
+
+_BASELINES = __import__('pathlib').Path(__file__).resolve().parents[2] / 'benchmarks' / 'baselines'
+
+
+@pytest.mark.parametrize('packet,admitted_protocol', [
+    ('gfx1201_ssd_calibrated_pairs_20260926', True),
+    ('gfx1151_ssd_calibrated_pairs_interleaved_20260926', True),
+    ('gfx1151_ssd_calibrated_pairs_20260926', False),
+])
+def test_committed_calibrations_carry_the_protocol_admission_reads(packet, admitted_protocol):
+    """The committed packets, read as data: gfx1201 and the gfx1151 re-record
+    were recorded interleaved with matching launches; the first gfx1151
+    packet predates the stamp and stays history (validates, never admits).
+    The end-to-end replays need tessera-opt and the device, so they are
+    committed as each packet's ``replay.json`` rather than run here."""
+    import json
+    from tessera.compiler.profiler_rocm_evidence import validate_rocm_profiler_packet
+    from tessera.compiler.ssd_performance import _calibration_protocol_refusal
+    root = _BASELINES / packet
+    refusals = []
+    for i in range(9):
+        for name in ('serial', 'cooperative'):
+            row = json.loads((root / f'{i}-{name}.json').read_text())['rows'][0]
+            calibration = json.loads((root / f'{i}-{name}-calibration.json').read_text())
+            validate_rocm_profiler_packet(calibration)
+            refusals.append(_calibration_protocol_refusal(calibration['timing'], row))
+    if admitted_protocol:
+        assert refusals == [None] * 18
+    else:
+        assert all(r and r.startswith('SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY') for r in refusals)
+
+
+def test_rows_recorded_at_different_launch_counts_are_one_measurement_refused(monkeypatch):
+    """Review (2026-09-26): each calibration matched only its own row, so a
+    serial incumbent at one launch count could pair with a candidate at
+    another. The bracket offset's share of a window depends on its length, so
+    every row must share one count."""
+    import sys
+    module = sys.modules[__name__]
+    original = module.evidence
+
+    def mixed():
+        pairs = original()
+        pairs[0]['cooperative']['rows'][0]['launches_per_window'] = 20
+        return pairs
+
+    monkeypatch.setattr(module, 'evidence', mixed)
+    bound, decision = _witness_admission('gfx1151', 'gfx1151')
+    assert bound == 'serial' and not decision.admitted
+    assert 'different launch counts' in decision.reason
+
+
+def test_committed_sm120_calibrations_validate_and_carry_the_protocol():
+    """The sm_120 %globaltimer packet, read as data (NVIDIA-GLOBALTIMER-MARKER-
+    2026-09-26): every calibration re-derives as eligible on the device-clock
+    route, names the queried RTX 5070, carries the interleaved protocol at the
+    row's launch count, and binds its row's run and image. The end-to-end
+    replay needs tessera-opt and the GPU; it is committed as ``replay.json``."""
+    import json
+    from tessera.compiler.profiler_nvidia_evidence import validate_nvidia_device_clock_packet
+    from tessera.compiler.ssd_performance import _calibration_protocol_refusal
+    root = _BASELINES / 'sm120_ssd_calibrated_pairs_20260926'
+    comparison = json.loads((root / 'comparison.json').read_text())
+    assert tuple(summarize(comparison['pairs'])['identity'][:2]) == ('nvidia', 'sm_120')
+    for i in range(9):
+        for name in ('serial', 'cooperative'):
+            row_packet = json.loads((root / f'{i}-{name}.json').read_text())
+            calibration = json.loads((root / f'{i}-{name}-calibration.json').read_text())
+            validate_nvidia_device_clock_packet(calibration)
+            assert calibration['eligible_for_promotion'] is True
+            assert calibration['admission_route'] == 'device_clock_witness'
+            identity = calibration['timing']['environment']['device_identity']
+            assert identity['architecture'] == 'sm_120' and identity['name'] == 'NVIDIA GeForce RTX 5070'
+            assert calibration['timing']['environment']['run_id'] == row_packet['run_id']
+            row = row_packet['rows'][0]
+            assert calibration['instrumentation_comparison']['uninstrumented']['image_sha256'] == row['image_sha256']
+            assert _calibration_protocol_refusal(calibration['timing'], row) is None
+    for decision in ('admission.json', 'replay.json'):
+        assert json.loads((root / decision).read_text())['decision']['admitted'] is True
+
+
+
+def test_a_committed_rocm_packet_rebuilt_with_short_windows_is_refused():
+    """The ROCm twin of the reviewer's NVIDIA forgery (the route had the same
+    median-only gap): the committed gfx1201 serial calibration rebuilt at 10
+    launches with one 18% window keeps an in-band median and is refused."""
+    import copy
+    import json
+    import statistics
+    from tessera.compiler.profiler_rocm_evidence import build_rocm_profiler_packet
+    packet = json.loads((_BASELINES / 'gfx1201_ssd_calibrated_pairs_20260926'
+                         / '0-serial-calibration.json').read_text())
+    timing = copy.deepcopy(packet['timing'])
+    events = timing['environment']['per_window_event_ns']
+    devices = [e * (1 - err) for e, err in zip(events, [0.0, 0.01, 0.01, 0.18, 0.01, 0.0, 0.01])]
+    timing['batch_size'] = 10
+    timing['clocks']['device_wall_clock_ns']['provenance']['per_window_ns'] = devices
+    timing['clocks']['device_wall_clock_ns']['provenance']['launches_per_window'] = 10
+    timing['clocks']['device_wall_clock_ns']['value'] = statistics.median(devices)
+    timing['clocks']['device_wall_clock_ns']['raw_value'] = statistics.median(devices)
+    images = packet['instrumentation_comparison']
+    rebuilt = build_rocm_profiler_packet(
+        timing=timing, capture=packet['capture'], uninstrumented=images['uninstrumented'],
+        instrumented=images['instrumented'], source=packet['source'])
+    assert not rebuilt['eligible_for_promotion']
+    assert {'DEVICE_CLOCK_WINDOW_TOO_SHORT', 'DEVICE_CLOCK_WINDOW_DISAGREES'} <= set(
+        rebuilt['ineligibility_reasons'])

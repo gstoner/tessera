@@ -7,6 +7,239 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `NVIDIA-GLOBALTIMER-MARKER-2026-09-26`: sibling outcome — not applicable (no ROCm change)
+
+NVIDIA validated and admitted its `%globaltimer` device-clock marker on
+The-Super-Bear (NVIDIA queue, same key). Shared code touched, ROCm behaviour
+unchanged: `profiler_timing` gains `NVIDIA_CLOCK_SLOTS` for `nvidia_sm120` and
+`cuda_event_ns` as a witness, but witnesses are intersected with the target's
+own slots, so a ROCm sample still admits only `hip_event_ns` /
+`profiler_activity_ns` (unit-tested); `native_device_clock` keeps the gfx1151 /
+gfx1201 image check; `ssd_performance` adds an NVIDIA branch before the ROCm
+one; `record_ssd_rocm_calibrated_pairs.py` gains `--backend` (default `rocm`,
+so every committed ROCm reproduce line is unchanged). No ROCm packet was
+re-recorded and none is affected.
+
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: gfx1151 corpus rows re-recorded (kernel-code identity); sm_120 re-recorded on Super-Bear
+
+Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
+item 3). The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`, now
+written as v4) keys every verdict on the toolchain identity
+(`compiler/toolchain_identity.py`: ROCm 10.0 / HIP 7.15 / LLVM 23.1.1 pins,
+digest `sha256:4f528f65...eb57728`).
+
+**gfx1151: re-recorded 2026-09-26 on Princess-Luna** (Strix Halo, WSL2), from
+a clean worktree at `82d6f1fa` on `claude/timing-foundation-corpus` with its own
+`build/` (ROCm + HIP + x86 + EBM + Clifford ON, empty `CMAKE_BUILD_TYPE`, the
+same configuration as that box's main tree), `scripts/_rocm_env.sh` sourced,
+each run under `flock /tmp/tessera-timing.lock`. All 16 `rocm:gfx1151` keys
+were replaced by rows carrying `evidence.toolchain_digest`; no row was
+hand-edited, and the 97 `nvidia:sm_120` rows are byte-identical in content (held
+stale, written back by `MeasureCache.to_dict`). Recorders and logs
+(`benchmarks/baselines/autotune_corpus_rerecord_20260926/`):
+
+- `benchmarks/rocm/record_paged_kv_corpus.py` (defaults: tokens 128/512/2048/8192,
+  4 heads, 4 KV heads, dim 32, page 16, 7 repeats): 8 `paged_kv_decode` f32 rows.
+  Winners unchanged from the pre-schema rows: `gather_fa` in the device domain,
+  `direct` end to end, at every token count. Every row is now `separated`;
+  the 8192-token end-to-end row, previously `separated: false` (6.52% margin
+  vs 5.59% noise) and therefore refused at dispatch, now separates.
+- `benchmarks/rocm/record_autotune_separation.py` (64/256/512/1024 square,
+  bias+gelu, f16, timer source `device_event`): 8 `fused_region` rows. Winners
+  unchanged: `rocm_generic_hip` at 64x64 end to end, `rocm_wmma_gemm`
+  everywhere else; all separated.
+
+The production warm start `cache/paged_kv.py::_rocm_paged_attention_corpus_winner`
+(end-to-end domain) selects **`direct`** again, the same route as before the
+schema change; `tests/unit/test_paged_kv_rocm_abi.py` now asserts the committed
+row selects its recorded winner and that the same row without its identity
+selects nothing. The separation recorder was fixed to count stale rows it will
+replace (it printed "evicted 0" on a v3 corpus) and to name any owned row a run
+leaves stale.
+
+**Review follow-up (2026-09-26): the 8 `fused_region` rows were re-recorded
+with the `tessera-opt` artifact identity.** Every Tier-3 candidate now carries
+an artifact identity checked against the live candidate: `rocm_wmma_gemm` and
+`rocm_flash_attn` by the digest of the `tessera-opt` binary that generates
+their kernels, `rocm_stockham` by its loaded library's digest. The rows from
+`82d6f1fa` lacked that stamp and, on Princess-Luna, all 8 missed (checked: none
+passed the served-hit predicate before the re-run). Re-run on Princess-Luna
+from the same worktree, clean at `59ecd215` on
+`claude/timing-foundation-corpus2`, `ninja -C build` (all targets, no work to
+do: the review fixes touched no C++), `scripts/_rocm_env.sh` sourced, under
+`flock /tmp/tessera-timing.lock`: `record_autotune_separation.py`, timer source
+`device_event`, log `autotune_corpus_rerecord_20260926/gfx1151_fused_separation_opt_identity.txt`.
+Only those 8 rows changed. Each carries
+`evidence.delegate_identities.rocm_wmma_gemm` = that tree's `tessera-opt`
+(`sha256:701ee098...35f20c87`), and after the re-run all 8 are served hits on
+Princess-Luna. Winners unchanged and all separated: `rocm_generic_hip` at
+64x64 end to end, `rocm_wmma_gemm` at 64x64 device and at 256/512/1024 in both
+domains. Standing cost (removed by the next paragraph): these verdicts served
+only with that `tessera-opt` binary; any rebuild has a different digest and
+fell back to a live race.
+
+**Kernel-code identity (2026-09-26, owner decision; branch
+`claude/timing-foundation-kernel-identity`).** A compiler-generated candidate
+is now keyed on the code that was timed, not on the compiler binary:
+`compiler/kernel_code_identity.py` digests the normalized instruction stream
+(every `.text` function by name; each instruction's text before its `//`
+comment, whitespace-collapsed, which drops addresses, encodings and branch
+annotations) plus the decoded `<entry>.kd` kernel descriptor (VGPR/SGPR, LDS,
+scratch, float modes) of the image the candidate would run for the workload
+(`tessera.kernel_code.v1`). `rocm_wmma_gemm` identifies the fused image
+`_rocm_wmma_fused_2d` launches for `(M, N, K, bias, activation)` via
+`runtime._rocm_wmma_fused_image` (gfx11 directive kernel or the gfx12 scheduled
+package); `rocm_flash_attn` the FA-2 image at Q's head_dim via
+`runtime._rocm_flash_attn_image`. Record time stamps it per candidate
+(`Candidate.artifact_identity(region, *inputs)`); `corpus_winner` and the
+`measured_arbitrate` hit path recompute it for the live workload and serve only
+on a match. Per-process cache keyed by (candidate, kernel-selecting facts,
+`tessera-opt` digest), building through the lane's own compile cache; any
+failure (no `llvm-objdump`, no image, no operands) is a miss. The family pins
+stay in the key. The per-instruction rule is that of
+`benchmarks/rocm/inspect_gfx1201_folded_prefill.selected_symbol_isa_evidence`,
+which sealed gfx1201 packets freeze by hash, so that function is kept as a
+declared oracle. What `tests/unit/test_kernel_code_identity.py` checks is
+narrower than "the two agree": on one constructed, fully decoded listing, the
+shared core (`instruction_blocks`) reproduces the oracle's digest and the
+production stream is that core's output under its function header. The two
+deliberately differ on an undecodable word (the oracle drops it, production
+refuses the image), and the test monkeypatches the oracle's disassembly, so it
+does not cover the oracle's own `llvm-objdump` call.
+**Proof on Princess-Luna** (log + script
+`benchmarks/baselines/autotune_corpus_rerecord_20260926/gfx1151_fused_kernel_identity.txt`,
+`check_kernel_identity.py`): worktree `~/programming/tessera-kid` clean at
+`acedf002`, two fresh build trees `build-a/`, `build-b/`. The two `tessera-opt`
+binaries differ (48 bytes: embedded build-tree paths); the four fused images are
+byte-identical across them and across the `59ecd215` tree's `tessera-opt`, and
+so are their identities (64/256/512 share one kernel, stream
+`cc3dbae2ae69ee17…`, 11560 instructions; 1024 selects another, `97baa4c06a2cb0ef…`,
+21744). Before the re-record the committed rows (stamped with the `59ecd215`
+binary's digest) were not served in `build-b` (all 8 missed); re-recorded in `build-a` under the lock
+(timer `device_event`); after it all 8 rows were served by `corpus_winner`
+and `measured_arbitrate` (re-measurement disabled) in `build-b`, with the
+`59ecd215` `tessera-opt`, and in `build-a` -- **but only when the caller
+passed `dims=(size, size)` explicitly; see the correction below.**
+
+**Corrected 2026-09-26 (pre-PR review, branch
+`claude/timing-foundation-kernel-identity-fixes`): the rows above were never
+reachable from production dispatch, and the v1 identity had two holes.**
+
+- *Unreachable rows (pre-existing).* `record_autotune_separation.py` passed
+  `dims=(size, size)`, a 2-D `(M, N)` bucket, while `run_arbitrated` ->
+  `corpus_winner` infers `(M, N, K)`; ordinary dispatch looked up a key no row
+  had and fell to tier priority. The 2-D bucket also dropped K. Now
+  `measured_arbitrate` infers dims with `_infer_dims` when none are given (the
+  one authority `corpus_winner` uses) and the recorder passes none.
+- *Undecodable words (P1-1).* v1 kept only lines starting with a mnemonic, so a
+  `.long 0x...` the disassembler could not decode vanished: two kernels
+  differing only in that word hashed equal. v2 refuses the image (fail closed)
+  on any non-decoded line inside a function (`.long`, `<unknown>`, `...`).
+- *Constant data (P1-2).* v1 digested no `.rodata` beyond the descriptor and
+  enforced nothing. v2 digests every allocatable, non-executable, non-loader
+  section with the `.kd` ranges removed, and names what it digested
+  (`data_sections`, `.rodata:0` for these images).
+- Also: the identity carries the `llvm-objdump --version` line
+  (`identity_mismatch()` names differing fields, so a tool change reads as
+  `["disassembler"]`); its ISA is the live device's (`_rocm_device_name`) and
+  must equal the build chip; raster order/group are in its cache key (the
+  arbiter runs the default raster); the recorder refuses an unqualified device
+  key and any row whose required identity was not stamped (a host without
+  `llvm-objdump` used to evict good rows and write unservable ones, exit 0).
+  The gfx12 image helper mirrors the launch's `build_canonical_gemm_hsaco`
+  call -- it is not a shared selector there (it is on gfx11).
+  `tests/_support/rocm_isa` now resolves `llvm-objdump` through the library
+  list, which adds `/opt/rocm/core/llvm/bin` before `/opt/rocm/llvm/bin`; on
+  Princess-Luna both resolve to the same `/opt/rocm/core-10.0/lib/llvm/bin/llvm-objdump`,
+  so the fixture helper's tool did not move there.
+
+**Proof of the fixes on Princess-Luna** (log
+`autotune_corpus_rerecord_20260926/gfx1151_fused_kernel_identity_v2.txt`):
+worktree `~/programming/tessera-kid` clean at `41c4feb4`, the same
+`build-a/`/`build-b/` rebuilt at that commit (`tessera-opt` still differs,
+`4ba11580…` vs `c83eb30d…`).
+1. Real-tool checks, kernels assembled with ROCm clang + ld.lld for gfx1151:
+   two kernels differing only in `.long 0xdeadbeef` / `.long 0xcafef00d` hash
+   equal under the lenient (oracle) walk and are both refused by v2; two
+   kernels differing only in a 4-byte `.rodata` table (1.0f vs 2.0f) differ in
+   `data_sha256` alone.
+2. v2 identities of the four fused images are identical across `build-a`,
+   `build-b` and the `59ecd215` `tessera-opt`; `data_sections=.rodata:0`,
+   disassembler `AMD LLVM version 23.0.0git`.
+3. Before: asked the way production asks (no dims), in `build-b`, every row
+   missed and ordinary `run_arbitrated` fell to tier priority.
+4. Re-recorded in `build-a`, no explicit dims, timer `device_event`; the 8 rows
+   now key on `(64,64,64)` ... `(1024,1024,1024)`. Winners and separation
+   unchanged (all separated): `rocm_generic_hip` at 64 end to end (margin
+   62.72% vs noise 3.24%), `rocm_wmma_gemm` at 64 device (93.22/0.69), 256
+   (38.54/2.05 e2e, 99.51/0.16 device), 512 (83.96/4.53, 99.89/1.87), 1024
+   (94.59/5.29, 99.91/0.47). Only these 8 rows changed (their 2-D keys removed,
+   3-D keys added; the 108 sm_120 and 8 paged-KV rows untouched).
+5. After, in `build-b`, with the `59ecd215` `tessera-opt`, and in `build-a`:
+   ordinary `run_arbitrated(region, op, "rocm", a, b, bias)` with no dims
+   consults the device row, which answers its recorded winner, and dispatches
+   it on the device (tag `rocm_wmma`); `corpus_winner` and `measured_arbitrate`
+   (re-measurement disabled), dims inferred, serve all 8 rows with an empty
+   `identity_mismatch`.
+
+**Dims-mismatch sweep of the other recorders.** `record_paged_kv_corpus.py`
+and `cache/paged_kv.py::_rocm_paged_attention_corpus_winner` both build
+`(q_len, q_heads, kv_heads, tokens, dim, page_size)` with `q_len = 1`: they
+agree. NVIDIA `record_autotune_corpus.py` passes `(m, n, k)` for matmul and
+fused_region and `(m, nk, d, dv)` for attention, which match `_infer_dims`;
+NVIDIA `benchmark_serving.py` writes `1xHxTxD` and
+`_paged_attention_corpus_winner` looks up `(q_len, H, T, D)`: they agree. **But
+`gated_matmul` `(m, h, k)` and `conv2d` rows are written with explicit dims
+while `_infer_dims` returns `None` for those ops, so ordinary
+`run_arbitrated` dispatch never consults them** (it reaches them only when a
+caller passes dims). NVIDIA-owned; recorded in the NVIDIA plan, not changed
+here.
+
+Also recorded, not fixed (pre-existing): `RocmFlashAttnCandidate.measure_device_latency`
+passes raw Q/K/V to `_rocm_flash_attn` without `region._natural`, while `run`
+and `artifact_identity` orient them; for a transposed attention region the
+device timing would measure a different problem than the one run and
+identified. No committed attention row exists on gfx1151. Owner: this queue,
+alongside `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`.
+
+Limits: the WMMA images here are byte-deterministic, so this proof shows the
+identity survives a rebuild but does not itself exercise the normalization
+against build noise -- that noise is the gfx1201 folded/packed MXFP4 case
+(`gfx1201_mxfp4_producer_relabel_20260924`), which is also the evidence for the
+rule. Non-descriptor data sections (a `.rodata` table) are not digested (these
+images have none); host launch geometry is outside the image (it derives from
+the same schedule the key selects); a disassembler that printed two encodings
+identically would conflate them. gfx1201 `rocm_wmma_gemm` identity goes through
+the scheduled package's image but has no committed rows and no device proof of
+the identity path. (The sentence "non-descriptor data sections are not
+digested" above describes v1; v2 digests them -- see the correction.)
+
+**sm_120:** re-recorded on Super-Bear (NVIDIA plan, same key). gfx1201 has no
+committed corpus rows: not applicable.
+
+## `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`: artifact identity for the gfx1151 paged-KV warm start — open
+
+Owner: this queue (sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`). The 8
+`rocm:gfx1151` `paged_kv_decode` rows and their production reader
+`cache/paged_kv.py::_rocm_paged_attention_corpus_winner` carry and check **no
+artifact identity**, although both routes run `tessera-opt`-generated kernels:
+`direct` (one paged-attention kernel) and `gather_fa` (two paged-KV reads plus
+the FA-2 forward with an additive bias). A rebuilt compiler that changes any of
+those kernels still serves the old ranking.
+
+Work: a multi-kernel identity per route (the `kernel_code_identity` digest of
+every image the route launches, ordered), stamped by
+`benchmarks/rocm/record_paged_kv_corpus.py`, and checked by the warm start
+before it returns a winner (fail closed: no identity, no hint); then
+re-record the 8 rows on Princess-Luna under the lock.
+
+**Gate:** a unit test that a paged-KV row whose stamped route identity differs
+from the live one is not served by `_rocm_paged_attention_corpus_winner`, and
+one that a row without a stamp is not served; plus a Princess-Luna log showing
+the re-recorded rows served by the warm start in a build tree other than the
+recording one. Until then, the paged-KV warm start is keyed on the toolchain
+pins only.
+
 ## ROCM-SPLIT-K-1: cross-workgroup split-K on gfx1201 — 2026-09-26
 
 Owner: [ROCM-SPLIT-K-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-split-k-1). **Landed for gfx1201 f16/bf16; device-proven for correctness and measured on Tajasarus.**
@@ -30,7 +263,7 @@ Sync `GFX1201-SSD-CALIBRATION-2026-09-26` (follows `DEVICE-CLOCK-MARKER-2026-09-
 - `profiler_rocm_evidence`: the packet's architecture is **derived** from the timing target `rocm_<arch>` over an explicit set `ROCM_PROFILER_ARCHITECTURES = (gfx1151, gfx1201)`. Both images must name that architecture. The validator re-derives it and refuses a relabelled packet. Every committed gfx1151 packet still validates (tested).
 - `ssd_performance.admit_ssd_candidate` admits either chip, but every calibration's rebuilt and stored architecture must equal the package chip, so a gfx1151 calibration cannot admit a gfx1201 package or the reverse.
 - The recorders query the chip from the active HIP device rather than assuming it, and resolve LLVM through `llvm_tools` (Tajasarus has no `/usr/lib/llvm-23`).
-- `record_ssd_gpu.py` now **interleaves** plain and marker-bracketed windows in alternating order behind one span-reset gap. It also takes `--launches` (default 100). This **changes the gfx1151 protocol** even at the default: with a calibration requested, plain windows are timed inside the interleaved loop rather than before calibration, so any new gfx1151 recording differs from the committed one (re-record owed, follow-up 1).
+- `record_ssd_gpu.py` now **interleaves** plain and marker-bracketed windows in alternating order behind one span-reset gap. It also takes `--launches` (default 100). This **changes the gfx1151 protocol** even at the default: with a calibration requested, plain windows are timed inside the interleaved loop rather than before calibration, so any new gfx1151 recording differs from the committed one (re-recorded 2026-09-26, follow-up 1).
 
 **ROCm outcome: landed, with gfx1201 evidence.** [`benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Tajasarus (RX 9070 XT, WSL2, no KFD), `32,2,16,4` chunk 8, 1000 launches per window. All 18 packets are eligible:
 
@@ -45,16 +278,41 @@ Two superseded attempts are kept with the evidence:
 
 The gfx1201 serial envelope matches gfx1151's: the 4096-byte native-tape limit. Follow-ups:
 
-1. The recorder changes were not re-run on gfx1151. Its committed packet stands as recorded at `54442ef5`, and a re-record on Princess-Luna is owed before claiming the new protocol there.
+1. **Closed 2026-09-26.** gfx1151 was re-recorded under the interleaved protocol on Princess-Luna. The packet is [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_interleaved_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_interleaved_20260926/README.md), recorded at `0f9c29cf` (clean) under `flock /tmp/tessera-timing.lock`.
+   - **Structure.** Nine pairs at `32,2,16,4` chunk 8, `--launches 1000`.
+   - **Why 1000.** The per-window bracket offset was measured on gfx1151 at about 30–74 µs. At 100 launches that is 2.17% of a 1.38 ms cooperative window; at 1000 it is 0.32% (`diagnostics/launches_probe/`).
+   - **Calibrations.** All 18 are `promotable` on `device_clock_witness`:
+     - serial: device clock 0.04–0.08% below the event, bracketed/plain ratio 0.9997–1.0001;
+     - cooperative: 0.29–0.62% below, ratio 0.9975–1.0020.
+   - **Decision.** The selector **admits cooperative** with a lower bound of 9.89×, and `check_ssd_admission.py` replays the same decision.
+   - **The `54442ef5` packet** stays as history. It validates, but it is now refused as `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`, so no ratio is claimed between the two packets.
 2. Power state is part of these measurements: first windows run ~30% slower on gfx1201. Pinning or warm-up policy is open.
 3. Follow-ups 2–4 of `DEVICE-CLOCK-MARKER-2026-09-26` are unchanged.
-4. **Pre-PR review (2026-09-26), open:** SSD admission never checks a
-   calibration's window protocol or launch count, so a packet recorded under
-   the old, power-state-biased protocol would still admit when it passes the
-   5% overhead gate (the committed gfx1151 calibrations carry no
-   `window_protocol` field). `admit_ssd_candidate` compares backends but not
-   `package.chip` (pre-existing; the cooperative image-digest binding
-   mitigates it). **Fixed in review:** the ROCm packet validator now refuses a
+4. **Pre-PR review (2026-09-26), closed 2026-09-26 (both gaps):**
+   - **Protocol and launch count.** `admit_ssd_candidate` now requires every
+     ROCm calibration to carry `timing.environment.window_protocol ==
+     SSD_CALIBRATION_WINDOW_PROTOCOL` (`interleaved_alternating_plain_bracketed`,
+     which the recorder stamps from the same constant). It also requires a
+     launch count that equals the row's `launches_per_window` in both places
+     it appears: `timing.batch_size` and the device clock's
+     `provenance.launches_per_window`, and one launch count across all 18
+     rows. **Integrity (corrected in review):** admission first validates each
+     stored calibration packet, so an edit that was not resealed is refused;
+     the digests are unkeyed SHA-256, so this is not protection against a
+     deliberate reseal, and the row's own count is not digest-covered. The
+     count is checked for consistency, not against the per-launch durations.
+   - **Refusals.** Admission refuses `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`
+     or `SSD_CALIBRATION_LAUNCHES_MISMATCH`; both codes are registered in
+     `diagnostic_codes.py`. Legacy packets still validate as history.
+   - **Chip.** A candidate whose `package.chip` differs from the
+     incumbent's is refused.
+   - **Tests** (`tests/unit/test_ssd_comparison.py`): legacy and
+     other-protocol refusal on both chips, three launch-mismatch forms, a row
+     with no launch count, cross-chip candidates, and the committed packets
+     read as data. gfx1201 and the gfx1151 re-record pass the protocol check;
+     the `54442ef5` gfx1151 packet is refused as legacy.
+
+   Earlier finding, **fixed in the first review:** the ROCm packet validator now refuses a
    packet whose timing target disagrees with the device identity queried at
    record time (a relabel-and-rebuild previously validated), and the run logs
    are committed as `record.txt`.
@@ -70,7 +328,7 @@ Sync `DEVICE-CLOCK-MARKER-2026-09-26` (follows `WSL-TIMING-ADMISSION-2026-09-26`
 - `target_perf.apply_corpus`: every selector-eligible corpus carries its raw measurements; the environment is derived from them (a WSL measurement cannot be relabelled bare metal), each overlay must equal its raw record's `results`, the raw architecture must match the device target, and a WSL witness sample counts only if its `artifact_digests` name the computed raw-measurement digest (reviews of #855 and this branch). Binding is by digest, not yet by comparing sample clocks with the measured metric — owed with the first WSL corpus producer.
 - `benchmarks/check_ssd_admission.py` now replays calibrations carried in the comparison.
 
-**ROCm outcome: landed, with gfx1151 evidence.** [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Princess-Luna (WSL2, no KFD), every process calibrated by marker bracketing (serial 0.30–0.51%, cooperative 2.05–3.12% device-vs-event; bracketing ratio 0.9965–1.0083; each calibration bound to its row `run_id`). The production SSD selector **admits the cooperative candidate** (lower bound 9.75×), where the 2026-09-10 packet was refused for missing calibration. Follow-ups: (1) the ROCm profiler packet and SSD adapter are gfx1151-only — gfx1201 needs its own adapter (the marker already builds for gfx1201); (2) the serial native tape GPU lowering caps temporaries at 4096 bytes, so SSD comparisons are limited to `32,2,16,4` — a real limit on the incumbent, not on the method; (3) `calibrate_gfx1151.py` can now use the marker instead of events-only timing; (4) the pass's 64-bit span atomics lower to compare-and-swap loops on gfx11 (correct; their cost is inside the bracketing ratio).
+**ROCm outcome: landed, with gfx1151 evidence.** [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Princess-Luna (WSL2, no KFD), every process calibrated by marker bracketing (serial 0.30–0.51%, cooperative 2.05–3.12% device-vs-event; bracketing ratio 0.9965–1.0083; each calibration bound to its row `run_id`). The production SSD selector **admitted the cooperative candidate** (lower bound 9.75×) at the time, where the 2026-09-10 packet was refused for missing calibration. **Superseded 2026-09-26:** this packet predates the interleaved window protocol and is now refused by admission as `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`; the current gfx1151 evidence is `gfx1151_ssd_calibrated_pairs_interleaved_20260926` (admits cooperative, lower bound 9.89×). Follow-ups: (1) the ROCm profiler packet and SSD adapter are gfx1151-only — gfx1201 needs its own adapter (the marker already builds for gfx1201); (2) the serial native tape GPU lowering caps temporaries at 4096 bytes, so SSD comparisons are limited to `32,2,16,4` — a real limit on the incumbent, not on the method; (3) `calibrate_gfx1151.py` can now use the marker instead of events-only timing; (4) the pass's 64-bit span atomics lower to compare-and-swap loops on gfx11 (correct; their cost is inside the bracketing ratio).
 
 ## WSL timing admission — 2026-09-26
 

@@ -1,0 +1,826 @@
+{
+  "schema": "tessera.nvidia_globaltimer_marker_probe.v1",
+  "sync_key": "NVIDIA-GLOBALTIMER-MARKER-2026-09-26",
+  "host": "The-Super-Bear",
+  "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+  "execution_environment": "wsl2",
+  "device_identity": {
+    "name": "NVIDIA GeForce RTX 5070",
+    "ordinal": 0,
+    "compute_capability": "12.0",
+    "architecture": "sm_120",
+    "driver_api_version": 13030,
+    "uuid": "cba12639821a7a104cd3f918f9c0a545"
+  },
+  "source_commit": "de66d702891b648af776c97162194b13a3e96944",
+  "worktree_dirty": false,
+  "marker_image_sha256": "a945e343f609d4ad6e005dec2babb68e3092da6627456dc017eb6ecd3c72ed93",
+  "single_marker_span": [
+    1790471292319713376,
+    1790471292319713472
+  ],
+  "agreement_band": 0.05,
+  "spin_geometry": [
+    48,
+    128
+  ],
+  "resolution": [
+    {
+      "reads": 65536,
+      "elapsed_ns": 640192,
+      "changes": 20006,
+      "zero_delta_fraction": 0.6947280079346914,
+      "min_nonzero_delta_ns": 32,
+      "median_nonzero_delta_ns": 32.0,
+      "max_delta_ns": 32,
+      "mean_update_period_ns": 32.0,
+      "ns_per_read": 9.768703746089876,
+      "top_nonzero_deltas": [
+        [
+          32,
+          20006
+        ]
+      ]
+    },
+    {
+      "reads": 65536,
+      "elapsed_ns": 646816,
+      "changes": 20213,
+      "zero_delta_fraction": 0.6915693904020752,
+      "min_nonzero_delta_ns": 32,
+      "median_nonzero_delta_ns": 32,
+      "max_delta_ns": 32,
+      "mean_update_period_ns": 32.0,
+      "ns_per_read": 9.869779507133593,
+      "top_nonzero_deltas": [
+        [
+          32,
+          20213
+        ]
+      ]
+    },
+    {
+      "reads": 65536,
+      "elapsed_ns": 646944,
+      "changes": 20217,
+      "zero_delta_fraction": 0.6915083543144884,
+      "min_nonzero_delta_ns": 32,
+      "median_nonzero_delta_ns": 32,
+      "max_delta_ns": 32,
+      "mean_update_period_ns": 32.0,
+      "ns_per_read": 9.87173266193637,
+      "top_nonzero_deltas": [
+        [
+          32,
+          20217
+        ]
+      ]
+    }
+  ],
+  "windows": [
+    {
+      "launches": 1,
+      "spin_iterations": 64,
+      "median_event_ns": 69311.99878454208,
+      "median_span_ns": 57312,
+      "median_host_ns": 121912,
+      "median_event_minus_span_ns": 27680.000643253326,
+      "median_relative_error": 0.48553847215302576,
+      "max_relative_error": 0.7627866003248541,
+      "within_band_all_windows": false,
+      "rows": [
+        {
+          "event_ns": 105888.0016207695,
+          "span_ns": 86688,
+          "host_ns": 871105,
+          "event_minus_span_ns": 19200.0016207695,
+          "relative_error": 0.1813236752690165
+        },
+        {
+          "event_ns": 69311.99878454208,
+          "span_ns": 57312,
+          "host_ns": 110792,
+          "event_minus_span_ns": 11999.998784542084,
+          "relative_error": 0.17313017940579598
+        },
+        {
+          "event_ns": 32159.999012947083,
+          "span_ns": 22944,
+          "host_ns": 121912,
+          "event_minus_span_ns": 9215.999012947083,
+          "relative_error": 0.2865671422824632
+        },
+        {
+          "event_ns": 156000.00321865082,
+          "span_ns": 80256,
+          "host_ns": 243603,
+          "event_minus_span_ns": 75744.00321865082,
+          "relative_error": 0.48553847215302576
+        },
+        {
+          "event_ns": 170847.99706935883,
+          "span_ns": 78368,
+          "host_ns": 258933,
+          "event_minus_span_ns": 92479.99706935883,
+          "relative_error": 0.5412998610209923
+        },
+        {
+          "event_ns": 51327.99968123436,
+          "span_ns": 12320,
+          "host_ns": 88111,
+          "event_minus_span_ns": 39007.99968123436,
+          "relative_error": 0.7599750608534971
+        },
+        {
+          "event_ns": 36288.00064325333,
+          "span_ns": 8608,
+          "host_ns": 65461,
+          "event_minus_span_ns": 27680.000643253326,
+          "relative_error": 0.7627866003248541
+        }
+      ]
+    },
+    {
+      "launches": 10,
+      "spin_iterations": 64,
+      "median_event_ns": 360415.9951210022,
+      "median_span_ns": 347904,
+      "median_host_ns": 399945,
+      "median_event_minus_span_ns": 11328.008520126343,
+      "median_relative_error": 0.034715426868892306,
+      "max_relative_error": 0.1794466139022939,
+      "within_band_all_windows": false,
+      "rows": [
+        {
+          "event_ns": 387616.00852012634,
+          "span_ns": 376288,
+          "host_ns": 473466,
+          "event_minus_span_ns": 11328.008520126343,
+          "relative_error": 0.029224821140322314
+        },
+        {
+          "event_ns": 267103.99985313416,
+          "span_ns": 257760,
+          "host_ns": 303484,
+          "event_minus_span_ns": 9343.999853134155,
+          "relative_error": 0.03498262795866744
+        },
+        {
+          "event_ns": 316000.0145435333,
+          "span_ns": 307040,
+          "host_ns": 399945,
+          "event_minus_span_ns": 8960.014543533325,
+          "relative_error": 0.028354475098604656
+        },
+        {
+          "event_ns": 445279.985666275,
+          "span_ns": 365376,
+          "host_ns": 530447,
+          "event_minus_span_ns": 79903.98566627502,
+          "relative_error": 0.1794466139022939
+        },
+        {
+          "event_ns": 118335.99954843521,
+          "span_ns": 110976,
+          "host_ns": 151952,
+          "event_minus_span_ns": 7359.999548435211,
+          "relative_error": 0.062195777924897194
+        },
+        {
+          "event_ns": 436895.9963321686,
+          "span_ns": 424960,
+          "host_ns": 520556,
+          "event_minus_span_ns": 11935.99633216858,
+          "relative_error": 0.027319994763911122
+        },
+        {
+          "event_ns": 360415.9951210022,
+          "span_ns": 347904,
+          "host_ns": 399385,
+          "event_minus_span_ns": 12511.995121002197,
+          "relative_error": 0.034715426868892306
+        }
+      ]
+    },
+    {
+      "launches": 100,
+      "spin_iterations": 64,
+      "median_event_ns": 2596415.9965515137,
+      "median_span_ns": 2584800,
+      "median_host_ns": 2622093,
+      "median_event_minus_span_ns": 11360.072692871094,
+      "median_relative_error": 0.004473858028506106,
+      "max_relative_error": 0.03213279072275943,
+      "within_band_all_windows": true,
+      "rows": [
+        {
+          "event_ns": 2644576.072692871,
+          "span_ns": 2633216,
+          "host_ns": 2743745,
+          "event_minus_span_ns": 11360.072692871094,
+          "relative_error": 0.004295611992474682
+        },
+        {
+          "event_ns": 2257632.01713562,
+          "span_ns": 2185088,
+          "host_ns": 2342458,
+          "event_minus_span_ns": 72544.01713562012,
+          "relative_error": 0.03213279072275943
+        },
+        {
+          "event_ns": 2735807.8956604004,
+          "span_ns": 2724064,
+          "host_ns": 2802594,
+          "event_minus_span_ns": 11743.89566040039,
+          "relative_error": 0.004292660928067654
+        },
+        {
+          "event_ns": 2328320.026397705,
+          "span_ns": 2317120,
+          "host_ns": 2395500,
+          "event_minus_span_ns": 11200.026397705078,
+          "relative_error": 0.004810346632216777
+        },
+        {
+          "event_ns": 2798207.998275757,
+          "span_ns": 2787616,
+          "host_ns": 2846885,
+          "event_minus_span_ns": 10591.998275756836,
+          "relative_error": 0.0037852791080161224
+        },
+        {
+          "event_ns": 2596415.9965515137,
+          "span_ns": 2584800,
+          "host_ns": 2622093,
+          "event_minus_span_ns": 11615.996551513672,
+          "relative_error": 0.004473858028506106
+        },
+        {
+          "event_ns": 2475712.0609283447,
+          "span_ns": 2464352,
+          "host_ns": 2512682,
+          "event_minus_span_ns": 11360.060928344727,
+          "relative_error": 0.004588603459840528
+        }
+      ]
+    },
+    {
+      "launches": 1000,
+      "spin_iterations": 64,
+      "median_event_ns": 26959583.282470703,
+      "median_span_ns": 26948512,
+      "median_host_ns": 27050754,
+      "median_event_minus_span_ns": 11839.232177734375,
+      "median_relative_error": 0.0004754498007637937,
+      "max_relative_error": 0.004188620855946789,
+      "within_band_all_windows": true,
+      "rows": [
+        {
+          "event_ns": 28144767.76123047,
+          "span_ns": 28026880,
+          "host_ns": 28215319,
+          "event_minus_span_ns": 117887.76123046875,
+          "relative_error": 0.004188620855946789
+        },
+        {
+          "event_ns": 25334079.74243164,
+          "span_ns": 25321568,
+          "host_ns": 25407915,
+          "event_minus_span_ns": 12511.742431640625,
+          "relative_error": 0.0004938700185223192
+        },
+        {
+          "event_ns": 27217184.06677246,
+          "span_ns": 27206848,
+          "host_ns": 27296298,
+          "event_minus_span_ns": 10336.066772460938,
+          "relative_error": 0.0003797625333724186
+        },
+        {
+          "event_ns": 24901119.232177734,
+          "span_ns": 24889280,
+          "host_ns": 24974810,
+          "event_minus_span_ns": 11839.232177734375,
+          "relative_error": 0.0004754498007637937
+        },
+        {
+          "event_ns": 27141471.86279297,
+          "span_ns": 27130240,
+          "host_ns": 27232337,
+          "event_minus_span_ns": 11231.86279296875,
+          "relative_error": 0.0004138265916361746
+        },
+        {
+          "event_ns": 25006240.844726562,
+          "span_ns": 24918624,
+          "host_ns": 25106731,
+          "event_minus_span_ns": 87616.8447265625,
+          "relative_error": 0.0035037991224114587
+        },
+        {
+          "event_ns": 26959583.282470703,
+          "span_ns": 26948512,
+          "host_ns": 27050754,
+          "event_minus_span_ns": 11071.282470703125,
+          "relative_error": 0.000410662225550858
+        }
+      ]
+    },
+    {
+      "launches": 1,
+      "spin_iterations": 4096,
+      "median_event_ns": 78368.00068616867,
+      "median_span_ns": 68480,
+      "median_host_ns": 147331,
+      "median_event_minus_span_ns": 9600.00068616867,
+      "median_relative_error": 0.12249898685833126,
+      "max_relative_error": 0.4260354847523822,
+      "within_band_all_windows": false,
+      "rows": [
+        {
+          "event_ns": 31840.000301599503,
+          "span_ns": 20992,
+          "host_ns": 58061,
+          "event_minus_span_ns": 10848.000301599503,
+          "relative_error": 0.34070352383302416
+        },
+        {
+          "event_ns": 103040.00228643417,
+          "span_ns": 94944,
+          "host_ns": 187532,
+          "event_minus_span_ns": 8096.002286434174,
+          "relative_error": 0.07857144901771863
+        },
+        {
+          "event_ns": 77760.0035071373,
+          "span_ns": 68480,
+          "host_ns": 147331,
+          "event_minus_span_ns": 9280.003507137299,
+          "relative_error": 0.11934160350552868
+        },
+        {
+          "event_ns": 186976.00066661835,
+          "span_ns": 177600,
+          "host_ns": 223892,
+          "event_minus_span_ns": 9376.000666618347,
+          "relative_error": 0.050145476602293626
+        },
+        {
+          "event_ns": 27039.99914228916,
+          "span_ns": 15520,
+          "host_ns": 58410,
+          "event_minus_span_ns": 11519.999142289162,
+          "relative_error": 0.4260354847523822
+        },
+        {
+          "event_ns": 78368.00068616867,
+          "span_ns": 68768,
+          "host_ns": 144252,
+          "event_minus_span_ns": 9600.00068616867,
+          "relative_error": 0.12249898685833126
+        },
+        {
+          "event_ns": 88320.00195980072,
+          "span_ns": 65952,
+          "host_ns": 157542,
+          "event_minus_span_ns": 22368.00195980072,
+          "relative_error": 0.25326088613518855
+        }
+      ]
+    },
+    {
+      "launches": 10,
+      "spin_iterations": 4096,
+      "median_event_ns": 283104.0024757385,
+      "median_span_ns": 271968,
+      "median_host_ns": 320044,
+      "median_event_minus_span_ns": 9375.993055343628,
+      "median_relative_error": 0.04544084497612698,
+      "max_relative_error": 0.22622602028479252,
+      "within_band_all_windows": false,
+      "rows": [
+        {
+          "event_ns": 212671.99516296387,
+          "span_ns": 203008,
+          "host_ns": 271944,
+          "event_minus_span_ns": 9663.995162963867,
+          "relative_error": 0.04544084497612698
+        },
+        {
+          "event_ns": 283104.0024757385,
+          "span_ns": 271968,
+          "host_ns": 320044,
+          "event_minus_span_ns": 11136.002475738525,
+          "relative_error": 0.03933537632232119
+        },
+        {
+          "event_ns": 299840.0032520294,
+          "span_ns": 291136,
+          "host_ns": 369284,
+          "event_minus_span_ns": 8704.003252029419,
+          "relative_error": 0.02902882589923567
+        },
+        {
+          "event_ns": 201631.99305534363,
+          "span_ns": 192256,
+          "host_ns": 292343,
+          "event_minus_span_ns": 9375.993055343628,
+          "relative_error": 0.046500522626734736
+        },
+        {
+          "event_ns": 364095.9858894348,
+          "span_ns": 281728,
+          "host_ns": 460176,
+          "event_minus_span_ns": 82367.98588943481,
+          "relative_error": 0.22622602028479252
+        },
+        {
+          "event_ns": 132640.00415802002,
+          "span_ns": 123424,
+          "host_ns": 159742,
+          "event_minus_span_ns": 9216.00415802002,
+          "relative_error": 0.06948133194447564
+        },
+        {
+          "event_ns": 376127.9881000519,
+          "span_ns": 367360,
+          "host_ns": 456415,
+          "event_minus_span_ns": 8767.98810005188,
+          "relative_error": 0.023311182303507687
+        }
+      ]
+    },
+    {
+      "launches": 100,
+      "spin_iterations": 4096,
+      "median_event_ns": 2309439.8975372314,
+      "median_span_ns": 2299744,
+      "median_host_ns": 2379879,
+      "median_event_minus_span_ns": 11072.075897216797,
+      "median_relative_error": 0.004568033427381621,
+      "max_relative_error": 0.009239711988389817,
+      "within_band_all_windows": true,
+      "rows": [
+        {
+          "event_ns": 2164608.0017089844,
+          "span_ns": 2154720,
+          "host_ns": 2201407,
+          "event_minus_span_ns": 9888.001708984375,
+          "relative_error": 0.004568033427381621
+        },
+        {
+          "event_ns": 2453216.075897217,
+          "span_ns": 2442144,
+          "host_ns": 2497921,
+          "event_minus_span_ns": 11072.075897216797,
+          "relative_error": 0.00451329012800774
+        },
+        {
+          "event_ns": 2423007.9650878906,
+          "span_ns": 2413248,
+          "host_ns": 2497312,
+          "event_minus_span_ns": 9759.965087890625,
+          "relative_error": 0.004028036733068106
+        },
+        {
+          "event_ns": 2256000.04196167,
+          "span_ns": 2244256,
+          "host_ns": 2293748,
+          "event_minus_span_ns": 11744.041961669922,
+          "relative_error": 0.0052056922620702046
+        },
+        {
+          "event_ns": 2382751.941680908,
+          "span_ns": 2360736,
+          "host_ns": 2449210,
+          "event_minus_span_ns": 22015.941680908203,
+          "relative_error": 0.009239711988389817
+        },
+        {
+          "event_ns": 2309439.8975372314,
+          "span_ns": 2299744,
+          "host_ns": 2379240,
+          "event_minus_span_ns": 9695.897537231445,
+          "relative_error": 0.004198376215623136
+        },
+        {
+          "event_ns": 2293823.9574432373,
+          "span_ns": 2282560,
+          "host_ns": 2379879,
+          "event_minus_span_ns": 11263.957443237305,
+          "relative_error": 0.004910558810185433
+        }
+      ]
+    },
+    {
+      "launches": 1000,
+      "spin_iterations": 4096,
+      "median_event_ns": 22597055.435180664,
+      "median_span_ns": 22587296,
+      "median_host_ns": 22801903,
+      "median_event_minus_span_ns": 16095.139404296875,
+      "median_relative_error": 0.0007375513251993537,
+      "max_relative_error": 0.003709681977274878,
+      "within_band_all_windows": true,
+      "rows": [
+        {
+          "event_ns": 23086271.286010742,
+          "span_ns": 23078496,
+          "host_ns": 23133108,
+          "event_minus_span_ns": 7775.2860107421875,
+          "relative_error": 0.0003367926294556569
+        },
+        {
+          "event_ns": 24986335.75439453,
+          "span_ns": 24925056,
+          "host_ns": 25075781,
+          "event_minus_span_ns": 61279.75439453125,
+          "relative_error": 0.002452530655030261
+        },
+        {
+          "event_ns": 25116575.241088867,
+          "span_ns": 25106400,
+          "host_ns": 25155192,
+          "event_minus_span_ns": 10175.241088867188,
+          "relative_error": 0.0004051205624651104
+        },
+        {
+          "event_ns": 22073535.919189453,
+          "span_ns": 22047584,
+          "host_ns": 22178204,
+          "event_minus_span_ns": 25951.919189453125,
+          "relative_error": 0.0011757028545160285
+        },
+        {
+          "event_ns": 22597055.435180664,
+          "span_ns": 22587296,
+          "host_ns": 22801903,
+          "event_minus_span_ns": 9759.435180664062,
+          "relative_error": 0.0004318896861876037
+        },
+        {
+          "event_ns": 22151647.567749023,
+          "span_ns": 22069472,
+          "host_ns": 22227416,
+          "event_minus_span_ns": 82175.56774902344,
+          "relative_error": 0.003709681977274878
+        },
+        {
+          "event_ns": 21822399.139404297,
+          "span_ns": 21806304,
+          "host_ns": 21874070,
+          "event_minus_span_ns": 16095.139404296875,
+          "relative_error": 0.0007375513251993537
+        }
+      ]
+    },
+    {
+      "launches": 1,
+      "spin_iterations": 65536,
+      "median_event_ns": 120063.99780511856,
+      "median_span_ns": 111616,
+      "median_host_ns": 213082,
+      "median_event_minus_span_ns": 9535.999445438385,
+      "median_relative_error": 0.07654183725150601,
+      "max_relative_error": 0.4488860796172645,
+      "within_band_all_windows": false,
+      "rows": [
+        {
+          "event_ns": 220799.9974489212,
+          "span_ns": 209152,
+          "host_ns": 318444,
+          "event_minus_span_ns": 11647.997448921204,
+          "relative_error": 0.05275361224411153
+        },
+        {
+          "event_ns": 117343.99944543839,
+          "span_ns": 107808,
+          "host_ns": 213082,
+          "event_minus_span_ns": 9535.999445438385,
+          "relative_error": 0.08126533517269754
+        },
+        {
+          "event_ns": 202527.9998779297,
+          "span_ns": 111616,
+          "host_ns": 283063,
+          "event_minus_span_ns": 90911.99987792969,
+          "relative_error": 0.4488860796172645
+        },
+        {
+          "event_ns": 117536.00090742111,
+          "span_ns": 111744,
+          "host_ns": 146492,
+          "event_minus_span_ns": 5792.000907421112,
+          "relative_error": 0.049278526261781384
+        },
+        {
+          "event_ns": 128864.00520801544,
+          "span_ns": 120960,
+          "host_ns": 211773,
+          "event_minus_span_ns": 7904.005208015442,
+          "relative_error": 0.061336020056621726
+        },
+        {
+          "event_ns": 116223.99836778641,
+          "span_ns": 107328,
+          "host_ns": 211192,
+          "event_minus_span_ns": 8895.998367786407,
+          "relative_error": 0.07654183725150601
+        },
+        {
+          "event_ns": 120063.99780511856,
+          "span_ns": 107968,
+          "host_ns": 214023,
+          "event_minus_span_ns": 12095.99780511856,
+          "relative_error": 0.10074625221752265
+        }
+      ]
+    },
+    {
+      "launches": 10,
+      "spin_iterations": 65536,
+      "median_event_ns": 1026816.0104751587,
+      "median_span_ns": 1013056,
+      "median_host_ns": 1115544,
+      "median_event_minus_span_ns": 10624.056465148926,
+      "median_relative_error": 0.009972585517458119,
+      "max_relative_error": 0.03128829773124992,
+      "within_band_all_windows": true,
+      "rows": [
+        {
+          "event_ns": 1045248.0316162109,
+          "span_ns": 1012544,
+          "host_ns": 1125584,
+          "event_minus_span_ns": 32704.031616210938,
+          "relative_error": 0.03128829773124992
+        },
+        {
+          "event_ns": 1019263.9827728271,
+          "span_ns": 1009952,
+          "host_ns": 1115544,
+          "event_minus_span_ns": 9311.982772827148,
+          "relative_error": 0.009135987271417787
+        },
+        {
+          "event_ns": 1025503.9930343628,
+          "span_ns": 1013056,
+          "host_ns": 1072444,
+          "event_minus_span_ns": 12447.993034362793,
+          "relative_error": 0.012138414983183477
+        },
+        {
+          "event_ns": 1023903.9659500122,
+          "span_ns": 1012032,
+          "host_ns": 1102063,
+          "event_minus_span_ns": 11871.965950012207,
+          "relative_error": 0.011594804146497276
+        },
+        {
+          "event_ns": 1099392.056465149,
+          "span_ns": 1088768,
+          "host_ns": 1185975,
+          "event_minus_span_ns": 10624.056465148926,
+          "relative_error": 0.009663573974973241
+        },
+        {
+          "event_ns": 1084704.041481018,
+          "span_ns": 1078176,
+          "host_ns": 1126944,
+          "event_minus_span_ns": 6528.041481018066,
+          "relative_error": 0.006018269713556981
+        },
+        {
+          "event_ns": 1026816.0104751587,
+          "span_ns": 1016576,
+          "host_ns": 1086794,
+          "event_minus_span_ns": 10240.010475158691,
+          "relative_error": 0.009972585517458119
+        }
+      ]
+    },
+    {
+      "launches": 100,
+      "spin_iterations": 65536,
+      "median_event_ns": 10141311.645507812,
+      "median_span_ns": 10111072,
+      "median_host_ns": 10239516,
+      "median_event_minus_span_ns": 12287.64306640625,
+      "median_relative_error": 0.0012118311665314553,
+      "max_relative_error": 0.009293450995324755,
+      "within_band_all_windows": true,
+      "rows": [
+        {
+          "event_ns": 10087264.060974121,
+          "span_ns": 10075040,
+          "host_ns": 10164716,
+          "event_minus_span_ns": 12224.060974121094,
+          "relative_error": 0.0012118311665314553
+        },
+        {
+          "event_ns": 10191871.643066406,
+          "span_ns": 10179584,
+          "host_ns": 10240737,
+          "event_minus_span_ns": 12287.64306640625,
+          "relative_error": 0.0012056316540020016
+        },
+        {
+          "event_ns": 10116479.873657227,
+          "span_ns": 10098624,
+          "host_ns": 10196037,
+          "event_minus_span_ns": 17855.873657226562,
+          "relative_error": 0.0017650283379421635
+        },
+        {
+          "event_ns": 10116319.65637207,
+          "span_ns": 10104704,
+          "host_ns": 10169165,
+          "event_minus_span_ns": 11615.656372070312,
+          "relative_error": 0.0011482097014158543
+        },
+        {
+          "event_ns": 10141311.645507812,
+          "span_ns": 10132672,
+          "host_ns": 10241427,
+          "event_minus_span_ns": 8639.6455078125,
+          "relative_error": 0.0008519258464598621
+        },
+        {
+          "event_ns": 10174912.452697754,
+          "span_ns": 10144032,
+          "host_ns": 10239516,
+          "event_minus_span_ns": 30880.452697753906,
+          "relative_error": 0.00303496003934327
+        },
+        {
+          "event_ns": 10205920.219421387,
+          "span_ns": 10111072,
+          "host_ns": 10316139,
+          "event_minus_span_ns": 94848.21942138672,
+          "relative_error": 0.009293450995324755
+        }
+      ]
+    },
+    {
+      "launches": 1000,
+      "spin_iterations": 65536,
+      "median_event_ns": 101121116.6381836,
+      "median_span_ns": 101033600,
+      "median_host_ns": 101228736,
+      "median_event_minus_span_ns": 45756.83203125,
+      "median_relative_error": 0.0004530081014301227,
+      "max_relative_error": 0.0015607893477372265,
+      "within_band_all_windows": true,
+      "rows": [
+        {
+          "event_ns": 100962432.86132812,
+          "span_ns": 100949376,
+          "host_ns": 101104933,
+          "event_minus_span_ns": 13056.861328125,
+          "relative_error": 0.00012932395702130707
+        },
+        {
+          "event_ns": 101006652.83203125,
+          "span_ns": 100960896,
+          "host_ns": 101085234,
+          "event_minus_span_ns": 45756.83203125,
+          "relative_error": 0.0004530081014301227
+        },
+        {
+          "event_ns": 101102943.42041016,
+          "span_ns": 100997568,
+          "host_ns": 101179995,
+          "event_minus_span_ns": 105375.42041015625,
+          "relative_error": 0.001042258680560665
+        },
+        {
+          "event_ns": 101147232.05566406,
+          "span_ns": 101106784,
+          "host_ns": 101228736,
+          "event_minus_span_ns": 40448.0556640625,
+          "relative_error": 0.000399892857590041
+        },
+        {
+          "event_ns": 101200576.78222656,
+          "span_ns": 101042624,
+          "host_ns": 101312175,
+          "event_minus_span_ns": 157952.7822265625,
+          "relative_error": 0.0015607893477372265
+        },
+        {
+          "event_ns": 101121116.6381836,
+          "span_ns": 101033600,
+          "host_ns": 101229136,
+          "event_minus_span_ns": 87516.63818359375,
+          "relative_error": 0.0008654635262457856
+        },
+        {
+          "event_ns": 101183868.40820312,
+          "span_ns": 101158176,
+          "host_ns": 101260455,
+          "event_minus_span_ns": 25692.408203125,
+          "relative_error": 0.00025391802673006006
+        }
+      ]
+    }
+  ]
+}

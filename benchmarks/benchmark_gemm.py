@@ -27,8 +27,15 @@ import numpy as np
 
 try:
     from benchmarks.compiler_support import compiler_matmul_relu
+    from benchmarks.common.route_provenance import RouteProvenance, route_unavailable
 except ImportError:  # Allows running this file directly from benchmarks/.
     from compiler_support import compiler_matmul_relu
+    from common.route_provenance import RouteProvenance, route_unavailable
+
+#: Decision #12: an analytical-model row has no executed artifact to take a
+#: route from; it says so rather than borrowing the benchmark's own label.
+_ROOFLINE_ROUTE = route_unavailable(
+    "latency is the analytical roofline model; no artifact executed")
 
 try:
     from tessera.telemetry import make_event, telemetry_report
@@ -77,6 +84,14 @@ class GEMMResult:
     compiler_path: str = "roofline_model"
     compiler_lowering: str = ""
     timestamp: float = field(default_factory=time.time)
+    #: Decision #12: derived from the executed artifact (``CompilerRun.route``)
+    #: or ``unknown`` with the reason, never from ``compiler_path``.
+    route: RouteProvenance = _ROOFLINE_ROUTE
+    #: Which clock produced ``latency_ms``.
+    timing_source: str = "analytical_model"
+    #: The lane that executed: the JIT's ``execution_kind`` for the timed call
+    #: (``reference_cpu`` / ``native_cpu`` ...), ``none`` for a modelled row.
+    backend: str = "none"
 
     def __repr__(self) -> str:
         return (
@@ -162,6 +177,11 @@ class GEMMBenchmark:
                         roofline_bound="measured_cpu",
                         compiler_path="tessera_jit_cpu" if run.is_executable else "tessera_jit_fallback",
                         compiler_lowering=run.lowering,
+                        route=run.route,
+                        # One perf_counter interval around the FIRST call,
+                        # which includes JIT compilation -- not steady state.
+                        timing_source="host_wall_clock_first_call",
+                        backend=run.execution_kind,
                     )
                 compiler_path = "compiler_unavailable"
 
@@ -249,6 +269,9 @@ class GEMMBenchmark:
                 "roofline_bound": r.roofline_bound,
                 "compiler_path": r.compiler_path,
                 "compiler_lowering": r.compiler_lowering,
+                **r.route.as_fields(),
+                "timing_source": r.timing_source,
+                "backend": r.backend,
                 "timestamp": r.timestamp,
                 "telemetry": telemetry,
             })

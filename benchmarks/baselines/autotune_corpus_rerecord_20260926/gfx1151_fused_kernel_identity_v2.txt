@@ -1,0 +1,134 @@
+# gfx1151 fused_region corpus: kernel-code identity v2 + production dims (review fixes, AUTOTUNE-TOOLCHAIN-KEY-2026-09-26)
+# Princess-Luna (Strix Halo, gfx1151, WSL2). Worktree ~/programming/tessera-kid, detached at 41c4feb4c6e2f47c0e4112345b88785d188f8fe6
+# (branch claude/timing-foundation-kernel-identity-fixes). build-a/ and build-b/: the same two trees as the v1 proof,
+# rebuilt incrementally at this commit (ninja, all targets, rc=0 each). scripts/_rocm_env.sh sourced.
+
+## 1. Real-tool fail-closed / data checks (assembled with ROCm clang + ld.lld, gfx1151)
+disassembler /opt/rocm/core/llvm/bin/llvm-objdump
+word_a oracle-style lenient stream 9ef938cc54653962
+word_a production identity: refused -> undecodable word in k: '.long 0xdeadbeef'
+word_b oracle-style lenient stream 9ef938cc54653962
+word_b production identity: refused -> undecodable word in k: '.long 0xcafef00d'
+clean_a stream c6664aec0555ce71 kd 3c55962acc001171 data .rodata:4 8396b76c04d77090 | AMD LLVM version 23.0.0git
+clean_b stream c6664aec0555ce71 kd 3c55962acc001171 data .rodata:4 6dff640fc302521f | AMD LLVM version 23.0.0git
+clean_a vs clean_b (constant table 1.0f vs 2.0f) differing fields: ['data_sha256']
+
+## 2. Identity v2 across trees (A vs B, then A vs the 59ecd215 tessera-opt)
+tree A tessera-opt /home/gstoner/programming/tessera-kid/build-a/tools/tessera-opt/tessera-opt
+  abi_digest sha256:4ba11580bcf4e02e95a6adae911eb02dc7bb18f6208fea8dcb502414de6177a6
+tree B tessera-opt /home/gstoner/programming/tessera-kid/build-b/tools/tessera-opt/tessera-opt
+  abi_digest sha256:c83eb30dfe0d02db6cec34b6879aaee73d46554c09c485c31460cce0f8ea79d4
+tessera-opt binaries identical: False
+64^3 f16 bias+gelu: payload identical=True sections varied=none kernel identity identical=True stream=cc3dbae2ae69ee17 kd=94ce3bee15c3e350 n=11560 data=.rodata:0 disassembler='AMD LLVM version 23.0.0git'
+256^3 f16 bias+gelu: payload identical=True sections varied=none kernel identity identical=True stream=cc3dbae2ae69ee17 kd=94ce3bee15c3e350 n=11560 data=.rodata:0 disassembler='AMD LLVM version 23.0.0git'
+512^3 f16 bias+gelu: payload identical=True sections varied=none kernel identity identical=True stream=cc3dbae2ae69ee17 kd=94ce3bee15c3e350 n=11560 data=.rodata:0 disassembler='AMD LLVM version 23.0.0git'
+1024^3 f16 bias+gelu: payload identical=True sections varied=none kernel identity identical=True stream=97baa4c06a2cb0ef kd=2f06167e17b310b7 n=21744 data=.rodata:0 disassembler='AMD LLVM version 23.0.0git'
+tree A tessera-opt /home/gstoner/programming/tessera-kid/build-a/tools/tessera-opt/tessera-opt
+  abi_digest sha256:4ba11580bcf4e02e95a6adae911eb02dc7bb18f6208fea8dcb502414de6177a6
+tree B tessera-opt /home/gstoner/programming/tessera-corpus/build/tools/tessera-opt/tessera-opt
+  abi_digest sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87
+tessera-opt binaries identical: False
+64^3 f16 bias+gelu: payload identical=True sections varied=none kernel identity identical=True stream=cc3dbae2ae69ee17 kd=94ce3bee15c3e350 n=11560 data=.rodata:0 disassembler='AMD LLVM version 23.0.0git'
+256^3 f16 bias+gelu: payload identical=True sections varied=none kernel identity identical=True stream=cc3dbae2ae69ee17 kd=94ce3bee15c3e350 n=11560 data=.rodata:0 disassembler='AMD LLVM version 23.0.0git'
+512^3 f16 bias+gelu: payload identical=True sections varied=none kernel identity identical=True stream=cc3dbae2ae69ee17 kd=94ce3bee15c3e350 n=11560 data=.rodata:0 disassembler='AMD LLVM version 23.0.0git'
+1024^3 f16 bias+gelu: payload identical=True sections varied=none kernel identity identical=True stream=97baa4c06a2cb0ef kd=2f06167e17b310b7 n=21744 data=.rodata:0 disassembler='AMD LLVM version 23.0.0git'
+
+## 3. BEFORE: the committed v1 rows (2-D (M,N) buckets) asked for the way production asks, in build-b
+serving tessera-opt abi_digest sha256:c83eb30dfe0d02db6cec34b6879aaee73d46554c09c485c31460cce0f8ea79d4; device key rocm:gfx1151; disassembler /opt/rocm/core/llvm/bin/llvm-objdump
+64^3 dims=(64, 64, 64) run_arbitrated: corpus_winner answers=[('device', None), ('end_to_end', None)] selected=rocm_wmma_gemm tag=rocm_wmma -> NOT SERVED
+    end_to_end recorded=None separated=None identity_mismatch=['<absent>'] corpus_winner=None measured_arbitrate=MISS (re-measure attempted: the row was NOT served) -> NOT SERVED
+    device     recorded=None separated=None identity_mismatch=['<absent>'] corpus_winner=None measured_arbitrate=MISS (re-measure attempted: the row was NOT served) -> NOT SERVED
+256^3 dims=(256, 256, 256) run_arbitrated: corpus_winner answers=[('device', None), ('end_to_end', None)] selected=rocm_wmma_gemm tag=rocm_wmma -> NOT SERVED
+    end_to_end recorded=None separated=None identity_mismatch=['<absent>'] corpus_winner=None measured_arbitrate=MISS (re-measure attempted: the row was NOT served) -> NOT SERVED
+    device     recorded=None separated=None identity_mismatch=['<absent>'] corpus_winner=None measured_arbitrate=MISS (re-measure attempted: the row was NOT served) -> NOT SERVED
+512^3 dims=(512, 512, 512) run_arbitrated: corpus_winner answers=[('device', None), ('end_to_end', None)] selected=rocm_wmma_gemm tag=rocm_wmma -> NOT SERVED
+    end_to_end recorded=None separated=None identity_mismatch=['<absent>'] corpus_winner=None measured_arbitrate=MISS (re-measure attempted: the row was NOT served) -> NOT SERVED
+    device     recorded=None separated=None identity_mismatch=['<absent>'] corpus_winner=None measured_arbitrate=MISS (re-measure attempted: the row was NOT served) -> NOT SERVED
+1024^3 dims=(1024, 1024, 1024) run_arbitrated: corpus_winner answers=[('device', None), ('end_to_end', None)] selected=rocm_wmma_gemm tag=rocm_wmma -> NOT SERVED
+    end_to_end recorded=None separated=None identity_mismatch=['<absent>'] corpus_winner=None measured_arbitrate=MISS (re-measure attempted: the row was NOT served) -> NOT SERVED
+    device     recorded=None separated=None identity_mismatch=['<absent>'] corpus_winner=None measured_arbitrate=MISS (re-measure attempted: the row was NOT served) -> NOT SERVED
+
+## 4. Re-record in build-a (no explicit dims: (M,N,K) buckets)
+host: Princess-Luna  2026-09-26T22:00:06-05:00
+commit: 41c4feb4c6e2f47c0e4112345b88785d188f8fe6
+git status --short (must be empty):
+ninja -C build-a:
+ninja: no work to do.
+TESSERA_BUILD_DIR=build-a  tessera-opt sha256: 4ba11580bcf4e02e95a6adae911eb02dc7bb18f6208fea8dcb502414de6177a6
+ROCM_PATH=/opt/rocm/core TESSERA_ROCM_CHIP=gfx1151
+--- flock /tmp/tessera-timing.lock python benchmarks/rocm/record_autotune_separation.py
+racing 2 candidates: rocm_generic_hip, rocm_wmma_gemm
+evicted 8 current gfx1151 fused_region rows; 0 stale (pre-toolchain-identity) rows will be re-measured and replaced
+device key rocm:gfx1151; disassembler /opt/rocm/core/llvm/bin/llvm-objdump
+  64x64 end_to_end: rocm_generic_hip       separated  margin=62.72% noise=3.24%
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  64x64 device    : rocm_wmma_gemm         separated  margin=93.22% noise=0.69%
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  256x256 end_to_end: rocm_wmma_gemm         separated  margin=38.54% noise=2.05%
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  256x256 device    : rocm_wmma_gemm         separated  margin=99.51% noise=0.16%
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  512x512 end_to_end: rocm_wmma_gemm         separated  margin=83.96% noise=4.53%
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  512x512 device    : rocm_wmma_gemm         separated  margin=99.89% noise=1.87%
+      rocm_wmma_gemm: stream=cc3dbae2ae69ee17 data=.rodata:0 kd=94ce3bee15c3e350 n=11560
+  1024x1024 end_to_end: rocm_wmma_gemm         separated  margin=94.59% noise=5.29%
+      rocm_wmma_gemm: stream=97baa4c06a2cb0ef data=.rodata:0 kd=2f06167e17b310b7 n=21744
+  1024x1024 device    : rocm_wmma_gemm         separated  margin=99.91% noise=0.47%
+      rocm_wmma_gemm: stream=97baa4c06a2cb0ef data=.rodata:0 kd=2f06167e17b310b7 n=21744
+
+device rows timed by: device_event
+
+           rows  rocm  other  ranked  separated  unseparated  never_asked
+  before   124    16    108     115         43           70            2
+  after    124    16    108     115         43           70            2
+
+wrote /home/gstoner/programming/tessera-kid/benchmarks/baselines/autotune_corpus.json
+recorder rc=0
+
+## 5. AFTER: ordinary run_arbitrated dispatch and both lookups, dims inferred
+=== AFTER, served in build-b (did not record) ===
+serving tessera-opt abi_digest sha256:c83eb30dfe0d02db6cec34b6879aaee73d46554c09c485c31460cce0f8ea79d4; device key rocm:gfx1151; disassembler /opt/rocm/core/llvm/bin/llvm-objdump
+64^3 dims=(64, 64, 64) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_generic_hip separated=True identity_mismatch=[] corpus_winner=rocm_generic_hip measured_arbitrate=rocm_generic_hip -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+256^3 dims=(256, 256, 256) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+512^3 dims=(512, 512, 512) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+1024^3 dims=(1024, 1024, 1024) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+rc=0
+=== AFTER, runtime from build-b + tessera-opt of ~/programming/tessera-corpus/build (a build of 59ecd215) ===
+serving tessera-opt abi_digest sha256:701ee09840ba7f25d59bf9252b82a6cbfe9cd39e200646bb0d1f136335f20c87; device key rocm:gfx1151; disassembler /opt/rocm/core/llvm/bin/llvm-objdump
+64^3 dims=(64, 64, 64) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_generic_hip separated=True identity_mismatch=[] corpus_winner=rocm_generic_hip measured_arbitrate=rocm_generic_hip -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+256^3 dims=(256, 256, 256) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+512^3 dims=(512, 512, 512) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+1024^3 dims=(1024, 1024, 1024) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+rc=0
+=== AFTER, served in build-a (recorded) ===
+serving tessera-opt abi_digest sha256:4ba11580bcf4e02e95a6adae911eb02dc7bb18f6208fea8dcb502414de6177a6; device key rocm:gfx1151; disassembler /opt/rocm/core/llvm/bin/llvm-objdump
+64^3 dims=(64, 64, 64) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_generic_hip separated=True identity_mismatch=[] corpus_winner=rocm_generic_hip measured_arbitrate=rocm_generic_hip -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+256^3 dims=(256, 256, 256) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+512^3 dims=(512, 512, 512) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+1024^3 dims=(1024, 1024, 1024) run_arbitrated: corpus_winner answers=[('device', 'rocm_wmma_gemm')] selected=rocm_wmma_gemm tag=rocm_wmma -> SERVED (device row)
+    end_to_end recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+    device     recorded=rocm_wmma_gemm separated=True identity_mismatch=[] corpus_winner=rocm_wmma_gemm measured_arbitrate=rocm_wmma_gemm -> SERVED
+rc=0

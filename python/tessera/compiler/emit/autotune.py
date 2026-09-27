@@ -30,6 +30,7 @@ from tessera.compiler.emit.candidate import (
     OP_ATTENTION,
     OP_FUSED_REGION,
     OP_MATMUL,
+    Tier,
     _note_arbiter_dispatch,
     arbitrate,
     live_candidates,
@@ -136,7 +137,13 @@ class MeasureRecord:
 
 #: Corpus JSON schema version — bump if the record/key shape changes so a stale
 #: committed corpus is skipped rather than mis-read.
-CORPUS_VERSION = 3
+#:
+#: v4 (Decision #11): every record carries ``evidence.toolchain_digest`` (and the
+#: readable ``evidence.toolchain``), and delegate candidates' ABI identities in
+#: ``evidence.delegate_identities``. v1-v3 payloads still parse, but their rows
+#: carry no toolchain identity, so they load as *stale* — kept for provenance
+#: and written back by :meth:`MeasureCache.to_dict`, never served as a hit.
+CORPUS_VERSION = 4
 
 
 TIMING_END_TO_END = "end_to_end"
@@ -197,13 +204,123 @@ def _evidence_matches(
     return True
 
 
+def toolchain_evidence(target: str) -> dict[str, Any]:
+    """The Decision #11 evidence fields for a verdict measured on ``target`` now:
+    the family toolchain identity (``toolchain_identity(target)``) and its digest.
+    """
+    from tessera.compiler.toolchain_identity import toolchain_identity
+
+    identity = toolchain_identity(target)
+    return {"toolchain": identity.as_dict(), "toolchain_digest": identity.digest}
+
+
+def _toolchain_mismatch(key: tuple[Any, ...], record: MeasureRecord) -> str | None:
+    """Why ``record`` cannot stand for a measurement under today's toolchain, or
+    ``None`` when its recorded identity matches the current one for its target.
+
+    Decision #11: a persisted verdict is a measurement, valid only for the
+    toolchain that produced it. A row with no identity (written before v4) is
+    exactly as unknown as a row from a different toolchain, so both miss.
+    """
+    from tessera.compiler.toolchain_identity import toolchain_identity
+
+    recorded = record.evidence.get("toolchain_digest")
+    expected = toolchain_identity(str(_normalize_key(key)[1])).digest
+    if not recorded:
+        return ("no toolchain identity (recorded before Decision #11 keyed the "
+                "corpus on it); re-measure to reinstate")
+    if recorded != expected:
+        return (f"measured under toolchain {str(recorded)[:19]}..., current is "
+                f"{expected[:19]}...")
+    return None
+
+
+def _record_matches_live_delegates(rec: MeasureRecord,
+                                   live: Mapping[str, Any],
+                                   region: Any = None,
+                                   inputs: tuple[Any, ...] = ()) -> bool:
+    """Whether every live identified candidate runs the artifact the record timed.
+
+    Decision #11's artifact half. Each live candidate is asked for
+    ``artifact_identity(region, *inputs)`` -- the identity of what it would run
+    for *this* workload:
+
+    * a Tier-3 delegate library: its content digest (``delegate_identity``,
+      the same for every workload);
+    * a ``tessera-opt``-generated kernel (``rocm_wmma_gemm``,
+      ``rocm_flash_attn``): the digest of the normalized instruction stream
+      and kernel descriptor of the image it would run for this workload
+      (``kernel_code_identity``). This replaced the ``tessera-opt`` binary's
+      digest, which differs on every build and so served a committed row only
+      in the tree that recorded it; two builds that generate the same kernel
+      now share the verdict, and a changed kernel misses.
+
+    Which candidates must carry one is ``requires_artifact_identity()`` --
+    every ``HAND_TUNED`` candidate, enforced for the registry by
+    ``tests/unit/test_autotune_toolchain_key.py``. SYNTHESIZED / EMITTED
+    candidates carry none by default: their code comes from this checkout's
+    emitters under the pinned toolchain, so they rely on the pin-based family
+    identity alone.
+
+    For each live candidate that returns an identity, the record must carry
+    the identical one under ``evidence.delegate_identities``; anything else --
+    a rebuilt library, a changed kernel, a record that never stamped it --
+    misses. A live candidate that requires an identity and cannot establish
+    one (``None`` or an error: no disassembler, no operands to derive the
+    workload from) also misses: fail closed rather than reuse a verdict it
+    cannot match.
+    """
+    recorded = rec.evidence.get("delegate_identities") or {}
+    for name, cand in live.items():
+        try:
+            identity = cand.artifact_identity(region, *inputs)
+        except Exception:  # noqa: BLE001 - an unidentifiable artifact cannot match
+            return False
+        if identity is None:
+            if _requires_identity(cand):
+                return False
+            continue
+        if recorded.get(name) != identity:
+            return False
+    return True
+
+
+def _requires_identity(cand: Any) -> bool:
+    probe = getattr(cand, "requires_artifact_identity", None)
+    if callable(probe):
+        return bool(probe())
+    return getattr(cand, "tier", None) == Tier.HAND_TUNED
+
+
+def _delegate_identities(candidates: Mapping[str, Any], region: Any = None,
+                         inputs: tuple[Any, ...] = ()) -> dict[str, dict[str, str]]:
+    """The artifact identity of every timed candidate for this workload, as
+    stamped into ``evidence.delegate_identities`` at record time."""
+    out: dict[str, dict[str, str]] = {}
+    for name, cand in candidates.items():
+        try:
+            identity = cand.artifact_identity(region, *inputs)
+        except Exception:  # noqa: BLE001 - leave it unstamped: every later hit misses
+            continue
+        if identity is not None:
+            out[name] = dict(identity)
+    return out
+
+
 class MeasureCache:
     """Content-keyed cache of :class:`MeasureRecord` — measure-at-first-miss. Key =
     ``(device, target, op, shape-bucket, dtype, timing)`` so nearby shapes share a verdict
-    (the bucket) while distinct devices/dtypes stay separate."""
+    (the bucket) while distinct devices/dtypes stay separate.
+
+    Every served record carries the toolchain identity it was measured under
+    (Decision #11). Persisted rows whose identity is absent or different are held
+    apart as *stale* (:meth:`stale_records`): never returned by :meth:`get`, but
+    written back by :meth:`to_dict` so a recorder that loads and re-saves the
+    corpus does not silently delete another box's evidence."""
 
     def __init__(self) -> None:
         self._store: dict[tuple[Any, ...], MeasureRecord] = {}
+        self._stale: dict[tuple[Any, ...], tuple[MeasureRecord, str]] = {}
         self.hits = 0
         self.misses = 0
 
@@ -217,13 +334,60 @@ class MeasureCache:
             self.misses += 1
         return rec
 
-    def put(self, key: tuple[Any, ...], rec: MeasureRecord) -> None:
+    def put(self, key: tuple[Any, ...], rec: MeasureRecord, *,
+            fresh: bool = False) -> None:
+        """Store a verdict.
+
+        Decision #11: a stored verdict must carry the identity of the toolchain
+        that measured it, and ``put`` never infers one.
+
+        * A record that already carries the **current** identity for its target
+          is stored (``measured_arbitrate`` stamps before it puts).
+        * A record with **no** identity is refused unless the caller passes
+          ``fresh=True`` -- the caller's statement that it measured this record
+          in this process, under this toolchain. Only then is it stamped. The
+          flag is for measurement code (``measured_arbitrate``, the corpus
+          recorders, tests that simulate a measurement); a record taken from a
+          loaded corpus is not fresh, and stamping it would serve an old
+          measurement as current.
+        * A record carrying a **different** identity is refused.
+        * A record this cache holds as stale (:meth:`stale_records`) is refused
+          outright, ``fresh`` or not -- that is the resurrection path.
+
+        The stamp is written into ``rec.evidence`` in place (the record is
+        frozen, its evidence dict is not) so the stored record stays the
+        caller's object: evidence mutated after ``put`` is still what admission
+        reads.
+        """
         if not _uninstrumented_measurement(rec):
             raise ValueError("intra-kernel instrumented evidence cannot select a kernel")
-        self._store[_normalize_key(key)] = rec
+        key = _normalize_key(key)
+        if any(rec is stale for stale, _ in self._stale.values()):
+            raise ValueError(
+                "refusing to re-store a record this cache holds as stale; "
+                "re-measure it instead (Decision #11)")
+        if not rec.evidence.get("toolchain_digest"):
+            if not fresh:
+                raise ValueError(
+                    "refusing a verdict with no toolchain identity; pass "
+                    "fresh=True only for a measurement made in this process "
+                    "(Decision #11)")
+            rec.evidence.update(toolchain_evidence(str(key[1])))
+        else:
+            reason = _toolchain_mismatch(key, rec)
+            if reason is not None:
+                raise ValueError(f"refusing a verdict {reason} (Decision #11)")
+        self._stale.pop(key, None)
+        self._store[key] = rec
+
+    def stale_records(self) -> dict[tuple[Any, ...], tuple[MeasureRecord, str]]:
+        """Loaded rows that are not served, keyed as in the corpus, each with the
+        reason (Decision #11 toolchain identity absent or different)."""
+        return dict(self._stale)
 
     def clear(self) -> None:
         self._store.clear()
+        self._stale.clear()
         self.hits = 0
         self.misses = 0
 
@@ -237,10 +401,12 @@ class MeasureCache:
         record carries its own ``(device, target, op, bucket, dtype)`` key so the
         corpus is self-describing and human-diffable. Round-trips through
         :meth:`load_dict`."""
+        stale = [(k, rec) for k, (rec, _) in self._stale.items()
+                 if k not in self._store]
         return {
             "version": CORPUS_VERSION,
             "records": [{**_key_to_json(k), **rec.as_json()}
-                        for k, rec in self._store.items()],
+                        for k, rec in [*self._store.items(), *stale]],
         }
 
     def load_dict(self, payload: dict[str, Any], *, overwrite: bool = False,
@@ -248,10 +414,15 @@ class MeasureCache:
         """Merge a :meth:`to_dict` payload into the cache (warm-start). Returns the
         number of records loaded. A record whose key is already present is kept
         (measure-on-this-box wins) unless ``overwrite``. A version mismatch loads
-        nothing (a stale corpus is skipped, not mis-read)."""
+        nothing (a stale corpus is skipped, not mis-read).
+
+        Decision #11: a row whose toolchain identity is absent (every v1-v3 row)
+        or differs from the current identity for its target is not loaded as a
+        verdict; it is held in :meth:`stale_records` with the reason and is not
+        counted in the return value."""
         # v1 lacked the additive ``timing`` key; its rows are unambiguously the
         # historical end-to-end metric and migrate as such.
-        if int(payload.get("version", -1)) not in (1, 2, CORPUS_VERSION):
+        if int(payload.get("version", -1)) not in (1, 2, 3, CORPUS_VERSION):
             return 0
         loaded = 0
         for r in payload.get("records", ()):
@@ -261,8 +432,14 @@ class MeasureCache:
                 continue
             if not _evidence_matches(key, record, required_evidence):
                 continue
+            stale_reason = _toolchain_mismatch(key, record)
+            if stale_reason is not None:
+                if key not in self._store:
+                    self._stale[key] = (record, stale_reason)
+                continue
             if not overwrite and key in self._store:
                 continue
+            self._stale.pop(key, None)
             self._store[key] = record
             loaded += 1
         return loaded
@@ -375,15 +552,20 @@ def measure_latency_samples(run_fn: Any, *, reps: int = 20,
     return samples
 
 
-def relative_spread(samples: Sequence[float]) -> float:
-    """Population sd over median, as a fraction. ``0.0`` for a single sample.
+def relative_spread(samples: Sequence[float]) -> float | None:
+    """Population sd over median, as a fraction; ``None`` below two samples.
 
     Relative rather than absolute because the arbiter compares candidates
     across four orders of magnitude of latency, and the question is always
-    "is this gap bigger than the noise", never "is it bigger than N ms"."""
+    "is this gap bigger than the noise", never "is it bigger than N ms".
+
+    One sample has no spread, and reporting it as ``0.0`` read as "no noise",
+    which earns ``separated: True`` on any margin at all (NVIDIA pre-PR
+    review, 2026-09-26). ``None`` means unmeasured, and
+    :func:`separation_verdict` then gives no verdict."""
     usable = [s for s in samples if s == s and s > 0.0]
     if len(usable) < 2:
-        return 0.0
+        return None
     med = statistics.median(usable)
     return (statistics.pstdev(usable) / med) if med > 0.0 else 0.0
 
@@ -396,7 +578,7 @@ SEPARATION_FACTOR = 2.0
 
 
 def separation_verdict(latencies: Mapping[str, float],
-                       spreads: Mapping[str, float],
+                       spreads: Mapping[str, float | None],
                        winner: str) -> dict[str, Any] | None:
     """Whether ``winner``'s margin over the runner-up exceeds measurement noise.
 
@@ -421,7 +603,12 @@ def separation_verdict(latencies: Mapping[str, float],
     ordered = sorted(timed.items(), key=lambda kv: kv[1])
     (best_name, best), (second_name, second) = ordered[0], ordered[1]
     margin = (second - best) / second if second > 0.0 else 0.0
-    noise = max(spreads.get(best_name, 0.0), spreads.get(second_name, 0.0))
+    best_noise, second_noise = spreads.get(best_name), spreads.get(second_name)
+    if best_noise is None or second_noise is None:
+        # A ranking whose noise floor was never measured has no verdict --
+        # neither separated nor tied; admission then refuses to serve it.
+        return None
+    noise = max(best_noise, second_noise)
     return {
         "separated": margin > SEPARATION_FACTOR * noise,
         "margin": margin,
@@ -571,6 +758,9 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
     for rec in matches:
         if not _record_raced_the_live_field(rec, live, timing):
             return None
+        # Decision #11: the artifacts racing now must be the ones it timed.
+        if not _record_matches_live_delegates(rec, live, region, inputs):
+            return None
 
     # ...and only if the verdict is SUPPORTED. Without this, `separation` was
     # an unconsumed declaration (Decision #29): recorded, documented, and read
@@ -672,6 +862,13 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
     cache = cache if cache is not None else _DEFAULT_CACHE
     _maybe_warm_start(cache)
     dev = device or _device_id(target)
+    # The same dims authority `corpus_winner` uses, so a verdict recorded
+    # without explicit dims lands under the key ordinary dispatch looks up.
+    # A recorder that passed hand-built dims could key a row where production
+    # never looks: the gfx1151 fused rows were written under a 2-D (M, N)
+    # bucket while `run_arbitrated` infers (M, N, K), so none was ever served.
+    if dims is None:
+        dims = _infer_dims(op, inputs)
     bucket = bucket_key(dims, SpecPolicy.BUCKET) if dims is not None else None
     if timing not in _TIMING_MODES:
         raise ValueError(f"unknown autotune timing mode {timing!r}")
@@ -680,7 +877,9 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
     live = live_candidates(region, op, target, inputs)
 
     rec = cache.get(key)
-    if rec is not None and record_is_admissible(rec) and _record_raced_the_live_field(rec, live, timing):
+    if (rec is not None and record_is_admissible(rec)
+            and _record_raced_the_live_field(rec, live, timing)
+            and _record_matches_live_delegates(rec, live, region, inputs)):
         # The exact-key hit is only usable if it beat the field racing now.
         # Validating solely that the winner is still live -- what this did
         # before -- accepted a legacy device row, or a partial one naming a
@@ -694,7 +893,7 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
 
     latencies: dict[str, float] = {}
     unmeasured: dict[str, str] = {}
-    spreads: dict[str, float] = {}
+    spreads: dict[str, float | None] = {}
 
     def _measure(cand: Candidate) -> float:
         if timing == TIMING_DEVICE:
@@ -771,12 +970,24 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         # still says the verdict was unseparated, so nothing reads it as a win.
         winner = live[rec.winner]
 
+    # Decision #11: stamp the pin-based toolchain identity and the artifact
+    # identity of every timed candidate that has one (a Tier-3 delegate's
+    # library digest; a tessera-opt-generated kernel's instruction-stream
+    # digest for THIS workload), so a pin bump, a rebuilt library or a changed
+    # kernel misses. See `_record_matches_live_delegates`.
+    evidence: dict[str, Any] = dict(toolchain_evidence(target))
+    delegates = _delegate_identities(
+        {name: cand for name, cand in live.items() if name in latencies},
+        region, inputs)
+    if delegates:
+        evidence["delegate_identities"] = delegates
     cache.put(key, MeasureRecord(
         winner=winner.name,
         latency_ms=latencies.get(winner.name, float("nan")),
         candidates=dict(latencies),
         unmeasured=dict(unmeasured),
-        separation=separation))
+        separation=separation,
+        evidence=evidence))
     return winner
 
 

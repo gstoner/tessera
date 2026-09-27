@@ -1,0 +1,14 @@
+completed pair 1/9
+completed pair 2/9
+completed pair 3/9
+completed pair 4/9
+completed pair 5/9
+completed pair 6/9
+completed pair 7/9
+completed pair 8/9
+completed pair 9/9
+{
+  "admitted": true,
+  "reason": "exact-artifact paired measurements and %globaltimer device-clock calibration admitted",
+  "lower_bound": 4.325140604432862
+}

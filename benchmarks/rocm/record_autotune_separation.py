@@ -56,6 +56,11 @@ from tessera.compiler.emit.candidate import OP_FUSED_REGION    # noqa: E402
 from tessera.compiler.emit import rocm_hip as _rocm_hip        # noqa: E402,F401
 
 
+def candidates_live(region, inputs):
+    from tessera.compiler.emit.candidate import live_candidates
+    return live_candidates(region, OP_FUSED_REGION, "rocm", inputs)
+
+
 def _summarise(cache: at.MeasureCache) -> dict[str, int]:
     rows = cache.to_dict()["records"]
     inf = float("inf")
@@ -109,32 +114,79 @@ def main() -> int:
                if str(k[0]) == DEVICE and k[2] == OP_FUSED_REGION]
     for key in evicted:
         del cache._store[key]
-    print(f"evicted {len(evicted)} gfx1151 fused_region rows for re-measurement")
+    # Decision #11: a row recorded under another (or no) toolchain identity is
+    # never in `_store` -- `load_dict` holds it in `stale_records()`, where it is
+    # already a miss. Count it too, or a v3 corpus reports "evicted 0" while every
+    # row it owns is in fact about to be re-raced.
+    stale_owned = [k for k in cache.stale_records()
+                   if str(k[0]) == DEVICE and k[2] == OP_FUSED_REGION]
+    print(f"evicted {len(evicted)} current gfx1151 fused_region rows; "
+          f"{len(stale_owned)} stale (pre-toolchain-identity) rows will be "
+          f"re-measured and replaced")
+
+    # Refuse to key device rows under a bare target id. `_device_id` falls back
+    # to "rocm" when the live device probe fails (no HIP runtime, no build
+    # tree), and a row written there is invisible to every gfx1151 lookup.
+    live_device = at._device_id("rocm")
+    if live_device != DEVICE:
+        print(f"REFUSING TO RECORD: the live device key is {live_device!r}, not "
+              f"{DEVICE!r}. Source scripts/_rocm_env.sh and run from a tree whose "
+              f"build/ (or TESSERA_BUILD_DIR) carries the ROCm runtime.")
+        return 1
+    from tessera.compiler import kernel_code_identity as KI
+    print(f"device key {live_device}; disassembler {KI.find_llvm_objdump()}")
 
     region = F.FusedRegion(epilogue=("bias", "gelu"))
     rng = np.random.default_rng(0)
+    unstamped: list[str] = []
     for size in args.shapes:
         a = rng.standard_normal((size, size)).astype(np.float32)
         b = rng.standard_normal((size, size)).astype(np.float32)
         bias = rng.standard_normal((size,)).astype(np.float32)
         for timing in (at.TIMING_END_TO_END, at.TIMING_DEVICE):
+            # No explicit dims: `measured_arbitrate` infers (M, N, K) exactly as
+            # `corpus_winner` does for ordinary `run_arbitrated` dispatch. The
+            # rows recorded before 2026-09-26 passed dims=(size, size), a 2-D
+            # bucket production never looked up, and one that omitted K.
             winner = at.measured_arbitrate(
                 region, OP_FUSED_REGION, "rocm", a, b, bias,
-                dims=(size, size), dtype="f16", cache=cache,
+                dtype="f16", cache=cache,
                 reps=args.reps, warmup=args.warmup, timing=timing,
                 device_repeats=args.device_repeats)
             if winner is None:
                 print(f"  {size}x{size} {timing}: no verified candidate")
                 continue
-            key = ("rocm:gfx1151", "rocm", OP_FUSED_REGION,
-                   at.bucket_key((size, size), at.SpecPolicy.BUCKET), "f16", timing)
+            dims = at._infer_dims(OP_FUSED_REGION, (a, b, bias))
+            key = (DEVICE, "rocm", OP_FUSED_REGION,
+                   at.bucket_key(dims, at.SpecPolicy.BUCKET), "f16", timing)
             rec = cache.get(key)
+            # A timed candidate that must carry an artifact identity and was not
+            # stamped makes the row unservable (every lookup misses on it), so
+            # writing it would replace a good row with a dead one.
+            live = candidates_live(region, (a, b, bias))
+            stamped_names = set((rec.evidence.get("delegate_identities") or {})
+                                if rec else ())
+            for name in sorted(rec.candidates if rec else {}):
+                cand = live.get(name)
+                if (cand is not None and cand.requires_artifact_identity()
+                        and name not in stamped_names):
+                    unstamped.append(f"{size}^3 {timing}: {name}")
             sep = (rec.separation or {}) if rec else {}
             verdict = ("separated" if sep.get("separated")
                        else "NOT separated" if sep else "no verdict")
             print(f"  {size}x{size} {timing:10s}: {winner.name:22s} {verdict}"
                   f"  margin={(sep.get('margin') or 0)*100:.2f}%"
                   f" noise={(sep.get('noise') or 0)*100:.2f}%")
+            # Decision #11: the artifact identity each timed candidate was
+            # stamped with -- for rocm_wmma_gemm the kernel-code identity of
+            # the image timed at this shape, not the tessera-opt binary.
+            stamped = (rec.evidence.get("delegate_identities") or {}) if rec else {}
+            for name, ident in sorted(stamped.items()):
+                print(f"      {name}: stream="
+                      f"{str(ident.get('instruction_stream_sha256', '-'))[:16]}"
+                      f" data={ident.get('data_sections', '-')}"
+                      f" kd={str(ident.get('kernel_descriptor_sha256', '-'))[:16]}"
+                      f" n={ident.get('instruction_count', '-')}")
 
     # The gate this module's docstring promised and did not have. HIP events
     # on this fleet have been measured returning success while writing garbage,
@@ -146,6 +198,14 @@ def main() -> int:
     # Documenting a gate that does not exist is worse than not mentioning one,
     # because a reader believes the write was checked. It was checked by hand
     # in a separate probe, which is exactly how the claim got written.
+    if unstamped:
+        print("\nREFUSING TO WRITE: candidates that require an artifact identity "
+              "were timed but not stamped (no disassembler? no image?), so these "
+              "rows could never be served:")
+        for line in unstamped:
+            print(f"  {line}")
+        return 1
+
     source = rt.rocm_last_timer_source()
     if args.check_timer and source != "device_event":
         print(f"\nREFUSING TO WRITE: device rows were timed by {source!r}, not "
@@ -165,6 +225,17 @@ def main() -> int:
     if after["other_rows"] < before["other_rows"]:
         print("\nREFUSING TO WRITE: this run would delete another device's rows.")
         return 1
+    still_stale = sorted(
+        (k for k in cache.stale_records()
+         if str(k[0]) == DEVICE and k[2] == OP_FUSED_REGION), key=str)
+    if still_stale:
+        # A shape that produced no verified candidate leaves its stale row in
+        # place. Writing would look like a full re-record while some rows
+        # still select nothing, so say which.
+        print(f"\nWARNING: {len(still_stale)} owned gfx1151 fused_region rows "
+              f"were not re-measured and remain stale:")
+        for key in still_stale:
+            print(f"  {key}")
     if args.dry_run:
         print("\n--dry-run: corpus not written")
         return 0

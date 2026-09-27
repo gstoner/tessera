@@ -61,4 +61,61 @@ def test_serving_d2_group_selects_device_winner(tmp_path, monkeypatch):
     assert records[at.TIMING_END_TO_END]["winner"] == "staged_paged_attention"
 
     from tessera.compiler.emit import nvidia_cuda
-    assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) == "fused"
+    # The serving recorder stores one latency per mode, so its two-candidate
+    # rows carry no separation verdict: an unproven ranking, which the lookup
+    # now refuses exactly as the ROCm twin and `corpus_winner` do.
+    assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) is None
+
+
+@pytest.mark.parametrize("staged_samples,expected", [
+    ([.30, .31, .29, .30], "fused"),     # clear margin over tight noise: served
+    ([.05, .60, .12, .40], None),        # ranking inside the noise: refused
+])
+def test_serving_rows_with_samples_earn_a_separation_verdict(
+        tmp_path, monkeypatch, staged_samples, expected):
+    """The recorder keeps every interleaved rep, so a two-mode row carries a
+    noise floor and a verdict; a separated verdict is served again, an
+    unseparated one is still refused (AUTOTUNE-TOOLCHAIN-KEY-2026-09-26)."""
+    import json
+    import statistics
+    from tessera.compiler.emit import autotune as at
+    from tessera.compiler.emit import nvidia_cuda
+    path = tmp_path / "corpus.json"
+    monkeypatch.setenv("TESSERA_AUTOTUNE_CORPUS", str(path))
+    fused = [.10, .101, .099, .10]
+    rows = [{"op": "paged_kv_decode", "shape": "1x8x128x64", "dtype": "f32",
+             "mode": f"{mode}_paged_attention",
+             "device_latency_ms": statistics.median(samples),
+             "device_samples_ms": samples}
+            for mode, samples in (("fused", fused), ("staged", staged_samples))]
+    bench.update_d2_corpus(rows)
+    record = json.loads(path.read_text())["records"][0]
+    assert record["separation"] is not None
+    assert record["separation"]["separated"] is (expected is not None)
+    assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) == expected
+
+
+@pytest.mark.parametrize("separated,expected", [(True, "fused"), (False, None)])
+def test_nvidia_paged_attention_lookup_applies_admission(
+        tmp_path, monkeypatch, separated, expected):
+    from tessera.compiler.emit import autotune as at
+    from tessera.compiler.emit import nvidia_cuda
+    from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
+
+    cache = at.MeasureCache()
+    cache.put(("nvidia:sm_120", "nvidia", "paged_kv_decode",
+               bucket_key((1, 8, 128, 64), SpecPolicy.BUCKET), "f32",
+               at.TIMING_DEVICE),
+              at.MeasureRecord(
+                  winner="fused_paged_attention", latency_ms=0.1,
+                  candidates={"fused_paged_attention": 0.1,
+                              "staged_paged_attention": 0.3},
+                  unmeasured={},
+                  separation={"separated": separated, "margin": 0.6,
+                              "noise": 0.01, "factor": 2.0,
+                              "runner_up": "staged_paged_attention"}),
+              fresh=True)
+    path = tmp_path / "corpus.json"
+    at.save_corpus(path, cache=cache)
+    monkeypatch.setenv("TESSERA_AUTOTUNE_CORPUS", str(path))
+    assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) == expected

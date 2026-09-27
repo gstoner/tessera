@@ -1,30 +1,30 @@
 {
   "schema": "tessera.nvidia.autotune-reproducibility.v1",
   "device": "nvidia:sm_120",
-  "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+  "compiler_fingerprint": "sha256:7104ec89a16d4e6e2df59d253c88aeeb98d53bf0e72506e2307b1d86797eb754",
   "kernel_cache_reproducible": true,
   "builds": [
     {
       "run": 1,
-      "cold_compile_ms": 983.21805,
-      "warm_cache_lookup_ms": 0.059268,
+      "cold_compile_ms": 1452.481219,
+      "warm_cache_lookup_ms": 0.096631,
       "cache_hits": 1,
       "cache_misses": 1,
-      "kernel_cache_key": "83f4e13ca8ded29dcd0fe5322aea1efecb1f16d5c3da244b2a4512403df7c23b",
+      "kernel_cache_key": "bd24cc50b8b474494e08cf76efa7f4c6b15b3b2ab3a408d6551f4f63c72b97ad",
       "artifact_present": true
     },
     {
       "run": 2,
-      "cold_compile_ms": 714.796537,
-      "warm_cache_lookup_ms": 0.04736,
+      "cold_compile_ms": 1444.84849,
+      "warm_cache_lookup_ms": 0.080591,
       "cache_hits": 1,
       "cache_misses": 1,
-      "kernel_cache_key": "83f4e13ca8ded29dcd0fe5322aea1efecb1f16d5c3da244b2a4512403df7c23b",
+      "kernel_cache_key": "bd24cc50b8b474494e08cf76efa7f4c6b15b3b2ab3a408d6551f4f63c72b97ad",
       "artifact_present": true
     }
   ],
-  "strict_records_considered": 20,
-  "strict_records_admitted": 20,
+  "strict_records_considered": 38,
+  "strict_records_admitted": 38,
   "stale_rejections": {
     "device": true,
     "timing": true,

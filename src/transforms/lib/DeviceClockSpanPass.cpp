@@ -37,6 +37,13 @@
 //             hipDeviceAttributeWallClockRate; 100 MHz on gfx1151).
 //   nvidia -- llvm.nvvm.read.ptx.sreg.globaltimer: nanoseconds. This is the
 //             non-profiler NVIDIA witness the sm_120 lane was missing.
+//             Validated on sm_120 (The-Super-Bear, RTX 5070, WSL2, driver
+//             610.88; sync NVIDIA-GLOBALTIMER-MARKER-2026-09-26): SASS is
+//             `CS2R Rn, SR_GLOBALTIMERLO` and the span updates are
+//             `REDG.E.MIN/MAX.64.STRONG.SYS`; the counter advances in 32 ns
+//             steps, and a marker-bracketed span agrees with CUDA events
+//             within 5% once the window is about 1 ms or longer (a
+//             ~10-16 us per-window offset dominates shorter ones).
 // Both are emitted as `llvm.call_intrinsic`, so no extra dialect is needed.
 //
 // The start stamp is placed AFTER the entry block's last alloca, never before

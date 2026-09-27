@@ -348,6 +348,8 @@ def test_tuning_cache_round_trips_a_swizzle(tmp_path) -> None:
 
     # A pre-existing cache written before the columns existed must migrate to the
     # identity — which is what those rows actually measured.
+    from tessera.compiler.autotune_v2 import _ensure_cache_schema
+
     legacy = tmp_path / "legacy.db"
     with sqlite3.connect(legacy) as conn:
         conn.execute(
@@ -357,11 +359,19 @@ def test_tuning_cache_round_trips_a_swizzle(tmp_path) -> None:
         conn.execute(
             "INSERT INTO tuning_results VALUES (256,256,256,'bf16',"
             "128,128,32,4,2,1.0,33.5,0.0,0)")
+    migrated_copy = tmp_path / "legacy_migrated.db"
+    migrated_copy.write_bytes(legacy.read_bytes())
+    with sqlite3.connect(migrated_copy) as conn:
+        _ensure_cache_schema(conn)
+        assert conn.execute(
+            "SELECT raster_order, raster_group, toolchain_digest"
+            " FROM tuning_results").fetchall() == [("row_major", 1, "")]
+    # ...but it carries no toolchain identity, so Decision #11 makes it a miss —
+    # reported, never silently reused.
     migrated = BayesianAutotuner(workload)
-    assert migrated.warm_start_from_cache(str(legacy)) == 1
-    assert migrated._results[0].config.raster_order == "row_major"
-    assert migrated._results[0].config.raster_group == 1
-    assert migrated.warm_start_skipped == []
+    assert migrated.warm_start_from_cache(str(legacy)) == 0
+    assert len(migrated.warm_start_skipped) == 1
+    assert "no toolchain identity" in migrated.warm_start_skipped[0]
 
 
 def test_unknown_raster_order_in_cache_is_reported_not_silently_dropped(
@@ -377,6 +387,7 @@ def test_unknown_raster_order_in_cache_is_reported_not_silently_dropped(
 
     from tessera.compiler.autotune_v2 import (
         BayesianAutotuner, GEMMWorkload, _ensure_cache_schema)
+    from tessera.compiler.toolchain_identity import toolchain_identity
 
     db = tmp_path / "future.db"
     with sqlite3.connect(db) as conn:
@@ -384,10 +395,12 @@ def test_unknown_raster_order_in_cache_is_reported_not_silently_dropped(
         conn.execute(
             "INSERT INTO tuning_results (M,N,K,dtype,arch,layout,movement_json,"
             "tile_m,tile_n,tile_k,num_warps,num_stages,latency_ms,tflops,"
-            "sampled_at,trial_id,status,reason,method,raster_order,raster_group)"
+            "sampled_at,trial_id,status,reason,method,raster_order,raster_group,"
+            "toolchain_digest)"
             " VALUES (256,256,256,'bf16','generic','row_major',"
             "'{\"overlap\": \"compute\", \"prefetch\": \"auto\"}',"
-            "128,128,32,4,2,1.0,33.5,0.0,0,'ok','','measured','z_order',4)")
+            "128,128,32,4,2,1.0,33.5,0.0,0,'ok','','measured','z_order',4,?)",
+            (toolchain_identity("generic").digest,))
 
     tuner = BayesianAutotuner(GEMMWorkload(M=256, N=256, K=256))
     assert tuner.warm_start_from_cache(str(db)) == 0
@@ -405,6 +418,7 @@ def test_corrupted_cache_row_is_also_reported(tmp_path) -> None:
 
     from tessera.compiler.autotune_v2 import (
         BayesianAutotuner, GEMMWorkload, _ensure_cache_schema)
+    from tessera.compiler.toolchain_identity import toolchain_identity
 
     db = tmp_path / "corrupt.db"
     with sqlite3.connect(db) as conn:
@@ -413,10 +427,12 @@ def test_corrupted_cache_row_is_also_reported(tmp_path) -> None:
         conn.execute(
             "INSERT INTO tuning_results (M,N,K,dtype,arch,layout,movement_json,"
             "tile_m,tile_n,tile_k,num_warps,num_stages,latency_ms,tflops,"
-            "sampled_at,trial_id,status,reason,method,raster_order,raster_group)"
+            "sampled_at,trial_id,status,reason,method,raster_order,raster_group,"
+            "toolchain_digest)"
             " VALUES (256,256,256,'bf16','generic','row_major',"
             "'{\"overlap\": \"compute\", \"prefetch\": \"auto\"}',"
-            "128,128,32,3,2,1.0,33.5,0.0,0,'ok','','measured','row_major',1)")
+            "128,128,32,3,2,1.0,33.5,0.0,0,'ok','','measured','row_major',1,?)",
+            (toolchain_identity("generic").digest,))
 
     tuner = BayesianAutotuner(GEMMWorkload(M=256, N=256, K=256))
     assert tuner.warm_start_from_cache(str(db)) == 0

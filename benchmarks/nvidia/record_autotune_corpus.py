@@ -17,6 +17,25 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 
 
+#: The corpus device key this recorder writes, and the ops it owns there. The
+#: sm_120 ``paged_kv_decode`` / ``ssm_replay_decode`` rows belong to
+#: ``benchmark_serving.py --update-corpus`` and are never evicted here.
+DEVICE = "nvidia:sm_120"
+OWNED_OPS = frozenset({"matmul", "fused_region", "attention", "gated_matmul",
+                       "conv2d"})
+
+
+def _owned(key: tuple[object, ...]) -> bool:
+    return str(key[0]) == DEVICE and str(key[2]) in OWNED_OPS
+
+
+def _other_device_rows(cache: object) -> int:
+    """Rows (served or stale) on any device other than :data:`DEVICE` -- the
+    count a save must never reduce."""
+    return sum(1 for r in cache.to_dict()["records"]  # type: ignore[attr-defined]
+               if r["device"] != DEVICE)
+
+
 def _candidate_descriptors(*, target: str, op: str, dims: tuple[int, ...],
                            dtype: str, names: dict[str, float]) -> dict[str, dict[str, object]]:
     """Persist each measured candidate's replay identity with its latency."""
@@ -114,7 +133,10 @@ def main() -> int:
                         choices=("f32", "fp8_e4m3", "fp8_e5m2"),
                         default=("f32", "fp8_e4m3", "fp8_e5m2"))
     parser.add_argument("--warm-start", action="store_true",
-                        help="load existing corpus instead of measuring from a fresh cache")
+                        help="serve this recorder's current-identity sm_120 rows "
+                             "from the corpus instead of re-racing them (the "
+                             "corpus is always loaded, so other devices' rows "
+                             "are never dropped)")
     args = parser.parse_args()
 
     from tessera import runtime as rt
@@ -132,8 +154,18 @@ def main() -> int:
         return 0
     cache = at.MeasureCache()
     observed_shapes: dict[tuple[object, ...], list[int]] = {}
-    if args.warm_start:
-        at.load_corpus(cache=cache)
+    # ALWAYS load the corpus. `save_corpus` writes the whole cache, so starting
+    # empty (what the default used to do) deleted every other device's rows --
+    # the committed gfx1151 rows included. `--warm-start` now only decides
+    # whether this recorder's own current sm_120 rows are served as hits or
+    # evicted and re-raced. Rows held stale by Decision #11 are already misses
+    # and are replaced by `put` when re-measured.
+    at.load_corpus(cache=cache)
+    before_other = _other_device_rows(cache)
+    if not args.warm_start:
+        for key in [k for k in cache._store if _owned(k)]:
+            del cache._store[key]
+    before_store = dict(cache._store)
     nvcc_version = subprocess.run(
         ["/usr/local/cuda/bin/nvcc", "--version"], check=True,
         capture_output=True, text=True).stdout
@@ -276,7 +308,7 @@ def main() -> int:
         winner = min(timings, key=timings.__getitem__)
         cache.put(("nvidia:sm_120", "nvidia", "conv2d",
                    (B, IH, IW, CI, KH, KW, CO), "f32", "device"),
-                  at.MeasureRecord(winner, timings[winner], timings))
+                  at.MeasureRecord(winner, timings[winner], timings), fresh=True)
         print(f"conv2d-device {shape_text}: {winner}")
     evidence = {
         "compiler_fingerprint": compiler_fingerprint,
@@ -298,6 +330,12 @@ def main() -> int:
         "cache_misses": cache.misses,
     }
     for key, record in list(cache._store.items()):
+        # Stamp only rows measured by THIS run. A warm-started hit keeps the
+        # evidence of the run that measured it, and another device's row (a
+        # current gfx1151 row loads into `_store` on any host, because the
+        # ROCm identity is pin-derived) must never inherit an nvcc fingerprint.
+        if not _owned(key) or before_store.get(key) is record:
+            continue
         workload_shape = observed_shapes.get(key)
         _, target, op, _, dtype, _ = key
         dimensions = tuple(workload_shape or ())
@@ -311,6 +349,15 @@ def main() -> int:
                                        names=record.candidates)
                 if workload_shape else record.candidate_descriptors
             ))
+    if _other_device_rows(cache) < before_other:
+        print("REFUSING TO WRITE: this run would delete another device's rows.")
+        return 1
+    still_stale = sorted((k for k in cache.stale_records() if _owned(k)), key=str)
+    if still_stale:
+        print(f"WARNING: {len(still_stale)} sm_120 rows this recorder owns were "
+              "not re-measured by this invocation and remain stale:")
+        for key in still_stale:
+            print(f"  {key}")
     print(f"wrote {at.save_corpus(cache=cache)}")
     return 0
 

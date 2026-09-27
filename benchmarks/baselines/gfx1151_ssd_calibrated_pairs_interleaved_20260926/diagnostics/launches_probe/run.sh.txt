@@ -1,0 +1,11 @@
+set -e
+cd ~/programming/tessera-ssd151
+source ~/programming/tessera/.venv/bin/activate
+source scripts/_rocm_env.sh
+export PYTHONPATH=python:.
+for L in 100 1000; do for v in cooperative serial; do
+  extra=""; [ $v = cooperative ] && extra=--cooperative
+  python benchmarks/record_ssd_gpu.py --backend rocm --compiler build/tools/tessera-opt/tessera-opt \
+    --shape 32 2 16 4 --chunk 8 --profile --launches $L $extra \
+    --output /tmp/ssd151-probe/$v-$L.json --device-clock-calibration /tmp/ssd151-probe/$v-$L-calibration.json
+done; done

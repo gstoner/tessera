@@ -334,7 +334,12 @@ def _reduction_module(shape: tuple[int, ...], dtype: str, kind: str, *,
                         operands=["%x"],
                         operand_types=[str(x)],
                         result_type=str(out),
-                        kwargs={"axis": axis, "keepdims": keepdims},
+                        # `tessera.reduce` requires its kind (TesseraOps.td:
+                        # a non-optional ReductionKindAttr); a semantic key is
+                        # never defaulted (Decision #21a), so the kind-less
+                        # form is refused rather than read as a sum.
+                        kwargs={"axis": axis, "keepdims": keepdims,
+                                **({"kind": "sum"} if kind == "sum" else {})},
                     )
                 ],
                 return_values=["%o"],
@@ -976,7 +981,11 @@ def test_canonical_sm120_norm_packages_launches_and_compares(
     assert bundle.native_image.resource_record.metrics["spill_load_bytes"] == 0
     assert bundle.launch_descriptor.provenance["kind"] == kind
     assert bundle.launch_descriptor.provenance["accum"] == "f32"
-    assert bundle.launch_descriptor.provenance["epsilon"] == epsilon
+    # The kernel computes in f32 and the packager binds the f32 bit pattern the
+    # Schedule and Tile IR carry (`tessera.norm_epsilon = ... : f32`), so the
+    # descriptor records the f32-rounded epsilon. Compare in that precision:
+    # 1e-5 is not representable in f32 (it rounds to 9.99999974737875e-06).
+    assert bundle.launch_descriptor.provenance["epsilon"] == float(np.float32(epsilon))
     assert "tile.norm_kernel" in bundle.tile.text
 
     warm = compile_graph_module(

@@ -134,7 +134,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `MASTER_AUDIT.md` | - | 2026-09-25 | 1 | ✓ |
+| `MASTER_AUDIT.md` | - | 2026-09-26 | 0 | ✓ |
 | `README.md` | - | 2026-09-06 | 20 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-09-05 | 21 | ✓ |
 | `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-09-05 | 21 | ✓ |

@@ -138,6 +138,15 @@ class X86AoclDlpCandidate(Candidate):
         sym = os.environ.get("TESSERA_AOCL_DLP_SGEMM")
         return bool(sym and getattr(_aocl_dlp_lib(), sym, None))
 
+    def delegate_identity(self) -> "dict[str, str] | None":
+        """Decision #11: the operator's licensed AOCL-DLP build (by content)
+        and the entry named by ``$TESSERA_AOCL_DLP_SGEMM``. Latent until
+        ``_ABI_WIRED``; declared now so the lane cannot be wired without it."""
+        from tessera.compiler.toolchain_identity import loaded_library_identity
+
+        return loaded_library_identity(
+            _aocl_dlp_lib(), entry=os.environ.get("TESSERA_AOCL_DLP_SGEMM") or None)
+
     def applies_to(self, region: Any) -> bool:
         return _aocl_epilogue(region) is not None
 

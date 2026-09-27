@@ -3253,8 +3253,12 @@ def _paged_attention_corpus_winner(
         "nvidia:sm_120", "nvidia", "paged_kv_decode",
         bucket_key((q_len, heads, tokens, dim), SpecPolicy.BUCKET),
         "f32", at.TIMING_DEVICE))
-    if record is not None and record.winner in {
-            "fused_paged_attention", "staged_paged_attention"}:
+    # The SAME admission rule as `corpus_winner` and the ROCm twin
+    # (`cache/paged_kv.py::_rocm_paged_attention_corpus_winner`): a row the
+    # corpus marks unseparated, selector-ineligible or an unproven ranking is
+    # not a dispatch hint.
+    if (record is not None and at.record_is_admissible(record)
+            and record.winner in {"fused_paged_attention", "staged_paged_attention"}):
         return record.winner.removesuffix("_paged_attention")
     return None
 
@@ -5256,6 +5260,14 @@ class NvidiaMmaGemmShippedCandidate(DelegatedCandidate):
         except Exception:
             return False
 
+    def delegate_library(self) -> "tuple[Any, str | None] | None":
+        """The shipped ``libtessera_nvidia_gemm`` this delegate binds (Decision
+        #11: its content digest keys every verdict measured against it)."""
+        from tessera import runtime as rt
+
+        path = rt._nvidia_gemm_lib_path()
+        return (path, "tessera_nvidia_gemm") if path is not None else None
+
     def applies_to(self, region: Any) -> bool:
         return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
 
@@ -5593,6 +5605,18 @@ class NvidiaNvfp4GemmShippedCandidate(_Nvfp4Candidate):
     def available(self) -> bool:
         from tessera import runtime as rt
         return rt._load_nvidia_gemm_runtime() is not None
+
+    def delegate_identity(self) -> "dict[str, str] | None":
+        """Decision #11: the shipped ``libtessera_nvidia_gemm`` build that is
+        timed, and the NVFP4 entry it binds."""
+        from tessera import runtime as rt
+        from tessera.compiler.toolchain_identity import delegate_library_identity
+
+        path = rt._nvidia_gemm_lib_path()
+        if path is None:
+            return None
+        return {**delegate_library_identity(path, cmake_target="tessera_nvidia_gemm"),
+                "entry": rt._NVIDIA_NVFP4_SYMBOL}
 
     def run(self, region, *inputs, **kwargs):
         from tessera import runtime as rt

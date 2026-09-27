@@ -51,13 +51,64 @@ def build(payloads: list[dict[str, Any]]) -> dict[str, Any]:
             "routes": routes, "details": details}
 
 
+def add_isolated_routes(manifest: dict[str, Any],
+                        isolated: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Add routes each captured in a report of its OWN (``route -> payload``).
+
+    Every kernel in such a report belongs to that route
+    (``profile_route_resources.py`` brackets one route's launches with
+    ``cuProfilerStart/Stop``), so no name pattern is consulted: kernels that
+    share a name across storages -- the tf32 and fp8 builds of one emitted
+    lane -- stay apart. An isolated report with no kernel is refused (a route
+    that launched nothing has no resource evidence), and a route already in
+    the manifest is refused rather than overwritten.
+    """
+    out = {**manifest,
+           "sources": list(manifest.get("sources", [])),
+           "routes": dict(manifest.get("routes", {})),
+           "details": dict(manifest.get("details", {}))}
+    for route, payload in sorted(isolated.items()):
+        rows = list(payload.get("rows", []))
+        if not rows:
+            raise ValueError(f"isolated report for {route} holds no kernel")
+        if route in out["routes"]:
+            raise ValueError(f"{route} is already in the manifest; refusing to overwrite")
+        out["details"][route] = rows
+        out["routes"][route] = [row["resource_fingerprint"] for row in rows]
+        if payload.get("source"):
+            out["sources"].append({"name": payload.get("source"),
+                                   "sha256": payload.get("source_sha256"),
+                                   "route": route})
+    return out
+
+
+def _route_arg(text: str) -> tuple[str, Path]:
+    route, sep, path = text.partition("=")
+    if not sep or not route or not path:
+        raise argparse.ArgumentTypeError("expected ROUTE=payload.json")
+    return route, Path(path)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("inputs", type=Path, nargs="+")
+    parser.add_argument("inputs", type=Path, nargs="*",
+                        help="normalized payloads mapped to routes by kernel name")
+    parser.add_argument("--base", type=Path,
+                        help="an existing manifest to extend instead of building one")
+    parser.add_argument("--route", type=_route_arg, action="append", default=[],
+                        help="ROUTE=payload.json: a report holding only that route")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
-    payloads = [json.loads(path.read_text()) for path in args.inputs]
-    args.output.write_text(json.dumps(build(payloads), indent=2) + "\n")
+    if args.base and args.inputs:
+        parser.error("--base extends an existing manifest; do not also pass inputs")
+    if args.base:
+        manifest = json.loads(args.base.read_text())
+    else:
+        manifest = build([json.loads(path.read_text()) for path in args.inputs])
+    if args.route:
+        manifest = add_isolated_routes(manifest, {
+            route: json.loads(path.read_text()) for route, path in args.route})
+    args.output.write_text(json.dumps(manifest, indent=2) + "\n")
     return 0
 
 

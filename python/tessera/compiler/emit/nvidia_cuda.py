@@ -3240,6 +3240,106 @@ _ssm_replay_device_artifact: str | None = None
 _ssm_replay_native_packages: dict[tuple[int, int, int, int, int], tuple[Any, Any]] = {}
 
 
+def _ssm_replay_device_source() -> KernelSource:
+    """The ReplaySSM ring runtime source `NvidiaReplayDeviceState` compiles (and
+    the async ring's Decision #11 identity digests), memoized while its emitter
+    is unchanged."""
+    return memoized(globals(), "_ssm_replay_device_source_uncached")
+
+
+def _ssm_replay_device_source_uncached() -> KernelSource:
+    return KernelSource(source=_synthesize_ssm_replay_device_cuda(), entry="cr",
+                        lang=_LANG, spec=SpecPolicy.DYNAMIC,
+                        shape_key=("ssm-replay-device",))
+
+
+def _ssm_replay_packages(batch: int, channels: int, state_dim: int,
+                         capacity: int, async_slots: int) -> tuple[Any, Any]:
+    """The compiler-generated decode/flush images the ring launches."""
+    from ..nvidia_native import package_replay_ssm_kernels
+
+    key = (batch, channels, state_dim, capacity, async_slots)
+    packages = _ssm_replay_native_packages.get(key)
+    if packages is None:
+        packages = package_replay_ssm_kernels(
+            batch=batch, channels=channels, state_dim=state_dim,
+            capacity=capacity, async_slots=async_slots,
+            pipeline_name="tessera-nvidia-pipeline-sm120")
+        _ssm_replay_native_packages[key] = packages
+    return packages
+
+
+def _native_package_identity(package: Any) -> dict[str, str]:
+    """A `tessera-nvidia-opt` package image as the driver receives it: PTX text
+    by the emitted-source PTX rule, any other payload by its bytes."""
+    from tessera.compiler.emitted_code_identity import (
+        ptx_identity,
+        source_identity,
+    )
+
+    entry = str(package.descriptor.entry_symbol)
+    payload = package.image.payload
+    data = payload if isinstance(payload, (bytes, bytearray)) else str(payload).encode()
+    text = bytes(data).rstrip(b"\0").decode("utf-8", "replace")
+    if ".entry" in text or ".visible" in text:
+        return ptx_identity(text, entry=entry, generator="tessera-nvidia-opt")
+    return source_identity(lang="nvidia-image", entry=entry,
+                           units=[(entry, bytes(data))],
+                           build=("driver-load",), generator="tessera-nvidia-opt")
+
+
+def ssm_replay_ring_identity(batch: int, channels: int, state_dim: int,
+                             capacity: int, async_slots: int) -> Any:
+    """Decision #11 identity of the sm_120 ReplaySSM ``async_ring`` route
+    (``benchmark_serving.py`` stamps it into the ``ssm_replay_decode`` rows,
+    sync ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27``): the ring runtime source
+    plus the decode and flush images it loads."""
+    from tessera.compiler.emit.autotune import RouteIdentity
+    from tessera.compiler.emitted_code_identity import composite_identity
+
+    def build() -> dict[str, str]:
+        decode, flush = _ssm_replay_packages(batch, channels, state_dim,
+                                             capacity, async_slots)
+        return composite_identity({
+            "ring": _cuda_source_identity(_ssm_replay_device_source(), "f32"),
+            "decode": _native_package_identity(decode),
+            "flush": _native_package_identity(flush),
+        })
+
+    return RouteIdentity("async_ring", build)
+
+
+def conv2d_route_identities() -> dict[str, Any]:
+    """Decision #11 identities of the three sm_120 ``conv2d`` routes
+    ``record_autotune_corpus.py`` races (``run_conv2d_resident_candidate``):
+    ``direct`` / ``shared`` run one resident-stage entry; ``im2col_tf32`` runs
+    the resident im2col (and epilogue) plus the shipped GEMM's tf32 device
+    entry, identified as the composed lanes identify it. No production path
+    reads these rows yet; they carry the identity so the first reader inherits
+    the contract rather than re-deriving it."""
+    from tessera import runtime as rt
+    from tessera.compiler.emit.autotune import RouteIdentity
+    from tessera.compiler.emitted_code_identity import composite_identity
+
+    def stages(entry: str) -> Any:
+        return lambda: {**_cuda_source_identity(_resident_ops_source(), "f32"),
+                        "route_entries": entry}
+
+    def im2col() -> dict[str, str]:
+        return composite_identity({
+            "gemm": _gemm_runtime_identity(rt._NVIDIA_GEMM_SYMBOLS["float32"] + "_device"),
+            "stages": {**_cuda_source_identity(_resident_ops_source(), "f32"),
+                       "route_entries": "tessera_nvidia_resident_im2col,"
+                                        "tessera_nvidia_resident_epilogue"},
+        })
+
+    return {
+        "direct": RouteIdentity("direct", stages("tessera_nvidia_resident_conv_direct")),
+        "shared": RouteIdentity("shared", stages("tessera_nvidia_resident_conv_shared")),
+        "im2col_tf32": RouteIdentity("im2col_tf32", im2col),
+    }
+
+
 def _synthesize_ssm_replay_device_cuda() -> str:
     """Persistent scalar-A ReplaySSM context; inputs stay in CUDA allocations."""
     return r'''#include <cuda_runtime.h>
@@ -3273,16 +3373,13 @@ class NvidiaReplayDeviceState:
     def __init__(self, s0: Any, a: Any, capacity: int, async_slots: int = 3):
         import numpy as np
         global _ssm_replay_device_artifact
-        from ..nvidia_native import package_replay_ssm_kernels
         s0=np.ascontiguousarray(s0,np.float32); a=np.ascontiguousarray(a,np.float32)
         self.B,self.D,self.N=s0.shape; self.capacity=capacity
         if async_slots < 2: raise ValueError("ReplaySSM async ring requires at least two slots")
-        if _ssm_replay_device_artifact is None: _ssm_replay_device_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_ssm_replay_device_cuda(),entry="cr",lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("ssm-replay-device",)))
-        key=(self.B,self.D,self.N,capacity,async_slots)
-        packages=_ssm_replay_native_packages.get(key)
-        if packages is None:
-            packages=package_replay_ssm_kernels(batch=self.B,channels=self.D,state_dim=self.N,capacity=capacity,async_slots=async_slots,pipeline_name="tessera-nvidia-pipeline-sm120")
-            _ssm_replay_native_packages[key]=packages
+        # Cached by the content of the source compiled (`_emitted_artifact`), so
+        # the ring's Decision #11 identity always names the runtime that runs.
+        _ssm_replay_device_artifact=_emitted_artifact(_ssm_replay_device_source(), "f32")
+        packages=_ssm_replay_packages(self.B,self.D,self.N,capacity,async_slots)
         self.decode_package: Any
         self.flush_package: Any
         self.decode_package,self.flush_package=packages
@@ -3727,6 +3824,32 @@ _nvidia_paged_attention_route_evidence: dict[
     tuple[Any, ...], dict[str, float]] = {}
 
 
+#: The two sm_120 paged-attention serving routes, by corpus mode name, and the
+#: resident-stage entries each launches.
+_PAGED_ATTENTION_ROUTES = {
+    "fused_paged_attention": "tessera_nvidia_resident_paged_attention",
+    "staged_paged_attention": ("tessera_nvidia_resident_paged,"
+                               "tessera_nvidia_resident_matmul_f32,"
+                               "tessera_nvidia_resident_scale_mask,"
+                               "tessera_nvidia_resident_softmax"),
+}
+
+
+def paged_attention_route_identities() -> dict[str, Any]:
+    """Decision #11 identities of the sm_120 paged-attention routes: both run
+    entries of the Python-emitted resident-stage library, so each is that
+    source's identity plus the entries the route launches (sync
+    ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27``)."""
+    from tessera.compiler.emit.autotune import RouteIdentity
+
+    def build(entries: str) -> Any:
+        return lambda: {**_cuda_source_identity(_resident_ops_source(), "f32"),
+                        "route_entries": entries}
+
+    return {name: RouteIdentity(name, build(entries))
+            for name, entries in _PAGED_ATTENTION_ROUTES.items()}
+
+
 def _paged_attention_corpus_winner(
     q_len: int, heads: int, tokens: int, dim: int,
 ) -> str | None:
@@ -3743,9 +3866,12 @@ def _paged_attention_corpus_winner(
     # The SAME admission rule as `corpus_winner` and the ROCm twin
     # (`cache/paged_kv.py::_rocm_paged_attention_corpus_winner`): a row the
     # corpus marks unseparated, selector-ineligible or an unproven ranking is
-    # not a dispatch hint.
+    # not a dispatch hint. And the same Decision #11 contract as the registry
+    # arbiter: the row must have timed both routes live now, each running the
+    # code the row stamped (`route_record_matches`, fail closed).
     if (record is not None and at.record_is_admissible(record)
-            and record.winner in {"fused_paged_attention", "staged_paged_attention"}):
+            and record.winner in _PAGED_ATTENTION_ROUTES
+            and at.route_record_matches(record, paged_attention_route_identities())):
         return record.winner.removesuffix("_paged_attention")
     return None
 

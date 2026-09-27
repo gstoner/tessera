@@ -484,6 +484,102 @@ _PAGED_KV_ENTRY = "tessera_rocm_paged_kv_read_f32"
 _paged_kv_artifact: str | None = None
 _PAGED_ATTN_ENTRY = "tessera_rocm_paged_attention_f32"
 _paged_attn_artifact: str | None = None
+#: Paged-route artifacts by the content key of the source compiled (plus the
+#: hipcc line), so the routes' Decision #11 identity always names the code a
+#: launch runs: a changed emitter compiles fresh within one process rather than
+#: reusing an image built from its old output.
+_PAGED_ARTIFACTS: dict[tuple[str, ...], str] = {}
+
+
+def _paged_kv_source() -> KernelSource:
+    from tessera.compiler.emit.source_memo import memoized
+
+    return memoized(globals(), "_paged_kv_source_uncached")
+
+
+def _paged_kv_source_uncached() -> KernelSource:
+    return KernelSource(source=_synthesize_paged_kv_read_hip(), entry=_PAGED_KV_ENTRY,
+                        lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("paged-kv-v1",))
+
+
+def _paged_attention_source() -> KernelSource:
+    from tessera.compiler.emit.source_memo import memoized
+
+    return memoized(globals(), "_paged_attention_source_uncached")
+
+
+def _paged_attention_source_uncached() -> KernelSource:
+    return KernelSource(source=_synthesize_paged_attention_direct_hip(),
+                        entry=_PAGED_ATTN_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
+                        shape_key=("paged-attention-direct-v1",))
+
+
+def _paged_artifact(source: KernelSource) -> str:
+    """The shared object compiled from exactly ``source`` (compiled on a miss)."""
+    from tessera.compiler.emit.kernel_cache import cache_key
+
+    key = (cache_key(source, dtype="f32", target=_TARGET), *_hipcc_cache_line())
+    artifact = _PAGED_ARTIFACTS.get(key)
+    if artifact is None:
+        artifact = _rocm_hip_compile_fn(source)
+        _PAGED_ARTIFACTS[key] = artifact
+    return artifact
+
+
+def _paged_source_identity(source: KernelSource) -> dict[str, str]:
+    from tessera.compiler.emitted_code_identity import kernel_source_identity
+
+    return kernel_source_identity(source, dtype="f32", target=_TARGET,
+                                  build=("hipcc", *_hipcc_flags(_rocm_arch())))
+
+
+def rocm_paged_attention_route_identities(
+    *, q_heads: int, kv_heads: int, head_dim: int, causal: bool,
+) -> dict[str, Any]:
+    """Decision #11 identities of the two gfx1151 paged-attention serving
+    routes ``cache/paged_kv.py`` races (sync
+    ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27``, closes
+    ``AUTOTUNE-KERNEL-IDENTITY-PAGED-KV``):
+
+    * ``direct`` -- the Python-emitted HIP paged-attention kernel (source +
+      hipcc line incl. the offload arch);
+    * ``gather_fa`` -- the emitted HIP paged-KV gather AND the compiled FA-2
+      forward image it hands the gathered K/V to, by kernel-code identity: f16
+      storage, GQA when the heads differ, the additive-bias variant when causal
+      (the route expresses the decode's right-aligned causal mask as a bias).
+
+    Host-side Python between the kernels (transposes, the bias construction)
+    is not digested -- the ``emitted_code_identity`` limit, stated there."""
+    from tessera import runtime as rt
+    from tessera.compiler.emit.autotune import RouteIdentity
+    from tessera.compiler.emitted_code_identity import composite_identity
+    from tessera.compiler.kernel_code_identity import (
+        compiler_kernel_identity,
+        generator_fingerprint,
+    )
+
+    gqa = int(q_heads) != int(kv_heads)
+    attn_bias = bool(causal)
+
+    def direct() -> dict[str, str]:
+        return _paged_source_identity(_paged_attention_source())
+
+    def gather_fa() -> dict[str, str]:
+        chip = _identity_isa()
+        if chip is None:
+            raise RuntimeError("no ROCm device matching the build arch to identify FA-2 on")
+        key = ("paged_kv_gather_fa", chip, int(head_dim), "f16", gqa, attn_bias,
+               generator_fingerprint())
+        attention = compiler_kernel_identity(
+            key, lambda: rt._rocm_flash_attn_image(
+                int(head_dim), "f16", gqa=gqa, attn_bias=attn_bias), isa=chip)
+        return composite_identity({
+            "gather": _paged_source_identity(_paged_kv_source()),
+            "attention": attention,
+        })
+
+    return {"direct": RouteIdentity("direct", direct),
+            "gather_fa": RouteIdentity("gather_fa", gather_fa)}
 
 
 def _synthesize_paged_kv_read_hip() -> str:
@@ -517,10 +613,7 @@ def run_paged_kv_cache_read_f32(
     if idx.size < 1 or np.any(idx < 0) or np.any(idx >= table.size * p.shape[1]):
         raise ValueError("ROCm paged KV token index exceeds logical table capacity")
     global _paged_kv_artifact
-    if _paged_kv_artifact is None:
-        _paged_kv_artifact = _rocm_hip_compile_fn(KernelSource(
-            source=_synthesize_paged_kv_read_hip(), entry=_PAGED_KV_ENTRY,
-            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("paged-kv-v1",)))
+    _paged_kv_artifact = _paged_artifact(_paged_kv_source())
     fn = getattr(ctypes.CDLL(_paged_kv_artifact), _PAGED_KV_ENTRY)
     fn.restype = ctypes.c_int
     fn.argtypes = ([ctypes.c_void_p] * 4 + [ctypes.c_int] * 5
@@ -577,11 +670,7 @@ def run_paged_attention_direct_f32(
             or np.any(idx < 0) or np.any(idx >= table.size * L)):
         raise ValueError("ROCm direct paged attention table/index is invalid")
     global _paged_attn_artifact
-    if _paged_attn_artifact is None:
-        _paged_attn_artifact = _rocm_hip_compile_fn(KernelSource(
-            source=_synthesize_paged_attention_direct_hip(),
-            entry=_PAGED_ATTN_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
-            shape_key=("paged-attention-direct-v1",)))
+    _paged_attn_artifact = _paged_artifact(_paged_attention_source())
     fn = getattr(ctypes.CDLL(_paged_attn_artifact), _PAGED_ATTN_ENTRY)
     fn.restype = ctypes.c_int
     fn.argtypes = ([ctypes.c_void_p] * 6 + [ctypes.c_int] * 8

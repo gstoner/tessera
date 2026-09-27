@@ -47,13 +47,23 @@ def test_target_ir_references_are_all_classified() -> None:
     }
 
 
+#: Rows reopened on purpose, each with the reason it is open. TILE-LATENT-
+#: DEFECTS-2026-09-27: `ntk_rope` looked closed only through an audit alias to
+#: `rope` whose premise (a canonicalization to `tessera.rope`) was false. It
+#: stays open until that rewrite lands (ODS triage WIRE slice 1); then drop it.
+_KNOWN_OPEN_SINGLE_GPU = {
+    ("tile_ir", "ntk_rope"),
+    ("target_ir", "ntk_rope"),
+}
+
+
 def test_single_gpu_tile_and_target_ir_closeout_is_empty() -> None:
-    rows = [
-        r for r in _csv_rows()
+    rows = {
+        (r["area"], r["op"]) for r in _csv_rows()
         if r["area"] in {"tile_ir", "target_ir"}
         and r["bucket"] in {"single_gpu_closeable", "single_gpu_promote"}
-    ]
-    assert rows == []
+    }
+    assert rows == _KNOWN_OPEN_SINGLE_GPU
 
 
 def test_sharding_rules_split_identity_layout_and_distributed() -> None:

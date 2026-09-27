@@ -78,8 +78,15 @@ process. Evidence and commands:
   finalizer-ineligible) in both the old and new corpus, so no served winner
   changed. Table in the evidence README.
 - The PTX bridge and `build/`'s shipped GEMM library are byte-identical to
-  another tree's build of the same source, so these content digests are
-  reproducible across trees, not per-build.
+  another tree's build of the same source, and the bridge again after a
+  from-scratch rebuild of `build-nvidia-cuda/` with the release gate's
+  configure arguments; the check re-run in that rebuilt tree gives the same
+  96/96 match and 15 served. These content digests are reproducible, not
+  per-build.
+- **NVIDIA release gate, device layer, at `7df492f9`** (same box, same
+  worktree, under the timing lock): both device-correctness passes **1122
+  passed, 1 skipped, 0 failed** (the skip: NCCL not installed, multi-rank
+  topology lane not evaluable here); `status=success`.
 
 Open, found by the re-record (not caused by it):
 

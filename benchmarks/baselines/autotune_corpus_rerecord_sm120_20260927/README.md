@@ -25,7 +25,13 @@ with two build trees configured from scratch in it and built with `ninja` to com
 
 The bridge library is byte-identical to the one in `~/programming/tessera-timing-nv` (a
 different tree at a different commit with the same bridge source), and so is `build/`'s GEMM
-library: these content digests are reproducible across trees, not per-build.
+library: these content digests are reproducible across trees, not per-build. After the
+re-record the NVIDIA release gate re-configured `build-nvidia-cuda/` with its own arguments
+(nvcc spelled `/usr/local/cuda/bin/nvcc`, which wiped the cache); the tree was rebuilt from
+scratch with the gate's arguments, its bridge came out byte-identical again
+(`sha256:1bcb4967…`), and `sm120_serve_check_after_rebuild.txt` is the same check re-run in
+that rebuilt tree at `7df492f9`: 96/96 identities match, the same 15 rows served, every row
+misses under the perturbations.
 
 **Recorder and timer.** `benchmarks/nvidia/record_autotune_corpus.py` with the NVIDIA queue's
 shape lists (`--fused-shapes 64x64x64 256x256x256 128x512x256 127x259x63 128x256x256
@@ -61,6 +67,10 @@ re-ordered to the prior record order.
   (`_synthesize_{fused,attention,gated,mma_fused,mma_attn,mma_gated,resident_ops}_cuda`,
   `ptx_emit.emit_mma_sync_gemm_ptx`, the `tessera-nvidia-opt` Tile PTX); every row misses under
   at least one of them, and with all perturbed 96/96 miss and 0 are served.
+
+**Release gate.** `scripts/run_nvidia_release_gate.sh --layer device` at `7df492f9`, same box
+and worktree, under the timing lock: both device-correctness passes 1122 passed, 1 skipped
+(NCCL not installed: the multi-rank topology lane cannot be evaluated here), 0 failed.
 
 **Winner changes (15 of 96), all within the re-measured field:**
 

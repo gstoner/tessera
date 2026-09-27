@@ -1,0 +1,94 @@
+{
+  "evidence_arch": "gfx1151",
+  "rows": [
+    {
+      "backend": "rocm",
+      "device": "gfx1151",
+      "device_ms": {
+        "direct": 0.10954250395298004,
+        "gather_fa": 0.022033300204202532
+      },
+      "device_timing_status": "available",
+      "device_winner": "gather_fa",
+      "dim": 32,
+      "end_to_end_ms": {
+        "direct": 1.0858110035769641,
+        "gather_fa": 3.4522950008977205
+      },
+      "end_to_end_winner": "direct",
+      "heads": 4,
+      "kv_heads": 4,
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "selected": "direct",
+      "tokens": 128
+    },
+    {
+      "backend": "rocm",
+      "device": "gfx1151",
+      "device_ms": {
+        "direct": 0.4275290369987488,
+        "gather_fa": 0.05485569955781102
+      },
+      "device_timing_status": "available",
+      "device_winner": "gather_fa",
+      "dim": 32,
+      "end_to_end_ms": {
+        "direct": 3.2049069995991886,
+        "gather_fa": 8.281068003270775
+      },
+      "end_to_end_winner": "direct",
+      "heads": 4,
+      "kv_heads": 4,
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "selected": "direct",
+      "tokens": 512
+    },
+    {
+      "backend": "rocm",
+      "device": "gfx1151",
+      "device_ms": {
+        "direct": 1.7019678354263306,
+        "gather_fa": 0.1800950039178133
+      },
+      "device_timing_status": "available",
+      "device_winner": "gather_fa",
+      "dim": 32,
+      "end_to_end_ms": {
+        "direct": 6.648183014476672,
+        "gather_fa": 10.716712014982477
+      },
+      "end_to_end_winner": "direct",
+      "heads": 4,
+      "kv_heads": 4,
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "selected": "direct",
+      "tokens": 2048
+    },
+    {
+      "backend": "rocm",
+      "device": "gfx1151",
+      "device_ms": {
+        "direct": 6.8179755210876465,
+        "gather_fa": 0.6713570840656757
+      },
+      "device_timing_status": "available",
+      "device_winner": "gather_fa",
+      "dim": 32,
+      "end_to_end_ms": {
+        "direct": 18.983385001774877,
+        "gather_fa": 22.272391011938453
+      },
+      "end_to_end_winner": "direct",
+      "heads": 4,
+      "kv_heads": 4,
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "selected": "direct",
+      "tokens": 8192
+    }
+  ],
+  "schema_version": 1
+}

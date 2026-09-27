@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 
 
 def _key(row: dict[str, Any]) -> tuple[Any, ...]:
@@ -50,14 +53,24 @@ def merge(base: dict[str, Any], first: dict[str, Any], second: dict[str, Any],
         })
         right["evidence"] = evidence
         # Unstable evidence is retained for audit but cannot displace a stable
-        # selector row already committed for the same key.
-        if stable or key not in merged:
+        # selector row already committed for the same key -- when that row was
+        # measured under the SAME toolchain. Decision #11: the fresh evidence
+        # carries today's `toolchain_digest`, and transplanting it onto a prior
+        # row measured under another (or no) toolchain would serve that old
+        # measurement as current. Such a prior row is replaced by the fresh,
+        # selector-ineligible one instead.
+        prior_digest = (merged.get(key, {}).get("evidence") or {}).get(
+            "toolchain_digest")
+        if (stable or key not in merged
+                or prior_digest != evidence.get("toolchain_digest")):
             merged[key] = right
-        elif key in merged:
+        else:
             prior = dict(merged[key])
             prior["evidence"] = evidence
             merged[key] = prior
-    return {"version": 3,
+    from tessera.compiler.emit.autotune import CORPUS_VERSION
+
+    return {"version": CORPUS_VERSION,
             "records": sorted(merged.values(), key=lambda r: str(_key(r)))}
 
 

@@ -1,0 +1,40 @@
+# host: Princess-Luna | AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+# kernel: 6.18.33.1-microsoft-standard-WSL2
+# date_utc: 2026-09-27T00:43:51Z
+# source_commit: 70eee14881453ce4a41cbbab54bc205998b5ebcc
+# compiler: g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+# compile: g++ -O2 -mavx512f -mavx512bw -mavx512dq -mavx512vl -std=gnu++17 -I /home/gstoner/programming/tessera-bimodal/src/compiler/layout_algebra/include /home/gstoner/programming/tessera-bimodal/benchmarks/baselines/x86_matmul_bimodal_20260926/gemm_harness.cpp /home/gstoner/programming/tessera-bimodal/src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f32.cpp -o /tmp/tmp.nGTeQgD5ph/gemm_harness
+# gemm_harness.cpp sha256: a5b9d9fdb728e1394d4718d4460d42f3b4f455471d3012cfc758731f4779269c
+# avx512_gemm_f32.cpp sha256: be41568300b08c019cb93a537e372d82d4cbef879b98b29d8262457bc25e6f76
+# THP mode: always [madvise] never
+# args: offA=0 offB=<ob> offC=0 hugepage=<h>; three processes per setting
+run=1 offB=0 huge=0 median_us=718.1 min_us=716.7 max_us=740.2 A%4096=0 B%4096=0 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=3->3 ghz=5.04/5.08 huge_req=0 B_AnonHugePages_kB=0
+run=1 offB=0 huge=1 median_us=717.6 min_us=716.0 max_us=719.2 A%4096=0 B%4096=0 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=4->4 ghz=5.08/5.07 huge_req=1 B_AnonHugePages_kB=2048
+run=1 offB=16 huge=0 median_us=1028.3 min_us=1009.5 max_us=1053.1 A%4096=0 B%4096=16 C%4096=0 A%64=0 B%64=16 C%64=0 cpu=3->3 ghz=5.08/5.07 huge_req=0 B_AnonHugePages_kB=0
+run=1 offB=16 huge=1 median_us=1047.0 min_us=1007.9 max_us=1076.6 A%4096=0 B%4096=16 C%4096=0 A%64=0 B%64=16 C%64=0 cpu=5->4 ghz=5.06/5.08 huge_req=1 B_AnonHugePages_kB=2048
+run=1 offB=32 huge=0 median_us=1055.2 min_us=1003.3 max_us=1081.8 A%4096=0 B%4096=32 C%4096=0 A%64=0 B%64=32 C%64=0 cpu=3->3 ghz=5.08/4.98 huge_req=0 B_AnonHugePages_kB=0
+run=1 offB=32 huge=1 median_us=1032.8 min_us=1007.6 max_us=1123.2 A%4096=0 B%4096=32 C%4096=0 A%64=0 B%64=32 C%64=0 cpu=5->2 ghz=5.05/5.08 huge_req=1 B_AnonHugePages_kB=2048
+run=1 offB=48 huge=0 median_us=1021.3 min_us=996.4 max_us=1043.9 A%4096=0 B%4096=48 C%4096=0 A%64=0 B%64=48 C%64=0 cpu=4->4 ghz=5.08/5.07 huge_req=0 B_AnonHugePages_kB=0
+run=1 offB=48 huge=1 median_us=1042.7 min_us=1021.8 max_us=1108.2 A%4096=0 B%4096=48 C%4096=0 A%64=0 B%64=48 C%64=0 cpu=2->3 ghz=5.07/4.99 huge_req=1 B_AnonHugePages_kB=2048
+run=1 offB=64 huge=0 median_us=738.0 min_us=728.6 max_us=739.5 A%4096=0 B%4096=64 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=5->5 ghz=5.05/4.99 huge_req=0 B_AnonHugePages_kB=0
+run=1 offB=64 huge=1 median_us=738.4 min_us=714.1 max_us=787.1 A%4096=0 B%4096=64 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=2->3 ghz=5.04/5.08 huge_req=1 B_AnonHugePages_kB=2048
+run=2 offB=0 huge=0 median_us=718.5 min_us=717.5 max_us=720.1 A%4096=0 B%4096=0 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=4->4 ghz=5.08/5.08 huge_req=0 B_AnonHugePages_kB=0
+run=2 offB=0 huge=1 median_us=719.7 min_us=716.1 max_us=781.4 A%4096=0 B%4096=0 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=3->2 ghz=5.07/5.08 huge_req=1 B_AnonHugePages_kB=2048
+run=2 offB=16 huge=0 median_us=1079.6 min_us=1065.4 max_us=1125.8 A%4096=0 B%4096=16 C%4096=0 A%64=0 B%64=16 C%64=0 cpu=5->4 ghz=5.07/4.99 huge_req=0 B_AnonHugePages_kB=0
+run=2 offB=16 huge=1 median_us=1069.9 min_us=1006.5 max_us=1117.7 A%4096=0 B%4096=16 C%4096=0 A%64=0 B%64=16 C%64=0 cpu=3->2 ghz=5.05/4.99 huge_req=1 B_AnonHugePages_kB=2048
+run=2 offB=32 huge=0 median_us=1053.7 min_us=1043.7 max_us=1066.1 A%4096=0 B%4096=32 C%4096=0 A%64=0 B%64=32 C%64=0 cpu=4->4 ghz=5.07/5.07 huge_req=0 B_AnonHugePages_kB=0
+run=2 offB=32 huge=1 median_us=1046.1 min_us=1030.7 max_us=1067.0 A%4096=0 B%4096=32 C%4096=0 A%64=0 B%64=32 C%64=0 cpu=3->3 ghz=5.08/5.08 huge_req=1 B_AnonHugePages_kB=2048
+run=2 offB=48 huge=0 median_us=1042.2 min_us=1032.7 max_us=1104.6 A%4096=0 B%4096=48 C%4096=0 A%64=0 B%64=48 C%64=0 cpu=5->2 ghz=5.06/5.08 huge_req=0 B_AnonHugePages_kB=0
+run=2 offB=48 huge=1 median_us=1043.0 min_us=998.8 max_us=1059.1 A%4096=0 B%4096=48 C%4096=0 A%64=0 B%64=48 C%64=0 cpu=4->4 ghz=5.06/5.08 huge_req=1 B_AnonHugePages_kB=2048
+run=2 offB=64 huge=0 median_us=739.2 min_us=719.6 max_us=774.9 A%4096=0 B%4096=64 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=3->2 ghz=5.07/4.99 huge_req=0 B_AnonHugePages_kB=0
+run=2 offB=64 huge=1 median_us=737.1 min_us=733.8 max_us=738.9 A%4096=0 B%4096=64 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=5->5 ghz=5.04/5.00 huge_req=1 B_AnonHugePages_kB=2048
+run=3 offB=0 huge=0 median_us=740.4 min_us=736.2 max_us=741.7 A%4096=0 B%4096=0 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=2->2 ghz=5.02/4.99 huge_req=0 B_AnonHugePages_kB=0
+run=3 offB=0 huge=1 median_us=738.3 min_us=715.5 max_us=777.5 A%4096=0 B%4096=0 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=2->12 ghz=5.02/5.08 huge_req=1 B_AnonHugePages_kB=2048
+run=3 offB=16 huge=0 median_us=1071.5 min_us=1042.9 max_us=1083.9 A%4096=0 B%4096=16 C%4096=0 A%64=0 B%64=16 C%64=0 cpu=2->2 ghz=5.06/4.99 huge_req=0 B_AnonHugePages_kB=0
+run=3 offB=16 huge=1 median_us=1065.0 min_us=1038.2 max_us=1111.5 A%4096=0 B%4096=16 C%4096=0 A%64=0 B%64=16 C%64=0 cpu=4->2 ghz=5.07/4.99 huge_req=1 B_AnonHugePages_kB=2048
+run=3 offB=32 huge=0 median_us=1048.3 min_us=1036.6 max_us=1115.7 A%4096=0 B%4096=32 C%4096=0 A%64=0 B%64=32 C%64=0 cpu=4->2 ghz=5.04/5.07 huge_req=0 B_AnonHugePages_kB=0
+run=3 offB=32 huge=1 median_us=1068.6 min_us=1031.7 max_us=1090.5 A%4096=0 B%4096=32 C%4096=0 A%64=0 B%64=32 C%64=0 cpu=5->5 ghz=5.08/4.99 huge_req=1 B_AnonHugePages_kB=2048
+run=3 offB=48 huge=0 median_us=1089.3 min_us=1072.0 max_us=1095.9 A%4096=0 B%4096=48 C%4096=0 A%64=0 B%64=48 C%64=0 cpu=3->3 ghz=5.04/4.99 huge_req=0 B_AnonHugePages_kB=0
+run=3 offB=48 huge=1 median_us=1067.5 min_us=1041.7 max_us=1106.4 A%4096=0 B%4096=48 C%4096=0 A%64=0 B%64=48 C%64=0 cpu=4->5 ghz=5.05/4.99 huge_req=1 B_AnonHugePages_kB=2048
+run=3 offB=64 huge=0 median_us=740.4 min_us=737.7 max_us=742.4 A%4096=0 B%4096=64 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=2->2 ghz=5.03/4.95 huge_req=0 B_AnonHugePages_kB=0
+run=3 offB=64 huge=1 median_us=737.5 min_us=714.9 max_us=794.7 A%4096=0 B%4096=64 C%4096=0 A%64=0 B%64=0 C%64=0 cpu=4->2 ghz=5.01/5.08 huge_req=1 B_AnonHugePages_kB=2048

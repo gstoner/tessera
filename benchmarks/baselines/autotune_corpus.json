@@ -2,6 +2,662 @@
   "records": [
     {
       "bucket": [
+        1,
+        4,
+        4,
+        128,
+        32,
+        16
+      ],
+      "candidates": {
+        "direct": 0.10954250395298004,
+        "gather_fa": 0.022033300204202532
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f32",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.022033300204202532,
+      "op": "paged_kv_decode",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.7988607215546205,
+        "noise": 0.020931616519984972,
+        "runner_up": "direct",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "gather_fa"
+    },
+    {
+      "bucket": [
+        1,
+        4,
+        4,
+        128,
+        32,
+        16
+      ],
+      "candidates": {
+        "direct": 1.1305730149615556,
+        "gather_fa": 3.573373018298298
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f32",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 1.1305730149615556,
+      "op": "paged_kv_decode",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.6836118118169611,
+        "noise": 0.09098164678318056,
+        "runner_up": "gather_fa",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "direct"
+    },
+    {
+      "bucket": [
+        1,
+        4,
+        4,
+        512,
+        32,
+        16
+      ],
+      "candidates": {
+        "direct": 0.42722684144973755,
+        "gather_fa": 0.05470269992947578
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f32",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.05470269992947578,
+      "op": "paged_kv_decode",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.871958653759091,
+        "noise": 0.009330674870672432,
+        "runner_up": "direct",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "gather_fa"
+    },
+    {
+      "bucket": [
+        1,
+        4,
+        4,
+        512,
+        32,
+        16
+      ],
+      "candidates": {
+        "direct": 3.2049069995991886,
+        "gather_fa": 8.173531998181716
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f32",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 3.2049069995991886,
+      "op": "paged_kv_decode",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.607892034886246,
+        "noise": 0.040203233219930086,
+        "runner_up": "gather_fa",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "direct"
+    },
+    {
+      "bucket": [
+        1,
+        4,
+        4,
+        2048,
+        32,
+        16
+      ],
+      "candidates": {
+        "direct": 1.701356291770935,
+        "gather_fa": 0.17997904997318984
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f32",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.17997904997318984,
+      "op": "paged_kv_decode",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.8942143683579349,
+        "noise": 0.004069662485105652,
+        "runner_up": "direct",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "gather_fa"
+    },
+    {
+      "bucket": [
+        1,
+        4,
+        4,
+        2048,
+        32,
+        16
+      ],
+      "candidates": {
+        "direct": 6.666532019153237,
+        "gather_fa": 10.62620000448078
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f32",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 6.666532019153237,
+      "op": "paged_kv_decode",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.37263254819764896,
+        "noise": 0.02250967914380558,
+        "runner_up": "gather_fa",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "direct"
+    },
+    {
+      "bucket": [
+        1,
+        4,
+        4,
+        8192,
+        32,
+        16
+      ],
+      "candidates": {
+        "direct": 6.819367408752441,
+        "gather_fa": 0.6720445103943348
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f32",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.6720445103943348,
+      "op": "paged_kv_decode",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9014506082291758,
+        "noise": 0.000666693261914591,
+        "runner_up": "direct",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "gather_fa"
+    },
+    {
+      "bucket": [
+        1,
+        4,
+        4,
+        8192,
+        32,
+        16
+      ],
+      "candidates": {
+        "direct": 18.592593987705186,
+        "gather_fa": 20.731755008455366
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f32",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 18.592593987705186,
+      "op": "paged_kv_decode",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.10318282363831385,
+        "noise": 0.03733083150552267,
+        "runner_up": "gather_fa",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "direct"
+    },
+    {
+      "bucket": [
+        64,
+        64
+      ],
+      "candidates": {
+        "rocm_generic_hip": 0.7402025075862184,
+        "rocm_wmma_gemm": 1.8134980055037886
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.7402025075862184,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.591837153754911,
+        "noise": 0.06864887999485637,
+        "runner_up": "rocm_wmma_gemm",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_generic_hip"
+    },
+    {
+      "bucket": [
+        64,
+        64
+      ],
+      "candidates": {
+        "rocm_generic_hip": 0.23108333333333334,
+        "rocm_wmma_gemm": 0.01563050039112568
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.01563050039112568,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9323598973337511,
+        "noise": 0.10720803807795667,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        256,
+        256
+      ],
+      "candidates": {
+        "rocm_generic_hip": 6.95972450193949,
+        "rocm_wmma_gemm": 3.800267993938178
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 3.800267993938178,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.4539628698119956,
+        "noise": 0.030894107050249996,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        256,
+        256
+      ],
+      "candidates": {
+        "rocm_generic_hip": 4.23191,
+        "rocm_wmma_gemm": 0.020859166979789734
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.020859166979789734,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9950709804840392,
+        "noise": 0.002812782098651713,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        512,
+        512
+      ],
+      "candidates": {
+        "rocm_generic_hip": 29.92593648377806,
+        "rocm_wmma_gemm": 5.629207502352074
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 5.629207502352074,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.8118953602202726,
+        "noise": 0.041103713184416496,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        512,
+        512
+      ],
+      "candidates": {
+        "rocm_generic_hip": 26.644796666666664,
+        "rocm_wmma_gemm": 0.030172333121299744
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.030172333121299744,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.998867608805623,
+        "noise": 0.01624831615337674,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        1024,
+        1024
+      ],
+      "candidates": {
+        "rocm_generic_hip": 191.62963300186675,
+        "rocm_wmma_gemm": 9.946481004590169
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 9.946481004590169,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9480952875148841,
+        "noise": 0.03692201153427962,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        1024,
+        1024
+      ],
+      "candidates": {
+        "rocm_generic_hip": 185.72697,
+        "rocm_wmma_gemm": 0.17156808574994406
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "evidence": {
+        "toolchain": {
+          "delegate": {},
+          "digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728",
+          "family": "rocm",
+          "schema": "tessera.toolchain_identity.v1",
+          "toolchain": {
+            "hip": "7.15",
+            "llvm_mlir": "23.1.1",
+            "rocm": "10.0"
+          }
+        },
+        "toolchain_digest": "sha256:4f528f652905f48c0203aa4b177fea7d7180553b8b979264905508b62eb57728"
+      },
+      "latency_ms": 0.17156808574994406,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9990762349391155,
+        "noise": 0.006435693419358187,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
         128,
         128,
         64,
@@ -8728,439 +9384,7 @@
       "target": "nvidia",
       "timing": "device",
       "winner": "async_ring"
-    },
-    {
-      "bucket": [
-        1,
-        4,
-        4,
-        128,
-        32,
-        16
-      ],
-      "candidates": {
-        "direct": 0.10958000272512436,
-        "gather_fa": 0.022400299459695815
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f32",
-      "latency_ms": 0.022400299459695815,
-      "op": "paged_kv_decode",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.79558040789718,
-        "noise": 0.04727367890280033,
-        "runner_up": "direct",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "gather_fa"
-    },
-    {
-      "bucket": [
-        1,
-        4,
-        4,
-        128,
-        32,
-        16
-      ],
-      "candidates": {
-        "direct": 1.1425380071159452,
-        "gather_fa": 3.6299999919719994
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f32",
-      "latency_ms": 1.1425380071159452,
-      "op": "paged_kv_decode",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.6852512370130169,
-        "noise": 0.1423905397104397,
-        "runner_up": "gather_fa",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "direct"
-    },
-    {
-      "bucket": [
-        1,
-        4,
-        4,
-        2048,
-        32,
-        16
-      ],
-      "candidates": {
-        "direct": 1.6994987726211548,
-        "gather_fa": 0.17959900125861167
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f32",
-      "latency_ms": 0.17959900125861167,
-      "op": "paged_kv_decode",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.8943223707178003,
-        "noise": 0.0020985750203648913,
-        "runner_up": "direct",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "gather_fa"
-    },
-    {
-      "bucket": [
-        1,
-        4,
-        4,
-        2048,
-        32,
-        16
-      ],
-      "candidates": {
-        "direct": 6.682851992081851,
-        "gather_fa": 10.648339986801147
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f32",
-      "latency_ms": 6.682851992081851,
-      "op": "paged_kv_decode",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.37240433716754034,
-        "noise": 0.03926223532931329,
-        "runner_up": "gather_fa",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "direct"
-    },
-    {
-      "bucket": [
-        1,
-        4,
-        4,
-        512,
-        32,
-        16
-      ],
-      "candidates": {
-        "direct": 0.4272955358028412,
-        "gather_fa": 0.05464664995670319
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f32",
-      "latency_ms": 0.05464664995670319,
-      "op": "paged_kv_decode",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.8721104121670071,
-        "noise": 0.006451392226977258,
-        "runner_up": "direct",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "gather_fa"
-    },
-    {
-      "bucket": [
-        1,
-        4,
-        4,
-        512,
-        32,
-        16
-      ],
-      "candidates": {
-        "direct": 3.287978994194418,
-        "gather_fa": 8.133057010127231
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f32",
-      "latency_ms": 3.287978994194418,
-      "op": "paged_kv_decode",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.5957265527463723,
-        "noise": 0.04322259557264771,
-        "runner_up": "gather_fa",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "direct"
-    },
-    {
-      "bucket": [
-        1,
-        4,
-        4,
-        8192,
-        32,
-        16
-      ],
-      "candidates": {
-        "direct": 6.817551612854004,
-        "gather_fa": 0.671743556112051
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f32",
-      "latency_ms": 0.671743556112051,
-      "op": "paged_kv_decode",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9014685044927967,
-        "noise": 0.0009832260852615758,
-        "runner_up": "direct",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "gather_fa"
-    },
-    {
-      "bucket": [
-        1,
-        4,
-        4,
-        8192,
-        32,
-        16
-      ],
-      "candidates": {
-        "direct": 18.7615159957204,
-        "gather_fa": 20.06909900228493
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f32",
-      "latency_ms": 18.7615159957204,
-      "op": "paged_kv_decode",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.06515404634835154,
-        "noise": 0.05589048824177955,
-        "runner_up": "gather_fa",
-        "separated": false
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "direct"
-    },
-    {
-      "bucket": [
-        64,
-        64
-      ],
-      "candidates": {
-        "rocm_generic_hip": 0.7421589980367571,
-        "rocm_wmma_gemm": 1.9345290056662634
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 0.7421589980367571,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.6163619176228619,
-        "noise": 0.029042554514633747,
-        "runner_up": "rocm_wmma_gemm",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "rocm_generic_hip"
-    },
-    {
-      "bucket": [
-        64,
-        64
-      ],
-      "candidates": {
-        "rocm_generic_hip": 0.23067500000000002,
-        "rocm_wmma_gemm": 0.015749333426356316
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 0.015749333426356316,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.931725009531348,
-        "noise": 0.01106663776277887,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        256,
-        256
-      ],
-      "candidates": {
-        "rocm_generic_hip": 6.889509997563437,
-        "rocm_wmma_gemm": 4.503930002101697
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 4.503930002101697,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.3462626509440338,
-        "noise": 0.06101253401190456,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        256,
-        256
-      ],
-      "candidates": {
-        "rocm_generic_hip": 4.228535,
-        "rocm_wmma_gemm": 0.02091125026345253
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 0.02091125026345253,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9950547292943176,
-        "noise": 0.033569652703752416,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        512,
-        512
-      ],
-      "candidates": {
-        "rocm_generic_hip": 28.700947994366288,
-        "rocm_wmma_gemm": 5.56548401073087
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 5.56548401073087,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.8060871016586867,
-        "noise": 0.04212020397491932,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        512,
-        512
-      ],
-      "candidates": {
-        "rocm_generic_hip": 24.935613333333336,
-        "rocm_wmma_gemm": 0.030062417189280193
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 0.030062417189280193,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9987943983255028,
-        "noise": 0.018474122057623173,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        1024,
-        1024
-      ],
-      "candidates": {
-        "rocm_generic_hip": 192.8678850090364,
-        "rocm_wmma_gemm": 10.884239498409443
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 10.884239498409443,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9435663459580143,
-        "noise": 0.08153570135541886,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "end_to_end",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        1024,
-        1024
-      ],
-      "candidates": {
-        "rocm_generic_hip": 185.95345500000002,
-        "rocm_wmma_gemm": 0.17158791422843933
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 0.17158791422843933,
-      "op": "fused_region",
-      "separation": {
-        "factor": 2.0,
-        "margin": 0.9990772534222155,
-        "noise": 0.009449549689085996,
-        "runner_up": "rocm_generic_hip",
-        "separated": true
-      },
-      "target": "rocm",
-      "timing": "device",
-      "unmeasured": {},
-      "winner": "rocm_wmma_gemm"
     }
   ],
-  "version": 3
+  "version": 4
 }

@@ -325,7 +325,7 @@ matches its module fails generation. Read the counts there.
 | Graph IR | Opportunistic folders; attribute-stamp-only passes; one `tessera.source_kind` admission for `NativeTapeToGPUPass` | [COMPILER_AUDIT](compiler/COMPILER_AUDIT.md) scorecard |
 | Schedule IR | Schedule→Tile is op-name macro expansion with tile sizes from pass options (U6); every boundary exists in Python and C++ with no differential test and `LowerScheduleToTarget` is a scaffold (U3); collective placement/overlap is runtime code, not a pass | [IR_STACK review](compiler/IR_STACK_INTEGRATION_REVIEW.md) U3/U6 (unrouted), DIST-NATIVE-1 |
 | Tile IR | Partial Tile rows in [`compiler_progress`](generated/compiler_progress.md) (linalg, optimizers, `game_*`, `depth_attn`); two NVIDIA tensor-valued `tile.mma` sites; `Tile_MMAOp` still `Variadic<AnyType>`; split whole-kernel/domain ops out of Tile; collapse the legality passes | W1.1 (NVIDIA closure), W3.3, IR_STACK U2 |
-| Target IR | Required (not optional) contracts per op; an ODS-op→consumer gate; layout/packing/scale-layout witnesses | GOV-ODS-CONSUMER-1, LAYOUT-ALG-1, IR_STACK U5 |
+| Target IR | Required (not optional) contracts per op; consume or delete the ODS ops the op→consumer gate waives (gate landed 2026-09-27; count = `_WAIVER_CEILING` in `tests/unit/test_ods_op_has_consumer.py`, none #29a) and the double-declared `tessera.neighbors.*` ops; layout/packing/scale-layout witnesses | GOV-ODS-CONSUMER-1, LAYOUT-ALG-1, IR_STACK U5 |
 | MLIR→LLVM/NVVM/ROCDL | x86 packages a prebuilt image instead of compiling the body (reuse `tessera-jit`); retire the `emit/*` source emitters family by family; compiler-owned Apple MSL endpoint; NVIDIA AOT beyond the f16 GEMM | [foundation program](compiler/INTEGRATED_COMPILER_PLAN.md#foundation-program) F2/F3 |
 | Runtime | Dispatch-bridge waits and checked-output ownership; allocation- and control-flow-scoped release; ROCm host-transfer coalescing; JIT `scf.while` forward crash | DISPATCH-BREAKER, IR-NATIVE-FOUNDATION-1, ROCM-TRANSFER-RESIDENCY-1, COMPILER-DEVEX-1 |
 | AD | General nested persistent tapes; native SAVE/RECOMPUTE plans; real batching; sparse coloring; native jets; KKT/IFT | [AUTODIFF plan](compiler/AUTODIFF_EXECUTION_PLAN.md): W4-PRODUCT-1 → AD-RESIDUAL-EVAL-1 → W2.4a / AD-HIGHER-1 |
@@ -524,7 +524,7 @@ matches its module fails generation. Read the counts there.
    the sync key). Open: move the family recorders onto `route_provenance`.
 4. E2E-REAL-6F census review, then bootstrap absorption (NVIDIA gap families,
    ROCm softmax/reduction/paged-KV first).
-5. Required Target IR contracts + GOV-ODS-CONSUMER-1; extend
+5. Required Target IR contracts + empty GOV-ODS-CONSUMER-1's op waiver; extend
    `verifier_coverage` to Tile/Schedule/Target ODS.
 6. NVIDIA `tile.mma` sites (W1.1), then W3.3.
 7. ROCM-SPLIT-K-1 per-shape slice rule (landed S rule is conservative on the router gate); the LDS-body VGPR lever.

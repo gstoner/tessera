@@ -5011,3 +5011,51 @@ gfx1151 real-device directive-change probe (fresh image, identity names it,
 correct results), serve check 8/8 served / 8/8 miss. No identity of unchanged
 code moved. Tests: `tests/unit/test_autotune_identity_memo_coherence.py`
 (the directive cases fail on `dedae4b0`). Detail: ROCm and NVIDIA queues.
+
+
+### 2026-09-27 — Evidence governance gates: reason vocabularies, ODS consumers, corpus eligibility
+
+Owner: [X86-EVIDENCE-VOCAB-1](INTEGRATED_COMPILER_PLAN.md#x86-evidence-vocab-1)
+
+PRs: branch `claude/evidence-governance-gates`.
+Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
+
+Outcome: Three host-free governance gates. **Reason vocabularies:** the x86
+packet's eleven promotion-ineligibility tags (re-counted from the producer: still
+eleven) and four sibling families with the same shape -- the ROCm profiler
+packet, the NVIDIA device-clock packet, the x86 PMU event map and the
+calibration corpus -- are each declared once through
+`evidence_reasons.ReasonVocabulary`, with a meaning per tag; validators refuse
+an undeclared tag, and the event-map validator, which only type-checked its
+reasons, now re-derives them. Registered diagnostics a packet also carries are
+borrowed by `pass_origin`, never redeclared; no tag was added to
+`diagnostic_codes.py`. **ODS consumers:** the 2026-09-20 gate parsed 286 of 623
+op records, passed fixture-only ops and matched bare substrings; the rebuilt
+scan (`ods_consumer_audit.py`, checked against `llvm-tblgen --dump-json`, 609/609
+agree) finds 546 compiler-consumed, 32 fixture-only and 45 unreferenced ops.
+The 77 are a shrink-only waiver with reasons; none meets #29a, none was deleted.
+Seven `tessera.neighbors.*` names are declared by two records. **Calibration
+corpus (EVIDENCE-PACKET-1 slice):** `apply_corpus` read `selector_eligible` with a
+default of `True` and never read `ineligibility_reasons`; it and
+`load_pruning_corpus` now refuse missing, contradicted or undeclared eligibility
+evidence by three registered codes, and the committed 2026-08-15 corpus still
+reads and still cannot promote.
+
+Remaining: the 77 waived ops need consume-or-delete decisions per dialect
+owner, and the `tessera.neighbors` double declaration needs one authority;
+EVIDENCE-PACKET-1's shared evidence envelope, GA/EBM route receipts, public-
+frontend AD pairing, asynchronous attribution and clean performance admission
+stay open (plan gate text). `profiler_cuda_window` reasons are prose, not tags,
+and were not changed.
+
+Evidence: `tests/unit/test_x86_evidence_vocabulary.py`,
+`tests/unit/test_ods_op_has_consumer.py`,
+`tests/unit/test_calibration_corpus_eligibility.py`,
+`python/tessera/compiler/evidence_reasons.py`,
+`python/tessera/compiler/ods_consumer_audit.py`; host: Mac (M1 Max, macOS 27),
+no device lane involved.
+
+<!-- entry-fields:end -->
+
+Additional owners: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1),
+[EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1).

@@ -11717,3 +11717,9 @@ Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
 Follow-up required: CPU-lane only; `rocm_ebm_langevin_compiled` (Python-emitted gfx1151 kernel) stays the ROCm lane. A device package for the loop needs the tensor-level gradient lowered inside a kernel (tile pipeline), which the arena skeleton route used for Clifford does not provide. EBM lit 14/14 on Princess-Luna and, under the assertions LLVM, on Tajasarus.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-quadratic-energy-loop-executes-through-the-mlirllvm-backbone).
+
+### Evidence governance gates (2026-09-27)
+
+Owners: X86-EVIDENCE-VOCAB-1 / GOV-ODS-CONSUMER-1 / EVIDENCE-PACKET-1. Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
+
+Parity validated host-free (Mac). The ROCm profiler packet's 13 tags are declared (window refusals borrowed from the registry) and the validator refuses an undeclared tag or gap; 148 of the 150 committed packets validate (the two diagnostic/superseded ones already failed the window rule and are unchanged). The gfx1151 calibration recorder checks its tags against `target_perf.CALIBRATION_CORPUS_REASONS`, and `apply_corpus`/`load_pruning_corpus` refuse a corpus whose eligibility is missing, contradicted or undeclared. The ODS gate waives `tessera_rocm.memcpy` and `tessera_rocm.emit` (unreferenced). No device run, measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility).

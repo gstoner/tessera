@@ -127,8 +127,22 @@ def _replay_row(shape: str, tokens: int, chunk: int, slots: int,
     return row
 
 
-def _paged_kv_row(tokens: int, heads: int, dim: int, page_size: int,
-                  reps: int, route: str) -> dict[str, Any]:
+_PAGED_ROUTES = ("fused", "staged")
+
+
+def _paged_kv_rows(tokens: int, heads: int, dim: int, page_size: int,
+                   reps: int) -> list[dict[str, Any]]:
+    """Both paged routes on one problem, measured INTERLEAVED and repeated.
+
+    Each rep runs both routes back to back, alternating which goes first, so a
+    drifting clock or power state lands on both sides of the comparison rather
+    than on whichever route happened to run second. Every rep's latency is kept
+    (``device_samples_ms`` / ``end_to_end_samples_ms``): the spread across reps
+    is the noise floor ``separation_verdict`` needs, and without it the corpus
+    row is an unproven ranking that ``record_is_admissible`` refuses to serve
+    (Decision #11 review; the ROCm twin ``record_paged_kv_corpus.py`` does the
+    same).
+    """
     from tessera.compiler.emit.nvidia_cuda import run_paged_attention_resident_f32
 
     rng = np.random.default_rng(5070 + tokens)
@@ -144,25 +158,30 @@ def _paged_kv_row(tokens: int, heads: int, dim: int, page_size: int,
         k[physical] = logical_k[logical]
         v[physical] = logical_v[logical]
     indices = np.arange(tokens, dtype=np.int64)
-    wall: list[float] = []
-    device: list[float] = []
-    for _ in range(reps):
-        t0 = time.perf_counter_ns()
-        _, latency = run_paged_attention_resident_f32(
-            q, k, v, table, indices, scale=dim ** -.5, causal=True,
-            route=route)
-        wall.append((time.perf_counter_ns() - t0) / 1e6)
-        device.append(latency)
-    return {
+    wall: dict[str, list[float]] = {route: [] for route in _PAGED_ROUTES}
+    device: dict[str, list[float]] = {route: [] for route in _PAGED_ROUTES}
+    for rep in range(reps):
+        order = _PAGED_ROUTES if rep % 2 == 0 else tuple(reversed(_PAGED_ROUTES))
+        for route in order:
+            t0 = time.perf_counter_ns()
+            _, latency = run_paged_attention_resident_f32(
+                q, k, v, table, indices, scale=dim ** -.5, causal=True,
+                route=route)
+            wall[route].append((time.perf_counter_ns() - t0) / 1e6)
+            device[route].append(latency)
+    return [{
         "backend": "nvidia", "device": "sm_120", "op": "paged_kv_decode",
         "shape": f"1x{heads}x{tokens}x{dim}", "dtype": "f32",
         "mode": f"{route}_paged_attention", "tokens": tokens,
         "page_size": page_size, "page_mapping": "permuted",
         "causal_offset": tokens - 1,
         "boundary_relation": ("exact" if tokens % page_size == 0 else "ragged"),
-        "reps": reps, "latency_ms": _median(wall),
-        "device_latency_ms": _median(device),
-    }
+        "reps": reps, "sampling": "interleaved_alternating",
+        "latency_ms": _median(wall[route]),
+        "device_latency_ms": _median(device[route]),
+        "end_to_end_samples_ms": wall[route],
+        "device_samples_ms": device[route],
+    } for route in _PAGED_ROUTES]
 
 
 def run_benchmark(shapes: list[str], *, tokens: int, chunk: int, slots: int,
@@ -172,8 +191,8 @@ def run_benchmark(shapes: list[str], *, tokens: int, chunk: int, slots: int,
     if rt._nvidia_device_name() != "sm_120":
         return []
     rows = [_replay_row(s, tokens, chunk, slots, reps) for s in shapes]
-    rows.extend(_paged_kv_row(t, heads, dim, page_size, reps, route)
-                for t in kv_tokens for route in ("fused", "staged"))
+    for t in kv_tokens:
+        rows.extend(_paged_kv_rows(t, heads, dim, page_size, reps))
     return rows
 
 
@@ -185,19 +204,33 @@ def update_d2_corpus(rows: list[dict[str, Any]]) -> Path:
     cache = at.MeasureCache()
     at.load_corpus(cache=cache)
     groups: dict[tuple[str, str, str, str], dict[str, float]] = {}
+    spreads: dict[tuple[str, str, str, str], dict[str, float]] = {}
     for row in rows:
-        for timing, field in ((at.TIMING_DEVICE, "device_latency_ms"),
-                              (at.TIMING_END_TO_END, "latency_ms")):
+        for timing, field, samples in (
+                (at.TIMING_DEVICE, "device_latency_ms", "device_samples_ms"),
+                (at.TIMING_END_TO_END, "latency_ms", "end_to_end_samples_ms")):
             if field not in row:
                 continue
             key = (str(row["op"]), str(row["shape"]), str(row["dtype"]), timing)
             groups.setdefault(key, {})[str(row["mode"])] = float(row[field])
-    for (op, shape, dtype, timing), candidates in groups.items():
+            if samples in row:
+                spreads.setdefault(key, {})[str(row["mode"])] = at.relative_spread(
+                    [float(v) for v in row[samples]])
+    for key, candidates in groups.items():
+        op, shape, dtype, timing = key
         dims = tuple(int(v) for v in shape.split("x"))
         winner = min(candidates, key=candidates.__getitem__)
+        # A ranking of two or more modes needs its noise floor; without
+        # per-rep samples the verdict stays None and admission refuses to
+        # serve the row (an unproven ranking), which is the honest outcome.
+        noise = spreads.get(key, {})
+        separation = (at.separation_verdict(candidates, noise, winner)
+                      if set(noise) == set(candidates) else None)
         cache.put(("nvidia:sm_120", "nvidia", op,
                    bucket_key(dims, SpecPolicy.BUCKET), dtype, timing),
-                  at.MeasureRecord(winner, candidates[winner], candidates), fresh=True)
+                  at.MeasureRecord(winner, candidates[winner], candidates,
+                                   unmeasured={}, separation=separation),
+                  fresh=True)
     return at.save_corpus(cache=cache)
 
 

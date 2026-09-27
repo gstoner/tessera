@@ -22,8 +22,9 @@
 #   3. <repo>/.venv/bin             the project venv, which non-interactive
 #                                   configures do not activate
 #   4. $VIRTUAL_ENV/bin             an activated venv
-#   5. LLVM_TOOLS_BINARY_DIR        the matched LLVM's own llvm-lit / lit
-#   6. every $PATH entry, in order
+#   5. $HOME/venv/bin               a user-level venv (the old tests/ hint)
+#   6. LLVM_TOOLS_BINARY_DIR        the matched LLVM's own llvm-lit / lit
+#   7. every $PATH entry, in order
 #
 # Result: global property TESSERA_LIT_COMMAND (empty when nothing works) and
 # the cache entry TESSERA_LIT_SELECTED (INTERNAL, for inspection).  Callers
@@ -80,6 +81,10 @@ function(tessera_resolve_lit)
   set(_dirs "${_repo}/.venv/bin")
   if(DEFINED ENV{VIRTUAL_ENV} AND NOT "$ENV{VIRTUAL_ENV}" STREQUAL "")
     list(APPEND _dirs "$ENV{VIRTUAL_ENV}/bin")
+  endif()
+  if(DEFINED ENV{HOME} AND NOT "$ENV{HOME}" STREQUAL "")
+    # Kept from the old tests/ search (a user-level venv).
+    list(APPEND _dirs "$ENV{HOME}/venv/bin")
   endif()
   if(LLVM_TOOLS_BINARY_DIR)
     list(APPEND _dirs "${LLVM_TOOLS_BINARY_DIR}")

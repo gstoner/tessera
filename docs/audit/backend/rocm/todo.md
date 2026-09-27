@@ -50,8 +50,7 @@ gfx1201 host" below.
   `mirrorRealForDCT`, `padRealScalar`) — a clear there would hide those.
   `emit/rocm_hip.py` was already complete: every emitted entry that reads the
   slot clears it first. `tools/profiler/src/runtime/rocm_timing_provider.hip`
-  has the same unguarded pattern in a standalone probe and is left as a
-  follow-up.
+  had the same unguarded pattern; closed the same day (next bullet).
 - **Architecture label.** `spectral_streaming.stream_stft_chunk(target="rocm")`
   hard-coded `architecture="gfx1151"`, so gfx1201 execution certificates and
   artifact/state digests named a chip that did not run them. It now reads the
@@ -76,9 +75,25 @@ gfx1201 host" below.
   spectral test is among the failures. Princess-Luna (gfx1151): same spectral
   subset 665 passed / 18 skipped; `tests/device/rocm` 5 passed / 136 skipped
   (gfx1201-only lanes).
-- **Sibling outcomes.** NVIDIA: follow-up required (same unguarded
-  `cudaGetLastError()` pattern in the hand-written sm_120 hooks and the CUDA
-  emitter; unproven on sm_120). Apple, x86: not applicable.
+- **Timing probe (closed 2026-09-27, same branch).**
+  `collect_rocm_timing_probe` (the one entry of `rocm_timing_provider.hip`)
+  now discards errors older than the call once, first. Its two post-loop
+  `hipGetLastError()` checks are the only detectors for the probe's launches,
+  including the warmup launch's configuration error, which its
+  `hipDeviceSynchronize` need not report; every launch the timing contract
+  measures happens after the clear and is still checked, and no clear sits
+  between a launch and its check, so the clear hides nothing the contract
+  rests on. Probe (scratch driver priming `hipSetDevice(97)` = 101, proven by
+  `hipPeekAtLastError`, then `collect_rocm_timing_probe`): Princess-Luna
+  gfx1151 pre-fix clean → valid sample, primed → `error="HIP instrumented
+  launch failed"` and every validity flag false; fixed, clean and primed both
+  → valid sample. Tajasarus gfx1201 builds both (hipcc and the
+  `TPROF_WITH_HIP` CMake target) but the probe fails closed before any launch
+  (`requires exact gfx1151`), primed or not — that host cannot evaluate the
+  launch lane. `tests/unit/test_rocm_timing_provider.py` 2/2 on both boxes.
+- **Sibling outcomes.** NVIDIA: the hand-written sm_120 hooks were reproduced
+  and fixed on the RTX 5070 on the same branch (NVIDIA queue); the emitted CUDA
+  templates stay a follow-up until #861 merges. Apple, x86: not applicable.
 
 ## GFX1201 folded MXFP4 load schedule in Target IR — 2026-09-27
 

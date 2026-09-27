@@ -8,6 +8,17 @@ last_updated: 2026-09-27
 
 # Apple compiler, exact-device, and performance plan
 
+## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — not applicable (Apple contract unchanged)
+
+ROCm moved its gfx1151 softmax/reduction packagers onto the native Schedule
+contract (ROCm queue, same key). Shared code touched:
+`native_unary_contract.verify_unary_projection`, which Apple's scheduled
+softmax/reduction also calls. Apple's rule is unchanged: input and output
+storage must agree for both families, and keepdims stays refused. The mixed
+f16/bf16 -> f32 reduction exception applies only to `rocm`/`gfx1151`.
+`test_apple_scheduled_projection.py` and `test_apple_lowp_native_contract.py`
+pass on the Mac with this branch.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
 
 The ROCm spectral image read HIP's per-thread, sticky last-error slot after

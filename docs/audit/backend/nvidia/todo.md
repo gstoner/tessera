@@ -8,6 +8,19 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — follow-up required (softmax_safe admission)
+
+ROCm moved its gfx1151 softmax/reduction packagers onto the native Schedule
+contract (ROCm queue, same key). NVIDIA's unary family already made that move
+on 2026-09-05; no NVIDIA code or packet changed, and `supports_scheduled_kernel`
+for `nvidia_sm120` is unchanged (host-free tests pass on the Mac). Found while
+checking: `nvidia_native.native_package_kind` classifies `tessera.softmax_safe`
+as `softmax`, but the scheduled contract refuses it, so a `softmax_safe` module
+defaults to `package_native` and then fails to package instead of taking another
+route. ROCm now canonicalizes `softmax_safe` to `softmax` in
+`lower_scheduled_kernel`, gated to gfx1151; admitting it for sm_120 needs
+sm_120 device rows on The-Super-Bear.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — hand-written hooks fixed on sm_120; emitted templates follow-up required
 
 **Update 2026-09-27 (same branch, PR #862) — reproduced and fixed on the RTX

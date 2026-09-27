@@ -9,6 +9,17 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — follow-up required (softmax_safe admission)
+
+ROCm moved its gfx1151 softmax/reduction packagers onto the native Schedule
+contract (ROCm queue, same key). The x86 unary contract is unchanged (f32,
+last-axis, keepdims as before; `test_x86_unary_migration.py` passes on the Mac
+and on Princess-Luna). Same finding as NVIDIA: `x86_native.native_package_kind`
+classifies `tessera.softmax_safe` as `softmax`, and the scheduled x86 contract
+refuses it, so a `softmax_safe` module is selected for native packaging and then
+refused. The canonicalization now exists (gfx1151-gated); admitting it for x86
+needs owning-Zen-5 rows.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
 
 The ROCm spectral image read HIP's per-thread, sticky last-error slot after

@@ -5133,3 +5133,69 @@ slot must fail the lane. The two mma.sync attention entries are the recorded
 exception. A successful `cudaFuncSetAttribute` resets the slot (measured on
 sm_120), which masks them; they clear anyway, because the rule must not rest on
 undocumented behaviour.
+
+### 2026-09-27 — E2E-REAL-6: gfx1151 softmax and reduction retire their Graph-owned constructors
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: branch `claude/e2e-real-6-rocm-unary`.
+Sync: `E2E-REAL-6-rocm-unary-2026-09-27`.
+
+Outcome: `rocm_native.package_softmax` / `package_reduction` no longer read the
+Python Graph object to author Tile IR text. Both lower through
+`scheduled_kernel.lower_scheduled_kernel(target="rocm_gfx1151")` (tessera-opt
+Graph -> Schedule -> Tile), and `package_scheduled_kernel` replays the Schedule
+record and projects the descriptor from native IR. The Schedule contract now
+carries the envelope the retired constructors served on gfx1151: f16/f32
+softmax (including `softmax_safe`, canonicalized to the one semantic it is),
+f16/bf16/f32 sum/mean/max with f32 output, and keepdims
+(`PMPasses.cpp::getSemanticKernelSchedule`, Python `_graph_contract`,
+`native_unary_contract.verify_unary_projection`). The ROCm consumer selects the
+storage-keyed ABI and carries `nan_mode` into the descriptor (#21a/#32).
+gfx1201 keeps its proved f32 rank-reducing envelope in all three layers.
+The retired constructors are frozen in `tests/_support/rocm_unary_baseline.py`
+as the declared oracle Decision #31(a) allows; nothing in `python/` calls them.
+
+Why this family: MASTER_AUDIT §1 already named ROCm softmax/reduction first in
+the bootstrap absorption order; the compiled consumer existed for both chips
+(f32 since 2026-08-05); the Graph constructor was still the production caller
+for every narrow-storage or keepdims request; and both routes compile through
+the same `_compile_tile_ir`/`_compile_reduction_tile_ir` into images that can be
+run side by side. Paged-KV and MoE have no ROCm Schedule producer yet, and the
+NVIDIA gap families need new Schedule contracts, so neither is a one-PR move.
+
+Found on the way: the retired constructor derived the combiner from the op
+*name*, so `tessera.reduce {kind = "max"}` (what `ts.reduce(x, op="max")`
+traces to) was packaged and executed as a **sum**. The compiled route reads
+`kind`; `min`/`prod` are refused instead of summed. Kept verbatim in the
+baseline as evidence, with a device test.
+
+Measured cost (Princess-Luna, not a promotion): the HSACO is shape-invariant on
+both routes, but the compiled route's cache key binds the shape through the
+Schedule digest, so each new shape is a cold compile (~370 ms) where the retired
+route hit its cache (~186 ms). The f32 envelope has had this since 2026-08-05.
+`benchmarks/rocm/measure_rocm_unary_route_cache.py` reproduces it.
+
+Remaining: E2E-REAL-6 still owns ROCm paged-KV, MoE dispatch and forward
+attention's Graph-owned constructors, the NVIDIA and Apple gap families, the
+x86 cohort/elementwise/breadth constructors and the frontend (`_OpExtractor`).
+Follow-ups this cut exposed: key the ROCm image cache on the shape-free kernel;
+gfx1201 narrow/keepdims unary rows (device proof on Tajasarus); NVIDIA and x86
+classify `softmax_safe` as a native softmax their scheduled packagers refuse;
+`numeric_policy` keyword arguments are still ignored by every target's unary
+contract (pre-existing, unchanged).
+
+Evidence: `tests/unit/test_rocm_unary_migration.py` -- host-free differential
+over the retired envelope (28 softmax + 150 reduction cases: ABI, buffers,
+scalars, shape guards, geometry, semantic provenance, Tile-kernel attributes),
+refusal parity and the gfx1201 boundary; on Princess-Luna (gfx1151,
+`TESSERA_ROCM_E2E_DEVICE_TEST=1`) all 375 pass with no skips, including 179
+device rows in which the retired and compiled images agree bit-for-bit and
+match an oracle. On Tajasarus (gfx1201, assertions-ON LLVM/MLIR 23.1.1) the
+host-free rows and every gfx1201 scheduled device row pass (310 passed; the
+skips are the gfx1151 device rows and Darwin-only rows). Route census:
+`scripts/record_package_route_census.py` differs from main only in the ROCm
+unary rows; `bootstrap_prune_gap.md` moves `rocm_gfx1151` softmax/reduction from
+gap to generic.
+
+<!-- entry-fields:end -->

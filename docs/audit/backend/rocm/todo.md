@@ -7,6 +7,39 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## E2E-REAL-6 ROCm unary family: gfx1151 softmax/reduction retire their Graph-owned constructors — 2026-09-27
+
+Owner E2E-REAL-6 (ROCM-E2E-1/-2 route); sync `E2E-REAL-6-rocm-unary-2026-09-27`.
+
+- **Moved.** `rocm_native.package_softmax` / `package_reduction` (and the
+  driver's `package_native` fallback that reached them) now lower through the
+  native Schedule contract (`scheduled_kernel` -> `tessera-opt` Graph ->
+  Schedule -> Tile) and the replaying `package_scheduled_kernel`. The contract
+  carries the gfx1151 envelope the constructors served: f16/f32 softmax incl.
+  `softmax_safe`, f16/bf16/f32 sum/mean/max with f32 output, keepdims. The
+  consumer selects `GFX_SOFTMAX_F16_ABI` / `GFX_REDUCE_{F16,BF16}_ABI` from the
+  replayed storage and carries `nan_mode` into the descriptor.
+- **Proof (Princess-Luna, gfx1151).** `tests/unit/test_rocm_unary_migration.py`
+  with `TESSERA_ROCM_E2E_DEVICE_TEST=1`: 375 passed, 0 skipped; 179 device rows
+  run the retired image (`tests/_support/rocm_unary_baseline.py`) and the
+  compiled image on the same inputs and compare bytes, plus an oracle. ROCm
+  subset sweep (`-k rocm|gfx1151|scheduled|unary|softmax|reduc`): 5570 passed,
+  694 skipped (gfx1201 gates, Darwin), 0 failed; `check-tessera-rocm` 82/82.
+- **gfx1201 (Tajasarus).** Unchanged envelope, re-verified: every gfx1201
+  scheduled device row passes with this branch on the assertions-ON LLVM/MLIR
+  23.1.1 build; narrow-storage/keepdims unary is refused in the Schedule
+  contract, the Python contract and the consumer. **Follow-up required:**
+  gfx1201 f16 softmax and f16/bf16/keepdims reductions need their own device
+  rows before admission (the gfx1151 rows do not transfer).
+- **Defect retired.** The constructor took the combiner from the op name, so
+  `tessera.reduce {kind = "max"}` ran as a sum on gfx1151
+  (`test_exact_gfx1151_reduce_kind_max_now_computes_max` shows both).
+- **Open, measured.** The compiled route's image cache is keyed by shape (the
+  Schedule digest binds it) though the HSACO is shape-invariant: ~370 ms cold
+  per new shape vs ~186 ms warm on the retired route
+  (`benchmarks/rocm/measure_rocm_unary_route_cache.py`, Princess-Luna). Key the
+  cache on the shape-free kernel. Not a runtime-latency claim.
+
 ## Spectral image survives a stale HIP error; streaming STFT names the chip that ran — 2026-09-27
 
 Owner TSOL-POLICY-PHYS-1; sync `SPECTRAL-STALE-HIP-ERROR-2026-09-27`. Closes

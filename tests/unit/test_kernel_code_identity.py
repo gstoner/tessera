@@ -374,3 +374,19 @@ def test_rocm_candidates_derive_their_key_from_the_workload(monkeypatch, tmp_pat
     assert fa.artifact_identity(_Attn(), q, q, q)["entry"] == "fa"
     assert fa_built == [64]
     assert fa.artifact_identity(_Attn(), q, q) is None
+
+
+def test_committed_rocm_fused_rows_carry_kernel_code_identities():
+    """The gfx1151 fused_region rows are stamped with the kernel-code identity,
+    not the tessera-opt binary digest (re-recorded 2026-09-26)."""
+    import json
+
+    rows = [r for r in json.loads(AT.corpus_path().read_text())["records"]
+            if r["device"] == "rocm:gfx1151" and r["op"] == "fused_region"]
+    assert len(rows) == 8
+    for row in rows:
+        identity = row["evidence"]["delegate_identities"]["rocm_wmma_gemm"]
+        assert identity["identity"] == "kernel_code"
+        assert identity["normalization"] == KI.NORMALIZATION
+        assert identity["isa"] == "gfx1151" and identity["entry"] == "gemm"
+        assert "abi_digest" not in identity

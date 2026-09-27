@@ -114,6 +114,26 @@ could not re-race). `resource_fingerprints` in
 `record_autotune_reproducibility.py` refuses a row as a stale resource
 fingerprint, regenerate that manifest first rather than dropping the row.
 
+**Kernel-code identity (2026-09-26, ROCm plan same key): follow-up required,
+not implemented for NVIDIA.** Compiler-generated candidates are now keyed on
+the digest of the normalized instruction stream of the image they would run
+for the workload (`compiler/kernel_code_identity.py`,
+`Candidate.artifact_identity(region, *inputs)`), replacing the `tessera-opt`
+binary digest that differed on every build; proven on gfx1151 for
+`rocm_wmma_gemm` (rows served in a build tree that did not record them). The
+mechanism is generic -- a candidate overrides `artifact_identity` and returns
+`compiler_kernel_identity(key, build_image, isa=...)`, and an EMITTED candidate
+sets `requires_artifact_identity()` to `True` so an uncomputable digest misses
+-- but only the AMDGPU HSACO normalization exists. The NVIDIA EMITTED lanes
+(`nvidia_tile_matmul_*` and the other emitted PTX candidates) carry no artifact
+identity today and rely on the pins alone; adopting it needs a PTX or
+SASS-level normalization (e.g. `cuobjdump -sass`/`nvdisasm` of the loaded cubin
+with addresses and encodings stripped, or the PTX text minus its version
+header) and a Super-Bear proof that two build trees yield one digest. Not
+trivial, so not done here. The two shipped Tier-3 delegates
+(`nvidia_mma_gemm_shipped`, `nvidia_nvfp4_gemm_shipped`) keep their library
+digest. No sm_120 row was touched.
+
 ## `NVIDIA-LANE-B-1`: routes that skip Schedule IR or bypass it from Python — 2026-09-26
 
 Sync `LANE-B-SWEEP-2026-09-26` (ROCm owns the pattern: its Lane B was retired

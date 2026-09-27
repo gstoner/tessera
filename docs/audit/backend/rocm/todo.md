@@ -7,7 +7,7 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: gfx1151 corpus rows re-recorded; sm_120 owed
+## `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`: gfx1151 corpus rows re-recorded (kernel-code identity); sm_120 owed
 
 Decisions #11/#12 landed host-independently on the Mac (MASTER_AUDIT action
 item 3). The arbiter corpus (`benchmarks/baselines/autotune_corpus.json`, now
@@ -61,11 +61,64 @@ Only those 8 rows changed. Each carries
 (`sha256:701ee098...35f20c87`), and after the re-run all 8 are served hits on
 Princess-Luna. Winners unchanged and all separated: `rocm_generic_hip` at
 64x64 end to end, `rocm_wmma_gemm` at 64x64 device and at 256/512/1024 in both
-domains. Standing cost: these verdicts serve only with that `tessera-opt`
-binary. The box's main tree, or any rebuild, has a different digest and
-falls back to a live race. That is by design, because the compiler generates
-the kernel. The 8 `paged_kv_decode` rows are unaffected (their lookup applies
-no candidate identity).
+domains. Standing cost (removed by the next paragraph): these verdicts served
+only with that `tessera-opt` binary; any rebuild has a different digest and
+fell back to a live race.
+
+**Kernel-code identity (2026-09-26, owner decision; branch
+`claude/timing-foundation-kernel-identity`).** A compiler-generated candidate
+is now keyed on the code that was timed, not on the compiler binary:
+`compiler/kernel_code_identity.py` digests the normalized instruction stream
+(every `.text` function by name; each instruction's text before its `//`
+comment, whitespace-collapsed, which drops addresses, encodings and branch
+annotations) plus the decoded `<entry>.kd` kernel descriptor (VGPR/SGPR, LDS,
+scratch, float modes) of the image the candidate would run for the workload
+(`tessera.kernel_code.v1`). `rocm_wmma_gemm` identifies the fused image
+`_rocm_wmma_fused_2d` launches for `(M, N, K, bias, activation)` via
+`runtime._rocm_wmma_fused_image` (gfx11 directive kernel or the gfx12 scheduled
+package); `rocm_flash_attn` the FA-2 image at Q's head_dim via
+`runtime._rocm_flash_attn_image`. Record time stamps it per candidate
+(`Candidate.artifact_identity(region, *inputs)`); `corpus_winner` and the
+`measured_arbitrate` hit path recompute it for the live workload and serve only
+on a match. Per-process cache keyed by (candidate, kernel-selecting facts,
+`tessera-opt` digest), building through the lane's own compile cache; any
+failure (no `llvm-objdump`, no image, no operands) is a miss. The family pins
+stay in the key. The normalization mirrors
+`benchmarks/rocm/inspect_gfx1201_folded_prefill.selected_symbol_isa_evidence`,
+which sealed gfx1201 packets freeze by hash, so that function is kept as a
+declared oracle with a differential test (`tests/unit/test_kernel_code_identity.py`).
+**Proof on Princess-Luna** (log + script
+`benchmarks/baselines/autotune_corpus_rerecord_20260926/gfx1151_fused_kernel_identity.txt`,
+`check_kernel_identity.py`): worktree `~/programming/tessera-kid` clean at
+`acedf002`, two fresh build trees `build-a/`, `build-b/`. The two `tessera-opt`
+binaries differ (48 bytes: embedded build-tree paths); the four fused images are
+byte-identical across them and across the `59ecd215` tree's `tessera-opt`, and
+so are their identities (64/256/512 share one kernel, stream
+`cc3dbae2ae69ee17…`, 11560 instructions; 1024 selects another, `97baa4c06a2cb0ef…`,
+21744). Before the re-record the committed rows (stamped with the `59ecd215`
+binary's digest) were not served in `build-b` (all 8 missed); re-recorded in `build-a` under the lock
+(timer `device_event`); after it all 8 rows are **served** by `corpus_winner`
+and `measured_arbitrate` (re-measurement disabled) in `build-b`, with the
+`59ecd215` `tessera-opt`, and in `build-a`. Winners and separation unchanged
+(all separated): `rocm_generic_hip` at 64 end to end (margin 62.41% vs noise
+3.43%), `rocm_wmma_gemm` at 64 device (93.20/1.13), 256 (37.45/2.20 e2e,
+99.51/3.82 device), 512 (83.37/4.32, 99.89/3.48) and 1024 (94.58/5.32,
+99.91/0.47). Only these 8 rows changed.
+
+Limits: the WMMA images here are byte-deterministic, so this proof shows the
+identity survives a rebuild but does not itself exercise the normalization
+against build noise -- that noise is the gfx1201 folded/packed MXFP4 case
+(`gfx1201_mxfp4_producer_relabel_20260924`), which is also the evidence for the
+rule. Non-descriptor data sections (a `.rodata` table) are not digested (these
+images have none); host launch geometry is outside the image (it derives from
+the same schedule the key selects); a disassembler that printed two encodings
+identically would conflate them. gfx1201 `rocm_wmma_gemm` identity goes through
+the scheduled package's image but has no committed rows and no device proof of
+the identity path. **Open:** the 8 `paged_kv_decode` rows and
+`cache/paged_kv.py::_rocm_paged_attention_corpus_winner` carry and check no
+artifact identity at all, although both routes run `tessera-opt`-generated
+kernels (`direct`; `gather_fa` = two paged-KV reads + FA-2 with bias): a
+multi-kernel identity plus a re-record is owed (`AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`).
 
 **sm_120: owed on Super-Bear** (97 rows; see the NVIDIA plan's entry under the
 same key for the commands). gfx1201 has no committed corpus rows: not

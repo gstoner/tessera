@@ -33,6 +33,15 @@ Diagnostic transforms (not production schedules):
 ``sched0`` (GFX1201-PERF-2026-09-27)
     The per-K16-step scheduling barrier fences everything (mask 0) instead
     of letting VALU/SALU cross it (mask 6).
+``skip_idle_waves`` (GFX1201-PERF-2026-09-27)
+    A wave whose 64 rows all lie at or past M issues no WMMAs and no
+    epilogue: at M <= 128 half of the BM256 tile computes rows that are
+    never stored. The wave still stages its share of A/B and meets every
+    barrier (the branch is wave-uniform), so no other wave's data changes.
+``wave_epilogue`` (GFX1201-PERF-2026-09-27)
+    The complete-tile vector epilogue's condition is taken per wave (its
+    own 64 rows x 32 columns) instead of per CTA, so the in-bounds waves of
+    a ragged or short tile take it too. Same per-element arithmetic.
 ``probe_a_hot`` / ``probe_b_hot``
     Output-changing attribution probes: the operand's global loads read a
     cache-hot 64-byte column (``kb & 0``) instead of the K slab. They bound
@@ -62,7 +71,8 @@ from benchmarks.rocm.inspect_gfx1201_folded_prefill import (
 )
 
 
-DIAGNOSTICS = ("uncond", "lds_pipe", "lds_barrier", "sgpr_base", "sched0")
+DIAGNOSTICS = ("uncond", "lds_pipe", "lds_barrier", "sgpr_base", "sched0",
+               "skip_idle_waves", "wave_epilogue")
 PROBES = ("probe_a_hot", "probe_b_hot")
 
 _UNCOND_OLD = "for (int step = 0; step < 4 && kb + step * 16 < K; ++step) {"
@@ -182,6 +192,22 @@ _FETCH_SGPR = """  // Wave-uniform bases plus 32-bit per-lane offsets (diagnosti
 _SCHED6 = "      __builtin_amdgcn_sched_barrier(6);\n"
 _SCHED0 = "      __builtin_amdgcn_sched_barrier(0);\n"
 
+_LOOP_HEAD = "  for (long kb = 0; kb < K; kb += 64) {\n"
+_LIVE_DECL = (
+    "  // Wave-uniform: does any of this wave's 64 rows exist? (diagnostic\n"
+    "  // skip_idle_waves). A wave with none still stages and meets barriers.\n"
+    "  const bool wave_rows_live = m0 + wm * 64 < M;\n"
+)
+_STEP_GUARDED = "    for (int step = 0; step < 4 && kb + step * 16 < K; ++step) {"
+_STEP_LIVE = "    for (int step = 0; wave_rows_live && step < 4 && kb + step * 16 < K; ++step) {"
+_VECTOR_EPILOGUE_HEAD = "  // Complete-tile epilogue: every output row and column is in bounds"
+_SCALAR_EPILOGUE_HEAD = (
+    "#pragma unroll\n  for (int j = 0; j < 2; ++j) {\n"
+    "    const long n = n0 + wn * 32 + j * 16 + col;"
+)
+_CTA_COMPLETE = "  if (m0 + 256 <= M && n0 + 64 <= N && N <= 16777216 &&"
+_WAVE_COMPLETE = ("  if (m0 + wm * 64 + 64 <= M && n0 + wn * 32 + 32 <= N && N <= 16777216 &&")
+
 _A_LOAD = "value = *reinterpret_cast<const copy_u32x4 *>(A + safe * K + kb + off);"
 _B_LOAD = "value = *reinterpret_cast<const copy_u32x4 *>(B + safe * K + kb + off);"
 
@@ -212,6 +238,18 @@ def variant_source(
             if source.count(old) != 2:
                 raise RuntimeError(f"folded load-schedule template changed near {probe}")
             source = source.replace(old, old.replace("+ kb +", "+ (kb & 0) +"))
+    if "skip_idle_waves" in chosen:
+        if "uncond" in chosen:
+            raise ValueError("skip_idle_waves guards the production K16 step loop")
+        source = _once(source, _LOOP_HEAD, _LIVE_DECL + _LOOP_HEAD, "K loop head")
+        source = _once(source, _STEP_GUARDED, _STEP_LIVE, "K16 step loop")
+        head = (_VECTOR_EPILOGUE_HEAD if _VECTOR_EPILOGUE_HEAD in source
+                else _SCALAR_EPILOGUE_HEAD)
+        source = _once(source, head, "  if (!wave_rows_live) return;\n" + head, "epilogue")
+    if "wave_epilogue" in chosen:
+        if schedule.epilogue != "complete_tile_vector_scales":
+            raise ValueError("wave_epilogue rewrites the complete-tile vector epilogue")
+        source = _once(source, _CTA_COMPLETE, _WAVE_COMPLETE, "vector epilogue condition")
     if "sgpr_base" in chosen:
         if schedule.staging_prefetch != "register_next_slab":
             raise ValueError("sgpr_base rewrites the register-staged next-slab fetch")

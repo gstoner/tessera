@@ -539,11 +539,21 @@ static LogicalResult materializeFragmentStore(
                           : desc.getAccType() == "f16" ? Type(builder.getF16Type())
                           : desc.getAccType() == "bf16" ? Type(builder.getBF16Type())
                           : Type(builder.getF32Type());
+  // An epilogue may name a narrower OUTPUT storage than the accumulator: an
+  // fp32 accumulator stored as bf16 is rounded once, to nearest-even, here
+  // (the W8A8 block-scale bf16 store, GFX1201-PERF-2026-09-27). Only that
+  // pair is admitted; every other narrowing is refused, not approximated.
+  const bool narrowToBF16 = epilogue && !integer &&
+                            outputTy.isF32() &&
+                            epilogue.getOutputType() == "bf16";
+  if (narrowToBF16)
+    outputTy = builder.getBF16Type();
   if (!memrefTy || memrefTy.getRank() != 1 ||
       memrefTy.getElementType() != outputTy) {
     op->emitError("ROCM_FRAGMENT_STORE_TYPE: accumulator store requires a "
                   "rank-1 memref whose "
-                  "element type matches the declared accumulator");
+                  "element type matches the declared accumulator (or the "
+                  "epilogue's bf16 output for an f32 accumulator)");
     return failure();
   }
   Location loc = op->getLoc();
@@ -582,6 +592,8 @@ static LogicalResult materializeFragmentStore(
       if (activation != "none")
         value = tessera::tile::emitScalarFloatActivation(eb, loc, value,
                                                          activation);
+      if (narrowToBF16)
+        value = arith::TruncFOp::create(eb, loc, eb.getBF16Type(), value);
       return value;
     };
     if (!haveBounds) {
@@ -3269,7 +3281,9 @@ struct LowerTileToROCMPass
              !macroM || !macroN || !scaleBlockN ||
              desc.getAType() != "e4m3" || desc.getBType() != "e4m3" ||
              desc.getScaleFormat() != "fp32" ||
-             epilogue.getOutputType() != "f32" || epilogue.getBias() ||
+             (epilogue.getOutputType() != "f32" &&
+              epilogue.getOutputType() != "bf16") ||
+             epilogue.getBias() ||
              epilogue.getActivation() != "none" || problemM.getInt() <= 0 ||
              problemN.getInt() <= 0 || problemK.getInt() <= 0 ||
              desc.getScaleBlockK() <= 0 ||
@@ -3280,7 +3294,7 @@ struct LowerTileToROCMPass
               "ROCM_FP8_BLOCKSCALE_CONTRACT: the gfx1201 W8A8 block-scale "
               "directive requires e4m3 x e4m3, fp32 scales, a positive scale "
               "N block, whole scale groups in the static K and the macro K, "
-              "and a plain f32 store");
+              "and a plain f32 or bf16 store");
           signalPassFailure();
           return;
         }
@@ -3421,8 +3435,12 @@ struct LowerTileToROCMPass
                     ? "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
                     : packedMxfp4
                     ? "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1"
+                    : fp8W8A8NK && epilogue.getOutputType() == "bf16"
+                    ? "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
                     : fp8W8A8NK
                     ? "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+                    : fp8W8A8 && epilogue.getOutputType() == "bf16"
+                    ? "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
                     : fp8W8A8
                     ? "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
                     : "unbound"));

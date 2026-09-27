@@ -466,6 +466,10 @@ def main() -> None:
                              "lds:MMxMN:W:D:S:P:F:L (LDS body: macro tile, warps, pipeline "
                              "depth, stage K (-1 default), pad bytes (-1 default), prefetch "
                              "(-1 = carrier), layout); no AITER arm unless --with-aiter")
+    parser.add_argument("--alt-compiler", action="append", default=[],
+                        help="NAME=PATH: a second tessera-opt a sweep variant names with a "
+                             "trailing @NAME, so two compiler builds are timed paired and "
+                             "interleaved in one process (diagnostic A/B)")
     parser.add_argument("--with-aiter", action="store_true",
                         help="also time AITER alongside --sweep variants")
     parser.add_argument("--no-production", action="store_true",
@@ -474,7 +478,13 @@ def main() -> None:
     parser.add_argument("--min-window-ms", type=float, default=6.0)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    os.environ.setdefault("TESSERA_OPT", str(args.compiler.resolve()))
+    # Assigned, not defaulted: an inherited TESSERA_OPT would otherwise
+    # compile every arm with a binary other than the one recorded below.
+    os.environ["TESSERA_OPT"] = str(args.compiler.resolve())
+    alt_compilers = {}
+    for item in args.alt_compiler:
+        name, _, path = item.partition("=")
+        alt_compilers[name] = Path(path).resolve()
 
     hip = Hip()
     marker = build_marker(args.compiler)
@@ -491,6 +501,9 @@ def main() -> None:
         "source_commit": git("rev-parse", "HEAD"), "worktree_dirty": bool(git("status", "--porcelain")),
         "compiler": str(args.compiler.resolve()),
         "compiler_sha256": hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
+        "alt_compilers": {name: {"path": str(path),
+                                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                          for name, path in alt_compilers.items()},
         "timing_source": "device_clock_marker (llvm.readsteadycounter), hip_event + host wall cross-checks",
         "marker_image_sha256": marker.image_sha256, "wall_clock_rate_khz": clock.rate_khz,
         "windows": args.windows, "min_window_ms": args.min_window_ms,
@@ -525,15 +538,20 @@ def main() -> None:
             if not args.no_production:
                 variants.insert(0, (None, 1, -1, "kn", None))
         for spec in args.sweep:
+            spec, _, alias = spec.partition("@")
             parts = spec.split(":")
             if parts[0] == "lds":
                 macro = tuple(int(v) for v in parts[1].split("x"))
                 warps, depth, stage_k, pad, prefetch = (int(v) for v in parts[2:7])
-                variants.append((macro, 1, -1, parts[7], (warps, depth, stage_k, pad, prefetch)))
+                variants.append((macro, 1, -1, parts[7], (warps, depth, stage_k, pad, prefetch),
+                                 alias))
             else:
                 variants.append((tuple(int(v) for v in parts[0].split("x")), int(parts[1]),
-                                 int(parts[2]), parts[3], None))
-        for panel, unroll, group_panels, layout, lds in variants:
+                                 int(parts[2]), parts[3], None, alias))
+        for panel, unroll, group_panels, layout, lds, *rest in variants:
+            alias = rest[0] if rest else ""
+            os.environ["TESSERA_OPT"] = str(alt_compilers[alias] if alias else
+                                            args.compiler.resolve())
             if lds is not None:
                 label = (f"tessera_{layout}_lds{panel[0]}x{panel[1]}_w{lds[0]}_d{lds[1]}"
                          f"_s{lds[2]}_p{lds[3]}_f{lds[4]}")
@@ -541,6 +559,8 @@ def main() -> None:
                 label = f"tessera_{layout}"
             else:
                 label = f"tessera_{layout}_{panel[0]}x{panel[1]}_u{unroll}_g{group_panels}"
+            if alias:
+                label += f"@{alias}"
             shape = BlockScaleShape(m, n, k, 128, 128, layout)
             try:
                 launch, meta, _ = tessera_launch(hip, device, shape, panel=panel, k_unroll=unroll,

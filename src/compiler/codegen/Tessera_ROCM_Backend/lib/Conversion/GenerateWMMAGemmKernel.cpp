@@ -745,7 +745,10 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // applies the bias add and activation there, so one epilogue implementation
   // is correct on every layout. The untyped body below keeps its own gfx11
   // element loop.
-  const bool typedEpilogue = viaTile && (hasBias || activation != "none");
+  // A narrower output storage than the accumulator (the W8A8 bf16 store)
+  // rides the same store epilogue, which owns the one rounding.
+  const bool typedEpilogue =
+      viaTile && (hasBias || activation != "none" || outputType != T.accElem);
   Attribute typedEpilogueAttr;
   if (typedEpilogue) {
     StringRef outputName = outputType.isF16()   ? "f16"
@@ -1844,7 +1847,8 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
                                 int64_t staticN, int64_t staticK,
                                 int64_t scaleK, int64_t scaleN, int64_t stageK,
                                 int64_t padBytes, int64_t prefetch,
-                                StringRef rasterOrder, int64_t rasterGroup) {
+                                StringRef rasterOrder, int64_t rasterGroup,
+                                Type outputType) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -2105,19 +2109,33 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
         l, kb.create<arith::DivUIOp>(l, k0, cStageK), ci(2)));
   };
 
+  // Every barrier here orders LDS only: the global operands are read-only
+  // for the whole kernel and the output is written once after the loop by
+  // the lane that owns it, so no global access needs a workgroup fence. A
+  // plain `gpu.barrier` fences every address space, which on gfx12 lowers to
+  // a `global_inv` of the vector L0 after each wait -- measured on this body
+  // in benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/.
+  auto barrier = [&](OpBuilder &kb, Location l) {
+    kb.create<gpu::BarrierOp>(l, gpu::AddressSpace::Workgroup);
+  };
   if (prefetch != 0) {
     // Prologue: slab 0 into buffer 0.
     drain(b, loc, planA, issue(b, loc, planA, c0), Value());
     drain(b, loc, planB, issue(b, loc, planB, c0), Value());
-    b.create<gpu::BarrierOp>(loc);
+    barrier(b, loc);
   }
   auto stage = [&](OpBuilder &kb, Location l, Value k0,
                    SmallVector<Value> partial) {
     if (prefetch == 0) {
-      kb.create<gpu::BarrierOp>(l);
-      drain(kb, l, planA, issue(kb, l, planA, k0), Value());
-      drain(kb, l, planB, issue(kb, l, planB, k0), Value());
-      kb.create<gpu::BarrierOp>(l);
+      // The slab's global loads touch no LDS, so they are issued before the
+      // barrier that waits for every wave to finish reading the previous
+      // slab: their latency overlaps the slowest wave's tail.
+      SmallVector<Value> slabA = issue(kb, l, planA, k0);
+      SmallVector<Value> slabB = issue(kb, l, planB, k0);
+      barrier(kb, l);
+      drain(kb, l, planA, slabA, Value());
+      drain(kb, l, planB, slabB, Value());
+      barrier(kb, l);
       return compute(kb, l, Value(), std::move(partial));
     }
     Value kn = nextK(kb, l, k0);
@@ -2125,10 +2143,10 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     SmallVector<Value> nextB = issue(kb, l, planB, kn);
     if (prefetch == 1) {
       partial = compute(kb, l, Value(), std::move(partial));
-      kb.create<gpu::BarrierOp>(l);
+      barrier(kb, l);
       drain(kb, l, planA, nextA, Value());
       drain(kb, l, planB, nextB, Value());
-      kb.create<gpu::BarrierOp>(l);
+      barrier(kb, l);
       return partial;
     }
     Value cur = parity(kb, l, k0);
@@ -2136,7 +2154,7 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     partial = compute(kb, l, cur, std::move(partial));
     drain(kb, l, planA, nextA, nxt);
     drain(kb, l, planB, nextB, nxt);
-    kb.create<gpu::BarrierOp>(l);
+    barrier(kb, l);
     return partial;
   };
 
@@ -2177,6 +2195,12 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
 
   ValueRange accs = groupLoop.getResults();
   const bool masked = !wholeM || !wholeN;
+  // A bf16 output is the fp32 accumulator rounded once, by the store's
+  // epilogue (the architecture consumer owns the element map and the cast).
+  Attribute storeEpilogue;
+  if (outputType.isBF16())
+    storeEpilogue =
+        tessera::tile::TileEpilogueAttr::get(ctx, false, "none", "bf16");
   for (int64_t ni = 0; ni < nt; ++ni)
     for (int64_t mi = 0; mi < mt; ++mi) {
       OperationState unpack(loc, "tile.fragment_unpack");
@@ -2189,6 +2213,8 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
         store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], M, N, N});
       else
         store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], N});
+      if (storeEpilogue)
+        store.addAttribute("tile.epilogue", storeEpilogue);
       store.addAttribute("tile.layout", tileLayout);
       store.addAttribute("tile.memory", gmemRowMajor);
       b.create(store);
@@ -2680,7 +2706,9 @@ struct GenerateWMMAGemmKernelPass
           desc.getAccType() != "f32" || desc.getScaleFormat() != "fp32" ||
           desc.getScaleBlockK() <= 0 || desc.getScaleBlockK() % 16 != 0 ||
           (16 * desc.getKBlocks()) % desc.getScaleBlockK() != 0 ||
-          scaleN.getInt() <= 0 || epilogue.getOutputType() != "f32" ||
+          scaleN.getInt() <= 0 ||
+          (epilogue.getOutputType() != "f32" &&
+           epilogue.getOutputType() != "bf16") ||
           epilogue.getBias() || epilogue.getActivation() != "none" ||
           logicalM.getInt() < 16 || logicalN.getInt() < 16 ||
           logicalM.getInt() % 16 != 0 || logicalN.getInt() % 16 != 0 ||
@@ -2689,7 +2717,8 @@ struct GenerateWMMAGemmKernelPass
                       "requires the gfx1201 W8A8 block-scale carrier: e4m3 x "
                       "e4m3 m16n16k16 WMMA with f32 accumulation, fp32 scales "
                       "whose K group divides the macro K, a positive scale N "
-                      "block, a 16-aligned macro tile and a plain f32 store");
+                      "block, a 16-aligned macro tile and a plain f32 or bf16 "
+                      "store");
         return signalPassFailure();
       }
       WmmaGemmRequest request;
@@ -2700,7 +2729,9 @@ struct GenerateWMMAGemmKernelPass
       request.nt = logicalN.getInt() / 16;
       request.dtype = "e4m3";
       request.kBlocks = std::max<int64_t>(desc.getKBlocks(), 1);
-      request.output = "f32";
+      // The accumulator is fp32; the output is the carrier's epilogue storage
+      // (f32, or bf16 rounded once at the store).
+      request.output = epilogue.getOutputType().str();
       request.portableABI = true;
       request.scaleK = desc.getScaleBlockK();
       request.scaleN = scaleN.getInt();
@@ -3107,6 +3138,10 @@ struct GenerateWMMAGemmKernelPass
         StringRef output = request.output;
         if (!T.isInt && output == "f16")
           outputTy = f16Ty;
+        else if (!T.isInt && output == "bf16" && request.scaleK > 0)
+          // ROCM-FP8-BLOCKSCALE-1 only: the typed store rounds the fp32
+          // accumulator once to bf16 (the tile.epilogue output type).
+          outputTy = bf16Ty;
         else if ((!T.isInt && output != "f32") ||
                  (T.isInt && output != "i32" && output != "int32")) {
           op->emitError("generate-wmma-gemm-kernel: output type is incompatible "
@@ -3173,9 +3208,10 @@ struct GenerateWMMAGemmKernelPass
         else if (splitK)
           why = "split-K is not defined for a block-scaled matmul";
         else if (T.isInt || T.halfAccumulator || !T.accElem.isF32() ||
-                 outputTy != T.accElem || hasBias || activation != "none")
-          why = "the block-scaled contract accumulates and stores fp32 with "
-                "no fused epilogue";
+                 (outputTy != T.accElem && !outputTy.isBF16()) || hasBias ||
+                 activation != "none")
+          why = "the block-scaled contract accumulates fp32 and stores f32 or "
+                "bf16 with no fused bias or activation";
         else if (request.scaleK % T.fragK != 0 ||
                  iterationK % request.scaleK != 0)
           why = (Twine("scale_k=") + Twine(request.scaleK) +
@@ -3378,7 +3414,7 @@ struct GenerateWMMAGemmKernelPass
       // and, since 2026-09-18, int4: the typed producer hands TileToROCM an
       // i8 tile view and its fragment materializer compacts the nibbles per
       // chip (slice 1b). A reduced output type remains untyped-only.
-      if (viaTile && outputTy != T.accElem) {
+      if (viaTile && outputTy != T.accElem && !scaled) {
         op->emitError(
             "generate-wmma-gemm-kernel: typed via-tile pilot requires a GEMM "
             "stored in its accumulator type");
@@ -3461,7 +3497,8 @@ struct GenerateWMMAGemmKernelPass
             /*nt=*/nt / ldsWavesNScaled, ldsWavesMScaled, ldsWavesNScaled, T,
             request.staticM, request.staticN, request.staticK, request.scaleK,
             request.scaleN, blockscaleStage, blockscaleLdsPadBytes,
-            blockscalePrefetchMode, request.rasterOrder, request.rasterGroup);
+            blockscalePrefetchMode, request.rasterOrder, request.rasterGroup,
+            outputTy);
       } else if (scaled) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(request.bTransposed

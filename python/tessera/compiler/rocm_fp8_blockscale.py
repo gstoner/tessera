@@ -56,12 +56,31 @@ GFX_FP8_W8A8_BLOCKSCALE_NK_ABI = (
     "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k."
     "e4m3_e4m3_f32_f32.wmma_exact.v1"
 )
+#: The same two contracts with a bf16 OUTPUT: the fp32 accumulator is rounded
+#: once, to nearest-even, by the store (GFX1201-PERF-2026-09-27). A distinct
+#: ABI, because the output buffer's element type is part of the launch.
+GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI = (
+    "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k."
+    "e4m3_e4m3_f32_bf16.wmma_exact.v1"
+)
+GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI = (
+    "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k."
+    "e4m3_e4m3_f32_bf16.wmma_exact.v1"
+)
 WEIGHT_LAYOUTS = {
     "kn": (FP8_W8A8_BLOCKSCALE_CONTRACT, GFX_FP8_W8A8_BLOCKSCALE_ABI,
            "a_b_lhs_scale_rhs_scale_d_m_n_k"),
     "nk": (FP8_W8A8_BLOCKSCALE_NK_CONTRACT, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
            "a_bnk_lhs_scale_rhs_scale_d_m_n_k"),
 }
+#: (weight layout, output storage) -> package ABI.
+PACKAGE_ABIS = {
+    ("kn", "f32"): GFX_FP8_W8A8_BLOCKSCALE_ABI,
+    ("nk", "f32"): GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+    ("kn", "bf16"): GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+    ("nk", "bf16"): GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+}
+OUTPUT_STORAGES = {"f32": ("f32", "fp32", 4), "bf16": ("bf16", "bf16", 2)}
 _DIRECTIVE = "tessera_rocm.scaled_wmma_gemm"
 
 
@@ -78,10 +97,16 @@ class BlockScaleShape:
     #: (``transposeB``), K contiguous. A semantic key: it decides which
     #: matrix the bytes are, so it selects a distinct named contract.
     weight_layout: str = "kn"
+    #: The output storage: "f32" stores the fp32 accumulator; "bf16" rounds it
+    #: once (to nearest-even) at the store. Semantic: it is the Graph result's
+    #: element type, and the package ABI names it.
+    output: str = "f32"
 
     def __post_init__(self) -> None:
         if self.weight_layout not in WEIGHT_LAYOUTS:
             raise ValueError(f"weight_layout must be one of {sorted(WEIGHT_LAYOUTS)}")
+        if self.output not in OUTPUT_STORAGES:
+            raise ValueError(f"output must be one of {sorted(OUTPUT_STORAGES)}")
         if min(self.m, self.n, self.k, self.scale_k, self.scale_n) <= 0:
             raise ValueError("W8A8 block-scale extents must be positive")
         if self.scale_k % 16:
@@ -107,15 +132,16 @@ def author_blockscale_graph(shape: BlockScaleShape, *, entry: str = "w8a8_blocks
     nk = shape.weight_layout == "nk"
     b_type = f"tensor<{n}x{k}xf8E4M3FN>" if nk else f"tensor<{k}x{n}xf8E4M3FN>"
     transpose = ",\n      transposeB = true" if nk else ""
+    out = OUTPUT_STORAGES[shape.output][0]
     return f'''module attributes {{tessera.target = "rocm", tessera.arch = "gfx1201"}} {{
   func.func @{entry}(%a: tensor<{m}x{k}xf8E4M3FN>, %b: {b_type},
-                     %sa: tensor<{m}x{g}xf32>, %sb: tensor<{g}x{ng}xf32>) -> tensor<{m}x{n}xf32> {{
+                     %sa: tensor<{m}x{g}xf32>, %sb: tensor<{g}x{ng}xf32>) -> tensor<{m}x{n}x{out}> {{
     %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {{
       numeric_policy = {{accum = "fp32", execution_mode = "exact_per_block"}},
       scale_layout = {{granularity = "block", block = [{shape.scale_n}, {shape.scale_k}], format = "fp32"}}{transpose}
     }} : (tensor<{m}x{k}xf8E4M3FN>, {b_type}, tensor<{m}x{g}xf32>,
-         tensor<{g}x{ng}xf32>) -> tensor<{m}x{n}xf32>
-    return %0 : tensor<{m}x{n}xf32>
+         tensor<{g}x{ng}xf32>) -> tensor<{m}x{n}x{out}>
+    return %0 : tensor<{m}x{n}x{out}>
   }}
 }}
 '''
@@ -187,7 +213,8 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     """
     directive = _one_line(target_ir, _DIRECTIVE, _DIRECTIVE + " directive")
     carrier = _one_line(tile_ir, "tile.scaled_matmul_kernel", "tile.scaled_matmul_kernel carrier")
-    contract, package_abi, pointer_abi = WEIGHT_LAYOUTS[shape.weight_layout]
+    contract, _, pointer_abi = WEIGHT_LAYOUTS[shape.weight_layout]
+    package_abi = PACKAGE_ABIS[(shape.weight_layout, shape.output)]
     expected_strings = {
         "abi": pointer_abi,
         "physical_contract": contract,
@@ -195,7 +222,7 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
         "scale_format": "fp32",
         "partial_combine": "scale_outer_product_then_add",
         "k_step_schedule": "isolated_scale_group",
-        "output": "f32",
+        "output": shape.output,
     }
     for name, expected in expected_strings.items():
         if _string_attr(directive, name) != expected:
@@ -269,7 +296,9 @@ def package_blockscale(
     what a group computes. -1 keeps the generator's measured default (and,
     for ``blockscale_prefetch``, the carrier's pipeline depth)."""
     shape = program.shape
-    contract, package_abi, _ = WEIGHT_LAYOUTS[shape.weight_layout]
+    contract = WEIGHT_LAYOUTS[shape.weight_layout][0]
+    package_abi = PACKAGE_ABIS[(shape.weight_layout, shape.output)]
+    _, out_dtype, out_bytes = OUTPUT_STORAGES[shape.output]
     target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries, compile_state = (
         _compile_native_tile_ir(
             program.tile_ir, directive=_DIRECTIVE, family="matmul", architecture="gfx1201",
@@ -301,7 +330,7 @@ def package_blockscale(
         BufferBinding(1, "b", "input", "fp8_e4m3", 2, "row_major", 1),
         BufferBinding(2, "a_scale", "input", "fp32", 2, "row_major", 4),
         BufferBinding(3, "b_scale", "input", "fp32", 2, "row_major", 4),
-        BufferBinding(4, "o", "output", "fp32", 2, "row_major", 4),
+        BufferBinding(4, "o", "output", out_dtype, 2, "row_major", out_bytes),
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
@@ -354,7 +383,7 @@ def package_blockscale(
             "a_storage": "e4m3",
             "b_storage": "e4m3",
             "accum": "f32",
-            "output_storage": "f32",
+            "output_storage": shape.output,
             "numeric_policy": {"storage": "e4m3", "accum": "f32",
                                "execution_mode": "exact_per_block"},
             "schedule_hash": checked["schedule_hash"],
@@ -416,7 +445,11 @@ __all__ = [
     "FP8_W8A8_BLOCKSCALE_CONTRACT",
     "FP8_W8A8_BLOCKSCALE_NK_CONTRACT",
     "GFX_FP8_W8A8_BLOCKSCALE_ABI",
+    "GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI",
     "GFX_FP8_W8A8_BLOCKSCALE_NK_ABI",
+    "GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI",
+    "OUTPUT_STORAGES",
+    "PACKAGE_ABIS",
     "WEIGHT_LAYOUTS",
     "author_blockscale_graph",
     "blockscale_reference",

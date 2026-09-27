@@ -673,7 +673,9 @@ LogicalResult ScaledMatmulKernelOp::verify() {
         mma.getScaleBlockK() % mma.getK() != 0 ||
         (mma.getK() * mma.getKBlocks()) % mma.getScaleBlockK() != 0 ||
         !scaleBlockN || scaleBlockN.getInt() <= 0 || !epilogue ||
-        epilogue.getOutputType() != "f32" || epilogue.getBias() ||
+        (epilogue.getOutputType() != "f32" &&
+         epilogue.getOutputType() != "bf16") ||
+        epilogue.getBias() ||
         epilogue.getActivation() != "none" || !problemK ||
         problemK.getInt() <= 0 ||
         problemK.getInt() % mma.getScaleBlockK() != 0)
@@ -681,7 +683,7 @@ LogicalResult ScaledMatmulKernelOp::verify() {
           "gfx1201 FP8 W8A8 block-scale contract requires e4m3 x e4m3 with "
           "f32 accumulation, fp32 scales, scale_k dividing the macro K and "
           "the static K, a positive tessera.scale_block_n, and a plain f32 "
-          "store");
+          "or bf16 store");
     return success();
   }
   if (physical) {

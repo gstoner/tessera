@@ -89,6 +89,11 @@ def Schedule_MatmulOp : Op<ScheduleDialect, "matmul", [Pure]> {
                        // ROCM-FP8-BLOCKSCALE-1: the weight scale's N block
                        // (0 = not a W8A8 block-scale contract).
                        DefaultValuedAttr<I64Attr, "0">:$scale_n,
+                       // ROCM-FP8-BLOCKSCALE-1 large-M body: "global" is the
+                       // one-wave register panel, "lds" the multi-wave
+                       // LDS-staged workgroup of `warps` waves (a
+                       // performance key; it enters the digest when set).
+                       DefaultValuedAttr<StrAttr, "\"global\"">:$staging,
                        StrAttr:$accum,
                        BoolAttr:$bias,
                        StrAttr:$activation,

@@ -283,6 +283,10 @@ struct MatmulSchedule {
   int64_t macroTileN = 16;
   int64_t warps = 1;
   int64_t pipelineDepth = 1;
+  //: ROCM-FP8-BLOCKSCALE-1 large-M body: "global" (the one-wave register
+  //: panel) or "lds" (the multi-wave LDS-staged workgroup). A performance
+  //: key the W8A8 rule sets; every other schedule is "global".
+  StringRef staging = "global";
   StringRef rasterOrder = "row_major";
   int64_t rasterGroup = 1;
   bool dynamicM = false;
@@ -420,8 +424,12 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
   if (!isa<Float8E4M3FNType>(lhs.getElementType()) ||
       !isa<Float8E4M3FNType>(rhs.getElementType()))
     return refuse("the W8A8 block-scale contract binds e4m3 x e4m3 only");
-  if (!out.getElementType().isF32())
-    return refuse("the W8A8 block-scale contract stores its fp32 accumulator");
+  // The accumulator is always fp32 (numeric_policy.accum); the OUTPUT storage
+  // is the Graph result's element type -- fp32, or bf16 rounded once at the
+  // store (GFX1201-PERF-2026-09-27). Anything else has no store epilogue.
+  if (!out.getElementType().isF32() && !out.getElementType().isBF16())
+    return refuse("the W8A8 block-scale contract stores its fp32 accumulator "
+                  "as f32 or rounds it once to bf16");
   if (schedule.dynamicM || schedule.dynamicN || schedule.dynamicK)
     return refuse("the W8A8 block-scale contract requires static M, N and K");
   const int64_t groupK = schedule.scaleBlockK;
@@ -478,7 +486,7 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
   schedule.physicalContract = transposedB ? kFp8W8A8BlockScaleNKContract
                                           : kFp8W8A8BlockScaleContract;
   schedule.scaleBlockN = blockN.getInt();
-  schedule.output = "f32";
+  schedule.output = out.getElementType().isBF16() ? "bf16" : "f32";
   return success();
 }
 
@@ -503,7 +511,39 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
 //
 // Open, not taken: at 4096^3 the 64x32 panel measured 13% faster than 32x32
 // (1402 vs 1618 us) and 6% slower at 2048^3. One shape is not a rule.
+//
+// GFX1201-PERF-2026-09-27 -- the LDS-staged multi-wave body, [N, K] weight
+// only (`benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/`,
+// rule.json: 30 (M, N, K) points, device clock, paired and interleaved with
+// the register panel). Eight waves of 32 rows share one staged K slab of A
+// and the weight, so each workgroup fetches its tile once per slab instead
+// of once per wave. It needs enough workgroups to cover the RX 9070 XT's 64
+// CUs: 128x128 (waves 4x2, 32x64 each) once that tiling yields >= 64
+// workgroups, else 128x64 (waves 4x2, 32x32 each) if that does, else the
+// register panel. Measured against the register panel: 0.44-0.92x wherever
+// the rule picks the LDS body; the one-wave panel keeps every point below
+// 64 workgroups, where the LDS body's coarser tiles leave CUs idle (N=1024,
+// M=128: 25.6-45.4 us vs 20.5). Single-buffered: double-buffering and a
+// register-staged next slab both measured slower (VGPR pressure; sweep.json).
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
+  constexpr int64_t kComputeUnits = 64;
+  auto tiles = [&](int64_t tm, int64_t tn) {
+    return ((schedule.m + tm - 1) / tm) * ((schedule.n + tn - 1) / tn);
+  };
+  const bool nk =
+      schedule.physicalContract == "rocm_fp8_w8a8_blockscale_nk_v1";
+  // At least one whole 128-row block: below it the workgroup computes rows
+  // that do not exist (M=32 would waste three quarters of every tile).
+  if (nk && schedule.m >= 128 &&
+      (tiles(128, 128) >= kComputeUnits || tiles(128, 64) >= kComputeUnits)) {
+    const bool wide = tiles(128, 128) >= kComputeUnits;
+    schedule.staging = "lds";
+    schedule.warps = 8;
+    schedule.pipelineDepth = 1;
+    schedule.macroTileM = 128;
+    schedule.macroTileN = wide ? 128 : 64;
+    return;
+  }
   constexpr int64_t kMinFullPanelTiles = 256;
   const bool full = schedule.m % 32 == 0 && schedule.n % 32 == 0 &&
                     (schedule.m / 32) * (schedule.n / 32) >= kMinFullPanelTiles;
@@ -875,7 +915,12 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   // `resolveFragmentLayout` selects them from the descriptor's two types.
   if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
       isa<Float8E4M3FNType, Float8E5M2Type>(lhsElement) &&
-      isa<Float8E4M3FNType, Float8E5M2Type>(rhsElement) && outElement.isF32() &&
+      isa<Float8E4M3FNType, Float8E5M2Type>(rhsElement) &&
+      // ROCM-FP8-BLOCKSCALE-1 may also store its fp32 accumulator as bf16
+      // (GFX1201-PERF-2026-09-27); the derivation below checks the rest.
+      (outElement.isF32() ||
+       (outElement.isBF16() && scaledMatmul &&
+        schedule.scaleFormat == kFp8W8A8BlockScaleFormat)) &&
       !schedule.bias && !schedule.residual && schedule.activation == "none") {
     // OCP FP8 storage on RDNA4 (V_WMMA_F32_16X16X16_{FP8,BF8}_{FP8,BF8},
     // device-audited 2026-09-13); f32 accumulate, 1x1 register tile, no fused
@@ -1094,6 +1139,10 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
     contract += (Twine(";split_k=") + Twine(schedule.splitK) +
                  ";split_k_reduction=" + schedule.splitKReduction)
                     .str();
+  // ROCM-FP8-BLOCKSCALE-1 large-M body: appended only when set, so every
+  // register-panel schedule keeps its digest.
+  if (schedule.staging != "global")
+    contract += (Twine(";staging=") + schedule.staging).str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
 }
@@ -2632,6 +2681,9 @@ struct GraphToSchedulePass
       if (selected->scaleBlockN > 0)
         state.addAttribute("scale_n",
                            builder.getI64IntegerAttr(selected->scaleBlockN));
+      if (selected->staging != "global")
+        state.addAttribute("staging",
+                           builder.getStringAttr(selected->staging));
       state.addAttribute("accum", builder.getStringAttr(selected->accum));
       state.addAttribute("bias", builder.getBoolAttr(selected->bias));
       state.addAttribute("activation",
@@ -3655,6 +3707,7 @@ struct ScheduleToTilePass
           scheduled.getScaleFormat() != selected->scaleFormat ||
           scheduled.getPhysicalContract() != selected->physicalContract ||
           scheduled.getScaleN() != selected->scaleBlockN ||
+          scheduled.getStaging() != selected->staging ||
           scheduled.getAccum() != selected->accum ||
           scheduled.getBias() != selected->bias ||
           scheduled.getActivation() != selected->activation ||
@@ -4202,7 +4255,9 @@ struct ScheduleToTilePass
       kernelState.addAttribute("epilogue", epilogue);
       kernelState.addAttribute("warps",
                                builder.getI64IntegerAttr(selected->warps));
-      kernelState.addAttribute("staging", builder.getStringAttr("global"));
+      // "lds" only for the W8A8 LDS-staged body the Schedule selected.
+      kernelState.addAttribute("staging",
+                               builder.getStringAttr(selected->staging));
       if (selected->scaleBlockK > 0) {
         const bool foldedMxfp4 =
             selected->physicalContract == "rocm_mxfp4_w4a8_folded_prefill_v1" ||

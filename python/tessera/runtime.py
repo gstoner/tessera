@@ -4203,6 +4203,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
     from tessera.compiler.rocm_fp8_blockscale import (
         GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
     )
 
     return frozenset({
@@ -4220,9 +4221,12 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         PACKED_FOLDED_TARGET_ABI_V1,
         # ROCM-FP8-BLOCKSCALE-1: compiler-generated W8A8 block scaling,
-        # device rows in tests/device/rocm/test_fp8_blockscale_w8a8.py.
+        # device rows in tests/device/rocm/test_fp8_blockscale_w8a8.py
+        # (the bf16-output pair since GFX1201-PERF-2026-09-27).
         GFX_FP8_W8A8_BLOCKSCALE_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
     })
 
 
@@ -4466,6 +4470,7 @@ def _submit_rocm_gfx1151_native(
     )
     from tessera.compiler.rocm_fp8_blockscale import (
         GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
     )
 
     if descriptor.abi_id == GFX1201_QUARK_W4A4_PROBE_ABI:
@@ -4516,6 +4521,8 @@ def _submit_rocm_gfx1151_native(
         GFX_SPARSE_MATMUL_2TO4_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
     }:
         raise RuntimeError(f"unsupported ROCm descriptor ABI {descriptor.abi_id!r}")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
@@ -4532,12 +4539,19 @@ def _submit_rocm_gfx1151_native(
                                    GFX_MATMUL_E5M2_E4M3_F32_ABI,
                                    GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI,
                                    GFX_FP8_W8A8_BLOCKSCALE_ABI,
-                                   GFX_FP8_W8A8_BLOCKSCALE_NK_ABI}
+                                   GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+                                   GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+                                   GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI}
     # ROCM-FP8-BLOCKSCALE-1: A, B, lhs_scale, rhs_scale, D, M, N, K; the _NK
-    # ABI's weight is [N, K].
+    # ABIs' weight is [N, K]; the _BF16 ABIs store D as bf16.
     matmul_blockscale = descriptor.abi_id in {GFX_FP8_W8A8_BLOCKSCALE_ABI,
-                                              GFX_FP8_W8A8_BLOCKSCALE_NK_ABI}
-    matmul_b_nk = descriptor.abi_id == GFX_FP8_W8A8_BLOCKSCALE_NK_ABI
+                                              GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+                                              GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+                                              GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI}
+    matmul_b_nk = descriptor.abi_id in {GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+                                        GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI}
+    matmul_bf16_out = descriptor.abi_id in {GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+                                            GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI}
     matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
     split_k = 1  # ROCM-SPLIT-K-1; read from the descriptor in the matmul branch
@@ -4598,7 +4612,9 @@ def _submit_rocm_gfx1151_native(
         # accepting an e5m2 buffer as e4m3 would return wrong numbers instead.
         expected_a = _scheduled_storage_numpy_dtype(ordered[0].dtype)
         expected_b = _scheduled_storage_numpy_dtype(ordered[1].dtype)
-        expected_out = np.int32 if matmul_integer else np.float32
+        expected_out = (np.int32 if matmul_integer
+                        else _scheduled_storage_numpy_dtype("bf16") if matmul_bf16_out
+                        else np.float32)
         if (
             tuple(a.shape) != (m, k)
             or tuple(b_matrix.shape) != ((n, k) if matmul_b_nk else (k, n))
@@ -5830,6 +5846,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
     from tessera.compiler.rocm_fp8_blockscale import (
         GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+        GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
     )
 
     if (
@@ -5869,6 +5886,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX1201_QUARK_W4A4_PROBE_ABI,
             GFX_FP8_W8A8_BLOCKSCALE_ABI,
             GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+            GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+            GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
         }
         and target not in _native_launchers
     ):

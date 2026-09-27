@@ -43,7 +43,13 @@ a claim.
   interleaved_alternating_plain_bracketed`. Its launch count appears as
   `timing.batch_size = 1000` and in the device clock's
   `provenance.launches_per_window = 1000`, and it equals the row's
-  `launches_per_window`. All three sit inside `timing_sha256`.
+  `launches_per_window`. The two calibration-side values sit in the part
+  `timing_sha256` covers, and admission validates that digest before reading
+  them; the row's own count (in `comparison.json`) is not digest-covered.
+  The digests are unkeyed SHA-256, so they catch an unresealed edit, not a
+  deliberate reseal. The count is checked for consistency (including one
+  value across all 18 rows), not against the durations, which are stored per
+  launch.
 - **Per-process agreement.** All 18 packets are `promotable` on the
   `device_clock_witness` route with no ineligibility reasons. Each names its
   row's `run_id` and records source commit `0f9c29cf…` with a clean tree.
@@ -58,8 +64,9 @@ a claim.
   `ROCPROFILER_*` appear as `diagnostic_gaps`.
 
 ## Why 1000 launches per window (measured on gfx1151)
-The event bracket and the marker span differ by a roughly fixed offset per
-window. `diagnostics/launches_probe/` measured it on this box at this commit,
+The event bracket and the marker span differ by an offset per window that
+grows slowly with window length (cooperative 29.9 -> 41.6 µs, serial 54.1 ->
+73.7 µs from 100 to 1000 launches) while its share of the window falls. `diagnostics/launches_probe/` measured it on this box at this commit,
 with one clean process per variant at 100 and at 1000 launches. The summary
 is in `offset_summary.txt`:
 

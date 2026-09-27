@@ -15,7 +15,13 @@ SSD_MAX_ABS_ERROR = 1e-6
 #: comparison row) and marker-bracketed windows interleaved in alternating
 #: order, each behind one span-reset + synchronize gap. The recorder stamps it
 #: into ``timing.environment`` and the launch count into ``timing.batch_size``
-#: and the device clock's provenance -- all inside ``timing_sha256``. The
+#: and the device clock's provenance, inside the part ``timing_sha256`` covers;
+#: admission validates the stored packet first, so an edit that was not
+#: resealed is refused. The digests are unkeyed SHA-256: they catch accidental
+#: or careless edits, not a deliberate reseal, and the row's own launch count
+#: (in the comparison) is not digest-covered. The launch count is checked for
+#: consistency (calibration, device clock, row, and one value across all
+#: rows), not against the measured durations, which are stored per launch. The
 #: earlier protocol (every plain window first, then the marker compiled, then
 #: the bracketed windows) compared two GPU power states on gfx1201 (sync
 #: GFX1201-SSD-CALIBRATION-2026-09-26), so a packet without this stamp stays
@@ -139,7 +145,9 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
         return SSDAdmission(False,'paired speedup bound does not exceed five percent',lower)
     if identity[0] == 'nvidia':
         return _admit_cuda_windows(comparison,calibrations,lower)
-    from .profiler_rocm_evidence import ROCM_PROFILER_ARCHITECTURES, build_rocm_profiler_packet
+    from .profiler_rocm_evidence import (
+        ROCM_PROFILER_ARCHITECTURES, ROCmProfilerPacketError, build_rocm_profiler_packet,
+        validate_rocm_profiler_packet)
     if identity[0] != 'rocm' or identity[1] not in ROCM_PROFILER_ARCHITECTURES:
         return SSDAdmission(False,'target has no native calibration adapter',lower)
     chip = identity[1]
@@ -151,10 +159,25 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
     # calibrations from any one stale commit would pass (review).
     if stated is None or commits != {stated}:
         return SSDAdmission(False,'calibrations do not share one source commit with the comparison',lower)
+    # One launch count across every row (review): the bracket offset's share
+    # of a window depends on its length, so pairs recorded at different counts
+    # are not one measurement.
+    counts = {pair[name]['rows'][0].get('launches_per_window')
+              for pair in comparison['pairs'] for name in ('serial', 'cooperative')}
+    if len(counts) != 1:
+        return SSDAdmission(False, 'SSD_CALIBRATION_LAUNCHES_MISMATCH: rows were recorded at '
+                            f'different launch counts {sorted(map(str, counts))}', lower)
     seen = set()
     for index,pair in enumerate(comparison['pairs']):
         for offset,name in enumerate(('serial','cooperative')):
             packet = calibrations[2*index+offset]
+            # Validate the stored packet before anything reads it: its digests
+            # must match what it says (review; a stamp edited without a reseal
+            # used to reach the protocol check untouched).
+            try:
+                validate_rocm_profiler_packet(packet)
+            except ROCmProfilerPacketError as exc:
+                raise ValueError(f'stored SSD calibration does not validate: {exc}') from exc
             timing = packet['timing']
             if timing['sample_id'] in seen:
                 raise ValueError('SSD calibration sample was reused across process runs')

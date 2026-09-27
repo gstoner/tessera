@@ -413,9 +413,12 @@ matches its module fails generation. Read the counts there.
   host so the two Zen 5 lanes are distinguished; register gfx1201 and
   Zen 2 fleet packets (neither lane has one).
 0. Record evidence on the new timing routes (`WSL-TIMING-ADMISSION-2026-09-26`).
-   **Done 2026-09-26:** the gfx1151 SSD calibrated-pairs packet — the
-   production selector admits the cooperative candidate on compiler-built
-   device-clock markers, no KFD ([packet](../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md),
+   **Done 2026-09-26:** the gfx1151 SSD calibrated-pairs packet on
+   compiler-built device-clock markers, no KFD — first recorded under the
+   plain-first protocol (now superseded and refused as legacy), then
+   re-recorded interleaved, where the production selector admits the
+   cooperative candidate, lower bound 9.89×
+   ([packet](../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_interleaved_20260926/README.md),
    sync `DEVICE-CLOCK-MARKER-2026-09-26`); and the gfx1201 packet on
    Tajasarus, where the same selector admits cooperative, lower bound 9.73×
    ([packet](../../benchmarks/baselines/gfx1201_ssd_calibrated_pairs_20260926/README.md),

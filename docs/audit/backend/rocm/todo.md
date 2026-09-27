@@ -62,8 +62,12 @@ The gfx1201 serial envelope matches gfx1151's: the 4096-byte native-tape limit. 
      which the recorder stamps from the same constant). It also requires a
      launch count that equals the row's `launches_per_window` in both places
      it appears: `timing.batch_size` and the device clock's
-     `provenance.launches_per_window`. All of these fields are inside
-     `timing_sha256`.
+     `provenance.launches_per_window`, and one launch count across all 18
+     rows. **Integrity (corrected in review):** admission first validates each
+     stored calibration packet, so an edit that was not resealed is refused;
+     the digests are unkeyed SHA-256, so this is not protection against a
+     deliberate reseal, and the row's own count is not digest-covered. The
+     count is checked for consistency, not against the per-launch durations.
    - **Refusals.** Admission refuses `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`
      or `SSD_CALIBRATION_LAUNCHES_MISMATCH`; both codes are registered in
      `diagnostic_codes.py`. Legacy packets still validate as history.
@@ -91,7 +95,7 @@ Sync `DEVICE-CLOCK-MARKER-2026-09-26` (follows `WSL-TIMING-ADMISSION-2026-09-26`
 - `target_perf.apply_corpus`: every selector-eligible corpus carries its raw measurements; the environment is derived from them (a WSL measurement cannot be relabelled bare metal), each overlay must equal its raw record's `results`, the raw architecture must match the device target, and a WSL witness sample counts only if its `artifact_digests` name the computed raw-measurement digest (reviews of #855 and this branch). Binding is by digest, not yet by comparing sample clocks with the measured metric — owed with the first WSL corpus producer.
 - `benchmarks/check_ssd_admission.py` now replays calibrations carried in the comparison.
 
-**ROCm outcome: landed, with gfx1151 evidence.** [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Princess-Luna (WSL2, no KFD), every process calibrated by marker bracketing (serial 0.30–0.51%, cooperative 2.05–3.12% device-vs-event; bracketing ratio 0.9965–1.0083; each calibration bound to its row `run_id`). The production SSD selector **admits the cooperative candidate** (lower bound 9.75×), where the 2026-09-10 packet was refused for missing calibration. Follow-ups: (1) the ROCm profiler packet and SSD adapter are gfx1151-only — gfx1201 needs its own adapter (the marker already builds for gfx1201); (2) the serial native tape GPU lowering caps temporaries at 4096 bytes, so SSD comparisons are limited to `32,2,16,4` — a real limit on the incumbent, not on the method; (3) `calibrate_gfx1151.py` can now use the marker instead of events-only timing; (4) the pass's 64-bit span atomics lower to compare-and-swap loops on gfx11 (correct; their cost is inside the bracketing ratio).
+**ROCm outcome: landed, with gfx1151 evidence.** [`benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/`](../../../../benchmarks/baselines/gfx1151_ssd_calibrated_pairs_20260926/README.md): nine independent-process pairs on Princess-Luna (WSL2, no KFD), every process calibrated by marker bracketing (serial 0.30–0.51%, cooperative 2.05–3.12% device-vs-event; bracketing ratio 0.9965–1.0083; each calibration bound to its row `run_id`). The production SSD selector **admitted the cooperative candidate** (lower bound 9.75×) at the time, where the 2026-09-10 packet was refused for missing calibration. **Superseded 2026-09-26:** this packet predates the interleaved window protocol and is now refused by admission as `SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY`; the current gfx1151 evidence is `gfx1151_ssd_calibrated_pairs_interleaved_20260926` (admits cooperative, lower bound 9.89×). Follow-ups: (1) the ROCm profiler packet and SSD adapter are gfx1151-only — gfx1201 needs its own adapter (the marker already builds for gfx1201); (2) the serial native tape GPU lowering caps temporaries at 4096 bytes, so SSD comparisons are limited to `32,2,16,4` — a real limit on the incumbent, not on the method; (3) `calibrate_gfx1151.py` can now use the marker instead of events-only timing; (4) the pass's 64-bit span atomics lower to compare-and-swap loops on gfx11 (correct; their cost is inside the bracketing ratio).
 
 ## WSL timing admission — 2026-09-26
 

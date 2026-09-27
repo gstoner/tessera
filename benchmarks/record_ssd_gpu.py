@@ -221,8 +221,10 @@ def device_clock_calibration(*, device, logical, clean_program, clean_binding, r
         environment={'kernel_release': platform.release(), 'per_window_event_ns': event_ns,
                      'per_window_plain_event_ns': [ms * 1e6 for ms in plain_ms],
                      # Admission requires this stamp and checks the launch
-                     # count (batch_size, provenance) against the row; all of
-                     # it is inside timing_sha256.
+                     # count (batch_size, provenance) against the row. These
+                     # sit in the part timing_sha256 covers, and admission
+                     # validates that digest, but it is unkeyed: it catches an
+                     # unresealed edit, not a deliberate reseal.
                      'window_protocol': SSD_CALIBRATION_WINDOW_PROTOCOL,
                      'per_window_host_ns': host_ns, 'run_id': run_id, 'process_id': os.getpid(),
                      'device_identity': identity})

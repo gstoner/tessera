@@ -1,5 +1,13 @@
 import copy
 import pytest
+
+
+def _reseal_rocm(packet):
+    """Recompute a ROCm calibration's digests after an edit, as a forger would."""
+    from tessera.compiler.profiler_rocm_evidence import _digest
+    packet['timing_sha256'] = _digest(packet['timing'])
+    packet.pop('packet_sha256', None)
+    packet['packet_sha256'] = _digest(packet)
 from benchmarks.compare_ssd_variants import summarize
 
 
@@ -81,12 +89,28 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
     with pytest.raises(ValueError, match='absolute admission tolerance'):
         bind_measured_ssd(incumbent,candidate,bad,calibrations)
     # Altering the eligibility bit cannot bypass the native environment gate.
+    # Each edit is resealed (the unkeyed digest would refuse it first); the
+    # stored packet's own validation then re-derives its reasons, so a forged
+    # eligibility bit is refused before the rebuild even runs.
+    pristine = copy.deepcopy(calibrations)
     calibrations[0]['timing']['execution_environment'] = 'wsl2'
     calibrations[0]['eligible_for_promotion'] = True
-    with pytest.raises(ValueError,match='WSL'):
+    _reseal_rocm(calibrations[0])
+    with pytest.raises(ValueError,match='WSL|BARE_METAL_REQUIRED'):
         bind_measured_ssd(incumbent,candidate,comparison,calibrations)
-    for clock in calibrations[0]['timing']['clocks'].values():
+    # An honestly ineligible calibration (WSL environment, no clock eligible
+    # for promotion), built by the builder rather than hand-edited, is a
+    # consistent packet that validates -- and admission refuses it.
+    calibrations = copy.deepcopy(pristine)
+    ineligible = copy.deepcopy(calibrations[0]['timing'])
+    ineligible['execution_environment'] = 'wsl2'
+    for clock in ineligible['clocks'].values():
         clock['eligible_for_promotion'] = False
+    images = calibrations[0]['instrumentation_comparison']
+    calibrations[0] = build_rocm_profiler_packet(
+        timing=ineligible, capture=calibrations[0]['capture'],
+        uninstrumented=images['uninstrumented'], instrumented=images['instrumented'],
+        source=calibrations[0]['source'])
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations)
     assert bound == 'serial' and not decision.admitted
     comparison['pairs'][0]['cooperative']['rows'][0]['image_sha256'] = 'foreign'
@@ -138,6 +162,11 @@ def test_ssd_admits_a_wsl_device_clock_witness_calibration():
     # A calibration naming another process's run is refused (review).
     stolen = calibrations(10_100)
     stolen[0]['timing']['environment']['run_id'] = 'someone-else'
+    # Unresealed, the stored packet's own digest refuses it first (review).
+    with pytest.raises(ValueError, match='does not validate'):
+        bind_measured_ssd(incumbent,candidate,comparison,stolen)
+    # Resealed (the digests are unkeyed), the run binding still refuses it.
+    _reseal_rocm(stolen[0])
     with pytest.raises(ValueError, match='measured process run'):
         bind_measured_ssd(incumbent,candidate,comparison,stolen)
     # Calibrations from two source commits cannot be mixed.
@@ -329,3 +358,23 @@ def test_committed_calibrations_carry_the_protocol_admission_reads(packet, admit
         assert refusals == [None] * 18
     else:
         assert all(r and r.startswith('SSD_CALIBRATION_WINDOW_PROTOCOL_LEGACY') for r in refusals)
+
+
+def test_rows_recorded_at_different_launch_counts_are_one_measurement_refused(monkeypatch):
+    """Review (2026-09-26): each calibration matched only its own row, so a
+    serial incumbent at one launch count could pair with a candidate at
+    another. The bracket offset's share of a window depends on its length, so
+    every row must share one count."""
+    import sys
+    module = sys.modules[__name__]
+    original = module.evidence
+
+    def mixed():
+        pairs = original()
+        pairs[0]['cooperative']['rows'][0]['launches_per_window'] = 20
+        return pairs
+
+    monkeypatch.setattr(module, 'evidence', mixed)
+    bound, decision = _witness_admission('gfx1151', 'gfx1151')
+    assert bound == 'serial' and not decision.admitted
+    assert 'different launch counts' in decision.reason

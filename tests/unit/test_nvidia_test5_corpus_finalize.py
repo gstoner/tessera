@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 PATH = Path(__file__).parents[2] / "benchmarks/nvidia/finalize_test5_corpus.py"
 SPEC = importlib.util.spec_from_file_location("finalize_test5", PATH)
@@ -97,3 +99,23 @@ def test_unstable_fresh_evidence_never_transplants_identities_onto_a_prior_row()
     assert row["winner"] == "shared"
     assert row["evidence"]["delegate_identities"] == ids
     assert row["evidence"]["selector_eligible"] is False
+
+
+
+@pytest.mark.parametrize("field,first,second", [
+    ("delegate_identities",
+     {"direct": {"source_sha256": "run1"}}, {"direct": {"source_sha256": "run2"}}),
+    ("delegate_identities", {"direct": {"source_sha256": "run1"}}, None),
+    ("toolchain_digest", "sha256:before", "sha256:after"),
+])
+def test_runs_that_timed_different_code_are_refused(field, first, second):
+    """AUTOTUNE-EMITTED-IDENTITY-2026-09-27 review: the merged row takes its
+    stamps from the second run and its winner from both. Two runs that timed
+    different code (a rebuild or emitter change between them) would publish
+    run 2's identities over a consensus that partly measured run 1's code."""
+    left, right = _row("direct"), _row("direct")
+    left["evidence"] = {field: first}
+    right["evidence"] = {field: second} if second is not None else {}
+    with pytest.raises(ValueError, match=field):
+        mod.merge({"version": 4, "records": []}, {"records": [left]},
+                  {"records": [right]}, {"routes": {"direct": ["sha256:r"]}})

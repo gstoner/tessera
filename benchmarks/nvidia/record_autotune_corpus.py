@@ -57,7 +57,7 @@ def _unstamped(cache: object, before_store: dict) -> list[str]:
             continue
         stamped = record.evidence.get("delegate_identities") or {}
         for name in sorted(record.candidates):
-            if name not in stamped:
+            if not stamped.get(name):    # absent, or `{}` naming no code
                 missing.append(f"{key}: {name}")
     return missing
 

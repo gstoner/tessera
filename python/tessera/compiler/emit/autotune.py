@@ -282,7 +282,9 @@ def _record_matches_live_delegates(rec: MeasureRecord,
             identity = cand.artifact_identity(region, *inputs)
         except Exception:  # noqa: BLE001 - an unidentifiable artifact cannot match
             return False
-        if identity is None or recorded.get(name) != identity:
+        # An empty identity names no code: it is a miss exactly like None,
+        # or a lane returning `{}` would match a row stamped `{}` forever.
+        if not identity or recorded.get(name) != identity:
             return False
     return True
 
@@ -297,7 +299,7 @@ def _delegate_identities(candidates: Mapping[str, Any], region: Any = None,
             identity = cand.artifact_identity(region, *inputs)
         except Exception:  # noqa: BLE001 - leave it unstamped: every later hit misses
             continue
-        if identity is not None:
+        if identity:                # `{}` names no code: leave it unstamped
             out[name] = dict(identity)
     return out
 

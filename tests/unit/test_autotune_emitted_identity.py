@@ -384,6 +384,50 @@ def test_composed_spectral_lane_carries_its_inner_fft():
     assert {f"inner.{k}": v for k, v in inner_ident.items()}.items() <= ident.items()
 
 
+class _FallbackFFT(Candidate):
+    """A second applicable FFT lane: `_inner_fft` falls through to it when the
+    first raises or declines at run time."""
+
+    name = "eid_fallback_fft"
+    tier = Tier.SYNTHESIZED
+    code = "v1"
+
+    def __init__(self, target, op):
+        self.target, self.op = target, op
+
+    def artifact_identity(self, region, *inputs):
+        return {"identity": "fake", "code": self.code}
+
+    def run(self, region, x, *a, **k):
+        return region.reference(x), "eid_fallback"
+
+
+def test_composed_spectral_lane_carries_every_inner_lane_it_may_fall_to(monkeypatch):
+    """Review 2026-09-27: `_inner_fft` tries the next applicable lane when the
+    first raises or declines (a data-dependent branch), so the composed
+    identity must change when that fallback's code changes."""
+    from tessera.compiler.emit import spectral_candidates as SC
+
+    target = "eid_spectral"
+    first = _FallbackFFT(target, SC.OP_SPECTRAL_FFT)
+    first.name, first.code = "eid_first_fft", "first"
+    fallback = _FallbackFFT(target, SC.OP_SPECTRAL_FFT)
+    rfft = SC.RFFTCandidate()
+    rfft.target = target
+    for cand in (first, fallback):
+        C.register_candidate(cand)
+    try:
+        before = rfft.artifact_identity(SC.SpectralRFFTRegion(64))
+        assert before is not None, EI.miss_reason(rfft.name)
+        assert before["inner_lane.name"] == "eid_first_fft"
+        assert before["inner_fallback0.name"] == "eid_fallback_fft"
+        fallback.code = "v2"
+        assert rfft.artifact_identity(SC.SpectralRFFTRegion(64)) != before
+    finally:
+        C.unregister_candidate(first)
+        C.unregister_candidate(fallback)
+
+
 # ── the Codex scenario, end to end ──────────────────────────────────────────
 
 _EID_TARGET = "eid_codex_rocm"
@@ -487,7 +531,14 @@ class _OptsOut(_NoIdentity):
         return False
 
 
-@pytest.mark.parametrize("cls", [_NoIdentity, _OptsOut])
+class _EmptyIdentity(_NoIdentity):
+    """`{}` names no code; stamped and matched it would serve forever."""
+
+    def artifact_identity(self, region, *inputs):
+        return {}
+
+
+@pytest.mark.parametrize("cls", [_NoIdentity, _OptsOut, _EmptyIdentity])
 def test_a_candidate_without_an_identity_is_never_served(cls):
     tgt = f"eid_none_{cls.__name__}"
     cand = cls(f"eid_none_{cls.__name__}", tgt)
@@ -528,3 +579,158 @@ def test_an_identity_that_raises_is_a_miss_with_a_reason():
 def test_composite_identity_refuses_a_missing_part():
     with pytest.raises(EI.EmittedIdentityUnavailable):
         EI.composite_identity({"a": {"x": "1"}, "b": None})
+
+
+# ── the identity describes what the compiler is actually handed ─────────────
+#
+# The tests above prove an identity changes when the function it reads
+# changes. That is necessary and not sufficient: an identity digested from a
+# different emit (another raster, spec, dtype or storage) or a flag list the
+# compile step does not use would pass them and still describe code nobody
+# timed. These drive each lane's real `run` with the compiler intercepted at
+# `subprocess.run`, and require the identity to equal the digest of the exact
+# source text and the exact command line the compile step received.
+
+_SRC_SUFFIXES = (".cu", ".hip", ".c")
+
+
+class _Compiled(Exception):
+    """Raised by the intercepted compiler: the lane then declines to the
+    reference, having handed over what it would have compiled."""
+
+
+def _capture_compiles(monkeypatch, compiler_names):
+    seen: list[tuple[list[str], str]] = []
+
+    def fake_run(argv, *a, **k):
+        argv = [str(x) for x in argv]
+        if argv[0].rsplit("/", 1)[-1] not in compiler_names:
+            raise AssertionError(f"unexpected tool: {argv[0]}")
+        src = next(x for x in argv[1:] if x.endswith(_SRC_SUFFIXES))
+        with open(src) as f:
+            seen.append((argv, f.read()))
+        raise _Compiled(argv[0])
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return seen
+
+
+def _build_line(argv, name):
+    """The identity's build line from a real compile command: the compiler by
+    name and every flag, without the source/output paths."""
+    out, skip = [name], False
+    for part in argv[1:]:
+        if skip:
+            skip = False
+        elif part == "-o":
+            skip = True
+        elif not part.endswith(_SRC_SUFFIXES):
+            out.append(part)
+    return " ".join(out)
+
+
+def _assert_identity_is(ident, text, argv, name, prefix=""):
+    assert ident is not None
+    entry = ident[f"{prefix}entry"]
+    assert ident[f"{prefix}source_sha256"] == EI._units_digest([(entry, text)]), (
+        "the identity digests different source than the compile step received")
+    assert ident[f"{prefix}build"] == _build_line(argv, name), (
+        "the identity names different flags than the compile step used")
+
+
+def _fresh_compile_caches(monkeypatch):
+    from tessera.compiler.emit import kernel_cache as KC
+    from tessera.compiler.emit import nvidia_cuda as N
+
+    monkeypatch.setattr(KC, "_DEFAULT_CACHE", KC.KernelCache())
+    for attr in ("_mma_fused_fn_cache", "_mma_attn_fn_cache", "_mma_gated_fn_cache"):
+        monkeypatch.setattr(N, attr, {})
+
+
+@pytest.mark.parametrize("name,region", [
+    ("nvidia_generic_cuda",
+     lambda: F.FusedRegion(epilogue=("bias", "gelu"), storage_dtype="f32")),
+    ("nvidia_mma_fused",
+     lambda: F.FusedRegion(epilogue=("bias", "relu"), storage_dtype="f16")),
+    ("nvidia_mma_fused_fp8_e4m3",
+     lambda: F.FusedRegion(epilogue=("bias",), storage_dtype="fp8_e4m3")),
+])
+def test_nvidia_fused_identity_is_what_nvcc_receives(monkeypatch, name, region):
+    pytest.importorskip("ml_dtypes")
+    _fresh_compile_caches(monkeypatch)
+    cand = _candidate("nvidia", OP_FUSED_REGION, name)
+    reg, ins = region(), _mm()
+    ident = cand.artifact_identity(reg, *ins)
+    seen = _capture_compiles(monkeypatch, {"nvcc"})
+    monkeypatch.setenv("TESSERA_NVCC", "/opt/some/toolkit/bin/nvcc")
+    _, tag = cand.run(reg, *ins)
+    assert tag == "reference" and len(seen) == 1, seen
+    _assert_identity_is(ident, seen[0][1], seen[0][0], "nvcc")
+
+
+def test_nvidia_gated_identities_are_what_nvcc_receives(monkeypatch):
+    pytest.importorskip("ml_dtypes")
+    rng = np.random.default_rng(1)
+    a = rng.standard_normal((16, 32)).astype(np.float32)
+    wg = rng.standard_normal((32, 16)).astype(np.float32)
+    wu = rng.standard_normal((32, 16)).astype(np.float32)
+    for name, storage in (("nvidia_gated", "f32"), ("nvidia_mma_gated_bf16", "bf16")):
+        _fresh_compile_caches(monkeypatch)
+        cand = _candidate("nvidia", "gated_matmul", name)
+        reg = F.GatedMatmulRegion(gate_act="silu", storage_dtype=storage)
+        ident = cand.artifact_identity(reg, a, wg, wu)
+        seen = _capture_compiles(monkeypatch, {"nvcc"})
+        cand.run(reg, a, wg, wu)
+        assert len(seen) == 1, (name, seen)
+        _assert_identity_is(ident, seen[0][1], seen[0][0], "nvcc")
+
+
+def test_mma_attention_identity_covers_both_arms_it_may_compile(monkeypatch):
+    """`nvidia_mma_attn_*` compiles its tensor-core kernel for a small, tame
+    workload and the scalar flash kernel past the envelope (a data-dependent
+    branch). Each arm's real compile must match its part of the identity."""
+    pytest.importorskip("ml_dtypes")
+    from tessera.compiler.emit import nvidia_cuda as N
+
+    cand = _candidate("nvidia", "attention", "nvidia_mma_attn_bf16")
+    reg = F.AttentionRegion(scale=0.125, storage_dtype="bf16")
+    rng = np.random.default_rng(2)
+    q, k, v = (rng.standard_normal((16, 16)).astype(np.float32) * 0.1
+               for _ in range(3))
+    ident = cand.artifact_identity(reg, q, k, v)
+    for arm, scale in (("mma", 1.0), ("scalar_fallback", 10 * N._MMA_ATTN_ABS_CAP)):
+        _fresh_compile_caches(monkeypatch)
+        seen = _capture_compiles(monkeypatch, {"nvcc"})
+        cand.run(reg, q * scale, k, v)
+        assert len(seen) == 1, (arm, seen)
+        _assert_identity_is(ident, seen[0][1], seen[0][0], "nvcc", prefix=f"{arm}.")
+
+
+def test_rocm_generic_identity_is_what_hipcc_receives(monkeypatch):
+    _fresh_compile_caches(monkeypatch)
+    monkeypatch.setenv("TESSERA_ROCM_ARCH", "gfx1201")
+    cand = _candidate("rocm", OP_FUSED_REGION, "rocm_generic_hip")
+    reg, ins = F.FusedRegion(epilogue=("bias", "gelu")), _mm()
+    ident = cand.artifact_identity(reg, *ins)
+    seen = _capture_compiles(monkeypatch, {"hipcc"})
+    cand.run(reg, *ins)
+    assert len(seen) == 1, seen
+    _assert_identity_is(ident, seen[0][1], seen[0][0], "hipcc")
+
+
+def test_x86_generic_identity_is_what_cc_receives(monkeypatch):
+    from tessera.compiler.emit import x86_c
+
+    try:
+        EI.compiler_version(x86_c._cc())
+    except EI.EmittedIdentityUnavailable:
+        pytest.skip("no host C compiler to name")
+    _fresh_compile_caches(monkeypatch)
+    monkeypatch.setattr(x86_c, "host_supports_x86_64_v4", lambda: True)
+    cand = _candidate("x86", OP_FUSED_REGION, "x86_generic_c")
+    reg, ins = F.FusedRegion(epilogue=("bias", "gelu")), _mm()
+    ident = cand.artifact_identity(reg, *ins)
+    seen = _capture_compiles(monkeypatch, {x86_c._cc().rsplit("/", 1)[-1]})
+    cand.run(reg, *ins)
+    assert len(seen) == 1, seen
+    _assert_identity_is(ident, seen[0][1], seen[0][0], "cc")

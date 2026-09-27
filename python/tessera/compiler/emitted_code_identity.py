@@ -252,7 +252,7 @@ def identify(owner: str, build_identity: Callable[[], Mapping[str, str] | None]
     except Exception as exc:  # noqa: BLE001 - any failure to identify is a miss
         _MISS_REASONS[owner] = f"{type(exc).__name__}: {exc}"
         return None
-    if identity is None:
+    if not identity:
         _MISS_REASONS[owner] = ("returned no identity (no workload operands, or a "
                                 "region this lane does not run)")
         return None

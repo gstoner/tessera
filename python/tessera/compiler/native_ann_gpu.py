@@ -301,6 +301,8 @@ class NativeANNDeviceCandidate(Candidate):
         device_region=self.registration.region
         digest=(device_region.transformed_digest if self.transformed
                 else device_region.original_digest)
+        if not digest:
+            return None               # no package digest: no identity, a miss
         return {"identity":"native_package","binding_digest":str(digest),
                 "backend":str(device_region.backend),"chip":str(device_region.chip),
                 "program":"transformed" if self.transformed else "original"}

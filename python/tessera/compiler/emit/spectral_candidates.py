@@ -1581,6 +1581,10 @@ class _ComposedSpectralCandidate(Candidate):
         identity of the inner FFT lane `_inner_fft` / `_inner_fft_rows` would
         pick for this region -- the first applicable, available
         ``spectral_fft`` candidate for this target, in registration order.
+        Those helpers fall through to the NEXT such candidate when one raises
+        or declines at run time (a data-dependent branch), so every later
+        applicable, available candidate is carried too, as ``inner_fallback<i>``
+        -- a false miss when only an untaken one changes, never a false hit.
         The Python part is an approximation: numpy itself is not covered."""
         from tessera.compiler.emit.candidate import candidates_for
         from tessera.compiler.emitted_code_identity import (
@@ -1592,17 +1596,23 @@ class _ComposedSpectralCandidate(Candidate):
         def build_identity() -> "dict[str, str] | None":
             n = int(getattr(region, self.inner_len_attr, 0) or 0)
             inner_region = SpectralFFTRegion(n=n, sign=self.inner_sign)
-            inner = next((c for c in candidates_for(self.target, OP_SPECTRAL_FFT)
-                          if c.applies_to(inner_region) and c.available()), None)
-            if inner is None:
+            inners = [c for c in candidates_for(self.target, OP_SPECTRAL_FFT)
+                      if c.applies_to(inner_region) and c.available()]
+            if not inners:
                 return None
-            return composite_identity({
+            inner, fallbacks = inners[0], inners[1:]
+            parts: dict[str, Any] = {
                 "compose": python_code_identity(
                     type(self).run, _hermitian_full, _inner_fft,
                     _inner_fft_rows, lane=self.name),
                 "inner": inner.artifact_identity(inner_region),
                 "inner_lane": {"name": inner.name},
-            })
+            }
+            for i, other in enumerate(fallbacks):
+                ident = other.artifact_identity(inner_region)
+                parts[f"inner_fallback{i}"] = (
+                    None if ident is None else {"name": other.name, **ident})
+            return composite_identity(parts)
 
         return identify(self.name, build_identity)
 

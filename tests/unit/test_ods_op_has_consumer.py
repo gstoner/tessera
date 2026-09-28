@@ -76,6 +76,10 @@ class Waiver(NamedTuple):
     owner: str | None = None
 
 
+# Per-op connection triage (capability, where it should connect, and a WIRE /
+# #29a / merge / delete-candidate recommendation for every entry below):
+# docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md.
+#
 # Family reasons, measured 2026-09-27. "No static reference" leaves one door
 # open that no scan can close: a name assembled at run time
 # (`f"tessera.{kind}"`) is invisible here, so confirm before deleting.
@@ -83,9 +87,9 @@ _R_CACHE = ("cache dialect KV/page/ring ops: no pass, lowering, verifier or Pyth
             "emitter names them; the KV cache lowers through `tessera.kv_cache.*` "
             "and runtime handles instead")
 _R_TESSERA_CACHE = "Graph-level page lookup with no producer or lowering"
-_R_SOLVER_CORE = ("solvers/core dialect (`trng`/`tsl`/`tss`): its .td is built by "
-                  "CMake, but no C++ outside `solvers/core/dialects` and no Python "
-                  "names these ops")
+_R_SOLVER_CORE = ("solvers/core dialect (`trng`/`tsl`/`tss`): CMake runs TableGen "
+                  "only (an INTERFACE library nothing compiles or registers), so no "
+                  "tool can parse these ops; no C++ or Python names them")
 _R_SOLVER_LINALG = ("linalg solver op with no producer or lowering; `potrf`/`potrs` "
                     "appear only in the `spd_solve.mlir` fixture")
 _R_COLLECTIVE = ("collective dialect op with no producer or lowering in the "
@@ -108,14 +112,17 @@ _R_ATTN_RES = ("block-AttnRes state op: the Python `_block_attnres_ops` referenc
                "fixtures name it")
 _R_FIXTURE_ONLY = "named only by lit fixtures / unit tests; no compiler producer or consumer"
 _R_UNREFERENCED = "nothing outside its own .td names it"
-_R_CATALOG_ONLY = ("Graph op named by the op catalog (a list of names, which is a "
-                   "declaration, not a consumer) and by tests; no pass or emitter "
-                   "produces or consumes it")
+_R_CATALOG_ONLY = ("Graph op named by the op catalog and by tests; the scan does not "
+                   "count the catalog, but `graph_ir._try_map_call` emits catalog "
+                   "names from @jit bodies, so the frontend PRODUCES it -- what is "
+                   "missing is a lowering consumer")
 _R_CLIFFORD_CALCULUS = ("geometric-calculus op (derivative/integral) with no "
                         "producer and no lowering in the Clifford passes")
 _R_ATTN_MASK = "FA-4 Attn Tile IR mask/LSE op with no producer; FA-4 lowering does not emit it"
-_R_MOE = ("programming-model MoE op with no producer or lowering; the MoE "
-          "transport tests exercise the Python API, not this op")
+_R_MOE = ("programming-model MoE op with no producer or lowering; its dialect is "
+          "TableGen-only (never compiled or registered) and its fixture's RUN pass "
+          "does not exist; the MoE transport tests exercise the Python API and the "
+          "Graph `tessera.moe_dispatch`, not this op")
 
 
 #: Shrink-only (ceiling below). Seeded 2026-09-27 from the first scan that
@@ -157,13 +164,22 @@ _WAIVED: dict[str, Waiver] = {
     **{name: Waiver("unreferenced", "#29", _R_ARCH) for name in (
         "tessera.arch.weighted_sum", "tessera.arch.switch", "tessera.arch.mixed")},
     "tessera.arch.parameter": Waiver("fixture_only", "#29", _R_ARCH),
-    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH) for name in (
-        "tessera.ebm.inner_step", "tessera.ebm.decode_init", "tessera.ebm.self_verify",
+    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH + "; the frontend emits the "
+                    "flat spelling (`tessera.ebm_inner_step` / `ebm_self_verify`) the "
+                    "runtime consumes instead (triage: merge/supersede)") for name in (
+        "tessera.ebm.inner_step", "tessera.ebm.self_verify")},
+    "tessera.ebm.decode_init": Waiver("fixture_only", "#29", _R_EBM_GRAPH),
+    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH + "; the compiled capability "
+                    "is `tessera_ebm.langevin_step{manifold}` (native_langevin.py -> "
+                    "LowerLangevin), triage: merge/supersede") for name in (
         "tessera.ebm.bivector_langevin_step", "tessera.ebm.sphere_langevin_step")},
     **{name: Waiver("fixture_only", "#29", _R_ATTN_RES) for name in (
         "tessera.attn_with_stats", "tessera.softmax_merge", "tessera.softmax_finalize")},
     "tessera.guided_denoise_region": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
-    "tessera.istft_jvp": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    "tessera.istft_jvp": Waiver(
+        "fixture_only", "#29", "produced by `ISTFTOp::buildTangent` "
+        "(TangentInterface.cpp) under --tessera-autodiff-forward, which the scan "
+        "reads as the dialect's own implementation; nothing lowers it"),
     # Added 2026-09-27 by the review that closed three fail-open holes; each
     # was "consumed" only through one of them.
     "tessera.arch.ste_one_hot": Waiver(
@@ -175,14 +191,18 @@ _WAIVED: dict[str, Waiver] = {
     "tessera.ebm.langevin_step_philox": Waiver(
         "fixture_only", "#29", _R_EBM_GRAPH + "; the runtime kernels mirror its "
         "semantics, and its only other mention was prose in an execution-matrix "
-        "`reason=` string"),
+        "`reason=` string; the compiled executors run its Philox semantics under "
+        "the name `tessera.ebm.langevin_step`"),
     "tessera_nvidia.func": Waiver(
         "fixture_only", "#29", "NVIDIA Target IR container op named only by "
         "fixtures; the bare `FuncOp` in PipelineOverlapPass.cpp is "
         "`using mlir::func::FuncOp`, not this op"),
     "tessera.ring.create": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
     # Tile / Attn / domain dialects
-    "tile.tmem.store": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    "tile.tmem.store": Waiver(
+        "fixture_only", "#29", "consumed through a prefix match and default branch "
+        "(`starts_with(\"tile.tmem.\")` -> `tessera_nvidia.tmem_store` in "
+        "NVIDIALowering.cpp), which a name scan cannot credit; make the branch explicit"),
     **{name: Waiver("fixture_only", "#29", _R_ATTN_MASK) for name in (
         "tessera_attn.lse.save", "tessera_attn.lse.load", "tessera_attn.causal_mask")},
     "tessera_attn.dropout_mask": Waiver("unreferenced", "#29", _R_ATTN_MASK),

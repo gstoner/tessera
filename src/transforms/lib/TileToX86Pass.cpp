@@ -515,6 +515,109 @@ struct LowerKVCacheToX86 : public RewritePattern {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ODS-WIRE-3 — `tessera.cache.commit` / `tessera.cache.rollback` through a
+// HANDLE ABI.
+//
+// These SD1-3 cursor ops thread their `!tessera.kv_cache` value-to-value, so
+// their result is always used -- exactly the case `LowerKVCacheToX86` above
+// refuses, and its kind-only call could not carry the handle or the count
+// anyway. They lower instead to the handle ABI in kv_cache_f32.cpp:
+//
+//   %h  = builtin.unrealized_conversion_cast %cache : !tessera.kv_cache to !llvm.ptr
+//   %n  = arith.index_cast %count : index to i64
+//   %h2 = func.call @tessera_x86_kv_cache_{commit,rollback}_f32(%h, %n)
+//             : (!llvm.ptr, i64) -> !llvm.ptr
+//   %c2 = builtin.unrealized_conversion_cast %h2 : !llvm.ptr to !tessera.kv_cache
+//
+// and every use of the op's result is rewired to %c2, so a commit feeding a
+// rollback becomes a call chain on the handle pointer once the cast pairs
+// fold. The function boundary keeps `!tessera.kv_cache` (a cast at each end):
+// giving the handle a native signature type is the job of the pass that
+// converts cache-typed function arguments, which does not exist yet.
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct LowerKVCacheCursorToX86 : public RewritePattern {
+  LowerKVCacheCursorToX86(MLIRContext *ctx, StringRef opName)
+      : RewritePattern(opName, /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    StringRef name = op->getName().getStringRef();
+    StringRef symbol;
+    if (name == "tessera.cache.commit")
+      symbol = "tessera_x86_kv_cache_commit_f32";
+    else if (name == "tessera.cache.rollback")
+      symbol = "tessera_x86_kv_cache_rollback_f32";
+    else
+      return rewriter.notifyMatchFailure(op, "not a cache cursor op");
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1 ||
+        !op->getOperand(1).getType().isIndex())
+      return rewriter.notifyMatchFailure(op, "expects (handle, index) -> handle");
+
+    Location loc = op->getLoc();
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+    MLIRContext *ctx = op->getContext();
+    Type handleType = op->getResult(0).getType();
+    Type ptrType = LLVM::LLVMPointerType::get(ctx);
+    Type i64Type = rewriter.getI64Type();
+    ensureExternalDecl(mod, symbol,
+                       FunctionType::get(ctx, {ptrType, i64Type}, {ptrType}));
+
+    rewriter.setInsertionPoint(op);
+    Value handle = rewriter
+                       .create<UnrealizedConversionCastOp>(
+                           loc, TypeRange{ptrType}, op->getOperand(0))
+                       .getResult(0);
+    Value count = rewriter.create<arith::IndexCastOp>(loc, i64Type,
+                                                      op->getOperand(1));
+    auto call = rewriter.create<func::CallOp>(loc, symbol, TypeRange{ptrType},
+                                              ValueRange{handle, count});
+    call->setAttr("tessera.kv_cache.abi",
+                  rewriter.getStringAttr("tessera_x86_kv_cache_f32_handle.v1"));
+    // The ABI returns NULL for any count or handle it rejects (a dynamic
+    // accepted > current_seq, a dynamic negative count, a bad handle). Never
+    // thread that NULL onward (Decision #21): trap at the call site. The
+    // dialects used here (llvm, arith, cf) are declared in
+    // getDependentDialects, so nothing loads mid-pass.
+    Value null = rewriter.create<LLVM::ZeroOp>(loc, ptrType);
+    Value accepted = rewriter.create<LLVM::ICmpOp>(
+        loc, LLVM::ICmpPredicate::ne, call.getResult(0), null);
+    rewriter.create<cf::AssertOp>(
+        loc, accepted,
+        (Twine("X86_KV_CACHE_CURSOR_REFUSED: ") + name +
+         " was rejected by the x86 KV-cache handle ABI (" + symbol +
+         " returned NULL: count out of range or invalid handle)")
+            .str());
+    Value updated = rewriter
+                        .create<UnrealizedConversionCastOp>(
+                            loc, TypeRange{handleType}, call.getResult(0))
+                        .getResult(0);
+    rewriter.replaceOp(op, updated);
+    return success();
+  }
+};
+
+// A count the handle ABI would reject is refused at compile time when it is
+// a constant, instead of lowering to a call that returns NULL at run time.
+static LogicalResult verifyKVCacheCursorCounts(ModuleOp module) {
+  bool failed = false;
+  module.walk([&](Operation *op) {
+    StringRef name = op->getName().getStringRef();
+    if (name != "tessera.cache.commit" && name != "tessera.cache.rollback")
+      return;
+    if (op->getNumOperands() != 2) return;
+    auto constant = op->getOperand(1).getDefiningOp<arith::ConstantIndexOp>();
+    if (constant && constant.value() < 0) {
+      op->emitError("X86_KV_CACHE_CURSOR_REFUSED: ")
+          << name << " count " << constant.value()
+          << " is negative; the x86 KV-cache handle ABI rejects it";
+      failed = true;
+    }
+  });
+  return failed ? failure() : success();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pass
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -579,6 +682,11 @@ struct TileToX86PassImpl
     patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.append");
     patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.prune");
     patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.read");
+    // ODS-WIRE-3: the SD1-3 cursor ops lower through the handle ABI.
+    if (failed(verifyKVCacheCursorCounts(getOperation())))
+      return signalPassFailure();
+    patterns.add<LowerKVCacheCursorToX86>(&getContext(), "tessera.cache.commit");
+    patterns.add<LowerKVCacheCursorToX86>(&getContext(), "tessera.cache.rollback");
     FrozenRewritePatternSet frozenPatterns(std::move(patterns));
     if (failed(applyPatternsGreedily(getOperation(), frozenPatterns)))
       return signalPassFailure();

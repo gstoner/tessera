@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -10,6 +10,19 @@ scope: ROCm backend implementation and exact-device proof
 ## `ODS-WIRE-1-4-2026-09-27`: the ROCm Langevin executor consumes the Philox op — gfx1151 validated, gfx1201 not evaluated
 
 Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slice 4). `rocm_ebm_langevin_compiled` now accepts exactly `tessera.ebm.langevin_step_philox` (seed 1 x i64 split low word first into the kernel's key, counter words < 2^32, `eta`/`temperature` required), as `ops.ebm_langevin_step_philox` emits it; the host-noise `tessera.ebm.langevin_step` is refused and its ROCm manifest credit moved to the Philox op. The generated kernel (`generate-rocm-ebm-langevin-kernel`) is unchanged. **Parity validated on gfx1151 (Princess-Luna, 2026-09-27):** `test_rocm_ebm_langevin_compiled.py` incl. the traced-op launch; `check-tessera-rocm` 82/82. gfx1201 not evaluated (no proof transfers). Slice 1 (`target_verify`/`ntk_rope` rewrite): not applicable -- ROCm pipelines consume Tile / directive carriers and have no Graph softmax or rope consumer.
+
+## `ODS-WIRE-B-2026-09-28`: the ISTFT forward product builds from compiler IR — sibling outcome: parity validated (gfx1151, gfx1201)
+
+Owner GOV-ODS-CONSUMER-1 ([triage row](../../compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-istft-jvp)).
+`GraphToSchedulePass` now consumes `tessera.istft_jvp` and the native JVP
+plugin builds the ISTFT package from its hashed contract (the kwargs derivation
+is a declared oracle that must lower to the identical program). Exact-device
+reruns of `tests/unit/test_istft_jvp_ir_contract.py` and the ISTFT rows of
+`test_native_jvp_compiled.py`: gfx1151 on Princess-Luna, gfx1201 on Tajasarus
+(counts in the log entry). `ts_istft_jvp_plan_hostptr_batch_amd` takes no
+n_fft/center/length, so those window-product geometries are now refused before
+launch. The KV-cache cursor half of the key is x86-only: not applicable here.
+
 
 ## Scheduled softmax/reduction images keyed on a shape-free kernel identity — 2026-09-27
 

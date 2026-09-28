@@ -449,36 +449,57 @@ static FailureOr<Value> materializeFragmentPack(
 // accumulator store and the block-scale accumulate (ROCM-FP8-BLOCKSCALE-1)
 // both ask it, so a scale can never be applied to a different element than
 // the store writes.
+//
+// The map is affine in `i` on every family: element `i` sits at
+// (rowBase + i * rowStep, colBase + i * colStep) from the fragment origin,
+// with the bases per lane and the steps constants. `accumulatorLaneMap`
+// states it; `accumulatorElementOffset` / `accumulatorElementCoordinate` are
+// its per-element forms (their op order is the historical one, so every
+// kernel that does not use the bounded store below compiles unchanged).
+struct AccumulatorLaneMap {
+  Value rowBase, colBase;
+  int64_t rowStep = 0, colStep = 0;
+};
+
+static AccumulatorLaneMap accumulatorLaneMap(
+    OpBuilder &builder, Location loc,
+    const tessera_rocm::FragmentLayoutDescriptor &physical, Value lane,
+    Value laneGroup, Value groupStride) {
+  if (physical.usesGfx11AccumulatorMap())
+    return {laneGroup, lane, 2, 0};
+  if (physical.family == tessera_rocm::FragmentFamily::RDNA4WMMA)
+    // gfx12 distributes output rows across registers and half-waves;
+    // the low four lane bits select the column, not the row.
+    return {arith::MulIOp::create(builder, loc, laneGroup, groupStride), lane,
+            1, 0};
+  return {lane, arith::MulIOp::create(builder, loc, laneGroup, groupStride), 0,
+          1};
+}
+
+static std::pair<Value, Value> accumulatorElementOffset(
+    OpBuilder &builder, Location loc,
+    const tessera_rocm::FragmentLayoutDescriptor &physical, int64_t i,
+    Value lane, Value laneGroup, Value groupStride) {
+  AccumulatorLaneMap map =
+      accumulatorLaneMap(builder, loc, physical, lane, laneGroup, groupStride);
+  auto offset = [&](Value base, int64_t step) -> Value {
+    if (step == 0)
+      return base;
+    return arith::AddIOp::create(
+        builder, loc, base, arith::ConstantIndexOp::create(builder, loc, i * step));
+  };
+  return {offset(map.rowBase, map.rowStep), offset(map.colBase, map.colStep)};
+}
+
 static std::pair<Value, Value> accumulatorElementCoordinate(
     OpBuilder &builder, Location loc,
     const tessera_rocm::FragmentLayoutDescriptor &physical, int64_t i,
     Value lane, Value laneGroup, Value groupStride, Value rowOrigin,
     Value colOrigin) {
-  Value ci = arith::ConstantIndexOp::create(builder, loc, i);
-  Value row;
-  Value col;
-  if (physical.usesGfx11AccumulatorMap()) {
-    Value two = arith::ConstantIndexOp::create(builder, loc, 2);
-    Value rowOffset = arith::AddIOp::create(
-        builder, loc, arith::MulIOp::create(builder, loc, ci, two), laneGroup);
-    row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
-    col = arith::AddIOp::create(builder, loc, colOrigin, lane);
-  } else if (physical.family == tessera_rocm::FragmentFamily::RDNA4WMMA) {
-    // gfx12 distributes output rows across registers and half-waves;
-    // the low four lane bits select the column, not the row.
-    Value rowOffset = arith::AddIOp::create(
-        builder, loc,
-        arith::MulIOp::create(builder, loc, laneGroup, groupStride), ci);
-    row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
-    col = arith::AddIOp::create(builder, loc, colOrigin, lane);
-  } else {
-    row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
-    Value colOffset = arith::AddIOp::create(
-        builder, loc,
-        arith::MulIOp::create(builder, loc, laneGroup, groupStride), ci);
-    col = arith::AddIOp::create(builder, loc, colOrigin, colOffset);
-  }
-  return {row, col};
+  auto [rowOffset, colOffset] = accumulatorElementOffset(
+      builder, loc, physical, i, lane, laneGroup, groupStride);
+  return {arith::AddIOp::create(builder, loc, rowOrigin, rowOffset),
+          arith::AddIOp::create(builder, loc, colOrigin, colOffset)};
 }
 
 // Takes the accumulator as a VALUE, not as the producing operation. The typed
@@ -574,19 +595,74 @@ static LogicalResult materializeFragmentStore(
   }
   Value groupStride = arith::ConstantIndexOp::create(
       builder, loc, physical.accumulatorElementsPerLane);
-  for (int64_t i = 0; i < physical.accumulatorElementsPerLane; ++i) {
-    auto [row, col] = accumulatorElementCoordinate(
-        builder, loc, physical, i, lane, laneGroup, groupStride, rowOrigin,
-        colOrigin);
-    Value linear = arith::AddIOp::create(
+  // A bounded store tests element `i` against the room each LANE has left
+  // before the bound -- `bound - origin - base`, one value per lane per
+  // fragment -- with `i * step` a constant, and addresses it as that lane's
+  // base address plus a constant multiple of the leading dimension: the same
+  // elements, the same predicates and the same addresses as `row < bound` /
+  // `row * ld + col`, in index arithmetic that cannot wrap. What changes is
+  // what the kernel keeps live. The block-scale join asks the same map for
+  // each element's absolute row inside the K loop, so LICM hoists those
+  // per-element rows above the loop, and GVN handed them to a store written
+  // against absolute rows (or per-element offsets): one 64-bit value per
+  // element held across the whole loop for the epilogue. Measured on gfx1201
+  // (FOUNDATION-BATCH-2-2026-09-27): the W8A8 LDS body at a ragged M took 233
+  // VGPRs against 187 for the whole-M kernel of the same tiling. Nothing
+  // per-element is formed here, so nothing per-element outlives the loop.
+  Value laneLinear, rowRoom, colRoom;
+  int64_t rowStep = 0, colStep = 0;
+  if (haveBounds) {
+    AccumulatorLaneMap map = accumulatorLaneMap(builder, loc, physical, lane,
+                                                laneGroup, groupStride);
+    rowStep = map.rowStep;
+    colStep = map.colStep;
+    laneLinear = arith::AddIOp::create(
         builder, loc,
-        arith::MulIOp::create(builder, loc, row, leadingDim), col);
+        arith::MulIOp::create(
+            builder, loc,
+            arith::AddIOp::create(builder, loc, rowOrigin, map.rowBase),
+            leadingDim),
+        arith::AddIOp::create(builder, loc, colOrigin, map.colBase));
+    rowRoom = arith::SubIOp::create(
+        builder, loc, arith::SubIOp::create(builder, loc, rowBound, rowOrigin),
+        map.rowBase);
+    colRoom = arith::SubIOp::create(
+        builder, loc, arith::SubIOp::create(builder, loc, colBound, colOrigin),
+        map.colBase);
+  }
+  for (int64_t i = 0; i < physical.accumulatorElementsPerLane; ++i) {
+    Value col, linear, rowOffset, colOffset;
+    if (haveBounds) {
+      rowOffset = arith::ConstantIndexOp::create(builder, loc, i * rowStep);
+      colOffset = arith::ConstantIndexOp::create(builder, loc, i * colStep);
+      linear = arith::AddIOp::create(
+          builder, loc, laneLinear,
+          arith::AddIOp::create(
+              builder, loc,
+              arith::MulIOp::create(builder, loc, rowOffset, leadingDim),
+              colOffset));
+    } else {
+      auto [row, c] = accumulatorElementCoordinate(
+          builder, loc, physical, i, lane, laneGroup, groupStride, rowOrigin,
+          colOrigin);
+      col = c;
+      linear = arith::AddIOp::create(
+          builder, loc,
+          arith::MulIOp::create(builder, loc, row, leadingDim), col);
+    }
     Value scalar = vector::ExtractOp::create(builder, loc, accumulator,
                                              ArrayRef<int64_t>{i});
     auto applyEpilogue = [&](OpBuilder &eb, Value value) -> Value {
       if (epilogueBias) {
+        // Formed only where it is read (inside the guard when bounded).
+        Value biasCol =
+            col ? col
+                : accumulatorElementCoordinate(eb, loc, physical, i, lane,
+                                               laneGroup, groupStride,
+                                               rowOrigin, colOrigin)
+                      .second;
         Value bias =
-            memref::LoadOp::create(eb, loc, biasBase, ValueRange{col});
+            memref::LoadOp::create(eb, loc, biasBase, ValueRange{biasCol});
         value = arith::AddFOp::create(eb, loc, value, bias);
       }
       if (activation != "none")
@@ -602,9 +678,9 @@ static LogicalResult materializeFragmentStore(
       continue;
     }
     Value rowOk = arith::CmpIOp::create(
-        builder, loc, arith::CmpIPredicate::slt, row, rowBound);
+        builder, loc, arith::CmpIPredicate::slt, rowOffset, rowRoom);
     Value colOk = arith::CmpIOp::create(
-        builder, loc, arith::CmpIPredicate::slt, col, colBound);
+        builder, loc, arith::CmpIPredicate::slt, colOffset, colRoom);
     Value inBounds = arith::AndIOp::create(builder, loc, rowOk, colOk);
     auto guarded = scf::IfOp::create(builder, loc, inBounds,
                                      /*withElseRegion=*/false);

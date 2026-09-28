@@ -574,6 +574,20 @@ struct LowerKVCacheCursorToX86 : public RewritePattern {
                                               ValueRange{handle, count});
     call->setAttr("tessera.kv_cache.abi",
                   rewriter.getStringAttr("tessera_x86_kv_cache_f32_handle.v1"));
+    // The ABI returns NULL for any count or handle it rejects (a dynamic
+    // accepted > current_seq, a dynamic negative count, a bad handle). Never
+    // thread that NULL onward (Decision #21): trap at the call site. The
+    // dialects used here (llvm, arith, cf) are declared in
+    // getDependentDialects, so nothing loads mid-pass.
+    Value null = rewriter.create<LLVM::ZeroOp>(loc, ptrType);
+    Value accepted = rewriter.create<LLVM::ICmpOp>(
+        loc, LLVM::ICmpPredicate::ne, call.getResult(0), null);
+    rewriter.create<cf::AssertOp>(
+        loc, accepted,
+        (Twine("X86_KV_CACHE_CURSOR_REFUSED: ") + name +
+         " was rejected by the x86 KV-cache handle ABI (" + symbol +
+         " returned NULL: count out of range or invalid handle)")
+            .str());
     Value updated = rewriter
                         .create<UnrealizedConversionCastOp>(
                             loc, TypeRange{handleType}, call.getResult(0))

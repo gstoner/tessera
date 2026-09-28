@@ -4507,12 +4507,16 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         pass_origin="LowerKVCacheCursorToX86",
         severity="error",
         summary=(
-            "tessera.cache.commit/rollback carries a constant negative count, "
-            "which the x86 KV-cache handle ABI would reject at run time."
+            "tessera.cache.commit/rollback was rejected by the x86 KV-cache "
+            "handle ABI: at compile time for a constant negative count, at run "
+            "time (the cf.assert the lowering emits after every ABI call) when "
+            "tessera_x86_kv_cache_{commit,rollback}_f32 returns NULL for a "
+            "dynamic out-of-range count or an invalid handle."
         ),
         fix_hint=(
-            "Pass a non-negative accepted_length / num_rejected; the handle ABI "
-            "(tessera_x86_kv_cache_{commit,rollback}_f32) returns NULL for it."
+            "Keep accepted_length in [0, current_seq] and num_rejected >= 0, "
+            "and pass a valid f32 handle; the lowering traps rather than "
+            "threading the NULL handle into later cache ops."
         ),
         spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-cache-commit",
         sprint="ODS-WIRE-3-2026-09-28",

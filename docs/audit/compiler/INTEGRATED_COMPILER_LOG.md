@@ -5764,7 +5764,9 @@ i64) -> handle*` over `struct tessera_x86_kv_cache_f32_handle` (truncate in
 place, zero the dropped rows, same handle back or NULL untouched) -- and
 threads the result, so commit → rollback becomes a call chain on the handle
 pointer; a constant negative count is refused at compile time
-(`X86_KV_CACHE_CURSOR_REFUSED`). Runtime: `runtime.x86_kv_cache_cursor`
+(`X86_KV_CACHE_CURSOR_REFUSED`), and every call is followed by a NULL check
+and a `cf.assert` naming that code, so a dynamic rejection traps instead of
+threading NULL into later cache ops (review fix before merge). Runtime: `runtime.x86_kv_cache_cursor`
 (refuses quantized/latent/SSM/non-f32/non-contiguous handles,
 `X86_KV_CACHE_HANDLE_REFUSED`) and the bufferized form in
 `x86_kv_cache_compiled` (`current_seq` and the count are never-defaulted

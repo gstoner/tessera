@@ -10,16 +10,24 @@
 
 // CHECK-DAG: func.func private @tessera_x86_kv_cache_commit_f32(!llvm.ptr, i64) -> !llvm.ptr
 // CHECK-DAG: func.func private @tessera_x86_kv_cache_rollback_f32(!llvm.ptr, i64) -> !llvm.ptr
+// A rejected count (dynamic accepted > current_seq, dynamic negative count,
+// bad handle) makes the ABI return NULL; every call is followed by a NULL
+// check that traps instead of threading NULL into later cache ops (#21).
 // CHECK-LABEL: func.func @spec_commit_rollback(
 // CHECK-SAME:    %[[CACHE:[^:]+]]: !tessera.kv_cache, %[[ACC:[^:]+]]: index, %[[REJ:[^:]+]]: index)
+// CHECK:       %[[NULL:.*]] = llvm.mlir.zero : !llvm.ptr
 // CHECK:       %[[H0:.*]] = builtin.unrealized_conversion_cast %[[CACHE]] : !tessera.kv_cache to !llvm.ptr
 // CHECK:       %[[N0:.*]] = arith.index_cast %[[ACC]] : index to i64
 // CHECK:       tessera_x86.abi_call {symbol = "tessera_x86_kv_cache_commit_f32"}
 // CHECK:       %[[H1:.*]] = call @tessera_x86_kv_cache_commit_f32(%[[H0]], %[[N0]])
 // CHECK-SAME:    tessera.kv_cache.abi = "tessera_x86_kv_cache_f32_handle.v1"
+// CHECK:       %[[OK1:.*]] = llvm.icmp "ne" %[[H1]], %[[NULL]] : !llvm.ptr
+// CHECK:       cf.assert %[[OK1]], "X86_KV_CACHE_CURSOR_{{REFUSED}}: tessera.cache.commit was rejected by the x86 KV-cache handle ABI (tessera_x86_kv_cache_commit_f32 returned NULL
 // CHECK:       %[[N1:.*]] = arith.index_cast %[[REJ]] : index to i64
 // The committed handle feeds the rollback directly: the result is threaded.
 // CHECK:       %[[H2:.*]] = call @tessera_x86_kv_cache_rollback_f32(%[[H1]], %[[N1]])
+// CHECK:       %[[OK2:.*]] = llvm.icmp "ne" %[[H2]], %[[NULL]] : !llvm.ptr
+// CHECK:       cf.assert %[[OK2]], "X86_KV_CACHE_CURSOR_{{REFUSED}}: tessera.cache.rollback was rejected by the x86 KV-cache handle ABI (tessera_x86_kv_cache_rollback_f32 returned NULL
 // CHECK:       %[[OUT:.*]] = builtin.unrealized_conversion_cast %[[H2]] : !llvm.ptr to !tessera.kv_cache
 // CHECK:       return %[[OUT]] : !tessera.kv_cache
 // CHECK-NOT:   tessera.cache.commit
@@ -38,7 +46,10 @@ func.func @spec_commit_rollback(%cache: !tessera.kv_cache, %accepted: index,
 // The handle ABI never goes through the kind-only artifact bridge.
 // CHECK-LABEL: func.func @commit_only(
 // CHECK-NOT:   tessera_x86_kv_cache_op
-// CHECK:       call @tessera_x86_kv_cache_commit_f32
+// CHECK:       %[[H:.*]] = call @tessera_x86_kv_cache_commit_f32
+// CHECK:       %[[OK:.*]] = llvm.icmp "ne" %[[H]]
+// CHECK:       cf.assert %[[OK]], "X86_KV_CACHE_CURSOR_{{REFUSED}}: tessera.cache.commit
+// CHECK-NOT:   cf.assert
 // CHECK-NOT:   tessera_x86_kv_cache_op
 func.func @commit_only(%cache: !tessera.kv_cache) -> !tessera.kv_cache {
   %n = arith.constant 3 : index

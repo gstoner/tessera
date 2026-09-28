@@ -2,7 +2,8 @@
 // reference (same accumulation, exact match) across square + rectangular +
 // tail-N shapes.
 //
-// X86-GEMM-ALIGN-1: the kernel packs B into 64-byte-aligned K-blocked panels. check_bitwise()
+// X86-GEMM-ALIGN-1: the kernel packs B into 64-byte-aligned K-blocked panels (or, for
+// small M, reads it directly -- the path table below pins the rule). check_bitwise()
 // places B at every 4-byte offset within a cache line and requires the output to be
 // bitwise identical to `oracle_unpacked` -- the pre-2026-09-27 kernel, kept here as
 // the declared oracle (Decision #31) -- for every offset, on the packed (M > 1) and
@@ -19,6 +20,7 @@
 
 extern "C" void tessera_x86_avx512_gemm_f32(const float*, const float*, int64_t,
                                             int64_t, int64_t, float*);
+extern "C" int tessera_x86_avx512_gemm_f32_uses_packed_path(int64_t, int64_t, int64_t);
 extern "C" int tessera_x86_avx512_gemm_f32_operands_overlap(
     const float*, const float*, int64_t, int64_t, int64_t, const float*);
 
@@ -142,16 +144,40 @@ int main() {
     check(3, 1, 100);
     check(2, 300, 40);     // two panels, second a 3-strip tail block
     // bitwise vs the pre-align kernel at every B offset
+    // Path selection (measured rule, avx512_gemm_f32.cpp packedPathWins):
+    // direct iff M == 1, or M <= 4 with B = K*N*4 bytes <= 1 MiB.
+    struct PathCase { int64_t M, N, K; int packed; const char* why; };
+    const PathCase paths[] = {
+        {1, 4096, 4096, 0, "M == 1, any size"},
+        {2, 256, 256, 0, "M == 2, B 256 KiB"},
+        {4, 512, 512, 0, "M == 4, B exactly 1 MiB"},
+        {4, 513, 512, 1, "M == 4, B just over 1 MiB"},
+        {5, 64, 64, 1, "M == 5"},
+        {2, 1024, 1024, 1, "M == 2, B 4 MiB"},
+        {16, 16, 16, 1, "M == 16, tiny"},
+        {4, 16, 0, 0, "K == 0"},
+        {3, (int64_t(1) << 40), (int64_t(1) << 40), 1, "B bytes overflow int64"},
+    };
+    for (const PathCase& c : paths) {
+        const int got = tessera_x86_avx512_gemm_f32_uses_packed_path(c.M, c.N, c.K);
+        std::printf("%s path M=%lld N=%lld K=%lld packed=%d (%s)\n",
+                    got == c.packed ? "ok  " : "FAIL", (long long)c.M, (long long)c.N,
+                    (long long)c.K, got, c.why);
+        if (got != c.packed) ++g_fail;
+    }
+    // bitwise vs the pre-align kernel at every B offset, on both paths
     check_bitwise(1, 1, 1);
-    check_bitwise(1, 250, 33);   // M == 1: direct path, tail strip
-    check_bitwise(2, 16, 5);
-    check_bitwise(7, 129, 17);   // one full 8-strip panel + a 1-wide tail panel
-    check_bitwise(16, 256, 64);
-    check_bitwise(33, 100, 3);   // 7-strip block, last strip 4 wide
+    check_bitwise(1, 250, 33);   // direct: M == 1, tail strip
+    check_bitwise(2, 16, 5);     // direct: small M
+    check_bitwise(4, 130, 600);  // direct: M == 4, B 305 KiB, tail strip
+    check_bitwise(7, 129, 17);   // packed: one full 8-strip panel + a 1-wide tail panel
+    check_bitwise(16, 256, 64);  // packed
+    check_bitwise(33, 100, 3);   // packed: 7-strip block, last strip 4 wide
     check_bitwise(4, 16, 0);     // K == 0: C must be the empty sum (zeros)
-    check_bitwise(2, 16, 512);   // exactly one K block
-    check_bitwise(2, 16, 513);   // a one-row second K block (continues through C)
-    check_bitwise(3, 130, 1100); // two full K blocks + a partial one, tail panel
+    check_bitwise(5, 16, 512);   // packed: exactly one K block
+    check_bitwise(5, 16, 513);   // packed: a one-row second K block (continues through C)
+    check_bitwise(5, 130, 1100); // packed: two full K blocks + a partial one, tail panel
+    check_bitwise(2, 1024, 1100);// packed: M == 2 with B > 1 MiB, K blocked
     // aliasing: arena float offsets (a, b, c)
     check_overlap("C == A (in place, N == K)", 40, 64, 64, 0, 4096, 0, true);
     check_overlap("C == A, M == 1 direct path", 1, 300, 300, 0, 400, 0, true);

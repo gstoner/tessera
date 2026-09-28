@@ -40,11 +40,13 @@ using tessera::layout::Rank2Order;
 // alignment. The blocked loop needs C disjoint from A and B; the entry point
 // enforces that (an overlapping C is computed through scratch, see below).
 //
-// M == 1 reads B directly (no pack): a GEMV never reuses the panel, so packing
-// is pure copy overhead there (measured slower than the direct read at every B
-// alignment). If the panel cannot be allocated the direct path runs too --
-// same result, only slower -- so the kernel never fails for want of scratch
-// memory. Evidence: benchmarks/baselines/x86_gemm_align_20260927/.
+// Small problems read B directly (no pack) -- see packedPathWins for the
+// measured rule: M == 1, or M <= 4 with B <= 1 MiB. There the copy costs more
+// than the panel's reuse repays, and the direct path keeps a residual
+// alignment effect (measured, see the evidence README). If the panel cannot
+// be allocated the direct path runs too -- same result, only slower -- so the
+// kernel never fails for want of scratch memory.
+// Evidence: benchmarks/baselines/x86_gemm_align_20260927/.
 namespace {
 
 constexpr int kStrips = 8;         // 16-float strips per panel row (128 floats)
@@ -56,11 +58,28 @@ constexpr int64_t kKBlock = 512;   // panel rows per K block (256 KiB panel)
 constexpr bool kForcePath = false;     // PATH-PROBE
 constexpr bool kForcedPacked = false;  // PATH-PROBE
 
-// Whether packing B pays for itself for this shape. PROVISIONAL (M > 1).
+// Path selection, measured on Princess-Luna (Zen 5) with the paired
+// TSC-witness probe over M in {1,2,3,4,6,8,12,16}, B from 16 KiB to 4 MiB and
+// B%64 in {0,16} (evidence: princess_luna_path_crossover*.jsonl). The direct
+// path reads B in place; the packed path pays one copy of B per call and wins
+// only once enough rows of A reuse the panel:
+//   * M == 1: direct at every size (packing was slower in every cell above
+//     the ~4.5 us ctypes floor, up to 2.1x);
+//   * M <= 4 with B <= 1 MiB: direct was never slower than packed at either
+//     offset (it is L2-resident, so the copy buys little);
+//   * otherwise packed: from M = 2 at 2-4 MiB and from M = 6 at <= 1 MiB the
+//     direct path lost to packing at B%64 = 16 by up to 2.6x.
+// Where the two are near-equal the rule picks packed, which is the
+// alignment-insensitive path.
+constexpr int64_t kDirectMaxM = 4;
+constexpr uint64_t kDirectMaxBBytes = uint64_t{1} << 20;
+
 bool packedPathWins(int64_t M, int64_t N, int64_t K) {
-    (void)N;
     if (kForcePath) return kForcedPacked;
-    return M > 1 && K > 0;
+    if (M <= 1 || N <= 0 || K <= 0) return false;
+    const unsigned __int128 bBytes = static_cast<unsigned __int128>(K) *
+                                     static_cast<unsigned __int128>(N) * sizeof(float);
+    return !(M <= kDirectMaxM && bBytes <= kDirectMaxBBytes);
 }
 
 inline __mmask16 stripMask(int64_t width) {
@@ -178,6 +197,14 @@ bool rangesOverlap(const void* p, uint64_t pBytes, const void* q, uint64_t qByte
 }
 
 } // namespace
+
+// Which path C = A[M,K] @ B[K,N] takes: 1 = packed (B copied into aligned
+// panels), 0 = direct. The GEMM consumes packedPathWins; this export lets a
+// test pin the measured rule.
+extern "C" int tessera_x86_avx512_gemm_f32_uses_packed_path(int64_t M, int64_t N,
+                                                           int64_t K) {
+    return packedPathWins(M, N, K) ? 1 : 0;
+}
 
 // Whether C's bytes overlap A's or B's for C[M,N] = A[M,K] @ B[K,N] in the
 // ABI's only layout (dense, row-major). The GEMM entry point consumes it; it

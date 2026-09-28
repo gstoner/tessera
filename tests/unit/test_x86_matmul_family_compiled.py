@@ -241,3 +241,24 @@ def test_gemm_f32_overlapping_output_equals_disjoint_product(case):
     got = arena[c_off:c_off + m * n].reshape(m, n)
     assert np.array_equal(got.view(np.uint32), want.view(np.uint32))
     np.testing.assert_allclose(got, a0 @ b0, **_TOL)
+
+
+@pytest.mark.parametrize("m,n,k,packed", [
+    (1, 4096, 4096, 0),    # M == 1: direct at any size
+    (2, 256, 256, 0),      # M <= 4, B = 256 KiB: direct
+    (4, 512, 512, 0),      # M <= 4, B = exactly 1 MiB: direct
+    (4, 513, 512, 1),      # B just over 1 MiB: packed
+    (5, 64, 64, 1),        # M > 4: packed
+    (2, 1024, 1024, 1),    # M == 2, B = 4 MiB: packed
+])
+def test_gemm_f32_path_selection_follows_the_measured_rule(m, n, k, packed):
+    """X86-GEMM-ALIGN-1 review: the packed path costs more than its reuse
+    repays at small M, so the kernel reads B directly for M == 1, or M <= 4
+    with B <= 1 MiB (crossover measured on Princess-Luna; evidence README)."""
+    import ctypes
+
+    rt = _x86_or_skip()
+    fn = rt._load_x86_elementwise().tessera_x86_avx512_gemm_f32_uses_packed_path
+    fn.argtypes = [ctypes.c_int64] * 3
+    fn.restype = ctypes.c_int
+    assert fn(m, n, k) == packed

@@ -6,7 +6,7 @@
 #   packed = this checkout's kernel with the packed path forced for every M > 1
 #   direct = this checkout's kernel with the direct (unpacked) path forced
 # The forcing edits the path-selection predicate only (see sed lines below).
-# usage: run_path_crossover.sh <checkout> <out.jsonl> [processes]
+# usage: [NKS="N K,N K,..."] [MS="1 2 ..."] run_path_crossover.sh <checkout> <out.jsonl> [processes]
 set -euo pipefail
 repo=$1; out=$2; procs=${3:-1}
 here=$(cd "$(dirname "$0")" && pwd)
@@ -27,9 +27,10 @@ grep -q "kForcePath = true" "$work/direct.cpp"
   for v in old packed direct shipped; do echo "# $v sha256=$(sha256sum "$work/lib_$v.so" | cut -d' ' -f1)"; done
 } > "$out.header"
 : > "$out"
-for nk in "64 64" "256 256" "1024 1024" "256 4096" "4096 256"; do
+IFS=, read -ra nks <<< "${NKS:-64 64,256 256,1024 1024,256 4096,4096 256}"
+for nk in "${nks[@]}"; do
   set -- $nk; n=$1; k=$2
-  for m in 1 2 3 4 6 8 12 16; do
+  for m in ${MS:-1 2 3 4 6 8 12 16}; do
     for off in 0 16; do
       for p in $(seq 1 "$procs"); do
         flock /tmp/tessera-timing.lock python "$here/probe_gemm_paths.py" \

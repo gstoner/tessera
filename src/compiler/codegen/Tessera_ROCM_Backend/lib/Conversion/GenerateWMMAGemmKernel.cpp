@@ -2196,12 +2196,6 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   if (outputType.isBF16())
     storeEpilogue =
         tessera::tile::TileEpilogueAttr::get(ctx, false, "none", "bf16");
-  // A bounded store masks both dimensions. When only one is partial, the
-  // other's bound is stated as the fragment's own far edge (`origin + 16`):
-  // the same elements are stored -- every element of a fragment lies inside
-  // its own edge -- but the bound folds away, so the whole dimension costs
-  // the kernel no live registers (FOUNDATION-BATCH-2-2026-09-27).
-  Value c16 = ci(16);
   for (int64_t ni = 0; ni < nt; ++ni)
     for (int64_t mi = 0; mi < mt; ++mi) {
       OperationState unpack(loc, "tile.fragment_unpack");
@@ -2210,18 +2204,10 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
       unpack.addAttribute("tile.layout", tileLayout);
       Value tile = b.create(unpack)->getResult(0);
       OperationState store(loc, "tile.store");
-      if (masked) {
-        Value rowBound = wholeM ? Value(b.create<arith::AddIOp>(
-                                      loc, rowOrigin[mi], c16))
-                                : M;
-        Value colBound = wholeN ? Value(b.create<arith::AddIOp>(
-                                      loc, colOrigin[ni], c16))
-                                : N;
-        store.addOperands(
-            {tile, D, rowOrigin[mi], colOrigin[ni], rowBound, colBound, N});
-      } else {
+      if (masked)
+        store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], M, N, N});
+      else
         store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], N});
-      }
       if (storeEpilogue)
         store.addAttribute("tile.epilogue", storeEpilogue);
       store.addAttribute("tile.layout", tileLayout);

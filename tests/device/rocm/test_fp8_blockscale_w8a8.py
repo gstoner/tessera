@@ -295,11 +295,13 @@ def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
 
 
 @pytest.mark.parametrize(("macro", "warps", "depth", "knobs", "spill_free"), [
-    # The register-staged next slab sits beside the 32x64 wave panel's 128
-    # accumulators and spills -- one reason it measured slower and is not
-    # selected. (Double-buffering 128x128 needs 72 KiB of LDS and is refused
-    # below.)
-    ((128, 128), 8, 1, {"blockscale_prefetch": 1}, False),        # register next slab
+    # The register-staged next slab beside the 32x64 wave panel's 128
+    # accumulators spilled at this ragged shape until the bounded store
+    # stopped holding a per-element row across the loop
+    # (FOUNDATION-BATCH-2-2026-09-27); it still measured 1.18-1.29x slower at
+    # whole M and is not selected. (Double-buffering 128x128 needs 72 KiB of
+    # LDS and is refused below.)
+    ((128, 128), 8, 1, {"blockscale_prefetch": 1}, True),         # register next slab
     ((128, 64), 8, 2, {}, True),                                  # double-buffered, 32x32 waves
     ((128, 64), 8, 1, {"blockscale_stage_k": 64}, True),          # two slabs per group
     ((128, 64), 8, 1, {"blockscale_lds_pad_bytes": 0}, True),     # unpadded rows
@@ -379,8 +381,18 @@ def _vgprs(payload: bytes) -> tuple[int, int]:
     import tempfile
     from pathlib import Path
 
+    import shutil
+
     from tests._support import rocm_isa
-    readelf = Path(rocm_isa.llvm_objdump()).with_name("llvm-readelf")
+    # The disassembler's own directory first; an assertions toolchain may
+    # ship llvm-objdump without llvm-readelf, so fall back along the same
+    # fleet list, then PATH. Failing (not skipping) when none is found.
+    siblings = [Path(rocm_isa.llvm_objdump()).with_name("llvm-readelf")]
+    siblings += [candidate.with_name("llvm-readelf") for candidate in rocm_isa._candidates()]
+    readelf = next((path for path in siblings if path.is_file()), None)
+    if readelf is None and shutil.which("llvm-readelf"):
+        readelf = Path(shutil.which("llvm-readelf"))
+    assert readelf is not None, f"llvm-readelf not found beside any of {siblings}"
     with tempfile.NamedTemporaryFile(suffix=".hsaco") as image:
         image.write(payload)
         image.flush()
@@ -396,8 +408,8 @@ def _vgprs(payload: bytes) -> tuple[int, int]:
 def test_ragged_m_costs_the_lds_body_no_registers(n, k):
     """FOUNDATION-BATCH-2-2026-09-27: a ragged M used to cost the 128x128 LDS
     body 13 VGPRs (251 vs 238, one wave per SIMD fewer) because the bounded
-    store held a per-element row across the K loop. With the per-lane bounded
-    store and the whole dimension's bound folded, the ragged kernel stays
+    store held a per-element row across the K loop. With the bounded store
+    testing each row per lane (TileToROCM), the ragged kernel stays
     within the whole kernel's register allocation and does not spill -- the
     precondition for the Schedule giving ragged M the whole-M tile."""
     whole = package_blockscale(lower_blockscale(BlockScaleShape(1024, n, k, 128, 128, "nk")))

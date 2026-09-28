@@ -595,52 +595,49 @@ static LogicalResult materializeFragmentStore(
   }
   Value groupStride = arith::ConstantIndexOp::create(
       builder, loc, physical.accumulatorElementsPerLane);
-  // A bounded store tests element `i` against the room each LANE has left
-  // before the bound -- `bound - origin - base`, one value per lane per
-  // fragment -- with `i * step` a constant, and addresses it as that lane's
-  // base address plus a constant multiple of the leading dimension: the same
-  // elements, the same predicates and the same addresses as `row < bound` /
-  // `row * ld + col`, in index arithmetic that cannot wrap. What changes is
-  // what the kernel keeps live. The block-scale join asks the same map for
-  // each element's absolute row inside the K loop, so LICM hoists those
-  // per-element rows above the loop, and GVN handed them to a store written
-  // against absolute rows (or per-element offsets): one 64-bit value per
-  // element held across the whole loop for the epilogue. Measured on gfx1201
-  // (FOUNDATION-BATCH-2-2026-09-27): the W8A8 LDS body at a ragged M took 233
-  // VGPRs against 187 for the whole-M kernel of the same tiling. Nothing
-  // per-element is formed here, so nothing per-element outlives the loop.
-  Value laneLinear, rowRoom, colRoom;
-  int64_t rowStep = 0, colStep = 0;
+  // A bounded store tests element `i`'s ROW against the room its lane has
+  // left before the bound -- `bound - origin - rowBase`, one value per lane
+  // per fragment, compared with the constant `i * rowStep` -- and addresses
+  // it from that lane's row base plus a constant multiple of the leading
+  // dimension: the same elements, predicates and addresses as `row < bound` /
+  // `row * ld + col`, in index arithmetic that cannot wrap. The column keeps
+  // its absolute form. What changes is what the kernel keeps live: the
+  // block-scale join asks the same map for each element's absolute row inside
+  // the K loop, so LICM hoists those per-element rows above the loop, and GVN
+  // handed them to a store written against absolute rows -- one 64-bit value
+  // per element held across the whole loop for the epilogue (gfx1201 W8A8 LDS
+  // body at a ragged M: 233 VGPRs against 187 whole for 128x64,
+  // FOUNDATION-BATCH-2-2026-09-27). Rows are what vary per element on RDNA
+  // (rowStep 1 or 2); the column is per lane, and writing it in the lane form
+  // too measured WORSE (the 128x128 body at a ragged N went from 251 VGPRs to
+  // 256 plus spills), so only the row is rewritten.
+  Value laneRowLinear, rowRoom;
+  int64_t rowStep = 0;
   if (haveBounds) {
     AccumulatorLaneMap map = accumulatorLaneMap(builder, loc, physical, lane,
                                                 laneGroup, groupStride);
     rowStep = map.rowStep;
-    colStep = map.colStep;
-    laneLinear = arith::AddIOp::create(
-        builder, loc,
-        arith::MulIOp::create(
-            builder, loc,
-            arith::AddIOp::create(builder, loc, rowOrigin, map.rowBase),
-            leadingDim),
-        arith::AddIOp::create(builder, loc, colOrigin, map.colBase));
+    laneRowLinear = arith::MulIOp::create(
+        builder, loc, arith::AddIOp::create(builder, loc, rowOrigin, map.rowBase),
+        leadingDim);
     rowRoom = arith::SubIOp::create(
         builder, loc, arith::SubIOp::create(builder, loc, rowBound, rowOrigin),
         map.rowBase);
-    colRoom = arith::SubIOp::create(
-        builder, loc, arith::SubIOp::create(builder, loc, colBound, colOrigin),
-        map.colBase);
   }
   for (int64_t i = 0; i < physical.accumulatorElementsPerLane; ++i) {
-    Value col, linear, rowOffset, colOffset;
+    Value col, linear, rowOffset;
     if (haveBounds) {
       rowOffset = arith::ConstantIndexOp::create(builder, loc, i * rowStep);
-      colOffset = arith::ConstantIndexOp::create(builder, loc, i * colStep);
+      col = arith::AddIOp::create(
+          builder, loc, colOrigin,
+          accumulatorElementOffset(builder, loc, physical, i, lane, laneGroup,
+                                   groupStride)
+              .second);
       linear = arith::AddIOp::create(
-          builder, loc, laneLinear,
+          builder, loc, laneRowLinear,
           arith::AddIOp::create(
               builder, loc,
-              arith::MulIOp::create(builder, loc, rowOffset, leadingDim),
-              colOffset));
+              arith::MulIOp::create(builder, loc, rowOffset, leadingDim), col));
     } else {
       auto [row, c] = accumulatorElementCoordinate(
           builder, loc, physical, i, lane, laneGroup, groupStride, rowOrigin,
@@ -654,15 +651,8 @@ static LogicalResult materializeFragmentStore(
                                              ArrayRef<int64_t>{i});
     auto applyEpilogue = [&](OpBuilder &eb, Value value) -> Value {
       if (epilogueBias) {
-        // Formed only where it is read (inside the guard when bounded).
-        Value biasCol =
-            col ? col
-                : accumulatorElementCoordinate(eb, loc, physical, i, lane,
-                                               laneGroup, groupStride,
-                                               rowOrigin, colOrigin)
-                      .second;
         Value bias =
-            memref::LoadOp::create(eb, loc, biasBase, ValueRange{biasCol});
+            memref::LoadOp::create(eb, loc, biasBase, ValueRange{col});
         value = arith::AddFOp::create(eb, loc, value, bias);
       }
       if (activation != "none")
@@ -680,7 +670,7 @@ static LogicalResult materializeFragmentStore(
     Value rowOk = arith::CmpIOp::create(
         builder, loc, arith::CmpIPredicate::slt, rowOffset, rowRoom);
     Value colOk = arith::CmpIOp::create(
-        builder, loc, arith::CmpIPredicate::slt, colOffset, colRoom);
+        builder, loc, arith::CmpIPredicate::slt, col, colBound);
     Value inBounds = arith::AndIOp::create(builder, loc, rowOk, colOk);
     auto guarded = scf::IfOp::create(builder, loc, inBounds,
                                      /*withElseRegion=*/false);

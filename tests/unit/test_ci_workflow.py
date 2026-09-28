@@ -376,8 +376,9 @@ ADVISORY_SUCCESS_ALLOWLIST = {
     ("pylint.yml", "--exit-zero"): "advisory lint; ruff + mypy ratchet gate",
     # Hosted runners have no Metal/ROCm/CUPTI device: the lane snapshots
     # provider availability into an uploaded status JSON. A green check here
-    # is NOT a profiler proof (listed in the 2026-09-27 CI audit; owner call
-    # whether an unavailable provider should fail the label-triggered lane).
+    # is NOT a profiler proof. Owner decision 2026-09-28: the label-triggered
+    # lane stays advisory (an unavailable provider does not fail it); profiler
+    # proof comes from the owning device host, never from this lane.
     ("profiler-native-proofs.yml", "--allow-unavailable"): (
         "provider-status snapshot; the artifact records `unavailable`"
     ),

@@ -42,6 +42,7 @@ from .native_artifact import (
     ShapeGuard,
 )
 from .rocm_native import ROCMNativePackage, _compile_native_tile_ir
+from .rocm_target import AMDArch, compute_units
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 FP8_W8A8_BLOCKSCALE_CONTRACT = "rocm_fp8_w8a8_blockscale_v1"
@@ -158,15 +159,85 @@ class BlockScaleProgram:
     tile_ir: str
 
 
+@dataclass(frozen=True)
+class BlockScalePanel:
+    """The physical schedule the W8A8 Schedule rule selects for one problem."""
+
+    #: "global" (the one-wave register panel) or "lds" (the multi-wave body).
+    staging: str
+    macro_tile_m: int
+    macro_tile_n: int
+    warps: int
+
+
+def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") -> BlockScalePanel:
+    """The Python oracle of `selectFp8W8A8BlockScalePanel` (PMPasses.cpp).
+
+    It exists to be DIFFERENTIAL, not to decide anything: the C++ Schedule is
+    the one authority (Decision #31), and `lower_blockscale` refuses a
+    Schedule whose panel this oracle does not reproduce -- the same guard the
+    split-K rule has (`verify_matmul_projection`). The occupancy denominator
+    is `rocm_target.compute_units`, the table the C++ `measuredComputeUnits`
+    mirrors; an arch absent there keeps the register panel on both sides.
+    """
+    try:
+        units = compute_units(AMDArch[f"GFX_{arch.removeprefix('gfx')}"])
+    except KeyError:
+        units = None
+
+    def tiles(tm: int, tn: int) -> int:
+        return -(-shape.m // tm) * -(-shape.n // tn)
+
+    if (shape.weight_layout == "nk" and shape.m >= 128 and units is not None
+            and (tiles(128, 128) >= units or tiles(128, 64) >= units)):
+        wide = shape.m % 128 == 0 and tiles(128, 128) >= units
+        return BlockScalePanel("lds", 128, 128 if wide else 64, 8)
+    full = (shape.m % 32 == 0 and shape.n % 32 == 0
+            and (shape.m // 32) * (shape.n // 32) >= 256)
+    return BlockScalePanel("global", 32 if full else 16, 32 if shape.n % 32 == 0 else 16, 1)
+
+
+def schedule_blockscale_panel(schedule_ir: str) -> BlockScalePanel:
+    """Read the panel the native Schedule stated on its one `schedule.matmul`."""
+    record = _one_line(schedule_ir, "schedule.matmul", "schedule.matmul record")
+    staging = re.search(r'(?<![\w.])staging\s*=\s*"(\w+)"', record)
+    return BlockScalePanel(
+        staging.group(1) if staging else "global",
+        _int_attr(record, "macro_tile_m"), _int_attr(record, "macro_tile_n"),
+        _int_attr(record, "warps"))
+
+
+def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str) -> BlockScalePanel:
+    """Refuse a Schedule whose W8A8 panel the Python oracle does not reproduce.
+
+    The differential half of Decision #31 for this rule: the CU count, the
+    ragged-M and tile-count thresholds live in C++ and here, and the two must
+    move together or packaging stops."""
+    native = schedule_blockscale_panel(schedule_ir)
+    arch = re.search(r'(?<![\w.])arch\s*=\s*"(\w+)"',
+                     _one_line(schedule_ir, "schedule.matmul", "schedule.matmul record"))
+    oracle = blockscale_panel_oracle(shape, arch=arch.group(1) if arch else "")
+    if native != oracle:
+        raise ValueError(
+            f"W8A8 panel oracle disagrees with the native Schedule for "
+            f"{shape.m}x{shape.n}x{shape.k} ({shape.weight_layout}): Schedule "
+            f"{native}, oracle {oracle}")
+    return native
+
+
 def lower_blockscale(
     shape: BlockScaleShape, *, entry: str = "w8a8_blockscale", tessera_opt: Path | None = None,
 ) -> BlockScaleProgram:
-    """Run Graph->Schedule->Tile through the compiler (no Python lowering)."""
+    """Run Graph->Schedule->Tile through the compiler (no Python lowering).
+
+    The Schedule's panel is checked against `blockscale_panel_oracle` before
+    Tile IR is produced (the projection check)."""
     tool = tessera_opt or find_tessera_opt()
     if tool is None:
         raise RuntimeError("tessera-opt is required to lower a W8A8 block-scale matmul")
     graph_ir = author_blockscale_graph(shape, entry=entry)
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+    verify_blockscale_schedule(shape, schedule_ir)
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     return BlockScaleProgram(shape, entry, graph_ir, schedule_ir, tile_ir)
 
@@ -439,6 +510,7 @@ def blockscale_reference(
 
 
 __all__ = [
+    "BlockScalePanel",
     "BlockScaleProgram",
     "BlockScaleShape",
     "CheckedDirective",
@@ -452,9 +524,12 @@ __all__ = [
     "PACKAGE_ABIS",
     "WEIGHT_LAYOUTS",
     "author_blockscale_graph",
+    "blockscale_panel_oracle",
     "blockscale_reference",
     "check_blockscale_target_ir",
     "compile_blockscale",
     "lower_blockscale",
     "package_blockscale",
+    "schedule_blockscale_panel",
+    "verify_blockscale_schedule",
 ]

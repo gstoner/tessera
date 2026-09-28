@@ -272,6 +272,10 @@ struct MatmulSchedule {
   //: part of the contract or the digest; Graph->Schedule turns it into a
   //: ROCM_SPLIT_K_NOT_APPLIED warning so the fallback is never silent.
   std::string splitKFallback;
+  //: Why a W8A8 schedule kept the register panel although its rule would
+  //: have asked for the LDS body (empty otherwise). Not part of the digest;
+  //: Graph->Schedule turns it into ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED.
+  std::string panelFallback;
   StringRef accum;
   int64_t m;
   int64_t n;
@@ -526,8 +530,28 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
 // 20.3). At every whole-M point the rule's choice is within 1.5% of the
 // fastest Tessera arm. Single-buffered: double-buffering (1.22-1.48x) and a
 // register-staged next slab (1.00-1.24x) both measured slower (knobs.json).
+//
+// FOUNDATION-BATCH-2-2026-09-27: the CU count is not this rule's to state.
+// It comes from one table, `measuredComputeUnits`, which mirrors
+// `rocm_target.compute_units` (Python, derived from the measured
+// `_DISPATCH_SLOTS` WGP counts); `tests/unit/test_rocm_fp8_blockscale.py`
+// fails when the two disagree, and `rocm_fp8_blockscale.lower_blockscale`
+// refuses a Schedule whose selection differs from the Python oracle of this
+// rule. A part with no measured count keeps the register panel and says so
+// (ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED): a guessed denominator would turn an
+// occupancy rule into a silent wrong answer.
+static std::optional<int64_t> measuredComputeUnits(StringRef arch) {
+  // Read from the GPU agent's `Compute Unit:` in rocminfo on the box that
+  // has the part (2026-09-20); see `rocm_target._DISPATCH_SLOTS`.
+  if (arch == "gfx1201")
+    return 64; // RX 9070 XT, Tajasarus: 32 WGPs
+  if (arch == "gfx1151")
+    return 40; // Radeon 8060S, Princess-Luna: 20 WGPs
+  return std::nullopt;
+}
+
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
-  constexpr int64_t kComputeUnits = 64;
+  std::optional<int64_t> computeUnits = measuredComputeUnits(schedule.arch);
   auto tiles = [&](int64_t tm, int64_t tn) {
     return ((schedule.m + tm - 1) / tm) * ((schedule.n + tn - 1) / tn);
   };
@@ -542,9 +566,15 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   // 128x64 measured 0.71-0.97x of 128x128 at 19 of 20 ragged points
   // (ragged.json; the exception, 200x4096x7168, is 1.03x).
   const bool raggedM = schedule.m % 128 != 0;
-  if (nk && schedule.m >= 128 &&
-      (tiles(128, 128) >= kComputeUnits || tiles(128, 64) >= kComputeUnits)) {
-    const bool wide = !raggedM && tiles(128, 128) >= kComputeUnits;
+  if (nk && schedule.m >= 128 && !computeUnits)
+    schedule.panelFallback =
+        (Twine("no measured compute-unit count for arch \"") + schedule.arch +
+         "\", so the LDS-staged W8A8 body's occupancy rule cannot be "
+         "evaluated")
+            .str();
+  if (nk && schedule.m >= 128 && computeUnits &&
+      (tiles(128, 128) >= *computeUnits || tiles(128, 64) >= *computeUnits)) {
+    const bool wide = !raggedM && tiles(128, 128) >= *computeUnits;
     schedule.staging = "lds";
     schedule.warps = 8;
     schedule.pipelineDepth = 1;
@@ -2659,6 +2689,10 @@ struct GraphToSchedulePass
         op->emitWarning("ROCM_SPLIT_K_NOT_APPLIED: ")
             << selected->splitKFallback
             << "; scheduling the unsplit kernel (ROCM-SPLIT-K-1).";
+      if (!selected->panelFallback.empty())
+        op->emitWarning("ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED: ")
+            << selected->panelFallback
+            << "; scheduling the register panel (ROCM-FP8-BLOCKSCALE-1).";
 
       builder.setInsertionPointAfter(op);
       OperationState state(op->getLoc(), "schedule.matmul");

@@ -5199,3 +5199,68 @@ scan now reads the `.td` constraint that emits it);
 `test_tessera_opt_build.py`, `test_test_suite_architecture.py`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-27 — Latent defects from the ODS triage: TMEM lowering, TMEM planning, solver matching, ZeRO config; dashboards stop over-claiming
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/tile-latent-defects`.
+Sync: `TILE-LATENT-DEFECTS-2026-09-27`.
+
+Outcome: the defects the ODS connection triage recorded in passing are fixed,
+each with a fixture that fails on the unfixed code. All are IR-level; TMEM is
+datacenter sm_100, which no fleet box has, so nothing here claims execution.
+
+1. `LowerTileToNVIDIA` maps `tile.tmem.allocate/load/store` by op identity.
+   Anything else under `tile.tmem.` (including the unregistered legacy
+   `tile.tmem.alloc`) fails with `NVIDIA_TMEM_UNKNOWN_OP`; it used to become a
+   `tmem_store` contract. The `!tile.tmem` handle lowers to the i32 TMEM
+   address, and load results are replaced; before, every op was erased with
+   live uses, which aborted the assertions-ON driver ("operation destroyed but
+   still has uses"). A handle feeding an unlowered op (`tile.tcgen05.mma`)
+   fails with `NVIDIA_TMEM_HANDLE_UNLOWERED`.
+2. `LowerNVIDIAToNVVM` refuses (`NVIDIA_MARKER_RESULT_USED`) a void-marker
+   contract whose result is used outside the contract family, instead of
+   `dropAllUses` leaving a null operand.
+3. `TileBufferReuse` / `TileBufferArena` / `TileMemrefLifetime.h` matched the
+   unregistered `"tile.tmem.alloc"` marker nothing produces, so no real TMEM
+   allocation was planned. They match `tile.tmem.allocate` (`isa<>`), size and
+   align it from the op, and never coalesce it: Tile IR carries no TMEM
+   completion fact, so no TMEM lifetime is provably disjoint (#30; #10a
+   negatives in `tile_buffer_reuse.mlir` / `tile_buffer_arena_tmem_invalid.mlir`).
+4. The linalg solver passes matched `contains("solve")` (every
+   `tessera_solver.*` op, through the dialect prefix) and `contains("lu")` /
+   `contains("factor")` (`gelu`, `relu`, `silu`, `adafactor`). They match
+   exact ops now (`linalg_solver_op_identity.mlir`); the four solver ops they
+   consume left the ODS waiver (ceiling 84 → 79 with `tile.tmem.store`).
+5. `ZeROConfig.to_ir_attr()` emits `tessera_sr.zero_config`, but
+   `OptimizerShardPass` read `tessera.num_dp_ranks` / `tessera.dp_axis`,
+   which nothing produces, and sharded with its defaults (1 rank, axis "dp").
+   It reads the emitted dictionary now and treats stage/axis/rank count as
+   semantic keys (#21a): `SR_ZERO_CONFIG_{MISSING,MALFORMED,CONFLICT}`,
+   including a count that disagrees with the `tessera.distributed_plan` mesh.
+
+Dashboards (Decision #25/#26), each regenerated through its generator:
+`ntk_rope` Tile `fused` → `partial` and Target `device_verified_abi` →
+`reference` (the `ntk_rope → rope` audit alias rested on a rewrite that does
+not exist); the three AttnRes ops' `lowering_rule` `complete` → `partial`
+(registered Graph ops, no lowering); the SM120 differentiation dashboard's
+four promoted rows cite fixture-only Target ops, so their Target-IR column is
+open and their status is runtime-promoted; `GRAPH_IR_SPEC.md` no longer calls
+`cache.page_lookup`, `ring.create` and the DNAS ops "scaffolded lowering".
+
+Remaining: `tile.tcgen05.mma` has no NVIDIA lowering, so a TMEM handle that
+feeds it cannot lower; the NVVM stage emits void markers for TMEM contracts;
+`OptimizerShardPass` still selects optimizer ops by substring
+(`contains("optimizer"/"adam"/…)`, the `schedule.optimizer_shard` WIRE row);
+the linalg precision/refinement annotations still have no consumer (an
+attribute-level #29 gap); the WIRE slices that would make the corrected rows
+green again (ntk_rope canonicalization, sm_120 Target producers) are open.
+
+Evidence: fixtures under `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/tmem_*.mlir`,
+`nvidia_marker_result_used.mlir`, `tests/tessera-ir/phase3/tile_buffer_*`,
+`tests/tessera-ir/phase5/{linalg_solver_op_identity,optimizer_shard_zero_config*}.mlir`;
+before/after on Tajasarus's assertions-ON LLVM/MLIR 23.1.1 recorded in the
+NVIDIA queue entry and the PR.
+
+<!-- entry-fields:end -->

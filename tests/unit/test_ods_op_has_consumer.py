@@ -142,10 +142,13 @@ _WAIVED: dict[str, Waiver] = {
     **{name: Waiver("unreferenced", "#29", _R_SOLVER_CORE) for name in (
         "trng.create_state", "trng.uniform", "trng.normal", "tsl.root.brent",
         "tsl.root.newton", "tsl.solve_trig", "tss.spmv", "tss.spmm", "tss.cg", "tss.gmres")},
-    **{name: Waiver("unreferenced", "#29", _R_SOLVER_LINALG) for name in (
-        "tessera_solver.getrf", "tessera_solver.trsm", "tessera_solver.ir_step")},
-    **{name: Waiver("fixture_only", "#29", _R_SOLVER_LINALG) for name in (
-        "tessera_solver.potrf", "tessera_solver.potrs")},
+    # getrf/potrf/potrs/trsm left this list 2026-09-27
+    # (TILE-LATENT-DEFECTS-2026-09-27): the linalg MixedPrecision /
+    # IterativeRefinement passes now select them by op identity instead of a
+    # `contains("solve")` substring. Those passes only annotate (no pass reads
+    # `tessera.compute_dtype` / `tessera_solver.ir_*` yet), which is an
+    # attribute-level #29 gap, not an op-level one.
+    "tessera_solver.ir_step": Waiver("unreferenced", "#29", _R_SOLVER_LINALG),
     "tessera_sr.export_manifest": Waiver("unreferenced", "#29", _R_UNREFERENCED),
     "tessera_spectral.twiddle_table": Waiver("unreferenced", "#29", _R_UNREFERENCED),
     # collectives
@@ -199,10 +202,6 @@ _WAIVED: dict[str, Waiver] = {
         "`using mlir::func::FuncOp`, not this op"),
     "tessera.ring.create": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
     # Tile / Attn / domain dialects
-    "tile.tmem.store": Waiver(
-        "fixture_only", "#29", "consumed through a prefix match and default branch "
-        "(`starts_with(\"tile.tmem.\")` -> `tessera_nvidia.tmem_store` in "
-        "NVIDIALowering.cpp), which a name scan cannot credit; make the branch explicit"),
     **{name: Waiver("fixture_only", "#29", _R_ATTN_MASK) for name in (
         "tessera_attn.lse.save", "tessera_attn.lse.load", "tessera_attn.causal_mask")},
     "tessera_attn.dropout_mask": Waiver("unreferenced", "#29", _R_ATTN_MASK),
@@ -227,7 +226,7 @@ _WAIVED: dict[str, Waiver] = {
 
 #: The waiver may only shrink: lower this with every entry removed. Raising it
 #: is visible in review and needs a reason in the PR.
-_WAIVER_CEILING = 84
+_WAIVER_CEILING = 79
 
 #: History (the ratchet this replaced): on 2026-09-27 seven `tessera.neighbors.*`
 #: names were declared by two ODS records -- `TesseraOps.td` (the live ones:

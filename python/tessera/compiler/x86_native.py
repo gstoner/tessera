@@ -143,7 +143,6 @@ class X86NativePackage:
 # The bounded cache includes the compiler and image file identities so an in-
 # process rebuild cannot serve a package from the previous toolchain.
 _UNARY_PACKAGE_CACHE_LIMIT = 64
-_UNARY_PACKAGE_CACHE: OrderedDict[tuple[object, ...], X86NativePackage] = OrderedDict()
 _UNARY_PACKAGE_CACHE_LOCK = RLock()
 _SCHEDULED_UNARY_PACKAGE_CACHE: OrderedDict[tuple[object, ...], X86NativePackage] = OrderedDict()
 
@@ -157,60 +156,6 @@ def _file_identity(path: Path | None) -> tuple[object, ...] | None:
         return None
     return (str(path.resolve()), stat.st_dev, stat.st_ino, stat.st_size,
             stat.st_mtime_ns, stat.st_ctime_ns)
-
-
-def _unary_package_key(
-    module: GraphIRModule, *, family: str, pipeline_name: str,
-    architecture: str,
-) -> tuple[object, ...] | None:
-    from . import scheduled_kernel
-
-    tool = _tessera_opt()
-    schedule_tool = scheduled_kernel.find_tessera_opt()
-    library = _library_path(architecture)
-    tool_identity = _file_identity(tool)
-    schedule_tool_identity = _file_identity(schedule_tool)
-    library_identity = _file_identity(library)
-    if tool_identity is None or schedule_tool_identity is None or library_identity is None:
-        return None
-    # Exact canonical Graph text retains the function name, bindings, shapes,
-    # dtype and policy. Cache reuse across shapes needs a separately verified
-    # parametric Schedule/Tile contract and is deliberately outside this key.
-    graph = module.to_mlir(target="x86", canonical=True)
-    return (family, pipeline_name, architecture, graph, schedule_tool_identity,
-            tool_identity, library_identity, scheduled_kernel.lower_scheduled_kernel, _lower)
-
-
-def _cached_unary_package(
-    module: GraphIRModule, *, family: str, pipeline_name: str,
-    architecture: str,
-) -> X86NativePackage:
-    from . import scheduled_kernel
-
-    native_architecture = _scheduled_unary_architecture(architecture)
-    key = _unary_package_key(
-        module, family=family, pipeline_name=pipeline_name,
-        architecture=architecture,
-    )
-    if key is not None:
-        with _UNARY_PACKAGE_CACHE_LOCK:
-            if cached := _UNARY_PACKAGE_CACHE.get(key):
-                _UNARY_PACKAGE_CACHE.move_to_end(key)
-                return deepcopy(cached)
-    artifact = scheduled_kernel.lower_scheduled_kernel(
-        module, target="x86", architecture=native_architecture
-    )
-    package = package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
-    if key is not None and key == _unary_package_key(
-        module, family=family, pipeline_name=pipeline_name,
-        architecture=architecture,
-    ):
-        with _UNARY_PACKAGE_CACHE_LOCK:
-            _UNARY_PACKAGE_CACHE[key] = deepcopy(package)
-            _UNARY_PACKAGE_CACHE.move_to_end(key)
-            if len(_UNARY_PACKAGE_CACHE) > _UNARY_PACKAGE_CACHE_LIMIT:
-                _UNARY_PACKAGE_CACHE.popitem(last=False)
-    return package
 
 
 def _repo_root() -> Path:
@@ -1190,10 +1135,11 @@ def package_softmax(
     """
     if not requests_softmax(module):
         raise ValueError("x86 native softmax requires one static f32 last-axis operation")
-    return _cached_unary_package(
-        module, family="softmax", pipeline_name=pipeline_name,
-        architecture=architecture,
+    from .scheduled_kernel import lower_scheduled_kernel
+    artifact = lower_scheduled_kernel(
+        module, target="x86", architecture=_scheduled_unary_architecture(architecture)
     )
+    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
 def package_reduction(
@@ -1203,10 +1149,11 @@ def package_reduction(
     """Compile an x86 reduction through native Schedule and Tile IR (E2E-REAL-6)."""
     if not requests_reduction(module):
         raise ValueError("x86 native reduction requires one static f32 last-axis operation")
-    return _cached_unary_package(
-        module, family="reduce", pipeline_name=pipeline_name,
-        architecture=architecture,
+    from .scheduled_kernel import lower_scheduled_kernel
+    artifact = lower_scheduled_kernel(
+        module, target="x86", architecture=_scheduled_unary_architecture(architecture)
     )
+    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
 def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:

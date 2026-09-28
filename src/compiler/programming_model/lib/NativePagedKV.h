@@ -12,12 +12,13 @@ static FailureOr<NativePagedKV> pagedKVContract(Operation *graph) {
   auto arch = mod->getAttrOfType<StringAttr>("tessera.arch");
   bool sm120 = target && arch && target.getValue() == "nvidia_sm120" && arch.getValue() == "sm_120";
   bool gfx1151 = target && arch && target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151";
+  bool gfx1201 = target && arch && target.getValue() == "rocm_gfx1201" && arch.getValue() == "gfx1201";
   if (!fn || !llvm::hasSingleElement(fn.getBody()) || fn.getNumArguments() != 2 ||
       fn.getNumResults() != 1 || graph->getNumOperands() != 2 || graph->getNumResults() != 1 ||
-      (!sm120 && !gfx1151) ||
+      (!sm120 && !gfx1151 && !gfx1201) ||
       graph->getOperand(0) != fn.getArgument(0) || graph->getOperand(1) != fn.getArgument(1) ||
       graph->getResultTypes() != fn.getResultTypes())
-    return graph->emitError("paged read requires an isolated SM120 or gfx1151 tensor entry"), failure();
+    return graph->emitError("paged read requires an isolated SM120, gfx1151, or gfx1201 tensor entry"), failure();
   for (unsigned i = 0; i < fn.getNumArguments(); ++i)
     if (fn.getArgAttr(i, "tessera.layout"))
       return graph->emitError("paged read layout overrides are unsupported"), failure();

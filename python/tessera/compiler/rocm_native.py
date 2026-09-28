@@ -2583,7 +2583,7 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
             ShapeGuard(output_name, 1, "eq", heads),
             ShapeGuard(output_name, 2, "eq", dim),
         ),
-        geometry=LaunchGeometry(policy="gfx1151_paged_kv_direct_256"),
+        geometry=LaunchGeometry(policy=f"{architecture}_paged_kv_direct_256"),
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",

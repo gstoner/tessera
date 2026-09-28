@@ -68,8 +68,8 @@ def lower_scheduled_paged_kv(names: tuple[str, str, str], dims: tuple[int, ...])
 
 def lower_scheduled_paged_kv_graph(module, *, target: str) -> ScheduledPagedKVArtifact:
     """Lower the caller's typed Graph op; only bindings are added at admission."""
-    if target != "rocm_gfx1151":
-        raise ValueError("ROCm paged read Schedule admission requires gfx1151")
+    if target not in {"rocm_gfx1151", "rocm_gfx1201"}:
+        raise ValueError("ROCm paged read Schedule admission requires gfx1151 or gfx1201")
     from .rocm_native import _paged_kv_contract
 
     contract = _paged_kv_contract(module)
@@ -82,8 +82,9 @@ def lower_scheduled_paged_kv_graph(module, *, target: str) -> ScheduledPagedKVAr
     # and explicit pages/table, use the registered typed Graph op that owns
     # this exact read contract; the native pass owns every later IR layer.
     source.functions[0].body[0].op_name = "tessera.paged_kv_read"
-    source.module_attrs.update({"tessera.target": '"rocm_gfx1151"',
-                                "tessera.arch": '"gfx1151"'})
+    architecture = target.removeprefix("rocm_")
+    source.module_attrs.update({"tessera.target": json.dumps(target),
+                                "tessera.arch": json.dumps(architecture)})
     source.functions[0].fn_attrs["tessera.bindings"] = json.dumps((pages, table, output))
     graph = source.to_mlir(target=target, canonical=True)
     tool = find_tessera_opt()

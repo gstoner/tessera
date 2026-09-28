@@ -28,26 +28,27 @@ def test_direct_unary_reuses_only_the_exact_compiled_package(monkeypatch, family
     if not x86_native.tools_available_for_architecture(x86_native.X86_AVX512_ARCHITECTURE):
         pytest.skip('x86 native image toolchain required')
     module = _module(family=family, target='x86')
-    x86_native._UNARY_PACKAGE_CACHE.clear()
-    real_lower = scheduled_kernel.lower_scheduled_kernel
+    scheduled_kernel._X86_GRAPH_CACHE.clear()
+    x86_native._SCHEDULED_UNARY_PACKAGE_CACHE.clear()
+    real_lower = scheduled_kernel.run_tessera_opt
     lowered = []
 
     def record_lower(*args, **kwargs):
         lowered.append(1)
         return real_lower(*args, **kwargs)
 
-    monkeypatch.setattr(scheduled_kernel, 'lower_scheduled_kernel', record_lower)
+    monkeypatch.setattr(scheduled_kernel, 'run_tessera_opt', record_lower)
     call = x86_native.package_softmax if family == 'softmax' else x86_native.package_reduction
     first = call(module, pipeline_name='tessera-lower-to-x86')
     first.descriptor.provenance['caller_mutation'] = True
     second = call(module, pipeline_name='tessera-lower-to-x86')
-    assert len(lowered) == 1
+    assert len(lowered) == 2
     assert first.image.image_digest == second.image.image_digest
     assert 'caller_mutation' not in second.descriptor.provenance
 
     module.functions[0].name = 'changed_graph_symbol'
     call(module, pipeline_name='tessera-lower-to-x86')
-    assert len(lowered) == 2
+    assert len(lowered) == 4
 
 
 @pytest.mark.parametrize('family', ['softmax', 'reduce'])

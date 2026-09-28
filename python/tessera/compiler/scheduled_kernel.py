@@ -6,13 +6,28 @@ import copy
 import math
 import re
 import struct
+from collections import OrderedDict
 from dataclasses import dataclass
+from pathlib import Path
+from threading import RLock
 
 from .graph_ir import GraphIRModule
 from .scheduled_matmul import digest_text, find_tessera_opt, run_tessera_opt
 
 
 _HASH_RE = re.compile(r'tessera\.schedule_hash = "([0-9a-f]{64})"')
+_X86_GRAPH_CACHE: OrderedDict[tuple[object, ...], ScheduledKernelArtifact] = OrderedDict()
+_X86_GRAPH_CACHE_LOCK = RLock()
+_X86_GRAPH_CACHE_LIMIT = 64
+
+
+def _tool_identity(path: Path) -> tuple[object, ...] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (str(path.resolve()), stat.st_dev, stat.st_ino, stat.st_size,
+            stat.st_mtime_ns, stat.st_ctime_ns)
 
 
 @dataclass(frozen=True)
@@ -131,6 +146,14 @@ def lower_scheduled_kernel(
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
     graph_ir = targeted.to_mlir(target=target, canonical=True)
+    tool_identity = _tool_identity(tool)
+    cache_key = None
+    if target == "x86" and tool_identity is not None:
+        cache_key = (graph_ir, tool_identity, run_tessera_opt)
+        with _X86_GRAPH_CACHE_LOCK:
+            if cached := _X86_GRAPH_CACHE.get(cache_key):
+                _X86_GRAPH_CACHE.move_to_end(cache_key)
+                return cached
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     hashes = _HASH_RE.findall(tile_ir)
@@ -166,6 +189,12 @@ def lower_scheduled_kernel(
         epsilon=contract[21],
     )
     artifact.validate()
+    if cache_key is not None and tool_identity == _tool_identity(tool):
+        with _X86_GRAPH_CACHE_LOCK:
+            _X86_GRAPH_CACHE[cache_key] = artifact
+            _X86_GRAPH_CACHE.move_to_end(cache_key)
+            if len(_X86_GRAPH_CACHE) > _X86_GRAPH_CACHE_LIMIT:
+                _X86_GRAPH_CACHE.popitem(last=False)
     return artifact
 
 
@@ -197,10 +226,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     # sum/mean/max with f32 output, keepdims. gfx1201 keeps its proved f32
     # rank-reducing envelope: evidence never transfers between the two chips.
     rocm_unary = target == "rocm_gfx1151"
-    # The three admitted targets package the same stable row-softmax semantic
+    # The admitted targets package the same stable row-softmax semantic
     # from a native Schedule/Tile consumer. Keep gfx1201 and Apple withheld
     # until their own Graph lane and exact-device rows exist.
-    if op.op_name == "tessera.softmax_safe" and target not in {"rocm_gfx1151", "x86", "nvidia_sm120"}:
+    if op.op_name == "tessera.softmax_safe" and target not in {"rocm_gfx1151", "x86"}:
         raise ValueError("scheduled softmax_safe is admitted only where it has a proved consumer")
     if rocm_unary:
         softmax_like = op.op_name in {"tessera.softmax", "tessera.softmax_safe"}

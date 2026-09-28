@@ -1574,7 +1574,15 @@ def _compile_native_tile_ir(
 
 
 def _compile_tile_ir(tile_ir: str):
-    """Compatibility wrapper retained for the ROCM-E2E-1 test seam."""
+    """Tile-text-keyed gfx1151 softmax compile, kept for the retired-route oracle.
+
+    Production packaging (``package_scheduled_kernel``) compiles through
+    :func:`_compile_shape_free_tile_ir` since FOUNDATION-BATCH-2-2026-09-27;
+    this wrapper and :func:`_compile_reduction_tile_ir` serve the frozen
+    Graph-owned constructors in ``tests/_support/rocm_unary_baseline.py``
+    (the declared Decision #31(a) oracle), whose kernel symbol is the one
+    their Tile text names.
+    """
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.softmax",
@@ -1583,6 +1591,7 @@ def _compile_tile_ir(tile_ir: str):
 
 
 def _compile_reduction_tile_ir(tile_ir: str):
+    """Tile-text-keyed gfx1151 reduction compile; see :func:`_compile_tile_ir`."""
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.reduce",

@@ -113,9 +113,9 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // GEN-SAME: %arg4: memref<?xbf16>
 // Only M is partial, so the column bound is each fragment's own far edge
 // (origin + 16), which folds: nothing column-wise is held for the store.
-// GEN: %[[C16:.*]] = arith.constant 16 : index
-// GEN: %[[COLEND:.*]] = arith.addi %{{.*}}, %[[C16]] : index
-// GEN: tile.store %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}, %arg5, %[[COLEND]], %arg6 {{.*}}tile.epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">
+// GEN: tile.fragment_unpack
+// GEN-NEXT: %[[COLEND:.*]] = arith.addi %[[COL:[0-9]+]], %c16{{[_0-9]*}} : index
+// GEN-NEXT: tile.store %{{.*}}, %arg4, %{{.*}}, %[[COL]], %arg5, %[[COLEND]], %arg6 {{.*}}tile.epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">
 // GEN-LABEL: gpu.func @w8a8_lds_narrow(
 // GEN-SAME: tessera.rocm.lds_waves = array<i64: 4, 2>
 // GEN-COUNT-4: tile.fragment_scaled_accumulate

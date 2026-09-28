@@ -63,14 +63,9 @@ if(NOT TESSERA_HARDWARE_FREE_TARGET_BUILD)
   target_link_libraries(tessera-translate-mlir PRIVATE TesseraIR)
 endif()
 
-# Neighbors dialect (Phase 7).
-if(TARGET TesseraNeighbors)
-  target_compile_definitions(tessera-translate-mlir PRIVATE TESSERA_HAVE_NEIGHBORS)
-  target_include_directories(tessera-translate-mlir PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/compiler/tessera_neighbors/include
-  )
-  target_link_libraries(tessera-translate-mlir PRIVATE TesseraNeighbors)
-endif()
+# Neighbors (Phase 7): `tessera.neighbors.*` ops are core `tessera` dialect
+# ops (TesseraOps.td), provided by TesseraIR above. The TesseraNeighbors
+# library holds only passes, which a translator does not run.
 
 # TPP dialect.
 if(TARGET TesseraTPPInit)

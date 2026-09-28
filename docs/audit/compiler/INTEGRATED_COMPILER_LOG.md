@@ -5133,3 +5133,69 @@ slot must fail the lane. The two mma.sync attention entries are the recorded
 exception. A successful `cudaFuncSetAttribute` resets the slot (measured on
 sm_120), which masks them; they clear anyway, because the rule must not rest on
 undocumented behaviour.
+
+
+### 2026-09-27 — Small correctness gaps: sm_120 TMA smoke, a lit runner that runs, one neighbors authority
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/small-correctness-gaps`.
+Sync: `SMALL-CORRECTNESS-GAPS-2026-09-27`.
+
+Outcome: Three small defects, each root-caused on the host that shows it.
+**TMA smoke (sm_120):** two stacked defects. Driver 610.88 rejects
+`cuTensorMapEncodeTiled` when a rank-1 map's `globalStrides` is `nullptr`
+(zero meaningful entries; the contents are ignored -- 128, 0, 7 and 2^41 all
+encode), and once that was fixed the launch faulted because the by-value
+`CUtensorMap` lacked `__grid_constant__`, so nvcc copied it to local memory
+and TMA was handed a local address (visible in the PTX; the fault goes away
+with exactly that change). The smoke now passes on the RTX 5070.
+**Lit runner:** on Tajasarus every lit selector picked an LLVM-prefix wrapper
+that cannot `import lit`, so `check-tessera-ir` ran zero fixtures;
+`cmake/TesseraLit.cmake` now selects, for every suite, the first candidate
+whose `--version` runs, warns per rejected candidate, fails configure for
+`tests/` and fails (not skips) the backend check targets when none works.
+Two resolver ratchets that failed only when `TESSERA_BUILD_DIR` was exported
+now clear every selector the resolver reads, gated against the resolver's
+source. **Neighbors:** the seven `tessera.neighbors.*` names declared three
+times (core `TesseraOps.td`, an unbuilt `tessera_neighbors.td`, a hand-written
+C++ dialect) now have one authority, `TesseraOps.td` -- the only one the parser
+ever reached, since `tessera.neighbors.x` resolves by its first segment (a
+taps/coeffs mismatch parsed clean on the pre-change `tessera-opt`, showing the
+hand-written verifier never ran). The semantics only the dead copies stated
+moved into the core verifier: stencil.define tap/coefficient well-formedness
+(before, checked only inside `-tessera-stencil-lower`) and neighbor.read's
+required `delta`. The duplicate ratchet's baseline is empty and a new gate
+rejects hand-written C++ ops that shadow an ODS name.
+
+Remaining: `test_tma_smoke` has no ctest/pytest wrapper, so no lane runs it.
+The halo.exchange `!tessera.neighbors.halo`-only operand check of the deleted
+dialect was not ported: `-tessera-halo-mesh-integration` legitimately builds
+exchanges over tensors. Array-of-integer stencil taps, which
+`-tessera-halo-infer` read but `-tessera-stencil-loop-materialize` silently
+skipped, are now rejected at parse (one unit-test input moved to dense taps).
+The two broken lit wrappers remain in Tajasarus's toolchain prefixes (reported,
+not used). The 77 waived ops' consume-or-delete decisions stay open.
+
+Evidence: The-Super-Bear (RTX 5070, CUDA 13.4.59 / driver 610.88, own worktree,
+device runs under `flock /tmp/tessera-timing.lock`): probe matrix and PTX in
+the [NVIDIA queue](../backend/nvidia/todo.md); pre-fix binary fails, fixed
+`test_tma_smoke` (CMake-built, `sm_120a`) passes 5/5. Tajasarus (own worktree,
+`build-wb`, configured like `build/`, under `env.sh`): before, `check-tessera-ir`
+/ `check-ebm` / `check-tessera-rocm` die with `ModuleNotFoundError`; after,
+`check-tessera-ir` 520 discovered / 454 passed / 66 unsupported,
+`check-tessera-rocm` 82/82, ebm 18, clifford 22, spectral 11; resolver ratchets
+17/17 under `env.sh`, with `TESSERA_BUILD_DIR` and under `env -i`
+([ROCm queue](../backend/rocm/todo.md)). Neighbors: the new negative fixture
+fails all nine expected diagnostics on the pre-change binary and passes after;
+Mac lit 520 / 471 passed / 49 unsupported; Tajasarus as above, and the same
+counts (454 / 66, `check-tessera-rocm` 82/82) from an assertions-ON LLVM 23.1.1
+tree built from this branch; Super-Bear reconfigured through the validator
+(selects `/usr/lib/llvm-23/bin/lit`), `check-tessera-nvidia` 62/62. Mac full
+unit sweep 21306 passed / 3821 skipped / 0 failed (the first sweep caught
+`NEIGHBORS_TOPOLOGY_UNKNOWN_KIND` losing its only C++ occurrence; the registry
+scan now reads the `.td` constraint that emits it);
+`tests/unit/test_ods_op_has_consumer.py`, `test_neighbors_*.py`,
+`test_tessera_opt_build.py`, `test_test_suite_architecture.py`.
+
+<!-- entry-fields:end -->

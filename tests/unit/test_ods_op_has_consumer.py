@@ -24,8 +24,9 @@ and bare substrings as consumers. Rebuilt 2026-09-27 (sync
 resolves class templates, cross-checked record-for-record against
 `llvm-tblgen --dump-json` once, by hand, when it landed (609 of 609 op records
 agreed on name and mnemonic; the 14 it could not dump -- `tessera_neighbors.td`
-redefines `StrAttr`, and two solver `.td` files leave an attr/type `mnemonic`
-unresolved -- are read here). No test re-runs that cross-check, since it needs
+redefined `StrAttr` (that file is deleted since, SMALL-CORRECTNESS-GAPS-2026-09-27),
+and two solver `.td` files leave an attr/type `mnemonic` unresolved -- are read
+here). No test re-runs that cross-check, since it needs
 an LLVM install; `_DECLARED_OP_RECORDS` and the per-form pins stand in for it.
 The pre-PR review found three fail-open holes (a `using` declaration, prose in a
 string, an op's own dialect arity table); each has a synthetic case below.
@@ -47,6 +48,7 @@ from tessera.compiler.ods_consumer_audit import (
     classify,
     declared_ops,
     duplicate_names,
+    hand_declared_op_names,
 )
 
 _SELF = Path(__file__).resolve()
@@ -227,22 +229,13 @@ _WAIVED: dict[str, Waiver] = {
 #: is visible in review and needs a reason in the PR.
 _WAIVER_CEILING = 84
 
-#: One textual op name declared by two ODS records. `TesseraOps.td` declares
-#: the seven `tessera.neighbors.*` ops in the `tessera` dialect (the live ones:
-#: MLIR resolves `tessera.neighbors.x` by its first segment); the unbuilt
-#: `tessera_neighbors.td` redeclares them for a hand-written neighbors dialect
-#: (`TesseraNeighbors.cpp` defines `struct HaloRegionOp` etc. by hand), and
-#: `llvm-tblgen` cannot even dump that file. Three declarations of one op is
-#: Decision #31's duplicate authority in ODS form. Shrink-only.
-_DUPLICATE_NAMES_ON_2026_09_27: frozenset[str] = frozenset({
-    "tessera.neighbors.halo.exchange",
-    "tessera.neighbors.halo.region",
-    "tessera.neighbors.neighbor.read",
-    "tessera.neighbors.pipeline.config",
-    "tessera.neighbors.stencil.apply",
-    "tessera.neighbors.stencil.define",
-    "tessera.neighbors.topology.create",
-})
+#: History (the ratchet this replaced): on 2026-09-27 seven `tessera.neighbors.*`
+#: names were declared by two ODS records -- `TesseraOps.td` (the live ones:
+#: MLIR resolves `tessera.neighbors.x` by its first segment) and an unbuilt
+#: `tessera_neighbors.td` -- and a third time by hand in `TesseraNeighbors.cpp`.
+#: Consolidated the same day onto `TesseraOps.td` (sync
+#: `SMALL-CORRECTNESS-GAPS-2026-09-27`), so the baseline is now empty and both
+#: gates below are absolute: no op name may have a second declaration of any form.
 
 
 # ─── The scan itself ────────────────────────────────────────────────────────
@@ -275,7 +268,7 @@ def test_scan_parses_every_ods_form() -> None:
 
 #: Every op record under `src/`. Pinned exactly, not as a floor: a floor let
 #: the reader lose up to its slack without failing (GOV-ODS-CONSUMER-1 review).
-_DECLARED_OP_RECORDS = 623
+_DECLARED_OP_RECORDS = 616
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:
@@ -479,10 +472,38 @@ def test_marked_at_site_reads_the_definition(tmp_path: Path) -> None:
 
 def test_no_two_records_declare_one_op_name() -> None:
     dups = duplicate_names(_OPS)
-    new = sorted(set(dups) - _DUPLICATE_NAMES_ON_2026_09_27)
-    assert not new, (
-        f"these op names are declared by more than one ODS record: "
-        f"{ {n: dups[n] for n in new} }. MLIR resolves a name by its first "
-        f"segment, so at most one can be live; delete the other declaration")
-    stale = sorted(_DUPLICATE_NAMES_ON_2026_09_27 - set(dups))
-    assert not stale, f"no longer duplicated; remove from the ratchet: {stale}"
+    assert not dups, (
+        f"these op names are declared by more than one ODS record: {dups}. "
+        f"MLIR resolves a name by its first segment, so at most one can be "
+        f"live; delete the other declaration (Decision #31)")
+
+
+def test_no_hand_written_cpp_op_shadows_an_ods_op() -> None:
+    """The third form `duplicate_names` cannot see: a C++ `Op<>` class by hand.
+
+    A hand-rolled op registering an ODS-declared name is a second authority
+    whose verifier may never run (the deleted neighbors dialect's did not: the
+    parser resolved every name to the `tessera` dialect) and which, loaded next
+    to the ODS dialect, would register one name twice.
+    """
+    ods = {op.full_name for op in _OPS}
+    hand = hand_declared_op_names()
+    shadowed = {name: files for name, files in hand.items() if name in ods}
+    assert not shadowed, (
+        f"hand-written C++ ops re-declare ODS op names: {shadowed}. Keep the "
+        f"ODS declaration and move any verifier logic into its verify().")
+
+
+def test_hand_written_op_scan_sees_the_form_it_gates(tmp_path) -> None:
+    """The scanner must match the shape the deleted neighbors dialect used."""
+    src = tmp_path / "src" / "x"
+    src.mkdir(parents=True)
+    (src / "Hand.cpp").write_text(
+        "struct HaloRegionOp : Op<HaloRegionOp> {\n"
+        "  static llvm::StringRef getOperationName() {\n"
+        "    return \"tessera.neighbors.halo.region\";\n  }\n};\n"
+        "// static StringRef getOperationName() { return \"in.a.comment\"; }\n")
+    (src / "Use.cpp").write_text(
+        "auto n = HaloRegionOp::getOperationName();\n")
+    found = hand_declared_op_names(tmp_path)
+    assert found == {"tessera.neighbors.halo.region": ["src/x/Hand.cpp"]}

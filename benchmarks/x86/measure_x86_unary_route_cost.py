@@ -101,7 +101,9 @@ def main() -> int:
         rows.append(row)
     print(json.dumps({
         "host": platform.node(), "claims": ["compile_cost", "runtime_load"],
-        "loaded_x86_images": len(rt._x86_native_image_libraries), "vm_rss_kib": _rss_kib(),
+        "image_digests_seen": len(rt._x86_native_image_libraries),
+        "loaded_x86_objects": len({lib._handle for lib in rt._x86_native_image_libraries.values()}),
+        "vm_rss_kib": _rss_kib(),
         "payload_bytes": len(x86_native._library_path().read_bytes()),
         "rows": rows,
     }, indent=2))

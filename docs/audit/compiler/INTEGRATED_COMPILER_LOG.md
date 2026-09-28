@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 audit_role: reference
 ---
 
@@ -5807,5 +5807,79 @@ Tajasarus (assertions-ON LLVM/MLIR 23.1.1, `llvm-config --assertion-mode` ON,
 Apple one unsupported there) and `ga_ebm_graph_ops{,_invalid}.mlir` pass; full
 lit 462 passed / 67 unsupported / 0 failed. libtessera_jit is not built on that
 box (no libffi), so the JIT-lane registration was not run under assertions.
+
+<!-- entry-fields:end -->
+
+### 2026-09-28 — E2E-REAL-6: x86 softmax and reduction retire their Graph-owned admission and constructors
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: branch `claude/foundation-batch-2-e2e-x86-unary` (umbrella `claude/foundation-batch-2`).
+Sync: `E2E-REAL-6-x86-unary-2026-09-28`.
+
+Outcome: the x86 twin of the ROCm unary cut. Since 2026-09-08 x86
+`package_softmax` / `package_reduction` already lowered through
+`lower_scheduled_kernel`, but admission (`supports_softmax` /
+`supports_reduction`, hence `supports_native_package`) still read the Python
+Graph object through `_softmax_contract` / `_reduction_contract`, the
+`emit_softmax_tile_ir` / `emit_reduce_tile_ir` constructors were still exported
+from production, and the packagers reached the lowering through an indirection
+the bootstrap audit could not prove. Now admission is
+`scheduled_kernel.supports_scheduled_kernel(target="x86")`, each packager hands
+`lower_scheduled_kernel(..., architecture=zen5-avx512 | x86_64_base)` straight to
+`package_scheduled_kernel`, and the retired contracts, constructors and the
+pre-2026-09-08 Graph-owned packagers are frozen in
+`tests/_support/x86_unary_baseline.py`, the declared oracle #31(a) allows.
+
+Envelope. Retired: f32 in and out; `softmax` and `softmax_safe` (last axis,
+shape-preserving); `sum` / `mean` / `max` / `amax` over the last axis (either
+spelling), keepdims true or false; any positive static rank; both images.
+Compiled: the same. The one point the scheduled contract had lost is
+`softmax_safe` -- the Graph contract kept selecting it for native packaging and
+the scheduled packager then refused it (the follow-up the ROCm cut recorded) --
+and it is now admitted for x86 through the existing canonicalization.
+Refused on purpose, each pinned by a test: an integer `keepdims` (coerced with
+`bool` before), a non-serial reduction `schedule` hint and a `schedule` hint on
+softmax (both silently ignored before). The reduction descriptor now carries
+`nan_mode` read from the replayed Tile op and fails closed on anything but
+`propagate`, which both reduce kernels implement (#21a, #32).
+
+Image identity (the shape-free-key question). x86 compiles nothing per
+package -- the payload is the prebuilt shared object, the same bytes for every
+shape -- so there is no compile cache to key. But `image_digest` binds the
+Target IR digest, which on the scheduled route carries the launch constants and
+Graph symbol, and `runtime._load_x86_native_image` loaded one copy per digest
+and never released it. Measured on Princess-Luna
+(`benchmarks/x86/measure_x86_unary_route_cost.py`, 8 shapes per family, timing
+lock): retired 1 digest, compiled 8; 16 copies of the 382 KiB object loaded;
+each new shape's first launch ~0.4 ms slower. A digest miss now resolves through
+an architecture + payload-sha256 map, and the same run loads one object (first
+launch 2.23-2.25 ms vs 1.98-2.03 ms retired; warm 0.78-0.85 ms on both; runtime
+claim, Princess-Luna). Package cost is 96-105 ms compiled vs 29-37 ms retired
+per call (compile-cost claim, Princess-Luna), all lowering and replay
+subprocesses; that route has been production since 2026-09-08, so a package
+cache is recorded as a follow-up rather than widened into this cut.
+
+Remaining: E2E-REAL-6 still owns x86 cohort/elementwise/breadth constructors,
+ROCm paged-KV / MoE / forward attention, the NVIDIA and Apple gap families and
+the frontend. NVIDIA still classifies `softmax_safe` as a native softmax its
+scheduled packager refuses (needs sm_120 rows). `numeric_policy` keyword
+arguments are still ignored by every target's unary contract (pre-existing).
+The compiled x86 package costs ~3x the retired one per call (subprocess-bound).
+
+Evidence: `tests/unit/test_x86_unary_differential.py` -- 288 host-free rows
+(descriptor, ABI, buffers, scalars, shape guards, geometry, shared provenance
+and Tile-kernel attributes identical, both images), refusal parity, pinned
+intentional refusals, a fail-closed `nan_mode` row, and 298 device rows (288
+bitwise retired-vs-compiled over every envelope point and both images, NaN
+propagation, one loaded object across shapes). Princess-Luna (Zen 5 AVX-512):
+that file + `test_x86_unary_migration.py` + `test_x86_e2e_spine.py` 662 passed
+/ 0 skipped; `-k x86 -m "not slow"` 2461 passed / 1 skipped (umbrella head 1858
+/ 1, the same skip); `check-tessera-ir` 462 passed / 67 unsupported. Tajasarus
+(Zen 5, assertions-ON LLVM/MLIR 23.1.1 tree): the same three files 662 passed /
+0 skipped; `-k x86` 2435 passed / 27 skipped / 0 failed; the four x86 unary
+Schedule/Tile lit fixtures pass under assertions (no C++ changed).
+`bootstrap_prune_gap.md`: x86 softmax/reduction gap -> generic; alpha
+scoreboard `schedule_tile` 18 -> 24 (ratchet baseline tightened).
 
 <!-- entry-fields:end -->

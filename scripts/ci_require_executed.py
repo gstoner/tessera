@@ -35,7 +35,8 @@ def evaluate(xml_path: Path, allowed: list[str]) -> list[str]:
 
     problems: list[str] = []
     try:
-        root = ET.parse(xml_path).getroot()
+        # The file is pytest's own --junitxml output from the same job.
+        root = ET.parse(xml_path).getroot()  # noqa: S314
     except (OSError, ET.ParseError) as exc:
         return [f"cannot read JUnit results {xml_path}: {exc}"]
 

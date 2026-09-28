@@ -5572,3 +5572,62 @@ before/after on Tajasarus's assertions-ON LLVM/MLIR 23.1.1 recorded in the
 NVIDIA queue entry and the PR.
 
 <!-- entry-fields:end -->
+
+### 2026-09-27 — CI lanes that reported success having tested nothing
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: branch `claude/foundation-batch-2-ci-lanes` (umbrella `claude/foundation-batch-2`).
+
+Outcome: The hosted `lit` and `rocm-serialize` lanes gated on the exact
+LLVM/MLIR 23.1.1 pin; apt.llvm.org now serves 23.1.2, so both printed
+`::warning … skipping`, set `mlir=false`, gated every later step off it and
+reported **success having configured, built and tested nothing** (push run
+36347063229 on main). The `sanitizer` lane installed no LLVM/MLIR at all; its
+last real run (35609056270, 2026-09-21) failed at `find_package(MLIR)`.
+Owner decision (sync `FOUNDATION-BATCH-2-2026-09-27`): hosted CI accepts any
+23.1.x patch, records the exact version, and **fails** when none is available;
+the fleet keeps its exact pin. Implemented as: `TESSERA_LLVM_PIN_MODE`
+(`exact` default, `minor` passed only by `validate.yml`) in
+`cmake/TesseraToolchainPins.cmake` — `minor` relaxes only the patch, still
+rejects a mixed LLVM/MLIR pair and other series, writes
+`tessera_llvm_pin.txt`, and refuses an MLIR that reports no version;
+`scripts/ci_resolve_llvm.sh` resolves the prefix (llvm-config, mlir-opt,
+CMake packages, optional ld.lld), writes version to `$GITHUB_OUTPUT`, the job
+summary and a `ci-toolchain/*.json` manifest, or fails with `::error`; every
+MLIR lane uploads `ci-toolchain/` on success and failure; apt install
+failures fail the step (the `|| echo ::warning` fallbacks are gone); the
+pytest proof steps now run through `scripts/ci_require_executed.py`, which
+fails an all-skipped or unexpectedly-skipped run (their tests `skipif` a
+missing tool, so a broken build was otherwise a second green no-op); the
+sanitizer lane installs LLVM/MLIR 23 + `libclang-rt-23-dev` and passes the
+pin mode through `run_sanitizers.sh`. Audit of the other workflows: no other
+step-output skip gate; `pylint.yml` (`--exit-zero`) and
+`profiler-native-proofs.yml` (`--allow-unavailable`, no device on hosted
+runners) still succeed without proving anything, deliberately, and are now an
+explicit allow-list in the gate. Sibling backends: ROCm — `rocm-serialize`
+proves hsaco emission again once the lane runs; Apple/NVIDIA/x86 — not
+applicable (no hosted lane builds for them beyond the portable `lit` build).
+
+Remaining: Only a real Actions run proves the lanes now pass on
+ubuntu-latest with apt's 23.1.2 — the local simulation cannot see apt, the
+runner image, or a configure/build that 23.1.2 might break (MLIR API drift
+within 23.1 is possible; if it happens the lane now fails loudly, which is the
+intended outcome). The sanitizer lane's Linux TSAN path (clang-23 +
+`libclang-rt-23-dev`, non-PIE) has not run since it was added. Whether a
+label-triggered `profiler-native-proofs` lane should fail when its provider is
+unavailable is an owner call.
+
+Evidence: `tests/unit/test_ci_workflow.py` (`TestNoSilentToolchainSkip`,
+`TestFleetPinStaysExact`, `TestResolverBehaviour`, `TestCMakePinModes`,
+`TestRequireExecuted`) — fails 11 tests against the pre-change `validate.yml`
+and passes on this branch (Mac, macOS 27, LLVM/MLIR 23.1.1). Local simulation
+(Mac): the resolver against faked prefixes accepts 23.1.1 (`exact`) and
+23.1.2 (`series`, recorded) and fails 23.2.0, 24.1.0, absent, mixed
+LLVM/MLIR, missing CMake packages and missing required ld.lld;
+`tessera_pin_llvm` under `cmake -P` rejects 23.1.2 in `exact` mode and
+accepts only matched 23.1.x in `minor`; the real Homebrew 23.1.1 keg resolves
+`exact`; `run_sanitizers.sh asan ubsan` with `TESSERA_LLVM_PIN_MODE=minor`
+configured, built and ran both smoke binaries clean.
+
+<!-- entry-fields:end -->

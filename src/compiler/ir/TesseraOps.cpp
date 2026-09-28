@@ -5939,8 +5939,22 @@ LogicalResult GatherOp::verify() {
   int64_t axis = getAxis();
   if (axis < -source.getRank() || axis >= source.getRank())
     return emitOpError("gather axis is out of range");
+  if (indices.getRank() == 0)
+    return emitOpError("gather indices must have at least one dimension");
   if (source.getRank() == 1)
     return verifySameRankedShape(getOperation(), indices, result, "gather");
+  if (result.getRank() != source.getRank())
+    return emitOpError("gather result rank must match the source rank");
+  if (axis < 0)
+    axis += source.getRank();
+  for (int64_t dim = 0; dim < source.getRank(); ++dim) {
+    int64_t expected = dim == axis ? indices.getDimSize(0)
+                                   : source.getDimSize(dim);
+    int64_t actual = result.getDimSize(dim);
+    if (!ShapedType::isDynamic(actual) && !ShapedType::isDynamic(expected) &&
+        actual != expected)
+      return emitOpError("gather result shape must replace the indexed axis with the index extent");
+  }
   return success();
 }
 

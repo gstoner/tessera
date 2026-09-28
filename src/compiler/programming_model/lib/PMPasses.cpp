@@ -514,17 +514,18 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
 //
 // GFX1201-PERF-2026-09-27 -- the LDS-staged multi-wave body, [N, K] weight
 // only (`benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/`,
-// rule.json: 30 (M, N, K) points, device clock, paired and interleaved with
-// the register panel). Eight waves of 32 rows share one staged K slab of A
-// and the weight, so each workgroup fetches its tile once per slab instead
-// of once per wave. It needs enough workgroups to cover the RX 9070 XT's 64
-// CUs: 128x128 (waves 4x2, 32x64 each) once that tiling yields >= 64
-// workgroups, else 128x64 (waves 4x2, 32x32 each) if that does, else the
-// register panel. Measured against the register panel: 0.44-0.92x wherever
-// the rule picks the LDS body; the one-wave panel keeps every point below
-// 64 workgroups, where the LDS body's coarser tiles leave CUs idle (N=1024,
-// M=128: 25.6-45.4 us vs 20.5). Single-buffered: double-buffering and a
-// register-staged next slab both measured slower (VGPR pressure; sweep.json).
+// rule.json, ragged.json, knobs.json: device clock, paired and interleaved).
+// Eight waves of 32 rows share one staged K slab of A and the weight, so each
+// workgroup fetches its tile once per slab instead of once per wave. It needs
+// enough workgroups to cover the RX 9070 XT's 64 CUs: 128x128 (waves 4x2,
+// 32x64 each) once that tiling yields >= 64 workgroups, else 128x64 (waves
+// 4x2, 32x32 each) if that does, else the register panel. Against the
+// register panel it runs at 0.45-0.97x wherever the rule picks it (29
+// points); the one-wave panel keeps every point below 64 workgroups, where
+// the LDS body's coarser tiles leave CUs idle (N=1024, M=128: 30.6-43.7 us vs
+// 20.3). At every whole-M point the rule's choice is within 1.5% of the
+// fastest Tessera arm. Single-buffered: double-buffering (1.22-1.48x) and a
+// register-staged next slab (1.00-1.24x) both measured slower (knobs.json).
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   constexpr int64_t kComputeUnits = 64;
   auto tiles = [&](int64_t tm, int64_t tn) {
@@ -538,8 +539,8 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   // A ragged M (not a whole number of 128-row blocks) takes 128x64 whenever
   // that covers the CUs: its masked edge keeps more registers live in the
   // 32x64-wave 128x128 body (251 vs 238 VGPRs, one wave per SIMD fewer), and
-  // 128x64 measured 0.72-0.98x of 128x128 at 19 of 20 ragged points
-  // (ragged.json; the exception, 200x4096x7168, is 1.10x).
+  // 128x64 measured 0.71-0.97x of 128x128 at 19 of 20 ragged points
+  // (ragged.json; the exception, 200x4096x7168, is 1.03x).
   const bool raggedM = schedule.m % 128 != 0;
   if (nk && schedule.m >= 128 &&
       (tiles(128, 128) >= kComputeUnits || tiles(128, 64) >= kComputeUnits)) {

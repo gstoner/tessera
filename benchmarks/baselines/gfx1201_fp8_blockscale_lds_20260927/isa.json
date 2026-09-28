@@ -1,0 +1,300 @@
+{
+  "work_item": "ROCM-FP8-BLOCKSCALE-1",
+  "sync_key": "GFX1201-PERF-2026-09-27",
+  "source_commit": "70650bb2e516598766a6cda880aca982255e8ddb",
+  "worktree_dirty": false,
+  "tessera_opt": "/home/angstorms/programming/tessera-w-perf/build/tools/tessera-opt/tessera-opt",
+  "kind": "static ISA census; not a runtime or profiler measurement",
+  "variants": [
+    {
+      "variant": "1024,4096,1024:reg:32x32",
+      "physical_route": "gfx1201_register_wmma_blockscale_nk_2x2_k128",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "macro_tile": [
+        32,
+        32
+      ],
+      "hsaco_sha256": "dc5110f6cb2b4344fa5359a42727fed9a64a57e8f9e0800e1a06d36a45529664",
+      "resources": {
+        "vgpr_count": 231,
+        "sgpr_count": 56,
+        "group_segment_fixed_size": 0,
+        "private_segment_fixed_size": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "census": {
+        "global_load_b32": 36,
+        "global_load_b64": 32,
+        "global_load_d16_hi_u8": 32,
+        "global_load_d16_u8": 32,
+        "global_store_b32": 64,
+        "s_wait_alu": 387,
+        "s_wait_kmcnt": 1,
+        "s_wait_loadcnt": 69,
+        "v_wmma_f32_16x16x16_fp8_fp8": 40
+      },
+      "instructions": 2979
+    },
+    {
+      "variant": "1024,4096,1024:prod",
+      "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x128_w8_d1_k128",
+      "workgroup": [
+        256,
+        1,
+        1
+      ],
+      "macro_tile": [
+        128,
+        128
+      ],
+      "hsaco_sha256": "cfdf06e26b8a521d9897bf2494136026e5876cd06077764c2b4a90e0164ceede",
+      "resources": {
+        "vgpr_count": 238,
+        "sgpr_count": 32,
+        "group_segment_fixed_size": 36864,
+        "private_segment_fixed_size": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "census": {
+        "ds_load_2addr_b64": 24,
+        "ds_store_b128": 8,
+        "global_load_b128": 8,
+        "global_load_b32": 20,
+        "global_store_b32": 64,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_alu": 95,
+        "s_wait_dscnt": 21,
+        "s_wait_kmcnt": 2,
+        "s_wait_loadcnt": 18,
+        "v_wmma_f32_16x16x16_fp8_fp8": 64
+      },
+      "instructions": 1014
+    },
+    {
+      "variant": "1024,4096,7168:prod",
+      "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x128_w8_d1_k128",
+      "workgroup": [
+        256,
+        1,
+        1
+      ],
+      "macro_tile": [
+        128,
+        128
+      ],
+      "hsaco_sha256": "42d25bd2f9deda59aa360fb60aad6c148fa6422d1c385f95decdfe5310fa635b",
+      "resources": {
+        "vgpr_count": 238,
+        "sgpr_count": 32,
+        "group_segment_fixed_size": 36864,
+        "private_segment_fixed_size": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "census": {
+        "ds_load_2addr_b64": 24,
+        "ds_store_b128": 8,
+        "global_load_b128": 8,
+        "global_load_b32": 20,
+        "global_store_b32": 64,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_alu": 98,
+        "s_wait_dscnt": 21,
+        "s_wait_kmcnt": 2,
+        "s_wait_loadcnt": 18,
+        "v_wmma_f32_16x16x16_fp8_fp8": 64
+      },
+      "instructions": 1065
+    },
+    {
+      "variant": "1024,4096,7168:prod:bf16",
+      "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x128_w8_d1_k128",
+      "workgroup": [
+        256,
+        1,
+        1
+      ],
+      "macro_tile": [
+        128,
+        128
+      ],
+      "hsaco_sha256": "9606c3e7955de20e1b79e4c519d39dd7d3a5b58725b34c9ef43b76968eac56f3",
+      "resources": {
+        "vgpr_count": 238,
+        "sgpr_count": 32,
+        "group_segment_fixed_size": 36864,
+        "private_segment_fixed_size": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "census": {
+        "ds_load_2addr_b64": 24,
+        "ds_store_b128": 8,
+        "global_load_b128": 8,
+        "global_load_b32": 20,
+        "global_store_d16_hi_b16": 64,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_alu": 162,
+        "s_wait_dscnt": 21,
+        "s_wait_kmcnt": 2,
+        "s_wait_loadcnt": 18,
+        "v_wmma_f32_16x16x16_fp8_fp8": 64
+      },
+      "instructions": 1444
+    },
+    {
+      "variant": "128,4096,1024:prod",
+      "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+      "workgroup": [
+        256,
+        1,
+        1
+      ],
+      "macro_tile": [
+        128,
+        64
+      ],
+      "hsaco_sha256": "c90fd244b66347e73b51b1d0901630c90d55073e90cbbbb918a17ad7874e6ddb",
+      "resources": {
+        "vgpr_count": 187,
+        "sgpr_count": 30,
+        "group_segment_fixed_size": 27648,
+        "private_segment_fixed_size": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "census": {
+        "ds_load_2addr_b64": 16,
+        "ds_store_b128": 6,
+        "global_load_b128": 6,
+        "global_load_b32": 18,
+        "global_store_b32": 32,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_alu": 82,
+        "s_wait_dscnt": 10,
+        "s_wait_kmcnt": 2,
+        "s_wait_loadcnt": 15,
+        "v_wmma_f32_16x16x16_fp8_fp8": 32
+      },
+      "instructions": 791
+    },
+    {
+      "variant": "1000,8192,1024:prod",
+      "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+      "workgroup": [
+        256,
+        1,
+        1
+      ],
+      "macro_tile": [
+        128,
+        64
+      ],
+      "hsaco_sha256": "9bb83225a325b630b00c89f6f7e44212dab3e6e9ffd81679f2decaebf455ade4",
+      "resources": {
+        "vgpr_count": 233,
+        "sgpr_count": 38,
+        "group_segment_fixed_size": 27648,
+        "private_segment_fixed_size": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "census": {
+        "ds_load_2addr_b64": 16,
+        "ds_store_b128": 6,
+        "global_load_b128": 6,
+        "global_load_b32": 18,
+        "global_store_b32": 32,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_alu": 218,
+        "s_wait_dscnt": 10,
+        "s_wait_kmcnt": 33,
+        "s_wait_loadcnt": 15,
+        "v_wmma_f32_16x16x16_fp8_fp8": 32
+      },
+      "instructions": 1395
+    },
+    {
+      "variant": "1000,8192,1024:lds:128x128:8",
+      "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x128_w8_d1_k128",
+      "workgroup": [
+        256,
+        1,
+        1
+      ],
+      "macro_tile": [
+        128,
+        128
+      ],
+      "hsaco_sha256": "ccc633656f7326c9957b9fba3a544a289dae87f47cbd4d6dedc49c66f61495fd",
+      "resources": {
+        "vgpr_count": 251,
+        "sgpr_count": 40,
+        "group_segment_fixed_size": 36864,
+        "private_segment_fixed_size": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "census": {
+        "ds_load_2addr_b64": 24,
+        "ds_store_b128": 8,
+        "global_load_b128": 8,
+        "global_load_b32": 20,
+        "global_store_b32": 64,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_alu": 420,
+        "s_wait_dscnt": 19,
+        "s_wait_kmcnt": 65,
+        "s_wait_loadcnt": 26,
+        "v_wmma_f32_16x16x16_fp8_fp8": 64
+      },
+      "instructions": 2398
+    },
+    {
+      "variant": "64,4096,1024:prod",
+      "physical_route": "gfx1201_register_wmma_blockscale_nk_2x2_k128",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "macro_tile": [
+        32,
+        32
+      ],
+      "hsaco_sha256": "dc5110f6cb2b4344fa5359a42727fed9a64a57e8f9e0800e1a06d36a45529664",
+      "resources": {
+        "vgpr_count": 231,
+        "sgpr_count": 56,
+        "group_segment_fixed_size": 0,
+        "private_segment_fixed_size": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "census": {
+        "global_load_b32": 36,
+        "global_load_b64": 32,
+        "global_load_d16_hi_u8": 32,
+        "global_load_d16_u8": 32,
+        "global_store_b32": 64,
+        "s_wait_alu": 387,
+        "s_wait_kmcnt": 1,
+        "s_wait_loadcnt": 69,
+        "v_wmma_f32_16x16x16_fp8_fp8": 40
+      },
+      "instructions": 2979
+    }
+  ]
+}

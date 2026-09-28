@@ -64,6 +64,12 @@ global it reaches by name (`_synthesize_fused_c`, the snippet helpers,
 memoized per source object (NVIDIA queue for the mechanism and the Mac
 numbers). Sibling outcome: host-independent, covered by the Mac tests; no x86
 device claim.
+## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
+
+x86 schedules no block-scaled matmul. The shared `schedule.matmul` `staging`
+attribute defaults to `global` and is admitted as `lds` only for the gfx1201
+W8A8 contract; no x86 schedule or digest changed.
+
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

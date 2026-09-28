@@ -484,6 +484,17 @@ original artifact and stamp with no compile; `nvidia_generic_cuda` (through
 `kernel_cache.build`) compiled once for 10 runs and recompiled exactly the
 patched text. `_mma_fused_fn` lookup on that host: 3.0 us per call.
 
+## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
+
+ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1 on gfx1201 ([W8A8 packet](../../../../benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/README.md),
+[MXFP4 packet](../../../../benchmarks/baselines/gfx1201_mxfp4_small_m_20260927/README.md)).
+One shared-dialect change: `schedule.matmul` gains `staging` (default
+`global`, printed and digested only when set; the verifier admits `lds` only
+for the gfx1201 `[N, K]` W8A8 contract), so every sm_120 schedule and digest
+is unchanged. The bf16 store narrowing lives in the ROCm fragment-store
+materializer only. sm_120 still has no W8A8 or folded MXFP4 route; nothing
+here transfers.
+
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

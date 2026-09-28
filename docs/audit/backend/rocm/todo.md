@@ -7,6 +7,62 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Scheduled softmax/reduction images keyed on a shape-free kernel identity — 2026-09-27
+
+Owner E2E-REAL-6 (follow-up the unary entry below recorded as open); sync
+`FOUNDATION-BATCH-2-2026-09-27`.
+
+- **Moved.** `package_scheduled_kernel` (softmax and reduction, gfx1151 and
+  gfx1201) compiles through `rocm_native._compile_shape_free_tile_ir`. Tile IR
+  is still consumed by the compiler per request (`TileToROCM`, Tile -> Target);
+  the Target IR is then projected onto its one `tessera_rocm.{softmax,reduce}`
+  directive (`_shape_free_target_ir`), whose `name` becomes
+  `tessera_rocm_<family>_<16 hex>` derived from everything else in that module,
+  and the HSACO is compiled *from that projection* at `input=directive`. The
+  image cache key is `_native_cache_key` over that text, so it covers the
+  binary's input by construction: every directive attribute (storage, accum,
+  kind, axis, keepdims, layout, `inner_is_one`, exp/ftz/NaN policy, arch), the
+  pipeline config, the driver-selected device libraries and the `tessera-opt`
+  binary. Static extents and the Graph symbol live only in host scaffolding and
+  are dropped; any Target IR op outside an audited scaffold set fails closed.
+  The descriptor's `entry_symbol` is read from that Target IR; the Graph symbol
+  is kept as `provenance["graph_symbol"]`.
+- **Why these two families.** `GenerateROCM{Softmax,Reduce}Kernel` read only the
+  directive's attributes and `name` (all extents are kernel arguments), and on
+  Princess-Luna the reduction HSACO compiled from the extracted directive has
+  the same instruction stream and kernel descriptor as the one compiled from
+  the full Tile module (only symbol-string layout differs). Other families stay
+  on the Tile-text key until the same code read and measurement admit them; a
+  family whose generator bakes an extent must first carry it as a directive
+  attribute.
+- **Measured (Princess-Luna gfx1151, `benchmarks/rocm/measure_rocm_unary_route_cache.py`,
+  not a runtime-latency claim).** Before, every new shape of the compiled route
+  was a cold compile: softmax f16 374–387 ms, reduce bf16 376–387 ms per shape.
+  After: the first shape is cold (~200 ms) and every further shape -- and a
+  different Graph symbol -- is `warm_cache` at 98–102 ms with the same HSACO
+  and the same `image_digest`. The remaining ~100 ms is per-shape
+  Graph -> Schedule -> Tile lowering, ancestry replay and Tile -> Target (five
+  `tessera-opt` runs) plus the device-library probe. Separately, the
+  `tessera-opt` digest in every ROCm compile key is now memoized on the
+  binary's stat signature (a rebuild misses): an exact warm hit fell from
+  ~186–208 ms to 16–20 ms, which is mostly the retired route's rows.
+- **Proof.** Princess-Luna (gfx1151, `TESSERA_ROCM_E2E_DEVICE_TEST=1`):
+  `test_rocm_shape_free_cache_key.py`, `test_rocm_unary_migration.py`,
+  `test_rocm_e2e_spine.py`, `test_scheduled_kernel_consumers.py`,
+  `test_rocm_gfx1201_scheduled.py` -- 500 passed, 101 skipped (gfx1201 gates,
+  Darwin); 185 exact-device rows incl. every retired-vs-compiled bitwise row
+  (now launching the canonical symbol) and the new two-shape/two-symbol reuse
+  row. ROCm subset (`-k "rocm or scheduled_kernel or unary"`, not slow): 4578
+  passed, 465 skipped, 0 failed. `check-tessera-ir` 521 passed / 4 unsupported,
+  `check-tessera-rocm` 82/82 (no C++ change). Tajasarus (gfx1201, assertions-ON LLVM/MLIR 23.1.1): the same five files with `TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1` -- 384 passed, 217 skipped (gfx1151 device gates, Darwin), including both new two-shape/two-symbol reuse rows and both `test_gfx1201_scheduled_package_executes` rows through the `input=directive` compile; ROCm subset 4615 passed / 418 skipped / 10 failed under `-n 8`, all ten in `test_rocm_sparse_{runtime,byte_formats}.py` ("sparse worker teardown is unconfirmed" -- worker-process contention on a GPU shared with another job), and those two files pass 34/34 run serially; `check-tessera-ir` 459 passed / 66 unsupported, `check-tessera-rocm` 82/82. Mac: full `tests/unit` sweep (`-m "not slow"`, Apple + x86 + EBM + Clifford build) 21675 passed / 4017 skipped / 0 failed; mypy clean; `check_compiler_plan.py` and generated-doc drift clean.
+- **Sibling backends.** NVIDIA: its scheduled unary route already exports a
+  shape-free symbol (`tessera_tile_softmax_<storage>`); whether its image cache
+  is keyed on shape-bound Tile text was not measured here -- follow-up
+  candidate, no parity claim. Apple, x86: not evaluated (different image
+  producers).
+- **Recorder impact.** The next `record_rocm_gfx1151_packet.py` softmax/reduce
+  packet will record the canonical entry symbol and a new image digest.
+
 ## E2E-REAL-6 ROCm unary family: gfx1151 softmax/reduction retire their Graph-owned constructors — 2026-09-27
 
 Owner E2E-REAL-6 (ROCM-E2E-1/-2 route); sync `E2E-REAL-6-rocm-unary-2026-09-27`.
@@ -39,6 +95,7 @@ Owner E2E-REAL-6 (ROCM-E2E-1/-2 route); sync `E2E-REAL-6-rocm-unary-2026-09-27`.
   shape-invariant: ~370 ms cold per new shape vs ~186 ms warm on the retired
   route (`benchmarks/rocm/measure_rocm_unary_route_cache.py`, Princess-Luna).
   Key the cache on the shape-free kernel. Not a runtime-latency claim.
+  **Done 2026-09-27** (`FOUNDATION-BATCH-2-2026-09-27`, entry above).
 - **Recorder label.** `benchmarks/e2e_spine/record_rocm_gfx1151_packet.py`
   derives `route` from `provenance["schedule"]`, falling back to the geometry
   policy; the next softmax/reduction packet will read

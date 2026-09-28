@@ -317,7 +317,7 @@ and every Apple CPU example launch is oracle-checked. Accelerator examples
 remain artifact claims; exact-device execution stays backend-owned.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [gfx1151 softmax and reduction retire their Graph-owned constructors](INTEGRATED_COMPILER_LOG.md#2026-09-27--e2e-real-6-gfx1151-softmax-and-reduction-retire-their-graph-owned-constructors)
+- Latest: [ROCm scheduled softmax/reduction images keyed on a shape-free kernel identity](INTEGRATED_COMPILER_LOG.md#2026-09-27--rocm-scheduled-softmaxreduction-images-keyed-on-a-shape-free-kernel-identity)
 
 ### W1.1
 

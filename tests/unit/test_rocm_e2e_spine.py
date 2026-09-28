@@ -273,10 +273,11 @@ def _reduction_module(
     )
 
 
-def _fake_reduce_compile(tile_ir: str):
+def _fake_reduce_compile(tile_ir: str, *, family: str = "reduction", architecture: str = "gfx1151"):
     assert "tile.reduce_kernel" in tile_ir
+    assert (family, architecture) == ("reduction", "gfx1151")
     return (
-        'module { "tessera_rocm.reduce"() {layout = "outer_axis_inner"} : () -> () }',
+        'module {\n  tessera_rocm.reduce {layout = "outer_axis_inner", name = "tessera_rocm_reduction_fake"}\n}\n',
         "gpu.binary @binary",
         b"\x7fELFrocm-e2e-2",
         "compiler",
@@ -338,12 +339,14 @@ def _softmax_module(dtype: str = "fp32", shape: tuple[int, ...] = (3, 17)) -> Gr
     )
 
 
-def _fake_compile(tile_ir: str):
+def _fake_compile(tile_ir: str, *, family: str = "softmax", architecture: str = "gfx1151"):
     assert "tile.softmax_kernel" in tile_ir
+    assert (family, architecture) == ("softmax", "gfx1151")
+    # The shape-free Target IR module the image is compiled from: the one
+    # directive, named by its kernel identity (FOUNDATION-BATCH-2-2026-09-27).
     target = (
-        "module { llvm.func @tessera_tile_softmax_f32() { "
-        '"tessera_rocm.softmax"() {name = "tessera_tile_softmax_f32", '
-        'dtype = "f32"} : () -> () llvm.return } }'
+        'module {\n  tessera_rocm.softmax {dtype = "f32", '
+        'name = "tessera_rocm_softmax_fake"}\n}\n'
     )
     libraries = (
         DeviceLibraryRecord("rocm.ocml", "1" * 64, "compiler_driver"),
@@ -810,7 +813,7 @@ _needs_compiler = pytest.mark.skipif(find_tessera_opt() is None, reason="require
 
 @_needs_compiler
 def test_rocm_softmax_package_owns_hsaco_and_descriptor(monkeypatch) -> None:
-    monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
+    monkeypatch.setattr("tessera.compiler.rocm_native._compile_shape_free_tile_ir", _fake_compile)
     package = package_softmax(_softmax_module(), pipeline_name="tessera-lower-to-rocm")
     assert package.image.target == "rocm_gfx1151"
     assert package.image.architecture == "gfx1151"
@@ -821,9 +824,13 @@ def test_rocm_softmax_package_owns_hsaco_and_descriptor(monkeypatch) -> None:
         "rocm.oclc_isa_version_1151",
     ]
     assert package.descriptor.abi_id == GFX_SOFTMAX_F32_ABI
-    # E2E-REAL-6: the entry is the native Schedule->Tile function, not a
-    # Python-authored symbol, and the route is the scheduled consumer.
-    assert package.descriptor.entry_symbol == "gfx1151_softmax"
+    # FOUNDATION-BATCH-2-2026-09-27: the entry is the symbol the image
+    # exports -- the shape-free kernel identity's directive name, read from
+    # the Target IR the image was compiled from -- and the Graph function the
+    # request named is kept as provenance.
+    assert package.descriptor.entry_symbol == "tessera_rocm_softmax_fake"
+    assert package.image.entry_points[0].symbol == "tessera_rocm_softmax_fake"
+    assert package.descriptor.provenance["graph_symbol"] == "gfx1151_softmax"
     assert [item.name for item in package.descriptor.buffers] == ["x", "o"]
     assert [item.name for item in package.descriptor.scalars] == ["Rows", "K"]
     assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
@@ -833,7 +840,7 @@ def test_rocm_softmax_package_owns_hsaco_and_descriptor(monkeypatch) -> None:
 @_needs_compiler
 @pytest.mark.parametrize("failure", ["dtype", "shape", "scalar"])
 def test_rocm_softmax_descriptor_rejects_invalid_invocations(monkeypatch, failure) -> None:
-    monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
+    monkeypatch.setattr("tessera.compiler.rocm_native._compile_shape_free_tile_ir", _fake_compile)
     package = package_softmax(_softmax_module(), pipeline_name="tessera-lower-to-rocm")
     x = BufferArgument("fp32", (3, 17), "row_major", 64)
     output = BufferArgument("fp32", (3, 17), "row_major", 64)
@@ -850,7 +857,7 @@ def test_rocm_softmax_descriptor_rejects_invalid_invocations(monkeypatch, failur
 
 @_needs_compiler
 def test_driver_joins_exact_gfx1151_native_package(monkeypatch) -> None:
-    monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
+    monkeypatch.setattr("tessera.compiler.rocm_native._compile_shape_free_tile_ir", _fake_compile)
     bundle = compile_graph_module(
         _softmax_module(),
         source_origin="unit",
@@ -869,7 +876,7 @@ def test_driver_joins_exact_gfx1151_native_package(monkeypatch) -> None:
 
 @_needs_compiler
 def test_canonical_gfx1151_selector_defaults_to_native_descriptor(monkeypatch) -> None:
-    monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
+    monkeypatch.setattr("tessera.compiler.rocm_native._compile_shape_free_tile_ir", _fake_compile)
     monkeypatch.setattr(
         "tessera.compiler.rocm_native.native_packaging_available", lambda: True
     )
@@ -925,7 +932,7 @@ def test_rocm_reduction_emitter_and_contract_are_typed_and_arbitrary_axis() -> N
 @_needs_compiler
 def test_rocm_reduction_package_owns_outer_axis_inner_descriptor(monkeypatch) -> None:
     monkeypatch.setattr(
-        "tessera.compiler.rocm_native._compile_reduction_tile_ir",
+        "tessera.compiler.rocm_native._compile_shape_free_tile_ir",
         _fake_reduce_compile,
     )
     package = package_reduction(_reduction_module(axis=1), pipeline_name="tessera-lower-to-rocm")
@@ -949,7 +956,7 @@ def test_rocm_reduction_package_owns_outer_axis_inner_descriptor(monkeypatch) ->
 @_needs_compiler
 def test_rocm_reduction_package_has_storage_keyed_f32_output_abi(monkeypatch, dtype, abi) -> None:
     monkeypatch.setattr(
-        "tessera.compiler.rocm_native._compile_reduction_tile_ir",
+        "tessera.compiler.rocm_native._compile_shape_free_tile_ir",
         _fake_reduce_compile,
     )
     package = package_reduction(_reduction_module(dtype=dtype), pipeline_name="tessera-lower-to-rocm")
@@ -963,7 +970,7 @@ def test_driver_joins_gfx1151_reduction_native_package(monkeypatch) -> None:
     # E2E-REAL-6: the driver's gfx1151 reduction goes through the scheduled
     # artifact; the retired Graph-owned constructor is a test baseline only.
     monkeypatch.setattr(
-        "tessera.compiler.rocm_native._compile_reduction_tile_ir",
+        "tessera.compiler.rocm_native._compile_shape_free_tile_ir",
         _fake_reduce_compile,
     )
     bundle = compile_graph_module(

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 audit_role: reference
 ---
 
@@ -5723,5 +5723,82 @@ LLVM/MLIR, missing CMake packages and missing required ld.lld;
 accepts only matched 23.1.x in `minor`; the real Homebrew 23.1.1 keg resolves
 `exact`; `run_sanitizers.sh asan ubsan` with `TESSERA_LLVM_PIN_MODE=minor`
 configured, built and ran both smoke binaries clean.
+
+<!-- entry-fields:end -->
+
+### 2026-09-28 — ODS wiring slices 2 and 3: `tessera.istft_jvp` gets its Schedule consumer; `cache.commit/rollback` lower through an x86 handle ABI
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/foundation-batch-2-wire-b` (umbrella `claude/foundation-batch-2`).
+Sync: `ODS-WIRE-B-2026-09-28` (x86, ROCm, NVIDIA, Apple todos).
+
+Outcome: **Slice 2.** `GraphToSchedulePass` (`PMPasses.cpp`,
+`scheduleIstftJvps`) consumes the `tessera.istft_jvp` that
+`ISTFTOp::buildTangent` produces under `--tessera-autodiff-forward`: exact
+profile only (Zen 5 AVX-512, gfx1151, gfx1201, sm120; else
+`SPECTRAL_JVP_SCHEDULE_REFUSED`), every default resolved and written back on
+the op (#32), tangent activity read from the IR -- a zero-splat tangent is
+inactive (#30) -- the overlap-add geometry checked against the static tangent
+type, and one hashed `schedule.jvp_contract` plus a matching
+`schedule.artifact` (`family=spectral_jvp`). The native JVP plugin now builds
+the ISTFT package from that contract
+(`native_jvp_plugins.istft_jvp_contract_from_paired_ir` →
+`istft_jvp_spectral_arguments` → `lower_scheduled_spectral`, which stays the
+one spectral-program authority; the package records `graph_schedule_artifact`).
+**The #31 dual authority is collapsed to one production path plus a declared
+oracle**: the old source-kwargs derivation (`_source_kwargs_spectral_arguments`)
+is re-derived for every ISTFT package, which is refused unless both lower to
+the identical scheduled program; it is not deleted (ordering caveat).
+Departure from the triage text, recorded: the arm does not emit
+`schedule.spectral_program` itself, because that op's identity is the
+ScheduleObject digest `scheduled_spectral.py` mints -- minting it in C++ too
+would be a second spectral-program authority. Found while wiring: the x86 and
+ROCm window-product symbols (`tessera_x86_istft_jvp_f32`,
+`ts_istft_jvp_plan_hostptr_batch_amd`) take no n_fft/center/length and write
+`(frames-1)*hop+window` samples into the cropped output buffer; those
+geometries are now refused before launch. **Slice 3.** `TileToX86Pass`
+(`LowerKVCacheCursorToX86`) lowers both cursor ops to a handle ABI in
+`kv_cache_f32.cpp` -- `tessera_x86_kv_cache_{commit,rollback}_f32(handle*,
+i64) -> handle*` over `struct tessera_x86_kv_cache_f32_handle` (truncate in
+place, zero the dropped rows, same handle back or NULL untouched) -- and
+threads the result, so commit → rollback becomes a call chain on the handle
+pointer; a constant negative count is refused at compile time
+(`X86_KV_CACHE_CURSOR_REFUSED`). Runtime: `runtime.x86_kv_cache_cursor`
+(refuses quantized/latent/SSM/non-f32/non-contiguous handles,
+`X86_KV_CACHE_HANDLE_REFUSED`) and the bufferized form in
+`x86_kv_cache_compiled` (`current_seq` and the count are never-defaulted
+kwargs). The three ops leave the ODS consumer waiver (ceiling 79 → 76).
+
+Remaining: sm_120 ISTFT JVP proof (the sm120 contract is exercised host-free
+only; owed on Super-Bear). A reduced-precision ISTFT window is refused: the
+frontend types the result f32 while the native packages emit window storage,
+and the two must agree before it is admitted. Window-only ISTFT activity is
+rejected upstream by the forward transform (pre-existing, unchanged:
+reproduced on Princess-Luna's `build/` at `4e12e5d7b`, an ancestor of the
+umbrella, and this branch touches no autodiff or TangentInterface source).
+The `!tessera.kv_cache` function-boundary type conversion (the lowering keeps
+the type behind a cast at the boundary), backend-manifest rows for
+`cache_commit`/`cache_rollback`, and the SSM ring rewind stay open. Retire
+the kwargs oracle once the differential test covers what it covers.
+
+Evidence: Mac (macOS 27, LLVM/MLIR 23.1.1 NDEBUG): lit
+`phase_f4/spectral_jvp_istft_schedule{,_invalid}.mlir`,
+`phase2/x86_kv_cache_cursor_{abi,invalid}.mlir`; full `lit tests/tessera-ir/`
+479 passed / 50 unsupported / 0 failed; `test_istft_jvp_ir_contract.py`
+host-free differential (5 geometries × 2 activity sets × 4 profiles) and
+`test_x86_kv_cache_cursor.py` host-free rows pass. Princess-Luna (Zen 5 +
+gfx1151, `~/wk-wireb` at `ef16ce164`, canonical x86+ROCm build): the four
+focused files 94 passed / 1 skipped (a gfx1201-only row), including x86 KV
+commit/rollback/chain/rejection and the bufferized lane bit-exact against
+`tessera.ops.cache_commit`/`cache_rollback`, and the IR-built ISTFT product vs
+centred difference on x86 and gfx1151; `check-tessera-ir` 463 passed / 66
+unsupported; `check-tessera-rocm` 81 passed / 1 unsupported. Tajasarus
+(Zen 5 + gfx1201, assertions-ON LLVM/MLIR 23.1.1, `~/wk-wireb` at
+`befbd4fd3`, `TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1`):
+the eight touched/adjacent fixtures pass under assertions; full lit 463
+passed / 66 unsupported; `check-tessera-rocm` 81 passed / 1 unsupported; the
+four focused files 92 passed / 5 skipped (all five gfx1151-only rows), with
+the x86 KV rows and the IR-built ISTFT product on x86 and gfx1201 executing.
 
 <!-- entry-fields:end -->

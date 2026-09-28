@@ -3,10 +3,18 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## `ODS-WIRE-B-2026-09-28`: sibling outcome — not applicable
+
+`tessera.istft_jvp` gained a Schedule consumer admitted only for Zen 5,
+gfx1151, gfx1201 and sm120 (an Apple module is refused with
+`SPECTRAL_JVP_SCHEDULE_REFUSED`; Apple has no native ISTFT JVP package), and
+the KV-cache cursor ops lower only on x86. No Apple code changed.
+
 
 ## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — not applicable (Apple contract unchanged)
 

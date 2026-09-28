@@ -3,10 +3,21 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## `ODS-WIRE-B-2026-09-28`: the ISTFT forward product builds from compiler IR — sibling outcome: follow-up required (sm_120 proof owed)
+
+The native JVP plugin now builds every ISTFT package, including
+`nvidia_sm120`, from the hashed contract `GraphToSchedulePass` binds to
+`tessera.istft_jvp` (triage row `tessera-istft-jvp`). The host-free
+differential covers the sm120 profile (contract and oracle lower to the same
+scheduled program), but nothing ran on the RTX 5070:
+`tests/device/nvidia/test_spectral_jvp.py::test_public_content_addressed_istft_jvp_matches_centered_difference`
+is owed on Super-Bear. The KV-cache cursor half of the key is x86-only.
+
 
 ## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — follow-up required (softmax_safe admission)
 

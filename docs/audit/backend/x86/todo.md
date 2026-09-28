@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,35 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## `ODS-WIRE-B-2026-09-28`: `tessera.cache.commit/rollback` lower through an x86 handle ABI; the ISTFT JVP builds from IR
+
+Owner: [GOV-ODS-CONSUMER-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+(triage rows [`cache.commit`](../../compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-cache-commit),
+[`istft_jvp`](../../compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-istft-jvp)).
+
+- **KV-cache cursor handle ABI.** `kv_cache_f32.cpp` gains
+  `struct tessera_x86_kv_cache_f32_handle` (`abi_version`, keys, values,
+  `max_seq`, `row_len`, `current_seq`) and
+  `tessera_x86_kv_cache_{commit,rollback}_f32(handle*, i64) -> handle*`
+  (truncate in place, zero the dropped rows, return the same handle; NULL and
+  untouched on a rejected count). `TileToX86Pass` lowers the two SD1-3 ops to
+  it (`LowerKVCacheCursorToX86`) and threads the result; the artifact-only
+  `tessera_x86_kv_cache_op(kind)` bridge is unchanged. The bufferized form
+  joins `x86_kv_cache_compiled`. Refusals: `X86_KV_CACHE_CURSOR_REFUSED`
+  (constant negative count, compile time), `X86_KV_CACHE_HANDLE_REFUSED`
+  (quantized/latent/SSM/non-f32/non-contiguous handle, run time).
+- **Proof:** lit `phase2/x86_kv_cache_cursor_{abi,invalid}.mlir`;
+  `tests/unit/test_x86_kv_cache_cursor.py` bit-exact against the Python
+  references on Zen 5 (Princess-Luna; Tajasarus result in the log entry).
+  Open: the function-boundary conversion of `!tessera.kv_cache` arguments (the
+  lowering keeps the type at the boundary behind a cast); no backend-manifest
+  row was added for `cache_commit`/`cache_rollback` (follow-up, with this proof).
+- **ISTFT JVP:** the x86 package now takes its contract from the scheduled
+  `tessera.istft_jvp`. `tessera_x86_istft_jvp_f32` has no n_fft/center/length
+  parameters, so a centered, cropped or `n_fft != window` window product is now
+  refused before launch (it would have overrun the cropped output buffer).
+
 
 ## `X86-GEMM-ALIGN-2026-09-27`: `X86-GEMM-ALIGN-1` closed — the f32 GEMM owns B's alignment
 

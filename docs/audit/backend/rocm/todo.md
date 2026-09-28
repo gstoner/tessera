@@ -1,11 +1,24 @@
 ---
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## `ODS-WIRE-B-2026-09-28`: the ISTFT forward product builds from compiler IR — sibling outcome: parity validated (gfx1151, gfx1201)
+
+Owner GOV-ODS-CONSUMER-1 ([triage row](../../compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-istft-jvp)).
+`GraphToSchedulePass` now consumes `tessera.istft_jvp` and the native JVP
+plugin builds the ISTFT package from its hashed contract (the kwargs derivation
+is a declared oracle that must lower to the identical program). Exact-device
+reruns of `tests/unit/test_istft_jvp_ir_contract.py` and the ISTFT rows of
+`test_native_jvp_compiled.py`: gfx1151 on Princess-Luna, gfx1201 on Tajasarus
+(counts in the log entry). `ts_istft_jvp_plan_hostptr_batch_amd` takes no
+n_fft/center/length, so those window-product geometries are now refused before
+launch. The KV-cache cursor half of the key is x86-only: not applicable here.
+
 
 ## Scheduled softmax/reduction images keyed on a shape-free kernel identity — 2026-09-27
 

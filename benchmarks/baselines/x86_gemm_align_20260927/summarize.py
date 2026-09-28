@@ -2,8 +2,10 @@
 """Summarize probe_gemm_align.py JSONL: per (shape, B%64), the range of the
 per-process medians before and after, the after/before ratio range, and the
 numerics flags. Prints a Markdown table; `--check` exits non-zero if any row
-lacks bitwise equality or a shape's M > 1 alignment effect after the fix
-exceeds `--max-spread` (default 5%). Shapes whose after-fix call is under
+lacks bitwise equality or a PACKED-path shape's alignment effect after the
+fix exceeds `--max-spread` (default 5%); direct-path shapes (small M, see
+the kernel's packedPathWins) keep an alignment effect by design and are
+reported, not checked. Shapes whose after-fix call is under
 10 µs are not checked: there the ~4.5 µs ctypes call itself is most of the
 number (32^3 reads 4.5-4.9 µs before AND after).
 
@@ -52,16 +54,22 @@ def main() -> int:
         if not bit or False in launch:
             failures.append(f"{m}x{n}x{k} B%64={off}: numerics mismatch")
     print()
-    print("| M×N×K | before: alignment effect | after: alignment effect | after: per-process spread (all offsets) |")
-    print("|---|---|---|---|")
+    print("| M×N×K | path after | before: alignment effect | after: alignment effect | after: per-process spread (all offsets) |")
+    print("|---|---|---|---|---|")
     for shape, per in sorted(by_shape.items()):
         bm = [min(b) for b, _ in per.values()]
         am = [min(a) for _, a in per.values()]
         spread_b, spread_a = max(bm) / min(bm), max(am) / min(am)
         every = [x for _, a in per.values() for x in a]
-        print(f"| {'×'.join(map(str, shape))} | {spread_b:.2f} | {spread_a:.2f} | "
+        paths = {r.get("after_path") for rs in groups.values() for r in rs
+                 if (r["M"], r["N"], r["K"]) == shape}
+        path = "/".join(sorted(map(str, paths)))
+        print(f"| {'×'.join(map(str, shape))} | {path} | {spread_b:.2f} | {spread_a:.2f} | "
               f"{max(every) / min(every):.2f} |")
-        if shape[0] > 1 and min(every) >= 10.0 and spread_a - 1 > args.max_spread:
+        # The direct path (small M) reads B in place and keeps an alignment
+        # effect by design; the 5% check applies to the packed path only.
+        if (paths == {"packed"} and min(every) >= 10.0
+                and spread_a - 1 > args.max_spread):
             failures.append(f"{shape}: after-fix alignment spread {spread_a:.2f}")
     if args.check and failures:
         print("\nFAIL:\n" + "\n".join(failures), file=sys.stderr)

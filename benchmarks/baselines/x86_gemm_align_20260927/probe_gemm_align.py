@@ -80,11 +80,18 @@ def main() -> None:
         fn.restype = None
         fn.argtypes = [fp, fp, i64, i64, i64, fp]
         fns[name] = fn
+    after_path = None
+    query = getattr(ctypes.CDLL(str(libs["after"])),
+                    "tessera_x86_avx512_gemm_f32_uses_packed_path", None)
     addresses = {ctypes.cast(fn, ctypes.c_void_p).value for fn in fns.values()}
     if len(addresses) != 2:
         raise SystemExit("before and after resolved to the same loaded image")
 
     M, N, K = args.M, args.N, args.K
+    if query is not None:
+        query.argtypes = [i64, i64, i64]
+        query.restype = ctypes.c_int
+        after_path = "packed" if query(M, N, K) else "direct"
     rng = np.random.default_rng(20260927 + M * 7 + N * 11 + K * 13)
     a = placed(rng.standard_normal((M, K)).astype(np.float32), 0)
     b = placed(rng.standard_normal((K, N)).astype(np.float32), args.offset_b)
@@ -170,6 +177,7 @@ def main() -> None:
         "bitwise_before_eq_after": bitwise, "launch_eq_direct_after": launch_bitwise,
         "max_abs_err_vs_f64": max_err,
         "lib_sha256": digests, "production_package": bool(packaged),
+        "after_path": after_path,
     }))
 
 

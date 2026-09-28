@@ -1617,14 +1617,16 @@ def _compile_shape_free_tile_ir(tile_ir: str, *, family: str, architecture: str)
     if tool is None:
         raise RuntimeError("tessera-opt is required for ROCm native packaging")
     tile_config = ROCMExecutablePipeline(family=family, arch=architecture, input_level=ROCMInputLevel.TILE)
-    device_libraries = _driver_selected_device_libraries(arch=architecture)
-    library_identity = "|".join(
-        f"{item.logical_name}:{item.content_digest}:{item.link_mode}" for item in device_libraries
-    )
-    tile_key = _native_cache_key(
-        tile_config, tile_ir=tile_ir, directive=directive,
-        library_identity=library_identity, tool_digest=_tool_digest(tool),
-    )
+    # Tile -> Target is a function of the Tile text, the pipeline config and
+    # the compiler binary; device libraries enter only at the binary step,
+    # which `_compile_native_tile_ir` keys (and fingerprints) itself.
+    tile_key = hashlib.sha256(
+        "\x1f".join(
+            ("tessera.rocm_shape_free_target.v1", tile_ir, directive)
+            + tile_config.cache_key()
+            + (_tool_digest(tool),)
+        ).encode()
+    ).hexdigest()
     shape_free = _shape_free_targets.get(tile_key)
     if shape_free is None:
         warn_if_generator_is_stale(tool)

@@ -6,9 +6,9 @@ Reference date for staleness: **2026-09-27**.
 
 ## Headline
 
-- **158** docs catalogued across the canonical doc tree.
-- **157** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **60** updated within the last 30 days.
+- **159** docs catalogued across the canonical doc tree.
+- **158** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **61** updated within the last 30 days.
 - **39** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -189,7 +189,8 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 62 | ✓ |
 | `compiler/MATH_SOURCE_WORKSTREAM.md` | - | 2026-09-07 | 20 | ✓ |
 | `compiler/MATRIX_CALCULUS_REVIEW.md` | - | 2026-09-07 | 20 | ✓ |
-| `compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` | - | 2026-09-08 | 19 | ✓ |
+| `compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` | - | 2026-09-27 | 0 | ✓ |
+| `compiler/ODS_OP_CONNECTION_TRIAGE.md` | - | 2026-09-27 | 0 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 50 | ✓ |
 | `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-09-07 | 20 | ✓ |
 | `compiler/README.md` | - | 2026-09-11 | 16 | ✓ |

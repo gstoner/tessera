@@ -1206,7 +1206,13 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     return failure();
   auto keepAttr = op->getAttrOfType<BoolAttr>("keepdims");
   bool keepdims = keepAttr && keepAttr.getValue();
-  if (keepdims && !nvidia && !x86) return failure();
+  // E2E-REAL-6 (ROCm unary family, 2026-09-27): gfx1151 reductions admit
+  // f16/bf16 storage (f32 output) and keepdims, the envelope the retired
+  // Graph-owned `rocm_native.package_reduction` constructor served with
+  // gfx1151 device proof. gfx1201 keeps its proved f32 rank-reducing envelope
+  // until it has its own device rows (proofs never transfer between the two).
+  bool rocmNarrow = rocm && schedule.arch == "gfx1151";
+  if (keepdims && !nvidia && !x86 && !rocmNarrow) return failure();
   if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
     schedule.reductionSchedule = mode.getValue();
   if (schedule.reductionSchedule != "serial" &&
@@ -1215,7 +1221,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   if (keepdims) expected[axis] = 1;
   else expected.erase(expected.begin() + axis);
   if (ArrayRef<int64_t>(expected) != output.getShape() ||
-      (schedule.storage != "f32" && (!nvidia || (schedule.storage != "f16" && schedule.storage != "bf16"))) ||
+      (schedule.storage != "f32" && ((!nvidia && !rocmNarrow) ||
+                                     (schedule.storage != "f16" && schedule.storage != "bf16"))) ||
       (x86 && axis != input.getRank() - 1) ||
       // Apple's synthesized reduce kernel gives one thread per row and folds
       // over the trailing extent, so it expresses last-axis reductions only.

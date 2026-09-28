@@ -531,7 +531,8 @@ matches its module fails generation. Read the counts there.
    where its verdict separates -- 128 tokens after the review fixes; NVIDIA plan under
    the sync key). Open: move the family recorders onto `route_provenance`.
 4. E2E-REAL-6F census review, then bootstrap absorption (NVIDIA gap families,
-   ROCm softmax/reduction/paged-KV first).
+   ROCm paged-KV next; ROCm softmax/reduction absorbed 2026-09-27 with a
+   bit-exact gfx1151 differential, `E2E-REAL-6-rocm-unary-2026-09-27`).
 5. Required Target IR contracts + empty GOV-ODS-CONSUMER-1's op waiver; extend
    `verifier_coverage` to Tile/Schedule/Target ODS.
 6. NVIDIA `tile.mma` sites (W1.1), then W3.3.

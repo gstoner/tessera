@@ -8,6 +8,16 @@ last_updated: 2026-09-27
 
 # Apple compiler, exact-device, and performance plan
 
+## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — not applicable (Apple contract unchanged)
+
+ROCm moved its gfx1151 softmax/reduction packagers onto the native Schedule
+contract (ROCm queue, same key). Shared code touched:
+`native_unary_contract.verify_unary_projection`, which Apple's scheduled
+softmax/reduction also calls. Apple's rule is unchanged: input and output
+storage must agree for both families, and keepdims stays refused. The mixed
+f16/bf16 -> f32 reduction exception applies only to `rocm`/`gfx1151`.
+`test_apple_scheduled_projection.py` and `test_apple_lowp_native_contract.py`
+pass on the Mac with this branch.
 ## `SMALL-CORRECTNESS-GAPS-2026-09-27`: sibling outcome — not applicable
 
 Three fixes landed under this key (sm_120 TMA smoke, a validated lit runner for every lit suite, one declaration of the `tessera.neighbors.*` ops; [ROCm](../rocm/todo.md) and [NVIDIA](../nvidia/todo.md) queues). Not applicable here: Mac configure selects `/opt/homebrew/bin/lit (lit 23.1.1)` through the new validator and lit counts are unchanged (520 discovered, 471 passed, 49 unsupported). No Apple code changed; the TMA fix is CUDA-only and the neighbors ops were already core `tessera` ops on every host.

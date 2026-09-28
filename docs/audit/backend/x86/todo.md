@@ -9,6 +9,16 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — follow-up required (softmax_safe admission)
+
+ROCm moved its gfx1151 softmax/reduction packagers onto the native Schedule
+contract (ROCm queue, same key). The x86 unary contract is unchanged (f32,
+last-axis, keepdims as before; `test_x86_unary_migration.py` passes on the Mac
+and on Princess-Luna). Same finding as NVIDIA: `x86_native.native_package_kind`
+classifies `tessera.softmax_safe` as `softmax`, and the scheduled x86 contract
+refuses it, so a `softmax_safe` module is selected for native packaging and then
+refused. The canonicalization now exists (gfx1151-gated); admitting it for x86
+needs owning-Zen-5 rows.
 ## `SMALL-CORRECTNESS-GAPS-2026-09-27`: sibling outcome — not applicable
 
 Three fixes landed under this key (sm_120 TMA smoke, a validated lit runner for every lit suite, one declaration of the `tessera.neighbors.*` ops; [ROCm](../rocm/todo.md) and [NVIDIA](../nvidia/todo.md) queues). Not applicable here: the lit-runner validator is shared CMake and was exercised on Tajasarus (which also builds the x86 backend: its x86 fixtures are inside the `check-tessera-ir` 454-pass count) and on the Mac. No x86 code changed.

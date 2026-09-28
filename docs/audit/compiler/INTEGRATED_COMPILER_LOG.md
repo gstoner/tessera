@@ -5636,3 +5636,33 @@ unsupported, `check-tessera-rocm` 82/82. Tajasarus (gfx1201, assertions-ON
 LLVM/MLIR 23.1.1): the same five files with `TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1` -- 384 passed, 217 skipped (gfx1151 device gates, Darwin), including both new two-shape/two-symbol reuse rows and both `test_gfx1201_scheduled_package_executes` rows through the `input=directive` compile; ROCm subset 4615 passed / 418 skipped / 10 failed under `-n 8`, all ten in `test_rocm_sparse_{runtime,byte_formats}.py` ("sparse worker teardown is unconfirmed" -- worker-process contention on a GPU shared with another job), and those two files pass 34/34 run serially; `check-tessera-ir` 459 passed / 66 unsupported, `check-tessera-rocm` 82/82. Mac: full `tests/unit` sweep (`-m "not slow"`, Apple + x86 + EBM + Clifford build) 21675 passed / 4017 skipped / 0 failed; mypy clean; `check_compiler_plan.py` and generated-doc drift clean.
 
 <!-- entry-fields:end -->
+
+### 2026-09-27 — ROCM-FP8-BLOCKSCALE-1: ragged M stops paying for its masked edge
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+
+PRs: branch `claude/foundation-batch-2-gfx1201-gaps` (sync `FOUNDATION-BATCH-2-2026-09-27`; follow-ups of PR #872).
+
+Outcome: (a) the W8A8 LDS rule's CU count comes from one authority: `measuredComputeUnits` (PMPasses.cpp) mirrors the new `rocm_target.compute_units` (2 x the measured `_DISPATCH_SLOTS` WGPs), a unit test compares the tables entry for entry, `lower_blockscale` refuses a Schedule whose panel the Python oracle `blockscale_panel_oracle` does not reproduce, and an unmeasured arch keeps the register panel with a registered `ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED` warning. (b) The ragged-M gap was the bounded store, not the 128-row tile: a ragged M = 1000 ran 1.25x slower than M = 1024 on the same grid because the block-scale join's per-element rows, hoisted by LICM above the K loop, were handed by GVN to a store written against absolute rows (251 vs 238 VGPRs at 128x128, 233 vs 187 at 128x64). `materializeFragmentStore` now tests each element's row as a constant against the lane's room and addresses it from the lane's row base (same elements, predicates and addresses; the column keeps its absolute form, which measured better): every ragged 128x128 variant is 240 VGPRs, no spills. Ragged M then follows the whole-M rule (128x128 when it gives >= 64 workgroups). Device clock, paired, vs unmodified AITER: ragged-M geomean **0.965** (was 1.086 at the previous compiler, 26 points); where the selection changed, 0.90x of the old tile (0.83-1.08). Whole-M LDS kernels byte-identical; the 54-row comparison is unchanged (0.647 / 0.905 / 0.912 by M bucket). (c) The short-K / N = 1024 whole-M gap (6 of 18 shapes at 1.04-1.09x AITER) is still open; grouped raster (~1-3%, not converging), 16-wave grids, a register-staged next slab and double-buffered LDS at stage K 64 all measured negative.
+
+Remaining: short K (K <= 2048, or N = 1024) at 1.04-1.09x AITER, also the K = 1536 ragged rows (1.12-1.34x); 200x8192x1024 loses 8% under the new rule and 200x2048x2048 is 6% slower from the store change (both recorded, not tuned around); the shared bounded store's effect on gfx1151 kernels is untimed (static census on gfx1201 only).
+
+Evidence: [ragged/short-K packet](../../../benchmarks/baselines/gfx1201_fp8_blockscale_ragged_20260927/README.md), `tests/unit/test_rocm_fp8_blockscale.py`, `tests/device/rocm/test_fp8_blockscale_w8a8.py`, `tests/tessera-ir/phase2/e2e_fp8_blockscale_lds_rocm_target.mlir`.
+
+<!-- entry-fields:end -->
+
+Found on the way: the first attempt wrote the column test in the per-lane form too; that made the ragged-N 128x128 body 256 VGPRs plus spills (from 251), so only the row is rewritten. A generator-side attempt (stating a whole dimension's bound as the fragment edge so it folds) was built, measured unnecessary once the row form landed, and removed. A 64-row LDS tile (64x64/4 waves, 64x128/8 waves) moved the ragged geomean only 1.07 -> 1.04 before the store fix and is not selected.
+
+### 2026-09-27 — ROCM-MXFP4-W4A8-1: the one-row-block gap is not the weight bytes
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `claude/foundation-batch-2-gfx1201-gaps` (sync `FOUNDATION-BATCH-2-2026-09-27`).
+
+Outcome: the M = 256 gap to Radiance (1.05-1.23x) was tested against the hypothesis that Radiance's packed E2M1 weights (half the bytes) explain it. An N scan at M = 256, K = 5120 (N 4096..24576) with three rotating input copies and with one (operands cache-resident where they fit the 64 MiB last-level cache), device clock witnessed by HIP events, three processes, all engines bitwise equal to exact K32: residency closes the gap at N = 4096 (1.03-1.07x -> 0.98-1.01x), but with both weights resident at N = 8192-12288 the gap stays 1.11-1.15x, and the marginal cost per output column is 16.0-16.7 ns for Tessera against 12.7-12.8 for Radiance in both regimes. The two opt-in packed-E2M1 candidates (bitwise exact, half the weight bytes) are 1.20-1.48x Radiance, slower than the expanded selected schedule at every N. Verdict: not the weight bytes; the per-column cost is unattributed (no counters on WSL2). Exact K32 stays default, folded opt-in, no selector change.
+
+Remaining: the M = 256 per-column cost (A restaging per 64-column block, LDS fragment traffic, epilogue or issue -- unmeasurable here); a packed decode on the selected load schedule is untested (the candidates lack its keys).
+
+Evidence: [one-row-block packet](../../../benchmarks/baselines/gfx1201_mxfp4_one_row_block_20260927/README.md), `benchmarks/rocm/record_gfx1201_mxfp4_folded_load_schedule.py` (`--shapes nscan`, `--packed`, `--copies`).
+
+<!-- entry-fields:end -->

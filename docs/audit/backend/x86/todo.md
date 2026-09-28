@@ -226,6 +226,14 @@ global it reaches by name (`_synthesize_fused_c`, the snippet helpers,
 memoized per source object (NVIDIA queue for the mechanism and the Mac
 numbers). Sibling outcome: host-independent, covered by the Mac tests; no x86
 device claim.
+## `FOUNDATION-BATCH-2-2026-09-27`: gfx1201 W8A8 CU authority, ragged-M store, MXFP4 one-row-block test — not applicable
+
+The changes are gfx1201 W8A8 selection (`selectFp8W8A8BlockScalePanel` and
+its Python oracle, now reading `rocm_target.compute_units`), the ROCm Tile
+consumer's bounded fragment store (`TileToROCM.cpp`, ROCm-only), and MXFP4
+recorder options. x86 schedules no `tessera.scaled_matmul` W8A8 contract
+and lowers no ROCm Tile store, so nothing here changed for x86.
+
 ## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
 
 x86 schedules no block-scaled matmul. The shared `schedule.matmul` `staging`

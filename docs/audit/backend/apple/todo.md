@@ -73,6 +73,14 @@ Apple: the `apple_gpu` emitter's reachable code reads the environment
 `source_memo_safe = False` because it delegates to the `apple_gpu` emitter
 object, which the name walk cannot follow. Apple emission is unchanged.
 
+## `FOUNDATION-BATCH-2-2026-09-27`: gfx1201 W8A8 CU authority, ragged-M store, MXFP4 one-row-block test — not applicable
+
+The changes are gfx1201 W8A8 selection (`selectFp8W8A8BlockScalePanel` and
+its Python oracle, now reading `rocm_target.compute_units`), the ROCm Tile
+consumer's bounded fragment store (`TileToROCM.cpp`, ROCm-only), and MXFP4
+recorder options. Apple schedules no `tessera.scaled_matmul` W8A8 contract
+and lowers no ROCm Tile store, so nothing here changed for Apple.
+
 ## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
 
 Apple never schedules a `tessera.scaled_matmul`. The shared `schedule.matmul`

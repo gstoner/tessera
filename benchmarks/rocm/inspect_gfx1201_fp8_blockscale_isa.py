@@ -55,13 +55,13 @@ def _rewrite(program: BlockScaleProgram, *, staging: str, warps: int,
                              program.schedule_ir, tile)
 
 
-def census(spec: str, llvm_bin: Path) -> dict:
+def census(spec: str, llvm_bin: Path, *, check_panel: bool = True) -> dict:
     """``M,N,K:prod[:bf16]`` or ``M,N,K:reg:PMxPN`` or ``M,N,K:lds:MMxMN:W``."""
     shape_text, kind, *rest = spec.split(":")
     m, n, k = (int(v) for v in shape_text.split(","))
     output = "bf16" if "bf16" in rest else "f32"
     shape = BlockScaleShape(m, n, k, 128, 128, "nk", output)
-    program = lower_blockscale(shape)
+    program = lower_blockscale(shape, check_panel=check_panel)
     if kind == "reg":
         macro = tuple(int(v) for v in rest[0].split("x"))
         program = _rewrite(program, staging="global", warps=1, macro=macro)
@@ -101,6 +101,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--variant", action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--sync-key", default="GFX1201-PERF-2026-09-27")
+    parser.add_argument("--other-compiler", action="store_true",
+                        help="TESSERA_OPT is a different build (e.g. the previous "
+                             "compiler); skip this tree's Schedule panel projection")
     args = parser.parse_args()
     llvm_bin = Path(os.environ.get("TESSERA_LLVM_BIN", ""))
     if not (llvm_bin / "llvm-objdump").is_file():
@@ -108,11 +112,13 @@ def main() -> None:
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True))
     record = {
-        "work_item": "ROCM-FP8-BLOCKSCALE-1", "sync_key": "GFX1201-PERF-2026-09-27",
+        "work_item": "ROCM-FP8-BLOCKSCALE-1", "sync_key": args.sync_key,
+        "panel_projection_checked": not args.other_compiler,
         "source_commit": commit, "worktree_dirty": dirty,
         "tessera_opt": os.environ.get("TESSERA_OPT"),
         "kind": "static ISA census; not a runtime or profiler measurement",
-        "variants": [census(spec, llvm_bin) for spec in args.variant],
+        "variants": [census(spec, llvm_bin, check_panel=not args.other_compiler)
+                     for spec in args.variant],
     }
     args.output.write_text(json.dumps(record, indent=2) + "\n")
     for row in record["variants"]:

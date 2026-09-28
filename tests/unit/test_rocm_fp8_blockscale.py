@@ -256,8 +256,9 @@ def test_w8a8_register_panel_rule(m, n, panel):
     (1024, 4096, "nk", (128, 128)),   # 256 workgroups at 128x128
     (256, 4096, "nk", (128, 128)),    # exactly 64 at 128x128
     (128, 4096, "nk", (128, 64)),     # 32 at 128x128, 64 at 128x64
-    (1000, 2048, "nk", (128, 64)),    # ragged M takes 128x64 (8 x 32 workgroups)
-    (1024, 2048, "nk", (128, 128)),   # the whole-block neighbour keeps 128x128
+    (1000, 2048, "nk", (128, 128)),   # ragged M follows the whole-M rule (8 x 16)
+    (1024, 2048, "nk", (128, 128)),   # the whole-block neighbour
+    (300, 2048, "nk", (128, 64)),     # 3 x 16 = 48 at 128x128: 128x64 covers the CUs
     (1024, 4096, "kn", None),         # [K, N] keeps the register panel
     (64, 8192, "nk", None),           # below one 128-row block
 ])
@@ -278,3 +279,99 @@ def test_w8a8_lds_body_rule(m, n, layout, macro):
     assert f"tessera.macro_tile_n = {macro[1]}" in carrier
     # Schedule IR states it too, and the digest moves with it.
     assert 'staging = "lds"' in scheduled
+
+
+# ── FOUNDATION-BATCH-2-2026-09-27: the CU count has one authority ──────────
+
+
+def _cpp_compute_units() -> dict[str, int]:
+    """The `measuredComputeUnits` table as PMPasses.cpp states it."""
+    from pathlib import Path
+    source = (Path(__file__).resolve().parents[2]
+              / "src/compiler/programming_model/lib/PMPasses.cpp").read_text()
+    body = source.split("static std::optional<int64_t> measuredComputeUnits(", 1)[1]
+    body = body.split("\n}\n", 1)[0]
+    table = dict(re.findall(r'arch == "(gfx\d+)"\)\s*return (\d+);', body))
+    assert table, "measuredComputeUnits has no entries (or its shape changed)"
+    return {arch: int(units) for arch, units in table.items()}
+
+
+def test_cpp_compute_units_mirror_rocm_target():
+    """The C++ rule's CU denominator is `rocm_target.compute_units`, entry for
+    entry: every C++ entry equals the Python authority, and every part the
+    Python table has measured is present in C++ (a missing one would silently
+    keep the register panel there)."""
+    from tessera.compiler.rocm_target import AMDArch, compute_units
+    cpp = _cpp_compute_units()
+    python = {f"gfx{arch.value}": compute_units(arch) for arch in AMDArch
+              if compute_units(arch) is not None}
+    assert cpp == python
+    assert cpp["gfx1201"] == 64
+
+
+def test_compute_units_is_twice_the_measured_wgps_and_none_when_unmeasured():
+    from tessera.compiler.rocm_target import (
+        AMDArch, WorkgroupProcessorMode, compute_units, dispatch_slots)
+    assert compute_units(AMDArch.GFX_1201) == 2 * dispatch_slots(
+        AMDArch.GFX_1201, WorkgroupProcessorMode.WGP)
+    assert compute_units(AMDArch.GFX_1151) == 40
+    assert compute_units(AMDArch.GFX_90A) is None
+
+
+@pytest.mark.parametrize(("m", "n", "layout", "expected"), [
+    (1024, 4096, "nk", ("lds", 128, 128, 8)),
+    (256, 4096, "nk", ("lds", 128, 128, 8)),
+    (128, 4096, "nk", ("lds", 128, 64, 8)),
+    (1024, 1024, "nk", ("lds", 128, 128, 8)),   # 8 x 8 = 64 workgroups
+    (1000, 24576, "nk", ("lds", 128, 128, 8)),  # ragged M: the whole-M rule
+    (200, 2048, "nk", ("lds", 128, 64, 8)),     # 2 x 16 = 32 at 128x128
+    (1024, 4096, "kn", ("global", 32, 32, 1)),
+    (64, 8192, "nk", ("global", 32, 32, 1)),
+    (256, 1024, "nk", ("global", 32, 32, 1)),   # 32 workgroups even at 128x64
+    (48, 6144, "nk", ("global", 16, 32, 1)),
+    (512, 520, "nk", ("global", 16, 16, 1)),
+])
+def test_panel_oracle_states_the_rule(m, n, layout, expected):
+    from tessera.compiler.rocm_fp8_blockscale import BlockScalePanel, blockscale_panel_oracle
+    assert blockscale_panel_oracle(BlockScaleShape(m, n, 256, 128, 128, layout)) == \
+        BlockScalePanel(*expected)
+
+
+def test_panel_oracle_keeps_the_register_panel_for_an_unmeasured_arch():
+    """No measured CU count, no occupancy verdict: the LDS body is not offered
+    (the C++ rule warns ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED in that case)."""
+    from tessera.compiler.rocm_fp8_blockscale import blockscale_panel_oracle
+    shape = BlockScaleShape(1024, 4096, 256, 128, 128, "nk")
+    assert blockscale_panel_oracle(shape, arch="gfx1250").staging == "global"
+    assert blockscale_panel_oracle(shape, arch="gfx9999").staging == "global"
+
+
+def _schedule_ir(shape: BlockScaleShape) -> str:
+    from tessera.compiler.scheduled_matmul import run_tessera_opt
+    tool = find_tessera_opt()
+    if tool is None:
+        pytest.skip("tessera-opt is not built on this host")
+    return run_tessera_opt(tool, author_blockscale_graph(shape), "--tessera-graph-to-schedule")
+
+
+@pytest.mark.parametrize("m", [64, 128, 200, 256, 300, 512, 1000, 1024, 1500, 2048])
+@pytest.mark.parametrize("n", [1024, 2048, 3072, 4096, 24576])
+def test_native_schedule_and_panel_oracle_agree(m, n):
+    """The differential half of Decision #31: the C++ Schedule is the
+    authority, and the Python oracle reproduces it on a grid spanning every
+    branch of the rule (both sides of the CU threshold, ragged and whole M)."""
+    from tessera.compiler.rocm_fp8_blockscale import verify_blockscale_schedule
+    for layout in ("nk", "kn"):
+        shape = BlockScaleShape(m, n, 256, 128, 128, layout)
+        verify_blockscale_schedule(shape, _schedule_ir(shape))
+
+
+def test_projection_refuses_when_the_oracle_and_the_schedule_diverge(monkeypatch):
+    from tessera.compiler import rocm_fp8_blockscale as w8a8
+    shape = BlockScaleShape(1024, 4096, 256, 128, 128, "nk")
+    if find_tessera_opt() is None:
+        pytest.skip("tessera-opt is not built on this host")
+    monkeypatch.setattr(w8a8, "blockscale_panel_oracle",
+                        lambda *a, **k: w8a8.BlockScalePanel("global", 32, 32, 1))
+    with pytest.raises(ValueError, match="oracle disagrees with the native Schedule"):
+        w8a8.lower_blockscale(shape)

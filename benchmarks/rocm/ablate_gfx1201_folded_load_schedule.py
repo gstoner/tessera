@@ -315,6 +315,7 @@ def compile_source(source: str, flags: tuple[str, ...]) -> bytes:
 def package_engine(
     hip: ctypes.CDLL, case: base.Case, inputs: dict[str, np.ndarray],
     folded: Any, package: Any, *, name: str, metadata: dict[str, object],
+    copies: int = 3,
 ) -> base._Engine:
     """Launch ``package`` with its own descriptor geometry on rotating copies."""
     payload = package.image.payload
@@ -338,7 +339,7 @@ def package_engine(
         folded.row_reference, inputs["output"],
     )
     try:
-        device_copies = base._copies(hip, arrays, 3)
+        device_copies = base._copies(hip, arrays, copies)
     except Exception:
         hip.hipModuleUnload(module)
         raise
@@ -383,7 +384,7 @@ def package_engine(
 def schedule_engine(
     hip: ctypes.CDLL, case: base.Case, inputs: dict[str, np.ndarray],
     folded: Any, schedule: FoldedPrefillSchedule,
-    diagnostics: tuple[str, ...] = (), *, name: str | None = None,
+    diagnostics: tuple[str, ...] = (), *, name: str | None = None, copies: int = 3,
 ) -> base._Engine:
     """Compile ``schedule`` (plus diagnostics) and bind its own descriptor."""
     package = package_mxfp4_folded_prefill(
@@ -410,7 +411,7 @@ def schedule_engine(
         metadata["source_sha256"] = package.image.target_ir_digest
     return package_engine(
         hip, case, inputs, folded, package,
-        name=name or f"tessera_{label}", metadata=metadata,
+        name=name or f"tessera_{label}", metadata=metadata, copies=copies,
     )
 
 

@@ -1,0 +1,36 @@
+lost []
+new []
+rows changed 108 unchanged 16
+changed by device/op: {('nvidia:sm_120', 'attention'): 21, ('nvidia:sm_120', 'conv2d'): 2, ('nvidia:sm_120', 'fused_region'): 35, ('nvidia:sm_120', 'gated_matmul'): 12, ('nvidia:sm_120', 'matmul'): 28, ('nvidia:sm_120', 'paged_kv_decode'): 6, ('nvidia:sm_120', 'ssm_replay_decode'): 4}
+rows outside the selection byte-identical: True 16
+winner changes 11
+   attention f16 end_to_end [64, 256, 64, 64] nvidia_flash_attn -> nvidia_mma_attn
+   attention f32 device [64, 256, 64, 64] nvidia_mma_attn_composed_tf32 -> nvidia_mma_attn_tf32
+   matmul bfloat16 device [128, 256, 64] nvidia_mma_gemm_emitted -> nvidia_tile_matmul_direct
+   matmul bfloat16 end_to_end [128, 256, 64] nvidia_tile_matmul_direct -> nvidia_tile_matmul_shared
+   matmul float16 device [128, 256, 64] nvidia_tile_matmul_direct -> nvidia_mma_gemm_emitted
+   matmul float16 end_to_end [128, 256, 64] nvidia_tile_matmul_shared -> nvidia_mma_gemm_emitted
+   matmul bfloat16 device [128, 512, 64] nvidia_tile_matmul_shared -> nvidia_tile_matmul_direct
+   matmul bfloat16 end_to_end [128, 512, 64] nvidia_tile_matmul_direct -> nvidia_tile_matmul_shared
+   matmul bfloat16 end_to_end [256, 256, 256] nvidia_tile_matmul_direct -> nvidia_mma_gemm_emitted
+   matmul bfloat16 device [64, 64, 64] nvidia_mma_gemm_emitted -> nvidia_tile_matmul_direct
+   matmul float16 end_to_end [64, 64, 64] nvidia_tile_matmul_direct -> nvidia_mma_gemm_emitted
+sm120 registry rows 96 selector_eligible 91
+timed candidates with no identity (all rows) 16
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 128, 32, 16] device: direct
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 128, 32, 16] device: gather_fa
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 128, 32, 16] end_to_end: direct
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 128, 32, 16] end_to_end: gather_fa
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 512, 32, 16] device: direct
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 512, 32, 16] device: gather_fa
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 512, 32, 16] end_to_end: direct
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 512, 32, 16] end_to_end: gather_fa
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 2048, 32, 16] device: direct
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 2048, 32, 16] device: gather_fa
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 2048, 32, 16] end_to_end: direct
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 2048, 32, 16] end_to_end: gather_fa
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 8192, 32, 16] device: direct
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 8192, 32, 16] device: gather_fa
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 8192, 32, 16] end_to_end: direct
+   rocm:gfx1151 paged_kv_decode [1, 4, 4, 8192, 32, 16] end_to_end: gather_fa
+sm120 registry rows with unmeasured candidates 0

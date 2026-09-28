@@ -208,10 +208,31 @@ def update_d2_corpus(rows: list[dict[str, Any]]) -> Path:
     from tessera.compiler.emit import autotune as at
     from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
 
+    from tessera.compiler.emit import nvidia_cuda
+
     cache = at.MeasureCache()
     at.load_corpus(cache=cache)
     groups: dict[tuple[str, str, str, str], dict[str, float]] = {}
     spreads: dict[tuple[str, str, str, str], dict[str, float | None]] = {}
+    # Decision #11 (sync AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27): each row
+    # carries the identity of every route it timed, and the warm start
+    # (`nvidia_cuda._paged_attention_corpus_winner`) refuses a row whose live
+    # identities differ. Identities are taken after the runs, from the code
+    # this process ran.
+    routes: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        for timing in (at.TIMING_DEVICE, at.TIMING_END_TO_END):
+            key = (str(row["op"]), str(row["shape"]), str(row["dtype"]), timing)
+            mode = str(row["mode"])
+            if row["op"] == "paged_kv_decode":
+                route = nvidia_cuda.paged_attention_route_identities()[mode]
+            elif row["op"] == "ssm_replay_decode" and mode == "async_ring":
+                bsz, d, n = parse_shape(str(row["shape"]))
+                route = nvidia_cuda.ssm_replay_ring_identity(
+                    bsz, d, n, int(row["tokens"]) + 1, int(row["async_slots"]))
+            else:
+                raise ValueError(f"no route identity for {row['op']}/{mode}")
+            routes.setdefault(key, {})[mode] = route
     for row in rows:
         for timing, field, samples in (
                 (at.TIMING_DEVICE, "device_latency_ms", "device_samples_ms"),
@@ -235,10 +256,13 @@ def update_d2_corpus(rows: list[dict[str, Any]]) -> Path:
         noise = spreads.get(key, {})
         separation = (at.separation_verdict(candidates, noise, winner)
                       if set(noise) == set(candidates) else None)
+        live = {mode: routes[key][mode] for mode in candidates}
         cache.put(("nvidia:sm_120", "nvidia", op,
                    bucket_key(dims, SpecPolicy.BUCKET), dtype, timing),
                   at.MeasureRecord(winner, candidates[winner], candidates,
-                                   unmeasured={}, separation=separation),
+                                   unmeasured={}, separation=separation,
+                                   evidence={"delegate_identities":
+                                             at.route_identities(live)}),
                   fresh=True)
     return at.save_corpus(cache=cache)
 

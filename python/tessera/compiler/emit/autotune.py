@@ -23,7 +23,7 @@ import statistics
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from tessera.compiler.emit.candidate import (
     Candidate,
@@ -303,6 +303,62 @@ def _delegate_identities(candidates: Mapping[str, Any], region: Any = None,
         if identity:                # `{}` names no code: leave it unstamped
             out[name] = dict(identity)
     return out
+
+
+class RouteIdentity:
+    """A route timed by a NON-registry recorder, presented to the same
+    Decision #11 check the registry arbiter applies to its candidates.
+
+    The paged-KV serving routes (``cache/paged_kv.py`` on ROCm,
+    ``nvidia_cuda._paged_attention_corpus_winner`` on sm_120), the sm_120
+    ``conv2d`` routes and the ReplaySSM async ring are not registry
+    ``Candidate`` s: their recorders race named routes and their own warm-start
+    code reads the rows. Until ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`` those
+    rows carried the toolchain pins and nothing else, so a changed emitter or
+    kernel kept serving a ranking measured for its old code. A route carries a
+    zero-argument ``build`` returning the identity of the code it runs
+    (``emitted_code_identity`` / ``kernel_code_identity`` forms); any failure
+    is a miss (``emitted_code_identity.identify``)."""
+
+    def __init__(self, name: str,
+                 build: Callable[[], Mapping[str, str] | None]) -> None:
+        self.name = name
+        self._build = build
+
+    def artifact_identity(self, region: Any = None, *inputs: Any) -> dict[str, str] | None:
+        from tessera.compiler.emitted_code_identity import identify
+
+        return identify(self.name, self._build)
+
+
+def route_identities(routes: Mapping[str, RouteIdentity]) -> dict[str, dict[str, str]]:
+    """The ``evidence.delegate_identities`` a non-registry recorder stamps for
+    the routes it timed. Raises when any route cannot be identified: such a row
+    could never be served (every lookup would miss), so writing it would only
+    replace a row with a dead one."""
+    stamped = _delegate_identities(routes)
+    missing = sorted(set(routes) - set(stamped))
+    if missing:
+        from tessera.compiler.emitted_code_identity import miss_reason
+
+        raise ValueError(
+            "refusing to stamp a route row with unidentifiable routes: "
+            + "; ".join(f"{name}: {miss_reason(name)}" for name in missing))
+    return stamped
+
+
+def route_record_matches(rec: MeasureRecord,
+                         routes: Mapping[str, RouteIdentity]) -> bool:
+    """Decision #11 for a non-registry warm start (fail closed).
+
+    The record must have timed exactly the routes the reader can dispatch now
+    -- a route added or dropped since means the ranking was not measured
+    against today's field -- and every one of them must run the code the
+    record stamped (``_record_matches_live_delegates``: a missing stamp, an
+    unidentifiable live route or a changed identity is a miss)."""
+    if set(rec.candidates) != set(routes):
+        return False
+    return _record_matches_live_delegates(rec, routes)
 
 
 class MeasureCache:

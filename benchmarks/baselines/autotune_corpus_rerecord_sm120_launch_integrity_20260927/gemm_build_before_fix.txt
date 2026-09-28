@@ -1,0 +1,12 @@
+build-r1 rc=0
+build-r2 rc=1
+build-r3 rc=0
+b219129145cfb3d0d43b9159bd53837331060d9568dddbe096b387a627104d6f  build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so
+ 0x000000000000001d (RUNPATH)            Library runpath: [/usr/local/cuda-13.4/targets/x86_64-linux/lib]
+a00c904005730b1c092f50f97d6e8e2e9a948eaf121ae5966ec6ed2bc6d3f060  build-r1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so
+ 0x000000000000001d (RUNPATH)            Library runpath: [/usr/local/cuda/lib64]
+sha256sum: build-r2/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so: No such file or directory
+readelf: Error: 'build-r2/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so': No such file
+b219129145cfb3d0d43b9159bd53837331060d9568dddbe096b387a627104d6f  build-r3/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so
+ 0x000000000000001d (RUNPATH)            Library runpath: [/usr/local/cuda-13.4/targets/x86_64-linux/lib]
+VARIANTS_DONE

@@ -6,25 +6,25 @@
   "builds": [
     {
       "run": 1,
-      "cold_compile_ms": 1478.954162,
-      "warm_cache_lookup_ms": 0.108882,
+      "cold_compile_ms": 1440.414243,
+      "warm_cache_lookup_ms": 0.113612,
       "cache_hits": 1,
       "cache_misses": 1,
-      "kernel_cache_key": "9bec56a60bcfb01ababfb8a94f5f9e26ff6c8cd317370f8db7710ebbe1570cbe",
+      "kernel_cache_key": "4c012d009bf26b2304362b19655fa5befd5c00870c54d05036cf207ea3464d55",
       "artifact_present": true
     },
     {
       "run": 2,
-      "cold_compile_ms": 1479.226898,
-      "warm_cache_lookup_ms": 0.101751,
+      "cold_compile_ms": 1599.430639,
+      "warm_cache_lookup_ms": 0.099822,
       "cache_hits": 1,
       "cache_misses": 1,
-      "kernel_cache_key": "9bec56a60bcfb01ababfb8a94f5f9e26ff6c8cd317370f8db7710ebbe1570cbe",
+      "kernel_cache_key": "4c012d009bf26b2304362b19655fa5befd5c00870c54d05036cf207ea3464d55",
       "artifact_present": true
     }
   ],
-  "strict_records_considered": 39,
-  "strict_records_admitted": 39,
+  "strict_records_considered": 92,
+  "strict_records_admitted": 92,
   "stale_rejections": {
     "device": true,
     "timing": true,

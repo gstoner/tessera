@@ -18,7 +18,7 @@ def test_nvidia_f32_scheduled_kernel_admission(family):
 
 
 @pytest.mark.parametrize("dtype", ["fp16", "bf16", "fp32"])
-def test_nvidia_softmax_safe_admits_only_shape_preserving_last_axis(dtype):
+def test_nvidia_softmax_admits_last_axis_but_softmax_safe_waits_for_device_rows(dtype):
     from tessera.compiler.graph_ir import tensor_ir_type
 
     module = _module(family="softmax", target="nvidia_sm120")
@@ -26,12 +26,14 @@ def test_nvidia_softmax_safe_admits_only_shape_preserving_last_axis(dtype):
     fn.args[0].ir_type = tensor_ir_type((2, 3, 5), dtype)
     fn.result_types[0] = fn.args[0].ir_type
     op = fn.body[0]
-    op.op_name = "tessera.softmax_safe"
     op.operand_types = [str(fn.args[0].ir_type)]
     op.result_type = str(fn.result_types[0])
     op.inferred_type = fn.result_types[0]
     assert scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
     op.kwargs["axis"] = 0
+    assert not scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
+    op.kwargs["axis"] = -1
+    op.op_name = "tessera.softmax_safe"
     assert not scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
 
 

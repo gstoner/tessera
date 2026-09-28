@@ -223,9 +223,12 @@ kernels.
 
 - Kernel device-clock time on one WSL2 host; not a model-level result.
 - No profiler attribution (no `/dev/kfd`); the register reading is static.
-- No gfx1151 evidence: the W8A8 contract is gfx1201-only. The TileToROCM
-  bounded store is shared by gfx1151's typed stores; its lit fixtures pass,
-  but no gfx1151 kernel was timed or census-checked here.
+- No gfx1151 device evidence: the W8A8 contract is gfx1201-only. The
+  TileToROCM bounded store is shared by gfx1151's typed stores; its lit
+  fixtures pass, and a static census of 24 gfx1151 f16/bf16 scheduled-matmul
+  kernels compiled for gfx1151 on Tajasarus (not run) has VGPRs equal or lower
+  (LDS body at 1024^3 211 -> 204; the already-spilling 1024^3 register panel
+  spills 2 more). No gfx1151 kernel was run or timed.
 - The 28-kernel generic census is static; those kernels were not timed.
 
 ## Reproduce

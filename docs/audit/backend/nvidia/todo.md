@@ -706,6 +706,14 @@ original artifact and stamp with no compile; `nvidia_generic_cuda` (through
 `kernel_cache.build`) compiled once for 10 runs and recompiled exactly the
 patched text. `_mma_fused_fn` lookup on that host: 3.0 us per call.
 
+## `FOUNDATION-BATCH-2-2026-09-27`: gfx1201 W8A8 CU authority, ragged-M store, MXFP4 one-row-block test — not applicable
+
+The changes are gfx1201 W8A8 selection (`selectFp8W8A8BlockScalePanel` and
+its Python oracle, now reading `rocm_target.compute_units`), the ROCm Tile
+consumer's bounded fragment store (`TileToROCM.cpp`, ROCm-only), and MXFP4
+recorder options. NVIDIA schedules no `tessera.scaled_matmul` W8A8 contract
+and lowers no ROCm Tile store, so nothing here changed for NVIDIA.
+
 ## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
 
 ROCM-FP8-BLOCKSCALE-1 / ROCM-MXFP4-W4A8-1 on gfx1201 ([W8A8 packet](../../../../benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/README.md),

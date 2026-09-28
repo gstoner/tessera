@@ -398,6 +398,73 @@ launch (which already paid the same selection).
   focused arbiter/identity tests 269 passed / 3 skipped (none a device lane)
   and the ROCm wmma/flash/arbiter unit subset 379 passed / 18 skipped.
 
+## `FOUNDATION-BATCH-2-2026-09-27`: W8A8 CU authority, ragged M at the whole-M tile, short-K negatives; MXFP4 one-row-block bytes test — 2026-09-27
+
+Owners [ROCM-FP8-BLOCKSCALE-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+and [ROCM-MXFP4-W4A8-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1);
+sync `FOUNDATION-BATCH-2-2026-09-27` (the four open items of
+`GFX1201-PERF-2026-09-27` below). Tajasarus (RX 9070 XT, gfx1201), both
+trees.
+
+- **(a) CU count.** `selectFp8W8A8BlockScalePanel` reads
+  `measuredComputeUnits(arch)` instead of a hard-coded 64; it mirrors the new
+  `rocm_target.compute_units` (2 x the measured `_DISPATCH_SLOTS` WGPs) and
+  `test_cpp_compute_units_mirror_rocm_target` compares the two tables.
+  `lower_blockscale` checks the native Schedule's panel against
+  `blockscale_panel_oracle` and refuses a divergence (the split-K pattern). No
+  measured count -> register panel + `ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED`
+  (registered warning; unreachable while the derivation is gfx1201-only).
+- **(b) Ragged M.** Root cause: the bounded fragment store reused the
+  block-scale join's per-element rows that LICM had hoisted above the K loop
+  (251 vs 238 VGPRs at 128x128, 233 vs 187 at 128x64; a ragged M ran 1.25x
+  its whole-M neighbour on the same grid). **Shared contract changed
+  (TileToROCM, every typed bounded store, both RDNA families):**
+  `materializeFragmentStore` tests each element's row as the constant
+  `i * rowStep` against the lane's room and addresses it from the lane's row
+  base; the column keeps its absolute form; the accumulator map is one affine
+  `accumulatorLaneMap`, and unbounded stores are built op for op as before.
+  Ragged 128x128 (M, N or both): 240 VGPRs, no spills. Rule: ragged M now
+  takes the whole-M tile. vs AITER, device clock, paired: ragged-M geomean
+  0.965 (previous compiler 1.086); 0.90x of the old tile where the selection
+  changed, loses at 200x8192x1024 (1.08x); whole-M LDS kernels byte-identical;
+  the 54-row comparison unchanged. A 64-row LDS tile (64x64/4, 64x128/8) was
+  measured and not selected. 28-kernel static census of the generic f16/bf16/
+  fp8 gfx1201 bodies: VGPRs equal or lower, 1024^3 register panels spill less;
+  not timed.
+- **(c) Short K / N = 1024.** Open, unchanged (6 of 18 M >= 1024 shapes at
+  1.04-1.09x AITER). Measured negative: grouped raster 4/8/16 (~1-3%, not
+  converging), 16-wave grids (128x128, 256x128, 128x256), a register-staged
+  next slab (stage K 128 and 64), double-buffered LDS at stage K 64
+  (128x128 1.39-1.46x).
+- **(d) MXFP4 M = 256.** Not the packed weight bytes: an N scan (K = 5120,
+  N 4096..24576) with 3 vs 1 rotating input copies shows residency closing the
+  gap only at N = 4096 (to 0.98-1.01x); with both weights resident at
+  N = 8192-12288 1.11-1.15x remains, and the per-column marginal cost is
+  16.0-16.7 ns vs Radiance's 12.7-12.8 in both regimes. The opt-in packed
+  candidates are 1.20-1.48x Radiance (slower than expanded at every N).
+  Recorder gains `--shapes nscan`, `--packed`, `--copies`.
+- **Proof.** W8A8 + MXFP4 device/host 270/270 on `build/` and the
+  assertions-ON `build-assertions/`; `lit tests/tessera-ir` 459 passed / 66
+  unsupported and `check-tessera-rocm` 82/82 on both trees; every timed W8A8
+  kernel byte-identical at the final compiler (84/84).
+  Packets: [W8A8](../../../../benchmarks/baselines/gfx1201_fp8_blockscale_ragged_20260927/README.md),
+  [MXFP4](../../../../benchmarks/baselines/gfx1201_mxfp4_one_row_block_20260927/README.md).
+- **Sibling outcomes.** gfx1151: **follow-up required** -- the bounded-store
+  change reaches gfx1151's typed stores (gfx11 accumulator map, same
+  predicates and addresses); its lit fixtures pass on both Tajasarus trees,
+  and a static census of 24 gfx1151 f16/bf16 scheduled-matmul kernels
+  (compiled for gfx1151 on Tajasarus, not run) shows VGPRs equal or lower
+  (LDS body 211 -> 204 at 1024^3) with the already-spilling 1024^3 register
+  panel spilling 2 more; no gfx1151 kernel was run or timed (owed on
+  Princess-Luna).
+  The W8A8 rule and the MXFP4 findings are gfx1201 measurements. NVIDIA /
+  Apple / x86: not applicable (their queues, same key); no shared dialect or
+  digest changed.
+- **Open.** Short K; the K = 1536 ragged rows (1.12-1.34x AITER); a 6%
+  store regression at 200x2048x2048; MXFP4 M = 256 per-column cost
+  unattributed (no `/dev/kfd`); a packed decode on the selected load
+  schedule untested.
+
 ## `GFX1201-PERF-2026-09-27`: W8A8 large-M LDS body, bf16 store, folded MXFP4 per-wave M guard — 2026-09-27
 
 Owners [ROCM-FP8-BLOCKSCALE-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)

@@ -37,17 +37,37 @@ func.func @arena_disjoint(%arg0: memref<16x16xf16>, %arg1: memref<16x16xf16>,
 // -----
 
 // ── SMEM and TMEM are laid out in SEPARATE arenas (distinct spaces). ─────────
-// Each is the sole member of its space → both at offset 0, each arena = 512 B.
+// Each is the sole member of its space → both at offset 0. The TMEM arena is
+// sized from the registered `tile.tmem.allocate`'s `bytes` (matched by op
+// identity since TILE-LATENT-DEFECTS-2026-09-27; the old "tile.tmem.alloc"
+// marker spelling was unregistered and never produced).
 // CHECK-LABEL: func.func @arena_smem_tmem_separate
 // CHECK-SAME: tile.smem_arena_bytes = 512
 // CHECK-SAME: tile.tmem_arena_bytes = 512
 // CHECK: memref.get_global @__tessera_smem_arena_arena_smem_tmem_separate
 // CHECK: memref.view{{.*}}to memref<16x16xf16, 3>
-// CHECK: "tile.tmem.alloc"(%arg1) {tile.buffer_group = 1 : i64, tile.tmem_offset = 0 : i64}
-func.func @arena_smem_tmem_separate(%arg0: memref<16x16xf16>,
-                                    %arg1: memref<16x16xf16>) {
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 1 : i64, tile.tmem_offset = 0 : i64
+func.func @arena_smem_tmem_separate(%arg0: memref<16x16xf16>) {
   "tile.alloc_shared"(%arg0) : (memref<16x16xf16>) -> ()
-  "tile.tmem.alloc"(%arg1) : (memref<16x16xf16>) -> ()
+  %t = tile.tmem.allocate {bytes = 512 : i64, alignment = 128 : i64} : !tile.tmem
+  return
+}
+
+// -----
+
+// ── TMEM placement honors each allocation's declared alignment. ─────────────
+// Two TMEM allocations never share a group (no TMEM completion fact), so both
+// are placed: 100 B at offset 0, then the 256 B buffer at the next 128-byte
+// boundary (128, not 100). Arena = 128 + 256 = 384 B.
+// CHECK-LABEL: func.func @arena_tmem_alignment
+// CHECK-SAME: tile.tmem_arena_bytes = 384
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 0 : i64, tile.tmem_offset = 0 : i64
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 1 : i64, tile.tmem_offset = 128 : i64
+func.func @arena_tmem_alignment(%x: f32) {
+  %a = tile.tmem.allocate {bytes = 100 : i64, alignment = 128 : i64} : !tile.tmem
+  tile.tmem.store %x, %a : f32, !tile.tmem
+  %b = tile.tmem.allocate {bytes = 256 : i64, alignment = 128 : i64} : !tile.tmem
+  tile.tmem.store %x, %b : f32, !tile.tmem
   return
 }
 

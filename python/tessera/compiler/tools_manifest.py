@@ -50,8 +50,9 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "print('tessera-opt structural smoke ok — build owned by lit lane')\""
         ),
         notes=(
-            "MLIR opt-style driver — registers 5 dialects (tessera, "
-            "tessera.neighbors, tessera.solver, tessera_apple, tpp) "
+            "MLIR opt-style driver — registers the Tessera dialects "
+            "(tessera, which owns the tessera.neighbors.* ops, "
+            "tessera.solver, tessera_apple, tpp, ...) "
             "+ 70+ passes + 6 named lowering pipelines.  Requires "
             "MLIR/LLVM 23 — proof tests live in "
             "``tests/unit/test_tessera_opt_build.py`` and the "

@@ -78,9 +78,14 @@ _KNOWN_FALSE_POSITIVES: frozenset[str] = frozenset({
 
 def _scan_codes_in_cpp() -> dict[str, set[Path]]:
     """Return ``code -> {paths that emit it}`` by scanning every .cpp /
-    .h / .mm / .inc under src/."""
+    .h / .mm / .inc / .td under src/.
+
+    `.td` counts: an ODS constraint's description is the message the
+    generated verifier emits. `NEIGHBORS_TOPOLOGY_UNKNOWN_KIND` is emitted
+    only that way since its hand-written C++ duplicate was deleted
+    (SMALL-CORRECTNESS-GAPS-2026-09-27)."""
     codes: dict[str, set[Path]] = {}
-    for ext in ("*.cpp", "*.h", "*.mm", "*.inc"):
+    for ext in ("*.cpp", "*.h", "*.mm", "*.inc", "*.td"):
         for path in SRC_ROOT.rglob(ext):
             try:
                 text = path.read_text(errors="replace")
@@ -327,6 +332,49 @@ def test_every_mlir_registered_code_appears_in_cpp() -> None:
         f"Registered MLIR diagnostic codes that don't appear in any "
         f"C++ file: {missing}.  Either restore the C++ emission site "
         f"or remove the stale entry from REGISTERED_CODES."
+    )
+
+
+_QUALIFIED_ORIGIN = re.compile(r"\b([A-Z][A-Za-z0-9_]*)::[A-Za-z_][A-Za-z0-9_]*")
+
+
+def test_mlir_pass_origin_classes_exist_in_src() -> None:
+    """A `Class::member` pass_origin must name a class that still exists.
+
+    The code-presence gate above cannot see a stale *origin*: when the
+    duplicate neighbors dialect was deleted (SMALL-CORRECTNESS-GAPS-2026-09-27)
+    `NEIGHBORS_TOPOLOGY_UNKNOWN_KIND` kept emitting -- from the ODS constraint
+    -- while its registry entry still credited the deleted hand-written
+    `CreateTopologyOp::verify`. Only the class half is checked: the member is
+    often ODS-generated (`verifyInvariantsImpl`) and never spelled in `src/`,
+    while an ODS op's class name always is (its `.td` def or `.cpp` verifier).
+    A class name is matched as a whole identifier, so a deleted
+    `CreateTopologyOp` is not satisfied by `NeighborsTopologyCreateOp`.
+    """
+    texts: list[str] = []
+    for ext in ("*.cpp", "*.h", "*.mm", "*.inc", "*.td", "*.cu", "*.hip"):
+        for path in SRC_ROOT.rglob(ext):
+            if "archive" in path.relative_to(SRC_ROOT).parts:
+                continue
+            try:
+                texts.append(path.read_text(errors="replace"))
+            except OSError:
+                continue
+    corpus = "\n".join(texts)
+    checked = 0
+    stale: list[str] = []
+    for entry in REGISTERED_CODES:
+        if entry.language != "mlir":
+            continue
+        for cls in _QUALIFIED_ORIGIN.findall(entry.pass_origin):
+            checked += 1
+            if not re.search(rf"(?<![A-Za-z0-9]){re.escape(cls)}\b", corpus):
+                stale.append(f"{entry.code}: pass_origin={entry.pass_origin!r}")
+    assert checked, "no qualified pass_origin was checked; the pattern is stale"
+    assert not stale, (
+        "Registered MLIR diagnostics credit a C++ class that no longer exists "
+        "under src/ (point pass_origin at the real emitter):\n  "
+        + "\n  ".join(stale)
     )
 
 

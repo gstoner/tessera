@@ -866,10 +866,15 @@ lit. ROCm is now the **ROCm 10 series** (`hipcc --version` reports HIP
 `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON
 -DCMAKE_PREFIX_PATH=/opt/rocm`.
 
-**`lit` is venv-only on this box**, so a non-interactive configure does not see
+**`lit` is venv-only on this box**, so a non-interactive configure did not see
 it and `check-tessera-rocm` printed "skipping" while exiting 0 — leaving the
-ROCm backend's only automated fixture coverage silently unrun. Pass
-`-DTESSERA_LIT=$PWD/.venv/bin/lit` if configuring outside the venv. **The `numpy<2.2` venv cap is no longer
+ROCm backend's only automated fixture coverage silently unrun. Since
+2026-09-27 every lit suite takes its runner from `cmake/TesseraLit.cmake`,
+which searches the repo `.venv` from any build dir and selects a candidate only
+if `<lit> --version` runs; with no working runner `tests/` fails configure and
+the backend check targets fail instead of skipping (configure with
+`-DTESSERA_BUILD_TESTS=OFF` when no lit suite is wanted).
+`-DTESSERA_LIT=<path>` still picks one explicitly. **The `numpy<2.2` venv cap is no longer
 required** (lifted 2026-08-28): numpy ≥2.2 ships PEP 695 `type` statements in
 its stubs, which `python_version=3.10` cannot parse — that used to abort the
 whole mypy run before any Tessera file was checked. The mypy overrides in

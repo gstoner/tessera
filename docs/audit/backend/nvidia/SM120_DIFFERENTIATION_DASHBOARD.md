@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-19
+last_updated: 2026-09-27
 audit_role: reference
 ---
 
@@ -8,12 +8,26 @@ audit_role: reference
 Updated 2026-07-19 from the RTX 5070 Ti WSL CUDA host. “Promoted” requires all
 six evidence columns; an assembling instruction is not runtime evidence.
 
+**Corrected 2026-09-27 (`TILE-LATENT-DEFECTS-2026-09-27`, code read on the
+Mac, no device run).** The “Typed IR + verifier” cells of the four promoted
+rows cited `sm120_differentiation_target_ir.mlir` and `tessera_nvidia.fpquant`
+as if a compiler path produced that IR. It does not:
+`tessera_nvidia.mma_fused`, `mma_attention` and `fpquant` have **no producer**
+(neither `LowerTileToNVIDIA` nor Python `target_ir.py` emits them), their ODS
+declares only the generic variadic contract, and the lanes execute through
+Python candidates that bypass Target IR (`NvidiaMmaFusedCandidate`,
+`emit/nvidia_cuda.py`; `nvidia_fpquant_compiled`). The fixture proves the ops
+parse and verify, nothing more (ODS triage `GOV-ODS-CONSUMER-1`, WIRE slice 7
+owns the producer). By this dashboard's own rule a row missing a column is not
+fully promoted, so the four statuses now say **runtime-promoted** and name the
+open column. The runtime, provenance and benchmark evidence is unchanged.
+
 | Lane | Typed IR + verifier | Direct device comparison | Provenance / ABI | Smoke benchmark | Matrix/dashboard | Status |
 |---|---|---|---|---|---|---|
-| f16 `mma.sync` fused GEMM + epilogue | `sm120_differentiation_target_ir.mlir` | `test_live_nvidia_mma_fused_tensor_core` | `nvidia_cuda`; production candidate C ABI | `mma_sync_fused`, 0.917 ms median | baseline + this dashboard | **promoted** |
-| f16 `mma.sync` attention | `sm120_differentiation_target_ir.mlir` | `test_live_nvidia_mma_attn_tensor_core` | `nvidia_cuda`; production candidate C ABI | `mma_sync_attention`, 0.642 ms median | baseline + this dashboard | **promoted** |
-| FP8 E4M3/E5M2 storage conversion, f32 compute | `tessera_nvidia.fpquant` | `test_quantize_grid_matches_reference` | `nvidia_fpquant_compiled`; `native_gpu` | `cuda_fpquant`, 1.051 ms median | execution matrix + baseline | **promoted (storage)** |
-| FP6 E2M3/E3M2 storage conversion, f32 compute | `tessera_nvidia.fpquant` | `test_quantize_grid_matches_reference` | `nvidia_fpquant_compiled`; `native_gpu` | `cuda_fpquant`, 1.024 ms median | execution matrix + baseline | **promoted (storage)** |
+| f16 `mma.sync` fused GEMM + epilogue | **open** — `tessera_nvidia.mma_fused` is fixture-only (`sm120_differentiation_target_ir.mlir`); no compiler producer | `test_live_nvidia_mma_fused_tensor_core` | `nvidia_cuda`; production candidate C ABI | `mma_sync_fused`, 0.917 ms median | baseline + this dashboard | **runtime-promoted; Target-IR column open** |
+| f16 `mma.sync` attention | **open** — `tessera_nvidia.mma_attention` is fixture-only (`sm120_differentiation_target_ir.mlir`); no compiler producer | `test_live_nvidia_mma_attn_tensor_core` | `nvidia_cuda`; production candidate C ABI | `mma_sync_attention`, 0.642 ms median | baseline + this dashboard | **runtime-promoted; Target-IR column open** |
+| FP8 E4M3/E5M2 storage conversion, f32 compute | **open** — `tessera_nvidia.fpquant` is fixture-only; no compiler producer | `test_quantize_grid_matches_reference` | `nvidia_fpquant_compiled`; `native_gpu` | `cuda_fpquant`, 1.051 ms median | execution matrix + baseline | **runtime-promoted (storage); Target-IR column open** |
+| FP6 E2M3/E3M2 storage conversion, f32 compute | **open** — `tessera_nvidia.fpquant` is fixture-only; no compiler producer | `test_quantize_grid_matches_reference` | `nvidia_fpquant_compiled`; `native_gpu` | `cuda_fpquant`, 1.024 ms median | execution matrix + baseline | **runtime-promoted (storage); Target-IR column open** |
 | FP6 E2M3/E3M2 + UE8M0 block-scale MMA | `tessera_nvidia.mx_block_scale_mma`; both PTX forms assemble | no runtime execution yet | typed m16n8k32 register ABI; packed-memory/scale-view ABI open | none | dtype contract + lit/device assembly fixture | **blocked at Tile/runtime gate** |
 | OCP/MXFP4 E2M1 + UE8M0 block-scale MMA | `tessera_nvidia.mx_block_scale_mma`; PTX assembles | no runtime execution yet | typed m16n8k64 register ABI; packed-memory/scale-view ABI open | none | dtype contract + lit/device assembly fixture | **blocked at Tile/runtime gate** |
 | NVFP4 E2M1 + UE4M3 block-scale MMA | `tessera_nvidia.nvfp4_block_scale_mma`; PTX assembles | **passes** fixed-tile unit and non-uniform scale oracle on sm_120a (`test_nvidia_nvfp4_compiled.py`) | no general-shape runtime ABI | none | execution proof is complete; runtime productization remains | **blocked at runtime-dispatch gate** |

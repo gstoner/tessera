@@ -99,6 +99,121 @@ unchanged.
 Open, found here: the `ncu`-only exit abort of a process holding a
 generic-lane library (recorded in the evidence README, not root-caused);
 route-resource entries are keyed by route, not by code identity or storage.
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: `test_tma_smoke` root-caused and passing on sm_120
+
+The TMA smoke (`src/compiler/codegen/tessera_gpu_backend_NVIDIA/`
+`src/kernels/tma_smoke.cu`, one rank-1 f32 box of 32) had **two** defects; the
+first hid the second.
+
+1. **Encode: `globalStrides == nullptr`.** For a rank-1 map `globalStrides`
+   has `tensorRank - 1 == 0` entries and the CUDA 13.4 `cuda.h` comment states
+   no requirement on the pointer, but driver 610.88 (`cuDriverGetVersion`
+   13030) returns `CUDA_ERROR_INVALID_VALUE` for a null pointer and ignores the
+   contents. Probe matrix on the RTX 5070 (every other documented
+   precondition held: `CUtensorMap` 64-byte aligned (alignof 128), global
+   address 256-byte aligned, `boxDim[0] * 4 = 128` a multiple of 16, rank 1,
+   interleave/swizzle NONE, `elementStrides` 1): rank-1 with `nullptr` fails
+   for f32 dim 32 / box 32, f32 dim 1024 / box 32 and u8 dim 128 / box 128,
+   also through `cudaGetDriverEntryPointByVersion(..., 12000)`; rank-1 with a
+   non-null array succeeds whether it holds 128, 0, 7 or 2^41; rank-2 with a
+   real stride succeeds. Fix: pass `{globalDim[0] * sizeof(float)}`.
+2. **Launch: the descriptor was read from local memory.** With the encode
+   fixed, the launch failed with `an illegal memory access`. The kernel took
+   `CUtensorMap` by value without `__grid_constant__`; the PTX shows nvcc
+   copying the parameter into `__local_depot0` (eight `st.local.v2.b64`) and
+   handing `cp.async.bulk.tensor` the generic address of that copy, while PTX
+   requires the tensor-map operand in `.param`, `.const` or `.global`. With
+   `const __grid_constant__` the PTX has no local depot, the instruction
+   addresses the parameter directly, and the smoke passes. `compute-sanitizer`
+   cannot attach under WSL2 ("Failed to initialize WDDM debugger interface"),
+   so the fault's cause rests on the PTX difference plus the fault
+   disappearing with exactly that change, not on a sanitizer report.
+
+Also added `fence.proxy.async.shared::cta` after `mbarrier.init` (the CUDA
+programming guide's TMA pattern). It is not shown necessary here: the smoke
+passed 6/6 with `__grid_constant__` alone.
+
+Evidence (The-Super-Bear, RTX 5070, CUDA 13.4.59 / driver 610.88, own
+worktree, `flock /tmp/tessera-timing.lock` around every device run): the
+unmodified `build-nvidia-cuda` binary fails (`cuTensorMapEncodeTiled: invalid
+argument`); strides-only fails (`illegal memory access`); the fixed source
+passes 3/3 at `-arch=sm_120a` and 3/3 at `sm_120` standalone, and the
+CMake-built `test_tma_smoke` (fresh tree, `TESSERA_CUDA_ARCH=sm_120a`) passes
+5/5 and compares all 32 values. `test_tma_smoke` is a standalone executable
+with no ctest/pytest wrapper, so no automated lane runs it; that is unchanged.
+
+Sibling outcome: ROCm not applicable (no TMA; `cuTensorMap*` is CUDA-only);
+Apple not applicable; x86 not applicable.
+
+## `TILE-LATENT-DEFECTS-2026-09-27`: Tile TMEM lowering fails closed and wires its results; the sm_120 dashboard stops citing fixture-only Target ops
+
+Owner: GOV-ODS-CONSUMER-1 (the ODS connection triage found these in passing).
+IR/lowering evidence only: TMEM is datacenter sm_100, which no fleet box has,
+so nothing here is an execution claim. Verified under the assertions-ON
+`tessera-nvidia-opt` / `tessera-opt` on Tajasarus (LLVM/MLIR 23.1.1,
+`--assertion-mode ON`, fresh trees at `f9023d62`): NVIDIA backend lit 68/68,
+`lit tests/tessera-ir` 458 passed / 66 unsupported / 0 failed,
+`check-tessera-rocm` 82/82. The same new fixtures against the unfixed
+`origin/main` build (`d8da67f7`) on that box: four TMEM fixtures abort with
+`LLVM ERROR: operation destroyed but still has uses`, the unknown-op fixture
+exits 0 emitting `tessera_nvidia.tmem_store` for both ops, and
+`nvidia_marker_result_used.mlir` fails with `null operand found`.
+
+**Fixed in `LowerTileToNVIDIA` (`NVIDIALowering.cpp`, `lowerTmemOp`).**
+
+- The branch matched `starts_with("tile.tmem.")` and defaulted anything that
+  was not alloc/load to a `tessera_nvidia.tmem_store` contract, so a new or
+  misspelled op silently became a store. The three registered ops
+  (`tile.tmem.allocate` / `load` / `store`, `TileOps.td`) now map by op
+  identity; anything else under the prefix fails with
+  `NVIDIA_TMEM_UNKNOWN_OP` (Decision #21). The unregistered legacy spelling
+  `tile.tmem.alloc` is no longer accepted as an alias.
+- Every op was erased without replacing its results. On the unfixed
+  assertions-ON driver, every new fixture with a used handle or load result
+  aborts with `LLVM ERROR: operation destroyed but still has uses`. Now the
+  `!tile.tmem` handle lowers to the i32 tensor-memory address
+  (`tessera_nvidia.tmem_alloc ... -> i32`, the `[taddr]` that `tcgen05.ld/st`
+  take), `index` operands are widened to i64 (neither type is an NVIDIA target
+  value), load results are replaced, and the allocation is erased only once it
+  has no users.
+- A handle consumed by an op this pass does not lower (today
+  `tile.tcgen05.mma`) is refused with `NVIDIA_TMEM_HANDLE_UNLOWERED` rather
+  than erased under a live use.
+
+**Fixed in `LowerNVIDIAToNVVM`.** A contract with no value-producing NVVM
+lowering becomes a void marker, and the pass called `dropAllUses()`. A result
+used outside the contract family left its user with a null operand (unfixed:
+`error: null operand found` on `func.return`). It now fails with
+`NVIDIA_MARKER_RESULT_USED`. Uses by other contracts, or by ops nested inside
+one, are erased with them as before.
+
+Fixtures (`src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/`):
+`tmem_tile_to_nvidia.mlir` (used load result and handle),
+`tmem_unknown_op_rejected.mlir` (legacy spelling + invented op),
+`tmem_handle_unlowered.mlir` (`tcgen05.mma` consumer),
+`tmem_to_nvvm_contract.mlir` / `tmem_to_nvvm_result_used.mlir`, and
+`nvidia_marker_result_used.mlir` (the NVVM stage alone).
+
+**Dashboard correction (`SM120_DIFFERENTIATION_DASHBOARD.md`).** The four
+promoted rows' “Typed IR + verifier” cells cited
+`sm120_differentiation_target_ir.mlir` / `tessera_nvidia.fpquant`. No compiler
+path produces `mma_fused`, `mma_attention` or `fpquant`; the lanes execute
+through Python candidates that bypass Target IR. The cells now say
+fixture-only, and the statuses now read **runtime-promoted … Target-IR column
+open** (the dashboard's own rule requires all six columns). Runtime,
+provenance and benchmark evidence is unchanged.
+`test_nvidia_sm120_promotion_gate.py` asserts the honest state.
+
+Open (not in this change):
+
+- `tile.tcgen05.mma` has no NVIDIA lowering, so a TMEM handle that feeds it
+  cannot lower yet. It is the next sm_100 slice, and it needs no hardware for
+  its IR half.
+- The NVVM stage lowers TMEM contracts to void markers only. A real
+  `tcgen05.alloc/ld/st` emission is sm_100 work and is hardware-gated for
+  execution.
+- WIRE slice 7 of the ODS triage: producers for `mma_fused` /
+  `mma_attention` / `fpquant` so the dashboard's Target-IR column can close.
 
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — hand-written hooks fixed on sm_120; emitted templates follow-up required
 
@@ -158,6 +273,9 @@ such source (benchmark harness, same follow-up).
 5070 with `cuTensorMapEncodeTiled: invalid argument` both before and after this
 change (the encode is a driver-API call ahead of any launch, so the entry clear
 cannot affect it). Owed: root-cause the descriptor (rank-1 f32, box 32).
+**Resolved 2026-09-27** (`SMALL-CORRECTNESS-GAPS-2026-09-27`, top of this
+queue): a null rank-1 `globalStrides` the driver rejects, then a by-value
+descriptor read from local memory.
 
 The ROCm spectral image checked its launches with `hipGetLastError()`, whose
 per-thread slot is sticky: an unrelated failed HIP call earlier on the thread

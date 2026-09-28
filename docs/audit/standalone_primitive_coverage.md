@@ -104,7 +104,7 @@ Contract axes distinguish implemented rules from explicit by-design closures; on
 | `transpose_rule` | 356 | 164 | 0 | 0 |
 | `sharding_rule` | 405 | 56 | 59 | 0 |
 | `masking_effect_rule` | 74 | 446 | 0 | 0 |
-| `lowering_rule` | 468 | 52 | 0 | 0 |
+| `lowering_rule` | 465 | 52 | 3 | 0 |
 | `backend_kernel` | 0 | 100 | 411 | 9 |
 | `tests` | 520 | 0 | 0 | 0 |
 <!-- END GENERATED LIVE REGISTRY SUMMARY -->
@@ -210,8 +210,8 @@ The compiler-facing table contains **353** callable/IR rows; the remaining **167
 | `frontend` | `public` 353 |
 | `graph_ir` | `registered` 321, `not_applicable` 32 |
 | `schedule_ir` | `not_applicable` 2, `complete` 351 |
-| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 20, `fused` 296, `no_kernel_required` 7 |
-| `target_ir` | `not_applicable` 26, `fused` 72, `device_verified_abi` 27, `device_verified_jit` 196, `reference` 24, `no_kernel_required` 8 |
+| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 21, `fused` 295, `no_kernel_required` 7 |
+| `target_ir` | `not_applicable` 26, `fused` 72, `device_verified_abi` 26, `device_verified_jit` 196, `reference` 25, `no_kernel_required` 8 |
 | `runtime` | `fused` 6, `ready` 347 |
 | `bench` | `benchmarked` 99, `none` 254 |
 
@@ -233,9 +233,9 @@ Current open queues derived from the same sources:
 
 | Queue | Count | Scope |
 |---|---:|---|
-| Tile IR partial | 20 | `adadelta`, `adagrad`, `depth_attn`, `det`, `eigh`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `inv`, `kron`, `logdet`, `matrix_power`, `norm`, `rmsprop`, `shampoo`, `solve`, `trace`, `vec` |
+| Tile IR partial | 21 | `adadelta`, `adagrad`, `depth_attn`, `det`, `eigh`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `inv`, `kron`, `logdet`, `matrix_power`, `norm`, `ntk_rope`, `rmsprop`, `shampoo`, `solve`, `trace`, `vec` |
 | Backend contract planned | 9 | `broadcast_to_axis`, `collective_permute`, `named_sharding`, `partition_spec`, `pmax`, `pmean`, `pmin`, `psum`, `shard_map` |
-| Native/fused aggregate rows without benchmark inventory | 201 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
+| Native/fused aggregate rows without benchmark inventory | 200 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
 | VJP / JVP planned | 40 / 40 | Autodiff rules, not forward compiler execution. |
 | Sharding partial | 59 | Multi-device/domain proof. |
 

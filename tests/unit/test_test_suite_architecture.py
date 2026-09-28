@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -155,6 +157,53 @@ def _fake_tessera_opt(path: Path, *registered: str) -> Path:
     return path
 
 
+def _pin_driver_search(monkeypatch, *candidates: Path, on_path: Path | None) -> None:
+    """Make the resolver see exactly `candidates` + `on_path`, whatever the host exports.
+
+    Clears every selector the resolver reads, not a hand-picked subset: these
+    ratchets failed on Tajasarus only because its sweep environment exports
+    `TESSERA_BUILD_DIR`, which the resolver honours ahead of the defaults.
+    """
+    for name in compiler_tool.DRIVER_SELECTION_ENVIRONMENT:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(compiler_tool, "_DEFAULT_CANDIDATES", candidates)
+    monkeypatch.setattr(
+        compiler_tool.shutil, "which",
+        lambda _: str(on_path) if on_path is not None else None,
+    )
+
+
+def test_driver_selection_environment_names_every_variable_the_resolver_reads():
+    """The hermetic helper above is only as good as this list."""
+    source = inspect.getsource(compiler_tool.tessera_opt_candidates)
+    read = set(re.findall(r'os\.environ\.get\("([A-Z_]+)"\)', source))
+    for selector in compiler_tool._ENV_SELECTORS:
+        read.add(selector)
+    assert read <= set(compiler_tool.DRIVER_SELECTION_ENVIRONMENT), (
+        "tessera_opt_candidates reads environment variables that "
+        "DRIVER_SELECTION_ENVIRONMENT does not list: "
+        f"{sorted(read - set(compiler_tool.DRIVER_SELECTION_ENVIRONMENT))}"
+    )
+
+
+def test_resolver_ratchets_are_hermetic_under_an_exported_build_dir(
+    tmp_path, monkeypatch
+):
+    """Reproduces the Tajasarus failure: an exported build dir must not leak in."""
+    lean = _fake_tessera_opt(tmp_path / "in-repo" / "tessera-opt", "canonicalize")
+    exported = _fake_tessera_opt(
+        tmp_path / "exported" / "tools" / "tessera-opt" / "tessera-opt", "canonicalize"
+    )
+    for name in compiler_tool._ENV_SELECTORS:  # these outrank TESSERA_BUILD_DIR
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("TESSERA_BUILD_DIR", str(tmp_path / "exported"))
+    assert compiler_tool.tessera_opt_candidates()[0] == exported, (
+        "precondition: the exported build dir is honoured when not pinned"
+    )
+    _pin_driver_search(monkeypatch, lean, on_path=None)
+    assert compiler_tool.tessera_opt_path() == lean
+
+
 def test_capable_driver_outranks_a_preferred_build_that_lacks_the_pass(
     tmp_path, monkeypatch
 ):
@@ -168,10 +217,7 @@ def test_capable_driver_outranks_a_preferred_build_that_lacks_the_pass(
     full = _fake_tessera_opt(
         tmp_path / "on-path" / "tessera-opt", "canonicalize", "generate-rocm-x-kernel"
     )
-    monkeypatch.delenv("TESSERA_OPT", raising=False)
-    monkeypatch.delenv("TESSERA_OPT_BIN", raising=False)
-    monkeypatch.setattr(compiler_tool, "_DEFAULT_CANDIDATES", (lean,))
-    monkeypatch.setattr(compiler_tool.shutil, "which", lambda _: str(full))
+    _pin_driver_search(monkeypatch, lean, on_path=full)
 
     assert compiler_tool.tessera_opt_path() == lean, "in-repo build stays preferred"
     assert compiler_tool.require_tessera_opt("--canonicalize") == lean
@@ -183,10 +229,7 @@ def test_pipeline_inner_passes_are_capability_checked(tmp_path, monkeypatch):
     lean = _fake_tessera_opt(
         tmp_path / "lean" / "tessera-opt", "pass-pipeline", "canonicalize"
     )
-    monkeypatch.delenv("TESSERA_OPT", raising=False)
-    monkeypatch.delenv("TESSERA_OPT_BIN", raising=False)
-    monkeypatch.setattr(compiler_tool, "_DEFAULT_CANDIDATES", (lean,))
-    monkeypatch.setattr(compiler_tool.shutil, "which", lambda _: None)
+    _pin_driver_search(monkeypatch, lean, on_path=None)
 
     assert compiler_tool.missing_passes(
         lean, "--pass-pipeline=builtin.module(canonicalize)"
@@ -215,10 +258,7 @@ def test_toolchain_fixture_reaches_the_capable_driver_too(tmp_path, monkeypatch)
         tmp_path / "on-path" / "tessera-opt",
         "pass-pipeline", "canonicalize", "lower-tile-to-rocm",
     )
-    monkeypatch.delenv("TESSERA_OPT", raising=False)
-    monkeypatch.delenv("TESSERA_OPT_BIN", raising=False)
-    monkeypatch.setattr(compiler_tool, "_DEFAULT_CANDIDATES", (lean,))
-    monkeypatch.setattr(compiler_tool.shutil, "which", lambda _: str(full))
+    _pin_driver_search(monkeypatch, lean, on_path=full)
     tools = CompilerToolchain.discover()
 
     def resolved(*passes: str) -> Path:
@@ -293,3 +333,40 @@ def test_migrated_child_process_guards_use_shared_import_state(filename):
     text = path.read_text(encoding="utf-8")
     assert "python_subprocess_env" in text
     assert "env=python_subprocess_env" in text
+
+
+def _active_cmake_files():
+    yield ROOT / "CMakeLists.txt"
+    for top in ("cmake", "src", "tests", "tools", "benchmarks", "examples"):
+        for pattern in ("CMakeLists.txt", "*.cmake"):
+            for path in sorted((ROOT / top).rglob(pattern)):
+                if "archive" in path.relative_to(ROOT).parts:
+                    continue
+                yield path
+
+
+def test_lit_suites_invoke_the_validated_runner_directly():
+    """No active CMake file may hand the validated lit runner to AddLLVM.
+
+    `cmake/TesseraLit.cmake` accepts a runner only if `<lit> --version` runs,
+    i.e. through its shebang. LLVM 23.1.1's `add_lit_target` (reached from
+    `add_lit_testsuite`) builds `${Python3_EXECUTABLE};<LLVM_EXTERNAL_LIT>`, so
+    it runs the script under the *configure* interpreter instead: a venv-only
+    lit (Princess-Luna) passed the probe and `check-tessera-collective` then
+    died with `No module named 'lit'`. Every suite must run the validated
+    command itself, as tests/ and the backend suites do.
+    """
+    offenders = []
+    for path in _active_cmake_files():
+        rel = path.relative_to(ROOT)
+        for lineno, line in enumerate(
+            path.read_text(errors="replace").splitlines(), 1
+        ):
+            code = line.split("#", 1)[0]
+            if re.search(r"\badd_lit_(testsuites?|target)\s*\(", code):
+                offenders.append(f"{rel}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "These CMake sites route lit through AddLLVM, which bypasses the "
+        "validated runner's interpreter; invoke tessera_lit_command()'s "
+        "result directly:\n  " + "\n  ".join(offenders)
+    )

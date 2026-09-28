@@ -8,6 +8,213 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`: checked emitted launches, route resources, reproducible shipped GEMM, route identities; sm_120 rows re-recorded
+
+Four items, one change, because each one moves the same sm_120 corpus rows and
+one re-record covers them. Evidence and commands:
+[`benchmarks/baselines/autotune_corpus_rerecord_sm120_launch_integrity_20260927/`](../../../../benchmarks/baselines/autotune_corpus_rerecord_sm120_launch_integrity_20260927/README.md).
+
+**1. `NVIDIA-EMITTED-UNCHECKED-LAUNCH` — closed.** All 55 sync-only entries,
+and the two inline sources (now the emitters `_synthesize_relu_bias_cuda` /
+`_synthesize_fused_epilogue_cuda`), read the last-error slot after each launch
+group, clear it once on entry, and consume every allocation / copy / memset /
+event status; the raced lanes' unchecked H2D/D2H copies are checked too. The
+ReplaySSM ring runtime launches through the driver and checks each
+`CUresult`, so it is the one `status-checked` source. The host-independent
+gate (`tests/unit/test_nvidia_emitted_stale_error_rule.py` +
+`tests/_support/nvidia_emitted_sources.py`) no longer accepts `sync-only`: it
+parses every host function and requires a slot read after the last launch, a
+read before a timer's timing boundary, no `cudaFuncSetAttribute` between a
+launch and its read, and every status in `STATUS_CALLS` consumed; no kernel
+source may live outside an emitter. Device proof on The-Super-Bear
+(`tests/device/nvidia/test_emitted_unchecked_launch.py`, 17 lanes: flash
+fwd/bwd, softmax, norm, reduce + timer, linear attention, MoE, paged-KV read +
+timer, relu-bias, fused/gated epilogue + timer, conv2d, rope, control-for):
+with every launch made invalid (grid `dim3(0u)`) the old sync-only judgment
+returned success on all 17 (the defect, observed), the shipped entries raise on
+all 17, and the unmodified lanes run; 17 + the 19
+`test_emitted_stale_cuda_error.py` cases passed. All 64 distinct rendered
+sources compile with the lane's own nvcc line. ROCm half: see the ROCm queue.
+
+**2. `AUTOTUNE-SM120-ROUTE-RESOURCES` — closed.** The route-resource manifest
+attests Nsight Compute launch facts per route (registers, shared memory,
+theoretical/achieved occupancy, spill requests; `parse_ncu_resources.py`); the
+finalizer admits a stable winner only when its route has an entry. The 17
+missing routes (native tf32/fp8 fused/attention/gated, composed fp8, and the
+scalar `nvidia_flash_attn` / `nvidia_gated`) were captured by the same method,
+one route per `ncu --set full` report so same-named tf32/fp8 builds stay apart
+(`profile_route_resources.py` brackets one timed invocation with
+`cuProfilerStart/Stop`; `build_test5_resource_manifest.py --route`). After the
+re-record 91 registry rows are selector-eligible (was 38). Of the 20 formerly
+partial rows **4 are now served** (attention fp8_e5m2 device 128x128, gated tf32
+and fp8_e5m2 device rows); 15 stay out as unseparated (device-event noise
+33–332% between repeats) and 1 because the two runs disagreed. None is blocked
+by missing resources any more.
+
+**3. Shipped GEMM byte-reproducibility — closed.** Root cause measured on
+Super-Bear: tree paths never mattered (two worktrees, same configure, identical
+bytes); the CUDA discovery path did. Linking the imported `CUDA::nvrtc` wrote
+the toolkit directory CMake found into DT_RUNPATH (`/usr/local/cuda/lib64` with
+`CUDAToolkit_ROOT=/usr/local/cuda` — reproducing the old `a00c9040…` exactly —
+vs `/usr/local/cuda-13.4/targets/x86_64-linux/lib`); `.text`/`.rodata`/`.data`
+were identical, only `.dynstr`/`.dynamic`/build-id differed. The library now
+builds with `SKIP_BUILD_RPATH` (every loader preloads the driver and NVRTC);
+four builds across two worktrees and both configures are byte-identical
+(`198b85b3…`). Identity scheme unchanged; the committed rows serve with the
+library built in another worktree under the other configure (96/96 match, 20
+served).
+
+**4. `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV` — closed (sm_120 half).** Non-registry
+rows get the registry contract (`autotune.RouteIdentity`, `route_identities`,
+`route_record_matches`, fail closed). sm_120: the paged-attention routes are the
+resident-stage source plus the entries each launches, and
+`_paged_attention_corpus_winner` refuses a row whose live identities differ;
+`conv2d` rows stamp `direct`/`shared` (resident stages) and `im2col_tf32`
+(resident stages + the shipped GEMM tf32 device entry) — no production path
+reads them yet, stated; `ssm_replay_decode` rows stamp the `async_ring` (ring
+runtime source + the `tessera-nvidia-opt` decode/flush images) — no reader
+either. The ring runtime and the paged HIP artifacts are cached by source
+content now.
+
+**Re-record (The-Super-Bear, own worktree at `fcfa3677`, fresh `build/` +
+`build-nvidia-cuda/`, everything under the timing lock).** Two recorder runs
+and the finalizer (rc 0, identities agreed), the serving recorder, then the
+order restored: 108 sm_120 rows changed, no key lost or added, every timed
+candidate of all 124 rows stamped. **Served registry rows: 20 (was 13)**; the
+two `matmul` end-to-end 2048³ shipped-GEMM rows dropped out (winner unchanged,
+now unseparated). Route rows match 12/12; the paged-KV warm start serves the
+128-token device row. Every one of the 108 rows misses under some single
+emitter perturbation with pins unchanged, and all 108 with all perturbed. 11
+winners changed, none served. Reproducibility: 92/92 strict records admitted.
+
+**NVIDIA release gate, device layer, at `71e1e81e`** (same box and worktree,
+under the timing lock, `TESSERA_NVIDIA_REPORT_DIR=~/gate-reports/a-71e1e81ea`):
+both device-correctness passes **1167 passed, 1 skipped, 0 failed** (junit:
+1168 tests, 0 failures, 0 errors, 1 skipped each), `status=success`. The skip
+is NCCL not installed (multi-rank topology lane not evaluable here). The 17
+new `test_emitted_unchecked_launch.py` cases are included. After the gate's
+re-configure the bridge (`1bcb4967…`) and `build/`'s GEMM (`198b85b3…`) are
+unchanged.
+
+Open, found here: the `ncu`-only exit abort of a process holding a
+generic-lane library (recorded in the evidence README, not root-caused);
+route-resource entries are keyed by route, not by code identity or storage.
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: `test_tma_smoke` root-caused and passing on sm_120
+
+The TMA smoke (`src/compiler/codegen/tessera_gpu_backend_NVIDIA/`
+`src/kernels/tma_smoke.cu`, one rank-1 f32 box of 32) had **two** defects; the
+first hid the second.
+
+1. **Encode: `globalStrides == nullptr`.** For a rank-1 map `globalStrides`
+   has `tensorRank - 1 == 0` entries and the CUDA 13.4 `cuda.h` comment states
+   no requirement on the pointer, but driver 610.88 (`cuDriverGetVersion`
+   13030) returns `CUDA_ERROR_INVALID_VALUE` for a null pointer and ignores the
+   contents. Probe matrix on the RTX 5070 (every other documented
+   precondition held: `CUtensorMap` 64-byte aligned (alignof 128), global
+   address 256-byte aligned, `boxDim[0] * 4 = 128` a multiple of 16, rank 1,
+   interleave/swizzle NONE, `elementStrides` 1): rank-1 with `nullptr` fails
+   for f32 dim 32 / box 32, f32 dim 1024 / box 32 and u8 dim 128 / box 128,
+   also through `cudaGetDriverEntryPointByVersion(..., 12000)`; rank-1 with a
+   non-null array succeeds whether it holds 128, 0, 7 or 2^41; rank-2 with a
+   real stride succeeds. Fix: pass `{globalDim[0] * sizeof(float)}`.
+2. **Launch: the descriptor was read from local memory.** With the encode
+   fixed, the launch failed with `an illegal memory access`. The kernel took
+   `CUtensorMap` by value without `__grid_constant__`; the PTX shows nvcc
+   copying the parameter into `__local_depot0` (eight `st.local.v2.b64`) and
+   handing `cp.async.bulk.tensor` the generic address of that copy, while PTX
+   requires the tensor-map operand in `.param`, `.const` or `.global`. With
+   `const __grid_constant__` the PTX has no local depot, the instruction
+   addresses the parameter directly, and the smoke passes. `compute-sanitizer`
+   cannot attach under WSL2 ("Failed to initialize WDDM debugger interface"),
+   so the fault's cause rests on the PTX difference plus the fault
+   disappearing with exactly that change, not on a sanitizer report.
+
+Also added `fence.proxy.async.shared::cta` after `mbarrier.init` (the CUDA
+programming guide's TMA pattern). It is not shown necessary here: the smoke
+passed 6/6 with `__grid_constant__` alone.
+
+Evidence (The-Super-Bear, RTX 5070, CUDA 13.4.59 / driver 610.88, own
+worktree, `flock /tmp/tessera-timing.lock` around every device run): the
+unmodified `build-nvidia-cuda` binary fails (`cuTensorMapEncodeTiled: invalid
+argument`); strides-only fails (`illegal memory access`); the fixed source
+passes 3/3 at `-arch=sm_120a` and 3/3 at `sm_120` standalone, and the
+CMake-built `test_tma_smoke` (fresh tree, `TESSERA_CUDA_ARCH=sm_120a`) passes
+5/5 and compares all 32 values. `test_tma_smoke` is a standalone executable
+with no ctest/pytest wrapper, so no automated lane runs it; that is unchanged.
+
+Sibling outcome: ROCm not applicable (no TMA; `cuTensorMap*` is CUDA-only);
+Apple not applicable; x86 not applicable.
+
+## `TILE-LATENT-DEFECTS-2026-09-27`: Tile TMEM lowering fails closed and wires its results; the sm_120 dashboard stops citing fixture-only Target ops
+
+Owner: GOV-ODS-CONSUMER-1 (the ODS connection triage found these in passing).
+IR/lowering evidence only: TMEM is datacenter sm_100, which no fleet box has,
+so nothing here is an execution claim. Verified under the assertions-ON
+`tessera-nvidia-opt` / `tessera-opt` on Tajasarus (LLVM/MLIR 23.1.1,
+`--assertion-mode ON`, fresh trees at `f9023d62`): NVIDIA backend lit 68/68,
+`lit tests/tessera-ir` 458 passed / 66 unsupported / 0 failed,
+`check-tessera-rocm` 82/82. The same new fixtures against the unfixed
+`origin/main` build (`d8da67f7`) on that box: four TMEM fixtures abort with
+`LLVM ERROR: operation destroyed but still has uses`, the unknown-op fixture
+exits 0 emitting `tessera_nvidia.tmem_store` for both ops, and
+`nvidia_marker_result_used.mlir` fails with `null operand found`.
+
+**Fixed in `LowerTileToNVIDIA` (`NVIDIALowering.cpp`, `lowerTmemOp`).**
+
+- The branch matched `starts_with("tile.tmem.")` and defaulted anything that
+  was not alloc/load to a `tessera_nvidia.tmem_store` contract, so a new or
+  misspelled op silently became a store. The three registered ops
+  (`tile.tmem.allocate` / `load` / `store`, `TileOps.td`) now map by op
+  identity; anything else under the prefix fails with
+  `NVIDIA_TMEM_UNKNOWN_OP` (Decision #21). The unregistered legacy spelling
+  `tile.tmem.alloc` is no longer accepted as an alias.
+- Every op was erased without replacing its results. On the unfixed
+  assertions-ON driver, every new fixture with a used handle or load result
+  aborts with `LLVM ERROR: operation destroyed but still has uses`. Now the
+  `!tile.tmem` handle lowers to the i32 tensor-memory address
+  (`tessera_nvidia.tmem_alloc ... -> i32`, the `[taddr]` that `tcgen05.ld/st`
+  take), `index` operands are widened to i64 (neither type is an NVIDIA target
+  value), load results are replaced, and the allocation is erased only once it
+  has no users.
+- A handle consumed by an op this pass does not lower (today
+  `tile.tcgen05.mma`) is refused with `NVIDIA_TMEM_HANDLE_UNLOWERED` rather
+  than erased under a live use.
+
+**Fixed in `LowerNVIDIAToNVVM`.** A contract with no value-producing NVVM
+lowering becomes a void marker, and the pass called `dropAllUses()`. A result
+used outside the contract family left its user with a null operand (unfixed:
+`error: null operand found` on `func.return`). It now fails with
+`NVIDIA_MARKER_RESULT_USED`. Uses by other contracts, or by ops nested inside
+one, are erased with them as before.
+
+Fixtures (`src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/`):
+`tmem_tile_to_nvidia.mlir` (used load result and handle),
+`tmem_unknown_op_rejected.mlir` (legacy spelling + invented op),
+`tmem_handle_unlowered.mlir` (`tcgen05.mma` consumer),
+`tmem_to_nvvm_contract.mlir` / `tmem_to_nvvm_result_used.mlir`, and
+`nvidia_marker_result_used.mlir` (the NVVM stage alone).
+
+**Dashboard correction (`SM120_DIFFERENTIATION_DASHBOARD.md`).** The four
+promoted rows' “Typed IR + verifier” cells cited
+`sm120_differentiation_target_ir.mlir` / `tessera_nvidia.fpquant`. No compiler
+path produces `mma_fused`, `mma_attention` or `fpquant`; the lanes execute
+through Python candidates that bypass Target IR. The cells now say
+fixture-only, and the statuses now read **runtime-promoted … Target-IR column
+open** (the dashboard's own rule requires all six columns). Runtime,
+provenance and benchmark evidence is unchanged.
+`test_nvidia_sm120_promotion_gate.py` asserts the honest state.
+
+Open (not in this change):
+
+- `tile.tcgen05.mma` has no NVIDIA lowering, so a TMEM handle that feeds it
+  cannot lower yet. It is the next sm_100 slice, and it needs no hardware for
+  its IR half.
+- The NVVM stage lowers TMEM contracts to void markers only. A real
+  `tcgen05.alloc/ld/st` emission is sm_100 work and is hardware-gated for
+  execution.
+- WIRE slice 7 of the ODS triage: producers for `mma_fused` /
+  `mma_attention` / `fpquant` so the dashboard's Target-IR column can close.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — hand-written hooks fixed on sm_120; emitted templates follow-up required
 
 **Update 2026-09-27 (same branch, PR #862) — reproduced and fixed on the RTX
@@ -66,6 +273,9 @@ such source (benchmark harness, same follow-up).
 5070 with `cuTensorMapEncodeTiled: invalid argument` both before and after this
 change (the encode is a driver-API call ahead of any launch, so the entry clear
 cannot affect it). Owed: root-cause the descriptor (rank-1 f32, box 32).
+**Resolved 2026-09-27** (`SMALL-CORRECTNESS-GAPS-2026-09-27`, top of this
+queue): a null rank-1 `globalStrides` the driver rejects, then a by-value
+descriptor read from local memory.
 
 The ROCm spectral image checked its launches with `hipGetLastError()`, whose
 per-thread slot is sticky: an unrelated failed HIP call earlier on the thread
@@ -207,14 +417,14 @@ under the timing lock,
 
 Open, found here:
 
-- **`AUTOTUNE-SM120-ROUTE-RESOURCES`**: the 20 formerly partial-field rows now
+- **`AUTOTUNE-SM120-ROUTE-RESOURCES`** (**closed 2026-09-27**, `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27` at the top of this file): the 20 formerly partial-field rows now
   race every live candidate, and the scalar lanes lost all 20 by 3–750x. They
   are still unserved. 18 have winners (native `nvidia_mma_{attn,fused,gated}_{tf32,fp8_*}`)
   with no entry in `nvidia_sm120_test5_route_resources.json`, so the finalizer
   marks them `selector_eligible: false`. The other 2 are unseparated. Owed:
   resource fingerprints for the native low-precision lanes, and more device
   repeats where a verdict is unseparated.
-- **`NVIDIA-EMITTED-UNCHECKED-LAUNCH`**: the sync-only emitted sources in the
+- **`NVIDIA-EMITTED-UNCHECKED-LAUNCH`** (**closed 2026-09-27**, `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`): the sync-only emitted sources in the
   table above judge their launches by `cudaDeviceSynchronize` only. It
   returned success after an invalid-configuration launch on this box, so a
   launch that never ran reports `rc 1`. To fix it, add a post-launch slot read

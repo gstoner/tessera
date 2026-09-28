@@ -9,6 +9,18 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: sibling outcome — not applicable
+
+Three fixes landed under this key (sm_120 TMA smoke, a validated lit runner for every lit suite, one declaration of the `tessera.neighbors.*` ops; [ROCm](../rocm/todo.md) and [NVIDIA](../nvidia/todo.md) queues). Not applicable here: the lit-runner validator is shared CMake and was exercised on Tajasarus (which also builds the x86 backend: its x86 fixtures are inside the `check-tessera-ir` 454-pass count) and on the Mac. No x86 code changed.
+
+## `TILE-LATENT-DEFECTS-2026-09-27`: sibling outcome — not applicable
+
+The linalg solver annotation passes (`tessera-linalg-mixed-precision`,
+`tessera-linalg-iterative-refinement`) now select ops by identity instead of
+`contains("solve")` / `contains("lu")`. No x86 pipeline runs them; the x86
+linalg lane lowers Graph `cholesky`/`lu`/`tri_solve` through `TilingPass` to
+the AVX-512 kernels, untouched here. x86 has no TMEM.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
 
 The ROCm spectral image read HIP's per-thread, sticky last-error slot after
@@ -18,6 +30,13 @@ spectral package makes no HIP/CUDA calls and has no last-error slot. The
 streaming-STFT label fix changes only `target="rocm"`; the x86 label stays the
 constant `zen5-avx512`, which is truthful only while the x86 streaming package
 loads solely on the Zen 5 hosts — not re-verified by this change.
+
+## `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`: sibling outcome — not applicable
+
+The change checks emitted CUDA/HIP launches and gives the non-registry
+autotune rows (paged-KV, conv2d, ReplaySSM) route identities (NVIDIA and ROCm
+queues). `x86_generic_c` makes no device launch, and x86 has no committed
+corpus rows of either kind.
 
 ## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: sibling outcome — not applicable
 

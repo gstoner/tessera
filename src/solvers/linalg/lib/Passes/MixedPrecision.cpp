@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "tessera/Solvers/LinalgPasses.h"
+#include "tessera/Dialect/Solver/SolverDialect.h"
 #include "SolversPasses.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -25,6 +26,39 @@
 
 namespace tessera {
 namespace solver {
+
+enum class SolverRole { None, Factor, Solve, Residual };
+
+// Precision role by op identity.
+//
+// TILE-LATENT-DEFECTS-2026-09-27: this used to classify by substring --
+// "factor"/"lu"/"chol"/"qr" as factorizations, "solve"/"triangular"/... as
+// solves, "residual" as residuals. Every `tessera_solver.*` name contains
+// "solve" through its dialect prefix, and "lu" matches `tessera.gelu`,
+// `tessera.relu`, `tessera.silu`, "factor" matches `tessera.adafactor`: the
+// pass stamped an fp32 factorization policy on activations and an fp16 solve
+// policy on the matrix-free IFT ops (`linear_solve`, `implicit`). The Graph ops
+// are compared by exact name because this library does not link the Tessera
+// Graph dialect.
+static SolverRole classify(mlir::Operation *op) {
+  if (mlir::isa<GetrfOp, PotrfOp>(op))
+    return SolverRole::Factor;
+  if (mlir::isa<TrsmOp, PotrsOp>(op))
+    return SolverRole::Solve;
+  if (mlir::isa<ResidualOp>(op))
+    return SolverRole::Residual;
+  mlir::StringRef name = op->getName().getStringRef();
+  if (name == "tessera.cholesky" || name == "tessera.lu" ||
+      name == "tessera.qr")
+    return SolverRole::Factor;
+  // Every op_catalog.py entry with lowering="linalg_solver" is a Solve;
+  // tests/unit/test_linalg_solver_classifiers.py keeps this list in step
+  // with the catalog.
+  if (name == "tessera.solve" || name == "tessera.tri_solve" ||
+      name == "tessera.cholesky_solve")
+    return SolverRole::Solve;
+  return SolverRole::None;
+}
 
 struct MixedPrecisionPass
     : public mlir::PassWrapper<MixedPrecisionPass,
@@ -49,21 +83,12 @@ struct MixedPrecisionPass
     mlir::MLIRContext *ctx = mod.getContext();
 
     mod.walk([&](mlir::Operation *op) {
-      mlir::StringRef opName = op->getName().getStringRef();
-
-      // Factor ops: run at fp32 (stability-critical).
-      bool isFactor = opName.contains("factor") || opName.contains("lu") ||
-                      opName.contains("chol") || opName.contains("qr");
-
-      // Solve ops: run at fp16 (throughput-critical).
-      bool isSolve = opName.contains("solve") || opName.contains("back_sub") ||
-                     opName.contains("fwd_sub") || opName.contains("triangular");
-
-      // Residual ops: run at fp32 (accuracy-critical).
-      bool isResidual = opName.contains("residual");
-
-      if (!isFactor && !isSolve && !isResidual)
+      SolverRole role = classify(op);
+      if (role == SolverRole::None)
         return;
+      bool isFactor = role == SolverRole::Factor;
+      bool isSolve = role == SolverRole::Solve;
+      bool isResidual = role == SolverRole::Residual;
 
       if (isFactor || isResidual) {
         op->setAttr("tessera.compute_dtype", mlir::StringAttr::get(ctx, "f32"));

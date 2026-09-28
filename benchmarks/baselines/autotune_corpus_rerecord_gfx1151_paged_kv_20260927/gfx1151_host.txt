@@ -1,0 +1,4 @@
+HEAD 176e557e0260087161759e5dee53ee04ac13b0a9 dirty=0
+build/: ninja: no work to do.
+chip: gfx1151 gfx1151
+tessera-opt: /home/gstoner/programming/tessera-w-a/build/tools/tessera-opt/tessera-opt

@@ -334,10 +334,14 @@ jobs:
         run: |
           # A build dir of its own: ROCM_BACKEND=ON is incompatible with the
           # lit lane's core+x86 `tessera-opt` (it forces the lean driver), and
-          # `tessera-rocm-opt` needs neither.
+          # `tessera-rocm-opt` needs neither. This lane runs no lit suite, so
+          # it configures with TESSERA_BUILD_TESTS=OFF: `tests/` requires a
+          # working lit runner (cmake/TesseraLit.cmake) and fails configure
+          # without one (SMALL-CORRECTNESS-GAPS-2026-09-27).
           cmake -S . -B build-rocm-ci \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DTESSERA_BUILD_TESTS=OFF \
             -DTESSERA_BUILD_ROCM_BACKEND=ON \
             -DTESSERA_ENABLE_HIP=OFF \
             -DTESSERA_ENABLE_CUDA=OFF \

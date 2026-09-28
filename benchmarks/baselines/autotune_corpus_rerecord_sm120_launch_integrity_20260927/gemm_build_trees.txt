@@ -1,0 +1,4 @@
+d8da67f77 Merge pull request #864 from gstoner/claude/sm120-autotune-followups
+build-r1: CMAKE_CUDA_COMPILER:FILEPATH=/usr/local/cuda/bin/nvcc
+build-r1: CUDAToolkit_ROOT:UNINITIALIZED=/usr/local/cuda
+build-r3: CMAKE_CUDA_COMPILER:FILEPATH=/usr/local/cuda/bin/nvcc

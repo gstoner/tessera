@@ -111,6 +111,7 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 | `nvidia/profile_test5_routes.py` | Nsight launch target for the TEST-5 production-route capture; `nvidia/parse_ncu_resources.py` normalises the export into `nvidia_sm120_test5_resources.json` |
 | `nvidia/profile_test5_emitted_gemm.py` | Nsight launch target for the `tessera_mma_gemm_f16` capture behind `nvidia_sm120_emitted_gemm_resources.json` |
 | `nvidia/profile_gemm_schedule_candidates.py` | Nsight launch target for the `nvidia_generic_cuda` / `nvidia_mma_fused` rows of `nvidia_sm120_test5_route_resources.json` |
+| `nvidia/profile_route_resources.py` + `nvidia/capture_route_resources.sh` | One-route-per-report Nsight capture of the native TF32/FP8, composed-FP8 and scalar arbiter routes added to `nvidia_sm120_test5_route_resources.json` (`build_test5_resource_manifest.py --base … --route NAME=payload.json`; sync `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`) |
 | `nvidia/prepare_test5_profile_artifacts.py` | Precompiles the MoE / resident-ops artifacts for `nvidia/profile_test5_transport_serving.py`, the launch target behind `nvidia_sm120_transport_serving_resources.json` |
 | `record_native_nonlinear_ad.py` | `native_storage_nonlinear_nvidia.json`, `native_storage_nonlinear_rocm.json` |
 | `rocm/benchmark_block_attnres_gfx1151.py` | `rocm_gfx1151_block_attnres_phase5.json`; also `runtime_source_maps_20260909/depth_{default,cooperative}.json` |

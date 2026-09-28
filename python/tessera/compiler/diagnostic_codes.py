@@ -3268,6 +3268,100 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Complete the allocation-specific async token before reuse/free on every path; preserve derivable allocation identity. Dynamic GPU arenas require uniform structured regions, completed nested lifetimes and a checked launch-argument size with a 64-bit host index.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
     ),
+    # TILE-LATENT-DEFECTS-2026-09-27 — NVIDIA TMEM lowering fails closed.
+    DiagnosticCode(
+        code="NVIDIA_TMEM_UNKNOWN_OP", pass_origin="LowerTileToNVIDIA",
+        severity="error",
+        summary=(
+            "An op under the tile.tmem. prefix is not one of the declared Tile "
+            "TMEM ops (tile.tmem.allocate / tile.tmem.load / tile.tmem.store); "
+            "it used to be defaulted silently to a tmem_store contract."
+        ),
+        fix_hint=(
+            "Use the registered op (the allocation is tile.tmem.allocate; the "
+            "unregistered tile.tmem.alloc spelling is not an alias), or add an "
+            "explicit NVIDIA lowering for the new op."
+        ),
+        spec="docs/audit/backend/nvidia/todo.md TILE-LATENT-DEFECTS-2026-09-27",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="NVIDIA_TMEM_HANDLE_UNLOWERED", pass_origin="LowerTileToNVIDIA",
+        severity="error",
+        summary=(
+            "A !tile.tmem handle cannot be rewritten onto its tensor-memory "
+            "address: it is consumed by an op with no NVIDIA lowering (today "
+            "tile.tcgen05.mma), a load/store reads a handle no lowered "
+            "allocation produced, or the accessed value is not a target value."
+        ),
+        fix_hint=(
+            "Lower the consuming op first (tile.tcgen05.mma has no NVIDIA "
+            "lowering yet), take the handle from tile.tmem.allocate, and load "
+            "or store a tensor/memref/vector/scalar value."
+        ),
+        spec="docs/audit/backend/nvidia/todo.md TILE-LATENT-DEFECTS-2026-09-27",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="NVIDIA_MARKER_RESULT_USED", pass_origin="LowerNVIDIAToNVVM",
+        severity="error",
+        summary=(
+            "A tessera_nvidia contract with no value-producing NVVM lowering "
+            "has a result used outside the contract family; a void artifact "
+            "marker cannot supply it (the pass used to drop the use and leave "
+            "a null operand)."
+        ),
+        fix_hint=(
+            "Give the contract a real NVVM lowering, or keep its results "
+            "flowing only into other tessera_nvidia contracts at this stage."
+        ),
+        spec="docs/audit/backend/nvidia/todo.md TILE-LATENT-DEFECTS-2026-09-27",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    # TILE-LATENT-DEFECTS-2026-09-27 — ZeRO configuration reaches the pass.
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_MISSING", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "Optimizer state is marked for sharding but the module carries no "
+            "tessera_sr.zero_config and the pass was not given all of "
+            "zero-stage / dp-axis / num-dp-ranks; the partition count is never "
+            "defaulted."
+        ),
+        fix_hint=(
+            "Attach ZeROConfig(...).to_ir_attr() to the module, or pass "
+            "--tessera-optimizer-shard=\"zero-stage=S dp-axis=A num-dp-ranks=N\"."
+        ),
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_MALFORMED", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "tessera_sr.zero_config (or the pass options) is missing or "
+            "mistypes stage / dp_axis / num_ranks, or states stage outside "
+            "{1, 2, 3}, num_ranks < 1 or an empty axis."
+        ),
+        fix_hint="Emit the attribute with ZeROConfig.to_ir_attr(), which validates all three.",
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_CONFLICT", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "A --tessera-optimizer-shard option disagrees with "
+            "tessera_sr.zero_config, or num_ranks disagrees with the "
+            "tessera.distributed_plan mesh size of the dp axis."
+        ),
+        fix_hint=(
+            "State the configuration once (the module attribute), and make "
+            "num_ranks equal the mesh size of dp_axis."
+        ),
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
     # C3 — TilePipelineLegalityPass.
     DiagnosticCode(
         code="TILE_PIPELINE_PHASE_ASYMMETRY", pass_origin="TilePipelineLegality",
@@ -4065,11 +4159,20 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     ),
     DiagnosticCode(
         code="NEIGHBORS_TOPOLOGY_UNKNOWN_KIND",
-        pass_origin="CreateTopologyOp::verify",
+        # Emitted by the ODS-generated verifier of the core op (the
+        # `Tessera_NeighborsTopologyKindAttr` constraint in TesseraOps.td). The
+        # hand-written `CreateTopologyOp::verify` that used to emit it was
+        # deleted with the duplicate neighbors dialect
+        # (SMALL-CORRECTNESS-GAPS-2026-09-27).
+        pass_origin=(
+            "NeighborsTopologyCreateOp::verifyInvariantsImpl "
+            "(ODS Tessera_NeighborsTopologyKindAttr)"
+        ),
         severity="error",
         summary="A topology.create operation names an unregistered topology kind.",
         fix_hint=(
-            "Use 2d_mesh, 3d_mesh, hex_2d, custom_graph, dynamic, adaptive, or fault."
+            "Use 1d_mesh, 2d_mesh, 3d_mesh, 4d_mesh, hex_2d, custom_graph, "
+            "dynamic, adaptive, or fault."
         ),
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
         sprint="W1.1b",

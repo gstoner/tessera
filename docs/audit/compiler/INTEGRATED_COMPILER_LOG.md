@@ -5227,3 +5227,181 @@ macOS 27) for the envelope and the unit gates, and one receipt record each from
 Mac, Princess-Luna, Tajasarus and The-Super-Bear.
 
 <!-- entry-fields:end -->
+
+### 2026-09-27 — Autotune launch integrity
+
+Owner: [W5.2](INTEGRATED_COMPILER_PLAN.md#w52)
+
+PRs: branch `claude/autotune-launch-integrity`.
+Sync: `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`.
+
+Outcome: four items that each move the same corpus rows landed together.
+
+1. `NVIDIA-EMITTED-UNCHECKED-LAUNCH`: every emitted CUDA source (55 sync-only
+   entries and two inline sources, now emitters) and the three sync-only HIP
+   entries (paged-KV gather, direct paged attention, ReplaySSM `su`) read the
+   last-error slot after each launch group and consume every
+   allocation/copy/memset/event status. The host-independent gates reject a
+   sync-only entry. With every launch made invalid, the sync-only judgment
+   reported success on sm_120 (17/17 lanes), gfx1151 and gfx1201 (3/3 each);
+   the fixed entries fail.
+2. `AUTOTUNE-SM120-ROUTE-RESOURCES`: the 17 routes without Nsight route
+   resources were captured one route per report; 91 registry rows are
+   selector-eligible (was 38).
+3. The shipped `libtessera_nvidia_gemm` was not byte-reproducible because its
+   DT_RUNPATH recorded how CMake discovered CUDA; it now builds without one and
+   four builds across two worktrees and both configures are identical.
+4. `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`: `autotune.RouteIdentity` gives the
+   non-registry rows the registry's Decision #11 contract; both paged-KV warm
+   starts refuse a changed route.
+
+Re-records: 108 sm_120 rows on The-Super-Bear (20 registry rows served, was
+13; all 108 miss after an emitter change with pins unchanged) and the 8 gfx1151
+paged-KV rows on Princess-Luna (winners unchanged, 3 served in two build
+trees). No row was backfilled.
+
+Remaining: 15 of the 20 formerly partial sm_120 rows are unseparated and 1 is
+unstable; an `ncu`-only exit abort of processes holding a generic-lane library
+is recorded, not root-caused.
+
+Evidence: `benchmarks/baselines/autotune_corpus_rerecord_sm120_launch_integrity_20260927/`,
+`benchmarks/baselines/autotune_corpus_rerecord_gfx1151_paged_kv_20260927/`,
+`tests/unit/test_nvidia_emitted_stale_error_rule.py`,
+`tests/unit/test_rocm_emitted_launch_rule.py`,
+`tests/unit/test_autotune_route_identity.py`,
+`tests/device/nvidia/test_emitted_unchecked_launch.py`,
+`tests/device/rocm/test_emitted_unchecked_launch_hip.py`.
+
+<!-- entry-fields:end -->
+
+Additional owners: the NVIDIA and ROCm backend queues (same sync key).
+
+### 2026-09-27 — Small correctness gaps: sm_120 TMA smoke, a lit runner that runs, one neighbors authority
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/small-correctness-gaps`.
+Sync: `SMALL-CORRECTNESS-GAPS-2026-09-27`.
+
+Outcome: Three small defects, each root-caused on the host that shows it.
+**TMA smoke (sm_120):** two stacked defects. Driver 610.88 rejects
+`cuTensorMapEncodeTiled` when a rank-1 map's `globalStrides` is `nullptr`
+(zero meaningful entries; the contents are ignored -- 128, 0, 7 and 2^41 all
+encode), and once that was fixed the launch faulted because the by-value
+`CUtensorMap` lacked `__grid_constant__`, so nvcc copied it to local memory
+and TMA was handed a local address (visible in the PTX; the fault goes away
+with exactly that change). The smoke now passes on the RTX 5070.
+**Lit runner:** on Tajasarus every lit selector picked an LLVM-prefix wrapper
+that cannot `import lit`, so `check-tessera-ir` ran zero fixtures;
+`cmake/TesseraLit.cmake` now selects, for every suite, the first candidate
+whose `--version` runs, warns per rejected candidate, fails configure for
+`tests/` and fails (not skips) the backend check targets when none works.
+Two resolver ratchets that failed only when `TESSERA_BUILD_DIR` was exported
+now clear every selector the resolver reads, gated against the resolver's
+source. **Neighbors:** the seven `tessera.neighbors.*` names declared three
+times (core `TesseraOps.td`, an unbuilt `tessera_neighbors.td`, a hand-written
+C++ dialect) now have one authority, `TesseraOps.td` -- the only one the parser
+ever reached, since `tessera.neighbors.x` resolves by its first segment (a
+taps/coeffs mismatch parsed clean on the pre-change `tessera-opt`, showing the
+hand-written verifier never ran). The semantics only the dead copies stated
+moved into the core verifier: stencil.define tap/coefficient well-formedness
+(before, checked only inside `-tessera-stencil-lower`) and neighbor.read's
+required `delta`. The duplicate ratchet's baseline is empty and a new gate
+rejects hand-written C++ ops that shadow an ODS name.
+
+Remaining: `test_tma_smoke` has no ctest/pytest wrapper, so no lane runs it.
+The halo.exchange `!tessera.neighbors.halo`-only operand check of the deleted
+dialect was not ported: `-tessera-halo-mesh-integration` legitimately builds
+exchanges over tensors. Array-of-integer stencil taps, which
+`-tessera-halo-infer` read but `-tessera-stencil-loop-materialize` silently
+skipped, are now rejected at parse (one unit-test input moved to dense taps).
+The two broken lit wrappers remain in Tajasarus's toolchain prefixes (reported,
+not used). The 77 waived ops' consume-or-delete decisions stay open.
+
+Evidence: The-Super-Bear (RTX 5070, CUDA 13.4.59 / driver 610.88, own worktree,
+device runs under `flock /tmp/tessera-timing.lock`): probe matrix and PTX in
+the [NVIDIA queue](../backend/nvidia/todo.md); pre-fix binary fails, fixed
+`test_tma_smoke` (CMake-built, `sm_120a`) passes 5/5. Tajasarus (own worktree,
+`build-wb`, configured like `build/`, under `env.sh`): before, `check-tessera-ir`
+/ `check-ebm` / `check-tessera-rocm` die with `ModuleNotFoundError`; after,
+`check-tessera-ir` 520 discovered / 454 passed / 66 unsupported,
+`check-tessera-rocm` 82/82, ebm 18, clifford 22, spectral 11; resolver ratchets
+17/17 under `env.sh`, with `TESSERA_BUILD_DIR` and under `env -i`
+([ROCm queue](../backend/rocm/todo.md)). Neighbors: the new negative fixture
+fails all nine expected diagnostics on the pre-change binary and passes after;
+Mac lit 520 / 471 passed / 49 unsupported; Tajasarus as above, and the same
+counts (454 / 66, `check-tessera-rocm` 82/82) from an assertions-ON LLVM 23.1.1
+tree built from this branch; Super-Bear reconfigured through the validator
+(selects `/usr/lib/llvm-23/bin/lit`), `check-tessera-nvidia` 62/62. Mac full
+unit sweep 21306 passed / 3821 skipped / 0 failed (the first sweep caught
+`NEIGHBORS_TOPOLOGY_UNKNOWN_KIND` losing its only C++ occurrence; the registry
+scan now reads the `.td` constraint that emits it);
+`tests/unit/test_ods_op_has_consumer.py`, `test_neighbors_*.py`,
+`test_tessera_opt_build.py`, `test_test_suite_architecture.py`.
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — Latent defects from the ODS triage: TMEM lowering, TMEM planning, solver matching, ZeRO config; dashboards stop over-claiming
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/tile-latent-defects`.
+Sync: `TILE-LATENT-DEFECTS-2026-09-27`.
+
+Outcome: the defects the ODS connection triage recorded in passing are fixed,
+each with a fixture that fails on the unfixed code. All are IR-level; TMEM is
+datacenter sm_100, which no fleet box has, so nothing here claims execution.
+
+1. `LowerTileToNVIDIA` maps `tile.tmem.allocate/load/store` by op identity.
+   Anything else under `tile.tmem.` (including the unregistered legacy
+   `tile.tmem.alloc`) fails with `NVIDIA_TMEM_UNKNOWN_OP`; it used to become a
+   `tmem_store` contract. The `!tile.tmem` handle lowers to the i32 TMEM
+   address, and load results are replaced; before, every op was erased with
+   live uses, which aborted the assertions-ON driver ("operation destroyed but
+   still has uses"). A handle feeding an unlowered op (`tile.tcgen05.mma`)
+   fails with `NVIDIA_TMEM_HANDLE_UNLOWERED`.
+2. `LowerNVIDIAToNVVM` refuses (`NVIDIA_MARKER_RESULT_USED`) a void-marker
+   contract whose result is used outside the contract family, instead of
+   `dropAllUses` leaving a null operand.
+3. `TileBufferReuse` / `TileBufferArena` / `TileMemrefLifetime.h` matched the
+   unregistered `"tile.tmem.alloc"` marker nothing produces, so no real TMEM
+   allocation was planned. They match `tile.tmem.allocate` (`isa<>`), size and
+   align it from the op, and never coalesce it: Tile IR carries no TMEM
+   completion fact, so no TMEM lifetime is provably disjoint (#30; #10a
+   negatives in `tile_buffer_reuse.mlir` / `tile_buffer_arena_tmem_invalid.mlir`).
+4. The linalg solver passes matched `contains("solve")` (every
+   `tessera_solver.*` op, through the dialect prefix) and `contains("lu")` /
+   `contains("factor")` (`gelu`, `relu`, `silu`, `adafactor`). They match
+   exact ops now (`linalg_solver_op_identity.mlir`); the four solver ops they
+   consume left the ODS waiver (ceiling 84 → 79 with `tile.tmem.store`).
+5. `ZeROConfig.to_ir_attr()` emits `tessera_sr.zero_config`, but
+   `OptimizerShardPass` read `tessera.num_dp_ranks` / `tessera.dp_axis`,
+   which nothing produces, and sharded with its defaults (1 rank, axis "dp").
+   It reads the emitted dictionary now and treats stage/axis/rank count as
+   semantic keys (#21a): `SR_ZERO_CONFIG_{MISSING,MALFORMED,CONFLICT}`,
+   including a count that disagrees with the `tessera.distributed_plan` mesh.
+
+Dashboards (Decision #25/#26), each regenerated through its generator:
+`ntk_rope` Tile `fused` → `partial` and Target `device_verified_abi` →
+`reference` (the `ntk_rope → rope` audit alias rested on a rewrite that does
+not exist); the three AttnRes ops' `lowering_rule` `complete` → `partial`
+(registered Graph ops, no lowering); the SM120 differentiation dashboard's
+four promoted rows cite fixture-only Target ops, so their Target-IR column is
+open and their status is runtime-promoted; `GRAPH_IR_SPEC.md` no longer calls
+`cache.page_lookup`, `ring.create` and the DNAS ops "scaffolded lowering".
+
+Remaining: `tile.tcgen05.mma` has no NVIDIA lowering, so a TMEM handle that
+feeds it cannot lower; the NVVM stage emits void markers for TMEM contracts;
+`OptimizerShardPass` still selects optimizer ops by substring
+(`contains("optimizer"/"adam"/…)`, the `schedule.optimizer_shard` WIRE row);
+the linalg precision/refinement annotations still have no consumer (an
+attribute-level #29 gap); the WIRE slices that would make the corrected rows
+green again (ntk_rope canonicalization, sm_120 Target producers) are open.
+
+Evidence: fixtures under `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/tmem_*.mlir`,
+`nvidia_marker_result_used.mlir`, `tests/tessera-ir/phase3/tile_buffer_*`,
+`tests/tessera-ir/phase5/{linalg_solver_op_identity,optimizer_shard_zero_config*}.mlir`;
+before/after on Tajasarus's assertions-ON LLVM/MLIR 23.1.1 recorded in the
+NVIDIA queue entry and the PR.
+
+<!-- entry-fields:end -->

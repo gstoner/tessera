@@ -95,9 +95,51 @@ def test_serving_rows_with_samples_earn_a_separation_verdict(
     assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) == expected
 
 
-@pytest.mark.parametrize("separated,expected", [(True, "fused"), (False, None)])
+@pytest.mark.parametrize("separated,stamp,expected", [
+    (True, "live", "fused"),
+    (False, "live", None),
+    # Decision #11 (AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27): a separated row is
+    # still refused when it carries no route identity, or a different one.
+    (True, None, None),
+    (True, "changed", None),
+])
 def test_nvidia_paged_attention_lookup_applies_admission(
-        tmp_path, monkeypatch, separated, expected):
+        tmp_path, monkeypatch, separated, stamp, expected):
+    from tessera.compiler.emit import autotune as at
+    from tessera.compiler.emit import nvidia_cuda
+    from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
+
+    evidence: dict = {}
+    if stamp is not None:
+        identities = at.route_identities(nvidia_cuda.paged_attention_route_identities())
+        if stamp == "changed":
+            identities["staged_paged_attention"] = {
+                **identities["staged_paged_attention"], "source_sha256": "0" * 64}
+        evidence["delegate_identities"] = identities
+    cache = at.MeasureCache()
+    cache.put(("nvidia:sm_120", "nvidia", "paged_kv_decode",
+               bucket_key((1, 8, 128, 64), SpecPolicy.BUCKET), "f32",
+               at.TIMING_DEVICE),
+              at.MeasureRecord(
+                  winner="fused_paged_attention", latency_ms=0.1,
+                  candidates={"fused_paged_attention": 0.1,
+                              "staged_paged_attention": 0.3},
+                  evidence=evidence,
+                  unmeasured={},
+                  separation={"separated": separated, "margin": 0.6,
+                              "noise": 0.01, "factor": 2.0,
+                              "runner_up": "staged_paged_attention"}),
+              fresh=True)
+    path = tmp_path / "corpus.json"
+    at.save_corpus(path, cache=cache)
+    monkeypatch.setenv("TESSERA_AUTOTUNE_CORPUS", str(path))
+    assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) == expected
+
+
+def test_nvidia_paged_attention_row_misses_when_the_resident_stages_change(
+        tmp_path, monkeypatch):
+    """The routes' identity is the emitted resident-stage source: an emitter
+    change with every pin unchanged misses the stamped row."""
     from tessera.compiler.emit import autotune as at
     from tessera.compiler.emit import nvidia_cuda
     from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
@@ -110,12 +152,17 @@ def test_nvidia_paged_attention_lookup_applies_admission(
                   winner="fused_paged_attention", latency_ms=0.1,
                   candidates={"fused_paged_attention": 0.1,
                               "staged_paged_attention": 0.3},
+                  evidence={"delegate_identities": at.route_identities(
+                      nvidia_cuda.paged_attention_route_identities())},
                   unmeasured={},
-                  separation={"separated": separated, "margin": 0.6,
-                              "noise": 0.01, "factor": 2.0,
-                              "runner_up": "staged_paged_attention"}),
+                  separation={"separated": True, "margin": 0.6, "noise": 0.01,
+                              "factor": 2.0, "runner_up": "staged_paged_attention"}),
               fresh=True)
     path = tmp_path / "corpus.json"
     at.save_corpus(path, cache=cache)
     monkeypatch.setenv("TESSERA_AUTOTUNE_CORPUS", str(path))
-    assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) == expected
+    assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) == "fused"
+    original = nvidia_cuda._synthesize_resident_ops_cuda
+    monkeypatch.setattr(nvidia_cuda, "_synthesize_resident_ops_cuda",
+                        lambda: original() + "\n// perturbed\n")
+    assert nvidia_cuda._paged_attention_corpus_winner(1, 8, 128, 64) is None

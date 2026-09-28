@@ -63,7 +63,7 @@ def test_rocm_backend_matches_reference():
 def test_rocm_routes_record_device_and_end_to_end_winners(monkeypatch):
     import tessera.cache.paged_kv as pk
     monkeypatch.setattr(pk, "_rocm_paged_attention_corpus_winner",
-                        lambda *args: None)
+                        lambda *args, **kwargs: None)
     pk._rocm_paged_attention_route_cache.clear()
     pk._rocm_paged_attention_route_evidence.clear()
     h, _, _ = _fill(4, 32, 37, seed=17, page_size=8)

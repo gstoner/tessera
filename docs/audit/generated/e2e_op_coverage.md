@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 295 |
-| ``runnable_reference`` | 24 |
+| ``complete`` | 294 |
+| ``runnable_reference`` | 25 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
 | **total** | **353** |
 
-## complete (295)
+## complete (294)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -253,7 +253,6 @@ each row into a single E2E tier.
 | ``training.loss_adamw`` | optimizer | public | public | registered | fused | device_verified_jit | ready | none |
 | ``training.loss_sgd`` | optimizer | public | public | registered | fused | device_verified_jit | ready | none |
 | ``alibi`` | position_encoding | public | public | registered | fused | device_verified_jit | ready | none |
-| ``ntk_rope`` | position_encoding | public | public | registered | fused | device_verified_abi | ready | none |
 | ``qkv_projection`` | projection | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dequantize_fp4`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dequantize_fp6`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
@@ -331,7 +330,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (24)
+## runnable_reference (25)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -357,6 +356,7 @@ each row into a single E2E tier.
 | ``kron`` | linalg_multilinear | public | public | registered | partial | reference | ready | none |
 | ``trace`` | linalg_multilinear | public | public | registered | partial | reference | ready | none |
 | ``solve`` | linalg_solver | public | public | registered | partial | reference | ready | none |
+| ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |
 

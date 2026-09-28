@@ -149,10 +149,66 @@ LogicalResult NeighborsHaloUnpackOp::verify() {
   return verifyDeclaredShapeConstraint(getOperation());
 }
 LogicalResult NeighborsNeighborReadOp::verify() {
-  return verifyDeclaredShapeConstraint(getOperation());
+  if (failed(verifyDeclaredShapeConstraint(getOperation())))
+    return failure();
+  // Carried over from the deleted hand-written dialect's verifier, widened to
+  // the two encodings `tessera-halo-infer` reads (SMALL-CORRECTNESS-GAPS).
+  Attribute delta = (*this)->getAttr("delta");
+  if (!delta)
+    return emitOpError("requires a 'delta' attribute (one relative offset "
+                       "per axis)");
+  if (auto dense = dyn_cast<DenseIntElementsAttr>(delta)) {
+    if (dense.getType().getRank() != 1 || dense.empty())
+      return emitOpError("requires 'delta' to be a non-empty rank-1 dense "
+                         "integer vector");
+    return success();
+  }
+  if (auto array = dyn_cast<ArrayAttr>(delta)) {
+    if (array.empty() ||
+        !llvm::all_of(array, [](Attribute a) { return isa<IntegerAttr>(a); }))
+      return emitOpError("requires 'delta' array to be non-empty and all "
+                         "integers");
+    return success();
+  }
+  return emitOpError("requires 'delta' to be a dense integer vector or an "
+                     "array of integers");
 }
 LogicalResult NeighborsStencilDefineOp::verify() {
-  return verifyDeclaredShapeConstraint(getOperation());
+  if (failed(verifyDeclaredShapeConstraint(getOperation())))
+    return failure();
+  // The stencil well-formedness contract. It used to live twice outside this
+  // verifier -- in `tessera-stencil-lower` (so only IR that reached that pass
+  // was checked) and in a hand-written dialect the parser never reached --
+  // and now lives once, here, for every stencil.define.
+  auto taps = (*this)->getAttrOfType<ArrayAttr>("taps");
+  if (!taps || taps.empty())
+    return emitOpError("requires a non-empty 'taps' array");
+  auto coeffs = (*this)->getAttrOfType<ArrayAttr>("coeffs");
+  if (!coeffs || coeffs.empty())
+    return emitOpError("requires explicit non-empty 'coeffs' array");
+  if (taps.size() != coeffs.size())
+    return emitOpError("requires one coefficient per tap; got ")
+           << taps.size() << " taps and " << coeffs.size() << " coefficients";
+  int64_t tapRank = -1;
+  for (auto [index, raw] : llvm::enumerate(taps)) {
+    auto tap = dyn_cast<DenseIntElementsAttr>(raw);
+    if (!tap || tap.getType().getRank() != 1 || tap.empty())
+      return emitOpError("tap ")
+             << index << " must be a non-empty rank-1 dense integer vector";
+    int64_t rank = tap.getNumElements();
+    if (tapRank < 0)
+      tapRank = rank;
+    else if (rank != tapRank)
+      return emitOpError("tap ")
+             << index << " has rank " << rank << ", expected " << tapRank;
+  }
+  for (auto [index, raw] : llvm::enumerate(coeffs)) {
+    auto coeff = dyn_cast<FloatAttr>(raw);
+    if (!coeff || !coeff.getType().isF64() || !coeff.getValue().isFinite())
+      return emitOpError("coefficient ")
+             << index << " must be a finite canonical f64 value";
+  }
+  return success();
 }
 LogicalResult NeighborsStencilApplyOp::verify() {
   return verifyDeclaredShapeConstraint(getOperation());

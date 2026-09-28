@@ -7,6 +7,137 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`: checked HIP launches; gfx1151 paged-KV rows carry route identities and were re-recorded
+
+Sync key shared with the [NVIDIA queue](../nvidia/todo.md). Closes
+`AUTOTUNE-KERNEL-IDENTITY-PAGED-KV` (below) and the ROCm follow-up recorded
+under `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`.
+
+- **Checked launches.** The paged-KV gather, the direct paged attention and
+  the ReplaySSM `su` step judged their launches by `hipDeviceSynchronize` / the
+  event sync alone and left their event statuses unchecked. They now clear the
+  sticky HIP slot before launching, read it after each launch group (the timer
+  before its timing boundary) and consume every status; failure paths free
+  what they allocated. Host-independent gate:
+  `tests/unit/test_rocm_emitted_launch_rule.py` (every `_synthesize_*` in
+  `emit/rocm_hip.py` must be rendered; the fused generic lane already met the
+  rule). Device proof, `tests/device/rocm/test_emitted_unchecked_launch_hip.py`
+  with every launch made invalid: the sync-only control **reported the dead
+  launch as success** for all three entries on both gfx1151 (Princess-Luna) and
+  gfx1201 (Tajasarus, `TESSERA_ROCM_CHIP=gfx1201`,
+  `TESSERA_GFX1201_DEVICE_PROOF=1`) — the gap was real on ROCm — and the shipped
+  entries fail, 3/3 on each chip. All four HIP sources compile with hipcc for
+  gfx1151 and gfx1201.
+- **Route identities (`AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`, closed).**
+  `rocm_hip.rocm_paged_attention_route_identities`: `direct` = the emitted HIP
+  paged-attention source + hipcc line; `gather_fa` = the emitted gather source
+  plus the FA-2 forward image by kernel-code identity (f16, GQA iff the heads
+  differ, the additive-bias variant when causal). The recorder stamps both and
+  `_rocm_paged_attention_corpus_winner` (now told `causal`) refuses a row whose
+  live identities differ or that timed a different route set. The paged HIP
+  artifacts are cached by source content.
+- **Re-record (Princess-Luna, own worktree at `176e557e`, fresh `build/`, under
+  the timing lock).** `record_paged_kv_corpus.py` at its defaults; the 8 rows
+  spliced into the corpus, the other 116 byte-identical; **winners unchanged**
+  (`gather_fa` device, `direct` end-to-end at every size); the 8192-token
+  end-to-end row is now unseparated (12.0% vs 6.0% noise; was separated). In a
+  fresh process, with the recording tree's `tessera-opt` and with a second
+  build tree's, identities match 8/8, the warm start serves `direct` at
+  128/512/2048 and refuses 8192, and perturbing the gather emitter, the direct
+  emitter or the FA-2 image (pins unchanged) makes all 8 rows miss. Evidence:
+  [`benchmarks/baselines/autotune_corpus_rerecord_gfx1151_paged_kv_20260927/`](../../../../benchmarks/baselines/autotune_corpus_rerecord_gfx1151_paged_kv_20260927/README.md).
+- **Sibling outcomes.** gfx1201: verified for the checked launches (device
+  proof above); no committed gfx1201 rows. NVIDIA: the emitted-CUDA half, the
+  route resources, the shipped GEMM and the sm_120 re-record are in the NVIDIA
+  queue. Apple, x86: not applicable (no emitted device launches, no committed
+  non-registry rows).
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: Tajasarus lit runs again; resolver ratchets hermetic
+
+**Lit runner.** On Tajasarus `ninja check-tessera-ir` ran zero fixtures: every
+lit selector in the tree (`tests/`, the ROCm/NVIDIA backend suites,
+collectives, EBM/Clifford/spectral -- seven `find_program` calls, three cache
+variables) took the first `lit`/`llvm-lit` file it found, and under
+`~/.config/tessera/env.sh` that was the assertions prefix's `bin/llvm-lit`, a
+wrapper whose `import lit` points at `../../llvm-project-23.1.1-assertions/llvm/utils/lit`,
+which the relocated prefix does not have (`ModuleNotFoundError: No module
+named 'lit'`). `build/` had cached the non-assertions prefix's `bin/lit`, which
+points at the apt path `/usr/lib/llvm-23/utils/lit`, also absent. Only
+`check-tessera-rocm` worked there, because its own selector searched the venv
+first. Now `cmake/TesseraLit.cmake` resolves one runner for every suite and
+selects a candidate only if `<lit> --version` runs (explicit `TESSERA_LIT` /
+`LLVM_EXTERNAL_LIT`, then the repo venv, `$VIRTUAL_ENV`, the matched LLVM's
+tools dir, `$PATH`); each broken candidate is a configure warning naming its
+error; `check-tessera-ir` fails configure when nothing works, and the backend
+suites fail (not "skipping", exit 0) at run time. A stale broken cache entry is
+rejected and replaced on the next reconfigure, so existing trees heal without
+editing the cache. **No box file was changed**; the two broken wrappers remain
+in the toolchain prefixes and are now reported rather than used.
+
+Evidence (Tajasarus, own worktree `build-wb`, configured like `build/`, under
+`env.sh`): before -- `check-tessera-ir`, `check-ebm` and `check-tessera-rocm`
+each die in `llvm-lit` with the `ModuleNotFoundError` (rc 1, no fixture run);
+after -- configure reports `rejected lit runner .../llvm-23.1.1-assertions/bin/llvm-lit
+... ModuleNotFoundError` then selects `.venv/bin/lit (lit 23.1.1)`;
+`check-tessera-ir` 520 discovered / 454 passed / 66 unsupported,
+`check-tessera-rocm` 82/82, `check-ebm` 18/18, `check-clifford` 22/22,
+`check-spectral` 11/11 (same counts after the neighbors change below).
+
+**Resolver ratchets.** `test_capable_driver_outranks_a_preferred_build_that_lacks_the_pass`
+and `test_toolchain_fixture_reaches_the_capable_driver_too` failed on
+Tajasarus only when `TESSERA_BUILD_DIR` was exported (reproduced: 2 failed /
+13 passed with it, 15/15 without, under `env.sh` either way). The tests pinned
+the candidate list but cleared only `TESSERA_OPT`/`TESSERA_OPT_BIN`, while
+`tessera_opt_candidates` honours `TESSERA_BUILD_DIR` ahead of the defaults --
+the tests were wrong, the environment legitimate. `compiler_tool.DRIVER_SELECTION_ENVIRONMENT`
+now lists every variable the resolver reads, a helper clears all of them, a
+ratchet re-derives the list from the resolver's source, and a regression test
+exports a build dir. Tajasarus: 17/17 under `env.sh`, with `TESSERA_BUILD_DIR`
+exported, and under `env -i`.
+
+Sibling outcome: the lit runner change is shared CMake (every host); Mac
+selected `/opt/homebrew/bin/lit` and ran the same counts as before. NVIDIA's
+release gate passes `-DLLVM_EXTERNAL_LIT`, which is still honoured after
+validation. Apple and x86 not otherwise affected.
+
+**Review follow-up (Codex P2s on #866).** `src/collectives/test` was the one
+suite still handing the runner to LLVM's `add_lit_testsuite`. LLVM 23.1.1's
+`add_lit_target` (read in the AddLLVM.cmake on Princess-Luna and the Mac)
+runs `${Python3_EXECUTABLE} <lit script>`, bypassing the shebang the resolver
+validated, and under this tree's `cmake_minimum_required(3.20)` (CMP0126 OLD)
+its `set(LLVM_EXTERNAL_LIT "" CACHE ...)` also hides a directory-scope
+`LLVM_EXTERNAL_LIT`. It now runs the validated command directly like every
+other suite, and `test_lit_suites_invoke_the_validated_runner_directly` fails
+any active CMake file that calls `add_lit_testsuite`/`add_lit_target`. The
+committed tree has no `lit.cfg.py` there, so the target stays the explicit
+"no suite defined" echo; the proof used a scratch cfg + fixtures in a throwaway
+Princess-Luna worktree (non-activated `env -i` shell, `Python3_EXECUTABLE=/usr/bin/python3`,
+lit venv-only). Before: runner selected from the resolver's scope -> command
+`/usr/bin/python3 /llvm-lit` (rc 2); with `-DLLVM_EXTERNAL_LIT=<venv lit>` as
+the release gates pass it -> `ModuleNotFoundError: No module named 'lit'`
+(rc 1). After, both configurations: 2 discovered / 2 passed (rc 0); a third,
+failing fixture gives 2 passed / 1 failed (rc 1). The NVIDIA and Apple release
+gates' `-DLLVM_EXTERNAL_LIT` only seeds the resolver; their suites already
+invoke the validated command, so they were not affected.
+`NEIGHBORS_TOPOLOGY_UNKNOWN_KIND`'s `pass_origin` named the deleted
+`CreateTopologyOp::verify`; it now names the generated
+`NeighborsTopologyCreateOp::verifyInvariantsImpl` (ODS
+`Tessera_NeighborsTopologyKindAttr`), and
+`test_mlir_pass_origin_classes_exist_in_src` fails a `Class::member` origin
+whose class no longer exists under `src/`.
+
+## `TILE-LATENT-DEFECTS-2026-09-27`: sibling outcome — verified, no ROCm change
+
+The shared Tile passes changed: `TileBufferReusePass`, `TileBufferArenaPass`
+and `TileMemrefLifetime.h` now match the registered `tile.tmem.allocate` by op
+identity (they matched an unregistered `"tile.tmem.alloc"` marker nothing
+produced), and a TMEM allocation never shares a reuse group. `tile.alloc_shared`
+(LDS) planning is unchanged: same code path, same fixtures. ROCm already
+rejects every `tile.tmem.*` op by prefix (`TileToROCM.cpp`,
+`ROCMWaveLdsPipeline.cpp`); that is a refusal, not a default, so it stays.
+Verified on Tajasarus under the assertions-ON build: `check-tessera-rocm` and
+`lit tests/tessera-ir/` (counts in the NVIDIA queue entry and the PR). No
+gfx1151/gfx1201 device lane is affected: no ROCm producer emits TMEM.
+
 ## Spectral image survives a stale HIP error; streaming STFT names the chip that ran — 2026-09-27
 
 Owner TSOL-POLICY-PHYS-1; sync `SPECTRAL-STALE-HIP-ERROR-2026-09-27`. Closes
@@ -144,7 +275,7 @@ Mac's for the same region. Evidence:
 `benchmarks/baselines/autotune_corpus_rerecord_20260927/`. No row was
 backfilled; only these 8 records changed.
 
-Still open, unchanged: `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV` (the 8 paged-KV rows
+(Closed since by `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`, top of this file.) Still open at the time: `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV` (the 8 paged-KV rows
 are read by `cache/paged_kv.py`, not the registry, and check no artifact
 identity). gfx1201 has no committed arbiter rows; its lanes carry the same
 identities. Sibling outcomes: NVIDIA follow-up required (sm_120 re-record owed,
@@ -493,7 +624,14 @@ digested" above describes v1; v2 digests them -- see the correction.)
 **sm_120:** re-recorded on Super-Bear (NVIDIA plan, same key). gfx1201 has no
 committed corpus rows: not applicable.
 
-## `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`: artifact identity for the gfx1151 paged-KV warm start — open
+## `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`: artifact identity for the gfx1151 paged-KV warm start — closed 2026-09-27
+
+**Closed by `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`** (top of this file): route
+identities stamped and checked, both unit gates present
+(`tests/unit/test_autotune_route_identity.py`,
+`tests/unit/test_paged_kv_rocm_abi.py`), rows re-recorded on Princess-Luna and
+served in a build tree other than the recording one. The text below is the
+original statement.
 
 Owner: this queue (sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`). The 8
 `rocm:gfx1151` `paged_kv_decode` rows and their production reader

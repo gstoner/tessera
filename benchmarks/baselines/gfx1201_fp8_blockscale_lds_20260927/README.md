@@ -10,17 +10,19 @@ HIP 7.15). Worktree `~/programming/tessera-w-perf` on branch
 | File | Clean source commit | What |
 |---|---|---|
 | `compare.json` | `79a641b1` | Tessera production `[N, K]` f32 and bf16, the previous production route, and AITER, 54 (M, N, K) rows, 10 windows |
-| `identity_compare.json` | `70650bb2` | all 108 Tessera production kernels of `compare.json` recompiled at the final compiler: **108/108 byte-identical HSACOs** |
+| `identity_compare.json` | `5789cc8b` | all 108 Tessera production kernels of `compare.json` recompiled at the final compiler: **108/108 byte-identical HSACOs** |
 | `rule.json` | `a1f4e5e7` | the Schedule rule: production vs forced register panel vs both LDS tilings, 32 rows, 5 windows |
-| `identity_rule.json` | `70650bb2` | 30/32 production kernels byte-identical at the final compiler; the 2 that differ are the ragged-M rows the later rule change moved (re-measured in `ragged.json`) |
+| `identity_rule.json` | `5789cc8b` | 30/32 production kernels byte-identical at the final compiler; the 2 that differ are the ragged-M rows the later rule change moved (re-measured in `ragged.json`) |
 | `ragged.json` | `ed8d6da8` | ragged M: production (final rule), both LDS tilings, both tilings under the pre-clamp compiler, AITER, 20 rows, 5 windows |
 | `knobs.json` | `29926fcb` | LDS-body performance keys at four shapes, 5 windows, one arm under the first-cut compiler |
 | `isa.json` | `70650bb2` | static ISA census of the selected kernels (not a runtime measurement) |
-| `device_tests_gfx1201.txt`, `lit_gfx1201.txt` | `70650bb2` | device + host tests and lit on both trees |
+| `device_tests_gfx1201.txt`, `lit_gfx1201.txt` | `5789cc8b` | device + host tests and lit on both trees |
 
-Changes between the timed commits and the final one are either benchmark-only
-or change only ragged-M code (the rule and the copy clamp); the two identity
-files are what show the timed kernels are the final route's.
+Changes between the timed commits and the final one (`5789cc8b`) are
+benchmark-only, documentation and comments, a no-op refactor of the
+generator's admission checks, the folded MXFP4 `row_guard`, or ragged-M code
+(the rule and the copy clamp); the two identity files are what show the timed
+kernels are the final route's.
 
 ## What was measured
 
@@ -300,9 +302,20 @@ acquire); the LDS-only memfence removes it.
 - `lit tests/tessera-ir`: 455 passed / 66 unsupported on both trees (new
   fixture `phase2/e2e_fp8_blockscale_lds_rocm_target.mlir`).
   `check-tessera-rocm`: 82/82 on both trees.
-- A first assertions-tree run reported 5 W8A8 failures and 1 lit failure
-  against a `tessera-opt` two commits stale (the generator's staleness warning
-  fired); after rebuilding that tree the recorded run above is green.
+- Two runs before the recorded one are not evidence and are recorded as such:
+  an assertions-tree run against a `tessera-opt` two commits stale (5 W8A8
+  failures and 1 lit failure; the generator's staleness warning fired), and a
+  run after a build I had cut short by piping ninja through `head` (one
+  exact-route MXFP4 row, `test_mxfp4_w4a8_exact.py`, returned wrong values
+  once). After complete rebuilds the recorded run is green on both trees, and
+  that file passed 3/3 in isolated reruns; the exact route is untouched by this
+  work.
+- Full sweeps: `tests/device/rocm` 168/168 on `build/`; `tests/unit -m "not
+  slow" -n 8` 21874 passed / 15 failed on `build/`, the 15 being 14 SWMMAC
+  sparse device rows that pass serially (49/49 on rerun, one GPU shared by
+  eight workers) and `test_rocm_lit_suite`, which fails before running
+  because the toolchain `lit` wrapper cannot import `lit` (the wrapper PR
+  #866 fixes; the venv `lit` used above passes).
 
 ## Not claimed
 

@@ -1,28 +1,28 @@
-== host: tajasarus  tree: build  commit: 70650bb2e516598766a6cda880aca982255e8ddb  dirty files: 0
-== TESSERA_OPT=/home/angstorms/programming/tessera-w-perf/build/tools/tessera-opt/tessera-opt (8d3b1a0783b7ffd5)
+== host: tajasarus  tree: build  commit: 5789cc8b41bd6210ffd9fdd0acae3a7dfdca1e58  dirty files: 0
+== TESSERA_OPT=/home/angstorms/programming/tessera-w-perf/build/tools/tessera-opt/tessera-opt (28ece3077fb44aa0)
 == LLVM: /home/angstorms/.local/share/tessera-toolchains/llvm-23.1.1/bin  assertion-mode: OFF
 == TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1
 == W8A8: tests/device/rocm/test_fp8_blockscale_w8a8.py + host tests
 ........................................................................ [ 48%]
 ........................................................................ [ 97%]
 ...                                                                      [100%]
-147 passed in 21.68s
+147 passed in 21.80s
 == MXFP4: every tests/device/rocm file matching mxfp4 + folded host tests
 ........................................................................ [ 49%]
 ........................................................................ [ 99%]
 .                                                                        [100%]
-145 passed, 48 deselected in 101.44s (0:01:41)
-== host: tajasarus  tree: build-assertions  commit: 70650bb2e516598766a6cda880aca982255e8ddb  dirty files: 0
-== TESSERA_OPT=/home/angstorms/programming/tessera-w-perf/build-assertions/tools/tessera-opt/tessera-opt (994a2947ec969654)
+145 passed, 48 deselected in 102.29s (0:01:42)
+== host: tajasarus  tree: build-assertions  commit: 5789cc8b41bd6210ffd9fdd0acae3a7dfdca1e58  dirty files: 0
+== TESSERA_OPT=/home/angstorms/programming/tessera-w-perf/build-assertions/tools/tessera-opt/tessera-opt (deb7ab34d8da0366)
 == LLVM: /home/angstorms/.local/share/tessera-toolchains/llvm-23.1.1-assertions/bin  assertion-mode: ON
 == TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1
 == W8A8: tests/device/rocm/test_fp8_blockscale_w8a8.py + host tests
 ........................................................................ [ 48%]
 ........................................................................ [ 97%]
 ...                                                                      [100%]
-147 passed in 31.08s
+147 passed in 31.26s
 == MXFP4: every tests/device/rocm file matching mxfp4 + folded host tests
 ........................................................................ [ 49%]
 ........................................................................ [ 99%]
 .                                                                        [100%]
-145 passed, 48 deselected in 101.11s (0:01:41)
+145 passed, 48 deselected in 101.66s (0:01:41)

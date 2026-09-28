@@ -1,7 +1,7 @@
 {
   "packet": "benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/compare.json",
   "packet_source_commit": "79a641b125bbd0a69e7b27e2410c5dd4a9113085",
-  "current_commit": "70650bb2e516598766a6cda880aca982255e8ddb",
+  "current_commit": "5789cc8b41bd6210ffd9fdd0acae3a7dfdca1e58",
   "worktree_dirty": false,
   "identical": 108,
   "checked": 108,

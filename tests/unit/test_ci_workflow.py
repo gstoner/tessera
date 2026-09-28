@@ -11,6 +11,10 @@ not invoke any GitHub Actions infrastructure.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -26,7 +30,17 @@ BRANCH_PROTECTION_DOC = REPO_ROOT / ".github" / "BRANCH_PROTECTION.md"
 # Required lanes (must all be inputs to the validate-required aggregator).
 REQUIRED_LANES = ("lint", "unit", "audit")
 OPTIONAL_LANES = ("lit", "sanitizer", "rocm-serialize")
+#: Lanes that configure a CMake build against LLVM/MLIR 23.
+MLIR_LANES = ("lit", "rocm-serialize", "sanitizer")
 AGGREGATOR_JOB = "validate-required"
+
+
+def _code(run: str) -> str:
+    """A step's shell text with whole-line comments removed."""
+
+    return "\n".join(
+        line for line in run.splitlines() if not line.strip().startswith("#")
+    )
 
 
 def _load_workflow() -> dict:
@@ -212,34 +226,48 @@ class TestWorkflowStructure:
                 f"lit lane must execute {test_name}; current proof step:\n{run_text}"
             )
 
-    @pytest.mark.parametrize("lane", ("lit", "rocm-serialize"))
-    def test_mlir_lanes_enable_only_the_exact_repository_pin(self, lane: str) -> None:
-        """A rolling apt.llvm.org patch must not reach the CMake build.
+    @pytest.mark.parametrize("lane", MLIR_LANES)
+    def test_mlir_lanes_resolve_a_23_1_series_toolchain_or_fail(self, lane: str) -> None:
+        """A rolling apt.llvm.org patch is recorded, never a reason to skip.
 
-        These lanes intentionally soft-skip when the hosted runner cannot
-        provide MLIR.  Patch drift is the same unavailable-toolchain case:
-        CMake treats a newer MLIR patch as contract-incompatible, so the
-        dependency step must leave ``mlir=false`` instead of scheduling a
-        configure that is guaranteed to fail.
+        Owner decision 2026-09-27 (sync ``FOUNDATION-BATCH-2-2026-09-27``):
+        hosted CI accepts any 23.1.x patch, records the exact version it ran,
+        and FAILS when none is available. The previous shape of this test
+        required the lane to set ``mlir=false`` and skip on patch drift --
+        which is exactly how the lit and rocm-serialize lanes went green on
+        main having built and tested nothing.
         """
 
         wf = _load_workflow()
-        run_text = "\n".join(
-            step.get("run", "") for step in wf["jobs"][lane].get("steps", [])
+        steps = wf["jobs"][lane].get("steps", [])
+        run_text = "\n".join(step.get("run", "") for step in steps)
+        assert "scripts/ci_resolve_llvm.sh" in run_text, (
+            f"{lane} must resolve (record or fail) its LLVM/MLIR through "
+            "scripts/ci_resolve_llvm.sh"
         )
-        for token in (
-            "TESSERA_REQUIRED_LLVM_VERSION",
-            "cmake/TesseraToolchainPins.cmake",
-            "/usr/lib/llvm-23/bin/llvm-config --version",
-            "/usr/lib/llvm-23/bin/mlir-opt --version",
-            '[ "$llvm_version" = "$required_llvm" ]',
-            '[ "$mlir_version" = "$required_llvm" ]',
-            'echo "mlir=false" >> "$GITHUB_OUTPUT"',
-        ):
-            assert token in run_text, (
-                f"{lane} must reject rolling LLVM/MLIR patch drift before "
-                f"configure; missing {token!r}"
-            )
+        assert "--manifest" in run_text, f"{lane} must record a toolchain manifest"
+        resolve_at = next(
+            i for i, step in enumerate(steps)
+            if "scripts/ci_resolve_llvm.sh" in step.get("run", "")
+        )
+        build_at = next(
+            (i for i, step in enumerate(steps)
+             if "cmake -S" in _code(step.get("run", ""))
+             or "bash scripts/run_sanitizers.sh" in _code(step.get("run", ""))),
+            None,
+        )
+        assert build_at is not None and resolve_at < build_at, (
+            f"{lane} must resolve the toolchain before it configures"
+        )
+        opted_in = "-DTESSERA_LLVM_PIN_MODE=minor" in _code(run_text) or any(
+            (step.get("env") or {}).get("TESSERA_LLVM_PIN_MODE") == "minor"
+            for step in steps
+        )
+        assert opted_in, (
+            f"{lane} must opt into the CI-only 23.1.x tolerance explicitly "
+            "(-DTESSERA_LLVM_PIN_MODE=minor); without it CMake's exact fleet "
+            "pin fails configure on every rolling patch"
+        )
 
     def test_rocm_compiler_suite_is_local_only(self) -> None:
         """The ROCm compiler suite is too heavy for hosted runners.
@@ -300,3 +328,393 @@ class TestWorkflowEnv:
         wf = _load_workflow()
         env = wf.get("env", {})
         assert env.get("PIP_DISABLE_PIP_VERSION_CHECK") == "1"
+
+
+# ---------------------------------------------------------------------------
+# No lane may report success having skipped its build/test on a toolchain
+# mismatch (sync FOUNDATION-BATCH-2-2026-09-27). Until 2026-09-27 the lit and
+# rocm-serialize lanes printed `::warning ... skipping`, set a step output that
+# gated every later step off, and exited 0; the sanitizer lane installed no
+# LLVM/MLIR at all. These tests pin the structural shape that made that
+# possible AND execute the resolver and CMake pin logic against faked
+# toolchains, so the rule is checked by behaviour, not by substring alone.
+# ---------------------------------------------------------------------------
+
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+RESOLVER = REPO_ROOT / "scripts" / "ci_resolve_llvm.sh"
+REQUIRE_EXECUTED = REPO_ROOT / "scripts" / "ci_require_executed.py"
+PINS = REPO_ROOT / "cmake" / "TesseraToolchainPins.cmake"
+
+#: Workflow steps allowed to report success without having proven anything,
+#: each with the reason. Adding an entry is a reviewed decision, not a default.
+ADVISORY_SUCCESS_ALLOWLIST = {
+    # pylint runs unconfigured purely to surface findings; ruff + mypy gate.
+    ("pylint.yml", "--exit-zero"): "advisory lint; ruff + mypy ratchet gate",
+    # Hosted runners have no Metal/ROCm/CUPTI device: the lane snapshots
+    # provider availability into an uploaded status JSON. A green check here
+    # is NOT a profiler proof (listed in the 2026-09-27 CI audit; owner call
+    # whether an unavailable provider should fail the label-triggered lane).
+    ("profiler-native-proofs.yml", "--allow-unavailable"): (
+        "provider-status snapshot; the artifact records `unavailable`"
+    ),
+}
+_ADVISORY_TOKENS = ("--exit-zero", "--allow-unavailable", "continue-on-error")
+
+
+def _all_workflows() -> dict[str, dict]:
+    result = {}
+    for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
+        with path.open() as f:
+            result[path.name] = yaml.safe_load(f)
+    return result
+
+
+def _bash() -> str:
+    found = shutil.which("bash")
+    if found is None or sys.platform == "win32":
+        pytest.skip("needs a POSIX bash to execute the CI resolver")
+    return found
+
+
+class TestNoSilentToolchainSkip:
+    def test_no_step_is_gated_off_by_an_earlier_step_output(self) -> None:
+        """`if: steps.<id>.outputs...` is the skip-and-succeed switch.
+
+        Every hollow lane had the same shape: a dependency step decided the
+        toolchain was unsuitable, wrote an output, and every later step was
+        gated off it -- so the job ran nothing and reported success. A lane
+        that cannot run must fail in the step that found out.
+        """
+
+        offenders = []
+        for name, wf in _all_workflows().items():
+            for job_id, job in (wf.get("jobs") or {}).items():
+                for step in job.get("steps", []) or []:
+                    cond = str(step.get("if", ""))
+                    if "steps." in cond and ".outputs." in cond:
+                        offenders.append(f"{name}:{job_id}:{step.get('name')} if: {cond}")
+        assert not offenders, (
+            "steps gated on an earlier step's output can turn a lane into a "
+            "green no-op:\n" + "\n".join(offenders)
+        )
+
+    def test_toolchain_install_failure_is_not_downgraded_to_a_warning(self) -> None:
+        offenders = []
+        for name, wf in _all_workflows().items():
+            for job_id, job in (wf.get("jobs") or {}).items():
+                for step in job.get("steps", []) or []:
+                    run = step.get("run", "")
+                    for line in run.splitlines():
+                        stripped = line.strip()
+                        if stripped.startswith("#"):
+                            continue
+                        if "|| echo" in stripped and "::warning" in stripped:
+                            offenders.append(f"{name}:{job_id}: {stripped}")
+                        if "::warning" in stripped and "skip" in stripped.lower():
+                            offenders.append(f"{name}:{job_id}: {stripped}")
+        assert not offenders, (
+            "a lane downgrades a failure to a ::warning and continues:\n"
+            + "\n".join(offenders)
+        )
+
+    @pytest.mark.parametrize("lane", MLIR_LANES)
+    def test_mlir_lane_has_no_early_success_exit(self, lane: str) -> None:
+        wf = _load_workflow()
+        for step in wf["jobs"][lane].get("steps", []):
+            run = step.get("run", "")
+            for line in run.splitlines():
+                code = line.split("#", 1)[0]
+                assert "exit 0" not in code, (
+                    f"{lane} step {step.get('name')!r} can exit 0 early: {line.strip()}"
+                )
+
+    @pytest.mark.parametrize("lane", ("lit", "rocm-serialize"))
+    def test_proof_steps_fail_when_every_test_skipped(self, lane: str) -> None:
+        wf = _load_workflow()
+        run_text = "\n".join(
+            step.get("run", "") for step in wf["jobs"][lane].get("steps", [])
+        )
+        assert "--junitxml=" in run_text and "scripts/ci_require_executed.py" in run_text, (
+            f"{lane}'s pytest proof must be checked by ci_require_executed.py: "
+            "its tests skipif the tool is missing, so a broken build is a green "
+            "all-skipped run otherwise"
+        )
+
+    @pytest.mark.parametrize("lane", MLIR_LANES)
+    def test_lane_uploads_its_toolchain_record_even_on_failure(self, lane: str) -> None:
+        wf = _load_workflow()
+        uploads = [
+            step for step in wf["jobs"][lane].get("steps", [])
+            if str(step.get("uses", "")).startswith("actions/upload-artifact")
+            and "ci-toolchain" in str(step.get("with", {}).get("path", ""))
+        ]
+        assert uploads, f"{lane} must upload its ci-toolchain/ record"
+        assert all("always()" in str(step.get("if", "")) for step in uploads)
+
+    def test_sanitizer_lane_installs_llvm_mlir(self) -> None:
+        wf = _load_workflow()
+        run_text = "\n".join(
+            step.get("run", "") for step in wf["jobs"]["sanitizer"].get("steps", [])
+        )
+        for package in ("llvm-23-dev", "libmlir-23-dev", "mlir-23-tools", "clang-23"):
+            assert package in run_text, (
+                f"the sanitizer lane configures the top-level CMakeLists, which "
+                f"runs find_package(LLVM/MLIR); it must install {package}"
+            )
+        san_text = (REPO_ROOT / "scripts" / "run_sanitizers.sh").read_text(encoding="utf-8")
+        assert "TESSERA_LLVM_PIN_MODE" in san_text
+
+    def test_advisory_success_is_explicitly_allowlisted(self) -> None:
+        found = set()
+        for name, wf in _all_workflows().items():
+            for job in (wf.get("jobs") or {}).values():
+                if "continue-on-error" in job:
+                    found.add((name, "continue-on-error"))
+                for step in job.get("steps", []) or []:
+                    if "continue-on-error" in step:
+                        found.add((name, "continue-on-error"))
+                    run = step.get("run", "")
+                    for token in _ADVISORY_TOKENS:
+                        if token in run:
+                            found.add((name, token))
+        unlisted = sorted(found - set(ADVISORY_SUCCESS_ALLOWLIST))
+        assert not unlisted, (
+            "a workflow reports success without proving anything and is not "
+            f"in ADVISORY_SUCCESS_ALLOWLIST: {unlisted}"
+        )
+        stale = sorted(set(ADVISORY_SUCCESS_ALLOWLIST) - found)
+        assert not stale, f"stale ADVISORY_SUCCESS_ALLOWLIST entries: {stale}"
+
+
+class TestFleetPinStaysExact:
+    """The CI tolerance must not leak into the fleet gate."""
+
+    def test_fleet_pin_is_a_full_version_and_default_mode_is_exact(self) -> None:
+        text = PINS.read_text(encoding="utf-8")
+        import re
+
+        pin = re.search(r'set\(TESSERA_REQUIRED_LLVM_VERSION\s+"([0-9.]+)"', text)
+        assert pin and re.fullmatch(r"\d+\.\d+\.\d+", pin.group(1))
+        mode = re.search(r'set\(TESSERA_LLVM_PIN_MODE\s+"([a-z]+)"', text)
+        assert mode and mode.group(1) == "exact"
+
+    def test_only_hosted_ci_opts_into_the_minor_tolerance(self) -> None:
+        """No fleet build entry point may pass the CI tolerance."""
+
+        offenders = []
+        for path in (REPO_ROOT / "scripts").glob("*.sh"):
+            text = _code(path.read_text(encoding="utf-8"))
+            if "TESSERA_LLVM_PIN_MODE=minor" in text:
+                offenders.append(str(path.relative_to(REPO_ROOT)))
+        for path in (REPO_ROOT / "CMakeLists.txt", REPO_ROOT / "CMakePresets.json"):
+            if path.is_file() and "TESSERA_LLVM_PIN_MODE=minor" in path.read_text(
+                encoding="utf-8"
+            ):
+                offenders.append(str(path.relative_to(REPO_ROOT)))
+        assert not offenders, f"fleet entry points pass the CI-only tolerance: {offenders}"
+
+
+def _fake_prefix(root: Path, llvm: str, mlir: str, lld: str | None, cmake: bool = True) -> Path:
+    bin_dir = root / "bin"
+    bin_dir.mkdir(parents=True)
+    if llvm:
+        (bin_dir / "llvm-config").write_text(f"#!/bin/sh\necho {llvm}\n")
+    if mlir:
+        (bin_dir / "mlir-opt").write_text(
+            f"#!/bin/sh\necho 'LLVM (http://llvm.org/):'\necho '  LLVM version {mlir}'\n"
+        )
+    if lld:
+        (bin_dir / "ld.lld").write_text(f"#!/bin/sh\necho 'Ubuntu LLD {lld} (compatible with GNU linkers)'\n")
+    for tool in bin_dir.iterdir():
+        tool.chmod(0o755)
+    if cmake:
+        for pkg, cfg in (("llvm", "LLVMConfig.cmake"), ("mlir", "MLIRConfig.cmake")):
+            (root / "lib" / "cmake" / pkg).mkdir(parents=True, exist_ok=True)
+            (root / "lib" / "cmake" / pkg / cfg).write_text("")
+    return root
+
+
+class TestResolverBehaviour:
+    """Execute scripts/ci_resolve_llvm.sh against faked toolchains."""
+
+    def _run(self, tmp_path: Path, prefix: Path, *extra: str) -> tuple[int, str, dict[str, str], str]:
+        gh_out = tmp_path / "gh_output"
+        summary = tmp_path / "summary.md"
+        manifest = tmp_path / "manifest.json"
+        env = dict(os.environ)
+        env.update(
+            TESSERA_CI_LLVM_PREFIX=str(prefix),
+            GITHUB_OUTPUT=str(gh_out),
+            GITHUB_STEP_SUMMARY=str(summary),
+        )
+        proc = subprocess.run(
+            [_bash(), str(RESOLVER), "--lane", "test", "--manifest", str(manifest), *extra],
+            capture_output=True, text=True, env=env, timeout=60,
+        )
+        outputs = {}
+        if gh_out.exists():
+            for line in gh_out.read_text().splitlines():
+                key, _, value = line.partition("=")
+                outputs[key] = value
+        return proc.returncode, proc.stdout + proc.stderr, outputs, (
+            summary.read_text() if summary.exists() else ""
+        )
+
+    def _pin(self) -> str:
+        import re
+
+        return re.search(
+            r'set\(TESSERA_REQUIRED_LLVM_VERSION\s+"([0-9.]+)"', PINS.read_text()
+        ).group(1)
+
+    def test_exact_pin_passes_and_is_recorded(self, tmp_path: Path) -> None:
+        pin = self._pin()
+        rc, log, outputs, summary = self._run(
+            tmp_path, _fake_prefix(tmp_path / "p", pin, pin, pin), "--require-lld"
+        )
+        assert rc == 0, log
+        assert outputs["llvm_version"] == pin and outputs["pin_match"] == "exact"
+        assert pin in summary
+        import json
+
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        assert manifest["llvm_version"] == pin and manifest["mlir_version"] == pin
+
+    def test_newer_patch_in_series_passes_and_records_the_real_version(self, tmp_path: Path) -> None:
+        pin = self._pin()
+        major_minor = pin.rsplit(".", 1)[0]
+        newer = f"{major_minor}.{int(pin.rsplit('.', 1)[1]) + 1}"
+        rc, log, outputs, summary = self._run(
+            tmp_path, _fake_prefix(tmp_path / "p", f"{newer}~++20260926", newer, newer)
+        )
+        assert rc == 0, log
+        assert outputs["llvm_version"] == newer and outputs["pin_match"] == "series"
+        assert newer in summary and "::notice" in log
+
+    @pytest.mark.parametrize(
+        "llvm, mlir, lld, cmake, require_lld, why",
+        [
+            ("", "", None, False, False, "no runnable llvm-config"),
+            ("NEXT_MINOR", "NEXT_MINOR", None, True, False, "outside the accepted"),
+            ("NEXT_MAJOR", "NEXT_MAJOR", None, True, False, "outside the accepted"),
+            ("NEWER", "PIN", None, True, False, "mixed LLVM/MLIR pair"),
+            ("NEWER", "NEWER", None, True, True, "requires ld.lld"),
+            ("NEWER", "NEWER", None, False, False, "LLVMConfig.cmake missing"),
+        ],
+    )
+    def test_unusable_toolchain_fails_rather_than_skips(
+        self, tmp_path: Path, llvm, mlir, lld, cmake, require_lld, why
+    ) -> None:
+        pin = self._pin()
+        major, minor, patch = (int(x) for x in pin.split("."))
+        names = {
+            "": "",
+            "PIN": pin,
+            "NEWER": f"{major}.{minor}.{patch + 1}",
+            "NEXT_MINOR": f"{major}.{minor + 1}.0",
+            "NEXT_MAJOR": f"{major + 1}.1.0",
+        }
+        prefix = _fake_prefix(tmp_path / "p", names[llvm], names[mlir], lld, cmake=cmake)
+        extra = ("--require-lld",) if require_lld else ()
+        rc, log, outputs, summary = self._run(tmp_path, prefix, *extra)
+        assert rc != 0, f"resolver accepted an unusable toolchain:\n{log}"
+        assert why in log and "::error" in log
+        assert "FAILED" in summary
+        assert "llvm_version" not in outputs
+
+
+class TestCMakePinModes:
+    """Run tessera_pin_llvm() in CMake script mode against faked versions."""
+
+    def _configure(self, tmp_path: Path, mode: str | None, llvm: str, mlir: str) -> tuple[int, str]:
+        cmake = shutil.which("cmake")
+        if cmake is None:
+            pytest.skip("cmake not installed")
+        script = tmp_path / "pin.cmake"
+        script.write_text(
+            f'set(CMAKE_BINARY_DIR "{tmp_path.as_posix()}")\n'
+            f'include("{PINS.as_posix()}")\n'
+            f'set(LLVM_PACKAGE_VERSION "{llvm}")\n'
+            f'set(MLIR_VERSION "{mlir}")\n'
+            "tessera_pin_llvm(${TESSERA_REQUIRED_LLVM_VERSION})\n"
+        )
+        args = [cmake]
+        if mode is not None:
+            args.append(f"-DTESSERA_LLVM_PIN_MODE={mode}")
+        args += ["-P", str(script)]
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=60)
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def _versions(self) -> tuple[str, str, str, str]:
+        import re
+
+        pin = re.search(
+            r'set\(TESSERA_REQUIRED_LLVM_VERSION\s+"([0-9.]+)"', PINS.read_text()
+        ).group(1)
+        major, minor, patch = (int(x) for x in pin.split("."))
+        return pin, f"{major}.{minor}.{patch + 1}", f"{major}.{minor + 1}.0", f"{major + 1}.1.0"
+
+    @pytest.mark.parametrize("mode", (None, "exact"))
+    def test_fleet_mode_is_exact(self, tmp_path: Path, mode) -> None:
+        pin, newer, _, _ = self._versions()
+        assert self._configure(tmp_path, mode, pin, pin)[0] == 0
+        rc, log = self._configure(tmp_path, mode, newer, newer)
+        assert rc != 0 and "pins LLVM/MLIR" in log
+
+    def test_minor_mode_accepts_a_matched_newer_patch_and_records_it(self, tmp_path: Path) -> None:
+        pin, newer, _, _ = self._versions()
+        rc, log = self._configure(tmp_path, "minor", newer, newer)
+        assert rc == 0, log
+        assert "not the fleet pin" in log
+        record = (tmp_path / "tessera_llvm_pin.txt").read_text()
+        assert f"llvm={newer}" in record and "mode=minor" in record
+
+    def test_minor_mode_still_rejects_a_mixed_pair_and_other_series(self, tmp_path: Path) -> None:
+        pin, newer, next_minor, next_major = self._versions()
+        assert self._configure(tmp_path, "minor", newer, pin)[0] != 0
+        assert self._configure(tmp_path, "minor", next_minor, next_minor)[0] != 0
+        assert self._configure(tmp_path, "minor", next_major, next_major)[0] != 0
+
+    def test_unknown_mode_is_refused(self, tmp_path: Path) -> None:
+        pin, _, _, _ = self._versions()
+        rc, log = self._configure(tmp_path, "any", pin, pin)
+        assert rc != 0 and "TESSERA_LLVM_PIN_MODE" in log
+
+
+class TestRequireExecuted:
+    def _junit(self, tmp_path: Path, cases: str) -> Path:
+        path = tmp_path / "junit.xml"
+        path.write_text(f'<testsuites><testsuite name="s">{cases}</testsuite></testsuites>')
+        return path
+
+    def _run(self, path: Path, *allow: str) -> int:
+        args = [sys.executable, str(REQUIRE_EXECUTED), str(path)]
+        for token in allow:
+            args += ["--allow-skip", token]
+        return subprocess.run(args, capture_output=True, text=True, timeout=60).returncode
+
+    def test_all_skipped_run_fails(self, tmp_path: Path) -> None:
+        path = self._junit(
+            tmp_path,
+            '<testcase classname="t" name="a"><skipped message="tessera-opt not built"/></testcase>',
+        )
+        assert self._run(path) != 0
+
+    def test_unexpected_skip_fails_even_beside_a_pass(self, tmp_path: Path) -> None:
+        path = self._junit(
+            tmp_path,
+            '<testcase classname="t" name="a"/>'
+            '<testcase classname="t" name="b"><skipped message="no ld.lld on this host"/></testcase>',
+        )
+        assert self._run(path, "no ROCm device bitcode") != 0
+
+    def test_named_skip_beside_a_pass_is_accepted(self, tmp_path: Path) -> None:
+        path = self._junit(
+            tmp_path,
+            '<testcase classname="t" name="a"/>'
+            '<testcase classname="t" name="b"><skipped message="no ROCm device bitcode (amdgcn/bitcode) on this host"/></testcase>',
+        )
+        assert self._run(path, "no ROCm device bitcode") == 0
+
+    def test_missing_results_file_fails(self, tmp_path: Path) -> None:
+        assert self._run(tmp_path / "absent.xml") != 0

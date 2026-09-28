@@ -6048,13 +6048,14 @@ PRs: branch `codex/rocm-perf-batch3-dedup`; sync `FOUNDATION-BATCH-3-DEDUP-2026-
 
 Outcome: The 128x64 FP8 LDS body groups fragment reads before WMMA under a
 register-budget rule and the block-scale join loads one uniform weight scale
-per fragment. Both M=200 regression rows improve versus rebuilt #875 and
+per fragment with a block-zero fallback for masked columns. Both M=200
+regression rows improve versus rebuilt #875 and
 AITER; the selected K=1536 row is near AITER.
 
 Remaining: Four paired rows do not close the short-K or ragged-K envelope.
 The sibling backends have no consumer of this gfx1201 physical schedule.
 
-Evidence: Tajasarus gfx1201, full HIP compiler from `a602a7174`, 57 exact
+Evidence: Tajasarus gfx1201, full HIP compiler from `0a2d7fa7a`, 57 exact
 W8A8 device tests and two lit fixtures passed. `w8a8_paired.json` records
 source-matched #875/AITER comparisons with all twelve timing arms admitted
 by device-clock and HIP witnesses. [Packet](../../../benchmarks/baselines/gfx1201_batch3_dedup_20260928/README.md).

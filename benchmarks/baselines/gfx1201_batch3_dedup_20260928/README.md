@@ -3,7 +3,7 @@
 Owner: ROCM-FP8-BLOCKSCALE-1 and ROCM-MXFP4-W4A8-1. Sync:
 `FOUNDATION-BATCH-3-DEDUP-2026-09-28`. Tajasarus RX 9070 XT, gfx1201,
 WSL2, HIP 7.15, LLVM/MLIR 23.1.1. The source is the post-#875 branch
-`codex/rocm-perf-batch3-dedup` at `a602a7174`; the reference compiler was
+`codex/rocm-perf-batch3-dedup` at `0a2d7fa7a`; the reference compiler was
 rebuilt from merged #875 (`48142ae8e`). Both are full HIP builds.
 
 ## W8A8
@@ -17,15 +17,17 @@ Numbers are median microseconds per launch; lower is faster.
 
 | M x N x K | #875 | this branch | AITER |
 |---|---:|---:|---:|
-| 200 x 8192 x 1024 | 43.26 | 40.98 | 44.44 |
-| 200 x 2048 x 2048 | 24.26 | 22.08 | 23.53 |
-| 1024 x 3072 x 1536 | 73.57 | 69.62 | 70.39 |
-| 1024 x 3072 x 1024 | 53.01 | 50.01 | 60.77 |
+| 200 x 8192 x 1024 | 43.65 | 41.01 | 44.49 |
+| 200 x 2048 x 2048 | 24.14 | 21.41 | 23.73 |
+| 1024 x 3072 x 1536 | 73.01 | 71.76 | 70.30 |
+| 1024 x 3072 x 1024 | 54.06 | 51.49 | 60.62 |
 
 The two old M=200 regressions are below AITER on these exact rows. The
-K=1536 row is near AITER; this four-row sample does not close the whole
+K=1536 row is 2.1% above AITER; this four-row sample does not close the whole
 short-K or ragged-K envelope. `tests/device/rocm/test_fp8_blockscale_w8a8.py`
 passed 57/57 and the two changed lit fixtures passed against this build.
+The uniform scale load now selects scale block zero for masked columns,
+preserving the generic fragment contract.
 
 ## Folded MXFP4 at M=256
 

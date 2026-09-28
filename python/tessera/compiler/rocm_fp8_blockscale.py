@@ -227,17 +227,22 @@ def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str) -> Bloc
 
 def lower_blockscale(
     shape: BlockScaleShape, *, entry: str = "w8a8_blockscale", tessera_opt: Path | None = None,
+    check_panel: bool = True,
 ) -> BlockScaleProgram:
     """Run Graph->Schedule->Tile through the compiler (no Python lowering).
 
     The Schedule's panel is checked against `blockscale_panel_oracle` before
-    Tile IR is produced (the projection check)."""
+    Tile IR is produced (the projection check). ``check_panel=False`` is for a
+    DIFFERENT compiler build timed beside this one (a benchmark's "before"
+    arm), whose rule this tree's oracle does not describe; its Target IR is
+    still checked field by field when it is packaged."""
     tool = tessera_opt or find_tessera_opt()
     if tool is None:
         raise RuntimeError("tessera-opt is required to lower a W8A8 block-scale matmul")
     graph_ir = author_blockscale_graph(shape, entry=entry)
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
-    verify_blockscale_schedule(shape, schedule_ir)
+    if check_panel:
+        verify_blockscale_schedule(shape, schedule_ir)
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     return BlockScaleProgram(shape, entry, graph_ir, schedule_ir, tile_ir)
 

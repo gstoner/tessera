@@ -3273,32 +3273,37 @@ struct GenerateWMMAGemmKernelPass
           const int64_t threads = request.warps * 32;
           const int64_t nbuf = blockscalePrefetchMode == 2 ? 2 : 1;
           const int64_t stride = blockscaleStage + blockscaleLdsPadBytes;
-          if (!why.empty()) {
-          } else if (request.pipelineDepth != 1 && request.pipelineDepth != 2)
-            why = "the LDS-staged body is single- (pipeline_depth 1) or "
-                  "double-buffered (2)";
-          else if (blockscalePrefetchMode > 2)
-            why = "blockscale-prefetch must be -1 (carrier), 0, 1 or 2";
-          else if (blockscaleStage % 16 != 0 ||
-                   request.scaleK % blockscaleStage != 0)
-            why = (Twine("stage K=") + Twine(blockscaleStage) +
-                   " must be whole 16-byte vectors dividing scale_k=" +
-                   Twine(request.scaleK))
-                      .str();
-          else if (blockscaleLdsPadBytes < 0 || blockscaleLdsPadBytes % 16 != 0)
-            why = "blockscale-lds-pad-bytes must be a non-negative multiple "
-                  "of 16 so every LDS row stays 16-byte aligned";
-          else if ((wgM * blockscaleStage / 16) % threads != 0 ||
-                   (wgN * blockscaleStage / 16) % threads != 0)
-            why = (Twine("a ") + Twine(wgM) + "x" + Twine(wgN) + " tile at "
-                   "stage K=" + Twine(blockscaleStage) + " does not divide "
-                   "into whole 16-byte copies for " + Twine(threads) +
-                   " threads")
-                      .str();
-          else if (nbuf * (wgM + wgN) * stride > 65536)
-            why = (Twine(nbuf * (wgM + wgN) * stride) +
-                   " LDS bytes exceed the 64 KiB workgroup limit")
-                      .str();
+          // The physical budget, checked once the wave grid is admitted.
+          auto budgetRefusal = [&]() -> std::string {
+            if (request.pipelineDepth != 1 && request.pipelineDepth != 2)
+              return "the LDS-staged body is single- (pipeline_depth 1) or "
+                     "double-buffered (2)";
+            if (blockscalePrefetchMode > 2)
+              return "blockscale-prefetch must be -1 (carrier), 0, 1 or 2";
+            if (blockscaleStage % 16 != 0 ||
+                request.scaleK % blockscaleStage != 0)
+              return (Twine("stage K=") + Twine(blockscaleStage) +
+                      " must be whole 16-byte vectors dividing scale_k=" +
+                      Twine(request.scaleK))
+                  .str();
+            if (blockscaleLdsPadBytes < 0 || blockscaleLdsPadBytes % 16 != 0)
+              return "blockscale-lds-pad-bytes must be a non-negative "
+                     "multiple of 16 so every LDS row stays 16-byte aligned";
+            if ((wgM * blockscaleStage / 16) % threads != 0 ||
+                (wgN * blockscaleStage / 16) % threads != 0)
+              return (Twine("a ") + Twine(wgM) + "x" + Twine(wgN) +
+                      " tile at stage K=" + Twine(blockscaleStage) +
+                      " does not divide into whole 16-byte copies for " +
+                      Twine(threads) + " threads")
+                  .str();
+            if (nbuf * (wgM + wgN) * stride > 65536)
+              return (Twine(nbuf * (wgM + wgN) * stride) +
+                      " LDS bytes exceed the 64 KiB workgroup limit")
+                  .str();
+            return std::string();
+          };
+          if (why.empty())
+            why = budgetRefusal();
         }
         if (!why.empty()) {
           op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: ") << why;

@@ -155,6 +155,8 @@ auto addAppleReasoningAttentionPrologue = [](mlir::OpPassManager &pm) {
   pm.addPass(tessera::createLookaheadSparseAttnExpandPass());
   pm.addPass(tessera::createMSAExpandPass());
   pm.addPass(tessera::createRLLossDecomposePass());
+  // ODS triage WIRE slice 1: target_verify -> softmax, ntk_rope -> rope.
+  pm.addPass(tessera::createDecomposeCompositeOpsPass());
 };
 
 class VerifyAppleValueTileIRPass

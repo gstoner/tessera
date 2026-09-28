@@ -4,6 +4,7 @@ set(LLVM_LINK_COMPONENTS Support)
 add_library(TesseraPasses
   # Phase 1
   CanonicalizeTesseraIR.cpp
+  DecomposeCompositeOpsPass.cpp
   VerifyTesseraIR.cpp
   MigrateTesseraIR.cpp
   Passes.cpp

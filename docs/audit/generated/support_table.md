@@ -103,6 +103,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ebm_energy_quadratic` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_inner_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_langevin_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
+| `ebm_langevin_step_philox` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | none |
 | `ebm_partition_exact` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
 | `ebm_refinement` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
@@ -379,7 +380,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | comparison | 6 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | contraction | 4 | PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB |
-| energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
+| energy_based_models | 11 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 11 | PPGCpRN· PPGCFCNB PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |

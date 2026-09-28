@@ -1,5 +1,6 @@
 
 #include "Tessera/Transforms/Passes.h"
+#include "Tessera/Transforms/CompositeDecomposition.h"
 #include "Tessera/IR/TransposeUtils.h"
 #include "Tessera/IR/TesseraOps.h"
 #include "mlir/IR/PatternMatch.h"
@@ -209,17 +210,29 @@ struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
   StringRef getDescription() const override {
     return "Canonicalize high-level Tessera IR patterns";
   }
+  // The composite rewrites (and ComposeConstantANN) build arith.constant; an
+  // input module need not have arith loaded, and loading it mid-pass is an
+  // assertion abort on an assertions-ON MLIR (Decision #19, third instance).
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<arith::ArithDialect>();
+  }
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     tessera::TransposeOp::getCanonicalizationPatterns(patterns, &getContext());
     patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul,
                  TransposeThroughPointwise, EraseIdentityCast>(&getContext());
+    // ODS triage WIRE slice 1: target_verify -> softmax, ntk_rope -> rope.
+    // This pass is the x86 / NVIDIA pre-lowering route for the shared pattern
+    // source (CompositeDecomposition.h).
+    tessera::composite::populateCompositeDecompositionPatterns(patterns);
     if (annReassociate) patterns.add<ComposeConstantANN>(&getContext());
     FrozenRewritePatternSet frozenPatterns(std::move(patterns));
     if (failed(applyPatternsGreedily(getOperation(), frozenPatterns)))
       getOperation()->emitWarning()
           << "tessera-canonicalize: greedy pattern application did not "
              "converge within the iteration limit";
+    if (failed(tessera::composite::verifyNoResidualComposites(getOperation())))
+      signalPassFailure();
   }
 };
 } // namespace

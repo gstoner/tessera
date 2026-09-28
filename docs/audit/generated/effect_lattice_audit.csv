@@ -108,6 +108,7 @@ dz,pure,,1,1,0
 ebm_energy_quadratic,pure,,1,1,0
 ebm_inner_step,pure,,1,1,0
 ebm_langevin_step,pure,,1,1,0
+ebm_langevin_step_philox,random,,1,1,0
 ebm_refinement,pure,,1,1,0
 ebm_self_verify,pure,,1,1,0
 eigh,pure,,1,1,0

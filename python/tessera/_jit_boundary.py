@@ -1263,13 +1263,25 @@ def _i64_array(xs) -> str:
 
 
 class _Val:
-    """An SSA value in a GraphFn: its name and static shape."""
+    """An SSA value in a GraphFn: its name, static shape and -- only for an
+    index operand whose element type differs from the graph's (``i32`` token
+    ids) -- its element type. ``elem=None`` means the graph element type."""
 
-    __slots__ = ("ssa", "shape")
+    __slots__ = ("ssa", "shape", "elem")
 
-    def __init__(self, ssa: str, shape: tuple[int, ...]):
+    def __init__(self, ssa: str, shape: tuple[int, ...], elem: str | None = None):
         self.ssa = ssa
         self.shape = shape
+        self.elem = elem
+
+
+# Graph ops that take an index operand of a non-graph element type, by operand
+# position. Every other op refuses such an operand (its lowering computes in the
+# graph element type), so an i32 argument can only reach the op that declares it.
+_INDEX_OPERANDS: dict[str, dict[int, str]] = {
+    # SD1-4 target scoring: `tokens` is the rank-1 i32 S-position pin.
+    "tessera.target_verify": {0: "i32"},
+}
 
 
 class _GraphOp:
@@ -1312,6 +1324,8 @@ class GraphFn:
         self._elem = elem
         self._target = target
         self._args: list[tuple[str, tuple[int, ...]]] = []
+        # Non-graph element types of index arguments (ssa -> "i32"); see arg().
+        self._arg_elems: dict[str, str] = {}
         self._lines: list[str] = []
         # Scope stack for nested regions (scf.for/scf.if bodies). _emit appends to
         # the innermost open scope; the function body is scopes[0] == _lines.
@@ -1334,22 +1348,41 @@ class GraphFn:
         self._while: Any = None
         self._scan: Any = None
 
-    def _t(self, shape: tuple[int, ...]) -> str:
-        return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
+    def _t(self, shape: tuple[int, ...], elem: str | None = None) -> str:
+        return "tensor<" + "x".join(str(s) for s in shape) + f"x{elem or self._elem}>"
+
+    def _arg_t(self, ssa: str, shape: tuple[int, ...]) -> str:
+        return self._t(shape, self._arg_elems.get(ssa))
 
     def _fresh(self) -> str:
         self._ctr += 1
         return f"%v{self._ctr}"
 
-    def arg(self, shape) -> _Val:
+    def arg(self, shape, elem: str | None = None) -> _Val:
+        """Declare a function argument. ``elem`` is only for an index operand
+        (``"i32"``) of an op listed in ``_INDEX_OPERANDS``, on the CPU lane."""
         ssa = f"%arg{len(self._args)}"
         shape = tuple(int(s) for s in shape)
+        if elem is not None and elem != self._elem:
+            if elem != "i32":
+                raise TesseraJitError(f"GraphFn index arguments are i32; got {elem!r}")
+            if self._target != "cpu":
+                raise TesseraJitError("GraphFn index (i32) arguments are CPU-lane only")
+            self._arg_elems[ssa] = elem
+        else:
+            elem = None
         self._args.append((ssa, shape))
-        return _Val(ssa, shape)
+        return _Val(ssa, shape, elem)
 
     def _emit(self, op: str, ins, out_shape, attrs=None, meta=None) -> _Val:
+        allowed = _INDEX_OPERANDS.get(op, {})
+        for pos, o in enumerate(ins):
+            if o.elem is not None and allowed.get(pos) != o.elem:
+                raise TesseraJitError(
+                    f"{op} operand {pos} is {o.elem}; only a declared index operand "
+                    "may differ from the graph element type")
         res = self._fresh()
-        in_types = ", ".join(self._t(o.shape) for o in ins)
+        in_types = ", ".join(self._t(o.shape, o.elem) for o in ins)
         in_ssas = ", ".join(o.ssa for o in ins)
         attr_str = (" {" + ", ".join(attrs) + "}") if attrs else ""
         self._scopes[-1].append(f"  {res} = {op} {in_ssas}{attr_str} : ({in_types}) -> {self._t(tuple(out_shape))}")
@@ -1400,6 +1433,23 @@ class GraphFn:
             [f"axis = {ax} : i64"],
             meta={"axis": ax, "rank": len(a.shape)},
         )
+
+    def target_verify(self, tokens, logits):
+        """SD1-4 target scoring ``tessera.target_verify(tokens, logits)``: the
+        per-position softmax over the vocab. Emitted as the Graph op itself --
+        the compiler's CompositeDecomposition rewrite (not this builder) turns
+        it into ``tessera.softmax`` inside libtessera_jit. ``tokens`` is the
+        rank-1 i32 S pin; ``logits`` is S x V in the graph element type."""
+        if tokens.elem != "i32" or len(tokens.shape) != 1:
+            raise TesseraJitError("target_verify tokens must be a rank-1 i32 argument")
+        if len(logits.shape) != 2 or logits.shape[0] != tokens.shape[0]:
+            raise TesseraJitError(
+                f"target_verify logits must be S x V with S = len(tokens); "
+                f"got tokens {tokens.shape}, logits {logits.shape}")
+        if self._elem != "f32":
+            # The op contract (TargetVerifyOp::verify) is S x V f32.
+            raise TesseraJitError("target_verify is an f32 contract")
+        return self._emit("tessera.target_verify", [tokens, logits], logits.shape)
 
     def rmsnorm(self, a, gamma=None, eps: float = 1e-5):
         operands = [a] + ([gamma] if gamma is not None else [])
@@ -1813,7 +1863,7 @@ class GraphFn:
     def build(self) -> str:
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
-        arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
+        arg_decl = ", ".join(f"{s}: {self._arg_t(s, sh)}" for s, sh in self._args)
         rtypes = [self._t(r.shape) for r in self._rets]
         rt = rtypes[0] if len(rtypes) == 1 else "(" + ", ".join(rtypes) + ")"
         ret_ssas = ", ".join(r.ssa for r in self._rets)
@@ -1848,8 +1898,9 @@ class GraphFn:
         npdt = _ELEM_TO_NP[self._elem]
         ins = [np.ascontiguousarray(np.asarray(a)) for a in arrays]
         for a, (_ssa, sh) in zip(ins, self._args):
-            if a.dtype != npdt or tuple(a.shape) != sh:
-                raise TesseraJitError(f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want {npdt}{sh}")
+            want = np.int32 if self._arg_elems.get(_ssa) == "i32" else npdt
+            if a.dtype != want or tuple(a.shape) != sh:
+                raise TesseraJitError(f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want {np.dtype(want)}{sh}")
         handle = compile_module(self.build())
         try:
             outs = [np.empty(r.shape, dtype=npdt) for r in self._rets]
@@ -1973,9 +2024,9 @@ class GraphFn:
             ia.append((1 if o.get("transpose_a") else 0) | (2 if o.get("transpose_b") else 0))
             fa.append(float(o.get("eps", 1e-5)))
 
-        arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
+        arg_decl = ", ".join(f"{s}: {self._arg_t(s, sh)}" for s, sh in self._args)
         operand_ssas = ", ".join(s for s, _ in self._args)
-        in_types = ", ".join(self._t(sh) for _, sh in self._args)
+        in_types = ", ".join(self._arg_t(s, sh) for s, sh in self._args)
         out_ty = self._t(carry_shape)
         payload = (
             f"carry_arg_index = {carry_arg_index} : i64, "
@@ -2046,9 +2097,9 @@ class GraphFn:
         tc, ti0, ti1, tia, tfa = self._encode_branch(then_ops)
         ec, ei0, ei1, eia, efa = self._encode_branch(else_ops)
 
-        arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
+        arg_decl = ", ".join(f"{s}: {self._arg_t(s, sh)}" for s, sh in self._args)
         operand_ssas = ", ".join(s for s, _ in self._args)
-        in_types = ", ".join(self._t(sh) for _, sh in self._args)
+        in_types = ", ".join(self._arg_t(s, sh) for s, sh in self._args)
         out_ty = self._t(out_shape)
         payload = (
             f"flag_arg_index = {flag_arg_index} : i64, "
@@ -2111,9 +2162,9 @@ class GraphFn:
         bc, bi0, bi1, bia, bfa = self._encode_branch(body_ops)
         cc, ci0, ci1, cia, cfa = self._encode_branch(cond_ops)
 
-        arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
+        arg_decl = ", ".join(f"{s}: {self._arg_t(s, sh)}" for s, sh in self._args)
         operand_ssas = ", ".join(s for s, _ in self._args)
-        in_types = ", ".join(self._t(sh) for _, sh in self._args)
+        in_types = ", ".join(self._arg_t(s, sh) for s, sh in self._args)
         out_ty = self._t(carry_shape)
         payload = (
             f"carry_arg_index = {carry_arg_index} : i64, "
@@ -3016,6 +3067,9 @@ _JIT_GRAPH_OPS: dict[str, str] = {
     "tessera.transpose": "transpose",
     "tessera.select": "select",
     "tessera.masked_fill": "masked_fill",
+    # ODS triage WIRE slice 1: emitted as the Graph op; libtessera_jit's
+    # CompositeDecomposition rewrite lowers it to tessera.softmax(logits).
+    "tessera.target_verify": "target_verify",
 }
 
 
@@ -3041,7 +3095,9 @@ def run_graph_ops(arg_names, ops, output_name, arrays, *, elem: str = "f32"):
     ordered: list = []
     for name in arg_names:
         arr = arrays[name]
-        env[name] = g.arg(arr.shape)
+        # An int32 argument is an index operand (target_verify's tokens); the
+        # op that consumes it must declare it, or _emit refuses the graph.
+        env[name] = g.arg(arr.shape, elem="i32" if arr.dtype == np.int32 else None)
         ordered.append(arr)
 
     def _in(operand) -> _Val:
@@ -3069,6 +3125,10 @@ def run_graph_ops(arg_names, ops, output_name, arrays, *, elem: str = "f32"):
                 out = g.softmax(ins[0], axis=int(kwargs.get("axis", -1)))
             elif method in ("rmsnorm", "layer_norm"):
                 out = getattr(g, method)(ins[0], eps=float(kwargs.get("eps", 1e-5)))
+            elif method == "target_verify":
+                if len(ins) != 2:
+                    raise UnsupportedJitOp("target_verify takes (tokens, logits)")
+                out = g.target_verify(ins[0], ins[1])
             elif method == "masked_fill":
                 out = g.masked_fill(ins[0], ins[1], value=float(kwargs.get("value", -1e9)))
             else:

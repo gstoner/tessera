@@ -8,6 +8,10 @@ last_updated: 2026-09-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `ODS-WIRE-1-4-2026-09-27`: sibling outcome — not applicable
+
+Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slices 1 and 4). The `target_verify -> softmax` / `ntk_rope -> rope(x, theta/s)` rewrite runs inside `tessera-canonicalize`, so every `tessera-lower-to-{gpu,nvidia-sm90,-sm100,-sm120}` pipeline now normalizes the two composites; those pipelines have no Graph softmax or rope consumer (the sm_120 families lower through their scheduled contracts), so nothing downstream changes and nothing was run on Super-Bear. No CUDA Langevin Philox executor exists (the CUDA EBM lane is the geo Langevin family).
+
 ## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — follow-up required (softmax_safe admission)
 
 ROCm moved its gfx1151 softmax/reduction packagers onto the native Schedule

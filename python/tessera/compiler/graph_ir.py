@@ -373,6 +373,9 @@ _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.deepseek_sparse_attention": ("window_size", "block_size", "top_k"),
     "tessera.ebm_inner_step": ("eta",),
     "tessera.ebm_refinement": ("eta", "T"),
+    # ODS triage WIRE slice 4: both are required F64 attributes of the ODS op
+    # and semantic for the executor (Decision #21a).
+    "tessera.ebm.langevin_step_philox": ("eta", "temperature"),
     "tessera.lookahead_sparse_attention": ("window_size", "block_size"),
     "tessera.masked_fill": ("value",),
     "tessera.memory_index_select": ("block_size",),

@@ -574,9 +574,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-canonicalize",
         cpp_class="Canon",
-        summary="Canonicalizes native Tessera patterns with checked permutation composition, matrix-transpose-only flag folding, epilogue operand preservation, attribute-free identity casts, and fail-closed fusion policy handling; opt-in ann-reassociate composes single-use affine chains with finite frozen fp32 constants, bounded folding work, and no intervening activation or numeric-policy overrides.",
+        summary="Canonicalizes native Tessera patterns with checked permutation composition, matrix-transpose-only flag folding, epilogue operand preservation, attribute-free identity casts, and fail-closed fusion policy handling; opt-in ann-reassociate composes single-use affine chains with finite frozen fp32 constants, bounded folding work, and no intervening activation or numeric-policy overrides. Also runs the composite rewrites (target_verify -> softmax, ntk_rope -> rope(x, theta / scale); CompositeDecomposition.h) and fails closed on a composite it cannot rewrite.",
         input_dialects=("tessera", "arith"),
         output_dialects=("tessera", "arith"),
+        diagnostic_codes=("TESSERA_NTK_ROPE_THETA_UNREWRITABLE",),
         sprint="MSW-9",
     ),
     PassMetadata(
@@ -595,6 +596,25 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         diagnostic_codes=(),
         pass_kind="transform",
         sprint="C4 (TIRx)",
+    ),
+    PassMetadata(
+        name="tessera-decompose-composite-ops",
+        cpp_class="DecomposeCompositeOpsPass",
+        summary=(
+            "ODS triage WIRE slice 1: rewrites the frontend-emitted Graph "
+            "composites onto the canonical ops their consumers lower -- "
+            "tessera.target_verify(tokens, logits) -> tessera.softmax(logits) "
+            "over the last axis, tessera.ntk_rope(x, theta){scale} -> "
+            "tessera.rope(x, theta / scale) with a splat arith.constant divisor "
+            "(no division at scale 1.0) -- and fails closed on a composite it "
+            "cannot rewrite. Same pattern source as tessera-canonicalize; run "
+            "by the Apple -runtime / -full pipelines and libtessera_jit."
+        ),
+        input_dialects=("tessera",),
+        output_dialects=("tessera", "arith"),
+        diagnostic_codes=("TESSERA_NTK_ROPE_THETA_UNREWRITABLE",),
+        pass_kind="transform",
+        sprint="GOV-ODS-CONSUMER-1 WIRE slice 1 (2026-09-27)",
     ),
     PassMetadata(
         name="tessera-device-clock-span",

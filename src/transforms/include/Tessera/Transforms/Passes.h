@@ -288,6 +288,9 @@ std::unique_ptr<mlir::Pass> createMSAExpandPass();
 // the supported compiler envelope. GRPO/CISPO are marked compiler-visible but
 // remain non-executable until they decompose or gain a runtime proof.
 std::unique_ptr<mlir::Pass> createRLLossDecomposePass();
+// ODS triage WIRE slice 1: target_verify -> softmax, ntk_rope -> rope(x, theta/s)
+// (pattern source: CompositeDecomposition.h; also run by tessera-canonicalize).
+std::unique_ptr<mlir::Pass> createDecomposeCompositeOpsPass();
 
 // varlen_sdpa → per-block flash_attn (Cosmos-3 two-way flat attention). Static
 // decomposition when cu_seqlens are constant; runtime-lowering annotation +

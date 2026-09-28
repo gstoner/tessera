@@ -18835,19 +18835,30 @@ def _execute_rocm_compiled_ebm_compute(artifact: RuntimeArtifact, args: Any) -> 
 # kernel). compiler_path="x86_ebm_langevin_compiled" / "rocm_ebm_langevin_
 # compiled". f32, matches the numpy reference.
 # ─────────────────────────────────────────────────────────────────────────────
-_EBM_LANGEVIN_OPS = ("tessera.ebm.langevin_step",)
+# ODS triage WIRE slice 4 (2026-09-27): these executors implement
+# `tessera.ebm.langevin_step_philox` and now accept exactly that op, as the
+# frontend emits it (`ops.ebm_langevin_step_philox`, op_catalog): operands
+# (y, grad, seed : 1 x i64, counter : 4 x i64), attributes eta, temperature and
+# optional noise_scale. They used to accept `tessera.ebm.langevin_step` -- the
+# 3-operand HOST-noise op -- and read Philox key/counter from kwargs, so a real
+# langevin_step routed here would have ignored its noise operand (a #31 naming
+# defect: the Philox semantics ran under another op's name).
+_EBM_LANGEVIN_OPS = ("tessera.ebm.langevin_step_philox",)
 
 
-def _ebm_langevin_params(kwargs: dict, np: Any) -> tuple:
-    """Extract (eta, noise_scale, k0, k1, c0, c1, c2, c3) from the op kwargs."""
-    eta = float(kwargs.get("eta", 0.0))
-    noise_scale = float(kwargs.get("noise_scale", 0.0))
-    if noise_scale < 0.0:
-        raise ValueError(f"ebm langevin requires noise_scale >= 0; got {noise_scale}")
-    key = np.asarray(kwargs.get("key", (0, 0)), np.uint32).reshape(-1)
-    ctr = np.asarray(kwargs.get("counter", (0, 0, 0, 0)), np.uint32).reshape(-1)
-    if key.size < 2 or ctr.size < 4:
-        raise ValueError("ebm langevin requires key (2x u32) + counter (4x u32) kwargs")
+def _ebm_langevin_params(operands: list, kwargs: dict, np: Any) -> tuple:
+    """(eta, noise_scale, k0, k1, c0, c1, c2, c3) from the Philox op's seed /
+    counter operands and attributes. eta and temperature are semantic and
+    required (Decision #21a); noise_scale defaults to sqrt(2*eta*T) per the op
+    definition. Validation is shared with the Python reference."""
+    from ._ebm_ops import langevin_philox_noise_scale, philox_key_counter
+
+    for name in ("eta", "temperature"):
+        if kwargs.get(name) is None:
+            raise ValueError(f"tessera.ebm.langevin_step_philox requires the {name!r} attribute")
+    eta = float(kwargs["eta"])
+    noise_scale = langevin_philox_noise_scale(eta, float(kwargs["temperature"]), kwargs.get("noise_scale"))
+    key, ctr = philox_key_counter(operands[2], operands[3])
     return (eta, noise_scale, int(key[0]), int(key[1]), int(ctr[0]), int(ctr[1]), int(ctr[2]), int(ctr[3]))
 
 
@@ -18927,13 +18938,13 @@ def _x86_ebm_partition_exact(energies: Any, temperature: float, np: Any) -> floa
 
 
 def _ebm_langevin_compute(operands: list, kwargs: dict, langevin_fn: Any, np: Any) -> Any:
-    if len(operands) < 2:
-        raise ValueError("ebm langevin needs (y, grad) operands")
+    if len(operands) != 4:
+        raise ValueError("tessera.ebm.langevin_step_philox needs (y, grad, seed, counter) operands")
     y = np.ascontiguousarray(operands[0], np.float32)
     grad = np.ascontiguousarray(operands[1], np.float32)
     if y.shape != grad.shape:
         raise ValueError(f"ebm langevin needs matching shapes; got {y.shape}, {grad.shape}")
-    eta, ns, k0, k1, c0, c1, c2, c3 = _ebm_langevin_params(kwargs, np)
+    eta, ns, k0, k1, c0, c1, c2, c3 = _ebm_langevin_params(operands, kwargs, np)
     return langevin_fn(y, grad, eta, ns, k0, k1, c0, c1, c2, c3, np)
 
 

@@ -218,7 +218,7 @@ Gate: a check that each op in the Tessera ODS files is referenced by at least on
   Connection triage 2026-09-27 ([ODS_OP_CONNECTION_TRIAGE.md](ODS_OP_CONNECTION_TRIAGE.md), reference): every waived op has a row -- 6 WIRE (each naming producer, consumer and proof after the same-day review found 19 first-draft WIRE rows naming only one end), 30 #29a debt candidates (25 under named items, 5 DNAS ops awaiting an owner item), 25 merge/supersede, 17 delete candidates for the owner, 5 AMX directed-closed, 1 consumed op the scan missed (`tile.tmem.store`). It also records scan blind spots proposed as follow-up here (not changed): catalog-driven frontend producers (`_try_map_call`), interface-method producers (`istft_jvp`), and prefix/default-branch consumers.
 - Depends on: —
 - Start: host-free
-- Latest: [Latent defects from the ODS triage: TMEM lowering, TMEM planning, solver matching, ZeRO config; dashboards stop over-claiming](INTEGRATED_COMPILER_LOG.md#2026-09-27--latent-defects-from-the-ods-triage-tmem-lowering-tmem-planning-solver-matching-zero-config-dashboards-stop-over-claiming)
+- Latest: [ODS WIRE slices 1 and 4: target_verify / ntk_rope reach their canonical consumers; the Philox Langevin step gets a producer](INTEGRATED_COMPILER_LOG.md#2026-09-27--ods-wire-slices-1-and-4-targetverify--ntkrope-reach-their-canonical-consumers-the-philox-langevin-step-gets-a-producer)
 
 ### ROCM-FP8-BLOCKSCALE-1
 

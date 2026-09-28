@@ -546,6 +546,7 @@ void registerTesseraPasses() {
 
   // ── Stage 13 — RL policy-loss compiler visibility/decomposition ─────────
   ::mlir::registerPass([]() { return createRLLossDecomposePass(); });
+  ::mlir::registerPass([]() { return createDecomposeCompositeOpsPass(); });
   ::mlir::registerPass([]() { return createVarlenSdpaDecomposePass(); });
 
   // ── Sprint V2 (2026-05-22) — Layout legality skeleton ─────────────────

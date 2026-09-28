@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 294 |
+| ``complete`` | 295 |
 | ``runnable_reference`` | 25 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **353** |
+| **total** | **354** |
 
-## complete (294)
+## complete (295)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -114,6 +114,7 @@ each row into a single E2E tier.
 | ``ebm_energy_quadratic`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_inner_step`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_langevin_step`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``ebm_langevin_step_philox`` | energy_based_models | public | public | not_applicable | fused | fused | ready | none |
 | ``ebm_partition_exact`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |

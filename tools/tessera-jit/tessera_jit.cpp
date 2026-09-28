@@ -721,6 +721,11 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // *before* lowering, so per-op folders/canonicalizers (identity cast,
   // transpose-of-transpose, …) + CSE bite on the executed CPU path. This is
   // what makes the Graph-IR optimizations observable end-to-end through the JIT.
+  // ODS triage WIRE slice 1: the Graph composites the frontend emits are
+  // rewritten onto ops tessera-to-linalg lowers (target_verify -> softmax) --
+  // the same pattern source as tessera-canonicalize. A composite it cannot
+  // rewrite fails the compile instead of reaching the linalg lowering.
+  pm1a.addPass(tessera::createDecomposeCompositeOpsPass());
   pm1a.addPass(createCanonicalizerPass());
   pm1a.addPass(createCSEPass());
 #ifdef TESSERA_JIT_HAVE_CLIFFORD

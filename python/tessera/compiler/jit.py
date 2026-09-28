@@ -2153,6 +2153,12 @@ class JitFn:
         arrays: Dict[str, Any] = {}
         for name, value in zip(arg_names, args):
             arr = np.asarray(value)
+            if arr.dtype == np.int32:
+                # An index operand (target_verify's tokens). It sets no graph
+                # element type; run_graph_ops declares it i32 and GraphFn refuses
+                # it anywhere but an op's declared index operand (→ numpy).
+                arrays[name] = np.ascontiguousarray(arr)
+                continue
             this_elem = _elem_for(arr.dtype)
             if this_elem is None:               # unsupported dtype → numpy
                 return _JIT_FALLBACK

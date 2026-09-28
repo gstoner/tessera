@@ -49,8 +49,11 @@ def test_target_ir_references_are_all_classified() -> None:
 
 #: Rows reopened on purpose, each with the reason it is open. TILE-LATENT-
 #: DEFECTS-2026-09-27: `ntk_rope` looked closed only through an audit alias to
-#: `rope` whose premise (a canonicalization to `tessera.rope`) was false. It
-#: stays open until that rewrite lands (ODS triage WIRE slice 1); then drop it.
+#: `rope` whose premise (a canonicalization to `tessera.rope`) was false. The
+#: rewrite landed with ODS triage WIRE slice 1 (2026-09-27), but the rows stay
+#: open: no route that executes rope also executes the `theta / scale`
+#: division the rewrite introduces (see test_compiler_audit.py). Drop them when
+#: one does.
 _KNOWN_OPEN_SINGLE_GPU = {
     ("tile_ir", "ntk_rope"),
     ("target_ir", "ntk_rope"),

@@ -168,6 +168,11 @@ _NO_LANE_DOTTED: frozenset[str] = frozenset(
         # Apple GPU dispatch lane).
         ("cache", "commit"), ("cache", "rollback"),
         ("ebm", "langevin_step"),
+        # ODS triage WIRE slice 4 (2026-09-27): the Philox step's Graph op is
+        # consumed by the x86 / ROCm compiled executors. Apple's Philox MSL
+        # kernel is reached from `tessera.ebm.langevin_step_philox` (Python),
+        # not from the Graph op -- no Apple Graph lane yet (follow-up).
+        ("ebm", "langevin_step_philox"),
         # Shared training-step carriers have exact ROCm/x86 ABIs; Apple owns no
         # Metal materializer yet (cross-backend sync 2026-07-23).
         ("training", "loss_adamw"), ("training", "loss_sgd"),

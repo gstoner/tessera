@@ -1231,6 +1231,27 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
         sprint="ROCM-FP8-BLOCKSCALE-1",
     ),
+    # ── GOV-ODS-CONSUMER-1 WIRE slice 1: ntk_rope -> rope (2026-09-27) ──
+    DiagnosticCode(
+        code="TESSERA_NTK_ROPE_THETA_UNREWRITABLE",
+        pass_origin="DecomposeCompositeOpsPass",
+        severity="error",
+        summary=(
+            "a tessera.ntk_rope with scale != 1 could not be rewritten to "
+            "tessera.rope(x, theta / scale): theta is unranked, dynamically "
+            "shaped or not floating, so the scale splat cannot be "
+            "materialized. Every rope consumer matches only tessera.rope, so "
+            "the op is refused rather than left unlowered (Decision #21). "
+            "Also emitted by tessera-canonicalize, which runs the same pattern."
+        ),
+        fix_hint=(
+            "Give theta a static floating tensor type, or fold the scale into "
+            "theta before the call (ntk_rope(x, theta / s, scale=1.0) is "
+            "rope(x, theta / s))."
+        ),
+        spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md",
+        sprint="GOV-ODS-CONSUMER-1",
+    ),
     DiagnosticCode(
         code="ROCM_SPLIT_K_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",

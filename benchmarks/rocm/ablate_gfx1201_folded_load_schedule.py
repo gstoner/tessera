@@ -46,6 +46,36 @@ Diagnostic transforms (not production schedules):
     Output-changing attribution probes: the operand's global loads read a
     cache-hot 64-byte column (``kb & 0``) instead of the K slab. They bound
     what that stream's traffic costs and are never candidates.
+
+``source_control`` (FOUNDATION-BATCH-3-2026-09-28)
+    No edit: the selected schedule compiled through this module's source
+    path, the control the probes below are compared with.
+
+Per-column attribution probes (FOUNDATION-BATCH-3-2026-09-28), all on the
+register-staged selected schedule, all output-changing (``diagnostic_bound``):
+
+``probe_no_store``
+    The complete-tile epilogue computes every scaled element but stores it
+    only when it equals a sentinel no input produces, so the WMMAs and the
+    scale arithmetic stay live and the 64 BF16 stores per lane go away.
+``probe_no_a_stage``
+    Neither the A slab's global fetch nor its LDS store is issued; the A
+    fragments are read from whatever the LDS holds. Removes A restaging.
+``probe_frag_once``
+    Every K16 step reads step 0's LDS fragments, so the four steps' reads of
+    a slab are one set (the compiler may reuse them): removes 3/4 of the LDS
+    fragment traffic, keeping the WMMA count.
+``probe_a_no_fetch``
+    The A slab's global fetch is replaced by a per-thread constant; its LDS
+    store stays. With ``probe_a_no_lds_store`` it splits ``probe_no_a_stage``
+    into its global-fetch and LDS-write halves.
+``probe_a_no_lds_store``
+    The A slab is fetched as before but stored to LDS only when its first
+    word equals a sentinel no input holds (four E4M3 NaNs), so the fetch
+    stays live and the LDS writes go away.
+``probe_no_wmma``
+    Each WMMA is replaced by one VALU op consuming the same fragments, so the
+    loads, LDS traffic, barriers and epilogue stay and the matrix work goes.
 """
 from __future__ import annotations
 
@@ -72,8 +102,53 @@ from benchmarks.rocm.inspect_gfx1201_folded_prefill import (
 
 
 DIAGNOSTICS = ("uncond", "lds_pipe", "lds_barrier", "sgpr_base", "sched0",
-               "skip_idle_waves", "wave_epilogue")
-PROBES = ("probe_a_hot", "probe_b_hot")
+               "skip_idle_waves", "wave_epilogue", "source_control")
+PROBES = ("probe_a_hot", "probe_b_hot", "probe_no_store", "probe_no_a_stage",
+          "probe_frag_once", "probe_no_wmma", "probe_a_no_fetch",
+          "probe_a_no_lds_store")
+
+_VECTOR_STORE = "          O_w[(im * 16 + e) * n_stride + jn * 16] = (__bf16)scaled;\n"
+_VECTOR_STORE_SENTINEL = (
+    "          if (scaled == 1.2345678e30f)\n"
+    "            O_w[(im * 16 + e) * n_stride + jn * 16] = (__bf16)scaled;\n"
+)
+_FETCH_A = """#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      const long row = m0 + slot / 4;
+      const long safe = row < M ? row : M - 1;
+      next_a[q] = *reinterpret_cast<const copy_u32x4 *>(
+          A + safe * K + slab_k + (slot & 3) * 16);
+    }
+"""
+_STORE_A = """#pragma unroll
+    for (int q = 0; q < 4; ++q) {
+      const int slot = tid + q * 256;
+      *reinterpret_cast<copy_u32x4 *>(sA + (slot / 4) * 80 + (slot & 3) * 16) =
+          next_a[q];
+    }
+"""
+_FETCH_A_LOAD = """      next_a[q] = *reinterpret_cast<const copy_u32x4 *>(
+          A + safe * K + slab_k + (slot & 3) * 16);
+"""
+_FETCH_A_CONST = """      next_a[q] = copy_u32x4{(unsigned)slot, (unsigned)safe, (unsigned)slab_k, 0u};
+"""
+_STORE_A_BODY = """      *reinterpret_cast<copy_u32x4 *>(sA + (slot / 4) * 80 + (slot & 3) * 16) =
+          next_a[q];
+"""
+_STORE_A_SENTINEL = """      if (next_a[q][0] == 0x7f7f7f7fu)
+        *reinterpret_cast<copy_u32x4 *>(sA + (slot / 4) * 80 + (slot & 3) * 16) =
+            next_a[q];
+"""
+_FRAG_A = "const unsigned char *p = sA + (wm * 64 + i * 16 + col) * 80 + step * 16 + half;"
+_FRAG_B = "const unsigned char *p = sB + (wn * 32 + j * 16 + col) * 80 + step * 16 + half;"
+_WMMA = """          acc[i][j] = __builtin_amdgcn_wmma_f32_16x16x16_fp8_fp8_w32_gfx12(
+              af[i], bf[j], acc[i][j]);
+    }
+"""
+_WMMA_VALU = """          acc[i][j][0] += (float)(af[i][0] ^ bf[j][1]);
+    }
+"""
 
 _UNCOND_OLD = "for (int step = 0; step < 4 && kb + step * 16 < K; ++step) {"
 _UNCOND_NEW = "for (int step = 0; step < 4; ++step) {"
@@ -238,6 +313,26 @@ def variant_source(
             if source.count(old) != 2:
                 raise RuntimeError(f"folded load-schedule template changed near {probe}")
             source = source.replace(old, old.replace("+ kb +", "+ (kb & 0) +"))
+    for probe in ("probe_no_store", "probe_no_a_stage", "probe_frag_once", "probe_no_wmma",
+                  "probe_a_no_fetch", "probe_a_no_lds_store"):
+        if probe in chosen and schedule.staging_prefetch != "register_next_slab":
+            raise ValueError(f"{probe} applies to the register-staged selected schedule")
+    if "probe_no_store" in chosen:
+        if schedule.epilogue != "complete_tile_vector_scales":
+            raise ValueError("probe_no_store rewrites the complete-tile vector epilogue")
+        source = _once(source, _VECTOR_STORE, _VECTOR_STORE_SENTINEL, "vector store")
+    if "probe_no_a_stage" in chosen:
+        source = _once(source, _FETCH_A, "", "A next-slab fetch")
+        source = _once(source, _STORE_A, "", "A LDS store")
+    if "probe_a_no_fetch" in chosen:
+        source = _once(source, _FETCH_A_LOAD, _FETCH_A_CONST, "A next-slab load")
+    if "probe_a_no_lds_store" in chosen:
+        source = _once(source, _STORE_A_BODY, _STORE_A_SENTINEL, "A LDS store body")
+    if "probe_frag_once" in chosen:
+        source = _once(source, _FRAG_A, _FRAG_A.replace("step * 16", "0"), "A fragment read")
+        source = _once(source, _FRAG_B, _FRAG_B.replace("step * 16", "0"), "B fragment read")
+    if "probe_no_wmma" in chosen:
+        source = _once(source, _WMMA, _WMMA_VALU, "K16 WMMA chain")
     if "skip_idle_waves" in chosen:
         if "uncond" in chosen:
             raise ValueError("skip_idle_waves guards the production K16 step loop")

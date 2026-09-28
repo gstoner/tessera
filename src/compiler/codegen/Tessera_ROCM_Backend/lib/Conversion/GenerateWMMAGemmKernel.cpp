@@ -2056,6 +2056,32 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     }
   };
 
+  // ---- Stage read grouping (FOUNDATION-BATCH-3-2026-09-28). LLVM's
+  // scheduler interleaves a stage's LDS fragment reads with its WMMA chain
+  // and, when the body's register demand is low, reuses fragment registers
+  // across the chain -- so a later panel's reads wait behind earlier WMMAs
+  // and their LDS latency lands inside the chain. The 128x64 body at
+  // 189 VGPRs issued 13 of its 16 `ds_load_2addr_b64` up front and 3 mid-chain
+  // (the 233-VGPR body before the lane-relative store issued all 16), and ran
+  // 1.06-1.08x slower whenever one workgroup per CU leaves nothing else to
+  // hide that latency (gfx1201, K scan in
+  // benchmarks/baselines/gfx1201_fp8_blockscale_short_k_20260928/). One
+  // `sched.group.barrier` pair per stage -- every read, then every WMMA --
+  // restores the up-front reads. It is applied only when the grouped live set
+  // fits the 256-VGPR wave ceiling: the stage's fragments (2 VGPRs per e4m3
+  // 16x16 operand per lane) plus the partial and running accumulators
+  // (8 VGPRs per f32 16x16 fragment each), with 64 left for the body's
+  // staging, scale and address state (the 128x64 body holds 61 beyond its
+  // fragments and accumulators). 128x64: 64 + 64 = 128 -> grouped;
+  // 128x128: 96 + 128 = 224 -> not grouped (grouping it spills 25 VGPRs and
+  // runs 1.6-1.8x slower). Only the production single-buffered body
+  // (prefetch 0) is grouped; the measured-negative prefetch variants keep
+  // their schedule.
+  const int64_t stagePanels = stageK / 16;
+  const int64_t groupedLiveVgprs =
+      stagePanels * (mt + nt) * 2 + 2 * mt * nt * 8;
+  const bool groupStageReads = prefetch == 0 && groupedLiveVgprs + 64 <= 256;
+
   // ---- One slab's MMA chain on the partial, from LDS buffer `buf`.
   auto compute = [&](OpBuilder &kb, Location l, Value buf,
                      SmallVector<Value> partial) {
@@ -2084,6 +2110,21 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
           mma.addTypes(accFragmentTy);
           partial[mi * nt + ni] = kb.create(mma)->getResult(0);
         }
+    }
+    if (groupStageReads) {
+      // All of the stage's LDS fragment reads, then its WMMA chain (see
+      // `groupStageReads` above for why and when).
+      auto i32 = kb.getI32Type();
+      kb.create<ROCDL::SchedGroupBarrier>(
+          l, ROCDL::SchedGroupMaskAttr::get(kb.getContext(),
+                                            ROCDL::SchedGroupMask::ds_read),
+          IntegerAttr::get(i32, stagePanels * (mt + nt)),
+          IntegerAttr::get(i32, 0));
+      kb.create<ROCDL::SchedGroupBarrier>(
+          l, ROCDL::SchedGroupMaskAttr::get(kb.getContext(),
+                                            ROCDL::SchedGroupMask::mfma_wmma),
+          IntegerAttr::get(i32, stagePanels * mt * nt),
+          IntegerAttr::get(i32, 0));
     }
     return partial;
   };

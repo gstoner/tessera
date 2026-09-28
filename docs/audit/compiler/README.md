@@ -150,6 +150,7 @@ resolves old IDs to current owners, successors or archived dispositions.
 | [`FRONT_END_LOWERING_ASSESSMENT.md`](FRONT_END_LOWERING_ASSESSMENT.md) | KGEN-as-yardstick assessment of the Python→MLIR front half: the two-memories finding (IR as lossy projection of the Python object graph), the pre-elaboration parametric-optimization gap on the existing Presburger substrate, raising as the arbiter on-ramp for user math, and the fail-closed-dtype / `loc` / elaboration-boundary down-payment. Global order defers to `INTEGRATED_COMPILER_PLAN.md` (`FRONTEND-IR-MEDIUM-1`). |
 | [`IR_STACK_INTEGRATION_REVIEW.md`](IR_STACK_INTEGRATION_REVIEW.md) | IR adjacency and lowering-boundary findings. |
 | [`TARGET_IR_REVIEW.md`](TARGET_IR_REVIEW.md) | Target-dialect typing and target-lowering review. |
+| [`ODS_OP_CONNECTION_TRIAGE.md`](ODS_OP_CONNECTION_TRIAGE.md) | Connection study for the 84 ODS ops waived by GOV-ODS-CONSUMER-1: per-op capability, where it should connect, and WIRE / #29a debt / merge / directed-closed / delete-candidate recommendations, plus what the consumer scan cannot see. Reference only; ordering stays with GOV-ODS-CONSUMER-1 and each row's owner item. |
 | [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) | Current typed Tile design. |
 | [`LSE_CHECKPOINT_CONTRACT.md`](LSE_CHECKPOINT_CONTRACT.md) | Shared saved/recomputed-LSE identity contract. |
 | [`SEQUENCE_MIXER_THEORY.md`](SEQUENCE_MIXER_THEORY.md) | Sequence-mixer semantic model. |

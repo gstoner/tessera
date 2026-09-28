@@ -1308,6 +1308,148 @@ def _native_cache_key(
     ).hexdigest()
 
 
+_TOOL_DIGESTS: dict[tuple[str, int, int, int, int], str] = {}
+
+
+def _tool_digest(tool: Path) -> str:
+    """SHA-256 of the ``tessera-opt`` binary, memoized on its stat signature.
+
+    The digest is the compiler half of every ROCm compile-cache key (Decision
+    #11: a rebuilt compiler must miss). Re-reading and hashing a ~190 MB binary
+    on every packaging call cost ~160 ms of a ~265 ms warm hit on Princess-Luna
+    (FOUNDATION-BATCH-2-2026-09-27). A rebuild writes a new file, which changes
+    the inode or mtime/size, so the memo misses exactly when the digest could
+    have changed; the same stat-keyed rule ``toolchain_identity._file_digest``
+    applies to the files it fingerprints.
+    """
+    resolved = tool.resolve()
+    st = resolved.stat()
+    key = (str(resolved), st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size)
+    digest = _TOOL_DIGESTS.get(key)
+    if digest is None:
+        hasher = hashlib.sha256()
+        with resolved.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                hasher.update(chunk)
+        digest = hasher.hexdigest()
+        _TOOL_DIGESTS[key] = digest
+    return digest
+
+
+def _check_target_boundary(target_ir: str, *, directive: str, schedule_kernel: bool = False) -> None:
+    # Target output stops after TileToROCM: Tile IR is consumed into one typed
+    # tessera_rocm directive, but the architecture generator has not yet
+    # produced GPU/ROCDL IR.  Binary output runs that generator and serialization.
+    # Keeping these boundaries distinct prevents a backend module from being
+    # mislabeled as Target IR.
+    if 'tessera.pipeline.target_ir_consumer = "tessera_rocm"' not in target_ir:
+        raise RuntimeError("ROCm native packaging lost its Target IR consumer identity")
+    if directive not in target_ir:
+        raise RuntimeError(
+            f"ROCm native packaging did not materialize Target IR directive {directive}"
+        )
+    if ("gpu.module" in target_ir and not schedule_kernel) or "gpu.binary" in target_ir:
+        raise RuntimeError(
+            "ROCm Target IR crossed into backend GPU/binary codegen"
+        )
+    if re.search(r'(?m)^\s*(?:%[^=\n]+=\s*)?"?tile\.', target_ir):
+        raise RuntimeError(
+            "ROCm native packaging left source Tile IR unconsumed"
+        )
+
+
+#: Families whose binary is a function of their Target IR directive alone, so
+#: the compiled image is keyed on a shape-free kernel identity
+#: (FOUNDATION-BATCH-2-2026-09-27). Admission is by code read *and*
+#: measurement, never by assumption: ``GenerateROCM{Softmax,Reduce}Kernel``
+#: read only the directive's attributes and ``name`` (every extent is a
+#: runtime kernel argument), and on Princess-Luna the HSACO compiled from the
+#: extracted directive alone has the same instruction stream and kernel
+#: descriptor as the one compiled from the full Tile module. A family whose
+#: generator bakes a static extent into the binary must carry that extent as a
+#: directive attribute before it may join this table -- then the key holds it
+#: by construction.
+_SHAPE_FREE_DIRECTIVES: dict[str, str] = {
+    "softmax": "tessera_rocm.softmax",
+    "reduction": "tessera_rocm.reduce",
+}
+
+#: Host-side scaffolding TileToROCM leaves around the directive in a scheduled
+#: unary Target IR module. None of it reaches the HSACO (the generator emits
+#: the kernel from the directive; the host function is not serialized). Any
+#: other operation fails closed: dropping an op we have not audited could drop
+#: something the binary depends on.
+_SHAPE_FREE_SCAFFOLD_OPS = frozenset({
+    "module", "func.func", "return", "func.return", "arith.constant",
+    "arith.index_cast", "bufferization.to_buffer", "bufferization.to_tensor",
+    "memref.alloc", "memref.extract_aligned_pointer_as_index", "llvm.inttoptr",
+})
+
+_OP_LINE_RE = re.compile(r'^\s*(?:%[^=\n]+=\s*)?"?([A-Za-z_][\w.]*)')
+_MODULE_HEADER_RE = re.compile(r"^module(?: attributes \{.*\})? \{$")
+_NAME_ATTR_RE = re.compile(r'(?:(?<=\{)|(?<=, ))name = "([^"\\]*)"')
+
+# Exact-Tile memo: one Tile text -> its shape-free Target IR module. Saves the
+# Tile -> Target run on an exact repeat; a new shape pays that run (~20 ms),
+# never the binary compile of an identity already in `_cache`.
+_shape_free_targets: dict[str, str] = {}
+
+
+def _shape_free_target_ir(target_ir: str, *, family: str, directive: str) -> str:
+    """Project one scheduled unary Target IR module onto its kernel identity.
+
+    Returns a Target IR module holding only the module header and the one
+    directive, with the directive's ``name`` replaced by a symbol derived from
+    everything else in that module. Static extents live only in the host
+    scaffolding (the function signature and ``arith.constant`` launch
+    arguments), which this drops; every directive attribute -- storage,
+    accumulator, kind, axis, keepdims, layout, ``inner_is_one``, exp/ftz/NaN
+    policy, arch -- is kept verbatim, so each is in the cache key. The binary is
+    then compiled from exactly this text, so the key covers the binary's input
+    by construction rather than by an audit of what a generator reads.
+    """
+    lines = [line for line in target_ir.splitlines() if line.strip()]
+    if not lines or not _MODULE_HEADER_RE.match(lines[0].strip()):
+        raise RuntimeError("ROCm shape-free kernel identity requires a single top-level Target IR module")
+    header = lines[0].strip()
+    directive_lines: list[str] = []
+    for line in lines[1:]:
+        stripped = line.strip()
+        if stripped == "}":
+            continue
+        match = _OP_LINE_RE.match(line)
+        name = match.group(1) if match else ""
+        if name.startswith("tessera_rocm."):
+            directive_lines.append(stripped)
+        elif name not in _SHAPE_FREE_SCAFFOLD_OPS:
+            raise RuntimeError(
+                f"ROCm shape-free kernel identity cannot drop unaudited Target IR operation {name or stripped!r}"
+            )
+    if len(directive_lines) != 1:
+        raise RuntimeError(f"ROCm shape-free kernel identity requires exactly one {directive} directive")
+    line = directive_lines[0]
+    if not (line.startswith(directive + " {") and line.endswith("}")):
+        raise RuntimeError(f"ROCm shape-free kernel identity requires one attribute-only {directive} directive")
+    if len(_NAME_ATTR_RE.findall(line)) != 1:
+        raise RuntimeError(f"ROCm {directive} directive must carry exactly one kernel name")
+    anonymous = _NAME_ATTR_RE.sub('name = ""', line)
+    identity = hashlib.sha256(
+        "\x1f".join(("tessera.rocm_shape_free_kernel.v1", family, header, anonymous)).encode()
+    ).hexdigest()
+    symbol = f"tessera_rocm_{family}_{identity[:16]}"
+    named = _NAME_ATTR_RE.sub('name = "' + symbol + '"', line)
+    return header + "\n  " + named + "\n}\n"
+
+
+def _directive_symbol(target_ir: str, directive: str) -> str:
+    """The kernel symbol a packaged image exports: the ``name`` of its one directive."""
+    lines = [line.strip() for line in target_ir.splitlines() if line.strip().startswith(directive + " {")]
+    names = _NAME_ATTR_RE.findall(lines[0]) if len(lines) == 1 else []
+    if len(names) != 1 or not names[0]:
+        raise RuntimeError(f"ROCm Target IR must carry exactly one named {directive} directive")
+    return names[0]
+
+
 def _compile_native_tile_ir(
     tile_ir: str,
     *,
@@ -1386,7 +1528,7 @@ def _compile_native_tile_ir(
         tile_ir=tile_ir,
         directive=directive,
         library_identity=library_identity,
-        tool_digest=hashlib.sha256(tool.read_bytes()).hexdigest(),
+        tool_digest=_tool_digest(tool),
     )
     cached = _cache.get(key)
     if cached is not None:
@@ -1405,25 +1547,7 @@ def _compile_native_tile_ir(
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
     native_pipeline = config.pass_pipeline(output=ROCMOutputLevel.BINARY)
     target_ir = _run_opt(tool, tile_ir, target_pipeline)
-    # Target output stops after TileToROCM: Tile IR is consumed into one typed
-    # tessera_rocm directive, but the architecture generator has not yet
-    # produced GPU/ROCDL IR.  Binary output runs that generator and serialization.
-    # Keeping these boundaries distinct prevents a backend module from being
-    # mislabeled as Target IR.
-    if 'tessera.pipeline.target_ir_consumer = "tessera_rocm"' not in target_ir:
-        raise RuntimeError("ROCm native packaging lost its Target IR consumer identity")
-    if directive not in target_ir:
-        raise RuntimeError(
-            f"ROCm native packaging did not materialize Target IR directive {directive}"
-        )
-    if ("gpu.module" in target_ir and not schedule_kernel) or "gpu.binary" in target_ir:
-        raise RuntimeError(
-            "ROCm Target IR crossed into backend GPU/binary codegen"
-        )
-    if re.search(r'(?m)^\s*(?:%[^=\n]+=\s*)?"?tile\.', target_ir):
-        raise RuntimeError(
-            "ROCm native packaging left source Tile IR unconsumed"
-        )
+    _check_target_boundary(target_ir, directive=directive, schedule_kernel=schedule_kernel)
     backend_ir = _run_opt(tool, tile_ir, native_pipeline)
     payload = _extract_hsaco(backend_ir)
     compiler_fp = _version_fingerprint(tool)
@@ -1463,6 +1587,57 @@ def _compile_reduction_tile_ir(tile_ir: str):
         tile_ir,
         directive="tessera_rocm.reduce",
         family="reduction",
+    )
+
+
+def _compile_shape_free_tile_ir(tile_ir: str, *, family: str, architecture: str):
+    """Compile a scheduled softmax/reduction by its shape-free kernel identity.
+
+    The Tile IR is the replay of a Schedule record whose digest binds the static
+    shape, and its function carries the Graph symbol, so keying the image on
+    Tile text (``_compile_native_tile_ir``) made every new shape a cold compile
+    of a binary that is identical across shapes. Here Tile IR is still consumed
+    by the compiler (``TileToROCM``, per request -- Python never translates
+    Tile to Target), then the Target IR is projected onto its kernel identity
+    (:func:`_shape_free_target_ir`) and the image is compiled *from that
+    projection* at the directive input level, keyed by it through the one
+    ROCm cache authority (``_native_cache_key``). A new shape therefore reuses
+    the image; any change to a directive attribute, the arch, the pipeline
+    config, the device libraries or the compiler binary misses.
+
+    The returned Target IR is the shape-free module the binary was compiled
+    from (``NativeImageArtifact.target_ir_digest`` binds it), and the image's
+    kernel symbol is that module's directive ``name`` -- read it with
+    :func:`_directive_symbol`, never from the Graph function name.
+    """
+    directive = _SHAPE_FREE_DIRECTIVES.get(family)
+    if directive is None:
+        raise ValueError(f"ROCm family {family!r} has no audited shape-free kernel identity")
+    tool = _tessera_opt()
+    if tool is None:
+        raise RuntimeError("tessera-opt is required for ROCm native packaging")
+    tile_config = ROCMExecutablePipeline(family=family, arch=architecture, input_level=ROCMInputLevel.TILE)
+    device_libraries = _driver_selected_device_libraries(arch=architecture)
+    library_identity = "|".join(
+        f"{item.logical_name}:{item.content_digest}:{item.link_mode}" for item in device_libraries
+    )
+    tile_key = _native_cache_key(
+        tile_config, tile_ir=tile_ir, directive=directive,
+        library_identity=library_identity, tool_digest=_tool_digest(tool),
+    )
+    shape_free = _shape_free_targets.get(tile_key)
+    if shape_free is None:
+        warn_if_generator_is_stale(tool)
+        target_ir = _run_opt(tool, tile_ir, tile_config.pass_pipeline(output=ROCMOutputLevel.TARGET))
+        _check_target_boundary(target_ir, directive=directive)
+        shape_free = _shape_free_target_ir(target_ir, family=family, directive=directive)
+        _shape_free_targets[tile_key] = shape_free
+    return _compile_native_tile_ir(
+        shape_free,
+        directive=directive,
+        family=family,
+        input_level=ROCMInputLevel.DIRECTIVE,
+        architecture=architecture,
     )
 
 
@@ -1938,9 +2113,7 @@ def package_scheduled_kernel(
     if artifact.family == "softmax":
         abi = GFX_SOFTMAX_F16_ABI if storage == "f16" else GFX_SOFTMAX_F32_ABI
         output_dtype, output_alignment = artifact.dtype, alignment
-        compile_result = (_compile_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
-                          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.softmax",
-                                                  family="softmax", architecture=arch))
+        compile_family = "softmax"
         scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
         geometry = f"{arch}_softmax_workgroup_per_row_256"
         semantic_provenance = {}
@@ -1955,9 +2128,7 @@ def package_scheduled_kernel(
         if nan_modes != ["propagate"]:
             raise ValueError("ROCm scheduled reduction requires one replayed nan_mode = \"propagate\"")
         semantic_provenance = {"nan_mode": nan_modes[0]}
-        compile_result = (_compile_reduction_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
-                          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.reduce",
-                                                  family="reduction", architecture=arch))
+        compile_family = "reduction"
         scalars = (
             ScalarArgument(2, "Outer", "int64"),
             ScalarArgument(3, "AxisExtent", "int64"),
@@ -1966,8 +2137,13 @@ def package_scheduled_kernel(
         geometry = f"{arch}_reduce_workgroup_per_output_256"
     else:
         raise ValueError("unsupported ROCm scheduled semantic-kernel family")
-    target_ir, backend_ir, payload, compiler_fp, toolchain_fp, device_libraries, compile_state = compile_result
-    entry = artifact.function_name
+    # FOUNDATION-BATCH-2-2026-09-27: the image is keyed and compiled by its
+    # shape-free kernel identity, so its exported symbol is the identity's,
+    # read from the Target IR that produced it -- not the Graph function name.
+    target_ir, backend_ir, payload, compiler_fp, toolchain_fp, device_libraries, compile_state = (
+        _compile_shape_free_tile_ir(artifact.tile_ir, family=compile_family, architecture=arch)
+    )
+    entry = _directive_symbol(target_ir, _SHAPE_FREE_DIRECTIVES[compile_family])
     image = NativeImageArtifact(
         target=f"rocm_{arch}", architecture=arch, pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
@@ -2015,6 +2191,9 @@ def package_scheduled_kernel(
             **semantic_provenance,
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
+            # The Graph symbol the request named. The image exports the
+            # shape-free kernel identity's symbol instead (`entry_symbol`).
+            "graph_symbol": artifact.function_name,
         },
     )
     return ROCMNativePackage(artifact.tile_ir, target_ir, backend_ir, image, descriptor)

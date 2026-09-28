@@ -5856,8 +5856,8 @@ threading NULL into later cache ops (review fix before merge). Runtime: `runtime
 `x86_kv_cache_compiled` (`current_seq` and the count are never-defaulted
 kwargs). The three ops leave the ODS consumer waiver (ceiling 79 → 76).
 
-Remaining: sm_120 ISTFT JVP proof (the sm120 contract is exercised host-free
-only; owed on Super-Bear). A reduced-precision ISTFT window is refused: the
+Remaining: none on sm_120 -- the ISTFT JVP proof ran on Super-Bear's RTX 5070
+2026-09-28 (see the NVIDIA queue entry `ODS-WIRE-B-2026-09-28`). A reduced-precision ISTFT window is refused: the
 frontend types the result f32 while the native packages emit window storage,
 and the two must agree before it is admitted. Window-only ISTFT activity is
 rejected upstream by the forward transform (pre-existing, unchanged:

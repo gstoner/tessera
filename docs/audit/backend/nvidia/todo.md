@@ -12,15 +12,27 @@ last_updated: 2026-09-28
 
 Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slices 1 and 4). The `target_verify -> softmax` / `ntk_rope -> rope(x, theta/s)` rewrite runs inside `tessera-canonicalize`, so every `tessera-lower-to-{gpu,nvidia-sm90,-sm100,-sm120}` pipeline now normalizes the two composites; those pipelines have no Graph softmax or rope consumer (the sm_120 families lower through their scheduled contracts), so nothing downstream changes and nothing was run on Super-Bear. No CUDA Langevin Philox executor exists (the CUDA EBM lane is the geo Langevin family).
 
-## `ODS-WIRE-B-2026-09-28`: the ISTFT forward product builds from compiler IR — sibling outcome: follow-up required (sm_120 proof owed)
+## `ODS-WIRE-B-2026-09-28`: the ISTFT forward product builds from compiler IR — sibling outcome: parity validated (sm_120, 2026-09-28)
 
 The native JVP plugin now builds every ISTFT package, including
 `nvidia_sm120`, from the hashed contract `GraphToSchedulePass` binds to
 `tessera.istft_jvp` (triage row `tessera-istft-jvp`). The host-free
 differential covers the sm120 profile (contract and oracle lower to the same
-scheduled program), but nothing ran on the RTX 5070:
-`tests/device/nvidia/test_spectral_jvp.py::test_public_content_addressed_istft_jvp_matches_centered_difference`
-is owed on Super-Bear. The KV-cache cursor half of the key is x86-only.
+scheduled program). **Device proof, 2026-09-28, The-Super-Bear RTX 5070**
+(umbrella `claude/foundation-batch-2` @ `e4ba9496`, `_nvidia_env.sh` sourced,
+worktree `build/` sm_120 + `build-nvidia-cuda/` sm_120a):
+`tests/device/nvidia/test_spectral_jvp.py` 13 passed / 0 skipped and
+`test_spectral_stale_cuda_error.py` 9 passed / 0 skipped, identical to the
+pre-change base `6008a942`; `tests/unit/test_istft_jvp_ir_contract.py` 51
+passed / 4 skipped (AVX-512 and gfx1151/gfx1201 gates only). The ISTFT
+centered-difference row's inputs re-run through `native_jvp` reported
+`execution_kind=native_gpu`, `evidence_target=nvidia_sm120`,
+`compiler_path=nvidia_sm120_jvp_compiled`, and the package was built by one
+call to `istft_jvp_contract_from_paired_ir(target=nvidia_sm120)` (schema
+`tessera.spectral_jvp.v1`) -- the IR contract, not the kwargs oracle.
+`test_native_jvp_compiled.py` has no sm120 row (all 16 skips are x86/ROCm
+gates), so it is no evidence either way. The KV-cache cursor half of the key
+is x86-only.
 
 
 ## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — follow-up required (softmax_safe admission)

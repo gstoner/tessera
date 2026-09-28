@@ -190,7 +190,7 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") ->
 
     if (shape.weight_layout == "nk" and shape.m >= 128 and units is not None
             and (tiles(128, 128) >= units or tiles(128, 64) >= units)):
-        wide = shape.m % 128 == 0 and tiles(128, 128) >= units
+        wide = tiles(128, 128) >= units
         return BlockScalePanel("lds", 128, 128 if wide else 64, 8)
     full = (shape.m % 32 == 0 and shape.n % 32 == 0
             and (shape.m // 32) * (shape.n // 32) >= 256)

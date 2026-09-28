@@ -560,12 +560,17 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   // At least one whole 128-row block: below it the workgroup computes rows
   // that do not exist (M=32 would waste three quarters of every tile).
   //
-  // A ragged M (not a whole number of 128-row blocks) takes 128x64 whenever
-  // that covers the CUs: its masked edge keeps more registers live in the
-  // 32x64-wave 128x128 body (251 vs 238 VGPRs, one wave per SIMD fewer), and
-  // 128x64 measured 0.71-0.97x of 128x128 at 19 of 20 ragged points
-  // (ragged.json; the exception, 200x4096x7168, is 1.03x).
-  const bool raggedM = schedule.m % 128 != 0;
+  // A ragged M (not a whole number of 128-row blocks) follows the same rule
+  // as a whole one (FOUNDATION-BATCH-2-2026-09-27,
+  // benchmarks/baselines/gfx1201_fp8_blockscale_ragged_20260927/). It took
+  // 128x64 until the bounded store stopped costing registers: the masked
+  // edge had kept the 32x64-wave 128x128 body at 251 VGPRs against 238
+  // whole, and the ragged kernels ran 10-30% behind their whole-M
+  // neighbours. With the per-lane bounded store and the whole dimension's
+  // bound folded (240 VGPRs), 128x128 is 0.83-0.89x of 128x64 at ragged M
+  // with N >= 4096 and K >= 1536, and within 2% elsewhere except
+  // 200x8192x1024 (+9%) and 600x8192x1024 (+2%) -- recorded, not tuned
+  // around.
   if (nk && schedule.m >= 128 && !computeUnits)
     schedule.panelFallback =
         (Twine("no measured compute-unit count for arch \"") + schedule.arch +
@@ -574,7 +579,7 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
             .str();
   if (nk && schedule.m >= 128 && computeUnits &&
       (tiles(128, 128) >= *computeUnits || tiles(128, 64) >= *computeUnits)) {
-    const bool wide = !raggedM && tiles(128, 128) >= *computeUnits;
+    const bool wide = tiles(128, 128) >= *computeUnits;
     schedule.staging = "lds";
     schedule.warps = 8;
     schedule.pipelineDepth = 1;

@@ -235,14 +235,17 @@ def _assert_lds_isa(package, *, spill_free: bool = True) -> None:
 
 LDS_SHAPES = [
     # (shape, expected macro tile) -- Schedule-selected: 128x128 at >= 64
-    # workgroups, else (and at any ragged M) 128x64; ragged M and ragged N;
-    # both output storages.
+    # workgroups (ragged M included since FOUNDATION-BATCH-2-2026-09-27),
+    # else 128x64; ragged M, ragged N and both; both output storages.
     (BlockScaleShape(256, 4096, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(128, 4096, 384, 128, 128, "nk"), (128, 64)),
-    (BlockScaleShape(200, 4096, 256, 128, 128, "nk"), (128, 64)),
+    (BlockScaleShape(200, 4096, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(256, 4000, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(256, 4096, 512, 128, 128, "nk", "bf16"), (128, 128)),
-    (BlockScaleShape(200, 4000, 256, 128, 128, "nk", "bf16"), (128, 64)),
+    (BlockScaleShape(200, 4000, 256, 128, 128, "nk", "bf16"), (128, 128)),
+    (BlockScaleShape(200, 2048, 384, 128, 128, "nk"), (128, 64)),
+    (BlockScaleShape(1000, 4096, 256, 128, 128, "nk"), (128, 128)),
+    (BlockScaleShape(300, 4000, 256, 128, 128, "nk", "bf16"), (128, 128)),
 ]
 
 
@@ -369,3 +372,39 @@ def test_blockscale_w8a8_is_not_a_single_rescale_on_gfx1201():
     scale = np.abs(want).max()
     assert np.abs(got - want).max() <= 1e-4 * scale
     assert np.abs(wrong - want).max() > 0.1 * scale
+
+
+def _vgprs(payload: bytes) -> tuple[int, int]:
+    """(VGPR count, VGPR spill count) of the one kernel in an HSACO."""
+    import tempfile
+    from pathlib import Path
+
+    from tests._support import rocm_isa
+    readelf = Path(rocm_isa.llvm_objdump()).with_name("llvm-readelf")
+    with tempfile.NamedTemporaryFile(suffix=".hsaco") as image:
+        image.write(payload)
+        image.flush()
+        notes = subprocess.run([str(readelf), "--notes", image.name], check=True,
+                               capture_output=True, text=True).stdout
+    vgpr = [int(v) for v in re.findall(r"\.vgpr_count:\s+(\d+)", notes)]
+    spill = [int(v) for v in re.findall(r"\.vgpr_spill_count:\s+(\d+)", notes)]
+    assert len(vgpr) == 1 and len(spill) == 1, notes
+    return vgpr[0], spill[0]
+
+
+@pytest.mark.parametrize(("n", "k"), [(24576, 1536), (8192, 1024), (4096, 7168)])
+def test_ragged_m_costs_the_lds_body_no_registers(n, k):
+    """FOUNDATION-BATCH-2-2026-09-27: a ragged M used to cost the 128x128 LDS
+    body 13 VGPRs (251 vs 238, one wave per SIMD fewer) because the bounded
+    store held a per-element row across the K loop. With the per-lane bounded
+    store and the whole dimension's bound folded, the ragged kernel stays
+    within the whole kernel's register allocation and does not spill -- the
+    precondition for the Schedule giving ragged M the whole-M tile."""
+    whole = package_blockscale(lower_blockscale(BlockScaleShape(1024, n, k, 128, 128, "nk")))
+    ragged = package_blockscale(lower_blockscale(BlockScaleShape(1000, n, k, 128, 128, "nk")))
+    for package in (whole, ragged):
+        assert tuple(package.descriptor.provenance["macro_tile"]) == (128, 128)
+    (whole_vgpr, whole_spill), (ragged_vgpr, ragged_spill) = (
+        _vgprs(whole.image.payload), _vgprs(ragged.image.payload))
+    assert whole_spill == ragged_spill == 0
+    assert ragged_vgpr - whole_vgpr <= 8, (whole_vgpr, ragged_vgpr)

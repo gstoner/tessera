@@ -256,8 +256,9 @@ def test_w8a8_register_panel_rule(m, n, panel):
     (1024, 4096, "nk", (128, 128)),   # 256 workgroups at 128x128
     (256, 4096, "nk", (128, 128)),    # exactly 64 at 128x128
     (128, 4096, "nk", (128, 64)),     # 32 at 128x128, 64 at 128x64
-    (1000, 2048, "nk", (128, 64)),    # ragged M takes 128x64 (8 x 32 workgroups)
-    (1024, 2048, "nk", (128, 128)),   # the whole-block neighbour keeps 128x128
+    (1000, 2048, "nk", (128, 128)),   # ragged M follows the whole-M rule (8 x 16)
+    (1024, 2048, "nk", (128, 128)),   # the whole-block neighbour
+    (300, 2048, "nk", (128, 64)),     # 3 x 16 = 48 at 128x128: 128x64 covers the CUs
     (1024, 4096, "kn", None),         # [K, N] keeps the register panel
     (64, 8192, "nk", None),           # below one 128-row block
 ])
@@ -322,6 +323,8 @@ def test_compute_units_is_twice_the_measured_wgps_and_none_when_unmeasured():
     (256, 4096, "nk", ("lds", 128, 128, 8)),
     (128, 4096, "nk", ("lds", 128, 64, 8)),
     (1024, 1024, "nk", ("lds", 128, 128, 8)),   # 8 x 8 = 64 workgroups
+    (1000, 24576, "nk", ("lds", 128, 128, 8)),  # ragged M: the whole-M rule
+    (200, 2048, "nk", ("lds", 128, 64, 8)),     # 2 x 16 = 32 at 128x128
     (1024, 4096, "kn", ("global", 32, 32, 1)),
     (64, 8192, "nk", ("global", 32, 32, 1)),
     (256, 1024, "nk", ("global", 32, 32, 1)),   # 32 workgroups even at 128x64

@@ -197,7 +197,11 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     # sum/mean/max with f32 output, keepdims. gfx1201 keeps its proved f32
     # rank-reducing envelope: evidence never transfers between the two chips.
     rocm_unary = target == "rocm_gfx1151"
-    if op.op_name == "tessera.softmax_safe" and not rocm_unary:
+    # ``softmax_safe`` is admitted where a retired Graph-owned packager served
+    # it with device proof: gfx1151 (E2E-REAL-6, ROCm unary family) and x86
+    # (E2E-REAL-6, x86 unary family: ``x86_native._softmax_contract`` classified
+    # it as a softmax until 2026-09-28; both Zen 5 hosts carry the rows).
+    if op.op_name == "tessera.softmax_safe" and target not in {"rocm_gfx1151", "x86"}:
         raise ValueError("scheduled softmax_safe is admitted only where it has a proved consumer")
     if rocm_unary:
         softmax_like = op.op_name in {"tessera.softmax", "tessera.softmax_safe"}

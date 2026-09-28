@@ -56,12 +56,31 @@ GFX_FP8_W8A8_BLOCKSCALE_NK_ABI = (
     "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k."
     "e4m3_e4m3_f32_f32.wmma_exact.v1"
 )
+#: The same two contracts with a bf16 OUTPUT: the fp32 accumulator is rounded
+#: once, to nearest-even, by the store (GFX1201-PERF-2026-09-27). A distinct
+#: ABI, because the output buffer's element type is part of the launch.
+GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI = (
+    "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k."
+    "e4m3_e4m3_f32_bf16.wmma_exact.v1"
+)
+GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI = (
+    "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k."
+    "e4m3_e4m3_f32_bf16.wmma_exact.v1"
+)
 WEIGHT_LAYOUTS = {
     "kn": (FP8_W8A8_BLOCKSCALE_CONTRACT, GFX_FP8_W8A8_BLOCKSCALE_ABI,
            "a_b_lhs_scale_rhs_scale_d_m_n_k"),
     "nk": (FP8_W8A8_BLOCKSCALE_NK_CONTRACT, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
            "a_bnk_lhs_scale_rhs_scale_d_m_n_k"),
 }
+#: (weight layout, output storage) -> package ABI.
+PACKAGE_ABIS = {
+    ("kn", "f32"): GFX_FP8_W8A8_BLOCKSCALE_ABI,
+    ("nk", "f32"): GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+    ("kn", "bf16"): GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+    ("nk", "bf16"): GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+}
+OUTPUT_STORAGES = {"f32": ("f32", "fp32", 4), "bf16": ("bf16", "bf16", 2)}
 _DIRECTIVE = "tessera_rocm.scaled_wmma_gemm"
 
 
@@ -78,10 +97,16 @@ class BlockScaleShape:
     #: (``transposeB``), K contiguous. A semantic key: it decides which
     #: matrix the bytes are, so it selects a distinct named contract.
     weight_layout: str = "kn"
+    #: The output storage: "f32" stores the fp32 accumulator; "bf16" rounds it
+    #: once (to nearest-even) at the store. Semantic: it is the Graph result's
+    #: element type, and the package ABI names it.
+    output: str = "f32"
 
     def __post_init__(self) -> None:
         if self.weight_layout not in WEIGHT_LAYOUTS:
             raise ValueError(f"weight_layout must be one of {sorted(WEIGHT_LAYOUTS)}")
+        if self.output not in OUTPUT_STORAGES:
+            raise ValueError(f"output must be one of {sorted(OUTPUT_STORAGES)}")
         if min(self.m, self.n, self.k, self.scale_k, self.scale_n) <= 0:
             raise ValueError("W8A8 block-scale extents must be positive")
         if self.scale_k % 16:
@@ -107,15 +132,16 @@ def author_blockscale_graph(shape: BlockScaleShape, *, entry: str = "w8a8_blocks
     nk = shape.weight_layout == "nk"
     b_type = f"tensor<{n}x{k}xf8E4M3FN>" if nk else f"tensor<{k}x{n}xf8E4M3FN>"
     transpose = ",\n      transposeB = true" if nk else ""
+    out = OUTPUT_STORAGES[shape.output][0]
     return f'''module attributes {{tessera.target = "rocm", tessera.arch = "gfx1201"}} {{
   func.func @{entry}(%a: tensor<{m}x{k}xf8E4M3FN>, %b: {b_type},
-                     %sa: tensor<{m}x{g}xf32>, %sb: tensor<{g}x{ng}xf32>) -> tensor<{m}x{n}xf32> {{
+                     %sa: tensor<{m}x{g}xf32>, %sb: tensor<{g}x{ng}xf32>) -> tensor<{m}x{n}x{out}> {{
     %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {{
       numeric_policy = {{accum = "fp32", execution_mode = "exact_per_block"}},
       scale_layout = {{granularity = "block", block = [{shape.scale_n}, {shape.scale_k}], format = "fp32"}}{transpose}
     }} : (tensor<{m}x{k}xf8E4M3FN>, {b_type}, tensor<{m}x{g}xf32>,
-         tensor<{g}x{ng}xf32>) -> tensor<{m}x{n}xf32>
-    return %0 : tensor<{m}x{n}xf32>
+         tensor<{g}x{ng}xf32>) -> tensor<{m}x{n}x{out}>
+    return %0 : tensor<{m}x{n}x{out}>
   }}
 }}
 '''
@@ -173,6 +199,10 @@ class CheckedDirective(TypedDict):
     block_n: int
     macro_k: int
     schedule_hash: str
+    #: "global" (one-wave register panel) or "lds" (multi-wave LDS-staged).
+    staging: str
+    warps: int
+    pipeline_depth: int
 
 
 def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: str) -> CheckedDirective:
@@ -183,7 +213,8 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     """
     directive = _one_line(target_ir, _DIRECTIVE, _DIRECTIVE + " directive")
     carrier = _one_line(tile_ir, "tile.scaled_matmul_kernel", "tile.scaled_matmul_kernel carrier")
-    contract, package_abi, pointer_abi = WEIGHT_LAYOUTS[shape.weight_layout]
+    contract, _, pointer_abi = WEIGHT_LAYOUTS[shape.weight_layout]
+    package_abi = PACKAGE_ABIS[(shape.weight_layout, shape.output)]
     expected_strings = {
         "abi": pointer_abi,
         "physical_contract": contract,
@@ -191,7 +222,7 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
         "scale_format": "fp32",
         "partial_combine": "scale_outer_product_then_add",
         "k_step_schedule": "isolated_scale_group",
-        "output": "f32",
+        "output": shape.output,
     }
     for name, expected in expected_strings.items():
         if _string_attr(directive, name) != expected:
@@ -209,6 +240,23 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     block_m, block_n = _int_attr(directive, "block_m"), _int_attr(directive, "block_n")
     if block_m <= 0 or block_n <= 0 or block_m % 16 or block_n % 16:
         raise ValueError("W8A8 Target IR register panel must be 16-aligned")
+    # The physical schedule decides the launch geometry, so it is read from
+    # Target IR and never assumed (GFX1201-PERF-2026-09-27).
+    staging = _string_attr(directive, "staging")
+    warps = _int_attr(directive, "warps")
+    pipeline_depth = _int_attr(directive, "pipeline_depth")
+    if staging not in ("global", "lds"):
+        raise ValueError("W8A8 Target IR staging must be global or lds")
+    if staging == "global" and warps != 1:
+        raise ValueError("W8A8 Target IR register panel is one wave")
+    if staging == "lds" and (not 1 <= warps <= 16 or block_m % 32
+                             or warps % (block_m // 32)
+                             or shape.weight_layout != "nk"):
+        raise ValueError(
+            "W8A8 Target IR LDS body needs the [N, K] weight and warps a whole "
+            "multiple of its 32-row wave rows (at most 16 waves)")
+    if pipeline_depth not in (1, 2):
+        raise ValueError("W8A8 Target IR pipeline_depth must be 1 or 2")
     policy = re.search(r"\bnumeric_policy\s*=\s*\{([^}]*)\}", directive)
     if policy is None:
         raise ValueError("W8A8 Target IR is missing numeric_policy")
@@ -230,26 +278,35 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     if _string_attr(directive, "tessera.schedule_hash") != tile_hash:
         raise ValueError("W8A8 Tile/Target tessera.schedule_hash mismatch")
     return CheckedDirective(block_m=block_m, block_n=block_n, macro_k=macro_k,
-                            schedule_hash=tile_hash)
+                            schedule_hash=tile_hash, staging=staging, warps=warps,
+                            pipeline_depth=pipeline_depth)
 
 
 def package_blockscale(
     program: BlockScaleProgram, *, pipeline_name: str = "tessera-lower-to-rocm", k_unroll: int = 1,
-    scale_group_panels: int = -1,
+    scale_group_panels: int = -1, blockscale_stage_k: int = -1,
+    blockscale_lds_pad_bytes: int = -1, blockscale_prefetch: int = -1,
 ) -> ROCMNativePackage:
     """Compile the Tile program to a gfx1201 HSACO and bind its launch ABI.
 
     ``k_unroll`` (whole scale groups per loop iteration) and
     ``scale_group_panels`` (panels per inner step of one group) are
-    performance keys; neither changes what a group computes. -1 keeps the
-    generator's measured default."""
+    performance keys of the register panel; ``blockscale_*`` are those of the
+    LDS-staged multi-wave body the Schedule selects at large M. None changes
+    what a group computes. -1 keeps the generator's measured default (and,
+    for ``blockscale_prefetch``, the carrier's pipeline depth)."""
     shape = program.shape
-    contract, package_abi, _ = WEIGHT_LAYOUTS[shape.weight_layout]
+    contract = WEIGHT_LAYOUTS[shape.weight_layout][0]
+    package_abi = PACKAGE_ABIS[(shape.weight_layout, shape.output)]
+    _, out_dtype, out_bytes = OUTPUT_STORAGES[shape.output]
     target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries, compile_state = (
         _compile_native_tile_ir(
             program.tile_ir, directive=_DIRECTIVE, family="matmul", architecture="gfx1201",
             staging="register", k_unroll=int(k_unroll),
             scale_group_panels=int(scale_group_panels),
+            blockscale_stage_k=int(blockscale_stage_k),
+            blockscale_lds_pad_bytes=int(blockscale_lds_pad_bytes),
+            blockscale_prefetch=int(blockscale_prefetch),
         )
     )
     checked = check_blockscale_target_ir(shape, program.tile_ir, target_ir)
@@ -273,7 +330,7 @@ def package_blockscale(
         BufferBinding(1, "b", "input", "fp8_e4m3", 2, "row_major", 1),
         BufferBinding(2, "a_scale", "input", "fp32", 2, "row_major", 4),
         BufferBinding(3, "b_scale", "input", "fp32", 2, "row_major", 4),
-        BufferBinding(4, "o", "output", "fp32", 2, "row_major", 4),
+        BufferBinding(4, "o", "output", out_dtype, 2, "row_major", out_bytes),
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
@@ -301,21 +358,32 @@ def package_blockscale(
             "materializer": "generate-wmma-gemm-kernel",
             "b_layout": shape.weight_layout,
             "scale_group_panels": int(scale_group_panels),
-            "physical_route": (f"gfx1201_register_wmma_blockscale_{shape.weight_layout}_"
-                               f"{checked['block_m'] // 16}x"
-                               f"{checked['block_n'] // 16}_k{checked['macro_k']}"
-                               + (f"_u{k_unroll}" if k_unroll > 1 else "")),
+            "staging": checked["staging"],
+            "warps": checked["warps"],
+            "pipeline_depth": checked["pipeline_depth"],
+            "blockscale_stage_k": int(blockscale_stage_k),
+            "blockscale_lds_pad_bytes": int(blockscale_lds_pad_bytes),
+            "blockscale_prefetch": int(blockscale_prefetch),
+            "physical_route": (
+                (f"gfx1201_lds_wmma_blockscale_{shape.weight_layout}_"
+                 f"{checked['block_m']}x{checked['block_n']}_w{checked['warps']}"
+                 f"_d{checked['pipeline_depth']}_k{checked['macro_k']}")
+                if checked["staging"] == "lds" else
+                (f"gfx1201_register_wmma_blockscale_{shape.weight_layout}_"
+                 f"{checked['block_m'] // 16}x"
+                 f"{checked['block_n'] // 16}_k{checked['macro_k']}"
+                 + (f"_u{k_unroll}" if k_unroll > 1 else ""))),
             "shape": [m, n, k],
             "scale_k": shape.scale_k,
             "scale_n": shape.scale_n,
             "macro_k": checked["macro_k"],
             "k_unroll": int(k_unroll),
             "macro_tile": [checked["block_m"], checked["block_n"]],
-            "workgroup": [32, 1, 1],
+            "workgroup": [32 * checked["warps"], 1, 1],
             "a_storage": "e4m3",
             "b_storage": "e4m3",
             "accum": "f32",
-            "output_storage": "f32",
+            "output_storage": shape.output,
             "numeric_policy": {"storage": "e4m3", "accum": "f32",
                                "execution_mode": "exact_per_block"},
             "schedule_hash": checked["schedule_hash"],
@@ -331,7 +399,10 @@ def compile_blockscale(
     shape: BlockScaleShape, *, entry: str = "w8a8_blockscale", k_unroll: int = 1,
     scale_group_panels: int = -1, tessera_opt: Path | None = None,
 ) -> ROCMNativePackage:
-    """Graph -> Schedule -> Tile -> Target -> HSACO for one static problem."""
+    """Graph -> Schedule -> Tile -> Target -> HSACO for one static problem.
+
+    The register panel or the LDS-staged multi-wave body is the Schedule's
+    measured choice for this (M, N, K); nothing here selects it."""
     return package_blockscale(lower_blockscale(shape, entry=entry, tessera_opt=tessera_opt),
                               k_unroll=k_unroll, scale_group_panels=scale_group_panels)
 
@@ -374,7 +445,11 @@ __all__ = [
     "FP8_W8A8_BLOCKSCALE_CONTRACT",
     "FP8_W8A8_BLOCKSCALE_NK_CONTRACT",
     "GFX_FP8_W8A8_BLOCKSCALE_ABI",
+    "GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI",
     "GFX_FP8_W8A8_BLOCKSCALE_NK_ABI",
+    "GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI",
+    "OUTPUT_STORAGES",
+    "PACKAGE_ABIS",
     "WEIGHT_LAYOUTS",
     "author_blockscale_graph",
     "blockscale_reference",

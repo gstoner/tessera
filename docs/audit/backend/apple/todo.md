@@ -73,6 +73,12 @@ Apple: the `apple_gpu` emitter's reachable code reads the environment
 `source_memo_safe = False` because it delegates to the `apple_gpu` emitter
 object, which the name walk cannot follow. Apple emission is unchanged.
 
+## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
+
+Apple never schedules a `tessera.scaled_matmul`. The shared `schedule.matmul`
+`staging` attribute defaults to `global` and is admitted as `lds` only for the
+gfx1201 W8A8 contract, so no Apple schedule or digest changed.
+
 ## `GFX1201-LANES-2026-09-27` (ROCM-MXFP4-W4A8-1 folded load schedule): sibling outcome — not applicable
 
 The gfx1201 folded MXFP4 prefill gained a Target-IR-carried load schedule

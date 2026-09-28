@@ -1331,6 +1331,9 @@ def _compile_native_tile_ir(
     lds_sched_valu_per_mma: int = 0,
     lds_b_row_major: bool = False,
     scale_group_panels: int = -1,
+    blockscale_stage_k: int = -1,
+    blockscale_lds_pad_bytes: int = -1,
+    blockscale_prefetch: int = -1,
 ) -> tuple[
     str,
     str,
@@ -1373,6 +1376,9 @@ def _compile_native_tile_ir(
         lds_sched_valu_per_mma=int(lds_sched_valu_per_mma),
         lds_b_row_major=bool(lds_b_row_major),
         scale_group_panels=int(scale_group_panels),
+        blockscale_stage_k=int(blockscale_stage_k),
+        blockscale_lds_pad_bytes=int(blockscale_lds_pad_bytes),
+        blockscale_prefetch=int(blockscale_prefetch),
         depth_cooperative=depth_cooperative,
     )
     key = _native_cache_key(

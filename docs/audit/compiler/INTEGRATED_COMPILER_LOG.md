@@ -5134,6 +5134,38 @@ exception. A successful `cudaFuncSetAttribute` resets the slot (measured on
 sm_120), which masks them; they clear anyway, because the rule must not rest on
 undocumented behaviour.
 
+### 2026-09-27 — ROCM-FP8-BLOCKSCALE-1: an LDS-staged multi-wave W8A8 body beats AITER at large M
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+
+PRs: branch `claude/gfx1201-perf-w8a8-mxfp4` (sync `GFX1201-PERF-2026-09-27`).
+
+Outcome: the W8A8 block-scale contract gets a second physical body on the typed route: eight waves of 32 rows share one LDS-staged K slab of A and the `[N, K]` weight, with the register body's isolated scale-group semantics unchanged (zero partial per group, one `tile.fragment_scaled_accumulate` join), bit-identical to the register panel on device. Graph→Schedule selects it (`staging = "lds"` on `schedule.matmul`, in the digest when set): 128x128 once that tiling gives >= 64 workgroups on a whole-128 M, else 128x64 when that covers the 64 CUs, else the register panel; Target IR states `staging`/`warps`/`pipeline_depth`, from which the package binds its 256-thread workgroup. The contract also admits a bf16 Graph result (one RNE rounding in the typed store, distinct package ABIs). Against unmodified AITER `gemm_a8w8_blockscale`, device clock, paired: `[N, K]` / AITER geomean **0.91 at M >= 1024** (was 1.29; 12/18 faster), **0.90 at M = 256** (was 1.08), 0.65 at M <= 64 (unchanged). The bf16 store is timing-neutral (bf16/f32 geomean 0.998).
+
+Remaining: 6 of 18 M >= 1024 shapes stay 1.04-1.08x behind AITER (K <= 2048, or N = 1024); ragged M is 1.075x AITER geomean over 20 points, 1.37-1.56x at N = 24576, K = 1536 (a 128-row tile and a masked edge that costs 13 VGPRs); `[K, N]` stays on the register panel; AITER's split-K buckets remain unmeasured.
+
+Evidence: [LDS-body packet](../../../benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/README.md), `tests/device/rocm/test_fp8_blockscale_w8a8.py`, `tests/unit/test_rocm_fp8_blockscale.py`, `tests/tessera-ir/phase2/e2e_fp8_blockscale_lds_rocm_target.mlir`.
+
+<!-- entry-fields:end -->
+
+What did not survive measurement (all in `knobs.json` / `ragged.json`, bit-identical results): double-buffered LDS (1.22-1.48x; 128x128 needs 72 KiB and is refused), a register-staged next slab (1.00-1.24x; spills at 128x128), a 64-byte slab (1.10-1.12x), 0 or 32 bytes of row padding (3.4-4.5x / 1.20-1.26x), 4- and 16-wave grids, grouped raster (neutral), and zero-filling the rows past M (clamping is 0.99x). The full-fence `gpu.barrier` put a `global_inv` after every wait; the body now fences LDS only, which measured neutral. A bf16 output was expected to close the K <= 2048 gap by halving the store bytes; it did not, so the remaining gap there is not the output traffic.
+
+Correction, same day: the first assertions-tree run of the final code reported 5 W8A8 failures and a lit failure. The `tessera-opt` it used was two commits stale (the generator's staleness warning fired); rebuilt, the recorded run is green on both trees.
+
+### 2026-09-27 — ROCM-MXFP4-W4A8-1: a per-wave M guard closes most of the one-row-block gap
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `claude/gfx1201-perf-w8a8-mxfp4` (sync `GFX1201-PERF-2026-09-27`).
+
+Outcome: the folded prefill's load schedule gains a fifth Target-IR performance key, `row_guard` (`cta` | `wave`), required by the folded materializer. `wave` skips the WMMAs and the epilogue of a wave whose 64 rows all lie past M (it still stages and meets every barrier) and tests the vector epilogue's completeness per wave; Tile→ROCm selects it only when M is not a whole number of BM256 row blocks, so whole-row-block kernels are byte-identical. Output bitwise equal to exact K32. On Tajasarus, device clock witnessed by HIP events, three processes: M = 128 goes 0.62-0.66x of the original schedule and **0.74-0.77x Radiance at N = 5120** (was 1.10-1.11x), **1.04-1.12x at N = 17408** (was 1.24-1.27x). Diagnostic probes ruled out the 64-bit staging address arithmetic (`sgpr_base`, 0.99-1.00x) and the K16 scheduling barrier (`sched0`, 1.00-1.01x) as the gap.
+
+Remaining: M = 256 (one full row block, no idle wave) stays 1.05-1.23x behind Radiance and is unattributed (no counters on WSL2); Radiance's packed E2M1 weights read half the bytes of the expanded E4M3 ones, untested as the cause. Exact K32 stays default; folded stays opt-in.
+
+Evidence: [one-row-block packet](../../../benchmarks/baselines/gfx1201_mxfp4_small_m_20260927/README.md), `tests/device/rocm/test_mxfp4_folded_prefill.py`, `tests/unit/test_rocm_mxfp4_folded_schedule.py`, `tests/tessera-ir/phase2/e2e_folded_mxfp4_rocm_load_schedule.mlir`.
+
+<!-- entry-fields:end -->
+
 ### 2026-09-27 — The x86 f32 GEMM packs B itself: alignment no longer sets its speed
 
 Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)

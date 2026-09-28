@@ -73,6 +73,10 @@ _FIELD_ALTERNATIVES: dict[str, tuple[dict[str, object], object]] = {
     "lds_b_row_major": ({}, True),
     # ROCM-FP8-BLOCKSCALE-1: panels per inner step of a scale group.
     "scale_group_panels": ({}, 2),
+    # ROCM-FP8-BLOCKSCALE-1 large-M LDS body (GFX1201-PERF-2026-09-27).
+    "blockscale_stage_k": ({}, 64),
+    "blockscale_lds_pad_bytes": ({}, 0),
+    "blockscale_prefetch": ({}, 2),
     "tile_q": ({}, 128),
     "tile_kv": ({}, 128),
     "depth_cooperative": ({"family": "depth_attention"}, True),

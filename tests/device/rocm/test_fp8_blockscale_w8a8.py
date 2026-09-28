@@ -21,7 +21,9 @@ import pytest
 
 from tessera import runtime as rt
 from tessera.compiler.rocm_fp8_blockscale import (
+    PACKAGE_ABIS,
     WEIGHT_LAYOUTS,
+    BlockScaleProgram,
     BlockScaleShape,
     blockscale_reference,
     lower_blockscale,
@@ -59,7 +61,8 @@ def _inputs(shape: BlockScaleShape, *, exact: bool, seed: int):
 
 
 def _launch(package, a, b, a_scale, b_scale, shape: BlockScaleShape) -> np.ndarray:
-    output = np.zeros((shape.m, shape.n), np.float32)
+    output = np.zeros((shape.m, shape.n),
+                      ml_dtypes.bfloat16 if shape.output == "bf16" else np.float32)
     artifact = rt.RuntimeArtifact(
         metadata={"target": package.image.target},
         native_image=package.image,
@@ -180,6 +183,174 @@ def test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201(shape, k_unroll, group_p
         err = np.abs(got.astype(np.float64) - want)
         assert np.all(err <= 4 * shape.k * np.finfo(np.float32).eps * magnitude + 1e-30), (
             float((err / (magnitude + 1e-30)).max()))
+
+
+# ---------------------------------------------------------------------------
+# The LDS-staged multi-wave body (GFX1201-PERF-2026-09-27) and the bf16 store.
+# ---------------------------------------------------------------------------
+def _with_schedule(program: BlockScaleProgram, *, staging: str, warps: int,
+                   macro: tuple[int, int], depth: int = 1) -> BlockScaleProgram:
+    """Rewrite the carrier's physical schedule (performance keys only) -- the
+    same seam the recorded sweep uses. The semantic contract is untouched."""
+    tile = program.tile_ir
+    for pattern, value in ((r'staging = "\w+"', f'staging = "{staging}"'),
+                           (r"(?<![\w.])warps = \d+", f"warps = {warps}"),
+                           (r"tessera\.pipeline_depth = \d+", f"tessera.pipeline_depth = {depth}"),
+                           (r"tessera\.macro_tile_m = \d+", f"tessera.macro_tile_m = {macro[0]}"),
+                           (r"tessera\.macro_tile_n = \d+", f"tessera.macro_tile_n = {macro[1]}")):
+        tile, count = re.subn(pattern, value, tile)
+        assert count == 1, pattern
+    return BlockScaleProgram(program.shape, program.entry, program.graph_ir,
+                             program.schedule_ir, tile)
+
+
+def _register_reference(shape: BlockScaleShape, a, b, a_scale, b_scale) -> np.ndarray:
+    """The one-wave register panel on the same inputs (the body the LDS one
+    must reproduce bit for bit)."""
+    panel = (32, 32) if shape.m % 32 == 0 and shape.n % 32 == 0 else (16, 16)
+    program = _with_schedule(lower_blockscale(shape), staging="global", warps=1, macro=panel)
+    package = package_blockscale(program)
+    assert package.descriptor.provenance["staging"] == "global"
+    return _launch(package, a, b, a_scale, b_scale, shape)
+
+
+def _assert_lds_isa(package, *, spill_free: bool = True) -> None:
+    from tests._support import rocm_isa
+
+    rocm_isa.assert_selected(
+        package.image.payload, chip="gfx1201", pattern=r"v_wmma_f32_16x16x16_\w+",
+        require="v_wmma_f32_16x16x16_fp8_fp8", what="LDS-staged block-scaled FP8 W8A8")
+    text = rocm_isa.disassemble(package.image.payload, chip="gfx1201")
+    ops = rocm_isa.mnemonics(text, r"[a-z_0-9]+")
+    # The slab is staged with 128-bit global loads and 128-bit LDS stores,
+    # the fragments come from LDS, the waves meet at barriers, and the body
+    # the Schedule selects does not spill.
+    assert ops["global_load_b128"] > 0 and ops["ds_store_b128"] > 0, ops
+    assert ops["ds_load_b64"] + ops["ds_load_2addr_b64"] > 0, ops
+    assert ops["s_barrier_signal"] > 0, ops
+    assert spill_free == (not any(name.startswith("scratch_") for name in ops)), ops
+    # LDS-only barriers: no L0 invalidate rides them.
+    assert ops["global_inv"] == 0, ops
+
+
+LDS_SHAPES = [
+    # (shape, expected macro tile) -- Schedule-selected: 128x128 at >= 64
+    # workgroups, else (and at any ragged M) 128x64; ragged M and ragged N;
+    # both output storages.
+    (BlockScaleShape(256, 4096, 256, 128, 128, "nk"), (128, 128)),
+    (BlockScaleShape(128, 4096, 384, 128, 128, "nk"), (128, 64)),
+    (BlockScaleShape(200, 4096, 256, 128, 128, "nk"), (128, 64)),
+    (BlockScaleShape(256, 4000, 256, 128, 128, "nk"), (128, 128)),
+    (BlockScaleShape(256, 4096, 512, 128, 128, "nk", "bf16"), (128, 128)),
+    (BlockScaleShape(200, 4000, 256, 128, 128, "nk", "bf16"), (128, 64)),
+]
+
+
+def _lds_id(value):
+    if isinstance(value, BlockScaleShape):
+        return f"{value.m}x{value.n}x{value.k}_{value.output}"
+    return f"{value[0]}x{value[1]}"
+
+
+@pytest.mark.parametrize("exact", [True, False], ids=["exact", "random"])
+@pytest.mark.parametrize(("shape", "macro"), LDS_SHAPES, ids=_lds_id)
+def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
+    """The Schedule-selected LDS body: the expected workgroup, the fp64 oracle
+    (bit-equal on exact inputs), and bitwise the register panel's result."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    package = package_blockscale(lower_blockscale(shape))
+    prov = package.descriptor.provenance
+    assert (prov["staging"], prov["warps"], tuple(prov["macro_tile"])) == ("lds", 8, macro)
+    assert prov["workgroup"] == [256, 1, 1]
+    assert package.descriptor.abi_id == PACKAGE_ABIS[(shape.weight_layout, shape.output)]
+    _assert_lds_isa(package)
+    a, b, a_scale, b_scale = _inputs(shape, exact=exact, seed=shape.m * 11 + shape.n)
+    got = _launch(package, a, b, a_scale, b_scale, shape)
+    want = blockscale_reference(a.astype(np.float32), b.astype(np.float32), a_scale, b_scale,
+                                scale_k=shape.scale_k, scale_n=shape.scale_n)
+    reference = _register_reference(shape, a, b, a_scale, b_scale)
+    # Same partial order and the same join: the two bodies agree bit for bit.
+    np.testing.assert_array_equal(got.view(np.uint16 if shape.output == "bf16" else np.uint32),
+                                  reference.view(np.uint16 if shape.output == "bf16" else np.uint32))
+    if shape.output == "bf16":
+        f32_shape = BlockScaleShape(shape.m, shape.n, shape.k, shape.scale_k, shape.scale_n,
+                                    shape.weight_layout, "f32")
+        f32 = _launch(package_blockscale(lower_blockscale(f32_shape)), a, b, a_scale, b_scale,
+                      f32_shape)
+        # The bf16 store is the fp32 result rounded once, to nearest-even.
+        np.testing.assert_array_equal(got.view(np.uint16),
+                                      f32.astype(ml_dtypes.bfloat16).view(np.uint16))
+        return
+    if exact:
+        np.testing.assert_array_equal(got, want.astype(np.float32))
+    else:
+        magnitude = blockscale_reference(
+            np.abs(a.astype(np.float32)), np.abs(b.astype(np.float32)),
+            a_scale, b_scale, scale_k=shape.scale_k, scale_n=shape.scale_n)
+        err = np.abs(got.astype(np.float64) - want)
+        assert np.all(err <= 4 * shape.k * np.finfo(np.float32).eps * magnitude + 1e-30)
+
+
+@pytest.mark.parametrize(("macro", "warps", "depth", "knobs", "spill_free"), [
+    # The register-staged next slab sits beside the 32x64 wave panel's 128
+    # accumulators and spills -- one reason it measured slower and is not
+    # selected. (Double-buffering 128x128 needs 72 KiB of LDS and is refused
+    # below.)
+    ((128, 128), 8, 1, {"blockscale_prefetch": 1}, False),        # register next slab
+    ((128, 64), 8, 2, {}, True),                                  # double-buffered, 32x32 waves
+    ((128, 64), 8, 1, {"blockscale_stage_k": 64}, True),          # two slabs per group
+    ((128, 64), 8, 1, {"blockscale_lds_pad_bytes": 0}, True),     # unpadded rows
+    ((64, 64), 4, 1, {"blockscale_lds_pad_bytes": 32}, True),     # four waves
+    ((256, 128), 16, 1, {}, True),                                # sixteen waves
+], ids=["f1", "d2w32", "s64", "p0", "w4p32", "w16"])
+def test_blockscale_w8a8_lds_knobs_compute_the_same_bits_on_gfx1201(macro, warps, depth, knobs,
+                                                                     spill_free):
+    """Every performance key of the LDS body -- staging schedule, slab K,
+    padding, wave grid -- changes the kernel and never the result."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    shape = BlockScaleShape(200, 520, 512, 128, 128, "nk")
+    a, b, a_scale, b_scale = _inputs(shape, exact=False, seed=99)
+    program = _with_schedule(lower_blockscale(shape), staging="lds", warps=warps, macro=macro,
+                             depth=depth)
+    package = package_blockscale(program, **knobs)
+    assert package.descriptor.provenance["workgroup"] == [32 * warps, 1, 1]
+    _assert_lds_isa(package, spill_free=spill_free)
+    got = _launch(package, a, b, a_scale, b_scale, shape)
+    reference = _register_reference(shape, a, b, a_scale, b_scale)
+    np.testing.assert_array_equal(got.view(np.uint32), reference.view(np.uint32))
+
+
+def test_blockscale_w8a8_lds_body_refuses_what_it_cannot_emit_on_gfx1201():
+    """Refused by name, never answered with the register panel: a
+    double-buffered 128x128 tile (72 KiB of LDS) and the [K, N] weight."""
+    shape = BlockScaleShape(256, 4096, 256, 128, 128, "nk")
+    program = _with_schedule(lower_blockscale(shape), staging="lds", warps=8,
+                             macro=(128, 128), depth=2)
+    with pytest.raises(RuntimeError, match="73728 LDS bytes exceed the 64 KiB"):
+        package_blockscale(program)
+    kn = BlockScaleShape(256, 4096, 256, 128, 128, "kn")
+    program = _with_schedule(lower_blockscale(kn), staging="lds", warps=8, macro=(128, 128))
+    with pytest.raises(RuntimeError, match=r"\[N, K\] weight"):
+        package_blockscale(program)
+
+
+@pytest.mark.parametrize("shape", [
+    BlockScaleShape(40, 72, 256, 128, 128, "kn", "bf16"),
+    BlockScaleShape(64, 96, 384, 128, 128, "nk", "bf16"),
+], ids=_id)
+def test_blockscale_w8a8_register_panel_bf16_store_on_gfx1201(shape):
+    """The register panel's bf16 store is its own fp32 result rounded once."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    package = package_blockscale(lower_blockscale(shape))
+    assert package.descriptor.provenance["staging"] == "global"
+    assert package.descriptor.abi_id == PACKAGE_ABIS[(shape.weight_layout, "bf16")]
+    a, b, a_scale, b_scale = _inputs(shape, exact=False, seed=5)
+    got = _launch(package, a, b, a_scale, b_scale, shape)
+    f32_shape = BlockScaleShape(shape.m, shape.n, shape.k, shape.scale_k, shape.scale_n,
+                                shape.weight_layout, "f32")
+    f32 = _launch(package_blockscale(lower_blockscale(f32_shape)), a, b, a_scale, b_scale,
+                  f32_shape)
+    np.testing.assert_array_equal(got.view(np.uint16), f32.astype(ml_dtypes.bfloat16).view(np.uint16))
 
 
 def test_blockscale_w8a8_is_not_a_single_rescale_on_gfx1201():

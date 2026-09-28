@@ -16,7 +16,10 @@ from tessera.compiler.rocm_fp8_blockscale import (
     FP8_W8A8_BLOCKSCALE_CONTRACT,
     FP8_W8A8_BLOCKSCALE_NK_CONTRACT,
     GFX_FP8_W8A8_BLOCKSCALE_ABI,
+    GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
     GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+    GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+    PACKAGE_ABIS,
     BlockScaleShape,
     author_blockscale_graph,
     blockscale_reference,
@@ -34,6 +37,8 @@ def test_shape_refuses_partial_groups_and_unaligned_groups():
         BlockScaleShape(32, 64, 192, 24, 128)
     with pytest.raises(ValueError, match="weight_layout"):
         BlockScaleShape(32, 64, 256, 128, 128, "tn")
+    with pytest.raises(ValueError, match="output"):
+        BlockScaleShape(32, 64, 256, 128, 128, "nk", "f16")
     shape = BlockScaleShape(40, 200, 256, 128, 128)
     assert (shape.groups, shape.n_groups) == (2, 2)
 
@@ -49,25 +54,42 @@ def test_author_states_the_logical_op_and_never_the_contract():
         assert "tensor<40x2xf32>" in text and "tensor<2x1xf32>" in text
     assert "tensor<256x72xf8E4M3FN>" in kn and "transposeB" not in kn
     assert "tensor<72x256xf8E4M3FN>" in nk and "transposeB = true" in nk
+    assert "-> tensor<40x72xf32>" in kn
 
 
-def _pair(layout: str = "kn") -> tuple[str, str]:
-    contract, abi, pointer = (
-        (FP8_W8A8_BLOCKSCALE_CONTRACT, GFX_FP8_W8A8_BLOCKSCALE_ABI, "a_b_lhs_scale_rhs_scale_d_m_n_k")
+def test_bf16_output_is_the_graph_result_type_and_its_own_abi():
+    text = author_blockscale_graph(BlockScaleShape(40, 72, 256, 128, 128, "nk", "bf16"))
+    # The accumulator stays fp32 (numeric_policy); only the result storage narrows.
+    assert "-> tensor<40x72xbf16>" in text and 'accum = "fp32"' in text
+    assert PACKAGE_ABIS == {
+        ("kn", "f32"): GFX_FP8_W8A8_BLOCKSCALE_ABI,
+        ("nk", "f32"): GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+        ("kn", "bf16"): GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+        ("nk", "bf16"): GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+    }
+    assert len(set(PACKAGE_ABIS.values())) == 4
+
+
+def _pair(layout: str = "kn", output: str = "f32", *, staging: str = "global",
+          warps: int = 1, depth: int = 1, block: tuple[int, int] = (32, 32)) -> tuple[str, str]:
+    contract, pointer = (
+        (FP8_W8A8_BLOCKSCALE_CONTRACT, "a_b_lhs_scale_rhs_scale_d_m_n_k")
         if layout == "kn" else
-        (FP8_W8A8_BLOCKSCALE_NK_CONTRACT, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
-         "a_bnk_lhs_scale_rhs_scale_d_m_n_k"))
+        (FP8_W8A8_BLOCKSCALE_NK_CONTRACT, "a_bnk_lhs_scale_rhs_scale_d_m_n_k"))
+    abi = PACKAGE_ABIS[(layout, output)]
     tile = (f'tile.scaled_matmul_kernel %a {{partial_accumulator = {{combine = "scale_outer_product_then_add", '
             f'cross_step_motion = "forbid", init = "zero", instruction_steps = 8 : i64, '
             f'schedule_scope = "scale_group", scope = "scale_group"}}, physical_contract = "{contract}", '
             f'tessera.scale_block_n = 128 : i64, tessera.schedule_hash = "h0"}}')
-    target = (f'tessera_rocm.scaled_wmma_gemm {{abi = "{pointer}", block_m = 32 : i64, block_n = 32 : i64, '
+    target = (f'tessera_rocm.scaled_wmma_gemm {{abi = "{pointer}", block_m = {block[0]} : i64, '
+              f'block_n = {block[1]} : i64, '
               f'instruction_k = 16 : i64, k = 256 : i64, k_step_schedule = "isolated_scale_group", '
               f'm = 64 : i64, macro_k = 128 : i64, n = 96 : i64, name = "w", numeric_policy = '
-              f'{{accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}}, output = "f32", '
+              f'{{accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}}, output = "{output}", '
               f'package_abi = "{abi}", partial_combine = "scale_outer_product_then_add", '
-              f'physical_contract = "{contract}", scale_format = "fp32", scale_k = 128 : i64, '
-              f'scale_n = 128 : i64, tessera.schedule_hash = "h0"}}')
+              f'physical_contract = "{contract}", pipeline_depth = {depth} : i64, scale_format = "fp32", '
+              f'scale_k = 128 : i64, scale_n = 128 : i64, staging = "{staging}", '
+              f'tessera.schedule_hash = "h0", warps = {warps} : i64}}')
     return tile, target
 
 
@@ -76,6 +98,28 @@ def test_target_check_accepts_the_bound_directive(layout):
     tile, target = _pair(layout)
     checked = check_blockscale_target_ir(BlockScaleShape(64, 96, 256, 128, 128, layout), tile, target)
     assert (checked["block_m"], checked["block_n"], checked["macro_k"]) == (32, 32, 128)
+    assert (checked["staging"], checked["warps"], checked["pipeline_depth"]) == ("global", 1, 1)
+
+
+def test_target_check_binds_the_lds_body_and_the_bf16_output():
+    tile, target = _pair("nk", "bf16", staging="lds", warps=8, block=(128, 128))
+    checked = check_blockscale_target_ir(
+        BlockScaleShape(64, 96, 256, 128, 128, "nk", "bf16"), tile, target)
+    assert (checked["staging"], checked["warps"], checked["block_m"]) == ("lds", 8, 128)
+
+
+@pytest.mark.parametrize(("layout", "staging", "warps", "depth", "block"), [
+    ("kn", "lds", 8, 1, (128, 128)),     # the LDS body reads the [N, K] weight only
+    ("nk", "lds", 6, 1, (128, 128)),     # 4 wave rows of 32 do not divide 6 waves
+    ("nk", "lds", 32, 1, (128, 128)),    # more than 16 waves
+    ("nk", "global", 8, 1, (32, 32)),    # the register panel is one wave
+    ("nk", "lds", 8, 3, (128, 128)),     # single- or double-buffered only
+    ("nk", "smem", 8, 1, (128, 128)),    # an unknown staging
+])
+def test_target_check_refuses_an_inconsistent_physical_schedule(layout, staging, warps, depth, block):
+    tile, target = _pair(layout, staging=staging, warps=warps, depth=depth, block=block)
+    with pytest.raises(ValueError, match="staging|warps|LDS|pipeline_depth|one wave"):
+        check_blockscale_target_ir(BlockScaleShape(64, 96, 256, 128, 128, layout), tile, target)
 
 
 @pytest.mark.parametrize(("old", "new"), [
@@ -154,11 +198,23 @@ def test_pipeline_knob_is_validated_and_reaches_the_pass_string():
             ROCMExecutablePipeline(family="matmul", arch="gfx1201", scale_group_panels=bad)
 
 
-def test_runtime_admits_both_abis_as_proved_gfx1201_launches():
+def test_runtime_admits_every_abi_as_proved_gfx1201_launches():
     from tessera import runtime as rt
 
     proved = rt._gfx1201_proved_scheduled_abis()
-    assert {GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI} <= proved
+    assert set(PACKAGE_ABIS.values()) <= proved
+
+
+def test_lds_body_knobs_are_validated_and_reach_the_pass_string():
+    base = ROCMExecutablePipeline(family="matmul", arch="gfx1201")
+    text = base.pass_pipeline()
+    for knob in ("blockscale-stage-k=-1", "blockscale-lds-pad-bytes=-1",
+                 "blockscale-prefetch=-1"):
+        assert knob in text
+    for field, bad in (("blockscale_stage_k", 1024), ("blockscale_lds_pad_bytes", 65),
+                       ("blockscale_prefetch", 3), ("blockscale_prefetch", True)):
+        with pytest.raises(ValueError, match=field):
+            ROCMExecutablePipeline(family="matmul", arch="gfx1201", **{field: bad})
 
 
 @pytest.mark.parametrize(("layout", "contract"), [
@@ -180,8 +236,8 @@ def test_graph_to_tile_derives_the_named_contract(layout, contract):
 
 @pytest.mark.parametrize(("m", "n", "panel"), [
     (512, 512, (32, 32)),    # 256 tiles at 32x32: the full panel
-    (256, 1024, (32, 32)),
-    (32, 4096, (16, 32)),    # 128 tiles: half height doubles the grid
+    (256, 1024, (32, 32)),   # 32 workgroups even at 128x64: too few for the LDS body
+    (32, 4096, (16, 32)),    # 128 tiles: half height doubles the grid (M < 128)
     (48, 6144, (16, 32)),    # ragged M under 32 rows would run the edge path
     (512, 520, (16, 16)),    # N not a whole 32 takes 16 columns
 ])
@@ -193,3 +249,32 @@ def test_w8a8_register_panel_rule(m, n, panel):
     carrier = next(line for line in program.tile_ir.splitlines() if "tile.scaled_matmul_kernel" in line)
     assert f"tessera.macro_tile_m = {panel[0]}" in carrier
     assert f"tessera.macro_tile_n = {panel[1]}" in carrier
+    assert 'staging = "global"' in carrier and "warps = 1" in carrier
+
+
+@pytest.mark.parametrize(("m", "n", "layout", "macro"), [
+    (1024, 4096, "nk", (128, 128)),   # 256 workgroups at 128x128
+    (256, 4096, "nk", (128, 128)),    # exactly 64 at 128x128
+    (128, 4096, "nk", (128, 64)),     # 32 at 128x128, 64 at 128x64
+    (1000, 2048, "nk", (128, 64)),    # ragged M takes 128x64 (8 x 32 workgroups)
+    (1024, 2048, "nk", (128, 128)),   # the whole-block neighbour keeps 128x128
+    (1024, 4096, "kn", None),         # [K, N] keeps the register panel
+    (64, 8192, "nk", None),           # below one 128-row block
+])
+def test_w8a8_lds_body_rule(m, n, layout, macro):
+    tool = find_tessera_opt()
+    if tool is None:
+        pytest.skip("tessera-opt is not built on this host")
+    program = lower_blockscale(BlockScaleShape(m, n, 256, 128, 128, layout), tessera_opt=tool)
+    carrier = next(line for line in program.tile_ir.splitlines() if "tile.scaled_matmul_kernel" in line)
+    scheduled = next(line for line in program.schedule_ir.splitlines() if "schedule.matmul" in line)
+    if macro is None:
+        assert 'staging = "global"' in carrier and "warps = 1" in carrier
+        assert "staging" not in scheduled
+        return
+    assert 'staging = "lds"' in carrier and "warps = 8" in carrier
+    assert "tessera.pipeline_depth = 1" in carrier
+    assert f"tessera.macro_tile_m = {macro[0]}" in carrier
+    assert f"tessera.macro_tile_n = {macro[1]}" in carrier
+    # Schedule IR states it too, and the digest moves with it.
+    assert 'staging = "lds"' in scheduled

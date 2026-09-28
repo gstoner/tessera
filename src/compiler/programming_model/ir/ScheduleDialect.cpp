@@ -117,9 +117,19 @@ LogicalResult MatmulOp::verify() {
   const bool packedFoldedMxfp4 =
       getPhysicalContract() == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
   const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
+  // ROCM-FP8-BLOCKSCALE-1: the W8A8 contract's LDS-staged body runs 8 waves.
+  const bool fp8W8A8Lds =
+      getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1" &&
+      getStaging() == "lds";
   if (getWarps() != 1 && getWarps() != 4 &&
-      !(foldedFamily && getWarps() == 8))
-    return emitOpError("warps must be 1 or 4 (8 only for folded gfx1201 prefill)");
+      !((foldedFamily || fp8W8A8Lds) && getWarps() == 8))
+    return emitOpError("warps must be 1 or 4 (8 only for folded gfx1201 "
+                       "prefill and the LDS-staged W8A8 block-scale body)");
+  if (getStaging() != "global" && getStaging() != "lds")
+    return emitOpError("staging must be global or lds");
+  if (getStaging() == "lds" && !fp8W8A8Lds)
+    return emitOpError("staging = lds is stated only by the [N, K] W8A8 "
+                       "block-scale contract's LDS-staged body");
   if (getPipelineDepth() <= 0)
     return emitOpError("pipeline_depth must be positive");
   if (getStorage().empty() || getAccum().empty())
@@ -170,7 +180,8 @@ LogicalResult MatmulOp::verify() {
       (getArch() != "gfx1201" || getStorage() != "e4m3" ||
        getStorageB() != "e4m3" || getScaleK() <= 0 ||
        getScaleFormat() != "fp32" || getAccum() != "f32" ||
-       getOutput() != "f32" || getBias() || getResidual() ||
+       (getOutput() != "f32" && getOutput() != "bf16") || getBias() ||
+       getResidual() ||
        getActivation() != "none"))
     return emitOpError("gfx1201 FP8 W8A8 block-scale contract is inconsistent");
   if (packedMxfp4 &&
@@ -206,7 +217,11 @@ LogicalResult MatmulOp::verify() {
   bool rocmInt = (getStorage() == "int8" || getStorage() == "int4") &&
                  getOutput() == "i32" && getAccum() == "i32" &&
                  (getArch().contains("gfx1151") || getArch().contains("gfx1201"));
+  // The W8A8 block-scale contract may round its fp32 accumulator once to a
+  // bf16 output (GFX1201-PERF-2026-09-27); its own check above is exact.
+  const bool fp8W8A8Bf16 = fp8W8A8 && getOutput() == "bf16";
   if (getOutput() != "f32" && getOutput() != "f16" && !packedMxfp4 && !foldedFamily && !f64 && !u8s8 && !rocmInt &&
+      !fp8W8A8Bf16 &&
       !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
     return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, int4 with i32 accumulation/output, or ROCm int8/int4 with i32 accumulation/output");
   if (getALayout() != "row_major" || getBLayout() != "col_major")

@@ -113,6 +113,24 @@ struct ROCMExecutablePipelineOptions
                      "panels issued straight-line per inner step of a scale "
                      "group (ROCM-FP8-BLOCKSCALE-1; -1 = generator default)"),
       llvm::cl::init(-1)};
+  Option<int> blockscaleStageK{
+      *this, "blockscale-stage-k",
+      llvm::cl::desc("forwarded to the WMMA GEMM generator: LDS-staged "
+                     "block-scale body K bytes per slab (-1 = generator "
+                     "default)"),
+      llvm::cl::init(-1)};
+  Option<int> blockscaleLdsPadBytes{
+      *this, "blockscale-lds-pad-bytes",
+      llvm::cl::desc("forwarded to the WMMA GEMM generator: LDS-staged "
+                     "block-scale body row padding in bytes (-1 = generator "
+                     "default)"),
+      llvm::cl::init(-1)};
+  Option<int> blockscalePrefetch{
+      *this, "blockscale-prefetch",
+      llvm::cl::desc("forwarded to the WMMA GEMM generator: LDS-staged "
+                     "block-scale body staging schedule (-1 = the carrier's "
+                     "pipeline_depth)"),
+      llvm::cl::init(-1)};
   Option<int> kUnroll{*this, "k-unroll",
                       llvm::cl::desc("typed matmul: K slabs per loop iteration"),
                       llvm::cl::init(1)};
@@ -339,12 +357,24 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                bool ldsDoubleBuffer = false,
                                int ldsSchedValuPerMma = 0,
                                bool ldsBRowMajor = false,
-                               int scaleGroupPanels = -1) {
+                               int scaleGroupPanels = -1,
+                               int blockscaleStageK = -1,
+                               int blockscaleLdsPadBytes = -1,
+                               int blockscalePrefetch = -1) {
   // -1 leaves the generator's measured default in force.
-  const std::string scaleGroupPanelsOption =
+  std::string scaleGroupPanelsOption =
       scaleGroupPanels >= 0
           ? " scale-group-panels=" + std::to_string(scaleGroupPanels)
           : std::string();
+  if (blockscaleStageK >= 0)
+    scaleGroupPanelsOption +=
+        " blockscale-stage-k=" + std::to_string(blockscaleStageK);
+  if (blockscaleLdsPadBytes >= 0)
+    scaleGroupPanelsOption +=
+        " blockscale-lds-pad-bytes=" + std::to_string(blockscaleLdsPadBytes);
+  if (blockscalePrefetch >= 0)
+    scaleGroupPanelsOption +=
+        " blockscale-prefetch=" + std::to_string(blockscalePrefetch);
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -595,7 +625,8 @@ static void buildROCMExecutablePipeline(
                        opts.ldsCopyWidth, opts.ldsCopyElide,
                        opts.ldsCopyDepth, opts.ldsDoubleBuffer,
                        opts.ldsSchedValuPerMma, opts.ldsBRowMajor,
-                       opts.scaleGroupPanels);
+                       opts.scaleGroupPanels, opts.blockscaleStageK,
+                       opts.blockscaleLdsPadBytes, opts.blockscalePrefetch);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());

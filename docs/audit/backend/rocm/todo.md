@@ -398,6 +398,62 @@ launch (which already paid the same selection).
   focused arbiter/identity tests 269 passed / 3 skipped (none a device lane)
   and the ROCm wmma/flash/arbiter unit subset 379 passed / 18 skipped.
 
+## `GFX1201-PERF-2026-09-27`: W8A8 large-M LDS body, bf16 store, folded MXFP4 per-wave M guard — 2026-09-27
+
+Owners [ROCM-FP8-BLOCKSCALE-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+and [ROCM-MXFP4-W4A8-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1);
+sync `GFX1201-PERF-2026-09-27`. Tajasarus (RX 9070 XT, gfx1201), both trees.
+
+- **W8A8 LDS-staged multi-wave body** (`emitTypedLdsBlockScaleBody`, typed
+  route, no Python code emission). Eight waves of 32 rows share one LDS-staged
+  K slab of A and the `[N, K]` weight; each wave's scale-group partial and
+  `tile.fragment_scaled_accumulate` join are the register body's, and the
+  device rows assert the two bodies agree bit for bit. Graph→Schedule selects
+  it (`selectFp8W8A8BlockScalePanel`): `[N, K]`, M >= 128, 128x128 when that
+  gives >= 64 workgroups on a whole-128 M, else 128x64 when that covers the
+  64 CUs (every ragged M), else the register panel. `staging` is a new
+  `schedule.matmul` attribute (default `global`, digested only when set; the
+  verifier admits `lds` and 8 warps only for the `_nk` W8A8 contract), and
+  `tessera_rocm.scaled_wmma_gemm` states `staging`/`warps`/`pipeline_depth`
+  for W8A8 so the package binds a 256-thread workgroup from Target IR.
+  Performance keys for the recorded sweep only (`blockscale-stage-k`,
+  `blockscale-lds-pad-bytes`, `blockscale-prefetch`) reach the generator
+  through `tessera-rocm-executable` and `ROCMExecutablePipeline`.
+- **bf16 store.** The W8A8 contract admits a bf16 Graph result: one RNE
+  rounding in the typed store epilogue (`materializeFragmentStore` narrows an
+  f32 accumulator only to a declared bf16 epilogue output), package ABIs
+  `...e4m3_e4m3_f32_bf16.wmma_exact.v1`, admitted by the runtime.
+- **Timing vs unmodified AITER** (device clock, paired, 54 shapes;
+  [packet](../../../../benchmarks/baselines/gfx1201_fp8_blockscale_lds_20260927/README.md)):
+  `[N, K]` / AITER geomean 0.91 at M >= 1024 (was 1.29), 0.90 at M = 256 (was
+  1.08), 0.65 at M <= 64; bf16/f32 0.998. All 108 production kernels of the
+  comparison are byte-identical at the final compiler.
+- **Folded MXFP4 `row_guard`** (fifth Target-IR key, `cta` | `wave`, required
+  by the folded materializer; Tile→ROCm emits `wave` only for a partial BM256
+  row block). M = 128 goes 0.74-0.77x Radiance at N = 5120 (was 1.10-1.11x)
+  and 1.04-1.12x at N = 17408 (was 1.24-1.27x); whole-row-block kernels are
+  byte-identical ([packet](../../../../benchmarks/baselines/gfx1201_mxfp4_small_m_20260927/README.md)).
+- **Measured negative / neutral.** W8A8: double-buffered LDS, register-staged
+  next slab, 64-byte slab, 0/32-byte padding, 4/16-wave grids (negative);
+  grouped raster, zero-filled vs clamped edge rows, full vs LDS-only barrier
+  fences (neutral). MXFP4: wave-uniform staging bases (`sgpr_base`) and a
+  fully fenced K16 scheduling barrier (`sched0`) are neutral; unguarded K16
+  steps lose again.
+- **Proof.** W8A8 device + host 147/147 and MXFP4 device + host 145/145 on
+  both `build/` and the assertions-ON `build-assertions/`; `lit
+  tests/tessera-ir` 455 passed / 66 unsupported and `check-tessera-rocm`
+  82/82 on both trees.
+- **Sibling outcomes.** gfx1151: not applicable -- RDNA 3.5 has no FP8 WMMA and
+  no folded MXFP4 route; the W8A8 rule and the `row_guard` rule are gfx1201
+  measurements. NVIDIA / Apple / x86: not applicable (their queues, same key);
+  the one shared-dialect change, `schedule.matmul`'s `staging`, defaults to
+  `global` and leaves every non-W8A8 digest unchanged.
+- **Open.** W8A8: 6 of 18 M >= 1024 shapes 1.04-1.08x behind AITER (K <= 2048
+  or N = 1024); ragged M 1.075x geomean, 1.37-1.56x at N = 24576, K = 1536 (a
+  64-row LDS tile, a cheaper masked edge); `[K, N]` register only; AITER
+  split-K buckets unmeasured. MXFP4: M = 256 one-row-block 1.05-1.23x behind
+  Radiance, unattributed (no `/dev/kfd`).
+
 ## GFX1201 folded MXFP4 load schedule in Target IR — 2026-09-27
 
 Owner ROCM-MXFP4-W4A8-1; sync `GFX1201-LANES-2026-09-27`. **Shared contract

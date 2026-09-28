@@ -19,8 +19,11 @@ one set of logical inputs, two kernels:
   measured rather than timed with a different config.
 
 Each kernel runs with its own production layouts: AITER reads the weight as
-``w[N, K]`` (``b = w.T``) and writes bf16; Tessera reads ``B[K, N]`` and writes
-f32 (its contract's plain f32 store). Both consume the same e4m3 values and
+``w[N, K]`` (``b = w.T``) and writes bf16; Tessera reads ``B[K, N]`` or the
+``[N, K]`` weight and writes f32 (its contract's plain f32 store) or, with
+``--bf16``, bf16 -- the matched-output arm (GFX1201-PERF-2026-09-27). The
+Tessera production route is whatever the Schedule selects for the shape: the
+one-wave register panel or the LDS-staged multi-wave body. Both consume the same e4m3 values and
 fp32 scales, and both are checked against an fp64 oracle of the block-scaled
 math before any timing is taken.
 
@@ -179,36 +182,67 @@ def memref(pointer: P, size: int) -> list:
 
 
 def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=1,
-                   scale_group_panels=-1):
+                   scale_group_panels=-1, lds=None):
+    """``panel`` overrides the carrier's macro tile; ``lds`` =
+    (warps, pipeline_depth, stage_k, pad_bytes, prefetch) additionally
+    overrides its staging to the LDS-staged multi-wave body. Both are
+    sweep-only: such a row is labelled ``panel_override`` and never stands
+    for the production route, which is whatever the Schedule chose."""
     program = lower_blockscale(shape)
-    overridden = panel is not None
+    overridden = panel is not None or lds is not None
     tile_ir = program.tile_ir
-    if overridden:
-        # Sweep-only override of the Schedule's register panel. The row is
-        # labelled `panel_override` and never stands for the production route.
+    if panel is not None:
         tile_ir = re.sub(r"tessera\.macro_tile_m = \d+", f"tessera.macro_tile_m = {panel[0]}", tile_ir)
         tile_ir = re.sub(r"tessera\.macro_tile_n = \d+", f"tessera.macro_tile_n = {panel[1]}", tile_ir)
+    stage_k = pad = prefetch = -1
+    if panel is not None and lds is None:
+        # A register-panel spec means the one-wave register body even where
+        # the Schedule chose the LDS body for this shape.
+        lds = (1, 1, -1, -1, -1)
+    if lds is not None:
+        warps, depth, stage_k, pad, prefetch, *raster = lds
+        staging = "lds" if warps > 1 or depth > 1 else "global"
+        tile_ir = re.sub(r'staging = "\w+"', f'staging = "{staging}"', tile_ir)
+        tile_ir = re.sub(r"(?<![\w.])warps = \d+", f"warps = {warps}", tile_ir)
+        tile_ir = re.sub(r"tessera\.pipeline_depth = \d+", f"tessera.pipeline_depth = {depth}",
+                         tile_ir)
+        if raster and raster[0]:
+            # gmG / gnG: grouped_m / grouped_n raster with group G.
+            order = {"gm": "grouped_m", "gn": "grouped_n"}[raster[0][:2]]
+            tile_ir = re.sub(r'tessera\.raster_order = "\w+"',
+                             f'tessera.raster_order = "{order}"', tile_ir)
+            tile_ir = re.sub(r"tessera\.raster_group = \d+",
+                             f"tessera.raster_group = {int(raster[0][2:])}", tile_ir)
+    if overridden:
         program = type(program)(program.shape, program.entry, program.graph_ir,
                                 program.schedule_ir, tile_ir)
-    package = package_blockscale(program, k_unroll=k_unroll, scale_group_panels=scale_group_panels)
+    package = package_blockscale(program, k_unroll=k_unroll, scale_group_panels=scale_group_panels,
+                                 blockscale_stage_k=stage_k, blockscale_lds_pad_bytes=pad,
+                                 blockscale_prefetch=prefetch)
     prov = package.descriptor.provenance
     block_m, block_n = prov["macro_tile"]
+    threads = int(prov["workgroup"][0])
     weight = device["wt"] if shape.weight_layout == "nk" else device["b"]
     args = (memref(device["a"], shape.m * shape.k) + memref(weight, shape.k * shape.n)
             + memref(device["sa"], shape.m * shape.groups)
             + memref(device["sb"], shape.groups * shape.n_groups)
-            + memref(device["o32"], shape.m * shape.n)
+            + memref(device["o32" if shape.output == "f32" else "o16t"], shape.m * shape.n)
             + [ct.c_int64(shape.m), ct.c_int64(shape.n), ct.c_int64(shape.k)])
     grid = ((shape.n + block_n - 1) // block_n, (shape.m + block_m - 1) // block_m, 1)
-    launch = Launch(hip, package.image.payload, package.descriptor.entry_symbol, args, grid, (32, 1, 1))
+    launch = Launch(hip, package.image.payload, package.descriptor.entry_symbol, args, grid,
+                    (threads, 1, 1))
     meta = {
         "route": prov["route"], "physical_route": prov["physical_route"],
         "panel_override": overridden, "macro_tile": [block_m, block_n],
+        "staging": prov["staging"], "warps": prov["warps"],
+        "pipeline_depth": prov["pipeline_depth"], "workgroup_threads": threads,
+        "blockscale_stage_k": stage_k, "blockscale_lds_pad_bytes": pad,
+        "blockscale_prefetch": prefetch,
         "macro_k": prov["macro_k"], "k_unroll": k_unroll,
         "scale_group_panels": scale_group_panels, "weight_layout": shape.weight_layout,
         "hsaco_sha256": hashlib.sha256(package.image.payload).hexdigest(),
         "schedule_hash": prov["schedule_hash"], "abi_id": package.descriptor.abi_id,
-        "output": "f32",
+        "output": shape.output,
     }
     return launch, meta, package
 
@@ -442,27 +476,54 @@ def main() -> None:
     parser.add_argument("--shape", action="append", default=[],
                         help="M,N,K (repeatable); K and N multiples of 128")
     parser.add_argument("--sweep", action="append", default=[],
-                        help="Tessera-only sweep variant PMxPN:U (e.g. 32x32:1); no AITER arm")
+                        help="Tessera-only sweep variant PMxPN:U:G:L (register panel) or "
+                             "lds:MMxMN:W:D:S:P:F:L (LDS body: macro tile, warps, pipeline "
+                             "depth, stage K (-1 default), pad bytes (-1 default), prefetch "
+                             "(-1 = carrier), layout) or prod:L[+bf16] (the production route); "
+                             "a trailing @NAME compiles with --alt-compiler NAME; no AITER arm "
+                             "unless --with-aiter")
+    parser.add_argument("--alt-compiler", action="append", default=[],
+                        help="NAME=PATH: a second tessera-opt a sweep variant names with a "
+                             "trailing @NAME, so two compiler builds are timed paired and "
+                             "interleaved in one process (diagnostic A/B)")
+    parser.add_argument("--bf16", action="store_true",
+                        help="add the production [N, K] arm with a bf16 output (AITER's output "
+                             "storage), labelled tessera_nk+bf16")
+    parser.add_argument("--sync-key", default="GFX1201-PERF-2026-09-27")
+    parser.add_argument("--with-aiter", action="store_true",
+                        help="also time AITER alongside --sweep variants")
+    parser.add_argument("--no-production", action="store_true",
+                        help="omit the production kn arm (the nk production arm is always kept)")
     parser.add_argument("--windows", type=int, default=10)
     parser.add_argument("--min-window-ms", type=float, default=6.0)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    os.environ.setdefault("TESSERA_OPT", str(args.compiler.resolve()))
+    # Assigned, not defaulted: an inherited TESSERA_OPT would otherwise
+    # compile every arm with a binary other than the one recorded below.
+    os.environ["TESSERA_OPT"] = str(args.compiler.resolve())
+    alt_compilers = {}
+    for item in args.alt_compiler:
+        name, _, path = item.partition("=")
+        alt_compilers[name] = Path(path).resolve()
 
     hip = Hip()
     marker = build_marker(args.compiler)
     clock = Clock(hip, marker.image, marker.entry)
-    fn, aiter_source_sha = (None, None) if args.sweep else _aiter_kernel(args.aiter_root)
+    fn, aiter_source_sha = ((None, None) if args.sweep and not args.with_aiter
+                            else _aiter_kernel(args.aiter_root))
 
     def git(*cmd):
         return subprocess.check_output(["git", *cmd], cwd=ROOT, text=True).strip()
 
     record = {
-        "work_item": "ROCM-FP8-BLOCKSCALE-1", "sync_key": "GFX1201-LANES-2026-09-27",
+        "work_item": "ROCM-FP8-BLOCKSCALE-1", "sync_key": args.sync_key,
         "host": platform.node(), "kernel_release": platform.release(),
         "source_commit": git("rev-parse", "HEAD"), "worktree_dirty": bool(git("status", "--porcelain")),
         "compiler": str(args.compiler.resolve()),
         "compiler_sha256": hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
+        "alt_compilers": {name: {"path": str(path),
+                                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                          for name, path in alt_compilers.items()},
         "timing_source": "device_clock_marker (llvm.readsteadycounter), hip_event + host wall cross-checks",
         "marker_image_sha256": marker.image_sha256, "wall_clock_rate_khz": clock.rate_khz,
         "windows": args.windows, "min_window_ms": args.min_window_ms,
@@ -483,29 +544,69 @@ def main() -> None:
             "sa": hip.upload(sa), "sb": hip.upload(sb),
             "sbt": hip.upload(np.ascontiguousarray(sb.T)),
             "o32": hip.malloc(m * n * 4), "o16": hip.malloc(m * n * 2),
+            "o16t": hip.malloc(m * n * 2),
         }
         row: dict = {"shape": [m, n, k], "scale_block": [128, 128], "flop": 2 * m * n * k}
         arms: dict = {}
         # Production arms: both named weight layouts, generator defaults.
         # Sweep spec: PMxPN:U:G:L -- panel, whole groups per iteration, panels
         # per inner group step (-1 = default), weight layout kn|nk.
-        variants = [(None, 1, -1, "kn"), (None, 1, -1, "nk")] if not args.sweep else [
-            (tuple(int(v) for v in spec.split(":")[0].split("x")), int(spec.split(":")[1]),
-             int(spec.split(":")[2]), spec.split(":")[3])
-            for spec in args.sweep]
-        for panel, unroll, group_panels, layout in variants:
-            label = (f"tessera_{layout}" if panel is None else
-                     f"tessera_{layout}_{panel[0]}x{panel[1]}_u{unroll}_g{group_panels}")
-            shape = BlockScaleShape(m, n, k, 128, 128, layout)
+        variants: list = []
+        if not args.sweep:
+            variants = [(None, 1, -1, "kn", None), (None, 1, -1, "nk", None)]
+        elif args.with_aiter:
+            variants = [(None, 1, -1, "nk", None)]
+            if not args.no_production:
+                variants.insert(0, (None, 1, -1, "kn", None))
+        if args.bf16:
+            variants.append((None, 1, -1, "nk+bf16", None))
+        for spec in args.sweep:
+            spec, _, alias = spec.partition("@")
+            parts = spec.split(":")
+            if parts[0] == "prod":
+                # prod:LAYOUT[+bf16] -- the production route; with @NAME it is
+                # compiled by that alternate tessera-opt (e.g. the previous
+                # compiler, for a before/after pair in one process).
+                variants.append((None, 1, -1, parts[1], None, alias))
+            elif parts[0] == "lds":
+                macro = tuple(int(v) for v in parts[1].split("x"))
+                warps, depth, stage_k, pad, prefetch = (int(v) for v in parts[2:7])
+                raster = parts[8] if len(parts) > 8 else ""
+                variants.append((macro, 1, -1, parts[7],
+                                 (warps, depth, stage_k, pad, prefetch, raster), alias))
+            else:
+                variants.append((tuple(int(v) for v in parts[0].split("x")), int(parts[1]),
+                                 int(parts[2]), parts[3], None, alias))
+        for panel, unroll, group_panels, layout, lds, *rest in variants:
+            alias = rest[0] if rest else ""
+            os.environ["TESSERA_OPT"] = str(alt_compilers[alias] if alias else
+                                            args.compiler.resolve())
+            if lds is not None:
+                label = (f"tessera_{layout}_lds{panel[0]}x{panel[1]}_w{lds[0]}_d{lds[1]}"
+                         f"_s{lds[2]}_p{lds[3]}_f{lds[4]}" + (f"_{lds[5]}" if lds[5] else ""))
+            elif panel is None:
+                label = f"tessera_{layout}"
+            else:
+                label = f"tessera_{layout}_{panel[0]}x{panel[1]}_u{unroll}_g{group_panels}"
+            if alias:
+                label += f"@{alias}"
+            layout, _, output = layout.partition("+")
+            shape = BlockScaleShape(m, n, k, 128, 128, layout, output or "f32")
             try:
                 launch, meta, _ = tessera_launch(hip, device, shape, panel=panel, k_unroll=unroll,
-                                                 scale_group_panels=group_panels)
+                                                 scale_group_panels=group_panels, lds=lds)
             except Exception as error:  # a variant the generator refuses is a result, not a crash
                 row[label] = {"refused": str(error)[:400]}
                 continue
             launch()
-            got = hip.download(device["o32"], np.zeros((m, n), np.float32))
-            meta["oracle_max_rel_err"] = check_close(got, want, magnitude, rel=1e-5)
+            if shape.output == "bf16":
+                got = hip.download(device["o16t"], np.zeros((m, n), ml_dtypes.bfloat16))
+                # One bf16 rounding of the fp32 result: the same bound AITER's
+                # bf16 store is held to.
+                meta["oracle_max_rel_err"] = check_close(got, want, magnitude, rel=2 ** -7)
+            else:
+                got = hip.download(device["o32"], np.zeros((m, n), np.float32))
+                meta["oracle_max_rel_err"] = check_close(got, want, magnitude, rel=1e-5)
             row[label] = meta
             arms[label] = launch
         if fn is not None:

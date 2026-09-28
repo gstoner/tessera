@@ -40,6 +40,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // TARGET-SAME: partial_combine = "row_reference_after_full_k"
 // TARGET-SAME: physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1"
 // TARGET-SAME: raster_group_m = 4
+// TARGET-SAME: row_guard = "wave"
 // TARGET-SAME: scale_k = 64
 // TARGET-SAME: stage_k = 64
 // TARGET-SAME: staging_prefetch = "register_next_slab"

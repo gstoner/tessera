@@ -127,7 +127,9 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     (`predicated_scalar_scales` | `complete_tile_vector_scales`). They are
     performance keys: none changes the tile, the per-lane WMMA order or the
     epilogue arithmetic. The folded materializer requires all four and
-    refuses values outside those sets.
+    refuses values outside those sets. A fifth, `row_guard` (`cta` | `wave`,
+    GFX1201-PERF-2026-09-27), takes the M bound per wave on a partial row
+    block, so waves with no stored row issue no WMMAs; it is required too.
 
     `physical_contract = "rocm_fp8_w8a8_blockscale_v1"` (ROCM-FP8-BLOCKSCALE-1)
     is the logical W8A8 form bound to an executable ABI: e4m3 A and B stay in
@@ -136,6 +138,13 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     `block_m`/`block_n` name the register panel the generator emits. It is
     the Tessera contract upstream ROCDL cannot carry -- which scale multiplies
     which partial -- and so earns its place here (Decision #19).
+
+    The W8A8 form also states its physical schedule (performance keys,
+    GFX1201-PERF-2026-09-27): `staging` is `global` for the one-wave register
+    panel or `lds` for the multi-wave LDS-staged workgroup of `warps` waves
+    over the `block_m` x `block_n` tile, single- or double-buffered by
+    `pipeline_depth`. None of them changes a scale group's partial or its
+    join; they decide the launch geometry the package binds.
   }];
   let arguments = (ins StrAttr:$name, StrAttr:$abi,
                        I64Attr:$m, I64Attr:$n, I64Attr:$k,
@@ -150,10 +159,14 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
                        OptionalAttr<StrAttr>:$workgroup_mode,
                        OptionalAttr<StrAttr>:$staging_prefetch,
                        OptionalAttr<StrAttr>:$epilogue_schedule,
+                       OptionalAttr<StrAttr>:$row_guard,
                        // ROCM-FP8-BLOCKSCALE-1: the weight scale's N block
                        // for the W8A8 contract (one scale per scale_n
                        // columns per K group). Absent for every MX form.
                        OptionalAttr<I64Attr>:$scale_n,
+                       OptionalAttr<StrAttr>:$staging,
+                       OptionalAttr<I64Attr>:$warps,
+                       OptionalAttr<I64Attr>:$pipeline_depth,
                        StrAttr:$partial_combine,
                        StrAttr:$k_step_schedule,
                        StrAttr:$physical_contract,

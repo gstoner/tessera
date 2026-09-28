@@ -36,3 +36,4 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // TARGET-NOT: workgroup_mode
 // TARGET-NOT: staging_prefetch
 // TARGET-NOT: epilogue_schedule
+// TARGET-NOT: row_guard

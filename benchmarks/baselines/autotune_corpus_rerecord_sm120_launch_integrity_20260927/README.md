@@ -50,6 +50,11 @@ invocation (`warmup=0, reps=1`, the entry and launch configuration the device
 rows time) with `cuProfilerStart/Stop`.
 `build_test5_resource_manifest.py --base … --route NAME=payload.json` adds each
 report's kernels to its route (refusing an empty report or an existing route).
+Now that these routes are committed, a plain re-run of
+`capture_route_resources.sh` refuses up front, before any capture (review fix
+on PR #868); `capture_route_resources.sh --refresh OUT_DIR` re-captures them
+and replaces exactly their entries and tagged sources, keeping every other
+route (`tests/unit/test_nvidia_route_resource_manifest.py`).
 The normalized per-route payloads are in `route_resources/` (report names and
 sha256 in the manifest's `sources`). 17 routes added: the native
 `nvidia_mma_{fused,attn,gated}_{tf32,fp8_e4m3,fp8_e5m2}` (9), the composed

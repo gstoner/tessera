@@ -292,10 +292,11 @@ def run_case(
             outputs["tessera_exact_k32"][np.ix_(rows, cols)], reference,
             err_msg=f"{case.label}: exact K32 fails the independent oracle",
         )
+        engine_by_name = {engine.name: engine for engine in engines}
         for name, output in outputs.items():
-            if "+probe" in name:
-                # Attribution probes change the output by construction
-                # (diagnostic_bound); they are never candidates.
+            if name != exact.name and engine_by_name[name].metadata.get("diagnostic_bound", False):
+                # Output-changing attribution probes are identified by the
+                # source edit, independent of the caller's display label.
                 continue
             np.testing.assert_array_equal(
                 output.view(np.uint16), outputs["tessera_exact_k32"].view(np.uint16),

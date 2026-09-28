@@ -127,10 +127,11 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 
 // The bf16 store rounds the fp32 accumulator once. Every fragment origin is
 // 16-aligned and a 128-wide weight-scale block covers a fragment, so each of
-// the eight joins loads its weight scale once (FOUNDATION-BATCH-3-2026-09-28).
+// the eight joins load one uniform weight scale and one block-zero scale
+// for masked columns (FOUNDATION-BATCH-3-2026-09-28).
 // LOWER-LABEL: gpu.func @w8a8_lds_bf16(
 // LOWER-NOT: {{[[:space:]]tile\.[a-z_]+ }}
-// LOWER-COUNT-8: memref.load %arg3[
+// LOWER-COUNT-16: memref.load %arg3[
 // LOWER-NOT: memref.load %arg3[
 // LOWER: arith.truncf {{.*}} : f32 to bf16
 // LOWER: memref.store {{.*}} : memref<?xbf16>

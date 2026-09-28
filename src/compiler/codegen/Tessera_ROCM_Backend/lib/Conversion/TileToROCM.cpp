@@ -1579,11 +1579,12 @@ struct ConvertFragmentScaledAccumulate
     // fragment: load it once, from a wave-uniform address, instead of once
     // per element from a per-lane one. The alignment is derived from the
     // origin's arithmetic (never assumed); an origin it cannot prove keeps the
-    // per-element form. A fragment wholly past N clamps its block into range
-    // -- its elements are never stored. On the gfx1201 W8A8 bodies this took
+    // per-element form. Out-of-range lanes still use scale block zero, as the
+    // fragment contract requires. On the gfx1201 W8A8 bodies this took
     // the 128x128 K loop from 1066 to 971 instructions and ran 1.02-1.21x
     // faster, output bitwise unchanged (FOUNDATION-BATCH-3-2026-09-28).
     Value uniformRhs;
+    Value zeroRhs;
     if (op.getScaleN() % 16 == 0 &&
         isKnownMultipleOf(adaptor.getColOrigin(), 16)) {
       Value block = arith::MinUIOp::create(
@@ -1593,6 +1594,8 @@ struct ConvertFragmentScaledAccumulate
       uniformRhs = memref::LoadOp::create(
           rewriter, loc, adaptor.getRhsScale(),
           ValueRange{arith::AddIOp::create(rewriter, loc, rhsGroupBase, block)});
+      zeroRhs = memref::LoadOp::create(
+          rewriter, loc, adaptor.getRhsScale(), ValueRange{rhsGroupBase});
     }
     for (int64_t i = 0; i < physical->accumulatorElementsPerLane; ++i) {
       auto [row, col] = accumulatorElementCoordinate(
@@ -1615,7 +1618,9 @@ struct ConvertFragmentScaledAccumulate
           arith::DivUIOp::create(rewriter, loc, safeCol, scaleN));
       Value lhsScale = memref::LoadOp::create(
           rewriter, loc, adaptor.getLhsScale(), ValueRange{lhsIndex});
-      Value rhsScale = uniformRhs ? uniformRhs
+      Value rhsScale = uniformRhs ? Value(arith::SelectOp::create(
+                                          rewriter, loc, colOk, uniformRhs,
+                                          zeroRhs))
                                   : Value(memref::LoadOp::create(
                                         rewriter, loc, adaptor.getRhsScale(),
                                         ValueRange{rhsIndex}));

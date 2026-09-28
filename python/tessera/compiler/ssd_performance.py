@@ -155,9 +155,9 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
         if NVIDIA_DEVICE_CLOCK_PACKET_SCHEMA_VERSION in schemas:
             return SSDAdmission(False,'CUDA calibrations mix the device-clock and Nsight routes',lower)
         return _admit_cuda_windows(comparison,calibrations,lower)
+    from .evidence_envelope import EvidenceEnvelopeError, read_evidence_packet
     from .profiler_rocm_evidence import (
-        ROCM_PROFILER_ARCHITECTURES, ROCmProfilerPacketError, build_rocm_profiler_packet,
-        validate_rocm_profiler_packet)
+        ROCM_PROFILER_ARCHITECTURES, ROCmProfilerPacketError, build_rocm_profiler_packet)
     if identity[0] != 'rocm' or identity[1] not in ROCM_PROFILER_ARCHITECTURES:
         return SSDAdmission(False,'target has no native calibration adapter',lower)
     chip = identity[1]
@@ -185,8 +185,8 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
             # must match what it says (review; a stamp edited without a reseal
             # used to reach the protocol check untouched).
             try:
-                validate_rocm_profiler_packet(packet)
-            except ROCmProfilerPacketError as exc:
+                envelope = read_evidence_packet(packet, family="rocm_profiler")
+            except (ROCmProfilerPacketError, EvidenceEnvelopeError) as exc:
                 raise ValueError(f'stored SSD calibration does not validate: {exc}') from exc
             timing = packet['timing']
             if timing['sample_id'] in seen:
@@ -213,11 +213,15 @@ def admit_ssd_candidate(incumbent, candidate, comparison, calibrations=()):
                 uninstrumented=clean,instrumented=probe,source=packet['source'],maximum_instrumentation_overhead=1.05)
             # The rebuilt architecture is derived from the timing target and
             # both images; it and the stored claim must name the package chip.
-            if rebuilt['architecture'] != chip or packet.get('architecture') != chip:
-                raise ValueError(f'SSD calibration architecture {packet.get("architecture")!r} '
+            if rebuilt['architecture'] != chip or envelope.architecture != chip:
+                raise ValueError(f'SSD calibration architecture {envelope.architecture!r} '
                                  f'does not match the measured package chip {chip!r}')
-            if not rebuilt['eligible_for_promotion']:
-                return SSDAdmission(False,'native calibration refuses promotion: '+', '.join(rebuilt['ineligibility_reasons']),lower)
+            # The stored packet's shared envelope and its rebuild must both allow
+            # promotion; the envelope also requires a clean tree, a valid clock
+            # and the image bound to its sample (EVIDENCE-PACKET-1).
+            if not envelope.eligible_for_promotion or not rebuilt['eligible_for_promotion']:
+                causes = list(envelope.refusal_causes) or rebuilt['ineligibility_reasons']
+                return SSDAdmission(False,'native calibration refuses promotion: '+', '.join(causes),lower)
     return SSDAdmission(True,'exact-artifact paired measurements and native calibration admitted',lower)
 
 
@@ -237,9 +241,9 @@ def _admit_nvidia_device_clock(incumbent, comparison, calibrations, report, lowe
     duration calibrated by its own ``%globaltimer`` marker packet, each packet
     re-derived from its inputs, named to its row's run and to the measured
     image, and on the package's exact architecture."""
+    from .evidence_envelope import EvidenceEnvelopeError, read_evidence_packet
     from .profiler_nvidia_evidence import (
-        NVIDIADeviceClockPacketError, build_nvidia_device_clock_packet,
-        validate_nvidia_device_clock_packet)
+        NVIDIADeviceClockPacketError, build_nvidia_device_clock_packet)
     identity = report['identity']
     chip = identity[1]
     if identity[4] != 'CUDA events' or len(calibrations) != 18:
@@ -270,8 +274,8 @@ def _admit_nvidia_device_clock(incumbent, comparison, calibrations, report, lowe
         for offset,name in enumerate(('serial','cooperative')):
             packet = calibrations[2*index+offset]
             try:
-                validate_nvidia_device_clock_packet(packet)
-            except NVIDIADeviceClockPacketError as exc:
+                envelope = read_evidence_packet(packet, family="nvidia_device_clock")
+            except (NVIDIADeviceClockPacketError, EvidenceEnvelopeError) as exc:
                 raise ValueError(f'stored SSD calibration does not validate: {exc}') from exc
             timing = packet['timing']
             if timing['sample_id'] in seen:
@@ -293,11 +297,15 @@ def _admit_nvidia_device_clock(incumbent, comparison, calibrations, report, lowe
                 raise ValueError('SSD calibration does not describe the measured image and duration')
             rebuilt = build_nvidia_device_clock_packet(timing=timing,uninstrumented=clean,instrumented=probe,
                 source=packet['source'],maximum_instrumentation_overhead=1.05)
-            if rebuilt['architecture'] != chip or packet.get('architecture') != chip:
-                raise ValueError(f'SSD calibration architecture {packet.get("architecture")!r} '
+            if rebuilt['architecture'] != chip or envelope.architecture != chip:
+                raise ValueError(f'SSD calibration architecture {envelope.architecture!r} '
                                  f'does not match the measured package chip {chip!r}')
-            if not rebuilt['eligible_for_promotion']:
-                return SSDAdmission(False,'native calibration refuses promotion: '+', '.join(rebuilt['ineligibility_reasons']),lower)
+            # The stored packet's shared envelope and its rebuild must both allow
+            # promotion; the envelope also requires a clean tree, a valid clock
+            # and the image bound to its sample (EVIDENCE-PACKET-1).
+            if not envelope.eligible_for_promotion or not rebuilt['eligible_for_promotion']:
+                causes = list(envelope.refusal_causes) or rebuilt['ineligibility_reasons']
+                return SSDAdmission(False,'native calibration refuses promotion: '+', '.join(causes),lower)
     return SSDAdmission(True,'exact-artifact paired measurements and %globaltimer device-clock calibration admitted',lower)
 
 

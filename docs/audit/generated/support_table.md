@@ -275,7 +275,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `training.loss_adamw` | optimizer | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `training.loss_sgd` | optimizer | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `alibi` | position_encoding | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `ntk_rope` | position_encoding | public | public | registered | complete | fused | device_verified_abi | ready | none |
+| `ntk_rope` | position_encoding | public | public | registered | complete | partial | reference | ready | none |
 | `qkv_projection` | projection | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `dequantize_fp4` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `dequantize_fp6` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -398,7 +398,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | normalization | 11 | PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFHNB PPGCnnN· PPGCFHNB PPGCFCN· PPGCnnN· PPGCnnN· PPGCFCN· |
 | numeric_helper | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | optimizer | 2 | PPGCFCN· PPGCFCN· |
-| position_encoding | 2 | PPGCFCN· PPGCFHN· |
+| position_encoding | 2 | PPGCFCN· PPGCpRN· |
 | projection | 1 | PPGCFCN· |
 | quantize | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | random_mask | 1 | PPGCFHN· |

@@ -29,6 +29,8 @@ from typing import Any, Callable, Optional, Tuple
 
 import numpy as np
 
+from tessera._route_receipts import public_route
+
 from tessera.ga.multivector import Multivector
 from tessera.ga.ops import grade_projection
 from tessera.ga.signature import TesseraAlgebraError
@@ -189,6 +191,7 @@ def _numerical_grad_mv(
 # Bivector Langevin — state lives in the grade-2 subspace
 # ---------------------------------------------------------------------------
 
+@public_route("ebm:bivector_langevin_step")
 def bivector_langevin_step(
     state: Multivector,
     energy_fn: Callable[[Multivector], Any],
@@ -351,6 +354,7 @@ def _project_to_tangent_plane(v: np.ndarray, x: np.ndarray) -> np.ndarray:
     return v - float(np.dot(v, x)) * x
 
 
+@public_route("ebm:sphere_langevin_step")
 def sphere_langevin_step(
     x: np.ndarray,
     energy_fn: Callable[[np.ndarray], Any],

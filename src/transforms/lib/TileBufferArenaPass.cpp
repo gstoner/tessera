@@ -18,9 +18,11 @@
 // half of the consumer (Decision #19), ahead of any HIP/PTX emission.
 //
 // SMEM (`tile.alloc_shared` → `tile.smem_offset` / `tile.smem_arena_bytes`) and
-// TMEM (`tile.tmem.alloc` → `tile.tmem_offset` / `tile.tmem_arena_bytes`) are laid
-// out in SEPARATE arenas — they are distinct physical spaces (the reuse pass
-// already keeps them in distinct groups).
+// TMEM (`tile.tmem.allocate` → `tile.tmem_offset` / `tile.tmem_arena_bytes`) are
+// laid out in SEPARATE arenas — they are distinct physical spaces (the reuse
+// pass already keeps them in distinct groups). A TMEM allocation is sized by its
+// `bytes` attribute and aligned by its `alignment` attribute, and never shares a
+// group (no TMEM completion proof exists in Tile IR yet; TileMemrefLifetime.h).
 
 #include "Tessera/Transforms/Passes.h"
 #include "TileMemrefLifetime.h"
@@ -54,11 +56,19 @@ static bool isSharedAlloc(Operation *op) {
   return op->getName().getStringRef() == "tile.alloc_shared";
 }
 static bool isTmemAlloc(Operation *op) {
-  return op->getName().getStringRef() == "tile.tmem.alloc";
+  return tessera::memory::isTmemAllocation(op);
 }
 
 static int64_t staticByteSize(Value v) {
   return tessera::memory::staticBytes(v);
+}
+
+// Planned size of one allocation: the TMEM op states it; a memref marker's is
+// its static memref extent (-1 when dynamic).
+static int64_t allocationBytes(Operation *op) {
+  if (auto tmem = dyn_cast<tessera::tile::TMEMAllocOp>(op))
+    return static_cast<int64_t>(tmem.getBytes());
+  return staticByteSize(op->getOperand(0));
 }
 
 // Natural alignment (bytes) of a memref's element — a backend casts
@@ -70,6 +80,14 @@ static int64_t elementAlign(Value v) {
     return 1;
   int64_t bits = mr.getElementType().getIntOrFloatBitWidth();
   return bits > 0 ? (bits + 7) / 8 : 1;
+}
+
+// Required placement alignment: the TMEM op states it (verified power of two);
+// a memref marker needs its element's natural alignment.
+static int64_t allocationAlign(Operation *op) {
+  if (auto tmem = dyn_cast<tessera::tile::TMEMAllocOp>(op))
+    return static_cast<int64_t>(tmem.getAlignment());
+  return elementAlign(op->getOperand(0));
 }
 
 static bool hasDynamicShape(Operation *op) {
@@ -118,8 +136,8 @@ struct TileBufferArena
     SmallVector<int64_t> order;                 // ascending unique group ids
     for (Operation *op : allocs) {
       int64_t g = op->getAttrOfType<IntegerAttr>(kGroupAttr).getInt();
-      int64_t sz = staticByteSize(op->getOperand(0));
-      int64_t al = elementAlign(op->getOperand(0));
+      int64_t sz = allocationBytes(op);
+      int64_t al = allocationAlign(op);
       auto it = groupBytes.find(g);
       if (it == groupBytes.end()) {
         groupBytes[g] = sz;
@@ -189,7 +207,7 @@ struct TileBufferArena
       if (tessera::memory::isMarker(op) && op->hasAttr(kGroupAttr)) planned.push_back(op);
     });
     for (auto [i, op] : llvm::enumerate(planned)) {
-      auto type = dyn_cast<MemRefType>(op->getOperand(0).getType());
+      auto type = dyn_cast<MemRefType>(tessera::memory::allocatedValue(op).getType());
       if (isSharedAlloc(op) && type) {
         bool unsafeAlias = !type.getLayout().isIdentity();
         bool permutedSlots = (lifetimes.permuted(op).has_value() || lifetimes.pendingSwap(op).has_value());

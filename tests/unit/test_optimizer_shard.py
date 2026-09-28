@@ -85,3 +85,40 @@ class TestZeROConfigPartitioning:
                          partition_parameters=True)
         assert cfg.partition_parameters is True
         assert cfg.stage == 3
+
+
+class TestZeROConfigReachesOptimizerShardPass:
+    """TILE-LATENT-DEFECTS-2026-09-27: producer and consumer share one contract.
+
+    ``to_ir_attr()`` emits ``tessera_sr.zero_config``; ``OptimizerShardPass``
+    used to read ``tessera.num_dp_ranks`` / ``tessera.dp_axis`` instead, so the
+    configured values never arrived. The lit fixture
+    ``tests/tessera-ir/phase5/optimizer_shard_zero_config.mlir`` runs the pass
+    over this exact attribute text and checks that stage 2 / axis ``data`` /
+    8 ranks come out; this test keeps the fixture's text byte-equal to what
+    Python emits, so the two cannot drift apart.
+    """
+
+    FIXTURE = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "tessera-ir" / "phase5" / "optimizer_shard_zero_config.mlir"
+    )
+
+    def test_fixture_carries_the_python_emitted_attribute(self):
+        attr = ZeROConfig(stage=2, dp_axis="data", num_dp_ranks=8).to_ir_attr()
+        assert attr == (
+            '{tessera_sr.zero_config = {stage = 2, dp_axis = "data", '
+            'num_ranks = 8}}'
+        )
+        assert f"module attributes {attr} {{" in self.FIXTURE.read_text()
+
+    def test_pass_reads_the_emitted_key_not_the_stale_spelling(self):
+        pass_src = (
+            __import__("pathlib").Path(__file__).resolve().parents[2]
+            / "src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp"
+        ).read_text()
+        assert '"tessera_sr.zero_config"' in pass_src
+        for key in ('"stage"', '"dp_axis"', '"num_ranks"'):
+            assert key in pass_src, key
+        assert '"tessera.num_dp_ranks"' not in pass_src
+        assert '"tessera.dp_axis"' not in pass_src

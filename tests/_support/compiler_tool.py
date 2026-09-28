@@ -52,6 +52,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: product and for the tests.
 _ENV_SELECTORS = ("TESSERA_OPT", "TESSERA_OPT_BIN")
 
+#: Every environment variable `tessera_opt_candidates` consults. A test that
+#: pins the candidate set (monkeypatching `_DEFAULT_CANDIDATES`) must clear all
+#: of these, not just `_ENV_SELECTORS`: `TESSERA_BUILD_DIR` short-circuits the
+#: default search too, and a host that exports it for its sweeps (Tajasarus)
+#: turned two resolver ratchets red while a clean shell passed
+#: (SMALL-CORRECTNESS-GAPS-2026-09-27). Ratcheted against the function body in
+#: `tests/unit/test_test_suite_architecture.py`.
+DRIVER_SELECTION_ENVIRONMENT = (*_ENV_SELECTORS, "TESSERA_BUILD_DIR")
+
 #: Search order for the driver when nothing is exported. A selector wins so a
 #: developer with several build directories can choose one without editing tests.
 _DEFAULT_CANDIDATES = (

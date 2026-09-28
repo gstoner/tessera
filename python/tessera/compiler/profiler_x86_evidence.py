@@ -242,6 +242,14 @@ def _derive_reasons(
     route split. The validator calls this on the stored inputs, so a packet
     cannot drop or add a reason by editing its lists."""
     reasons: list[str] = []
+    # Each environment fact is a bool, never truthiness (EVIDENCE-PACKET-1,
+    # 2026-09-27): an environment that omitted `wsl`, `virtualized` or
+    # `worktree_dirty` used to derive none of the three reasons they decide.
+    for fact in ("virtualized", "wsl", "worktree_dirty"):
+        if type(environment.get(fact)) is not bool:
+            raise X86ProfilerPacketError(
+                f"x86 packet environment must state {fact!r} as a bool; "
+                f"got {environment.get(fact)!r}")
     if not exact_zen5_cpu(cpu):
         reasons.append("CPU_NOT_EXACT_ZEN5")
     if environment.get("virtualized"):

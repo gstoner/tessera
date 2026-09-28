@@ -146,6 +146,8 @@ def test_rocm_route_warm_starts_from_committed_gfx1151_corpus(
     from tessera.cache.paged_kv import _rocm_paged_attention_corpus_winner
     from tessera.compiler.emit import autotune as at
 
+    from tessera.compiler.emit import rocm_hip
+
     monkeypatch.delenv("TESSERA_AUTOTUNE_CORPUS", raising=False)
     payload = json.loads(at.corpus_path().read_text())
     row, = [r for r in payload["records"]
@@ -155,10 +157,33 @@ def test_rocm_route_warm_starts_from_committed_gfx1151_corpus(
     assert row["evidence"]["toolchain_digest"] == \
         at.toolchain_evidence("rocm")["toolchain_digest"]
     assert row["winner"] in {"gather_fa", "direct"}
+    # AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27: the row stamps both routes' code
+    # identities, and the lookup serves it only while the live routes carry
+    # the same ones. The live identities need a gfx1151 device (the FA-2
+    # image); here they are stood in by the stamped values, then perturbed.
+    stamped = row["evidence"]["delegate_identities"]
+    assert set(stamped) == {"direct", "gather_fa"}
+    assert stamped["gather_fa"]["parts"] == "gather,attention"
+    live = dict(stamped)
+    monkeypatch.setattr(rocm_hip, "rocm_paged_attention_route_identities",
+                        lambda **kw: {name: at.RouteIdentity(name, lambda name=name: live[name])
+                                      for name in ("direct", "gather_fa")})
     assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) == row["winner"]
+    live["gather_fa"] = {**stamped["gather_fa"], "attention.digest": "changed"}
+    assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) is None
+    live["gather_fa"] = stamped["gather_fa"]
 
     for r in payload["records"]:
         if r["device"] == "rocm:gfx1151" and r["op"] == "paged_kv_decode":
+            r["evidence"].pop("delegate_identities", None)
+    unstamped = tmp_path / "unstamped.json"
+    unstamped.write_text(json.dumps(payload))
+    monkeypatch.setenv("TESSERA_AUTOTUNE_CORPUS", str(unstamped))
+    assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) is None
+
+    for r in payload["records"]:
+        if r["device"] == "rocm:gfx1151" and r["op"] == "paged_kv_decode":
+            r["evidence"]["delegate_identities"] = stamped
             r["evidence"].pop("toolchain_digest", None)
     stripped = tmp_path / "corpus.json"
     stripped.write_text(json.dumps(payload))

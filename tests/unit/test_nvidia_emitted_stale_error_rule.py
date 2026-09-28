@@ -15,9 +15,19 @@ launch reports any older unread error as its own failure. The rule:
 * the arbiter-raced lanes check each launch group through the slot, after the
   launch, so a launch that never ran cannot be timed or served as a kernel.
 
-Every ``_synthesize_*`` emitter must be listed in the shared table, so a new
-one cannot skip the gate. Host-independent (renders source text only); the
-sm_120 behaviour is proven by ``tests/device/nvidia/test_emitted_stale_cuda_error.py``.
+Extended by ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`` (``NVIDIA-EMITTED-UNCHECKED-LAUNCH``):
+the rule now covers every emitted source, not only the raced lanes. A launch
+judged by ``cudaDeviceSynchronize`` alone ("sync-only") is no longer an
+accepted class, because on sm_120 the sync returns success over a launch that
+never ran. Every runtime launch is read through the slot (a timer's warm-up
+group before its timing boundary), and every allocation / copy / memset /
+event / driver-launch status is consumed rather than discarded.
+
+Every ``_synthesize_*`` emitter must be listed in the shared table, and no
+CUDA kernel source may live outside an emitter, so nothing can skip the gate.
+Host-independent (renders source text only); the sm_120 behaviour is proven by
+``tests/device/nvidia/test_emitted_stale_cuda_error.py`` and
+``tests/device/nvidia/test_emitted_unchecked_launch.py``.
 """
 from __future__ import annotations
 
@@ -54,13 +64,45 @@ def test_every_emitter_is_in_the_table():
     assert listed - defined == set(), f"stale table entries: {sorted(listed - defined)}"
 
 
-@pytest.mark.parametrize("function", S.INLINE_SOURCE_FUNCTIONS)
-def test_inline_sources_never_read_the_slot(function):
-    text = S.inline_source_text(function)
-    assert 'extern "C"' in text, f"{function} no longer holds an inline source"
-    assert "cudaGetLastError" not in text and "cudaPeekAtLastError" not in text, (
-        f"{function}'s inline CUDA reads the last-error slot: move it to an "
-        "emitter the gate renders, and clear on entry")
+def test_no_cuda_source_lives_outside_an_emitter():
+    """A kernel source built inline in a run function is invisible to every
+    rule below. The two that existed (`run_relu_bias_f32`,
+    `run_fused_epilogue_f32`) were sync-only; they now come from emitters."""
+    assert S.INLINE_SOURCE_FUNCTIONS == ()
+    offenders = S.functions_holding_kernel_source()
+    assert offenders == [], (
+        f"CUDA kernel source outside a `_synthesize_*` emitter: {offenders}; "
+        "move it to an emitter and list it in tests/_support/nvidia_emitted_sources.py")
+
+
+def test_no_entry_is_sync_only():
+    """Every entry that makes a call is slot-checked or status-checked; none
+    judges its launch by `cudaDeviceSynchronize` alone."""
+    rows = S.classify()
+    bad = [f"{r['label']}:{r['entry']}" for r in rows if r["kind"] == "sync-only"]
+    assert not bad, "sync-only entries (launch judged by the sync alone):\n" + "\n".join(bad)
+    assert {r["kind"] for r in rows} <= {"metadata", "slot-checked", "status-checked"}
+
+
+def test_every_runtime_launch_is_checked_through_the_slot():
+    bad = []
+    for emitter, label, source in _sources():
+        for fn in S.host_functions(source):
+            for problem in S.launch_check_violations(fn):
+                bad.append(f"{label}:{fn.name}: {problem}")
+    assert not bad, "\n".join(bad)
+
+
+def test_every_status_is_consumed():
+    """Allocation, copy, memset, event and driver-launch statuses are checked,
+    never discarded as a bare statement (a failed H2D copy leaves the kernel
+    reading garbage and the entry reporting success)."""
+    bad = []
+    for emitter, label, source in _sources():
+        for fn in S.host_functions(source):
+            for call in S.unchecked_status_calls(fn):
+                bad.append(f"{label}:{fn.name}: {call} status discarded")
+    assert not bad, "\n".join(bad)
 
 
 def test_every_entry_in_a_slot_reading_source_clears_first_exactly_once():
@@ -151,3 +193,43 @@ def test_the_parser_sees_what_it_is_asked_about():
     assert not entries["b"].first_statement_is_clear() and entries["b"].clears() == 1
     assert not entries["c"].makes_calls()
     assert entries["a"].reads() == 1 and entries["b"].reads() == 1
+
+
+def test_launch_and_status_parsers_see_what_they_are_asked_about():
+    """Guard the launch/status half of the gate the same way: each defect it
+    exists to catch must be reported, and the fixed form must pass."""
+    src = (
+        '#include <cuda_runtime.h>\n'
+        '__global__ void k(int*p){if(p)*p=1;}\n'
+        '// a { brace and cudaMemcpy( in a comment are not code\n'
+        'static int helper(int*p){k<<<1,1>>>(p);return cudaGetLastError()?3:1;}\n'
+        'extern "C" int sync_only(int*h){int*p=0;if(cudaMalloc(&p,4))return 2;'
+        'cudaMemcpy(p,h,4,cudaMemcpyHostToDevice);k<<<1,1>>>(p);'
+        'return cudaDeviceSynchronize()==cudaSuccess?1:3;}\n'
+        'extern "C" int fixed(int*h){(void)cudaGetLastError();int*p=0;'
+        'if(cudaMalloc(&p,4)||cudaMemcpy(p,h,4,cudaMemcpyHostToDevice))return 2;'
+        'k<<<1,1>>>(p);return cudaGetLastError()==cudaSuccess&&'
+        'cudaDeviceSynchronize()==cudaSuccess?1:3;}\n'
+        'extern "C" int timer(int*p,float*ms){(void)cudaGetLastError();cudaEvent_t a,b;'
+        'k<<<1,1>>>(p);if(cudaEventCreate(&a)||cudaEventCreate(&b)||cudaEventRecord(a))return 3;'
+        'k<<<1,1>>>(p);if(cudaEventRecord(b)||cudaEventSynchronize(b)||cudaGetLastError()||'
+        'cudaEventElapsedTime(ms,a,b))return 3;return 1;}\n'
+        'extern "C" void dl(int*p){cudaDeviceSynchronize();cudaFree(p);}\n')
+    fns = {f.name: f for f in S.host_functions(src)}
+    assert set(fns) == {"helper", "sync_only", "fixed", "timer", "dl"}, set(fns)
+    assert not fns["helper"].exported and fns["fixed"].exported
+    assert S.launch_check_violations(fns["helper"]) == []
+    assert S.launch_check_violations(fns["sync_only"]) == [
+        "its last launch is never read through the slot"]
+    assert S.unchecked_status_calls(fns["sync_only"]) == ["cudaMemcpy"]
+    assert S.launch_check_violations(fns["fixed"]) == []
+    assert S.unchecked_status_calls(fns["fixed"]) == []
+    # The timer's warm-up launch reaches `cudaEventRecord(a)` unread.
+    assert S.launch_check_violations(fns["timer"]) == [
+        "a launch group reaches a timing boundary unread"]
+    assert fns["dl"].returns_void and S.unchecked_status_calls(fns["dl"]) == []
+    reset = S.HostFunction(name="r", signature='extern "C" int r()', body=(
+        "k<<<1,1>>>(0);cudaFuncSetAttribute(k,cudaFuncAttributeMaxDynamicSharedMemorySize,0);"
+        "return cudaGetLastError()?3:1;"))
+    assert S.launch_check_violations(reset) == [
+        "cudaFuncSetAttribute sits between a launch and its read"]

@@ -1,0 +1,24 @@
+{
+  "schema": "tessera.nvidia.resources.v1",
+  "source": "nvidia_mma_gated_fp8_e4m3.ncu-repz",
+  "source_sha256": "f575380f6cfc454472b528bfc02f49e930d77e9b4d7867565733a2a256bce1fc",
+  "rows": [
+    {
+      "kernel": "tessera_nvidia_mma_gated_kernel",
+      "launches": 1,
+      "cc": "12.0",
+      "block_size": "(32, 1, 1)",
+      "grid_size": "(8, 64, 1)",
+      "registers_per_thread": 48,
+      "static_shared_memory_bytes": 0,
+      "dynamic_shared_memory_bytes": 0,
+      "theoretical_occupancy_pct": 50,
+      "achieved_occupancy_pct": 23.28,
+      "local_spill_requests": 0,
+      "shared_spill_requests": 0,
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:f42c283868ba8d624bb6b0da1fc1b4af959f91ea230eef747d074d88813c84f4"
+    }
+  ]
+}

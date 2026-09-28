@@ -76,6 +76,23 @@ if(TESSERA_ENABLE_CUDA)
   if(COMMAND tessera_runtime_library_optimization)
     tessera_runtime_library_optimization(tessera_nvidia_gemm)  # RUNTIME-LIB-OPT-1
   endif()
+  # Byte-reproducible across configurations (AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27).
+  # The autotune arbiter identifies this library by its content digest
+  # (Decision #11), so two builds of the same source must be the same bytes.
+  # They were not: linking the imported CUDA::nvrtc target made CMake write the
+  # directory it DISCOVERED the toolkit through into DT_RUNPATH, and that
+  # string depends on how the configure found CUDA, not on the code
+  # (`/usr/local/cuda/lib64` with CUDAToolkit_ROOT=/usr/local/cuda,
+  # `/usr/local/cuda-13.4/targets/x86_64-linux/lib` from nvcc's realpath,
+  # `/usr/local/cuda-13.4/lib64` from the release gate). Measured on sm_120:
+  # .text/.rodata/.data identical, only .dynstr/.dynamic/build-id differed.
+  # Every loader preloads the driver and NVRTC RTLD_GLOBAL before dlopen'ing
+  # this library (`runtime._load_nvidia_gemm_runtime`,
+  # tests/device/nvidia/test_mma_runtime_symbol.py), and scripts/_nvidia_env.sh
+  # puts the toolkit's lib64 on LD_LIBRARY_PATH, so no search path is embedded.
+  set_target_properties(tessera_nvidia_gemm PROPERTIES
+    SKIP_BUILD_RPATH TRUE
+    INSTALL_RPATH "")
   add_dependencies(tessera_nvidia_gemm tessera_nvidia_sm120_f16_aot_artifact)
   target_include_directories(tessera_nvidia_gemm PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
   add_custom_command(TARGET tessera_nvidia_gemm POST_BUILD

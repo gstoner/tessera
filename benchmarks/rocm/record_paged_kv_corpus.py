@@ -42,6 +42,7 @@ def main() -> int:
     )
     from tessera.compiler.emit import autotune as at
     from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
+    from tessera.compiler.emit.rocm_hip import rocm_paged_attention_route_identities
 
     chip = str(rt._rocm_chip())
     if chip != "gfx1151" or not rt._rocm_compiled_flash_attn_available():
@@ -80,6 +81,12 @@ def main() -> int:
                     f"native ROCm route measurement failed at T={tokens}")
             samples.append(next(iter(_rocm_paged_attention_route_evidence.values())))
         evidence = samples[-1]
+        # Decision #11 (sync AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27): stamp the
+        # identity of both routes, taken after the runs from the code this
+        # process ran; the warm start refuses a row whose live identities differ.
+        routes = rocm_paged_attention_route_identities(
+            q_heads=args.heads, kv_heads=args.kv_heads, head_dim=args.dim,
+            causal=True)
         bucket = bucket_key(
             (1, args.heads, args.kv_heads, tokens, args.dim, args.page_size),
             SpecPolicy.BUCKET)
@@ -99,6 +106,8 @@ def main() -> int:
             cache.put(("rocm:gfx1151", "rocm", "paged_kv_decode", bucket,
                        "f32", timing), at.MeasureRecord(
                            winner, candidates[winner], candidates,
+                           evidence={"delegate_identities": at.route_identities(
+                               {name: routes[name] for name in candidates})},
                            unmeasured={},
                            separation=at.separation_verdict(
                                candidates, spreads, winner)), fresh=True)

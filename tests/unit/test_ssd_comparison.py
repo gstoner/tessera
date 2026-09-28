@@ -87,7 +87,17 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
             for image in (clean,probe):
                 image.update(calibration_sample_id=timing['sample_id'],semantic_sha256=hashlib.sha256(logical.schedule_ir.encode()).hexdigest(),duration_ns=pair[name]['rows'][0]['device_event_ms'][0]*1e6)
             clean['image_sha256'] = pair[name]['rows'][0]['image_sha256']
+            # The timing sample names the image it calibrates: the shared
+            # envelope refuses an eligible packet whose sample does not, on
+            # every route (EVIDENCE-PACKET-1; the family checked it only on
+            # the device-clock route).
+            timing['artifact_digests'] = {'application_image': clean['image_sha256']}
             calibrations.append(build_rocm_profiler_packet(timing=timing,capture=_capture(),uninstrumented=clean,instrumented=probe,source=dict(source_commit='a'*40,worktree_dirty=False)))
+    unbound = copy.deepcopy(calibrations)
+    unbound[0]['timing']['artifact_digests'] = {'application_image': 'd'*64}
+    _reseal_rocm(unbound[0])
+    with pytest.raises(ValueError, match='not named by its timing sample'):
+        bind_measured_ssd(incumbent,candidate,comparison,unbound)
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations)
     assert bound == 'cooperative' and decision.admitted
     # Even a fast, fully calibrated candidate must pass the numerical gate.

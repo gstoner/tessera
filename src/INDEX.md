@@ -111,11 +111,10 @@ compiler/
 │   ├── tests/pm_v1_1
 │   └── tools/tessera-opt
 │
-├── tessera_neighbors/         ← Halo/neighbor exchange dialect
+├── tessera_neighbors/         ← Halo/neighbor exchange passes (ops live in core TesseraOps.td)
 │   ├── docs
-│   ├── include/tessera/Dialect/Neighbors/ (IR, Transforms)
-│   ├── lib/Dialect/Neighbors/ (IR, Transforms)
-│   └── test/Neighbors
+│   ├── include/tessera/Dialect/Neighbors/Transforms
+│   └── lib/Dialect/Neighbors/Transforms
 │
 └── tile_opt_fa4/              ← FA-4 Tile IR (warp spec, TMA, attention)
     ├── cmake

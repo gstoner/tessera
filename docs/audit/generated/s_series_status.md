@@ -17,7 +17,7 @@
 | `batching_rule` | 0 | 520 |
 | `transpose_rule` | 0 | 520 |
 | `sharding_rule` | 59 | 461 |
-| `lowering_rule` | 0 | 520 |
+| `lowering_rule` | 3 | 517 |
 | `backend_kernel` | 420 | 100 |
 
 ## Backend Proof By Target
@@ -45,7 +45,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
 | S5 | `control_flow` | 7 | — | — | — | — | — |
-| S7 | `attention` | 30 | — | — | 16 | — | 30 |
+| S7 | `attention` | 30 | — | — | 16 | 1 | 30 |
 | S7 | `position_encoding` | 3 | — | — | — | — | 3 |
 | S7 | `normalization` | 12 | — | — | — | — | 12 |
 | S7 | `memory` | 3 | — | — | — | — | 1 |
@@ -96,7 +96,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `sort` | 3 | — | — | — | — | 3 |
 | other | `sparse` | 4 | — | — | 1 | — | 4 |
 | other | `spectral` | 14 | — | — | 14 | — | 14 |
-| other | `stable_reduction` | 11 | — | — | — | — | 11 |
+| other | `stable_reduction` | 11 | — | — | — | 2 | 11 |
 | other | `state_space` | 1 | — | — | 1 | — | 1 |
 | other | `state_tree` | 10 | — | — | — | — | — |
 | other | `state_update` | 6 | — | — | 2 | — | 6 |

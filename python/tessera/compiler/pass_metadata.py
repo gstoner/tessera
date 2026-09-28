@@ -724,8 +724,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         # occupancy rule asked for split-K and no aligned split existed.
         # ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED is a warning
         # (ROCM-FP8-BLOCKSCALE-1): no measured CU count for the W8A8 LDS rule.
+        # SPECTRAL_JVP_SCHEDULE_REFUSED (ODS-WIRE-2): the tessera.istft_jvp arm
+        # refuses a forward product it cannot bind to an exact profile.
         diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", "ROCM_SPLIT_K_NOT_APPLIED",
-                          "ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED"),
+                          "ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED",
+                          "SPECTRAL_JVP_SCHEDULE_REFUSED"),
     ),
     PassMetadata(
         name="tessera-ir-contracts",

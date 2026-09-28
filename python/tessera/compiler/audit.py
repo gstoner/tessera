@@ -259,8 +259,10 @@ _SINGLE_GPU_TILE_TARGET_TERMINAL: dict[str, str] = {
         "single-GPU terminal contract until a backend-specific dynamic-shape "
         "kernel lands"
     ),
-    "cache_commit": "state cursor mutation; no tensor Tile/Target kernel",
-    "cache_rollback": "state cursor mutation; no tensor Tile/Target kernel",
+    # ODS-WIRE-3: no tensor Tile kernel; TileToX86Pass lowers the Graph op
+    # straight to the x86 KV-cache handle ABI (kv_cache_f32.cpp).
+    "cache_commit": "state cursor mutation; no tensor Tile kernel (x86: handle ABI call)",
+    "cache_rollback": "state cursor mutation; no tensor Tile kernel (x86: handle ABI call)",
     "kv_cache_append": "cache handle mutation; runtime state lane, not Tile IR",
     "kv_cache_prune": "cache handle mutation; runtime state lane, not Tile IR",
     "arange": "constant/index generation; no tensor Tile/Target kernel",

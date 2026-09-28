@@ -9,6 +9,8 @@ authority for the paired JVP IR bound by the parent artifact.
 
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, Sequence
 
@@ -418,6 +420,7 @@ def _plan_normalization(*, source: Any, primal_inputs: Sequence[Any],
 def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
                             wrt_indices: tuple[int, ...], target: str,
                             execution_mode: str, architecture: str = "gfx1151",
+                            ir_contract: Mapping[str, Any] | None = None,
                             **_: Any) -> NativeJVPFamilyPlan:
     from .scheduled_spectral import lower_scheduled_spectral
 
@@ -443,29 +446,40 @@ def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
         }.get(str(real_operand.dtype))
     if storage is None:
         raise ValueError(f"native {bare} JVP has unsupported real storage {real_operand.dtype}")
-    scheduled = lower_scheduled_spectral(
-        # The exact chip's composite profile (gfx1151 or gfx1201).
-        target=(target if target == "nvidia_sm120" else
-                "x86" if target == "x86" else f"rocm_{architecture}"),
-        op_name=source.op_name,
-        input_shapes=tuple(tuple(int(dim) for dim in value.shape) for value in primal_inputs),
-        axis=int(source.kwargs.get("axis", -1)),
-        hop=source.kwargs.get("hop", source.kwargs.get("hop_length")),
-        normalization=str(source.kwargs.get(
-            "normalization", source.kwargs.get("norm", "backward")
-        )),
-        storage=storage,
-        center=bool(source.kwargs.get("center", False)),
-        pad_mode=str(source.kwargs.get("pad_mode", "constant")),
-        output_length=source.kwargs.get(
-            "length", source.kwargs.get("output_length")
-        ),
-        n_fft=(
-            source.kwargs.get("n_fft", source.kwargs.get("logical_length"))
-            if bare in {"stft", "istft"} else None
-        ),
-        onesided=bool(source.kwargs.get("onesided", True)),
+    oracle_arguments = _source_kwargs_spectral_arguments(
+        source=source, primal_inputs=primal_inputs, storage=storage,
+        target=target, architecture=architecture,
     )
+    if bare == "istft":
+        # ODS-WIRE-2: the ISTFT product's contract comes from the compiler's
+        # paired JVP IR (the GraphToSchedule consumer of tessera.istft_jvp),
+        # not from the source op's kwargs. The kwargs derivation is kept as a
+        # declared #31 oracle and must lower to the identical scheduled
+        # spectral program; a package whose derivations disagree is refused.
+        if ir_contract is None:
+            raise ValueError(
+                "native ISTFT JVP requires the scheduled tessera.istft_jvp "
+                "contract from the compiler's paired JVP IR"
+            )
+        scheduled = lower_scheduled_spectral(**istft_jvp_spectral_arguments(
+            ir_contract, primal_inputs=primal_inputs, wrt_indices=wrt_indices,
+            target=target, architecture=architecture,
+        ))
+        try:
+            oracle = lower_scheduled_spectral(**oracle_arguments)
+        except ValueError as exc:
+            raise ValueError(
+                "native ISTFT JVP: the declared source-kwargs oracle refused a "
+                f"product the compiler scheduled ({exc}); refusing the package"
+            ) from exc
+        if oracle.to_metadata() != scheduled.to_metadata():
+            raise ValueError(
+                "native ISTFT JVP: the compiler's scheduled istft_jvp contract "
+                "and the declared source-kwargs oracle lower to different "
+                "spectral programs; refusing the package"
+            )
+    else:
+        scheduled = lower_scheduled_spectral(**oracle_arguments)
     operands = ["primal_0", "primal_1"]
     names = operands + [f"tangent_{index}" for index in wrt_indices]
     compiler_prefix = "nvidia" if target == "nvidia_sm120" else target
@@ -483,9 +497,204 @@ def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
     ))
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ODS-WIRE-2: the ISTFT product contract comes from compiler IR
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SPECTRAL_JVP_SCHEMA = "tessera.spectral_jvp.v1"
+_JVP_CONTRACT_RE = re.compile(
+    r'schedule\.jvp_contract = "(?P<contract>[^"]*)"'
+)
+_JVP_HASH_RE = re.compile(r'schedule\.artifact_hash = "(?P<hash>[0-9a-f]{64})"')
+_STORAGE_FROM_POLICY = {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}
+_STORAGE_FROM_DTYPE = {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}
+
+
+def _module_profile(target: str, architecture: str) -> tuple[str, str]:
+    """The exact (tessera.target, tessera.arch) the Schedule consumer admits."""
+    if target == "x86" and architecture == "zen5_avx512":
+        return "x86", "zen5-avx512"
+    if target == "rocm" and architecture in {"gfx1151", "gfx1201"}:
+        return "rocm", architecture
+    if target == "nvidia_sm120" and architecture == "sm120":
+        return "nvidia_sm120", "sm120"
+    raise ValueError(
+        f"native ISTFT JVP has no exact Schedule profile for {target}/{architecture}"
+    )
+
+
+def istft_jvp_contract_from_paired_ir(
+    paired_jvp_ir: str, *, target: str, architecture: str
+) -> dict[str, Any]:
+    """Schedule the compiler's paired JVP IR and read its ISTFT contract.
+
+    Runs ``--tessera-graph-to-schedule`` -- whose ``tessera.istft_jvp`` arm is
+    the production authority for the product's semantic contract -- over the
+    paired IR that ``--tessera-autodiff-forward`` emitted, under the exact
+    target profile. Returns the parsed contract. Nothing here re-derives a
+    value: the only checks are that the contract hash is the SHA-256 of the
+    contract text and that exactly one matching ``schedule.artifact`` exists.
+    """
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+
+    module_target, module_arch = _module_profile(target, architecture)
+    header = re.search(r"^module( attributes \{)?", paired_jvp_ir, re.MULTILINE)
+    if header is None:
+        raise ValueError("native ISTFT JVP paired IR has no module")
+    line_end = paired_jvp_ir.find("\n", header.start())
+    header_line = paired_jvp_ir[header.start(): line_end if line_end >= 0 else None]
+    if "tessera.target =" in header_line or "tessera.arch =" in header_line:
+        raise ValueError("native ISTFT JVP paired IR already names a target profile")
+    profile = f'tessera.target = "{module_target}", tessera.arch = "{module_arch}"'
+    if header.group(1):
+        scheduled_input = (
+            paired_jvp_ir[: header.end()] + profile + ", " + paired_jvp_ir[header.end():]
+        )
+    else:
+        scheduled_input = (
+            paired_jvp_ir[: header.end()] + f" attributes {{{profile}}}"
+            + paired_jvp_ir[header.end():]
+        )
+    tool = find_tessera_opt()
+    if tool is None:
+        raise ValueError("native ISTFT JVP requires the production tessera-opt")
+    try:
+        scheduled = run_tessera_opt(
+            tool, scheduled_input, "--tessera-graph-to-schedule"
+        )
+    except RuntimeError as exc:
+        raise ValueError(str(exc)) from exc
+    products = [line for line in scheduled.splitlines() if "tessera.istft_jvp " in line]
+    if len(products) != 1:
+        raise ValueError(
+            f"native ISTFT JVP expects one scheduled tessera.istft_jvp; found {len(products)}"
+        )
+    contract_match = _JVP_CONTRACT_RE.search(products[0])
+    hash_match = _JVP_HASH_RE.search(products[0])
+    if contract_match is None or hash_match is None:
+        raise ValueError("scheduled tessera.istft_jvp carries no hashed contract")
+    contract_text = contract_match.group("contract")
+    digest = hash_match.group("hash")
+    if hashlib.sha256(contract_text.encode()).hexdigest() != digest:
+        raise ValueError("scheduled tessera.istft_jvp contract does not match its hash")
+    artifacts = [
+        line for line in scheduled.splitlines()
+        if line.lstrip().startswith(("schedule.artifact {", '"schedule.artifact"('))
+        and f'hash = "{digest}"' in line
+    ]
+    if len(artifacts) != 1 or "family=spectral_jvp;kind=tessera.istft" not in artifacts[0]:
+        raise ValueError(
+            "scheduled tessera.istft_jvp requires exactly one matching schedule.artifact"
+        )
+    fields: dict[str, Any] = {}
+    for item in contract_text.split(";"):
+        key, separator, value = item.partition("=")
+        if not separator or key in fields:
+            raise ValueError(f"malformed spectral JVP contract field {item!r}")
+        fields[key] = value
+    if fields.get("schema") != _SPECTRAL_JVP_SCHEMA or fields.get("kind") != "tessera.istft":
+        raise ValueError("scheduled tessera.istft_jvp contract schema mismatch")
+    if (fields.get("target"), fields.get("arch")) != (module_target, module_arch):
+        raise ValueError("scheduled tessera.istft_jvp contract names another profile")
+    return {**fields, "artifact_hash": digest}
+
+
+def _tensor_shape(type_text: str) -> tuple[int, ...]:
+    match = re.fullmatch(r"tensor<((?:\d+x)*)(.+)>", type_text)
+    if match is None:
+        raise ValueError(f"spectral JVP contract has a non-static type {type_text!r}")
+    return tuple(int(dim) for dim in match.group(1).split("x") if dim)
+
+
+def istft_jvp_spectral_arguments(
+    contract: Mapping[str, Any], *, primal_inputs: Sequence[Any],
+    wrt_indices: tuple[int, ...], target: str, architecture: str,
+) -> dict[str, Any]:
+    """``lower_scheduled_spectral`` arguments from the compiler's contract.
+
+    The contract is checked against the launch it will serve -- the primal
+    shapes and dtypes and the requested tangent set -- and refused on any
+    disagreement; it is never patched from the launch.
+    """
+    spectrum, window = primal_inputs
+    if (_tensor_shape(str(contract["spectrum"])) != tuple(spectrum.shape)
+            or _tensor_shape(str(contract["window"])) != tuple(window.shape)):
+        raise ValueError("scheduled ISTFT JVP contract shapes disagree with the launch")
+    storage = _STORAGE_FROM_POLICY.get(str(contract["numeric_storage"]))
+    if storage is None or storage != _STORAGE_FROM_DTYPE.get(str(window.dtype)):
+        raise ValueError("scheduled ISTFT JVP contract storage disagrees with the window")
+    if str(contract["numeric_accum"]) != "fp32":
+        raise ValueError("scheduled ISTFT JVP contract requires fp32 accumulation")
+    active = tuple(int(index) for index in str(contract["active_tangents"]).split(","))
+    if active != tuple(sorted(wrt_indices)):
+        raise ValueError(
+            f"scheduled ISTFT JVP activity {active} disagrees with wrt {wrt_indices}"
+        )
+    if str(contract["pad_mode"]) != "constant":
+        raise ValueError("scheduled ISTFT JVP contract names a non-constant pad mode")
+    return {
+        "target": (target if target == "nvidia_sm120" else
+                   "x86" if target == "x86" else f"rocm_{architecture}"),
+        "op_name": "tessera.istft",
+        "input_shapes": (tuple(spectrum.shape), tuple(window.shape)),
+        "axis": int(contract["axis"]),
+        "hop": int(contract["hop"]),
+        "normalization": str(contract["normalization"]),
+        "storage": storage,
+        "center": str(contract["center"]) == "1",
+        "pad_mode": "constant",
+        "output_length": int(contract["output_length"]),
+        "n_fft": int(contract["logical_length"]),
+        "onesided": str(contract["onesided"]) == "1",
+    }
+
+
+def _source_kwargs_spectral_arguments(
+    *, source: Any, primal_inputs: Sequence[Any], storage: str, target: str,
+    architecture: str,
+) -> dict[str, Any]:
+    """Derive ``lower_scheduled_spectral`` arguments from the source op's kwargs.
+
+    For ``spectral_filter``/``spectral_conv``/``stft`` this is still the
+    production derivation. For ``istft`` it is a **declared Decision #31
+    oracle** since ODS-WIRE-2: the production contract is the compiler's
+    scheduled ``tessera.istft_jvp`` (:func:`istft_jvp_contract_from_paired_ir`),
+    every package re-derives this and refuses a disagreement, and
+    ``tests/unit/test_istft_jvp_ir_contract.py`` is its differential test.
+    Retire it only after that test has covered the configurations it covers.
+    """
+    bare = source.op_name.removeprefix("tessera.")
+    return {
+        # The exact chip's composite profile (gfx1151 or gfx1201).
+        "target": (target if target == "nvidia_sm120" else
+                   "x86" if target == "x86" else f"rocm_{architecture}"),
+        "op_name": source.op_name,
+        "input_shapes": tuple(
+            tuple(int(dim) for dim in value.shape) for value in primal_inputs
+        ),
+        "axis": int(source.kwargs.get("axis", -1)),
+        "hop": source.kwargs.get("hop", source.kwargs.get("hop_length")),
+        "normalization": str(source.kwargs.get(
+            "normalization", source.kwargs.get("norm", "backward")
+        )),
+        "storage": storage,
+        "center": bool(source.kwargs.get("center", False)),
+        "pad_mode": str(source.kwargs.get("pad_mode", "constant")),
+        "output_length": source.kwargs.get(
+            "length", source.kwargs.get("output_length")
+        ),
+        "n_fft": (
+            source.kwargs.get("n_fft", source.kwargs.get("logical_length"))
+            if bare in {"stft", "istft"} else None
+        ),
+        "onesided": bool(source.kwargs.get("onesided", True)),
+    }
+
+
 def plan_native_jvp_family(
     *, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[int, ...],
     target: str, architecture: str, execution_mode: str,
+    ir_contract: Mapping[str, Any] | None = None,
 ) -> NativeJVPFamilyPlan:
     """Dispatch to the sole registered owner for ``source`` or fail closed.
 
@@ -511,6 +720,7 @@ def plan_native_jvp_family(
         target=target,
         execution_mode=execution_mode,
         architecture=architecture,
+        ir_contract=ir_contract,
     )
     if plan.family != declaration.family:
         raise ValueError(
@@ -537,9 +747,16 @@ def build_native_jvp_family_artifact(
     """Plan and construct a native package entirely inside the family boundary."""
     from .native_jvp import build_native_jvp_artifact
 
+    ir_contract = (
+        istft_jvp_contract_from_paired_ir(
+            paired_jvp_ir, target=target, architecture=architecture
+        )
+        if source.op_name == "tessera.istft" else None
+    )
     plan = plan_native_jvp_family(
         source=source, primal_inputs=primal_inputs, wrt_indices=wrt_indices,
         target=target, architecture=architecture, execution_mode=execution_mode,
+        ir_contract=ir_contract,
     )
     if plan.family == "reduce":
         plan = replace(plan, steps=(
@@ -575,12 +792,19 @@ def build_native_jvp_family_artifact(
             }
             for step in plan.steps
         ]
-    schedule_program = {
+    schedule_program: dict[str, Any] = {
         "schema": "tessera.native_jvp_schedule.v1",
         "family": plan.family,
         "consumer": plan.declaration.schedule_consumer,
         "actions": schedule_actions,
     }
+    if ir_contract is not None:
+        # The Graph->Schedule artifact the compiler minted for the paired
+        # tessera.istft_jvp; the package is bound to it, not to the kwargs.
+        schedule_program["graph_schedule_artifact"] = str(ir_contract["artifact_hash"])
+        schedule_program["graph_schedule_consumer"] = (
+            "tessera-graph-to-schedule:tessera.istft_jvp"
+        )
     tile_program = {
         "schema": "tessera.native_jvp_tile.v1",
         "family": plan.family,
@@ -612,6 +836,8 @@ def build_native_jvp_family_artifact(
 
 
 __all__ = [
+    "istft_jvp_contract_from_paired_ir",
+    "istft_jvp_spectral_arguments",
     "NativeJVPFamilyPlan",
     "NativeJVPPluginDeclaration",
     "build_native_jvp_family_artifact",

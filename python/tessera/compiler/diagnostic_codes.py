@@ -4482,6 +4482,59 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="EVIDENCE-PACKET-1-2026-09-27",
         language="python", status="implemented",
     ),
+    DiagnosticCode(
+        code="SPECTRAL_JVP_SCHEDULE_REFUSED",
+        pass_origin="GraphToSchedulePass",
+        severity="error",
+        summary=(
+            "tessera.istft_jvp cannot be bound to a scheduled forward-product "
+            "contract: no exact Zen 5 AVX-512 / gfx1151 / gfx1201 / sm120 "
+            "profile, a non-static or mistyped operand, an overlap-add geometry "
+            "the static tangent type contradicts, or no active tangent."
+        ),
+        fix_hint=(
+            "Set tessera.target/tessera.arch to an exact proven profile, keep "
+            "the window and tangent in one f16/bf16/f32 storage with fp32 "
+            "accumulation, and make output_length agree with the result type. "
+            "A reduced-precision window whose ISTFT result the frontend types "
+            "as f32 is refused until the two storages agree."
+        ),
+        spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-istft-jvp",
+        sprint="ODS-WIRE-2-2026-09-28",
+    ),
+    DiagnosticCode(
+        code="X86_KV_CACHE_CURSOR_REFUSED",
+        pass_origin="LowerKVCacheCursorToX86",
+        severity="error",
+        summary=(
+            "tessera.cache.commit/rollback carries a constant negative count, "
+            "which the x86 KV-cache handle ABI would reject at run time."
+        ),
+        fix_hint=(
+            "Pass a non-negative accepted_length / num_rejected; the handle ABI "
+            "(tessera_x86_kv_cache_{commit,rollback}_f32) returns NULL for it."
+        ),
+        spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-cache-commit",
+        sprint="ODS-WIRE-3-2026-09-28",
+    ),
+    DiagnosticCode(
+        code="X86_KV_CACHE_HANDLE_REFUSED",
+        pass_origin="tessera.runtime.x86_kv_cache_cursor",
+        severity="error",
+        summary=(
+            "The x86 KV-cache cursor ABI represents only an unquantized f32 "
+            "KVCacheHandle with contiguous (max_seq, ...) keys and values; a "
+            "quantized, latent, SSM, non-f32 or non-contiguous handle is refused."
+        ),
+        fix_hint=(
+            "Run commit/rollback for that handle through its reference "
+            "(tessera.ops.cache_commit / cache_rollback); the x86 handle ABI "
+            "does not trim quantization scales or rewind SSM rings."
+        ),
+        spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-cache-commit",
+        sprint="ODS-WIRE-3-2026-09-28",
+        language="python", status="implemented",
+    ),
 )
 
 

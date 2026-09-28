@@ -179,18 +179,13 @@ _WAIVED: dict[str, Waiver] = {
     **{name: Waiver("fixture_only", "#29", _R_ATTN_RES) for name in (
         "tessera.attn_with_stats", "tessera.softmax_merge", "tessera.softmax_finalize")},
     "tessera.guided_denoise_region": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
-    "tessera.istft_jvp": Waiver(
-        "fixture_only", "#29", "produced by `ISTFTOp::buildTangent` "
-        "(TangentInterface.cpp) under --tessera-autodiff-forward, which the scan "
-        "reads as the dialect's own implementation; nothing lowers it"),
     # Added 2026-09-27 by the review that closed three fail-open holes; each
     # was "consumed" only through one of them.
     "tessera.arch.ste_one_hot": Waiver(
         "unreferenced", "#29", _R_ARCH + "; its only mention was its own "
         "dialect's arity table in TesseraOps.cpp"),
     **{name: Waiver("fixture_only", "#29", _R_CATALOG_ONLY) for name in (
-        "tessera.cache.commit", "tessera.cache.rollback", "tessera.ntk_rope",
-        "tessera.target_verify")},
+        "tessera.ntk_rope", "tessera.target_verify")},
     "tessera.ebm.langevin_step_philox": Waiver(
         "fixture_only", "#29", _R_EBM_GRAPH + "; the runtime kernels mirror its "
         "semantics, and its only other mention was prose in an execution-matrix "
@@ -226,7 +221,7 @@ _WAIVED: dict[str, Waiver] = {
 
 #: The waiver may only shrink: lower this with every entry removed. Raising it
 #: is visible in review and needs a reason in the PR.
-_WAIVER_CEILING = 79
+_WAIVER_CEILING = 76
 
 #: History (the ratchet this replaced): on 2026-09-27 seven `tessera.neighbors.*`
 #: names were declared by two ODS records -- `TesseraOps.td` (the live ones:

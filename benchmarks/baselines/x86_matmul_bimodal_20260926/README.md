@@ -81,6 +81,10 @@ processes (Tajasarus ~3%).
 
 ## Re-recorded packets (`329fcbf6`, both hosts twice)
 
+**Superseded 2026-09-27:** the committed packets were re-recorded at `de914e51`
+after the kernel fix (`../x86_gemm_align_20260927/`, sync `X86-GEMM-ALIGN-2026-09-27`);
+the `329fcbf6` second runs described here are no longer the committed packets.
+
 Median `kernel_wall`, run 1 → run 2 (µs):
 
 | Family | Princess-Luna | ratio | Tajasarus | ratio |

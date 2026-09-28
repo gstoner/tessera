@@ -27,6 +27,8 @@ from typing import Iterable, Optional, Union
 
 import numpy as np
 
+from tessera._route_receipts import native_attempt, public_route
+
 from tessera.ga.multivector import Multivector
 from tessera.ga.signature import Cl, TesseraAlgebraError
 
@@ -124,6 +126,7 @@ def _with_grades(mv, grades):
     return Multivector(mv.coefficients, mv.algebra, grades=grades)
 
 
+@public_route("ga:geometric_product")
 def geometric_product(a: Multivector, b: Multivector) -> Multivector:
     """The fundamental Clifford product ``a * b``.
 
@@ -196,6 +199,7 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
 # Grade projection
 # ---------------------------------------------------------------------------
 
+@public_route("ga:grade_projection")
 def grade_projection(a: Multivector, k: _GradeArg) -> Multivector:
     """Project ``a`` onto the subspace of the requested grade(s).
 
@@ -225,6 +229,7 @@ def grade_projection(a: Multivector, k: _GradeArg) -> Multivector:
 # Wedge (outer product) and contractions
 # ---------------------------------------------------------------------------
 
+@public_route("ga:wedge")
 def wedge(a: Multivector, b: Multivector) -> Multivector:
     """The outer (exterior) product ``a ∧ b``.
 
@@ -267,6 +272,7 @@ def wedge(a: Multivector, b: Multivector) -> Multivector:
     return Multivector(out, algebra)
 
 
+@public_route("ga:left_contraction")
 def left_contraction(a: Multivector, b: Multivector) -> Multivector:
     """Left contraction ``a ⌋ b``.
 
@@ -315,6 +321,7 @@ def left_contraction(a: Multivector, b: Multivector) -> Multivector:
     return Multivector(out, algebra)
 
 
+@public_route("ga:inner")
 def inner(a: Multivector, b: Multivector) -> np.ndarray:
     """The scalar (symmetric) inner product ``<a, b> = <a * reverse(b)>_0``.
 
@@ -357,6 +364,7 @@ def _is_cl30_f32_8axis(*arrays: np.ndarray) -> bool:
     return True
 
 
+@native_attempt
 def _try_apple_gpu_unary_8x8_cl30_f32(
     a: Multivector, symbol: str, *, op_name: Optional[str] = None,
 ) -> Optional[Multivector]:
@@ -407,6 +415,7 @@ def _try_apple_gpu_unary_8x8_cl30_f32(
     return Multivector(out.reshape(A.shape), a.algebra)
 
 
+@native_attempt
 def _try_apple_gpu_inner_cl30_f32(
     a: Multivector, b: Multivector,
 ) -> Optional[np.ndarray]:
@@ -448,6 +457,7 @@ def _try_apple_gpu_inner_cl30_f32(
     return out.reshape(A.shape[:-1]) if A.ndim > 1 else out[0]
 
 
+@native_attempt
 def _try_apple_gpu_norm_cl30_f32(a: Multivector) -> Optional[np.ndarray]:
     """``|a|`` on ``Cl(3,0)`` f32 batched input — routed through the
     JIT bridge so the route is traced + manifest-verified."""
@@ -482,6 +492,7 @@ def _try_apple_gpu_norm_cl30_f32(a: Multivector) -> Optional[np.ndarray]:
     return out.reshape(A.shape[:-1]) if A.ndim > 1 else out[0]
 
 
+@native_attempt
 def _try_apple_gpu_rotor_sandwich_cl30_f32(
     rotor: Multivector, x: Multivector,
 ) -> Optional[Multivector]:
@@ -491,6 +502,7 @@ def _try_apple_gpu_rotor_sandwich_cl30_f32(
         op_name="clifford_rotor_sandwich")
 
 
+@native_attempt
 def _try_apple_gpu_rotor_sandwich_norm_cl30_f32(
     rotor: Multivector, x: Multivector,
 ) -> Optional[np.ndarray]:
@@ -534,6 +546,7 @@ def _try_apple_gpu_rotor_sandwich_norm_cl30_f32(
     return out.reshape(R.shape[:-1]) if R.ndim > 1 else out[0]
 
 
+@native_attempt
 def _try_apple_gpu_binary_8x8_cl30_f32(
     a: Multivector, b: Multivector, symbol: str, *,
     op_name: Optional[str] = None,
@@ -586,6 +599,7 @@ def _try_apple_gpu_binary_8x8_cl30_f32(
     return Multivector(out.reshape(A.shape), a.algebra)
 
 
+@native_attempt
 def _try_apple_gpu_grade_projection_cl30_f32(
     a: Multivector, grade_mask: int,
 ) -> Optional[Multivector]:
@@ -632,6 +646,7 @@ def _grade_sign_array(algebra: Cl, sign_fn) -> np.ndarray:
     )
 
 
+@public_route("ga:reverse")
 def reverse(a: Multivector) -> Multivector:
     """Reversion ``a†``: blade of grade k picks up sign ``(-1)^{k(k-1)/2}``.
 
@@ -650,6 +665,7 @@ def reverse(a: Multivector) -> Multivector:
     )
 
 
+@public_route("ga:grade_involution")
 def grade_involution(a: Multivector) -> Multivector:
     """Grade involution ``â``: blade of grade k picks up sign ``(-1)^k``.
 
@@ -668,6 +684,7 @@ def grade_involution(a: Multivector) -> Multivector:
     )
 
 
+@public_route("ga:conjugate")
 def conjugate(a: Multivector) -> Multivector:
     """Clifford conjugation: combination of reverse + grade involution.
 
@@ -690,6 +707,7 @@ def norm_squared(a: Multivector) -> np.ndarray:
     return inner(a, a)
 
 
+@public_route("ga:norm")
 def norm(a: Multivector) -> np.ndarray:
     """Multivector norm ``|a| = sqrt(<a, a>)`` (clipped to non-negative inputs).
 
@@ -717,6 +735,7 @@ def _is_pure_bivector_3d(a: Multivector) -> bool:
     return grades == frozenset({2})
 
 
+@public_route("ga:exp_mv")
 def exp_mv(a: Multivector, *, terms: int = 24) -> Multivector:
     """Exponential ``exp(a)``.
 
@@ -761,6 +780,7 @@ def exp_mv(a: Multivector, *, terms: int = 24) -> Multivector:
     return result
 
 
+@public_route("ga:log_mv")
 def log_mv(a: Multivector, *, terms: int = 64) -> Multivector:
     """Logarithm ``log(a)``.
 
@@ -831,6 +851,7 @@ def rotor_from_axis(
     return exp_mv(-0.5 * float(angle) * unit)
 
 
+@public_route("ga:rotor_sandwich")
 def rotor_sandwich(rotor: Multivector, x: Multivector) -> Multivector:
     """Apply ``R x R†`` — rotor-conjugation rotation of ``x``.
 
@@ -847,6 +868,7 @@ def rotor_sandwich(rotor: Multivector, x: Multivector) -> Multivector:
     return geometric_product(geometric_product(rotor, x), reverse(rotor))
 
 
+@public_route("ga:rotor_sandwich_norm")
 def rotor_sandwich_norm(rotor: Multivector, x: Multivector) -> np.ndarray:
     """Fused ``‖R x R†‖`` — the rotor-invariant magnitude (close-out gap #6).
 

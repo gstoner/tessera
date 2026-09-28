@@ -31,6 +31,9 @@ target_link_libraries(tessera-opt PRIVATE TesseraSR DialectSR)
 3. Run passes within your normal pipelines:
 ```
 tessera-opt -tessera-optimizer-shard -tessera-insert-recompute             -tessera-resilience-restart -tessera-export-deployment-manifest input.mlir
+# -tessera-optimizer-shard needs the ZeRO configuration: the module attribute
+# `tessera_sr.zero_config` emitted by Python `ZeROConfig.to_ir_attr()`, or
+# explicit zero-stage / dp-axis / num-dp-ranks options. It never defaults them.
 ```
 
 ## New DIrectory Layout

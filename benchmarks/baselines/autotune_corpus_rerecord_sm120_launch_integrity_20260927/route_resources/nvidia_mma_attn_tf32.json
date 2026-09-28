@@ -1,0 +1,24 @@
+{
+  "schema": "tessera.nvidia.resources.v1",
+  "source": "nvidia_mma_attn_tf32.ncu-repz",
+  "source_sha256": "a9f3892d0f6e3ffd48d205264dbce10c20deedb65d1769fc6c20733e9d07aa24",
+  "rows": [
+    {
+      "kernel": "tessera_nvidia_mma_attn_kernel(const float *, const float *, const float *, float *, int, int, int, int, float, int)",
+      "launches": 1,
+      "cc": "12.0",
+      "block_size": "(32, 1, 1)",
+      "grid_size": "(8, 1, 1)",
+      "registers_per_thread": 40,
+      "static_shared_memory_bytes": 0,
+      "dynamic_shared_memory_bytes": 8192,
+      "theoretical_occupancy_pct": 22.92,
+      "achieved_occupancy_pct": 2.08,
+      "local_spill_requests": 0,
+      "shared_spill_requests": 0,
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:d38df7d69ea463d44296bb94056b0557c90228bd24b1de23a7b6b98ab246b52e"
+    }
+  ]
+}

@@ -484,13 +484,109 @@ _PAGED_KV_ENTRY = "tessera_rocm_paged_kv_read_f32"
 _paged_kv_artifact: str | None = None
 _PAGED_ATTN_ENTRY = "tessera_rocm_paged_attention_f32"
 _paged_attn_artifact: str | None = None
+#: Paged-route artifacts by the content key of the source compiled (plus the
+#: hipcc line), so the routes' Decision #11 identity always names the code a
+#: launch runs: a changed emitter compiles fresh within one process rather than
+#: reusing an image built from its old output.
+_PAGED_ARTIFACTS: dict[tuple[str, ...], str] = {}
+
+
+def _paged_kv_source() -> KernelSource:
+    from tessera.compiler.emit.source_memo import memoized
+
+    return memoized(globals(), "_paged_kv_source_uncached")
+
+
+def _paged_kv_source_uncached() -> KernelSource:
+    return KernelSource(source=_synthesize_paged_kv_read_hip(), entry=_PAGED_KV_ENTRY,
+                        lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("paged-kv-v1",))
+
+
+def _paged_attention_source() -> KernelSource:
+    from tessera.compiler.emit.source_memo import memoized
+
+    return memoized(globals(), "_paged_attention_source_uncached")
+
+
+def _paged_attention_source_uncached() -> KernelSource:
+    return KernelSource(source=_synthesize_paged_attention_direct_hip(),
+                        entry=_PAGED_ATTN_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
+                        shape_key=("paged-attention-direct-v1",))
+
+
+def _paged_artifact(source: KernelSource) -> str:
+    """The shared object compiled from exactly ``source`` (compiled on a miss)."""
+    from tessera.compiler.emit.kernel_cache import cache_key
+
+    key = (cache_key(source, dtype="f32", target=_TARGET), *_hipcc_cache_line())
+    artifact = _PAGED_ARTIFACTS.get(key)
+    if artifact is None:
+        artifact = _rocm_hip_compile_fn(source)
+        _PAGED_ARTIFACTS[key] = artifact
+    return artifact
+
+
+def _paged_source_identity(source: KernelSource) -> dict[str, str]:
+    from tessera.compiler.emitted_code_identity import kernel_source_identity
+
+    return kernel_source_identity(source, dtype="f32", target=_TARGET,
+                                  build=("hipcc", *_hipcc_flags(_rocm_arch())))
+
+
+def rocm_paged_attention_route_identities(
+    *, q_heads: int, kv_heads: int, head_dim: int, causal: bool,
+) -> dict[str, Any]:
+    """Decision #11 identities of the two gfx1151 paged-attention serving
+    routes ``cache/paged_kv.py`` races (sync
+    ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27``, closes
+    ``AUTOTUNE-KERNEL-IDENTITY-PAGED-KV``):
+
+    * ``direct`` -- the Python-emitted HIP paged-attention kernel (source +
+      hipcc line incl. the offload arch);
+    * ``gather_fa`` -- the emitted HIP paged-KV gather AND the compiled FA-2
+      forward image it hands the gathered K/V to, by kernel-code identity: f16
+      storage, GQA when the heads differ, the additive-bias variant when causal
+      (the route expresses the decode's right-aligned causal mask as a bias).
+
+    Host-side Python between the kernels (transposes, the bias construction)
+    is not digested -- the ``emitted_code_identity`` limit, stated there."""
+    from tessera import runtime as rt
+    from tessera.compiler.emit.autotune import RouteIdentity
+    from tessera.compiler.emitted_code_identity import composite_identity
+    from tessera.compiler.kernel_code_identity import (
+        compiler_kernel_identity,
+        generator_fingerprint,
+    )
+
+    gqa = int(q_heads) != int(kv_heads)
+    attn_bias = bool(causal)
+
+    def direct() -> dict[str, str]:
+        return _paged_source_identity(_paged_attention_source())
+
+    def gather_fa() -> dict[str, str]:
+        chip = _identity_isa()
+        if chip is None:
+            raise RuntimeError("no ROCm device matching the build arch to identify FA-2 on")
+        key = ("paged_kv_gather_fa", chip, int(head_dim), "f16", gqa, attn_bias,
+               generator_fingerprint())
+        attention = compiler_kernel_identity(
+            key, lambda: rt._rocm_flash_attn_image(
+                int(head_dim), "f16", gqa=gqa, attn_bias=attn_bias), isa=chip)
+        return composite_identity({
+            "gather": _paged_source_identity(_paged_kv_source()),
+            "attention": attention,
+        })
+
+    return {"direct": RouteIdentity("direct", direct),
+            "gather_fa": RouteIdentity("gather_fa", gather_fa)}
 
 
 def _synthesize_paged_kv_read_hip() -> str:
     """HIP gather for the stable PLHD pages + logical-page-table ABI."""
     return f'''#include <hip/hip_runtime.h>
 __global__ void paged_read(const float*pages,const int*table,const long long*idx,float*out,int page_size,int H,int D,long long T){{long long z=(long long)blockIdx.x*blockDim.x+threadIdx.x,n=T*H*D;if(z>=n)return;int d=z%D,h=(z/D)%H;long long t=z/(D*H),tok=idx[t];int lp=(int)(tok/page_size),off=(int)(tok%page_size),pp=table[lp];out[z]=pages[(((long long)pp*page_size+off)*H+h)*D+d];}}
-extern "C" int {_PAGED_KV_ENTRY}(const float*hp,const int*ht,const long long*hi,float*ho,int P,int LP,int page_size,int H,int D,long long T,int reps,float*device_ms){{if(!hp||!ht||!hi||!ho||!device_ms||P<1||LP<1||page_size<1||H<1||D<1||T<1||reps<1)return 2;size_t pb=(size_t)P*page_size*H*D*4,tb=(size_t)LP*4,ib=(size_t)T*8,ob=(size_t)T*H*D*4;float *p=0,*o=0;int*t=0;long long*i=0;hipEvent_t a=0,b=0;if(hipMalloc(&p,pb)!=hipSuccess||hipMalloc(&t,tb)!=hipSuccess||hipMalloc(&i,ib)!=hipSuccess||hipMalloc(&o,ob)!=hipSuccess)return 3;if(hipMemcpy(p,hp,pb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(t,ht,tb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(i,hi,ib,hipMemcpyHostToDevice)!=hipSuccess)return 3;long long n=T*H*D;hipLaunchKernelGGL(paged_read,dim3((unsigned)((n+255)/256)),dim3(256),0,0,p,t,i,o,page_size,H,D,T);if(hipDeviceSynchronize()!=hipSuccess||hipEventCreate(&a)!=hipSuccess||hipEventCreate(&b)!=hipSuccess)return 3;hipEventRecord(a,0);for(int r=0;r<reps;r++)hipLaunchKernelGGL(paged_read,dim3((unsigned)((n+255)/256)),dim3(256),0,0,p,t,i,o,page_size,H,D,T);hipEventRecord(b,0);hipEventSynchronize(b);float ms=0;int ok=hipEventElapsedTime(&ms,a,b)==hipSuccess&&hipMemcpy(ho,o,ob,hipMemcpyDeviceToHost)==hipSuccess;*device_ms=ms/reps;hipEventDestroy(a);hipEventDestroy(b);hipFree(p);hipFree(t);hipFree(i);hipFree(o);return ok?1:3;}}'''
+extern "C" int {_PAGED_KV_ENTRY}(const float*hp,const int*ht,const long long*hi,float*ho,int P,int LP,int page_size,int H,int D,long long T,int reps,float*device_ms){{if(!hp||!ht||!hi||!ho||!device_ms||P<1||LP<1||page_size<1||H<1||D<1||T<1||reps<1)return 2;(void)hipGetLastError();size_t pb=(size_t)P*page_size*H*D*4,tb=(size_t)LP*4,ib=(size_t)T*8,ob=(size_t)T*H*D*4;float *p=0,*o=0;int*t=0;long long*i=0;hipEvent_t a=0,b=0;int ok=0;float ms=0;long long n=T*H*D;if(hipMalloc(&p,pb)!=hipSuccess||hipMalloc(&t,tb)!=hipSuccess||hipMalloc(&i,ib)!=hipSuccess||hipMalloc(&o,ob)!=hipSuccess||hipMemcpy(p,hp,pb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(t,ht,tb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(i,hi,ib,hipMemcpyHostToDevice)!=hipSuccess)goto done;hipLaunchKernelGGL(paged_read,dim3((unsigned)((n+255)/256)),dim3(256),0,0,p,t,i,o,page_size,H,D,T);if(hipGetLastError()!=hipSuccess||hipDeviceSynchronize()!=hipSuccess||hipEventCreate(&a)!=hipSuccess||hipEventCreate(&b)!=hipSuccess||hipEventRecord(a,0)!=hipSuccess)goto done;for(int r=0;r<reps;r++)hipLaunchKernelGGL(paged_read,dim3((unsigned)((n+255)/256)),dim3(256),0,0,p,t,i,o,page_size,H,D,T);if(hipEventRecord(b,0)!=hipSuccess||hipEventSynchronize(b)!=hipSuccess||hipGetLastError()!=hipSuccess)goto done;ok=hipEventElapsedTime(&ms,a,b)==hipSuccess&&hipMemcpy(ho,o,ob,hipMemcpyDeviceToHost)==hipSuccess;*device_ms=ms/reps;done:if(a)hipEventDestroy(a);if(b)hipEventDestroy(b);if(p)hipFree(p);if(t)hipFree(t);if(i)hipFree(i);if(o)hipFree(o);return ok?1:3;}}'''
 
 
 def run_paged_kv_cache_read_f32(
@@ -517,10 +613,7 @@ def run_paged_kv_cache_read_f32(
     if idx.size < 1 or np.any(idx < 0) or np.any(idx >= table.size * p.shape[1]):
         raise ValueError("ROCm paged KV token index exceeds logical table capacity")
     global _paged_kv_artifact
-    if _paged_kv_artifact is None:
-        _paged_kv_artifact = _rocm_hip_compile_fn(KernelSource(
-            source=_synthesize_paged_kv_read_hip(), entry=_PAGED_KV_ENTRY,
-            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("paged-kv-v1",)))
+    _paged_kv_artifact = _paged_artifact(_paged_kv_source())
     fn = getattr(ctypes.CDLL(_paged_kv_artifact), _PAGED_KV_ENTRY)
     fn.restype = ctypes.c_int
     fn.argtypes = ([ctypes.c_void_p] * 4 + [ctypes.c_int] * 5
@@ -549,7 +642,7 @@ def _synthesize_paged_attention_direct_hip() -> str:
 #include <float.h>
 #include <math.h>
 __global__ void paged_attn(const float*q,const float*kp,const float*vp,const int*table,const long long*idx,float*out,int T,int L,int HQ,int HKV,int D,int Q,float scale,int causal){{int qi=blockIdx.x%Q,qh=blockIdx.x/Q,t=threadIdx.x,ratio=HQ/HKV,kh=qh/ratio;extern __shared__ float scores[];__shared__ float red[256];int limit=qi+(T>Q?T-Q:0);for(int j=0;j<T;j++){{float x=0.f;if(!causal||j<=limit){{long long tok=idx[j];int pp=table[tok/L],off=tok%L;const float*k=kp+(((long long)pp*L+off)*HKV+kh)*D;const float*qr=q+((long long)qh*Q+qi)*D;for(int d=t;d<D;d+=256)x+=qr[d]*k[d];}}red[t]=x;__syncthreads();for(int s=128;s;s>>=1){{if(t<s)red[t]+=red[t+s];__syncthreads();}}if(t==0)scores[j]=(causal&&j>limit)?-INFINITY:red[0]*scale;__syncthreads();}}float m=-FLT_MAX;for(int j=t;j<T;j+=256)m=fmaxf(m,scores[j]);red[t]=m;__syncthreads();for(int s=128;s;s>>=1){{if(t<s)red[t]=fmaxf(red[t],red[t+s]);__syncthreads();}}m=red[0];__syncthreads();float z=0.f;for(int j=t;j<T;j+=256)z+=expf(scores[j]-m);red[t]=z;__syncthreads();for(int s=128;s;s>>=1){{if(t<s)red[t]+=red[t+s];__syncthreads();}}z=red[0];for(int j=t;j<T;j+=256)scores[j]=expf(scores[j]-m)/z;__syncthreads();for(int d=t;d<D;d+=256){{float acc=0.f;for(int j=0;j<T;j++){{long long tok=idx[j];int pp=table[tok/L],off=tok%L;const float*v=vp+(((long long)pp*L+off)*HKV+kh)*D;acc+=scores[j]*v[d];}}out[((long long)qh*Q+qi)*D+d]=acc;}}}}
-extern "C" int {_PAGED_ATTN_ENTRY}(const float*hq,const float*hkp,const float*hvp,const int*ht,const long long*hi,float*ho,int P,int LP,int L,int HQ,int HKV,int D,int Q,int T,float scale,int causal,int reps,float*device_ms){{if(!hq||!hkp||!hvp||!ht||!hi||!ho||!device_ms||P<1||LP<1||L<1||HQ<1||HKV<1||HQ%HKV||D<1||Q<1||T<1||T>8192||reps<1)return 2;size_t qb=(size_t)HQ*Q*D*4,pb=(size_t)P*L*HKV*D*4,tb=(size_t)LP*4,ib=(size_t)T*8,ob=qb;float *q=0,*kp=0,*vp=0,*o=0;int*table=0;long long*idx=0;hipEvent_t a=0,b=0;if(hipMalloc(&q,qb)!=hipSuccess||hipMalloc(&kp,pb)!=hipSuccess||hipMalloc(&vp,pb)!=hipSuccess||hipMalloc(&table,tb)!=hipSuccess||hipMalloc(&idx,ib)!=hipSuccess||hipMalloc(&o,ob)!=hipSuccess)return 3;if(hipMemcpy(q,hq,qb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(kp,hkp,pb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(vp,hvp,pb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(table,ht,tb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(idx,hi,ib,hipMemcpyHostToDevice)!=hipSuccess)return 3;paged_attn<<<HQ*Q,256,(size_t)T*4>>>(q,kp,vp,table,idx,o,T,L,HQ,HKV,D,Q,scale,causal);if(hipDeviceSynchronize()!=hipSuccess||hipEventCreate(&a)!=hipSuccess||hipEventCreate(&b)!=hipSuccess)return 3;hipEventRecord(a,0);for(int r=0;r<reps;r++)paged_attn<<<HQ*Q,256,(size_t)T*4>>>(q,kp,vp,table,idx,o,T,L,HQ,HKV,D,Q,scale,causal);hipEventRecord(b,0);hipEventSynchronize(b);float ms=0;int ok=hipEventElapsedTime(&ms,a,b)==hipSuccess&&hipMemcpy(ho,o,ob,hipMemcpyDeviceToHost)==hipSuccess;*device_ms=ms/reps;hipEventDestroy(a);hipEventDestroy(b);hipFree(q);hipFree(kp);hipFree(vp);hipFree(table);hipFree(idx);hipFree(o);return ok?1:3;}}'''
+extern "C" int {_PAGED_ATTN_ENTRY}(const float*hq,const float*hkp,const float*hvp,const int*ht,const long long*hi,float*ho,int P,int LP,int L,int HQ,int HKV,int D,int Q,int T,float scale,int causal,int reps,float*device_ms){{if(!hq||!hkp||!hvp||!ht||!hi||!ho||!device_ms||P<1||LP<1||L<1||HQ<1||HKV<1||HQ%HKV||D<1||Q<1||T<1||T>8192||reps<1)return 2;(void)hipGetLastError();size_t qb=(size_t)HQ*Q*D*4,pb=(size_t)P*L*HKV*D*4,tb=(size_t)LP*4,ib=(size_t)T*8,ob=qb;float *q=0,*kp=0,*vp=0,*o=0;int*table=0;long long*idx=0;hipEvent_t a=0,b=0;int ok=0;float ms=0;if(hipMalloc(&q,qb)!=hipSuccess||hipMalloc(&kp,pb)!=hipSuccess||hipMalloc(&vp,pb)!=hipSuccess||hipMalloc(&table,tb)!=hipSuccess||hipMalloc(&idx,ib)!=hipSuccess||hipMalloc(&o,ob)!=hipSuccess||hipMemcpy(q,hq,qb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(kp,hkp,pb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(vp,hvp,pb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(table,ht,tb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(idx,hi,ib,hipMemcpyHostToDevice)!=hipSuccess)goto done;paged_attn<<<HQ*Q,256,(size_t)T*4>>>(q,kp,vp,table,idx,o,T,L,HQ,HKV,D,Q,scale,causal);if(hipGetLastError()!=hipSuccess||hipDeviceSynchronize()!=hipSuccess||hipEventCreate(&a)!=hipSuccess||hipEventCreate(&b)!=hipSuccess||hipEventRecord(a,0)!=hipSuccess)goto done;for(int r=0;r<reps;r++)paged_attn<<<HQ*Q,256,(size_t)T*4>>>(q,kp,vp,table,idx,o,T,L,HQ,HKV,D,Q,scale,causal);if(hipEventRecord(b,0)!=hipSuccess||hipEventSynchronize(b)!=hipSuccess||hipGetLastError()!=hipSuccess)goto done;ok=hipEventElapsedTime(&ms,a,b)==hipSuccess&&hipMemcpy(ho,o,ob,hipMemcpyDeviceToHost)==hipSuccess;*device_ms=ms/reps;done:if(a)hipEventDestroy(a);if(b)hipEventDestroy(b);if(q)hipFree(q);if(kp)hipFree(kp);if(vp)hipFree(vp);if(table)hipFree(table);if(idx)hipFree(idx);if(o)hipFree(o);return ok?1:3;}}'''
 
 
 def run_paged_attention_direct_f32(
@@ -577,11 +670,7 @@ def run_paged_attention_direct_f32(
             or np.any(idx < 0) or np.any(idx >= table.size * L)):
         raise ValueError("ROCm direct paged attention table/index is invalid")
     global _paged_attn_artifact
-    if _paged_attn_artifact is None:
-        _paged_attn_artifact = _rocm_hip_compile_fn(KernelSource(
-            source=_synthesize_paged_attention_direct_hip(),
-            entry=_PAGED_ATTN_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
-            shape_key=("paged-attention-direct-v1",)))
+    _paged_attn_artifact = _paged_artifact(_paged_attention_source())
     fn = getattr(ctypes.CDLL(_paged_attn_artifact), _PAGED_ATTN_ENTRY)
     fn.restype = ctypes.c_int
     fn.argtypes = ([ctypes.c_void_p] * 6 + [ctypes.c_int] * 8
@@ -621,7 +710,7 @@ extern "C" int cr(void**out,const float*s0,const float*a,int B,int D,int N,int L
 extern "C" int ap(void*v,const float*d,const float*x,const float*b,int pos){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||pos<0||pos>=q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4;if(hipMemcpyAsync(q->d+(size_t)pos*q->B*q->D,d,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x+(size_t)pos*q->B*q->D,x,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b+(size_t)pos*q->B*q->N,b,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;return hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
 extern "C" int de(void*v,const float*c,float*y,int M){Ctx*q=(Ctx*)v;if(!q||!c||!y||M<1||M>q->L)return 2;(void)hipGetLastError();size_t cb=(size_t)q->B*q->N*4,yb=(size_t)q->B*q->D*4;if(hipMemcpyAsync(q->c,c,cb,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3((M*q->B+127)/128),dim3(128),0,q->stream,*q,M);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,M);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(y,q->y,yb,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;return hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
 extern "C" int fu(void*v,int M){Ctx*q=(Ctx*)v;if(!q||M<1||M>q->L)return 2;(void)hipGetLastError();long long n=(long long)q->B*q->D*q->N;hipLaunchKernelGGL(replay_flush,dim3((unsigned)((n+127)/128)),dim3(128),0,q->stream,*q,M);return hipGetLastError()==hipSuccess&&hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
-extern "C" int su(void*v,const float*d,const float*x,const float*b,const float*c,float*y,float*ms){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!y||!ms)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4;hipEvent_t beg=0,end=0;if(hipEventCreate(&beg)!=hipSuccess||hipEventCreate(&end)!=hipSuccess)return 3;hipEventRecord(beg,q->stream);if(hipMemcpyAsync(q->d,d,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x,x,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b,b,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,c,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3((q->B+127)/128),dim3(128),0,q->stream,*q,1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,1);long long n=(long long)q->B*q->D*q->N;hipLaunchKernelGGL(replay_flush,dim3((unsigned)((n+127)/128)),dim3(128),0,q->stream,*q,1);if(hipMemcpyAsync(y,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess||hipEventRecord(end,q->stream)!=hipSuccess||hipEventSynchronize(end)!=hipSuccess)return 3;int ok=hipEventElapsedTime(ms,beg,end)==hipSuccess;hipEventDestroy(beg);hipEventDestroy(end);return ok?1:3;}
+extern "C" int su(void*v,const float*d,const float*x,const float*b,const float*c,float*y,float*ms){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!y||!ms)return 2;(void)hipGetLastError();size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4;long long n=(long long)q->B*q->D*q->N;hipEvent_t beg=0,end=0;int ok=0;if(hipEventCreate(&beg)!=hipSuccess||hipEventCreate(&end)!=hipSuccess||hipEventRecord(beg,q->stream)!=hipSuccess||hipMemcpyAsync(q->d,d,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x,x,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b,b,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,c,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)goto done;hipLaunchKernelGGL(replay_gram,dim3((q->B+127)/128),dim3(128),0,q->stream,*q,1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,1);hipLaunchKernelGGL(replay_flush,dim3((unsigned)((n+127)/128)),dim3(128),0,q->stream,*q,1);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(y,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess||hipEventRecord(end,q->stream)!=hipSuccess||hipEventSynchronize(end)!=hipSuccess)goto done;ok=hipEventElapsedTime(ms,beg,end)==hipSuccess;done:if(beg)hipEventDestroy(beg);if(end)hipEventDestroy(end);return ok?1:3;}
 extern "C" int bl(void*v,const float*d,const float*x,const float*b,const float*c,float*y,int T,int start){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!y||T<1||start<0||start+T>q->L)return 2;(void)hipGetLastError();size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,rows=(size_t)q->B*q->D;for(int i=0;i<T;i++){int p=start+i;if(hipMemcpyAsync(q->d+(size_t)p*rows,d+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x+(size_t)p*rows,x+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b+(size_t)p*q->B*q->N,b+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,c+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3(((p+1)*q->B+127)/128),dim3(128),0,q->stream,*q,p+1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,p+1);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(y+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;}return hipStreamSynchronize(q->stream)==hipSuccess?1:3;}
 static int take(Ctx*q){for(int n=0;n<q->nslots;n++){int i=(q->next+n)%q->nslots;Slot&z=q->slots[i];if(z.state==2&&hipEventQuery(z.done)==hipSuccess)z.state=0;if(z.state==0){z.state=1;q->next=(i+1)%q->nslots;return i;}}return -1;}
 extern "C" int as(void*v,const float*d,const float*x,const float*b,const float*c,int T,int start,int*slot){Ctx*q=(Ctx*)v;if(!q||!d||!x||!b||!c||!slot||T<1||start<0||start+T>q->L)return 2;(void)hipGetLastError();int si=take(q);if(si<0)return 4;Slot&z=q->slots[si];size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,rows=(size_t)q->B*q->D;memcpy(z.pd,d,(size_t)T*bd);memcpy(z.px,x,(size_t)T*bd);memcpy(z.pb,b,(size_t)T*bn);memcpy(z.pc,c,(size_t)T*bn);if(hipEventRecord(z.beg,q->stream)!=hipSuccess)return 3;for(int i=0;i<T;i++){int p=start+i;if(hipMemcpyAsync(q->d+(size_t)p*rows,z.pd+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->x+(size_t)p*rows,z.px+(size_t)i*rows,bd,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->b+(size_t)p*q->B*q->N,z.pb+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(q->c,z.pc+(size_t)i*q->B*q->N,bn,hipMemcpyHostToDevice,q->stream)!=hipSuccess)return 3;hipLaunchKernelGGL(replay_gram,dim3(((p+1)*q->B+127)/128),dim3(128),0,q->stream,*q,p+1);hipLaunchKernelGGL(replay_out,dim3((q->B*q->D+127)/128),dim3(128),0,q->stream,*q,p+1);if(hipGetLastError()!=hipSuccess||hipMemcpyAsync(z.dy+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToDevice,q->stream)!=hipSuccess||hipMemcpyAsync(z.py+(size_t)i*rows,q->y,bd,hipMemcpyDeviceToHost,q->stream)!=hipSuccess)return 3;}z.tokens=T;if(hipEventRecord(z.done,q->stream)!=hipSuccess)return 3;*slot=si;return 1;}

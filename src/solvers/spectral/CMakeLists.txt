@@ -151,17 +151,18 @@ target_link_libraries(ts-spectral-correctness PRIVATE TesseraSpectral)
 # Homebrew's llvm keg has none, which silently made this target fail with
 # "No such file or directory". Fall back to a standalone `lit` (brew/pip) the
 # way the other lit targets in this repo already do.
-find_program(TESSERA_LIT_EXECUTABLE
-    NAMES llvm-lit lit.py lit
-    HINTS ${LLVM_TOOLS_BINARY_DIR}
-)
-if(TESSERA_LIT_EXECUTABLE)
-  set(LLVM_LIT ${TESSERA_LIT_EXECUTABLE})
+# Shared validated lit runner (cmake/TesseraLit.cmake): a candidate must
+# actually run `--version` (a relocated LLVM prefix's wrapper can exist and
+# still fail to `import lit`).
+include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/TesseraLit.cmake)
+tessera_lit_command(LLVM_LIT)
+if(LLVM_LIT)
+  add_custom_target(check-spectral
+      COMMAND ${CMAKE_COMMAND} -E env "BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+              ${LLVM_LIT} -v ${CMAKE_CURRENT_SOURCE_DIR}/test
+      DEPENDS ts-spectral-opt
+  )
 else()
-  set(LLVM_LIT ${LLVM_TOOLS_BINARY_DIR}/llvm-lit)
+  tessera_add_lit_unavailable_target(check-spectral "the spectral lit suite")
+  add_dependencies(check-spectral ts-spectral-opt)
 endif()
-add_custom_target(check-spectral
-    COMMAND ${CMAKE_COMMAND} -E env "BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
-            ${LLVM_LIT} -v ${CMAKE_CURRENT_SOURCE_DIR}/test
-    DEPENDS ts-spectral-opt
-)

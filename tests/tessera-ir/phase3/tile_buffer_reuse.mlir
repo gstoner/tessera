@@ -1,7 +1,7 @@
 // RUN: tessera-opt --tessera-tile-buffer-reuse --allow-unregistered-dialect %s | FileCheck %s
 //
 // TileBufferReusePass (Workstream H / W3, 2026-07-08): global buffer assignment/
-// reuse for Tile IR. Shared-memory staging buffers (tile.alloc_shared / TMEM)
+// reuse for Tile IR. Shared-memory staging buffers (tile.alloc_shared)
 // with DISJOINT live ranges + identical memref type share one reuse group
 // (tile.buffer_group), cutting the statically-allocated shared-memory footprint.
 // The assignment half of shared-memory planning; TileBarrierReuseLegalityPass is
@@ -51,38 +51,64 @@ func.func @distinct_types_not_shared(%arg0: memref<8x8xf16>,
 
 // -----
 
-// ── TMEM allocations are planned too, and a chain of fully-disjoint buffers
-// collapses to a single group. ──────────────────────────────────────────────
-// Three same-type buffers used strictly one-after-another → all reuse group 0.
-// CHECK-LABEL: func.func @tmem_chain_collapses
-// CHECK-SAME: tile.buffer_reuse.bytes_after = 512
+// ── TMEM allocations are planned, but a live TMEM buffer is never reused. ──
+// TILE-LATENT-DEFECTS-2026-09-27: the passes used to match only the
+// unregistered marker spelling "tile.tmem.alloc", so the registered
+// `tile.tmem.allocate` was invisible to reuse planning. It is matched by op
+// identity now, and this is the negative case Decision #10a asks for: %a is
+// still live (loaded after %b is allocated), so the two must not share a
+// group. The correct output is NO shared group.
+// CHECK-LABEL: func.func @tmem_live_overlap_not_reused
+// CHECK-SAME: tile.buffer_reuse.bytes_after = 8192
+// CHECK-SAME: tile.buffer_reuse.bytes_before = 8192
+// CHECK-SAME: tile.buffer_reuse.groups = 2
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 0
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 1
+func.func @tmem_live_overlap_not_reused(%i: index) -> (f32, f32) {
+  %a = tile.tmem.allocate {bytes = 4096 : i64, alignment = 128 : i64} : !tile.tmem
+  %b = tile.tmem.allocate {bytes = 4096 : i64, alignment = 128 : i64} : !tile.tmem
+  %vb = tile.tmem.load %b, %i : (!tile.tmem, index) -> f32
+  %va = tile.tmem.load %a, %i : (!tile.tmem, index) -> f32
+  return %va, %vb : f32, f32
+}
+
+// -----
+
+// ── Even strictly sequential TMEM uses do not coalesce. ─────────────────────
+// Program order over the handle's uses is not a TMEM lifetime proof: TMEM is
+// released by tcgen05 completion (wait::ld/st, commit) and dealloc, none of
+// which Tile IR carries yet. Contrast @reuse_disjoint, where the same shape of
+// program coalesces shared memory. Each TMEM allocation keeps its own group
+// until a completion fact exists (fail closed, Decision #30).
+// CHECK-LABEL: func.func @tmem_sequential_not_coalesced
+// CHECK-SAME: tile.buffer_reuse.bytes_after = 1536
 // CHECK-SAME: tile.buffer_reuse.bytes_before = 1536
-// CHECK-SAME: tile.buffer_reuse.groups = 1
-// CHECK: "tile.tmem.alloc"(%arg0) {tile.buffer_group = 0
-// CHECK: "tile.tmem.alloc"(%arg1) {tile.buffer_group = 0
-// CHECK: "tile.tmem.alloc"(%arg2) {tile.buffer_group = 0
-func.func @tmem_chain_collapses(%arg0: memref<16x16xf16>,
-                                %arg1: memref<16x16xf16>,
-                                %arg2: memref<16x16xf16>) {
-  "tile.tmem.alloc"(%arg0) : (memref<16x16xf16>) -> ()
-  "tile.tmem.alloc"(%arg1) : (memref<16x16xf16>) -> ()
-  "tile.tmem.alloc"(%arg2) : (memref<16x16xf16>) -> ()
+// CHECK-SAME: tile.buffer_reuse.groups = 3
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 0
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 1
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 2
+func.func @tmem_sequential_not_coalesced(%x: f32) {
+  %a = tile.tmem.allocate {bytes = 512 : i64, alignment = 128 : i64} : !tile.tmem
+  tile.tmem.store %x, %a : f32, !tile.tmem
+  %b = tile.tmem.allocate {bytes = 512 : i64, alignment = 128 : i64} : !tile.tmem
+  tile.tmem.store %x, %b : f32, !tile.tmem
+  %c = tile.tmem.allocate {bytes = 512 : i64, alignment = 128 : i64} : !tile.tmem
+  tile.tmem.store %x, %c : f32, !tile.tmem
   return
 }
 
 // -----
 
-// ── SMEM (alloc_shared) and TMEM (tmem.alloc) never share a group. ───────────
-// Disjoint live ranges + identical memref type, but distinct physical spaces —
-// a backend cannot realize one group as both LDS and TMEM, so they stay separate.
+// ── SMEM (alloc_shared) and TMEM (tmem.allocate) never share a group. ───────
+// Distinct physical spaces — a backend cannot realize one group as both LDS and
+// TMEM, so they stay separate.
 // CHECK-LABEL: func.func @smem_tmem_never_alias
 // CHECK-SAME: tile.buffer_reuse.groups = 2
 // CHECK: "tile.alloc_shared"(%arg0) {tile.buffer_group = 0
-// CHECK: "tile.tmem.alloc"(%arg1) {tile.buffer_group = 1
-func.func @smem_tmem_never_alias(%arg0: memref<16x16xf16>,
-                                 %arg1: memref<16x16xf16>) {
+// CHECK: tile.tmem.allocate {{.*}}tile.buffer_group = 1
+func.func @smem_tmem_never_alias(%arg0: memref<16x16xf16>) {
   "tile.alloc_shared"(%arg0) : (memref<16x16xf16>) -> ()
-  "tile.tmem.alloc"(%arg1) : (memref<16x16xf16>) -> ()
+  %t = tile.tmem.allocate {bytes = 512 : i64, alignment = 128 : i64} : !tile.tmem
   return
 }
 

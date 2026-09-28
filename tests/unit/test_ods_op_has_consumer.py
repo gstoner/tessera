@@ -24,8 +24,9 @@ and bare substrings as consumers. Rebuilt 2026-09-27 (sync
 resolves class templates, cross-checked record-for-record against
 `llvm-tblgen --dump-json` once, by hand, when it landed (609 of 609 op records
 agreed on name and mnemonic; the 14 it could not dump -- `tessera_neighbors.td`
-redefines `StrAttr`, and two solver `.td` files leave an attr/type `mnemonic`
-unresolved -- are read here). No test re-runs that cross-check, since it needs
+redefined `StrAttr` (that file is deleted since, SMALL-CORRECTNESS-GAPS-2026-09-27),
+and two solver `.td` files leave an attr/type `mnemonic` unresolved -- are read
+here). No test re-runs that cross-check, since it needs
 an LLVM install; `_DECLARED_OP_RECORDS` and the per-form pins stand in for it.
 The pre-PR review found three fail-open holes (a `using` declaration, prose in a
 string, an op's own dialect arity table); each has a synthetic case below.
@@ -47,6 +48,7 @@ from tessera.compiler.ods_consumer_audit import (
     classify,
     declared_ops,
     duplicate_names,
+    hand_declared_op_names,
 )
 
 _SELF = Path(__file__).resolve()
@@ -74,6 +76,10 @@ class Waiver(NamedTuple):
     owner: str | None = None
 
 
+# Per-op connection triage (capability, where it should connect, and a WIRE /
+# #29a / merge / delete-candidate recommendation for every entry below):
+# docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md.
+#
 # Family reasons, measured 2026-09-27. "No static reference" leaves one door
 # open that no scan can close: a name assembled at run time
 # (`f"tessera.{kind}"`) is invisible here, so confirm before deleting.
@@ -81,9 +87,9 @@ _R_CACHE = ("cache dialect KV/page/ring ops: no pass, lowering, verifier or Pyth
             "emitter names them; the KV cache lowers through `tessera.kv_cache.*` "
             "and runtime handles instead")
 _R_TESSERA_CACHE = "Graph-level page lookup with no producer or lowering"
-_R_SOLVER_CORE = ("solvers/core dialect (`trng`/`tsl`/`tss`): its .td is built by "
-                  "CMake, but no C++ outside `solvers/core/dialects` and no Python "
-                  "names these ops")
+_R_SOLVER_CORE = ("solvers/core dialect (`trng`/`tsl`/`tss`): CMake runs TableGen "
+                  "only (an INTERFACE library nothing compiles or registers), so no "
+                  "tool can parse these ops; no C++ or Python names them")
 _R_SOLVER_LINALG = ("linalg solver op with no producer or lowering; `potrf`/`potrs` "
                     "appear only in the `spd_solve.mlir` fixture")
 _R_COLLECTIVE = ("collective dialect op with no producer or lowering in the "
@@ -106,14 +112,17 @@ _R_ATTN_RES = ("block-AttnRes state op: the Python `_block_attnres_ops` referenc
                "fixtures name it")
 _R_FIXTURE_ONLY = "named only by lit fixtures / unit tests; no compiler producer or consumer"
 _R_UNREFERENCED = "nothing outside its own .td names it"
-_R_CATALOG_ONLY = ("Graph op named by the op catalog (a list of names, which is a "
-                   "declaration, not a consumer) and by tests; no pass or emitter "
-                   "produces or consumes it")
+_R_CATALOG_ONLY = ("Graph op named by the op catalog and by tests; the scan does not "
+                   "count the catalog, but `graph_ir._try_map_call` emits catalog "
+                   "names from @jit bodies, so the frontend PRODUCES it -- what is "
+                   "missing is a lowering consumer")
 _R_CLIFFORD_CALCULUS = ("geometric-calculus op (derivative/integral) with no "
                         "producer and no lowering in the Clifford passes")
 _R_ATTN_MASK = "FA-4 Attn Tile IR mask/LSE op with no producer; FA-4 lowering does not emit it"
-_R_MOE = ("programming-model MoE op with no producer or lowering; the MoE "
-          "transport tests exercise the Python API, not this op")
+_R_MOE = ("programming-model MoE op with no producer or lowering; its dialect is "
+          "TableGen-only (never compiled or registered) and its fixture's RUN pass "
+          "does not exist; the MoE transport tests exercise the Python API and the "
+          "Graph `tessera.moe_dispatch`, not this op")
 
 
 #: Shrink-only (ceiling below). Seeded 2026-09-27 from the first scan that
@@ -133,10 +142,13 @@ _WAIVED: dict[str, Waiver] = {
     **{name: Waiver("unreferenced", "#29", _R_SOLVER_CORE) for name in (
         "trng.create_state", "trng.uniform", "trng.normal", "tsl.root.brent",
         "tsl.root.newton", "tsl.solve_trig", "tss.spmv", "tss.spmm", "tss.cg", "tss.gmres")},
-    **{name: Waiver("unreferenced", "#29", _R_SOLVER_LINALG) for name in (
-        "tessera_solver.getrf", "tessera_solver.trsm", "tessera_solver.ir_step")},
-    **{name: Waiver("fixture_only", "#29", _R_SOLVER_LINALG) for name in (
-        "tessera_solver.potrf", "tessera_solver.potrs")},
+    # getrf/potrf/potrs/trsm left this list 2026-09-27
+    # (TILE-LATENT-DEFECTS-2026-09-27): the linalg MixedPrecision /
+    # IterativeRefinement passes now select them by op identity instead of a
+    # `contains("solve")` substring. Those passes only annotate (no pass reads
+    # `tessera.compute_dtype` / `tessera_solver.ir_*` yet), which is an
+    # attribute-level #29 gap, not an op-level one.
+    "tessera_solver.ir_step": Waiver("unreferenced", "#29", _R_SOLVER_LINALG),
     "tessera_sr.export_manifest": Waiver("unreferenced", "#29", _R_UNREFERENCED),
     "tessera_spectral.twiddle_table": Waiver("unreferenced", "#29", _R_UNREFERENCED),
     # collectives
@@ -155,13 +167,22 @@ _WAIVED: dict[str, Waiver] = {
     **{name: Waiver("unreferenced", "#29", _R_ARCH) for name in (
         "tessera.arch.weighted_sum", "tessera.arch.switch", "tessera.arch.mixed")},
     "tessera.arch.parameter": Waiver("fixture_only", "#29", _R_ARCH),
-    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH) for name in (
-        "tessera.ebm.inner_step", "tessera.ebm.decode_init", "tessera.ebm.self_verify",
+    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH + "; the frontend emits the "
+                    "flat spelling (`tessera.ebm_inner_step` / `ebm_self_verify`) the "
+                    "runtime consumes instead (triage: merge/supersede)") for name in (
+        "tessera.ebm.inner_step", "tessera.ebm.self_verify")},
+    "tessera.ebm.decode_init": Waiver("fixture_only", "#29", _R_EBM_GRAPH),
+    **{name: Waiver("fixture_only", "#29", _R_EBM_GRAPH + "; the compiled capability "
+                    "is `tessera_ebm.langevin_step{manifold}` (native_langevin.py -> "
+                    "LowerLangevin), triage: merge/supersede") for name in (
         "tessera.ebm.bivector_langevin_step", "tessera.ebm.sphere_langevin_step")},
     **{name: Waiver("fixture_only", "#29", _R_ATTN_RES) for name in (
         "tessera.attn_with_stats", "tessera.softmax_merge", "tessera.softmax_finalize")},
     "tessera.guided_denoise_region": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
-    "tessera.istft_jvp": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
+    "tessera.istft_jvp": Waiver(
+        "fixture_only", "#29", "produced by `ISTFTOp::buildTangent` "
+        "(TangentInterface.cpp) under --tessera-autodiff-forward, which the scan "
+        "reads as the dialect's own implementation; nothing lowers it"),
     # Added 2026-09-27 by the review that closed three fail-open holes; each
     # was "consumed" only through one of them.
     "tessera.arch.ste_one_hot": Waiver(
@@ -173,14 +194,14 @@ _WAIVED: dict[str, Waiver] = {
     "tessera.ebm.langevin_step_philox": Waiver(
         "fixture_only", "#29", _R_EBM_GRAPH + "; the runtime kernels mirror its "
         "semantics, and its only other mention was prose in an execution-matrix "
-        "`reason=` string"),
+        "`reason=` string; the compiled executors run its Philox semantics under "
+        "the name `tessera.ebm.langevin_step`"),
     "tessera_nvidia.func": Waiver(
         "fixture_only", "#29", "NVIDIA Target IR container op named only by "
         "fixtures; the bare `FuncOp` in PipelineOverlapPass.cpp is "
         "`using mlir::func::FuncOp`, not this op"),
     "tessera.ring.create": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
     # Tile / Attn / domain dialects
-    "tile.tmem.store": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
     **{name: Waiver("fixture_only", "#29", _R_ATTN_MASK) for name in (
         "tessera_attn.lse.save", "tessera_attn.lse.load", "tessera_attn.causal_mask")},
     "tessera_attn.dropout_mask": Waiver("unreferenced", "#29", _R_ATTN_MASK),
@@ -205,24 +226,15 @@ _WAIVED: dict[str, Waiver] = {
 
 #: The waiver may only shrink: lower this with every entry removed. Raising it
 #: is visible in review and needs a reason in the PR.
-_WAIVER_CEILING = 84
+_WAIVER_CEILING = 79
 
-#: One textual op name declared by two ODS records. `TesseraOps.td` declares
-#: the seven `tessera.neighbors.*` ops in the `tessera` dialect (the live ones:
-#: MLIR resolves `tessera.neighbors.x` by its first segment); the unbuilt
-#: `tessera_neighbors.td` redeclares them for a hand-written neighbors dialect
-#: (`TesseraNeighbors.cpp` defines `struct HaloRegionOp` etc. by hand), and
-#: `llvm-tblgen` cannot even dump that file. Three declarations of one op is
-#: Decision #31's duplicate authority in ODS form. Shrink-only.
-_DUPLICATE_NAMES_ON_2026_09_27: frozenset[str] = frozenset({
-    "tessera.neighbors.halo.exchange",
-    "tessera.neighbors.halo.region",
-    "tessera.neighbors.neighbor.read",
-    "tessera.neighbors.pipeline.config",
-    "tessera.neighbors.stencil.apply",
-    "tessera.neighbors.stencil.define",
-    "tessera.neighbors.topology.create",
-})
+#: History (the ratchet this replaced): on 2026-09-27 seven `tessera.neighbors.*`
+#: names were declared by two ODS records -- `TesseraOps.td` (the live ones:
+#: MLIR resolves `tessera.neighbors.x` by its first segment) and an unbuilt
+#: `tessera_neighbors.td` -- and a third time by hand in `TesseraNeighbors.cpp`.
+#: Consolidated the same day onto `TesseraOps.td` (sync
+#: `SMALL-CORRECTNESS-GAPS-2026-09-27`), so the baseline is now empty and both
+#: gates below are absolute: no op name may have a second declaration of any form.
 
 
 # ─── The scan itself ────────────────────────────────────────────────────────
@@ -255,7 +267,7 @@ def test_scan_parses_every_ods_form() -> None:
 
 #: Every op record under `src/`. Pinned exactly, not as a floor: a floor let
 #: the reader lose up to its slack without failing (GOV-ODS-CONSUMER-1 review).
-_DECLARED_OP_RECORDS = 623
+_DECLARED_OP_RECORDS = 616
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:
@@ -459,10 +471,38 @@ def test_marked_at_site_reads_the_definition(tmp_path: Path) -> None:
 
 def test_no_two_records_declare_one_op_name() -> None:
     dups = duplicate_names(_OPS)
-    new = sorted(set(dups) - _DUPLICATE_NAMES_ON_2026_09_27)
-    assert not new, (
-        f"these op names are declared by more than one ODS record: "
-        f"{ {n: dups[n] for n in new} }. MLIR resolves a name by its first "
-        f"segment, so at most one can be live; delete the other declaration")
-    stale = sorted(_DUPLICATE_NAMES_ON_2026_09_27 - set(dups))
-    assert not stale, f"no longer duplicated; remove from the ratchet: {stale}"
+    assert not dups, (
+        f"these op names are declared by more than one ODS record: {dups}. "
+        f"MLIR resolves a name by its first segment, so at most one can be "
+        f"live; delete the other declaration (Decision #31)")
+
+
+def test_no_hand_written_cpp_op_shadows_an_ods_op() -> None:
+    """The third form `duplicate_names` cannot see: a C++ `Op<>` class by hand.
+
+    A hand-rolled op registering an ODS-declared name is a second authority
+    whose verifier may never run (the deleted neighbors dialect's did not: the
+    parser resolved every name to the `tessera` dialect) and which, loaded next
+    to the ODS dialect, would register one name twice.
+    """
+    ods = {op.full_name for op in _OPS}
+    hand = hand_declared_op_names()
+    shadowed = {name: files for name, files in hand.items() if name in ods}
+    assert not shadowed, (
+        f"hand-written C++ ops re-declare ODS op names: {shadowed}. Keep the "
+        f"ODS declaration and move any verifier logic into its verify().")
+
+
+def test_hand_written_op_scan_sees_the_form_it_gates(tmp_path) -> None:
+    """The scanner must match the shape the deleted neighbors dialect used."""
+    src = tmp_path / "src" / "x"
+    src.mkdir(parents=True)
+    (src / "Hand.cpp").write_text(
+        "struct HaloRegionOp : Op<HaloRegionOp> {\n"
+        "  static llvm::StringRef getOperationName() {\n"
+        "    return \"tessera.neighbors.halo.region\";\n  }\n};\n"
+        "// static StringRef getOperationName() { return \"in.a.comment\"; }\n")
+    (src / "Use.cpp").write_text(
+        "auto n = HaloRegionOp::getOperationName();\n")
+    found = hand_declared_op_names(tmp_path)
+    assert found == {"tessera.neighbors.halo.region": ["src/x/Hand.cpp"]}

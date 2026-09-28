@@ -229,9 +229,16 @@ _STRUCTURAL_BACKEND_ALIASES: dict[str, str] = {
 
 _DOMAIN_BACKEND_ALIASES: dict[str, str] = {
     # Domain variants whose Tile/Target lowering is the canonical kernel plus a
-    # parameterization, not a distinct backend lane. NTK RoPE changes the angle
-    # schedule; the executing compiler path is the existing RoPE kernel.
-    "ntk_rope": "rope",
+    # parameterization, not a distinct backend lane. An entry is admissible only
+    # when a compiler rewrite actually carries the variant onto the canonical
+    # op; the alias borrows that op's Tile/Target evidence.
+    #
+    # Withdrawn 2026-09-27 (TILE-LATENT-DEFECTS-2026-09-27): "ntk_rope" ->
+    # "rope". Its premise was false -- the frontend emits `tessera.ntk_rope`,
+    # but no pass rewrites it to `tessera.rope` and every rope consumer matches
+    # only the literal `tessera.rope`, so an emitted ntk_rope reaches no Tile or
+    # Target lowering. Re-add only with the canonicalization
+    # `ntk_rope(x, theta, s) -> rope(x, theta / s)` (ODS triage WIRE slice 1).
 }
 
 

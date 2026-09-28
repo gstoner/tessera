@@ -1,0 +1,5 @@
+T=128: device=gather_fa end_to_end=direct
+T=512: device=gather_fa end_to_end=direct
+T=2048: device=gather_fa end_to_end=direct
+T=8192: device=gather_fa end_to_end=direct
+record rc=0

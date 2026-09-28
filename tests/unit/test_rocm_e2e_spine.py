@@ -16,6 +16,8 @@ from tessera.compiler.native_artifact import (
     BufferArgument,
     DeviceLibraryRecord,
 )
+from tests._support.rocm_unary_baseline import emit_reduce_tile_ir, emit_softmax_tile_ir
+from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tessera.compiler.rocm_native import (
     GFX_ATTN_BWD_DKDV_ABI,
     GFX_ATTN_BWD_DQ_ABI,
@@ -34,9 +36,7 @@ from tessera.compiler.rocm_native import (
     emit_attention_graph_ir,
     emit_moe_dispatch_tile_ir,
     emit_attention_tile_ir,
-    emit_reduce_tile_ir,
     emit_paged_kv_read_tile_ir,
-    emit_softmax_tile_ir,
     native_package_kind,
     package_attention_backward,
     package_moe_dispatch,
@@ -805,6 +805,10 @@ def test_rocm_driver_selected_device_libraries_are_content_addressed(monkeypatch
     assert not any(str(tmp_path) in str(record.to_dict()) for record in records)
 
 
+_needs_compiler = pytest.mark.skipif(find_tessera_opt() is None, reason="requires production tessera-opt")
+
+
+@_needs_compiler
 def test_rocm_softmax_package_owns_hsaco_and_descriptor(monkeypatch) -> None:
     monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
     package = package_softmax(_softmax_module(), pipeline_name="tessera-lower-to-rocm")
@@ -817,13 +821,16 @@ def test_rocm_softmax_package_owns_hsaco_and_descriptor(monkeypatch) -> None:
         "rocm.oclc_isa_version_1151",
     ]
     assert package.descriptor.abi_id == GFX_SOFTMAX_F32_ABI
-    assert package.descriptor.entry_symbol == "tessera_tile_softmax_f32"
+    # E2E-REAL-6: the entry is the native Schedule->Tile function, not a
+    # Python-authored symbol, and the route is the scheduled consumer.
+    assert package.descriptor.entry_symbol == "gfx1151_softmax"
     assert [item.name for item in package.descriptor.buffers] == ["x", "o"]
     assert [item.name for item in package.descriptor.scalars] == ["Rows", "K"]
-    assert package.descriptor.provenance["work_item"] == "ROCM-E2E-1"
-    assert package.descriptor.provenance["schedule"] == "workgroup_per_row_256"
+    assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    assert package.descriptor.geometry.policy == "gfx1151_softmax_workgroup_per_row_256"
 
 
+@_needs_compiler
 @pytest.mark.parametrize("failure", ["dtype", "shape", "scalar"])
 def test_rocm_softmax_descriptor_rejects_invalid_invocations(monkeypatch, failure) -> None:
     monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
@@ -841,11 +848,8 @@ def test_rocm_softmax_descriptor_rejects_invalid_invocations(monkeypatch, failur
         package.descriptor.validate_invocation(package.image, {"x": x, "o": output}, scalars)
 
 
+@_needs_compiler
 def test_driver_joins_exact_gfx1151_native_package(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
-        lambda module, *, target: False,
-    )
     monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
     bundle = compile_graph_module(
         _softmax_module(),
@@ -860,13 +864,11 @@ def test_driver_joins_exact_gfx1151_native_package(monkeypatch) -> None:
     assert bundle.tile is not None and "tile.softmax_kernel" in bundle.tile.text
     assert bundle.target_ir is not None and "tessera_rocm.softmax" in bundle.target_ir.text
     assert any(event.pass_name == "rocm-gfx1151-native-package" for event in bundle.trace_events)
+    assert bundle.launch_descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
 
 
+@_needs_compiler
 def test_canonical_gfx1151_selector_defaults_to_native_descriptor(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
-        lambda module, *, target: False,
-    )
     monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
     monkeypatch.setattr(
         "tessera.compiler.rocm_native.native_packaging_available", lambda: True
@@ -920,6 +922,7 @@ def test_rocm_reduction_emitter_and_contract_are_typed_and_arbitrary_axis() -> N
     assert supports_reduction(module)
 
 
+@_needs_compiler
 def test_rocm_reduction_package_owns_outer_axis_inner_descriptor(monkeypatch) -> None:
     monkeypatch.setattr(
         "tessera.compiler.rocm_native._compile_reduction_tile_ir",
@@ -928,7 +931,8 @@ def test_rocm_reduction_package_owns_outer_axis_inner_descriptor(monkeypatch) ->
     package = package_reduction(_reduction_module(axis=1), pipeline_name="tessera-lower-to-rocm")
     assert package.descriptor.abi_id == GFX_REDUCE_F32_ABI
     assert [item.name for item in package.descriptor.scalars] == ["Outer", "AxisExtent", "Inner"]
-    assert package.descriptor.provenance["work_item"] == "ROCM-E2E-2"
+    assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    assert package.descriptor.provenance["nan_mode"] == "propagate"
     assert package.descriptor.provenance["outer"] == 2
     assert package.descriptor.provenance["axis_extent"] == 3
     assert package.descriptor.provenance["inner"] == 5
@@ -942,6 +946,7 @@ def test_rocm_reduction_package_owns_outer_axis_inner_descriptor(monkeypatch) ->
         ("fp32", GFX_REDUCE_F32_ABI),
     ],
 )
+@_needs_compiler
 def test_rocm_reduction_package_has_storage_keyed_f32_output_abi(monkeypatch, dtype, abi) -> None:
     monkeypatch.setattr(
         "tessera.compiler.rocm_native._compile_reduction_tile_ir",
@@ -953,13 +958,10 @@ def test_rocm_reduction_package_has_storage_keyed_f32_output_abi(monkeypatch, dt
     assert package.descriptor.buffers[1].dtype == "fp32"
 
 
+@_needs_compiler
 def test_driver_joins_gfx1151_reduction_native_package(monkeypatch) -> None:
-    # Keep this retained Graph-owned packager check distinct from the
-    # E2E-REAL-5 exact-artifact coverage in test_scheduled_kernel_consumers.py.
-    monkeypatch.setattr(
-        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
-        lambda module, *, target: False,
-    )
+    # E2E-REAL-6: the driver's gfx1151 reduction goes through the scheduled
+    # artifact; the retired Graph-owned constructor is a test baseline only.
     monkeypatch.setattr(
         "tessera.compiler.rocm_native._compile_reduction_tile_ir",
         _fake_reduce_compile,
@@ -974,7 +976,7 @@ def test_driver_joins_gfx1151_reduction_native_package(monkeypatch) -> None:
     assert bundle.orchestration_state == "launchable"
     assert bundle.tile is not None and "tile.reduce_kernel" in bundle.tile.text
     assert bundle.launch_descriptor is not None
-    assert bundle.launch_descriptor.provenance["work_item"] == "ROCM-E2E-2"
+    assert bundle.launch_descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
 
 
 def test_rocm_paged_kv_owns_typed_direct_descriptor(monkeypatch) -> None:

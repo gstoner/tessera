@@ -5165,3 +5165,410 @@ Remaining: M = 256 (one full row block, no idle wave) stays 1.05-1.23x behind Ra
 Evidence: [one-row-block packet](../../../benchmarks/baselines/gfx1201_mxfp4_small_m_20260927/README.md), `tests/device/rocm/test_mxfp4_folded_prefill.py`, `tests/unit/test_rocm_mxfp4_folded_schedule.py`, `tests/tessera-ir/phase2/e2e_folded_mxfp4_rocm_load_schedule.mlir`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-27 — The x86 f32 GEMM packs B itself: alignment no longer sets its speed
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: branch `claude/x86-gemm-align`.
+Sync: `X86-GEMM-ALIGN-2026-09-27` (closes `X86-GEMM-ALIGN-1`).
+
+Outcome: `tessera_x86_avx512_gemm_f32` read B with one unaligned 64-byte load per
+FMA, so any caller whose B was not 64-byte aligned (numpy guarantees 16) ran it
+~1.5x slower at 256³ (`X86-MATMUL-BIMODAL-1`). The recorder had been aligned; the
+production path had not.
+
+What the kernel does now:
+- **Two paths.** The packed path copies blocks of up to 8 strips × 512 rows of B into
+  the kernel's own 64-byte-aligned, L2-resident panel and runs eight accumulators
+  over it; the sum continues through C between K blocks. The direct path runs the
+  same loop over B in place.
+- **Measured rule:** direct iff M == 1, or M ≤ 4 with B ≤ 1 MiB. It comes from a
+  paired TSC-witness crossover on Princess-Luna (M ∈ 1..16, B from 16 KiB to 4 MiB,
+  B%64 ∈ {0,16}). It replaced "packed for every M > 1" after Codex review showed that
+  rule regressed aligned small-M calls.
+- **Unrolled strip loops.** Measuring the rule also exposed that GCC 15 `-O2` left
+  the strip loops rolled with the accumulators on the stack; they are now fully
+  unrolled.
+- **Overlap.** An overlapping C (with A or B) is detected at entry and computed
+  through scratch.
+- **Why the kernel, not `runtime.launch`:** the matmul-family lane and
+  `TileToX86Pass`'s `func.call` reach the symbol directly.
+
+Numerics: results are bitwise identical to the pre-fix kernel on both paths at every
+alignment. The oracle is declared in `test_gemm_f32.cpp` and checked with `memcmp`
+at every 4-byte B offset; a K-block mutation fails it. The path rule and overlap
+cases are pinned by tests.
+
+Measurement: a paired interleaved before/after probe (both builds in one process,
+TSC witness, timing lock, production package asserted to embed the timed library).
+Princess-Luna ran 17 shapes and Tajasarus 7:
+- On the packed path, the best-process alignment effect fell from 1.14–3.34x to
+  ≤ 1.04x.
+- The direct path keeps 1.07–1.43x.
+- No shape is slower than before at any alignment: 0.04–0.77x above 10 µs, and
+  0.87–1.05 on the ~4.5 µs ctypes floor.
+- 256³ went to 0.42x of before when aligned and 0.28x when misaligned.
+
+Packets: both AVX-512 E2E packets were re-recorded twice at `86ec9d31`. Matmul 256³
+went from ~0.73 / ~0.70 ms to ~0.30 / ~0.29 ms. Princess-Luna attention is +6%
+(recording drift, unchanged source); everything else is within 4%.
+
+Remaining: the direct path's residual alignment effect; the rule is measured on
+Princess-Luna only; `_tiled` and the bf16 / f64 / u8s8 GEMMs are unchanged (the
+latter's sensitivity is unmeasured).
+
+Evidence: `benchmarks/baselines/x86_gemm_align_20260927/`,
+`docs/audit/evidence/e2e_spine/x86/x86_64_avx512_{strix_halo,granite_ridge}/`,
+`src/compiler/codegen/tessera_x86_backend/tests/test_gemm_f32.cpp`,
+`tests/unit/test_x86_matmul_family_compiled.py`.
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — E2E-REAL-6: gfx1151 softmax and reduction retire their Graph-owned constructors
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: branch `claude/e2e-real-6-rocm-unary`.
+Sync: `E2E-REAL-6-rocm-unary-2026-09-27`.
+
+Outcome: `rocm_native.package_softmax` / `package_reduction` no longer read the
+Python Graph object to author Tile IR text. Both lower through
+`scheduled_kernel.lower_scheduled_kernel(target="rocm_gfx1151")` (tessera-opt
+Graph -> Schedule -> Tile), and `package_scheduled_kernel` replays the Schedule
+record and projects the descriptor from native IR. The Schedule contract now
+carries the envelope the retired constructors served on gfx1151: f16/f32
+softmax (including `softmax_safe`, canonicalized to the one semantic it is),
+f16/bf16/f32 sum/mean/max with f32 output, and keepdims
+(`PMPasses.cpp::getSemanticKernelSchedule`, Python `_graph_contract`,
+`native_unary_contract.verify_unary_projection`). The ROCm consumer selects the
+storage-keyed ABI and carries `nan_mode` into the descriptor (#21a/#32).
+gfx1201 keeps its proved f32 rank-reducing envelope in all three layers.
+The retired constructors are frozen in `tests/_support/rocm_unary_baseline.py`
+as the declared oracle Decision #31(a) allows; nothing in `python/` calls them.
+
+Why this family: MASTER_AUDIT §1 already named ROCm softmax/reduction first in
+the bootstrap absorption order; the compiled consumer existed for both chips
+(f32 since 2026-08-05); the Graph constructor was still the production caller
+for every narrow-storage or keepdims request; and both routes compile through
+the same `_compile_tile_ir`/`_compile_reduction_tile_ir` into images that can be
+run side by side. Paged-KV and MoE have no ROCm Schedule producer yet, and the
+NVIDIA gap families need new Schedule contracts, so neither is a one-PR move.
+
+Found on the way: the retired constructor derived the combiner from the op
+*name*, so `tessera.reduce {kind = "max"}` (what `ts.reduce(x, op="max")`
+traces to) was packaged and executed as a **sum**. The compiled route reads
+`kind`; `min`/`prod` are refused instead of summed. Kept verbatim in the
+baseline as evidence, with a device test. The same review listed every other
+case the retired contract admitted and the compiled one refuses, each on
+purpose and each pinned by a test: an integer `keepdims`, a combiner-less
+`tessera.reduce` (summed before), a reduction `schedule` hint on softmax, and a
+softmax whose declared output shape differs from its input (the retired route
+guarded the output with the input shape). `nan_mode` in the descriptor is now
+read from the replayed Tile op, not written as a literal. A knock-on: the native
+JVP reduce child (`native_jvp_plugins._scheduled_reduce_step`) now accepts
+keepdims on gfx1151 through the same contract -- same device-proven kernel, not
+separately device-tested through the JVP entry.
+
+Measured cost (Princess-Luna, not a promotion): the HSACO is shape-invariant on
+both routes, but the compiled route's cache key is its Tile text, which binds
+the shape (through the Schedule digest and constants) and the Graph function
+name, so each new shape or function name is a cold compile (~370 ms) where the
+retired route hit its cache (~186 ms). The f32 envelope has had this since 2026-08-05.
+`benchmarks/rocm/measure_rocm_unary_route_cache.py` reproduces it.
+
+Remaining: E2E-REAL-6 still owns ROCm paged-KV, MoE dispatch and forward
+attention's Graph-owned constructors, the NVIDIA and Apple gap families, the
+x86 cohort/elementwise/breadth constructors and the frontend (`_OpExtractor`).
+Follow-ups this cut exposed: key the ROCm image cache on the shape-free kernel;
+gfx1201 narrow/keepdims unary rows (device proof on Tajasarus); NVIDIA and x86
+classify `softmax_safe` as a native softmax their scheduled packagers refuse;
+`numeric_policy` keyword arguments are still ignored by every target's unary
+contract (pre-existing, unchanged).
+
+Evidence: `tests/unit/test_rocm_unary_migration.py` -- host-free differential
+over the retired envelope (28 softmax + 150 reduction cases: ABI, buffers,
+scalars, shape guards, geometry, semantic provenance, Tile-kernel attributes),
+refusal parity and the gfx1201 boundary; on Princess-Luna (gfx1151,
+`TESSERA_ROCM_E2E_DEVICE_TEST=1`) all 375 pass with no skips, including 179
+device rows in which the retired and compiled images agree bit-for-bit and
+match an oracle. On Tajasarus (gfx1201, assertions-ON LLVM/MLIR 23.1.1) the
+host-free rows and every gfx1201 scheduled device row pass (310 passed; the
+skips are the gfx1151 device rows and Darwin-only rows). Route census:
+`scripts/record_package_route_census.py` differs from main only in the ROCm
+unary rows; `bootstrap_prune_gap.md` moves `rocm_gfx1151` softmax/reduction from
+gap to generic.
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — EVIDENCE-PACKET-1: shared evidence envelope, GA and EBM route receipts
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: branch `claude/evidence-packet-1-envelope`.
+Sync: `EVIDENCE-PACKET-1-2026-09-27`.
+
+Outcome: two slices. **Shared envelope** (`compiler/evidence_envelope.py`):
+`read_evidence_packet` dispatches on `schema` to one of three registered
+families (x86 Zen 5 profiler v1/v2, ROCm gfx1151/gfx1201 profiler, NVIDIA
+sm_120 device clock) and runs the family validator unchanged. It then projects
+the packet onto one envelope: artifact identity (image, ISA and semantic
+digests, the timing sample's digests, x86 per-row images), compiler identity
+where a family records it, timing domain, clock validity, execution
+environment, source commit and worktree state, sample ids, route, eligibility
+and refusal causes. A missing or malformed field is refused, never defaulted
+(`EVIDENCE_ENVELOPE_INCOMPLETE`). The envelope also enforces invariants no
+family may waive (`EVIDENCE_ENVELOPE_CONTRADICTED`): a packet is eligible
+exactly when it names no refusal cause (the x86 benchmark's own retain/reject
+verdict counts as a cause), and an eligible packet has a valid clock, a clean
+tree, a sample id, and a measured image its timing sample names. The last
+rule was checked only on the ROCm device-clock route before; now it applies
+on every route. An unregistered schema refuses (`EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN`).
+
+Two fail-open derivations were closed at the family, not only in the
+envelope. `profiler_rocm_evidence` read `if source.get("worktree_dirty")`, and
+`profiler_x86_evidence` read `environment.get("virtualized"/"wsl"/"worktree_dirty")`,
+so a packet that omitted a field (or stored the string `"false"`) derived no
+`SOURCE_WORKTREE_DIRTY` / `VIRTUALIZED_HOST` / `WSL_CLOCK_DOMAIN`. Both now
+require bools. NVIDIA already refused (`is not False`). The SSD admission loops
+(`ssd_performance`, ROCm and NVIDIA device-clock routes) read calibrations
+through the envelope, pinned to their family. A drift test refuses any
+production module that calls a family validator directly. Committed evidence:
+188 packets found under `benchmarks/`; 186 read. Those are 36 NVIDIA, 75
+gfx1151, 73 gfx1201 and 2 x86 packets; 149 are promotable. The 37 retained are
+36 gfx1201 packets (`INSTRUMENTATION_OVERHEAD_EXCEEDED`) and the 2026-08-06 x86
+packet (`VIRTUALIZED_HOST`, ..., `benchmark_verdict=retain`). The 2 refused
+are the pre-existing `DEVICE_CLOCK_WINDOW_TOO_SHORT` pair. No committed packet
+changed state.
+
+**GA/EBM route receipts** (`tessera/_route_receipts.py`): each of the 32
+`_try_<target>_*` native-lane helpers in `tessera.ga` and `tessera.ebm` is
+`@native_attempt` (target from its name: `apple_gpu_runtime`, `x86_avx512`,
+`rocm`, `cuda`), and each of the 29 public primitives that reaches one is
+`@public_route`. Inside `capture_route_receipts()` every public call leaves a
+receipt naming its route. A native dispatch outside any receipt frame (an
+orphan), or a capture with no receipts, makes the span `unattributed`
+(`ROUTE_RECEIPT_ORPHAN_DISPATCH`, `ROUTE_RECEIPT_EMPTY`). `clifford_core`,
+`energy_core` and `visual_complex_core` rows now carry `route` and
+`route_receipts` over the timed span, and derive `device` from them. The
+jit_bridge trace had covered only the Apple manifest lane. A receipt run on
+Princess-Luna shows why that mattered: `ebm.energy_quadratic` and
+`partition_exact_from_energies` ran on the **x86 AVX-512** kernel, which the
+old trace would have reported as no native dispatch.
+
+Device receipts, all at clean `eed48b9b`
+(`benchmarks/baselines/ga_ebm_route_receipts_20260927/`):
+
+- **Mac M1 Max:** the GA primitives ran on the Apple GPU runtime.
+  `geometric_product` split between that runtime and the reference, and
+  `rotor_sandwich` is `mixed`. EBM `langevin_step` and the partition ran on
+  the Apple GPU; `energy_quadratic` ran on the reference.
+- **Princess-Luna and Tajasarus (Zen 5):** EBM energy and partition ran on
+  x86 AVX-512. `langevin_step` and all GA ran on the reference.
+- **The-Super-Bear (Zen 2):** everything ran on the reference.
+- **No host:** no composition reached a ROCm or CUDA GPU lane. The x86 lane
+  precedes ROCm in those primitives, and the native Langevin/Clifford GPU
+  routes are separate entry points these suites do not call.
+
+Receipts attribute routes. They are not timings, and every row stays
+non-promotable. The pre-PR full sweep caught one defect in the first
+labelling. The labels were dotted (`tessera.ebm.inner_step`), and the ODS
+consumer audit read them as compiler consumers of six EBM ODS ops. Labels are
+now `ebm:inner_step`, dotted labels are refused, and the receipts were
+re-recorded. The Codex review of PR #869 found two more defects, both now fixed with tests. First, the CLI filtered out a top-level packet whose schema is unregistered, then exited 0 having read nothing; it now refuses with `EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN`, and so does an input that contains no packet at all. Second, nested receipt captures were closed with `list.remove`, which matches by dataclass equality, so an inner capture could remove an equal outer one; captures now close by identity, in stack order. Each backend outcome is recorded in `docs/audit/backend/{apple,nvidia,rocm,x86}/todo.md` under the sync key.
+
+Remaining: math probes' manufactured `RuntimeArtifact.metadata`, paired
+public-frontend runs for the direct-IR AD probes, asynchronous/multi-thread
+attribution, DLOP profiler receipts and clean performance admission (plan
+record). Also open: the GPU families record no compiler build identity, and
+the CUDA activity-window calibration, the calibration corpus and E2E-spine
+packets are not yet envelope families. The image-binding rule means a future
+bare-metal x86 packet on the profiler route can promote only if its rows also
+carry timing witnesses that name their images. No such packet exists, since
+every fleet host is WSL2.
+
+Evidence: `tests/unit/test_evidence_envelope.py`,
+`tests/unit/test_route_receipts.py`, `tests/unit/test_ssd_comparison.py`,
+`benchmarks/baselines/ga_ebm_route_receipts_20260927/`; hosts: Mac (M1 Max,
+macOS 27) for the envelope and the unit gates, and one receipt record each from
+Mac, Princess-Luna, Tajasarus and The-Super-Bear.
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — Autotune launch integrity
+
+Owner: [W5.2](INTEGRATED_COMPILER_PLAN.md#w52)
+
+PRs: branch `claude/autotune-launch-integrity`.
+Sync: `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`.
+
+Outcome: four items that each move the same corpus rows landed together.
+
+1. `NVIDIA-EMITTED-UNCHECKED-LAUNCH`: every emitted CUDA source (55 sync-only
+   entries and two inline sources, now emitters) and the three sync-only HIP
+   entries (paged-KV gather, direct paged attention, ReplaySSM `su`) read the
+   last-error slot after each launch group and consume every
+   allocation/copy/memset/event status. The host-independent gates reject a
+   sync-only entry. With every launch made invalid, the sync-only judgment
+   reported success on sm_120 (17/17 lanes), gfx1151 and gfx1201 (3/3 each);
+   the fixed entries fail.
+2. `AUTOTUNE-SM120-ROUTE-RESOURCES`: the 17 routes without Nsight route
+   resources were captured one route per report; 91 registry rows are
+   selector-eligible (was 38).
+3. The shipped `libtessera_nvidia_gemm` was not byte-reproducible because its
+   DT_RUNPATH recorded how CMake discovered CUDA; it now builds without one and
+   four builds across two worktrees and both configures are identical.
+4. `AUTOTUNE-KERNEL-IDENTITY-PAGED-KV`: `autotune.RouteIdentity` gives the
+   non-registry rows the registry's Decision #11 contract; both paged-KV warm
+   starts refuse a changed route.
+
+Re-records: 108 sm_120 rows on The-Super-Bear (20 registry rows served, was
+13; all 108 miss after an emitter change with pins unchanged) and the 8 gfx1151
+paged-KV rows on Princess-Luna (winners unchanged, 3 served in two build
+trees). No row was backfilled.
+
+Remaining: 15 of the 20 formerly partial sm_120 rows are unseparated and 1 is
+unstable; an `ncu`-only exit abort of processes holding a generic-lane library
+is recorded, not root-caused.
+
+Evidence: `benchmarks/baselines/autotune_corpus_rerecord_sm120_launch_integrity_20260927/`,
+`benchmarks/baselines/autotune_corpus_rerecord_gfx1151_paged_kv_20260927/`,
+`tests/unit/test_nvidia_emitted_stale_error_rule.py`,
+`tests/unit/test_rocm_emitted_launch_rule.py`,
+`tests/unit/test_autotune_route_identity.py`,
+`tests/device/nvidia/test_emitted_unchecked_launch.py`,
+`tests/device/rocm/test_emitted_unchecked_launch_hip.py`.
+
+<!-- entry-fields:end -->
+
+Additional owners: the NVIDIA and ROCm backend queues (same sync key).
+
+### 2026-09-27 — Small correctness gaps: sm_120 TMA smoke, a lit runner that runs, one neighbors authority
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/small-correctness-gaps`.
+Sync: `SMALL-CORRECTNESS-GAPS-2026-09-27`.
+
+Outcome: Three small defects, each root-caused on the host that shows it.
+**TMA smoke (sm_120):** two stacked defects. Driver 610.88 rejects
+`cuTensorMapEncodeTiled` when a rank-1 map's `globalStrides` is `nullptr`
+(zero meaningful entries; the contents are ignored -- 128, 0, 7 and 2^41 all
+encode), and once that was fixed the launch faulted because the by-value
+`CUtensorMap` lacked `__grid_constant__`, so nvcc copied it to local memory
+and TMA was handed a local address (visible in the PTX; the fault goes away
+with exactly that change). The smoke now passes on the RTX 5070.
+**Lit runner:** on Tajasarus every lit selector picked an LLVM-prefix wrapper
+that cannot `import lit`, so `check-tessera-ir` ran zero fixtures;
+`cmake/TesseraLit.cmake` now selects, for every suite, the first candidate
+whose `--version` runs, warns per rejected candidate, fails configure for
+`tests/` and fails (not skips) the backend check targets when none works.
+Two resolver ratchets that failed only when `TESSERA_BUILD_DIR` was exported
+now clear every selector the resolver reads, gated against the resolver's
+source. **Neighbors:** the seven `tessera.neighbors.*` names declared three
+times (core `TesseraOps.td`, an unbuilt `tessera_neighbors.td`, a hand-written
+C++ dialect) now have one authority, `TesseraOps.td` -- the only one the parser
+ever reached, since `tessera.neighbors.x` resolves by its first segment (a
+taps/coeffs mismatch parsed clean on the pre-change `tessera-opt`, showing the
+hand-written verifier never ran). The semantics only the dead copies stated
+moved into the core verifier: stencil.define tap/coefficient well-formedness
+(before, checked only inside `-tessera-stencil-lower`) and neighbor.read's
+required `delta`. The duplicate ratchet's baseline is empty and a new gate
+rejects hand-written C++ ops that shadow an ODS name.
+
+Remaining: `test_tma_smoke` has no ctest/pytest wrapper, so no lane runs it.
+The halo.exchange `!tessera.neighbors.halo`-only operand check of the deleted
+dialect was not ported: `-tessera-halo-mesh-integration` legitimately builds
+exchanges over tensors. Array-of-integer stencil taps, which
+`-tessera-halo-infer` read but `-tessera-stencil-loop-materialize` silently
+skipped, are now rejected at parse (one unit-test input moved to dense taps).
+The two broken lit wrappers remain in Tajasarus's toolchain prefixes (reported,
+not used). The 77 waived ops' consume-or-delete decisions stay open.
+
+Evidence: The-Super-Bear (RTX 5070, CUDA 13.4.59 / driver 610.88, own worktree,
+device runs under `flock /tmp/tessera-timing.lock`): probe matrix and PTX in
+the [NVIDIA queue](../backend/nvidia/todo.md); pre-fix binary fails, fixed
+`test_tma_smoke` (CMake-built, `sm_120a`) passes 5/5. Tajasarus (own worktree,
+`build-wb`, configured like `build/`, under `env.sh`): before, `check-tessera-ir`
+/ `check-ebm` / `check-tessera-rocm` die with `ModuleNotFoundError`; after,
+`check-tessera-ir` 520 discovered / 454 passed / 66 unsupported,
+`check-tessera-rocm` 82/82, ebm 18, clifford 22, spectral 11; resolver ratchets
+17/17 under `env.sh`, with `TESSERA_BUILD_DIR` and under `env -i`
+([ROCm queue](../backend/rocm/todo.md)). Neighbors: the new negative fixture
+fails all nine expected diagnostics on the pre-change binary and passes after;
+Mac lit 520 / 471 passed / 49 unsupported; Tajasarus as above, and the same
+counts (454 / 66, `check-tessera-rocm` 82/82) from an assertions-ON LLVM 23.1.1
+tree built from this branch; Super-Bear reconfigured through the validator
+(selects `/usr/lib/llvm-23/bin/lit`), `check-tessera-nvidia` 62/62. Mac full
+unit sweep 21306 passed / 3821 skipped / 0 failed (the first sweep caught
+`NEIGHBORS_TOPOLOGY_UNKNOWN_KIND` losing its only C++ occurrence; the registry
+scan now reads the `.td` constraint that emits it);
+`tests/unit/test_ods_op_has_consumer.py`, `test_neighbors_*.py`,
+`test_tessera_opt_build.py`, `test_test_suite_architecture.py`.
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — Latent defects from the ODS triage: TMEM lowering, TMEM planning, solver matching, ZeRO config; dashboards stop over-claiming
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/tile-latent-defects`.
+Sync: `TILE-LATENT-DEFECTS-2026-09-27`.
+
+Outcome: the defects the ODS connection triage recorded in passing are fixed,
+each with a fixture that fails on the unfixed code. All are IR-level; TMEM is
+datacenter sm_100, which no fleet box has, so nothing here claims execution.
+
+1. `LowerTileToNVIDIA` maps `tile.tmem.allocate/load/store` by op identity.
+   Anything else under `tile.tmem.` (including the unregistered legacy
+   `tile.tmem.alloc`) fails with `NVIDIA_TMEM_UNKNOWN_OP`; it used to become a
+   `tmem_store` contract. The `!tile.tmem` handle lowers to the i32 TMEM
+   address, and load results are replaced; before, every op was erased with
+   live uses, which aborted the assertions-ON driver ("operation destroyed but
+   still has uses"). A handle feeding an unlowered op (`tile.tcgen05.mma`)
+   fails with `NVIDIA_TMEM_HANDLE_UNLOWERED`.
+2. `LowerNVIDIAToNVVM` refuses (`NVIDIA_MARKER_RESULT_USED`) a void-marker
+   contract whose result is used outside the contract family, instead of
+   `dropAllUses` leaving a null operand.
+3. `TileBufferReuse` / `TileBufferArena` / `TileMemrefLifetime.h` matched the
+   unregistered `"tile.tmem.alloc"` marker nothing produces, so no real TMEM
+   allocation was planned. They match `tile.tmem.allocate` (`isa<>`), size and
+   align it from the op, and never coalesce it: Tile IR carries no TMEM
+   completion fact, so no TMEM lifetime is provably disjoint (#30; #10a
+   negatives in `tile_buffer_reuse.mlir` / `tile_buffer_arena_tmem_invalid.mlir`).
+4. The linalg solver passes matched `contains("solve")` (every
+   `tessera_solver.*` op, through the dialect prefix) and `contains("lu")` /
+   `contains("factor")` (`gelu`, `relu`, `silu`, `adafactor`). They match
+   exact ops now (`linalg_solver_op_identity.mlir`); the four solver ops they
+   consume left the ODS waiver (ceiling 84 → 79 with `tile.tmem.store`).
+5. `ZeROConfig.to_ir_attr()` emits `tessera_sr.zero_config`, but
+   `OptimizerShardPass` read `tessera.num_dp_ranks` / `tessera.dp_axis`,
+   which nothing produces, and sharded with its defaults (1 rank, axis "dp").
+   It reads the emitted dictionary now and treats stage/axis/rank count as
+   semantic keys (#21a): `SR_ZERO_CONFIG_{MISSING,MALFORMED,CONFLICT}`,
+   including a count that disagrees with the `tessera.distributed_plan` mesh.
+
+Dashboards (Decision #25/#26), each regenerated through its generator:
+`ntk_rope` Tile `fused` → `partial` and Target `device_verified_abi` →
+`reference` (the `ntk_rope → rope` audit alias rested on a rewrite that does
+not exist); the three AttnRes ops' `lowering_rule` `complete` → `partial`
+(registered Graph ops, no lowering); the SM120 differentiation dashboard's
+four promoted rows cite fixture-only Target ops, so their Target-IR column is
+open and their status is runtime-promoted; `GRAPH_IR_SPEC.md` no longer calls
+`cache.page_lookup`, `ring.create` and the DNAS ops "scaffolded lowering".
+
+Remaining: `tile.tcgen05.mma` has no NVIDIA lowering, so a TMEM handle that
+feeds it cannot lower; the NVVM stage emits void markers for TMEM contracts;
+`OptimizerShardPass` still selects optimizer ops by substring
+(`contains("optimizer"/"adam"/…)`, the `schedule.optimizer_shard` WIRE row);
+the linalg precision/refinement annotations still have no consumer (an
+attribute-level #29 gap); the WIRE slices that would make the corrected rows
+green again (ntk_rope canonicalization, sm_120 Target producers) are open.
+
+Evidence: fixtures under `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/tmem_*.mlir`,
+`nvidia_marker_result_used.mlir`, `tests/tessera-ir/phase3/tile_buffer_*`,
+`tests/tessera-ir/phase5/{linalg_solver_op_identity,optimizer_shard_zero_config*}.mlir`;
+before/after on Tajasarus's assertions-ON LLVM/MLIR 23.1.1 recorded in the
+NVIDIA queue entry and the PR.
+
+<!-- entry-fields:end -->

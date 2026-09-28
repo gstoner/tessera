@@ -122,10 +122,11 @@ class OdsOp:
     """One declared op. ``full_name`` is `dialect.mnemonic`.
 
     ``key`` is the full name, or `full name [Record]` when two records declare
-    the same name (measured 2026-09-27: `TesseraOps.td` and the unbuilt
-    `tessera_neighbors.td` both declare the seven `tessera.neighbors.*` ops), so
-    each record keeps its own verdict and waiver. The collision itself is gated
-    by :func:`duplicate_names`.
+    the same name, so each record keeps its own verdict and waiver. The
+    collision itself is gated by :func:`duplicate_names` (measured 2026-09-27:
+    `TesseraOps.td` and an unbuilt `tessera_neighbors.td` both declared seven
+    `tessera.neighbors.*` ops; the second was deleted the same day, sync
+    `SMALL-CORRECTNESS-GAPS-2026-09-27`).
     """
 
     td: Path
@@ -405,6 +406,46 @@ def duplicate_names(ops: Iterable[OdsOp]) -> dict[str, list[str]]:
     return {name: sorted(recs) for name, recs in owners.items() if len(recs) > 1}
 
 
+#: A hand-written C++ op: `getOperationName()` returning a string literal.
+#: Generated ODS code lives in build trees (skipped) and spells it
+#: `::llvm::StringLiteral("...")`, so only hand-rolled ops match.
+_HAND_OP_NAME = re.compile(
+    r'getOperationName\s*\(\s*\)\s*(?:const\s*)?\{\s*return\s*"([^"]+)"\s*;')
+
+
+def hand_declared_op_names(root: Path = REPO_ROOT,
+                           roots: Iterable[str] = ("src", "tools")) -> dict[str, list[str]]:
+    """``op name -> [files]`` for every op name a hand-written C++ class declares.
+
+    The third declaration form next to ODS. `TesseraNeighbors.cpp` hand-rolled
+    ten `tessera.neighbors.*` ops (`struct HaloRegionOp : Op<...>` with a
+    literal `getOperationName()`) that re-declared names the core `tessera`
+    dialect already owns in ODS; `duplicate_names` could not see them because
+    it reads only `.td`. Deleted 2026-09-27 (`SMALL-CORRECTNESS-GAPS-2026-09-27`).
+    """
+    tracked = _tracked_files(root)
+    if tracked is None:
+        candidates = [p for scope in roots for p in (root / scope).rglob("*")
+                      if p.is_file()]
+    else:
+        candidates = [root / p for p in tracked
+                      if p.split("/", 1)[0] in set(roots)]
+    found: dict[str, list[str]] = {}
+    for path in candidates:
+        rel = path.relative_to(root)
+        if path.suffix not in _CPP_SUFFIXES or path.suffix == ".td":
+            continue
+        if _SKIP_PARTS & set(rel.parts):
+            continue
+        try:
+            text = strip_comments(path.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        for name in _HAND_OP_NAME.findall(text):
+            found.setdefault(name, []).append(rel.as_posix())
+    return {name: sorted(files) for name, files in found.items()}
+
+
 # ─── Reference corpus ────────────────────────────────────────────────────────
 
 _IDENT = re.compile(r"(?<![\w:])((?:[A-Za-z_]\w*::|::)*)([A-Za-z_]\w*)")
@@ -673,5 +714,6 @@ __all__ = [
     "classify",
     "declared_ops",
     "duplicate_names",
+    "hand_declared_op_names",
     "strip_comments",
 ]

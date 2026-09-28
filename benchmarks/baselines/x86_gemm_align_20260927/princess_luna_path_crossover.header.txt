@@ -1,0 +1,6 @@
+# host=Princess-Luna commit=0b6a34d2d593e9b530eccae8b0ed43b60fc986f5 compiler=g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+# flags: -O2 -fPIC -shared -std=gnu++17 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vnni -mavx512bf16 -mavx512vpopcntdq -mf16c
+# old sha256=61b41744146bc2ed17c7f977b470feb7dd4469502042f9527c950e341bbf9d59
+# packed sha256=2df1f7d850e1f7927abdb477575cd2a1363962b1fcbaad544888dc560d8139cd
+# direct sha256=6e44b88b8282f730628e70e12f52e1ff534bd5c8c88fb7c6312901549dace0e1
+# shipped sha256=b15c2440ef336053dd52a926c6d729c82ecc88eb9b62b3305c6baef6e45bd901

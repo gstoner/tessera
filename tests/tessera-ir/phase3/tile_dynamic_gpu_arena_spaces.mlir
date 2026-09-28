@@ -6,7 +6,7 @@ module {
     // CHECK-LABEL: gpu.func @mixed
     // CHECK-SAME: tile.smem_arena_materialized
     // CHECK-SAME: tile.tmem_arena_bytes = 64
-    gpu.func @mixed(%n: index, %m: index, %tmem: memref<16xf32>) kernel {
+    gpu.func @mixed(%n: index, %m: index) kernel {
       %a = memref.alloca(%n) : memref<?xf32>
       %b = memref.alloca(%m) : memref<?xf32>
       // Disjoint empty lifetimes permit a supplied shared group; its size is
@@ -15,8 +15,8 @@ module {
       "tile.alloc_shared"(%b) {tile.buffer_group = 0 : i64} : (memref<?xf32>) -> ()
       // CHECK: gpu.dynamic_shared_memory
       // CHECK-COUNT-2: memref.view
-      // CHECK: "tile.tmem.alloc"{{.*}}tile.tmem_offset = 0
-      "tile.tmem.alloc"(%tmem) {tile.buffer_group = 1 : i64} : (memref<16xf32>) -> ()
+      // CHECK: tile.tmem.allocate {{.*}}tile.tmem_offset = 0
+      %tmem = tile.tmem.allocate {bytes = 64 : i64, alignment = 16 : i64, tile.buffer_group = 1 : i64} : !tile.tmem
       gpu.return
     }
   }

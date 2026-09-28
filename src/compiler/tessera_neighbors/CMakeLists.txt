@@ -38,7 +38,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Library
 # ------------------------------------------------------------------
 add_library(TesseraNeighbors
-    lib/Dialect/Neighbors/IR/TesseraNeighbors.cpp
     lib/Dialect/Neighbors/Transforms/HaloInferPass.cpp
     lib/Dialect/Neighbors/Transforms/StencilLowerPass.cpp
     lib/Dialect/Neighbors/Transforms/BoundaryConditionLowerPass.cpp
@@ -62,5 +61,7 @@ target_link_libraries(TesseraNeighbors
         MLIRFuncDialect
 )
 
-# ODS / tablegen: wire tessera_neighbors.td here when tablegen stubs are added.
-# Lit tests: see test/Neighbors/*.mlir — driven by parent check-tessera target.
+# The ops these passes transform are core `tessera` dialect ops, declared once
+# in src/compiler/ir/TesseraOps.td and verified in TesseraOps.cpp (Decision
+# #31: one authority). This component owns passes only; it declares no ops.
+# Lit fixtures: tests/tessera-ir/phase7/neighbors_*.mlir (check-tessera-ir).

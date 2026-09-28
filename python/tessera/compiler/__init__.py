@@ -303,6 +303,12 @@ from .profiler_provider_status import (
     provider_status_artifact,
     validate_provider_status_artifact,
 )
+from .evidence_envelope import (
+    EvidenceEnvelope,
+    EvidenceEnvelopeError,
+    read_evidence_packet,
+    require_promotable,
+)
 from .profiler_rocm_evidence import (
     ROCM_PROFILER_PACKET_SCHEMA_VERSION,
     ROCmProfilerPacketError,
@@ -599,6 +605,10 @@ __all__ = [
     "profiler_activity_interval_ns",
     "probe_rocm_native_capabilities",
     "validate_rocm_native_capture",
+    "EvidenceEnvelope",
+    "EvidenceEnvelopeError",
+    "read_evidence_packet",
+    "require_promotable",
     "ROCM_PROFILER_PACKET_SCHEMA_VERSION",
     "ROCmProfilerPacketError",
     "build_rocm_profiler_packet",

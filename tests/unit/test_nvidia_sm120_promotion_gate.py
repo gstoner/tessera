@@ -27,10 +27,33 @@ def test_promoted_lanes_have_typed_artifact_benchmark_and_dashboard_evidence():
                for row in rows)
 
     dashboard = DASHBOARD.read_text()
-    assert "**promoted**" in dashboard
-    assert "**promoted (storage)**" in dashboard
+    assert "**runtime-promoted; Target-IR column open**" in dashboard
+    assert "**runtime-promoted (storage); Target-IR column open**" in dashboard
     assert "**blocked at runtime-dispatch gate**" in dashboard
     assert "passes** fixed-tile unit and non-uniform scale oracle" in dashboard
+
+
+def test_fixture_only_target_ops_are_not_cited_as_promotion_evidence():
+    """TILE-LATENT-DEFECTS-2026-09-27: a lit fixture that merely parses an op
+    is not "Typed IR + verifier" evidence for a lane whose kernels run
+    through Python candidates. While no compiler path produces
+    ``mma_fused`` / ``mma_attention`` / ``fpquant``, the dashboard must mark
+    that column open and must not call those lanes fully **promoted**. When a
+    producer lands (ODS triage WIRE slice 7), update the dashboard and this
+    test together.
+    """
+    producers = [
+        ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp",
+        ROOT / "python/tessera/compiler/target_ir.py",
+    ]
+    produced = "\n".join(path.read_text() for path in producers)
+    dashboard = DASHBOARD.read_text()
+    for op in ("mma_fused", "mma_attention", "fpquant"):
+        if f"tessera_nvidia.{op}" in produced:
+            continue  # a producer exists; this gate no longer applies to it
+        assert f"`tessera_nvidia.{op}` is fixture-only" in dashboard, op
+    assert "| **promoted** |" not in dashboard
+    assert "| **promoted (storage)** |" not in dashboard
 
 
 def test_fpquant_provenance_is_native_and_nvfp4_is_not_runtime_promoted():

@@ -505,14 +505,23 @@ def test_the_paged_kv_lookup_refuses_an_unsupported_route(
     from tessera.compiler.emit import autotune as at
     from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
 
+    from tessera.compiler.emit import rocm_hip
+
     key = ("rocm:gfx1151", "rocm", "paged_kv_decode",
            bucket_key((1, 4, 4, 8192, 32, 16), SpecPolicy.BUCKET),
            "f32", at.TIMING_END_TO_END)
+    # Route identities (AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27) stand in for the
+    # device-derived ones; this test is about separation, so they match.
+    monkeypatch.setattr(rocm_hip, "rocm_paged_attention_route_identities",
+                        lambda **kw: {n: at.RouteIdentity(n, lambda n=n: {"code": n})
+                                      for n in ("direct", "gather_fa")})
 
     def fake_load(cache=None, **kw):
         cache.put(key, at.MeasureRecord(
             winner="direct", latency_ms=1.0,
             candidates={"direct": 1.0, "gather_fa": 1.07},
+            evidence={"delegate_identities": {n: {"code": n}
+                                              for n in ("direct", "gather_fa")}},
             unmeasured={},
             separation={"separated": separated, "margin": 0.065,
                         "noise": 0.056, "runner_up": "gather_fa",

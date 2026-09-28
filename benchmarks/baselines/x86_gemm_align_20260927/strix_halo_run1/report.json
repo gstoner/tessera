@@ -1,0 +1,388 @@
+{
+  "architecture": "x86_64_avx512_strix_halo",
+  "benchmarks": [
+    {
+      "discard_first": true,
+      "family": "matmul",
+      "median_ns": 307516.82272220065,
+      "repetitions": 1500,
+      "resource_fingerprint": "abc83b1497d098908860d178e0dd729548953c438240dad1b6420ea3369c2e89",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        307547.3244602307,
+        307486.3209841706
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "matmul",
+      "median_ns": 1067336.72,
+      "repetitions": 1500,
+      "resource_fingerprint": "abc83b1497d098908860d178e0dd729548953c438240dad1b6420ea3369c2e89",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        1067219.92,
+        1067453.52
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 2878.264007354702,
+      "repetitions": 1500,
+      "resource_fingerprint": "af4a44937b2c64c9a353d048fe1de3c49dbbc1bc07cff69aab42f00661dac99c",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        2877.7639788624056,
+        2878.764035846998
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 710895.325,
+      "repetitions": 1500,
+      "resource_fingerprint": "af4a44937b2c64c9a353d048fe1de3c49dbbc1bc07cff69aab42f00661dac99c",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        711305.7,
+        710484.95
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 711.7405559342418,
+      "repetitions": 1500,
+      "resource_fingerprint": "8c65b3c259bc6a61c996ec27244ff9801b32285bad377f4706fb36f2baa0de83",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        702.0400031836979,
+        721.4411086847857
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 731744.7649999999,
+      "repetitions": 1500,
+      "resource_fingerprint": "8c65b3c259bc6a61c996ec27244ff9801b32285bad377f4706fb36f2baa0de83",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        732329.2,
+        731160.33
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "attention",
+      "median_ns": 572830.8906746674,
+      "repetitions": 1500,
+      "resource_fingerprint": "9298432e9bb7f9fee28c01a85671b4fa6a4716f679e699255b98a9dcda2928f1",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        572979.8491625224,
+        572681.9321868125
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "attention",
+      "median_ns": 1296179.98,
+      "repetitions": 1500,
+      "resource_fingerprint": "9298432e9bb7f9fee28c01a85671b4fa6a4716f679e699255b98a9dcda2928f1",
+      "route": "schedule_tile_x86_avx512_c_abi",
+      "run_medians_ns": [
+        1296013.92,
+        1296346.04
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "linalg",
+      "median_ns": 65125.96096485693,
+      "repetitions": 1500,
+      "resource_fingerprint": "c0d6e4f476ebc85356f72c6bc6e84923879794b142892425071a5c96a4b402d3",
+      "route": "x86_breadth_graph_abi_c_abi",
+      "run_medians_ns": [
+        65174.81374855426,
+        65077.10818115961
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "timing_source": "tsc_rdtscp_witnessed_by_clock_monotonic_raw",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "linalg",
+      "median_ns": 802370.785,
+      "repetitions": 1500,
+      "resource_fingerprint": "c0d6e4f476ebc85356f72c6bc6e84923879794b142892425071a5c96a4b402d3",
+      "route": "x86_breadth_graph_abi_c_abi",
+      "run_medians_ns": [
+        802831.51,
+        801910.06
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "timing_source": "perf_counter_ns",
+      "warmups": 1
+    }
+  ],
+  "cache_proofs": [
+    {
+      "cold": {
+        "cache_key": "db48d192d239e91610168ad9720e308bdf08af2ad58ac09953c22de8223e425d",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "6421585688d3d568b8c458c4639b1878d2b086dc8fa6fa0096279d21f609c935",
+        "image_digest": "76b937f9b33d383e99d5cdd1e6453248f5a42f7e081035adb1187d7d03e05a89"
+      },
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "warm": {
+        "cache_key": "db48d192d239e91610168ad9720e308bdf08af2ad58ac09953c22de8223e425d",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "6421585688d3d568b8c458c4639b1878d2b086dc8fa6fa0096279d21f609c935",
+        "image_digest": "76b937f9b33d383e99d5cdd1e6453248f5a42f7e081035adb1187d7d03e05a89"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "8a0fced626d303487fdec1267d0bd404772fa47285e8d6eba3ac8f6386c5efbf",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "7c13b51e1684a9249924f0e2aeb46da41e440c79db48412e0fdd653c29bdfcd5",
+        "image_digest": "634696630f3580cb3fb8e4baa13706374cd8de7f7a2717ea0c8108028ce858ab"
+      },
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "warm": {
+        "cache_key": "8a0fced626d303487fdec1267d0bd404772fa47285e8d6eba3ac8f6386c5efbf",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "7c13b51e1684a9249924f0e2aeb46da41e440c79db48412e0fdd653c29bdfcd5",
+        "image_digest": "634696630f3580cb3fb8e4baa13706374cd8de7f7a2717ea0c8108028ce858ab"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "936fc06a760f4237bdc137d587b85de3191658f1133f9ff61b8cd161f0d1e1ed",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "22c86a39403550eddc21a65acad8d5632890e50df4475f68ae392ffc63c94734",
+        "image_digest": "f8466f545c8fc4fcf18dd45cd7e579a5149fff7e45afdc2166ec32875502e14c"
+      },
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "warm": {
+        "cache_key": "936fc06a760f4237bdc137d587b85de3191658f1133f9ff61b8cd161f0d1e1ed",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "22c86a39403550eddc21a65acad8d5632890e50df4475f68ae392ffc63c94734",
+        "image_digest": "f8466f545c8fc4fcf18dd45cd7e579a5149fff7e45afdc2166ec32875502e14c"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "e47ca4b805fb30850e718066e25239ada8ebf618cca565f1e989db87127cb6ef",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "685aa22fb7fbdcb83aaa013b1b1f272b3c3651cc6a19bf50f8a66fe08ef50c35",
+        "image_digest": "2c63920f24db2908d8b4cfcc56b5f59140c2ae08759ef554e4217cff00cf6df1"
+      },
+      "fixture_id": "attention-f32-uniform-1x1x2x2-v1",
+      "warm": {
+        "cache_key": "e47ca4b805fb30850e718066e25239ada8ebf618cca565f1e989db87127cb6ef",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "685aa22fb7fbdcb83aaa013b1b1f272b3c3651cc6a19bf50f8a66fe08ef50c35",
+        "image_digest": "2c63920f24db2908d8b4cfcc56b5f59140c2ae08759ef554e4217cff00cf6df1"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "3810eb50139d6181c7332280b517a5fb6038d78d0e617c87ccdc759647fd0147",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "bb34b3827b98df7936934d29d4fc6c8877108d4c82016261f9e60324f7088954",
+        "image_digest": "01c9488518707305b2b6acb2668f49168e9a7b425cc88aba2c7800229310d27f"
+      },
+      "fixture_id": "cholesky-f32-3x3-spd-v1",
+      "warm": {
+        "cache_key": "3810eb50139d6181c7332280b517a5fb6038d78d0e617c87ccdc759647fd0147",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "bb34b3827b98df7936934d29d4fc6c8877108d4c82016261f9e60324f7088954",
+        "image_digest": "01c9488518707305b2b6acb2668f49168e9a7b425cc88aba2c7800229310d27f"
+      }
+    }
+  ],
+  "device": {
+    "exact": true,
+    "identity": "Princess-Luna | AMD RYZEN AI MAX+ 395 w/ Radeon 8060S"
+  },
+  "fixtures": [
+    {
+      "actual": [
+        [
+          5.5,
+          -11.0
+        ],
+        [
+          7.0,
+          7.5
+        ]
+      ],
+      "descriptor_digest": "6421585688d3d568b8c458c4639b1878d2b086dc8fa6fa0096279d21f609c935",
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "image_digest": "76b937f9b33d383e99d5cdd1e6453248f5a42f7e081035adb1187d7d03e05a89",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          0.5,
+          0.5
+        ]
+      ],
+      "descriptor_digest": "7c13b51e1684a9249924f0e2aeb46da41e440c79db48412e0fdd653c29bdfcd5",
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "image_digest": "634696630f3580cb3fb8e4baa13706374cd8de7f7a2717ea0c8108028ce858ab",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        2.0,
+        3.5
+      ],
+      "descriptor_digest": "22c86a39403550eddc21a65acad8d5632890e50df4475f68ae392ffc63c94734",
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "image_digest": "f8466f545c8fc4fcf18dd45cd7e579a5149fff7e45afdc2166ec32875502e14c",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          [
+            [
+              2.0,
+              3.0
+            ],
+            [
+              2.0,
+              3.0
+            ]
+          ]
+        ]
+      ],
+      "descriptor_digest": "685aa22fb7fbdcb83aaa013b1b1f272b3c3651cc6a19bf50f8a66fe08ef50c35",
+      "fixture_id": "attention-f32-uniform-1x1x2x2-v1",
+      "image_digest": "2c63920f24db2908d8b4cfcc56b5f59140c2ae08759ef554e4217cff00cf6df1",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          2.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          3.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.5,
+          1.5
+        ]
+      ],
+      "descriptor_digest": "bb34b3827b98df7936934d29d4fc6c8877108d4c82016261f9e60324f7088954",
+      "fixture_id": "cholesky-f32-3x3-spd-v1",
+      "image_digest": "01c9488518707305b2b6acb2668f49168e9a7b425cc88aba2c7800229310d27f",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    }
+  ],
+  "required_timing_domains": [
+    "kernel_wall",
+    "end_to_end"
+  ],
+  "schema": "tessera.e2e-backend-report.v1",
+  "scope": [
+    "matmul",
+    "softmax",
+    "reduction",
+    "attention",
+    "linalg"
+  ],
+  "source_commit": "86ec9d31e72ab6851a21885a6a0fb066ba7d7719",
+  "target": "x86",
+  "toolchain_fingerprint": "9708d8dde0fca9b2e6d0e7dab2515fbdee9b26111dfe0eaecd682906b5a8266f"
+}

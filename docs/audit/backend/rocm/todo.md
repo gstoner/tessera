@@ -7,6 +7,10 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `ODS-WIRE-1-4-2026-09-27`: the ROCm Langevin executor consumes the Philox op — gfx1151 validated, gfx1201 not evaluated
+
+Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slice 4). `rocm_ebm_langevin_compiled` now accepts exactly `tessera.ebm.langevin_step_philox` (seed 1 x i64 split low word first into the kernel's key, counter words < 2^32, `eta`/`temperature` required), as `ops.ebm_langevin_step_philox` emits it; the host-noise `tessera.ebm.langevin_step` is refused and its ROCm manifest credit moved to the Philox op. The generated kernel (`generate-rocm-ebm-langevin-kernel`) is unchanged. **Parity validated on gfx1151 (Princess-Luna, 2026-09-27):** `test_rocm_ebm_langevin_compiled.py` incl. the traced-op launch; `check-tessera-rocm` 82/82. gfx1201 not evaluated (no proof transfers). Slice 1 (`target_verify`/`ntk_rope` rewrite): not applicable -- ROCm pipelines consume Tile / directive carriers and have no Graph softmax or rope consumer.
+
 ## Scheduled softmax/reduction images keyed on a shape-free kernel identity — 2026-09-27
 
 Owner E2E-REAL-6 (follow-up the unary entry below recorded as open); sync

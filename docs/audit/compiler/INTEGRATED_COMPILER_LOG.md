@@ -5725,3 +5725,87 @@ accepts only matched 23.1.x in `minor`; the real Homebrew 23.1.1 keg resolves
 configured, built and ran both smoke binaries clean.
 
 <!-- entry-fields:end -->
+
+### 2026-09-27 — ODS WIRE slices 1 and 4: target_verify / ntk_rope reach their canonical consumers; the Philox Langevin step gets a producer
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/foundation-batch-2-wire-a` (umbrella `claude/foundation-batch-2`).
+Sync: `ODS-WIRE-1-4-2026-09-27`.
+
+Outcome: Three waived ODS ops now have a producer and a consumer, and the
+waiver ceiling drops 79 -> 76 ([triage rows](ODS_OP_CONNECTION_TRIAGE.md#tessera-target-verify)).
+**Slice 1.** `src/transforms/include/Tessera/Transforms/CompositeDecomposition.h`
+holds one name-matched pattern source: `tessera.target_verify(tokens, logits)`
+-> `tessera.softmax(logits){axis = rank-1}` (the verifier already pinned S, so
+`tokens` carries nothing further -- the named #32 reason), and
+`tessera.ntk_rope(x, theta){s}` -> `tessera.rope(x, tessera.div(theta,
+arith.constant splat(s)))`, with no division at `s = 1.0`; a scaled theta that
+is not a static floating tensor fails closed with
+`TESSERA_NTK_ROPE_THETA_UNREWRITABLE` (registered), and any composite left
+after the rewrite is an error, not a silent no-op. Routes: `tessera-canonicalize`
+(so every pipeline built on `addGraphIRPreLoweringPasses`: `-x86`, `-gpu`,
+`-nvidia-sm{90,100,120}`); new standalone `tessera-decompose-composite-ops`
+first in `tessera-lower-to-apple_gpu-runtime` (header-only, so `TesseraApple`
+gains an include path, not a link), in the Apple `-full` reasoning prologue, and
+in libtessera_jit stage 1a. ROCm is not a route: its pipelines consume Tile /
+directive carriers and have no Graph softmax or rope consumer. `target_verify`
+joins `_JIT_GRAPH_OPS`; `GraphFn` gained a declared i32 *index operand* (only
+`target_verify` operand 0 may take one -- any other use refuses the graph, so
+`@jit` falls back rather than computing on integer bits), and `@jit` passes an
+int32 argument through as that operand. `Canon` now declares `arith` as a
+dependent dialect (the rewrite builds `arith.constant`).
+The `ntk_rope -> rope` dashboard alias stays withheld, departing from the
+recorded "re-add when the rewrite lands": rope's x86 / ROCm device rows are
+Python runtime executors keyed on the literal op, which no C++ rewrite feeds,
+and on the Apple -runtime route a scaled `ntk_rope` leaves `tessera.div` with no
+Graph consumer (`composite_decomposition_apple_gpu.mlir` pins it), so borrowing
+rope's device-verified cells would over-claim. `target_verify` rows unchanged.
+**Slice 4.** The MERGE alternative (onto `tessera_ebm.langevin_step`) was read
+and rejected: that solver op takes an `energy_fn` whose gradient the compiler
+derives, draws `sqrt(2 eta T)` noise and advances its key, so it cannot carry a
+precomputed-gradient step over a caller-owned (seed, counter) stream -- a Graph
+producer for the Philox op is a different capability, not a second authority
+(#31). Producer: catalog `OpSpec("ebm_langevin_step_philox", ..., 4, 4,
+effect=random, stochastic_identity=seed_counter)`, `ops.ebm_langevin_step_philox`
+(`_ebm_ops.py`), `graph_ir._KEYWORD_ATTR_PARAMS` (`eta`, `temperature`),
+`primitive_coverage`, PYTHON_API_SPEC. Consumer: `runtime._EBM_LANGEVIN_OPS =
+("tessera.ebm.langevin_step_philox",)`; seed (1 x i64, split low word first) and
+counter (4 x i64, each < 2^32 -- refused, never truncated) come from operands;
+`eta` / `temperature` are required (#21a) and `noise_scale` defaults to
+`sqrt(2 eta T)`, now stated in the ODS description. The executors used to accept
+the 3-operand host-noise `tessera.ebm.langevin_step` and ignore its noise
+operand; that name is now refused there, and its x86 / ROCm manifest credit
+(which cited these Philox tests) moved to the Philox op, so
+`ebm_langevin_step` shows x86 `reference` / ROCm `planned` -- the honest state.
+The Apple Philox MSL row now cites `tests/unit/test_philox_runtime.py`
+(execute-compare on Metal); the Graph op still has no Apple lane.
+
+Remaining: Apple *execution* of `target_verify` / `ntk_rope` (their `@jit
+(target="apple_gpu")` capability stays `artifact_only`); a route that executes
+rope and the `theta / s` division (then re-add the alias and drop the two
+`_KNOWN_OPEN_SINGLE_GPU` rows); an Apple Graph lane for the Philox op; gfx1201
+proof of the repointed ROCm executor (not evaluated; no proof transfers).
+
+Evidence: Mac (macOS 27, Homebrew LLVM/MLIR 23.1.1 NDEBUG): lit
+`composite_decomposition{,_invalid,_apple_gpu,_x86}.mlir` pass; full `lit
+tests/tessera-ir/` 479 passed / 50 unsupported / 0 failed;
+`tests/unit/test_composite_decomposition.py` executes `target_verify` through
+libtessera_jit (invocation counter +1) against numpy and the Python reference;
+`test_ebm_langevin_philox_op.py` (host-free executor mapping and refusals);
+full unit sweep 21792 passed / 4024 skipped / 1 failed, the one failure
+(`test_op_arity_contract`, the new op's keyword attributes) fixed and re-run
+green in the same session. Princess-Luna (Zen 5 AVX-512 + gfx1151, apt LLVM
+23.1 NDEBUG, `~/wk-wirea`): `test_{x86,rocm}_ebm_langevin_compiled.py` (incl.
+the traced-op launch), the kernel-level `*_langevin_philox_compiled` tests,
+`test_ebm_langevin_philox_op.py`, `test_composite_decomposition.py`,
+`test_native_cpu_jit.py` -- 61 passed, 0 skipped; lit 462 passed / 67
+unsupported / 0 failed; `check-tessera-rocm` 82/82; full unit sweep 22709
+passed / 3107 skipped / 1 failed (the same arity test, pre-fix).
+Tajasarus (assertions-ON LLVM/MLIR 23.1.1, `llvm-config --assertion-mode` ON,
+`~/wk-wirea/build-assertions`, `tessera-opt` only): the four new fixtures (the
+Apple one unsupported there) and `ga_ebm_graph_ops{,_invalid}.mlir` pass; full
+lit 462 passed / 67 unsupported / 0 failed. libtessera_jit is not built on that
+box (no libffi), so the JIT-lane registration was not run under assertions.
+
+<!-- entry-fields:end -->

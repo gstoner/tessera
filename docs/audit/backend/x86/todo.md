@@ -9,6 +9,10 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `ODS-WIRE-1-4-2026-09-27`: the x86 Langevin executor consumes the Philox op; target_verify runs on the CPU JIT lane
+
+Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slices 1 and 4). `x86_ebm_langevin_compiled` now accepts exactly `tessera.ebm.langevin_step_philox` (seed / counter from operands; `eta`/`temperature` required, `noise_scale` default `sqrt(2*eta*T)`) as `ops.ebm_langevin_step_philox` emits it; the host-noise `tessera.ebm.langevin_step` is refused there and its x86 manifest row drops to `reference` (its only credit was this Philox test). `tessera.target_verify` reaches libtessera_jit (rewritten to softmax in stage 1a). `tessera-lower-to-x86` runs the rewrite through `tessera-canonicalize` but has no Graph softmax/rope consumer of its own. **Parity validated on Princess-Luna (Zen 5 AVX-512, 2026-09-27):** `test_x86_ebm_langevin_compiled.py` (incl. the traced-op launch), `test_composite_decomposition.py`, `test_native_cpu_jit.py`.
+
 ## `X86-GEMM-ALIGN-2026-09-27`: `X86-GEMM-ALIGN-1` closed — the f32 GEMM owns B's alignment
 
 **The fix is in the kernel.** `tessera_x86_avx512_gemm_f32`

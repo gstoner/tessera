@@ -3527,6 +3527,15 @@ def Tessera_CeilOp : Op<Tessera_Dialect, "ceil", [Pure]> {
   let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
 }
 
+// Existing public unary truncation, admitted physically only by the bounded
+// static f32 x86 Schedule contract.
+def Tessera_TruncOp : Op<Tessera_Dialect, "trunc", [Pure]> {
+  let hasVerifier = 1;
+  let arguments = (ins AnyRankedTensor:$input);
+  let results = (outs AnyRankedTensor:$output);
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
+}
+
 // Existing public inclusive scan. Native scheduling currently accepts the
 // trailing-axis static f32 envelope only.
 def Tessera_CumsumOp : Op<Tessera_Dialect, "cumsum", [Pure]> {

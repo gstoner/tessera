@@ -7,6 +7,115 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `E2E-REAL-6-GFX1151-PAGED-2026-09-28`: native paged-KV Schedule/Tile — landing
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1151-PAGED-2026-09-28`.
+The bounded f32/i32 physical-page read now canonicalizes the admitted public
+Graph op to `tessera.paged_kv_read`, then uses the native Graph→Schedule→Tile
+producer and replay checks. The ROCm Target directive supplies the HSACO
+symbol; image identity excludes shape-only wrapper arguments and is compiled
+from that exact directive. Princess-Luna WSL passed 13 focused tests, including
+four exact gfx1151 permuted-page numerical launches, replay-drift refusal,
+and cross-shape cache reuse. This covers the direct static envelope only;
+general KV layouts, throughput, and `moe_dispatch` Schedule migration remain
+open. A [host-wall timing packet](../../../../benchmarks/baselines/e2e_real6_gfx1151_paged_20260928/README.md)
+records 94–103 ms warm packaging and 2.16–2.26 ms launches across three
+intervals with one image; these are not kernel timings. NVIDIA's existing
+native paged-KV producer received the shared target
+admission change but has no new sm_120 device proof in this slice. Apple and
+x86 have no consumer for this physical page contract.
+
+## `E2E-REAL-6-APPLE-X86-2026-09-28`: sibling outcome — follow-up required
+
+The shared `tessera.trunc` MLIR declaration/shape verifier makes the existing
+public operation parseable, but does not add a ROCm Schedule or native image.
+Apple's checked Graph division and f32 rope C ABI are Metal-only. gfx1151 and
+gfx1201 unary routes and their exact-device evidence are unchanged. ROCm
+`paged_kv`, `moe_dispatch` and the remaining E2E-REAL-6 family migrations
+remain independent work; no Apple or Zen 5 measurement transfers here.
+
+## `ROCM-DIRECT-CACHE-2026-09-28`: paged-KV and MoE dispatch already reuse an image across shapes
+
+Owner E2E-REAL-6 / ROCm cache-key follow-up. The direct `paged_kv` and
+`moe_dispatch` emitters use fixed Tile text and pass dimensions as runtime
+kernel arguments. Princess-Luna's native compiler packaged two different
+Graph shapes per family: the first image was cold, the second was
+`warm_cache`, with the same image digest and payload but different descriptor
+shape guards (2/2 focused tests; full gfx1151 E2E spine 67/67). These two
+families do not have the
+shape-per-image recompile reported for scheduled attention/matmul. Their
+Graph-owned Tile constructors still need the E2E-REAL-6 Schedule migration;
+cache reuse alone does not close that route. Scheduled attention/matmul remain
+on Tile-text keys until an MLIR-owned image identity proves which shape
+fields are runtime-only and which affect generated instructions. No ROCm
+Target IR, ABI, or sibling-backend contract changed in this audit/test slice.
+
+## `GFX1201-MXFP4-M256-SLOPE-2026-09-28`: per-column schedule decomposition — diagnostic
+
+Owner ROCM-MXFP4-W4A8-1. Two fresh-process fixed-K (5120) device-clock
+decompositions at N=8192/12288/17408 compared the selected folded route
+with the pinned Radiance binary and each selected schedule key removed in
+turn. Every engine is bitwise equal to exact K32. The selected marginal cost
+was 17.99–18.09 ns per added output column against Radiance 13.43–13.60;
+removing the vector epilogue left 17.69–18.10, removing prefetch
+18.62–18.82, and removing grouped raster 17.83–17.93. Those keys improve
+absolute time but do not explain the slope. The remaining candidate is the
+core loop or launch geometry; A restaging versus LDS fragment traffic versus
+issue is still unattributed without counters or a separately validated phase
+ablation. This dirty-tree packet is diagnostic, with no route promotion.
+[Packet](../../../../benchmarks/baselines/gfx1201_mxfp4_m256_decomposition_20260928/README.md).
+The folded route remains opt-in; gfx1151 has no counterpart.
+
+## `GFX1201-W8A8-M200-SHORTK-2026-09-28`: bounded short-K panel — landing
+
+Owner ROCM-FP8-BLOCKSCALE-1. Paired device-clock sweeps on Tajasarus found
+that 128x64 LDS beats the incumbent 128x128 in the measured
+M=192–255, whole-128 N=8192–10240, K=1024 envelope, while N=4096/6144,
+K=1536/2048 and M=300 do not sustain a win. The native Schedule selector
+and differential oracle now choose 128x64 only inside that envelope.
+Five additional interior-N rows (`m200_interior.json`) were all neutral or
+faster; the weak 200x8320 point motivates retaining the whole-scale-block
+N guard rather than claiming ragged-N performance.
+The rebuilt compiler passed 30 focused selector/device cases, the full
+W8A8 unit/device pair passed 184/184, and `check-tessera-rocm` passed 81
+with one unsupported fixture. The production
+remeasurement selected the intended panel and passed the fp64 oracle.
+At 200x8192x1024 it measured 44.16 µs against AITER 44.42 µs; the HSACO
+matches the pre-rule opt-in candidate. Absolute timing varied across runs,
+so the paired candidate/incumbent sweeps are the selector evidence.
+[Packet](../../../../benchmarks/baselines/gfx1201_w8a8_followup_20260928/README.md).
+Large-M short-K, ragged K=1536 and the separate 200x2048x2048 gap remain
+open. gfx1151 has no FP8 WMMA; sibling outcomes are recorded under this
+sync key in the other backend plans.
+
+## `GFX1201-W8A8-RAGGED97-2026-09-28`: bounded M=97–127 Schedule panel — landing
+
+Owner ROCM-FP8-BLOCKSCALE-1. Paired gfx1201 device-clock sweeps on Tajasarus
+found that the current register fallback at ragged M=97–127 is 2.4–3.4x
+slower than the opt-in 128x64 LDS body across measured N=1024–24576 and
+K=1024–4096. The [packet](../../../../benchmarks/baselines/gfx1201_w8a8_followup_20260928/README.md)
+keeps the current-main, boundary, cross-shape and neighbor rows. The native
+Schedule rule now selects that panel only for gfx1201, NK layout and this
+bounded envelope; the Python panel oracle mirrors it and tests pin the
+M=96/128 boundaries. Tajasarus rebuilt the changed compiler: focused unit
+and device suites passed 117/117 and 22/22; `check-tessera-rocm` passed
+81 fixtures with one unsupported. Five-window production
+remeasurement selected the new panel at M=97,100,127 while leaving M=96,128
+and M=200 unchanged. At 100x8192x1024 the production route fell from 53.83
+to 25.01 µs; at 100x24576x1536 it fell from 282.29 to 90.91 µs. The
+separate M=200,N=8192,K=1024 128x64 candidate is not promoted: M=300 and
+M=200,N=24576,K=1536 regress. gfx1151 has no FP8 WMMA; NVIDIA, Apple and
+x86 outcomes are recorded in their plans under this sync key.
+
+## `E2E-REAL-6-SM120-SOFTMAX-SAFE-2026-09-28`: sibling outcome — not applicable
+
+The shared scheduled-kernel admission adds only `nvidia_sm120` to the existing
+`softmax_safe` normalization gate. gfx1151's previously proved fp16/fp32
+contract is unchanged; gfx1201 remains refused because it has no matching
+exact-device scheduled `softmax_safe` rows. No ROCm Target IR or runtime ABI
+changed. Super-Bear's RTX 5070 passed the 14 focused `softmax_safe` device
+rows; the NVIDIA plan owns that proof.
+
 ## `CI-LIT-EBM-CLIFFORD-2026-09-28`: hosted lit lane covers the EBM / Clifford fixtures — sibling outcome — parity validated (host-free IR only)
 
 Owner: CI toolchain lanes (PR #874, follow-up to #873 item 1). The hosted `lit` lane now configures `TESSERA_BUILD_{EBM,CLIFFORD}_BACKEND=ON`, so the six fixtures that `REQUIRES: tessera-ebm` / `tessera-clifford` run there and the fleet-union gate passes on one lane: dispatched run 36418280808, LLVM/MLIR 23.1.2 under the CI 23.1.x tolerance (fleet pin 23.1.1), 533/533 passed, `uncovered: []`. Every one of the six already passed on every fleet box, which configures both backends ON; this adds hosted-runner coverage and makes no device claim. `phase_f5/row_program_sphere_status.mlir` drives `tessera-row-program-to-gpu=backend=rocm`, so the ROCm row-program emitter's IR now also runs on a hosted runner. It is IR/FileCheck only: no gfx1151 or gfx1201 claim, and `check-tessera-rocm` stays local-only.
@@ -542,6 +651,16 @@ trees.
   store regression at 200x2048x2048; MXFP4 M = 256 per-column cost
   unattributed (no `/dev/kfd`); a packed decode on the selected load
   schedule untested.
+
+**gfx1151 edge-row timing follow-up, 2026-09-28.** Princess-Luna now has a
+first current-main typed-route timing packet for two ragged f16 shapes:
+[`gfx1151_edge_row_store_20260928`](../../../../benchmarks/baselines/gfx1151_edge_row_store_20260928/README.md).
+The selected 32x64 Graph → Schedule → Tile body measures 0.0311 ms at
+513x769x257 and 0.2208 ms at 1009x1537x1025 (three fresh-process medians,
+synchronized host wall time). The separate directive body measures 0.0312
+and 0.2162 ms, respectively. This closes the absence of *any* gfx1151 timing
+under the new store. A paired pre-change typed binary and promotion-grade
+device timing remain open; the packet does not claim a speedup or regression.
 
 ## `GFX1201-PERF-2026-09-27`: W8A8 large-M LDS body, bf16 store, folded MXFP4 per-wave M guard — 2026-09-27
 
@@ -12212,3 +12331,17 @@ Parity validated host-free (Mac). The ROCm profiler packet's tags are declared (
 Owner: EVIDENCE-PACKET-1. Sync: `EVIDENCE-PACKET-1-2026-09-27`.
 
 Parity validated host-free (Mac) for the envelope. The gfx1151 and gfx1201 profiler packets read through `evidence_envelope.read_evidence_packet`, as does SSD admission's ROCm route. Result: 148 read (75 gfx1151, 73 gfx1201); 112 promotable; 36 gfx1201 retained (`INSTRUMENTATION_OVERHEAD_EXCEEDED`); the 2 known window-rule packets still refused. Fixed fail-open: the ROCm derivation read `source.worktree_dirty` by truthiness, so an omitted field derived no `SOURCE_WORKTREE_DIRTY`. It now requires a bool, and every committed packet has one. The envelope checks image binding on every route; the family checked it only on `device_clock_witness`. Route receipts on Princess-Luna (gfx1151) and Tajasarus (gfx1201), both clean `eed48b9b`: EBM `energy_quadratic` and the partition ran on the x86 AVX-512 lane, which runs before the ROCm lane in those primitives. Langevin and all GA ran on the reference. No ROCm GPU lane was reached on either box. Follow-up required: record compiler build identity in the ROCm packet. A `rocm` receipt names the lane, not the chip. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-packet-1-shared-evidence-envelope-ga-and-ebm-route-receipts).
+
+### E2E-REAL-6 native MoE and paged-KV follow-ups — 2026-09-28
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-NATIVE-FOLLOWUPS-2026-09-28`.
+gfx1151 `moe_dispatch` direct token gather now uses the registered Graph subtype,
+native Schedule/Tile replay, shape-free Target directive and checked image
+entry. Princess-Luna WSL passed 333 focused spine/registry tests, including
+exact-device S<T and S>T gathers, replay-drift refusal and cross-shape image
+reuse; both compiler fixture stages pass. This does not broaden routed MoE
+semantics beyond direct gather. gfx1201 has no corresponding MoE consumer.
+Paged KV still admits the bounded static physical-page envelope; its packet
+measures host launch wall time, not GPU kernel time. WSL HIP events on this
+host are invalid and `/dev/kfd` counters are unavailable. Broader layouts and
+exact kernel attribution remain open.

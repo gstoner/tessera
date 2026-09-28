@@ -1372,6 +1372,8 @@ def _check_target_boundary(target_ir: str, *, directive: str, schedule_kernel: b
 _SHAPE_FREE_DIRECTIVES: dict[str, str] = {
     "softmax": "tessera_rocm.softmax",
     "reduction": "tessera_rocm.reduce",
+    "paged_kv": "tessera_rocm.paged_kv_read",
+    "moe_dispatch": "tessera_rocm.moe_dispatch",
 }
 
 #: Host-side scaffolding TileToROCM leaves around the directive in a scheduled
@@ -1412,6 +1414,11 @@ def _shape_free_target_ir(target_ir: str, *, family: str, directive: str) -> str
     if not lines or not _MODULE_HEADER_RE.match(lines[0].strip()):
         raise RuntimeError("ROCm shape-free kernel identity requires a single top-level Target IR module")
     header = lines[0].strip()
+    if family in {"paged_kv", "moe_dispatch"} and (
+        len(re.findall(r"(?m)^\s*llvm\.func @", target_ir)) != 1
+        or len(re.findall(r"(?m)^\s*llvm\.return\b", target_ir)) != 1
+    ):
+        raise RuntimeError(f"ROCm {family} Target IR needs one checked LLVM wrapper")
     directive_lines: list[str] = []
     for line in lines[1:]:
         stripped = line.strip()
@@ -1421,6 +1428,11 @@ def _shape_free_target_ir(target_ir: str, *, family: str, directive: str) -> str
         name = match.group(1) if match else ""
         if name.startswith("tessera_rocm."):
             directive_lines.append(stripped)
+        elif family in {"paged_kv", "moe_dispatch"} and name in {"llvm.func", "llvm.return"}:
+            # Native Schedule/Tile emits one host wrapper around the direct
+            # directive. Its shape-bound signature and replay contract do not
+            # enter the GPU image; the exact directive below is the code input.
+            continue
         elif name not in _SHAPE_FREE_SCAFFOLD_OPS:
             raise RuntimeError(
                 f"ROCm shape-free kernel identity cannot drop unaudited Target IR operation {name or stripped!r}"
@@ -1653,20 +1665,14 @@ def _compile_shape_free_tile_ir(tile_ir: str, *, family: str, architecture: str)
 
 
 def _compile_paged_kv_tile_ir(tile_ir: str, *, architecture: str = "gfx1151"):
-    return _compile_native_tile_ir(
-        tile_ir,
-        directive="tessera_rocm.paged_kv_read",
-        family="paged_kv",
-        architecture=architecture,
+    return _compile_shape_free_tile_ir(
+        tile_ir, family="paged_kv", architecture=architecture,
     )
 
 
 def _compile_moe_dispatch_tile_ir(tile_ir: str, *, architecture: str = "gfx1151"):
-    return _compile_native_tile_ir(
-        tile_ir,
-        directive="tessera_rocm.moe_dispatch",
-        family="moe_dispatch",
-        architecture=architecture,
+    return _compile_shape_free_tile_ir(
+        tile_ir, family="moe_dispatch", architecture=architecture,
     )
 
 
@@ -2526,8 +2532,9 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
         )
     pages_name, table_name, output_name, dims = contract
     physical_pages, logical_pages, page_size, heads, dim, start, tokens = dims
-    entry = "tessera_tile_paged_kv_read_f32_direct"
-    tile_ir = emit_paged_kv_read_tile_ir(entry=entry)
+    from .scheduled_paged_kv import lower_scheduled_paged_kv_graph
+    artifact = lower_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}")
+    tile_ir = artifact.tile_ir
     (
         target_ir,
         backend_ir,
@@ -2537,6 +2544,9 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
         device_libraries,
         compile_state,
     ) = _compile_paged_kv_tile_ir(tile_ir, architecture=architecture)
+    # Shape-free packaging renames the directive's exported symbol. The
+    # checked Schedule entry names the Tile wrapper, not the HSACO kernel.
+    entry = _directive_symbol(target_ir, _SHAPE_FREE_DIRECTIVES["paged_kv"])
     image = NativeImageArtifact(
         target=f"rocm_{architecture}",
         architecture=architecture,
@@ -2587,6 +2597,7 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
             "storage": "f32",
             "table_storage": "i32",
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+            "schedule_digest": artifact.schedule_digest,
         },
     )
     return ROCMNativePackage(tile_ir, target_ir, backend_ir, image, descriptor)
@@ -3259,8 +3270,9 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
         )
     x_name, token_name, output_name, dims = contract
     tokens, slots, hidden = dims
-    entry = "tessera_tile_moe_dispatch_f32_direct"
-    tile_ir = emit_moe_dispatch_tile_ir(entry=entry)
+    from .scheduled_moe_dispatch import lower_scheduled_moe_dispatch
+    artifact = lower_scheduled_moe_dispatch(module, target=f"rocm_{architecture}")
+    tile_ir = artifact.tile_ir
     (
         target_ir,
         backend_ir,
@@ -3270,6 +3282,7 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
         device_libraries,
         compile_state,
     ) = _compile_moe_dispatch_tile_ir(tile_ir, architecture=architecture)
+    entry = _directive_symbol(target_ir, _SHAPE_FREE_DIRECTIVES["moe_dispatch"])
     image = NativeImageArtifact(
         target=f"rocm_{architecture}",
         architecture=architecture,
@@ -3310,6 +3323,7 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
             "work_item": "ROCM-E2E-2",
             "sync_key": "E2E-SPINE-2026-07-18",
             "route": "direct_gather",
+            "schedule_digest": artifact.schedule_digest,
             "shape": list(dims),
             "storage": "f32",
             "index_storage": "i32",

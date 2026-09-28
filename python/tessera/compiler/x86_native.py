@@ -8,8 +8,11 @@ import os
 import re
 import shutil
 import subprocess
+from collections import OrderedDict
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
+from threading import RLock
 from typing import Any, cast
 
 from .graph_ir import GraphIRModule
@@ -133,6 +136,81 @@ class X86NativePackage:
     backend_ir: str
     image: NativeImageArtifact
     descriptor: LaunchDescriptor
+
+
+# Exact-program memoization for the migrated unary route. The cached value is
+# the verified native package, never a Python-authored replacement for lowering.
+# The bounded cache includes the compiler and image file identities so an in-
+# process rebuild cannot serve a package from the previous toolchain.
+_UNARY_PACKAGE_CACHE_LIMIT = 64
+_UNARY_PACKAGE_CACHE: OrderedDict[tuple[object, ...], X86NativePackage] = OrderedDict()
+_UNARY_PACKAGE_CACHE_LOCK = RLock()
+_SCHEDULED_UNARY_PACKAGE_CACHE: OrderedDict[tuple[object, ...], X86NativePackage] = OrderedDict()
+
+
+def _file_identity(path: Path | None) -> tuple[object, ...] | None:
+    if path is None:
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (str(path.resolve()), stat.st_dev, stat.st_ino, stat.st_size,
+            stat.st_mtime_ns, stat.st_ctime_ns)
+
+
+def _unary_package_key(
+    module: GraphIRModule, *, family: str, pipeline_name: str,
+    architecture: str,
+) -> tuple[object, ...] | None:
+    from . import scheduled_kernel
+
+    tool = _tessera_opt()
+    schedule_tool = scheduled_kernel.find_tessera_opt()
+    library = _library_path(architecture)
+    tool_identity = _file_identity(tool)
+    schedule_tool_identity = _file_identity(schedule_tool)
+    library_identity = _file_identity(library)
+    if tool_identity is None or schedule_tool_identity is None or library_identity is None:
+        return None
+    # Exact canonical Graph text retains the function name, bindings, shapes,
+    # dtype and policy. Cache reuse across shapes needs a separately verified
+    # parametric Schedule/Tile contract and is deliberately outside this key.
+    graph = module.to_mlir(target="x86", canonical=True)
+    return (family, pipeline_name, architecture, graph, schedule_tool_identity,
+            tool_identity, library_identity, scheduled_kernel.lower_scheduled_kernel, _lower)
+
+
+def _cached_unary_package(
+    module: GraphIRModule, *, family: str, pipeline_name: str,
+    architecture: str,
+) -> X86NativePackage:
+    from . import scheduled_kernel
+
+    native_architecture = _scheduled_unary_architecture(architecture)
+    key = _unary_package_key(
+        module, family=family, pipeline_name=pipeline_name,
+        architecture=architecture,
+    )
+    if key is not None:
+        with _UNARY_PACKAGE_CACHE_LOCK:
+            if cached := _UNARY_PACKAGE_CACHE.get(key):
+                _UNARY_PACKAGE_CACHE.move_to_end(key)
+                return deepcopy(cached)
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        module, target="x86", architecture=native_architecture
+    )
+    package = package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
+    if key is not None and key == _unary_package_key(
+        module, family=family, pipeline_name=pipeline_name,
+        architecture=architecture,
+    ):
+        with _UNARY_PACKAGE_CACHE_LOCK:
+            _UNARY_PACKAGE_CACHE[key] = deepcopy(package)
+            _UNARY_PACKAGE_CACHE.move_to_end(key)
+            if len(_UNARY_PACKAGE_CACHE) > _UNARY_PACKAGE_CACHE_LIMIT:
+                _UNARY_PACKAGE_CACHE.popitem(last=False)
+    return package
 
 
 def _repo_root() -> Path:
@@ -1110,15 +1188,12 @@ def package_softmax(
     descriptor projected from the serialized IR by
     :func:`package_scheduled_kernel`.
     """
-    from . import scheduled_kernel
-
     if not requests_softmax(module):
         raise ValueError("x86 native softmax requires one static f32 last-axis operation")
-    native_architecture = _scheduled_unary_architecture(architecture)
-    artifact = scheduled_kernel.lower_scheduled_kernel(
-        module, target="x86", architecture=native_architecture
+    return _cached_unary_package(
+        module, family="softmax", pipeline_name=pipeline_name,
+        architecture=architecture,
     )
-    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
 def package_reduction(
@@ -1126,15 +1201,12 @@ def package_reduction(
     architecture: str = X86_AVX512_ARCHITECTURE,
 ) -> X86NativePackage:
     """Compile an x86 reduction through native Schedule and Tile IR (E2E-REAL-6)."""
-    from . import scheduled_kernel
-
     if not requests_reduction(module):
         raise ValueError("x86 native reduction requires one static f32 last-axis operation")
-    native_architecture = _scheduled_unary_architecture(architecture)
-    artifact = scheduled_kernel.lower_scheduled_kernel(
-        module, target="x86", architecture=native_architecture
+    return _cached_unary_package(
+        module, family="reduce", pipeline_name=pipeline_name,
+        architecture=architecture,
     )
-    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
 def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
@@ -1231,6 +1303,45 @@ def package_scheduled_matmul(
 
 
 def package_scheduled_kernel(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> X86NativePackage:
+    """Package a previously verified exact Schedule/Tile program once per toolchain."""
+
+    from .native_unary_contract import verify_unary_ancestry
+
+    # Validate the caller's artifact even on a hit. Every field, including
+    # Graph/Schedule/Tile text and projected ABI dimensions, participates in
+    # the frozen artifact key; a changed field must go through native replay.
+    artifact.validate()
+    architecture = (
+        X86_BASE_ARCHITECTURE if artifact.architecture == "x86_64_base"
+        else X86_AVX512_ARCHITECTURE
+    )
+    tool_identity = _file_identity(_tessera_opt())
+    library_identity = _file_identity(_library_path(architecture))
+    key = None
+    if tool_identity is not None and library_identity is not None:
+        key = (artifact, pipeline_name, tool_identity, library_identity,
+               _lower, verify_unary_ancestry)
+        with _UNARY_PACKAGE_CACHE_LOCK:
+            if cached := _SCHEDULED_UNARY_PACKAGE_CACHE.get(key):
+                _SCHEDULED_UNARY_PACKAGE_CACHE.move_to_end(key)
+                return deepcopy(cached)
+    package = _package_scheduled_kernel_uncached(artifact, pipeline_name=pipeline_name)
+    if key is not None and (tool_identity, library_identity) == (
+        _file_identity(_tessera_opt()), _file_identity(_library_path(architecture))
+    ):
+        with _UNARY_PACKAGE_CACHE_LOCK:
+            _SCHEDULED_UNARY_PACKAGE_CACHE[key] = deepcopy(package)
+            _SCHEDULED_UNARY_PACKAGE_CACHE.move_to_end(key)
+            if len(_SCHEDULED_UNARY_PACKAGE_CACHE) > _UNARY_PACKAGE_CACHE_LIMIT:
+                _SCHEDULED_UNARY_PACKAGE_CACHE.popitem(last=False)
+    return package
+
+
+def _package_scheduled_kernel_uncached(
     artifact: ScheduledKernelArtifact,
     *,
     pipeline_name: str,
@@ -1551,9 +1662,9 @@ def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86Nati
     if contract[:2] == ("unary", "abs"):
         from .scheduled_absolute import lower_absolute, package_absolute
         return package_absolute(lower_absolute(module), pipeline_name=pipeline_name)
-    if contract[:2] in (("unary", "floor"), ("unary", "ceil")):
-        from .scheduled_absolute import lower_floor, lower_ceil, package_unary
-        lower = lower_floor if contract[1] == "floor" else lower_ceil
+    if contract[:2] in (("unary", "floor"), ("unary", "ceil"), ("unary", "trunc")):
+        from .scheduled_absolute import lower_floor, lower_ceil, lower_trunc, package_unary
+        lower = {"floor": lower_floor, "ceil": lower_ceil, "trunc": lower_trunc}[contract[1]]
         return package_unary(lower(module), pipeline_name=pipeline_name)
     family, kind, input_names, output_name, shape, input_dtypes, output_dtype = contract
     if family == "unary":

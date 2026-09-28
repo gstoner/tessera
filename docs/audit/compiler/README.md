@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-11
+last_updated: 2026-09-28
 audit_role: index
 ---
 
@@ -68,6 +68,8 @@ The complete file-by-file catalog is below. Its practical summary is:
 - [`MLIR_NATIVE_FOUNDATION_SURVEY.md`](MLIR_NATIVE_FOUNDATION_SURVEY.md)
   inventories every live compiler document and identifies historical Graph-owned
   packaging, source emitters and their canonical IR migration targets.
+- Four closed or refuted ROCm tuning records moved from the integrated live
+  queue to the [measured-record archive](archive/ROCM_MEASURED_QUEUE_2026-09-28.md).
 
 ## Current plan and historical evidence
 

@@ -41,10 +41,10 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `Verifier coverage` | closed | 245 | 245 | 0 | real=245 | No action unless this row reopens. |
+| `Verifier coverage` | closed | 246 | 246 | 0 | real=246 | No action unless this row reopens. |
 | `Direct test evidence` | mixed | 409 | 521 | 112 | covered_by_family=26, directly_tested=416, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
 | `Runtime execution matrix` | closed | 271 | 271 | 0 | apple_cpu=2, apple_gpu=24, cpu=7, nvidia_sm120=54, rocm=94, rocm_gfx1201=3, x86=87 | Add rows only when a launch path actually executes. |
-| `Runtime ABI symbols` | mixed | 576 | 905 | 329 | apple=719, nvidia=8, rocm=13, x86=165 | Reduce stub-only ABI rows where a backend claims native execution. |
+| `Runtime ABI symbols` | mixed | 578 | 909 | 331 | apple=723, nvidia=8, rocm=13, x86=165 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 39 | 67 | 28 | archived=4, compile_only=18, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
 ## Code Generation Pathways

@@ -1,10 +1,17 @@
 """Native x86 absolute/floor packaging from replayed serialized contracts."""
 from dataclasses import dataclass
+from collections import OrderedDict
 import copy
 import json
 import re
+from threading import RLock
 from typing import ClassVar, cast
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+
+
+_LOWER_CACHE_LIMIT = 64
+_LOWER_CACHE: OrderedDict[tuple[object, ...], tuple[str, str]] = OrderedDict()
+_LOWER_CACHE_LOCK = RLock()
 
 
 @dataclass(frozen=True)
@@ -70,8 +77,26 @@ def _lower_unary(module, artifact_type, op_name):
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError('absolute lowering requires the native compiler')
-    schedule = run_tessera_opt(tool, graph, '--tessera-graph-to-schedule')
-    tile = run_tessera_opt(tool, schedule, '--tessera-schedule-to-tile')
+    from . import x86_native as x
+    identity = x._file_identity(tool)
+    key = (graph, artifact_type, identity, run_tessera_opt) if identity is not None else None
+    cached = None
+    if key is not None:
+        with _LOWER_CACHE_LOCK:
+            cached = _LOWER_CACHE.get(key)
+            if cached is not None:
+                _LOWER_CACHE.move_to_end(key)
+    if cached is None:
+        schedule = run_tessera_opt(tool, graph, '--tessera-graph-to-schedule')
+        tile = run_tessera_opt(tool, schedule, '--tessera-schedule-to-tile')
+        if key is not None and identity == x._file_identity(tool):
+            with _LOWER_CACHE_LOCK:
+                _LOWER_CACHE[key] = (schedule, tile)
+                _LOWER_CACHE.move_to_end(key)
+                if len(_LOWER_CACHE) > _LOWER_CACHE_LIMIT:
+                    _LOWER_CACHE.popitem(last=False)
+    else:
+        schedule, tile = cached
     return artifact_type(graph, schedule, tile)
 
 
@@ -80,6 +105,35 @@ def package_absolute(artifact, *, pipeline_name):
 
 
 def package_unary(artifact, *, pipeline_name):
+    from . import x86_native as x
+    from copy import deepcopy
+    # An exact immutable artifact is validated and lowered once per compiler
+    # and native-image identity. A changed Graph, Schedule, Tile, pipeline, or
+    # rebuilt toolchain misses; the first request always executes native replay.
+    tool_identity = x._file_identity(x._tessera_opt())
+    library_identity = x._file_identity(x._library_path(x.X86_AVX512_ARCHITECTURE))
+    key = None
+    if tool_identity is not None and library_identity is not None:
+        key = ("scheduled_absolute", artifact, pipeline_name, tool_identity,
+               library_identity, x._lower, x._image)
+        with x._UNARY_PACKAGE_CACHE_LOCK:
+            if cached := x._SCHEDULED_UNARY_PACKAGE_CACHE.get(key):
+                x._SCHEDULED_UNARY_PACKAGE_CACHE.move_to_end(key)
+                return deepcopy(cached)
+    package = _package_unary_uncached(artifact, pipeline_name=pipeline_name)
+    if key is not None and (tool_identity, library_identity) == (
+        x._file_identity(x._tessera_opt()),
+        x._file_identity(x._library_path(x.X86_AVX512_ARCHITECTURE)),
+    ):
+        with x._UNARY_PACKAGE_CACHE_LOCK:
+            x._SCHEDULED_UNARY_PACKAGE_CACHE[key] = deepcopy(package)
+            x._SCHEDULED_UNARY_PACKAGE_CACHE.move_to_end(key)
+            if len(x._SCHEDULED_UNARY_PACKAGE_CACHE) > x._UNARY_PACKAGE_CACHE_LIMIT:
+                x._SCHEDULED_UNARY_PACKAGE_CACHE.popitem(last=False)
+    return package
+
+
+def _package_unary_uncached(artifact, *, pipeline_name):
     from . import x86_native as x
     import math
     names, shape, digest = artifact.project()
@@ -120,6 +174,17 @@ class ScheduledCeil(ScheduledAbsolute):
 
 def lower_ceil(module):
     return _lower_unary(module, ScheduledCeil, "tessera.ceil")
+
+
+@dataclass(frozen=True)
+class ScheduledTrunc(ScheduledAbsolute):
+    kind: ClassVar[str] = "trunc"
+    contract_name: ClassVar[str] = "trunc"
+    numeric_policy: ClassVar[str] = "ieee_trunc"
+
+
+def lower_trunc(module):
+    return _lower_unary(module, ScheduledTrunc, "tessera.trunc")
 
 
 @dataclass(frozen=True)

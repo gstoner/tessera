@@ -7,7 +7,7 @@
 // RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu-runtime)' | FileCheck %s
 
 // CHECK-DAG: func.func private @tessera_apple_gpu_softmax_f32_status(i64, i64, i32, i32) -> i32
-// CHECK-DAG: func.func private @tessera_apple_gpu_rope_f32(i64, i64, i64, i32, i32)
+// CHECK-DAG: func.func private @tessera_apple_gpu_rope_f32_status(i64, i64, i64, i32, i32) -> i32
 
 // CHECK-LABEL: func.func @target_verify
 // CHECK-NOT: tessera.target_verify
@@ -21,21 +21,20 @@ func.func @target_verify(%t: tensor<3xi32>, %l: tensor<3x8xf32>) -> tensor<3x8xf
 // CHECK-LABEL: func.func @ntk_rope_unit
 // CHECK-NOT: tessera.ntk_rope
 // CHECK-NOT: tessera.rope
-// CHECK: call @tessera_apple_gpu_rope_f32
+// CHECK: call @tessera_apple_gpu_rope_f32_status
 func.func @ntk_rope_unit(%x: tensor<4x8xf32>, %th: tensor<4x8xf32>) -> tensor<4x8xf32> {
   %0 = tessera.ntk_rope %x, %th {scale = 1.0 : f64} : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
   return %0 : tensor<4x8xf32>
 }
 
-// A scaled theta: the rope call consumes theta / scale. This pipeline has no
-// Graph `tessera.div` lowering, so the division stays a Graph op here -- the
-// recorded gap that keeps the ntk_rope Target row from borrowing rope's
-// device-verified ABI evidence (ODS triage, ntk_rope row).
+// A scaled theta: the native Graph division runs before the rope call. The
+// status assertion prevents a host fallback from counting as Metal execution.
 // CHECK-LABEL: func.func @ntk_rope_scaled
 // CHECK-NOT: tessera.ntk_rope
-// CHECK: %[[D:.*]] = tessera.div
-// CHECK: bufferization.to_buffer %[[D]]
-// CHECK: call @tessera_apple_gpu_rope_f32
+// CHECK-NOT: tessera.div
+// CHECK: call @tessera_apple_gpu_mpsgraph_binary_f32_status
+// CHECK: cf.assert
+// CHECK: call @tessera_apple_gpu_rope_f32_status
 func.func @ntk_rope_scaled(%x: tensor<4x8xf32>, %th: tensor<4x8xf32>) -> tensor<4x8xf32> {
   %0 = tessera.ntk_rope %x, %th {scale = 2.0 : f64} : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
   return %0 : tensor<4x8xf32>

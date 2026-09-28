@@ -6,12 +6,14 @@ static bool isNativeFloor(Operation *op) {
 static bool isNativeUnary(Operation *op) {
   auto name = op->getName().getStringRef();
   return name == "tessera.absolute" || name == "tessera.abs" ||
-         name == "tessera.ceil" || name == "tessera.cumsum" || isNativeFloor(op);
+         name == "tessera.ceil" || name == "tessera.trunc" ||
+         name == "tessera.cumsum" || isNativeFloor(op);
 }
 static StringRef nativeUnaryFamily(Operation *op) {
   if (op->getName().getStringRef() == "tessera.cumsum") return "cumsum";
   if (isNativeFloor(op)) return "floor";
   if (op->getName().getStringRef() == "tessera.ceil") return "ceil";
+  if (op->getName().getStringRef() == "tessera.trunc") return "trunc";
   return "absolute";
 }
 static StringRef nativeUnaryKind(Operation *op) {
@@ -21,7 +23,8 @@ static StringRef nativeUnaryKind(Operation *op) {
 static StringRef nativeUnaryPolicy(Operation *op) {
   auto family = nativeUnaryFamily(op);
   if (family == "cumsum") return "f32_inclusive_scan";
-  return family == "floor" ? "ieee_floor" : family == "ceil" ? "ieee_ceil" : "ieee_abs_clear_sign";
+  return family == "floor" ? "ieee_floor" : family == "ceil" ? "ieee_ceil" :
+         family == "trunc" ? "ieee_trunc" : "ieee_abs_clear_sign";
 }
 static FailureOr<DictionaryAttr> absoluteContract(Operation *op) {
   auto fn = op->getParentOfType<func::FuncOp>();
@@ -105,7 +108,7 @@ static LogicalResult scheduleNativeAbsolute(ModuleOp mod) {
 }
 static LogicalResult lowerNativeAbsolute(ModuleOp mod) {
   SmallVector<schedule::ArtifactOp> records;
-  mod.walk([&](schedule::ArtifactOp op) { if (op.getShapeKey() == "family=absolute" || op.getShapeKey() == "family=floor" || op.getShapeKey() == "family=ceil" || op.getShapeKey() == "family=cumsum") records.push_back(op); });
+  mod.walk([&](schedule::ArtifactOp op) { if (op.getShapeKey() == "family=absolute" || op.getShapeKey() == "family=floor" || op.getShapeKey() == "family=ceil" || op.getShapeKey() == "family=trunc" || op.getShapeKey() == "family=cumsum") records.push_back(op); });
   for (auto record : records) {
     auto fn = record->getParentOfType<func::FuncOp>();
     if (!fn || !fn.getBody().hasOneBlock() || fn.getBody().front().getOperations().size() != 3)

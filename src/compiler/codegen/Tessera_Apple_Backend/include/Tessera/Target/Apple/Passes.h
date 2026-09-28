@@ -107,6 +107,8 @@ std::unique_ptr<::mlir::Pass> createLowerMatmulToAppleSimdgroupPass();
 /// Apple GPU runtime shim's custom-MSL rope kernel. Phase 8.4 — the first
 /// concrete custom kernel emitted via the gpu.msl_kernel op contract.
 std::unique_ptr<::mlir::Pass> createLowerRopeToAppleGPUPass();
+std::unique_ptr<::mlir::Pass> createLowerGraphDivToAppleGPUPass();
+std::unique_ptr<::mlir::Pass> createLowerPhiloxLangevinToAppleGPUPass();
 
 /// tessera.flash_attn (rank-3, f32, head_dim <= 256) → func.call into the
 /// Apple GPU runtime shim's custom-MSL flash-attention kernel. Phase 8.4.1.

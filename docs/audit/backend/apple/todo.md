@@ -8,6 +8,47 @@ last_updated: 2026-09-28
 
 # Apple compiler, exact-device, and performance plan
 
+## `E2E-REAL-6-GFX1151-PAGED-2026-09-28`: sibling outcome — not applicable
+
+The bounded ROCm physical-page f32/i32 Graph read and HSACO symbol contract
+have no Apple Metal consumer. Apple `target_verify`, `ntk_rope` execution and
+Philox Langevin Graph lane remain its E2E-REAL-6 follow-ups.
+
+## `E2E-REAL-6-APPLE-X86-2026-09-28`: scaled ntk_rope native Graph lowering — landing
+
+Owner E2E-REAL-6 / GOV-ODS-CONSUMER-1; cross-backend sync key
+`E2E-REAL-6-APPLE-X86-2026-09-28`. The Apple runtime pipeline now lowers
+same-shape static rank-2 f32 `tessera.div` through the checked MPSGraph binary
+ABI before the rope pass. This consumes the `theta / scale` op emitted by the
+shared composite rewrite. The f32 rope compiler call now uses a status-bearing
+Metal entry rather than the void entry that can recover on the host; the
+non-Darwin stub returns failure. Twenty-one Apple phase-8 IR lit fixtures and 233
+Apple pass/metadata checks passed in Princess-Luna WSL. The Metal runtime
+implementation and `@jit(target="apple_gpu")` execution have **not** been
+validated on the Mac, so no executable dashboard promotion follows. The
+`target_verify` JIT route and the Philox Langevin Apple Graph lane remain open.
+The shared `tessera.trunc` ODS registration is not Apple physical-schedule
+evidence; Apple's existing MPSGraph unary route is unchanged.
+
+## `GFX1201-W8A8-M200-SHORTK-2026-09-28`: sibling outcome — not applicable
+
+The bounded gfx1201 FP8 W8A8 LDS panel changes no Apple Graph or Target IR,
+Metal image, numerical policy or runtime ABI. No Apple device claim follows.
+
+## `GFX1201-W8A8-RAGGED97-2026-09-28`: sibling outcome — not applicable
+
+The bounded native Schedule rule selects a gfx1201 FP8 W8A8 LDS panel.
+Apple has no ROCm WMMA/LDS consumer for this physical contract; its Schedule,
+Target IR and Metal runtime ABI are unchanged. No Apple device claim follows.
+
+## `E2E-REAL-6-SM120-SOFTMAX-SAFE-2026-09-28`: sibling outcome — not applicable
+
+The shared scheduled-kernel admission adds only `nvidia_sm120`.
+`apple_gpu` still refuses `softmax_safe` at this boundary; its Graph
+execution and native Schedule/Tile rows have not been proved. Apple Target
+IR and runtime ABI are unchanged. Super-Bear's RTX 5070 passed the 14
+focused sm_120 device softmax rows.
+
 ## `CI-LIT-EBM-CLIFFORD-2026-09-28`: hosted lit lane covers the EBM / Clifford fixtures — sibling outcome — not applicable
 
 Owner: CI toolchain lanes (PR #874, follow-up to #873 item 1). The hosted `lit` lane now configures `TESSERA_BUILD_{EBM,CLIFFORD}_BACKEND=ON`, so the six fixtures that `REQUIRES: tessera-ebm` / `tessera-clifford` run there and the fleet-union gate passes on one lane: dispatched run 36418280808, LLVM/MLIR 23.1.2 under the CI 23.1.x tolerance (fleet pin 23.1.1), 533/533 passed, `uncovered: []`. Every one of the six already passed on every fleet box, which configures both backends ON; this adds hosted-runner coverage and makes no device claim. None of the six fixtures lowers to an Apple target (EBM Langevin lowering, row-program GPU emission for `nvidia`/`rocm`, and dialect-visibility checks). The Mac lane already ran all six; Apple lit coverage is unchanged.
@@ -10092,3 +10133,16 @@ Not applicable to Apple evidence: no Apple packet family carries ineligibility t
 Owner: EVIDENCE-PACKET-1. Sync: `EVIDENCE-PACKET-1-2026-09-27`.
 
 Parity validated for route receipts on the Mac (M1 Max, macOS 27, clean `eed48b9b`). The 2026-09-10 follow-up under `BENCHMARK-COMPILER-ALIGNMENT-2026-09-10` asked for per-call Metal/CPU receipts for public GA/EBM compositions; that item is closed here. Every Apple `_try_apple_gpu_*` lane in `tessera.ga`/`tessera.ebm` is `@native_attempt` and its public callers `@public_route`. In `clifford_core`, `energy_core` and `visual_complex_core`, the GA primitives, EBM `langevin_step` and the partition ran on the Apple GPU runtime. `geometric_product` split between the runtime and the reference, `rotor_sandwich` is `mixed`, and `energy_quadratic` ran on the reference (`benchmarks/baselines/ga_ebm_route_receipts_20260927/mac_m1max.json`). The runtime lane is the hand-written MSL kernels reached by ctypes, not compiler-generated code. Not applicable to the envelope: no Apple measurement-packet family exists yet. Follow-up required: an Apple device-clock packet family must register with `evidence_envelope` before its packets can admit anything. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-packet-1-shared-evidence-envelope-ga-and-ebm-route-receipts).
+
+### E2E-REAL-6 native follow-ups — 2026-09-28
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-NATIVE-FOLLOWUPS-2026-09-28`.
+The M1 Max rebuilt the Metal runtime and compiler. Scaled RoPE's division and
+status-bearing rope calls returned Metal success and agreed with an independent
+oracle (maximum absolute error 4.77e-7). The bounded f32 Philox Langevin Graph
+pass emits a checked runtime call; its lit fixture and Mac C ABI
+numerical/invalid-counter test pass. Follow-up required: `ntk_rope` and
+`target_verify` still report `artifact_only` under `@jit` and return eager
+results. Philox likewise lacks a public compiled JIT binding. The new MoE
+direct-gather subtype has no Apple physical schedule. No JIT or performance
+promotion is claimed.

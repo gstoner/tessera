@@ -197,11 +197,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     # sum/mean/max with f32 output, keepdims. gfx1201 keeps its proved f32
     # rank-reducing envelope: evidence never transfers between the two chips.
     rocm_unary = target == "rocm_gfx1151"
-    # ``softmax_safe`` is admitted where a retired Graph-owned packager served
-    # it with device proof: gfx1151 (E2E-REAL-6, ROCm unary family) and x86
-    # (E2E-REAL-6, x86 unary family: ``x86_native._softmax_contract`` classified
-    # it as a softmax until 2026-09-28; both Zen 5 hosts carry the rows).
-    if op.op_name == "tessera.softmax_safe" and target not in {"rocm_gfx1151", "x86"}:
+    # The three admitted targets package the same stable row-softmax semantic
+    # from a native Schedule/Tile consumer. Keep gfx1201 and Apple withheld
+    # until their own Graph lane and exact-device rows exist.
+    if op.op_name == "tessera.softmax_safe" and target not in {"rocm_gfx1151", "x86", "nvidia_sm120"}:
         raise ValueError("scheduled softmax_safe is admitted only where it has a proved consumer")
     if rocm_unary:
         softmax_like = op.op_name in {"tessera.softmax", "tessera.softmax_safe"}
@@ -210,7 +209,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         if not softmax_like and (dtype not in {"fp16", "bf16", "fp32"} or output_dtype != "fp32"):
             raise ValueError("gfx1151 scheduled reduction requires f16/bf16/f32 storage and f32 output")
     elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name == "tessera.softmax"):
-        expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"} else "fp32"
+        expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"} else "fp32"
         if dtype not in {"fp16", "bf16", "fp32"} or output_dtype != expected_dtype:
             raise ValueError("NVIDIA scheduled unary storage contract is unsupported")
     elif dtype != "fp32" or output_dtype != "fp32":

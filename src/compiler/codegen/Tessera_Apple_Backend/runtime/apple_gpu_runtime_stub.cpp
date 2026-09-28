@@ -416,6 +416,18 @@ extern "C" int32_t tessera_apple_gpu_mps_matmul_bf16_status(
   return 0;
 }
 
+extern "C" int32_t tessera_apple_gpu_rope_f32_status(const float*,
+                                                       const float*, float*,
+                                                       int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_ebm_langevin_step_philox_graph_f32_status(
+    const float*, const float*, const int64_t*, const int64_t*,
+    float, float, float*, int32_t) {
+  return 0;
+}
+
 extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
                                            float* Out, int32_t M, int32_t K) {
   reference_rope_f32(X, Theta, Out, M, K);

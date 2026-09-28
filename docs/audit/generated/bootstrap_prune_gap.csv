@@ -16,8 +16,8 @@ rocm_gfx1151,reduction,scheduled_kernel.supports_scheduled_kernel,generic_compil
 rocm_gfx1151,paged_kv,—,gap
 rocm_gfx1151,attention,scheduled_attention.supports_scheduled_attention,compiled
 rocm_gfx1151,moe_dispatch,—,gap
-x86,softmax,scheduled_kernel.supports_scheduled_kernel,generic_compiled
-x86,reduction,scheduled_kernel.supports_scheduled_kernel,generic_compiled
+x86,softmax,—,gap
+x86,reduction,—,gap
 x86,matmul,scheduled_matmul.supports_scheduled_matmul,compiled
 x86,attention,scheduled_attention.supports_scheduled_attention,compiled
 x86,attention_backward,scheduled_attention_backward.supports_scheduled_attention_backward,compiled

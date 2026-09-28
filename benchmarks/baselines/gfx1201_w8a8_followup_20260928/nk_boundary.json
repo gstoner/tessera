@@ -1,0 +1,1144 @@
+{
+  "work_item": "ROCM-FP8-BLOCKSCALE-1",
+  "sync_key": "GFX1201-PERF-2026-09-27",
+  "host": "tajasarus",
+  "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+  "source_commit": "2a70e08aacc7a2320899683a071db808ab1490c6",
+  "worktree_dirty": false,
+  "compiler": "/home/angstorms/programming/tessera/build-assertions/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "d7eb5270f29b949a5dbbb7822e46005cefdbc2a21cb663156fbc9420eedc8a7a",
+  "alt_compilers": {},
+  "timing_source": "device_clock_marker (llvm.readsteadycounter), hip_event + host wall cross-checks",
+  "marker_image_sha256": "12595356cd5091e2a3134665ded071969f2aad4f9ffedd9684ab48b2471f188e",
+  "wall_clock_rate_khz": 100000,
+  "windows": 5,
+  "min_window_ms": 6.0,
+  "aiter_kernel_source_sha256": "f48245242d51165a5545554fdf1b0f84418f24b4a67d839125c3e2c170fac685",
+  "rows": [
+    {
+      "shape": [
+        100,
+        1024,
+        1024
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 209715200,
+      "tessera_nk": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "2a07c40fd1b24e96fe7df6a4ea70a4b1c87b79f08fb4e9ddf42b92af1852ea7f",
+        "schedule_hash": "e093f2c53e7c9ad9a71a4fc07fdd9e37e09b2f4be845f843bf42cfd04695405c",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.614404254443968e-08
+      },
+      "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "panel_override": true,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "347a85381a9db0c5ac1d7895578a28672521ae04390748c7d7164db549bd0c64",
+        "schedule_hash": "e093f2c53e7c9ad9a71a4fc07fdd9e37e09b2f4be845f843bf42cfd04695405c",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.614404254443968e-08
+      },
+      "aiter": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_128_BLOCK_SIZE_N_32_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1024_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "ecc57eb6c17d64652118aad99c55e6439c1c2b04020e23963cd47bf9a18d3cfb",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 20480,
+        "num_warps": 8,
+        "output": "bf16",
+        "oracle_max_rel_err": 0.0010726952295901878,
+        "config": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 32,
+          "BLOCK_SIZE_K": 128,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 8,
+          "num_stages": 2,
+          "waves_per_eu": 4,
+          "matrix_instr_nonkdim": 16,
+          "cache_modifier": ".cg",
+          "NUM_KSPLIT": 1,
+          "kpack": 2
+        },
+        "config_source": "DEFAULT.json:M_LEQ_128"
+      },
+      "timing": {
+        "tessera_nk": {
+          "launches_per_window": 287,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.53788,
+          "median_us": 26.305783972125436,
+          "min_us": 26.26439024390244,
+          "event_median_us": 26.524753105349657,
+          "device_event_disagreement_max": 0.010458513819558203,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 287,
+              "device_ns": 7569500.0,
+              "event_ns": 7615676.8798828125,
+              "host_ns": 7738369
+            },
+            {
+              "launches": 287,
+              "device_ns": 7549760.0,
+              "event_ns": 7593204.975128174,
+              "host_ns": 7704995
+            },
+            {
+              "launches": 287,
+              "device_ns": 7548000.0,
+              "event_ns": 7627775.192260742,
+              "host_ns": 7733730
+            },
+            {
+              "launches": 287,
+              "device_ns": 7580470.0,
+              "event_ns": 7612604.141235352,
+              "host_ns": 7702520
+            },
+            {
+              "launches": 287,
+              "device_ns": 7537880.0,
+              "event_ns": 7567316.055297852,
+              "host_ns": 7691249
+            }
+          ],
+          "tflops": 7.97220870597211
+        },
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+          "launches_per_window": 684,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.18775,
+          "median_us": 10.613713450292398,
+          "min_us": 10.508406432748538,
+          "event_median_us": 10.675817205194843,
+          "device_event_disagreement_max": 0.0114588524077888,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 684,
+              "device_ns": 7272580.0,
+              "event_ns": 7306231.0218811035,
+              "host_ns": 7439929
+            },
+            {
+              "launches": 684,
+              "device_ns": 7290480.0,
+              "event_ns": 7333291.053771973,
+              "host_ns": 7445109
+            },
+            {
+              "launches": 684,
+              "device_ns": 7259780.0,
+              "event_ns": 7302258.9683532715,
+              "host_ns": 7414751
+            },
+            {
+              "launches": 684,
+              "device_ns": 7187750.0,
+              "event_ns": 7271068.096160889,
+              "host_ns": 7375556
+            },
+            {
+              "launches": 684,
+              "device_ns": 7227310.0,
+              "event_ns": 7256729.1259765625,
+              "host_ns": 7380225
+            }
+          ],
+          "tflops": 19.758890324500197
+        },
+        "aiter": {
+          "launches_per_window": 787,
+          "paired_set_attempts": 1,
+          "window_ms_min": 6.79744,
+          "median_us": 8.685730622617536,
+          "min_us": 8.637153748411691,
+          "event_median_us": 8.75958584466762,
+          "device_event_disagreement_max": 0.019294092790001563,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 787,
+              "device_ns": 6797440.0,
+              "event_ns": 6860167.980194092,
+              "host_ns": 6999498
+            },
+            {
+              "launches": 787,
+              "device_ns": 6835670.0,
+              "event_ns": 6878686.904907227,
+              "host_ns": 6974500
+            },
+            {
+              "launches": 787,
+              "device_ns": 6885200.0,
+              "event_ns": 6927254.199981689,
+              "host_ns": 7038553
+            },
+            {
+              "launches": 787,
+              "device_ns": 6850680.0,
+              "event_ns": 6893794.059753418,
+              "host_ns": 7024597
+            },
+            {
+              "launches": 787,
+              "device_ns": 6802090.0,
+              "event_ns": 6935912.132263184,
+              "host_ns": 7052179
+            }
+          ],
+          "tflops": 24.144796691472816
+        }
+      },
+      "time_over_aiter": {
+        "tessera_nk": 3.0286207476462024,
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": 1.2219712896292707
+      }
+    },
+    {
+      "shape": [
+        100,
+        1536,
+        1024
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 314572800,
+      "tessera_nk": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "2a07c40fd1b24e96fe7df6a4ea70a4b1c87b79f08fb4e9ddf42b92af1852ea7f",
+        "schedule_hash": "c130555ea48eb4f70aa19ea5d60113a38fc7bb0ec97b453eb3b10bb6bde318f2",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.772748906176667e-08
+      },
+      "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "panel_override": true,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "347a85381a9db0c5ac1d7895578a28672521ae04390748c7d7164db549bd0c64",
+        "schedule_hash": "c130555ea48eb4f70aa19ea5d60113a38fc7bb0ec97b453eb3b10bb6bde318f2",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.772748906176667e-08
+      },
+      "aiter": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_128_BLOCK_SIZE_N_32_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1024_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "ecc57eb6c17d64652118aad99c55e6439c1c2b04020e23963cd47bf9a18d3cfb",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 20480,
+        "num_warps": 8,
+        "output": "bf16",
+        "oracle_max_rel_err": 0.0012044506611147536,
+        "config": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 32,
+          "BLOCK_SIZE_K": 128,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 8,
+          "num_stages": 2,
+          "waves_per_eu": 4,
+          "matrix_instr_nonkdim": 16,
+          "cache_modifier": ".cg",
+          "NUM_KSPLIT": 1,
+          "kpack": 2
+        },
+        "config_source": "DEFAULT.json:M_LEQ_128"
+      },
+      "timing": {
+        "tessera_nk": {
+          "launches_per_window": 280,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.48832,
+          "median_us": 26.780714285714286,
+          "min_us": 26.744,
+          "event_median_us": 26.939875738961355,
+          "device_event_disagreement_max": 0.0062940897756983295,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 280,
+              "device_ns": 7519440.0,
+              "event_ns": 7549823.760986328,
+              "host_ns": 7620233
+            },
+            {
+              "launches": 280,
+              "device_ns": 7498600.0,
+              "event_ns": 7543165.20690918,
+              "host_ns": 7621645
+            },
+            {
+              "launches": 280,
+              "device_ns": 7534830.0,
+              "event_ns": 7578784.942626953,
+              "host_ns": 7656102
+            },
+            {
+              "launches": 280,
+              "device_ns": 7490080.0,
+              "event_ns": 7537521.839141846,
+              "host_ns": 7616916
+            },
+            {
+              "launches": 280,
+              "device_ns": 7488320.0,
+              "event_ns": 7522361.755371094,
+              "host_ns": 7620193
+            }
+          ],
+          "tflops": 11.746243832182008
+        },
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+          "launches_per_window": 671,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.2282,
+          "median_us": 10.849523099850968,
+          "min_us": 10.772280178837557,
+          "event_median_us": 10.91621032237296,
+          "device_event_disagreement_max": 0.00968575383155955,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 671,
+              "device_ns": 7294240.0,
+              "event_ns": 7324777.126312256,
+              "host_ns": 7395314
+            },
+            {
+              "launches": 671,
+              "device_ns": 7290070.0,
+              "event_ns": 7332148.07510376,
+              "host_ns": 7413017
+            },
+            {
+              "launches": 671,
+              "device_ns": 7228200.0,
+              "event_ns": 7270308.971405029,
+              "host_ns": 7342092
+            },
+            {
+              "launches": 671,
+              "device_ns": 7280030.0,
+              "event_ns": 7332554.817199707,
+              "host_ns": 7411465
+            },
+            {
+              "launches": 671,
+              "device_ns": 7253740.0,
+              "event_ns": 7324685.096740723,
+              "host_ns": 7403159
+            }
+          ],
+          "tflops": 28.99415919989341
+        },
+        "aiter": {
+          "launches_per_window": 1240,
+          "paired_set_attempts": 1,
+          "window_ms_min": 12.48783,
+          "median_us": 10.100903225806452,
+          "min_us": 10.07083064516129,
+          "event_median_us": 10.138487046764743,
+          "device_event_disagreement_max": 0.009193255907519815,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 1240,
+              "device_ns": 12487830.0,
+              "event_ns": 12571723.937988281,
+              "host_ns": 12647287
+            },
+            {
+              "launches": 1240,
+              "device_ns": 12525120.0,
+              "event_ns": 12557802.200317383,
+              "host_ns": 12629693
+            },
+            {
+              "launches": 1240,
+              "device_ns": 12520830.0,
+              "event_ns": 12541532.516479492,
+              "host_ns": 12613323
+            },
+            {
+              "launches": 1240,
+              "device_ns": 12600010.0,
+              "event_ns": 12716919.898986816,
+              "host_ns": 12807783
+            },
+            {
+              "launches": 1240,
+              "device_ns": 12531920.0,
+              "event_ns": 12575788.497924805,
+              "host_ns": 12655603
+            }
+          ],
+          "tflops": 31.14303671342071
+        }
+      },
+      "time_over_aiter": {
+        "tessera_nk": 2.6513187669487968,
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": 1.0741141517059478
+      }
+    },
+    {
+      "shape": [
+        100,
+        2048,
+        1024
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 419430400,
+      "tessera_nk": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "2a07c40fd1b24e96fe7df6a4ea70a4b1c87b79f08fb4e9ddf42b92af1852ea7f",
+        "schedule_hash": "0e2aad893be45aaa7d6954e41b01c3a25ed1311335ecdc5e83e8b383c87abf4f",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.901839998412161e-08
+      },
+      "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "panel_override": true,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "347a85381a9db0c5ac1d7895578a28672521ae04390748c7d7164db549bd0c64",
+        "schedule_hash": "0e2aad893be45aaa7d6954e41b01c3a25ed1311335ecdc5e83e8b383c87abf4f",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.901839998412161e-08
+      },
+      "aiter": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_128_BLOCK_SIZE_N_32_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1024_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "ecc57eb6c17d64652118aad99c55e6439c1c2b04020e23963cd47bf9a18d3cfb",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 20480,
+        "num_warps": 8,
+        "output": "bf16",
+        "oracle_max_rel_err": 0.001309707326111479,
+        "config": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 32,
+          "BLOCK_SIZE_K": 128,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 8,
+          "num_stages": 2,
+          "waves_per_eu": 4,
+          "matrix_instr_nonkdim": 16,
+          "cache_modifier": ".cg",
+          "NUM_KSPLIT": 1,
+          "kpack": 2
+        },
+        "config_source": "DEFAULT.json:M_LEQ_128"
+      },
+      "timing": {
+        "tessera_nk": {
+          "launches_per_window": 277,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.59512,
+          "median_us": 27.67162454873646,
+          "min_us": 27.419205776173285,
+          "event_median_us": 27.87981136611222,
+          "device_event_disagreement_max": 0.011411164704873543,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 277,
+              "device_ns": 7690420.0,
+              "event_ns": 7734580.039978027,
+              "host_ns": 7798364
+            },
+            {
+              "launches": 277,
+              "device_ns": 7625440.0,
+              "event_ns": 7683117.866516113,
+              "host_ns": 7754440
+            },
+            {
+              "launches": 277,
+              "device_ns": 7595120.0,
+              "event_ns": 7625668.048858643,
+              "host_ns": 7715215
+            },
+            {
+              "launches": 277,
+              "device_ns": 7665040.0,
+              "event_ns": 7722707.748413086,
+              "host_ns": 7792774
+            },
+            {
+              "launches": 277,
+              "device_ns": 7668600.0,
+              "event_ns": 7757117.748260498,
+              "host_ns": 7826216
+            }
+          ],
+          "tflops": 15.157418721885342
+        },
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+          "launches_per_window": 668,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.4976,
+          "median_us": 11.32693113772455,
+          "min_us": 11.223952095808382,
+          "event_median_us": 11.391302068790276,
+          "device_event_disagreement_max": 0.008259788414055547,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 668,
+              "device_ns": 7566390.0,
+              "event_ns": 7609389.781951904,
+              "host_ns": 7672633
+            },
+            {
+              "launches": 668,
+              "device_ns": 7534520.0,
+              "event_ns": 7592650.890350342,
+              "host_ns": 7662014
+            },
+            {
+              "launches": 668,
+              "device_ns": 7604920.0,
+              "event_ns": 7668258.190155029,
+              "host_ns": 7731986
+            },
+            {
+              "launches": 668,
+              "device_ns": 7497600.0,
+              "event_ns": 7555518.15032959,
+              "host_ns": 7630222
+            },
+            {
+              "launches": 668,
+              "device_ns": 7568690.0,
+              "event_ns": 7625657.081604004,
+              "host_ns": 7677915
+            }
+          ],
+          "tflops": 37.02948264628178
+        },
+        "aiter": {
+          "launches_per_window": 619,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.2962,
+          "median_us": 11.80324717285945,
+          "min_us": 11.78707592891761,
+          "event_median_us": 11.926466890991408,
+          "device_event_disagreement_max": 0.010331619519694656,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 619,
+              "device_ns": 7296200.0,
+              "event_ns": 7340423.107147217,
+              "host_ns": 7403420
+            },
+            {
+              "launches": 619,
+              "device_ns": 7306210.0,
+              "event_ns": 7382483.005523682,
+              "host_ns": 7449207
+            },
+            {
+              "launches": 619,
+              "device_ns": 7382170.0,
+              "event_ns": 7458108.901977539,
+              "host_ns": 7528079
+            },
+            {
+              "launches": 619,
+              "device_ns": 7379720.0,
+              "event_ns": 7437098.979949951,
+              "host_ns": 7511436
+            },
+            {
+              "launches": 619,
+              "device_ns": 7298240.0,
+              "event_ns": 7364098.072052002,
+              "host_ns": 7470427
+            }
+          ],
+          "tflops": 35.53517043720342
+        }
+      },
+      "time_over_aiter": {
+        "tessera_nk": 2.3444077840176876,
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": 0.9596453392732343
+      }
+    },
+    {
+      "shape": [
+        100,
+        2048,
+        1536
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 629145600,
+      "tessera_nk": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "4a7cb96de0b2f987cc0d0bccd8f95d59092647c1b858fa61b2b65d127c3f8690",
+        "schedule_hash": "83f6373a8326838b151f4436240e06ddeab6366a3451dd1b931e13f154aacdf4",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.190589035247647e-08
+      },
+      "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "panel_override": true,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "431332a82404005f928e43aefb50b3a1a0275384ea2bd9f1e21fc10e1f4de594",
+        "schedule_hash": "83f6373a8326838b151f4436240e06ddeab6366a3451dd1b931e13f154aacdf4",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.190589035247647e-08
+      },
+      "aiter": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_128_BLOCK_SIZE_N_32_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1536_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "9eaa8e08cda415534cb3cc60ea1390111f12d364efc85979642edbdf3b7805e5",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 20480,
+        "num_warps": 8,
+        "output": "bf16",
+        "oracle_max_rel_err": 0.0010727898785925216,
+        "config": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 32,
+          "BLOCK_SIZE_K": 128,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 8,
+          "num_stages": 2,
+          "waves_per_eu": 4,
+          "matrix_instr_nonkdim": 16,
+          "cache_modifier": ".cg",
+          "NUM_KSPLIT": 1,
+          "kpack": 2
+        },
+        "config_source": "DEFAULT.json:M_LEQ_128"
+      },
+      "timing": {
+        "tessera_nk": {
+          "launches_per_window": 207,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.72016,
+          "median_us": 37.48212560386473,
+          "min_us": 37.29545893719807,
+          "event_median_us": 38.04596149979007,
+          "device_event_disagreement_max": 0.014819861916972245,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 207,
+              "device_ns": 7730240.0,
+              "event_ns": 7787261.009216309,
+              "host_ns": 7858969
+            },
+            {
+              "launches": 207,
+              "device_ns": 7885560.0,
+              "event_ns": 7937273.979187012,
+              "host_ns": 8015859
+            },
+            {
+              "launches": 207,
+              "device_ns": 7855320.0,
+              "event_ns": 7904333.114624023,
+              "host_ns": 7985020
+            },
+            {
+              "launches": 207,
+              "device_ns": 7758800.0,
+              "event_ns": 7875514.030456543,
+              "host_ns": 7955874
+            },
+            {
+              "launches": 207,
+              "device_ns": 7720160.0,
+              "event_ns": 7762304.782867432,
+              "host_ns": 7841526
+            }
+          ],
+          "tflops": 16.785216682992218
+        },
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+          "launches_per_window": 549,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.78691,
+          "median_us": 14.266830601092895,
+          "min_us": 14.183806921675775,
+          "event_median_us": 14.343779378032858,
+          "device_event_disagreement_max": 0.0057478281274432495,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 549,
+              "device_ns": 7856800.0,
+              "event_ns": 7891709.804534912,
+              "host_ns": 7989248
+            },
+            {
+              "launches": 549,
+              "device_ns": 7849380.0,
+              "event_ns": 7883861.064910889,
+              "host_ns": 7981412
+            },
+            {
+              "launches": 549,
+              "device_ns": 7786910.0,
+              "event_ns": 7792705.059051514,
+              "host_ns": 7864691
+            },
+            {
+              "launches": 549,
+              "device_ns": 7819310.0,
+              "event_ns": 7864513.874053955,
+              "host_ns": 7945825
+            },
+            {
+              "launches": 549,
+              "device_ns": 7832490.0,
+              "event_ns": 7874734.878540039,
+              "host_ns": 7953750
+            }
+          ],
+          "tflops": 44.09848393039762
+        },
+        "aiter": {
+          "launches_per_window": 650,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.90252,
+          "median_us": 12.234492307692308,
+          "min_us": 12.157723076923077,
+          "event_median_us": 12.29994480426495,
+          "device_event_disagreement_max": 0.006172471212630403,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 650,
+              "device_ns": 7902520.0,
+              "event_ns": 7951601.028442383,
+              "host_ns": 8036197
+            },
+            {
+              "launches": 650,
+              "device_ns": 7994160.0,
+              "event_ns": 8036330.223083496,
+              "host_ns": 8115218
+            },
+            {
+              "launches": 650,
+              "device_ns": 7963430.0,
+              "event_ns": 7994964.122772217,
+              "host_ns": 8067187
+            },
+            {
+              "launches": 650,
+              "device_ns": 7952420.0,
+              "event_ns": 7996363.162994385,
+              "host_ns": 8068800
+            },
+            {
+              "launches": 650,
+              "device_ns": 7942390.0,
+              "event_ns": 7984513.759613037,
+              "host_ns": 8064101
+            }
+          ],
+          "tflops": 51.423923786721524
+        }
+      },
+      "time_over_aiter": {
+        "tessera_nk": 3.0636437263766343,
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": 1.1661154580254038
+      }
+    },
+    {
+      "shape": [
+        100,
+        2048,
+        4096
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 1677721600,
+      "tessera_nk": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "7caadd7ca3d58ef2b2c51788ef4f30ebf69d2e09e481290d7ee5647e96b7175b",
+        "schedule_hash": "bc73475ba9c89e948cbcf56914dc9a73a8ae40deb6f87f9166ef547eee31926d",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.00235290829132e-08
+      },
+      "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "panel_override": true,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "acb21e1d9fd1f74b7fa6ed7f10c76e900eadd89626be6e5ac1f980b9efd5a0ff",
+        "schedule_hash": "bc73475ba9c89e948cbcf56914dc9a73a8ae40deb6f87f9166ef547eee31926d",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+        "output": "f32",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 6.00235290829132e-08
+      },
+      "aiter": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_128_BLOCK_SIZE_N_32_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_4096_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "7dd44e75b99e4570e868a07e55e9dfe23116a332b3b2e865c0f5380f8d685690",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 20480,
+        "num_warps": 8,
+        "output": "bf16",
+        "oracle_max_rel_err": 0.0007695475395537606,
+        "config": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 32,
+          "BLOCK_SIZE_K": 128,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 8,
+          "num_stages": 2,
+          "waves_per_eu": 4,
+          "matrix_instr_nonkdim": 16,
+          "cache_modifier": ".cg",
+          "NUM_KSPLIT": 1,
+          "kpack": 2
+        },
+        "config_source": "DEFAULT.json:M_LEQ_128"
+      },
+      "timing": {
+        "tessera_nk": {
+          "launches_per_window": 100,
+          "paired_set_attempts": 1,
+          "window_ms_min": 9.11364,
+          "median_us": 91.226,
+          "min_us": 91.1364,
+          "event_median_us": 91.61789894104004,
+          "device_event_disagreement_max": 0.0076125826450096365,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 100,
+              "device_ns": 9126720.0,
+              "event_ns": 9160631.17980957,
+              "host_ns": 9235668
+            },
+            {
+              "launches": 100,
+              "device_ns": 9139240.0,
+              "event_ns": 9183370.590209961,
+              "host_ns": 9266996
+            },
+            {
+              "launches": 100,
+              "device_ns": 9114960.0,
+              "event_ns": 9157450.675964355,
+              "host_ns": 9233512
+            },
+            {
+              "launches": 100,
+              "device_ns": 9122600.0,
+              "event_ns": 9192579.26940918,
+              "host_ns": 9273869
+            },
+            {
+              "launches": 100,
+              "device_ns": 9113640.0,
+              "event_ns": 9161789.894104004,
+              "host_ns": 9240246
+            }
+          ],
+          "tflops": 18.390827176462853
+        },
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": {
+          "launches_per_window": 274,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.74156,
+          "median_us": 28.427299270072993,
+          "min_us": 28.253868613138685,
+          "event_median_us": 28.591258682473732,
+          "device_event_disagreement_max": 0.00895819814399852,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 274,
+              "device_ns": 7813320.0,
+              "event_ns": 7857807.159423828,
+              "host_ns": 7946265
+            },
+            {
+              "launches": 274,
+              "device_ns": 7741560.0,
+              "event_ns": 7787207.126617432,
+              "host_ns": 7870722
+            },
+            {
+              "launches": 274,
+              "device_ns": 7789080.0,
+              "event_ns": 7834004.878997803,
+              "host_ns": 7917010
+            },
+            {
+              "launches": 274,
+              "device_ns": 7751240.0,
+              "event_ns": 7821304.798126221,
+              "host_ns": 7902393
+            },
+            {
+              "launches": 274,
+              "device_ns": 7835520.0,
+              "event_ns": 7905624.866485596,
+              "host_ns": 7990952
+            }
+          ],
+          "tflops": 59.017973675966864
+        },
+        "aiter": {
+          "launches_per_window": 258,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.6984,
+          "median_us": 29.905116279069766,
+          "min_us": 29.83875968992248,
+          "event_median_us": 30.056617056676583,
+          "device_event_disagreement_max": 0.009308616105189257,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 258,
+              "device_ns": 7806900.0,
+              "event_ns": 7825576.7822265625,
+              "host_ns": 7906942
+            },
+            {
+              "launches": 258,
+              "device_ns": 7710320.0,
+              "event_ns": 7754607.200622559,
+              "host_ns": 7837197
+            },
+            {
+              "launches": 258,
+              "device_ns": 7741240.0,
+              "event_ns": 7747206.211090088,
+              "host_ns": 7863417
+            },
+            {
+              "launches": 258,
+              "device_ns": 7698400.0,
+              "event_ns": 7770734.786987305,
+              "host_ns": 7852526
+            },
+            {
+              "launches": 258,
+              "device_ns": 7715520.0,
+              "event_ns": 7724124.908447266,
+              "host_ns": 7838560
+            }
+          ],
+          "tflops": 56.1014906059475
+        }
+      },
+      "time_over_aiter": {
+        "tessera_nk": 3.0505148065198457,
+        "tessera_nk_lds128x64_w8_d1_s-1_p-1_f-1": 0.9505831378414977
+      }
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "host": "Princess-Luna",
+  "claims": [
+    "compile_cost",
+    "runtime_load"
+  ],
+  "image_digests_seen": 18,
+  "loaded_x86_objects": 1,
+  "vm_rss_kib": 107356,
+  "payload_bytes": 783360,
+  "rows": [
+    {
+      "family": "softmax",
+      "shapes": 8,
+      "retired": {
+        "package_median_ms": 32.45,
+        "repeat_package_median_ms": 31.19,
+        "first_launch_median_ms": 3.237,
+        "warm_launch_median_ms": 0.835,
+        "distinct_image_digests": 1,
+        "package_ms": [
+          37.17,
+          32.3,
+          30.87,
+          32.61,
+          31.08,
+          32.63,
+          32.76,
+          31.4
+        ],
+        "repeat_package_ms": [
+          32.3,
+          31.04,
+          30.38,
+          32.24,
+          31.71,
+          29.76,
+          31.01,
+          31.34
+        ],
+        "first_launch_ms": [
+          12.301,
+          3.383,
+          3.229,
+          3.262,
+          3.199,
+          3.245,
+          3.162,
+          3.154
+        ]
+      },
+      "compiled": {
+        "package_median_ms": 100.33,
+        "repeat_package_median_ms": 0.2,
+        "first_launch_median_ms": 3.288,
+        "warm_launch_median_ms": 0.802,
+        "distinct_image_digests": 8,
+        "package_ms": [
+          104.88,
+          100.26,
+          100.81,
+          103.08,
+          98.06,
+          98.63,
+          100.4,
+          98.3
+        ],
+        "repeat_package_ms": [
+          0.28,
+          0.21,
+          0.21,
+          0.2,
+          0.2,
+          0.2,
+          0.21,
+          0.2
+        ],
+        "first_launch_ms": [
+          3.279,
+          3.261,
+          3.28,
+          3.281,
+          3.417,
+          3.295,
+          3.317,
+          3.296
+        ]
+      }
+    },
+    {
+      "family": "reduction",
+      "shapes": 8,
+      "retired": {
+        "package_median_ms": 32.24,
+        "repeat_package_median_ms": 31.2,
+        "first_launch_median_ms": 3.261,
+        "warm_launch_median_ms": 0.818,
+        "distinct_image_digests": 1,
+        "package_ms": [
+          31.38,
+          30.67,
+          32.75,
+          31.72,
+          32.86,
+          31.62,
+          33.85,
+          33.81
+        ],
+        "repeat_package_ms": [
+          32.46,
+          31.67,
+          31.54,
+          30.09,
+          30.69,
+          31.11,
+          31.3,
+          30.01
+        ],
+        "first_launch_ms": [
+          3.496,
+          3.163,
+          3.165,
+          3.247,
+          3.322,
+          3.185,
+          3.289,
+          3.276
+        ]
+      },
+      "compiled": {
+        "package_median_ms": 100.44,
+        "repeat_package_median_ms": 0.2,
+        "first_launch_median_ms": 3.262,
+        "warm_launch_median_ms": 0.779,
+        "distinct_image_digests": 8,
+        "package_ms": [
+          101.23,
+          100.41,
+          100.47,
+          100.33,
+          102.0,
+          102.02,
+          99.74,
+          100.39
+        ],
+        "repeat_package_ms": [
+          0.2,
+          0.19,
+          0.2,
+          0.2,
+          0.21,
+          0.25,
+          0.2,
+          0.19
+        ],
+        "first_launch_ms": [
+          3.254,
+          3.34,
+          3.218,
+          3.204,
+          3.238,
+          3.269,
+          3.343,
+          3.335
+        ]
+      }
+    }
+  ]
+}

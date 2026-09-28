@@ -17,6 +17,81 @@ link additional owners in the body. Update that owner record in
 the same PR. Evidence corrections are explicit; do not rewrite old results as
 current proof. Current priorities live only in the plan.
 
+### 2026-09-28 — native MoE, cache, Apple Philox and sm_120 paged-KV follow-ups
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: pending; sync `E2E-REAL-6-NATIVE-FOLLOWUPS-2026-09-28`.
+
+Outcome: gfx1151 MoE direct token gather now follows a registered Graph subtype,
+native Schedule and Tile replay, a shape-free ROCm Target directive and a
+checked image entry. Exact Graph x86 `trunc` repeats reuse the native package.
+Apple has a bounded Philox Langevin Graph lowering to a status-bearing Metal
+ABI; the scaled RoPE Metal calls passed direct C ABI numerical checks.
+
+Remaining: Apple `@jit` execution still reports `artifact_only` for `ntk_rope`
+and `target_verify`; the Philox pass and direct ABI test do not prove a public
+JIT route. Broader paged KV and the other x86/NVIDIA families, ROCm cache keys,
+per-envelope certificates and device-only paged-KV kernel timing remain open.
+
+Evidence: Princess-Luna WSL rebuilt `tessera-opt` and passed 333 focused MoE,
+registry and drift tests plus both native MoE compiler fixture stages; the
+device cases include S<T and S>T. Its x86 cache packet records 96.85–104.18 ms
+cold and 0.313–0.336 ms repeat medians. Super-Bear sm_120 passed four paged-KV
+remap/invalid-page device rows and 25 scheduled packed-state tests. The Mac
+rebuilt its runtime/compiler, passed the Philox lit fixture and direct Metal
+Philox test, and measured scaled RoPE C ABI maximum absolute error 4.77e-7.
+WSL HIP events remain invalid on this fleet, so the paged-KV packet contains
+host launch wall time only. See the [x86 packet](../../../benchmarks/baselines/e2e_real6_x86_trunc_cache_20260928/README.md).
+<!-- entry-fields:end -->
+
+### 2026-09-28 — gfx1151 paged-KV native Schedule and shape-free image
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: pending; sync `E2E-REAL-6-GFX1151-PAGED-2026-09-28`.
+
+Outcome: The admitted bounded physical-page Graph read uses the native paged-KV
+Schedule and Tile producer. ROCm packaging replays both boundaries, compiles a
+shape-free Target directive, and binds the exported HSACO symbol to the launch
+descriptor. Shape-only Graph changes reuse the image.
+
+Remaining: General KV layouts and throughput, gfx1151 `moe_dispatch`, sm_120
+paged-KV regression, the other E2E-REAL-6 family migrations and Apple device
+execution.
+
+Evidence: Princess-Luna WSL rebuilt `tessera-opt` and passed 13 focused paged
+tests, including four exact gfx1151 permuted-page oracle launches, replay
+refusal and cross-shape cache reuse. NVIDIA's shared Schedule consumer is
+covered by host-free regression; no new sm_120 device claim. The
+[host-wall timing packet](../../../benchmarks/baselines/e2e_real6_gfx1151_paged_20260928/README.md)
+records 94–103 ms warm packages and 2.16–2.26 ms launches, with no kernel
+throughput attribution.
+<!-- entry-fields:end -->
+
+### 2026-09-28 — Apple scaled RoPE Graph division and x86 trunc migration
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: pending; sync `E2E-REAL-6-APPLE-X86-2026-09-28`.
+
+Outcome: Static f32 `tessera.trunc` now follows replayed x86 Graph→Schedule→Tile
+and executes as a native AVX-512 image. Apple `theta / scale` from the shared
+`ntk_rope` rewrite lowers to a checked MPSGraph division before the rope call;
+the f32 rope compiler call now requires a successful Metal status.
+
+Remaining: Apple `@jit` execution of `target_verify` and `ntk_rope`, the Philox
+Langevin Apple Graph lane, exact Mac device proof for the new calls, and the
+other E2E-REAL-6 x86/ROCm/NVIDIA families.
+
+Evidence: Princess-Luna WSL rebuilt `tessera-opt`, passed 47 focused x86
+tests with three exact-CPU native launches, 21 Apple IR lit fixtures and 233
+Apple/pass-metadata checks. The [Zen 5 timing packet](../../../benchmarks/baselines/e2e_real6_trunc_20260928/README.md)
+records about 100 ms packaging and 0.72 ms end-to-end native launch medians;
+there is no performance promotion and no Apple Metal execution claim.
+
+<!-- entry-fields:end -->
+
 ### 2026-09-04 — Engineering follow-through
 
 Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)

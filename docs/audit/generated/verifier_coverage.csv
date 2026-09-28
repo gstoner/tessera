@@ -221,6 +221,7 @@ src/compiler/ir/TesseraOps.td,TrainingLossSGDOp,1,1,real
 src/compiler/ir/TesseraOps.td,TransposeOp,1,1,real
 src/compiler/ir/TesseraOps.td,TriSolveOp,1,1,real
 src/compiler/ir/TesseraOps.td,TridiagonalSolveOp,1,1,real
+src/compiler/ir/TesseraOps.td,TruncOp,1,1,real
 src/compiler/ir/TesseraOps.td,UnsqueezeOp,1,1,real
 src/compiler/ir/TesseraOps.td,VarlenSdpaOp,1,1,real
 src/compiler/ir/TesseraOps.td,ViewOp,1,1,real

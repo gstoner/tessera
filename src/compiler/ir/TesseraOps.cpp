@@ -2733,6 +2733,18 @@ LogicalResult MoeDispatchOp::verify() {
   auto xTy = dyn_cast<RankedTensorType>(getX().getType());
   auto routeTy = dyn_cast<RankedTensorType>(getRoute().getType());
   if (!xTy || !routeTy) return success();
+  auto outputTy = dyn_cast<RankedTensorType>(getPartials().getType());
+  // The direct token-gather specialization uses one i32 source token per
+  // output slot. Slot count is independent of the input token count.
+  if (xTy.getRank() == 2 && xTy.getElementType().isF32() &&
+      routeTy.getRank() == 1 && routeTy.getElementType().isInteger(32) &&
+      outputTy && outputTy.getRank() == 2 &&
+      outputTy.getElementType().isF32()) {
+    if (!dimsAgree(routeTy.getDimSize(0), outputTy.getDimSize(0)) ||
+        !dimsAgree(xTy.getDimSize(1), outputTy.getDimSize(1)))
+      return emitOpError("token-gather slots/hidden dimensions must match output");
+    return success();
+  }
   if (xTy.getRank() < 1 || routeTy.getRank() < 1)
     return emitOpError(
         "moe_dispatch requires rank >= 1 token and route tensors");
@@ -5585,6 +5597,12 @@ LogicalResult CeilOp::verify() {
 }
 
 LogicalResult FloorOp::verify() {
+  if (getInput().getType() != getOutput().getType())
+    return emitOpError("requires unchanged tensor shape and element type");
+  return success();
+}
+
+LogicalResult TruncOp::verify() {
   if (getInput().getType() != getOutput().getType())
     return emitOpError("requires unchanged tensor shape and element type");
   return success();

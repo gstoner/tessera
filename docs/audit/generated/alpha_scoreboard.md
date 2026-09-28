@@ -17,7 +17,7 @@ MLIR passes. A cell is alpha-complete only when all five stages are
 |---|---|---|
 | `frontend` | AST: does `graph_ir._OpExtractor` still exist (E2E-REAL-6) | 0 |
 | `graph_opt` | not yet derivable per family — shown `unmeasured` | 0 |
-| `schedule_tile` | [`bootstrap_prune_gap`](bootstrap_prune_gap.md) family routes | 18 |
+| `schedule_tile` | [`bootstrap_prune_gap`](bootstrap_prune_gap.md) family routes | 24 |
 | `native_lowering` | [spine](compilation_spine_inventory.md) Level C for the lane target | 0 |
 | `execution` | [E2E fleet](e2e_fleet.md) release packet for the lane | 27 |
 
@@ -41,11 +41,11 @@ improvement fails until the baseline is tightened, so gains are locked.
 |---|---|---|---|
 | `mac_cpu` | Mac M1 Max | arm64 CPU | 1 |
 | `mac_gpu` | Mac M1 Max | Apple7 GPU | 3 |
-| `luna_cpu` | Princess-Luna | Zen 5 AVX-512 | 7 |
+| `luna_cpu` | Princess-Luna | Zen 5 AVX-512 | 9 |
 | `luna_gpu` | Princess-Luna | gfx1151 | 7 |
-| `bear_cpu` | The-Super-Bear | Zen 2 AVX2 | 4 |
+| `bear_cpu` | The-Super-Bear | Zen 2 AVX2 | 6 |
 | `bear_gpu` | The-Super-Bear | sm_120 | 13 |
-| `taj_cpu` | Tajasarus | Zen 5 AVX-512 | 7 |
+| `taj_cpu` | Tajasarus | Zen 5 AVX-512 | 9 |
 | `taj_gpu` | Tajasarus | gfx1201 | 3 |
 
 Known limits: `taj_gpu` shares the ROCm route module with gfx1151, so
@@ -84,8 +84,8 @@ Legend: ✅ native · 🔴 bypass · 🟡 partial / pending · ⬛ absent / unro
 | `mac_gpu` | `ebm` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | 🟡 packet_pending | — |
 | `mac_gpu` | `clifford` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | 🟡 packet_pending | — |
 | `luna_cpu` | `matmul` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
-| `luna_cpu` | `softmax` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | ✅ native | — |
-| `luna_cpu` | `reduction` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | ✅ native | — |
+| `luna_cpu` | `softmax` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
+| `luna_cpu` | `reduction` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
 | `luna_cpu` | `norm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `luna_cpu` | `attention` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
 | `luna_cpu` | `paged_kv` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
@@ -110,8 +110,8 @@ Legend: ✅ native · 🔴 bypass · 🟡 partial / pending · ⬛ absent / unro
 | `luna_gpu` | `ebm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `luna_gpu` | `clifford` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `bear_cpu` | `matmul` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ⬛ absent | — |
-| `bear_cpu` | `softmax` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | ✅ native | — |
-| `bear_cpu` | `reduction` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | ✅ native | — |
+| `bear_cpu` | `softmax` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
+| `bear_cpu` | `reduction` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
 | `bear_cpu` | `norm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `bear_cpu` | `attention` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ⬛ absent | — |
 | `bear_cpu` | `paged_kv` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
@@ -136,8 +136,8 @@ Legend: ✅ native · 🔴 bypass · 🟡 partial / pending · ⬛ absent / unro
 | `bear_gpu` | `ebm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | ⬛ absent | ⬛ absent | — |
 | `bear_gpu` | `clifford` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | ⬛ absent | ⬛ absent | — |
 | `taj_cpu` | `matmul` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
-| `taj_cpu` | `softmax` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | ✅ native | — |
-| `taj_cpu` | `reduction` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | ✅ native | — |
+| `taj_cpu` | `softmax` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
+| `taj_cpu` | `reduction` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
 | `taj_cpu` | `norm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `taj_cpu` | `attention` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
 | `taj_cpu` | `paged_kv` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |

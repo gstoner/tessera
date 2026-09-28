@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -348,36 +349,6 @@ def _lower(
     return target_ir, payload, compiler, toolchain
 
 
-def emit_softmax_tile_ir(*, entry: str) -> str:
-    return f'''module {{
-  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %k: i64) {{
-    tile.softmax_kernel %x, %o, %rows, %k {{
-      storage = "f32", accum = "f32", axis = -1 : i64,
-      exp_mode = "accurate", ftz = false
-    }} : !llvm.ptr, !llvm.ptr, i64, i64
-    llvm.return
-  }}
-}}
-'''
-
-
-def emit_reduce_tile_ir(*, entry: str, kind: str, axis: int, keepdims: bool) -> str:
-    if kind not in {"sum", "mean", "max"}:
-        raise ValueError(f"unsupported x86 reduction kind {kind!r}")
-    return f'''module {{
-  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr,
-                     %outer: i64, %axis_extent: i64, %inner: i64) {{
-    tile.reduce_kernel %x, %o, %outer, %axis_extent, %inner {{
-      storage = "f32", accum = "f32", kind = "{kind}", axis = {axis} : i64,
-      keepdims = {str(keepdims).lower()}, schedule = "serial",
-      nan_mode = "propagate", inner_is_one = true
-    }} : !llvm.ptr, !llvm.ptr, i64, i64, i64
-    llvm.return
-  }}
-}}
-'''
-
-
 def emit_matmul_tile_ir(
     *, entry: str, a_storage: str = "f32", b_storage: str = "f32",
     accum: str = "f32", output: str = "f32",
@@ -698,58 +669,6 @@ def _shape(module: GraphIRModule, name: str) -> tuple[int, ...] | None:
     return shape if all(value > 0 for value in shape) else None
 
 
-def _softmax_contract(module: GraphIRModule) -> tuple[str, str, tuple[int, ...]] | None:
-    if not requests_softmax(module):
-        return None
-    function, op = module.functions[0], module.functions[0].body[0]
-    if len(op.operands) != 1 or len(function.result_types) != 1 or op.kwargs.get("axis", -1) != -1:
-        return None
-    input_name = op.operands[0].removeprefix("%")
-    arg = next((value for value in function.args if value.name == input_name), None)
-    shape = _shape(module, input_name)
-    result = function.result_types[0]
-    if arg is None or arg.ir_type.dtype != "fp32" or shape is None or result.dtype != "fp32":
-        return None
-    try:
-        if tuple(int(value) for value in result.shape) != shape:
-            return None
-    except (TypeError, ValueError):
-        return None
-    return input_name, op.result or "output", shape
-
-
-def _reduction_contract(
-    module: GraphIRModule,
-) -> tuple[str, str, str, tuple[int, ...], tuple[int, ...], int, bool] | None:
-    if not requests_reduction(module):
-        return None
-    function, op = module.functions[0], module.functions[0].body[0]
-    if len(op.operands) != 1 or len(function.result_types) != 1:
-        return None
-    input_name = op.operands[0].removeprefix("%")
-    arg = next((value for value in function.args if value.name == input_name), None)
-    shape = _shape(module, input_name)
-    if arg is None or arg.ir_type.dtype != "fp32" or shape is None:
-        return None
-    raw_axis = op.kwargs.get("axis", -1)
-    if not isinstance(raw_axis, int) or isinstance(raw_axis, bool):
-        return None
-    axis = raw_axis + len(shape) if raw_axis < 0 else raw_axis
-    if axis != len(shape) - 1:
-        return None
-    keepdims = bool(op.kwargs.get("keepdims", False))
-    output_shape = shape[:-1] + ((1,) if keepdims else ())
-    result = function.result_types[0]
-    try:
-        declared = tuple(int(value) for value in result.shape)
-    except (TypeError, ValueError):
-        return None
-    if result.dtype != "fp32" or declared != output_shape:
-        return None
-    kind = "max" if op.op_name in {"tessera.max", "tessera.amax"} else "mean" if op.op_name == "tessera.mean" else "sum"
-    return input_name, op.result or "output", kind, shape, output_shape, axis, keepdims
-
-
 def _matmul_contract(
     module: GraphIRModule,
 ) -> tuple[str, str, str, tuple[int, int, int], tuple[str, str, str]] | None:
@@ -1009,11 +928,27 @@ def supports_cohort2(module: GraphIRModule) -> bool:
 
 
 def supports_softmax(module: GraphIRModule) -> bool:
-    return _softmax_contract(module) is not None
+    """An x86 softmax the compiled Graph -> Schedule -> Tile route admits.
+
+    E2E-REAL-6 (x86 unary family, 2026-09-28): admission is the scheduled
+    contract's, not a Graph-owned constructor's. The retired constructor
+    survives only as the differential baseline
+    ``tests/_support/x86_unary_baseline.py``.
+    """
+    from . import scheduled_kernel
+
+    return requests_softmax(module) and scheduled_kernel.supports_scheduled_kernel(
+        module, target="x86"
+    )
 
 
 def supports_reduction(module: GraphIRModule) -> bool:
-    return _reduction_contract(module) is not None
+    """An x86 reduction the compiled Schedule -> Tile route admits (E2E-REAL-6)."""
+    from . import scheduled_kernel
+
+    return requests_reduction(module) and scheduled_kernel.supports_scheduled_kernel(
+        module, target="x86"
+    )
 
 
 def supports_matmul(module: GraphIRModule) -> bool:
@@ -1154,32 +1089,52 @@ def package_cohort2(module: GraphIRModule, *, pipeline_name: str) -> X86NativePa
     return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
 
 
+def _scheduled_unary_architecture(architecture: str) -> str:
+    """The native Schedule ``tessera.arch`` for one x86 image architecture."""
+    if architecture == X86_BASE_ARCHITECTURE:
+        return "x86_64_base"
+    if architecture == X86_AVX512_ARCHITECTURE:
+        return "zen5-avx512"
+    raise ValueError(f"unsupported x86 unary architecture {architecture!r}")
+
+
 def package_softmax(
     module: GraphIRModule, *, pipeline_name: str,
     architecture: str = X86_AVX512_ARCHITECTURE,
 ) -> X86NativePackage:
-    if _softmax_contract(module) is None:
+    """Compile an x86 softmax through native Schedule and Tile IR.
+
+    E2E-REAL-6 (x86 unary family, 2026-09-28): no Python Tile construction and
+    no Graph-owned admission. The Graph op is lowered by the native compiler
+    (Graph -> Schedule -> Tile, ``scheduled_kernel``), replayed, and its
+    descriptor projected from the serialized IR by
+    :func:`package_scheduled_kernel`.
+    """
+    from . import scheduled_kernel
+
+    if not requests_softmax(module):
         raise ValueError("x86 native softmax requires one static f32 last-axis operation")
-    return _package_unary(module, pipeline_name, architecture)
+    native_architecture = _scheduled_unary_architecture(architecture)
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        module, target="x86", architecture=native_architecture
+    )
+    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
 def package_reduction(
     module: GraphIRModule, *, pipeline_name: str,
     architecture: str = X86_AVX512_ARCHITECTURE,
 ) -> X86NativePackage:
-    if _reduction_contract(module) is None:
+    """Compile an x86 reduction through native Schedule and Tile IR (E2E-REAL-6)."""
+    from . import scheduled_kernel
+
+    if not requests_reduction(module):
         raise ValueError("x86 native reduction requires one static f32 last-axis operation")
-    return _package_unary(module, pipeline_name, architecture)
-
-
-def _package_unary(module, pipeline_name, architecture):
-    from .scheduled_kernel import lower_scheduled_kernel
-    if architecture not in (X86_BASE_ARCHITECTURE, X86_AVX512_ARCHITECTURE):
-        raise ValueError('unsupported x86 unary architecture')
-    native_arch = 'x86_64_base' if architecture == X86_BASE_ARCHITECTURE else 'zen5-avx512'
-    return package_scheduled_kernel(lower_scheduled_kernel(module,target='x86',
-                                    **({'architecture': native_arch} if architecture == X86_BASE_ARCHITECTURE else {})),
-                                    pipeline_name=pipeline_name)
+    native_architecture = _scheduled_unary_architecture(architecture)
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        module, target="x86", architecture=native_architecture
+    )
+    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
 def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
@@ -1296,6 +1251,7 @@ def package_scheduled_kernel(
     ):
         raise ValueError("x86 scheduled semantic kernel requires a supported f32 architecture contract")
     scalars: tuple[ScalarArgument, ...]
+    semantic_provenance: dict[str, object] = {}
     if artifact.family == "softmax":
         symbol, abi = ("tessera_x86_base_softmax_f32" if baseline else "tessera_x86_avx512_softmax_f32"), X86_SOFTMAX_F32_ABI
         scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
@@ -1308,6 +1264,14 @@ def package_scheduled_kernel(
             ScalarArgument(4, "Inner", "int64"),
         )
         geometry = architecture + "_rows"
+        # NaN policy is semantic (Decision #21a): read it from the replayed
+        # Tile op and carry it into the descriptor (Decision #32). Both x86
+        # reduce kernels implement only ``propagate`` (avx512_reduce_f32.cpp,
+        # base_e2e_f32.cpp); anything else fails closed.
+        nan_modes = re.findall(r'\bnan_mode = "([a-z_]+)"', artifact.tile_ir)
+        if nan_modes != ["propagate"]:
+            raise ValueError('x86 scheduled reduction requires one replayed nan_mode = "propagate"')
+        semantic_provenance = {"nan_mode": nan_modes[0]}
     else:
         raise ValueError("unsupported x86 scheduled semantic-kernel family")
     family = "reduction" if artifact.family == "reduce" else artifact.family
@@ -1353,6 +1317,7 @@ def package_scheduled_kernel(
             "ftz": False,
             "storage": artifact.storage,
             "accum": artifact.accum,
+            **semantic_provenance,
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
             "required_features": [] if baseline else ["avx512f"],
@@ -1674,8 +1639,8 @@ __all__ = [
     "X86_UNARY_F32_ABI", "X86_WHERE_F32_ABI",
     "X86_BINARY_MATH_KINDS", "X86_BITWISE_KINDS", "X86_COMPARE_KINDS",
     "X86_LOGICAL_KINDS", "X86_TRANSCENDENTAL_KINDS", "X86_WHERE_KINDS",
-    "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir", "emit_reduce_tile_ir",
-    "emit_softmax_tile_ir", "native_package_kind", "package_attention", "package_matmul",
+    "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir",
+    "native_package_kind", "package_attention", "package_matmul",
     "package_native", "package_scheduled_kernel", "package_scheduled_matmul",
     "emit_attention_graph_ir", "package_attention_backward_semantics",
     "package_scheduled_attention", "package_scheduled_attention_backward",

@@ -4,6 +4,7 @@ import pytest
 from tessera.compiler import x86_native, scheduled_kernel
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tests.unit.test_scheduled_kernel_consumers import _module
+from tests._support import x86_unary_baseline as baseline
 
 pytestmark = pytest.mark.skipif(find_tessera_opt() is None, reason='native compiler required')
 
@@ -13,9 +14,9 @@ def test_direct_unary_uses_native_schedule_not_graph_constructor(monkeypatch, fa
     module = _module(family=family, target='x86')
     def forbidden(*args, **kwargs):
         pytest.fail('legacy Graph-to-Tile constructor called')
-    monkeypatch.setattr(x86_native, 'emit_softmax_tile_ir', forbidden)
-    monkeypatch.setattr(x86_native, 'emit_reduce_tile_ir', forbidden)
-    monkeypatch.setattr(x86_native, '_lower', lambda tile, symbol, family: ('target', b'image', 'compiler', 'toolchain'))
+    monkeypatch.setattr(baseline, 'emit_softmax_tile_ir', forbidden)
+    monkeypatch.setattr(baseline, 'emit_reduce_tile_ir', forbidden)
+    monkeypatch.setattr(x86_native, '_lower', lambda tile, symbol, family, *arch: ('target', b'image', 'compiler', 'toolchain'))
     call = x86_native.package_softmax if family == 'softmax' else x86_native.package_reduction
     package = call(module, pipeline_name='tessera-lower-to-x86')
     assert package.descriptor.provenance['route'] == 'canonical_scheduled_tile_consumer'
@@ -95,7 +96,7 @@ def test_keepdims_reduction_executes_native_parent(kind, monkeypatch):
     fn.body[0].result_type = str(output_type)
     fn.body[0].kwargs['keepdims'] = True
     fn.body[0].op_name = 'tessera.' + kind
-    monkeypatch.setattr(x86_native, 'emit_reduce_tile_ir', lambda *a, **kw: pytest.fail('Graph constructor used'))
+    monkeypatch.setattr(baseline, 'emit_reduce_tile_ir', lambda *a, **kw: pytest.fail('Graph constructor used'))
     artifact = scheduled_kernel.lower_scheduled_kernel(module, target='x86')
     assert artifact.keepdims and artifact.output_shape == (2, 3, 1)
     with pytest.raises(ValueError):
@@ -114,8 +115,8 @@ def test_keepdims_reduction_executes_native_parent(kind, monkeypatch):
 @pytest.mark.skipif(not x86_native.tools_available_for_architecture(x86_native.X86_BASE_ARCHITECTURE), reason='baseline x86 toolchain required')
 def test_baseline_unary_uses_its_native_parent(family,monkeypatch):
     module=_module(family=family,target='x86')
-    monkeypatch.setattr(x86_native,'emit_softmax_tile_ir',lambda **kw:pytest.fail('Graph constructor used'))
-    monkeypatch.setattr(x86_native,'emit_reduce_tile_ir',lambda **kw:pytest.fail('Graph constructor used'))
+    monkeypatch.setattr(baseline,'emit_softmax_tile_ir',lambda **kw:pytest.fail('Graph constructor used'))
+    monkeypatch.setattr(baseline,'emit_reduce_tile_ir',lambda **kw:pytest.fail('Graph constructor used'))
     call=x86_native.package_softmax if family=='softmax' else x86_native.package_reduction
     package=call(module,pipeline_name='tessera-lower-to-x86',architecture=x86_native.X86_BASE_ARCHITECTURE)
     assert package.descriptor.entry_symbol.startswith('tessera_x86_base_')

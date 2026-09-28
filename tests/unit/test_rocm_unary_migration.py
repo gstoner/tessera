@@ -265,8 +265,10 @@ def test_gfx1201_keeps_its_proved_f32_envelope(module) -> None:
     assert scheduled_kernel.supports_scheduled_kernel(module, target="rocm_gfx1151")
 
 
-@pytest.mark.parametrize("target", ["nvidia_sm120", "x86", "apple_gpu", "rocm_gfx1201"])
-def test_softmax_safe_admission_is_gfx1151_only(target) -> None:
+@pytest.mark.parametrize("target", ["nvidia_sm120", "apple_gpu", "rocm_gfx1201"])
+def test_softmax_safe_admission_is_limited_to_proved_consumers(target) -> None:
+    # gfx1151 (this cut) and x86 (E2E-REAL-6 x86 unary cut, 2026-09-28,
+    # tests/unit/test_x86_unary_differential.py) carry device rows; nothing else does.
     assert not scheduled_kernel.supports_scheduled_kernel(
         _softmax(op_name="tessera.softmax_safe"), target=target
     )

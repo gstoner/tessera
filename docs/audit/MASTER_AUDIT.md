@@ -459,14 +459,17 @@ matches its module fails generation. Read the counts there.
    refuses otherwise. Re-recorded twice per host at `329fcbf6`: matmul moved
    1.016x (Princess-Luna) and 0.998x (Tajasarus) between runs.
    **`X86-GEMM-ALIGN-1` closed 2026-09-27** (sync `X86-GEMM-ALIGN-2026-09-27`):
-   the f32 GEMM packs B into its own 64-byte-aligned, K-blocked panels, bitwise
-   identical to the old kernel; B%64's effect on the best process fell from
-   1.2–3.3x to ≤ 1.04x for M > 1 on both Zen 5 hosts (paired TSC-witnessed
-   probe; M == 1 keeps a 1.25x effect by design), and both AVX-512 packets were
-   re-recorded at `de914e51` (matmul 256³ ~0.73 / ~0.70 ms → ~0.45 / ~0.43 ms).
+   the f32 GEMM owns B's alignment. It packs B into 64-byte-aligned, K-blocked panels,
+   or reads B directly by a measured small-M rule (M == 1, or M ≤ 4 with B ≤ 1 MiB).
+   Results are bitwise identical to the old kernel on both paths, and an overlapping
+   C is computed through scratch. B%64's effect on the best process fell from
+   1.14–3.3x to ≤ 1.04x on the packed path (the direct path keeps 1.07–1.43x). No
+   shape is slower at any alignment (paired TSC-witnessed probe on both Zen 5 hosts).
+   Both AVX-512 packets were re-recorded at `86ec9d31` (matmul 256³ ~0.73 / ~0.70 ms →
+   ~0.30 / ~0.29 ms).
    Open: an uninvestigated 0.62x Princess-Luna reduction shift between the two
-   `329fcbf6` re-recordings, and a ~7% per-process level on Princess-Luna that
-   does not follow B%64 (x86 queue).
+   `329fcbf6` re-recordings, and a per-process level that does not follow B%64
+   (packed path, up to 1.09x across processes on Princess-Luna; x86 queue).
 1. RUNTIME-LIB-OPT-1: applied 2026-09-26 (`-O2` runtime libraries + build
    record); open: re-measure the affected packets on their own boxes.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),

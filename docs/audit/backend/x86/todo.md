@@ -9,14 +9,24 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
-## `X86-GEMM-ALIGN-2026-09-27`: `X86-GEMM-ALIGN-1` closed — the f32 GEMM packs B itself
+## `X86-GEMM-ALIGN-2026-09-27`: `X86-GEMM-ALIGN-1` closed — the f32 GEMM owns B's alignment
 
 **The fix is in the kernel.** `tessera_x86_avx512_gemm_f32`
-(`src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f32.cpp`) now
-copies each block of up to eight 16-column strips × 512 rows of B into its own
-64-byte-aligned panel (≤ 256 KiB, L2-resident) and runs eight accumulators over it
-with aligned loads. Between K blocks the sum continues through C. So the caller's
-B%64 no longer decides the level.
+(`src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f32.cpp`, final
+at `86ec9d31`) has two paths, chosen by a measured rule (`packedPathWins`):
+
+- **Packed.** Each block of up to eight 16-column strips × 512 rows of B is copied
+  into the kernel's own 64-byte-aligned panel (≤ 256 KiB, L2-resident). Eight
+  accumulators run over the panel with aligned loads, and the sum continues through
+  C between K blocks. This path is alignment-insensitive.
+- **Direct.** The same eight-accumulator loop reads B in place.
+- **Rule:** direct iff M == 1, or M ≤ 4 with B = K·N·4 bytes ≤ 1 MiB. It was measured
+  on Princess-Luna with a paired TSC-witness probe over M ∈ {1..16}, B from 16 KiB to
+  4 MiB and B%64 ∈ {0,16}.
+  - Inside that region, direct was never slower than packed, except within the
+    ≤ 6% noise of the 64×64 cells on the ctypes floor.
+  - Outside it, packing wins by up to 2.6x at B%64 = 16.
+- **Allocation fallback:** a failed panel allocation falls back to the direct path.
 
 Why the kernel and not the other options:
 
@@ -26,81 +36,100 @@ Why the kernel and not the other options:
 - Declaring `alignment = 64` in the descriptor would have refused misaligned callers
   rather than fixing them.
 
-`M == 1` reads B directly with the same blocking: a GEMV never reuses the panel. A
-failed panel allocation falls back to that path.
+**The strip loops are fully unrolled.** Found while measuring the rule: at `-O2`,
+GCC 15 had left the S ≥ 4 loops rolled and kept the accumulators on the stack. That
+made N = 64 1.4–1.8x slower than the pre-fix kernel (kernel-only harness).
 
-**Numerics: bitwise identical to the previous kernel** at every alignment, because
-the per-element FMA order is unchanged. The checks:
+**Numerics: bitwise identical to the previous kernel** on both paths and at every
+alignment, because the per-element FMA order is unchanged. The checks:
 
-- `test_gemm_f32.cpp` `check_bitwise` compares against the pre-fix kernel, kept in
-  the test as the declared oracle, at every 4-byte B offset. It covers K-block
-  boundaries and K = 0. A mutation that restarts accumulators at each K block fails
-  it.
-- `test_x86_matmul_family_compiled.py::test_gemm_f32_result_independent_of_b_alignment`.
+- `test_gemm_f32.cpp` pins the path rule
+  (`tessera_x86_avx512_gemm_f32_uses_packed_path`).
+- `check_bitwise` compares against the pre-fix kernel, kept in the test as the
+  declared oracle, at every 4-byte B offset. It covers both paths, K-block boundaries
+  and K = 0. A mutation that restarts accumulators at each K block fails 5 cases.
+- The Python tests in `test_x86_matmul_family_compiled.py` cover alignment
+  independence, overlap and the path rule.
 - Every probe row compares the old and new builds' outputs bit for bit.
 
-**Overlap is enforced, not documented.** The blocked loop cannot run with C
-overlapping A or B, so the entry point checks byte-range overlap
-(`tessera_x86_avx512_gemm_f32_operands_overlap`).
+**Overlap is enforced, not documented.** The entry point checks byte-range overlap
+of C with A and B (`tessera_x86_avx512_gemm_f32_operands_overlap`).
 
 - **On overlap:** it computes into scratch and copies out, bitwise the product of the
   inputs at entry.
 - **If scratch allocation fails:** C is filled with NaN and a message goes to stderr.
 - **Disjoint operands, including adjacent ones:** they take the fast path. The check
-  cost is not measurable: after/before 1.00 at 256³, and noise at 32³.
+  costs nothing measurable: after/before 1.00 at 256³.
 
-The pre-fix kernel failed all six overlap test cases (C == A, C == B, partial), so no
-caller could have relied on aliasing.
+The pre-fix kernel failed all six overlap test cases, so no caller could have relied
+on aliasing.
 
 **Measured before/after** with a paired interleaved probe on the TSC witness route.
-It loads both builds into one process, uses fresh processes per (shape, B%64), runs
-under the timing lock, and packages the fixed build through
-`package_matmul` → `runtime.launch`. Evidence:
-`benchmarks/baselines/x86_gemm_align_20260927/`.
+It loads both builds into one process, uses a fresh process per (shape, B%64), runs
+under the timing lock, and packages the fixed build through `package_matmul` →
+`runtime.launch`.
+
+- Princess-Luna ran 17 shapes × 4 offsets × 3 processes; Tajasarus ran 7 shapes × 4
+  offsets × 2.
+- Evidence: `benchmarks/baselines/x86_gemm_align_20260927/`.
 
 The alignment effect is the best process at the worst B%64 divided by the best at
 the best B%64:
 
-| Shape | Princess-Luna, before → after | Tajasarus, before → after |
-|---|---|---|
-| 256³ | 1.52 → 1.00 | 1.56 → 1.01 |
-| 64×1024×1024 | 1.66 → 1.03 | 3.29 → 1.03 |
-| 1024³ | 1.68 → 1.04 | — |
-| 256×256×4096 | 1.31 → 1.01 | 1.31 → 1.03 |
-| 64×128×16384 | 1.22 → 1.01 | 1.20 → 1.01 |
+| Shape | Path | Princess-Luna, before → after | Tajasarus, before → after |
+|---|---|---|---|
+| 256³ | packed | 1.52 → 1.01 | 1.53 → 1.02 |
+| 64×1024×1024 | packed | 1.68 → 1.02 | 3.34 → 1.02 |
+| 1024³ | packed | 1.67 → 1.02 | — |
+| 2×1024×1024 | packed | 1.67 → 1.03 | 3.32 → 1.04 |
+| 256×256×4096 | packed | 1.33 → 1.01 | — |
+| 2×256×256 | direct | 1.25 → 1.10 | 1.28 → 1.12 |
+| 4×512×512 | direct | 1.32 → 1.43 | 1.29 → 1.36 |
+| 1×1024×1024 | direct | 1.64 → 1.21 | 3.09 → 1.22 |
 
-After/before at 256³:
+**No shape is slower than before at any alignment, small calls included.**
 
-| B%64 | Princess-Luna | Tajasarus |
-|---|---|---|
-| 0 (aligned) | 0.62–0.66 | 0.62–0.66 |
-| 16 / 32 / 48 | 0.41–0.42 | 0.41–0.43 |
-
-Aligned performance did not regress for any M > 1 shape: 0.09–0.69x of before.
-Calls under ~10 µs are dominated by the ctypes call and read 0.88–1.00x.
+- Above 10 µs, paired after/before per process is 0.04–0.77.
+- The ctypes-dominated calls sit on a ~4.5 µs floor:
+  - 32³ reads 0.93–1.05; the 1.05 is one process, inside that cell's own
+    before-spread.
+  - 8×64×64 reads 0.87–1.03.
+- 256³ is 0.42x of before when aligned and 0.28x when misaligned, on both hosts.
+- 2×256×256 aligned went from 9.8 to 6.5 µs on Princess-Luna.
 
 **Still alignment-sensitive, recorded not fixed:**
 
-- `M == 1`: 1.25–1.28x between aligned and misaligned B. It is faster than packing
-  at every alignment, and 0.12–0.18x of before.
+- **The direct path** (M == 1, or M ≤ 4 with B ≤ 1 MiB) has a 1.07–1.43x alignment
+  effect, largest at the 1 MiB boundary. Every direct-path cell is still 0.11–0.77x
+  of the pre-fix kernel at the same offset, and it is faster than packing there.
 - `tessera_x86_avx512_gemm_f32_tiled` (the T1 evidence ABI) is unchanged, because its
   committed baselines measure that loop nest.
 - The bf16 / f64 / u8s8 GEMMs are unchanged and their sensitivity is unmeasured.
+- The path rule was measured on Princess-Luna only. Tajasarus spot checks (4 of the
+  7 shapes) agree, but the crossover was not re-derived there.
 
-**Not investigated:** a per-process level that does not follow B%64 remains, before
-and after the fix: ~7% on Princess-Luna (256³: 448–479 µs), ≤ 4% on Tajasarus.
+**Not investigated:** a per-process level that does not follow B%64 remains. On the
+packed path the spread across processes and offsets is up to 1.09x on Princess-Luna
+(250³) and ≤ 1.06x on Tajasarus.
 
 **Re-recorded AVX-512 E2E packets.** Both hosts were re-recorded twice at
-`de914e51`, because the committed matmul row pinned the old kernel. matmul 256³
+`86ec9d31`, because the committed matmul row pinned the old kernel. matmul 256³
 `kernel_wall`:
 
-| Host | Before (`329fcbf6`) | Run 1 → run 2 (`de914e51`) |
+| Host | Before (`329fcbf6`) | Run 1 → run 2 (`86ec9d31`) |
 |---|---|---|
-| Princess-Luna | 731.6 µs | 480.1 → 446.7 µs (0.93, the per-process level above) |
-| Tajasarus | 695.3 µs | 436.4 → 434.1 µs |
+| Princess-Luna | 731.6 µs | 307.5 → 296.4 µs |
+| Tajasarus | 695.3 µs | 293.4 → 290.7 µs |
 
-The other four families moved ≤ 4.5% against the `329fcbf6` packets. The second runs
-are committed; the first runs are `*_run1/` in the evidence directory.
+Other families against the `329fcbf6` packets:
+
+- Princess-Luna attention read 573 / 574 µs against 541 µs (+6%). The flash-attention
+  source is unchanged and does not call the GEMM, so this is recording drift, not
+  investigated.
+- Everything else is within 4%.
+
+The second runs are committed; the first runs are `*_run1/` in the evidence
+directory.
 
 Not re-recorded:
 

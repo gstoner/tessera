@@ -2789,6 +2789,10 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
+    # The Philox Langevin MSL kernel vs the numpy Philox reference on Metal
+    # (hardware_apple_gpu; surfaced when the op entered the catalog, ODS
+    # triage WIRE slice 4, 2026-09-27).
+    ("ebm_langevin_step_philox", "apple_gpu"): "tests/unit/test_philox_runtime.py",
     # cpu
     ("matmul", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
     ("relu", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
@@ -3145,8 +3149,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         (op, "x86"): "tests/unit/test_x86_ebm_compute_compiled.py"
         for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement", "ebm_self_verify")
     },
-    ("ebm_langevin_step", "x86"): "tests/unit/test_x86_ebm_langevin_compiled.py",
-    ("ebm_langevin_step", "rocm"): "tests/unit/test_rocm_ebm_langevin_compiled.py",
+    # Re-keyed 2026-09-27 (ODS triage WIRE slice 4): these executors run the
+    # Philox op, never the host-noise `ebm_langevin_step` they were credited to.
+    ("ebm_langevin_step_philox", "x86"): "tests/unit/test_x86_ebm_langevin_compiled.py",
+    ("ebm_langevin_step_philox", "rocm"): "tests/unit/test_rocm_ebm_langevin_compiled.py",
     **{
         (op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
         for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6", "dequantize_fp6", "quantize_fp4", "dequantize_fp4")
@@ -5393,19 +5399,22 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     "ebm_inner_step": ("tests/unit/test_x86_ebm_compute_compiled.py", "tests/unit/test_rocm_ebm_compute_compiled.py"),
     "ebm_refinement": ("tests/unit/test_x86_ebm_compute_compiled.py", "tests/unit/test_rocm_ebm_compute_compiled.py"),
     "ebm_self_verify": ("tests/unit/test_x86_ebm_compute_compiled.py", "tests/unit/test_rocm_ebm_compute_compiled.py"),
-    "ebm_langevin_step": (
-        "tests/unit/test_x86_ebm_langevin_compiled.py",
-        "tests/unit/test_rocm_ebm_langevin_compiled.py",
-    ),
+    # `ebm_langevin_step` (the host-noise / energy_fn step) was credited here to
+    # the two `*_ebm_langevin_compiled` executor tests until 2026-09-27. Those
+    # executors draw Philox noise and ignore a noise operand, so they never ran
+    # this op's semantics: the credit moved to `ebm_langevin_step_philox` below
+    # with the executor repoint (ODS triage WIRE slice 4).
+    #
     # On-device-Philox Langevin step — SAME affine math as ebm_langevin_step but
     # the noise is drawn IN-KERNEL from (key, counter) via Philox-4x32-10 +
     # Box-Muller (no host noise buffer). The x86 `tessera_x86_ebm_langevin_philox_f32`
-    # and ROCm `generate-rocm-ebm-langevin-kernel` already implement this exact
-    # math (verified byte-tight vs the numpy Philox reference); tessera.ebm.
-    # langevin_step_philox routes x86 → ROCm → Apple → numpy.
+    # and ROCm `generate-rocm-ebm-langevin-kernel` implement this exact math;
+    # the fixtures launch the Graph op `tessera.ebm.langevin_step_philox` as the
+    # frontend emits it through those executors (the kernel-level
+    # `*_ebm_langevin_philox_compiled` tests stay as kernel checks).
     "ebm_langevin_step_philox": (
-        "tests/unit/test_x86_ebm_langevin_philox_compiled.py",
-        "tests/unit/test_rocm_ebm_langevin_philox_compiled.py",
+        "tests/unit/test_x86_ebm_langevin_compiled.py",
+        "tests/unit/test_rocm_ebm_langevin_compiled.py",
     ),
     # Manifold Langevin STEP — reuses the native affine-Langevin kernel (host-drawn,
     # grade-projected noise as an input). x86 = AVX-512 affine kernel, ROCm =

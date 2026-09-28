@@ -5509,6 +5509,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         ebm_self_verify=_ebm_ops_mod.ebm_self_verify,
         ebm_refinement=_ebm_ops_mod.ebm_refinement,
         ebm_inner_step=_ebm_ops_mod.ebm_inner_step,
+        ebm_langevin_step_philox=_ebm_ops_mod.ebm_langevin_step_philox,
         registry=_ops_registry,
         register_reference=_register_reference,
         register_lowering=_register_lowering,

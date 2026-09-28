@@ -14,9 +14,9 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 420 | backend_pathway_owned=405, multi_gpu_deferred=15 | backend_codegen=405, distributed_validation=15 |
-| `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
-| `sharding_rule` | 59 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=49, single_device_identity=7 | compiler_middle_end=1, distributed_validation=2, primitive_registry=56 |
+| `backend_kernel` | 421 | backend_pathway_owned=406, multi_gpu_deferred=15 | backend_codegen=406, distributed_validation=15 |
+| `benchmark_evidence` | 2 | benchmark_required=2 | benchmarks=2 |
+| `sharding_rule` | 60 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=50, single_device_identity=7 | compiler_middle_end=1, distributed_validation=2, primitive_registry=57 |
 | `target_ir` | 25 | architecture_evidence_gated=20, multi_gpu_deferred=4, single_gpu_promote=1 | backend_codegen=21, distributed_validation=4 |
 | `tile_ir` | 21 | architecture_evidence_gated=20, single_gpu_closeable=1 | backend_codegen=20, compiler_middle_end=1 |
 
@@ -87,6 +87,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `ebm_energy_quadratic` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_inner_step` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_langevin_step` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `ebm_langevin_step_philox` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_partition_ais` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_partition_exact` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_partition_monte_carlo` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -444,6 +445,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `image_normalize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `image_resize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `interpolate` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `benchmark_evidence` | `ebm_langevin_step_philox` | energy_based_models | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
 | `benchmark_evidence` | `batched_gemm` | loop_nest | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
 | `sharding_rule` | `attn_with_stats` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `cross_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
@@ -464,6 +466,7 @@ test, ABI, and surface dashboards.
 | `sharding_rule` | `ebm_bivector_langevin_sample` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `ebm_bivector_langevin_step` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `ebm_energy_quadratic` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `ebm_langevin_step_philox` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `ebm_refinement` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `ebm_sphere_langevin_sample` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `ebm_sphere_langevin_step` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |

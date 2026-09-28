@@ -10,6 +10,7 @@
 #include "Tessera/Target/Apple/Passes.h"
 
 #include "Tessera/Target/Apple/TesseraAppleDialect.h"
+#include "Tessera/Transforms/CompositeDecomposition.h"
 
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -116,6 +117,14 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
     "fusions, matmul, rope, flash_attn, softmax, gelu) to Apple GPU runtime "
     "calls (MPS + custom MSL kernels)",
     [](OpPassManager &pm) {
+      // ODS triage WIRE slice 1: rewrite the Graph composites onto the ops
+      // this pipeline lowers -- target_verify -> softmax, ntk_rope ->
+      // rope(x, theta / scale) -- ahead of every fusion that claims a softmax
+      // and of the rope / softmax runtime lowerings. Same pattern source as
+      // tessera-canonicalize (CompositeDecomposition.h); fails closed on a
+      // composite it cannot rewrite.
+      pm.addPass(
+          std::make_unique<::tessera::composite::DecomposeCompositeOpsPass>());
       // Architecture-owned Graph layout boundary. Legal row-major/BHSD/NHWC
       // casts become explicit Apple operand-binding attrs before fusion or
       // per-op runtime lowering consumes their users.

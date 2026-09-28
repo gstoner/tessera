@@ -834,6 +834,22 @@ def Tessera_EBMLangevinStepPhiloxOp : Op<
   [Pure]
 > {
   let summary = "EBM Langevin step with Philox RNG state";
+  let description = [{
+    `result = y - eta * grad + noise_scale * z`, with `z` a standard normal
+    drawn from counter-based Philox-4x32-10: element `i` uses counter
+    `(counter[0] + i, counter[1], counter[2], counter[3])` and key
+    `(seed & 0xFFFFFFFF, seed >> 32)` (the 1 x i64 seed split low word first),
+    mapped to (0, 1) by `(x + 0.5) * 2^-32` and taken through the first
+    Box-Muller lobe. Every counter word must lie in `[0, 2^32)`. When
+    `noise_scale` is absent the amplitude is the Langevin `sqrt(2 * eta *
+    temperature)`; `eta` and `temperature` are required and positive.
+
+    Producer: `ops.ebm_langevin_step_philox` (op catalog). Consumer: the x86
+    and ROCm compiled executors (`_EBM_LANGEVIN_OPS` in runtime.py), which draw
+    the noise on the device -- ODS triage WIRE slice 4, 2026-09-27. The
+    3-operand `tessera.ebm.langevin_step` takes its noise as an operand and is
+    a different op.
+  }];
   let arguments = (ins TensorType:$y, TensorType:$grad,
                         TensorType:$seed, TensorType:$counter,
                         F64Attr:$eta,

@@ -192,7 +192,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **Open:** the remaining short-K / N = 1024 whole-M shapes and K = 1536 ragged rows; the `[K, N]` weight on the register panel; AITER's split-K buckets unmeasured; gfx1151 edge-row store before/after device-clock timing remains unavailable.
 - Depends on: —
 - Start: device
-- Latest: [ROCM-FP8-BLOCKSCALE-1: ragged M stops paying for its masked edge](INTEGRATED_COMPILER_LOG.md#2026-09-27--rocm-fp8-blockscale-1-ragged-m-stops-paying-for-its-masked-edge)
+- Latest: [ROCM-FP8-BLOCKSCALE-1: grouped LDS reads and uniform scale join on gfx1201](INTEGRATED_COMPILER_LOG.md#2026-09-28--rocm-fp8-blockscale-1-grouped-lds-reads-and-uniform-scale-join-on-gfx1201)
 
 ### ROCM-MXFP4-W4A8-1
 
@@ -214,7 +214,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **2026-09-28 diagnostic, sync `GFX1201-MXFP4-M256-SLOPE-2026-09-28`.** A fixed-K one-copy N scan at 8192/12288/17408 ablated selected schedule keys in two independent processes, with bitwise exact K32 agreement and device-clock/HIP-event windows. The selected marginal cost was 17.99-18.09 ns per added column against Radiance 13.43-13.60; removing the vector epilogue left 17.69-18.10, removing prefetch 18.62-18.82, and removing raster 17.83-17.93. These keys help absolute latency but do not explain the slope. The remaining mechanism is in the core loop or launch geometry; A restaging, LDS fragment traffic and issue remain unseparated without counters or a validated phase ablation. The source tree was dirty, so the packet is diagnostic and makes no promotion claim. [Packet](../../../benchmarks/baselines/gfx1201_mxfp4_m256_decomposition_20260928/README.md).
 - Depends on: [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1)
 - Start: device
-- Latest: [ROCM-MXFP4-W4A8-1: the one-row-block gap is not the weight bytes](INTEGRATED_COMPILER_LOG.md#2026-09-27--rocm-mxfp4-w4a8-1-the-one-row-block-gap-is-not-the-weight-bytes)
+- Latest: [ROCM-MXFP4-W4A8-1: M256 A-restaging attribution](INTEGRATED_COMPILER_LOG.md#2026-09-28--rocm-mxfp4-w4a8-1-m256-a-restaging-attribution)
 
 ### EVIDENCE-PACKET-1
 

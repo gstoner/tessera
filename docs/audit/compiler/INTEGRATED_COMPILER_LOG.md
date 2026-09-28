@@ -6039,3 +6039,44 @@ Philox test, and measured scaled RoPE C ABI maximum absolute error 4.77e-7.
 WSL HIP events remain invalid on this fleet, so the paged-KV packet contains
 host launch wall time only. See the [x86 packet](../../../benchmarks/baselines/e2e_real6_x86_trunc_cache_20260928/README.md).
 <!-- entry-fields:end -->
+
+### 2026-09-28 — ROCM-FP8-BLOCKSCALE-1: grouped LDS reads and uniform scale join on gfx1201
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+
+PRs: branch `codex/rocm-perf-batch3-dedup`; sync `FOUNDATION-BATCH-3-DEDUP-2026-09-28`.
+
+Outcome: The 128x64 FP8 LDS body groups fragment reads before WMMA under a
+register-budget rule and the block-scale join loads one uniform weight scale
+per fragment. Both M=200 regression rows improve versus rebuilt #875 and
+AITER; the selected K=1536 row is near AITER.
+
+Remaining: Four paired rows do not close the short-K or ragged-K envelope.
+The sibling backends have no consumer of this gfx1201 physical schedule.
+
+Evidence: Tajasarus gfx1201, full HIP compiler from `a602a7174`, 57 exact
+W8A8 device tests and two lit fixtures passed. `w8a8_paired.json` records
+source-matched #875/AITER comparisons with all twelve timing arms admitted
+by device-clock and HIP witnesses. [Packet](../../../benchmarks/baselines/gfx1201_batch3_dedup_20260928/README.md).
+
+<!-- entry-fields:end -->
+
+### 2026-09-28 — ROCM-MXFP4-W4A8-1: M256 A-restaging attribution
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `codex/rocm-perf-batch3-dedup`; sync `FOUNDATION-BATCH-3-DEDUP-2026-09-28`.
+
+Outcome: Controlled M=256 output-changing probes show A fetch plus LDS
+restaging together cost more than either isolated half at N=8192/12288.
+The source control varies by 2-4%; no traffic counters are available.
+
+Remaining: Which A-stage component Radiance implements more cheaply is
+unattributed. The selected folded route remains opt-in; no performance
+promotion or selector change follows from diagnostic probes.
+
+Evidence: Tajasarus gfx1201, 32 folded numerical device tests passed;
+`mxfp4_slope.json` has three processes and seven trials for each of three
+N values against pinned Radiance `dfdfa383`. [Packet](../../../benchmarks/baselines/gfx1201_batch3_dedup_20260928/README.md).
+
+<!-- entry-fields:end -->

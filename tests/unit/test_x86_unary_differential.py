@@ -289,3 +289,25 @@ def test_device_reduction_nan_propagates_on_both_routes(op, architecture):
     got_old, got_new = _run(old, x), _run(new, x)
     assert got_old.tobytes() == got_new.tobytes()
     assert np.isnan(got_new[1]) and np.isfinite(np.delete(got_new, 1)).all()
+
+
+@_needs_compiler
+@pytest.mark.parametrize("architecture", [AVX512, BASE])
+def test_device_shapes_share_one_loaded_image(monkeypatch, architecture):
+    """Distinct shapes are distinct images (their Target IR binds the launch
+    constants) but one payload, so the runtime loads the object once."""
+    if not x86_native.tools_available_for_architecture(architecture):
+        pytest.skip(f"{architecture} shared image not available on this host")
+    monkeypatch.setattr(rt, "_x86_native_image_libraries", {})
+    monkeypatch.setattr(rt, "_x86_native_payload_libraries", {})
+    packages = [x86_native.package_softmax(_softmax(shape), pipeline_name=PIPELINE,
+                                           architecture=architecture)
+                for shape in ((3, 17), (4, 33), (2, 3, 5))]
+    assert len({p.image.image_digest for p in packages}) == 3
+    assert len({p.image.payload for p in packages}) == 1
+    handles = {rt._load_x86_native_image(p.image)._handle for p in packages}
+    assert len(handles) == 1 and len(rt._x86_native_payload_libraries) == 1
+    for package, shape in zip(packages, ((3, 17), (4, 33), (2, 3, 5))):
+        x = _inputs(shape, 5)
+        np.testing.assert_allclose(_run(package, x), _oracle(("tessera.softmax", shape), x),
+                                   rtol=2e-5, atol=2e-6)

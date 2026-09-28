@@ -462,7 +462,10 @@ def test_x86_loader_uses_unique_temporary_image_without_memfd(monkeypatch) -> No
     package = package_softmax(
         _softmax_module((2, 2)), pipeline_name="tessera-lower-to-x86",
     )
-    rt._x86_native_image_libraries.pop(package.image.image_digest, None)
+    # Fresh load caches: both the per-image fast path and the per-payload map
+    # would otherwise hand back an already-loaded object.
+    monkeypatch.setattr(rt, "_x86_native_image_libraries", {})
+    monkeypatch.setattr(rt, "_x86_native_payload_libraries", {})
     monkeypatch.delattr(rt.os, "memfd_create", raising=False)
 
     library = rt._load_x86_native_image(package.image)

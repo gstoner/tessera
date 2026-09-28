@@ -17,33 +17,7 @@ link additional owners in the body. Update that owner record in
 the same PR. Evidence corrections are explicit; do not rewrite old results as
 current proof. Current priorities live only in the plan.
 
-### 2026-09-28 — native MoE, cache, Apple Philox and sm_120 paged-KV follow-ups
 
-Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-
-PRs: pending; sync `E2E-REAL-6-NATIVE-FOLLOWUPS-2026-09-28`.
-
-Outcome: gfx1151 MoE direct token gather now follows a registered Graph subtype,
-native Schedule and Tile replay, a shape-free ROCm Target directive and a
-checked image entry. Exact Graph x86 `trunc` repeats reuse the native package.
-Apple has a bounded Philox Langevin Graph lowering to a status-bearing Metal
-ABI; the scaled RoPE Metal calls passed direct C ABI numerical checks.
-
-Remaining: Apple `@jit` execution still reports `artifact_only` for `ntk_rope`
-and `target_verify`; the Philox pass and direct ABI test do not prove a public
-JIT route. Broader paged KV and the other x86/NVIDIA families, ROCm cache keys,
-per-envelope certificates and device-only paged-KV kernel timing remain open.
-
-Evidence: Princess-Luna WSL rebuilt `tessera-opt` and passed 333 focused MoE,
-registry and drift tests plus both native MoE compiler fixture stages; the
-device cases include S<T and S>T. Its x86 cache packet records 96.85–104.18 ms
-cold and 0.313–0.336 ms repeat medians. Super-Bear sm_120 passed four paged-KV
-remap/invalid-page device rows and 25 scheduled packed-state tests. The Mac
-rebuilt its runtime/compiler, passed the Philox lit fixture and direct Metal
-Philox test, and measured scaled RoPE C ABI maximum absolute error 4.77e-7.
-WSL HIP events remain invalid on this fleet, so the paged-KV packet contains
-host launch wall time only. See the [x86 packet](../../../benchmarks/baselines/e2e_real6_x86_trunc_cache_20260928/README.md).
-<!-- entry-fields:end -->
 
 ### 2026-09-28 — gfx1151 paged-KV native Schedule and shape-free image
 
@@ -6036,4 +6010,32 @@ Schedule/Tile lit fixtures pass under assertions (no C++ changed).
 `bootstrap_prune_gap.md`: x86 softmax/reduction gap -> generic; alpha
 scoreboard `schedule_tile` 18 -> 24 (ratchet baseline tightened).
 
+<!-- entry-fields:end -->
+
+### 2026-09-28 — native MoE, cache, Apple Philox and sm_120 paged-KV follow-ups
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: pending; sync `E2E-REAL-6-NATIVE-FOLLOWUPS-2026-09-28`.
+
+Outcome: gfx1151 MoE direct token gather now follows a registered Graph subtype,
+native Schedule and Tile replay, a shape-free ROCm Target directive and a
+checked image entry. Exact Graph x86 `trunc` repeats reuse the native package.
+Apple has a bounded Philox Langevin Graph lowering to a status-bearing Metal
+ABI; the scaled RoPE Metal calls passed direct C ABI numerical checks.
+
+Remaining: Apple `@jit` execution still reports `artifact_only` for `ntk_rope`
+and `target_verify`; the Philox pass and direct ABI test do not prove a public
+JIT route. Broader paged KV and the other x86/NVIDIA families, ROCm cache keys,
+per-envelope certificates and device-only paged-KV kernel timing remain open.
+
+Evidence: Princess-Luna WSL rebuilt `tessera-opt` and passed 333 focused MoE,
+registry and drift tests plus both native MoE compiler fixture stages; the
+device cases include S<T and S>T. Its x86 cache packet records 96.85–104.18 ms
+cold and 0.313–0.336 ms repeat medians. Super-Bear sm_120 passed four paged-KV
+remap/invalid-page device rows and 25 scheduled packed-state tests. The Mac
+rebuilt its runtime/compiler, passed the Philox lit fixture and direct Metal
+Philox test, and measured scaled RoPE C ABI maximum absolute error 4.77e-7.
+WSL HIP events remain invalid on this fleet, so the paged-KV packet contains
+host launch wall time only. See the [x86 packet](../../../benchmarks/baselines/e2e_real6_x86_trunc_cache_20260928/README.md).
 <!-- entry-fields:end -->

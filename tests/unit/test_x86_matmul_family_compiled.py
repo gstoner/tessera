@@ -159,3 +159,106 @@ def test_matmul_family_unknown_op_rejected():
     with pytest.raises(ValueError, match="x86_matmul_family_compiled executor"):
         rt._execute_x86_compiled_matmul_family(
             _artifact(rt, "tessera.softmax", ("a",)), (a,))
+
+
+def _at_offset(src: np.ndarray, offset: int) -> np.ndarray:
+    """A C-contiguous copy of ``src`` whose data sits ``offset`` bytes past a
+    64-byte boundary (numpy itself guarantees only 16)."""
+    raw = np.empty(src.nbytes + 128, dtype=np.uint8)
+    start = (-raw.ctypes.data) % 64 + offset
+    view = raw[start:start + src.nbytes].view(src.dtype).reshape(src.shape)
+    view[...] = src
+    assert view.ctypes.data % 64 == offset
+    return view
+
+
+@pytest.mark.parametrize("m,n,k", [
+    (1, 250, 33),     # M == 1: the direct (unpacked) path, tail strip
+    (7, 129, 17),     # one full 8-strip panel + a 1-wide tail panel
+    (64, 256, 64),
+    (33, 100, 3),     # 7-strip block, last strip 4 wide
+    (3, 130, 1100),   # K blocks of 512: two full + one partial (C carries the sum)
+])
+def test_gemm_f32_result_independent_of_b_alignment(m, n, k):
+    """X86-GEMM-ALIGN-1: the kernel packs B into its own 64-byte-aligned panel,
+    so the caller's B%64 must not change a single bit of the result."""
+    import ctypes
+
+    rt = _x86_or_skip()
+    lib = rt._load_x86_elementwise()
+    rng = np.random.default_rng(m * 1000 + n + k)
+    a = rng.standard_normal((m, k)).astype(np.float32)
+    b = rng.standard_normal((k, n)).astype(np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    outs = []
+    for offset in (0, 4, 16, 32, 48, 60):
+        bb = _at_offset(b, offset)
+        out = np.full((m, n), np.nan, dtype=np.float32)
+        lib.tessera_x86_avx512_gemm_f32(
+            a.ctypes.data_as(cf), bb.ctypes.data_as(cf), ctypes.c_int64(m),
+            ctypes.c_int64(n), ctypes.c_int64(k), out.ctypes.data_as(cf))
+        outs.append(out)
+    for out in outs[1:]:
+        assert np.array_equal(out.view(np.uint32), outs[0].view(np.uint32))
+    np.testing.assert_allclose(outs[0], a @ b, **_TOL)
+
+
+@pytest.mark.parametrize("case", ["c_is_a", "c_is_b", "c_inside_a", "adjacent"])
+def test_gemm_f32_overlapping_output_equals_disjoint_product(case):
+    """X86-GEMM-ALIGN-1 review: the blocked kernel writes C while A and B are
+    still read, so an overlapping C must be detected at entry and computed
+    through scratch -- the result equals the product of the inputs' values at
+    entry, bit for bit -- while a disjoint C takes the fast path."""
+    import ctypes
+
+    rt = _x86_or_skip()
+    lib = rt._load_x86_elementwise()
+    cf = ctypes.POINTER(ctypes.c_float)
+    i64 = ctypes.c_int64
+    overlap = lib.tessera_x86_avx512_gemm_f32_operands_overlap
+    overlap.argtypes = [cf, cf, i64, i64, i64, cf]
+    overlap.restype = ctypes.c_int
+    m, n, k = {"c_is_a": (24, 40, 40), "c_is_b": (40, 24, 40),
+               "c_inside_a": (16, 32, 64), "adjacent": (16, 32, 64)}[case]
+    a_off, b_off, c_off = {
+        "c_is_a": (0, 4096, 0),
+        "c_is_b": (0, 4096, 4096),
+        "c_inside_a": (0, 4096, 300),
+        "adjacent": (0, m * k + m * n, m * k),  # C between A and B, touching both
+    }[case]
+    arena = np.random.default_rng(len(case) * 101).standard_normal(16384).astype(np.float32)
+    a0 = arena[a_off:a_off + m * k].copy().reshape(m, k)
+    b0 = arena[b_off:b_off + k * n].copy().reshape(k, n)
+    want = np.zeros((m, n), np.float32)
+    lib.tessera_x86_avx512_gemm_f32(a0.ctypes.data_as(cf), b0.ctypes.data_as(cf),
+                                    i64(m), i64(n), i64(k), want.ctypes.data_as(cf))
+
+    def at(off):
+        return ctypes.cast(arena.ctypes.data + 4 * off, cf)
+
+    assert overlap(at(a_off), at(b_off), m, n, k, at(c_off)) == int(case != "adjacent")
+    lib.tessera_x86_avx512_gemm_f32(at(a_off), at(b_off), i64(m), i64(n), i64(k), at(c_off))
+    got = arena[c_off:c_off + m * n].reshape(m, n)
+    assert np.array_equal(got.view(np.uint32), want.view(np.uint32))
+    np.testing.assert_allclose(got, a0 @ b0, **_TOL)
+
+
+@pytest.mark.parametrize("m,n,k,packed", [
+    (1, 4096, 4096, 0),    # M == 1: direct at any size
+    (2, 256, 256, 0),      # M <= 4, B = 256 KiB: direct
+    (4, 512, 512, 0),      # M <= 4, B = exactly 1 MiB: direct
+    (4, 513, 512, 1),      # B just over 1 MiB: packed
+    (5, 64, 64, 1),        # M > 4: packed
+    (2, 1024, 1024, 1),    # M == 2, B = 4 MiB: packed
+])
+def test_gemm_f32_path_selection_follows_the_measured_rule(m, n, k, packed):
+    """X86-GEMM-ALIGN-1 review: the packed path costs more than its reuse
+    repays at small M, so the kernel reads B directly for M == 1, or M <= 4
+    with B <= 1 MiB (crossover measured on Princess-Luna; evidence README)."""
+    import ctypes
+
+    rt = _x86_or_skip()
+    fn = rt._load_x86_elementwise().tessera_x86_avx512_gemm_f32_uses_packed_path
+    fn.argtypes = [ctypes.c_int64] * 3
+    fn.restype = ctypes.c_int
+    assert fn(m, n, k) == packed

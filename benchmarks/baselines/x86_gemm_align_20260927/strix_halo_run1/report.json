@@ -4,13 +4,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 296396.83858826186,
+      "median_ns": 307516.82272220065,
       "repetitions": 1500,
       "resource_fingerprint": "abc83b1497d098908860d178e0dd729548953c438240dad1b6420ea3369c2e89",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        296292.98267058795,
-        296500.6945059357
+        307547.3244602307,
+        307486.3209841706
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -22,13 +22,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1021294.58,
+      "median_ns": 1067336.72,
       "repetitions": 1500,
       "resource_fingerprint": "abc83b1497d098908860d178e0dd729548953c438240dad1b6420ea3369c2e89",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1021861.45,
-        1020727.71
+        1067219.92,
+        1067453.52
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -40,13 +40,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 2888.7646007972307,
+      "median_ns": 2878.264007354702,
       "repetitions": 1500,
       "resource_fingerprint": "af4a44937b2c64c9a353d048fe1de3c49dbbc1bc07cff69aab42f00661dac99c",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        2892.364805935661,
-        2885.1643956588
+        2877.7639788624056,
+        2878.764035846998
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -58,13 +58,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 733229.7250000001,
+      "median_ns": 710895.325,
       "repetitions": 1500,
       "resource_fingerprint": "af4a44937b2c64c9a353d048fe1de3c49dbbc1bc07cff69aab42f00661dac99c",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        733187.92,
-        733271.53
+        711305.7,
+        710484.95
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -76,13 +76,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 747.8426118106242,
+      "median_ns": 711.7405559342418,
       "repetitions": 1500,
       "resource_fingerprint": "8c65b3c259bc6a61c996ec27244ff9801b32285bad377f4706fb36f2baa0de83",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        748.7426630952318,
-        746.9425605260166
+        702.0400031836979,
+        721.4411086847857
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -94,13 +94,13 @@
     {
       "discard_first": true,
       "family": "reduction",
-      "median_ns": 729500.81,
+      "median_ns": 731744.7649999999,
       "repetitions": 1500,
       "resource_fingerprint": "8c65b3c259bc6a61c996ec27244ff9801b32285bad377f4706fb36f2baa0de83",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        729375.3,
-        729626.32
+        732329.2,
+        731160.33
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -112,13 +112,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 574073.060482328,
+      "median_ns": 572830.8906746674,
       "repetitions": 1500,
       "resource_fingerprint": "9298432e9bb7f9fee28c01a85671b4fa6a4716f679e699255b98a9dcda2928f1",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        574019.0074024023,
-        574127.1135622535
+        572979.8491625224,
+        572681.9321868125
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -130,13 +130,13 @@
     {
       "discard_first": true,
       "family": "attention",
-      "median_ns": 1297646.085,
+      "median_ns": 1296179.98,
       "repetitions": 1500,
       "resource_fingerprint": "9298432e9bb7f9fee28c01a85671b4fa6a4716f679e699255b98a9dcda2928f1",
       "route": "schedule_tile_x86_avx512_c_abi",
       "run_medians_ns": [
-        1298500.26,
-        1296791.91
+        1296013.92,
+        1296346.04
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -148,13 +148,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 65574.58641701346,
+      "median_ns": 65125.96096485693,
       "repetitions": 1500,
       "resource_fingerprint": "c0d6e4f476ebc85356f72c6bc6e84923879794b142892425071a5c96a4b402d3",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        65543.43464199621,
-        65605.73819203071
+        65174.81374855426,
+        65077.10818115961
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -166,13 +166,13 @@
     {
       "discard_first": true,
       "family": "linalg",
-      "median_ns": 772112.855,
+      "median_ns": 802370.785,
       "repetitions": 1500,
       "resource_fingerprint": "c0d6e4f476ebc85356f72c6bc6e84923879794b142892425071a5c96a4b402d3",
       "route": "x86_breadth_graph_abi_c_abi",
       "run_medians_ns": [
-        771876.19,
-        772349.52
+        802831.51,
+        801910.06
       ],
       "selected": true,
       "stability_limit_pct": 4.0,

@@ -5134,6 +5134,65 @@ exception. A successful `cudaFuncSetAttribute` resets the slot (measured on
 sm_120), which masks them; they clear anyway, because the rule must not rest on
 undocumented behaviour.
 
+### 2026-09-27 — The x86 f32 GEMM packs B itself: alignment no longer sets its speed
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: branch `claude/x86-gemm-align`.
+Sync: `X86-GEMM-ALIGN-2026-09-27` (closes `X86-GEMM-ALIGN-1`).
+
+Outcome: `tessera_x86_avx512_gemm_f32` read B with one unaligned 64-byte load per
+FMA, so any caller whose B was not 64-byte aligned (numpy guarantees 16) ran it
+~1.5x slower at 256³ (`X86-MATMUL-BIMODAL-1`). The recorder had been aligned; the
+production path had not.
+
+What the kernel does now:
+- **Two paths.** The packed path copies blocks of up to 8 strips × 512 rows of B into
+  the kernel's own 64-byte-aligned, L2-resident panel and runs eight accumulators
+  over it; the sum continues through C between K blocks. The direct path runs the
+  same loop over B in place.
+- **Measured rule:** direct iff M == 1, or M ≤ 4 with B ≤ 1 MiB. It comes from a
+  paired TSC-witness crossover on Princess-Luna (M ∈ 1..16, B from 16 KiB to 4 MiB,
+  B%64 ∈ {0,16}). It replaced "packed for every M > 1" after Codex review showed that
+  rule regressed aligned small-M calls.
+- **Unrolled strip loops.** Measuring the rule also exposed that GCC 15 `-O2` left
+  the strip loops rolled with the accumulators on the stack; they are now fully
+  unrolled.
+- **Overlap.** An overlapping C (with A or B) is detected at entry and computed
+  through scratch.
+- **Why the kernel, not `runtime.launch`:** the matmul-family lane and
+  `TileToX86Pass`'s `func.call` reach the symbol directly.
+
+Numerics: results are bitwise identical to the pre-fix kernel on both paths at every
+alignment. The oracle is declared in `test_gemm_f32.cpp` and checked with `memcmp`
+at every 4-byte B offset; a K-block mutation fails it. The path rule and overlap
+cases are pinned by tests.
+
+Measurement: a paired interleaved before/after probe (both builds in one process,
+TSC witness, timing lock, production package asserted to embed the timed library).
+Princess-Luna ran 17 shapes and Tajasarus 7:
+- On the packed path, the best-process alignment effect fell from 1.14–3.34x to
+  ≤ 1.04x.
+- The direct path keeps 1.07–1.43x.
+- No shape is slower than before at any alignment: 0.04–0.77x above 10 µs, and
+  0.87–1.05 on the ~4.5 µs ctypes floor.
+- 256³ went to 0.42x of before when aligned and 0.28x when misaligned.
+
+Packets: both AVX-512 E2E packets were re-recorded twice at `86ec9d31`. Matmul 256³
+went from ~0.73 / ~0.70 ms to ~0.30 / ~0.29 ms. Princess-Luna attention is +6%
+(recording drift, unchanged source); everything else is within 4%.
+
+Remaining: the direct path's residual alignment effect; the rule is measured on
+Princess-Luna only; `_tiled` and the bf16 / f64 / u8s8 GEMMs are unchanged (the
+latter's sensitivity is unmeasured).
+
+Evidence: `benchmarks/baselines/x86_gemm_align_20260927/`,
+`docs/audit/evidence/e2e_spine/x86/x86_64_avx512_{strix_halo,granite_ridge}/`,
+`src/compiler/codegen/tessera_x86_backend/tests/test_gemm_f32.cpp`,
+`tests/unit/test_x86_matmul_family_compiled.py`.
+
+<!-- entry-fields:end -->
+
 ### 2026-09-27 — E2E-REAL-6: gfx1151 softmax and reduction retire their Graph-owned constructors
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)

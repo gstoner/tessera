@@ -2,12 +2,12 @@
   "architecture": "x86_64_avx512_granite_ridge",
   "files": {
     "report.json": {
-      "bytes": 12266,
-      "sha256": "99a655c94b106e4d705ae9294b125d729763aaebd98a596d351a375eead23a89"
+      "bytes": 12264,
+      "sha256": "f6e650100c2f727d64c8572dab706faad22e98a98f8d7bd33a1881711925baf3"
     },
     "resources.json": {
-      "bytes": 923960,
-      "sha256": "0d0272fe4aeeb1977aa835f302f351d438fb4292829633cced431e66e7bde7cf"
+      "bytes": 923958,
+      "sha256": "2f497e51101af3d665ca7683c549a23186ca85b73c2338169611d357535365bc"
     }
   },
   "schema": "tessera.e2e-release-packet.v1",

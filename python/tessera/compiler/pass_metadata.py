@@ -722,7 +722,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         pass_kind="lowering", sprint="IR-NATIVE-FOUNDATION-1",
         # ROCM_SPLIT_K_NOT_APPLIED is a warning (ROCM-SPLIT-K-1): the
         # occupancy rule asked for split-K and no aligned split existed.
-        diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", "ROCM_SPLIT_K_NOT_APPLIED"),
+        # ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED is a warning
+        # (ROCM-FP8-BLOCKSCALE-1): no measured CU count for the W8A8 LDS rule.
+        diagnostic_codes=("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED", "ROCM_SPLIT_K_NOT_APPLIED",
+                          "ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED"),
     ),
     PassMetadata(
         name="tessera-ir-contracts",

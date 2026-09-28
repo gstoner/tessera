@@ -1208,6 +1208,29 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
         sprint="ROCM-SPLIT-K-1",
     ),
+    # ── ROCM-FP8-BLOCKSCALE-1: the LDS body's CU denominator (2026-09-27) ──
+    DiagnosticCode(
+        code="ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED",
+        pass_origin="GraphToSchedulePass",
+        severity="warning",
+        summary=(
+            "a [N, K] W8A8 block-scale matmul at M >= 128 targets an arch with "
+            "no measured compute-unit count, so the LDS-staged body's "
+            "occupancy rule cannot be evaluated; the register panel was "
+            "scheduled (emitted as a warning). Unreachable while the W8A8 "
+            "derivation admits gfx1201 alone, which is measured."
+        ),
+        fix_hint=(
+            "The body is a performance decision, so falling back is allowed "
+            "-- never silently (Decision #21a), and never by guessing the "
+            "denominator. Measure the part's CU count on the box that has it "
+            "and add it to `rocm_target._DISPATCH_SLOTS` and, mirrored, to "
+            "`measuredComputeUnits` in PMPasses.cpp (a unit test compares "
+            "the two)."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-FP8-BLOCKSCALE-1",
+    ),
     DiagnosticCode(
         code="ROCM_SPLIT_K_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",

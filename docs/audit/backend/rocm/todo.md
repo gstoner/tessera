@@ -54,7 +54,7 @@ Owner E2E-REAL-6 (follow-up the unary entry below recorded as open); sync
   (now launching the canonical symbol) and the new two-shape/two-symbol reuse
   row. ROCm subset (`-k "rocm or scheduled_kernel or unary"`, not slow): 4578
   passed, 465 skipped, 0 failed. `check-tessera-ir` 521 passed / 4 unsupported,
-  `check-tessera-rocm` 82/82 (no C++ change). Tajasarus (gfx1201): TAJASARUS_RESULT.
+  `check-tessera-rocm` 82/82 (no C++ change). Tajasarus (gfx1201, assertions-ON LLVM/MLIR 23.1.1): the same five files with `TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1` -- 384 passed, 217 skipped (gfx1151 device gates, Darwin), including both new two-shape/two-symbol reuse rows and both `test_gfx1201_scheduled_package_executes` rows through the `input=directive` compile; ROCm subset 4615 passed / 418 skipped / 10 failed under `-n 8`, all ten in `test_rocm_sparse_{runtime,byte_formats}.py` ("sparse worker teardown is unconfirmed" -- worker-process contention on a GPU shared with another job), and those two files pass 34/34 run serially; `check-tessera-ir` 459 passed / 66 unsupported, `check-tessera-rocm` 82/82. Mac: full `tests/unit` sweep (`-m "not slow"`, Apple + x86 + EBM + Clifford build) 21675 passed / 4017 skipped / 0 failed; mypy clean; `check_compiler_plan.py` and generated-doc drift clean.
 - **Sibling backends.** NVIDIA: its scheduled unary route already exports a
   shape-free symbol (`tessera_tile_softmax_<storage>`); whether its image cache
   is keyed on shape-bound Tile text was not measured here -- follow-up

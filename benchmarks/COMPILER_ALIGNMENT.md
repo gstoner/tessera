@@ -12,8 +12,8 @@ sequencing. `linalg` was supplied twice and is reviewed once.
 |---|---|---|
 | `math/` | Seven metadata-driven runtime probes for x86/ROCm; host-wall timing includes wrapper work. Direct x86 scan C ABIs form a separate comparison. | Keep as diagnostic regression probes. Require observed native execution, finite correctly shaped outputs, and positive repetitions. No fresh run may inherit selector eligibility from target name or old packets. Migrate probes to serialized package ancestry before using them for F2/F3 promotion. |
 | `linalg/` | fp64 public `tessera.ops` cholesky, QR, SVD and triangular solve; NumPy/SciPy-style reference composition. | Keep as numerical oracle. Enforce residual bounds even in smoke mode and retain valid JSON stdout. This script's route says nothing about whether another backend has native factorization support. Add a separate exact-package comparison instead of silently changing the oracle. |
-| `energy_core/` | Python EBM composition with host RNG, analytic gradient, annealing and partition work. Public primitives can opportunistically dispatch to Apple. | Keep the domain workload. Fixed `cpu` attribution was incorrect: report unattributed library composition until per-call route receipts are captured. Report logical-byte bandwidth as an estimate. Determinism is not a native execution certificate. |
-| `clifford_core/` | Public multivector/rotor/grade operations, with optional Apple primitive fast paths; Python composition and NumPy oracle share implementation. | Keep as a composition oracle. Report unattributed library execution; no proof of whole-program MLIR compilation, independent per-op correctness or GPU kernel timing. |
+| `energy_core/` | Python EBM composition with host RNG, analytic gradient, annealing and partition work. Public primitives can opportunistically dispatch to Apple. | Keep the domain workload. Fixed `cpu` attribution was incorrect: report unattributed library composition until per-call route receipts are captured. Report logical-byte bandwidth as an estimate. Determinism is not a native execution certificate. **2026-09-27:** receipts now attribute each row, and they show the x86 AVX-512 lane too, not only Apple (see the last section). |
+| `clifford_core/` | Public multivector/rotor/grade operations, with optional Apple primitive fast paths; Python composition and NumPy oracle share implementation. | Keep as a composition oracle. Report unattributed library execution; no proof of whole-program MLIR compilation, independent per-op correctness or GPU kernel timing. **2026-09-27:** rows are receipt-attributed (see the last section). |
 | `autodiff/` | Eight different native/JIT/compiler-substrate probes; details below. | Keep all eight: their input models and correctness obligations differ. Index newer resident/public-AD work rather than pretending the older solver scripts cover it. Separate fresh-run eligibility from historical evidence. |
 | `Tessera_Operator_Benchmarks/` | Seven C++ CPU reference groups; optional Python JIT artifact/CPU bridge; native C ABI mode explicitly unavailable. | Keep the runnable reference harness and slow bridge tests. A target-IR string or reference bridge result is not native backend proof. Static MLIR samples and split specs are design/fixture material, not production route authority. |
 
@@ -143,3 +143,33 @@ calls across artifacts, not arbitrary concurrent streams. Warmups and unmarked
 work are excluded explicitly. Remaining: resolve ROCm's compiler assertion,
 validate those adapters on gfx1151, broaden dtype/shape/mask cases, and extend
 attribution to asynchronous/multi-thread ownership. Promotion stays disabled.
+
+## Shared evidence envelope and GA/EBM route receipts — 2026-09-27
+
+Cleanup item 1 is partly done. `tessera.compiler.evidence_envelope.read_evidence_packet`
+is now the single reader for the x86, ROCm and NVIDIA device-clock
+measurement packets. It projects route, artifact/compiler identity, timing
+domain, clock validity, environment and sample provenance onto one envelope.
+It refuses a missing field instead of defaulting it. The family schemas and
+validators stay as they are, and the envelope adapts them. Every committed
+packet still reads, except the two that already failed the window rule.
+`python -m tessera.compiler.evidence_envelope PACKET.json` prints each
+envelope.
+
+Cleanup item 2's GA/EBM half is done. `clifford_core`, `energy_core` and
+`visual_complex_core` rows carry `route` and `route_receipts` from per-call
+receipts (`tessera._route_receipts`) over the timed span, and derive `device`
+from them. A row is `unattributed` only when a native dispatch escaped a
+receipt or nothing was captured. `record_ga_ebm_route_receipts.py` records
+the three sweeps per host. The committed records
+(`baselines/ga_ebm_route_receipts_20260927/`) show:
+
+- EBM energy and partition ran on x86 AVX-512 on both Zen 5 boxes.
+- The Mac reached the Apple GPU runtime.
+- Super-Bear ran the reference.
+- No composition reached a ROCm or CUDA GPU lane on any host.
+
+The rows remain host-wall composition timings and cannot promote.
+
+Still open here: math's package consumers (item 2), the AD public-frontend
+pairing (item 3), DLOP profiler receipts, and asynchronous attribution.

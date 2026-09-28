@@ -589,11 +589,21 @@ _rocm_paged_attention_route_evidence: dict[tuple[Any, ...], dict[str, Any]] = {}
 
 def _rocm_paged_attention_corpus_winner(
     q_heads: int, kv_heads: int, q_len: int, tokens: int, dim: int,
-    page_size: int,
+    page_size: int, causal: bool = True,
 ) -> str | None:
-    """Warm-start the production route from committed gfx1151 wall timing."""
+    """Warm-start the production route from committed gfx1151 wall timing.
+
+    Decision #11 (sync ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27``, closes
+    ``AUTOTUNE-KERNEL-IDENTITY-PAGED-KV``): the row must carry the identity of
+    both routes it timed and each must equal the live route's identity for
+    this workload (``rocm_paged_attention_route_identities``) -- a rebuilt
+    compiler that changes the FA-2 image, or a changed HIP emitter, misses
+    here and falls through to a live race. ``causal`` selects the FA-2 image
+    variant ``gather_fa`` launches, so a non-causal call never inherits a
+    causal row's ranking."""
     from ..compiler.emit import autotune as at
     from ..compiler.emit.kernel_emitter import SpecPolicy, bucket_key
+    from ..compiler.emit.rocm_hip import rocm_paged_attention_route_identities
     cache = at.MeasureCache()
     at.load_corpus(cache=cache)
     record = cache.get((
@@ -610,7 +620,9 @@ def _rocm_paged_attention_corpus_winner(
     # behaviour for a row nothing can vouch for.
     if (record is not None
             and at.record_is_admissible(record)
-            and record.winner in {"gather_fa", "direct"}):
+            and record.winner in {"gather_fa", "direct"}
+            and at.route_record_matches(record, rocm_paged_attention_route_identities(
+                q_heads=q_heads, kv_heads=kv_heads, head_dim=dim, causal=causal))):
         return record.winner
     return None
 
@@ -708,7 +720,7 @@ def _paged_attention_rocm(
         if selected is None and not _force_measure:
             selected = _rocm_paged_attention_corpus_winner(
                 int(Q.shape[0]), int(kv_heads), int(Q.shape[1]), int(idx.size),
-                head_dim, int(page_size))
+                head_dim, int(page_size), causal=bool(causal))
             if selected is not None:
                 _rocm_paged_attention_route_cache[key] = selected
         if selected is not None:

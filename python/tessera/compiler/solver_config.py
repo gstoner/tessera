@@ -325,6 +325,13 @@ class ZeROConfig:
         return 1.0 / self.num_dp_ranks
 
     def to_ir_attr(self) -> str:
+        """Module attribute consumed by ``OptimizerShardPass``
+        (``--tessera-optimizer-shard``). The pass reads exactly these three
+        keys and refuses a missing/malformed one (stage, axis and partition
+        count are semantic keys, Decision #21a). Change both sides together:
+        ``tests/unit/test_optimizer_shard.py`` pins this text against the lit
+        fixture ``tests/tessera-ir/phase5/optimizer_shard_zero_config.mlir``.
+        """
         return (
             f'{{tessera_sr.zero_config = {{'
             f'stage = {self.stage}, '

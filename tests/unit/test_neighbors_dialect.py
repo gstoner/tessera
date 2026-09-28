@@ -2,10 +2,10 @@
 
 These tests validate two things:
 
-1. Structural wiring: the source files declare and register the dialect
-   and the four Phase 7 passes (HaloInfer, StencilLower, PipelineOverlap,
-   DynamicTopology). This catches regressions in the registration plumbing
-   without requiring a C++ build.
+1. Structural wiring: the `tessera.neighbors.*` ops have one declaration
+   (core `TesseraOps.td`), and the Phase 7 passes (HaloInfer, StencilLower,
+   PipelineOverlap, DynamicTopology, ...) are registered. This catches
+   regressions in the registration plumbing without requiring a C++ build.
 
 2. Behavioral contract (skipped if `tessera-opt` is not on PATH or not yet
    built): runs `tessera-opt -tessera-halo-infer` against a minimal stencil
@@ -46,10 +46,39 @@ def test_neighbors_passes_header_declares_all_four_registration_fns() -> None:
         assert fn in text, f"{fn} missing from Passes.h"
 
 
-def test_neighbors_dialect_header_declares_register_fn() -> None:
-    header = NEIGHBORS_ROOT / "include" / "tessera" / "Dialect" / "Neighbors" / "IR" / "NeighborsDialect.h"
-    assert header.exists(), "NeighborsDialect.h registration header missing"
-    assert "registerNeighborsDialect" in header.read_text()
+NEIGHBORS_OPS = (
+    "topology.create",
+    "halo.region",
+    "halo.exchange",
+    "halo.pack",
+    "halo.transport",
+    "halo.unpack",
+    "neighbor.read",
+    "stencil.define",
+    "stencil.apply",
+    "pipeline.config",
+)
+TESSERA_OPS_TD = REPO_ROOT / "src" / "compiler" / "ir" / "TesseraOps.td"
+
+
+def test_neighbors_ops_have_exactly_one_authority() -> None:
+    """Decision #31: the `tessera.neighbors.*` ops are declared once, in the core
+    `tessera` dialect ODS -- the declaration MLIR's parser actually resolves.
+
+    An unbuilt `tessera_neighbors.td` and a hand-written C++ `tessera.neighbors`
+    dialect re-declared these names until 2026-09-27
+    (SMALL-CORRECTNESS-GAPS-2026-09-27). The ODS side is gated for every op by
+    `test_ods_op_has_consumer.py`; this pins the neighbors files specifically.
+    """
+    td = TESSERA_OPS_TD.read_text()
+    for op in NEIGHBORS_OPS:
+        assert f'"neighbors.{op}"' in td, f"TesseraOps.td lost neighbors.{op}"
+    ir_dir = NEIGHBORS_ROOT / "include" / "tessera" / "Dialect" / "Neighbors" / "IR"
+    lib_ir = NEIGHBORS_ROOT / "lib" / "Dialect" / "Neighbors" / "IR"
+    for stale in (ir_dir, lib_ir):
+        leftovers = sorted(stale.rglob("*")) if stale.exists() else []
+        assert not leftovers, (
+            f"{stale} holds a second neighbors op declaration again: {leftovers}")
 
 
 def test_each_pass_cpp_defines_its_registration_fn() -> None:
@@ -66,50 +95,11 @@ def test_each_pass_cpp_defines_its_registration_fn() -> None:
         assert f"void {fn_name}()" in text, f"{fn_name} not defined in {filename}"
 
 
-def test_dialect_cpp_no_longer_includes_missing_tablegen_inc() -> None:
-    """The hand-written dialect must not reference NeighborsOps.cpp.inc — that
-    file is never generated because TableGen is not wired in CMakeLists."""
-    cpp = NEIGHBORS_ROOT / "lib" / "Dialect" / "Neighbors" / "IR" / "TesseraNeighbors.cpp"
-    text = cpp.read_text()
-    assert 'NeighborsOps.cpp.inc' not in text, (
-        "TesseraNeighbors.cpp still references the missing TableGen output"
-    )
-
-
-def test_dialect_cpp_registers_all_seven_ops() -> None:
-    cpp = NEIGHBORS_ROOT / "lib" / "Dialect" / "Neighbors" / "IR" / "TesseraNeighbors.cpp"
-    text = cpp.read_text()
-    expected_ops = (
-        "CreateTopologyOp",
-        "HaloRegionOp",
-        "HaloExchangeOp",
-        # Sub-4 (2026-05-20) — halo transport triple.
-        "HaloPackOp",
-        "HaloTransportOp",
-        "HaloUnpackOp",
-        "NeighborReadOp",
-        "StencilDefineOp",
-        "StencilApplyOp",
-        "PipelineConfigOp",
-    )
-    for op in expected_ops:
-        assert f"struct {op}" in text, f"{op} struct definition missing"
-    # And they must all appear in the addOperations<...> list.
-    add_ops_line = next(
-        (line for line in text.splitlines() if "addOperations<" in line),
-        None,
-    )
-    add_ops_block_start = text.find("addOperations<")
-    assert add_ops_block_start != -1, "addOperations<...> call missing"
-    add_ops_block = text[add_ops_block_start : add_ops_block_start + 500]
-    for op in expected_ops:
-        assert op in add_ops_block, f"{op} not listed in addOperations<>"
-
-
-def test_tessera_opt_cpp_registers_neighbors_dialect_and_passes() -> None:
+def test_tessera_opt_cpp_registers_neighbors_passes_but_no_second_dialect() -> None:
     text = TESSERA_OPT_CPP.read_text()
-    assert "NeighborsDialect.h" in text, "tessera-opt does not include the dialect header"
-    assert "registerNeighborsDialect(registry)" in text
+    assert "registerNeighborsDialect" not in text, (
+        "tessera-opt registers a second neighbors dialect; the ops are core "
+        "`tessera` dialect ops")
     for fn in PASS_REGISTRATION_FNS:
         assert f"tessera::neighbors::{fn}" in text, (
             f"tessera-opt does not call {fn}"
@@ -147,7 +137,9 @@ func.func @test_stencil_halo_infer(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
   } : () -> index
 
   %st = "tessera.neighbors.stencil.define"() {
-      taps = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]],
+      taps = [dense<[0, 0]> : tensor<2xi64>, dense<[1, 0]> : tensor<2xi64>,
+              dense<[-1, 0]> : tensor<2xi64>, dense<[0, 1]> : tensor<2xi64>,
+              dense<[0, -1]> : tensor<2xi64>],
       coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64],
       bc = "periodic"
   } : () -> index

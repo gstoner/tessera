@@ -142,6 +142,27 @@ Not re-recorded:
   kernel; their production/scheduled ratios share one image and are unaffected.
 
 Sibling backends: not applicable (the change is x86 kernel code only).
+## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — follow-up required (softmax_safe admission)
+
+ROCm moved its gfx1151 softmax/reduction packagers onto the native Schedule
+contract (ROCm queue, same key). The x86 unary contract is unchanged (f32,
+last-axis, keepdims as before; `test_x86_unary_migration.py` passes on the Mac
+and on Princess-Luna). Same finding as NVIDIA: `x86_native.native_package_kind`
+classifies `tessera.softmax_safe` as `softmax`, and the scheduled x86 contract
+refuses it, so a `softmax_safe` module is selected for native packaging and then
+refused. The canonicalization now exists (gfx1151-gated); admitting it for x86
+needs owning-Zen-5 rows.
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: sibling outcome — not applicable
+
+Three fixes landed under this key (sm_120 TMA smoke, a validated lit runner for every lit suite, one declaration of the `tessera.neighbors.*` ops; [ROCm](../rocm/todo.md) and [NVIDIA](../nvidia/todo.md) queues). Not applicable here: the lit-runner validator is shared CMake and was exercised on Tajasarus (which also builds the x86 backend: its x86 fixtures are inside the `check-tessera-ir` 454-pass count) and on the Mac. No x86 code changed.
+
+## `TILE-LATENT-DEFECTS-2026-09-27`: sibling outcome — not applicable
+
+The linalg solver annotation passes (`tessera-linalg-mixed-precision`,
+`tessera-linalg-iterative-refinement`) now select ops by identity instead of
+`contains("solve")` / `contains("lu")`. No x86 pipeline runs them; the x86
+linalg lane lowers Graph `cholesky`/`lu`/`tri_solve` through `TilingPass` to
+the AVX-512 kernels, untouched here. x86 has no TMEM.
 
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
 
@@ -152,6 +173,13 @@ spectral package makes no HIP/CUDA calls and has no last-error slot. The
 streaming-STFT label fix changes only `target="rocm"`; the x86 label stays the
 constant `zen5-avx512`, which is truthful only while the x86 streaming package
 loads solely on the Zen 5 hosts — not re-verified by this change.
+
+## `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`: sibling outcome — not applicable
+
+The change checks emitted CUDA/HIP launches and gives the non-registry
+autotune rows (paged-KV, conv2d, ReplaySSM) route identities (NVIDIA and ROCm
+queues). `x86_generic_c` makes no device launch, and x86 has no committed
+corpus rows of either kind.
 
 ## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: sibling outcome — not applicable
 
@@ -6291,3 +6319,9 @@ See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--t
 Owners: X86-EVIDENCE-VOCAB-1 / GOV-ODS-CONSUMER-1 / EVIDENCE-PACKET-1. Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
 
 Parity validated host-free (Mac). The x86 packet's ineligibility tags and the PMU event map's are declared through `evidence_reasons.ReasonVocabulary`; the event-map validator now re-derives its reasons from the stored cpu/environment/perf inputs instead of only type-checking them. The committed 2026-08-06/2026-09-26 packets and the 2026-08-07 event map still validate. The ODS gate waives `tessera_x86.amx_*` (retired ISA) and three fixture-only directives (`avx512_gemm_microkernel`, `pack_b_panel`, `elementwise`): no producer exists. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility).
+
+### EVIDENCE-PACKET-1: shared envelope and GA/EBM route receipts (2026-09-27)
+
+Owner: EVIDENCE-PACKET-1. Sync: `EVIDENCE-PACKET-1-2026-09-27`.
+
+Parity validated. The envelope part was checked host-free on the Mac, and the route receipts were recorded on both Zen 5 hosts. The x86 v1/v2 profiler packets read through `evidence_envelope.read_evidence_packet`. The 2026-09-26 packet stays promotable. The 2026-08-06 packet stays retained, and its benchmark verdict is now an explicit refusal cause (`benchmark_verdict=retain`). Fixed fail-open: the derivation read `virtualized`, `wsl` and `worktree_dirty` by truthiness, so an omitted field derived none of `VIRTUALIZED_HOST`, `WSL_CLOCK_DOMAIN` or `SOURCE_WORKTREE_DIRTY`. All three must now be bools. Route receipts on Princess-Luna and Tajasarus (clean `eed48b9b`): EBM `energy_quadratic` and `partition_exact_from_energies` ran on the x86 AVX-512 kernels (`_try_x86_energy_quadratic_f32`, `_try_x86_partition_exact_f32`). The Apple-only jit_bridge trace would have reported these calls as no native dispatch. Follow-up required: a future bare-metal x86 profiler-route packet needs per-row timing witnesses naming its images before the envelope admits it as eligible. None exists yet. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-packet-1-shared-evidence-envelope-ga-and-ebm-route-receipts).

@@ -87,11 +87,24 @@ def test_check_subcommand_passes_when_in_sync() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+#: lowering_rule rows reopened on purpose (TILE-LATENT-DEFECTS-2026-09-27): the
+#: three Block AttnRes Graph ops are registered but nothing lowers them, so
+#: `complete` was a false green. BLOCK-ATTNRES-1 owns the wiring; remove each
+#: name here when its lowering lands.
+_KNOWN_OPEN_LOWERING_RULE = {"attn_with_stats", "softmax_merge", "softmax_finalize"}
+
+
 def test_lowering_rule_is_closed_project_wide() -> None:
     """Sprint A1+ closed lowering_rule.  Any regression here means a
-    new category added a partial that the classifier didn't cover."""
+    new category added a partial that the classifier didn't cover.
+    Named exceptions are listed in ``_KNOWN_OPEN_LOWERING_RULE``."""
+    from tessera.compiler import primitive_coverage as pc
+
+    for name in _KNOWN_OPEN_LOWERING_RULE:
+        assert pc.coverage_for(name).contract_status["lowering_rule"] == "partial", name
     rows = tally_by_category()
     total_open = sum(int(r["lowering_rule_open"]) for r in rows)
+    total_open -= len(_KNOWN_OPEN_LOWERING_RULE)
     assert total_open == 0, (
         f"lowering_rule has {total_open} open entries; the multi-axis "
         "classifier was supposed to close this axis.  "

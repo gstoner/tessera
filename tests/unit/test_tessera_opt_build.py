@@ -81,14 +81,18 @@ def test_tessera_opt_runs_and_reports_a_version() -> None:
 
 @_REQUIRES_OPT
 def test_core_tessera_dialects_are_registered() -> None:
-    """The Tessera, Neighbors, Solver, Apple, and TPP dialects must
-    all be registered when ``tessera-opt`` builds with the full
-    feature set we ship out of the Apple host."""
+    """The Tessera, Solver, Apple, and TPP dialects must all be registered
+    when ``tessera-opt`` builds with the full feature set we ship out of the
+    Apple host. The ``tessera.neighbors.*`` ops are core ``tessera`` dialect
+    ops; a separate ``tessera.neighbors`` dialect registering the same names
+    was deleted 2026-09-27 (Decision #31) and must not come back."""
     out = _run_help()
     dialects = _available_dialects(out)
+    assert "tessera.neighbors" not in dialects, (
+        "a second `tessera.neighbors` dialect is registered again; its op "
+        "names are owned by the core `tessera` dialect")
     for dialect in (
         "tessera",
-        "tessera.neighbors",
         "tessera_solver",
         "tpp",
     ):

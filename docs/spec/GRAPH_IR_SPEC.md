@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-07-14
+last_updated: 2026-09-27
 ---
 
 # Tessera Graph IR Specification
@@ -395,8 +395,17 @@ them as target artifacts or reference CPU behavior:
 | Random and collectives | `tessera.dropout`, `tessera.all_reduce`, `tessera.reduce_scatter`, `tessera.all_gather` | implemented / mock-runtime at Python level |
 | Spectral | `tessera.fft`, `tessera.ifft`, `tessera.rfft`, `tessera.irfft`, `tessera.dct`, `tessera.spectral_conv` | implemented / reference CPU |
 | Optimizer | `tessera.adam` | implemented / reference CPU |
-| Stateful cache/ring | `tessera.kv_cache.create`, `tessera.kv_cache.append`, `tessera.kv_cache.prune`, `tessera.cache.page_lookup`, `tessera.ring.create` | implemented / scaffolded lowering |
-| Architecture search | `tessera.arch.parameter`, `tessera.arch.gumbel_softmax`, `tessera.arch.hard_concrete`, `tessera.arch.ste_one_hot`, `tessera.arch.weighted_sum`, `tessera.arch.switch`, `tessera.arch.mixed` | implemented / scaffolded lowering |
+| Stateful KV cache | `tessera.kv_cache.create`, `tessera.kv_cache.append`, `tessera.kv_cache.prune` | implemented / x86 artifact lowering (`LowerKVCacheToX86`) |
+| Paged cache / ring | `tessera.cache.page_lookup`, `tessera.ring.create` | ODS + verifier only — **no lowering and no producer** (`ring.create` is fixture-only, `cache.page_lookup` unreferenced) |
+| Architecture search | `tessera.arch.parameter`, `tessera.arch.gumbel_softmax`, `tessera.arch.hard_concrete`, `tessera.arch.ste_one_hot`, `tessera.arch.weighted_sum`, `tessera.arch.switch`, `tessera.arch.mixed` | ODS + verifier only — **no lowering**; the textual frontend emits `tessera.graph.arch.*`, a different namespace, so nothing produces these ops |
+
+*Corrected 2026-09-27 (`TILE-LATENT-DEFECTS-2026-09-27`).* The last three rows
+used to read "implemented / scaffolded lowering". No pass lowers
+`cache.page_lookup`, `ring.create` or any `arch.*` op, and none has a producer
+outside lit fixtures (ODS triage `GOV-ODS-CONSUMER-1`, rows
+`tessera.cache.page_lookup`, `tessera.ring.create`, `tessera.arch.*`; the DNAS
+namespace fix and an `arch-specialize` pass are WIRE work with no owner item
+yet). The KV-cache trio does lower, to the x86 artifact lane.
 
 The public Python op catalog also contains `tessera.all_to_all`,
 `tessera.rng_uniform`, `tessera.rng_normal`, `tessera.rmsnorm`, the

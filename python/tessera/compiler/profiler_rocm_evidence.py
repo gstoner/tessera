@@ -256,7 +256,14 @@ def _derive_eligibility(
         # twin is a different program, so its clock says nothing about the
         # clean image (measured: gfx1151 serial SSD, 2026-09-26).
         reasons.append("INSTRUMENTATION_CHANGED_THE_KERNEL")
-    if source.get("worktree_dirty"):
+    # A bool, never truthiness (EVIDENCE-PACKET-1, 2026-09-27): a packet that
+    # omitted the field, or stated it as the string "false", used to derive
+    # no SOURCE_WORKTREE_DIRTY and could promote. NVIDIA refused it already.
+    dirty = source.get("worktree_dirty")
+    if type(dirty) is not bool:
+        raise ROCmProfilerPacketError(
+            f"ROCm profiler packet must state source.worktree_dirty as a bool; got {dirty!r}")
+    if dirty:
         reasons.append("SOURCE_WORKTREE_DIRTY")
     route = _admission_route(timing)
     diagnostic_gaps: list[str] = []

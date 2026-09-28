@@ -78,7 +78,6 @@
 #endif
 
 #ifdef TESSERA_HAVE_NEIGHBORS
-#include "tessera/Dialect/Neighbors/IR/NeighborsDialect.h"
 #include "tessera/Dialect/Neighbors/Transforms/Passes.h"
 #endif
 
@@ -590,9 +589,11 @@ int main(int argc, char **argv) {
 #ifdef TESSERA_HAVE_COLLECTIVES
   tessera::collective::registerCollectiveDialect(registry);
 #endif
-#ifdef TESSERA_HAVE_NEIGHBORS
-  tessera::neighbors::registerNeighborsDialect(registry);
-#endif
+  // Neighbors (Phase 7): the `tessera.neighbors.*` ops are core `tessera`
+  // dialect ops (TesseraOps.td). A second, hand-written `tessera.neighbors`
+  // dialect registering the same op names was deleted
+  // (SMALL-CORRECTNESS-GAPS-2026-09-27): the parser never reached it, and
+  // loading both would register one op name twice.
 
 #ifdef TESSERA_HAVE_TPP
   tessera::tpp::registerTPPDialect(registry);

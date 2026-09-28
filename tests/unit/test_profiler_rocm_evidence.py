@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from tessera.compiler.profiler_provider_trace import build_provider_trace_artifact
 from tessera.compiler.profiler_rocm_evidence import (
     build_rocm_profiler_packet,
@@ -26,7 +28,7 @@ def _timing(environment: str = "bare_metal") -> dict:
                 eligible_for_promotion=environment == "bare_metal",
             ),
         },
-        artifact_digests={"probe": "abc"},
+        artifact_digests={"probe": _sha("probe")},
         batch_size=10,
         warm_state="warm",
         synchronization="terminal sync",
@@ -55,13 +57,18 @@ def _capture() -> dict:
     }
 
 
+def _sha(text: str) -> str:
+    """A real sha256, so the shared evidence envelope reads these packets."""
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
 def _image(duration: int, suffix: str, architecture: str = "gfx1151") -> dict:
     return {
         "architecture": architecture,
         "kernel_name": "tessera_application_kernel",
-        "semantic_sha256": "semantic-artifact",
-        "image_sha256": "image-" + suffix,
-        "isa_sha256": "isa-" + suffix,
+        "semantic_sha256": _sha("semantic-artifact"),
+        "image_sha256": _sha("image-" + suffix),
+        "isa_sha256": _sha("isa-" + suffix),
         "duration_ns": duration,
         "clock_source": "hip_event",
         "instrumented": suffix == "probe",
@@ -102,10 +109,11 @@ def test_wsl_packet_remains_retain_only() -> None:
 
 
 def _wsl_witness_timing(device_ns: int = 1_000_000, event_ns: int = 1_010_000,
-                        image_sha256: str = "image-clean", architecture: str = "gfx1151") -> dict:
+                        image_sha256: str = "", architecture: str = "gfx1151") -> dict:
     """WSL, no KFD: the device clock is the promotion clock, the HIP event its
     agreeing witness, and the profiler slot is unavailable."""
     from tessera.compiler.profiler_timing import unavailable_clock
+    image_sha256 = image_sha256 or _sha("image-clean")
     return build_timing_sample(
         sample_id="gfx1151-calibration",
         target=f"rocm_{architecture}",

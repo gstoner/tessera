@@ -26,10 +26,6 @@
 #include "Tessera/IR/Dialects.h"
 #endif
 
-#ifdef TESSERA_HAVE_NEIGHBORS
-#include "tessera/Dialect/Neighbors/IR/NeighborsDialect.h"
-#endif
-
 #ifdef TESSERA_HAVE_TPP
 #include "tpp/InitTPP.h"
 #endif
@@ -95,9 +91,8 @@ int main(int argc, char **argv) {
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraDialects(registry);
 #endif
-#ifdef TESSERA_HAVE_NEIGHBORS
-  tessera::neighbors::registerNeighborsDialect(registry);
-#endif
+  // tessera.neighbors.* ops are core `tessera` dialect ops (TesseraOps.td);
+  // registerTesseraDialects above already provides them.
 #ifdef TESSERA_HAVE_TPP
   tessera::tpp::registerTPPDialect(registry);
 #endif

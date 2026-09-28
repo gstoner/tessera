@@ -3268,6 +3268,100 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Complete the allocation-specific async token before reuse/free on every path; preserve derivable allocation identity. Dynamic GPU arenas require uniform structured regions, completed nested lifetimes and a checked launch-argument size with a 64-bit host index.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
     ),
+    # TILE-LATENT-DEFECTS-2026-09-27 — NVIDIA TMEM lowering fails closed.
+    DiagnosticCode(
+        code="NVIDIA_TMEM_UNKNOWN_OP", pass_origin="LowerTileToNVIDIA",
+        severity="error",
+        summary=(
+            "An op under the tile.tmem. prefix is not one of the declared Tile "
+            "TMEM ops (tile.tmem.allocate / tile.tmem.load / tile.tmem.store); "
+            "it used to be defaulted silently to a tmem_store contract."
+        ),
+        fix_hint=(
+            "Use the registered op (the allocation is tile.tmem.allocate; the "
+            "unregistered tile.tmem.alloc spelling is not an alias), or add an "
+            "explicit NVIDIA lowering for the new op."
+        ),
+        spec="docs/audit/backend/nvidia/todo.md TILE-LATENT-DEFECTS-2026-09-27",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="NVIDIA_TMEM_HANDLE_UNLOWERED", pass_origin="LowerTileToNVIDIA",
+        severity="error",
+        summary=(
+            "A !tile.tmem handle cannot be rewritten onto its tensor-memory "
+            "address: it is consumed by an op with no NVIDIA lowering (today "
+            "tile.tcgen05.mma), a load/store reads a handle no lowered "
+            "allocation produced, or the accessed value is not a target value."
+        ),
+        fix_hint=(
+            "Lower the consuming op first (tile.tcgen05.mma has no NVIDIA "
+            "lowering yet), take the handle from tile.tmem.allocate, and load "
+            "or store a tensor/memref/vector/scalar value."
+        ),
+        spec="docs/audit/backend/nvidia/todo.md TILE-LATENT-DEFECTS-2026-09-27",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="NVIDIA_MARKER_RESULT_USED", pass_origin="LowerNVIDIAToNVVM",
+        severity="error",
+        summary=(
+            "A tessera_nvidia contract with no value-producing NVVM lowering "
+            "has a result used outside the contract family; a void artifact "
+            "marker cannot supply it (the pass used to drop the use and leave "
+            "a null operand)."
+        ),
+        fix_hint=(
+            "Give the contract a real NVVM lowering, or keep its results "
+            "flowing only into other tessera_nvidia contracts at this stage."
+        ),
+        spec="docs/audit/backend/nvidia/todo.md TILE-LATENT-DEFECTS-2026-09-27",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    # TILE-LATENT-DEFECTS-2026-09-27 — ZeRO configuration reaches the pass.
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_MISSING", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "Optimizer state is marked for sharding but the module carries no "
+            "tessera_sr.zero_config and the pass was not given all of "
+            "zero-stage / dp-axis / num-dp-ranks; the partition count is never "
+            "defaulted."
+        ),
+        fix_hint=(
+            "Attach ZeROConfig(...).to_ir_attr() to the module, or pass "
+            "--tessera-optimizer-shard=\"zero-stage=S dp-axis=A num-dp-ranks=N\"."
+        ),
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_MALFORMED", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "tessera_sr.zero_config (or the pass options) is missing or "
+            "mistypes stage / dp_axis / num_ranks, or states stage outside "
+            "{1, 2, 3}, num_ranks < 1 or an empty axis."
+        ),
+        fix_hint="Emit the attribute with ZeROConfig.to_ir_attr(), which validates all three.",
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
+    DiagnosticCode(
+        code="SR_ZERO_CONFIG_CONFLICT", pass_origin="OptimizerShardPass",
+        severity="error",
+        summary=(
+            "A --tessera-optimizer-shard option disagrees with "
+            "tessera_sr.zero_config, or num_ranks disagrees with the "
+            "tessera.distributed_plan mesh size of the dp axis."
+        ),
+        fix_hint=(
+            "State the configuration once (the module attribute), and make "
+            "num_ranks equal the mesh size of dp_axis."
+        ),
+        spec="src/solvers/scaling_resilience/lib/sr/passes/OptimizerShardPass.cpp",
+        sprint="TILE-LATENT-DEFECTS-2026-09-27",
+    ),
     # C3 — TilePipelineLegalityPass.
     DiagnosticCode(
         code="TILE_PIPELINE_PHASE_ASYMMETRY", pass_origin="TilePipelineLegality",
@@ -4065,11 +4159,20 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     ),
     DiagnosticCode(
         code="NEIGHBORS_TOPOLOGY_UNKNOWN_KIND",
-        pass_origin="CreateTopologyOp::verify",
+        # Emitted by the ODS-generated verifier of the core op (the
+        # `Tessera_NeighborsTopologyKindAttr` constraint in TesseraOps.td). The
+        # hand-written `CreateTopologyOp::verify` that used to emit it was
+        # deleted with the duplicate neighbors dialect
+        # (SMALL-CORRECTNESS-GAPS-2026-09-27).
+        pass_origin=(
+            "NeighborsTopologyCreateOp::verifyInvariantsImpl "
+            "(ODS Tessera_NeighborsTopologyKindAttr)"
+        ),
         severity="error",
         summary="A topology.create operation names an unregistered topology kind.",
         fix_hint=(
-            "Use 2d_mesh, 3d_mesh, hex_2d, custom_graph, dynamic, adaptive, or fault."
+            "Use 1d_mesh, 2d_mesh, 3d_mesh, 4d_mesh, hex_2d, custom_graph, "
+            "dynamic, adaptive, or fault."
         ),
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
         sprint="W1.1b",
@@ -4277,6 +4380,83 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         ),
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
         sprint="EVIDENCE-GOVERNANCE-GATES-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN",
+        pass_origin="tessera.compiler.evidence_envelope.read_evidence_packet",
+        severity="error",
+        summary=(
+            "An evidence packet names a schema no registered evidence family "
+            "owns, or a consumer that pinned one family was handed another."
+        ),
+        fix_hint=(
+            "Register the family (schema, validator, vocabulary, routes, timing "
+            "domains, projection) in evidence_envelope before any consumer reads it."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="EVIDENCE_ENVELOPE_INCOMPLETE",
+        pass_origin="tessera.compiler.evidence_envelope.read_evidence_packet",
+        severity="error",
+        summary=(
+            "An evidence packet lacks, or malforms, a field the shared envelope "
+            "requires: artifact or compiler sha256, source commit, worktree state "
+            "as a bool, execution environment, a declared timing domain, sample "
+            "id, reasons as a list of tags, or its packet digest. Absence is "
+            "refused, never defaulted."
+        ),
+        fix_hint="Re-record the packet with its family's recorder; never add fields by hand.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="EVIDENCE_ENVELOPE_CONTRADICTED",
+        pass_origin="tessera.compiler.evidence_envelope.read_evidence_packet",
+        severity="error",
+        summary=(
+            "An evidence packet's promotion eligibility disagrees with its refusal "
+            "causes, or it is promotion-eligible on an invalid clock, from a dirty "
+            "tree, without naming its image in its timing sample, or on an "
+            "undeclared route or tag."
+        ),
+        fix_hint="Do not edit eligibility; re-record, or fix the family's derivation.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="ROUTE_RECEIPT_ORPHAN_DISPATCH",
+        pass_origin="tessera._route_receipts.RouteReceiptLog.refusal",
+        severity="error",
+        summary=(
+            "A native GA/EBM dispatch ran while no public primitive's receipt "
+            "frame was open, so the captured span cannot say which call it "
+            "served; the span's route is reported as unattributed."
+        ),
+        fix_hint=(
+            "Decorate the public caller with @public_route (test_route_receipts "
+            "names undecorated callers of _try_* helpers)."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="ROUTE_RECEIPT_EMPTY",
+        pass_origin="tessera._route_receipts.RouteReceiptLog.refusal",
+        severity="error",
+        summary=(
+            "A route-receipt capture saw no public GA/EBM primitive call, so it "
+            "attributes nothing; an empty capture is never read as a reference route."
+        ),
+        fix_hint="Capture around the calls being attributed.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
         language="python", status="implemented",
     ),
 )

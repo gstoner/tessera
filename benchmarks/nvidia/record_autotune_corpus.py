@@ -45,7 +45,8 @@ def _unstamped(cache: object, before_store: dict) -> list[str]:
     writing it would replace a row with a dead one. The usual cause on the box
     is a missing build product -- the PTX launch bridge, the shipped GEMM
     library or ``tessera-nvidia-opt`` -- whose identity is then ``None``.
-    ``conv2d`` is not a registry op and is not checked here.
+    ``conv2d`` is not a registry op; since AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27
+    its routes carry identities too and are checked the same way.
     """
     from tessera.compiler.emit.candidate import _CANDIDATES
 
@@ -53,7 +54,7 @@ def _unstamped(cache: object, before_store: dict) -> list[str]:
     for key, record in cache._store.items():  # type: ignore[attr-defined]
         if not _owned(key) or before_store.get(key) is record:
             continue
-        if (key[1], key[2]) not in _CANDIDATES:
+        if (key[1], key[2]) not in _CANDIDATES and key[2] != "conv2d":
             continue
         stamped = record.evidence.get("delegate_identities") or {}
         for name in sorted(record.candidates):
@@ -332,9 +333,19 @@ def main() -> int:
                 x, w, route=route, padding=(KH // 2, KW // 2),
                 reps=args.device_reps, warmup=args.device_warmup)
         winner = min(timings, key=timings.__getitem__)
+        # Decision #11 for the non-registry conv2d routes (sync
+        # AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27): the row carries the identity
+        # of each route it timed, taken from the code this process ran. A
+        # route that cannot be identified stays unstamped and `_unstamped`
+        # refuses the write below, as for a registry row.
+        conv_routes = nvidia_cuda.conv2d_route_identities()
         cache.put(("nvidia:sm_120", "nvidia", "conv2d",
                    (B, IH, IW, CI, KH, KW, CO), "f32", "device"),
-                  at.MeasureRecord(winner, timings[winner], timings), fresh=True)
+                  at.MeasureRecord(
+                      winner, timings[winner], timings,
+                      evidence={"delegate_identities": at._delegate_identities(
+                          {name: conv_routes[name] for name in timings})}),
+                  fresh=True)
         print(f"conv2d-device {shape_text}: {winner}")
     evidence = {
         "compiler_fingerprint": compiler_fingerprint,

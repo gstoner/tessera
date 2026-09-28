@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import math
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Sequence
 
 import numpy as np
@@ -35,6 +35,7 @@ import tessera.ga as ga
 from tessera.ga.multivector import Multivector
 from tessera.ebm.partition import partition_exact_from_energies
 from tessera.rng import RNGKey, normal
+from tessera._route_receipts import capture_route_receipts, device_label
 
 # Reuse the building blocks from the sister benchmarks rather than
 # re-deriving them.  This guarantees the visual-complex benchmark stays
@@ -258,6 +259,11 @@ class VisualComplexCoreResult:
     device: str
     tessera_version: str
     determinism_ok: bool
+    # EVIDENCE-PACKET-1: the route the timed span's public GA/EBM calls
+    # took, from per-call receipts (Decision #12: a row carries its route).
+    # ``device`` is derived from it; an incomplete capture stays unattributed.
+    route: str = "unattributed"
+    route_receipts: dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return {**asdict(self), "execution_kind": "unknown",
@@ -270,7 +276,6 @@ class VisualComplexCoreBenchmark:
 
     BACKEND = "tessera-library"
     OP = "visual_complex_core_forward"
-    DEVICE = "unattributed"
     VERSION = "pre-alpha"
 
     def __init__(self, *, warmup: int = 1, reps: int = 3):
@@ -283,11 +288,14 @@ class VisualComplexCoreBenchmark:
         model = VisualComplexCoreModel(cfg)
         for _ in range(self.warmup):
             model()
-        start = time.perf_counter()
-        last = None
-        for _ in range(self.reps):
-            last = model()
-        elapsed = (time.perf_counter() - start) / max(self.reps, 1)
+        # The receipts describe exactly the timed span.
+        with capture_route_receipts() as receipts:
+            start = time.perf_counter()
+            last = None
+            for _ in range(self.reps):
+                last = model()
+            elapsed = (time.perf_counter() - start) / max(self.reps, 1)
+        route_receipts = receipts.summary()
 
         a = model()
         b = VisualComplexCoreModel(cfg)()
@@ -318,9 +326,11 @@ class VisualComplexCoreBenchmark:
             latency_ms=elapsed * 1000.0,
             throughput_msps=throughput_msps,
             memory_bw_gb_s=memory_bw_gb_s,
-            device=self.DEVICE,
+            device=device_label(str(route_receipts["route"])),
             tessera_version=self.VERSION,
             determinism_ok=determinism_ok,
+            route=str(route_receipts["route"]),
+            route_receipts=route_receipts,
         )
 
     def run(

@@ -331,9 +331,11 @@ std::unique_ptr<mlir::Pass> createNVIDIAGraphLayoutMaterializationPass();
 
 // ── 2026-07-08 — TileBufferReusePass (Workstream H / W3) ─────────────────
 // Global buffer assignment/reuse for Tile IR: assign disjoint-live-range
-// `tile.alloc_shared` / `tile.tmem.alloc` buffers of identical memref type to
-// shared reuse groups (`tile.buffer_group`), cutting peak shared-memory
-// footprint. The assignment half of shared-memory planning; the paired verifier
+// `tile.alloc_shared` buffers of identical memref type to shared reuse groups
+// (`tile.buffer_group`), cutting peak shared-memory footprint. Registered
+// `tile.tmem.allocate` ops are planned too (matched by op identity since
+// TILE-LATENT-DEFECTS-2026-09-27) but always get a group of their own: Tile IR
+// has no TMEM completion fact, so no TMEM lifetime is provably disjoint. The assignment half of shared-memory planning; the paired verifier
 // is TileBarrierReuseLegalityPass. v1 output is IR metadata (a shared-memory-
 // aware backend reads `tile.buffer_group`); registered as
 // `--tessera-tile-buffer-reuse`.

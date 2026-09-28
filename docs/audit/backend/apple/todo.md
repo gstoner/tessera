@@ -8,6 +8,28 @@ last_updated: 2026-09-27
 
 # Apple compiler, exact-device, and performance plan
 
+## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — not applicable (Apple contract unchanged)
+
+ROCm moved its gfx1151 softmax/reduction packagers onto the native Schedule
+contract (ROCm queue, same key). Shared code touched:
+`native_unary_contract.verify_unary_projection`, which Apple's scheduled
+softmax/reduction also calls. Apple's rule is unchanged: input and output
+storage must agree for both families, and keepdims stays refused. The mixed
+f16/bf16 -> f32 reduction exception applies only to `rocm`/`gfx1151`.
+`test_apple_scheduled_projection.py` and `test_apple_lowp_native_contract.py`
+pass on the Mac with this branch.
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: sibling outcome — not applicable
+
+Three fixes landed under this key (sm_120 TMA smoke, a validated lit runner for every lit suite, one declaration of the `tessera.neighbors.*` ops; [ROCm](../rocm/todo.md) and [NVIDIA](../nvidia/todo.md) queues). Not applicable here: Mac configure selects `/opt/homebrew/bin/lit (lit 23.1.1)` through the new validator and lit counts are unchanged (520 discovered, 471 passed, 49 unsupported). No Apple code changed; the TMA fix is CUDA-only and the neighbors ops were already core `tessera` ops on every host.
+
+## `TILE-LATENT-DEFECTS-2026-09-27`: sibling outcome — not applicable (verified on the Mac)
+
+The shared arena/reuse passes now recognise the registered
+`tile.tmem.allocate`; Apple has no tensor memory and rejects `tile.tmem.*`
+(`ThreadgroupPipelineToApple.cpp`), and the arena's `emit-apple-msl`
+materialization covers `tile.alloc_shared` only, which is unchanged. The Mac
+`lit tests/tessera-ir/` run (including the Apple arena fixtures) passes.
+
 ## `SPECTRAL-STALE-HIP-ERROR-2026-09-27`: sibling outcome — not applicable
 
 The ROCm spectral image read HIP's per-thread, sticky last-error slot after
@@ -18,6 +40,13 @@ Apple's runtime reports kernel failure per command buffer (`MTLCommandBuffer`
 status/error), and no Apple hook reads a process- or thread-wide last-error
 slot. The streaming-STFT architecture label fix touches only `target="rocm"`.
 No shared contract changed.
+
+## `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`: sibling outcome — not applicable
+
+The change checks emitted CUDA/HIP launches, adds sm_120 route resources, makes
+the shipped NVIDIA GEMM byte-reproducible and gives the non-registry autotune
+rows (paged-KV, conv2d, ReplaySSM) route identities (NVIDIA and ROCm queues).
+Apple registers no arbiter candidates and has no committed corpus rows.
 
 ## `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`: sibling outcome — not applicable
 
@@ -10027,3 +10056,9 @@ See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--t
 Owners: X86-EVIDENCE-VOCAB-1 / GOV-ODS-CONSUMER-1 / EVIDENCE-PACKET-1. Sync: `EVIDENCE-GOVERNANCE-GATES-2026-09-27`.
 
 Not applicable to Apple evidence: no Apple packet family carries ineligibility tags. The ODS gate waives `tessera_apple.gpu.mps_softmax` (unreferenced). No Apple lane changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility).
+
+### EVIDENCE-PACKET-1: shared envelope and GA/EBM route receipts (2026-09-27)
+
+Owner: EVIDENCE-PACKET-1. Sync: `EVIDENCE-PACKET-1-2026-09-27`.
+
+Parity validated for route receipts on the Mac (M1 Max, macOS 27, clean `eed48b9b`). The 2026-09-10 follow-up under `BENCHMARK-COMPILER-ALIGNMENT-2026-09-10` asked for per-call Metal/CPU receipts for public GA/EBM compositions; that item is closed here. Every Apple `_try_apple_gpu_*` lane in `tessera.ga`/`tessera.ebm` is `@native_attempt` and its public callers `@public_route`. In `clifford_core`, `energy_core` and `visual_complex_core`, the GA primitives, EBM `langevin_step` and the partition ran on the Apple GPU runtime. `geometric_product` split between the runtime and the reference, `rotor_sandwich` is `mixed`, and `energy_quadratic` ran on the reference (`benchmarks/baselines/ga_ebm_route_receipts_20260927/mac_m1max.json`). The runtime lane is the hand-written MSL kernels reached by ctypes, not compiler-generated code. Not applicable to the envelope: no Apple measurement-packet family exists yet. Follow-up required: an Apple device-clock packet family must register with `evidence_envelope` before its packets can admit anything. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-packet-1-shared-evidence-envelope-ga-and-ebm-route-receipts).

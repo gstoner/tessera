@@ -527,48 +527,6 @@ def _extract_hsaco(text: str) -> bytes:
     return payload
 
 
-def emit_softmax_tile_ir(*, entry: str, storage: str) -> str:
-    """Emit the shared semantic softmax envelope with ROCm-owned math intent."""
-    if storage not in {"f16", "f32"}:
-        raise ValueError(f"unsupported gfx1151 softmax storage {storage!r}")
-    return f'''module {{
-  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr,
-                     %rows: i64, %columns: i64) {{
-    tile.softmax_kernel %x, %o, %rows, %columns {{
-      storage = "{storage}", accum = "f32", axis = -1 : i64,
-      exp_mode = "accurate", ftz = false
-    }} : !llvm.ptr, !llvm.ptr, i64, i64
-    llvm.return
-  }}
-}}
-'''
-
-
-def emit_reduce_tile_ir(
-    *, entry: str, storage: str, kind: str, axis: int, keepdims: bool, inner_is_one: bool = False
-) -> str:
-    """Emit the shared arbitrary-axis mixed-precision reduction envelope."""
-    if storage not in {"f16", "bf16", "f32"}:
-        raise ValueError(f"unsupported gfx1151 reduction storage {storage!r}")
-    if kind not in {"sum", "mean", "max"}:
-        raise ValueError(f"unsupported gfx1151 reduction kind {kind!r}")
-    if axis < 0:
-        raise ValueError("gfx1151 reduction requires a normalized axis")
-    return f'''module {{
-  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr,
-                     %outer: i64, %axis_extent: i64, %inner: i64) {{
-    tile.reduce_kernel %x, %o, %outer, %axis_extent, %inner {{
-      storage = "{storage}", accum = "f32", kind = "{kind}",
-      axis = {axis} : i64, keepdims = {str(keepdims).lower()},
-      schedule = "serial", nan_mode = "propagate",
-      inner_is_one = {str(inner_is_one).lower()}
-    }} : !llvm.ptr, !llvm.ptr, i64, i64, i64
-    llvm.return
-  }}
-}}
-'''
-
-
 def emit_paged_kv_read_tile_ir(*, entry: str) -> str:
     """Emit the shared direct f32 paged-KV gather envelope."""
     return f"""module {{
@@ -975,77 +933,27 @@ def _shape(module: GraphIRModule, name: str) -> tuple[int, ...] | None:
     return shape if all(dim > 0 for dim in shape) else None
 
 
-def _softmax_contract(
-    module: GraphIRModule,
-) -> tuple[str, str, str, tuple[int, ...]] | None:
-    if not requests_softmax(module):
-        return None
-    function = module.functions[0]
-    op = function.body[0]
-    if len(op.operands) != 1 or op.kwargs.get("axis", -1) != -1:
-        return None
-    input_name = op.operands[0].removeprefix("%")
-    arg = next((item for item in function.args if item.name == input_name), None)
-    shape = _shape(module, input_name)
-    if (
-        arg is None
-        or shape is None
-        or arg.ir_type.dtype not in {"fp16", "fp32"}
-        or not function.result_types
-        or function.result_types[0].dtype != arg.ir_type.dtype
-    ):
-        return None
-    return input_name, op.result or "output", arg.ir_type.dtype, shape
-
-
 def supports_softmax(module: GraphIRModule) -> bool:
-    return _softmax_contract(module) is not None
+    """A gfx1151 softmax the compiled Schedule -> Tile route admits.
 
+    E2E-REAL-6 (2026-09-27): admission is the scheduled contract's, not a
+    Graph-owned constructor's. The retired constructor survives only as the
+    differential baseline ``tests/_support/rocm_unary_baseline.py``.
+    """
+    from . import scheduled_kernel
 
-def _reduction_contract(
-    module: GraphIRModule,
-) -> tuple[str, str, str, str, tuple[int, ...], tuple[int, ...], int, bool] | None:
-    if not requests_reduction(module):
-        return None
-    function = module.functions[0]
-    op = function.body[0]
-    if len(op.operands) != 1 or len(function.result_types) != 1:
-        return None
-    input_name = op.operands[0].removeprefix("%")
-    arg = next((item for item in function.args if item.name == input_name), None)
-    shape = _shape(module, input_name)
-    if arg is None or arg.ir_type.dtype not in {"fp16", "bf16", "fp32"} or shape is None:
-        return None
-    raw_axis = op.kwargs.get("axis", -1)
-    if not isinstance(raw_axis, int) or isinstance(raw_axis, bool):
-        return None
-    axis = raw_axis + len(shape) if raw_axis < 0 else raw_axis
-    if axis < 0 or axis >= len(shape):
-        return None
-    keepdims = bool(op.kwargs.get("keepdims", False))
-    output_shape = shape[:axis] + ((1,) if keepdims else ()) + shape[axis + 1 :]
-    result = function.result_types[0]
-    try:
-        declared_output_shape = tuple(int(dim) for dim in result.shape)
-    except (TypeError, ValueError):
-        return None
-    if result.dtype != "fp32" or declared_output_shape != output_shape:
-        return None
-    kind = "max" if op.op_name in {"tessera.max", "tessera.amax"} else "mean" if op.op_name == "tessera.mean" else "sum"
-    return (
-        input_name,
-        op.result or "output",
-        arg.ir_type.dtype,
-        kind,
-        shape,
-        output_shape,
-        axis,
-        keepdims,
+    return requests_softmax(module) and scheduled_kernel.supports_scheduled_kernel(
+        module, target="rocm_gfx1151"
     )
 
 
 def supports_reduction(module: GraphIRModule) -> bool:
-    return _reduction_contract(module) is not None
+    """A gfx1151 reduction the compiled Schedule -> Tile route admits (E2E-REAL-6)."""
+    from . import scheduled_kernel
+
+    return requests_reduction(module) and scheduled_kernel.supports_scheduled_kernel(
+        module, target="rocm_gfx1151"
+    )
 
 
 def _paged_kv_contract(
@@ -1997,27 +1905,50 @@ def package_scheduled_kernel(
     """Package the exact E2E-REAL-5 Tile artifact without Graph resynthesis."""
 
     artifact.validate()
+    storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}.get(artifact.dtype)
     if (
         artifact.target != "rocm"
         or artifact.architecture not in {"gfx1151", "gfx1201"}
-        or artifact.dtype != "fp32"
-        or artifact.storage != "f32"
+        or storage is None
+        or artifact.storage != storage
         or artifact.accum != "f32"
     ):
-        raise ValueError("ROCm scheduled semantic kernel requires the gfx1151 f32 contract")
+        raise ValueError("ROCm scheduled semantic kernel requires a consistent storage/f32-accumulation contract")
+    # E2E-REAL-6 (ROCm unary family): gfx1151 owns the narrow-storage and
+    # keepdims envelope the retired Graph-owned constructors served; gfx1201
+    # keeps its proved f32 rank-reducing rows until it has its own device proof.
+    if artifact.architecture == "gfx1201" and (storage != "f32" or artifact.keepdims):
+        raise ValueError(
+            "gfx1201 scheduled semantic kernel has device proof only for the f32 rank-reducing contract"
+        )
+    if artifact.family == "softmax" and (storage == "bf16" or artifact.keepdims):
+        raise ValueError("ROCm scheduled softmax requires shape-preserving f16/f32 storage")
     from .native_unary_contract import verify_unary_ancestry
     verify_unary_ancestry(artifact, target="rocm", architecture=artifact.architecture)
     arch = artifact.architecture
+    alignment = 4 if storage == "f32" else 2
     scalars: tuple[ScalarArgument, ...]
+    semantic_provenance: dict[str, object]
     if artifact.family == "softmax":
-        abi = GFX_SOFTMAX_F32_ABI
+        abi = GFX_SOFTMAX_F16_ABI if storage == "f16" else GFX_SOFTMAX_F32_ABI
+        output_dtype, output_alignment = artifact.dtype, alignment
         compile_result = (_compile_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
                           _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.softmax",
                                                   family="softmax", architecture=arch))
         scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
         geometry = f"{arch}_softmax_workgroup_per_row_256"
+        semantic_provenance = {}
     elif artifact.family == "reduce":
-        abi = GFX_REDUCE_F32_ABI
+        abi = {"f16": GFX_REDUCE_F16_ABI, "bf16": GFX_REDUCE_BF16_ABI, "f32": GFX_REDUCE_F32_ABI}[storage]
+        # A reduction accumulates and stores f32 whatever its input storage.
+        output_dtype, output_alignment = "fp32", 4
+        # NaN policy is semantic (Decision #21a): read it from the replayed
+        # Tile op and carry it into the descriptor (Decision #32). The gfx1151
+        # kernel implements only ``propagate``; anything else fails closed.
+        nan_modes = re.findall(r'\bnan_mode = "([a-z_]+)"', artifact.tile_ir)
+        if nan_modes != ["propagate"]:
+            raise ValueError("ROCm scheduled reduction requires one replayed nan_mode = \"propagate\"")
+        semantic_provenance = {"nan_mode": nan_modes[0]}
         compile_result = (_compile_reduction_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
                           _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.reduce",
                                                   family="reduction", architecture=arch))
@@ -2044,8 +1975,10 @@ def package_scheduled_kernel(
         entry_symbol=entry,
         abi_id=abi,
         buffers=(
-            BufferBinding(0, artifact.input_name, "input", "fp32", len(artifact.input_shape), "row_major", 4),
-            BufferBinding(1, artifact.output_name, "output", "fp32", len(artifact.output_shape), "row_major", 4),
+            BufferBinding(0, artifact.input_name, "input", artifact.dtype, len(artifact.input_shape),
+                          "row_major", alignment),
+            BufferBinding(1, artifact.output_name, "output", output_dtype, len(artifact.output_shape),
+                          "row_major", output_alignment),
         ),
         scalars=scalars,
         shape_guards=tuple(
@@ -2073,6 +2006,7 @@ def package_scheduled_kernel(
             "ftz": False,
             "storage": artifact.storage,
             "accum": artifact.accum,
+            **semantic_provenance,
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },
@@ -2360,177 +2294,31 @@ def package_scheduled_depth_attention(
 
 
 def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativePackage:
-    contract = _softmax_contract(module)
-    if contract is None:
+    """Compile a gfx1151 softmax through native Schedule and Tile IR.
+
+    E2E-REAL-6 (ROCm unary family, 2026-09-27): no Python Tile construction.
+    The Graph op is lowered by ``tessera-opt`` (Graph -> Schedule -> Tile),
+    replayed, and its descriptor projected from the serialized IR.
+    """
+    from . import scheduled_kernel
+
+    if not requests_softmax(module):
         raise ValueError("gfx1151 native packaging requires one static f16/f32 last-axis softmax")
-    input_name, output_name, dtype, shape = contract
-    storage = "f16" if dtype == "fp16" else "f32"
-    entry = f"tessera_tile_softmax_{storage}"
-    abi_id = GFX_SOFTMAX_F16_ABI if dtype == "fp16" else GFX_SOFTMAX_F32_ABI
-    alignment = 2 if dtype == "fp16" else 4
-    tile_ir = emit_softmax_tile_ir(entry=entry, storage=storage)
-    (
-        target_ir,
-        backend_ir,
-        payload,
-        compiler_fp,
-        toolchain_fp,
-        device_libraries,
-        compile_state,
-    ) = _compile_tile_ir(tile_ir)
-    image = NativeImageArtifact(
-        target="rocm_gfx1151",
-        architecture="gfx1151",
-        pipeline_name=pipeline_name,
-        compiler_fingerprint=compiler_fp,
-        toolchain_fingerprint=toolchain_fp,
-        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
-        binary_format="hsaco",
-        payload=payload,
-        entry_points=(NativeEntryPoint(entry, abi_id),),
-        compile_state=compile_state,
-        device_libraries=device_libraries,
-    )
-    rows = math.prod(shape[:-1]) if len(shape) > 1 else 1
-    columns = shape[-1]
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest,
-        entry_symbol=entry,
-        abi_id=abi_id,
-        buffers=(
-            BufferBinding(0, input_name, "input", dtype, len(shape), "row_major", alignment),
-            BufferBinding(1, output_name, "output", dtype, len(shape), "row_major", alignment),
-        ),
-        scalars=(
-            ScalarArgument(2, "Rows", "int64"),
-            ScalarArgument(3, "K", "int64"),
-        ),
-        shape_guards=tuple(
-            ShapeGuard(name, axis, "eq", extent)
-            for name in (input_name, output_name)
-            for axis, extent in enumerate(shape)
-        ),
-        geometry=LaunchGeometry(policy="gfx1151_softmax_workgroup_per_row_256"),
-        ordering=OrderingSemantics(
-            ordered_submission=True,
-            residency="none",
-            synchronization=("completion",),
-        ),
-        provenance={
-            "work_item": "ROCM-E2E-1",
-            "sync_key": "E2E-SPINE-2026-07-18",
-            "schedule": "workgroup_per_row_256",
-            "shape": list(shape),
-            "storage": storage,
-            "accum": "f32",
-            "axis": -1,
-            "exp_mode": "accurate",
-            "ftz": False,
-            "rows": rows,
-            "columns": columns,
-            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
-        },
-    )
-    return ROCMNativePackage(tile_ir, target_ir, backend_ir, image, descriptor)
+    artifact = scheduled_kernel.lower_scheduled_kernel(module, target="rocm_gfx1151")
+    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
 def package_reduction(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativePackage:
-    contract = _reduction_contract(module)
-    if contract is None:
+    """Compile a gfx1151 reduction through native Schedule and Tile IR (E2E-REAL-6)."""
+    from . import scheduled_kernel
+
+    if not requests_reduction(module):
         raise ValueError(
             "gfx1151 reduction packaging requires one static f16/bf16/f32 "
             "sum/mean/max with f32 output and one normalized axis"
         )
-    input_name, output_name, dtype, kind, shape, output_shape, axis, keepdims = contract
-    storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
-    entry = f"tessera_tile_reduce_{kind}_{storage}"
-    abi_id = {
-        "fp16": GFX_REDUCE_F16_ABI,
-        "bf16": GFX_REDUCE_BF16_ABI,
-        "fp32": GFX_REDUCE_F32_ABI,
-    }[dtype]
-    outer = math.prod(shape[:axis]) if axis else 1
-    axis_extent = shape[axis]
-    inner = math.prod(shape[axis + 1 :]) if axis + 1 < len(shape) else 1
-    tile_ir = emit_reduce_tile_ir(
-        entry=entry,
-        storage=storage,
-        kind=kind,
-        axis=axis,
-        keepdims=keepdims,
-        inner_is_one=inner == 1,
-    )
-    (
-        target_ir,
-        backend_ir,
-        payload,
-        compiler_fp,
-        toolchain_fp,
-        device_libraries,
-        compile_state,
-    ) = _compile_reduction_tile_ir(tile_ir)
-    image = NativeImageArtifact(
-        target="rocm_gfx1151",
-        architecture="gfx1151",
-        pipeline_name=pipeline_name,
-        compiler_fingerprint=compiler_fp,
-        toolchain_fingerprint=toolchain_fp,
-        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
-        binary_format="hsaco",
-        payload=payload,
-        entry_points=(NativeEntryPoint(entry, abi_id),),
-        compile_state=compile_state,
-        device_libraries=device_libraries,
-    )
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest,
-        entry_symbol=entry,
-        abi_id=abi_id,
-        buffers=(
-            BufferBinding(
-                0,
-                input_name,
-                "input",
-                dtype,
-                len(shape),
-                "row_major",
-                2 if dtype in {"fp16", "bf16"} else 4,
-            ),
-            BufferBinding(1, output_name, "output", "fp32", len(output_shape), "row_major", 4),
-        ),
-        scalars=(
-            ScalarArgument(2, "Outer", "int64"),
-            ScalarArgument(3, "AxisExtent", "int64"),
-            ScalarArgument(4, "Inner", "int64"),
-        ),
-        shape_guards=tuple(
-            [ShapeGuard(input_name, index, "eq", extent) for index, extent in enumerate(shape)]
-            + [ShapeGuard(output_name, index, "eq", extent) for index, extent in enumerate(output_shape)]
-        ),
-        geometry=LaunchGeometry(policy="gfx1151_reduce_workgroup_per_output_256"),
-        ordering=OrderingSemantics(
-            ordered_submission=True,
-            residency="none",
-            synchronization=("completion",),
-        ),
-        provenance={
-            "work_item": "ROCM-E2E-2",
-            "sync_key": "E2E-SPINE-2026-07-18",
-            "schedule": "workgroup_per_output_256",
-            "shape": list(shape),
-            "storage": storage,
-            "accum": "f32",
-            "kind": kind,
-            "axis": axis,
-            "keepdims": keepdims,
-            "nan_mode": "propagate",
-            "outer": outer,
-            "axis_extent": axis_extent,
-            "inner": inner,
-            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
-        },
-    )
-    return ROCMNativePackage(tile_ir, target_ir, backend_ir, image, descriptor)
+    artifact = scheduled_kernel.lower_scheduled_kernel(module, target="rocm_gfx1151")
+    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
 def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151") -> ROCMNativePackage:
@@ -3369,9 +3157,7 @@ __all__ = [
     "emit_attention_backward_graph_ir",
     "emit_attention_tile_ir",
     "emit_moe_dispatch_tile_ir",
-    "emit_reduce_tile_ir",
     "emit_paged_kv_read_tile_ir",
-    "emit_softmax_tile_ir",
     "package_moe_dispatch",
     "package_native",
     "package_scheduled_kernel",

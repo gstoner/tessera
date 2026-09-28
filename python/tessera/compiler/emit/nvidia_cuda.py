@@ -216,18 +216,20 @@ def _synthesize_fused_cuda(region: FusedRegion) -> str:
         "    if (cudaMalloc(&dA,szA)!=cudaSuccess) return 2;\n"
         "    if (cudaMalloc(&dB,szB)!=cudaSuccess) { cudaFree(dA); return 2; }\n"
         "    if (cudaMalloc(&dO,szO)!=cudaSuccess) { cudaFree(dA); cudaFree(dB); return 2; }\n"
-        "    cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);\n"
-        "    cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice);\n"
-        "    if (hbias) { cudaMalloc(&dbias,(size_t)N*sizeof(float));\n"
-        "        cudaMemcpy(dbias,hbias,(size_t)N*sizeof(float),cudaMemcpyHostToDevice); }\n"
-        "    if (hresidual) { cudaMalloc(&dres,szO);\n"
-        "        cudaMemcpy(dres,hresidual,szO,cudaMemcpyHostToDevice); }\n"
+        "    int ok = 1;\n"
+        "    if (cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice) ||\n"
+        "        cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice)) ok = 3;\n"
+        "    if (ok==1 && hbias && (cudaMalloc(&dbias,(size_t)N*sizeof(float)) ||\n"
+        "        cudaMemcpy(dbias,hbias,(size_t)N*sizeof(float),cudaMemcpyHostToDevice))) ok = 3;\n"
+        "    if (ok==1 && hresidual && (cudaMalloc(&dres,szO) ||\n"
+        "        cudaMemcpy(dres,hresidual,szO,cudaMemcpyHostToDevice))) ok = 3;\n"
         "    int t=64, b=(M+t-1)/t;\n"
+        "    if (ok==1) {\n"
         f"    {_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(\n"
         "        dA,dB,dbias,dres,dO,M,N,K);\n"
-        "    int ok = (cudaGetLastError()==cudaSuccess &&\n"
-        "              cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
-        "    if (ok==1) cudaMemcpy(hout,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "    ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "          cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3; }\n"
+        "    if (ok==1 && cudaMemcpy(hout,dO,szO,cudaMemcpyDeviceToHost)) ok = 3;\n"
         "    cudaFree(dA); cudaFree(dB); cudaFree(dO);\n"
         "    if (dbias) cudaFree(dbias);\n"
         "    if (dres) cudaFree(dres);\n"
@@ -328,15 +330,16 @@ def _synthesize_attention_cuda() -> str:
         "    if (cudaMalloc(&dK,szK)!=cudaSuccess){cudaFree(dQ);return 3;}\n"
         "    if (cudaMalloc(&dV,szV)!=cudaSuccess){cudaFree(dQ);cudaFree(dK);return 3;}\n"
         "    if (cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dQ);cudaFree(dK);cudaFree(dV);return 3;}\n"
-        "    cudaMemcpy(dQ,hQ,szQ,cudaMemcpyHostToDevice);\n"
-        "    cudaMemcpy(dK,hK,szK,cudaMemcpyHostToDevice);\n"
-        "    cudaMemcpy(dV,hV,szV,cudaMemcpyHostToDevice);\n"
+        "    int ok = (cudaMemcpy(dQ,hQ,szQ,cudaMemcpyHostToDevice) ||\n"
+        "              cudaMemcpy(dK,hK,szK,cudaMemcpyHostToDevice) ||\n"
+        "              cudaMemcpy(dV,hV,szV,cudaMemcpyHostToDevice)) ? 3 : 1;\n"
         "    int t=128, b=(M+t-1)/t;\n"
+        "    if (ok==1) {\n"
         f"    {_ATTN_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(\n"
         "        dQ,dK,dV,dO,M,Nk,D,Dv,scale,causal);\n"
-        "    int ok = (cudaGetLastError()==cudaSuccess &&\n"
-        "              cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
-        "    if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "    ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "          cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3; }\n"
+        "    if (ok==1 && cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost)) ok = 3;\n"
         "    cudaFree(dQ); cudaFree(dK); cudaFree(dV); cudaFree(dO);\n"
         "    return ok;\n"
         "}\n"
@@ -429,12 +432,13 @@ def _synthesize_flash_fwd_cuda() -> str:
         "  long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int d=0;d<Dv;++d)acc[d]=acc[d]*corr+p*v[vo+d];mi=mn;}\n"
         " float inv=li>0.f?1.f/li:0.f;long oo=(((b*(long)Hq+qh)*Sq+m)*Dv);for(int d=0;d<Dv;++d)o[oo+d]=acc[d]*inv;}\n"
         f'extern "C" int {_FLASH_FWD_ENTRY}(const float*hq,const float*hk,const float*hv,const float*hb,float*ho,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float softcap){{\n'
+        " (void)cudaGetLastError();\n"
         " if(!hq||!hk||!hv||!ho||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||Dv>TSR_FA_DV_CAP)return 2;\n"
         " size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,nv=(size_t)B*Hkv*Sk*Dv*4,no=(size_t)B*Hq*Sq*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *dq=0,*dk=0,*dv=0,*db=0,*dout=0;\n"
         " if(cudaMalloc(&dq,nq)!=cudaSuccess||cudaMalloc(&dk,nk)!=cudaSuccess||cudaMalloc(&dv,nv)!=cudaSuccess||cudaMalloc(&dout,no)!=cudaSuccess){if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(dout)cudaFree(dout);return 2;}\n"
         " if(hb&&cudaMalloc(&db,nb)!=cudaSuccess){cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);return 2;}\n"
         " if(cudaMemcpy(dq,hq,nq,cudaMemcpyHostToDevice)!=cudaSuccess||cudaMemcpy(dk,hk,nk,cudaMemcpyHostToDevice)!=cudaSuccess||cudaMemcpy(dv,hv,nv,cudaMemcpyHostToDevice)!=cudaSuccess||(hb&&cudaMemcpy(db,hb,nb,cudaMemcpyHostToDevice)!=cudaSuccess)){cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);if(db)cudaFree(db);return 3;}\n"
-        " long rows=B*(long)Hq*Sq;tsr_flash_fwd<<<(unsigned)((rows+127)/128),128>>>(dq,dk,dv,db,dout,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,softcap);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
+        " long rows=B*(long)Hq*Sq;tsr_flash_fwd<<<(unsigned)((rows+127)/128),128>>>(dq,dk,dv,db,dout,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,softcap);int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;\n"
         " if(ok==1&&cudaMemcpy(ho,dout,no,cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);if(db)cudaFree(db);return ok;}\n"
     )
 
@@ -591,7 +595,8 @@ extern "C" int {entry}(const float*hq,const float*hk,const float*hv,
   if(!alloc_inputs(hq,hk,hv,hb,&q,&k,&v,&b,&o,B,Hq,Hkv,Sq,Sk,D,Dv)){{release_inputs(q,k,v,b,o);return 3;}}
   long rows=B*(long)Hq*Sq;{entry}_kernel<<<(unsigned)((rows+WARPS-1)/WARPS),WARPS*32>>>(
       q,k,v,b,o,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,softcap);
-  size_t no=(size_t)B*Hq*Sq*Dv*4;int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;
+  size_t no=(size_t)B*Hq*Sq*Dv*4;
+  int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;
   if(ok==1&&cudaMemcpy(ho,o,no,cudaMemcpyDeviceToHost))ok=3;
   release_inputs(q,k,v,b,o);return ok;
 }}
@@ -604,10 +609,16 @@ extern "C" int {entry}_timed(const float*hq,const float*hk,const float*hv,
   if(!alloc_inputs(hq,hk,hv,hb,&q,&k,&v,&b,&o,B,Hq,Hkv,Sq,Sk,D,Dv)){{release_inputs(q,k,v,b,o);return 3;}}
   long rows=B*(long)Hq*Sq;auto launch=[&](){{{entry}_kernel<<<(unsigned)((rows+WARPS-1)/WARPS),WARPS*32>>>(
       q,k,v,b,o,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,softcap);}};
-  for(int i=0;i<warmup;i++)launch();cudaEvent_t a,z;cudaEventCreate(&a);cudaEventCreate(&z);
-  cudaEventRecord(a);for(int i=0;i<reps;i++)launch();cudaEventRecord(z);cudaEventSynchronize(z);
-  float ms=0;cudaEventElapsedTime(&ms,a,z);*out_ms=ms/reps;cudaEventDestroy(a);cudaEventDestroy(z);
-  int ok=cudaGetLastError()==cudaSuccess?1:3;release_inputs(q,k,v,b,o);return ok;
+  cudaEvent_t a=0,z=0;float ms=0;int ok=3;
+  for(int i=0;i<warmup;i++)launch();
+  if(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&
+     cudaEventCreate(&a)==cudaSuccess&&cudaEventCreate(&z)==cudaSuccess&&
+     cudaEventRecord(a)==cudaSuccess){{
+    for(int i=0;i<reps;i++)launch();
+    if(cudaEventRecord(z)==cudaSuccess&&cudaEventSynchronize(z)==cudaSuccess&&
+       cudaGetLastError()==cudaSuccess&&cudaEventElapsedTime(&ms,a,z)==cudaSuccess){{
+      *out_ms=ms/reps;ok=1;}}}}
+  if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);release_inputs(q,k,v,b,o);return ok;
 }}
 '''
 
@@ -706,10 +717,10 @@ def _synthesize_mla_fused_cuda() -> str:
         " long row=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)Hq*Sq;if(row>=total)return;long m=row%Sq,t=row/Sq;int qh=(int)(t%Hq);long b=t/Hq;int hk=qh/(Hq/Hkv);float acc[TSR_MLA_CAP];for(int d=0;d<Dv;d++)acc[d]=0;float mx=-INFINITY,z=0;\n"
         " for(long n=0;n<Sk;n++){if(causal&&n>m)continue;long xo=(((b*(long)Hkv+hk)*Sk+n)*Dx),qo=(((b*(long)Hq+qh)*Sq+m)*D);float c[TSR_MLA_CAP];for(int l=0;l<L;l++){float a=0;for(int j=0;j<Dx;j++)a+=x[xo+j]*wd[j*(long)L+l];c[l]=a;}float s=0;for(int d=0;d<D;d++){float kd=0;for(int l=0;l<L;l++)kd+=c[l]*wk[l*(long)D+d];s+=q[qo+d]*kd;}s*=scale;float nm=fmaxf(mx,s),corr=expf(mx-nm),p=expf(s-nm);z=z*corr+p;for(int d=0;d<Dv;d++){float vd=0;for(int l=0;l<L;l++)vd+=c[l]*wv[l*(long)Dv+d];acc[d]=acc[d]*corr+p*vd;}mx=nm;}\n"
         " long oo=(((b*(long)Hq+qh)*Sq+m)*Dv);float inv=z>0?1.f/z:0;for(int d=0;d<Dv;d++)o[oo+d]=acc[d]*inv;}\n"
-        f'extern "C" int {_MLA_FUSED_ENTRY}(const float*hx,const float*hwd,const float*hwk,const float*hwv,const float*hq,float*ho,long B,int Hq,int Hkv,long Sq,long Sk,int Dx,int L,int D,int Dv,float scale,int causal){{\n'
+        f'extern "C" int {_MLA_FUSED_ENTRY}(const float*hx,const float*hwd,const float*hwk,const float*hwv,const float*hq,float*ho,long B,int Hq,int Hkv,long Sq,long Sk,int Dx,int L,int D,int Dv,float scale,int causal){{(void)cudaGetLastError();\n'
         " if(!hx||!hwd||!hwk||!hwv||!hq||!ho||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||Dx<=0||L<=0||D<=0||Dv<=0||L>TSR_MLA_CAP||Dv>TSR_MLA_CAP)return 2;size_t nx=(size_t)B*Hkv*Sk*Dx*4,nwd=(size_t)Dx*L*4,nwk=(size_t)L*D*4,nwv=(size_t)L*Dv*4,nq=(size_t)B*Hq*Sq*D*4,no=(size_t)B*Hq*Sq*Dv*4;float *x=0,*wd=0,*wk=0,*wv=0,*q=0,*o=0;\n"
         " if(cudaMalloc(&x,nx)||cudaMalloc(&wd,nwd)||cudaMalloc(&wk,nwk)||cudaMalloc(&wv,nwv)||cudaMalloc(&q,nq)||cudaMalloc(&o,no)){if(x)cudaFree(x);if(wd)cudaFree(wd);if(wk)cudaFree(wk);if(wv)cudaFree(wv);if(q)cudaFree(q);if(o)cudaFree(o);return 2;}\n"
-        " int bad=cudaMemcpy(x,hx,nx,cudaMemcpyHostToDevice)||cudaMemcpy(wd,hwd,nwd,cudaMemcpyHostToDevice)||cudaMemcpy(wk,hwk,nwk,cudaMemcpyHostToDevice)||cudaMemcpy(wv,hwv,nwv,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice);int ok=3;if(!bad){long rows=B*(long)Hq*Sq;tsr_mla_fused<<<(unsigned)((rows+127)/128),128>>>(x,wd,wk,wv,q,o,B,Hq,Hkv,Sq,Sk,Dx,L,D,Dv,scale,causal);ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&cudaMemcpy(ho,o,no,cudaMemcpyDeviceToHost))ok=3;}cudaFree(x);cudaFree(wd);cudaFree(wk);cudaFree(wv);cudaFree(q);cudaFree(o);return ok;}\n"
+        " int bad=cudaMemcpy(x,hx,nx,cudaMemcpyHostToDevice)||cudaMemcpy(wd,hwd,nwd,cudaMemcpyHostToDevice)||cudaMemcpy(wk,hwk,nwk,cudaMemcpyHostToDevice)||cudaMemcpy(wv,hwv,nwv,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice);int ok=3;if(!bad){long rows=B*(long)Hq*Sq;tsr_mla_fused<<<(unsigned)((rows+127)/128),128>>>(x,wd,wk,wv,q,o,B,Hq,Hkv,Sq,Sk,Dx,L,D,Dv,scale,causal);ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;if(ok==1&&cudaMemcpy(ho,o,no,cudaMemcpyDeviceToHost))ok=3;}cudaFree(x);cudaFree(wd);cudaFree(wk);cudaFree(wv);cudaFree(q);cudaFree(o);return ok;}\n"
     )
 
 
@@ -780,14 +791,14 @@ __global__ void tsr_flash_bwd_split(const float*go,const float*q,const float*k,c
  for(int qh=hk*ratio;qh<(hk+1)*ratio;++qh)for(long m=mbeg;m<mend;++m){if(!tsr_legal(n,m,causal,wl,wr))continue;long r=((b*(long)Hq+qh)*Sq+m);float mx=sm[r],z=sz[r],delta=sd[r];if(z<=0.f)continue;long goo=r*Dv;float raw=tsr_score(q,k,bias,b,qh,hk,m,n,Hq,Hkv,Sq,Sk,D,scale,0.f),s=raw,deriv=1.f;if(cap>0.f){float th=tanhf(s/cap);s=cap*th;deriv=1.f-th*th;}float p=expf(s-mx)/z,dp=0.f;long qo=r*D,vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int x=0;x<Dv;++x)dp+=go[goo+x]*v[vo+x];float ds=p*(dp-delta)*deriv;for(int d=0;d<D;++d)ak[d]+=ds*scale*q[qo+d];for(int d=0;d<Dv;++d)av[d]+=p*go[goo+d];}
  long base=((b*(long)Hkv+hk)*Sk+n);for(int d=0;d<D;++d)dk[base*D+d]=ak[d];for(int d=0;d<Dv;++d)dv[base*Dv+d]=av[d];}
 __global__ void tsr_flash_bwd_reduce(float*dk,float*dv,const float*wk,const float*wv,long nk,long nv){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<nk)dk[i]+=wk[i];if(i<nv)dv[i]+=wv[i];}
-extern "C" int TSR_ATOMIC_ENTRY(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,float*hdq,float*hdk,float*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){
- if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;int rc=2;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||(hb&&cudaMalloc(&bi,nb)))goto fail;rc=3;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq;cudaMemset(dk,0,nk);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);if(cudaDeviceSynchronize()!=cudaSuccess)goto fail;}if(cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,nk,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost))goto fail;rc=1;fail:if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return rc;}
-extern "C" int TSR_ATOMIC_ENTRY_timed(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int reps,float*ms){
- if(!hgo||!hq||!hk||!hv||!ms||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP||reps<1)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;cudaEvent_t a=0,z=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||(hb&&cudaMalloc(&bi,nb)))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq;cudaMemset(dk,0,nk);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&z)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){cudaMemset(dk,0,nk);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);}if(cudaEventRecord(z)!=cudaSuccess||cudaEventSynchronize(z)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,z)!=cudaSuccess)goto fail;*ms=elapsed/reps;}cudaEventDestroy(a);cudaEventDestroy(z);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return 1;fail:if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return 3;}
-extern "C" int TSR_SPLIT_ENTRY(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,float*hdq,float*hdk,float*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){
- if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4,ns=(size_t)B*Hq*Sq*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0,*wk=0,*wv=0,*sm=0,*sz=0,*sd=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||cudaMalloc(&wk,nk)||cudaMalloc(&wv,nv)||cudaMalloc(&sm,ns)||cudaMalloc(&sz,ns)||cudaMalloc(&sd,ns))goto fail;if(hb&&cudaMalloc(&bi,nb))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq,items=B*(long)Hkv*Sk*(D+Dv),mx=nk>nv?nk/4:nv/4;tsr_flash_bwd_stats<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);if(cudaDeviceSynchronize()!=cudaSuccess)goto fail;}if(cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,nk,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost))goto fail;cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(wk);cudaFree(wv);cudaFree(sm);cudaFree(sz);cudaFree(sd);if(bi)cudaFree(bi);return 1;fail:if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(wk)cudaFree(wk);if(wv)cudaFree(wv);if(sm)cudaFree(sm);if(sz)cudaFree(sz);if(sd)cudaFree(sd);if(bi)cudaFree(bi);return 3;}
-extern "C" int TSR_SPLIT_ENTRY_timed(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int reps,float*ms){
- if(!hgo||!hq||!hk||!hv||!ms||reps<1||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4,ns=(size_t)B*Hq*Sq*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0,*wk=0,*wv=0,*sm=0,*sz=0,*sd=0;cudaEvent_t a=0,z=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||cudaMalloc(&wk,nk)||cudaMalloc(&wv,nv)||cudaMalloc(&sm,ns)||cudaMalloc(&sz,ns)||cudaMalloc(&sd,ns)||(hb&&cudaMalloc(&bi,nb)))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq,items=B*(long)Hkv*Sk*(D+Dv),mx=nk>nv?nk/4:nv/4;tsr_flash_bwd_stats<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&z)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){tsr_flash_bwd_stats<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);}if(cudaEventRecord(z)!=cudaSuccess||cudaEventSynchronize(z)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,z)!=cudaSuccess)goto fail;*ms=elapsed/reps;}cudaEventDestroy(a);cudaEventDestroy(z);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(wk);cudaFree(wv);cudaFree(sm);cudaFree(sz);cudaFree(sd);if(bi)cudaFree(bi);return 1;fail:if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(wk)cudaFree(wk);if(wv)cudaFree(wv);if(sm)cudaFree(sm);if(sz)cudaFree(sz);if(sd)cudaFree(sd);if(bi)cudaFree(bi);return 3;}
+extern "C" int TSR_ATOMIC_ENTRY(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,float*hdq,float*hdk,float*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){(void)cudaGetLastError();
+ if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;int rc=2;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||(hb&&cudaMalloc(&bi,nb)))goto fail;rc=3;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq;if(cudaMemset(dk,0,nk)||cudaMemset(dv,0,nv))goto fail;tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)goto fail;}if(cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,nk,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost))goto fail;rc=1;fail:if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return rc;}
+extern "C" int TSR_ATOMIC_ENTRY_timed(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int reps,float*ms){(void)cudaGetLastError();
+ if(!hgo||!hq||!hk||!hv||!ms||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP||reps<1)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;cudaEvent_t a=0,z=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||(hb&&cudaMalloc(&bi,nb)))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq;if(cudaMemset(dk,0,nk)||cudaMemset(dv,0,nv))goto fail;tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&z)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){if(cudaMemset(dk,0,nk)||cudaMemset(dv,0,nv))goto fail;tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);}if(cudaEventRecord(z)!=cudaSuccess||cudaEventSynchronize(z)!=cudaSuccess||cudaGetLastError()!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,z)!=cudaSuccess)goto fail;*ms=elapsed/reps;}cudaEventDestroy(a);cudaEventDestroy(z);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return 1;fail:if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return 3;}
+extern "C" int TSR_SPLIT_ENTRY(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,float*hdq,float*hdk,float*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){(void)cudaGetLastError();
+ if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4,ns=(size_t)B*Hq*Sq*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0,*wk=0,*wv=0,*sm=0,*sz=0,*sd=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||cudaMalloc(&wk,nk)||cudaMalloc(&wv,nv)||cudaMalloc(&sm,ns)||cudaMalloc(&sz,ns)||cudaMalloc(&sd,ns))goto fail;if(hb&&cudaMalloc(&bi,nb))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq,items=B*(long)Hkv*Sk*(D+Dv),mx=nk>nv?nk/4:nv/4;tsr_flash_bwd_stats<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)goto fail;}if(cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,nk,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost))goto fail;cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(wk);cudaFree(wv);cudaFree(sm);cudaFree(sz);cudaFree(sd);if(bi)cudaFree(bi);return 1;fail:if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(wk)cudaFree(wk);if(wv)cudaFree(wv);if(sm)cudaFree(sm);if(sz)cudaFree(sz);if(sd)cudaFree(sd);if(bi)cudaFree(bi);return 3;}
+extern "C" int TSR_SPLIT_ENTRY_timed(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int reps,float*ms){(void)cudaGetLastError();
+ if(!hgo||!hq||!hk||!hv||!ms||reps<1||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4,ns=(size_t)B*Hq*Sq*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0,*wk=0,*wv=0,*sm=0,*sz=0,*sd=0;cudaEvent_t a=0,z=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||cudaMalloc(&wk,nk)||cudaMalloc(&wv,nv)||cudaMalloc(&sm,ns)||cudaMalloc(&sz,ns)||cudaMalloc(&sd,ns)||(hb&&cudaMalloc(&bi,nb)))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq,items=B*(long)Hkv*Sk*(D+Dv),mx=nk>nv?nk/4:nv/4;tsr_flash_bwd_stats<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&z)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){tsr_flash_bwd_stats<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,sm,sz,sd,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);}if(cudaEventRecord(z)!=cudaSuccess||cudaEventSynchronize(z)!=cudaSuccess||cudaGetLastError()!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,z)!=cudaSuccess)goto fail;*ms=elapsed/reps;}cudaEventDestroy(a);cudaEventDestroy(z);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(wk);cudaFree(wv);cudaFree(sm);cudaFree(sz);cudaFree(sd);if(bi)cudaFree(bi);return 1;fail:if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(wk)cudaFree(wk);if(wv)cudaFree(wv);if(sm)cudaFree(sm);if(sz)cudaFree(sz);if(sd)cudaFree(sd);if(bi)cudaFree(bi);return 3;}
 '''
     # The split kernel owns one complete (batch, KV-head, key) row per
     # thread.  Keep launch geometry in that semantic space; D and Dv are
@@ -812,10 +823,10 @@ def _synthesize_flash_bwd_f16_cuda() -> str:
     return kernel + (
         "__global__ void tsr_h2f(const __half*x,float*y,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)y[i]=__half2float(x[i]);}\n"
         "__global__ void tsr_f2h(const float*x,__half*y,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)y[i]=__float2half_rn(x[i]);}\n"
-        f'extern "C" int {_FLASH_BWD_ENTRY}(const __half*hgo,const __half*hq,const __half*hk,const __half*hv,const float*hb,__half*hdq,__half*hdk,__half*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){{\n'
+        f'extern "C" int {_FLASH_BWD_ENTRY}(const __half*hgo,const __half*hq,const __half*hk,const __half*hv,const float*hb,__half*hdq,__half*hdk,__half*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){{(void)cudaGetLastError();\n'
         " if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;long eq=(long)B*Hq*Sq*D,ek=(long)B*Hkv*Sk*D,eo=(long)B*Hq*Sq*Dv,ev=(long)B*Hkv*Sk*Dv;size_t nq2=(size_t)eq*2,nk2=(size_t)ek*2,no2=(size_t)eo*2,nv2=(size_t)ev*2,nq4=(size_t)eq*4,nk4=(size_t)ek*4,no4=(size_t)eo*4,nv4=(size_t)ev*4,nb=(size_t)B*Hq*Sq*Sk*4;__half *hgo_d=0,*hq_d=0,*hk_d=0,*hv_d=0,*hdq_d=0,*hdk_d=0,*hdv_d=0;float *go=0,*q=0,*k=0,*v=0,*dq=0,*dk=0,*dv=0,*bi=0;int rc=2;\n"
         " if(cudaMalloc(&hgo_d,no2)||cudaMalloc(&hq_d,nq2)||cudaMalloc(&hk_d,nk2)||cudaMalloc(&hv_d,nv2)||cudaMalloc(&hdq_d,nq2)||cudaMalloc(&hdk_d,nk2)||cudaMalloc(&hdv_d,nv2)||cudaMalloc(&go,no4)||cudaMalloc(&q,nq4)||cudaMalloc(&k,nk4)||cudaMalloc(&v,nv4)||cudaMalloc(&dq,nq4)||cudaMalloc(&dk,nk4)||cudaMalloc(&dv,nv4)||(hb&&cudaMalloc(&bi,nb)))goto fail;rc=3;\n"
-        " if(cudaMemcpy(hgo_d,hgo,no2,cudaMemcpyHostToDevice)||cudaMemcpy(hq_d,hq,nq2,cudaMemcpyHostToDevice)||cudaMemcpy(hk_d,hk,nk2,cudaMemcpyHostToDevice)||cudaMemcpy(hv_d,hv,nv2,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{int t=128;tsr_h2f<<<(unsigned)((eo+t-1)/t),t>>>(hgo_d,go,eo);tsr_h2f<<<(unsigned)((eq+t-1)/t),t>>>(hq_d,q,eq);tsr_h2f<<<(unsigned)((ek+t-1)/t),t>>>(hk_d,k,ek);tsr_h2f<<<(unsigned)((ev+t-1)/t),t>>>(hv_d,v,ev);cudaMemset(dk,0,nk4);cudaMemset(dv,0,nv4);long rows=B*(long)Hq*Sq;tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_f2h<<<(unsigned)((eq+t-1)/t),t>>>(dq,hdq_d,eq);tsr_f2h<<<(unsigned)((ek+t-1)/t),t>>>(dk,hdk_d,ek);tsr_f2h<<<(unsigned)((ev+t-1)/t),t>>>(dv,hdv_d,ev);}if(cudaDeviceSynchronize()!=cudaSuccess)goto fail;if(cudaMemcpy(hdq,hdq_d,nq2,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,hdk_d,nk2,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,hdv_d,nv2,cudaMemcpyDeviceToHost))goto fail;rc=1;fail:if(hgo_d)cudaFree(hgo_d);if(hq_d)cudaFree(hq_d);if(hk_d)cudaFree(hk_d);if(hv_d)cudaFree(hv_d);if(hdq_d)cudaFree(hdq_d);if(hdk_d)cudaFree(hdk_d);if(hdv_d)cudaFree(hdv_d);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return rc;}\n"
+        " if(cudaMemcpy(hgo_d,hgo,no2,cudaMemcpyHostToDevice)||cudaMemcpy(hq_d,hq,nq2,cudaMemcpyHostToDevice)||cudaMemcpy(hk_d,hk,nk2,cudaMemcpyHostToDevice)||cudaMemcpy(hv_d,hv,nv2,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{int t=128;tsr_h2f<<<(unsigned)((eo+t-1)/t),t>>>(hgo_d,go,eo);tsr_h2f<<<(unsigned)((eq+t-1)/t),t>>>(hq_d,q,eq);tsr_h2f<<<(unsigned)((ek+t-1)/t),t>>>(hk_d,k,ek);tsr_h2f<<<(unsigned)((ev+t-1)/t),t>>>(hv_d,v,ev);if(cudaMemset(dk,0,nk4)||cudaMemset(dv,0,nv4))goto fail;long rows=B*(long)Hq*Sq;tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_f2h<<<(unsigned)((eq+t-1)/t),t>>>(dq,hdq_d,eq);tsr_f2h<<<(unsigned)((ek+t-1)/t),t>>>(dk,hdk_d,ek);tsr_f2h<<<(unsigned)((ev+t-1)/t),t>>>(dv,hdv_d,ev);}if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)goto fail;if(cudaMemcpy(hdq,hdq_d,nq2,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,hdk_d,nk2,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,hdv_d,nv2,cudaMemcpyDeviceToHost))goto fail;rc=1;fail:if(hgo_d)cudaFree(hgo_d);if(hq_d)cudaFree(hq_d);if(hk_d)cudaFree(hk_d);if(hv_d)cudaFree(hv_d);if(hdq_d)cudaFree(hdq_d);if(hdk_d)cudaFree(hdk_d);if(hdv_d)cudaFree(hdv_d);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return rc;}\n"
     )
 
 
@@ -974,8 +985,8 @@ def _synthesize_linear_attn_cuda() -> str:
     return (
         "#include <cuda_runtime.h>\n"
         "__global__ void tsr_la(const float*q,const float*k,const float*v,float*o,long B,int H,long S,int D){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)H*S*D;if(x>=total)return;int d=x%D;long t=x/D,m=t%S,z=t/S,h=z%H,b=z/H;float y=0;for(long n=0;n<=m;n++){long qo=(((b*(long)H+h)*S+m)*D),ko=(((b*(long)H+h)*S+n)*D);float s=0;for(int j=0;j<D;j++)s+=q[qo+j]*k[ko+j];y+=s*v[ko+d];}o[x]=y;}\n"
-        f'extern "C" int {_LINEAR_ATTN_ENTRY}(const float*hq,const float*hk,const float*hv,float*ho,long B,int H,long S,int D){{'
-        "if(!hq||!hk||!hv||!ho||B<=0||H<=0||S<=0||D<=0)return 2;size_t n=(size_t)B*H*S*D*4;float*q=0,*k=0,*v=0,*o=0;if(cudaMalloc(&q,n)||cudaMalloc(&k,n)||cudaMalloc(&v,n)||cudaMalloc(&o,n))return 2;if(cudaMemcpy(q,hq,n,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,n,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,n,cudaMemcpyHostToDevice))return 3;long all=B*(long)H*S*D;tsr_la<<<(unsigned)((all+127)/128),128>>>(q,k,v,o,B,H,S,D);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&cudaMemcpy(ho,o,n,cudaMemcpyDeviceToHost))ok=3;cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(o);return ok;}\n"
+        f'extern "C" int {_LINEAR_ATTN_ENTRY}(const float*hq,const float*hk,const float*hv,float*ho,long B,int H,long S,int D){{(void)cudaGetLastError();'
+        "if(!hq||!hk||!hv||!ho||B<=0||H<=0||S<=0||D<=0)return 2;size_t n=(size_t)B*H*S*D*4;float*q=0,*k=0,*v=0,*o=0;if(cudaMalloc(&q,n)||cudaMalloc(&k,n)||cudaMalloc(&v,n)||cudaMalloc(&o,n))return 2;if(cudaMemcpy(q,hq,n,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,n,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,n,cudaMemcpyHostToDevice))return 3;long all=B*(long)H*S*D;tsr_la<<<(unsigned)((all+127)/128),128>>>(q,k,v,o,B,H,S,D);int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;if(ok==1&&cudaMemcpy(ho,o,n,cudaMemcpyDeviceToHost))ok=3;cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(o);return ok;}\n"
     )
 
 
@@ -1006,8 +1017,8 @@ def _synthesize_linear_attn_bwd_cuda() -> str:
     return (
         "#include <cuda_runtime.h>\n#define D_CAP 256\n"
         "__global__ void tsr_la_bwd(const float*go,const float*q,const float*k,const float*v,float*dq,float*dk,float*dv,long B,int H,long S,int D){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)H*S;if(x>=total)return;long m=x%S,z=x/S,h=z%H,b=z/H,qo=(((b*(long)H+h)*S+m)*D);float aq[D_CAP];for(int j=0;j<D;j++)aq[j]=0;for(long n=0;n<=m;n++){long ko=(((b*(long)H+h)*S+n)*D);float score=0,ds=0;for(int j=0;j<D;j++)score+=q[qo+j]*k[ko+j];for(int d=0;d<D;d++){ds+=go[qo+d]*v[ko+d];atomicAdd(&dv[ko+d],score*go[qo+d]);}for(int j=0;j<D;j++){aq[j]+=ds*k[ko+j];atomicAdd(&dk[ko+j],ds*q[qo+j]);}}for(int j=0;j<D;j++)dq[qo+j]=aq[j];}\n"
-        f'extern "C" int {_LINEAR_ATTN_BWD_ENTRY}(const float*hgo,const float*hq,const float*hk,const float*hv,float*hdq,float*hdk,float*hdv,long B,int H,long S,int D){{'
-        "if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||H<=0||S<=0||D<=0||D>D_CAP)return 2;size_t n=(size_t)B*H*S*D*4;float*go=0,*q=0,*k=0,*v=0,*dq=0,*dk=0,*dv=0;if(cudaMalloc(&go,n)||cudaMalloc(&q,n)||cudaMalloc(&k,n)||cudaMalloc(&v,n)||cudaMalloc(&dq,n)||cudaMalloc(&dk,n)||cudaMalloc(&dv,n))return 2;if(cudaMemcpy(go,hgo,n,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,n,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,n,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,n,cudaMemcpyHostToDevice))return 3;cudaMemset(dk,0,n);cudaMemset(dv,0,n);long rows=B*(long)H*S;tsr_la_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,dq,dk,dv,B,H,S,D);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&(cudaMemcpy(hdq,dq,n,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,n,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,n,cudaMemcpyDeviceToHost)))ok=3;cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);return ok;}\n"
+        f'extern "C" int {_LINEAR_ATTN_BWD_ENTRY}(const float*hgo,const float*hq,const float*hk,const float*hv,float*hdq,float*hdk,float*hdv,long B,int H,long S,int D){{(void)cudaGetLastError();'
+        "if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||H<=0||S<=0||D<=0||D>D_CAP)return 2;size_t n=(size_t)B*H*S*D*4;float*go=0,*q=0,*k=0,*v=0,*dq=0,*dk=0,*dv=0;if(cudaMalloc(&go,n)||cudaMalloc(&q,n)||cudaMalloc(&k,n)||cudaMalloc(&v,n)||cudaMalloc(&dq,n)||cudaMalloc(&dk,n)||cudaMalloc(&dv,n))return 2;if(cudaMemcpy(go,hgo,n,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,n,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,n,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,n,cudaMemcpyHostToDevice))return 3;if(cudaMemset(dk,0,n)||cudaMemset(dv,0,n))return 3;long rows=B*(long)H*S;tsr_la_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,dq,dk,dv,B,H,S,D);int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;if(ok==1&&(cudaMemcpy(hdq,dq,n,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,n,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,n,cudaMemcpyDeviceToHost)))ok=3;cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);return ok;}\n"
     )
 
 
@@ -1044,7 +1055,7 @@ def _synthesize_linear_attn_variant_cuda() -> str:
         "#include <cuda_runtime.h>\n#include <math.h>\n"
         "__device__ float phi(float x,int f){return f==1?fmaxf(x,0.f):(f==2?x*x:x);}\n"
         "__global__ void tsr_lav(const float*q,const float*k,const float*v,const float*dec,float*o,long B,int H,long S,int D,int Dv,int fmap){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)H*S*Dv;if(x>=total)return;int d=x%Dv;long t=x/Dv,m=t%S,z=t/S,h=z%H,b=z/H;float y=0;for(long n=0;n<=m;n++){long qo=(((b*(long)H+h)*S+m)*D),ko=(((b*(long)H+h)*S+n)*D);float s=0;for(int j=0;j<D;j++)s+=phi(q[qo+j],fmap)*phi(k[ko+j],fmap);if(dec&&n)y*=dec[((b*(long)H+h)*S+n)];y+=s*v[(((b*(long)H+h)*S+n)*Dv+d)];}o[(((b*(long)H+h)*S+m)*Dv+d)]=y;}\n"
-        "extern \"C\" int tessera_nvidia_linear_attn_variant(const float*hq,const float*hk,const float*hv,const float*hd,float*ho,long B,int H,long S,int D,int Dv,int fmap){if(!hq||!hk||!hv||!ho||B<=0||H<=0||S<=0||D<=0||Dv<=0||fmap<0||fmap>2)return 2;size_t nq=(size_t)B*H*S*D*4,nv=(size_t)B*H*S*Dv*4,nd=(size_t)B*H*S*4;float*q=0,*k=0,*v=0,*d=0,*o=0;if(cudaMalloc(&q,nq)||cudaMalloc(&k,nq)||cudaMalloc(&v,nv)||cudaMalloc(&o,nv))return 2;if(hd&&cudaMalloc(&d,nd))return 2;if(cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nq,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hd&&cudaMemcpy(d,hd,nd,cudaMemcpyHostToDevice)))return 3;long n=B*(long)H*S*Dv;tsr_lav<<<(unsigned)((n+127)/128),128>>>(q,k,v,d,o,B,H,S,D,Dv,fmap);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&cudaMemcpy(ho,o,nv,cudaMemcpyDeviceToHost))ok=3;cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(o);if(d)cudaFree(d);return ok;}\n"
+        "extern \"C\" int tessera_nvidia_linear_attn_variant(const float*hq,const float*hk,const float*hv,const float*hd,float*ho,long B,int H,long S,int D,int Dv,int fmap){(void)cudaGetLastError();if(!hq||!hk||!hv||!ho||B<=0||H<=0||S<=0||D<=0||Dv<=0||fmap<0||fmap>2)return 2;size_t nq=(size_t)B*H*S*D*4,nv=(size_t)B*H*S*Dv*4,nd=(size_t)B*H*S*4;float*q=0,*k=0,*v=0,*d=0,*o=0;if(cudaMalloc(&q,nq)||cudaMalloc(&k,nq)||cudaMalloc(&v,nv)||cudaMalloc(&o,nv))return 2;if(hd&&cudaMalloc(&d,nd))return 2;if(cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nq,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hd&&cudaMemcpy(d,hd,nd,cudaMemcpyHostToDevice)))return 3;long n=B*(long)H*S*Dv;tsr_lav<<<(unsigned)((n+127)/128),128>>>(q,k,v,d,o,B,H,S,D,Dv,fmap);int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;if(ok==1&&cudaMemcpy(ho,o,nv,cudaMemcpyDeviceToHost))ok=3;cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(o);if(d)cudaFree(d);return ok;}\n"
     )
 
 
@@ -1082,7 +1093,7 @@ def _synthesize_linear_attn_variant_bwd_cuda() -> str:
     return ("#include <cuda_runtime.h>\n#include <math.h>\n#define DC 256\n"
         "__device__ float p(float x,int f){return f==2?x*x:x;}__device__ float dp(float x,int f){return f==2?2*x:1;}\n"
         "__global__ void kb(const float*go,const float*q,const float*k,const float*v,const float*de,float*dq,float*dk,float*dv,long B,int H,long S,int D,int Vd,int f){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)H*S;if(x>=total)return;long m=x%S,z=x/S,h=z%H,b=z/H,qo=(((b*(long)H+h)*S+m)*D),g=(((b*(long)H+h)*S+m)*Vd);float a[DC];for(int j=0;j<D;j++)a[j]=0;float fac=1;for(long n=m;n>=0;n--){long ko=(((b*(long)H+h)*S+n)*D),vo=(((b*(long)H+h)*S+n)*Vd);float s=0,ds=0;for(int j=0;j<D;j++)s+=p(q[qo+j],f)*p(k[ko+j],f);for(int d=0;d<Vd;d++){ds+=go[g+d]*v[vo+d];atomicAdd(&dv[vo+d],fac*s*go[g+d]);}ds*=fac;for(int j=0;j<D;j++){a[j]+=ds*dp(q[qo+j],f)*p(k[ko+j],f);atomicAdd(&dk[ko+j],ds*dp(k[ko+j],f)*p(q[qo+j],f));}if(de)fac*=de[((b*(long)H+h)*S+n)];}for(int j=0;j<D;j++)dq[qo+j]=a[j];}\n"
-        "extern \"C\" int tessera_nvidia_linear_attn_variant_bwd(const float*hg,const float*hq,const float*hk,const float*hv,const float*hd,float*hdq,float*hdk,float*hdv,long B,int H,long S,int D,int Vd,int f){if(!hg||!hq||!hk||!hv||!hdq||!hdk||!hdv||D>DC)return 2;size_t nq=(size_t)B*H*S*D*4,nv=(size_t)B*H*S*Vd*4,nd=(size_t)B*H*S*4;float*g=0,*q=0,*k=0,*v=0,*d=0,*dq=0,*dk=0,*dv=0;int ok=1;if(cudaMalloc(&g,nv)||cudaMalloc(&q,nq)||cudaMalloc(&k,nq)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nq)||cudaMalloc(&dv,nv)||(hd&&cudaMalloc(&d,nd))){ok=2;}if(ok==1&&(cudaMemcpy(g,hg,nv,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nq,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hd&&cudaMemcpy(d,hd,nd,cudaMemcpyHostToDevice))||cudaMemset(dk,0,nq)||cudaMemset(dv,0,nv))){ok=3;}if(ok==1){long r=B*(long)H*S;kb<<<(r+127)/128,128>>>(g,q,k,v,d,dq,dk,dv,B,H,S,D,Vd,f);ok=cudaDeviceSynchronize()==cudaSuccess?1:3;}if(ok==1&&(cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost)))ok=3;if(g)cudaFree(g);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(d)cudaFree(d);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);return ok;}\n")
+        "extern \"C\" int tessera_nvidia_linear_attn_variant_bwd(const float*hg,const float*hq,const float*hk,const float*hv,const float*hd,float*hdq,float*hdk,float*hdv,long B,int H,long S,int D,int Vd,int f){(void)cudaGetLastError();if(!hg||!hq||!hk||!hv||!hdq||!hdk||!hdv||D>DC)return 2;size_t nq=(size_t)B*H*S*D*4,nv=(size_t)B*H*S*Vd*4,nd=(size_t)B*H*S*4;float*g=0,*q=0,*k=0,*v=0,*d=0,*dq=0,*dk=0,*dv=0;int ok=1;if(cudaMalloc(&g,nv)||cudaMalloc(&q,nq)||cudaMalloc(&k,nq)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nq)||cudaMalloc(&dv,nv)||(hd&&cudaMalloc(&d,nd))){ok=2;}if(ok==1&&(cudaMemcpy(g,hg,nv,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nq,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hd&&cudaMemcpy(d,hd,nd,cudaMemcpyHostToDevice))||cudaMemset(dk,0,nq)||cudaMemset(dv,0,nv))){ok=3;}if(ok==1){long r=B*(long)H*S;kb<<<(r+127)/128,128>>>(g,q,k,v,d,dq,dk,dv,B,H,S,D,Vd,f);ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;}if(ok==1&&(cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost)))ok=3;if(g)cudaFree(g);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(d)cudaFree(d);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);return ok;}\n")
 
 
 def run_linear_attention_variant_backward(go: Any,q: Any,k: Any,v: Any,*,feature_map: str,decay: Any=None) -> tuple[Any,Any,Any]:
@@ -1129,14 +1140,15 @@ def _synthesize_gated_cuda(region: GatedMatmulRegion) -> str:
         "    if (cudaMalloc(&dWg,szW)!=cudaSuccess){cudaFree(dA);return 3;}\n"
         "    if (cudaMalloc(&dWu,szW)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);return 3;}\n"
         "    if (cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);cudaFree(dWu);return 3;}\n"
-        "    cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);\n"
-        "    cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice);\n"
-        "    cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice);\n"
+        "    int ok = (cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice) ||\n"
+        "              cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice) ||\n"
+        "              cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice)) ? 3 : 1;\n"
         "    int t=128, b=(M+t-1)/t;\n"
+        "    if (ok==1) {\n"
         f"    {_GATED_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dA,dWg,dWu,dO,M,K,H);\n"
-        "    int ok = (cudaGetLastError()==cudaSuccess &&\n"
-        "              cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
-        "    if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "    ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "          cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3; }\n"
+        "    if (ok==1 && cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost)) ok = 3;\n"
         "    cudaFree(dA); cudaFree(dWg); cudaFree(dWu); cudaFree(dO);\n"
         "    return ok;\n"
         "}\n"
@@ -1212,7 +1224,7 @@ def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
         fail = f"{{ {prior} return 3; }}" if prior else "return 3;"
         alloc_lines.append(
             f"    float* d{j}=0; if (cudaMalloc(&d{j},sz)!=cudaSuccess) {fail}\n"
-            f"    cudaMemcpy(d{j},hi{j},sz,cudaMemcpyHostToDevice);\n")
+            f"    if (cudaMemcpy(d{j},hi{j},sz,cudaMemcpyHostToDevice)) copy_ok=0;\n")
     allocs = "".join(alloc_lines)
     all_free = " ".join(f"cudaFree(d{j});" for j in range(n))
     dargs = ", ".join(f"d{j}" for j in range(n))
@@ -1231,14 +1243,16 @@ def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
         "}\n"
         f'extern "C" int {_PW_ENTRY}({hparams}, float* hout, long numel) {{\n'
         "    (void)cudaGetLastError();\n"
-        "    size_t sz=(size_t)numel*4;\n"
+        "    size_t sz=(size_t)numel*4; int copy_ok=1;\n"
         f"{allocs}"
         f"    float* dout=0; if (cudaMalloc(&dout,sz)!=cudaSuccess) {{ {all_free} return 3; }}\n"
         "    int t=256; long b=(numel+t-1)/t;\n"
+        "    int ok = copy_ok ? 1 : 3;\n"
+        "    if (ok==1) {\n"
         f"    {_PW_ENTRY}_kernel<<<dim3((unsigned)b), dim3(t)>>>({dargs}, dout, numel);\n"
-        "    int ok = (cudaGetLastError()==cudaSuccess &&\n"
-        "              cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
-        "    if (ok==1) cudaMemcpy(hout,dout,sz,cudaMemcpyDeviceToHost);\n"
+        "    ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "          cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3; }\n"
+        "    if (ok==1 && cudaMemcpy(hout,dout,sz,cudaMemcpyDeviceToHost)) ok = 3;\n"
         f"    {all_free} cudaFree(dout);\n"
         "    return ok;\n"
         "}\n"
@@ -1627,7 +1641,7 @@ def _synthesize_softmax_cuda() -> str:
         "  sum = scratch[0];\n"
         "  for (long j = tid; j < K; j += blockDim.x) o[row*K+j] = expf(x[row*K+j]-mx)/sum;\n"
         "}\n"
-        f'extern "C" int {_SOFTMAX_ENTRY}(const float* hx, float* ho, long M, long K) {{\n'
+        f'extern "C" int {_SOFTMAX_ENTRY}(const float* hx, float* ho, long M, long K) {{(void)cudaGetLastError();\n'
         "  if (!hx || !ho || M <= 0 || K <= 0) return 2;\n"
         "  const size_t bytes = (size_t)M * (size_t)K * sizeof(float);\n"
         "  float *dx = 0, *dout = 0;\n"
@@ -1635,16 +1649,16 @@ def _synthesize_softmax_cuda() -> str:
         "  if (cudaMalloc(&dout, bytes) != cudaSuccess) { cudaFree(dx); return 2; }\n"
         "  if (cudaMemcpy(dx, hx, bytes, cudaMemcpyHostToDevice) != cudaSuccess) { cudaFree(dx); cudaFree(dout); return 3; }\n"
         "  tsr_softmax_kernel<<<(unsigned)M, TSR_SM_BLOCK>>>(dx, dout, K);\n"
-        "  int ok = (cudaDeviceSynchronize() == cudaSuccess) ? 1 : 3;\n"
+        "  int ok = (cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess) ? 1 : 3;\n"
         "  if (ok == 1 && cudaMemcpy(ho, dout, bytes, cudaMemcpyDeviceToHost) != cudaSuccess) ok = 3;\n"
         "  cudaFree(dx); cudaFree(dout); return ok;\n"
         "}\n"
-        'extern "C" int tessera_nvidia_softmax_benchmark(const float*hx,long M,long K,int warmup,int reps,float*ms){\n'
+        'extern "C" int tessera_nvidia_softmax_benchmark(const float*hx,long M,long K,int warmup,int reps,float*ms){(void)cudaGetLastError();\n'
         " if(!hx||M<=0||K<=0||warmup<0||reps<=0||!ms)return 2;size_t n=(size_t)M*K*sizeof(float);float *dx=0,*o=0;cudaEvent_t a=0,b=0;\n"
         " if(cudaMalloc(&dx,n)!=cudaSuccess||cudaMalloc(&o,n)!=cudaSuccess)return 2;if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;\n"
-        " for(int i=0;i<warmup;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaDeviceSynchronize()!=cudaSuccess)return 3;\n"
+        " for(int i=0;i<warmup;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)return 3;\n"
         " if(cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)return 3;\n"
-        " for(int i=0;i<reps;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaEventElapsedTime(ms,a,b)!=cudaSuccess)return 3;\n"
+        " for(int i=0;i<reps;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaGetLastError()!=cudaSuccess||cudaEventElapsedTime(ms,a,b)!=cudaSuccess)return 3;\n"
         " *ms/=reps;cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(o);return 1;}\n"
     )
 
@@ -1661,18 +1675,18 @@ def _synthesize_softmax_f16_cuda() -> str:
         " for(long j=t;j<K;j+=blockDim.x)sum+=expf(__half2float(x[r*K+j])-mx);s[t]=sum;__syncthreads();\n"
         " for(int d=blockDim.x/2;d;d>>=1){if(t<d)s[t]+=s[t+d];__syncthreads();}sum=s[0];\n"
         " for(long j=t;j<K;j+=blockDim.x)o[r*K+j]=__float2half(expf(__half2float(x[r*K+j])-mx)/sum);}\n"
-        f'extern "C" int {_SOFTMAX_ENTRY}(const __half*hx,__half*ho,long M,long K){{\n'
+        f'extern "C" int {_SOFTMAX_ENTRY}(const __half*hx,__half*ho,long M,long K){{(void)cudaGetLastError();\n'
         " if(!hx||!ho||M<=0||K<=0)return 2;size_t n=(size_t)M*K*sizeof(__half);__half *dx=0,*dout=0;\n"
         " if(cudaMalloc(&dx,n)!=cudaSuccess)return 2;if(cudaMalloc(&dout,n)!=cudaSuccess){cudaFree(dx);return 2;}\n"
         " if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess){cudaFree(dx);cudaFree(dout);return 3;}\n"
-        " tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,dout,K);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
+        " tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,dout,K);int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;\n"
         " if(ok==1&&cudaMemcpy(ho,dout,n,cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;cudaFree(dx);cudaFree(dout);return ok;}\n"
-        'extern "C" int tessera_nvidia_softmax_benchmark(const __half*hx,long M,long K,int warmup,int reps,float*ms){\n'
+        'extern "C" int tessera_nvidia_softmax_benchmark(const __half*hx,long M,long K,int warmup,int reps,float*ms){(void)cudaGetLastError();\n'
         " if(!hx||M<=0||K<=0||warmup<0||reps<=0||!ms)return 2;size_t n=(size_t)M*K*sizeof(__half);__half *dx=0,*o=0;cudaEvent_t a=0,b=0;\n"
         " if(cudaMalloc(&dx,n)!=cudaSuccess||cudaMalloc(&o,n)!=cudaSuccess)return 2;if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;\n"
-        " for(int i=0;i<warmup;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaDeviceSynchronize()!=cudaSuccess)return 3;\n"
+        " for(int i=0;i<warmup;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess)return 3;\n"
         " if(cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)return 3;\n"
-        " for(int i=0;i<reps;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaEventElapsedTime(ms,a,b)!=cudaSuccess)return 3;\n"
+        " for(int i=0;i<reps;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaGetLastError()!=cudaSuccess||cudaEventElapsedTime(ms,a,b)!=cudaSuccess)return 3;\n"
         " *ms/=reps;cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(o);return 1;}\n"
     )
 
@@ -1781,11 +1795,11 @@ def _synthesize_norm_cuda(dtype: str = "f32") -> str:
         "  else denom=rsqrtf(tsr_sum(sq,s)/(float)K+eps);\n"
         f"  for(long j=t;j<K;j+=blockDim.x) {{ float v=({load}-(layer?mean:0.f))*denom; o[r*K+j]={store}; }}\n"
         "}\n"
-        f'extern "C" int tessera_nvidia_norm(const {ctype}* hx,{ctype}* ho,long M,long K,float eps,int layer) {{\n'
+        f'extern "C" int tessera_nvidia_norm(const {ctype}* hx,{ctype}* ho,long M,long K,float eps,int layer) {{(void)cudaGetLastError();\n'
         f"  if(!hx||!ho||M<=0||K<=0||eps<0.f) return 2; size_t n=(size_t)M*K*sizeof({ctype}); {ctype} *dx=0,*dout=0;\n"
         "  if(cudaMalloc(&dx,n)!=cudaSuccess) return 2; if(cudaMalloc(&dout,n)!=cudaSuccess){cudaFree(dx);return 2;}\n"
         "  if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess){cudaFree(dx);cudaFree(dout);return 3;}\n"
-        "  tsr_norm_kernel<<<(unsigned)M,TSR_NM_BLOCK>>>(dx,dout,K,eps,layer); int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
+        "  tsr_norm_kernel<<<(unsigned)M,TSR_NM_BLOCK>>>(dx,dout,K,eps,layer); int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;\n"
         "  if(ok==1&&cudaMemcpy(ho,dout,n,cudaMemcpyDeviceToHost)!=cudaSuccess) ok=3; cudaFree(dx);cudaFree(dout);return ok;\n"
         "}\n"
     )
@@ -1853,17 +1867,17 @@ def _synthesize_reduce_cuda(dtype: str = "f32") -> str:
         f" for(long j=t;j<K;j+=blockDim.x)v=tsr_rcombine(v,{load},kind);\n"
         " s[t]=v;__syncthreads();for(int d=blockDim.x/2;d;d>>=1){if(t<d)s[t]=tsr_rcombine(s[t],s[t+d],kind);__syncthreads();}\n"
         " if(t==0)o[r]=(kind==1?s[0]/(float)K:s[0]);}\n"
-        f"extern \"C\" int tessera_nvidia_reduce(const {ctype}*hx,float*ho,long M,long K,int kind){{\n"
+        f"extern \"C\" int tessera_nvidia_reduce(const {ctype}*hx,float*ho,long M,long K,int kind){{(void)cudaGetLastError();\n"
         f" if(!hx||!ho||M<=0||K<=0||kind<0||kind>3)return 2;size_t n=(size_t)M*K*sizeof({ctype});{ctype} *dx=0;float *dout=0;\n"
         " if(cudaMalloc(&dx,n)!=cudaSuccess)return 2;if(cudaMalloc(&dout,(size_t)M*sizeof(float))!=cudaSuccess){cudaFree(dx);return 2;}\n"
         " if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess){cudaFree(dx);cudaFree(dout);return 3;}\n"
-        " tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
+        " tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;\n"
         " if(ok==1&&cudaMemcpy(ho,dout,(size_t)M*sizeof(float),cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;cudaFree(dx);cudaFree(dout);return ok;}\n"
-        f"extern \"C\" int tessera_nvidia_reduce_timed(const {ctype}*hx,long M,long K,int kind,int reps,float*ms){{\n"
+        f"extern \"C\" int tessera_nvidia_reduce_timed(const {ctype}*hx,long M,long K,int kind,int reps,float*ms){{(void)cudaGetLastError();\n"
         f" if(!hx||!ms||M<=0||K<=0||kind<0||kind>3||reps<1)return 2;size_t n=(size_t)M*K*sizeof({ctype});{ctype} *dx=0;float *dout=0;cudaEvent_t a=0,b=0;\n"
         " if(cudaMalloc(&dx,n)!=cudaSuccess||cudaMalloc(&dout,(size_t)M*sizeof(float))!=cudaSuccess||cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess)goto fail;\n"
-        " tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)goto fail;\n"
-        " if(cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++)tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess)goto fail;\n"
+        " tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)goto fail;\n"
+        " if(cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++)tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaGetLastError()!=cudaSuccess)goto fail;\n"
         " {float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,b)!=cudaSuccess)goto fail;*ms=elapsed/(float)reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(dout);return 1;\n"
         " fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(dx)cudaFree(dx);if(dout)cudaFree(dout);return 3;}\n"
     )
@@ -1942,7 +1956,7 @@ def _synthesize_fpquant_cuda() -> str:
     return r'''#include <cuda_runtime.h>
 #include <math.h>
 __global__ void fq_k(const float*x,float*o,long n,float mx,int mb,int me){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float z=x[i];if(isnan(z)){o[i]=z;return;}float a=fminf(fabsf(z),mx);if(a==0){o[i]=z;return;}int e=(int)floorf(log2f(a));e=e<me?me:e;float step=ldexpf(1.f,e-mb);float q=nearbyintf(z/step)*step;o[i]=fminf(fmaxf(q,-mx),mx);}}
-extern "C" int tessera_nvidia_fpquant_f32(const float*x,float*o,long n,float mx,int mb,int me){float *dx=0,*d=0;size_t z=n*4;if(cudaMalloc(&dx,z)!=cudaSuccess||cudaMalloc(&d,z)!=cudaSuccess||cudaMemcpy(dx,x,z,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;fq_k<<<(n+255)/256,256>>>(dx,d,n,mx,mb,me);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_fpquant_f32(const float*x,float*o,long n,float mx,int mb,int me){(void)cudaGetLastError();float *dx=0,*d=0;size_t z=n*4;if(cudaMalloc(&dx,z)!=cudaSuccess||cudaMalloc(&d,z)!=cudaSuccess||cudaMemcpy(dx,x,z,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;fq_k<<<(n+255)/256,256>>>(dx,d,n,mx,mb,me);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
 '''
 
 
@@ -2491,7 +2505,7 @@ def run_solver_diagonal_cg(
 def _synthesize_local_collective_cuda() -> str:
     return r'''#include <cuda_runtime.h>
 __global__ void copy_k(const float*x,float*o,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)o[i]=x[i];}
-extern "C" int tessera_nvidia_local_collective_f32(const float*x,float*o,long n){float *dx=0,*d=0;size_t z=n*4;if(cudaMalloc(&dx,z)!=cudaSuccess||cudaMalloc(&d,z)!=cudaSuccess||cudaMemcpy(dx,x,z,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;copy_k<<<(n+255)/256,256>>>(dx,d,n);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_local_collective_f32(const float*x,float*o,long n){(void)cudaGetLastError();float *dx=0,*d=0;size_t z=n*4;if(cudaMalloc(&dx,z)!=cudaSuccess||cudaMalloc(&d,z)!=cudaSuccess||cudaMemcpy(dx,x,z,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;copy_k<<<(n+255)/256,256>>>(dx,d,n);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
 '''
 
 
@@ -2512,7 +2526,7 @@ def _synthesize_optimizer_cuda() -> str:
 #include <math.h>
 __global__ void opt_k(const float*p,const float*g,const float*m,const float*v,float*po,float*mo,float*vo,long n,int kind,float lr,float b1,float b2,float eps,float wd,float b1c,float b2c){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float P=p[i],G=g[i],M=m[i],V=v[i],PN=P,MN=M,VN=V;if(kind==0)PN=P-lr*G;else if(kind==1||kind==5){VN=b1*V+G;PN=P-lr*(kind==5?G+b1*VN:VN);}else if(kind==4){float u=b1*M+(1-b1)*G;MN=b2*M+(1-b2)*G;float pp=wd!=0?P*(1-lr*wd):P;PN=pp-lr*((u>0)-(u<0));}else{MN=b1*M+(1-b1)*G;VN=b2*V+(1-b2)*G*G;float pp=(kind==3&&wd!=0)?P*(1-lr*wd):P;PN=pp-lr*(MN/b1c)/(sqrtf(VN/b2c)+eps);}po[i]=PN;mo[i]=MN;vo[i]=VN;}}
 static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
-extern "C" int tessera_nvidia_optimizer_f32(const float*p,const float*g,const float*m,const float*v,float*po,float*mo,float*vo,long n,int kind,float lr,float b1,float b2,float eps,float wd,float b1c,float b2c){if(kind<0||kind>5)return 2;float *dp=0,*dg=0,*dm=0,*dv=0,*dpo=0,*dmo=0,*dvo=0;size_t z=n*4;if(!ac(&dp,p,z)||!ac(&dg,g,z)||!ac(&dm,m,z)||!ac(&dv,v,z)||cudaMalloc(&dpo,z)!=cudaSuccess||cudaMalloc(&dmo,z)!=cudaSuccess||cudaMalloc(&dvo,z)!=cudaSuccess)return 3;opt_k<<<(n+255)/256,256>>>(dp,dg,dm,dv,dpo,dmo,dvo,n,kind,lr,b1,b2,eps,wd,b1c,b2c);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(po,dpo,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(mo,dmo,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(vo,dvo,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dp);cudaFree(dg);cudaFree(dm);cudaFree(dv);cudaFree(dpo);cudaFree(dmo);cudaFree(dvo);return ok?1:3;}
+extern "C" int tessera_nvidia_optimizer_f32(const float*p,const float*g,const float*m,const float*v,float*po,float*mo,float*vo,long n,int kind,float lr,float b1,float b2,float eps,float wd,float b1c,float b2c){(void)cudaGetLastError();if(kind<0||kind>5)return 2;float *dp=0,*dg=0,*dm=0,*dv=0,*dpo=0,*dmo=0,*dvo=0;size_t z=n*4;if(!ac(&dp,p,z)||!ac(&dg,g,z)||!ac(&dm,m,z)||!ac(&dv,v,z)||cudaMalloc(&dpo,z)!=cudaSuccess||cudaMalloc(&dmo,z)!=cudaSuccess||cudaMalloc(&dvo,z)!=cudaSuccess)return 3;opt_k<<<(n+255)/256,256>>>(dp,dg,dm,dv,dpo,dmo,dvo,n,kind,lr,b1,b2,eps,wd,b1c,b2c);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(po,dpo,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(mo,dmo,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(vo,dvo,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dp);cudaFree(dg);cudaFree(dm);cudaFree(dv);cudaFree(dpo);cudaFree(dmo);cudaFree(dvo);return ok?1:3;}
 '''
 
 
@@ -2539,7 +2553,7 @@ def _synthesize_dequant_grouped_cuda() -> str:
     return r'''#include <cuda_runtime.h>
 __global__ void dqg_k(const float*x,const unsigned char*codes,const float*sc,const int*off,float*o,int T,int K,int N,int E,int G,int mode){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,total=(long)T*N;if(z<total){int r=z/N,c=z%N,e=0;while(e+1<E&&r>=off[e+1])++e;float a=0;for(int k=0;k<K;++k){int gi=k/G;float q;if(mode==4){int kb=K/2;unsigned char b=codes[((long)e*N+c)*kb+k/2];int v=(k&1)?(b>>4):(b&15);q=(float)(v>=8?v-16:v);}else{q=(float)((const signed char*)codes)[((long)e*K+k)*N+c];}a+=x[(long)r*K+k]*q*sc[((long)e*(K/G)+gi)*N+c];}o[z]=a;}}
 static int ac(void**d,const void*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
-extern "C" int tessera_nvidia_dequant_grouped_gemm_f32(const float*x,const unsigned char*c,const float*s,const int*off,float*o,int T,int K,int N,int E,int G,int mode){size_t nx=(size_t)T*K*4,nc=(size_t)E*(mode==4?N*(K/2):K*N),ns=(size_t)E*(K/G)*N*4,no=(size_t)T*N*4;float *dx=0,*ds=0,*dout=0;unsigned char*dc=0;int*df=0;if(!ac((void**)&dx,x,nx)||!ac((void**)&dc,c,nc)||!ac((void**)&ds,s,ns)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;dqg_k<<<(T*N+255)/256,256>>>(dx,dc,ds,df,dout,T,K,N,E,G,mode);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dc);cudaFree(ds);cudaFree(df);cudaFree(dout);return ok?1:3;}
+extern "C" int tessera_nvidia_dequant_grouped_gemm_f32(const float*x,const unsigned char*c,const float*s,const int*off,float*o,int T,int K,int N,int E,int G,int mode){(void)cudaGetLastError();size_t nx=(size_t)T*K*4,nc=(size_t)E*(mode==4?N*(K/2):K*N),ns=(size_t)E*(K/G)*N*4,no=(size_t)T*N*4;float *dx=0,*ds=0,*dout=0;unsigned char*dc=0;int*df=0;if(!ac((void**)&dx,x,nx)||!ac((void**)&dc,c,nc)||!ac((void**)&ds,s,ns)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;dqg_k<<<(T*N+255)/256,256>>>(dx,dc,ds,df,dout,T,K,N,E,G,mode);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dc);cudaFree(ds);cudaFree(df);cudaFree(dout);return ok?1:3;}
 '''
 
 
@@ -2569,21 +2583,23 @@ extern "C" __global__ void gather_k(const float*x,const int*tok,float*o,int S,in
 extern "C" __global__ void combine_k(const float*x,const int*tok,const float*w,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;atomicAdd(&o[(long)tok[s]*H+h],w[s]*x[z]);}}
 extern "C" __global__ void gg_k(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)T*N;if(z<n){int r=z/N,c=z%N,e=0;while(e+1<E&&r>=off[e+1])++e;float a=0;for(int k=0;k<K;++k)a+=x[(long)r*K+k]*w[((long)e*K+k)*N+c];o[z]=a;}}
 static int ac(void**d,const void*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
-extern "C" int tessera_nvidia_moe_dispatch_f32(const float*x,const int*tok,float*o,int T,int S,int H){float *dx=0,*dout=0;int*dt=0;size_t nx=(size_t)T*H*4,no=(size_t)S*H*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gather_k<<<(S*H+255)/256,256>>>(dx,dt,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dout);return ok?1:3;}
-extern "C" int tessera_nvidia_moe_combine_f32(const float*x,const int*tok,const float*w,float*o,int T,int S,int H){float *dx=0,*dw=0,*dout=0;int*dt=0;size_t ni=(size_t)S*H*4,no=(size_t)T*H*4;if(!ac((void**)&dx,x,ni)||!ac((void**)&dt,tok,S*4)||!ac((void**)&dw,w,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;cudaMemset(dout,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dw);cudaFree(dout);return ok?1:3;}
-extern "C" int tessera_nvidia_grouped_gemm_f32(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){float *dx=0,*dw=0,*dout=0;int*df=0;size_t nx=(size_t)T*K*4,nw=(size_t)E*K*N*4,no=(size_t)T*N*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dw,w,nw)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,dout,T,K,N,E);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dw);cudaFree(df);cudaFree(dout);return ok?1:3;}
-extern "C" int tessera_nvidia_moe_timed(const float*x,const int*tok,const float*w,const float*weights,const int*off,int T,int S,int H,int K,int N,int E,int kind,int reps,int batches,float*ms){float *dx=0,*dw=0,*do_=0;int*dt=0,*df=0;cudaEvent_t a=0,b=0;size_t nx=(size_t)(kind==1?S:T)*(kind==2?K:H)*4,no=(size_t)(kind==2?T*N:(kind==0?S*H:T*H))*4;if(!x||!tok||!ms||T<=0||S<=0||H<=0||reps<1||batches<1||kind<0||kind>2)return 2;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,(size_t)S*4)||cudaMalloc(&do_,no)!=cudaSuccess)goto fail;if(kind==1&&(!weights||!ac((void**)&dw,weights,(size_t)S*4)))goto fail;if(kind==2&&(!w||!off||!ac((void**)&dw,w,(size_t)E*K*N*4)||!ac((void**)&df,off,(size_t)(E+1)*4)))goto fail;if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)goto fail;for(int batch=0;batch<batches;batch++){if(cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);}if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,b)!=cudaSuccess)goto fail;ms[batch]=elapsed/(float)reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);cudaFree(do_);return 1;fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(dx)cudaFree(dx);if(dt)cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);if(do_)cudaFree(do_);return 3;}
+extern "C" int tessera_nvidia_moe_dispatch_f32(const float*x,const int*tok,float*o,int T,int S,int H){(void)cudaGetLastError();float *dx=0,*dout=0;int*dt=0;size_t nx=(size_t)T*H*4,no=(size_t)S*H*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gather_k<<<(S*H+255)/256,256>>>(dx,dt,dout,S,H);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dout);return ok?1:3;}
+extern "C" int tessera_nvidia_moe_combine_f32(const float*x,const int*tok,const float*w,float*o,int T,int S,int H){(void)cudaGetLastError();float *dx=0,*dw=0,*dout=0;int*dt=0;size_t ni=(size_t)S*H*4,no=(size_t)T*H*4;if(!ac((void**)&dx,x,ni)||!ac((void**)&dt,tok,S*4)||!ac((void**)&dw,w,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;int ok=cudaMemset(dout,0,no)==cudaSuccess;if(ok){combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,dout,S,H);ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;}cudaFree(dx);cudaFree(dt);cudaFree(dw);cudaFree(dout);return ok?1:3;}
+extern "C" int tessera_nvidia_grouped_gemm_f32(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){(void)cudaGetLastError();float *dx=0,*dw=0,*dout=0;int*df=0;size_t nx=(size_t)T*K*4,nw=(size_t)E*K*N*4,no=(size_t)T*N*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dw,w,nw)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,dout,T,K,N,E);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dw);cudaFree(df);cudaFree(dout);return ok?1:3;}
+extern "C" int tessera_nvidia_moe_timed(const float*x,const int*tok,const float*w,const float*weights,const int*off,int T,int S,int H,int K,int N,int E,int kind,int reps,int batches,float*ms){(void)cudaGetLastError();float *dx=0,*dw=0,*do_=0;int*dt=0,*df=0;cudaEvent_t a=0,b=0;size_t nx=(size_t)(kind==1?S:T)*(kind==2?K:H)*4,no=(size_t)(kind==2?T*N:(kind==0?S*H:T*H))*4;if(!x||!tok||!ms||T<=0||S<=0||H<=0||reps<1||batches<1||kind<0||kind>2)return 2;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,(size_t)S*4)||cudaMalloc(&do_,no)!=cudaSuccess)goto fail;if(kind==1&&(!weights||!ac((void**)&dw,weights,(size_t)S*4)))goto fail;if(kind==2&&(!w||!off||!ac((void**)&dw,w,(size_t)E*K*N*4)||!ac((void**)&df,off,(size_t)(E+1)*4)))goto fail;if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){if(cudaMemset(do_,0,no))goto fail;combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)goto fail;for(int batch=0;batch<batches;batch++){if(cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){if(cudaMemset(do_,0,no))goto fail;combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);}if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaGetLastError()!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,b)!=cudaSuccess)goto fail;ms[batch]=elapsed/(float)reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);cudaFree(do_);return 1;fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(dx)cudaFree(dx);if(dt)cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);if(do_)cudaFree(do_);return 3;}
 '''
     launch = ("if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);"
-              "else if(kind==1){cudaMemset(do_,0,no);combine_k<<<"
+              "else if(kind==1){if(cudaMemset(do_,0,no))goto fail;combine_k<<<"
               "(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<"
               "(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);")
     # Warm the exact resident route after allocations and before events.  A
     # single microkernel launch does not reliably leave WSL's P8 state.
+    anchor = "if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize"
+    if source.count(launch + anchor) != 1:
+        raise RuntimeError("MoE timer warm-up anchor moved; the warm loop would be dropped")
     return source.replace(
-        launch + "if(cudaDeviceSynchronize",
-        "for(int warm=0;warm<100;warm++){" + launch +
-        "}if(cudaDeviceSynchronize", 1)
+        launch + anchor,
+        "for(int warm=0;warm<100;warm++){" + launch + "}" + anchor, 1)
 
 
 def _moe_lib():
@@ -2796,7 +2812,7 @@ def _synthesize_deltanet_cuda() -> str:
 #include <math.h>
 __global__ void dn_k(const float*q,const float*k,const float*v,const float*g,const float*beta,const float*decay,float*o,int BH,int S,int DK,int DV,int erase,int modified){int bh=blockIdx.x,e=threadIdx.x;if(bh>=BH||e>=DV)return;extern __shared__ float sm[];float*st=sm;float*target=st+DK*DV;float*ms=target+DV;for(int z=e;z<DK*DV;z+=DV)st[z]=0.f;__syncthreads();for(int t=0;t<S;++t){long base=((long)bh*S+t);float de=decay?decay[base]:1.f;float tar=v[base*DV+e];if(erase){float vh=0.f;for(int d=0;d<DK;++d)vh+=k[base*DK+d]*st[d*DV+e];tar-=de*vh;}target[e]=tar;__syncthreads();if(e==0){float sc=1.f;if(modified){float kn=0.f,tn=0.f;for(int d=0;d<DK;++d){float z=k[base*DK+d];kn+=z*z;}for(int j=0;j<DV;++j)tn+=target[j]*target[j];sc=1.f/(1.f+sqrtf(kn*tn));}*ms=sc;}__syncthreads();float w=beta?beta[base]:1.f;for(int d=0;d<DK;++d)st[d*DV+e]=de*st[d*DV+e]+w*k[base*DK+d]*target[e]*(*ms);float y=0.f;for(int d=0;d<DK;++d)y+=q[base*DK+d]*st[d*DV+e];if(g)y*=1.f/(1.f+expf(-g[base*DV+e]));o[base*DV+e]=y;__syncthreads();}}
 static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
-extern "C" int tessera_nvidia_deltanet_f32(const float*q,const float*k,const float*v,const float*g,const float*beta,const float*decay,float*o,int B,int H,int S,int DK,int DV,int erase,int modified){if(DK<1||DK>64||DV<1||DV>64)return 2;int BH=B*H;size_t nq=(size_t)BH*S*DK*4,nv=(size_t)BH*S*DV*4,ns=(size_t)BH*S*4;float *dq=0,*dk=0,*dv=0,*dg=0,*db=0,*dd=0,*dout=0;if(!ac(&dq,q,nq)||!ac(&dk,k,nq)||!ac(&dv,v,nv)||cudaMalloc(&dout,nv)!=cudaSuccess)return 3;if(g&&!ac(&dg,g,nv))return 3;if(beta&&!ac(&db,beta,ns))return 3;if(decay&&!ac(&dd,decay,ns))return 3;size_t sh=((size_t)DK*DV+DV+1)*4;dn_k<<<BH,DV,sh>>>(dq,dk,dv,dg,db,dd,dout,BH,S,DK,DV,erase,modified);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,nv,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);if(dg)cudaFree(dg);if(db)cudaFree(db);if(dd)cudaFree(dd);return ok?1:3;}
+extern "C" int tessera_nvidia_deltanet_f32(const float*q,const float*k,const float*v,const float*g,const float*beta,const float*decay,float*o,int B,int H,int S,int DK,int DV,int erase,int modified){(void)cudaGetLastError();if(DK<1||DK>64||DV<1||DV>64)return 2;int BH=B*H;size_t nq=(size_t)BH*S*DK*4,nv=(size_t)BH*S*DV*4,ns=(size_t)BH*S*4;float *dq=0,*dk=0,*dv=0,*dg=0,*db=0,*dd=0,*dout=0;if(!ac(&dq,q,nq)||!ac(&dk,k,nq)||!ac(&dv,v,nv)||cudaMalloc(&dout,nv)!=cudaSuccess)return 3;if(g&&!ac(&dg,g,nv))return 3;if(beta&&!ac(&db,beta,ns))return 3;if(decay&&!ac(&dd,decay,ns))return 3;size_t sh=((size_t)DK*DV+DV+1)*4;dn_k<<<BH,DV,sh>>>(dq,dk,dv,dg,db,dd,dout,BH,S,DK,DV,erase,modified);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,nv,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);if(dg)cudaFree(dg);if(db)cudaFree(db);if(dd)cudaFree(dd);return ok?1:3;}
 '''
 
 
@@ -2830,7 +2846,7 @@ def _synthesize_ssm_cuda() -> str:
 #define MAX_N 64
 __global__ void ssm_k(const float*x,const float*A,const float*Bv,const float*C,const float*dt,const float*g,const float*st,float*y,int BS,int S,int D,int N){int z=blockIdx.x*blockDim.x+threadIdx.x;if(z>=BS*D)return;int b=z/D,d=z%D;float h[MAX_N];for(int n=0;n<N;++n)h[n]=st?st[((long)b*D+d)*N+n]:0.f;for(int t=0;t<S;++t){long xd=((long)b*S+t)*D+d;float xv=x[xd],dl=dt[xd],sum=0.f;for(int n=0;n<N;++n){h[n]=expf(dl*A[(long)d*N+n])*h[n]+dl*Bv[((long)b*S+t)*N+n]*xv;sum+=C[((long)b*S+t)*N+n]*h[n];}y[xd]=g?sum*g[xd]:sum;}}
 static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
-extern "C" int tessera_nvidia_selective_ssm_f32(const float*x,const float*A,const float*Bv,const float*C,const float*dt,const float*g,const float*st,float*y,int BS,int S,int D,int N){if(N<1||N>MAX_N)return 2;size_t nx=(size_t)BS*S*D*4,na=(size_t)D*N*4,nb=(size_t)BS*S*N*4,ns=(size_t)BS*D*N*4;float *dx=0,*da=0,*db=0,*dc=0,*dd=0,*dg=0,*ds=0,*dy=0;if(!ac(&dx,x,nx)||!ac(&da,A,na)||!ac(&db,Bv,nb)||!ac(&dc,C,nb)||!ac(&dd,dt,nx)||cudaMalloc(&dy,nx)!=cudaSuccess)return 3;if(g&&!ac(&dg,g,nx))return 3;if(st&&!ac(&ds,st,ns))return 3;ssm_k<<<(BS*D+127)/128,128>>>(dx,da,db,dc,dd,dg,ds,dy,BS,S,D,N);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(y,dy,nx,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(da);cudaFree(db);cudaFree(dc);cudaFree(dd);cudaFree(dy);if(dg)cudaFree(dg);if(ds)cudaFree(ds);return ok?1:3;}
+extern "C" int tessera_nvidia_selective_ssm_f32(const float*x,const float*A,const float*Bv,const float*C,const float*dt,const float*g,const float*st,float*y,int BS,int S,int D,int N){(void)cudaGetLastError();if(N<1||N>MAX_N)return 2;size_t nx=(size_t)BS*S*D*4,na=(size_t)D*N*4,nb=(size_t)BS*S*N*4,ns=(size_t)BS*D*N*4;float *dx=0,*da=0,*db=0,*dc=0,*dd=0,*dg=0,*ds=0,*dy=0;if(!ac(&dx,x,nx)||!ac(&da,A,na)||!ac(&db,Bv,nb)||!ac(&dc,C,nb)||!ac(&dd,dt,nx)||cudaMalloc(&dy,nx)!=cudaSuccess)return 3;if(g&&!ac(&dg,g,nx))return 3;if(st&&!ac(&ds,st,ns))return 3;ssm_k<<<(BS*D+127)/128,128>>>(dx,da,db,dc,dd,dg,ds,dy,BS,S,D,N);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(y,dy,nx,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(da);cudaFree(db);cudaFree(dc);cudaFree(dd);cudaFree(dy);if(dg)cudaFree(dg);if(ds)cudaFree(ds);return ok?1:3;}
 '''
 
 
@@ -2874,7 +2890,7 @@ def _synthesize_ssm_replay_decode_cuda() -> str:
 #include <math.h>
 __global__ void ssm_replay_k(const float*delta,const float*x,const float*b,const float*s0,const float*c,const float*a,float*y,int B,int D,int N,int M){int z=blockIdx.x*blockDim.x+threadIdx.x;if(z>=B*D)return;int bi=z/D,d=z%D;float dc=0.f;for(int i=0;i<M;++i)dc+=delta[((long)i*B+bi)*D+d]*a[d];float out=0.f;for(int n=0;n<N;++n)out+=c[(long)bi*N+n]*s0[((long)bi*D+d)*N+n];out*=expf(dc);float prefix=0.f;for(int i=0;i<M;++i){long q=((long)i*B+bi)*D+d;prefix+=delta[q]*a[d];float gram=0.f;for(int n=0;n<N;++n)gram+=c[(long)bi*N+n]*b[((long)i*B+bi)*N+n];out+=expf(dc-prefix)*delta[q]*x[q]*gram;}y[(long)bi*D+d]=out;}
 static int cp(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
-extern "C" int tessera_nvidia_ssm_replay_decode_f32(const float*hd,const float*hx,const float*hb,const float*hs,const float*hc,const float*ha,float*hy,int B,int D,int N,int M){if(!hd||!hx||!hb||!hs||!hc||!ha||!hy||B<1||D<1||N<1||M<1)return 2;size_t zbd=(size_t)M*B*D*4,zbn=(size_t)M*B*N*4,zs=(size_t)B*D*N*4,zc=(size_t)B*N*4,za=(size_t)D*4,zy=(size_t)B*D*4;float *d=0,*x=0,*b=0,*s=0,*c=0,*a=0,*y=0;if(!cp(&d,hd,zbd)||!cp(&x,hx,zbd)||!cp(&b,hb,zbn)||!cp(&s,hs,zs)||!cp(&c,hc,zc)||!cp(&a,ha,za)||cudaMalloc(&y,zy)!=cudaSuccess){if(d)cudaFree(d);if(x)cudaFree(x);if(b)cudaFree(b);if(s)cudaFree(s);if(c)cudaFree(c);if(a)cudaFree(a);return 3;}ssm_replay_k<<<(B*D+127)/128,128>>>(d,x,b,s,c,a,y,B,D,N,M);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,zy,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(d);cudaFree(x);cudaFree(b);cudaFree(s);cudaFree(c);cudaFree(a);cudaFree(y);return ok?1:3;}
+extern "C" int tessera_nvidia_ssm_replay_decode_f32(const float*hd,const float*hx,const float*hb,const float*hs,const float*hc,const float*ha,float*hy,int B,int D,int N,int M){(void)cudaGetLastError();if(!hd||!hx||!hb||!hs||!hc||!ha||!hy||B<1||D<1||N<1||M<1)return 2;size_t zbd=(size_t)M*B*D*4,zbn=(size_t)M*B*N*4,zs=(size_t)B*D*N*4,zc=(size_t)B*N*4,za=(size_t)D*4,zy=(size_t)B*D*4;float *d=0,*x=0,*b=0,*s=0,*c=0,*a=0,*y=0;if(!cp(&d,hd,zbd)||!cp(&x,hx,zbd)||!cp(&b,hb,zbn)||!cp(&s,hs,zs)||!cp(&c,hc,zc)||!cp(&a,ha,za)||cudaMalloc(&y,zy)!=cudaSuccess){if(d)cudaFree(d);if(x)cudaFree(x);if(b)cudaFree(b);if(s)cudaFree(s);if(c)cudaFree(c);if(a)cudaFree(a);return 3;}ssm_replay_k<<<(B*D+127)/128,128>>>(d,x,b,s,c,a,y,B,D,N,M);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,zy,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(d);cudaFree(x);cudaFree(b);cudaFree(s);cudaFree(c);cudaFree(a);cudaFree(y);return ok?1:3;}
 '''
 
 
@@ -2922,8 +2938,8 @@ def _synthesize_paged_kv_read_cuda() -> str:
     return r'''#include <cuda_runtime.h>
 __global__ void kvread(const float*pages,const int*table,float*out,long start,long tokens,int page_size,int H,int D){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=tokens*(long)H*D;if(z>=n)return;int d=z%D,h=(z/D)%H;long t=z/(D*H),logical=start+t,lp=logical/page_size,off=logical%page_size,pp=table[lp];out[z]=pages[(((long)pp*page_size+off)*H+h)*D+d];}
 static int alloc_copy(const float*hp,const int*ht,float**p,int**t,float**o,int P,int LP,int PS,int H,int D,long tokens){size_t pb=(size_t)P*PS*H*D*4,tb=(size_t)LP*4,ob=(size_t)tokens*H*D*4;if(cudaMalloc(p,pb)||cudaMalloc(t,tb)||cudaMalloc(o,ob))return 3;if(cudaMemcpy(*p,hp,pb,cudaMemcpyHostToDevice)||cudaMemcpy(*t,ht,tb,cudaMemcpyHostToDevice))return 3;return 1;}
-extern "C" int tessera_nvidia_paged_kv_read_f32(const float*hp,const int*ht,float*ho,int P,int LP,int PS,int H,int D,long start,long end){if(!hp||!ht||!ho||P<1||LP<1||PS<1||H<1||D<1||start<0||end<=start||end>(long)LP*PS)return 2;long tokens=end-start;size_t ob=(size_t)tokens*H*D*4;float *p=0,*o=0;int*t=0;int ok=alloc_copy(hp,ht,&p,&t,&o,P,LP,PS,H,D,tokens);if(ok==1){long n=tokens*(long)H*D;kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(ho,o,ob,cudaMemcpyDeviceToHost)==cudaSuccess?1:3;}cudaFree(p);cudaFree(t);cudaFree(o);return ok;}
-extern "C" int tessera_nvidia_paged_kv_read_f32_timed(const float*hp,const int*ht,float*ho,int P,int LP,int PS,int H,int D,long start,long end,int reps,float*ms){if(!ms||reps<1||start<0||end<=start||end>(long)LP*PS)return 2;long tokens=end-start;size_t ob=(size_t)tokens*H*D*4;float*p=0,*o=0;int*t=0;int ok=alloc_copy(hp,ht,&p,&t,&o,P,LP,PS,H,D,tokens);cudaEvent_t a=0,b=0;long n=tokens*(long)H*D;if(ok==1){for(int i=0;i<20000;i++)kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)ok=3;}if(ok==1){cudaEventRecord(a);for(int i=0;i<reps;i++)kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);cudaEventRecord(b);cudaEventSynchronize(b);float total=0;if(cudaEventElapsedTime(&total,a,b)!=cudaSuccess)ok=3;else *ms=total/reps;}if(ok==1&&cudaMemcpy(ho,o,ob,cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);cudaFree(p);cudaFree(t);cudaFree(o);return ok;}
+extern "C" int tessera_nvidia_paged_kv_read_f32(const float*hp,const int*ht,float*ho,int P,int LP,int PS,int H,int D,long start,long end){(void)cudaGetLastError();if(!hp||!ht||!ho||P<1||LP<1||PS<1||H<1||D<1||start<0||end<=start||end>(long)LP*PS)return 2;long tokens=end-start;size_t ob=(size_t)tokens*H*D*4;float *p=0,*o=0;int*t=0;int ok=alloc_copy(hp,ht,&p,&t,&o,P,LP,PS,H,D,tokens);if(ok==1){long n=tokens*(long)H*D;kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(ho,o,ob,cudaMemcpyDeviceToHost)==cudaSuccess?1:3;}cudaFree(p);cudaFree(t);cudaFree(o);return ok;}
+extern "C" int tessera_nvidia_paged_kv_read_f32_timed(const float*hp,const int*ht,float*ho,int P,int LP,int PS,int H,int D,long start,long end,int reps,float*ms){(void)cudaGetLastError();if(!ms||reps<1||start<0||end<=start||end>(long)LP*PS)return 2;long tokens=end-start;size_t ob=(size_t)tokens*H*D*4;float*p=0,*o=0;int*t=0;int ok=alloc_copy(hp,ht,&p,&t,&o,P,LP,PS,H,D,tokens);cudaEvent_t a=0,b=0;long n=tokens*(long)H*D;if(ok==1){for(int i=0;i<20000;i++)kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);if(cudaGetLastError()!=cudaSuccess||cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)ok=3;}if(ok==1&&cudaEventRecord(a)!=cudaSuccess)ok=3;if(ok==1){for(int i=0;i<reps;i++)kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);float total=0;if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaGetLastError()!=cudaSuccess||cudaEventElapsedTime(&total,a,b)!=cudaSuccess)ok=3;else *ms=total/reps;}if(ok==1&&cudaMemcpy(ho,o,ob,cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);cudaFree(p);cudaFree(t);cudaFree(o);return ok;}
 '''
 
 
@@ -3002,6 +3018,14 @@ _gated_epilogue_artifacts: dict[str, str] = {}
 _fused_epilogue_artifacts: dict[str, str] = {}
 
 
+def _synthesize_relu_bias_cuda() -> str:
+    """ReLU epilogue with optional column bias (was an inline source in
+    `run_relu_bias_f32`; an emitter so the launch-integrity gate reaches it)."""
+    return r'''#include <cuda_runtime.h>
+__global__ void k(const float*x,const float*b,float*y,long n,int N){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float v=x[i]+(b?b[i%N]:0.f);y[i]=v>0.f?v:0.f;}}
+extern "C" int tessera_nvidia_relu_bias_f32(const float*hx,const float*hb,float*hy,long n,int N){(void)cudaGetLastError();if(!hx||!hy||n<1||N<1)return 2;size_t z=(size_t)n*4,bz=(size_t)N*4;float *x=0,*b=0,*y=0;int ok=0;if(cudaMalloc(&x,z)||cudaMalloc(&y,z)||cudaMemcpy(x,hx,z,cudaMemcpyHostToDevice)||(hb&&(cudaMalloc(&b,bz)||cudaMemcpy(b,hb,bz,cudaMemcpyHostToDevice))))goto done;k<<<(n+255)/256,256>>>(x,b,y,n,N);ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,z,cudaMemcpyDeviceToHost)==cudaSuccess;done:if(x)cudaFree(x);if(y)cudaFree(y);if(b)cudaFree(b);return ok?1:3;}'''
+
+
 def run_relu_bias_f32(x: Any, bias: Any = None) -> Any:
     """CUDA ReLU epilogue over an f32 matrix, with optional column bias."""
     import numpy as np
@@ -3011,9 +3035,7 @@ def run_relu_bias_f32(x: Any, bias: Any = None) -> Any:
     bb = None if bias is None else np.ascontiguousarray(bias, dtype=np.float32)
     if bb is not None and bb.shape != (xx.shape[1],):
         raise ValueError("NVIDIA ReLU epilogue bias must have shape [N]")
-    source = r'''#include <cuda_runtime.h>
-__global__ void k(const float*x,const float*b,float*y,long n,int N){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float v=x[i]+(b?b[i%N]:0.f);y[i]=v>0.f?v:0.f;}}
-extern "C" int tessera_nvidia_relu_bias_f32(const float*hx,const float*hb,float*hy,long n,int N){if(!hx||!hy||n<1||N<1)return 2;size_t z=(size_t)n*4,bz=(size_t)N*4;float *x=0,*b=0,*y=0;if(cudaMalloc(&x,z)||cudaMalloc(&y,z))return 3;if(cudaMemcpy(x,hx,z,cudaMemcpyHostToDevice))return 3;if(hb&&(cudaMalloc(&b,bz)||cudaMemcpy(b,hb,bz,cudaMemcpyHostToDevice)))return 3;k<<<(n+255)/256,256>>>(x,b,y,n,N);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(x);cudaFree(y);if(b)cudaFree(b);return ok?1:3;}'''
+    source = _synthesize_relu_bias_cuda()
     global _relu_bias_artifact
     if _relu_bias_artifact is None:
         _relu_bias_artifact = _nvidia_cuda_compile_fn(KernelSource(
@@ -3039,20 +3061,21 @@ def _synthesize_gated_epilogue_cuda(activation: str) -> tuple[str, str, str]:
         f'extern "C" __global__ void {kernel}(const float*g,const float*u,float*o,long n){{'
         "long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float v=g[i];"
         f"{snippet}o[i]=v*u[i];}}}}\n"
-        f'extern "C" int {entry}(const float*hg,const float*hu,float*ho,long n){{'
+        f'extern "C" int {entry}(const float*hg,const float*hu,float*ho,long n){{(void)cudaGetLastError();'
         "if(!hg||!hu||!ho||n<1)return 2;size_t z=(size_t)n*4;"
         "float *g=0,*u=0,*o=0;if(cudaMalloc(&g,z)||cudaMalloc(&u,z)||cudaMalloc(&o,z))return 3;"
         "if(cudaMemcpy(g,hg,z,cudaMemcpyHostToDevice)||cudaMemcpy(u,hu,z,cudaMemcpyHostToDevice))return 3;"
-        f"{kernel}<<<(n+255)/256,256>>>(g,u,o,n);int ok=cudaDeviceSynchronize()==cudaSuccess&&"
+        f"{kernel}<<<(n+255)/256,256>>>(g,u,o,n);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&"
         "cudaMemcpy(ho,o,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(g);cudaFree(u);cudaFree(o);"
         "return ok?1:3;}"
-        f'extern "C" int {entry}_timed(const float*hg,const float*hu,long n,int reps,float*ms){{'
+        f'extern "C" int {entry}_timed(const float*hg,const float*hu,long n,int reps,float*ms){{(void)cudaGetLastError();'
         "if(!hg||!hu||!ms||n<1||reps<1)return 2;size_t z=(size_t)n*4;"
         "float *g=0,*u=0,*o=0;cudaEvent_t a=0,b=0;if(cudaMalloc(&g,z)||cudaMalloc(&u,z)||cudaMalloc(&o,z))goto fail;"
         "if(cudaMemcpy(g,hg,z,cudaMemcpyHostToDevice)||cudaMemcpy(u,hu,z,cudaMemcpyHostToDevice))goto fail;"
         f"for(int warm=0;warm<100;warm++){kernel}<<<(n+255)/256,256>>>(g,u,o,n);"
-        "if(cudaDeviceSynchronize()||cudaEventCreate(&a)||cudaEventCreate(&b))goto fail;"
-        f"cudaEventRecord(a);for(int i=0;i<reps;i++){kernel}<<<(n+255)/256,256>>>(g,u,o,n);cudaEventRecord(b);cudaEventSynchronize(b);"
+        "if(cudaGetLastError()||cudaDeviceSynchronize()||cudaEventCreate(&a)||cudaEventCreate(&b)||cudaEventRecord(a))goto fail;"
+        f"for(int i=0;i<reps;i++){kernel}<<<(n+255)/256,256>>>(g,u,o,n);"
+        "if(cudaEventRecord(b)||cudaEventSynchronize(b)||cudaGetLastError())goto fail;"
         "{float all=0;if(cudaEventElapsedTime(&all,a,b))goto fail;*ms=all/reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(g);cudaFree(u);cudaFree(o);return 1;"
         "fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(g)cudaFree(g);if(u)cudaFree(u);if(o)cudaFree(o);return 3;}"
     )
@@ -3082,12 +3105,37 @@ def run_gated_epilogue_f32(gate: Any, up: Any, activation: str) -> Any:
     return out
 
 
+def _synthesize_fused_epilogue_cuda(activation: str | None) -> tuple[str, str]:
+    """``(entry, source)`` of the one-stage bias + activation epilogue (was an
+    inline source in `run_fused_epilogue_f32`; an emitter so the
+    launch-integrity gate reaches it)."""
+    from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
+    snippet = ("" if activation is None
+               else pointwise_snippet(activation, "v"))
+    entry = f"tessera_nvidia_fused_epilogue_{activation or 'identity'}"
+    source = (
+        "#include <cuda_runtime.h>\n#include <math.h>\n"
+        "__global__ void k(const float*x,const float*b,float*o,long n,int N){"
+        "long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){"
+        "float v=x[i]+(b?b[i%N]:0.f);"
+        f"{snippet}o[i]=v;}}}}\n"
+        f'extern "C" int {entry}(const float*hx,const float*hb,float*ho,long n,int N){{(void)cudaGetLastError();'
+        "if(!hx||!ho||n<1||N<1)return 2;size_t z=(size_t)n*4,bz=(size_t)N*4;"
+        "float *x=0,*b=0,*o=0;int ok=0;"
+        "if(cudaMalloc(&x,z)||cudaMalloc(&o,z)||cudaMemcpy(x,hx,z,cudaMemcpyHostToDevice)||"
+        "(hb&&(cudaMalloc(&b,bz)||cudaMemcpy(b,hb,bz,cudaMemcpyHostToDevice))))goto done;"
+        "k<<<(n+255)/256,256>>>(x,b,o,n,N);ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&"
+        "cudaMemcpy(ho,o,z,cudaMemcpyDeviceToHost)==cudaSuccess;"
+        "done:if(x)cudaFree(x);if(o)cudaFree(o);if(b)cudaFree(b);return ok?1:3;}"
+    )
+    return entry, source
+
+
 def run_fused_epilogue_f32(
     x: Any, bias: Any = None, activation: str | None = None,
 ) -> Any:
     """Apply optional column bias and activation in one generated CUDA stage."""
     import numpy as np
-    from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
     xx = np.ascontiguousarray(x, dtype=np.float32)
     bb = None if bias is None else np.ascontiguousarray(bias, dtype=np.float32)
     if xx.ndim != 2:
@@ -3096,25 +3144,8 @@ def run_fused_epilogue_f32(
         raise ValueError("NVIDIA fused epilogue bias must have shape [N]")
     if activation is None and bb is None:
         raise ValueError("NVIDIA fused epilogue requires bias or activation")
-    snippet = ("" if activation is None
-               else pointwise_snippet(activation, "v"))
     suffix = activation or "identity"
-    entry = f"tessera_nvidia_fused_epilogue_{suffix}"
-    source = (
-        "#include <cuda_runtime.h>\n#include <math.h>\n"
-        "__global__ void k(const float*x,const float*b,float*o,long n,int N){"
-        "long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){"
-        "float v=x[i]+(b?b[i%N]:0.f);"
-        f"{snippet}o[i]=v;}}}}\n"
-        f'extern "C" int {entry}(const float*hx,const float*hb,float*ho,long n,int N){{'
-        "if(!hx||!ho||n<1||N<1)return 2;size_t z=(size_t)n*4,bz=(size_t)N*4;"
-        "float *x=0,*b=0,*o=0;if(cudaMalloc(&x,z)||cudaMalloc(&o,z))return 3;"
-        "if(cudaMemcpy(x,hx,z,cudaMemcpyHostToDevice))return 3;"
-        "if(hb&&(cudaMalloc(&b,bz)||cudaMemcpy(b,hb,bz,cudaMemcpyHostToDevice)))return 3;"
-        "k<<<(n+255)/256,256>>>(x,b,o,n,N);int ok=cudaDeviceSynchronize()==cudaSuccess&&"
-        "cudaMemcpy(ho,o,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(x);cudaFree(o);"
-        "if(b)cudaFree(b);return ok?1:3;}"
-    )
+    entry, source = _synthesize_fused_epilogue_cuda(activation)
     artifact = _fused_epilogue_artifacts.get(suffix)
     if artifact is None:
         artifact = _nvidia_cuda_compile_fn(KernelSource(
@@ -3155,7 +3186,7 @@ def _synthesize_conv2d_nhwc_cuda() -> str:
     """Guarded direct NHWC x HWIO f32 convolution baseline."""
     return r'''#include <cuda_runtime.h>
 __global__ void conv(const float*x,const float*w,const float*b,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)B*OH*OW*CO;if(z>=n)return;int co=z%CO,ow=(z/CO)%OW,oh=(z/(CO*OW))%OH,bi=z/(CO*OW*OH);float v=b?b[co]:0.f;for(int kh=0;kh<KH;kh++){int ih=oh*SH-PH+kh*DH;if(ih<0||ih>=IH)continue;for(int kw=0;kw<KW;kw++){int iw=ow*SW-PW+kw*DW;if(iw<0||iw>=IW)continue;for(int ci=0;ci<CI;ci++)v+=x[((long)bi*IH*IW+ih*IW+iw)*CI+ci]*w[((long)kh*KW*CI+kw*CI+ci)*CO+co];}}y[z]=v;}
-extern "C" int tessera_nvidia_conv2d_nhwc_f32(const float*hx,const float*hw,const float*hb,float*hy,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW){if(!hx||!hw||!hy||B<1||IH<1||IW<1||CI<1||KH<1||KW<1||CO<1||OH<1||OW<1)return 2;size_t xb=(size_t)B*IH*IW*CI*4,wb=(size_t)KH*KW*CI*CO*4,yb=(size_t)B*OH*OW*CO*4,bb=(size_t)CO*4;float *x=0,*w=0,*b=0,*y=0;if(cudaMalloc(&x,xb)||cudaMalloc(&w,wb)||cudaMalloc(&y,yb))return 3;if(cudaMemcpy(x,hx,xb,cudaMemcpyHostToDevice)||cudaMemcpy(w,hw,wb,cudaMemcpyHostToDevice)){cudaFree(x);cudaFree(w);cudaFree(y);return 3;}if(hb&&(cudaMalloc(&b,bb)||cudaMemcpy(b,hb,bb,cudaMemcpyHostToDevice))){cudaFree(x);cudaFree(w);cudaFree(y);if(b)cudaFree(b);return 3;}long n=(long)B*OH*OW*CO;conv<<<(n+255)/256,256>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,yb,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(x);cudaFree(w);cudaFree(y);if(b)cudaFree(b);return ok?1:3;}'''
+extern "C" int tessera_nvidia_conv2d_nhwc_f32(const float*hx,const float*hw,const float*hb,float*hy,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW){(void)cudaGetLastError();if(!hx||!hw||!hy||B<1||IH<1||IW<1||CI<1||KH<1||KW<1||CO<1||OH<1||OW<1)return 2;size_t xb=(size_t)B*IH*IW*CI*4,wb=(size_t)KH*KW*CI*CO*4,yb=(size_t)B*OH*OW*CO*4,bb=(size_t)CO*4;float *x=0,*w=0,*b=0,*y=0;if(cudaMalloc(&x,xb)||cudaMalloc(&w,wb)||cudaMalloc(&y,yb))return 3;if(cudaMemcpy(x,hx,xb,cudaMemcpyHostToDevice)||cudaMemcpy(w,hw,wb,cudaMemcpyHostToDevice)){cudaFree(x);cudaFree(w);cudaFree(y);return 3;}if(hb&&(cudaMalloc(&b,bb)||cudaMemcpy(b,hb,bb,cudaMemcpyHostToDevice))){cudaFree(x);cudaFree(w);cudaFree(y);if(b)cudaFree(b);return 3;}long n=(long)B*OH*OW*CO;conv<<<(n+255)/256,256>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,yb,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(x);cudaFree(w);cudaFree(y);if(b)cudaFree(b);return ok?1:3;}'''
 
 
 def run_conv2d_nhwc_f32(
@@ -3209,6 +3240,106 @@ _ssm_replay_device_artifact: str | None = None
 _ssm_replay_native_packages: dict[tuple[int, int, int, int, int], tuple[Any, Any]] = {}
 
 
+def _ssm_replay_device_source() -> KernelSource:
+    """The ReplaySSM ring runtime source `NvidiaReplayDeviceState` compiles (and
+    the async ring's Decision #11 identity digests), memoized while its emitter
+    is unchanged."""
+    return memoized(globals(), "_ssm_replay_device_source_uncached")
+
+
+def _ssm_replay_device_source_uncached() -> KernelSource:
+    return KernelSource(source=_synthesize_ssm_replay_device_cuda(), entry="cr",
+                        lang=_LANG, spec=SpecPolicy.DYNAMIC,
+                        shape_key=("ssm-replay-device",))
+
+
+def _ssm_replay_packages(batch: int, channels: int, state_dim: int,
+                         capacity: int, async_slots: int) -> tuple[Any, Any]:
+    """The compiler-generated decode/flush images the ring launches."""
+    from ..nvidia_native import package_replay_ssm_kernels
+
+    key = (batch, channels, state_dim, capacity, async_slots)
+    packages = _ssm_replay_native_packages.get(key)
+    if packages is None:
+        packages = package_replay_ssm_kernels(
+            batch=batch, channels=channels, state_dim=state_dim,
+            capacity=capacity, async_slots=async_slots,
+            pipeline_name="tessera-nvidia-pipeline-sm120")
+        _ssm_replay_native_packages[key] = packages
+    return packages
+
+
+def _native_package_identity(package: Any) -> dict[str, str]:
+    """A `tessera-nvidia-opt` package image as the driver receives it: PTX text
+    by the emitted-source PTX rule, any other payload by its bytes."""
+    from tessera.compiler.emitted_code_identity import (
+        ptx_identity,
+        source_identity,
+    )
+
+    entry = str(package.descriptor.entry_symbol)
+    payload = package.image.payload
+    data = payload if isinstance(payload, (bytes, bytearray)) else str(payload).encode()
+    text = bytes(data).rstrip(b"\0").decode("utf-8", "replace")
+    if ".entry" in text or ".visible" in text:
+        return ptx_identity(text, entry=entry, generator="tessera-nvidia-opt")
+    return source_identity(lang="nvidia-image", entry=entry,
+                           units=[(entry, bytes(data))],
+                           build=("driver-load",), generator="tessera-nvidia-opt")
+
+
+def ssm_replay_ring_identity(batch: int, channels: int, state_dim: int,
+                             capacity: int, async_slots: int) -> Any:
+    """Decision #11 identity of the sm_120 ReplaySSM ``async_ring`` route
+    (``benchmark_serving.py`` stamps it into the ``ssm_replay_decode`` rows,
+    sync ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27``): the ring runtime source
+    plus the decode and flush images it loads."""
+    from tessera.compiler.emit.autotune import RouteIdentity
+    from tessera.compiler.emitted_code_identity import composite_identity
+
+    def build() -> dict[str, str]:
+        decode, flush = _ssm_replay_packages(batch, channels, state_dim,
+                                             capacity, async_slots)
+        return composite_identity({
+            "ring": _cuda_source_identity(_ssm_replay_device_source(), "f32"),
+            "decode": _native_package_identity(decode),
+            "flush": _native_package_identity(flush),
+        })
+
+    return RouteIdentity("async_ring", build)
+
+
+def conv2d_route_identities() -> dict[str, Any]:
+    """Decision #11 identities of the three sm_120 ``conv2d`` routes
+    ``record_autotune_corpus.py`` races (``run_conv2d_resident_candidate``):
+    ``direct`` / ``shared`` run one resident-stage entry; ``im2col_tf32`` runs
+    the resident im2col (and epilogue) plus the shipped GEMM's tf32 device
+    entry, identified as the composed lanes identify it. No production path
+    reads these rows yet; they carry the identity so the first reader inherits
+    the contract rather than re-deriving it."""
+    from tessera import runtime as rt
+    from tessera.compiler.emit.autotune import RouteIdentity
+    from tessera.compiler.emitted_code_identity import composite_identity
+
+    def stages(entry: str) -> Any:
+        return lambda: {**_cuda_source_identity(_resident_ops_source(), "f32"),
+                        "route_entries": entry}
+
+    def im2col() -> dict[str, str]:
+        return composite_identity({
+            "gemm": _gemm_runtime_identity(rt._NVIDIA_GEMM_SYMBOLS["float32"] + "_device"),
+            "stages": {**_cuda_source_identity(_resident_ops_source(), "f32"),
+                       "route_entries": "tessera_nvidia_resident_im2col,"
+                                        "tessera_nvidia_resident_epilogue"},
+        })
+
+    return {
+        "direct": RouteIdentity("direct", stages("tessera_nvidia_resident_conv_direct")),
+        "shared": RouteIdentity("shared", stages("tessera_nvidia_resident_conv_shared")),
+        "im2col_tf32": RouteIdentity("im2col_tf32", im2col),
+    }
+
+
 def _synthesize_ssm_replay_device_cuda() -> str:
     """Persistent scalar-A ReplaySSM context; inputs stay in CUDA allocations."""
     return r'''#include <cuda_runtime.h>
@@ -3242,16 +3373,13 @@ class NvidiaReplayDeviceState:
     def __init__(self, s0: Any, a: Any, capacity: int, async_slots: int = 3):
         import numpy as np
         global _ssm_replay_device_artifact
-        from ..nvidia_native import package_replay_ssm_kernels
         s0=np.ascontiguousarray(s0,np.float32); a=np.ascontiguousarray(a,np.float32)
         self.B,self.D,self.N=s0.shape; self.capacity=capacity
         if async_slots < 2: raise ValueError("ReplaySSM async ring requires at least two slots")
-        if _ssm_replay_device_artifact is None: _ssm_replay_device_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_ssm_replay_device_cuda(),entry="cr",lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("ssm-replay-device",)))
-        key=(self.B,self.D,self.N,capacity,async_slots)
-        packages=_ssm_replay_native_packages.get(key)
-        if packages is None:
-            packages=package_replay_ssm_kernels(batch=self.B,channels=self.D,state_dim=self.N,capacity=capacity,async_slots=async_slots,pipeline_name="tessera-nvidia-pipeline-sm120")
-            _ssm_replay_native_packages[key]=packages
+        # Cached by the content of the source compiled (`_emitted_artifact`), so
+        # the ring's Decision #11 identity always names the runtime that runs.
+        _ssm_replay_device_artifact=_emitted_artifact(_ssm_replay_device_source(), "f32")
+        packages=_ssm_replay_packages(self.B,self.D,self.N,capacity,async_slots)
         self.decode_package: Any
         self.flush_package: Any
         self.decode_package,self.flush_package=packages
@@ -3696,6 +3824,32 @@ _nvidia_paged_attention_route_evidence: dict[
     tuple[Any, ...], dict[str, float]] = {}
 
 
+#: The two sm_120 paged-attention serving routes, by corpus mode name, and the
+#: resident-stage entries each launches.
+_PAGED_ATTENTION_ROUTES = {
+    "fused_paged_attention": "tessera_nvidia_resident_paged_attention",
+    "staged_paged_attention": ("tessera_nvidia_resident_paged,"
+                               "tessera_nvidia_resident_matmul_f32,"
+                               "tessera_nvidia_resident_scale_mask,"
+                               "tessera_nvidia_resident_softmax"),
+}
+
+
+def paged_attention_route_identities() -> dict[str, Any]:
+    """Decision #11 identities of the sm_120 paged-attention routes: both run
+    entries of the Python-emitted resident-stage library, so each is that
+    source's identity plus the entries the route launches (sync
+    ``AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27``)."""
+    from tessera.compiler.emit.autotune import RouteIdentity
+
+    def build(entries: str) -> Any:
+        return lambda: {**_cuda_source_identity(_resident_ops_source(), "f32"),
+                        "route_entries": entries}
+
+    return {name: RouteIdentity(name, build(entries))
+            for name, entries in _PAGED_ATTENTION_ROUTES.items()}
+
+
 def _paged_attention_corpus_winner(
     q_len: int, heads: int, tokens: int, dim: int,
 ) -> str | None:
@@ -3712,9 +3866,12 @@ def _paged_attention_corpus_winner(
     # The SAME admission rule as `corpus_winner` and the ROCm twin
     # (`cache/paged_kv.py::_rocm_paged_attention_corpus_winner`): a row the
     # corpus marks unseparated, selector-ineligible or an unproven ranking is
-    # not a dispatch hint.
+    # not a dispatch hint. And the same Decision #11 contract as the registry
+    # arbiter: the row must have timed both routes live now, each running the
+    # code the row stamped (`route_record_matches`, fail closed).
     if (record is not None and at.record_is_admissible(record)
-            and record.winner in {"fused_paged_attention", "staged_paged_attention"}):
+            and record.winner in _PAGED_ATTENTION_ROUTES
+            and at.route_record_matches(record, paged_attention_route_identities())):
         return record.winner.removesuffix("_paged_attention")
     return None
 
@@ -3983,8 +4140,8 @@ def _synthesize_posenc_cuda() -> str:
 __global__ void rope_k(const float*x,const float*t,float*o,long n){long p=(long)blockIdx.x*blockDim.x+threadIdx.x;if(p<n/2){long e=2*p;float a=t[e],c=cosf(a),s=sinf(a),xe=x[e],xo=x[e+1];o[e]=xe*c-xo*s;o[e+1]=xe*s+xo*c;}}
 __global__ void alibi_k(const float*s,float*o,long H,long S){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,n=H*S*S;if(x<n){long j=x%S,i=(x/S)%S,h=x/(S*S);o[x]=s[h]*(float)(j-i);}}
 static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
-extern "C" int tessera_nvidia_rope_f32(const float*x,const float*t,float*o,long n){float *dx=0,*dt=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||!ac(&dt,t,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;rope_k<<<(n/2+255)/256,256>>>(dx,dt,d,n);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(d);return ok?1:3;}
-extern "C" int tessera_nvidia_alibi_f32(const float*s,float*o,long H,long S){float *ds=0,*d=0;size_t n=H*S*S,z=n*4;if(!ac(&ds,s,H*4)||cudaMalloc(&d,z)!=cudaSuccess)return 3;alibi_k<<<(n+255)/256,256>>>(ds,d,H,S);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(ds);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_rope_f32(const float*x,const float*t,float*o,long n){(void)cudaGetLastError();float *dx=0,*dt=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||!ac(&dt,t,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;rope_k<<<(n/2+255)/256,256>>>(dx,dt,d,n);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_alibi_f32(const float*s,float*o,long H,long S){(void)cudaGetLastError();float *ds=0,*d=0;size_t n=H*S*S,z=n*4;if(!ac(&ds,s,H*4)||cudaMalloc(&d,z)!=cudaSuccess)return 3;alibi_k<<<(n+255)/256,256>>>(ds,d,H,S);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(ds);cudaFree(d);return ok?1:3;}
 '''
 
 
@@ -4037,10 +4194,10 @@ __global__ void cf_if(const float*f,const float*x,float*o,long n,float ta,float 
 __global__ void cf_while(const float*x,float*o,long n,int m,float limit,float a,float b){__shared__ int active;long i=threadIdx.x;if(i<n)o[i]=x[i];__syncthreads();for(int t=0;t<m;++t){if(i==0)active=o[0]<limit;__syncthreads();if(!active)break;if(i<n)o[i]=a*o[i]+b;__syncthreads();}}
 __global__ void cf_scan(const float*init,const float*xs,float*c,float*ys,long n,int trip,float a){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float v=init[i];for(int t=0;t<trip;++t){v=a*v+xs[(long)t*n+i];ys[(long)t*n+i]=v;}c[i]=v;}}
 static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
-extern "C" int tessera_nvidia_control_for_f32(const float*x,float*o,long n,int t,float a,float b){float *dx=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_for<<<(n+255)/256,256>>>(dx,d,n,t,a,b);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
-extern "C" int tessera_nvidia_control_if_f32(const float*f,const float*x,float*o,long n,float ta,float tb,float ea,float eb){float *df=0,*dx=0,*d=0;size_t z=n*4;if(!ac(&df,f,4)||!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_if<<<(n+255)/256,256>>>(df,dx,d,n,ta,tb,ea,eb);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(df);cudaFree(dx);cudaFree(d);return ok?1:3;}
-extern "C" int tessera_nvidia_control_while_f32(const float*x,float*o,long n,int m,float l,float a,float b){if(n<1||n>1024)return 2;float *dx=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_while<<<1,n>>>(dx,d,n,m,l,a,b);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
-extern "C" int tessera_nvidia_control_scan_f32(const float*i,const float*x,float*c,float*y,long n,int t,float a){float *di=0,*dx=0,*dc=0,*dy=0;size_t z=n*4,zs=z*t;if(!ac(&di,i,z)||!ac(&dx,x,zs)||cudaMalloc(&dc,z)!=cudaSuccess||cudaMalloc(&dy,zs)!=cudaSuccess)return 3;cf_scan<<<(n+255)/256,256>>>(di,dx,dc,dy,n,t,a);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(c,dc,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(y,dy,zs,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(di);cudaFree(dx);cudaFree(dc);cudaFree(dy);return ok?1:3;}
+extern "C" int tessera_nvidia_control_for_f32(const float*x,float*o,long n,int t,float a,float b){(void)cudaGetLastError();float *dx=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_for<<<(n+255)/256,256>>>(dx,d,n,t,a,b);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_control_if_f32(const float*f,const float*x,float*o,long n,float ta,float tb,float ea,float eb){(void)cudaGetLastError();float *df=0,*dx=0,*d=0;size_t z=n*4;if(!ac(&df,f,4)||!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_if<<<(n+255)/256,256>>>(df,dx,d,n,ta,tb,ea,eb);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(df);cudaFree(dx);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_control_while_f32(const float*x,float*o,long n,int m,float l,float a,float b){(void)cudaGetLastError();if(n<1||n>1024)return 2;float *dx=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_while<<<1,n>>>(dx,d,n,m,l,a,b);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_control_scan_f32(const float*i,const float*x,float*c,float*y,long n,int t,float a){(void)cudaGetLastError();float *di=0,*dx=0,*dc=0,*dy=0;size_t z=n*4,zs=z*t;if(!ac(&di,i,z)||!ac(&dx,x,zs)||cudaMalloc(&dc,z)!=cudaSuccess||cudaMalloc(&dy,zs)!=cudaSuccess)return 3;cf_scan<<<(n+255)/256,256>>>(di,dx,dc,dy,n,t,a);int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(c,dc,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(y,dy,zs,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(di);cudaFree(dx);cudaFree(dc);cudaFree(dy);return ok?1:3;}
 '''
 
 
@@ -4690,15 +4847,16 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         "  if (cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
         "  if (cudaMalloc(&dB,szB)!=cudaSuccess){cudaFree(dA);return 3;}\n"
         "  if (cudaMalloc(&dD,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dB);return 3;}\n"
-        "  cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);\n"
-        "  cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice);\n"
-        "  if (hbias){ if (cudaMalloc(&dbias,szBias)!=cudaSuccess){cudaFree(dA);cudaFree(dB);cudaFree(dD);return 3;}\n"
-        "    cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice); }\n"
+        "  if (hbias){ if (cudaMalloc(&dbias,szBias)!=cudaSuccess){cudaFree(dA);cudaFree(dB);cudaFree(dD);return 3;} }\n"
+        "  int ok = (cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice) ||\n"
+        "            cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice) ||\n"
+        "            (hbias && cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice))) ? 3 : 1;\n"
         f"  {launch};\n"
+        "  if (ok==1) {\n"
         f"  {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
-        "  int ok = (cudaGetLastError()==cudaSuccess &&\n"
-        "            cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
-        "  if (ok==1) cudaMemcpy(hD,dD,szO,cudaMemcpyDeviceToHost);\n"
+        "  ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "        cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3; }\n"
+        "  if (ok==1 && cudaMemcpy(hD,dD,szO,cudaMemcpyDeviceToHost)) ok = 3;\n"
         "  cudaFree(dA); cudaFree(dB); cudaFree(dD); if (dbias) cudaFree(dbias);\n"
         "  return ok;\n"
         "}\n"
@@ -5006,14 +5164,15 @@ def _synthesize_mma_attn_16_cuda(storage: str = "f16") -> str:
         "  if (cudaMalloc(&dK,szK)!=cudaSuccess){cudaFree(dQ);return 3;}\n"
         "  if (cudaMalloc(&dV,szV)!=cudaSuccess){cudaFree(dQ);cudaFree(dK);return 3;}\n"
         "  if (cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dQ);cudaFree(dK);cudaFree(dV);return 3;}\n"
-        "  cudaMemcpy(dQ,hQ,szQ,cudaMemcpyHostToDevice);\n"
-        "  cudaMemcpy(dK,hK,szK,cudaMemcpyHostToDevice);\n"
-        "  cudaMemcpy(dV,hV,szV,cudaMemcpyHostToDevice);\n"
+        "  int ok = (cudaMemcpy(dQ,hQ,szQ,cudaMemcpyHostToDevice) ||\n"
+        "            cudaMemcpy(dK,hK,szK,cudaMemcpyHostToDevice) ||\n"
+        "            cudaMemcpy(dV,hV,szV,cudaMemcpyHostToDevice)) ? 3 : 1;\n"
+        "  if (ok==1) {\n"
         f"  cudaFuncSetAttribute({e}_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem);\n"
         f"  {e}_kernel<<<dim3((M+15)/16),dim3(32),smem>>>(dQ,dK,dV,dO,M,Nk,D,Dv,scale,causal);\n"
-        "  int ok = (cudaGetLastError()==cudaSuccess &&\n"
-        "            cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
-        "  if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "  ok = (cudaGetLastError()==cudaSuccess &&\n"
+        "        cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3; }\n"
+        "  if (ok==1 && cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost)) ok = 3;\n"
         "  cudaFree(dQ); cudaFree(dK); cudaFree(dV); cudaFree(dO);\n"
         "  return ok;\n"
         "}\n"
@@ -5099,7 +5258,7 @@ def _synthesize_mma_attn_lowp_cuda(storage: str) -> str:
         f"cudaFuncSetAttribute({e}_kernel,cudaFuncAttributeMaxDynamicSharedMemorySize,sh);"
         f"{e}_kernel<<<(M+15)/16,32,sh>>>(dq,dk,dv,dout,M,Nk,D,Dv,scale,causal);"
         "int ok=cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess?1:3;"
-        "if(ok==1)cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost);"
+        "if(ok==1&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost))ok=3;"
         "cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);return ok;}\n"
         f'extern "C" float {e}_device_ms(const {ctype}*q,const {ctype}*k,const {ctype}*v,'
         "int M,int Nk,int D,int Dv,float scale,int causal,int warmup,int reps){(void)cudaGetLastError();"
@@ -5337,10 +5496,10 @@ def _synthesize_mma_gated_cuda(storage: str, act: str, *,
         f"  {ctype} *dA=0,*dWg=0,*dWu=0; float* dO=0;\n"
         "  if(cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
         "  if(cudaMalloc(&dWg,szW)!=cudaSuccess||cudaMalloc(&dWu,szW)!=cudaSuccess||cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return 3;}\n"
-        "  cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice);cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice);\n"
-        f"  {launch}; {e}_kernel<<<{launch_args}>>>(dA,dWg,dWu,dO,M,H,K);\n"
-        "  int ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3;\n"
-        "  if(ok==1)cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "  int ok=(cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice)||cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice)||cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice))?3:1;\n"
+        f"  {launch}; if(ok==1){{ {e}_kernel<<<{launch_args}>>>(dA,dWg,dWu,dO,M,H,K);\n"
+        "  ok=(cudaGetLastError()==cudaSuccess&&cudaDeviceSynchronize()==cudaSuccess)?1:3; }\n"
+        "  if(ok==1&&cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost))ok=3;\n"
         "  cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return ok;\n}\n"
         f'extern "C" float {e}_device_ms(const {ctype}*hA,const {ctype}*hWg,'
         f'const {ctype}*hWu,int M,int H,int K,int warmup,int reps){{(void)cudaGetLastError();'

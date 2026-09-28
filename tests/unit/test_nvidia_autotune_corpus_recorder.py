@@ -84,6 +84,11 @@ def recorder_env(tmp_path, monkeypatch, request):
                         lambda x, w, route, **k: (None, {"direct": 1.0,
                                                          "shared": 2.0,
                                                          "im2col_tf32": 3.0}[route]))
+    # The conv2d routes carry identities (AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27);
+    # `im2col_tf32`'s needs the shipped GEMM library, absent off the box.
+    monkeypatch.setattr(nvidia_cuda, "conv2d_route_identities", lambda: {
+        name: at.RouteIdentity(name, lambda name=name: {"fake_build": name})
+        for name in ("direct", "shared", "im2col_tf32")})
     return corpus, rocm_evidence, mm_bucket
 
 
@@ -138,6 +143,34 @@ def test_recorder_keeps_other_devices_and_replaces_stale_rows(
     assert served_owned
     for key in served_owned:
         assert "compiler_fingerprint" in cache._store[key].evidence
+    # The conv2d rows carry the identity of every route they timed.
+    conv = [cache._store[k] for k in served_owned if k[2] == "conv2d"]
+    assert conv and all(
+        rec.evidence["delegate_identities"] == {
+            name: {"fake_build": name} for name in ("direct", "shared", "im2col_tf32")}
+        for rec in conv)
+
+
+def test_recorder_refuses_a_conv2d_row_with_an_unidentifiable_route(
+        recorder_env, monkeypatch, capsys):
+    """A conv2d route that cannot be identified (on the box: the shipped GEMM
+    library missing, so `im2col_tf32` has no identity) leaves its row
+    unstamped, and the recorder refuses to write it."""
+    from tessera.compiler.emit import autotune as at
+    from tessera.compiler.emit import nvidia_cuda
+
+    corpus, _, _ = recorder_env
+    before = corpus.read_text()
+    monkeypatch.setattr(nvidia_cuda, "conv2d_route_identities", lambda: {
+        "direct": at.RouteIdentity("direct", lambda: {"fake_build": "direct"}),
+        "shared": at.RouteIdentity("shared", lambda: {"fake_build": "shared"}),
+        "im2col_tf32": at.RouteIdentity("im2col_tf32", lambda: None)})
+    recorder = _load_recorder()
+    monkeypatch.setattr(sys, "argv", ["record_autotune_corpus.py", *_ARGS])
+    assert recorder.main() == 1
+    out = capsys.readouterr().out
+    assert "REFUSING TO WRITE" in out and "im2col_tf32" in out
+    assert corpus.read_text() == before
 
 
 @pytest.mark.parametrize("recorder_env", [True], indirect=True)

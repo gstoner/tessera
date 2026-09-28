@@ -1,0 +1,31 @@
+lost []
+new []
+rows changed 8 unchanged 116
+changed by device/op: {('rocm:gfx1151', 'paged_kv_decode'): 8}
+rows outside the selection byte-identical: True 116
+winner changes 0
+sm120 registry rows 96 selector_eligible 38
+timed candidates with no identity (all rows) 22
+   nvidia:sm_120 conv2d [1, 32, 32, 32, 3, 3, 64] device: direct
+   nvidia:sm_120 conv2d [1, 32, 32, 32, 3, 3, 64] device: im2col_tf32
+   nvidia:sm_120 conv2d [1, 32, 32, 32, 3, 3, 64] device: shared
+   nvidia:sm_120 conv2d [1, 64, 64, 64, 3, 3, 64] device: direct
+   nvidia:sm_120 conv2d [1, 64, 64, 64, 3, 3, 64] device: im2col_tf32
+   nvidia:sm_120 conv2d [1, 64, 64, 64, 3, 3, 64] device: shared
+   nvidia:sm_120 paged_kv_decode [1, 8, 128, 64] device: fused_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 128, 64] device: staged_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 2048, 64] device: fused_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 2048, 64] device: staged_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 512, 64] device: fused_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 512, 64] device: staged_paged_attention
+   nvidia:sm_120 ssm_replay_decode [1, 128, 64] device: async_ring
+   nvidia:sm_120 ssm_replay_decode [1, 256, 128] device: async_ring
+   nvidia:sm_120 paged_kv_decode [1, 8, 128, 64] end_to_end: fused_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 128, 64] end_to_end: staged_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 2048, 64] end_to_end: fused_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 2048, 64] end_to_end: staged_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 512, 64] end_to_end: fused_paged_attention
+   nvidia:sm_120 paged_kv_decode [1, 8, 512, 64] end_to_end: staged_paged_attention
+   nvidia:sm_120 ssm_replay_decode [1, 128, 64] end_to_end: async_ring
+   nvidia:sm_120 ssm_replay_decode [1, 256, 128] end_to_end: async_ring
+sm120 registry rows with unmeasured candidates 0

@@ -25,6 +25,8 @@ from typing import Any, Callable, Optional, Tuple, Union
 
 import numpy as np
 
+from tessera._route_receipts import native_attempt, public_route
+
 from tessera.ga.coordinates import OrthogonalCoordinates, coordinate_error
 from tessera.ga.multivector import Multivector
 from tessera.ga.ops import (
@@ -38,6 +40,7 @@ from tessera.ga.signature import Cl, TesseraAlgebraError
 # Pointwise HodgeStar
 # ---------------------------------------------------------------------------
 
+@public_route("ga:hodge_star")
 def hodge_star(mv: Multivector) -> Multivector:
     """Hodge star ``⋆ω = reverse(ω) · I`` where ``I`` is the pseudoscalar.
 
@@ -322,6 +325,7 @@ def _wedge_left_basis(
     return out
 
 
+@public_route("ga:ext_deriv")
 def ext_deriv(field: MultivectorField) -> MultivectorField:
     """Exterior derivative ``dω`` of a multivector field.
 
@@ -356,6 +360,7 @@ def ext_deriv(field: MultivectorField) -> MultivectorField:
     return field.with_values(out / weights)
 
 
+@public_route("ga:vec_deriv")
 def vec_deriv(field: MultivectorField) -> MultivectorField:
     """Geometric gradient ``∂F = Σ_i e_i · ∂_i F``.
 
@@ -434,6 +439,7 @@ def codifferential_output_signs(algebra: Cl) -> np.ndarray:
     )
 
 
+@public_route("ga:codiff")
 def codiff(field: MultivectorField) -> MultivectorField:
     """Codifferential ``δω = (-1)^(n(k+1)+1) ⋆d⋆ω`` for a sampled field.
 
@@ -514,6 +520,7 @@ _FIELD_OP_BRIDGE_OP_NAME = {
 }
 
 
+@native_attempt
 def _try_apple_gpu_field_op_cl30_f32(
     field: "MultivectorField", symbol: str,
 ) -> "Optional[MultivectorField]":
@@ -573,6 +580,7 @@ def _try_apple_gpu_field_op_cl30_f32(
 # Integral — Riemann sum over a Manifold
 # ---------------------------------------------------------------------------
 
+@public_route("ga:integral")
 def integral(
     integrand: Union[Callable[[np.ndarray], Multivector], MultivectorField],
     manifold: Any,
@@ -643,6 +651,7 @@ def integral(
     return np.einsum("i,ij->j", weights, sample_arr)
 
 
+@native_attempt
 def _try_apple_gpu_integral_cl30_f32(
     field: "MultivectorField", weights: np.ndarray,
 ) -> "Optional[np.ndarray]":

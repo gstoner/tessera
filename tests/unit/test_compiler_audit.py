@@ -282,15 +282,29 @@ def test_structural_aliases_reuse_existing_tile_target_evidence() -> None:
         assert row.cells["target_ir"].status in target_statuses, op_name
 
 
-def test_domain_variants_reuse_existing_tile_target_evidence() -> None:
-    """Domain parameterizations should not look like separate codegen gaps."""
+def test_domain_variant_without_a_rewrite_does_not_borrow_evidence() -> None:
+    """A domain variant borrows the canonical op's Tile/Target evidence only
+    when a compiler rewrite carries it onto that op.
 
+    TILE-LATENT-DEFECTS-2026-09-27: this test used to lock ``ntk_rope`` to
+    rope's ``fused`` / ``device_verified_*`` cells through the audit alias
+    ``ntk_rope -> rope``. No pass rewrites ``tessera.ntk_rope`` to
+    ``tessera.rope`` and every rope consumer matches the literal op name, so
+    the frontend-emitted op reaches no lowering; the row must not claim one.
+    When the canonicalization lands (ODS triage WIRE slice 1), re-add the
+    alias together with a lit fixture proving the rewrite, and flip this test.
+    """
+
+    assert "ntk_rope" not in audit._DOMAIN_BACKEND_ALIASES
     row = audit.support_row_for("ntk_rope")
-    assert row.cells["tile_ir"].status == "fused"
-    assert row.cells["target_ir"].status in {
+    assert row.cells["tile_ir"].status not in {"fused", "complete"}
+    assert row.cells["target_ir"].status not in {
         "device_verified_jit",
         "device_verified_abi",
+        "fused",
     }
+    rope = audit.support_row_for("rope")
+    assert rope.cells["tile_ir"].status == "fused"
 
 
 def test_x86_and_rocm_native_manifest_rows_close_tile_ir(support_rows) -> None:

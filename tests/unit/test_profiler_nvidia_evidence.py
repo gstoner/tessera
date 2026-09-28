@@ -56,7 +56,7 @@ def _timing(*, environment: str = "wsl2", event: float = 24_000.0, device: float
 def _image(duration: float, *, instrumented: bool, architecture: str = "sm_120") -> dict:
     return {
         "architecture": architecture, "kernel_name": "ssd", "semantic_sha256": "s" * 64,
-        "image_sha256": _IMAGE, "isa_sha256": "i" * 64, "duration_ns": duration,
+        "image_sha256": _IMAGE, "isa_sha256": "e" * 64, "duration_ns": duration,
         "clock_source": "cuda_event", "instrumented": instrumented,
         "calibration_sample_id": "sm120-serial-0", "resources": {"registers": 40},
     }

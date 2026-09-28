@@ -4382,6 +4382,83 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="EVIDENCE-GOVERNANCE-GATES-2026-09-27",
         language="python", status="implemented",
     ),
+    DiagnosticCode(
+        code="EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN",
+        pass_origin="tessera.compiler.evidence_envelope.read_evidence_packet",
+        severity="error",
+        summary=(
+            "An evidence packet names a schema no registered evidence family "
+            "owns, or a consumer that pinned one family was handed another."
+        ),
+        fix_hint=(
+            "Register the family (schema, validator, vocabulary, routes, timing "
+            "domains, projection) in evidence_envelope before any consumer reads it."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="EVIDENCE_ENVELOPE_INCOMPLETE",
+        pass_origin="tessera.compiler.evidence_envelope.read_evidence_packet",
+        severity="error",
+        summary=(
+            "An evidence packet lacks, or malforms, a field the shared envelope "
+            "requires: artifact or compiler sha256, source commit, worktree state "
+            "as a bool, execution environment, a declared timing domain, sample "
+            "id, reasons as a list of tags, or its packet digest. Absence is "
+            "refused, never defaulted."
+        ),
+        fix_hint="Re-record the packet with its family's recorder; never add fields by hand.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="EVIDENCE_ENVELOPE_CONTRADICTED",
+        pass_origin="tessera.compiler.evidence_envelope.read_evidence_packet",
+        severity="error",
+        summary=(
+            "An evidence packet's promotion eligibility disagrees with its refusal "
+            "causes, or it is promotion-eligible on an invalid clock, from a dirty "
+            "tree, without naming its image in its timing sample, or on an "
+            "undeclared route or tag."
+        ),
+        fix_hint="Do not edit eligibility; re-record, or fix the family's derivation.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="ROUTE_RECEIPT_ORPHAN_DISPATCH",
+        pass_origin="tessera._route_receipts.RouteReceiptLog.refusal",
+        severity="error",
+        summary=(
+            "A native GA/EBM dispatch ran while no public primitive's receipt "
+            "frame was open, so the captured span cannot say which call it "
+            "served; the span's route is reported as unattributed."
+        ),
+        fix_hint=(
+            "Decorate the public caller with @public_route (test_route_receipts "
+            "names undecorated callers of _try_* helpers)."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="ROUTE_RECEIPT_EMPTY",
+        pass_origin="tessera._route_receipts.RouteReceiptLog.refusal",
+        severity="error",
+        summary=(
+            "A route-receipt capture saw no public GA/EBM primitive call, so it "
+            "attributes nothing; an empty capture is never read as a reference route."
+        ),
+        fix_hint="Capture around the calls being attributed.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
+        sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
 )
 
 

@@ -465,6 +465,14 @@ matches its module fails generation. Read the counts there.
    record); open: re-measure the affected packets on their own boxes.
 2. Native timing: DEVICE-CLOCK-DISCIPLINE (NVIDIA), TPROF-ROCM-TIME-1 (ROCm),
    dual-clock + MPSGraph timer (Apple) → EVIDENCE-PACKET-1 → W5.2.
+   **EVIDENCE-PACKET-1, 2026-09-27** (sync `EVIDENCE-PACKET-1-2026-09-27`): the
+   x86, ROCm and NVIDIA device-clock packets now read through one envelope,
+   `evidence_envelope.read_evidence_packet`. It refuses missing or contradicted
+   identity, clock, environment and eligibility fields, and SSD admission uses
+   it. GA/EBM composition rows carry per-call route receipts (Zen 5 hosts: x86
+   AVX-512 lane; Mac: Apple GPU runtime; no ROCm/CUDA GPU lane anywhere).
+   Still open: AD public-frontend pairing, math package consumers, async
+   attribution, DLOP receipts and clean admission (plan record).
 3. Decision #11 versioned cache key and a Decision #12 `route` schema field.
    **Landed 2026-09-26** (sync `AUTOTUNE-TOOLCHAIN-KEY-2026-09-26`, Mac,
    host-independent). `compiler/toolchain_identity.py` is the one identity

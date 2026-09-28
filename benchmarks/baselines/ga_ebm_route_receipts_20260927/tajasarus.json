@@ -1,0 +1,530 @@
+{
+  "host": {
+    "machine": "x86_64",
+    "node": "tajasarus",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "python": "3.14.4",
+    "source_commit": "eed48b9b9436225ac2ebcbfbf5be12eef129d063",
+    "tessera_build_dir_env": "/home/angstorms/programming/tessera/build",
+    "tessera_rocm_chip_env": "gfx1201",
+    "worktree_dirty": false
+  },
+  "promotion_eligible": false,
+  "schema": "tessera.ga_ebm_route_receipts.v1",
+  "suites": {
+    "clifford_core": [
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 0.9861765429377556,
+        "memory_bw_gb_s": 0.000275812684805633,
+        "op": "clifford_core_forward",
+        "promotion_eligible": false,
+        "route": "python_reference",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 14,
+          "native_dispatches": {},
+          "ops": {
+            "ga:exp_mv": {
+              "python_reference": 2
+            },
+            "ga:geometric_product": {
+              "python_reference": 2
+            },
+            "ga:grade_projection": {
+              "python_reference": 4
+            },
+            "ga:inner": {
+              "python_reference": 2
+            },
+            "ga:norm": {
+              "python_reference": 2
+            },
+            "ga:rotor_sandwich": {
+              "python_reference": 2
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "python_reference",
+          "routes": {
+            "python_reference": 14
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 4,
+          "algebra_signature": [
+            3,
+            0,
+            0
+          ],
+          "n_rotors": 1,
+          "tile": 2
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.004056068894200486,
+        "timing_domain": "host_wall_composition"
+      },
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 1.560040982440114,
+        "memory_bw_gb_s": 0.00034870878786088735,
+        "op": "clifford_core_forward",
+        "promotion_eligible": false,
+        "route": "python_reference",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 24,
+          "native_dispatches": {},
+          "ops": {
+            "ga:exp_mv": {
+              "python_reference": 4
+            },
+            "ga:geometric_product": {
+              "python_reference": 4
+            },
+            "ga:grade_projection": {
+              "python_reference": 6
+            },
+            "ga:inner": {
+              "python_reference": 2
+            },
+            "ga:norm": {
+              "python_reference": 4
+            },
+            "ga:rotor_sandwich": {
+              "python_reference": 4
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "python_reference",
+          "routes": {
+            "python_reference": 24
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 8,
+          "algebra_signature": [
+            3,
+            0,
+            0
+          ],
+          "n_rotors": 2,
+          "tile": 4
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.005128070409718932,
+        "timing_domain": "host_wall_composition"
+      },
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 2.4163895286619663,
+        "memory_bw_gb_s": 0.00045025853120728474,
+        "op": "clifford_core_forward",
+        "promotion_eligible": false,
+        "route": "python_reference",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 34,
+          "native_dispatches": {},
+          "ops": {
+            "ga:exp_mv": {
+              "python_reference": 6
+            },
+            "ga:geometric_product": {
+              "python_reference": 6
+            },
+            "ga:grade_projection": {
+              "python_reference": 8
+            },
+            "ga:inner": {
+              "python_reference": 2
+            },
+            "ga:norm": {
+              "python_reference": 6
+            },
+            "ga:rotor_sandwich": {
+              "python_reference": 6
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "python_reference",
+          "routes": {
+            "python_reference": 34
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 16,
+          "algebra_signature": [
+            3,
+            0,
+            0
+          ],
+          "n_rotors": 3,
+          "tile": 4
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.006621448988342422,
+        "timing_domain": "host_wall_composition"
+      }
+    ],
+    "energy_core": [
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "mixed+cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 0.33662200439721346,
+        "memory_bw_gb_s": 0.0007604969272832218,
+        "op": "energy_core_forward",
+        "promotion_eligible": false,
+        "route": "mixed",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 16,
+          "native_dispatches": {
+            "x86_avx512:_try_x86_energy_quadratic_f32": 8,
+            "x86_avx512:_try_x86_partition_exact_f32": 2
+          },
+          "ops": {
+            "ebm:energy_quadratic": {
+              "x86_avx512": 8
+            },
+            "ebm:langevin_step": {
+              "python_reference": 6
+            },
+            "ebm:partition_exact_from_energies": {
+              "x86_avx512": 2
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "mixed",
+          "routes": {
+            "python_reference": 6,
+            "x86_avx512": 10
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 4,
+          "D": 4,
+          "T_max": 1.0,
+          "T_min": 0.1,
+          "eta": 0.05,
+          "n_steps": 3
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.01188276448880034,
+        "timing_domain": "host_wall_composition"
+      },
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "mixed+cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 0.33677753526717424,
+        "memory_bw_gb_s": 0.0019003642849641726,
+        "op": "energy_core_forward",
+        "promotion_eligible": false,
+        "route": "mixed",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 18,
+          "native_dispatches": {
+            "x86_avx512:_try_x86_energy_quadratic_f32": 8,
+            "x86_avx512:_try_x86_partition_exact_f32": 2
+          },
+          "ops": {
+            "ebm:energy_quadratic": {
+              "x86_avx512": 8
+            },
+            "ebm:langevin_step": {
+              "python_reference": 8
+            },
+            "ebm:partition_exact_from_energies": {
+              "x86_avx512": 2
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "mixed",
+          "routes": {
+            "python_reference": 8,
+            "x86_avx512": 10
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 4,
+          "D": 8,
+          "T_max": 1.0,
+          "T_min": 0.1,
+          "eta": 0.05,
+          "n_steps": 4
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.011877276781026078,
+        "timing_domain": "host_wall_composition"
+      },
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "mixed+cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 0.4251010250300169,
+        "memory_bw_gb_s": 0.0072265175078867015,
+        "op": "energy_core_forward",
+        "promotion_eligible": false,
+        "route": "mixed",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 28,
+          "native_dispatches": {
+            "x86_avx512:_try_x86_energy_quadratic_f32": 16,
+            "x86_avx512:_try_x86_partition_exact_f32": 2
+          },
+          "ops": {
+            "ebm:energy_quadratic": {
+              "x86_avx512": 16
+            },
+            "ebm:langevin_step": {
+              "python_reference": 10
+            },
+            "ebm:partition_exact_from_energies": {
+              "x86_avx512": 2
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "mixed",
+          "routes": {
+            "python_reference": 10,
+            "x86_avx512": 18
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 8,
+          "D": 16,
+          "T_max": 1.0,
+          "T_min": 0.1,
+          "eta": 0.05,
+          "n_steps": 5
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.018819056010121616,
+        "timing_domain": "host_wall_composition"
+      }
+    ],
+    "visual_complex_core": [
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "mixed+cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 1.0433500865474343,
+        "memory_bw_gb_s": 0.0002453634722427,
+        "op": "visual_complex_core_forward",
+        "promotion_eligible": false,
+        "route": "mixed",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 14,
+          "native_dispatches": {
+            "x86_avx512:_try_x86_partition_exact_f32": 2
+          },
+          "ops": {
+            "ebm:partition_exact_from_energies": {
+              "x86_avx512": 2
+            },
+            "ga:exp_mv": {
+              "python_reference": 2
+            },
+            "ga:grade_projection": {
+              "python_reference": 4
+            },
+            "ga:inner": {
+              "python_reference": 2
+            },
+            "ga:norm": {
+              "python_reference": 2
+            },
+            "ga:rotor_sandwich": {
+              "python_reference": 2
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "mixed",
+          "routes": {
+            "python_reference": 12,
+            "x86_avx512": 2
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 2,
+          "T_max": 1.0,
+          "T_min": 0.1,
+          "algebra": "Cl(3,0)",
+          "eta": 0.05,
+          "n_rotors": 1,
+          "n_steps": 2
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.0019169021268960933,
+        "timing_domain": "host_wall_composition"
+      },
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "mixed+cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 1.6522514633834362,
+        "memory_bw_gb_s": 0.00046482028735947385,
+        "op": "visual_complex_core_forward",
+        "promotion_eligible": false,
+        "route": "mixed",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 22,
+          "native_dispatches": {
+            "x86_avx512:_try_x86_partition_exact_f32": 2
+          },
+          "ops": {
+            "ebm:partition_exact_from_energies": {
+              "x86_avx512": 2
+            },
+            "ga:exp_mv": {
+              "python_reference": 4
+            },
+            "ga:grade_projection": {
+              "python_reference": 6
+            },
+            "ga:inner": {
+              "python_reference": 2
+            },
+            "ga:norm": {
+              "python_reference": 4
+            },
+            "ga:rotor_sandwich": {
+              "python_reference": 4
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "mixed",
+          "routes": {
+            "python_reference": 20,
+            "x86_avx512": 2
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 4,
+          "T_max": 1.0,
+          "T_min": 0.1,
+          "algebra": "Cl(3,0)",
+          "eta": 0.05,
+          "n_rotors": 2,
+          "n_steps": 3
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.0024209389966639264,
+        "timing_domain": "host_wall_composition"
+      },
+      {
+        "backend": "tessera-library",
+        "bandwidth_kind": "estimated_logical_bytes",
+        "determinism_ok": true,
+        "device": "mixed+cpu",
+        "dtype": "fp32",
+        "execution_kind": "unknown",
+        "latency_ms": 2.3275455459952354,
+        "memory_bw_gb_s": 0.000879896852512201,
+        "op": "visual_complex_core_forward",
+        "promotion_eligible": false,
+        "route": "mixed",
+        "route_receipts": {
+          "attribution": "complete",
+          "calls": 30,
+          "native_dispatches": {
+            "x86_avx512:_try_x86_partition_exact_f32": 2
+          },
+          "ops": {
+            "ebm:partition_exact_from_energies": {
+              "x86_avx512": 2
+            },
+            "ga:exp_mv": {
+              "python_reference": 6
+            },
+            "ga:grade_projection": {
+              "python_reference": 8
+            },
+            "ga:inner": {
+              "python_reference": 2
+            },
+            "ga:norm": {
+              "python_reference": 6
+            },
+            "ga:rotor_sandwich": {
+              "python_reference": 6
+            }
+          },
+          "orphan_dispatches": 0,
+          "refusal": null,
+          "route": "mixed",
+          "routes": {
+            "python_reference": 28,
+            "x86_avx512": 2
+          },
+          "schema": "tessera.route_receipts.v1"
+        },
+        "shape": {
+          "B": 8,
+          "T_max": 1.0,
+          "T_min": 0.1,
+          "algebra": "Cl(3,0)",
+          "eta": 0.05,
+          "n_rotors": 3,
+          "n_steps": 4
+        },
+        "tessera_version": "pre-alpha",
+        "throughput_msps": 0.003437097080125785,
+        "timing_domain": "host_wall_composition"
+      }
+    ]
+  },
+  "work_item": "EVIDENCE-PACKET-1"
+}

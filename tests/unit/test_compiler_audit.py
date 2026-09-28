@@ -288,11 +288,16 @@ def test_domain_variant_without_a_rewrite_does_not_borrow_evidence() -> None:
 
     TILE-LATENT-DEFECTS-2026-09-27: this test used to lock ``ntk_rope`` to
     rope's ``fused`` / ``device_verified_*`` cells through the audit alias
-    ``ntk_rope -> rope``. No pass rewrites ``tessera.ntk_rope`` to
-    ``tessera.rope`` and every rope consumer matches the literal op name, so
-    the frontend-emitted op reaches no lowering; the row must not claim one.
-    When the canonicalization lands (ODS triage WIRE slice 1), re-add the
-    alias together with a lit fixture proving the rewrite, and flip this test.
+    ``ntk_rope -> rope``, while no pass rewrote ``tessera.ntk_rope``.
+
+    ODS triage WIRE slice 1 (2026-09-27) landed the rewrite
+    ``ntk_rope(x, theta){s} -> rope(x, theta / s)``
+    (``composite_decomposition*.mlir``), but the alias stays withheld: rope's
+    x86 / ROCm device rows are Python runtime executors keyed on the literal
+    op, and on the Apple GPU -runtime route the ``theta / s`` division has no
+    Graph consumer, so the rewritten program does not reach rope's
+    device-verified evidence. Flip this test only when a route that executes
+    rope also executes the division.
     """
 
     assert "ntk_rope" not in audit._DOMAIN_BACKEND_ALIASES

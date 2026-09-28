@@ -272,6 +272,10 @@ struct MatmulSchedule {
   //: part of the contract or the digest; Graph->Schedule turns it into a
   //: ROCM_SPLIT_K_NOT_APPLIED warning so the fallback is never silent.
   std::string splitKFallback;
+  //: Why a W8A8 schedule kept the register panel although its rule would
+  //: have asked for the LDS body (empty otherwise). Not part of the digest;
+  //: Graph->Schedule turns it into ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED.
+  std::string panelFallback;
   StringRef accum;
   int64_t m;
   int64_t n;
@@ -526,8 +530,28 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
 // 20.3). At every whole-M point the rule's choice is within 1.5% of the
 // fastest Tessera arm. Single-buffered: double-buffering (1.22-1.48x) and a
 // register-staged next slab (1.00-1.24x) both measured slower (knobs.json).
+//
+// FOUNDATION-BATCH-2-2026-09-27: the CU count is not this rule's to state.
+// It comes from one table, `measuredComputeUnits`, which mirrors
+// `rocm_target.compute_units` (Python, derived from the measured
+// `_DISPATCH_SLOTS` WGP counts); `tests/unit/test_rocm_fp8_blockscale.py`
+// fails when the two disagree, and `rocm_fp8_blockscale.lower_blockscale`
+// refuses a Schedule whose selection differs from the Python oracle of this
+// rule. A part with no measured count keeps the register panel and says so
+// (ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED): a guessed denominator would turn an
+// occupancy rule into a silent wrong answer.
+static std::optional<int64_t> measuredComputeUnits(StringRef arch) {
+  // Read from the GPU agent's `Compute Unit:` in rocminfo on the box that
+  // has the part (2026-09-20); see `rocm_target._DISPATCH_SLOTS`.
+  if (arch == "gfx1201")
+    return 64; // RX 9070 XT, Tajasarus: 32 WGPs
+  if (arch == "gfx1151")
+    return 40; // Radeon 8060S, Princess-Luna: 20 WGPs
+  return std::nullopt;
+}
+
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
-  constexpr int64_t kComputeUnits = 64;
+  std::optional<int64_t> computeUnits = measuredComputeUnits(schedule.arch);
   auto tiles = [&](int64_t tm, int64_t tn) {
     return ((schedule.m + tm - 1) / tm) * ((schedule.n + tn - 1) / tn);
   };
@@ -536,15 +560,26 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   // At least one whole 128-row block: below it the workgroup computes rows
   // that do not exist (M=32 would waste three quarters of every tile).
   //
-  // A ragged M (not a whole number of 128-row blocks) takes 128x64 whenever
-  // that covers the CUs: its masked edge keeps more registers live in the
-  // 32x64-wave 128x128 body (251 vs 238 VGPRs, one wave per SIMD fewer), and
-  // 128x64 measured 0.71-0.97x of 128x128 at 19 of 20 ragged points
-  // (ragged.json; the exception, 200x4096x7168, is 1.03x).
-  const bool raggedM = schedule.m % 128 != 0;
-  if (nk && schedule.m >= 128 &&
-      (tiles(128, 128) >= kComputeUnits || tiles(128, 64) >= kComputeUnits)) {
-    const bool wide = !raggedM && tiles(128, 128) >= kComputeUnits;
+  // A ragged M (not a whole number of 128-row blocks) follows the same rule
+  // as a whole one (FOUNDATION-BATCH-2-2026-09-27,
+  // benchmarks/baselines/gfx1201_fp8_blockscale_ragged_20260927/). It took
+  // 128x64 until the bounded store stopped costing registers: the masked
+  // edge had kept the 32x64-wave 128x128 body at 251 VGPRs against 238
+  // whole (a wave per SIMD fewer), and a ragged M ran up to 25% behind its
+  // whole-M neighbour on the same grid. With the bounded store testing each
+  // row per lane (TileToROCM; 240 VGPRs, no spills), 128x128 measured
+  // 0.83-1.08x of 128x64 where this changes the selection, geomean 0.90 over
+  // 24 ragged points; it loses at 200x8192x1024 (1.08x) and 600x8192x1024
+  // (1.01x) -- recorded, not tuned around.
+  if (nk && schedule.m >= 128 && !computeUnits)
+    schedule.panelFallback =
+        (Twine("no measured compute-unit count for arch \"") + schedule.arch +
+         "\", so the LDS-staged W8A8 body's occupancy rule cannot be "
+         "evaluated")
+            .str();
+  if (nk && schedule.m >= 128 && computeUnits &&
+      (tiles(128, 128) >= *computeUnits || tiles(128, 64) >= *computeUnits)) {
+    const bool wide = tiles(128, 128) >= *computeUnits;
     schedule.staging = "lds";
     schedule.warps = 8;
     schedule.pipelineDepth = 1;
@@ -1634,6 +1669,236 @@ static std::string spectralBackwardTypeSignature(ValueRange values) {
   return signature;
 }
 
+// ── ODS-WIRE-2: the Graph->Schedule consumer of `tessera.istft_jvp` ─────
+//
+// `ISTFTOp::buildTangent` (TangentInterface.cpp) produces this op under
+// `--tessera-autodiff-forward`; `JitFn.native_jvp` runs that transform over the
+// traced module. Before this arm nothing consumed the product: the native JVP
+// plugin re-derived the ISTFT contract from the SOURCE op's Python kwargs, so
+// C++ forward AD and the plugin were two authorities for one JVP (#31).
+//
+// This arm is the production authority for the product's semantic contract.
+// It resolves every default (axis, n_fft, output length, centering, storage),
+// derives which tangents are active from the IR (a tangent the transform
+// materialized as a zero splat is inactive), checks the overlap-add geometry
+// against the static result type, and binds all of it into one canonical
+// contract string plus its SHA-256 and a matching `schedule.artifact`. The
+// plugin (`native_jvp_plugins.istft_jvp_contract_from_paired_ir`) reads that
+// contract instead of the kwargs; the kwargs derivation survives only as a
+// declared oracle that must agree with it. The physical spectral program
+// (`schedule.spectral_program`) is still minted by `lower_scheduled_spectral`
+// from these values -- that module is the one spectral-program authority, and
+// minting its content-addressed ScheduleObject here too would be a second one.
+static bool isZeroSplatConstant(Value value) {
+  auto constant = value.getDefiningOp<arith::ConstantOp>();
+  if (!constant) return false;
+  auto dense = dyn_cast<DenseElementsAttr>(constant.getValue());
+  if (!dense || !dense.isSplat()) return false;
+  Type element = dense.getElementType();
+  auto complex = dyn_cast<ComplexType>(element);
+  if (!isa<FloatType>(element) &&
+      !(complex && isa<FloatType>(complex.getElementType())))
+    return false;
+  // All-zero bits: +0.0, or (+0.0, +0.0) for a complex splat. A -0.0 splat
+  // reads as active, which only costs a redundant term, never a dropped one.
+  return llvm::all_of(dense.getRawData(), [](char byte) { return byte == 0; });
+}
+
+static LogicalResult scheduleIstftJvps(ModuleOp mod, OpBuilder &builder) {
+  SmallVector<Operation *> products;
+  mod.walk([&](Operation *op) {
+    if (op->getName().getStringRef() == "tessera.istft_jvp")
+      products.push_back(op);
+  });
+  for (Operation *op : products) {
+    auto refuse = [&](const Twine &why) {
+      op->emitError("SPECTRAL_JVP_SCHEDULE_REFUSED: tessera.istft_jvp ") << why;
+      return failure();
+    };
+    StringRef configuredTarget = moduleString(mod, "tessera.target", "target");
+    StringRef configuredArch = moduleString(mod, "tessera.arch", "arch");
+    StringRef target, arch;
+    if (configuredTarget == "x86" && (configuredArch == "zen5-avx512" ||
+                                      configuredArch == "zen5_avx512")) {
+      target = "x86";
+      arch = "zen5-avx512";
+    } else if (configuredTarget == "rocm" &&
+               (configuredArch == "gfx1151" || configuredArch == "gfx1201")) {
+      target = "rocm";
+      arch = configuredArch;
+    } else if (configuredTarget == "nvidia_sm120" && configuredArch == "sm120") {
+      target = "nvidia_sm120";
+      arch = "sm120";
+    } else {
+      return refuse(Twine("requires an exact Zen 5 AVX-512, gfx1151, gfx1201 "
+                          "or sm120 profile; got target='") +
+                    configuredTarget + "' arch='" + configuredArch + "'");
+    }
+    if (op->getNumOperands() != 4 || op->getNumResults() != 1)
+      return refuse("requires (spectrum, window, dspectrum, dwindow) -> tangent");
+    auto spectrum = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto window = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto result = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!spectrum || !window || !result || !spectrum.hasStaticShape() ||
+        !window.hasStaticShape() || !result.hasStaticShape())
+      return refuse("requires static ranked tensors");
+    auto complex = dyn_cast<ComplexType>(spectrum.getElementType());
+    if (!complex || !complex.getElementType().isF32())
+      return refuse("requires a complex<f32> spectrum");
+    Type storageElement = window.getElementType();
+    StringRef storage = storageElement.isF32()    ? "fp32"
+                        : storageElement.isF16()  ? "fp16"
+                        : storageElement.isBF16() ? "bf16"
+                                                  : "";
+    if (storage.empty() || result.getElementType() != storageElement)
+      return refuse("requires an f16/bf16/f32 window whose element type the "
+                    "tangent shares");
+    if (auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy")) {
+      auto declaredStorage = policy.getAs<StringAttr>("storage");
+      auto declaredAccum = policy.getAs<StringAttr>("accum");
+      if (!declaredStorage || declaredStorage.getValue() != storage ||
+          !declaredAccum || declaredAccum.getValue() != "fp32")
+        return refuse(Twine("numeric_policy must be {storage=") + storage +
+                      ", accum=fp32} for this window");
+    }
+    int64_t rank = spectrum.getRank();
+    auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
+    int64_t axis = axisAttr ? axisAttr.getInt() : -1;
+    if (axis < 0) axis += rank;
+    if (axis <= 0 || axis >= rank)
+      return refuse("requires a frequency axis with a preceding frame axis");
+    int64_t windowLength = window.getDimSize(window.getRank() - 1);
+    auto lengthAttr = op->getAttrOfType<IntegerAttr>("logical_length");
+    int64_t nfft = lengthAttr ? lengthAttr.getInt() : windowLength;
+    if (nfft < windowLength)
+      return refuse("requires logical_length (n_fft) >= the window length");
+    auto hopAttr = op->getAttrOfType<IntegerAttr>("hop");
+    if (!hopAttr || hopAttr.getInt() <= 0)
+      return refuse("requires an explicit hop > 0");
+    int64_t hop = hopAttr.getInt();
+    auto boolAttr = [&](StringRef name, bool fallback) {
+      auto attr = op->getAttrOfType<BoolAttr>(name);
+      return attr ? attr.getValue() : fallback;
+    };
+    bool center = boolAttr("center", false);
+    bool onesided = boolAttr("onesided", true);
+    auto normalizationAttr = op->getAttrOfType<StringAttr>("normalization");
+    StringRef normalization =
+        normalizationAttr ? normalizationAttr.getValue() : "backward";
+    if (normalization != "backward" && normalization != "forward" &&
+        normalization != "ortho")
+      return refuse("normalization must be backward, forward or ortho");
+    auto padModeAttr = op->getAttrOfType<StringAttr>("pad_mode");
+    if (padModeAttr && padModeAttr.getValue() != "constant")
+      return refuse("ISTFT has no pad_mode other than constant");
+    int64_t expectedBins = onesided ? nfft / 2 + 1 : nfft;
+    if (spectrum.getDimSize(axis) != expectedBins)
+      return refuse(Twine("spectrum axis ") + Twine(axis) + " has " +
+                    Twine(spectrum.getDimSize(axis)) + " bins; n_fft=" +
+                    Twine(nfft) + " requires " + Twine(expectedBins));
+    int64_t frameAxis = axis - 1;
+    int64_t frames = spectrum.getDimSize(frameAxis);
+    int64_t raw = (frames - 1) * hop + nfft;
+    int64_t pad = center ? nfft / 2 : 0;
+    int64_t available = raw - 2 * pad;
+    if (result.getRank() != rank - 1)
+      return refuse("tangent rank must drop the frequency axis");
+    int64_t outputLength = result.getDimSize(frameAxis);
+    if (outputLength <= 0 || outputLength > available)
+      return refuse(Twine("output length ") + Twine(outputLength) +
+                    " must crop within the " + Twine(available) +
+                    " available overlap-add samples");
+    if (auto declared = op->getAttrOfType<IntegerAttr>("output_length"))
+      if (declared.getInt() != outputLength)
+        return refuse("output_length disagrees with the static tangent type");
+    for (int64_t dim = 0; dim < rank - 1; ++dim) {
+      int64_t source = dim < frameAxis ? dim : dim + 1;
+      if (dim == frameAxis) continue;
+      if (result.getDimSize(dim) != spectrum.getDimSize(source))
+        return refuse("tangent batch dimensions disagree with the spectrum");
+    }
+    SmallVector<int64_t> active;
+    if (!isZeroSplatConstant(op->getOperand(2))) active.push_back(0);
+    if (!isZeroSplatConstant(op->getOperand(3))) active.push_back(1);
+    if (active.empty())
+      return refuse("has no active tangent (both are zero splats)");
+
+    std::string spectrumType, windowType, resultType;
+    {
+      llvm::raw_string_ostream s(spectrumType), w(windowType), r(resultType);
+      spectrum.print(s);
+      window.print(w);
+      result.print(r);
+    }
+    std::string activeText;
+    for (auto [index, value] : llvm::enumerate(active))
+      activeText += (index ? "," : "") + std::to_string(value);
+    std::string contract =
+        (Twine("schema=tessera.spectral_jvp.v1;kind=tessera.istft;target=") +
+         target + ";arch=" + arch + ";spectrum=" + spectrumType +
+         ";window=" + windowType + ";tangent=" + resultType +
+         ";axis=" + Twine(axis) + ";logical_length=" + Twine(nfft) +
+         ";hop=" + Twine(hop) + ";frames=" + Twine(frames) +
+         ";center=" + Twine(center ? 1 : 0) +
+         ";onesided=" + Twine(onesided ? 1 : 0) +
+         ";pad_mode=constant;output_length=" + Twine(outputLength) +
+         ";normalization=" + normalization +
+         ";spectrum_layout=" +
+         (onesided ? "half_spectrum_nyquist_explicit" : "full_complex") +
+         ";window_broadcast=trailing_batch_broadcast_v1" +
+         ";numeric_storage=" + storage + ";numeric_accum=fp32" +
+         ";active_tangents=" + activeText +
+         ";mutation_lineage=inputs_immutable_output_fresh_v1")
+            .str();
+    std::string digest = llvm::toHex(
+        llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
+        /*LowerCase=*/true);
+
+    // Carry every resolved default forward on the op (Decision #32): a
+    // downstream reader sees the values the contract was hashed over.
+    op->setAttr("axis", builder.getI64IntegerAttr(axis));
+    op->setAttr("logical_length", builder.getI64IntegerAttr(nfft));
+    op->setAttr("output_length", builder.getI64IntegerAttr(outputLength));
+    op->setAttr("normalization", builder.getStringAttr(normalization));
+    op->setAttr("center", builder.getBoolAttr(center));
+    op->setAttr("onesided", builder.getBoolAttr(onesided));
+    op->setAttr("pad_mode", builder.getStringAttr("constant"));
+    // buildTangent copies the ISTFT op's attribute dictionary, which can carry
+    // the compound op's "not_applicable" window default; the product's real
+    // policy is the trailing-batch broadcast the contract hashes.
+    op->setAttr("window_broadcast",
+                builder.getStringAttr("trailing_batch_broadcast_v1"));
+    op->setAttr("numeric_policy",
+                builder.getDictionaryAttr({
+                    builder.getNamedAttr("storage", builder.getStringAttr(storage)),
+                    builder.getNamedAttr("accum", builder.getStringAttr("fp32")),
+                }));
+    op->setAttr("schedule.target", builder.getStringAttr(target));
+    op->setAttr("schedule.arch", builder.getStringAttr(arch));
+    op->setAttr("schedule.frames", builder.getI64IntegerAttr(frames));
+    op->setAttr("schedule.active_tangents",
+                builder.getDenseI64ArrayAttr(active));
+    op->setAttr("schedule.jvp_contract", builder.getStringAttr(contract));
+    op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
+
+    builder.setInsertionPointAfter(op);
+    OperationState artifactState(op->getLoc(), "schedule.artifact");
+    artifactState.addAttribute("hash", builder.getStringAttr(digest));
+    artifactState.addAttribute("arch", builder.getStringAttr(arch));
+    artifactState.addAttribute(
+        "shape_key",
+        builder.getStringAttr("family=spectral_jvp;kind=tessera.istft"));
+    artifactState.addAttribute(
+        "tile", builder.getDictionaryAttr({builder.getNamedAttr(
+                    "output_count", builder.getI64IntegerAttr(1))}));
+    artifactState.addAttribute(
+        "numeric_policy",
+        builder.getStringAttr((Twine("jvp;") + normalization).str()));
+    builder.create(artifactState);
+  }
+  return success();
+}
+
 static FailureOr<std::string> spectralBackwardDigest(Operation *op) {
   auto stringAttr = [&](StringRef name) {
     return op->getAttrOfType<StringAttr>(name);
@@ -2659,6 +2924,10 @@ struct GraphToSchedulePass
         op->emitWarning("ROCM_SPLIT_K_NOT_APPLIED: ")
             << selected->splitKFallback
             << "; scheduling the unsplit kernel (ROCM-SPLIT-K-1).";
+      if (!selected->panelFallback.empty())
+        op->emitWarning("ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED: ")
+            << selected->panelFallback
+            << "; scheduling the register panel (ROCM-FP8-BLOCKSCALE-1).";
 
       builder.setInsertionPointAfter(op);
       OperationState state(op->getLoc(), "schedule.matmul");
@@ -3083,6 +3352,8 @@ struct GraphToSchedulePass
                                     .str()));
       builder.create(artifactState);
     }
+
+    if (failed(scheduleIstftJvps(mod, builder))) return signalPassFailure();
 
     SmallVector<Operation *> esCorrections;
     mod.walk([&](Operation *op) {

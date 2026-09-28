@@ -855,8 +855,11 @@ x86,tessera_x86_istft_policy_strided_storage,istft_policy_strided_storage,,src/c
 x86,tessera_x86_istft_storage,istft_storage,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_istft_strided_storage,istft_strided_storage,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_kv_cache_append_f32,kv_cache_append,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
+x86,tessera_x86_kv_cache_commit_f32,kv_cache_commit,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
+x86,tessera_x86_kv_cache_f32_handle_abi,kv_cache_f32_handle_abi,,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
 x86,tessera_x86_kv_cache_prune_f32,kv_cache_prune,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
 x86,tessera_x86_kv_cache_read_f32,kv_cache_read,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
+x86,tessera_x86_kv_cache_rollback_f32,kv_cache_rollback,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
 x86,tessera_x86_lu_f32,lu,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_lu_qr_f32.cpp
 x86,tessera_x86_moe_f32,moe,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_moe_f32.cpp
 x86,tessera_x86_optimizer_f32,optimizer,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_optimizer_f32.cpp

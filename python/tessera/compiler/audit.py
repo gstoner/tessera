@@ -235,10 +235,20 @@ _DOMAIN_BACKEND_ALIASES: dict[str, str] = {
     #
     # Withdrawn 2026-09-27 (TILE-LATENT-DEFECTS-2026-09-27): "ntk_rope" ->
     # "rope". Its premise was false -- the frontend emits `tessera.ntk_rope`,
-    # but no pass rewrites it to `tessera.rope` and every rope consumer matches
-    # only the literal `tessera.rope`, so an emitted ntk_rope reaches no Tile or
-    # Target lowering. Re-add only with the canonicalization
-    # `ntk_rope(x, theta, s) -> rope(x, theta / s)` (ODS triage WIRE slice 1).
+    # but no pass rewrote it to `tessera.rope` and every rope consumer matches
+    # only the literal `tessera.rope`, so an emitted ntk_rope reached no Tile or
+    # Target lowering.
+    #
+    # Still withheld after the rewrite landed (ODS triage WIRE slice 1,
+    # 2026-09-27; CompositeDecomposition.h). The rewrite now exists, but the
+    # alias would borrow evidence the rewritten program does not reach: rope's
+    # x86 / ROCm device rows are Python runtime executors (`x86_rope_compiled`,
+    # `rocm_rope_compiled`) keyed on the literal op, which no C++ rewrite feeds,
+    # and on the Apple GPU -runtime route a scale != 1 leaves the `theta / s`
+    # `tessera.div` with no Graph consumer (composite_decomposition_apple_gpu
+    # .mlir), so the rope MSL call's device-verified ABI does not make the
+    # ntk_rope program executable. Re-add when a route that executes rope also
+    # executes the division.
 }
 
 
@@ -259,8 +269,10 @@ _SINGLE_GPU_TILE_TARGET_TERMINAL: dict[str, str] = {
         "single-GPU terminal contract until a backend-specific dynamic-shape "
         "kernel lands"
     ),
-    "cache_commit": "state cursor mutation; no tensor Tile/Target kernel",
-    "cache_rollback": "state cursor mutation; no tensor Tile/Target kernel",
+    # ODS-WIRE-3: no tensor Tile kernel; TileToX86Pass lowers the Graph op
+    # straight to the x86 KV-cache handle ABI (kv_cache_f32.cpp).
+    "cache_commit": "state cursor mutation; no tensor Tile kernel (x86: handle ABI call)",
+    "cache_rollback": "state cursor mutation; no tensor Tile kernel (x86: handle ABI call)",
     "kv_cache_append": "cache handle mutation; runtime state lane, not Tile IR",
     "kv_cache_prune": "cache handle mutation; runtime state lane, not Tile IR",
     "arange": "constant/index generation; no tensor Tile/Target kernel",

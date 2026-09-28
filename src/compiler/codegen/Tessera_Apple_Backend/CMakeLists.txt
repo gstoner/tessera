@@ -85,6 +85,11 @@ target_include_directories(TesseraApple
     ${MLIR_INCLUDE_DIRS}
     ${LLVM_INCLUDE_DIRS}
 )
+# Header-only shared pattern source (CompositeDecomposition.h, ODS triage WIRE
+# slice 1): the -runtime pipeline runs the same target_verify / ntk_rope
+# rewrite as tessera-canonicalize without linking TesseraPasses.
+target_include_directories(TesseraApple PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../transforms/include)
 
 add_dependencies(TesseraApple TesseraAppleOpsIncGen)
 

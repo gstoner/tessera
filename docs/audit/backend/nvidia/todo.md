@@ -3,10 +3,37 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## `ODS-WIRE-1-4-2026-09-27`: sibling outcome — not applicable
+
+Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slices 1 and 4). The `target_verify -> softmax` / `ntk_rope -> rope(x, theta/s)` rewrite runs inside `tessera-canonicalize`, so every `tessera-lower-to-{gpu,nvidia-sm90,-sm100,-sm120}` pipeline now normalizes the two composites; those pipelines have no Graph softmax or rope consumer (the sm_120 families lower through their scheduled contracts), so nothing downstream changes and nothing was run on Super-Bear. No CUDA Langevin Philox executor exists (the CUDA EBM lane is the geo Langevin family).
+
+## `ODS-WIRE-B-2026-09-28`: the ISTFT forward product builds from compiler IR — sibling outcome: parity validated (sm_120, 2026-09-28)
+
+The native JVP plugin now builds every ISTFT package, including
+`nvidia_sm120`, from the hashed contract `GraphToSchedulePass` binds to
+`tessera.istft_jvp` (triage row `tessera-istft-jvp`). The host-free
+differential covers the sm120 profile (contract and oracle lower to the same
+scheduled program). **Device proof, 2026-09-28, The-Super-Bear RTX 5070**
+(umbrella `claude/foundation-batch-2` @ `e4ba9496`, `_nvidia_env.sh` sourced,
+worktree `build/` sm_120 + `build-nvidia-cuda/` sm_120a):
+`tests/device/nvidia/test_spectral_jvp.py` 13 passed / 0 skipped and
+`test_spectral_stale_cuda_error.py` 9 passed / 0 skipped, identical to the
+pre-change base `6008a942`; `tests/unit/test_istft_jvp_ir_contract.py` 51
+passed / 4 skipped (AVX-512 and gfx1151/gfx1201 gates only). The ISTFT
+centered-difference row's inputs re-run through `native_jvp` reported
+`execution_kind=native_gpu`, `evidence_target=nvidia_sm120`,
+`compiler_path=nvidia_sm120_jvp_compiled`, and the package was built by one
+call to `istft_jvp_contract_from_paired_ir(target=nvidia_sm120)` (schema
+`tessera.spectral_jvp.v1`) -- the IR contract, not the kwargs oracle.
+`test_native_jvp_compiled.py` has no sm120 row (all 16 skips are x86/ROCm
+gates), so it is no evidence either way. The KV-cache cursor half of the key
+is x86-only.
+
 
 ## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — follow-up required (softmax_safe admission)
 
@@ -705,6 +732,14 @@ with the digest of what nvcc received; restoring the emitter reused the
 original artifact and stamp with no compile; `nvidia_generic_cuda` (through
 `kernel_cache.build`) compiled once for 10 runs and recompiled exactly the
 patched text. `_mma_fused_fn` lookup on that host: 3.0 us per call.
+
+## `FOUNDATION-BATCH-2-2026-09-27`: gfx1201 W8A8 CU authority, ragged-M store, MXFP4 one-row-block test — not applicable
+
+The changes are gfx1201 W8A8 selection (`selectFp8W8A8BlockScalePanel` and
+its Python oracle, now reading `rocm_target.compute_units`), the ROCm Tile
+consumer's bounded fragment store (`TileToROCM.cpp`, ROCm-only), and MXFP4
+recorder options. NVIDIA schedules no `tessera.scaled_matmul` W8A8 contract
+and lowers no ROCm Tile store, so nothing here changed for NVIDIA.
 
 ## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
 

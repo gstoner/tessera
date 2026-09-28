@@ -26,7 +26,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
   }
 
   // Ragged M = 200 (the second 128-row block is partial) with a bf16 output:
-  // a ragged M takes 128x64, 2 x 64 = 128 workgroups.
+  // a ragged M follows the whole-M rule, 2 x 32 = 64 workgroups at 128x128.
   func.func @w8a8_lds_bf16(%a: tensor<200x256xf8E4M3FN>, %b: tensor<4096x256xf8E4M3FN>,
                            %sa: tensor<200x2xf32>, %sb: tensor<2x32xf32>) -> tensor<200x4096xbf16> {
     %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
@@ -62,7 +62,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // SCHED-SAME: warps = 8 : i64
 // SCHED-LABEL: func.func @w8a8_lds_bf16(
 // SCHED: schedule.matmul
-// SCHED-SAME: macro_tile_m = 128 : i64, macro_tile_n = 64 : i64
+// SCHED-SAME: macro_tile_m = 128 : i64, macro_tile_n = 128 : i64
 // SCHED-SAME: output = "bf16"
 // SCHED-SAME: staging = "lds"
 // SCHED-LABEL: func.func @w8a8_lds_narrow(

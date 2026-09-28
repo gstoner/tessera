@@ -70,6 +70,13 @@ PRODUCTION = ((256, 5120, 8704), (1024, 17408, 5120))
 #: One-row-block prefill (M <= 256): the band still behind Radiance
 #: (GFX1201-PERF-2026-09-27).
 SMALL = ((128, 5120, 8704), (128, 17408, 5120), (256, 5120, 8704), (256, 17408, 5120))
+#: M = 256 (one whole BM256 row block) across N at K = 5120
+#: (FOUNDATION-BATCH-2-2026-09-27): the expanded E4M3 weight is N*K bytes, so
+#: its per-launch DRAM stream crosses the RX 9070 XT's 64 MiB last-level cache
+#: at N ~ 13k, where the packed E2M1 weight (half the bytes) is still at 32 MiB.
+#: Every engine rotates three input copies, so each launch reads its weight from
+#: memory, not from the previous launch's cache footprint.
+NSCAN = tuple((256, n, 5120) for n in (4096, 8192, 12288, 16384, 17408, 20480, 24576))
 SWEEP = (
     (128, 5120, 8704), (128, 17408, 5120), (256, 17408, 5120),
     (512, 5120, 8704), (512, 17408, 5120), (1024, 5120, 8704),
@@ -229,13 +236,14 @@ def run_case(
     hip: ctypes.CDLL, clock: DeviceClock, case: base.Case, *, tessera_opt: Path,
     radiance: Any, decomposition: bool, trials: int, order_seed: int,
     diagnostics: tuple[tuple[str, tuple[str, ...]], ...] = (),
+    packed: bool = False, copies: int = 3,
 ) -> dict[str, Any]:
     inputs = base._logical_inputs(case)
     exact = base._tessera_engine(hip, case, inputs, 3, None, None, name="tessera_exact_k32")
     engines: list[base._Engine] = []
     try:
         selected, folded = folded_bench.folded_engine(
-            hip, case, inputs, 3, tessera_opt=tessera_opt,
+            hip, case, inputs, copies, tessera_opt=tessera_opt,
         )
         selected.name = "tessera_folded_selected"
         engines.append(selected)
@@ -245,19 +253,35 @@ def run_case(
         schedule = _schedule_from(receipt)
         engines.append(ls.schedule_engine(
             hip, case, inputs, folded, FOLDED_PREFILL_SCHEDULE_V1, name="tessera_folded_v1",
+            copies=copies,
         ))
         if decomposition:
             for label, variant in _decomposition(schedule):
                 engines.append(ls.schedule_engine(
                     hip, case, inputs, folded, variant, name=f"tessera_{label}",
+                    copies=copies,
                 ))
         # Diagnostic source edits on top of the selected schedule; each must
         # still produce the exact route's BF16 bits (checked below).
         for label, edits in diagnostics:
             engines.append(ls.schedule_engine(
                 hip, case, inputs, folded, schedule, edits, name=f"tessera_selected+{label}",
+                copies=copies,
             ))
-        engines.append(base._radiance_engine(hip, radiance, case, inputs, 3))
+        if packed:
+            # The opt-in packed-E2M1 candidates (manual, never selected): the
+            # weight read at half the expanded bytes, decoded in the kernel.
+            # Diagnostic arms for the packed-bytes hypothesis at one row block.
+            from benchmarks.rocm.benchmark_gfx1201_mxfp4_packed_folded import (
+                packed_folded_engine,
+            )
+            for flags in ({"batched_loads": True, "permute_decode": True},
+                          {"batched_loads": True, "permute_decode": True,
+                           "a_offset32": True}):
+                engine, _ = packed_folded_engine(
+                    hip, case, inputs, copies, integer_decode=False, **flags)
+                engines.append(engine)
+        engines.append(base._radiance_engine(hip, radiance, case, inputs, copies))
         outputs = {engine.name: engine.output() for engine in [exact, *engines]}
         rows, cols, reference = base._sampled_exact_reference(case, inputs)
         np.testing.assert_array_equal(
@@ -346,6 +370,7 @@ def _child(args: argparse.Namespace) -> None:
                 radiance=radiance, decomposition=args.decomposition,
                 trials=args.trials, order_seed=args.order_seed,
                 diagnostics=_diagnostic_specs(args.diagnostics),
+                packed=args.packed, copies=args.copies,
             ))
             print(f"completed {m}x{n}x{k}", flush=True)
         packet = {
@@ -405,9 +430,15 @@ def main() -> None:
     parser.add_argument("--radiance-revision", required=True)
     parser.add_argument("--tessera-opt", type=Path, required=True)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--shapes", choices=("production", "sweep", "all", "small"),
+    parser.add_argument("--shapes", choices=("production", "sweep", "all", "small", "nscan"),
                         default="production")
     parser.add_argument("--decomposition", action="store_true")
+    parser.add_argument("--packed", action="store_true",
+                        help="also time the opt-in packed-E2M1 folded candidates")
+    parser.add_argument("--copies", type=int, default=3,
+                        help="rotating device copies of every input per engine (3: each "
+                             "launch reads operands the previous launch did not; 1: "
+                             "operands may stay resident in the last-level cache)")
     parser.add_argument("--diagnostics", action="append", default=[],
                         help="LABEL=edit[+edit...]: an extra engine of the selected schedule "
                              "with those diagnostic source edits (see ablate module)")
@@ -420,6 +451,8 @@ def main() -> None:
     parser.add_argument("--order-seed", type=int, default=0, help=argparse.SUPPRESS)
     parser.add_argument("--child-shapes", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.copies < 1:
+        raise SystemExit("--copies must be at least 1")
     if os.environ.get("RADIANCE_MXFP4_WPERM") != "1":
         raise SystemExit("matched fragment-order Radiance requires RADIANCE_MXFP4_WPERM=1")
     args.tessera_opt = args.tessera_opt.resolve()
@@ -439,7 +472,7 @@ def main() -> None:
     if source["worktree_dirty"] and not args.diagnostic:
         raise SystemExit("source tree has uncommitted changes; commit first or pass --diagnostic")
     shapes = {"production": PRODUCTION, "sweep": SWEEP, "all": PRODUCTION + SWEEP,
-              "small": SMALL}[args.shapes]
+              "small": SMALL, "nscan": NSCAN}[args.shapes]
     output.parent.mkdir(parents=True, exist_ok=True)
     processes = []
     for index in range(args.processes):
@@ -452,7 +485,8 @@ def main() -> None:
             "--trials", str(args.trials), "--order-seed", str(index),
             "--child-output", str(child),
             "--child-shapes", ",".join(f"{m}x{n}x{k}" for m, n, k in shapes),
-        ] + (["--decomposition"] if args.decomposition else []) + [
+        ] + (["--decomposition"] if args.decomposition else []) + (
+            ["--packed"] if args.packed else []) + ["--copies", str(args.copies)] + [
             f"--diagnostics={item}" for item in args.diagnostics]
         subprocess.run(command, cwd=ROOT, check=True, timeout=7200)
         processes.append(json.loads(child.read_text()))
@@ -461,7 +495,8 @@ def main() -> None:
         raise SystemExit("source changed while collecting evidence")
     packet = {
         "schema": SCHEMA, "sync_key": args.sync_key, "work_item": "ROCM-MXFP4-W4A8-1",
-        "diagnostics": args.diagnostics,
+        "diagnostics": args.diagnostics, "packed": args.packed, "shapes": args.shapes,
+        "copies": args.copies,
         "source": source,
         "tessera_opt_sha256": base._sha256(args.tessera_opt),
         "radiance": {

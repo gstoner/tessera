@@ -1,0 +1,18 @@
+== lit build
+
+Total Discovered Tests: 525
+  Unsupported:  66 (12.57%)
+  Passed     : 459 (87.43%)
+== rocm lit build
+
+Total Discovered Tests: 82
+  Passed: 82 (100.00%)
+== lit build-assertions
+
+Total Discovered Tests: 525
+  Unsupported:  66 (12.57%)
+  Passed     : 459 (87.43%)
+== rocm lit build-assertions
+
+Total Discovered Tests: 82
+  Passed: 82 (100.00%)

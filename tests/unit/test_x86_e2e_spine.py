@@ -22,8 +22,6 @@ from tessera.compiler.x86_native import (
     X86_SOFTMAX_F32_ABI,
     emit_attention_tile_ir,
     emit_matmul_tile_ir,
-    emit_reduce_tile_ir,
-    emit_softmax_tile_ir,
     host_supports_architecture,
     package_attention,
     package_attention_backward_semantics,
@@ -223,6 +221,9 @@ def _fake_attention_semantics(graph_ir: str, *, tile_q: int, tile_kv: int) -> st
 
 
 def test_x86_emitters_use_shared_typed_envelopes() -> None:
+    # The softmax/reduction constructors are the retired E2E-REAL-6 baseline.
+    from tests._support.x86_unary_baseline import emit_reduce_tile_ir, emit_softmax_tile_ir
+
     softmax = emit_softmax_tile_ir(entry="softmax")
     reduction = emit_reduce_tile_ir(entry="reduce", kind="mean", axis=1, keepdims=True)
     assert "tile.softmax_kernel" in softmax
@@ -286,10 +287,9 @@ def test_canonical_x86_selector_defaults_to_descriptor(
         "tessera.compiler.scheduled_attention.supports_scheduled_attention",
         lambda module, *, target: False,
     )
-    monkeypatch.setattr(
-        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
-        lambda module, *, target: False,
-    )
+    # Softmax/reduction admission *is* the scheduled contract since the
+    # E2E-REAL-6 x86 unary cut, so it is not overridden here; the stubbed
+    # lowering above keeps the unary rows host-free.
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
     _stub_attention_schedule_boundary(monkeypatch)
     monkeypatch.setattr(
@@ -366,7 +366,7 @@ def _stub_unary_schedule_boundary(monkeypatch):
     from dataclasses import replace
     from tests.unit.test_scheduled_kernel_consumers import _artifact
     from tessera.compiler import native_unary_contract
-    def lower(module, *, target):
+    def lower(module, *, target, architecture=None):
         family = 'softmax' if module.functions[0].body[0].op_name == 'tessera.softmax' else 'reduce'
         artifact = _artifact(family=family, target='x86')
         return replace(artifact, axis=-1 if family == 'softmax' else 2)
@@ -462,7 +462,10 @@ def test_x86_loader_uses_unique_temporary_image_without_memfd(monkeypatch) -> No
     package = package_softmax(
         _softmax_module((2, 2)), pipeline_name="tessera-lower-to-x86",
     )
-    rt._x86_native_image_libraries.pop(package.image.image_digest, None)
+    # Fresh load caches: both the per-image fast path and the per-payload map
+    # would otherwise hand back an already-loaded object.
+    monkeypatch.setattr(rt, "_x86_native_image_libraries", {})
+    monkeypatch.setattr(rt, "_x86_native_payload_libraries", {})
     monkeypatch.delattr(rt.os, "memfd_create", raising=False)
 
     library = rt._load_x86_native_image(package.image)

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,99 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## `E2E-REAL-6-x86-unary-2026-09-28`: x86 softmax / reduction admit and package through native Schedule/Tile
+
+Owner E2E-REAL-6 (x86 unary family; log entry of the same date). Branch
+`claude/foundation-batch-2-e2e-x86-unary` (umbrella `claude/foundation-batch-2`).
+
+- **What moved.** `x86_native.supports_softmax` / `supports_reduction` (and so
+  `supports_native_package`) now admit through
+  `scheduled_kernel.supports_scheduled_kernel(target="x86")`, not the
+  Graph-owned `_softmax_contract` / `_reduction_contract`.
+  `package_softmax` / `package_reduction` hand `lower_scheduled_kernel(...,
+  architecture=zen5-avx512 | x86_64_base)` straight to
+  `package_scheduled_kernel`. The contracts and the `emit_softmax_tile_ir` /
+  `emit_reduce_tile_ir` constructors left production; they are frozen with the
+  pre-2026-09-08 Graph-owned packagers in `tests/_support/x86_unary_baseline.py`,
+  the declared oracle Decision #31(a) allows.
+- **Envelope, before and after.** Retired: f32 in / f32 out; `softmax` and
+  `softmax_safe`, last axis, shape-preserving; `sum` / `mean` / `max` / `amax`,
+  last axis (either spelling), keepdims true/false, f32 output; any positive
+  static rank; both images. Compiled: the same set. `softmax_safe` was the gap
+  (the scheduled contract refused it since 2026-09-08 while the Graph contract
+  still selected it for native packaging); it is now admitted for x86 through
+  the gfx1151 canonicalization. Refused on purpose, each pinned: an integer
+  `keepdims` (was coerced with `bool`), a non-serial reduction `schedule` hint and
+  a `schedule` hint on softmax (both ignored before).
+- **Carried from IR.** The reduction descriptor now carries `nan_mode` read from
+  the replayed Tile op and fails closed on anything but `propagate` (both reduce
+  kernels propagate NaN; #21a/#32).
+- **Image identity (the shape-free-key assessment).** x86 has no compile to
+  cache: the image payload is the prebuilt shared object, identical for every
+  shape. But `image_digest` binds the Target IR digest, which on the scheduled
+  route carries the launch constants and Graph symbol, and the runtime loaded one
+  copy per digest. Measured on Princess-Luna
+  (`benchmarks/x86/measure_x86_unary_route_cost.py`, 8 shapes per family): the
+  retired route had 1 digest, the compiled route 8, and 16 copies of the
+  382 KiB object were loaded; the first launch of each new shape paid ~0.4 ms.
+  `runtime._load_x86_native_image` now resolves a digest miss through an
+  architecture + payload-sha256 map, so the same run loads **one** object (first
+  launch 2.23-2.25 ms vs 1.98-2.03 ms retired, warm 0.78-0.85 ms on both; runtime
+  claim, Princess-Luna). A shape-free *package* cache was not added: the
+  compiled route costs 96-105 ms per package call vs 29-37 ms retired (compile
+  cost, Princess-Luna), all of it lowering + replay subprocesses, and it has been
+  the production route since 2026-09-08 — a follow-up, not this cut.
+- **Proof.** Princess-Luna (Zen 5 AVX-512): `test_x86_unary_differential.py` +
+  `test_x86_unary_migration.py` + `test_x86_e2e_spine.py` 662 passed / 0 skipped,
+  including 298 device rows (288 bitwise retired-vs-compiled rows over every
+  envelope point on both images, 8 NaN-propagation rows, 2 shared-image rows) and
+  288 host-free descriptor/Tile-attribute parity rows; x86 unit subset
+  (`-k x86 -m "not slow"`) 2461 passed / 1 skipped (umbrella head: 1858 / 1, the
+  same `owning Zen 5 host` skip); `check-tessera-ir` 462 passed / 67 unsupported.
+  Tajasarus (Zen 5 9800X3D, assertions-ON LLVM/MLIR 23.1.1 tree): the same three
+  files 662 passed / 0 skipped; x86 subset 2435 passed / 27 skipped / 0 failed;
+  the four unary Schedule/Tile x86 lit fixtures pass under assertions. No C++
+  changed.
+- **Sibling outcomes.** ROCm: not applicable (gfx1151 already migrated; the
+  `softmax_safe` gate now names x86 beside gfx1151 and the ROCm test pins the
+  rest). NVIDIA: follow-up still required (`softmax_safe` classified as a native
+  softmax its scheduled packager refuses; needs sm_120 rows). Apple: not
+  applicable (Apple GPU softmax contract unchanged; Apple CPU has no unary
+  package). The payload-keyed loader is x86-only.
+
+## `ODS-WIRE-1-4-2026-09-27`: the x86 Langevin executor consumes the Philox op; target_verify runs on the CPU JIT lane
+
+Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slices 1 and 4). `x86_ebm_langevin_compiled` now accepts exactly `tessera.ebm.langevin_step_philox` (seed / counter from operands; `eta`/`temperature` required, `noise_scale` default `sqrt(2*eta*T)`) as `ops.ebm_langevin_step_philox` emits it; the host-noise `tessera.ebm.langevin_step` is refused there and its x86 manifest row drops to `reference` (its only credit was this Philox test). `tessera.target_verify` reaches libtessera_jit (rewritten to softmax in stage 1a). `tessera-lower-to-x86` runs the rewrite through `tessera-canonicalize` but has no Graph softmax/rope consumer of its own. **Parity validated on Princess-Luna (Zen 5 AVX-512, 2026-09-27):** `test_x86_ebm_langevin_compiled.py` (incl. the traced-op launch), `test_composite_decomposition.py`, `test_native_cpu_jit.py`.
+
+## `ODS-WIRE-B-2026-09-28`: `tessera.cache.commit/rollback` lower through an x86 handle ABI; the ISTFT JVP builds from IR
+
+Owner: [GOV-ODS-CONSUMER-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+(triage rows [`cache.commit`](../../compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-cache-commit),
+[`istft_jvp`](../../compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-istft-jvp)).
+
+- **KV-cache cursor handle ABI.** `kv_cache_f32.cpp` gains
+  `struct tessera_x86_kv_cache_f32_handle` (`abi_version`, keys, values,
+  `max_seq`, `row_len`, `current_seq`) and
+  `tessera_x86_kv_cache_{commit,rollback}_f32(handle*, i64) -> handle*`
+  (truncate in place, zero the dropped rows, return the same handle; NULL and
+  untouched on a rejected count). `TileToX86Pass` lowers the two SD1-3 ops to
+  it (`LowerKVCacheCursorToX86`) and threads the result; the artifact-only
+  `tessera_x86_kv_cache_op(kind)` bridge is unchanged. The bufferized form
+  joins `x86_kv_cache_compiled`. Refusals: `X86_KV_CACHE_CURSOR_REFUSED`
+  (constant negative count, compile time), `X86_KV_CACHE_HANDLE_REFUSED`
+  (quantized/latent/SSM/non-f32/non-contiguous handle, run time).
+- **Proof:** lit `phase2/x86_kv_cache_cursor_{abi,invalid}.mlir`;
+  `tests/unit/test_x86_kv_cache_cursor.py` bit-exact against the Python
+  references on Zen 5 (Princess-Luna; Tajasarus result in the log entry).
+  Open: the function-boundary conversion of `!tessera.kv_cache` arguments (the
+  lowering keeps the type at the boundary behind a cast); no backend-manifest
+  row was added for `cache_commit`/`cache_rollback` (follow-up, with this proof).
+- **ISTFT JVP:** the x86 package now takes its contract from the scheduled
+  `tessera.istft_jvp`. `tessera_x86_istft_jvp_f32` has no n_fft/center/length
+  parameters, so a centered, cropped or `n_fft != window` window product is now
+  refused before launch (it would have overrun the cropped output buffer).
+
 
 ## `X86-GEMM-ALIGN-2026-09-27`: `X86-GEMM-ALIGN-1` closed — the f32 GEMM owns B's alignment
 
@@ -151,7 +244,8 @@ and on Princess-Luna). Same finding as NVIDIA: `x86_native.native_package_kind`
 classifies `tessera.softmax_safe` as `softmax`, and the scheduled x86 contract
 refuses it, so a `softmax_safe` module is selected for native packaging and then
 refused. The canonicalization now exists (gfx1151-gated); admitting it for x86
-needs owning-Zen-5 rows.
+needs owning-Zen-5 rows. **Closed 2026-09-28** by `E2E-REAL-6-x86-unary-2026-09-28`
+(above): x86 admits `softmax_safe`, with bitwise rows on both Zen 5 hosts.
 ## `SMALL-CORRECTNESS-GAPS-2026-09-27`: sibling outcome — not applicable
 
 Three fixes landed under this key (sm_120 TMA smoke, a validated lit runner for every lit suite, one declaration of the `tessera.neighbors.*` ops; [ROCm](../rocm/todo.md) and [NVIDIA](../nvidia/todo.md) queues). Not applicable here: the lit-runner validator is shared CMake and was exercised on Tajasarus (which also builds the x86 backend: its x86 fixtures are inside the `check-tessera-ir` 454-pass count) and on the Mac. No x86 code changed.
@@ -226,6 +320,14 @@ global it reaches by name (`_synthesize_fused_c`, the snippet helpers,
 memoized per source object (NVIDIA queue for the mechanism and the Mac
 numbers). Sibling outcome: host-independent, covered by the Mac tests; no x86
 device claim.
+## `FOUNDATION-BATCH-2-2026-09-27`: gfx1201 W8A8 CU authority, ragged-M store, MXFP4 one-row-block test — not applicable
+
+The changes are gfx1201 W8A8 selection (`selectFp8W8A8BlockScalePanel` and
+its Python oracle, now reading `rocm_target.compute_units`), the ROCm Tile
+consumer's bounded fragment store (`TileToROCM.cpp`, ROCm-only), and MXFP4
+recorder options. x86 schedules no `tessera.scaled_matmul` W8A8 contract
+and lowers no ROCm Tile store, so nothing here changed for x86.
+
 ## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
 
 x86 schedules no block-scaled matmul. The shared `schedule.matmul` `staging`

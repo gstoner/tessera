@@ -4996,6 +4996,14 @@ def _submit_rocm_gfx1151_native(
 
 
 _x86_native_image_libraries: dict[str, ctypes.CDLL] = {}
+# One loaded object per distinct shared-object *payload*, not per image.
+# ``image_digest`` binds the Target IR digest, which carries per-shape launch
+# constants and the Graph symbol; the x86 payload is the same prebuilt object
+# for every shape, so keying loads on the digest alone dlopen'd one more copy
+# per shape and never released it (E2E-REAL-6 x86 unary cut, measured on
+# Princess-Luna: 8 shapes -> 8 copies of one 382 KiB object). The digest map
+# stays the per-launch fast path; the payload map decides what gets loaded.
+_x86_native_payload_libraries: dict[str, ctypes.CDLL] = {}
 _x86_native_image_fds: dict[str, int] = {}
 
 
@@ -5010,6 +5018,11 @@ def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
     cached = _x86_native_image_libraries.get(image.image_digest)
     if cached is not None:
         return cached
+    payload_key = f"{image.architecture}:{hashlib.sha256(image.payload).hexdigest()}"
+    loaded = _x86_native_payload_libraries.get(payload_key)
+    if loaded is not None:
+        _x86_native_image_libraries[image.image_digest] = loaded
+        return loaded
     if hasattr(os, "memfd_create"):
         fd = os.memfd_create(f"tessera-x86-{image.image_digest[:12]}", flags=0)
         try:
@@ -5025,7 +5038,7 @@ def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
         # to reuse the same fd number; glibc may then return the already-loaded
         # handle for that repeated ``/proc/self/fd/N`` spelling even though the
         # new fd contains a different architecture image.
-        _x86_native_image_fds[image.image_digest] = fd
+        _x86_native_image_fds[payload_key] = fd
     else:
         # Some valid Linux Python builds (including the project's WSL host
         # toolchain) do not expose os.memfd_create.  A uniquely named temporary
@@ -5048,6 +5061,7 @@ def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
                     os.unlink(path)
                 except FileNotFoundError:
                     pass
+    _x86_native_payload_libraries[payload_key] = library
     _x86_native_image_libraries[image.image_digest] = library
     return library
 
@@ -13553,6 +13567,18 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         fn = getattr(lib, sym, None)
         if fn is not None:
             fn.restype = ctypes.c_int
+    # ODS-WIRE-3 handle ABI: pointer in, updated pointer (or NULL) out.
+    handle_pointer = ctypes.POINTER(_X86KVCacheF32Handle)
+    for sym in ("tessera_x86_kv_cache_commit_f32",
+                "tessera_x86_kv_cache_rollback_f32"):
+        fn = getattr(lib, sym, None)
+        if fn is not None:
+            fn.argtypes = [handle_pointer, i64]
+            fn.restype = handle_pointer
+    handle_abi = getattr(lib, "tessera_x86_kv_cache_f32_handle_abi", None)
+    if handle_abi is not None:
+        handle_abi.argtypes = []
+        handle_abi.restype = ctypes.c_int64
     package_abi = getattr(lib, "tessera_x86_spectral_composite_package_abi", None)
     if package_abi is not None:
         package_abi.argtypes = []
@@ -14567,6 +14593,22 @@ def _execute_compiled_spectral_jvp(
 
     if op_name == "tessera.istft" and 1 in wrt:
         axis = int(contract["axis"])
+        # The x86 and ROCm window-product symbols take (batch, frames, window,
+        # hop) only: they overlap-add (frames-1)*hop+window samples with
+        # n_fft == window, no centering trim and no crop. Any other geometry
+        # would be computed wrong and written past the cropped output buffer,
+        # so it is refused here rather than launched (found while wiring
+        # ODS-WIRE-2; the symbols have no n_fft/center/length parameters).
+        window_length = int(contract["window_length"])
+        uncropped = (int(contract["frames"]) - 1) * int(contract["hop"]) + window_length
+        if (int(contract["transform_length"]) != window_length
+                or bool(contract["center"])
+                or int(contract["output_length"]) != uncropped):
+            raise ValueError(
+                f"{target} ISTFT window JVP supports only n_fft == window, "
+                "center=False and the uncropped overlap-add length; the "
+                "window-product symbol has no n_fft/center/length parameters"
+            )
         spectrum = np.ascontiguousarray(primals[0], np.complex64)
         window = np.ascontiguousarray(primals[1], np.float32)
         if axis != spectrum.ndim - 1 or window.ndim != 1:
@@ -18835,19 +18877,30 @@ def _execute_rocm_compiled_ebm_compute(artifact: RuntimeArtifact, args: Any) -> 
 # kernel). compiler_path="x86_ebm_langevin_compiled" / "rocm_ebm_langevin_
 # compiled". f32, matches the numpy reference.
 # ─────────────────────────────────────────────────────────────────────────────
-_EBM_LANGEVIN_OPS = ("tessera.ebm.langevin_step",)
+# ODS triage WIRE slice 4 (2026-09-27): these executors implement
+# `tessera.ebm.langevin_step_philox` and now accept exactly that op, as the
+# frontend emits it (`ops.ebm_langevin_step_philox`, op_catalog): operands
+# (y, grad, seed : 1 x i64, counter : 4 x i64), attributes eta, temperature and
+# optional noise_scale. They used to accept `tessera.ebm.langevin_step` -- the
+# 3-operand HOST-noise op -- and read Philox key/counter from kwargs, so a real
+# langevin_step routed here would have ignored its noise operand (a #31 naming
+# defect: the Philox semantics ran under another op's name).
+_EBM_LANGEVIN_OPS = ("tessera.ebm.langevin_step_philox",)
 
 
-def _ebm_langevin_params(kwargs: dict, np: Any) -> tuple:
-    """Extract (eta, noise_scale, k0, k1, c0, c1, c2, c3) from the op kwargs."""
-    eta = float(kwargs.get("eta", 0.0))
-    noise_scale = float(kwargs.get("noise_scale", 0.0))
-    if noise_scale < 0.0:
-        raise ValueError(f"ebm langevin requires noise_scale >= 0; got {noise_scale}")
-    key = np.asarray(kwargs.get("key", (0, 0)), np.uint32).reshape(-1)
-    ctr = np.asarray(kwargs.get("counter", (0, 0, 0, 0)), np.uint32).reshape(-1)
-    if key.size < 2 or ctr.size < 4:
-        raise ValueError("ebm langevin requires key (2x u32) + counter (4x u32) kwargs")
+def _ebm_langevin_params(operands: list, kwargs: dict, np: Any) -> tuple:
+    """(eta, noise_scale, k0, k1, c0, c1, c2, c3) from the Philox op's seed /
+    counter operands and attributes. eta and temperature are semantic and
+    required (Decision #21a); noise_scale defaults to sqrt(2*eta*T) per the op
+    definition. Validation is shared with the Python reference."""
+    from ._ebm_ops import langevin_philox_noise_scale, philox_key_counter
+
+    for name in ("eta", "temperature"):
+        if kwargs.get(name) is None:
+            raise ValueError(f"tessera.ebm.langevin_step_philox requires the {name!r} attribute")
+    eta = float(kwargs["eta"])
+    noise_scale = langevin_philox_noise_scale(eta, float(kwargs["temperature"]), kwargs.get("noise_scale"))
+    key, ctr = philox_key_counter(operands[2], operands[3])
     return (eta, noise_scale, int(key[0]), int(key[1]), int(ctr[0]), int(ctr[1]), int(ctr[2]), int(ctr[3]))
 
 
@@ -18927,13 +18980,13 @@ def _x86_ebm_partition_exact(energies: Any, temperature: float, np: Any) -> floa
 
 
 def _ebm_langevin_compute(operands: list, kwargs: dict, langevin_fn: Any, np: Any) -> Any:
-    if len(operands) < 2:
-        raise ValueError("ebm langevin needs (y, grad) operands")
+    if len(operands) != 4:
+        raise ValueError("tessera.ebm.langevin_step_philox needs (y, grad, seed, counter) operands")
     y = np.ascontiguousarray(operands[0], np.float32)
     grad = np.ascontiguousarray(operands[1], np.float32)
     if y.shape != grad.shape:
         raise ValueError(f"ebm langevin needs matching shapes; got {y.shape}, {grad.shape}")
-    eta, ns, k0, k1, c0, c1, c2, c3 = _ebm_langevin_params(kwargs, np)
+    eta, ns, k0, k1, c0, c1, c2, c3 = _ebm_langevin_params(operands, kwargs, np)
     return langevin_fn(y, grad, eta, ns, k0, k1, c0, c1, c2, c3, np)
 
 
@@ -23344,6 +23397,119 @@ def _moe_grouped_swiglu_native(x_packed: Any, w_gate: Any, w_up: Any, w_down: An
 # compiler_path="rocm_kv_cache_compiled".
 # ─────────────────────────────────────────────────────────────────────────────
 _KV_CACHE_OPS = ("tessera.kv_cache.append", "tessera.kv_cache.read", "tessera.kv_cache.prune")
+#: SD1-3 speculative-decode cursor ops (ODS-WIRE-3). They thread a cache
+#: HANDLE, so the lane binds (keys, values) plus the handle's cursor and
+#: returns the updated (keys, values, current_seq) triple.
+_KV_CACHE_CURSOR_OPS = ("tessera.cache.commit", "tessera.cache.rollback")
+_KV_CACHE_CURSOR_COUNT = {
+    "tessera.cache.commit": "accepted_length",
+    "tessera.cache.rollback": "num_rejected",
+}
+#: Must equal kKvCacheF32HandleAbi in kv_cache_f32.cpp.
+_X86_KV_CACHE_F32_HANDLE_ABI = 1
+
+
+class _X86KVCacheF32Handle(ctypes.Structure):
+    """ctypes mirror of ``tessera_x86_kv_cache_f32_handle`` (kv_cache_f32.cpp)."""
+
+    _fields_ = [
+        ("abi_version", ctypes.c_int64),
+        ("keys", ctypes.POINTER(ctypes.c_float)),
+        ("values", ctypes.POINTER(ctypes.c_float)),
+        ("max_seq", ctypes.c_int64),
+        ("row_len", ctypes.c_int64),
+        ("current_seq", ctypes.c_int64),
+    ]
+
+
+def x86_kv_cache_cursor(handle: Any, op_name: str, count: int) -> Any:
+    """Apply ``tessera.cache.commit`` / ``tessera.cache.rollback`` to a KV handle
+    through the native x86 handle ABI, in place, and return the handle.
+
+    This is the runtime half of the lowering ``TileToX86Pass`` emits for the
+    two ops (``tessera_x86_kv_cache_{commit,rollback}_f32``: handle + count in,
+    updated handle out). It admits exactly what that ABI represents -- an
+    unquantized f32 ``KVCacheHandle`` with contiguous (max_seq, H, D) keys and
+    values -- and refuses anything else with ``X86_KV_CACHE_HANDLE_REFUSED``
+    rather than falling back to the Python reference.
+    """
+    import numpy as np
+
+    if op_name not in _KV_CACHE_CURSOR_OPS:
+        raise ValueError(f"x86 KV-cache cursor handles {_KV_CACHE_CURSOR_OPS}; got {op_name!r}")
+    if not hasattr(handle, "current_seq") or not hasattr(handle, "keys"):
+        raise ValueError(
+            "X86_KV_CACHE_HANDLE_REFUSED: the x86 cursor ABI carries a KV "
+            f"(keys/values/current_seq) handle; got {type(handle).__name__} "
+            "(SSM ring and latent handles have no x86 cursor ABI)"
+        )
+    if getattr(handle, "quantize_bits", None) is not None or getattr(
+        handle, "_scales", None
+    ) is not None:
+        raise ValueError(
+            "X86_KV_CACHE_HANDLE_REFUSED: quantized KV handles carry per-token "
+            "scales the f32 cursor ABI does not trim"
+        )
+    keys, values = handle.keys, handle.values
+    if not (isinstance(keys, np.ndarray) and isinstance(values, np.ndarray)
+            and keys.dtype == np.float32 and values.dtype == np.float32
+            and keys.shape == values.shape and keys.ndim >= 2
+            and keys.flags.c_contiguous and values.flags.c_contiguous):
+        raise ValueError(
+            "X86_KV_CACHE_HANDLE_REFUSED: the x86 cursor ABI requires "
+            "contiguous f32 keys/values of one (max_seq, ...) shape"
+        )
+    count = int(count)
+    lib = _load_x86_elementwise()
+    symbol = ("tessera_x86_kv_cache_commit_f32" if op_name == "tessera.cache.commit"
+              else "tessera_x86_kv_cache_rollback_f32")
+    if lib is None or not hasattr(lib, symbol):
+        raise _RocmCompiledUnavailable(
+            f"libtessera_x86_elementwise.so does not export {symbol}"
+        )
+    abi = getattr(lib, "tessera_x86_kv_cache_f32_handle_abi", None)
+    if abi is None or int(abi()) != _X86_KV_CACHE_F32_HANDLE_ABI:
+        raise _RocmCompiledUnavailable("x86 KV-cache handle ABI version mismatch")
+    c_f32 = ctypes.POINTER(ctypes.c_float)
+    native = _X86KVCacheF32Handle(
+        _X86_KV_CACHE_F32_HANDLE_ABI,
+        keys.ctypes.data_as(c_f32), values.ctypes.data_as(c_f32),
+        int(keys.shape[0]), int(np.prod(keys.shape[1:])), int(handle.current_seq),
+    )
+    updated = getattr(lib, symbol)(ctypes.byref(native), count)
+    if not updated:
+        raise ValueError(
+            f"native x86 KV-cache handle ABI rejected {op_name}("
+            f"current_seq={handle.current_seq}, count={count})"
+        )
+    if ctypes.addressof(updated.contents) != ctypes.addressof(native):
+        raise RuntimeError("x86 KV-cache handle ABI returned a foreign handle")
+    handle.current_seq = int(native.current_seq)
+    return handle
+
+
+def _execute_x86_compiled_kv_cache_cursor(
+    op_name: str, operands: list, kwargs: Mapping[str, Any]
+) -> Any:
+    """Bufferized form of the cursor ops: (keys, values) in, fresh
+    (keys, values, current_seq) out. ``current_seq`` and the count are
+    semantic keys and never default (Decision #21a)."""
+    import numpy as np
+    from types import SimpleNamespace
+
+    count_key = _KV_CACHE_CURSOR_COUNT[op_name]
+    missing = [key for key in ("current_seq", count_key) if key not in kwargs]
+    if missing:
+        raise ValueError(f"x86 {op_name} requires {missing}; they never default")
+    if len(operands) != 2:
+        raise ValueError(f"x86 {op_name} binds the cache's keys and values buffers")
+    handle = SimpleNamespace(
+        keys=np.array(operands[0], dtype=np.float32, order="C", copy=True),
+        values=np.array(operands[1], dtype=np.float32, order="C", copy=True),
+        current_seq=int(kwargs["current_seq"]),
+    )
+    x86_kv_cache_cursor(handle, op_name, int(kwargs[count_key]))
+    return handle.keys, handle.values, np.int64(handle.current_seq)
 
 
 def _execute_x86_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -23354,15 +23520,20 @@ def _execute_x86_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any:
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    if len(ops) != 1 or op_name not in _KV_CACHE_OPS:
+    if len(ops) != 1 or op_name not in _KV_CACHE_OPS + _KV_CACHE_CURSOR_OPS:
         raise ValueError(
-            f"x86_kv_cache_compiled handles one of {_KV_CACHE_OPS}; got {[o.get('op_name') for o in ops]!r}"
+            f"x86_kv_cache_compiled handles one of {_KV_CACHE_OPS + _KV_CACHE_CURSOR_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}"
         )
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
     raw_operands = [_as_numpy(values[n]) for n in operand_names]
     if any(array.dtype != np.float32 for array in raw_operands):
         raise ValueError("x86 KV-cache lane handles f32 only")
+    if op_name in _KV_CACHE_CURSOR_OPS:
+        return _execute_x86_compiled_kv_cache_cursor(
+            op_name, raw_operands, ops[0].get("kwargs") or {}
+        )
     operands = [np.ascontiguousarray(array, np.float32) for array in raw_operands]
     if not operands or operands[0].ndim < 2:
         raise ValueError("x86 KV-cache buffer must have shape (max_seq, ...)")

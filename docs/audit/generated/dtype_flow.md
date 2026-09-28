@@ -16,10 +16,10 @@ a bounded uint8/int8 x86 package does not promote unsigned frontend storage.
 Use the canonical dtype vocabulary, serialized artifact and owning-device
 packet to resolve the supported envelope.
 
-- Operators: **353**
+- Operators: **354**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **952**
-- Rows retaining at least one compiler/evidence gap: **374**
+- Operator/logical-dtype rows: **956**
+- Rows retaining at least one compiler/evidence gap: **378**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -131,6 +131,7 @@ for the complete per-dtype and per-target matrix.
 | `ebm_energy_quadratic` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_inner_step` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_langevin_step` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
+| `ebm_langevin_step_philox` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_partition_exact` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_refinement` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_self_verify` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |

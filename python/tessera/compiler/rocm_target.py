@@ -147,6 +147,20 @@ def dispatch_slots(arch: AMDArch, mode: WorkgroupProcessorMode) -> int | None:
     return slots
 
 
+def compute_units(arch: AMDArch) -> int | None:
+    """The part's compute-unit count, or None when this fleet has not measured it.
+
+    Derived from the same measured table as `dispatch_slots` -- on RDNA a WGP
+    is two CUs, so this is `dispatch_slots(arch, CU)` -- rather than restated:
+    one authority, so a correction to a part's slot count cannot leave a CU
+    constant behind. The C++ Schedule mirrors it (`measuredComputeUnits` in
+    `PMPasses.cpp`, the W8A8 LDS-body occupancy rule); a unit test compares
+    the two tables entry for entry. None means "never measured" -- a caller
+    must decline to conclude, never substitute a default.
+    """
+    return dispatch_slots(arch, WorkgroupProcessorMode.CU)
+
+
 #: RDNA parts pair CUs into WGPs; CDNA does not, so its slot count is CUs and
 #: the mode does not apply.
 _IS_RDNA: dict[AMDArch, bool] = {
@@ -1244,6 +1258,7 @@ __all__ = [
     "TESSERA_TARGET_ROCM",
     "TESSERA_TARGET_HIP",
     "dispatch_slots",
+    "compute_units",
     "TESSERA_TARGET_RCCL_MIN",
     "TESSERA_TARGET_ROCBLAS_MIN",
     "TESSERA_TARGET_MIOPEN_MIN",

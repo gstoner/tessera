@@ -1208,6 +1208,50 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
         sprint="ROCM-SPLIT-K-1",
     ),
+    # ── ROCM-FP8-BLOCKSCALE-1: the LDS body's CU denominator (2026-09-27) ──
+    DiagnosticCode(
+        code="ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED",
+        pass_origin="GraphToSchedulePass",
+        severity="warning",
+        summary=(
+            "a [N, K] W8A8 block-scale matmul at M >= 128 targets an arch with "
+            "no measured compute-unit count, so the LDS-staged body's "
+            "occupancy rule cannot be evaluated; the register panel was "
+            "scheduled (emitted as a warning). Unreachable while the W8A8 "
+            "derivation admits gfx1201 alone, which is measured."
+        ),
+        fix_hint=(
+            "The body is a performance decision, so falling back is allowed "
+            "-- never silently (Decision #21a), and never by guessing the "
+            "denominator. Measure the part's CU count on the box that has it "
+            "and add it to `rocm_target._DISPATCH_SLOTS` and, mirrored, to "
+            "`measuredComputeUnits` in PMPasses.cpp (a unit test compares "
+            "the two)."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="ROCM-FP8-BLOCKSCALE-1",
+    ),
+    # ── GOV-ODS-CONSUMER-1 WIRE slice 1: ntk_rope -> rope (2026-09-27) ──
+    DiagnosticCode(
+        code="TESSERA_NTK_ROPE_THETA_UNREWRITABLE",
+        pass_origin="DecomposeCompositeOpsPass",
+        severity="error",
+        summary=(
+            "a tessera.ntk_rope with scale != 1 could not be rewritten to "
+            "tessera.rope(x, theta / scale): theta is unranked, dynamically "
+            "shaped or not floating, so the scale splat cannot be "
+            "materialized. Every rope consumer matches only tessera.rope, so "
+            "the op is refused rather than left unlowered (Decision #21). "
+            "Also emitted by tessera-canonicalize, which runs the same pattern."
+        ),
+        fix_hint=(
+            "Give theta a static floating tensor type, or fold the scale into "
+            "theta before the call (ntk_rope(x, theta / s, scale=1.0) is "
+            "rope(x, theta / s))."
+        ),
+        spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md",
+        sprint="GOV-ODS-CONSUMER-1",
+    ),
     DiagnosticCode(
         code="ROCM_SPLIT_K_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",
@@ -4457,6 +4501,63 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Capture around the calls being attributed.",
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1",
         sprint="EVIDENCE-PACKET-1-2026-09-27",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="SPECTRAL_JVP_SCHEDULE_REFUSED",
+        pass_origin="GraphToSchedulePass",
+        severity="error",
+        summary=(
+            "tessera.istft_jvp cannot be bound to a scheduled forward-product "
+            "contract: no exact Zen 5 AVX-512 / gfx1151 / gfx1201 / sm120 "
+            "profile, a non-static or mistyped operand, an overlap-add geometry "
+            "the static tangent type contradicts, or no active tangent."
+        ),
+        fix_hint=(
+            "Set tessera.target/tessera.arch to an exact proven profile, keep "
+            "the window and tangent in one f16/bf16/f32 storage with fp32 "
+            "accumulation, and make output_length agree with the result type. "
+            "A reduced-precision window whose ISTFT result the frontend types "
+            "as f32 is refused until the two storages agree."
+        ),
+        spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-istft-jvp",
+        sprint="ODS-WIRE-2-2026-09-28",
+    ),
+    DiagnosticCode(
+        code="X86_KV_CACHE_CURSOR_REFUSED",
+        pass_origin="LowerKVCacheCursorToX86",
+        severity="error",
+        summary=(
+            "tessera.cache.commit/rollback was rejected by the x86 KV-cache "
+            "handle ABI: at compile time for a constant negative count, at run "
+            "time (the cf.assert the lowering emits after every ABI call) when "
+            "tessera_x86_kv_cache_{commit,rollback}_f32 returns NULL for a "
+            "dynamic out-of-range count or an invalid handle."
+        ),
+        fix_hint=(
+            "Keep accepted_length in [0, current_seq] and num_rejected >= 0, "
+            "and pass a valid f32 handle; the lowering traps rather than "
+            "threading the NULL handle into later cache ops."
+        ),
+        spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-cache-commit",
+        sprint="ODS-WIRE-3-2026-09-28",
+    ),
+    DiagnosticCode(
+        code="X86_KV_CACHE_HANDLE_REFUSED",
+        pass_origin="tessera.runtime.x86_kv_cache_cursor",
+        severity="error",
+        summary=(
+            "The x86 KV-cache cursor ABI represents only an unquantized f32 "
+            "KVCacheHandle with contiguous (max_seq, ...) keys and values; a "
+            "quantized, latent, SSM, non-f32 or non-contiguous handle is refused."
+        ),
+        fix_hint=(
+            "Run commit/rollback for that handle through its reference "
+            "(tessera.ops.cache_commit / cache_rollback); the x86 handle ABI "
+            "does not trim quantization scales or rewind SSM rings."
+        ),
+        spec="docs/audit/compiler/ODS_OP_CONNECTION_TRIAGE.md#tessera-cache-commit",
+        sprint="ODS-WIRE-3-2026-09-28",
         language="python", status="implemented",
     ),
 )

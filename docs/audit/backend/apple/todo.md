@@ -3,10 +3,22 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## `ODS-WIRE-1-4-2026-09-27`: target_verify / ntk_rope rewrite on the Apple pipelines — follow-up required (ntk_rope division, Philox Graph lane)
+
+Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slices 1 and 4). `tessera-lower-to-apple_gpu-runtime` now runs `tessera-decompose-composite-ops` first (pattern source `src/transforms/include/Tessera/Transforms/CompositeDecomposition.h`, header-only so `TesseraApple` needs no new link), and the `-full` spines run it in the reasoning prologue. Proven host-free on the Mac by `tests/tessera-ir/phase8/composite_decomposition_apple_gpu.mlir`: `target_verify` reaches `tessera_apple_gpu_softmax_f32_status`, `ntk_rope` reaches `tessera_apple_gpu_rope_f32`. **Not proven:** Apple execution of either op (`@jit(target="apple_gpu")` still records them `artifact_only`). **Follow-up required:** (1) a scaled `ntk_rope` leaves `tessera.div(theta, splat)` on the -runtime pipeline, which has no Graph binary-elementwise lowering -- the reason the `ntk_rope -> rope` dashboard alias stays withheld; (2) `tessera.ebm.langevin_step_philox` has no Apple Graph lane (the Philox MSL kernel is reached from Python `tessera.ebm.langevin_step_philox`); its apple_gpu manifest row now cites `tests/unit/test_philox_runtime.py`, which passes on this Mac (Metal, M1 Max).
+
+## `ODS-WIRE-B-2026-09-28`: sibling outcome — not applicable
+
+`tessera.istft_jvp` gained a Schedule consumer admitted only for Zen 5,
+gfx1151, gfx1201 and sm120 (an Apple module is refused with
+`SPECTRAL_JVP_SCHEDULE_REFUSED`; Apple has no native ISTFT JVP package), and
+the KV-cache cursor ops lower only on x86. No Apple code changed.
+
 
 ## `E2E-REAL-6-rocm-unary-2026-09-27`: sibling outcome — not applicable (Apple contract unchanged)
 
@@ -72,6 +84,14 @@ Apple: the `apple_gpu` emitter's reachable code reads the environment
 (`_candidate_libraries`), so it is never memoized, and `AppleAIREmitter` sets
 `source_memo_safe = False` because it delegates to the `apple_gpu` emitter
 object, which the name walk cannot follow. Apple emission is unchanged.
+
+## `FOUNDATION-BATCH-2-2026-09-27`: gfx1201 W8A8 CU authority, ragged-M store, MXFP4 one-row-block test — not applicable
+
+The changes are gfx1201 W8A8 selection (`selectFp8W8A8BlockScalePanel` and
+its Python oracle, now reading `rocm_target.compute_units`), the ROCm Tile
+consumer's bounded fragment store (`TileToROCM.cpp`, ROCm-only), and MXFP4
+recorder options. Apple schedules no `tessera.scaled_matmul` W8A8 contract
+and lowers no ROCm Tile store, so nothing here changed for Apple.
 
 ## `GFX1201-PERF-2026-09-27`: gfx1201 W8A8 LDS body, bf16 store, folded MXFP4 row guard — not applicable
 

@@ -182,13 +182,13 @@ def memref(pointer: P, size: int) -> list:
 
 
 def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=1,
-                   scale_group_panels=-1, lds=None):
+                   scale_group_panels=-1, lds=None, check_panel=True):
     """``panel`` overrides the carrier's macro tile; ``lds`` =
     (warps, pipeline_depth, stage_k, pad_bytes, prefetch) additionally
     overrides its staging to the LDS-staged multi-wave body. Both are
     sweep-only: such a row is labelled ``panel_override`` and never stands
     for the production route, which is whatever the Schedule chose."""
-    program = lower_blockscale(shape)
+    program = lower_blockscale(shape, check_panel=check_panel)
     overridden = panel is not None or lds is not None
     tile_ir = program.tile_ir
     if panel is not None:
@@ -242,7 +242,7 @@ def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=
         "scale_group_panels": scale_group_panels, "weight_layout": shape.weight_layout,
         "hsaco_sha256": hashlib.sha256(package.image.payload).hexdigest(),
         "schedule_hash": prov["schedule_hash"], "abi_id": package.descriptor.abi_id,
-        "output": shape.output,
+        "output": shape.output, "panel_projection_checked": check_panel,
     }
     return launch, meta, package
 
@@ -593,8 +593,11 @@ def main() -> None:
             layout, _, output = layout.partition("+")
             shape = BlockScaleShape(m, n, k, 128, 128, layout, output or "f32")
             try:
+                # An @alias arm is another compiler build, whose Schedule
+                # rule this tree's panel oracle does not describe.
                 launch, meta, _ = tessera_launch(hip, device, shape, panel=panel, k_unroll=unroll,
-                                                 scale_group_panels=group_panels, lds=lds)
+                                                 scale_group_panels=group_panels, lds=lds,
+                                                 check_panel=not alias)
             except Exception as error:  # a variant the generator refuses is a result, not a crash
                 row[label] = {"refused": str(error)[:400]}
                 continue

@@ -158,6 +158,17 @@ _SPECS = [
     # does not collide on public_name with the canonical flat-lane OpSpec.
     OpSpec("ebm_langevin_step", "tessera.ebm.langevin_step", 3, 3,
            lowering="ebm"),
+    # ODS triage WIRE slice 4 (GOV-ODS-CONSUMER-1, 2026-09-27): the producer
+    # of the Philox Langevin step. Operands (y, grad, seed, counter): the noise
+    # is drawn from counter-based Philox-4x32-10 over (seed, counter) instead
+    # of a host noise operand, so the op is `random` with a seed/counter sample
+    # identity (same contract as dropout). Consumed by the x86 / ROCm compiled
+    # executors (`_EBM_LANGEVIN_OPS` in runtime.py), which draw the noise on
+    # the device; the 3-operand host-noise `ebm_langevin_step` above is a
+    # different op and is no longer accepted there.
+    OpSpec("ebm_langevin_step_philox", "tessera.ebm.langevin_step_philox", 4, 4,
+           effect="random", lowering="ebm",
+           stochastic_identity="seed_counter"),
     OpSpec("transpose", "tessera.transpose", 1, 1, lowering="layout_transform"),
     OpSpec("stop_gradient", "tessera.stop_gradient", 1, 1,
            lowering="layout_transform", shape_rule="same_as_first"),
@@ -765,6 +776,7 @@ OP_SHAPE_RULE: dict = {
     "tessera.transpose": "transpose",
     "tessera.ebm_energy_quadratic": "reduce_trailing",
     "tessera.ebm.langevin_step": "same_as_first",
+    "tessera.ebm.langevin_step_philox": "same_as_first",
     # The `logical` kind is NOT uniform: the connectives yield a predicate
     # while the bitwise ops preserve the operand's integer dtype. Declaring one
     # default for the kind would be wrong for half of it.

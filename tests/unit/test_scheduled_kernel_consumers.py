@@ -154,11 +154,12 @@ def test_rocm_packages_exact_scheduled_reduction(monkeypatch) -> None:
     monkeypatch.setattr(native_unary_contract, "verify_unary_ancestry", lambda *args, **kwargs: None)
     artifact = _artifact(family="reduce", target="rocm")
 
-    def fake_compile(tile_ir: str):
-        assert tile_ir == artifact.tile_ir
-        return "rocm-target", "rocm-backend", b"hsaco", "compiler", "toolchain", (), "cold"
+    def fake_compile(tile_ir: str, *, family: str, architecture: str):
+        assert tile_ir == artifact.tile_ir and family == "reduction"
+        target = 'module {\n  tessera_rocm.reduce {name = "tessera_rocm_reduction_fake"}\n}\n'
+        return target, "rocm-backend", b"hsaco", "compiler", "toolchain", (), "cold"
 
-    monkeypatch.setattr(rocm_native, "_compile_reduction_tile_ir", fake_compile)
+    monkeypatch.setattr(rocm_native, "_compile_shape_free_tile_ir", fake_compile)
     package = rocm_native.package_scheduled_kernel(
         artifact, pipeline_name="tessera-lower-to-rocm"
     )
@@ -335,8 +336,11 @@ def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, tmp_path, 
         from tessera.compiler import native_unary_contract
         monkeypatch.setattr(native_unary_contract, "verify_unary_ancestry", lambda *args, **kwargs: None)
         monkeypatch.setattr(
-            rocm_native, "_compile_reduction_tile_ir",
-            lambda tile_ir: ("target", "backend", b"hsaco", "compiler", "toolchain", (), "cold"),
+            rocm_native, "_compile_shape_free_tile_ir",
+            lambda tile_ir, **_kw: (
+                'module {\n  tessera_rocm.reduce {name = "tessera_rocm_reduction_fake"}\n}\n',
+                "backend", b"hsaco", "compiler", "toolchain", (), "cold",
+            ),
         )
     else:
         from tessera.compiler import apple_native

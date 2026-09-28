@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-27
+last_updated: 2026-09-28
 audit_role: reference
 ---
 
@@ -5570,5 +5570,395 @@ Evidence: fixtures under `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/n
 `tests/tessera-ir/phase5/{linalg_solver_op_identity,optimizer_shard_zero_config*}.mlir`;
 before/after on Tajasarus's assertions-ON LLVM/MLIR 23.1.1 recorded in the
 NVIDIA queue entry and the PR.
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — ROCm scheduled softmax/reduction images keyed on a shape-free kernel identity
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: branch `claude/foundation-batch-2-rocm-cache-key` (umbrella `claude/foundation-batch-2`).
+Sync: `FOUNDATION-BATCH-2-2026-09-27`.
+
+Outcome: the follow-up the ROCm unary cut recorded as open is closed. The
+compiled route's image was keyed on its Tile text, which binds the shape
+(through the Schedule digest and launch constants) and the Graph function name,
+so every new shape or caller name recompiled an identical HSACO.
+`package_scheduled_kernel` now compiles softmax and reduction (gfx1151 and
+gfx1201) through `rocm_native._compile_shape_free_tile_ir`: `tessera-opt` still
+consumes the Tile IR per request (Tile -> Target; Python never translates Tile
+to Target), the Target IR is projected onto its one directive with the `name`
+replaced by a symbol derived from the rest of the module, and the HSACO is
+compiled from that projection at `input=directive` and cached by it through
+the single ROCm cache authority (`_native_cache_key`). The key therefore holds
+exactly what the binary is compiled from -- every directive attribute, the
+arch, the pipeline config, the device libraries and the compiler binary --
+rather than an audited list of fields. Host scaffolding (function signature,
+buffer casts, `arith.constant` launch extents) is the only thing dropped; any
+other op fails closed, and a family joins `_SHAPE_FREE_DIRECTIVES` only after
+its generator is read and measured (a generator that bakes an extent must
+carry it as a directive attribute first). The descriptor's `entry_symbol` is
+read from the Target IR that produced the image; the Graph symbol is
+provenance (`graph_symbol`). Decision #11: `kernel_code_identity` digests the
+image's decoded instruction stream and symbols, so it reads what runs; images
+of one identity are now byte-identical across shapes, and the `tessera-opt`
+digest in every ROCm compile key is memoized on the binary's stat signature
+(content-hashed again on any rebuild).
+
+Measured (Princess-Luna gfx1151, `benchmarks/rocm/measure_rocm_unary_route_cache.py`;
+compile cost only, not a runtime claim): before, each new shape cost 374–387 ms
+(softmax f16) / 376–387 ms (reduce bf16), all cold. After, the first shape is
+cold at ~200 ms and each further shape, and a different Graph symbol, is a
+warm hit at 98–102 ms with the same HSACO and `image_digest`. The ~100 ms left
+is per-shape lowering + ancestry replay + Tile -> Target (five `tessera-opt`
+runs) and the device-library probe. The digest memo takes an exact warm hit
+from ~186–208 ms to 16–20 ms (visible on the retired-route rows). Evidence the
+projection is binary-faithful: on Princess-Luna the reduction HSACO compiled
+from the extracted directive has the same `llvm-objdump -d` stream and `.kd`
+descriptor as the one compiled from the full Tile module, and all retired-vs-
+compiled bitwise device rows pass launching the canonical symbol.
+
+Remaining: other ROCm families keep the Tile-text key (each needs the same
+generator read and measurement before joining); the ~100 ms per-shape floor is
+lowering/replay subprocesses, not codegen; NVIDIA's scheduled unary image key
+was not measured (follow-up candidate, no parity claim).
+
+Evidence: `tests/unit/test_rocm_shape_free_cache_key.py` (host-free: projection
+independent of shape and Graph symbol; each directive attribute, the header,
+the arch and a rebuilt compiler miss; two shapes and two symbols share one
+compile; unaudited Target IR, a second directive and a nameless directive fail
+closed; exact-device: two shapes + two symbols -> one image, both launches
+correct, a storage/kind change -> a new image). Princess-Luna
+(`TESSERA_ROCM_E2E_DEVICE_TEST=1`): 500 passed / 101 skipped (gfx1201 gates,
+Darwin) over the five ROCm unary/scheduled files, 185 exact-device rows; ROCm
+subset 4578 passed / 465 skipped / 0 failed; `check-tessera-ir` 521 + 4
+unsupported, `check-tessera-rocm` 82/82. Tajasarus (gfx1201, assertions-ON
+LLVM/MLIR 23.1.1): the same five files with `TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1` -- 384 passed, 217 skipped (gfx1151 device gates, Darwin), including both new two-shape/two-symbol reuse rows and both `test_gfx1201_scheduled_package_executes` rows through the `input=directive` compile; ROCm subset 4615 passed / 418 skipped / 10 failed under `-n 8`, all ten in `test_rocm_sparse_{runtime,byte_formats}.py` ("sparse worker teardown is unconfirmed" -- worker-process contention on a GPU shared with another job), and those two files pass 34/34 run serially; `check-tessera-ir` 459 passed / 66 unsupported, `check-tessera-rocm` 82/82. Mac: full `tests/unit` sweep (`-m "not slow"`, Apple + x86 + EBM + Clifford build) 21675 passed / 4017 skipped / 0 failed; mypy clean; `check_compiler_plan.py` and generated-doc drift clean.
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — ROCM-FP8-BLOCKSCALE-1: ragged M stops paying for its masked edge
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+
+PRs: branch `claude/foundation-batch-2-gfx1201-gaps` (sync `FOUNDATION-BATCH-2-2026-09-27`; follow-ups of PR #872).
+
+Outcome: (a) the W8A8 LDS rule's CU count comes from one authority: `measuredComputeUnits` (PMPasses.cpp) mirrors the new `rocm_target.compute_units` (2 x the measured `_DISPATCH_SLOTS` WGPs), a unit test compares the tables entry for entry, `lower_blockscale` refuses a Schedule whose panel the Python oracle `blockscale_panel_oracle` does not reproduce, and an unmeasured arch keeps the register panel with a registered `ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED` warning. (b) The ragged-M gap was the bounded store, not the 128-row tile: a ragged M = 1000 ran 1.25x slower than M = 1024 on the same grid because the block-scale join's per-element rows, hoisted by LICM above the K loop, were handed by GVN to a store written against absolute rows (251 vs 238 VGPRs at 128x128, 233 vs 187 at 128x64). `materializeFragmentStore` now tests each element's row as a constant against the lane's room and addresses it from the lane's row base (same elements, predicates and addresses; the column keeps its absolute form, which measured better): every ragged 128x128 variant is 240 VGPRs, no spills. Ragged M then follows the whole-M rule (128x128 when it gives >= 64 workgroups). Device clock, paired, vs unmodified AITER: ragged-M geomean **0.965** (was 1.086 at the previous compiler, 26 points); where the selection changed, 0.90x of the old tile (0.83-1.08). Whole-M LDS kernels byte-identical; the 54-row comparison is unchanged (0.647 / 0.905 / 0.912 by M bucket). (c) The short-K / N = 1024 whole-M gap (6 of 18 shapes at 1.04-1.09x AITER) is still open; grouped raster (~1-3%, not converging), 16-wave grids, a register-staged next slab and double-buffered LDS at stage K 64 all measured negative.
+
+Remaining: short K (K <= 2048, or N = 1024) at 1.04-1.09x AITER, also the K = 1536 ragged rows (1.12-1.34x); 200x8192x1024 loses 8% under the new rule and 200x2048x2048 is 6% slower from the store change (both recorded, not tuned around); the shared bounded store's effect on gfx1151 kernels is untimed (static census on gfx1201 only).
+
+Evidence: [ragged/short-K packet](../../../benchmarks/baselines/gfx1201_fp8_blockscale_ragged_20260927/README.md), `tests/unit/test_rocm_fp8_blockscale.py`, `tests/device/rocm/test_fp8_blockscale_w8a8.py`, `tests/tessera-ir/phase2/e2e_fp8_blockscale_lds_rocm_target.mlir`.
+
+<!-- entry-fields:end -->
+
+Found on the way: the first attempt wrote the column test in the per-lane form too; that made the ragged-N 128x128 body 256 VGPRs plus spills (from 251), so only the row is rewritten. A generator-side attempt (stating a whole dimension's bound as the fragment edge so it folds) was built, measured unnecessary once the row form landed, and removed. A 64-row LDS tile (64x64/4 waves, 64x128/8 waves) moved the ragged geomean only 1.07 -> 1.04 before the store fix and is not selected.
+
+### 2026-09-27 — ROCM-MXFP4-W4A8-1: the one-row-block gap is not the weight bytes
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+
+PRs: branch `claude/foundation-batch-2-gfx1201-gaps` (sync `FOUNDATION-BATCH-2-2026-09-27`).
+
+Outcome: the M = 256 gap to Radiance (1.05-1.23x) was tested against the hypothesis that Radiance's packed E2M1 weights (half the bytes) explain it. An N scan at M = 256, K = 5120 (N 4096..24576) with three rotating input copies and with one (operands cache-resident where they fit the 64 MiB last-level cache), device clock witnessed by HIP events, three processes, all engines bitwise equal to exact K32: residency closes the gap at N = 4096 (1.03-1.07x -> 0.98-1.01x), but with both weights resident at N = 8192-12288 the gap stays 1.11-1.15x, and the marginal cost per output column is 16.0-16.7 ns for Tessera against 12.7-12.8 for Radiance in both regimes. The two opt-in packed-E2M1 candidates (bitwise exact, half the weight bytes) are 1.20-1.48x Radiance, slower than the expanded selected schedule at every N. Verdict: not the weight bytes; the per-column cost is unattributed (no counters on WSL2). Exact K32 stays default, folded opt-in, no selector change.
+
+Remaining: the M = 256 per-column cost (A restaging per 64-column block, LDS fragment traffic, epilogue or issue -- unmeasurable here); a packed decode on the selected load schedule is untested (the candidates lack its keys).
+
+Evidence: [one-row-block packet](../../../benchmarks/baselines/gfx1201_mxfp4_one_row_block_20260927/README.md), `benchmarks/rocm/record_gfx1201_mxfp4_folded_load_schedule.py` (`--shapes nscan`, `--packed`, `--copies`).
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — CI lanes that reported success having tested nothing
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: branch `claude/foundation-batch-2-ci-lanes` (umbrella `claude/foundation-batch-2`).
+
+Outcome: The hosted `lit` and `rocm-serialize` lanes gated on the exact
+LLVM/MLIR 23.1.1 pin; apt.llvm.org now serves 23.1.2, so both printed
+`::warning … skipping`, set `mlir=false`, gated every later step off it and
+reported **success having configured, built and tested nothing** (push run
+36347063229 on main). The `sanitizer` lane installed no LLVM/MLIR at all; its
+last real run (35609056270, 2026-09-21) failed at `find_package(MLIR)`.
+Owner decision (sync `FOUNDATION-BATCH-2-2026-09-27`): hosted CI accepts any
+23.1.x patch, records the exact version, and **fails** when none is available;
+the fleet keeps its exact pin. Implemented as: `TESSERA_LLVM_PIN_MODE`
+(`exact` default, `minor` passed only by `validate.yml`) in
+`cmake/TesseraToolchainPins.cmake` — `minor` relaxes only the patch, still
+rejects a mixed LLVM/MLIR pair and other series, writes
+`tessera_llvm_pin.txt`, and refuses an MLIR that reports no version;
+`scripts/ci_resolve_llvm.sh` resolves the prefix (llvm-config, mlir-opt,
+CMake packages, optional ld.lld), writes version to `$GITHUB_OUTPUT`, the job
+summary and a `ci-toolchain/*.json` manifest, or fails with `::error`; every
+MLIR lane uploads `ci-toolchain/` on success and failure; apt install
+failures fail the step (the `|| echo ::warning` fallbacks are gone); the
+pytest proof steps now run through `scripts/ci_require_executed.py`, which
+fails an all-skipped or unexpectedly-skipped run (their tests `skipif` a
+missing tool, so a broken build was otherwise a second green no-op); the
+sanitizer lane installs LLVM/MLIR 23 + `libclang-rt-23-dev` and passes the
+pin mode through `run_sanitizers.sh`. Audit of the other workflows: no other
+step-output skip gate; `pylint.yml` (`--exit-zero`) and
+`profiler-native-proofs.yml` (`--allow-unavailable`, no device on hosted
+runners) still succeed without proving anything, deliberately, and are now an
+explicit allow-list in the gate. Sibling backends: ROCm — `rocm-serialize`
+proves hsaco emission again once the lane runs; Apple/NVIDIA/x86 — not
+applicable (no hosted lane builds for them beyond the portable `lit` build).
+
+Remaining: Only a real Actions run proves the lanes now pass on
+ubuntu-latest with apt's 23.1.2 — the local simulation cannot see apt, the
+runner image, or a configure/build that 23.1.2 might break (MLIR API drift
+within 23.1 is possible; if it happens the lane now fails loudly, which is the
+intended outcome). The sanitizer lane's Linux TSAN path (clang-23 +
+`libclang-rt-23-dev`, non-PIE) has not run since it was added. Whether a
+label-triggered `profiler-native-proofs` lane should fail when its provider is
+unavailable is an owner call.
+
+Evidence: `tests/unit/test_ci_workflow.py` (`TestNoSilentToolchainSkip`,
+`TestFleetPinStaysExact`, `TestResolverBehaviour`, `TestCMakePinModes`,
+`TestRequireExecuted`) — fails 11 tests against the pre-change `validate.yml`
+and passes on this branch (Mac, macOS 27, LLVM/MLIR 23.1.1). Local simulation
+(Mac): the resolver against faked prefixes accepts 23.1.1 (`exact`) and
+23.1.2 (`series`, recorded) and fails 23.2.0, 24.1.0, absent, mixed
+LLVM/MLIR, missing CMake packages and missing required ld.lld;
+`tessera_pin_llvm` under `cmake -P` rejects 23.1.2 in `exact` mode and
+accepts only matched 23.1.x in `minor`; the real Homebrew 23.1.1 keg resolves
+`exact`; `run_sanitizers.sh asan ubsan` with `TESSERA_LLVM_PIN_MODE=minor`
+configured, built and ran both smoke binaries clean.
+
+<!-- entry-fields:end -->
+
+### 2026-09-27 — ODS WIRE slices 1 and 4: target_verify / ntk_rope reach their canonical consumers; the Philox Langevin step gets a producer
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/foundation-batch-2-wire-a` (umbrella `claude/foundation-batch-2`).
+Sync: `ODS-WIRE-1-4-2026-09-27`.
+
+Outcome: Three waived ODS ops now have a producer and a consumer, and the
+waiver ceiling drops 79 -> 76 ([triage rows](ODS_OP_CONNECTION_TRIAGE.md#tessera-target-verify)).
+**Slice 1.** `src/transforms/include/Tessera/Transforms/CompositeDecomposition.h`
+holds one name-matched pattern source: `tessera.target_verify(tokens, logits)`
+-> `tessera.softmax(logits){axis = rank-1}` (the verifier already pinned S, so
+`tokens` carries nothing further -- the named #32 reason), and
+`tessera.ntk_rope(x, theta){s}` -> `tessera.rope(x, tessera.div(theta,
+arith.constant splat(s)))`, with no division at `s = 1.0`; a scaled theta that
+is not a static floating tensor fails closed with
+`TESSERA_NTK_ROPE_THETA_UNREWRITABLE` (registered), and any composite left
+after the rewrite is an error, not a silent no-op. Routes: `tessera-canonicalize`
+(so every pipeline built on `addGraphIRPreLoweringPasses`: `-x86`, `-gpu`,
+`-nvidia-sm{90,100,120}`); new standalone `tessera-decompose-composite-ops`
+first in `tessera-lower-to-apple_gpu-runtime` (header-only, so `TesseraApple`
+gains an include path, not a link), in the Apple `-full` reasoning prologue, and
+in libtessera_jit stage 1a. ROCm is not a route: its pipelines consume Tile /
+directive carriers and have no Graph softmax or rope consumer. `target_verify`
+joins `_JIT_GRAPH_OPS`; `GraphFn` gained a declared i32 *index operand* (only
+`target_verify` operand 0 may take one -- any other use refuses the graph, so
+`@jit` falls back rather than computing on integer bits), and `@jit` passes an
+int32 argument through as that operand. `Canon` now declares `arith` as a
+dependent dialect (the rewrite builds `arith.constant`).
+The `ntk_rope -> rope` dashboard alias stays withheld, departing from the
+recorded "re-add when the rewrite lands": rope's x86 / ROCm device rows are
+Python runtime executors keyed on the literal op, which no C++ rewrite feeds,
+and on the Apple -runtime route a scaled `ntk_rope` leaves `tessera.div` with no
+Graph consumer (`composite_decomposition_apple_gpu.mlir` pins it), so borrowing
+rope's device-verified cells would over-claim. `target_verify` rows unchanged.
+**Slice 4.** The MERGE alternative (onto `tessera_ebm.langevin_step`) was read
+and rejected: that solver op takes an `energy_fn` whose gradient the compiler
+derives, draws `sqrt(2 eta T)` noise and advances its key, so it cannot carry a
+precomputed-gradient step over a caller-owned (seed, counter) stream -- a Graph
+producer for the Philox op is a different capability, not a second authority
+(#31). Producer: catalog `OpSpec("ebm_langevin_step_philox", ..., 4, 4,
+effect=random, stochastic_identity=seed_counter)`, `ops.ebm_langevin_step_philox`
+(`_ebm_ops.py`), `graph_ir._KEYWORD_ATTR_PARAMS` (`eta`, `temperature`),
+`primitive_coverage`, PYTHON_API_SPEC. Consumer: `runtime._EBM_LANGEVIN_OPS =
+("tessera.ebm.langevin_step_philox",)`; seed (1 x i64, split low word first) and
+counter (4 x i64, each < 2^32 -- refused, never truncated) come from operands;
+`eta` / `temperature` are required (#21a) and `noise_scale` defaults to
+`sqrt(2 eta T)`, now stated in the ODS description. The executors used to accept
+the 3-operand host-noise `tessera.ebm.langevin_step` and ignore its noise
+operand; that name is now refused there, and its x86 / ROCm manifest credit
+(which cited these Philox tests) moved to the Philox op, so
+`ebm_langevin_step` shows x86 `reference` / ROCm `planned` -- the honest state.
+The Apple Philox MSL row now cites `tests/unit/test_philox_runtime.py`
+(execute-compare on Metal); the Graph op still has no Apple lane.
+
+Remaining: Apple *execution* of `target_verify` / `ntk_rope` (their `@jit
+(target="apple_gpu")` capability stays `artifact_only`); a route that executes
+rope and the `theta / s` division (then re-add the alias and drop the two
+`_KNOWN_OPEN_SINGLE_GPU` rows); an Apple Graph lane for the Philox op; gfx1201
+proof of the repointed ROCm executor (not evaluated; no proof transfers).
+
+Evidence: Mac (macOS 27, Homebrew LLVM/MLIR 23.1.1 NDEBUG): lit
+`composite_decomposition{,_invalid,_apple_gpu,_x86}.mlir` pass; full `lit
+tests/tessera-ir/` 479 passed / 50 unsupported / 0 failed;
+`tests/unit/test_composite_decomposition.py` executes `target_verify` through
+libtessera_jit (invocation counter +1) against numpy and the Python reference;
+`test_ebm_langevin_philox_op.py` (host-free executor mapping and refusals);
+full unit sweep 21792 passed / 4024 skipped / 1 failed, the one failure
+(`test_op_arity_contract`, the new op's keyword attributes) fixed and re-run
+green in the same session. Princess-Luna (Zen 5 AVX-512 + gfx1151, apt LLVM
+23.1 NDEBUG, `~/wk-wirea`): `test_{x86,rocm}_ebm_langevin_compiled.py` (incl.
+the traced-op launch), the kernel-level `*_langevin_philox_compiled` tests,
+`test_ebm_langevin_philox_op.py`, `test_composite_decomposition.py`,
+`test_native_cpu_jit.py` -- 61 passed, 0 skipped; lit 462 passed / 67
+unsupported / 0 failed; `check-tessera-rocm` 82/82; full unit sweep 22709
+passed / 3107 skipped / 1 failed (the same arity test, pre-fix).
+Tajasarus (assertions-ON LLVM/MLIR 23.1.1, `llvm-config --assertion-mode` ON,
+`~/wk-wirea/build-assertions`, `tessera-opt` only): the four new fixtures (the
+Apple one unsupported there) and `ga_ebm_graph_ops{,_invalid}.mlir` pass; full
+lit 462 passed / 67 unsupported / 0 failed. libtessera_jit is not built on that
+box (no libffi), so the JIT-lane registration was not run under assertions.
+
+<!-- entry-fields:end -->
+
+### 2026-09-28 — ODS wiring slices 2 and 3: `tessera.istft_jvp` gets its Schedule consumer; `cache.commit/rollback` lower through an x86 handle ABI
+
+Owner: [GOV-ODS-CONSUMER-1](INTEGRATED_COMPILER_PLAN.md#gov-ods-consumer-1)
+
+PRs: branch `claude/foundation-batch-2-wire-b` (umbrella `claude/foundation-batch-2`).
+Sync: `ODS-WIRE-B-2026-09-28` (x86, ROCm, NVIDIA, Apple todos).
+
+Outcome: **Slice 2.** `GraphToSchedulePass` (`PMPasses.cpp`,
+`scheduleIstftJvps`) consumes the `tessera.istft_jvp` that
+`ISTFTOp::buildTangent` produces under `--tessera-autodiff-forward`: exact
+profile only (Zen 5 AVX-512, gfx1151, gfx1201, sm120; else
+`SPECTRAL_JVP_SCHEDULE_REFUSED`), every default resolved and written back on
+the op (#32), tangent activity read from the IR -- a zero-splat tangent is
+inactive (#30) -- the overlap-add geometry checked against the static tangent
+type, and one hashed `schedule.jvp_contract` plus a matching
+`schedule.artifact` (`family=spectral_jvp`). The native JVP plugin now builds
+the ISTFT package from that contract
+(`native_jvp_plugins.istft_jvp_contract_from_paired_ir` →
+`istft_jvp_spectral_arguments` → `lower_scheduled_spectral`, which stays the
+one spectral-program authority; the package records `graph_schedule_artifact`).
+**The #31 dual authority is collapsed to one production path plus a declared
+oracle**: the old source-kwargs derivation (`_source_kwargs_spectral_arguments`)
+is re-derived for every ISTFT package, which is refused unless both lower to
+the identical scheduled program; it is not deleted (ordering caveat).
+Departure from the triage text, recorded: the arm does not emit
+`schedule.spectral_program` itself, because that op's identity is the
+ScheduleObject digest `scheduled_spectral.py` mints -- minting it in C++ too
+would be a second spectral-program authority. Found while wiring: the x86 and
+ROCm window-product symbols (`tessera_x86_istft_jvp_f32`,
+`ts_istft_jvp_plan_hostptr_batch_amd`) take no n_fft/center/length and write
+`(frames-1)*hop+window` samples into the cropped output buffer; those
+geometries are now refused before launch. **Slice 3.** `TileToX86Pass`
+(`LowerKVCacheCursorToX86`) lowers both cursor ops to a handle ABI in
+`kv_cache_f32.cpp` -- `tessera_x86_kv_cache_{commit,rollback}_f32(handle*,
+i64) -> handle*` over `struct tessera_x86_kv_cache_f32_handle` (truncate in
+place, zero the dropped rows, same handle back or NULL untouched) -- and
+threads the result, so commit → rollback becomes a call chain on the handle
+pointer; a constant negative count is refused at compile time
+(`X86_KV_CACHE_CURSOR_REFUSED`), and every call is followed by a NULL check
+and a `cf.assert` naming that code, so a dynamic rejection traps instead of
+threading NULL into later cache ops (review fix before merge). Runtime: `runtime.x86_kv_cache_cursor`
+(refuses quantized/latent/SSM/non-f32/non-contiguous handles,
+`X86_KV_CACHE_HANDLE_REFUSED`) and the bufferized form in
+`x86_kv_cache_compiled` (`current_seq` and the count are never-defaulted
+kwargs). The three ops leave the ODS consumer waiver (ceiling 79 → 76).
+
+Remaining: none on sm_120 -- the ISTFT JVP proof ran on Super-Bear's RTX 5070
+2026-09-28 (see the NVIDIA queue entry `ODS-WIRE-B-2026-09-28`). A reduced-precision ISTFT window is refused: the
+frontend types the result f32 while the native packages emit window storage,
+and the two must agree before it is admitted. Window-only ISTFT activity is
+rejected upstream by the forward transform (pre-existing, unchanged:
+reproduced on Princess-Luna's `build/` at `4e12e5d7b`, an ancestor of the
+umbrella, and this branch touches no autodiff or TangentInterface source).
+The `!tessera.kv_cache` function-boundary type conversion (the lowering keeps
+the type behind a cast at the boundary), backend-manifest rows for
+`cache_commit`/`cache_rollback`, and the SSM ring rewind stay open. Retire
+the kwargs oracle once the differential test covers what it covers.
+
+Evidence: Mac (macOS 27, LLVM/MLIR 23.1.1 NDEBUG): lit
+`phase_f4/spectral_jvp_istft_schedule{,_invalid}.mlir`,
+`phase2/x86_kv_cache_cursor_{abi,invalid}.mlir`; full `lit tests/tessera-ir/`
+479 passed / 50 unsupported / 0 failed; `test_istft_jvp_ir_contract.py`
+host-free differential (5 geometries × 2 activity sets × 4 profiles) and
+`test_x86_kv_cache_cursor.py` host-free rows pass. Princess-Luna (Zen 5 +
+gfx1151, `~/wk-wireb` at `ef16ce164`, canonical x86+ROCm build): the four
+focused files 94 passed / 1 skipped (a gfx1201-only row), including x86 KV
+commit/rollback/chain/rejection and the bufferized lane bit-exact against
+`tessera.ops.cache_commit`/`cache_rollback`, and the IR-built ISTFT product vs
+centred difference on x86 and gfx1151; `check-tessera-ir` 463 passed / 66
+unsupported; `check-tessera-rocm` 81 passed / 1 unsupported. Tajasarus
+(Zen 5 + gfx1201, assertions-ON LLVM/MLIR 23.1.1, `~/wk-wireb` at
+`befbd4fd3`, `TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1`):
+the eight touched/adjacent fixtures pass under assertions; full lit 463
+passed / 66 unsupported; `check-tessera-rocm` 81 passed / 1 unsupported; the
+four focused files 92 passed / 5 skipped (all five gfx1151-only rows), with
+the x86 KV rows and the IR-built ISTFT product on x86 and gfx1201 executing.
+
+<!-- entry-fields:end -->
+
+### 2026-09-28 — E2E-REAL-6: x86 softmax and reduction retire their Graph-owned admission and constructors
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: branch `claude/foundation-batch-2-e2e-x86-unary` (umbrella `claude/foundation-batch-2`).
+Sync: `E2E-REAL-6-x86-unary-2026-09-28`.
+
+Outcome: the x86 twin of the ROCm unary cut. Since 2026-09-08 x86
+`package_softmax` / `package_reduction` already lowered through
+`lower_scheduled_kernel`, but admission (`supports_softmax` /
+`supports_reduction`, hence `supports_native_package`) still read the Python
+Graph object through `_softmax_contract` / `_reduction_contract`, the
+`emit_softmax_tile_ir` / `emit_reduce_tile_ir` constructors were still exported
+from production, and the packagers reached the lowering through an indirection
+the bootstrap audit could not prove. Now admission is
+`scheduled_kernel.supports_scheduled_kernel(target="x86")`, each packager hands
+`lower_scheduled_kernel(..., architecture=zen5-avx512 | x86_64_base)` straight to
+`package_scheduled_kernel`, and the retired contracts, constructors and the
+pre-2026-09-08 Graph-owned packagers are frozen in
+`tests/_support/x86_unary_baseline.py`, the declared oracle #31(a) allows.
+
+Envelope. Retired: f32 in and out; `softmax` and `softmax_safe` (last axis,
+shape-preserving); `sum` / `mean` / `max` / `amax` over the last axis (either
+spelling), keepdims true or false; any positive static rank; both images.
+Compiled: the same. The one point the scheduled contract had lost is
+`softmax_safe` -- the Graph contract kept selecting it for native packaging and
+the scheduled packager then refused it (the follow-up the ROCm cut recorded) --
+and it is now admitted for x86 through the existing canonicalization.
+Refused on purpose, each pinned by a test: an integer `keepdims` (coerced with
+`bool` before), a non-serial reduction `schedule` hint and a `schedule` hint on
+softmax (both silently ignored before). The reduction descriptor now carries
+`nan_mode` read from the replayed Tile op and fails closed on anything but
+`propagate`, which both reduce kernels implement (#21a, #32).
+
+Image identity (the shape-free-key question). x86 compiles nothing per
+package -- the payload is the prebuilt shared object, the same bytes for every
+shape -- so there is no compile cache to key. But `image_digest` binds the
+Target IR digest, which on the scheduled route carries the launch constants and
+Graph symbol, and `runtime._load_x86_native_image` loaded one copy per digest
+and never released it. Measured on Princess-Luna
+(`benchmarks/x86/measure_x86_unary_route_cost.py`, 8 shapes per family, timing
+lock): retired 1 digest, compiled 8; 16 copies of the 382 KiB object loaded;
+each new shape's first launch ~0.4 ms slower. A digest miss now resolves through
+an architecture + payload-sha256 map, and the same run loads one object (first
+launch 2.23-2.25 ms vs 1.98-2.03 ms retired; warm 0.78-0.85 ms on both; runtime
+claim, Princess-Luna). Package cost is 96-105 ms compiled vs 29-37 ms retired
+per call (compile-cost claim, Princess-Luna), all lowering and replay
+subprocesses; that route has been production since 2026-09-08, so a package
+cache is recorded as a follow-up rather than widened into this cut.
+
+Remaining: E2E-REAL-6 still owns x86 cohort/elementwise/breadth constructors,
+ROCm paged-KV / MoE / forward attention, the NVIDIA and Apple gap families and
+the frontend. NVIDIA still classifies `softmax_safe` as a native softmax its
+scheduled packager refuses (needs sm_120 rows). `numeric_policy` keyword
+arguments are still ignored by every target's unary contract (pre-existing).
+The compiled x86 package costs ~3x the retired one per call (subprocess-bound).
+
+Evidence: `tests/unit/test_x86_unary_differential.py` -- 288 host-free rows
+(descriptor, ABI, buffers, scalars, shape guards, geometry, shared provenance
+and Tile-kernel attributes identical, both images), refusal parity, pinned
+intentional refusals, a fail-closed `nan_mode` row, and 298 device rows (288
+bitwise retired-vs-compiled over every envelope point and both images, NaN
+propagation, one loaded object across shapes). Princess-Luna (Zen 5 AVX-512):
+that file + `test_x86_unary_migration.py` + `test_x86_e2e_spine.py` 662 passed
+/ 0 skipped; `-k x86 -m "not slow"` 2461 passed / 1 skipped (umbrella head 1858
+/ 1, the same skip); `check-tessera-ir` 462 passed / 67 unsupported. Tajasarus
+(Zen 5, assertions-ON LLVM/MLIR 23.1.1 tree): the same three files 662 passed /
+0 skipped; `-k x86` 2435 passed / 27 skipped / 0 failed; the four x86 unary
+Schedule/Tile lit fixtures pass under assertions (no C++ changed).
+`bootstrap_prune_gap.md`: x86 softmax/reduction gap -> generic; alpha
+scoreboard `schedule_tile` 18 -> 24 (ratchet baseline tightened).
 
 <!-- entry-fields:end -->

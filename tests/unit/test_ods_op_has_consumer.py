@@ -179,23 +179,19 @@ _WAIVED: dict[str, Waiver] = {
     **{name: Waiver("fixture_only", "#29", _R_ATTN_RES) for name in (
         "tessera.attn_with_stats", "tessera.softmax_merge", "tessera.softmax_finalize")},
     "tessera.guided_denoise_region": Waiver("fixture_only", "#29", _R_FIXTURE_ONLY),
-    "tessera.istft_jvp": Waiver(
-        "fixture_only", "#29", "produced by `ISTFTOp::buildTangent` "
-        "(TangentInterface.cpp) under --tessera-autodiff-forward, which the scan "
-        "reads as the dialect's own implementation; nothing lowers it"),
     # Added 2026-09-27 by the review that closed three fail-open holes; each
     # was "consumed" only through one of them.
     "tessera.arch.ste_one_hot": Waiver(
         "unreferenced", "#29", _R_ARCH + "; its only mention was its own "
         "dialect's arity table in TesseraOps.cpp"),
-    **{name: Waiver("fixture_only", "#29", _R_CATALOG_ONLY) for name in (
-        "tessera.cache.commit", "tessera.cache.rollback", "tessera.ntk_rope",
-        "tessera.target_verify")},
-    "tessera.ebm.langevin_step_philox": Waiver(
-        "fixture_only", "#29", _R_EBM_GRAPH + "; the runtime kernels mirror its "
-        "semantics, and its only other mention was prose in an execution-matrix "
-        "`reason=` string; the compiled executors run its Philox semantics under "
-        "the name `tessera.ebm.langevin_step`"),
+    # `tessera.ntk_rope`, `tessera.target_verify` and
+    # `tessera.ebm.langevin_step_philox` left the waiver with ODS triage WIRE
+    # slices 1 and 4 (2026-09-27): CompositeDecomposition.h rewrites the first
+    # two onto rope / softmax, and the x86 / ROCm compiled executors consume
+    # the third (`_EBM_LANGEVIN_OPS`), which `ops.ebm_langevin_step_philox`
+    # now produces.
+    # `tessera.cache.commit` / `tessera.cache.rollback` left with slice 3
+    # (2026-09-28): TileToX86Pass lowers them through the x86 KV-cache handle ABI.
     "tessera_nvidia.func": Waiver(
         "fixture_only", "#29", "NVIDIA Target IR container op named only by "
         "fixtures; the bare `FuncOp` in PipelineOverlapPass.cpp is "
@@ -226,7 +222,7 @@ _WAIVED: dict[str, Waiver] = {
 
 #: The waiver may only shrink: lower this with every entry removed. Raising it
 #: is visible in review and needs a reason in the PR.
-_WAIVER_CEILING = 79
+_WAIVER_CEILING = 73
 
 #: History (the ratchet this replaced): on 2026-09-27 seven `tessera.neighbors.*`
 #: names were declared by two ODS records -- `TesseraOps.td` (the live ones:

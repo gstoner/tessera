@@ -46,6 +46,20 @@ set(TESSERA_REQUIRED_NCCL_VERSION   "2.22"      CACHE STRING "Required minimum N
 # deliberately when the fleet moves together.
 set(TESSERA_REQUIRED_LLVM_VERSION   "23.1.1" CACHE STRING "Exact LLVM/MLIR version every fleet box must match (measured on all four, 2026-09-20)")
 
+# Hosted-CI tolerance (owner decision 2026-09-27, sync FOUNDATION-BATCH-2-2026-09-27).
+# GitHub-hosted runners install LLVM/MLIR from apt.llvm.org, a rolling source
+# that serves whatever 23.1.x patch is current and cannot be held. `exact` (the
+# default, and the ONLY mode for fleet boxes) enforces the pin above. `minor`
+# accepts any patch in the pin's major.minor series, still rejects a mixed
+# LLVM/MLIR pair, and records the exact version in the configure log and in
+# `${CMAKE_BINARY_DIR}/tessera_llvm_pin.txt`. It exists so a CI lane builds and
+# runs instead of skipping (the pre-2026-09-27 lanes printed a warning, skipped
+# configure/build/test and reported success). Pass it only from
+# .github/workflows/validate.yml, paired with scripts/ci_resolve_llvm.sh; a
+# `minor` result is never a fleet-comparable measurement.
+set(TESSERA_LLVM_PIN_MODE "exact" CACHE STRING "LLVM/MLIR pin enforcement: exact (fleet, default) or minor (hosted CI only: any patch in the pinned major.minor)")
+set_property(CACHE TESSERA_LLVM_PIN_MODE PROPERTY STRINGS exact minor)
+
 set(TESSERA_REQUIRED_ROCM_VERSION   "10.0"   CACHE STRING "Required minimum ROCm version (measured 10.0.0 on Princess-Luna + Tajasarus, 2026-09-15)")
 set(TESSERA_REQUIRED_HIP_VERSION    "7.15"   CACHE STRING "Required minimum HIP version (measured 7.15.26333)")
 set(TESSERA_REQUIRED_RCCL_VERSION   "2.22"   CACHE STRING "Required minimum RCCL version")
@@ -117,10 +131,29 @@ function(tessera_pin_llvm required_version)
     # (`23.1.2~++2026...`) that is not part of the version identity.
     string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _tessera_llvm_found "${LLVM_PACKAGE_VERSION}")
 
+    if(NOT TESSERA_LLVM_PIN_MODE STREQUAL "exact" AND
+       NOT TESSERA_LLVM_PIN_MODE STREQUAL "minor")
+        message(FATAL_ERROR
+            "TESSERA_LLVM_PIN_MODE must be `exact` or `minor` "
+            "(got `${TESSERA_LLVM_PIN_MODE}`).")
+    endif()
+
+    # The version the pin is compared at: all three components in `exact`
+    # mode, major.minor in the hosted-CI `minor` mode.
+    if(TESSERA_LLVM_PIN_MODE STREQUAL "minor")
+        string(REGEX MATCH "^[0-9]+\\.[0-9]+" _tessera_llvm_cmp "${_tessera_llvm_found}")
+        string(REGEX MATCH "^[0-9]+\\.[0-9]+" _tessera_pin_cmp "${required_version}")
+    else()
+        set(_tessera_llvm_cmp "${_tessera_llvm_found}")
+        set(_tessera_pin_cmp "${required_version}")
+    endif()
+
     # EXACT, not a floor. A newer MLIR is not "at least as good": its C++ API
     # moves between patch releases, and two boxes on different patches cannot
     # be compared -- which is the whole reason a fleet result means anything.
-    if(NOT _tessera_llvm_found VERSION_EQUAL ${required_version})
+    # (`minor` relaxes only the patch, only for hosted CI -- see the cache
+    # variable's comment above.)
+    if(NOT _tessera_llvm_cmp VERSION_EQUAL _tessera_pin_cmp)
         message(FATAL_ERROR
             "Tessera pins LLVM/MLIR ${required_version} but this box has "
             "${_tessera_llvm_found} (${LLVM_PACKAGE_VERSION}) at ${LLVM_DIR}.\n"
@@ -160,7 +193,10 @@ function(tessera_pin_llvm required_version)
 
     if(_tessera_mlir_raw)
         string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _tessera_mlir_found "${_tessera_mlir_raw}")
-        if(NOT _tessera_mlir_found VERSION_EQUAL ${required_version})
+        # MLIR must equal LLVM to the patch in BOTH modes: `minor` tolerates a
+        # newer 23.1.x toolchain, never a mixed-patch pair. In `exact` mode LLVM
+        # already equals the pin, so this is the same comparison as before.
+        if(NOT _tessera_mlir_found VERSION_EQUAL _tessera_llvm_found)
             message(FATAL_ERROR
                 "Tessera pins LLVM/MLIR ${required_version}: LLVM is "
                 "${_tessera_llvm_found} but MLIR is ${_tessera_mlir_found} "
@@ -171,13 +207,36 @@ function(tessera_pin_llvm required_version)
                 "report.\n"
                 "  One-off override: -DTESSERA_SKIP_TOOLCHAIN_PIN=ON")
         endif()
-        message(STATUS "Tessera LLVM/MLIR pin satisfied: LLVM ${_tessera_llvm_found}, MLIR ${_tessera_mlir_found}")
+        message(STATUS "Tessera LLVM/MLIR pin satisfied (${TESSERA_LLVM_PIN_MODE}): LLVM ${_tessera_llvm_found}, MLIR ${_tessera_mlir_found}, pin ${required_version}")
+        if(TESSERA_LLVM_PIN_MODE STREQUAL "minor" AND
+           NOT _tessera_llvm_found VERSION_EQUAL ${required_version})
+            message(WARNING
+                "Tessera LLVM pin mode `minor` (hosted CI only): building against "
+                "LLVM/MLIR ${_tessera_llvm_found}, not the fleet pin "
+                "${required_version}. Results from this tree are not "
+                "fleet-comparable.")
+        endif()
+    elseif(TESSERA_LLVM_PIN_MODE STREQUAL "minor")
+        # The tolerance is only honest when the LLVM/MLIR pairing can be
+        # verified; refuse rather than build an unverified mixed pair.
+        message(FATAL_ERROR
+            "Tessera LLVM pin mode `minor` requires MLIR to report its version "
+            "(MLIR_VERSION / MLIR_PACKAGE_VERSION); this MLIR package reports "
+            "none, so the LLVM ${_tessera_llvm_found} / MLIR pairing cannot be "
+            "verified.")
     else()
         message(WARNING
             "Tessera LLVM pin satisfied at ${_tessera_llvm_found}, but this "
             "MLIR package reports NO version variable at all, so its patch level "
             "is unverified. A mixed-patch pair would pass here.")
     endif()
+    # The exact toolchain this tree was configured against, for CI manifests
+    # and for anyone reading a build tree after the fact.
+    file(WRITE "${CMAKE_BINARY_DIR}/tessera_llvm_pin.txt"
+        "mode=${TESSERA_LLVM_PIN_MODE}\n"
+        "pin=${required_version}\n"
+        "llvm=${_tessera_llvm_found}\n"
+        "mlir=${_tessera_mlir_found}\n")
 endfunction()
 
 function(tessera_pin_rocm required_version)

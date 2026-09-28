@@ -2547,7 +2547,7 @@ _NONDIFFERENTIABLE_PER_NAME: frozenset[str] = frozenset({
     # flat autodiff lane (distinct from the kernel-backed flat ops
     # energy_quadratic / self_verify / refinement / inner_step, which DO have
     # registered VJP+JVP). See _ebm_ops.py for the flat-shimmable subset.
-    "ebm_energy", "ebm_langevin_step",
+    "ebm_energy", "ebm_langevin_step", "ebm_langevin_step_philox",
     "ebm_partition_exact", "ebm_partition_monte_carlo", "ebm_partition_ais",
     "ebm_decode_init",
     "ebm_sphere_langevin_step", "ebm_bivector_langevin_step",
@@ -3786,6 +3786,14 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
              references=("Welling & Teh 2011",),
              notes="EBM1: one Langevin step; consumes one RNGKey, returns next. "
                    "Fused MSL kernel ``tessera_apple_gpu_ebm_langevin_step_f32``."),
+    _partial("ebm_langevin_step_philox", "ebm", ("EBT", "RBM", "score_matching"),
+             references=("Welling & Teh 2011", "Salmon et al. 2011 (Philox)"),
+             notes="ODS triage WIRE slice 4 (2026-09-27): Graph op "
+                   "``tessera.ebm.langevin_step_philox`` (y, grad, seed, counter) "
+                   "-- y - eta*grad + noise_scale*z with z drawn on the device "
+                   "from Philox-4x32-10 over (seed, counter). Producer: "
+                   "``ops.ebm_langevin_step_philox``; consumer: the x86 / ROCm "
+                   "compiled executors (``_EBM_LANGEVIN_OPS``)."),
     _partial("ebm_self_verify", "ebm", ("EBT",),
              references=("EBT 2025",),
              notes="EBM1: argmin over K candidates; soft-min variant when beta>0. "

@@ -3,13 +3,13 @@
   "delegating_packagers": 3,
   "graph_input_packagers": 45,
   "lane_native": {
-    "bear_cpu": 4,
+    "bear_cpu": 6,
     "bear_gpu": 13,
-    "luna_cpu": 7,
+    "luna_cpu": 9,
     "luna_gpu": 7,
     "mac_cpu": 1,
     "mac_gpu": 3,
-    "taj_cpu": 7,
+    "taj_cpu": 9,
     "taj_gpu": 3
   },
   "source_emitters": 5,
@@ -18,7 +18,7 @@
     "frontend": 0,
     "graph_opt": 0,
     "native_lowering": 0,
-    "schedule_tile": 18
+    "schedule_tile": 24
   },
   "target_ops_without_required_contract": 104
 }

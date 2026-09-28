@@ -30,6 +30,45 @@ without expanding the aggregator log.
 
 Apply the labels from the PR's right-side sidebar.
 
+### Opt-in means "runs when triggered", never "may skip when triggered"
+
+Once an opt-in lane runs, it runs for real or it fails. The three lanes that
+build against LLVM/MLIR (`lit`, `rocm-serialize`, `sanitizer`) follow one
+toolchain rule (owner decision 2026-09-27, sync
+`FOUNDATION-BATCH-2-2026-09-27`):
+
+* **Hosted CI accepts any LLVM/MLIR 23.1.x patch.** apt.llvm.org is a rolling
+  source and cannot be held at the fleet's exact pin, so the lanes configure
+  with `-DTESSERA_LLVM_PIN_MODE=minor`. That mode still rejects a mixed
+  LLVM/MLIR pair and any other major.minor.
+* **The exact version is recorded**: `scripts/ci_resolve_llvm.sh` writes it to
+  the job summary and to `ci-toolchain/*.json`, and configure writes
+  `tessera_llvm_pin.txt`; each lane uploads `ci-toolchain/` as the
+  `ci-toolchain-<lane>-<sha>-<attempt>` artifact (also on failure). A
+  `pin_match=series` result is not a fleet-comparable measurement.
+* **No usable 23.1.x fails the lane.** There is no `::warning … skipping`
+  path. The pytest proof steps also fail when their tests skip for a missing
+  tool (`scripts/ci_require_executed.py`); the only allowed skip is
+  `rocm-serialize`'s OCML case, which needs AMD device bitcode a stock runner
+  lacks.
+
+The fleet boxes keep the **exact** pin (`TESSERA_REQUIRED_LLVM_VERSION` in
+`cmake/TesseraToolchainPins.cmake`, default `TESSERA_LLVM_PIN_MODE=exact`);
+nothing outside hosted CI passes `minor`. Before 2026-09-27 the `lit` and
+`rocm-serialize` lanes compared apt's 23.1.2 against the exact 23.1.1 pin,
+printed a warning, skipped configure/build/test and reported success (push run
+36347063229 on main), and the `sanitizer` lane installed no LLVM/MLIR at all
+(its last real run, 35609056270, failed at `find_package(MLIR)`).
+`tests/unit/test_ci_workflow.py` (`TestNoSilentToolchainSkip`,
+`TestResolverBehaviour`, `TestCMakePinModes`) gates the pattern in every
+workflow.
+
+Two workflows still report success without proving anything, deliberately
+and allow-listed in that test: `pylint.yml` (`--exit-zero`, advisory — ruff +
+mypy gate) and `profiler-native-proofs.yml` (`--allow-unavailable`: hosted
+runners have no Metal/ROCm/CUPTI device, so a green check there is a
+provider-status snapshot recorded in its artifact, **not** a profiler proof).
+
 ## Apple Metal 4 promotion
 
 Apple exact-device promotion is a local backend-host proof, never a registered
@@ -63,9 +102,9 @@ policy.)
 | lint         | ~30s              | ruff + mypy ratchet (defends 0). |
 | unit         | ~2min             | `pytest -m "not slow"`, ~4300 tests. |
 | audit        | ~10s              | support_table drift + claim_lint + examples audit. |
-| lit          | ~10min if installed | LLVM/MLIR 23 install + tessera-opt build + lit. |
-| sanitizer    | ~15min per matrix | asan + tsan + ubsan run in parallel. |
-| rocm-serialize | ~15min if installed | LLVM/MLIR 23 + lld-23 install + HIP-less `tessera-rocm-opt` build + hsaco proof. |
+| lit          | ~10min            | LLVM/MLIR 23.1.x install + tessera-opt build + lit; fails if no 23.1.x. |
+| sanitizer    | ~15min per matrix | LLVM/MLIR 23.1.x install; asan + tsan + ubsan run in parallel. |
+| rocm-serialize | ~15min          | LLVM/MLIR 23.1.x + lld-23 install + HIP-less `tessera-rocm-opt` build + hsaco proof; fails if no 23.1.x. |
 
 The standalone C++ runtime and collectives compile-check are intentionally
 local-only. Run `scripts/validate.sh` on the owning host; it builds and tests

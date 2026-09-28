@@ -79,10 +79,18 @@ REDUCTION_CASES = [
 ]
 
 
+#: A Target IR stand-in naming one directive per family, so the packager can
+#: read the image's kernel symbol from it (the shape-free route does).
+_FAKE_TARGET = (
+    'module {\n  tessera_rocm.softmax {name = "tessera_rocm_softmax_fake"}\n'
+    '  tessera_rocm.reduce {name = "tessera_rocm_reduction_fake"}\n}\n'
+)
+
+
 def _recording_compile(calls: list[str]):
-    def compile_(tile_ir: str):
+    def compile_(tile_ir: str, **_kwargs):
         calls.append(tile_ir)
-        return ("target", "backend", b"\x7fELFrocm-unary", "compiler", "toolchain", (), "cold")
+        return (_FAKE_TARGET, "backend", b"\x7fELFrocm-unary", "compiler", "toolchain", (), "cold")
     return compile_
 
 
@@ -122,6 +130,7 @@ def _assert_same_launch_contract(old, new) -> None:
 def test_softmax_compiled_route_reproduces_retired_contract(monkeypatch, dtype, shape, op_name) -> None:
     calls: list[str] = []
     monkeypatch.setattr(rocm_native, "_compile_tile_ir", _recording_compile(calls))
+    monkeypatch.setattr(rocm_native, "_compile_shape_free_tile_ir", _recording_compile(calls))
     module = _softmax(dtype, shape, op_name)
     assert rocm_native.supports_softmax(module)
     assert rocm_native.native_package_kind(module) == "softmax"
@@ -141,6 +150,7 @@ def test_reduction_compiled_route_reproduces_retired_contract(
 ) -> None:
     calls: list[str] = []
     monkeypatch.setattr(rocm_native, "_compile_reduction_tile_ir", _recording_compile(calls))
+    monkeypatch.setattr(rocm_native, "_compile_shape_free_tile_ir", _recording_compile(calls))
     module = _reduction(dtype, kind, shape, axis, keepdims, op_name)
     assert rocm_native.supports_reduction(module)
     assert rocm_native.native_package_kind(module) == "reduction"
@@ -165,6 +175,7 @@ def test_reduce_kind_is_read_from_ir_not_from_the_op_name(monkeypatch) -> None:
     """
     calls: list[str] = []
     monkeypatch.setattr(rocm_native, "_compile_reduction_tile_ir", _recording_compile(calls))
+    monkeypatch.setattr(rocm_native, "_compile_shape_free_tile_ir", _recording_compile(calls))
     module = _reduction("fp32", "max", op_name="tessera.reduce")
     old = baseline.baseline_reduction(module, pipeline_name=PIPELINE)
     new = rocm_native.package_reduction(module, pipeline_name=PIPELINE)
@@ -254,8 +265,10 @@ def test_gfx1201_keeps_its_proved_f32_envelope(module) -> None:
     assert scheduled_kernel.supports_scheduled_kernel(module, target="rocm_gfx1151")
 
 
-@pytest.mark.parametrize("target", ["nvidia_sm120", "x86", "apple_gpu", "rocm_gfx1201"])
-def test_softmax_safe_admission_is_gfx1151_only(target) -> None:
+@pytest.mark.parametrize("target", ["nvidia_sm120", "apple_gpu", "rocm_gfx1201"])
+def test_softmax_safe_admission_is_limited_to_proved_consumers(target) -> None:
+    # gfx1151 (this cut) and x86 (E2E-REAL-6 x86 unary cut, 2026-09-28,
+    # tests/unit/test_x86_unary_differential.py) carry device rows; nothing else does.
     assert not scheduled_kernel.supports_scheduled_kernel(
         _softmax(op_name="tessera.softmax_safe"), target=target
     )
@@ -296,6 +309,7 @@ def test_driver_selects_the_scheduled_boundary_for_the_whole_envelope(monkeypatc
     calls: list[str] = []
     monkeypatch.setattr(rocm_native, "_compile_tile_ir", _recording_compile(calls))
     monkeypatch.setattr(rocm_native, "_compile_reduction_tile_ir", _recording_compile(calls))
+    monkeypatch.setattr(rocm_native, "_compile_shape_free_tile_ir", _recording_compile(calls))
 
     def forbidden(*_args, **_kwargs):
         raise AssertionError("gfx1151 unary packaging must consume the scheduled artifact")

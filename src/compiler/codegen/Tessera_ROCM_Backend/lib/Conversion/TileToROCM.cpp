@@ -454,8 +454,9 @@ static FailureOr<Value> materializeFragmentPack(
 // (rowBase + i * rowStep, colBase + i * colStep) from the fragment origin,
 // with the bases per lane and the steps constants. `accumulatorLaneMap`
 // states it; `accumulatorElementOffset` / `accumulatorElementCoordinate` are
-// its per-element forms (their op order is the historical one, so every
-// kernel that does not use the bounded store below compiles unchanged).
+// its per-element forms, built op for op as before this map was factored
+// out, so only the bounded store below emits anything new
+// (FOUNDATION-BATCH-2-2026-09-27).
 struct AccumulatorLaneMap {
   Value rowBase, colBase;
   int64_t rowStep = 0, colStep = 0;
@@ -482,6 +483,15 @@ static std::pair<Value, Value> accumulatorElementOffset(
     Value lane, Value laneGroup, Value groupStride) {
   AccumulatorLaneMap map =
       accumulatorLaneMap(builder, loc, physical, lane, laneGroup, groupStride);
+  if (physical.usesGfx11AccumulatorMap()) {
+    // rowBase + i * 2, built in the historical operand order.
+    Value ci = arith::ConstantIndexOp::create(builder, loc, i);
+    Value two = arith::ConstantIndexOp::create(builder, loc, map.rowStep);
+    return {arith::AddIOp::create(
+                builder, loc, arith::MulIOp::create(builder, loc, ci, two),
+                map.rowBase),
+            map.colBase};
+  }
   auto offset = [&](Value base, int64_t step) -> Value {
     if (step == 0)
       return base;

@@ -96,6 +96,11 @@ run_one() {
   elif [[ -n "$llvm_prefix" ]]; then
     llvm_flags+=(-DMLIR_DIR="$llvm_prefix/lib/cmake/mlir")
   fi
+  # Hosted CI sets TESSERA_LLVM_PIN_MODE=minor (any 23.1.x patch, recorded by
+  # scripts/ci_resolve_llvm.sh); unset, configure keeps the fleet's exact pin.
+  if [[ -n "${TESSERA_LLVM_PIN_MODE:-}" ]]; then
+    llvm_flags+=(-DTESSERA_LLVM_PIN_MODE="$TESSERA_LLVM_PIN_MODE")
+  fi
 
   # GCC's TSAN runtime can abort before main under WSL with
   # "unexpected memory mapping". Use the LLVM 23 Clang runtime and non-PIE

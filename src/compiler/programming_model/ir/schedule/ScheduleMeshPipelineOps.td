@@ -650,6 +650,14 @@ def Schedule_PagedKVReadOp : Op<ScheduleDialect, "paged_kv_read"> {
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
 }
 
+def Schedule_MoeDispatchOp : Op<ScheduleDialect, "moe_dispatch"> {
+  let summary = "Content-addressed gfx1151 MoE token-gather schedule";
+  let arguments = (ins AnyRankedTensor:$subject, StrAttr:$artifact_hash,
+                       DictionaryAttr:$contract);
+  let results = (outs AnyRankedTensor:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+}
+
 // A shared semantic recurrence, not a target-specific ReplaySSM marker.
 def Schedule_SSDOp : Op<ScheduleDialect, "ssd", [Pure]> {
   let summary = "Chunked scalar-decay SSD with explicit carry and checkpoints";

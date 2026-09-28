@@ -188,6 +188,17 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") ->
     def tiles(tm: int, tn: int) -> int:
         return -(-shape.m // tm) * -(-shape.n // tn)
 
+    # Differential mirror of the bounded gfx1201 ragged-row rule in PMPasses.
+    # The Schedule pass remains the sole selector authority.
+    if (shape.weight_layout == "nk" and arch == "gfx1201" and units is not None
+            and 96 < shape.m < 128 and shape.n >= 1024
+            and 1024 <= shape.k <= 4096):
+        return BlockScalePanel("lds", 128, 64, 8)
+    # Differential mirror of the measured M=192..255 short-K panel rule.
+    if (shape.weight_layout == "nk" and arch == "gfx1201" and units is not None
+            and 192 <= shape.m < 256 and 8192 <= shape.n <= 10240
+            and shape.n % 128 == 0 and shape.k == 1024):
+        return BlockScalePanel("lds", 128, 64, 8)
     if (shape.weight_layout == "nk" and shape.m >= 128 and units is not None
             and (tiles(128, 128) >= units or tiles(128, 64) >= units)):
         wide = tiles(128, 128) >= units

@@ -263,7 +263,7 @@ def test_scan_parses_every_ods_form() -> None:
 
 #: Every op record under `src/`. Pinned exactly, not as a floor: a floor let
 #: the reader lose up to its slack without failing (GOV-ODS-CONSUMER-1 review).
-_DECLARED_OP_RECORDS = 616
+_DECLARED_OP_RECORDS = 618
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

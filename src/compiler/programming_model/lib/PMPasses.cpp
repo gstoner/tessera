@@ -56,6 +56,7 @@ namespace tessera {
 
 #include "NativeCheckpoint.h"
 #include "NativePagedKV.h"
+#include "NativeMoeDispatch.h"
 #include "NativeSSD.h"
 #include "NativeAbsolute.h"
 #include "NativeSparse.h"
@@ -577,6 +578,38 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
          "\", so the LDS-staged W8A8 body's occupancy rule cannot be "
          "evaluated")
             .str();
+  // ROCM-FP8-BLOCKSCALE-1, gfx1201 ragged 97..127-row follow-up: the
+  // register fallback uses a 16-row panel because M is not 32-aligned. On
+  // Tajasarus it took 2.4-3.4x the time of the 128x64 LDS body across the
+  // measured N=1024..24576, K=1024..4096 envelope. M=96 (the 32-row
+  // register panel) and M=128 (the existing LDS rule) are faster unchanged.
+  // Keep this exact-device rule bounded to the measured layout and ranges.
+  if (nk && schedule.arch == "gfx1201" && computeUnits &&
+      schedule.m > 96 && schedule.m < 128 && schedule.n >= 1024 &&
+      schedule.k >= 1024 && schedule.k <= 4096) {
+    schedule.staging = "lds";
+    schedule.warps = 8;
+    schedule.pipelineDepth = 1;
+    schedule.macroTileM = 128;
+    schedule.macroTileN = 64;
+    return;
+  }
+  // Paired Tajasarus device-clock sweeps at K=1024: 128x64 wins over
+  // 128x128 throughout M=192..255, N=8192..10240 (roughly 7-10% at the
+  // tested corners). Interior whole-scale-block N points also win, while
+  // N=4096/6144, K=1536/2048 and M=300 do not sustain that win. Keep the
+  // selector inside the measured short-K, whole-128-column envelope.
+  if (nk && schedule.arch == "gfx1201" && computeUnits &&
+      schedule.m >= 192 && schedule.m < 256 &&
+      schedule.n >= 8192 && schedule.n <= 10240 &&
+      schedule.n % 128 == 0 && schedule.k == 1024) {
+    schedule.staging = "lds";
+    schedule.warps = 8;
+    schedule.pipelineDepth = 1;
+    schedule.macroTileM = 128;
+    schedule.macroTileN = 64;
+    return;
+  }
   if (nk && schedule.m >= 128 && computeUnits &&
       (tiles(128, 128) >= *computeUnits || tiles(128, 64) >= *computeUnits)) {
     const bool wide = tiles(128, 128) >= *computeUnits;
@@ -2770,6 +2803,7 @@ struct GraphToSchedulePass
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
     if (failed(scheduleNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(scheduleNativePagedKV(mod))) return signalPassFailure();
+    if (failed(scheduleNativeMoeDispatch(mod))) return signalPassFailure();
 
     SmallVector<Operation *> tridiagonalSolves;
     mod.walk([&](Operation *op) {
@@ -3754,6 +3788,7 @@ struct ScheduleToTilePass
     if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
     if (failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();
+    if (failed(lowerNativeMoeDispatch(mod))) return signalPassFailure();
     if (failed(lowerNativeSSD(mod))) return signalPassFailure();
 
     SmallVector<Operation *> scheduledTridiagonalSolves;

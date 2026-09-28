@@ -1,6 +1,7 @@
 """Native paged read contract; Python owns bindings, not Tile construction."""
 
 from dataclasses import dataclass
+import copy
 import json
 import re
 
@@ -21,6 +22,8 @@ class ScheduledPagedKVArtifact:
         tool = find_tessera_opt()
         if tool is None:
             raise RuntimeError("paged read requires native Schedule replay")
+        if run_tessera_opt(tool, self.graph_ir, "--tessera-graph-to-schedule") != self.schedule_ir:
+            raise ValueError("paged Schedule IR disagrees with Graph replay")
         if run_tessera_opt(tool, self.schedule_ir, "--tessera-schedule-to-tile") != self.tile_ir:
             raise ValueError("paged Tile IR disagrees with native Schedule replay")
         if len(self.dims) != 7 or any(type(d) is not int for d in self.dims):
@@ -59,5 +62,40 @@ def lower_scheduled_paged_kv(names: tuple[str, str, str], dims: tuple[int, ...])
     if len(hashes) != 1:
         raise RuntimeError("paged lowering lost its unique schedule hash")
     artifact = ScheduledPagedKVArtifact(graph, schedule, tile, hashes[0], names, dims)
+    artifact.validate()
+    return artifact
+
+
+def lower_scheduled_paged_kv_graph(module, *, target: str) -> ScheduledPagedKVArtifact:
+    """Lower the caller's typed Graph op; only bindings are added at admission."""
+    if target not in {"rocm_gfx1151", "rocm_gfx1201"}:
+        raise ValueError("ROCm paged read Schedule admission requires gfx1151 or gfx1201")
+    from .rocm_native import _paged_kv_contract
+
+    contract = _paged_kv_contract(module)
+    if contract is None:
+        raise ValueError("paged read requires the static f32/i32 Graph contract")
+    pages, table, output, dims = contract
+    source = copy.deepcopy(module)
+    # The public frontend spells the bounded physical-page read as
+    # tessera.kv_cache.read. Once admission has proved a single tensor result
+    # and explicit pages/table, use the registered typed Graph op that owns
+    # this exact read contract; the native pass owns every later IR layer.
+    source.functions[0].body[0].op_name = "tessera.paged_kv_read"
+    architecture = target.removeprefix("rocm_")
+    source.module_attrs.update({"tessera.target": json.dumps(target),
+                                "tessera.arch": json.dumps(architecture)})
+    source.functions[0].fn_attrs["tessera.bindings"] = json.dumps((pages, table, output))
+    graph = source.to_mlir(target=target, canonical=True)
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("paged read requires production tessera-opt")
+    schedule = run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(tool, schedule, "--tessera-schedule-to-tile")
+    hashes = re.findall(r'tessera.schedule_hash = "([0-9a-f]{64})"', tile)
+    if len(hashes) != 1:
+        raise RuntimeError("paged lowering lost its unique schedule hash")
+    artifact = ScheduledPagedKVArtifact(graph, schedule, tile, hashes[0],
+                                        (pages, table, output), dims)
     artifact.validate()
     return artifact

@@ -21,14 +21,26 @@ spec restates the claim.
 
 ```mermaid
 flowchart TD
-  A["Python API<br/>@tessera.jit, @tessera.kernel,<br/>Region, Domain, DistributedArray"] --> B["Graph IR<br/>tessera dialect<br/>math ops, effects, shapes, shard attrs"]
-  B --> C["Schedule IR<br/>schedule dialect<br/>mesh regions and pipeline structure"]
-  C --> D1["x86 Path<br/>TilingPass -> TileToX86Pass<br/>AMX/AVX-512 backend calls"]
-  C --> D2["GPU Path<br/>TileIRLoweringPass<br/>tile.*, tessera_attn.*"]
-  D2 --> E["Target IR<br/>NVIDIA TMA, WGMMA, mbarrier<br/>LLVM NVPTX / PTX"]
-  D1 --> F["Runtime / Host Integration<br/>C ABI + Python wrapper; target-gated execution"]
-  E --> F
+  A["Python / textual frontend<br/>capture and orchestration"] --> B["Typed semantic Graph IR<br/>Tessera MLIR dialect"]
+  B --> AD["Differentiation and optimization<br/>verified MLIR passes"]
+  AD --> C["Schedule IR<br/>MLIR schedule dialect"]
+  C --> D["Tile IR<br/>MLIR tile dialect and passes"]
+  D --> E["Backend Target IR<br/>MLIR target dialects"]
+  E --> X["x86<br/>LLVM / object or ORC<br/>explicit library calls"]
+  E --> N["NVIDIA<br/>NVVM / LLVM / PTX / image"]
+  E --> R["ROCm<br/>ROCDL / LLVM / HSACO"]
+  E --> M["Apple GPU<br/>compiler-owned MSL / Metal / metallib"]
+  X --> F["Native image + checked runtime ABI<br/>target-gated execution"]
+  N --> F
+  R --> F
+  M --> F
 ```
+
+This is the target architecture, not a claim that every family crosses every
+boundary today. Python owns the frontend, orchestration and oracle; new
+semantic lowering belongs in the verified MLIR/LLVM route. Current Graph-owned
+packagers and source emitters are inventoried in the
+[foundation survey](../audit/compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md).
 
 ## How To Read Current Status
 

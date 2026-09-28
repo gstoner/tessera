@@ -17,20 +17,23 @@ pytestmark = [pytest.mark.hardware_nvidia, pytest.mark.skipif(
 )]
 
 
-@pytest.mark.parametrize("kind", ["softmax", "sum", "mean", "max"])
+@pytest.mark.parametrize("kind", ["softmax", "softmax_safe", "sum", "mean", "max"])
 @pytest.mark.parametrize("shape", [(2, 3, 5), (7, 19, 257), (2, 3, 1)])
 def test_scheduled_unary_matches_legacy_and_oracle(kind, shape):
-    module = _module(family="softmax" if kind == "softmax" else "reduce", target="nvidia_sm120")
-    if kind != "softmax":
+    softmax = kind in {"softmax", "softmax_safe"}
+    module = _module(family="softmax" if softmax else "reduce", target="nvidia_sm120")
+    if kind == "softmax_safe":
+        module.functions[0].body[0].op_name = "tessera.softmax_safe"
+    elif not softmax:
         module.functions[0].body[0].op_name = "tessera.reduce"
         module.functions[0].body[0].kwargs["kind"] = kind
     fn = module.functions[0]
     fn.args[0].ir_type = tensor_ir_type(shape, "fp32")
-    fn.result_types[0] = tensor_ir_type(shape if kind == "softmax" else (shape[0], shape[2]), "fp32")
+    fn.result_types[0] = tensor_ir_type(shape if softmax else (shape[0], shape[2]), "fp32")
     fn.body[0].operand_types = [str(fn.args[0].ir_type)]
     fn.body[0].result_type = str(fn.result_types[0])
     fn.body[0].inferred_type = fn.result_types[0]
-    baseline = baseline_softmax if kind == "softmax" else baseline_reduction
+    baseline = baseline_softmax if softmax else baseline_reduction
     legacy = baseline(module, pipeline_name="tessera-nvidia-pipeline-sm120")
     direct = nvidia_native.package_native(module, pipeline_name="tessera-nvidia-pipeline-sm120")
     assert direct.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
@@ -39,7 +42,7 @@ def test_scheduled_unary_matches_legacy_and_oracle(kind, shape):
     assert bundle.schedule is not None and bundle.tile is not None
     assert bundle.tile.input_digest == bundle.schedule.output_digest
     x = np.random.default_rng(725).normal(size=shape).astype(np.float32)
-    if kind == "softmax":
+    if softmax:
         exp = np.exp(x - x.max(axis=-1, keepdims=True))
         expected = exp / exp.sum(axis=-1, keepdims=True)
         scalars = {"Rows": shape[0] * shape[1], "K": shape[2]}
@@ -65,10 +68,12 @@ def test_scheduled_unary_matches_legacy_and_oracle(kind, shape):
 
 @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
 @pytest.mark.parametrize("shape", [(3, 17), (129, 257)])
-def test_narrow_softmax_native_parity(dtype, shape):
+@pytest.mark.parametrize("op_name", ["tessera.softmax", "tessera.softmax_safe"])
+def test_narrow_softmax_native_parity(dtype, shape, op_name):
     storage = np.float16 if dtype == "fp16" else pytest.importorskip("ml_dtypes").bfloat16
     module = _module(family="softmax", target="nvidia_sm120")
     fn = module.functions[0]
+    fn.body[0].op_name = op_name
     fn.args[0].ir_type = tensor_ir_type(shape, dtype)
     fn.result_types[0] = fn.args[0].ir_type
     fn.body[0].operand_types = [str(fn.args[0].ir_type)]

@@ -337,6 +337,44 @@ def test_panel_oracle_states_the_rule(m, n, layout, expected):
         BlockScalePanel(*expected)
 
 
+@pytest.mark.parametrize(("m", "n", "k", "expected"), [
+    (96, 8192, 1024, ("global", 32, 32, 1)),
+    (97, 1024, 1024, ("lds", 128, 64, 8)),
+    (100, 2048, 4096, ("lds", 128, 64, 8)),
+    (127, 24576, 1536, ("lds", 128, 64, 8)),
+    (128, 8192, 1024, ("lds", 128, 128, 8)),
+    (100, 2048, 512, ("global", 16, 32, 1)),
+])
+def test_gfx1201_sub128_ragged_panel_matches_native_schedule(m, n, k, expected):
+    from tessera.compiler.rocm_fp8_blockscale import (
+        BlockScalePanel, blockscale_panel_oracle, verify_blockscale_schedule)
+
+    shape = BlockScaleShape(m, n, k, 128, 128, "nk")
+    assert blockscale_panel_oracle(shape) == BlockScalePanel(*expected)
+    verify_blockscale_schedule(shape, _schedule_ir(shape))
+
+
+@pytest.mark.parametrize(("m", "n", "k", "expected"), [
+    (192, 8192, 1024, ("lds", 128, 64, 8)),
+    (200, 8192, 1024, ("lds", 128, 64, 8)),
+    (200, 8320, 1024, ("lds", 128, 64, 8)),
+    (255, 10240, 1024, ("lds", 128, 64, 8)),
+    (200, 8193, 1024, ("lds", 128, 128, 8)),
+    (200, 6144, 1024, ("lds", 128, 128, 8)),
+    (200, 8192, 1536, ("lds", 128, 128, 8)),
+    (200, 8192, 2048, ("lds", 128, 128, 8)),
+    (256, 8192, 1024, ("lds", 128, 128, 8)),
+    (300, 8192, 1024, ("lds", 128, 128, 8)),
+])
+def test_gfx1201_short_k_m200_panel_matches_native_schedule(m, n, k, expected):
+    from tessera.compiler.rocm_fp8_blockscale import (
+        BlockScalePanel, blockscale_panel_oracle, verify_blockscale_schedule)
+
+    shape = BlockScaleShape(m, n, k, 128, 128, "nk")
+    assert blockscale_panel_oracle(shape) == BlockScalePanel(*expected)
+    verify_blockscale_schedule(shape, _schedule_ir(shape))
+
+
 def test_panel_oracle_keeps_the_register_panel_for_an_unmeasured_arch():
     """No measured CU count, no occupancy verdict: the LDS body is not offered
     (the C++ rule warns ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED in that case)."""
@@ -344,6 +382,8 @@ def test_panel_oracle_keeps_the_register_panel_for_an_unmeasured_arch():
     shape = BlockScaleShape(1024, 4096, 256, 128, 128, "nk")
     assert blockscale_panel_oracle(shape, arch="gfx1250").staging == "global"
     assert blockscale_panel_oracle(shape, arch="gfx9999").staging == "global"
+    ragged = BlockScaleShape(100, 2048, 1024, 128, 128, "nk")
+    assert blockscale_panel_oracle(ragged, arch="gfx1151").staging == "global"
 
 
 def _schedule_ir(shape: BlockScaleShape) -> str:

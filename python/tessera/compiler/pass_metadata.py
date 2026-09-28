@@ -732,9 +732,23 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="COMP-GRAPH-DATAFLOW-W2.1-2026-08-11",
     ),
     PassMetadata(
+        name="tessera-graph-div-to-apple_gpu",
+        cpp_class="LowerGraphDivToAppleGPUPass",
+        summary=(
+            "Lowers equal static rank-2 f32 Graph division, including the "
+            "scaled ntk_rope theta division, to the checked Metal MPSGraph "
+            "binary ABI and asserts native execution status."
+        ),
+        input_dialects=("tessera", "func", "arith"),
+        output_dialects=("func", "arith", "bufferization", "memref", "cf"),
+        diagnostic_codes=(),
+        pass_kind="lowering",
+        sprint="ODS-WIRE-1-4",
+    ),
+    PassMetadata(
         name="tessera-graph-to-schedule",
         cpp_class="GraphToSchedulePass",
-        summary="Selects bounded native Schedule contracts from typed Graph IR, including native checked-2:4 and wave-uniform automatic sparse/dense gfx1201 half matmul packing, replay-bound x86 absolute/floor/ceil and physical batch/head attention bias broadcasting. Unsupported dtype/layout/policy envelopes refuse before artifact creation.",
+        summary="Selects bounded native Schedule contracts from typed Graph IR, including native checked-2:4 and wave-uniform automatic sparse/dense gfx1201 half matmul packing, replay-bound x86 absolute/floor/ceil/trunc and physical batch/head attention bias broadcasting. Unsupported dtype/layout/policy envelopes refuse before artifact creation.",
         input_dialects=("tessera", "func"),
         output_dialects=("tessera", "schedule", "func", "gpu", "arith", "scf", "memref", "vector"),
         required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings", "tessera.sparse_policy"),
@@ -895,6 +909,19 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="NVWGMMA-ACCUMULATOR-GUARD-2026-08-03",
     ),
     PassMetadata(
+        name="tessera-philox-langevin-to-apple_gpu",
+        cpp_class="LowerPhiloxLangevinToAppleGPUPass",
+        summary=(
+            "Lowers static f32 Philox Langevin Graph programs with i64 seed "
+            "and counter tensors to a checked Metal runtime call."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("func", "arith", "bufferization", "memref", "cf"),
+        diagnostic_codes=(),
+        pass_kind="lowering",
+        sprint="ODS-WIRE-1-4",
+    ),
+    PassMetadata(
         name="tessera-pipeline-partition",
         cpp_class="PipelineStagePartitionPass",
         summary=(
@@ -974,7 +1001,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-schedule-to-tile",
         cpp_class="ScheduleToTilePass",
-        summary="Replays registered Schedule decisions, including gfx1201 packed sparse MMA fragments with f32 or matching f16/bf16 accumulation, independently signed byte-addressable INT4/i8 with i32 accumulation, and independently typed FP8/BF8 operands with f32 accumulation, into Tile carriers and structured SSD loops, including the x86 absolute/floor/ceil and inclusive trailing-axis cumsum contracts and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
+        summary="Replays registered Schedule decisions, including gfx1201 packed sparse MMA fragments with f32 or matching f16/bf16 accumulation, independently signed byte-addressable INT4/i8 with i32 accumulation, and independently typed FP8/BF8 operands with f32 accumulation, into Tile carriers and structured SSD loops, including the x86 absolute/floor/ceil/trunc and inclusive trailing-axis cumsum contracts and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
         input_dialects=("schedule", "func", "tessera"),
         output_dialects=("tile", "gpu", "llvm", "arith", "scf", "tensor", "memref"),
         required_attrs=("chunk_size", "artifact_hash", "storage", "accum", "output", "a_layout", "b_layout", "contract", "bias_shape"),

@@ -32,11 +32,20 @@ def test_native_packed_state_consumes_serialized_schedule(kind, monkeypatch):
         "_compile_tile_ir",
         lambda text, entry: (calls.append(text) or text, "// PTX", {}, "compiler", "toolchain", (), "cold"),
     )
-    result = package(kind, replace(scheduled, graph_ir="discarded"))
+    # Paged read now replays both native boundaries from the admitted Graph.
+    consumed = scheduled if kind == "paged" else replace(scheduled, graph_ir="discarded")
+    result = package(kind, consumed)
     assert calls == [scheduled.tile_ir]
     assert result.descriptor.provenance["schedule_digest"] == scheduled.schedule_digest
     assert not hasattr(native, "emit_int4_matmul_tile_ir")
     assert not hasattr(native, "emit_paged_kv_read_tile_ir")
+
+
+def test_native_paged_state_rejects_graph_replay_drift(monkeypatch):
+    scheduled = artifact("paged")
+    monkeypatch.setattr(native, "_compile_tile_ir", lambda *a: pytest.fail("compiled corrupt Graph"))
+    with pytest.raises((ValueError, RuntimeError), match="Graph replay|unknown"):
+        package("paged", replace(scheduled, graph_ir="discarded"))
 
 
 @pytest.mark.parametrize("kind", ["int4", "paged"])

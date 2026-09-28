@@ -77,6 +77,7 @@ SMALL = ((128, 5120, 8704), (128, 17408, 5120), (256, 5120, 8704), (256, 17408, 
 #: Every engine rotates three input copies, so each launch reads its weight from
 #: memory, not from the previous launch's cache footprint.
 NSCAN = tuple((256, n, 5120) for n in (4096, 8192, 12288, 16384, 17408, 20480, 24576))
+NSCAN_DECOMPOSITION = tuple((256, n, 5120) for n in (8192, 12288, 17408))
 SWEEP = (
     (128, 5120, 8704), (128, 17408, 5120), (256, 17408, 5120),
     (512, 5120, 8704), (512, 17408, 5120), (1024, 5120, 8704),
@@ -430,7 +431,7 @@ def main() -> None:
     parser.add_argument("--radiance-revision", required=True)
     parser.add_argument("--tessera-opt", type=Path, required=True)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--shapes", choices=("production", "sweep", "all", "small", "nscan"),
+    parser.add_argument("--shapes", choices=("production", "sweep", "all", "small", "nscan", "nscan_decomposition"),
                         default="production")
     parser.add_argument("--decomposition", action="store_true")
     parser.add_argument("--packed", action="store_true",
@@ -472,7 +473,8 @@ def main() -> None:
     if source["worktree_dirty"] and not args.diagnostic:
         raise SystemExit("source tree has uncommitted changes; commit first or pass --diagnostic")
     shapes = {"production": PRODUCTION, "sweep": SWEEP, "all": PRODUCTION + SWEEP,
-              "small": SMALL, "nscan": NSCAN}[args.shapes]
+              "small": SMALL, "nscan": NSCAN,
+              "nscan_decomposition": NSCAN_DECOMPOSITION}[args.shapes]
     output.parent.mkdir(parents=True, exist_ok=True)
     processes = []
     for index in range(args.processes):

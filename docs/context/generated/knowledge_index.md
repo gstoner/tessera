@@ -8,20 +8,22 @@ Use this generated index for navigation, then verify claims against the canonica
 
 | ID | Name | Authority | Primary References | Relations |
 | --- | --- | --- | --- | --- |
-| `api.python_frontend` | Python Frontend API | normative | docs/CANONICAL_API.md, docs/spec/PYTHON_API_SPEC.md, python/tessera/__init__.py | defined_by -> doc.canonical_api; implemented_in -> python/tessera/compiler/jit.py; tested_by -> test.unit; example.getting_started_basic_tensor_ops -> depends_on; test.numerical_validation -> depends_on |
+| `api.python_frontend` | Python Frontend API | normative | docs/CANONICAL_API.md, docs/spec/PYTHON_API_SPEC.md, python/tessera/__init__.py | defined_by -> doc.canonical_api; depends_on -> concept.mlir_foundation; implemented_in -> python/tessera/compiler/jit.py; tested_by -> test.unit; example.getting_started_basic_tensor_ops -> depends_on; test.numerical_validation -> depends_on |
 
 ## backend
 
 | ID | Name | Authority | Primary References | Relations |
 | --- | --- | --- | --- | --- |
-| `backend.nvidia_gpu` | NVIDIA GPU Backend | normative | docs/spec/TARGET_IR_SPEC.md, python/tessera/compiler/gpu_target.py, src/runtime/src/backend/cuda_backend.cpp | tested_by -> test.mlir_lit; pass.lower_to_gpu -> depends_on |
-| `backend.rocm` | ROCm Backend | normative | docs/spec/COMPILER_REFERENCE.md, src/compiler/codegen/Tessera_ROCM_Backend/CMakeLists.txt, src/runtime/src/backend/hip_backend.cpp | none |
-| `backend.x86` | x86 AMX/AVX512 Backend | normative | docs/spec/COMPILER_REFERENCE.md, src/compiler/codegen/tessera_x86_backend/CMakeLists.txt, src/runtime/src/backend/cpu_backend.cpp | tested_by -> test.unit |
+| `backend.nvidia_gpu` | NVIDIA GPU Backend | normative | docs/spec/TARGET_IR_SPEC.md, python/tessera/compiler/gpu_target.py, src/runtime/src/backend/cuda_backend.cpp | depends_on -> concept.llvm_native_lowering; tested_by -> test.mlir_lit; pass.lower_to_gpu -> depends_on |
+| `backend.rocm` | ROCm Backend | normative | docs/spec/COMPILER_REFERENCE.md, src/compiler/codegen/Tessera_ROCM_Backend/CMakeLists.txt, src/runtime/src/backend/hip_backend.cpp | depends_on -> concept.llvm_native_lowering |
+| `backend.x86` | x86 AMX/AVX512 Backend | normative | docs/spec/COMPILER_REFERENCE.md, src/compiler/codegen/tessera_x86_backend/CMakeLists.txt, src/runtime/src/backend/cpu_backend.cpp | depends_on -> concept.llvm_native_lowering; tested_by -> test.unit |
 
 ## concept
 
 | ID | Name | Authority | Primary References | Relations |
 | --- | --- | --- | --- | --- |
+| `concept.mlir_foundation` | MLIR Compiler Foundation | normative | docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md, docs/spec/COMPILER_REFERENCE.md, src/compiler/ir/TesseraOps.td | api.python_frontend -> depends_on; ir.graph -> depends_on; ir.schedule -> depends_on; ir.target -> depends_on; ir.tile -> depends_on |
+| `concept.llvm_native_lowering` | LLVM Native Lowering | normative | docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md, docs/audit/compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md, docs/spec/LOWERING_PIPELINE_SPEC.md | backend.nvidia_gpu -> depends_on; backend.rocm -> depends_on; backend.x86 -> depends_on; depends_on -> runtime.c_abi |
 | `concept.diagnostics` | Diagnostics And Error Handling | normative | docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md, python/tessera/diagnostics.py, tests/unit/test_error_reporter.py | explained_by -> docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md |
 | `concept.shape_layout` | Shape And Layout System | normative | docs/spec/SHAPE_SYSTEM.md, docs/guides/Tessera_Tensor_Layout_And_Data_Movement_Guide.md, python/tessera/shape.py | defined_by -> docs/spec/SHAPE_SYSTEM.md |
 
@@ -59,10 +61,10 @@ Use this generated index for navigation, then verify claims against the canonica
 
 | ID | Name | Authority | Primary References | Relations |
 | --- | --- | --- | --- | --- |
-| `ir.graph` | Graph IR | normative | docs/spec/GRAPH_IR_SPEC.md, src/compiler/ir/TesseraOps.td, python/tessera/compiler/graph_ir.py | example.ir_pipeline_tutorial -> depends_on; defined_by -> docs/spec/GRAPH_IR_SPEC.md; lowers_to -> ir.schedule |
-| `ir.schedule` | Schedule IR | normative | docs/spec/TARGET_IR_SPEC.md, docs/architecture/Compiler/Tessera_Compiler_ScheduleIR_Design.md, src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td | ir.graph -> lowers_to; lowers_to -> ir.tile |
-| `ir.tile` | Tile IR | normative | docs/spec/TILE_IR.md, docs/spec/TARGET_IR_SPEC.md, src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td | ir.schedule -> lowers_to; lowers_to -> ir.target |
-| `ir.target` | Target IR | normative | docs/spec/TARGET_IR_SPEC.md, docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md, python/tessera/compiler/target_ir.py | ir.tile -> lowers_to; pass.lower_to_x86 -> depends_on |
+| `ir.graph` | Graph IR | normative | docs/spec/GRAPH_IR_SPEC.md, src/compiler/ir/TesseraOps.td, python/tessera/compiler/graph_ir.py | example.ir_pipeline_tutorial -> depends_on; defined_by -> docs/spec/GRAPH_IR_SPEC.md; depends_on -> concept.mlir_foundation; lowers_to -> ir.schedule |
+| `ir.schedule` | Schedule IR | normative | docs/spec/TARGET_IR_SPEC.md, docs/architecture/Compiler/Tessera_Compiler_ScheduleIR_Design.md, src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td | ir.graph -> lowers_to; depends_on -> concept.mlir_foundation; lowers_to -> ir.tile |
+| `ir.tile` | Tile IR | normative | docs/spec/TILE_IR.md, docs/spec/TARGET_IR_SPEC.md, src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td | ir.schedule -> lowers_to; depends_on -> concept.mlir_foundation; lowers_to -> ir.target |
+| `ir.target` | Target IR | normative | docs/spec/TARGET_IR_SPEC.md, docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md, python/tessera/compiler/target_ir.py | depends_on -> concept.mlir_foundation; ir.tile -> lowers_to; pass.lower_to_x86 -> depends_on |
 
 ## pass
 
@@ -75,7 +77,7 @@ Use this generated index for navigation, then verify claims against the canonica
 
 | ID | Name | Authority | Primary References | Relations |
 | --- | --- | --- | --- | --- |
-| `runtime.c_abi` | Runtime C ABI | normative | docs/spec/RUNTIME_ABI_SPEC.md, src/runtime/include/tessera/tessera_runtime.h, src/runtime/src/tessera_runtime.cpp | defined_by -> docs/spec/RUNTIME_ABI_SPEC.md |
+| `runtime.c_abi` | Runtime C ABI | normative | docs/spec/RUNTIME_ABI_SPEC.md, src/runtime/include/tessera/tessera_runtime.h, src/runtime/src/tessera_runtime.cpp | concept.llvm_native_lowering -> depends_on; defined_by -> docs/spec/RUNTIME_ABI_SPEC.md |
 | `runtime.profiler` | Tessera Profiler | informative | docs/guides/Tessera_Profiling_And_Autotuning_Guide.md, tools/profiler/README.md, python/tessera/profiler.py | explained_by -> docs/guides/Tessera_Profiling_And_Autotuning_Guide.md |
 
 ## test_suite

@@ -134,7 +134,9 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
       // preserves the longest-chain-first policy.
       pm.addPass(createLowerDeclarativeFusionsToAppleGPUPass());
       pm.addPass(createLowerMatmulToAppleGPUPass());
+      pm.addPass(createLowerGraphDivToAppleGPUPass());
       pm.addPass(createLowerRopeToAppleGPUPass());
+      pm.addPass(createLowerPhiloxLangevinToAppleGPUPass());
       pm.addPass(createLowerFlashAttnToAppleGPUPass());
       pm.addPass(createLowerLinearAttnToAppleGPUPass());
       pm.addPass(createLowerAttnLocalWindow2DToAppleGPUPass());
@@ -179,6 +181,8 @@ void registerTesseraAppleBackendPipelines() {
   registerPass([]() { return createLowerMatmulToAppleGPUPass(); });
   registerPass([]() { return createLowerMatmulToAppleSimdgroupPass(); });
   registerPass([]() { return createLowerRopeToAppleGPUPass(); });
+  registerPass([]() { return createLowerGraphDivToAppleGPUPass(); });
+  registerPass([]() { return createLowerPhiloxLangevinToAppleGPUPass(); });
   registerPass([]() { return createLowerFlashAttnToAppleGPUPass(); });
   registerPass([]() { return createLowerSoftmaxToAppleGPUPass(); });
   registerPass([]() { return createLowerGeluToAppleGPUPass(); });

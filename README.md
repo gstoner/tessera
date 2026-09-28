@@ -6,8 +6,9 @@ Tessera is a standalone, tile-oriented programming model and compiler for deep
 learning and scientific computing. It makes layout, memory ownership, numerical
 policy and parallel execution explicit compiler contracts.
 
-The architectural foundation is **MLIR/LLVM with native code generation for each
-backend**. Python provides the user interface, tracing, orchestration and
+The architectural foundation is **MLIR with LLVM native lowering for CPU,
+NVIDIA and ROCm, and compiler-owned Metal code generation for Apple GPU**.
+Python provides the user interface, tracing, orchestration and
 reference implementations. Migration is active: some package families already
 consume verified native IR; others still use compatibility IR or source emitters.
 A Python result or generated kernel string alone is not native execution proof.
@@ -50,18 +51,28 @@ constraints and execution policy.
 
 ```text
 Python / textual frontend
-  → typed semantic Graph IR
-  → structured differentiation and optimization
-  → Schedule IR → Tile IR
-  → backend Target IR and native lowering
+  → typed semantic Graph IR (Tessera MLIR dialect)
+  → structured differentiation and optimization (verified MLIR passes)
+  → Schedule IR → Tile IR (MLIR dialects and passes)
+  → backend Target IR → native lowering (MLIR target dialects, LLVM where supported)
   → native image + checked runtime ABI → execution
 ```
 
 Tracing builds the semantic program; it is not itself the optimizing compiler.
-The production direction is to preserve verified types, effects, layouts,
-residuals and package identity across the native boundaries. Backend-specific
-Target IR is inspectable without the GPU but may name hardware instructions.
-Physical schedules belong to each architecture.
+The final architecture gives MLIR ownership of semantics, differentiation,
+optimization, scheduling and target lowering. LLVM supplies CPU code generation
+and the NVIDIA NVVM/PTX and ROCm ROCDL/AMDGPU native paths. Apple GPU ends in a
+compiler-owned MSL → Metal/metallib path; no general LLVM-to-Metal backend is
+assumed. Verified types, effects, layouts, residuals and package identity must
+survive these boundaries. Backend-specific Target IR is inspectable without a
+GPU but may name hardware instructions. Physical schedules belong to each
+architecture.
+
+Python remains the frontend, orchestration layer and numerical oracle. New
+compiler enhancements must enter the canonical typed IR and verified native
+passes, not add another Python semantic backend or a Graph-derived fast path.
+Existing source emitters and delegated libraries remain explicitly bounded
+migration candidates until equivalent compiled routes have been proved.
 
 The [integrated compiler plan](docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md)
 owns sequencing. The [compiler audit map](docs/audit/compiler/README.md) separates
@@ -80,7 +91,7 @@ supported.
 | x86 CPU | MLIR/LLVM CPU execution and architecture-specific native packages; ISA admission matters. | [x86 queue](docs/audit/backend/x86/todo.md) |
 | Apple CPU/GPU | Accelerate/BNNS and Metal/MPS/MSL paths; native coverage varies by family and toolchain. | [Apple queue](docs/audit/backend/apple/todo.md) |
 | NVIDIA CUDA | Native scheduled packages and specialized candidates, with RTX 5070 / `sm_120` evidence for admitted families. | [NVIDIA queue](docs/audit/backend/nvidia/todo.md) |
-| AMD ROCm | MLIR→ROCDL/LLVM native packages with `gfx1151` evidence; other architectures require their own proof. | [ROCm queue](docs/audit/backend/rocm/todo.md) |
+| AMD ROCm | MLIR→ROCDL/LLVM native packages with separate `gfx1151` and RX 9070 XT / `gfx1201` evidence for admitted families; neither architecture proves the other's coverage. | [ROCm queue](docs/audit/backend/rocm/todo.md) and [gfx1201 W8A8 packet](benchmarks/baselines/gfx1201_fp8_blockscale_ragged_20260927/README.md) |
 
 Autodiff includes Python reference rules, compiler-generated forward/reverse
 products and bounded native packages. Persistent static f32 tensor tapes now

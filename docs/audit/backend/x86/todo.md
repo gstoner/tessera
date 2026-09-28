@@ -9,6 +9,48 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `E2E-REAL-6-GFX1151-PAGED-2026-09-28`: sibling outcome — not applicable
+
+The bounded gfx1151 paged-KV physical read changes no x86 Schedule, native
+image, ABI or runtime. Cohort, breadth and elementwise migration remain open.
+
+## `E2E-REAL-6-APPLE-X86-2026-09-28`: trunc moves to native Schedule/Tile — landing
+
+Owner E2E-REAL-6; cross-backend sync key
+`E2E-REAL-6-APPLE-X86-2026-09-28`. Static same-shape f32 `tessera.trunc`
+now has its existing public op declared and verified in ODS. The Zen 5
+packager replays the native Graph→Schedule→Tile contract and projects its
+numeric policy, shape and bindings; it no longer emits this family from the
+Python Tile constructor. Princess-Luna WSL passed 47 focused tests, including
+three exact-CPU native image launches with bitwise exceptional-value checks.
+The [timing packet](../../../../benchmarks/baselines/e2e_real6_trunc_20260928/README.md)
+records ~99–105 ms package calls and ~718–730 µs native launch medians, so
+there is no performance promotion. Cohort, breadth and the other elementwise
+routes remain open. The image still calls the prepackaged AVX-512 kernel; an
+LLVM-generated body and lower-cost launch ABI remain separate work. The shared
+Apple Graph division pass and f32 rope status ABI do not alter x86 lowering or
+execution.
+
+## `GFX1201-W8A8-M200-SHORTK-2026-09-28`: sibling outcome — not applicable
+
+The bounded gfx1201 FP8 W8A8 LDS panel changes no x86 Schedule, Target IR,
+native image, numerical policy or runtime ABI. The GPU timing is not Zen 5
+evidence.
+
+## `GFX1201-W8A8-RAGGED97-2026-09-28`: sibling outcome — not applicable
+
+The bounded native Schedule rule selects a gfx1201 FP8 W8A8 LDS panel.
+x86 has no ROCm WMMA/LDS consumer for that physical contract, and its
+Schedule, Target IR and native ABI are unchanged. No Zen 5 performance claim
+follows from the Tajasarus packet.
+
+## `E2E-REAL-6-SM120-SOFTMAX-SAFE-2026-09-28`: sibling outcome — parity unchanged
+
+The shared scheduled-kernel admission adds only `nvidia_sm120`.
+The existing x86 `softmax_safe` Schedule/Tile and Zen 5 rows remain the
+authority for x86; no x86 ABI, selector or numerical policy changed.
+Super-Bear's RTX 5070 passed 14 focused device softmax rows.
+
 ## `CI-LIT-EBM-CLIFFORD-2026-09-28`: hosted lit lane covers the EBM / Clifford fixtures — sibling outcome — not applicable
 
 Owner: CI toolchain lanes (PR #874, follow-up to #873 item 1). The hosted `lit` lane now configures `TESSERA_BUILD_{EBM,CLIFFORD}_BACKEND=ON`, so the six fixtures that `REQUIRES: tessera-ebm` / `tessera-clifford` run there and the fleet-union gate passes on one lane: dispatched run 36418280808, LLVM/MLIR 23.1.2 under the CI 23.1.x tolerance (fleet pin 23.1.1), 533/533 passed, `uncovered: []`. Every one of the six already passed on every fleet box, which configures both backends ON; this adds hosted-runner coverage and makes no device claim. None of the six fixtures lowers to x86 Target IR; `tessera_x86` fixture coverage on the hosted lane is unchanged, and the lane still builds the x86 backend as before.
@@ -55,6 +97,23 @@ Owner E2E-REAL-6 (x86 unary family; log entry of the same date). Branch
   compiled route costs 96-105 ms per package call vs 29-37 ms retired (compile
   cost, Princess-Luna), all of it lowering + replay subprocesses, and it has been
   the production route since 2026-09-08 — a follow-up, not this cut.
+- **Package-cache follow-up in progress (2026-09-28).** The direct x86 unary
+  packagers now memoize a completed native package for an exact canonical Graph
+  program, pipeline and architecture, keyed also by the compiler and shared
+  image file identities. A hit copies the verified package; a miss still runs
+  Graph → Schedule → Tile, ancestry replay and Target lowering. The 64-entry
+  bound avoids unbounded package retention. This covers repeated calls for the
+  *same* shape and symbol. The driver's scheduled unary packager now also
+  caches an exact verified Schedule/Tile artifact and pipeline, so a repeated
+  driver call skips Target lowering and replay; Graph → Schedule → Tile still
+  runs in the driver before that lookup. A new shape still pays its first
+  compile. Princess-Luna passed the 23 focused migration/cache tests and the
+  625-row unary migration/differential suite. The
+  [fresh cost packet](../../../../benchmarks/baselines/x86_unary_package_cache_20260928/README.md)
+  measures first compiled packages at 100.33 ms (softmax) and 100.44 ms
+  (reduction) over eight new shapes each, then exact repeat calls at 0.20 ms
+  for both families. New shapes retain the roughly 100 ms compile cost; the cache
+  removes it on exact direct-package repeats.
 - **Proof.** Princess-Luna (Zen 5 AVX-512): `test_x86_unary_differential.py` +
   `test_x86_unary_migration.py` + `test_x86_e2e_spine.py` 662 passed / 0 skipped,
   including 298 device rows (288 bitwise retired-vs-compiled rows over every
@@ -6437,3 +6496,16 @@ Parity validated host-free (Mac). The x86 packet's ineligibility tags and the PM
 Owner: EVIDENCE-PACKET-1. Sync: `EVIDENCE-PACKET-1-2026-09-27`.
 
 Parity validated. The envelope part was checked host-free on the Mac, and the route receipts were recorded on both Zen 5 hosts. The x86 v1/v2 profiler packets read through `evidence_envelope.read_evidence_packet`. The 2026-09-26 packet stays promotable. The 2026-08-06 packet stays retained, and its benchmark verdict is now an explicit refusal cause (`benchmark_verdict=retain`). Fixed fail-open: the derivation read `virtualized`, `wsl` and `worktree_dirty` by truthiness, so an omitted field derived none of `VIRTUALIZED_HOST`, `WSL_CLOCK_DOMAIN` or `SOURCE_WORKTREE_DIRTY`. All three must now be bools. Route receipts on Princess-Luna and Tajasarus (clean `eed48b9b`): EBM `energy_quadratic` and `partition_exact_from_energies` ran on the x86 AVX-512 kernels (`_try_x86_energy_quadratic_f32`, `_try_x86_partition_exact_f32`). The Apple-only jit_bridge trace would have reported these calls as no native dispatch. Follow-up required: a future bare-metal x86 profiler-route packet needs per-row timing witnesses naming its images before the envelope admits it as eligible. None exists yet. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-packet-1-shared-evidence-envelope-ga-and-ebm-route-receipts).
+
+### E2E-REAL-6 exact Graph package reuse — 2026-09-28
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-NATIVE-FOLLOWUPS-2026-09-28`.
+Princess-Luna WSL measured static f32 `trunc` native package construction at
+96.85–104.18 ms on four cold shapes and 0.313–0.336 ms for exact repeats. The
+bounded cache returns a copy of the replay-verified Graph→Schedule→Tile→Target
+package; compiler and image identities are part of its key. New shapes still
+incur compilation, and `trunc` still executes a prepackaged AVX-512 kernel
+body. The remaining `cohort2`, `breadth` and elementwise constructors require
+native migrations. The shared MoE direct-gather Graph subtype does not change
+x86 execution; parity requires its own physical consumer and proof. See the
+[timing packet](../../../../benchmarks/baselines/e2e_real6_x86_trunc_cache_20260928/README.md).

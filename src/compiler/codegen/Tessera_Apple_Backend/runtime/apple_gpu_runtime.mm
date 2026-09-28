@@ -4742,10 +4742,17 @@ inline void reference_rope_f32(const float* X, const float* Theta, float* Out,
 
 } // namespace
 
+extern "C" int32_t tessera_apple_gpu_rope_f32_status(const float* X,
+                                                       const float* Theta,
+                                                       float* Out, int32_t M,
+                                                       int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_rope_msl(ctx, X, Theta, Out, M, K)) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
                                            float* Out, int32_t M, int32_t K) {
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_rope_msl(ctx, X, Theta, Out, M, K)) return;
+  if (tessera_apple_gpu_rope_f32_status(X, Theta, Out, M, K)) return;
   reference_rope_f32(X, Theta, Out, M, K);
 }
 
@@ -16350,6 +16357,27 @@ static bool dispatch_ebm_langevin_step_philox_f32_msl(
     if (_pool_ok) std::memcpy(out, [bO contents], bytes);
     return _pool_ok;
   }
+}
+
+extern "C" int32_t tessera_apple_gpu_ebm_langevin_step_philox_graph_f32_status(
+    const float* y, const float* grad, const int64_t* seed,
+    const int64_t* counter, float eta, float noise_scale,
+    float* out, int32_t n) {
+  if (!y || !grad || !seed || !counter || !out || n <= 0 ||
+      !std::isfinite(eta) || eta <= 0 || !std::isfinite(noise_scale) ||
+      noise_scale < 0) return 0;
+  uint32_t ctr[4];
+  for (int i = 0; i < 4; ++i) {
+    if (counter[i] < 0 || static_cast<uint64_t>(counter[i]) > UINT32_MAX)
+      return 0;
+    ctr[i] = static_cast<uint32_t>(counter[i]);
+  }
+  uint64_t seedBits = static_cast<uint64_t>(seed[0]);
+  uint32_t key[2] = {static_cast<uint32_t>(seedBits),
+                     static_cast<uint32_t>(seedBits >> 32)};
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_ebm_langevin_step_philox_f32_msl(
+      ctx, y, grad, eta, noise_scale, key, ctr, out, n)) ? 1 : 0;
 }
 
 extern "C" void tessera_apple_gpu_ebm_langevin_step_philox_f32(

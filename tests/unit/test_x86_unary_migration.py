@@ -23,6 +23,60 @@ def test_direct_unary_uses_native_schedule_not_graph_constructor(monkeypatch, fa
     assert package.descriptor.provenance['shape'] == [2, 3, 5]
 
 
+@pytest.mark.parametrize('family', ['softmax', 'reduce'])
+def test_direct_unary_reuses_only_the_exact_compiled_package(monkeypatch, family):
+    if not x86_native.tools_available_for_architecture(x86_native.X86_AVX512_ARCHITECTURE):
+        pytest.skip('x86 native image toolchain required')
+    module = _module(family=family, target='x86')
+    scheduled_kernel._X86_GRAPH_CACHE.clear()
+    x86_native._SCHEDULED_UNARY_PACKAGE_CACHE.clear()
+    real_lower = scheduled_kernel.run_tessera_opt
+    lowered = []
+
+    def record_lower(*args, **kwargs):
+        lowered.append(1)
+        return real_lower(*args, **kwargs)
+
+    monkeypatch.setattr(scheduled_kernel, 'run_tessera_opt', record_lower)
+    call = x86_native.package_softmax if family == 'softmax' else x86_native.package_reduction
+    first = call(module, pipeline_name='tessera-lower-to-x86')
+    first.descriptor.provenance['caller_mutation'] = True
+    second = call(module, pipeline_name='tessera-lower-to-x86')
+    assert len(lowered) == 2
+    assert first.image.image_digest == second.image.image_digest
+    assert 'caller_mutation' not in second.descriptor.provenance
+
+    module.functions[0].name = 'changed_graph_symbol'
+    call(module, pipeline_name='tessera-lower-to-x86')
+    assert len(lowered) == 4
+
+
+@pytest.mark.parametrize('family', ['softmax', 'reduce'])
+def test_scheduled_unary_package_cache_keeps_exact_artifact_and_pipeline(monkeypatch, family):
+    if not x86_native.tools_available_for_architecture(x86_native.X86_AVX512_ARCHITECTURE):
+        pytest.skip('x86 native image toolchain required')
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        _module(family=family, target='x86'), target='x86'
+    )
+    x86_native._SCHEDULED_UNARY_PACKAGE_CACHE.clear()
+    real_lower = x86_native._lower
+    calls = []
+
+    def record_lower(*args, **kwargs):
+        calls.append(1)
+        return real_lower(*args, **kwargs)
+
+    monkeypatch.setattr(x86_native, '_lower', record_lower)
+    first = x86_native.package_scheduled_kernel(artifact, pipeline_name='tessera-lower-to-x86')
+    first.descriptor.provenance['caller_mutation'] = True
+    repeated = x86_native.package_scheduled_kernel(artifact, pipeline_name='tessera-lower-to-x86')
+    assert len(calls) == 1
+    assert first.image.image_digest == repeated.image.image_digest
+    assert 'caller_mutation' not in repeated.descriptor.provenance
+    x86_native.package_scheduled_kernel(artifact, pipeline_name='tessera-x86-executable')
+    assert len(calls) == 2
+
+
 @pytest.mark.parametrize('field,value', [('rows', 5), ('input_shape', (3, 2, 5)), ('workgroup_size', True), ('kind', 'max')])
 def test_descriptor_forgery_refuses_before_native_compile(monkeypatch, field, value):
     artifact = scheduled_kernel.lower_scheduled_kernel(_module(family='softmax', target='x86'), target='x86')

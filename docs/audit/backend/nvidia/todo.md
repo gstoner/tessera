@@ -8,6 +8,51 @@ last_updated: 2026-09-28
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `E2E-REAL-6-GFX1151-PAGED-2026-09-28`: sibling outcome — follow-up required
+
+The shared native paged-KV Schedule producer now also admits `rocm_gfx1151`;
+its existing sm_120 branch and `nvvm.kernel` marking are unchanged. The ROCm
+image-symbol and shape-free cache fix is backend-specific. The shared
+serialized-Schedule consumer passed host-free regression in Princess-Luna
+WSL; sm_120 exact-device evidence is still needed before a parity claim.
+
+## `E2E-REAL-6-APPLE-X86-2026-09-28`: sibling outcome — follow-up required
+
+The shared `tessera.trunc` MLIR declaration/shape verifier adds no sm_120
+Schedule, PTX or runtime ABI. Apple's checked Graph division and f32 rope
+entry are Metal-only, and x86 trunc's AVX-512 policy does not transfer.
+Attention with LSE/backward, paged KV and quantized matmul E2E-REAL-6
+migrations still need their own native Schedule/Tile and Super-Bear proof.
+
+## `GFX1201-W8A8-M200-SHORTK-2026-09-28`: sibling outcome — not applicable
+
+The native Schedule change selects a gfx1201-only FP8 W8A8 LDS panel at a
+bounded M/N/K envelope. NVIDIA sm_120 has no ROCm LDS or WMMA consumer for
+that physical contract; its Schedule, Target IR and runtime ABI are unchanged.
+The Tajasarus performance result is not sm_120 evidence.
+
+## `GFX1201-W8A8-RAGGED97-2026-09-28`: sibling outcome — not applicable
+
+The new Schedule panel rule is gated to gfx1201 FP8 W8A8 with NK weights and
+only changes ROCm LDS tiling. NVIDIA sm_120 Schedule selection, fragments,
+numerical policy and runtime ABI are unchanged. No sm_120 performance or
+device parity is inferred from the Tajasarus packet.
+
+## `E2E-REAL-6-SM120-SOFTMAX-SAFE-2026-09-28`: scheduled admission and device rows — landing
+
+Owner E2E-REAL-6. `tessera.softmax_safe` is now admitted to the existing
+sm_120 stable row-softmax Schedule/Tile consumer for shape-preserving,
+last-axis fp16/bf16/fp32 inputs and matching output storage. The scheduled
+producer canonicalizes it to `tessera.softmax`; the compiled PTX and ABI
+remain the existing softmax family. Focused admission and exact-device
+parity/oracle rows were added for all three storages, including driver
+packaging. Super-Bear's RTX 5070 (sm_120) passed 40/40 focused scheduled
+unit rows and 14/14 focused device softmax rows, including the new safe
+route. This is exact-device functional proof; no new performance claim is
+made. Shared scheduled-kernel contract
+assessment: Apple, ROCm and x86 outcomes are recorded in their plans under
+this sync key.
+
 ## `CI-LIT-EBM-CLIFFORD-2026-09-28`: hosted lit lane covers the EBM / Clifford fixtures — sibling outcome — parity validated (host-free IR only)
 
 Owner: CI toolchain lanes (PR #874, follow-up to #873 item 1). The hosted `lit` lane now configures `TESSERA_BUILD_{EBM,CLIFFORD}_BACKEND=ON`, so the six fixtures that `REQUIRES: tessera-ebm` / `tessera-clifford` run there and the fleet-union gate passes on one lane: dispatched run 36418280808, LLVM/MLIR 23.1.2 under the CI 23.1.x tolerance (fleet pin 23.1.1), 533/533 passed, `uncovered: []`. Every one of the six already passed on every fleet box, which configures both backends ON; this adds hosted-runner coverage and makes no device claim. `phase2_autodiff/row_program_to_gpu_langevin.mlir` drives `tessera-row-program-to-gpu=backend=nvidia`, so the NVIDIA row-program emitter's IR now also runs on a hosted runner. It is IR/FileCheck only: no sm_120 execution is implied, and the RTX 5070 Langevin device rows are unchanged.
@@ -9886,3 +9931,13 @@ Parity validated host-free (Mac). The device-clock packet's packet-local tags ar
 Owner: EVIDENCE-PACKET-1. Sync: `EVIDENCE-PACKET-1-2026-09-27`.
 
 Parity validated host-free (Mac) for the envelope. The sm_120 device-clock packets read through `evidence_envelope.read_evidence_packet`, and SSD admission's `%globaltimer` route reads them through it too. All 36 committed packets read and stay promotable. NVIDIA already refused a missing `worktree_dirty`. Follow-up required: record compiler build identity in the device-clock packet. The envelope records it where present and does not yet require it. Follow-up required: make `profiler_cuda_window` (the Nsight activity-window calibration) an envelope family; it is still read by its own rebuild. Route receipts on The-Super-Bear (clean `eed48b9b`): every GA/EBM composition call ran on the NumPy reference. Zen 2 has no x86 AVX-512 lane, and no composition reaches the sm_120 sphere-Langevin row program, which is a separate entry point. No CUDA GPU lane was reached. No measurement or promotion changed. [Log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-packet-1-shared-evidence-envelope-ga-and-ebm-route-receipts).
+
+### E2E-REAL-6 native follow-ups — 2026-09-28
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-NATIVE-FOLLOWUPS-2026-09-28`.
+Parity validated for the shared paged-KV Schedule change on Super-Bear's RTX
+5070 (sm_120): four exact device remap/invalid-table rows and 25 scheduled
+packed-state tests pass. The shared MoE Graph direct-gather subtype has no
+sm_120 physical consumer; follow-up required before NVIDIA support is claimed.
+Attention with LSE/backward and nvfp4/int4/mx matmul migrations remain open.
+No paged-KV performance claim follows from these correctness tests.

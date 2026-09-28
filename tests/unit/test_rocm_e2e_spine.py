@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -290,7 +291,7 @@ def _fake_reduce_compile(tile_ir: str, *, family: str = "reduction", architectur
 def _fake_paged_kv_compile(tile_ir: str, **_kw):
     assert "tile.paged_kv_read_kernel" in tile_ir
     return (
-        'module { "tessera_rocm.paged_kv_read"() {route = "direct"} : () -> () }',
+        'module {\n  tessera_rocm.paged_kv_read {name = "tessera_rocm_paged_kv_test", route = "direct"}\n}',
         "gpu.binary @binary",
         b"\x7fELFrocm-e2e-2-paged-kv",
         "compiler",
@@ -303,7 +304,7 @@ def _fake_paged_kv_compile(tile_ir: str, **_kw):
 def _fake_moe_dispatch_compile(tile_ir: str, **_kw):
     assert "tile.moe_dispatch_kernel" in tile_ir
     return (
-        'module { "tessera_rocm.moe_dispatch"() {route = "direct_gather"} : () -> () }',
+        'module {\n  tessera_rocm.moe_dispatch {name = "tessera_rocm_moe_test", route = "direct_gather"}\n}',
         "gpu.binary @binary",
         b"\x7fELFrocm-e2e-2-moe",
         "compiler",
@@ -986,6 +987,7 @@ def test_driver_joins_gfx1151_reduction_native_package(monkeypatch) -> None:
     assert bundle.launch_descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
 
 
+@_needs_compiler
 def test_rocm_paged_kv_owns_typed_direct_descriptor(monkeypatch) -> None:
     module = _paged_kv_module()
     assert requests_paged_kv_read(module)
@@ -998,7 +1000,14 @@ def test_rocm_paged_kv_owns_typed_direct_descriptor(monkeypatch) -> None:
         "tessera.compiler.rocm_native._compile_paged_kv_tile_ir",
         _fake_paged_kv_compile,
     )
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_native.emit_paged_kv_read_tile_ir",
+        lambda **_kw: pytest.fail("paged-KV packaging bypassed native Schedule/Tile replay"),
+    )
     package = package_paged_kv_read(module, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.entry_symbol == "tessera_rocm_paged_kv_test"
+    assert package.image.entry_points[0].symbol == package.descriptor.entry_symbol
+    assert len(package.descriptor.provenance["schedule_digest"]) == 64
     assert package.descriptor.abi_id == GFX_PAGED_KV_F32_ABI
     assert [item.name for item in package.descriptor.buffers] == [
         "pages",
@@ -1016,6 +1025,18 @@ def test_rocm_paged_kv_owns_typed_direct_descriptor(monkeypatch) -> None:
     ]
 
 
+@_needs_compiler
+def test_rocm_paged_kv_rejects_schedule_or_tile_replay_drift() -> None:
+    from tessera.compiler.scheduled_paged_kv import lower_scheduled_paged_kv_graph
+
+    artifact = lower_scheduled_paged_kv_graph(_paged_kv_module(), target="rocm_gfx1151")
+    artifact.validate()
+    with pytest.raises(ValueError, match="Schedule IR disagrees"):
+        replace(artifact, schedule_ir=artifact.schedule_ir.replace("gfx1151", "gfx1201", 1)).validate()
+    with pytest.raises(ValueError, match="Tile IR disagrees"):
+        replace(artifact, tile_ir=artifact.tile_ir.replace("gfx1151", "gfx1201", 1)).validate()
+
+
 def test_rocm_paged_kv_contract_rejects_bounds_dtype_and_output_drift() -> None:
     assert not supports_paged_kv_read(_paged_kv_module(start=0, end=17))
 
@@ -1028,6 +1049,7 @@ def test_rocm_paged_kv_contract_rejects_bounds_dtype_and_output_drift() -> None:
     assert not supports_paged_kv_read(result_shape)
 
 
+@_needs_compiler
 def test_driver_joins_gfx1151_paged_kv_native_package(monkeypatch) -> None:
     monkeypatch.setattr(
         "tessera.compiler.rocm_native._compile_paged_kv_tile_ir",
@@ -1046,6 +1068,7 @@ def test_driver_joins_gfx1151_paged_kv_native_package(monkeypatch) -> None:
     assert bundle.launch_descriptor.abi_id == GFX_PAGED_KV_F32_ABI
 
 
+@_needs_compiler
 def test_rocm_moe_dispatch_owns_typed_direct_descriptor(monkeypatch) -> None:
     module = _moe_dispatch_module()
     assert requests_moe_dispatch(module)
@@ -1057,13 +1080,21 @@ def test_rocm_moe_dispatch_owns_typed_direct_descriptor(monkeypatch) -> None:
         "tessera.compiler.rocm_native._compile_moe_dispatch_tile_ir",
         _fake_moe_dispatch_compile,
     )
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_native.emit_moe_dispatch_tile_ir",
+        lambda **_kw: pytest.fail("MoE packaging bypassed native Schedule/Tile"),
+    )
     package = package_moe_dispatch(module, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.entry_symbol == "tessera_rocm_moe_test"
+    assert package.image.entry_points[0].symbol == package.descriptor.entry_symbol
+    assert len(package.descriptor.provenance["schedule_digest"]) == 64
     assert package.descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
     assert [item.name for item in package.descriptor.buffers] == ["x", "token", "o"]
     assert [item.name for item in package.descriptor.scalars] == ["T", "S", "H"]
     assert package.descriptor.provenance["route"] == "direct_gather"
 
 
+@_needs_compiler
 def test_driver_joins_gfx1151_moe_dispatch_native_package(monkeypatch) -> None:
     monkeypatch.setattr(
         "tessera.compiler.rocm_native._compile_moe_dispatch_tile_ir",
@@ -1082,6 +1113,45 @@ def test_driver_joins_gfx1151_moe_dispatch_native_package(monkeypatch) -> None:
     assert bundle.launch_descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
 
 
+@_needs_compiler
+def test_rocm_moe_dispatch_rejects_schedule_and_tile_drift() -> None:
+    from tessera.compiler.scheduled_moe_dispatch import lower_scheduled_moe_dispatch
+
+    artifact = lower_scheduled_moe_dispatch(_moe_dispatch_module())
+    artifact.validate()
+    with pytest.raises(ValueError, match="Schedule disagrees"):
+        replace(artifact, schedule_ir=artifact.schedule_ir + "\n").validate()
+    with pytest.raises(ValueError, match="Tile disagrees"):
+        replace(artifact, tile_ir=artifact.tile_ir + "\n").validate()
+
+
+@pytest.mark.parametrize(("family", "first", "second", "package_fn"), [
+    ("paged_kv", _paged_kv_module(start=3, end=10),
+     _paged_kv_module(start=4, end=8), package_paged_kv_read),
+    ("moe_dispatch", _moe_dispatch_module(tokens=7, slots=9, hidden=13),
+     _moe_dispatch_module(tokens=11, slots=5, hidden=17), package_moe_dispatch),
+])
+def test_gfx1151_direct_kernel_cache_reuses_image_across_shapes(
+    family, first, second, package_fn,
+) -> None:
+    """Both native Tile producers take runtime extents and shape-free images.
+    The distinct descriptor guards must still reflect each caller's shape.
+    """
+    if find_tessera_opt() is None:
+        pytest.skip("tessera-opt is not built on this host")
+    from tessera.compiler import rocm_native
+
+    rocm_native._cache.clear()
+    initial = package_fn(first, pipeline_name="tessera-lower-to-rocm")
+    reused = package_fn(second, pipeline_name="tessera-lower-to-rocm")
+    assert initial.image.compile_state == "cold", family
+    assert reused.image.compile_state == "warm_cache", family
+    assert reused.image.image_digest == initial.image.image_digest
+    assert reused.image.payload == initial.image.payload
+    assert reused.descriptor.shape_guards != initial.descriptor.shape_guards
+
+
+@_needs_compiler
 def test_rocm_moe_dispatch_contract_and_launcher_reject_invalid_indices(monkeypatch) -> None:
     from tessera import runtime as rt
 
@@ -1116,6 +1186,7 @@ def test_rocm_moe_dispatch_contract_and_launcher_reject_invalid_indices(monkeypa
         ([0, 1, 2, 3], 3, 7, (7, 3, 9), "arrays disagree"),
     ],
 )
+@_needs_compiler
 def test_rocm_paged_kv_rejects_invalid_launch_before_hip(
     monkeypatch, table, start, tokens, output_shape, error
 ) -> None:

@@ -10,17 +10,21 @@ static FailureOr<NativePagedKV> pagedKVContract(Operation *graph) {
   auto mod = graph->getParentOfType<ModuleOp>();
   auto target = mod->getAttrOfType<StringAttr>("tessera.target");
   auto arch = mod->getAttrOfType<StringAttr>("tessera.arch");
+  bool sm120 = target && arch && target.getValue() == "nvidia_sm120" && arch.getValue() == "sm_120";
+  bool gfx1151 = target && arch && target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151";
+  bool gfx1201 = target && arch && target.getValue() == "rocm_gfx1201" && arch.getValue() == "gfx1201";
   if (!fn || !llvm::hasSingleElement(fn.getBody()) || fn.getNumArguments() != 2 ||
       fn.getNumResults() != 1 || graph->getNumOperands() != 2 || graph->getNumResults() != 1 ||
-      !target || target.getValue() != "nvidia_sm120" || !arch || arch.getValue() != "sm_120" ||
+      (!sm120 && !gfx1151 && !gfx1201) ||
       graph->getOperand(0) != fn.getArgument(0) || graph->getOperand(1) != fn.getArgument(1) ||
       graph->getResultTypes() != fn.getResultTypes())
-    return graph->emitError("paged read requires an isolated SM120 tensor entry"), failure();
+    return graph->emitError("paged read requires an isolated SM120, gfx1151, or gfx1201 tensor entry"), failure();
   for (unsigned i = 0; i < fn.getNumArguments(); ++i)
     if (fn.getArgAttr(i, "tessera.layout"))
       return graph->emitError("paged read layout overrides are unsupported"), failure();
   for (NamedAttribute attr : graph->getAttrs())
-    if (attr.getName() != "start" && attr.getName() != "end" && attr.getName() != "schedule.artifact_hash")
+    if (attr.getName() != "start" && attr.getName() != "end" && attr.getName() != "schedule.artifact_hash" &&
+        !(attr.getName() == "tessera.effect_kind" && attr.getValue() == StringAttr::get(graph->getContext(), "pure")))
       return graph->emitError("paged read has an unsupported policy attribute"), failure();
   auto pages = dyn_cast<RankedTensorType>(graph->getOperand(0).getType());
   auto table = dyn_cast<RankedTensorType>(graph->getOperand(1).getType());
@@ -89,7 +93,9 @@ static LogicalResult lowerNativePagedKV(ModuleOp mod) {
     SmallVector<Type> args(3, LLVM::LLVMPointerType::get(mod.getContext())); args.append(7, builder.getI64Type());
     auto fn = LLVM::LLVMFuncOp::create(builder, scheduled->getLoc(), entry,
         LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(mod.getContext()), args, false));
-    fn->setAttr("nvvm.kernel", builder.getUnitAttr()); fn->setAttr("tessera.schedule_hash", hash);
+    if (c->contract.getAs<StringAttr>("target").getValue() == "nvidia_sm120")
+      fn->setAttr("nvvm.kernel", builder.getUnitAttr());
+    fn->setAttr("tessera.schedule_hash", hash);
     fn->setAttr("tessera.native_contract", c->contract);
     auto block = fn.addEntryBlock(builder); builder.setInsertionPointToStart(block);
     OperationState kernel(scheduled->getLoc(), "tile.paged_kv_read_kernel"); kernel.addOperands(block->getArguments());

@@ -5,9 +5,9 @@ retired Graph-owned constructor (``tests/_support/x86_unary_baseline.py``) and
 the compiled Graph -> Schedule -> Tile route (``x86_native.package_*``) for a
 sequence of distinct shapes, interleaved so both routes see the same host state.
 
-Neither route keeps a package cache: the x86 image payload is the prebuilt,
-shape-free shared object, and every package call re-runs its lowering
-subprocesses (compile-cost rows). The runtime, however, loads one copy of the
+The compiled route now memoizes an exact completed package; this probe records
+both the first call for each shape and an immediate repeated call. A different
+shape still runs the compiler. The runtime loads one copy of the
 image per distinct ``image_digest`` (``runtime._load_x86_native_image``), and
 ``image_digest`` binds the Target IR digest, so the probe also counts distinct
 digests / loaded images and times the first (loading) and a warm launch per
@@ -69,13 +69,16 @@ def main() -> int:
     if not x86_native.tools_available():
         print("x86 native image toolchain unavailable on this host", file=sys.stderr)
         return 2
+    x86_native._UNARY_PACKAGE_CACHE.clear()
+    x86_native._SCHEDULED_UNARY_PACKAGE_CACHE.clear()
     rows = []
     for family, build, old, new in (
         ("softmax", _softmax, baseline.package_softmax, x86_native.package_softmax),
         ("reduction", _reduction, baseline.package_reduction, x86_native.package_reduction),
     ):
         record: dict[str, dict[str, list]] = {
-            route: {"package_ms": [], "first_launch_ms": [], "warm_launch_ms": [], "digests": []}
+            route: {"package_ms": [], "repeat_package_ms": [],
+                    "first_launch_ms": [], "warm_launch_ms": [], "digests": []}
             for route in ("retired", "compiled")
         }
         for shape in SHAPES:
@@ -84,6 +87,11 @@ def main() -> int:
                 holder = []
                 record[route]["package_ms"].append(_time(
                     lambda: holder.append(packager(module, pipeline_name="tessera-lower-to-x86"))))
+                repeated = []
+                record[route]["repeat_package_ms"].append(_time(
+                    lambda: repeated.append(packager(module, pipeline_name="tessera-lower-to-x86"))))
+                if repeated[0].image.image_digest != holder[0].image.image_digest:
+                    raise RuntimeError("repeated package changed native image identity")
                 first, warm = _launch_ms(holder[0], shape)
                 record[route]["first_launch_ms"].append(first)
                 record[route]["warm_launch_ms"].append(warm)
@@ -92,10 +100,12 @@ def main() -> int:
         for route, values in record.items():
             row[route] = {
                 "package_median_ms": round(statistics.median(values["package_ms"]), 2),
+                "repeat_package_median_ms": round(statistics.median(values["repeat_package_ms"]), 2),
                 "first_launch_median_ms": round(statistics.median(values["first_launch_ms"]), 3),
                 "warm_launch_median_ms": round(statistics.median(values["warm_launch_ms"]), 3),
                 "distinct_image_digests": len(set(values["digests"])),
                 "package_ms": [round(v, 2) for v in values["package_ms"]],
+                "repeat_package_ms": [round(v, 2) for v in values["repeat_package_ms"]],
                 "first_launch_ms": [round(v, 3) for v in values["first_launch_ms"]],
             }
         rows.append(row)

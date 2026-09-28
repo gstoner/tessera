@@ -246,6 +246,8 @@ LDS_SHAPES = [
     (BlockScaleShape(200, 2048, 384, 128, 128, "nk"), (128, 64)),
     (BlockScaleShape(1000, 4096, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(300, 4000, 256, 128, 128, "nk", "bf16"), (128, 128)),
+    (BlockScaleShape(100, 1024, 1024, 128, 128, "nk"), (128, 64)),
+    (BlockScaleShape(127, 1024, 1024, 128, 128, "nk"), (128, 64)),
 ]
 
 

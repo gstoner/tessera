@@ -109,6 +109,32 @@ entities:
       - path: python/tessera/__init__.py
       - path: python/tessera/compiler/jit.py
 
+  - id: concept.mlir_foundation
+    type: concept
+    name: MLIR Compiler Foundation
+    description: "Canonical typed semantics, differentiation, optimization, scheduling, Tile and Target dialects, and verified lowering passes. Python capture and orchestration do not independently own downstream semantics."
+    authority: normative
+    tags: ["compiler", "mlir", "native-lowering"]
+    owner_area: compiler
+    output_priority: 45
+    references:
+      - path: docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md
+      - path: docs/spec/COMPILER_REFERENCE.md
+      - path: src/compiler/ir/TesseraOps.td
+
+  - id: concept.llvm_native_lowering
+    type: concept
+    name: LLVM Native Lowering
+    description: "CPU LLVM object/ORC, NVIDIA NVVM/PTX, and ROCm ROCDL/AMDGPU native destinations; Apple GPU uses compiler-owned MSL and Metal/metallib instead of an assumed LLVM-to-Metal backend."
+    authority: normative
+    tags: ["compiler", "llvm", "native-image"]
+    owner_area: compiler
+    output_priority: 46
+    references:
+      - path: docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md
+      - path: docs/audit/compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md
+      - path: docs/spec/LOWERING_PIPELINE_SPEC.md
+
   - id: ir.graph
     type: ir_layer
     name: Graph IR
@@ -382,6 +408,33 @@ entities:
       - path: docs/context/generated/eval_matrix.md
 
 relations:
+  - source: api.python_frontend
+    relation: depends_on
+    target: concept.mlir_foundation
+  - source: ir.graph
+    relation: depends_on
+    target: concept.mlir_foundation
+  - source: ir.schedule
+    relation: depends_on
+    target: concept.mlir_foundation
+  - source: ir.tile
+    relation: depends_on
+    target: concept.mlir_foundation
+  - source: ir.target
+    relation: depends_on
+    target: concept.mlir_foundation
+  - source: backend.x86
+    relation: depends_on
+    target: concept.llvm_native_lowering
+  - source: backend.nvidia_gpu
+    relation: depends_on
+    target: concept.llvm_native_lowering
+  - source: backend.rocm
+    relation: depends_on
+    target: concept.llvm_native_lowering
+  - source: concept.llvm_native_lowering
+    relation: depends_on
+    target: runtime.c_abi
   - source: api.python_frontend
     relation: defined_by
     target: doc.canonical_api

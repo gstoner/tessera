@@ -21,7 +21,7 @@ def test_cumsum_cohort_route_bypasses_old_emitter_and_refuses_tampering(monkeypa
     from tessera.compiler import x86_native
     source = graph((3,17))
     artifact = lower_cumsum(source)
-    monkeypatch.setattr(x86_native,'emit_cohort2_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
+    monkeypatch.setattr('tests._support.x86_kernel_baseline.emit_cohort2_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
     monkeypatch.setattr(x86_native,'_lower',lambda *a: ('target',b'image','compiler','toolchain'))
     package = x86_native.package_cohort2(source,pipeline_name='tessera-lower-to-x86')
     assert package.descriptor.provenance['inclusive'] is True

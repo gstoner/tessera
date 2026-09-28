@@ -138,10 +138,6 @@ class X86NativePackage:
     descriptor: LaunchDescriptor
 
 
-# Exact-program memoization for the migrated unary route. The cached value is
-# the verified native package, never a Python-authored replacement for lowering.
-# The bounded cache includes the compiler and image file identities so an in-
-# process rebuild cannot serve a package from the previous toolchain.
 _UNARY_PACKAGE_CACHE_LIMIT = 64
 _UNARY_PACKAGE_CACHE_LOCK = RLock()
 _SCHEDULED_UNARY_PACKAGE_CACHE: OrderedDict[tuple[object, ...], X86NativePackage] = OrderedDict()
@@ -336,12 +332,6 @@ def package_native(
     )
 
 
-def _version_fingerprint(tool: Path) -> str:
-    result = subprocess.run([str(tool), "--version"], capture_output=True, text=True, check=False)
-    text = "\n".join(value.strip() for value in (result.stdout, result.stderr) if value.strip())
-    return hashlib.sha256((text or str(tool)).encode()).hexdigest()
-
-
 def _lower(
     tile_ir: str, symbol: str, family: str,
     architecture: str = X86_AVX512_ARCHITECTURE,
@@ -351,23 +341,25 @@ def _lower(
         raise RuntimeError(
             f"X86 native packaging requires tessera-opt and the {architecture} shared image"
         )
+    from . import x86_compile_cache
+
     pipeline = X86ExecutablePipeline(
         family=family,
         architecture=architecture,
     )
-    result = subprocess.run(
-        [str(tool), "-", f"--pass-pipeline={pipeline.pass_pipeline()}"],
-        input=tile_ir, capture_output=True, text=True, check=False,
-    )
-    if result.returncode:
-        raise RuntimeError("x86 typed lowering failed: " + (result.stderr.strip() or str(result.returncode)))
-    target_ir = result.stdout
+    # Every step below is memoized on exactly its inputs (compiler binary
+    # digest + pass option + Tile text; library stat signature), so a repeat
+    # package call reruns no subprocess -- see x86_compile_cache.
+    try:
+        target_ir = x86_compile_cache.run(tool, tile_ir, f"--pass-pipeline={pipeline.pass_pipeline()}")
+    except RuntimeError as exc:
+        raise RuntimeError("x86 typed lowering failed: " + str(exc)) from exc
     if f"call @{symbol}" not in target_ir:
         raise RuntimeError(f"x86 typed lowering did not emit {symbol}")
-    payload = library.read_bytes()
-    compiler = _version_fingerprint(tool)
+    payload, payload_digest = x86_compile_cache.payload(library)
+    compiler = x86_compile_cache.version_fingerprint(tool)
     toolchain = hashlib.sha256(
-        f"{compiler}|{hashlib.sha256(payload).hexdigest()}|{architecture}".encode()
+        f"{compiler}|{payload_digest}|{architecture}".encode()
     ).hexdigest()
     return target_ir, payload, compiler, toolchain
 
@@ -541,87 +533,17 @@ def package_attention_backward_semantics(
     return graph_ir, semantic_ir
 
 
-def emit_elementwise_tile_ir(*, entry: str, family: str, kind: str) -> str:
-    if family not in {
-        "unary", "binary", "predicate", "compare", "logical", "bitwise",
-        "where", "transcendental", "binary_math",
-    }:
-        raise ValueError(f"unsupported x86 elementwise family {family!r}")
-    storage = "i8" if family == "logical" else "i32" if family == "bitwise" else "f32"
-    output_storage = "i8" if family in {"predicate", "compare", "logical"} else storage
-    binary_arity = (
-        family in {"binary", "compare"}
-        or (family == "logical" and kind != "not")
-        or (family == "bitwise" and kind not in {"not", "popcount"})
-    )
-    if family == "where":
-        arguments = "%c: !llvm.ptr, %a: !llvm.ptr, %b: !llvm.ptr, %o: !llvm.ptr, %n: i64"
-        operands = "%c, %a, %b, %o, %n"
-        types = "!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64"
-    elif binary_arity or family == "binary_math":
-        arguments = "%a: !llvm.ptr, %b: !llvm.ptr, %o: !llvm.ptr, %n: i64"
-        operands = "%a, %b, %o, %n"
-        types = "!llvm.ptr, !llvm.ptr, !llvm.ptr, i64"
-    else:
-        arguments = "%x: !llvm.ptr, %o: !llvm.ptr, %n: i64"
-        operands = "%x, %o, %n"
-        types = "!llvm.ptr, !llvm.ptr, i64"
-    condition = ', condition_storage = "i8"' if family == "where" else ""
+
+
+def _emit_alibi_tile_ir(*, entry: str) -> str:
+    """The ALiBi launch envelope, still authored here (see ``_alibi_contract``)."""
     return f'''module {{
-  llvm.func @{entry}({arguments}) {{
-    tile.elementwise_kernel {operands} {{
-      family = "{family}", kind = "{kind}", storage = "{storage}",
-      output_storage = "{output_storage}"{condition}
-    }} : {types}
-    llvm.return
-  }}
-}}
-'''
-
-
-def emit_cohort2_tile_ir(*, entry: str, family: str, kind: str = "", eps: float = 0.0) -> str:
-    if family in {"argreduce", "scan"}:
-        op = "argreduce_kernel" if family == "argreduce" else "scan_kernel"
-        attrs = (
-            f'kind = "{kind}", storage = "f32", output_storage = "i32", tie_break = "first"'
-            if family == "argreduce"
-            else f'kind = "{kind}", storage = "f32", inclusive = true'
-        )
-        return f'''module {{
-  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {{
-    tile.{op} %x, %o, %rows, %cols {{ {attrs} }} : !llvm.ptr, !llvm.ptr, i64, i64
-    llvm.return
-  }}
-}}
-'''
-    if family == "norm":
-        return f'''module {{
-  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {{
-    %eps = arith.constant {float(eps):.9e} : f32
-    tile.norm_kernel %x, %o, %rows, %cols, %eps {{
-      kind = "{kind}", storage = "f32", accum = "f32", axis = -1 : i64, affine = false
-    }} : !llvm.ptr, !llvm.ptr, i64, i64, f32
-    llvm.return
-  }}
-}}
-'''
-    if family == "rope":
-        return f'''module {{
-  llvm.func @{entry}(%x: !llvm.ptr, %theta: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {{
-    tile.rope_kernel %x, %theta, %o, %rows, %cols {{ storage = "f32", layout = "interleaved_pairs" }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64
-    llvm.return
-  }}
-}}
-'''
-    if family == "alibi":
-        return f'''module {{
   llvm.func @{entry}(%slopes: !llvm.ptr, %o: !llvm.ptr, %h: i64, %s: i64) {{
     tile.alibi_kernel %slopes, %o, %h, %s {{ storage = "f32", formula = "slope_times_j_minus_i" }} : !llvm.ptr, !llvm.ptr, i64, i64
     llvm.return
   }}
 }}
 '''
-    raise ValueError(f"unsupported X86-E2E-2 cohort-2 family {family!r}")
 
 
 def requests_softmax(module: GraphIRModule) -> bool:
@@ -791,148 +713,30 @@ def _attention_contract(
     return names, bias_name, output_name, (b, hq, hkv, sq, sk, d, dv), scale, bool(op.kwargs.get("causal", False)), raw_window, softcap
 
 
-def _elementwise_contract(
-    module: GraphIRModule,
-) -> tuple[str, str, tuple[str, ...], str, tuple[int, ...], tuple[str, ...], str] | None:
-    if not requests_elementwise(module):
-        return None
-    function, op = module.functions[0], module.functions[0].body[0]
-    if len(function.result_types) != 1:
-        return None
-    if op.op_name in X86_UNARY_KINDS:
-        family, kind, expected_operands = "unary", X86_UNARY_KINDS[op.op_name], 1
-    elif op.op_name in X86_BINARY_KINDS:
-        family, kind, expected_operands = "binary", X86_BINARY_KINDS[op.op_name], 2
-    elif op.op_name in X86_PREDICATE_KINDS:
-        family, kind, expected_operands = "predicate", X86_PREDICATE_KINDS[op.op_name], 1
-    elif op.op_name in X86_COMPARE_KINDS:
-        family, kind, expected_operands = "compare", X86_COMPARE_KINDS[op.op_name], 2
-    elif op.op_name in X86_LOGICAL_KINDS:
-        family, kind = "logical", X86_LOGICAL_KINDS[op.op_name]
-        expected_operands = 1 if kind == "not" else 2
-    elif op.op_name in X86_BITWISE_KINDS:
-        family, kind = "bitwise", X86_BITWISE_KINDS[op.op_name]
-        expected_operands = 1 if kind in {"not", "popcount"} else 2
-    elif op.op_name in X86_WHERE_KINDS:
-        family, kind, expected_operands = "where", X86_WHERE_KINDS[op.op_name], 3
-    elif op.op_name in X86_TRANSCENDENTAL_KINDS:
-        family, kind, expected_operands = (
-            "transcendental", X86_TRANSCENDENTAL_KINDS[op.op_name], 1
-        )
-    else:
-        family, kind, expected_operands = (
-            "binary_math", X86_BINARY_MATH_KINDS[op.op_name], 2
-        )
-    if len(op.operands) != expected_operands:
-        return None
-    names = tuple(value.removeprefix("%") for value in op.operands)
-    args = {arg.name: arg for arg in function.args}
-    shapes = tuple(_shape(module, name) for name in names)
-    input_dtypes = (
-        ("bool", "fp32", "fp32") if family == "where"
-        else ("bool",) * expected_operands if family == "logical"
-        else ("int32",) * expected_operands if family == "bitwise"
-        else ("fp32",) * expected_operands
-    )
-    if (
-        any(
-            name not in args or args[name].ir_type.dtype != dtype
-            for name, dtype in zip(names, input_dtypes)
-        )
-        or any(shape is None for shape in shapes)
-        or len(set(shapes)) != 1
-    ):
-        return None
-    shape = shapes[0]
-    assert shape is not None
-    result = function.result_types[0]
-    expected_dtype = (
-        "bool" if family in {"predicate", "compare", "logical"}
-        else "int32" if family == "bitwise" else "fp32"
-    )
-    try:
-        result_shape = tuple(int(value) for value in result.shape)
-    except (TypeError, ValueError):
-        return None
-    if result.dtype != expected_dtype or result_shape != shape:
-        return None
-    return family, kind, names, op.result or "output", shape, input_dtypes, expected_dtype
 
 
-def _cohort2_contract(module: GraphIRModule) -> dict[str, object] | None:
-    if not requests_cohort2(module):
+def _alibi_contract(module: GraphIRModule) -> dict[str, object] | None:
+    """ALiBi alone stays on its retired Graph-owned route (E2E-REAL-6 gap).
+
+    Its Graph operand list is not decodable by position: the catalog admits
+    0-2 optional operands without presence flags and the ODS op declares no
+    slopes operand at all (``tests/unit/test_op_arity_contract.py::
+    _UNDECODABLE_OPERAND_LISTS``), so the native Graph -> Schedule route
+    cannot parse the x86 slopes form. Every other cohort-2 op lowers through
+    ``scheduled_kernel``; the retired constructors for those live in
+    ``tests/_support/x86_kernel_baseline.py``.
+    """
+    if not requests_cohort2(module) or module.functions[0].body[0].op_name != "tessera.alibi":
         return None
     function, op = module.functions[0], module.functions[0].body[0]
     args = {arg.name: arg for arg in function.args}
     names = tuple(value.removeprefix("%") for value in op.operands)
-    if len(function.result_types) != 1:
+    if len(function.result_types) != 1 or len(names) != 1 or names[0] not in args:
         return None
     result = function.result_types[0]
     try:
         output_shape = tuple(int(value) for value in result.shape)
     except (TypeError, ValueError):
-        return None
-    output_name = op.result or "output"
-    if op.op_name in X86_ARGREDUCE_KINDS or op.op_name in X86_SCAN_KINDS:
-        if len(names) != 1 or names[0] not in args:
-            return None
-        shape = _shape(module, names[0])
-        if shape is None or args[names[0]].ir_type.dtype != "fp32":
-            return None
-        raw_axis = op.kwargs.get("axis", -1)
-        if raw_axis is None:
-            axis = 0
-            shape = (math.prod(shape),)
-        elif isinstance(raw_axis, int) and not isinstance(raw_axis, bool):
-            axis = raw_axis + len(shape) if raw_axis < 0 else raw_axis
-        else:
-            return None
-        if axis != len(shape) - 1:
-            return None
-        rows, cols = (math.prod(shape[:-1]) if len(shape) > 1 else 1), shape[-1]
-        if op.op_name in X86_SCAN_KINDS:
-            if result.dtype != "fp32" or output_shape != shape:
-                return None
-            return {"family": "scan", "kind": X86_SCAN_KINDS[op.op_name],
-                    "inputs": names, "output": output_name, "shape": shape,
-                    "output_shape": output_shape, "rows": rows, "cols": cols}
-        keepdims = bool(op.kwargs.get("keepdims", False))
-        expected = shape[:-1] + ((1,) if keepdims else ())
-        if result.dtype != "int32" or output_shape != expected:
-            return None
-        return {"family": "argreduce", "kind": X86_ARGREDUCE_KINDS[op.op_name],
-                "inputs": names, "output": output_name, "shape": shape,
-                "output_shape": output_shape, "rows": rows, "cols": cols,
-                "keepdims": keepdims}
-    if op.op_name in X86_NORM_KINDS:
-        if len(names) != 1 or names[0] not in args:
-            return None
-        shape = _shape(module, names[0])
-        if (shape is None or args[names[0]].ir_type.dtype != "fp32" or
-                result.dtype != "fp32" or output_shape != shape):
-            return None
-        eps_default = 1e-6 if op.op_name == "tessera.rmsnorm_safe" else 1e-5
-        eps = float(op.kwargs.get("eps", eps_default))
-        if not math.isfinite(eps) or eps <= 0.0:
-            return None
-        return {"family": "norm", "kind": X86_NORM_KINDS[op.op_name],
-                "inputs": names, "output": output_name, "shape": shape,
-                "output_shape": output_shape,
-                "rows": math.prod(shape[:-1]) if len(shape) > 1 else 1,
-                "cols": shape[-1], "eps": eps}
-    if op.op_name == "tessera.rope":
-        if len(names) != 2 or any(name not in args for name in names):
-            return None
-        shape, theta_shape = _shape(module, names[0]), _shape(module, names[1])
-        if (shape is None or theta_shape != shape or shape[-1] % 2 or
-                any(args[name].ir_type.dtype != "fp32" for name in names) or
-                result.dtype != "fp32" or output_shape != shape):
-            return None
-        return {"family": "rope", "kind": "rope", "inputs": names,
-                "output": output_name, "shape": shape, "output_shape": output_shape,
-                "rows": math.prod(shape[:-1]) if len(shape) > 1 else 1,
-                "cols": shape[-1]}
-    if len(names) != 1 or names[0] not in args:
         return None
     slopes_shape = _shape(module, names[0])
     h, s = op.kwargs.get("num_heads"), op.kwargs.get("seq_len")
@@ -942,12 +746,23 @@ def _cohort2_contract(module: GraphIRModule) -> dict[str, object] | None:
             output_shape != (h, s, s)):
         return None
     return {"family": "alibi", "kind": "alibi", "inputs": names,
-            "output": output_name, "shape": slopes_shape, "output_shape": output_shape,
-            "rows": h, "cols": s}
+            "output": op.result or "output", "shape": slopes_shape,
+            "output_shape": output_shape, "rows": h, "cols": s}
 
 
 def supports_cohort2(module: GraphIRModule) -> bool:
-    return _cohort2_contract(module) is not None
+    """An x86 cohort-2 op (argreduce/scan/norm/rope/alibi) with an admitted route.
+
+    E2E-REAL-6 (2026-09-28): admission is the scheduled contract's for every
+    op but ALiBi (see ``_alibi_contract``).
+    """
+    from . import scheduled_kernel
+
+    if not requests_cohort2(module):
+        return False
+    if module.functions[0].body[0].op_name == "tessera.alibi":
+        return _alibi_contract(module) is not None
+    return scheduled_kernel.supports_scheduled_kernel(module, target="x86")
 
 
 def supports_softmax(module: GraphIRModule) -> bool:
@@ -988,7 +803,12 @@ def supports_attention(module: GraphIRModule) -> bool:
 
 
 def supports_elementwise(module: GraphIRModule) -> bool:
-    return _elementwise_contract(module) is not None
+    """An x86 elementwise op the compiled Schedule -> Tile route admits (E2E-REAL-6)."""
+    from . import scheduled_kernel
+
+    return requests_elementwise(module) and scheduled_kernel.supports_scheduled_kernel(
+        module, target="x86"
+    )
 
 
 def supports_promoted_elementwise(module: GraphIRModule) -> bool:
@@ -998,13 +818,16 @@ def supports_promoted_elementwise(module: GraphIRModule) -> bool:
     measured size.  Binary descriptors retain a small fixed validation cost,
     so the canonical selector promotes them only from the measured 16K-element
     crossover; explicit packaging remains available for every valid shape.
+    The thresholds are a performance policy over the admitted request
+    (E2E-REAL-6: admission is the scheduled contract's).
     """
+    from . import native_x86_kernel
 
-    contract = _elementwise_contract(module)
-    if contract is None:
+    if not supports_elementwise(module):
         return False
-    family, _, _, _, shape, _, _ = contract
-    elements = math.prod(shape)
+    request = native_x86_kernel.admit(module)
+    family = request.subfamily
+    elements = math.prod(request.shapes[-1])
     if family in {"unary", "predicate", "logical"}:
         return True
     if family == "compare":
@@ -1035,78 +858,61 @@ def _image(
 
 
 def package_cohort2(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
-    contract = _cohort2_contract(module)
-    if contract is None:
+    """Compile an x86 cohort-2 op; all but ALiBi through native Schedule/Tile.
+
+    E2E-REAL-6 (x86 cohort-2 family, 2026-09-28): argmax/argmin, the scans and
+    rope lower through ``NativeX86Kernel.h``, cumsum through
+    ``NativeAbsolute.h`` and the norms through ``schedule.norm``; the package
+    is projected from the replayed Tile IR by :func:`package_scheduled_kernel`.
+    ALiBi keeps its retired constructor (``_alibi_contract``).
+    """
+    from . import scheduled_kernel
+
+    if not requests_cohort2(module):
         raise ValueError("x86 native cohort 2 requires one supported static f32 operation")
-    if contract["family"] == "scan" and contract["kind"] == "sum":
-        from .scheduled_absolute import lower_cumsum, package_cumsum
-        return package_cumsum(lower_cumsum(module),pipeline_name=pipeline_name)
-    family, kind = str(contract["family"]), str(contract["kind"])
-    variants = {
-        "argreduce": ("tessera_x86_avx512_argreduce_f32", X86_ARGREDUCE_F32_ABI),
-        "scan": ("tessera_x86_avx512_scan_f32", X86_SCAN_F32_ABI),
-        "norm": (
-            "tessera_x86_avx512_rmsnorm_f32" if kind == "rmsnorm"
-            else "tessera_x86_avx512_layernorm_f32",
-            X86_NORM_F32_ABI,
-        ),
-        "rope": ("tessera_x86_avx512_rope_f32", X86_ROPE_F32_ABI),
-        "alibi": ("tessera_x86_avx512_alibi_f32", X86_ALIBI_F32_ABI),
-    }
-    symbol, abi = variants[family]
-    tile_ir = emit_cohort2_tile_ir(
-        entry=f"tessera_tile_x86_{family}_{kind}", family=family, kind=kind,
-        eps=float(cast(Any, contract.get("eps", 0.0))),
+    if module.functions[0].body[0].op_name == "tessera.alibi":
+        return _package_alibi(module, pipeline_name=pipeline_name)
+    return package_scheduled_kernel(
+        scheduled_kernel.lower_scheduled_kernel(module, target="x86"),
+        pipeline_name=pipeline_name,
     )
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol, family)
+
+
+def _package_alibi(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
+    contract = _alibi_contract(module)
+    if contract is None:
+        raise ValueError("x86 native ALiBi requires static f32 slopes (num_heads,) and a (H, S, S) result")
+    symbol, abi = "tessera_x86_avx512_alibi_f32", X86_ALIBI_F32_ABI
+    tile_ir = _emit_alibi_tile_ir(entry="tessera_tile_x86_alibi_alibi")
+    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol, "alibi")
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler,
         toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
     )
-    input_names = cast(tuple[str, ...], contract["inputs"])
+    slopes = cast(tuple[str, ...], contract["inputs"])[0]
     output_name = str(contract["output"])
-    shape = cast(tuple[int, ...], contract["shape"])
+    heads, seq = int(cast(Any, contract["rows"])), int(cast(Any, contract["cols"]))
     output_shape = cast(tuple[int, ...], contract["output_shape"])
-    output_dtype = "int32" if family == "argreduce" else "fp32"
-    bindings = [
-        BufferBinding(index, name, "input", "fp32", len(shape), "row_major", 4)
-        for index, name in enumerate(input_names)
-    ]
-    bindings.append(BufferBinding(
-        len(bindings), output_name, "output", output_dtype, len(output_shape),
-        "row_major", 4,
-    ))
-    scalar_names = ("H", "S") if family == "alibi" else ("Rows", "Cols")
-    scalars = [
-        ScalarArgument(len(bindings) + index, name, "int64")
-        for index, name in enumerate(scalar_names)
-    ]
-    if family == "norm":
-        scalars.append(ScalarArgument(len(bindings) + 2, "Epsilon", "float32"))
-    shapes = {name: shape for name in input_names}
-    if family == "alibi":
-        shapes[input_names[0]] = (int(cast(Any, contract["rows"])),)
-    shapes[output_name] = output_shape
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=tuple(bindings), scalars=tuple(scalars),
-        shape_guards=tuple(
-            ShapeGuard(name, axis, "eq", extent)
-            for name, value_shape in shapes.items()
-            for axis, extent in enumerate(value_shape)
+        buffers=(
+            BufferBinding(0, slopes, "input", "fp32", 1, "row_major", 4),
+            BufferBinding(1, output_name, "output", "fp32", 3, "row_major", 4),
         ),
-        geometry=LaunchGeometry(policy=f"x86_avx512_{family}"),
+        scalars=(ScalarArgument(2, "H", "int64"), ScalarArgument(3, "S", "int64")),
+        shape_guards=tuple(
+            [ShapeGuard(slopes, 0, "eq", heads)]
+            + [ShapeGuard(output_name, axis, "eq", extent) for axis, extent in enumerate(output_shape)]
+        ),
+        geometry=LaunchGeometry(policy="x86_avx512_alibi"),
         ordering=OrderingSemantics(
             ordered_submission=True, residency="all", synchronization=("return",),
         ),
         provenance={
             "work_item": "X86-E2E-2", "route": "avx512_c_abi",
-            "family": family, "kind": kind, "shape": list(shape),
-            "output_shape": list(output_shape), "rows": int(cast(Any, contract["rows"])),
-            "cols": int(cast(Any, contract["cols"])), "storage": "f32",
-            **({"eps": float(cast(Any, contract["eps"]))} if family == "norm" else {}),
-            **({"tie_break": "first"} if family == "argreduce" else {}),
-            **({"inclusive": True} if family == "scan" else {}),
+            "family": "alibi", "kind": "alibi", "shape": [heads],
+            "output_shape": list(output_shape), "rows": heads, "cols": seq,
+            "storage": "f32",
         },
     )
     return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
@@ -1133,11 +939,13 @@ def package_softmax(
     descriptor projected from the serialized IR by
     :func:`package_scheduled_kernel`.
     """
+    from . import scheduled_kernel
+
     if not requests_softmax(module):
         raise ValueError("x86 native softmax requires one static f32 last-axis operation")
-    from .scheduled_kernel import lower_scheduled_kernel
-    artifact = lower_scheduled_kernel(
-        module, target="x86", architecture=_scheduled_unary_architecture(architecture)
+    native_architecture = _scheduled_unary_architecture(architecture)
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        module, target="x86", architecture=native_architecture
     )
     return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
@@ -1147,11 +955,13 @@ def package_reduction(
     architecture: str = X86_AVX512_ARCHITECTURE,
 ) -> X86NativePackage:
     """Compile an x86 reduction through native Schedule and Tile IR (E2E-REAL-6)."""
+    from . import scheduled_kernel
+
     if not requests_reduction(module):
         raise ValueError("x86 native reduction requires one static f32 last-axis operation")
-    from .scheduled_kernel import lower_scheduled_kernel
-    artifact = lower_scheduled_kernel(
-        module, target="x86", architecture=_scheduled_unary_architecture(architecture)
+    native_architecture = _scheduled_unary_architecture(architecture)
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        module, target="x86", architecture=native_architecture
     )
     return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
@@ -1254,14 +1064,12 @@ def package_scheduled_kernel(
     *,
     pipeline_name: str,
 ) -> X86NativePackage:
-    """Package a previously verified exact Schedule/Tile program once per toolchain."""
-
+    """Package a replayed Schedule/Tile artifact with the verified unary cache."""
+    artifact.validate()
+    if artifact.record:
+        return _package_x86_kernel(artifact, pipeline_name=pipeline_name)
     from .native_unary_contract import verify_unary_ancestry
 
-    # Validate the caller's artifact even on a hit. Every field, including
-    # Graph/Schedule/Tile text and projected ABI dimensions, participates in
-    # the frozen artifact key; a changed field must go through native replay.
-    artifact.validate()
     architecture = (
         X86_BASE_ARCHITECTURE if artifact.architecture == "x86_64_base"
         else X86_AVX512_ARCHITECTURE
@@ -1296,6 +1104,8 @@ def _package_scheduled_kernel_uncached(
     """Package the exact E2E-REAL-5 Tile artifact without Graph resynthesis."""
 
     artifact.validate()
+    if artifact.record:
+        return _package_x86_kernel(artifact, pipeline_name=pipeline_name)
     from .native_unary_contract import verify_unary_ancestry
     baseline = artifact.architecture == "x86_64_base"
     architecture = X86_BASE_ARCHITECTURE if baseline else X86_AVX512_ARCHITECTURE
@@ -1330,6 +1140,8 @@ def _package_scheduled_kernel_uncached(
         if nan_modes != ["propagate"]:
             raise ValueError('x86 scheduled reduction requires one replayed nan_mode = "propagate"')
         semantic_provenance = {"nan_mode": nan_modes[0]}
+    elif artifact.family == "norm" and not baseline:
+        return _package_x86_norm(artifact, pipeline_name=pipeline_name)
     else:
         raise ValueError("unsupported x86 scheduled semantic-kernel family")
     family = "reduction" if artifact.family == "reduce" else artifact.family
@@ -1380,6 +1192,231 @@ def _package_scheduled_kernel_uncached(
             "tile_ir_digest": artifact.tile_digest,
             "required_features": [] if baseline else ["avx512f"],
         },
+    )
+    return X86NativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def _package_x86_norm(artifact: ScheduledKernelArtifact, *, pipeline_name: str) -> X86NativePackage:
+    """The x86 row-normalization ABI from a replayed ``schedule.norm`` (E2E-REAL-6).
+
+    ``verify_unary_ancestry`` has already replayed Schedule -> Tile and matched
+    kind, shape, storage and epsilon against the native parent. The epsilon in
+    the descriptor is the f32 the Schedule hashed and the kernel receives.
+    """
+    import struct
+
+    if (artifact.kind not in {"rmsnorm", "layernorm"} or artifact.axis != -1
+            or artifact.output_shape != artifact.input_shape
+            or not math.isfinite(artifact.epsilon) or artifact.epsilon <= 0.0):
+        raise ValueError("unsupported x86 scheduled norm contract")
+    tile_eps = re.findall(r"arith\.constant ([-+0-9.eE]+) : f32", artifact.tile_ir)
+    if len(tile_eps) != 1 or struct.pack("f", float(tile_eps[0])) != struct.pack("f", artifact.epsilon):
+        raise ValueError("x86 scheduled norm epsilon disagrees with native Tile IR")
+    symbol = ("tessera_x86_avx512_rmsnorm_f32" if artifact.kind == "rmsnorm"
+              else "tessera_x86_avx512_layernorm_f32")
+    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol, "norm")
+    image = _image(
+        target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
+        pipeline_name=pipeline_name, symbol=symbol, abi=X86_NORM_F32_ABI,
+    )
+    shape = artifact.input_shape
+    names = (artifact.input_name, artifact.output_name)
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=X86_NORM_F32_ABI,
+        buffers=tuple(
+            BufferBinding(index, name, "input" if index == 0 else "output", "fp32",
+                          len(shape), "row_major", 4)
+            for index, name in enumerate(names)
+        ),
+        scalars=(
+            ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "Cols", "int64"),
+            ScalarArgument(4, "Epsilon", "float32"),
+        ),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name in names for axis, extent in enumerate(shape)
+        ),
+        geometry=LaunchGeometry(policy="x86_avx512_norm"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="all", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-6", "route": "canonical_scheduled_tile_consumer",
+            "family": "norm", "kind": artifact.kind, "shape": list(shape),
+            "output_shape": list(artifact.output_shape),
+            "rows": artifact.rows, "cols": artifact.columns, "storage": "f32",
+            "accum": artifact.accum, "eps": float(artifact.epsilon),
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+            "required_features": ["avx512f"],
+        },
+    )
+    return X86NativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+_X86_ELEMENTWISE_ENTRIES: dict[str, tuple[str, str]] = {
+    "unary": ("tessera_x86_avx512_unary_f32", X86_UNARY_F32_ABI),
+    "binary": ("tessera_x86_avx512_binary_f32", X86_BINARY_F32_ABI),
+    "predicate": ("tessera_x86_avx512_predicate_f32", X86_PREDICATE_F32_ABI),
+    "compare": ("tessera_x86_avx512_compare_f32", X86_COMPARE_F32_ABI),
+    "logical": ("tessera_x86_avx512_logical_i8", X86_LOGICAL_I8_ABI),
+    "bitwise": ("tessera_x86_avx512_bitwise_i32", X86_BITWISE_I32_ABI),
+    "where": ("tessera_x86_avx512_where_f32", X86_WHERE_F32_ABI),
+    "transcendental": ("tessera_x86_avx512_transcendental_f32", X86_TRANSCENDENTAL_F32_ABI),
+}
+_X86_STORAGE_DTYPE = {"f32": "fp32", "i8": "bool", "i32": "int32", "i64": "int64"}
+_X86_ORDERING = OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",))
+
+
+def _tile_kernel_attrs(tile_ir: str, op: str) -> dict[str, str]:
+    match = re.search(re.escape(op) + r" [^{]*\{([^{}]*)\}", tile_ir, re.S)
+    if match is None:
+        raise ValueError(f"x86 native kernel Tile artifact lost its {op}")
+    return dict(re.findall(r'([\w.]+) = ("[^"]*"|true|false|-?\d+ : i64)', match[1]))
+
+
+def _package_x86_kernel(artifact: ScheduledKernelArtifact, *, pipeline_name: str) -> X86NativePackage:
+    """Package a replayed x86 elementwise / cohort-2 / breadth native contract.
+
+    E2E-REAL-6 (2026-09-28). Every descriptor field comes from the contract
+    serialized in native-printed Tile IR (``native_x86_kernel.project``): the
+    binding order, per-binding shape and storage, the ABI's compile-time
+    scalars and the ABI key. The descriptor reproduces what the retired
+    Graph-owned constructors produced (differential:
+    ``tests/unit/test_x86_kernel_differential.py``), with the route stated.
+    """
+    from . import native_x86_kernel
+
+    projection = native_x86_kernel.project(artifact)
+    names, shapes = projection.bindings, projection.shapes
+    dtypes = tuple(_X86_STORAGE_DTYPE[storage] for storage in projection.storage)
+    family, sub, kind = projection.family, projection.subfamily, projection.kind
+    common = {
+        "work_item": "E2E-REAL-6", "route": "canonical_scheduled_tile_consumer",
+        "numeric_policy": projection.numeric_policy,
+        "schedule_digest": projection.schedule_digest,
+        "tile_ir_digest": artifact.tile_digest,
+    }
+    tile_attrs = _tile_kernel_attrs(artifact.tile_ir, native_x86_kernel.TILE_OPS[family])
+    guards = tuple(
+        ShapeGuard(name, axis, "eq", extent)
+        for name, shape in zip(names, shapes) for axis, extent in enumerate(shape)
+    )
+    if family == "elementwise":
+        if tile_attrs.get("family") != f'"{sub}"' or tile_attrs.get("kind") != f'"{kind}"':
+            raise ValueError("x86 native elementwise Tile op disagrees with its contract")
+        if sub == "binary_math":
+            symbol = "tessera_x86_avx512_pow_f32" if kind == "pow" else "tessera_x86_avx512_silu_mul_f32"
+            abi = X86_BINARY_MATH_F32_ABI
+        else:
+            symbol, abi = _X86_ELEMENTWISE_ENTRIES[sub]
+        n = math.prod(shapes[-1])
+        if projection.scalars.get("N", n) != n:
+            raise ValueError("x86 native elementwise element count disagrees with its shape")
+        buffers = tuple(
+            BufferBinding(index, name, "input" if index < len(names) - 1 else "output",
+                          dtype, len(shape), "row_major", 1 if dtype == "bool" else 4)
+            for index, (name, dtype, shape) in enumerate(zip(names, dtypes, shapes))
+        )
+        scalars: tuple[ScalarArgument, ...] = (ScalarArgument(len(buffers), "N", "int64"),)
+        geometry = "x86_avx512_flat"
+        pipeline_family = "elementwise"
+        provenance: dict[str, object] = {
+            "family": sub, "kind": kind, "shape": list(shapes[-1]), "elements": n,
+            "storage": ("mixed_i8_f32" if sub == "where" else projection.storage[0]),
+            "output_storage": projection.storage[-1],
+        }
+    elif family in {"argreduce", "scan", "rope"}:
+        symbol, abi = {
+            "argreduce": ("tessera_x86_avx512_argreduce_f32", X86_ARGREDUCE_F32_ABI),
+            "scan": ("tessera_x86_avx512_scan_f32", X86_SCAN_F32_ABI),
+            "rope": ("tessera_x86_avx512_rope_f32", X86_ROPE_F32_ABI),
+        }[family]
+        logical = projection.extras.get("logical_shape", shapes[0])
+        if not isinstance(logical, tuple) or math.prod(logical) != math.prod(shapes[0]):
+            raise ValueError("x86 native argreduce/scan logical shape disagrees with its operand")
+        # The operand is described at its real shape. A flattened (`axis=None`)
+        # argmax reads it as one row of `Cols` contiguous elements; the retired
+        # constructor described a rank-1 operand the caller never passes, and
+        # the runtime refused that descriptor for any rank >= 2 operand.
+        input_shapes = list(shapes[:-1])
+        rows, cols = int(projection.scalars["Rows"]), int(projection.scalars["Cols"])
+        buffers = tuple(
+            BufferBinding(index, name, "input", "fp32", len(shape), "row_major", 4)
+            for index, (name, shape) in enumerate(zip(names[:-1], input_shapes))
+        ) + (BufferBinding(len(names) - 1, names[-1], "output", dtypes[-1],
+                           len(shapes[-1]), "row_major", 4),)
+        guards = tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name, shape in zip(names, (*input_shapes, shapes[-1]))
+            for axis, extent in enumerate(shape)
+        )
+        scalars = (ScalarArgument(len(buffers), "Rows", "int64"),
+                   ScalarArgument(len(buffers) + 1, "Cols", "int64"))
+        geometry = f"x86_avx512_{family}"
+        pipeline_family = family
+        provenance = {
+            "family": family, "kind": kind, "shape": list(input_shapes[0]),
+            "output_shape": list(shapes[-1]), "rows": rows, "cols": cols, "storage": "f32",
+            **({"tie_break": "first"} if family == "argreduce" else {}),
+            **({"inclusive": True} if family == "scan" else {}),
+        }
+        expected = ({"kind": f'"{kind}"', "tie_break": '"first"'} if family == "argreduce"
+                    else {"kind": f'"{kind}"', "inclusive": "true"} if family == "scan"
+                    else {"layout": '"interleaved_pairs"'})
+        if any(tile_attrs.get(key) != value for key, value in expected.items()):
+            raise ValueError(f"x86 native {family} Tile op disagrees with its contract")
+    else:
+        from .x86_breadth import X86_BREADTH_ABIS
+
+        spec = X86_BREADTH_ABIS.get(sub)
+        if spec is None:
+            raise ValueError(f"x86 native breadth ABI {sub!r} is not registered")
+        if (tile_attrs.get("symbol") != f'"{spec.symbol}"' or tile_attrs.get("abi") != f'"{spec.abi_id}"'
+                or tile_attrs.get("family") != f'"{spec.family}"'):
+            raise ValueError("x86 native breadth Tile carrier disagrees with the ABI registry")
+        symbol, abi = spec.symbol, spec.abi_id
+        buffer_args = tuple(argument for argument in spec.args if argument.kind == "buffer")
+        if len(buffer_args) != len(names):
+            raise ValueError("x86 native breadth bindings disagree with the ABI registry")
+        public = {argument.name: name for argument, name in zip(buffer_args, names)}
+        buffers = tuple(
+            BufferBinding(index, name, argument.direction, argument.dtype, len(shape), "row_major", 4)
+            for index, (argument, name, shape) in enumerate(zip(buffer_args, names, shapes))
+        )
+        scalar_args = tuple(argument for argument in spec.args if argument.kind == "scalar")
+        if set(projection.scalars) != {argument.name for argument in scalar_args}:
+            raise ValueError("x86 native breadth scalars disagree with the ABI registry")
+        scalars = tuple(
+            ScalarArgument(len(buffers) + index, argument.name, argument.dtype)
+            for index, argument in enumerate(scalar_args)
+        )
+        geometry = f"x86_avx512_{spec.family}"
+        pipeline_family = spec.family
+        graph_scalars = {argument.name: projection.scalars[argument.name] for argument in scalar_args}
+        provenance = {
+            "cohort": spec.cohort, "family": spec.family, "effects": spec.effects,
+            "public_route": spec.public_route, "returns_status": spec.returns_status,
+            "abi_arguments": [
+                {"name": arg.name, "kind": arg.kind, "dtype": arg.dtype,
+                 "direction": arg.direction,
+                 **({"binding": public[arg.name]} if arg.name in public else {})}
+                for arg in spec.args
+            ],
+            "graph_level": True, "selector_family": kind, "graph_scalars": graph_scalars,
+            **({"kind": int(graph_scalars["Kind"]), "parameter": float(graph_scalars["Parameter"])}
+               if kind == "pointwise_loss" else {}),
+        }
+    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol, pipeline_family)
+    image = _image(
+        target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
+        pipeline_name=pipeline_name, symbol=symbol, abi=abi,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=buffers, scalars=scalars, shape_guards=guards,
+        geometry=LaunchGeometry(policy=geometry), ordering=_X86_ORDERING,
+        provenance={**provenance, **common},
     )
     return X86NativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
 
@@ -1600,89 +1637,26 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86Native
 
 
 def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
-    contract = _elementwise_contract(module)
-    if contract is None:
+    """Compile an x86 elementwise op through native Schedule and Tile IR.
+
+    E2E-REAL-6 (x86 elementwise family, 2026-09-28): no Python Tile
+    construction and no Graph-owned admission. ``NativeX86Kernel.h`` (and
+    ``NativeAbsolute.h`` for absolute/floor/ceil) owns the contract; the
+    package is projected from the replayed IR by
+    :func:`package_scheduled_kernel`. The retired constructor is the
+    differential oracle ``tests/_support/x86_kernel_baseline.py``.
+    """
+    from . import scheduled_kernel
+
+    if not requests_elementwise(module):
         raise ValueError(
             "x86 native elementwise requires one static same-shape f32 unary/binary "
             "operation or f32-to-bool predicate"
         )
-    if contract[:2] == ("unary", "abs"):
-        from .scheduled_absolute import lower_absolute, package_absolute
-        return package_absolute(lower_absolute(module), pipeline_name=pipeline_name)
-    if contract[:2] in (("unary", "floor"), ("unary", "ceil"), ("unary", "trunc")):
-        from .scheduled_absolute import lower_floor, lower_ceil, lower_trunc, package_unary
-        lower = {"floor": lower_floor, "ceil": lower_ceil, "trunc": lower_trunc}[contract[1]]
-        return package_unary(lower(module), pipeline_name=pipeline_name)
-    family, kind, input_names, output_name, shape, input_dtypes, output_dtype = contract
-    if family == "unary":
-        symbol, abi = "tessera_x86_avx512_unary_f32", X86_UNARY_F32_ABI
-    elif family == "binary":
-        symbol, abi = "tessera_x86_avx512_binary_f32", X86_BINARY_F32_ABI
-    elif family == "predicate":
-        symbol, abi = "tessera_x86_avx512_predicate_f32", X86_PREDICATE_F32_ABI
-    elif family == "compare":
-        symbol, abi = "tessera_x86_avx512_compare_f32", X86_COMPARE_F32_ABI
-    elif family == "logical":
-        symbol, abi = "tessera_x86_avx512_logical_i8", X86_LOGICAL_I8_ABI
-    elif family == "bitwise":
-        symbol, abi = "tessera_x86_avx512_bitwise_i32", X86_BITWISE_I32_ABI
-    elif family == "where":
-        symbol, abi = "tessera_x86_avx512_where_f32", X86_WHERE_F32_ABI
-    elif family == "transcendental":
-        symbol, abi = (
-            "tessera_x86_avx512_transcendental_f32", X86_TRANSCENDENTAL_F32_ABI
-        )
-    else:
-        symbol = (
-            "tessera_x86_avx512_pow_f32" if kind == "pow"
-            else "tessera_x86_avx512_silu_mul_f32"
-        )
-        abi = X86_BINARY_MATH_F32_ABI
-    tile_ir = emit_elementwise_tile_ir(
-        entry=f"tessera_tile_x86_{family}_{kind}", family=family, kind=kind,
+    return package_scheduled_kernel(
+        scheduled_kernel.lower_scheduled_kernel(module, target="x86"),
+        pipeline_name=pipeline_name,
     )
-    target_ir, payload, compiler, toolchain = _lower(
-        tile_ir, symbol, "elementwise"
-    )
-    image = _image(
-        target_ir=target_ir, payload=payload, compiler=compiler,
-        toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
-    )
-    bindings = [
-        BufferBinding(index, name, "input", dtype, len(shape), "row_major",
-                      1 if dtype == "bool" else 4)
-        for index, (name, dtype) in enumerate(zip(input_names, input_dtypes))
-    ]
-    bindings.append(BufferBinding(
-        len(bindings), output_name, "output", output_dtype, len(shape),
-        "row_major", 1 if output_dtype == "bool" else 4,
-    ))
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=tuple(bindings),
-        scalars=(ScalarArgument(len(bindings), "N", "int64"),),
-        shape_guards=tuple(
-            ShapeGuard(name, axis, "eq", extent)
-            for name in (*input_names, output_name)
-            for axis, extent in enumerate(shape)
-        ),
-        geometry=LaunchGeometry(policy="x86_avx512_flat"),
-        ordering=OrderingSemantics(
-            ordered_submission=True, residency="all", synchronization=("return",),
-        ),
-        provenance={
-            "work_item": "X86-E2E-2", "route": "avx512_c_abi",
-            "family": family, "kind": kind, "shape": list(shape),
-            "elements": math.prod(shape),
-            "storage": (
-                "mixed_i8_f32" if family == "where"
-                else "i8" if input_dtypes[0] == "bool"
-                else "i32" if input_dtypes[0] == "int32" else "f32"
-            ),
-            "output_storage": "i8" if output_dtype == "bool" else "i32" if output_dtype == "int32" else "f32",
-        },
-    )
-    return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
 
 
 __all__ = [
@@ -1697,7 +1671,7 @@ __all__ = [
     "X86_UNARY_F32_ABI", "X86_WHERE_F32_ABI",
     "X86_BINARY_MATH_KINDS", "X86_BITWISE_KINDS", "X86_COMPARE_KINDS",
     "X86_LOGICAL_KINDS", "X86_TRANSCENDENTAL_KINDS", "X86_WHERE_KINDS",
-    "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir",
+    "emit_attention_tile_ir", "emit_matmul_tile_ir",
     "native_package_kind", "package_attention", "package_matmul",
     "package_native", "package_scheduled_kernel", "package_scheduled_matmul",
     "emit_attention_graph_ir", "package_attention_backward_semantics",

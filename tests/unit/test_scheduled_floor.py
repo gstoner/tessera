@@ -18,7 +18,7 @@ def floor_module():
 
 def test_floor_uses_serialized_policy_and_never_legacy_emitter(monkeypatch):
     from tessera.compiler import x86_native
-    monkeypatch.setattr(x86_native,'emit_elementwise_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
+    monkeypatch.setattr('tests._support.x86_kernel_baseline.emit_elementwise_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
     monkeypatch.setattr(x86_native,'_lower',lambda *a: ('target',b'image','compiler','toolchain'))
     package = x86_native.package_elementwise(floor_module(),pipeline_name='tessera-lower-to-x86')
     assert package.descriptor.provenance['kind'] == 'floor'

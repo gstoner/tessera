@@ -75,7 +75,7 @@ def test_absolute_lower_cache_keys_exact_graph_and_compiler(monkeypatch):
 
 def test_absolute_graph_packager_never_uses_legacy_constructor(monkeypatch):
     from tessera.compiler import x86_native
-    monkeypatch.setattr(x86_native,'emit_elementwise_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
+    monkeypatch.setattr('tests._support.x86_kernel_baseline.emit_elementwise_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
     monkeypatch.setattr(x86_native,'_lower',lambda *a: ('target',b'image','compiler','toolchain'))
     packet = x86_native.package_elementwise(absolute_module(),pipeline_name='tessera-lower-to-x86')
     assert packet.descriptor.provenance['numeric_policy'] == 'ieee_abs_clear_sign'
@@ -103,7 +103,7 @@ def test_absolute_preserves_explicit_row_major_packaging(monkeypatch):
     artifact = lower_absolute(module)
     assert 'tessera.layout = "row_major"' in artifact.graph_ir
     assert artifact.project()[1] == (3, 17)
-    monkeypatch.setattr(x86_native, 'emit_elementwise_tile_ir', lambda **kw: pytest.fail('Graph constructor'))
+    monkeypatch.setattr('tests._support.x86_kernel_baseline.emit_elementwise_tile_ir', lambda **kw: pytest.fail('Graph constructor'))
     monkeypatch.setattr(x86_native, '_lower', lambda *a: ('target', b'image', 'compiler', 'toolchain'))
     packet = x86_native.package_elementwise(module, pipeline_name='tessera-lower-to-x86')
     assert packet.descriptor.provenance['numeric_policy'] == 'ieee_abs_clear_sign'
@@ -127,7 +127,7 @@ def test_rounding_unary_projects_and_replays_without_graph_constructor(family, m
     module.functions[0].args[0].layout = 'row_major'
     artifact = {'floor': lower_floor, 'ceil': lower_ceil, 'trunc': lower_trunc}[family](module)
     assert artifact.project()[1] == (3,17)
-    monkeypatch.setattr(x86_native,'emit_elementwise_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
+    monkeypatch.setattr('tests._support.x86_kernel_baseline.emit_elementwise_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
     monkeypatch.setattr(x86_native,'_lower',lambda *a: ('target',b'image','compiler','toolchain'))
     packet = x86_native.package_elementwise(module,pipeline_name='tessera-lower-to-x86')
     assert packet.descriptor.provenance['numeric_policy'] == 'ieee_' + family

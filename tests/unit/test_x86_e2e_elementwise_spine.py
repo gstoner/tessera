@@ -16,11 +16,18 @@ from tessera.compiler.x86_native import (
     X86_PREDICATE_KINDS,
     X86_UNARY_F32_ABI,
     X86_UNARY_KINDS,
-    emit_elementwise_tile_ir,
     package_elementwise,
     supports_elementwise,
     tools_available,
 )
+from tests._support.x86_kernel_baseline import emit_elementwise_tile_ir  # retired carrier (oracle)
+
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+# E2E-REAL-6 (x86 elementwise / cohort-2 / breadth cut, 2026-09-28): packaging
+# lowers through the native Graph -> Schedule -> Tile route, so these gates need
+# `tessera-opt` even where the final target compilation is stubbed.
+pytestmark = pytest.mark.skipif(find_tessera_opt() is None, reason="native compiler required")
 
 
 def _module(op_name: str, shape: tuple[int, ...] = (3, 17)) -> GraphIRModule:
@@ -85,9 +92,7 @@ def test_elementwise_package_and_canonical_selector(monkeypatch, op_name, abi) -
         return
     package = package_elementwise(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
-    assert package.descriptor.provenance["work_item"] == (
-        "E2E-REAL-6" if op_name == "tessera.absolute" else "X86-E2E-2"
-    )
+    assert package.descriptor.provenance["work_item"] == "E2E-REAL-6"
     monkeypatch.setattr("tessera.compiler.x86_native.tools_available", lambda: True)
     result = canonical_compile(module, target="x86", enable_tool_validation=False)
     assert result.launch_descriptor is not None

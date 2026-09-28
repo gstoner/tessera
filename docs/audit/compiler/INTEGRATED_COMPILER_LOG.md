@@ -6039,3 +6039,121 @@ Philox test, and measured scaled RoPE C ABI maximum absolute error 4.77e-7.
 WSL HIP events remain invalid on this fleet, so the paged-KV packet contains
 host launch wall time only. See the [x86 packet](../../../benchmarks/baselines/e2e_real6_x86_trunc_cache_20260928/README.md).
 <!-- entry-fields:end -->
+
+### 2026-09-28 — E2E-REAL-6: x86 elementwise lowers through a native Schedule contract; cohort-2 and breadth follow except ALiBi and batched linalg; x86 package compile cache
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: branch `codex/x86-batch3-dedup` (post-#875).
+Sync: `E2E-REAL-6-x86-kernel-2026-09-28`.
+
+
+Outcome: `x86_native.package_elementwise` and `package_cohort2` and
+`x86_breadth.package_graph_breadth` no longer read the Python Graph object to
+decide admission or author Tile IR. Admission is
+`scheduled_kernel.supports_scheduled_kernel(target="x86")` (host-free,
+`native_x86_kernel.admit`), and every moved packager hands
+`lower_scheduled_kernel(module, target="x86")` straight to
+`package_scheduled_kernel`, which projects the descriptor from the contract
+serialized in replayed Tile IR (`native_x86_kernel.project`). The native owner
+is a new table-driven contract, `src/compiler/programming_model/lib/NativeX86Kernel.h`
+(Graph -> content-addressed `schedule.artifact` record -> the same
+`tile.{elementwise,argreduce,scan,rope,x86_abi}_kernel` launch the retired
+constructors authored), opt-in per module by `tessera.launch_bindings`;
+`absolute`/`floor`/`ceil`/`trunc`/`cumsum` keep `NativeAbsolute.h`, and x86 row
+normalization now rides the existing `schedule.norm` semantic kernel (Zen 5
+admitted beside sm_120 in `getSemanticKernelSchedule` and the `NormOp`
+verifier). The retired `_elementwise_contract` / `_cohort2_contract` /
+`graph_breadth_contract`, the `emit_elementwise_tile_ir` /
+`emit_cohort2_tile_ir` constructors and the packagers are frozen verbatim in
+`tests/_support/x86_kernel_baseline.py`, the declared oracle #31(a) allows;
+`scheduled_absolute`'s packagers are the oracle for its five kinds.
+
+What had to land first: 45 new Graph ODS ops; `trunc` was already registered by #875. Most of the x86 vocabulary
+(`sqrt`, `exp`, `isnan`, `logical_*`, `bitwise_*`, `where`, `argmax`,
+`cumprod`, `gather`, `loss.log_cosh`, ...) was a catalog spelling the Graph
+dialect never declared, so `tessera-opt` could not parse it and no native route
+could own it. They are now registered with real verifiers (tail of
+`TesseraOps.td`; consumer: the x86 contract), as the tensor/tensor comparisons
+were before them. Catalog aliases the retired tables accepted (`subtract`,
+`equal`, `power`, `swiglu`, `mse_loss`, ...) are spelled as the ODS op before
+emission.
+
+Envelope, before -> after. Elementwise: 71 op spellings (unary 10, binary 12,
+predicate 3, compare 12, logical 4, bitwise 5, transcendental 21,
+binary_math 4) plus `where`, any positive static rank, AVX-512 image only ->
+the same. Cohort-2: argmax/argmin (last axis or flattened, keepdims),
+cumsum/cumprod/cummax/cummin (last axis), rmsnorm/rmsnorm_safe/layer_norm
+(eps), rope, ALiBi -> all but ALiBi. Breadth: gather, the 10 pointwise-loss
+spellings with `reduction="none"`, rank-2/3 cholesky and tri_solve -> all but
+rank-3. Refused on purpose, each pinned by a test (15): unknown keywords on
+elementwise/loss/gather (ignored before), comparison `signedness`, an integer
+`keepdims`, a flattened rank >= 2 scan, a norm `numeric_policy` or non-last
+`axis` (ignored before), `lower=False` cholesky and `trans`/`unit_diag`
+tri_solve (silently computed the default before), a zero huber `delta`,
+rank-1 rope (Graph verifier `LEGALITY_ROPE_RANK`), flattened keepdims argmax
+over rank >= 2 (NumPy keeps every axis), and a repeated operand (`add(x, x)`,
+which the retired route admitted and then could not package). Corrected, also
+pinned: the retired flattened argmax described a rank-1 operand the caller
+never passes, and the runtime refused that descriptor for any rank >= 2
+operand; the compiled route describes the real operand and executes. The norm
+`epsilon=` keyword is honoured (the retired x86 norm read only `eps` and
+silently used 1e-5). A rank-1 `cumsum(axis=None)` now packages (the retired
+route emitted `axis = none`).
+
+Still gaps, and exactly why. `cohort2` keeps ALiBi on a narrowed retained
+constructor (`x86_native._alibi_contract`): its Graph operand list is not
+decodable by position (the catalog admits 0-2 optional operands with no
+presence flags, `test_op_arity_contract.py::_UNDECODABLE_OPERAND_LISTS`) and
+the ODS `tessera.alibi` declares no slopes operand at all, so the x86 slopes
+form is not Graph IR. `breadth` keeps rank-3 (batched) cholesky / tri_solve on
+`x86_breadth.batched_linalg_contract`: the ODS verifiers are rank-2 only
+("batched rank-3 is a follow-on", pinned by
+`apple_cholesky_graph_ir_invalid.mlir`). Both rows stay `gap` on the dashboard
+by the audit's all-paths rule.
+
+Package cache. `x86_compile_cache` memoizes each `tessera-opt` run on (the
+compiler binary's SHA-256 -- `rocm_native._tool_digest`, stat-memoized --, the
+pass option, the complete source text), the `--version` probe on the binary
+digest, and the shared object on its stat signature. The source text is the
+MLIR the compiler receives, so Graph op identity, attributes, shapes, dtypes,
+target/arch and bindings are all in the key; a changed compiler or input misses,
+a failing run is not cached, and the verified #875 unary artifact caches remain keyed by complete artifact and
+toolchain identity; new x86 kernel descriptors, projections and replay
+comparisons are rebuilt every call (a forged artifact still fails). Used by every x86 lowering, replay and Tile ->
+Target run. Compile-cost claim, Princess-Luna, load < 2, timing lock
+(`benchmarks/baselines/x86_package_cache_20260928/`): compiled route cold
+53.65-82.10 ms (3 compiler runs), warm 0.29-0.95 ms (0 runs), retired
+cold 25.44-26.86 ms except absolute at 82.37 ms; all relevant #875 and
+compiler-run caches were cleared between cold samples. The first call in a
+process took 147.16 ms including binary digest work.
+
+Remaining: E2E-REAL-6 still owns x86 ALiBi (needs a decodable Graph operand
+list and an ODS slopes operand) and batched linalg (needs rank-3 Graph ODS),
+ROCm paged-KV / MoE / forward attention, the NVIDIA and Apple gap families and
+the frontend. `scheduled_absolute` survives only as its five kinds' oracle.
+
+Evidence: `tests/unit/test_x86_kernel_differential.py` -- 501 host-free rows
+(elementwise 288, cohort-2 158, breadth 55: descriptor, ABI, buffers, scalars,
+shape guards, geometry and shared provenance identical; the Tile launch op's
+attributes identical; and the `tessera-x86-executable` Target IR identical --
+the C-ABI call and kind constant, or for norm the symbol and the f32 epsilon),
+15 pinned intentional refusals, 13 refusal-parity rows, the retained-constructor
+rows, the flattened-argmax correction, forged-contract rows, a drift test that
+the native table and the Python admission own the same ops and that the native
+breadth ABI rows match `X86_BREADTH_ABIS`, and 501 device rows (bitwise
+retired-vs-compiled on two seeds over every envelope point).
+`tests/unit/test_x86_compile_cache.py` (11 rows: exact-repeat hit, op / shape /
+kind / attribute / compiler / shared-object misses, failures uncached, forged
+artifact under a warm cache). On the deduplicated Princess-Luna Zen 5 worktree, the native differential
+file passed 1,049 cases, including bitwise retired-versus-compiled execution
+on two seeds per admitted envelope point; focused cache, cohort, breadth and
+#875 unary regression files passed 122 tests. The two new Graph/Schedule/Tile
+lit fixtures passed against the freshly built full Graph compiler. The
+registry/audit drift gates passed 317 tests and the exact ODS count gate
+passed 748. Broader suites and sibling-host proof remain to be refreshed.
+`bootstrap_prune_gap.md`: x86 `elementwise` gap -> generic
+(`cohort2`, `breadth` stay gap for the two reasons above); Tile-constructing
+bootstrap packagers 10 -> 8; `verifier_coverage` 245 -> 291 real.
+
+<!-- entry-fields:end -->

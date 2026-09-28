@@ -22,8 +22,8 @@ from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IRO
 from tessera.compiler.x86_breadth import (  # noqa: E402
     GRAPH_PROMOTION_THRESHOLDS,
     X86_BREADTH_ABIS,
-    graph_breadth_contract,
     package_graph_breadth,
+    supports_graph_breadth,
 )
 
 SCHEMA = "tessera.x86.e2e_cohort34_comparison.v1"
@@ -98,8 +98,7 @@ def _summary(retained: list[float], descriptor: list[float]) -> dict[str, Any]:
 def _measure(family: str, extent: int, trials: int,
              rng: np.random.Generator) -> dict[str, Any]:
     module = _module(family, extent)
-    contract = graph_breadth_contract(module)
-    assert contract is not None
+    assert supports_graph_breadth(module)
     package = package_graph_breadth(module, pipeline_name="tessera-lower-to-x86")
     typed = rt.RuntimeArtifact(
         metadata={"target": "x86", "compiler_path": "canonical_native_descriptor"},
@@ -155,7 +154,7 @@ def _measure(family: str, extent: int, trials: int,
         retained_result = retained_fn()
         expected = retained_result["output"]
         retained_route = "x86_linalg_compiled"
-    typed_values.update(cast(dict[str, object], contract["scalars"]))
+    typed_values.update(cast(dict[str, object], package.descriptor.provenance["graph_scalars"]))
     first = rt.launch(typed, typed_values)
     if not first["ok"]:
         raise RuntimeError(str(first.get("reason")))

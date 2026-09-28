@@ -5625,6 +5625,331 @@ LogicalResult AbsoluteOp::verify() {
   return success();
 }
 
+// E2E-REAL-6 x86 (2026-09-28): verifiers for the registered catalog
+// spellings (see TesseraOps.td). Float pointwise ops require a floating
+// element type; logic ops fix their element type (i1 / integer).
+static LogicalResult verifyFloatPointwiseUnary(Operation *op, Value x, Value y,
+                                               StringRef name) {
+  if (failed(verifyUnaryPointwise(op, x, y, name)))
+    return failure();
+  if (auto ty = dyn_cast<RankedTensorType>(x.getType()))
+    if (!isFloatTensor(ty))
+      return op->emitOpError() << name << " requires a floating operand";
+  return success();
+}
+
+static LogicalResult verifyFloatPointwiseBinary(Operation *op, Value lhs,
+                                                Value rhs, Value result,
+                                                StringRef name) {
+  if (failed(verifyBinaryPointwise(op, lhs, rhs, result, name)))
+    return failure();
+  if (auto ty = dyn_cast<RankedTensorType>(lhs.getType()))
+    if (!isFloatTensor(ty))
+      return op->emitOpError() << name << " requires floating operands";
+  return success();
+}
+
+static bool hasElementType(Value value, bool boolean) {
+  auto ty = dyn_cast<RankedTensorType>(value.getType());
+  if (!ty)
+    return true;
+  auto integer = dyn_cast<IntegerType>(ty.getElementType());
+  return integer && (boolean ? integer.getWidth() == 1 : integer.getWidth() > 1);
+}
+
+static LogicalResult verifyLogicOperands(Operation *op, ValueRange values,
+                                         bool boolean, StringRef name) {
+  for (Value value : values)
+    if (!hasElementType(value, boolean))
+      return op->emitOpError()
+             << name << (boolean ? " requires i1 operands and result"
+                                 : " requires integer operands and result");
+  return success();
+}
+LogicalResult SqrtOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "sqrt");
+}
+LogicalResult RsqrtOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "rsqrt");
+}
+LogicalResult ReciprocalOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "reciprocal");
+}
+LogicalResult SignOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "sign");
+}
+LogicalResult RoundOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "round");
+}
+LogicalResult ExpOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "exp");
+}
+LogicalResult LogOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "log");
+}
+LogicalResult ErfOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "erf");
+}
+LogicalResult ErfcOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "erfc");
+}
+LogicalResult Expm1Op::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "expm1");
+}
+LogicalResult Log1pOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "log1p");
+}
+LogicalResult CosOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "cos");
+}
+LogicalResult TanOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "tan");
+}
+LogicalResult SinhOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "sinh");
+}
+LogicalResult CoshOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "cosh");
+}
+LogicalResult AsinOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "asin");
+}
+LogicalResult AcosOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "acos");
+}
+LogicalResult AtanOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "atan");
+}
+LogicalResult LgammaOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "lgamma");
+}
+LogicalResult DigammaOp::verify() {
+  return verifyFloatPointwiseUnary(getOperation(), getX(), getY(), "digamma");
+}
+LogicalResult MaximumOp::verify() {
+  return verifyFloatPointwiseBinary(getOperation(), getLhs(), getRhs(),
+                                    getResult(), "maximum");
+}
+LogicalResult MinimumOp::verify() {
+  return verifyFloatPointwiseBinary(getOperation(), getLhs(), getRhs(),
+                                    getResult(), "minimum");
+}
+LogicalResult ModOp::verify() {
+  return verifyFloatPointwiseBinary(getOperation(), getLhs(), getRhs(),
+                                    getResult(), "mod");
+}
+LogicalResult FloorDivOp::verify() {
+  return verifyFloatPointwiseBinary(getOperation(), getLhs(), getRhs(),
+                                    getResult(), "floor_div");
+}
+LogicalResult PowOp::verify() {
+  return verifyFloatPointwiseBinary(getOperation(), getLhs(), getRhs(),
+                                    getResult(), "pow");
+}
+LogicalResult IsNanOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto maskTy = dyn_cast<RankedTensorType>(getMask().getType());
+  if (!xTy || !maskTy)
+    return success();
+  if (!isFloatTensor(xTy))
+    return emitOpError("isnan requires a floating operand");
+  if (!maskTy.getElementType().isInteger(1))
+    return emitOpError("isnan result must have i1 element type");
+  return verifySameRankedShape(getOperation(), xTy, maskTy, "isnan");
+}
+LogicalResult IsInfOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto maskTy = dyn_cast<RankedTensorType>(getMask().getType());
+  if (!xTy || !maskTy)
+    return success();
+  if (!isFloatTensor(xTy))
+    return emitOpError("isinf requires a floating operand");
+  if (!maskTy.getElementType().isInteger(1))
+    return emitOpError("isinf result must have i1 element type");
+  return verifySameRankedShape(getOperation(), xTy, maskTy, "isinf");
+}
+LogicalResult IsFiniteOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto maskTy = dyn_cast<RankedTensorType>(getMask().getType());
+  if (!xTy || !maskTy)
+    return success();
+  if (!isFloatTensor(xTy))
+    return emitOpError("isfinite requires a floating operand");
+  if (!maskTy.getElementType().isInteger(1))
+    return emitOpError("isfinite result must have i1 element type");
+  return verifySameRankedShape(getOperation(), xTy, maskTy, "isfinite");
+}
+LogicalResult LogicalAndOp::verify() {
+  if (failed(verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                                   "logical_and")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getLhs(), getRhs(), getResult()},
+                             /*boolean=*/true, "logical_and");
+}
+LogicalResult LogicalOrOp::verify() {
+  if (failed(verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                                   "logical_or")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getLhs(), getRhs(), getResult()},
+                             /*boolean=*/true, "logical_or");
+}
+LogicalResult LogicalXorOp::verify() {
+  if (failed(verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                                   "logical_xor")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getLhs(), getRhs(), getResult()},
+                             /*boolean=*/true, "logical_xor");
+}
+LogicalResult BitwiseAndOp::verify() {
+  if (failed(verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                                   "bitwise_and")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getLhs(), getRhs(), getResult()},
+                             /*boolean=*/false, "bitwise_and");
+}
+LogicalResult BitwiseOrOp::verify() {
+  if (failed(verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                                   "bitwise_or")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getLhs(), getRhs(), getResult()},
+                             /*boolean=*/false, "bitwise_or");
+}
+LogicalResult BitwiseXorOp::verify() {
+  if (failed(verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                                   "bitwise_xor")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getLhs(), getRhs(), getResult()},
+                             /*boolean=*/false, "bitwise_xor");
+}
+LogicalResult LogicalNotOp::verify() {
+  if (failed(verifyUnaryPointwise(getOperation(), getX(), getY(), "logical_not")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getX(), getY()},
+                             /*boolean=*/true, "logical_not");
+}
+LogicalResult BitwiseNotOp::verify() {
+  if (failed(verifyUnaryPointwise(getOperation(), getX(), getY(), "bitwise_not")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getX(), getY()},
+                             /*boolean=*/false, "bitwise_not");
+}
+LogicalResult PopcountOp::verify() {
+  if (failed(verifyUnaryPointwise(getOperation(), getX(), getY(), "popcount")))
+    return failure();
+  return verifyLogicOperands(getOperation(), {getX(), getY()},
+                             /*boolean=*/false, "popcount");
+}
+LogicalResult WhereOp::verify() {
+  auto condTy = dyn_cast<RankedTensorType>(getCond().getType());
+  auto aTy = dyn_cast<RankedTensorType>(getA().getType());
+  auto bTy = dyn_cast<RankedTensorType>(getB().getType());
+  auto resultTy = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!condTy || !aTy || !bTy || !resultTy)
+    return success();
+  if (!condTy.getElementType().isInteger(1))
+    return emitOpError("where condition must have i1 element type");
+  if (failed(verifySameRankedShape(getOperation(), condTy, aTy, "where")))
+    return failure();
+  if (failed(verifySameRankedShapeAndElementType(getOperation(), aTy, bTy,
+                                                 "where")))
+    return failure();
+  return verifySameRankedShapeAndElementType(getOperation(), aTy, resultTy,
+                                             "where");
+}
+
+// An absent axis flattens the operand (NumPy `axis=None`): the result is
+// rank-0, or rank-1 of extent 1 under keepdims.
+static LogicalResult verifyArgReduce(Operation *op, Value xValue,
+                                     Value indicesValue,
+                                     std::optional<int64_t> axis,
+                                     bool keepdims, StringRef name) {
+  auto x = dyn_cast<RankedTensorType>(xValue.getType());
+  auto indices = dyn_cast<RankedTensorType>(indicesValue.getType());
+  if (!x || !indices)
+    return success();
+  if (!isFloatTensor(x))
+    return op->emitOpError() << name << " requires a floating operand";
+  auto integer = dyn_cast<IntegerType>(indices.getElementType());
+  if (!integer || (integer.getWidth() != 32 && integer.getWidth() != 64))
+    return op->emitOpError() << name << " result must be an i32/i64 index tensor";
+  SmallVector<int64_t> expected;
+  if (!axis) {
+    if (keepdims)
+      expected.assign(x.getRank(), 1);
+  } else {
+    int64_t normalized = *axis < 0 ? *axis + x.getRank() : *axis;
+    if (normalized < 0 || normalized >= x.getRank())
+      return op->emitOpError() << name << " axis is out of range";
+    expected.assign(x.getShape().begin(), x.getShape().end());
+    if (keepdims)
+      expected[normalized] = 1;
+    else
+      expected.erase(expected.begin() + normalized);
+  }
+  if (indices.getRank() != static_cast<int64_t>(expected.size()))
+    return op->emitOpError() << name << " result rank disagrees with its axis";
+  for (auto [actual, want] : llvm::zip(indices.getShape(), expected))
+    if (!ShapedType::isDynamic(actual) && !ShapedType::isDynamic(want) &&
+        actual != want)
+      return op->emitOpError() << name << " result shape disagrees with its axis";
+  return success();
+}
+
+LogicalResult ArgmaxOp::verify() {
+  return verifyArgReduce(getOperation(), getX(), getIndices(), getAxis(),
+                         getKeepdims(), "argmax");
+}
+
+LogicalResult ArgminOp::verify() {
+  return verifyArgReduce(getOperation(), getX(), getIndices(), getAxis(),
+                         getKeepdims(), "argmin");
+}
+
+static LogicalResult verifyInclusiveScan(Operation *op, Value inputValue,
+                                         Value outputValue, int64_t axis) {
+  auto input = cast<RankedTensorType>(inputValue.getType());
+  if (outputValue.getType() != input || axis < -input.getRank() ||
+      axis >= input.getRank())
+    return op->emitOpError("requires unchanged tensor type and an in-range axis");
+  return success();
+}
+
+LogicalResult CumprodOp::verify() {
+  return verifyInclusiveScan(getOperation(), getInput(), getOutput(), getAxis());
+}
+
+LogicalResult CummaxOp::verify() {
+  return verifyInclusiveScan(getOperation(), getInput(), getOutput(), getAxis());
+}
+
+LogicalResult CumminOp::verify() {
+  return verifyInclusiveScan(getOperation(), getInput(), getOutput(), getAxis());
+}
+
+LogicalResult GatherOp::verify() {
+  auto source = dyn_cast<RankedTensorType>(getSource().getType());
+  auto indices = dyn_cast<RankedTensorType>(getIndices().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!source || !indices || !result)
+    return success();
+  if (!isa<IntegerType>(indices.getElementType()))
+    return emitOpError("gather indices must have an integer element type");
+  if (source.getElementType() != result.getElementType())
+    return emitOpError("gather result must keep the source element type");
+  int64_t axis = getAxis();
+  if (axis < -source.getRank() || axis >= source.getRank())
+    return emitOpError("gather axis is out of range");
+  if (source.getRank() == 1)
+    return verifySameRankedShape(getOperation(), indices, result, "gather");
+  return success();
+}
+
+LogicalResult LogCoshLossOp::verify() {
+  return verifyRegressionLoss(getOperation(), getPrediction(), getTarget(),
+                              getResult(), getReduction(),
+                              "log_cosh prediction/target");
+}
+
 } // namespace tessera
 
 #define GET_OP_CLASSES

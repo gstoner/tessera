@@ -7,7 +7,11 @@ def verify_unary_ancestry(artifact, *, target, architecture):
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("unary packaging requires native Schedule replay")
-    tile = run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile")
+    runner = run_tessera_opt
+    if target == "x86":
+        # The replay is memoized on the exact Schedule text and compiler digest.
+        from .x86_compile_cache import run as runner
+    tile = runner(tool, artifact.schedule_ir, "--tessera-schedule-to-tile")
     if tile != artifact.tile_ir:
         raise ValueError("unary Tile IR disagrees with native Schedule replay")
     header = re.match(r'\s*module attributes \{([^{}]*)\}', tile)
@@ -18,7 +22,7 @@ def verify_unary_ancestry(artifact, *, target, architecture):
         raise ValueError("unary native parent target disagrees")
     if (artifact.target, artifact.architecture) != (target, architecture):
         raise ValueError("unary descriptor target disagrees")
-    verify_unary_projection(artifact, run_tessera_opt(tool, artifact.schedule_ir, "--canonicalize"))
+    verify_unary_projection(artifact, runner(tool, artifact.schedule_ir, "--canonicalize"))
 
 
 def verify_unary_projection(artifact, parent: str) -> None:
@@ -33,7 +37,7 @@ def verify_unary_projection(artifact, parent: str) -> None:
     name, input_dims, storage, output_dims, output_storage = functions[0]
     input_shape = tuple(int(d) for d in input_dims.split('x') if d)
     output_shape = tuple(int(d) for d in output_dims.split('x') if d)
-    ops = re.findall(r' = schedule\.(softmax|reduce) %\w+ \{([^{}]*)\}', parent)
+    ops = re.findall(r' = schedule\.(softmax|reduce|norm) %\w+ \{([^{}]*)\}', parent)
     if len(ops) != 1 or not input_shape:
         raise ValueError('Native unary descriptor requires one native unary schedule')
     family, attrs = ops[0]
@@ -61,7 +65,19 @@ def verify_unary_projection(artifact, parent: str) -> None:
                     output_shape=output_shape, family=family, dtype={'f32': 'fp32', 'f16': 'fp16', 'bf16': 'bf16'}[storage],
                     storage=storage, accum='f32', keepdims=False,
                     workgroup_size=workgroup, schedule='serial', epsilon=0.0)
-    if family == 'softmax':
+    if family == 'norm':
+        # E2E-REAL-6 x86 (2026-09-28): the unweighted row normalization.
+        import struct
+        kind = re.search(r'(?:^|, )kind = "(rmsnorm|layernorm)"(?:,|$)', attrs)
+        eps = re.search(r'(?:^|, )epsilon = ([-+0-9.eE]+) : f32(?:,|$)', attrs)
+        if (artifact.target != 'x86' or axis != -1 or output_shape != input_shape
+                or kind is None or eps is None
+                or struct.pack('f', float(eps[1])) != struct.pack('f', artifact.epsilon)):
+            raise ValueError('Native norm kind/axis/epsilon is unsupported')
+        expected.update(kind=kind[1], axis=-1, rows=math.prod(input_shape[:-1]),
+                        columns=input_shape[-1], outer=1, axis_extent=1, inner=1,
+                        epsilon=artifact.epsilon)
+    elif family == 'softmax':
         if axis != -1 or output_shape != input_shape:
             raise ValueError('Native native softmax shape/axis is unsupported')
         expected.update(kind='softmax', axis=-1, rows=math.prod(input_shape[:-1]),

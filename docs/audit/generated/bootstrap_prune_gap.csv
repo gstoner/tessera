@@ -23,7 +23,7 @@ x86,attention,scheduled_attention.supports_scheduled_attention,compiled
 x86,attention_backward,scheduled_attention_backward.supports_scheduled_attention_backward,compiled
 x86,cohort2,—,gap
 x86,breadth,—,gap
-x86,elementwise,—,gap
+x86,elementwise,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 apple_cpu,batched_gemm,—,gap
 apple_cpu,cholesky,—,gap
 apple_cpu,cholesky_solve,—,gap

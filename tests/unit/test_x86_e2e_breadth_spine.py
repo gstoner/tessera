@@ -14,13 +14,18 @@ from tessera.compiler.x86_breadth import (
     X86_BREADTH_ABIS,
     cohort_specs,
     emit_abi_tile_ir,
-    graph_breadth_contract,
     package_abi,
     package_graph_breadth,
     supports_graph_breadth,
     supports_promoted_graph_breadth,
 )
 from tessera.compiler.x86_native import _library_path, tools_available
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tests._support.x86_kernel_baseline import graph_breadth_contract  # retired admission (oracle)
+
+# E2E-REAL-6 (x86 breadth cut, 2026-09-28): Graph-level breadth packaging lowers
+# gather / pointwise loss / rank-2 linalg through native Schedule -> Tile.
+_needs_compiler = pytest.mark.skipif(find_tessera_opt() is None, reason="native compiler required")
 
 
 COHORT3_SYMBOLS = {
@@ -145,6 +150,7 @@ def test_package_rejects_unaccounted_buffers() -> None:
         )
 
 
+@_needs_compiler
 @pytest.mark.parametrize("family", ["gather", "pointwise_loss", "cholesky", "tri_solve"])
 def test_graph_breadth_contract_is_isomorphic_and_packageable(monkeypatch, family: str) -> None:
     module = _graph_module(family)
@@ -158,6 +164,7 @@ def test_graph_breadth_contract_is_isomorphic_and_packageable(monkeypatch, famil
         return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-graph", "cc", "tc"
 
     monkeypatch.setattr("tessera.compiler.x86_breadth._lower", fake_lower)
+    monkeypatch.setattr("tessera.compiler.x86_native._lower", fake_lower)
     package = package_graph_breadth(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.provenance["graph_level"] is True
     assert package.descriptor.provenance["selector_family"] == family
@@ -174,12 +181,14 @@ def test_graph_breadth_rejects_composite_variants() -> None:
     assert not supports_graph_breadth(gather)
 
 
+@_needs_compiler
 @pytest.mark.parametrize("family", ["gather", "pointwise_loss", "cholesky", "tri_solve"])
 def test_canonical_selector_promotes_measured_graph_breadth(monkeypatch, family: str) -> None:
     def fake_lower(tile_ir: str, symbol: str, family: str):
         return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-graph", "cc", "tc"
 
     monkeypatch.setattr("tessera.compiler.x86_breadth._lower", fake_lower)
+    monkeypatch.setattr("tessera.compiler.x86_native._lower", fake_lower)
     monkeypatch.setattr("tessera.compiler.x86_native.tools_available", lambda: True)
     result = canonical_compile(
         _graph_module(family), target="x86", enable_tool_validation=False,

@@ -380,7 +380,12 @@ def test_the_surface_is_mostly_ir_constructing_not_delegating():
     """
     s = audit.summary()
     constructing = s["constructs_tile_ir"] + s["both"]
-    assert constructing > s["delegates"] * 5, (
+    # Evidence (2026-09-28, E2E-REAL-6 x86): the ratio fell from 11:2 to 9:2
+    # because two constructors *left* (x86 package_elementwise / package_cohort2
+    # now lower through Schedule -> Tile), not because delegation grew. The
+    # finding stands -- the remainder is still mostly IR-constructing -- so the
+    # guard now asserts that, rather than a 5x margin the prune itself erodes.
+    assert s["delegates"] <= 2 and constructing > s["delegates"] * 4, (
         f"{constructing} IR-constructing vs {s['delegates']} delegating — the "
         "bootstrap surface's character changed; re-scope the prune"
     )

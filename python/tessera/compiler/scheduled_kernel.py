@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import math
 import re
 import struct
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 
+from . import native_x86_kernel
 from .graph_ir import GraphIRModule
 from .scheduled_matmul import digest_text, find_tessera_opt, run_tessera_opt
 
@@ -58,6 +60,12 @@ class ScheduledKernelArtifact:
     schedule_digest: str
     schedule: str = "serial"
     epsilon: float = 0.0
+    #: E2E-REAL-6 x86 elementwise / cohort-2 / breadth: the serialized
+    #: contract stem (``x86_kernel`` or a NativeAbsolute ``absolute`` /
+    #: ``floor`` / ``ceil`` / ``cumsum``) and every input binding in operand
+    #: order. Empty for the semantic-kernel families (softmax/reduce/norm).
+    record: str = ""
+    input_names: tuple[str, ...] = ()
 
     @property
     def graph_digest(self) -> str:
@@ -72,6 +80,9 @@ class ScheduledKernelArtifact:
         return digest_text(self.tile_ir)
 
     def validate(self) -> None:
+        if self.record:
+            self._validate_record()
+            return
         schedule_op = f"schedule.{self.family}"
         tile_op = f"tile.{self.family}_kernel"
         if len(re.findall(rf"(?m)^\s*%[^=]+ = {re.escape(schedule_op)}\b", self.schedule_ir)) != 1:
@@ -93,13 +104,73 @@ class ScheduledKernelArtifact:
         if self.schedule_ir_digest == self.tile_digest:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
+    def _validate_record(self) -> None:
+        """A native contract carried on the durable ``schedule.artifact`` record."""
+        from .native_x86_kernel import TILE_OPS
+
+        if self.target != "x86" or self.architecture != "zen5-avx512":
+            raise ValueError("x86 native kernel artifact requires the zen5-avx512 target")
+        if len(re.findall(r"(?m)^\s*schedule\.artifact\b", self.schedule_ir)) != 1:
+            raise ValueError("x86 native kernel artifact requires one durable schedule record")
+        record_hash = re.findall(r'(?<![\w.])hash = "' + re.escape(self.schedule_digest) + '"', self.schedule_ir)
+        if (len(record_hash) != 1
+                or self.schedule_ir.count(f'schedule.artifact_hash = "{self.schedule_digest}"') != 1):
+            raise ValueError("x86 native kernel artifact has incomplete Schedule digest identity")
+        if self.tile_ir.count(TILE_OPS.get(self.family, "\0")) != 1:
+            raise ValueError(f"x86 native kernel artifact requires exactly one {self.family} launch op")
+        if re.search(r"=\s*tessera\.[a-z]", self.tile_ir) or re.search(r"(?m)^\s*schedule\.", self.tile_ir):
+            raise ValueError("x86 native kernel Tile artifact retains Graph or Schedule ops")
+        if _HASH_RE.findall(self.tile_ir) != [self.schedule_digest]:
+            raise ValueError("x86 native kernel Tile artifact has a stale schedule digest")
+        if f"tessera.{self.record}_contract = {{" not in self.tile_ir:
+            raise ValueError("x86 native kernel Tile artifact lost its serialized contract")
+        if not self.input_names or self.input_names[0] != self.input_name:
+            raise ValueError("x86 native kernel artifact requires its ordered input bindings")
+        if self.schedule_ir_digest == self.tile_digest:
+            raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
+
 
 def supports_scheduled_kernel(module: GraphIRModule, *, target: str) -> bool:
     try:
-        _graph_contract(module, target)
+        if target == "x86" and native_x86_kernel.owns(module):
+            native_x86_kernel.admit(module)
+        else:
+            _graph_contract(module, target)
     except ValueError:
         return False
     return True
+
+
+def _lower_x86_kernel(module: GraphIRModule, architecture: str | None) -> ScheduledKernelArtifact:
+    """E2E-REAL-6 x86 elementwise / cohort-2 / breadth: the native contract."""
+    if architecture not in (None, "zen5-avx512"):
+        raise ValueError("x86 native kernels exist only for the zen5-avx512 image")
+    request = native_x86_kernel.admit(module)
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scheduled x86 kernel lowering requires production tessera-opt")
+    graph_ir, schedule_ir, tile_ir = native_x86_kernel.lower(module, request, tool)
+    hashes = _HASH_RE.findall(tile_ir)
+    if len(hashes) != 1:
+        raise RuntimeError("scheduled x86 kernel lowering did not preserve one schedule digest")
+    storage = {"fp32": "f32", "bool": "i8", "int32": "i32", "int64": "i64"}
+    input_shape, output_shape = request.shapes[0], request.shapes[-1]
+    artifact = ScheduledKernelArtifact(
+        graph_ir=graph_ir, schedule_ir=schedule_ir, tile_ir=tile_ir,
+        target="x86", architecture="zen5-avx512",
+        function_name=module.functions[0].name,
+        family=request.family, kind=request.kind,
+        input_name=request.bindings[0], output_name=request.bindings[-1],
+        input_shape=input_shape, output_shape=output_shape,
+        dtype=request.dtypes[0], storage=storage.get(request.dtypes[0], ""), accum="",
+        axis=-1, keepdims=bool(request.kwargs.get("keepdims", False)),
+        rows=math.prod(input_shape[:-1]), columns=input_shape[-1],
+        outer=1, axis_extent=1, inner=1, workgroup_size=1,
+        schedule_digest=hashes[0], record=request.record,
+        input_names=request.bindings[:-1],
+    )
+    artifact.validate()
+    return artifact
 
 
 def lower_scheduled_kernel(
@@ -109,6 +180,10 @@ def lower_scheduled_kernel(
     schedule: str | None = None,
     architecture: str | None = None,
 ) -> ScheduledKernelArtifact:
+    if target == "x86" and native_x86_kernel.owns(module):
+        if schedule is not None:
+            raise ValueError("x86 native kernels take no reduction schedule")
+        return _lower_x86_kernel(module, architecture)
     if schedule is not None:
         module = copy.deepcopy(module)
         if (module.functions and module.functions[0].body
@@ -134,6 +209,11 @@ def lower_scheduled_kernel(
         op.kwargs = {**op.kwargs, "axis": -1}
     if contract[5] == "norm":
         op.kwargs = {"eps": contract[21]}
+        if target == "x86":
+            # The x86 native-package request marker (NativeX86Kernel.h): an
+            # isolated norm is claimed for `schedule.norm` only when the module
+            # names its host bindings; a norm in any other x86 program is not.
+            targeted.module_attrs["tessera.launch_bindings"] = json.dumps([contract[3], contract[4]])
     if contract[5] == "reduce":
         op.op_name = "tessera.reduce"
         op.kwargs = {"kind": contract[6], "axis": contract[14]}
@@ -166,7 +246,7 @@ def lower_scheduled_kernel(
         target=contract[0],
         architecture=contract[1],
         function_name=(f"tessera_tile_norm_{contract[6]}_{contract[10]}_{hashes[0][:10]}"
-                       if contract[5] == "norm" else contract[2]),
+                       if contract[5] == "norm" and contract[0] == "nvidia_sm120" else contract[2]),
         input_name=contract[3],
         output_name=contract[4],
         family=contract[5],
@@ -262,7 +342,11 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     if op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"}:
         from .nvidia_native import _norm_contract
 
-        norm = _norm_contract(module) if target == "nvidia_sm120" else None
+        # E2E-REAL-6 x86 (2026-09-28): Zen 5 carries the static f32
+        # unweighted row normalization the retired `package_cohort2` served.
+        norm = _norm_contract(module) if target in {"nvidia_sm120", "x86"} else None
+        if norm is not None and target == "x86" and norm[0] != "fp32":
+            norm = None
         if norm is None or op.kwargs.get("numeric_policy") is not None or mode != "serial":
             raise ValueError("unsupported scheduled normalization contract")
         try:

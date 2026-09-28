@@ -178,6 +178,30 @@ class TestWorkflowStructure:
                 f"to FileCheck against; current build text:\n{build_text}"
             )
 
+    def test_lit_lane_configures_every_fixture_backend(self) -> None:
+        """The lit lane ends with ``check_lit_fleet_union.py`` over its one
+        report, so every active fixture must be able to run on this lane.
+        Six fixtures ``REQUIRES: tessera-ebm`` / ``tessera-clifford``, which
+        lit derives from passes ``tessera-opt`` registers only when those
+        backends are configured ON. Without them the union gate fails with
+        every test passing (first seen 2026-09-28, run 36386976430, once the
+        lane stopped skipping on a toolchain mismatch)."""
+
+        wf = _load_workflow()
+        steps = wf["jobs"]["lit"].get("steps", [])
+        configure = "\n".join(
+            s.get("run", "") for s in steps if "cmake -S" in s.get("run", "")
+        )
+        assert configure, "lit lane is missing its `cmake -S` configure step"
+        for flag in (
+            "-DTESSERA_BUILD_EBM_BACKEND=ON",
+            "-DTESSERA_BUILD_CLIFFORD_BACKEND=ON",
+        ):
+            assert flag in configure, (
+                f"lit lane configure must pass {flag} or the fleet-union gate "
+                f"cannot cover the fixtures that require it"
+            )
+
     def test_lit_lane_runs_proof_tests_for_both_binaries(self) -> None:
         """After building the two MLIR binaries the lit lane must
         invoke the matching unit proof tests so a build that links
@@ -352,8 +376,9 @@ ADVISORY_SUCCESS_ALLOWLIST = {
     ("pylint.yml", "--exit-zero"): "advisory lint; ruff + mypy ratchet gate",
     # Hosted runners have no Metal/ROCm/CUPTI device: the lane snapshots
     # provider availability into an uploaded status JSON. A green check here
-    # is NOT a profiler proof (listed in the 2026-09-27 CI audit; owner call
-    # whether an unavailable provider should fail the label-triggered lane).
+    # is NOT a profiler proof. Owner decision 2026-09-28: the label-triggered
+    # lane stays advisory (an unavailable provider does not fail it); profiler
+    # proof comes from the owning device host, never from this lane.
     ("profiler-native-proofs.yml", "--allow-unavailable"): (
         "provider-status snapshot; the artifact records `unavailable`"
     ),

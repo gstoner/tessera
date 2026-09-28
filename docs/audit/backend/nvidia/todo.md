@@ -8,6 +8,10 @@ last_updated: 2026-09-28
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `CI-LIT-EBM-CLIFFORD-2026-09-28`: hosted lit lane covers the EBM / Clifford fixtures — sibling outcome — parity validated (host-free IR only)
+
+Owner: CI toolchain lanes (PR #874, follow-up to #873 item 1). The hosted `lit` lane now configures `TESSERA_BUILD_{EBM,CLIFFORD}_BACKEND=ON`, so the six fixtures that `REQUIRES: tessera-ebm` / `tessera-clifford` run there and the fleet-union gate passes on one lane: dispatched run 36418280808, LLVM/MLIR 23.1.2 under the CI 23.1.x tolerance (fleet pin 23.1.1), 533/533 passed, `uncovered: []`. Every one of the six already passed on every fleet box, which configures both backends ON; this adds hosted-runner coverage and makes no device claim. `phase2_autodiff/row_program_to_gpu_langevin.mlir` drives `tessera-row-program-to-gpu=backend=nvidia`, so the NVIDIA row-program emitter's IR now also runs on a hosted runner. It is IR/FileCheck only: no sm_120 execution is implied, and the RTX 5070 Langevin device rows are unchanged.
+
 ## `ODS-WIRE-1-4-2026-09-27`: sibling outcome — not applicable
 
 Owner GOV-ODS-CONSUMER-1 (ODS triage WIRE slices 1 and 4). The `target_verify -> softmax` / `ntk_rope -> rope(x, theta/s)` rewrite runs inside `tessera-canonicalize`, so every `tessera-lower-to-{gpu,nvidia-sm90,-sm100,-sm120}` pipeline now normalizes the two composites; those pipelines have no Graph softmax or rope consumer (the sm_120 families lower through their scheduled contracts), so nothing downstream changes and nothing was run on Super-Bear. No CUDA Langevin Philox executor exists (the CUDA EBM lane is the geo Langevin family).

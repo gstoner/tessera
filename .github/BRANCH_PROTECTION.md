@@ -68,6 +68,11 @@ and allow-listed in that test: `pylint.yml` (`--exit-zero`, advisory — ruff +
 mypy gate) and `profiler-native-proofs.yml` (`--allow-unavailable`: hosted
 runners have no Metal/ROCm/CUPTI device, so a green check there is a
 provider-status snapshot recorded in its artifact, **not** a profiler proof).
+**Owner decision 2026-09-28:** the label-triggered `profiler-native-proofs`
+lane stays advisory -- an unavailable provider does not fail it. Profiler
+evidence is produced on the owning device host (Mac for Metal; the WSL2 ROCm
+boxes cannot supply it at all while `/dev/kfd` is absent), and a green check on
+this lane must never be cited as one.
 
 ## Apple Metal 4 promotion
 

@@ -9,6 +9,10 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `CI-LIT-EBM-CLIFFORD-2026-09-28`: hosted lit lane covers the EBM / Clifford fixtures — sibling outcome — not applicable
+
+Owner: CI toolchain lanes (PR #874, follow-up to #873 item 1). The hosted `lit` lane now configures `TESSERA_BUILD_{EBM,CLIFFORD}_BACKEND=ON`, so the six fixtures that `REQUIRES: tessera-ebm` / `tessera-clifford` run there and the fleet-union gate passes on one lane: dispatched run 36418280808, LLVM/MLIR 23.1.2 under the CI 23.1.x tolerance (fleet pin 23.1.1), 533/533 passed, `uncovered: []`. Every one of the six already passed on every fleet box, which configures both backends ON; this adds hosted-runner coverage and makes no device claim. None of the six fixtures lowers to x86 Target IR; `tessera_x86` fixture coverage on the hosted lane is unchanged, and the lane still builds the x86 backend as before.
+
 ## `E2E-REAL-6-x86-unary-2026-09-28`: x86 softmax / reduction admit and package through native Schedule/Tile
 
 Owner E2E-REAL-6 (x86 unary family; log entry of the same date). Branch

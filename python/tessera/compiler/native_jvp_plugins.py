@@ -547,9 +547,9 @@ def istft_jvp_contract_from_paired_ir(
         raise ValueError("native ISTFT JVP paired IR already names a target profile")
     profile = f'tessera.target = "{module_target}", tessera.arch = "{module_arch}"'
     if header.group(1):
-        scheduled_input = (
-            paired_jvp_ir[: header.end()] + profile + ", " + paired_jvp_ir[header.end():]
-        )
+        rest = paired_jvp_ir[header.end():]
+        separator = "" if rest.lstrip().startswith("}") else ", "
+        scheduled_input = paired_jvp_ir[: header.end()] + profile + separator + rest
     else:
         scheduled_input = (
             paired_jvp_ir[: header.end()] + f" attributes {{{profile}}}"

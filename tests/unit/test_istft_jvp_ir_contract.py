@@ -318,3 +318,14 @@ def test_x86_window_product_refuses_geometry_its_symbol_cannot_express():
             runtime.RuntimeArtifact(metadata=child),
             (spectrum, window, spectrum, window.copy()), target="x86",
         )
+
+
+@pytest.mark.parametrize("header", ["module {", "module attributes {} {"])
+def test_the_profile_is_injected_into_any_module_header(header):
+    _, paired, *_ = _paired((4, 5), 8, dict(hop=4), ("spectrum",))
+    first, rest = paired.split("\n", 1)
+    assert first.startswith("module attributes {")
+    contract = plugins.istft_jvp_contract_from_paired_ir(
+        header + "\n" + rest, target="rocm", architecture="gfx1201"
+    )
+    assert (contract["target"], contract["arch"]) == ("rocm", "gfx1201")

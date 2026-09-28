@@ -96,7 +96,7 @@ def test_the_lane_never_defaults_a_semantic_key(op, kwargs):
 
 def test_an_unknown_cursor_op_is_refused():
     with pytest.raises(ValueError, match="x86 KV-cache cursor handles"):
-        rt.x86_kv_cache_cursor(_filled(5, 3), "tessera.cache.page_lookup", 1)
+        rt.x86_kv_cache_cursor(_filled(5, 3), "tessera.not_a_cursor_op", 1)
 
 
 # ── Zen 5: native numerics against the Python references ────────────────────

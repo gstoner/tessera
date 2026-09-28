@@ -7,6 +7,80 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `SMALL-CORRECTNESS-GAPS-2026-09-27`: Tajasarus lit runs again; resolver ratchets hermetic
+
+**Lit runner.** On Tajasarus `ninja check-tessera-ir` ran zero fixtures: every
+lit selector in the tree (`tests/`, the ROCm/NVIDIA backend suites,
+collectives, EBM/Clifford/spectral -- seven `find_program` calls, three cache
+variables) took the first `lit`/`llvm-lit` file it found, and under
+`~/.config/tessera/env.sh` that was the assertions prefix's `bin/llvm-lit`, a
+wrapper whose `import lit` points at `../../llvm-project-23.1.1-assertions/llvm/utils/lit`,
+which the relocated prefix does not have (`ModuleNotFoundError: No module
+named 'lit'`). `build/` had cached the non-assertions prefix's `bin/lit`, which
+points at the apt path `/usr/lib/llvm-23/utils/lit`, also absent. Only
+`check-tessera-rocm` worked there, because its own selector searched the venv
+first. Now `cmake/TesseraLit.cmake` resolves one runner for every suite and
+selects a candidate only if `<lit> --version` runs (explicit `TESSERA_LIT` /
+`LLVM_EXTERNAL_LIT`, then the repo venv, `$VIRTUAL_ENV`, the matched LLVM's
+tools dir, `$PATH`); each broken candidate is a configure warning naming its
+error; `check-tessera-ir` fails configure when nothing works, and the backend
+suites fail (not "skipping", exit 0) at run time. A stale broken cache entry is
+rejected and replaced on the next reconfigure, so existing trees heal without
+editing the cache. **No box file was changed**; the two broken wrappers remain
+in the toolchain prefixes and are now reported rather than used.
+
+Evidence (Tajasarus, own worktree `build-wb`, configured like `build/`, under
+`env.sh`): before -- `check-tessera-ir`, `check-ebm` and `check-tessera-rocm`
+each die in `llvm-lit` with the `ModuleNotFoundError` (rc 1, no fixture run);
+after -- configure reports `rejected lit runner .../llvm-23.1.1-assertions/bin/llvm-lit
+... ModuleNotFoundError` then selects `.venv/bin/lit (lit 23.1.1)`;
+`check-tessera-ir` 520 discovered / 454 passed / 66 unsupported,
+`check-tessera-rocm` 82/82, `check-ebm` 18/18, `check-clifford` 22/22,
+`check-spectral` 11/11 (same counts after the neighbors change below).
+
+**Resolver ratchets.** `test_capable_driver_outranks_a_preferred_build_that_lacks_the_pass`
+and `test_toolchain_fixture_reaches_the_capable_driver_too` failed on
+Tajasarus only when `TESSERA_BUILD_DIR` was exported (reproduced: 2 failed /
+13 passed with it, 15/15 without, under `env.sh` either way). The tests pinned
+the candidate list but cleared only `TESSERA_OPT`/`TESSERA_OPT_BIN`, while
+`tessera_opt_candidates` honours `TESSERA_BUILD_DIR` ahead of the defaults --
+the tests were wrong, the environment legitimate. `compiler_tool.DRIVER_SELECTION_ENVIRONMENT`
+now lists every variable the resolver reads, a helper clears all of them, a
+ratchet re-derives the list from the resolver's source, and a regression test
+exports a build dir. Tajasarus: 17/17 under `env.sh`, with `TESSERA_BUILD_DIR`
+exported, and under `env -i`.
+
+Sibling outcome: the lit runner change is shared CMake (every host); Mac
+selected `/opt/homebrew/bin/lit` and ran the same counts as before. NVIDIA's
+release gate passes `-DLLVM_EXTERNAL_LIT`, which is still honoured after
+validation. Apple and x86 not otherwise affected.
+
+**Review follow-up (Codex P2s on #866).** `src/collectives/test` was the one
+suite still handing the runner to LLVM's `add_lit_testsuite`. LLVM 23.1.1's
+`add_lit_target` (read in the AddLLVM.cmake on Princess-Luna and the Mac)
+runs `${Python3_EXECUTABLE} <lit script>`, bypassing the shebang the resolver
+validated, and under this tree's `cmake_minimum_required(3.20)` (CMP0126 OLD)
+its `set(LLVM_EXTERNAL_LIT "" CACHE ...)` also hides a directory-scope
+`LLVM_EXTERNAL_LIT`. It now runs the validated command directly like every
+other suite, and `test_lit_suites_invoke_the_validated_runner_directly` fails
+any active CMake file that calls `add_lit_testsuite`/`add_lit_target`. The
+committed tree has no `lit.cfg.py` there, so the target stays the explicit
+"no suite defined" echo; the proof used a scratch cfg + fixtures in a throwaway
+Princess-Luna worktree (non-activated `env -i` shell, `Python3_EXECUTABLE=/usr/bin/python3`,
+lit venv-only). Before: runner selected from the resolver's scope -> command
+`/usr/bin/python3 /llvm-lit` (rc 2); with `-DLLVM_EXTERNAL_LIT=<venv lit>` as
+the release gates pass it -> `ModuleNotFoundError: No module named 'lit'`
+(rc 1). After, both configurations: 2 discovered / 2 passed (rc 0); a third,
+failing fixture gives 2 passed / 1 failed (rc 1). The NVIDIA and Apple release
+gates' `-DLLVM_EXTERNAL_LIT` only seeds the resolver; their suites already
+invoke the validated command, so they were not affected.
+`NEIGHBORS_TOPOLOGY_UNKNOWN_KIND`'s `pass_origin` named the deleted
+`CreateTopologyOp::verify`; it now names the generated
+`NeighborsTopologyCreateOp::verifyInvariantsImpl` (ODS
+`Tessera_NeighborsTopologyKindAttr`), and
+`test_mlir_pass_origin_classes_exist_in_src` fails a `Class::member` origin
+whose class no longer exists under `src/`.
+
 ## `TILE-LATENT-DEFECTS-2026-09-27`: sibling outcome — verified, no ROCm change
 
 The shared Tile passes changed: `TileBufferReusePass`, `TileBufferArenaPass`

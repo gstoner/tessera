@@ -18,14 +18,20 @@
 # ------------------------------------------------------------------
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-find_program(LLVM_LIT
-    NAMES llvm-lit lit.py lit
-    HINTS
-      "${LLVM_TOOLS_BINARY_DIR}"
-      "$ENV{HOME}/venv/bin"
-)
+# One validated runner for every suite (cmake/TesseraLit.cmake): a candidate is
+# selected only if `<lit> --version` actually runs.  The earlier bare
+# find_program picked the matched LLVM prefix's `lit` wrapper on Tajasarus,
+# which exists but cannot `import lit`, so check-tessera-ir ran zero fixtures
+# (SMALL-CORRECTNESS-GAPS-2026-09-27).  This suite is required when tests are
+# built, so no working runner is a configure error, not a silent skip.
+include(${CMAKE_SOURCE_DIR}/cmake/TesseraLit.cmake)
+tessera_lit_command(LLVM_LIT)
 if(NOT LLVM_LIT)
-    message(FATAL_ERROR "lit not found; install llvm-lit or Python lit")
+    get_property(_tessera_lit_rejected GLOBAL PROPERTY TESSERA_LIT_REJECTED)
+    message(FATAL_ERROR
+        "No working lit runner for check-tessera-ir. Rejected: "
+        "${_tessera_lit_rejected}. Install lit (`pip install lit`) or pass "
+        "-DTESSERA_LIT=<path>.")
 endif()
 set(TESSERA_LIT_CFGS ${CMAKE_CURRENT_SOURCE_DIR})
 

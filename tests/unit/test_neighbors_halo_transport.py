@@ -31,10 +31,6 @@ PASS_CPP = (
     / "lib" / "Dialect" / "Neighbors" / "Transforms"
     / "HaloTransportLowerPass.cpp"
 )
-DIALECT_CPP = (
-    NEIGHBORS_ROOT / "lib" / "Dialect" / "Neighbors" / "IR"
-    / "TesseraNeighbors.cpp"
-)
 TESSERA_OPS_TD = REPO_ROOT / "src" / "compiler" / "ir" / "TesseraOps.td"
 LIT_FIXTURE = (
     REPO_ROOT / "tests" / "tessera-ir" / "phase7"
@@ -66,25 +62,11 @@ def test_pass_skips_width_zero_axes() -> None:
     assert "if (w == 0) continue" in text
 
 
-def test_dialect_registers_three_new_ops() -> None:
-    text = DIALECT_CPP.read_text()
-    assert "struct HaloPackOp" in text
-    assert "struct HaloTransportOp" in text
-    assert "struct HaloUnpackOp" in text
-    # addOperations<> must list them.
-    add_ops_start = text.find("addOperations<")
-    assert add_ops_start != -1
-    add_ops = text[add_ops_start: add_ops_start + 500]
-    assert "HaloPackOp" in add_ops
-    assert "HaloTransportOp" in add_ops
-    assert "HaloUnpackOp" in add_ops
-
-
 def test_tessera_dialect_shells_registered() -> None:
-    """The parent Tessera dialect (`tessera`) also declares string-name
-    shells for the new ops so generic-form parsing works.  Without
-    these the parser rejects ``"tessera.neighbors.halo.pack"(...)``
-    even when the neighbors dialect knows the op."""
+    """The core `tessera` dialect is the one declaration of the transport
+    triple (Decision #31; a hand-written duplicate in the neighbors component
+    was deleted 2026-09-27). Without it the parser rejects
+    ``"tessera.neighbors.halo.pack"(...)``."""
     text = TESSERA_OPS_TD.read_text()
     assert 'Tessera_NeighborsHaloPackOp' in text
     assert 'Tessera_NeighborsHaloTransportOp' in text

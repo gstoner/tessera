@@ -130,6 +130,7 @@ run_one() {
     -DTESSERA_ENABLE_SANITIZERS="$cmake_val" \
     -DTESSERA_BUILD_APPLE_BACKEND=OFF \
     -DTESSERA_BUILD_EXAMPLES=OFF \
+    -DTESSERA_BUILD_TESTS=OFF \
     "${compiler_flags[@]}" \
     "${llvm_flags[@]}" \
     >/dev/null

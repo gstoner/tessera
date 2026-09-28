@@ -565,12 +565,12 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   // benchmarks/baselines/gfx1201_fp8_blockscale_ragged_20260927/). It took
   // 128x64 until the bounded store stopped costing registers: the masked
   // edge had kept the 32x64-wave 128x128 body at 251 VGPRs against 238
-  // whole, and the ragged kernels ran 10-30% behind their whole-M
-  // neighbours. With the per-lane bounded store and the whole dimension's
-  // bound folded (240 VGPRs), 128x128 is 0.83-0.89x of 128x64 at ragged M
-  // with N >= 4096 and K >= 1536, and within 2% elsewhere except
-  // 200x8192x1024 (+9%) and 600x8192x1024 (+2%) -- recorded, not tuned
-  // around.
+  // whole (a wave per SIMD fewer), and a ragged M ran up to 25% behind its
+  // whole-M neighbour on the same grid. With the bounded store testing each
+  // row per lane (TileToROCM; 240 VGPRs, no spills), 128x128 measured
+  // 0.83-1.08x of 128x64 where this changes the selection, geomean 0.90 over
+  // 24 ragged points; it loses at 200x8192x1024 (1.08x) and 600x8192x1024
+  // (1.01x) -- recorded, not tuned around.
   if (nk && schedule.m >= 128 && !computeUnits)
     schedule.panelFallback =
         (Twine("no measured compute-unit count for arch \"") + schedule.arch +

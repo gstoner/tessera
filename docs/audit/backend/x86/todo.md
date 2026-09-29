@@ -9,6 +9,17 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `EVIDENCE-MATH-PACKAGES-2026-09-28`: serialized x86 consumers
+
+Owner EVIDENCE-PACKET-1; sync `EVIDENCE-MATH-PACKAGES-2026-09-28`.
+Seven physical-math f32 rows now compile Graph → Schedule → Tile → Target,
+reload a serialized native image/descriptor, and bind each launch receipt to
+that package. Princess-Luna: 16 focused tests passed and 31 samples per row
+passed independent NumPy checks. Host-wrapper timing remains diagnostic.
+No promotion eligibility is granted.
+
+[Evidence](../../../../benchmarks/baselines/evidence_math_packages_20260928/README.md).
+
 ## `COMPILER-NEXT-SLICES-2026-09-28`: implementation and exact-device loops
 
 Owner E2E-REAL-6; shared synchronization key `COMPILER-NEXT-SLICES-2026-09-28`.

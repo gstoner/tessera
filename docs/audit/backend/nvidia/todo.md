@@ -8,6 +8,16 @@ last_updated: 2026-09-28
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `EVIDENCE-MATH-PACKAGES-2026-09-28`: serialized x86 consumers
+
+Owner EVIDENCE-PACKET-1; sync `EVIDENCE-MATH-PACKAGES-2026-09-28`.
+Not applicable to NVIDIA code generation: this slice changes the x86 math
+benchmark consumer only. No sm_120 fragment producer or device ABI changed.
+NVIDIA fragment-producer closure remains the next architecture slice.
+No promotion eligibility is granted.
+
+[Evidence](../../../../benchmarks/baselines/evidence_math_packages_20260928/README.md).
+
 ## `COMPILER-NEXT-SLICES-2026-09-28`: implementation and exact-device loops
 
 Owner E2E-REAL-6; shared synchronization key `COMPILER-NEXT-SLICES-2026-09-28`.

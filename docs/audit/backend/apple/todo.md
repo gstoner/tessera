@@ -8,6 +8,16 @@ last_updated: 2026-09-28
 
 # Apple compiler, exact-device, and performance plan
 
+## `EVIDENCE-MATH-PACKAGES-2026-09-28`: serialized x86 consumers
+
+Owner EVIDENCE-PACKET-1; sync `EVIDENCE-MATH-PACKAGES-2026-09-28`.
+Not applicable to Apple code generation: this slice changes the x86 math
+benchmark consumer only. No Metal image or execution claim follows; Apple
+compiler-owned JIT execution remains open.
+No promotion eligibility is granted.
+
+[Evidence](../../../../benchmarks/baselines/evidence_math_packages_20260928/README.md).
+
 ## `COMPILER-NEXT-SLICES-2026-09-28`: implementation and exact-device loops
 
 Owner E2E-REAL-6; shared synchronization key `COMPILER-NEXT-SLICES-2026-09-28`.

@@ -125,6 +125,34 @@ def test_math_probe_rejects_nan_and_wrong_shape(monkeypatch):
     monkeypatch.setattr(benchmark, "_cases", lambda *args: [("unary", "sqrt", (np.ones(2),), {}, lambda: np.ones(2))])
     rt = SimpleNamespace(RuntimeArtifact=lambda **kw: kw)
     for output in (np.array([np.nan, 1]), np.ones((1,2))):
-        rt.launch = lambda *args: {"ok": True, "execution_kind": "native_cpu", "output": output}
+        rt.launch = lambda *args: {"ok": True, "execution_kind": "native_gpu", "output": output}
         with pytest.raises(RuntimeError, match="nonfinite"):
-            benchmark._measure_dtype(rt, "x86", "f32", 1)
+            benchmark._measure_dtype(rt, "rocm", "f32", 1)
+
+
+@pytest.mark.parametrize("op_name", ["sqrt", "exp", "add", "div", "sum", "cumsum", "cummax"])
+def test_x86_math_executes_serialized_package(op_name, monkeypatch):
+    from tessera import runtime as rt
+    from tessera.compiler import x86_native
+    if not x86_native.tools_available_for_architecture(x86_native.X86_AVX512_ARCHITECTURE):
+        pytest.skip("requires the owning AVX-512 host and compiler")
+    case = next(case for case in benchmark._cases("x86", "f32") if case[1] == op_name)
+    monkeypatch.setattr(benchmark, "_cases", lambda *args: [case])
+    rows = benchmark._measure_dtype(rt, "x86", "f32", 2)
+    row = rows[0]
+    assert row["compiler_boundary"] == "serialized_native_package"
+    assert row["max_abs_error"] <= row["error_limit"]
+    assert len(row["warm_samples_ns"]) == 2
+    receipt = row["package_receipt"]
+    assert receipt["native_image"]["image_digest"] == receipt["launch_descriptor"]["image_digest"]
+    assert set(receipt["ir_sha256"]) == {"graph_ir", "schedule_ir", "tile_ir", "target_ir"}
+    assert receipt["launch_descriptor"]["provenance"]["route"] == "canonical_scheduled_tile_consumer"
+
+
+def test_x86_math_rejects_unbound_receipt():
+    from types import SimpleNamespace
+    artifact = SimpleNamespace(artifact_hash="artifact", native_image=SimpleNamespace(image_digest="image"),
+                               launch_descriptor=SimpleNamespace(descriptor_digest="descriptor"))
+    rt = SimpleNamespace(launch=lambda *args: {"ok": True, "execution_kind": "native_cpu"})
+    with pytest.raises(RuntimeError, match="serialized package"):
+        benchmark._checked_launch(rt, "x86", artifact, ())

@@ -9,6 +9,17 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: split residual ABI
+
+Owners AD-RESIDUAL-EVAL-1 / EVIDENCE-PACKET-1 / W1.1.
+The strengthened persistent tape contract has CUDA/HIP consumers only; no
+x86 runtime or execution claim follows. The gfx1151 math packet and NVIDIA
+fragment producers have no x86 physical consumer. Existing x86 native math
+packages remain separate evidence.
+
+[Evidence](../../../../benchmarks/baselines/compiler_math_residual_next_20260929/README.md).
+
+
 ## `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`: evidence, fragments and residuals
 
 Owners EVIDENCE-PACKET-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

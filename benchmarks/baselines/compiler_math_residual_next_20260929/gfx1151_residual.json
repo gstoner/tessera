@@ -1,0 +1,39 @@
+{
+  "backend": "rocm",
+  "rows": [
+    {
+      "width": 4,
+      "lineage": "3fdc18e0a30b87f5db160ef1d951165efba1d3e812b3c9130bdcf4aced3714c0",
+      "forward": "e3b9224182fe1caf8e855abba7fb7a2a04250161c575f2d8c6fca80682efbd31",
+      "backward": "ff9a270bd94d1894b4996c5f85fa9c4ca7942f7eae17c446b29fc25a2170247b",
+      "repeated_backward": true,
+      "residual_mutation_control": true
+    },
+    {
+      "width": 8,
+      "lineage": "ca53aa02fba5466bd861216ee8271d15655325644f3990870d98af1c0a742a0a",
+      "forward": "9bfbc4d1b4622b73f793f75d46dc81289d06e4a38b951f2f271d4537be525c95",
+      "backward": "9f5f64255958f12a78c4a807a2426f2bdb826f3475ba4a176e465d10997b9ecf",
+      "repeated_backward": true,
+      "residual_mutation_control": true
+    },
+    {
+      "width": 16,
+      "lineage": "82809a17308cca03bdbdd22c609327bf8f6b63424225100a819e2598326f1295",
+      "forward": "0135aa8de6bf75f5efb1c600628fea6edc542f9cb07d4057777a903010d01e62",
+      "backward": "3b8e38c52dab0272c913f42c6ecf9e27fb4b25ef9c81705cae9d09890a96ca3f",
+      "repeated_backward": true,
+      "residual_mutation_control": true
+    }
+  ],
+  "compiler_sha256": "5494cf7f16aca53d1924176b3648bf63ba8ed1d898c02be398c1432b055ecfa5",
+  "source_hashes": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "8a7d50550353ef47999ea460169eff253cce159f2a9c3af8a154cdb78d8750e7",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "b308bd265dc035356f2bafea3700aee3b664bc751a9f84b55e53bc11fc75fade",
+    "python/tessera/compiler/native_persistent_tape.py": "2da5e6a54c74748a4a4bc9c6cea05196609ed18fa5d9d37ca468526a6938159d",
+    "python/tessera/compiler/native_gpu_storage.py": "e311c9d00b538dd66afba5cd7bdfebe0af956eb867b6559276c95b8dd6d53326",
+    "python/tessera/compiler/native_gpu_tensor.py": "8531a34a9b81e72ca61f366b2b4b7e5cf0e221886ad4ec409ffe9b8a0eb8dfeb",
+    "python/tessera/compiler/native_storage_contract.py": "75fcc10ce8c864164207a345fe9bd9b7d5d096f0f10af1a5f6c39667c60f8283"
+  },
+  "recorder_sha256": "268fd88418e982957b57a115236a2db8f1aeef94f702a6627bd50fc6d6c7429d"
+}

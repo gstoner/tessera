@@ -8,6 +8,18 @@ last_updated: 2026-09-28
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: split residual ABI
+
+Owners AD-RESIDUAL-EVAL-1 / EVIDENCE-PACKET-1 / W1.1.
+Shared CUDA/HIP persistent tape validation now binds residual-source identity
+and exported slots across both products. Exact-device nested SAVE tape recording passes on Super-Bear sm_120 at
+widths 4, 8, and 16, including repeated backward and mutation controls.
+The two tensor-valued `tile.mma` producers remain open under W1.1. The gfx1151
+math measurements are not NVIDIA evidence.
+
+[Evidence](../../../../benchmarks/baselines/compiler_math_residual_next_20260929/README.md).
+
+
 ## `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`: evidence, fragments and residuals
 
 Owners EVIDENCE-PACKET-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

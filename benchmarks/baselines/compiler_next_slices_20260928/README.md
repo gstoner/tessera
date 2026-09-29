@@ -15,6 +15,8 @@ from promotion. No selectors changed.
   The differential includes the old image/ABI and independent NumPy oracles.
   The final breadth-entrypoint/census sweep passed **1,108** tests; the owning
   generator now marks x86 breadth as a generic compiled route.
+  Follow-up review: Apple CPU explicitly refuses the newly valid rank-3
+  Graph forms before executable lowering; its LAPACK ABI remains rank-2.
 - **ROCm attention cache:** native Tile-to-Target retains static extents in
   replayed Schedule/Tile and launch guards; the device directive retains head
   dimension, storage and all physical/numerical policy. Batch, query/KV head

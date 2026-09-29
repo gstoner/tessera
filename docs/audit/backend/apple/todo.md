@@ -19,7 +19,9 @@ compiler validation receives noncanonical Graph text and fails parsing.
 Returned eager values do not close this gap. Native Schedule/package work
 for target_verify, scaled ntk_rope and Philox remains required.
 Shared rank-3 linalg Graph verification is now admitted for the x86 native
-consumer; Apple physical-consumer parity remains follow-up required.
+consumer. Apple CPU lowering now refuses rank-3 Cholesky/triangular solve
+before emitting an executable rank-2 LAPACK ABI call; Apple GPU physical
+parity remains follow-up required.
 ROCm attention image caching is not applicable to Apple code generation.
 
 [Evidence packet](../../../../benchmarks/baselines/compiler_next_slices_20260928/README.md).

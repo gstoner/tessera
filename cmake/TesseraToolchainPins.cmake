@@ -46,18 +46,13 @@ set(TESSERA_REQUIRED_NCCL_VERSION   "2.22"      CACHE STRING "Required minimum N
 # deliberately when the fleet moves together.
 set(TESSERA_REQUIRED_LLVM_VERSION   "23.1.1" CACHE STRING "Exact LLVM/MLIR version every fleet box must match (measured on all four, 2026-09-20)")
 
-# Hosted-CI tolerance (owner decision 2026-09-27, sync FOUNDATION-BATCH-2-2026-09-27).
-# GitHub-hosted runners install LLVM/MLIR from apt.llvm.org, a rolling source
-# that serves whatever 23.1.x patch is current and cannot be held. `exact` (the
-# default, and the ONLY mode for fleet boxes) enforces the pin above. `minor`
-# accepts any patch in the pin's major.minor series, still rejects a mixed
-# LLVM/MLIR pair, and records the exact version in the configure log and in
-# `${CMAKE_BINARY_DIR}/tessera_llvm_pin.txt`. It exists so a CI lane builds and
-# runs instead of skipping (the pre-2026-09-27 lanes printed a warning, skipped
-# configure/build/test and reported success). Pass it only from
-# .github/workflows/validate.yml, paired with scripts/ci_resolve_llvm.sh; a
-# `minor` result is never a fleet-comparable measurement.
-set(TESSERA_LLVM_PIN_MODE "exact" CACHE STRING "LLVM/MLIR pin enforcement: exact (fleet, default) or minor (hosted CI only: any patch in the pinned major.minor)")
+# The fleet and GitHub compiler-proof lanes now use the same exact patch pin.
+# Hosted CI installs the digest-checked official release bundle using
+# scripts/ci_install_pinned_llvm.sh. The prior `minor` mode remains available
+# only for explicit local toolchain experiments; CI does not select it.
+# A 2026-09-29 GitHub lit artifact recorded 23.1.2 against the 23.1.1 fleet,
+# which made its compiler result non-comparable despite a passing version gate.
+set(TESSERA_LLVM_PIN_MODE "exact" CACHE STRING "LLVM/MLIR pin enforcement: exact (fleet and CI, default) or minor (explicit local experiment only)")
 set_property(CACHE TESSERA_LLVM_PIN_MODE PROPERTY STRINGS exact minor)
 
 set(TESSERA_REQUIRED_ROCM_VERSION   "10.0"   CACHE STRING "Required minimum ROCm version (measured 10.0.0 on Princess-Luna + Tajasarus, 2026-09-15)")
@@ -151,7 +146,7 @@ function(tessera_pin_llvm required_version)
     # EXACT, not a floor. A newer MLIR is not "at least as good": its C++ API
     # moves between patch releases, and two boxes on different patches cannot
     # be compared -- which is the whole reason a fleet result means anything.
-    # (`minor` relaxes only the patch, only for hosted CI -- see the cache
+    # (`minor` relaxes only the patch, only for an explicit local experiment -- see the cache
     # variable's comment above.)
     if(NOT _tessera_llvm_cmp VERSION_EQUAL _tessera_pin_cmp)
         message(FATAL_ERROR
@@ -211,7 +206,7 @@ function(tessera_pin_llvm required_version)
         if(TESSERA_LLVM_PIN_MODE STREQUAL "minor" AND
            NOT _tessera_llvm_found VERSION_EQUAL ${required_version})
             message(WARNING
-                "Tessera LLVM pin mode `minor` (hosted CI only): building against "
+                "Tessera LLVM pin mode `minor` (local experiment only): building against "
                 "LLVM/MLIR ${_tessera_llvm_found}, not the fleet pin "
                 "${required_version}. Results from this tree are not "
                 "fleet-comparable.")

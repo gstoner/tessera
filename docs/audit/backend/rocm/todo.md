@@ -1,11 +1,18 @@
 ---
-last_updated: 2026-09-28
+last_updated: 2026-09-29
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
+
+Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.
+The HIP-free ROCm HSACO serialization lane now uses exact LLVM/MLIR/lld 23.1.1, matching Princess-Luna and Tajasarus. It proves host-free compilation only; gfx1151 and gfx1201 execution remain device-owned.
+
+[Compiler log](../../compiler/INTEGRATED_COMPILER_LOG.md).
 
 ## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: measured packet and split ABI
 

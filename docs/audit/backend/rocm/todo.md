@@ -7,6 +7,17 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: traced residual and typed-loop proof
+
+Owners FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / W1.1.
+Parity validated on Princess-Luna gfx1151 for public traced cubic-residual
+MLIR AD products, saved-input mutation isolation and repeated backward.
+No gfx1201 proof is transferred; that device remains follow-up required.
+NVIDIA fragment lane mapping is not applicable to ROCm.
+No selector or performance promotion.
+
+[Evidence](../../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md).
+
 ## `EVIDENCE-MATH-PACKAGES-2026-09-28`: serialized x86 consumers
 
 Owner EVIDENCE-PACKET-1; sync `EVIDENCE-MATH-PACKAGES-2026-09-28`.

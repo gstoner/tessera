@@ -566,3 +566,26 @@ def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:
             assert_matches(actual, reference, "bf16", reduction_length=k)
         finally:
             driver.close()
+
+
+@pytest.mark.parametrize("k_bound", [0, 16, 32, 64])
+def test_sm120_typed_fragment_loop_preserves_accumulator(k_bound: int) -> None:
+    """Execute the SCF-carried fragment, including zero-trip and four K panels."""
+    rng = np.random.default_rng(20260928)
+    a = np.ascontiguousarray(rng.uniform(-1, 1, (16, 64)), dtype=np.float16)
+    b = np.asfortranarray(rng.uniform(-1, 1, (64, 8)), dtype=np.float16)
+    reference = a[:, :k_bound].astype(np.float32) @ b[:k_bound].astype(np.float32)
+    output = np.full((16, 8), np.nan, dtype=np.float32)
+    fixture = (FIXTURE.parent / "sm120_typed_accumulator_loop.mlir")
+    with tempfile.TemporaryDirectory(prefix="tessera-sm120-typed-loop-") as tmp:
+        cubin = _compile_cubin(Path(tmp), fixture, ("typed_accumulator_loop",))
+        driver = _CudaDriver()
+        try:
+            actual = driver.launch(cubin, "typed_accumulator_loop", [a, b, output],
+                                   2, [0, k_bound], (1, 1))
+        finally:
+            driver.close()
+    np.testing.assert_allclose(actual, reference, rtol=1e-5, atol=1e-4)
+    if k_bound > 16:
+        last_panel = a[:, k_bound - 16:k_bound].astype(np.float32) @ b[k_bound - 16:k_bound].astype(np.float32)
+        assert not np.allclose(actual, last_panel, rtol=1e-5, atol=1e-4)

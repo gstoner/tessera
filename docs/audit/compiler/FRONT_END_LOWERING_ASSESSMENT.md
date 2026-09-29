@@ -306,3 +306,16 @@ Asymmetric bounded window masks now retain exact source syntax and execute with 
 ### Snapshot/public-AD follow-through (2026-09-10)
 
 [Current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--snapshot-marking-public-vjp-and-additive-bias): explicit resident SSD programs now enter public `vjp` with asynchronous capture and reader-aware whole-frame retirement. This is first-order protocol dispatch, not arbitrary traced public AD. Program unloading, higher-order products and broader mixer integration remain open. Snapshot marking overlaps active graph updates by using private storage; final sweep is exclusive. Full-shape finite additive attention bias is recognized and bound on NVIDIA; Boolean/padding/broadcast masks and fully masked rows remain open. Exact-device correctness under WSL does not satisfy clean bare-metal promotion.
+
+
+## Public traced residual capture — 2026-09-28
+
+FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1, sync
+`FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: tensor arithmetic now reaches canonical
+tracer operations, and public persistent-tape compilation refuses AST fallback.
+The bounded cubic residual executes native MLIR forward/backward products on
+sm_120 and gfx1151, with saved-input mutation isolation, repeated backward and
+closed-frame refusal. No additional exported residual tensors are needed for
+this example; the frame retains 136 bytes of primal-input snapshots.
+Broader raising, dynamic/alias residual layouts and general solver frontend
+integration remain open. [Evidence](../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md).

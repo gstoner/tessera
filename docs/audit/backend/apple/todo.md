@@ -8,6 +8,17 @@ last_updated: 2026-09-28
 
 # Apple compiler, exact-device, and performance plan
 
+## `FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: traced residual and typed-loop proof
+
+Owners FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / W1.1.
+Shared tensor arithmetic tracing is covered by WSL frontend regressions.
+Apple has no consumer for this CUDA/HIP persistent-tape package; Metal
+residual execution remains follow-up required. NVIDIA fragment mapping is
+not applicable; no Apple device parity is inferred.
+No selector or performance promotion.
+
+[Evidence](../../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md).
+
 ## `EVIDENCE-MATH-PACKAGES-2026-09-28`: serialized x86 consumers
 
 Owner EVIDENCE-PACKET-1; sync `EVIDENCE-MATH-PACKAGES-2026-09-28`.

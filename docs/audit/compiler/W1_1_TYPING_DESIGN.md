@@ -852,7 +852,7 @@ W1.1 shared-contract completion ledger:
 1. A `tile.mma` whose operand types disagree fails **type** verification, with no
    producer chase.
 2. The §2 K-loop fixture — accumulator as `scf.for` `iter_args` — verifies and
-   lowers on the typed ROCm path. NVIDIA lowering evidence remains open.
+   lowers on the typed ROCm path. **2026-09-28:** the existing NVIDIA structural conversion now has exact sm_120 numerical proof for zero, one, two and four K panels; see [the packet](../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md). The two tensor-valued producers remain open.
 3. **Closed.** `MMAOp::verify()` has no permissive bare-fragment branch.
 4. ROCm and Python producers use the typed/logical boundary. NVIDIA's final two
    tensor producers remain the architecture-owned open item.

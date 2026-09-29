@@ -111,3 +111,20 @@ def test_sm120_rmsnorm_tensor_edge_uses_same_resident_device_buffer(monkeypatch)
         assert np.max(np.abs(output - reference)) < 2e-4
         assert result.producer_receipt["execution_kind"] == "native_gpu"
         assert result.consumer_receipt["execution_kind"] == "native_gpu"
+
+
+@pytest.mark.parametrize("producer_stream", [None, 1, 2, 0x5678])
+def test_sm120_resident_launch_rejects_unordered_cuda_buffer_stream(producer_stream):
+    interface = {"stream": producer_stream}
+    with pytest.raises(RuntimeError, match="producer stream must match"):
+        rt._validate_nvidia_cuda_buffer_streams([interface], 0x1234)
+
+
+def test_sm120_resident_launch_requires_matching_cuda_buffer_stream():
+    interface = {"stream": 0x1234}
+    rt._validate_nvidia_cuda_buffer_streams([interface], 0x1234)
+
+
+def test_sm120_resident_launch_rejects_missing_cuda_buffer_stream():
+    with pytest.raises(RuntimeError, match="producer stream must match"):
+        rt._validate_nvidia_cuda_buffer_streams([{}], 0x1234)

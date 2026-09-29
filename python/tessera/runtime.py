@@ -2957,6 +2957,29 @@ def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
     return lib
 
 
+def _validate_nvidia_cuda_buffer_streams(
+    cuda_interfaces: list[Mapping[str, Any]],
+    launch_stream: Any,
+) -> None:
+    """Require every resident CUDA buffer to be ordered on the launch stream.
+
+    The resident bridge does not import producer-library stream machinery, so
+    it accepts only buffers whose CUDA Array Interface stream exactly matches
+    the caller-owned launch stream. This fails closed for default/sentinel,
+    missing, or different producer streams.
+    """
+    if launch_stream is None:
+        raise RuntimeError("resident SM120 packages require an explicit CUDA stream")
+    expected = int(launch_stream)
+    for index, interface in enumerate(cuda_interfaces):
+        producer_stream = interface.get("stream")
+        if type(producer_stream) is not int or producer_stream != expected:
+            raise RuntimeError(
+                "resident SM120 CUDA buffer producer stream must match the "
+                f"explicit launch stream (buffer {index})"
+            )
+
+
 def _submit_nvidia_sm120_native(
     image: NativeImageArtifact,
     descriptor: LaunchDescriptor,
@@ -3113,6 +3136,10 @@ def _submit_nvidia_sm120_native(
         is_matmul = entry.startswith("nvidia_sm120_scheduled_matmul_") and "_fused_" not in entry
         if not (is_rmsnorm or is_matmul):
             raise RuntimeError("resident SM120 launch is limited to RMSNorm and scheduled matmul")
+        _validate_nvidia_cuda_buffer_streams(
+            [cast(Mapping[str, Any], interface) for interface in cuda_interfaces],
+            stream,
+        )
         addresses = [
             int(cast(Mapping[str, Any], interface)["data"][0])
             for interface in cuda_interfaces

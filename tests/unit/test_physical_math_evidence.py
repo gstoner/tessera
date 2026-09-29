@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from benchmarks.math import benchmark_physical_math as benchmark
@@ -156,3 +158,42 @@ def test_x86_math_rejects_unbound_receipt():
     rt = SimpleNamespace(launch=lambda *args: {"ok": True, "execution_kind": "native_cpu"})
     with pytest.raises(RuntimeError, match="serialized package"):
         benchmark._checked_launch(rt, "x86", artifact, ())
+
+
+@pytest.mark.parametrize("dtype_name", ["f32", "f16", "bf16"])
+def test_gfx1151_sum_executes_serialized_package(dtype_name):
+    from tessera import runtime as rt
+    from tessera.compiler.scheduled_kernel import find_tessera_opt
+
+    if os.environ.get("TESSERA_ROCM_CHIP") != "gfx1151" or find_tessera_opt() is None:
+        pytest.skip("requires gfx1151 and the owning ROCm compiler")
+    case = next(case for case in benchmark._cases("rocm", dtype_name) if case[1] == "sum")
+    family, op_name, operands, kwargs, reference = case
+    artifact = benchmark._artifact(rt, "rocm", family, op_name, operands, kwargs)
+    assert artifact.native_image.target == "rocm_gfx1151"
+    assert artifact.launch_descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    args = benchmark._native_arguments(artifact, operands)
+    result = benchmark._checked_launch(rt, "rocm", artifact, args)
+    np.testing.assert_allclose(result["output"], reference(), rtol=5e-3, atol=5e-3)
+
+
+def test_rocm_math_rejects_unbound_serialized_receipt():
+    from types import SimpleNamespace
+    artifact = SimpleNamespace(artifact_hash="artifact", native_image=SimpleNamespace(image_digest="image"),
+                               launch_descriptor=SimpleNamespace(descriptor_digest="descriptor"))
+    rt = SimpleNamespace(launch=lambda *args: {"ok": True, "execution_kind": "native_gpu"})
+    with pytest.raises(RuntimeError, match="serialized package"):
+        benchmark._checked_launch(rt, "rocm", artifact, ())
+
+
+def test_rocm_cache_comparison_excludes_serialized_native_sum(monkeypatch):
+    from types import SimpleNamespace
+
+    inputs = (np.ones((1, 2), dtype=np.float32),)
+    monkeypatch.setattr(benchmark, "_cases", lambda *args: [
+        ("reduce", "sum", inputs, {"axis": -1}, lambda: np.ones(1))])
+    monkeypatch.setattr(benchmark, "_artifact", lambda *args: pytest.fail(
+        "packaged sum must not enter the legacy cache comparison"))
+    rows = [{"family": "reduce", "op_name": "sum", "warm_median_ms": 1.0,
+             "compiler_boundary": "serialized_native_package"}]
+    assert benchmark._rocm_cache_comparison(SimpleNamespace(), rows, 2) == []

@@ -1,0 +1,104 @@
+{
+  "work_items": [
+    "FRONTEND-IR-MEDIUM-1",
+    "AD-RESIDUAL-EVAL-1"
+  ],
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "width": 17,
+  "case": "coupled",
+  "compiler_boundary": "public_jit_to_mlir_split_products",
+  "frontend_authority": "tracer",
+  "promotion_eligible": false,
+  "timing_domain": "synchronized_host_wall",
+  "timing_scope": "backward allocation, native launch and synchronization; readback excluded",
+  "graph_sha256": "c0bd364388d8e7c9ea74e9d982e770b00b45c5cc4e748fc8e9541ce7cbf35fda",
+  "lineage_digest": "ff4fe56c00dc901a0481694db18c2803b5a8d466694b7e4a102496fa90f0de9a",
+  "compiler_digest": "daac9626f676e3d9a66f63ebf3ece75522f7e076e909a21b5d66bec41ecf07ca",
+  "llvm_digest": "6a18ad10ba826cdb2709263b31e7e9b504e963ce7014a2e2935e57983ab8bb5d",
+  "forward_binding_digest": "59d9db7e3987557dc1f151634c7afa0cadcfd454ecfeb00652ea9a04e09682ee",
+  "backward_binding_digest": "49e3c2b8433b1c528bbeb63a36c535f49d68853fabef8657875ae5af21db666a",
+  "forward_abi": {
+    "entry": "coupled",
+    "inputs": [
+      "tensor<17xf32>",
+      "tensor<17xf32>"
+    ],
+    "primal_inputs": 2,
+    "primal_results": 1,
+    "residual_sources": [],
+    "results": [
+      "tensor<17xf32>"
+    ],
+    "role": "forward",
+    "schema": 1
+  },
+  "backward_abi": {
+    "entry": "coupled__bwd",
+    "inputs": [
+      "tensor<17xf32>",
+      "tensor<17xf32>",
+      "tensor<17xf32>"
+    ],
+    "primal_inputs": 2,
+    "primal_results": 1,
+    "residual_sources": [],
+    "results": [
+      "tensor<17xf32>",
+      "tensor<17xf32>"
+    ],
+    "role": "backward",
+    "schema": 1
+  },
+  "residual_bytes": 0,
+  "saved_input_bytes": 136,
+  "caller_mutation_isolated": true,
+  "closed_frame_refused": true,
+  "samples": [
+    {
+      "backward_ns": 1433035,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 246812,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 205572,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 193702,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 183542,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 177872,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 175121,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 178692,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 215172,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 237843,
+      "max_abs_error": 2.384185791015625e-07
+    },
+    {
+      "backward_ns": 183712,
+      "max_abs_error": 2.384185791015625e-07
+    }
+  ],
+  "backward_median_ms": 0.193702
+}

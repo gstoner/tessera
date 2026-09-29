@@ -8,6 +8,14 @@ last_updated: 2026-09-28
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`: evidence, fragments and residuals
+
+Owners EVIDENCE-PACKET-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Super-Bear sm_120: the legacy tensor MMA now refuses before an invalid async-token target op is formed; the typed accumulator fixture retains FileCheck. The two tensor-to-fragment producers remain open. The public coupled residual passes native tape capture, mutation isolation and analytic repeated backward. ROCm physical-math packaging is not applicable to sm_120.
+No selector or performance promotion.
+
+[Evidence](../../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
+
 ## `FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: traced residual and typed-loop proof
 
 Owners FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / W1.1.

@@ -5686,6 +5686,13 @@ struct LowerTileToNVIDIAPass
             fragmentForm &= resultTy && resultTy.getBody().size() == 2 &&
                 resultTy.getBody()[0] == fragTy && resultTy.getBody()[1] == fragTy;
           }
+          if (!fragmentForm) {
+            op->emitError("sm_120 tile.mma requires typed fragment registers "
+                          "and an accumulator; tensor-valued producers must "
+                          "materialize fragments before NVIDIA lowering");
+            signalPassFailure();
+            return;
+          }
           attrs.push_back(builder.getNamedAttr("shape",
                                                builder.getStringAttr("m16n8k16")));
           attrs.push_back(builder.getNamedAttr("dtype_ab",

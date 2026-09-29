@@ -8,6 +8,14 @@ last_updated: 2026-09-28
 
 # Apple compiler, exact-device, and performance plan
 
+## `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`: evidence, fragments and residuals
+
+Owners EVIDENCE-PACKET-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+No Apple compiler or runtime changed. The physical-math package is gfx1151-only, and the NVIDIA MMA refusal has no Metal consumer. Shared public residual tracing has no Apple persistent-tape execution proof; Apple JIT work remains open.
+No selector or performance promotion.
+
+[Evidence](../../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
+
 ## `FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: traced residual and typed-loop proof
 
 Owners FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / W1.1.

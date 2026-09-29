@@ -793,7 +793,10 @@ ReLU feature-map case. This is a typed boundary, not a permissive vector
 
 The remaining **two** C++ construction sites are the tensor-valued producers in
 `TileIRLoweringPass`; they feed the NVIDIA warp-specialization/WGMMA lane and
-require that backend's typed tensor-to-fragment materializer. Step 3 is landing,
+require that backend's typed tensor-to-fragment materializer. A 2026-09-29
+Super-Bear probe showed the legacy sm_120 form carried async tokens into an
+invalid target MMA. NVIDIA lowering now refuses that form at the Tile boundary;
+the typed materializer is still required. Step 3 is landing,
 not complete. Step 4's old “five Python text emitters” count is no longer a live
 migration surface: current `nvidia_native.py` and `runtime.py` emit the typed
 launch-level `tile.matmul_kernel` envelope and no Python file constructs

@@ -6221,3 +6221,34 @@ Evidence: 1,112 x86 differential/breadth/registry checks; gfx1151 attention
 keeps compile cost, device timing and full-call time separate. Apple @jit
 still records artifact-only provenance. All four backend queues were assessed.
 <!-- entry-fields:end -->
+
+### 2026-09-29 — evidence consumers, NVIDIA fragments, and public residuals
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+Additional owners: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11),
+[FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1),
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1).
+
+PRs: pending; sync `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`.
+
+Outcome: Three gfx1151 physical-math sum rows now reload a serialized native
+Graph/Schedule/Tile/Target package and require artifact, image, and descriptor
+identity in launch receipts. The sm_120 lowering refuses tensor-valued MMA
+producers before an async token becomes a data operand. A coupled public
+tracer residual executes forward and repeated backward through native tape
+packages on gfx1151 and sm_120 with analytic gradient checks and saved-input
+mutation isolation.
+
+Remaining: Eighteen ROCm math rows retain metadata-only probes; no selector
+promotion. The two NVIDIA producers still require explicit typed fragment and
+accumulator materialization. Broader frontend masks, layouts, aliases, and
+solver wiring remain open. Apple and gfx1201 have no new device proof.
+
+Evidence: Princess-Luna passed 35 focused audit/frontend/math tests and the
+21-row physical-math run; Super-Bear passed 13 NVIDIA fragment tests and the
+source-matched coupled residual run. The math and residual timings are
+synchronized host calls, not device-kernel measurements.
+[Packet](../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
+
+<!-- entry-fields:end -->

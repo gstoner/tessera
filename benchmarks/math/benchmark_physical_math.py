@@ -16,23 +16,28 @@ import numpy as np
 
 
 def _artifact(rt: Any, target: str, family: str, op_name: str, operands, kwargs=None):
-    if target == "rocm":
+    if target == "rocm" and op_name != "sum":
         # These families still lack a uniform native package contract. Keep
         # their diagnostic boundary explicit; never claim compiler ancestry.
         return _legacy_rocm_artifact(rt, target, family, op_name, operands, kwargs)
-    from tessera.compiler import scheduled_kernel, x86_native
+    from tessera.compiler import rocm_native, scheduled_kernel, x86_native
     from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 
-    def ir_type(shape):
+    def ir_type(shape, dtype):
         dims = "x".join(map(str, shape))
-        return IRType(f"tensor<{dims + 'x' if dims else ''}f32>", tuple(map(str, shape)), "fp32")
+        storage = {"float32": ("f32", "fp32"), "float16": ("f16", "fp16"),
+                   "bfloat16": ("bf16", "bf16")}.get(np.dtype(dtype).name)
+        if storage is None:
+            raise ValueError("physical math native package requires f32/f16/bf16")
+        return IRType(f"tensor<{dims + 'x' if dims else ''}{storage[0]}>",
+                      tuple(map(str, shape)), storage[1])
 
-    if any(value.dtype != np.float32 for value in operands):
+    if target == "x86" and any(value.dtype != np.float32 for value in operands):
         raise ValueError("x86 physical math package requires f32 operands")
     names = [f"a{index}" for index in range(len(operands))]
-    types = [ir_type(value.shape) for value in operands]
+    types = [ir_type(value.shape, value.dtype) for value in operands]
     shape = operands[0].shape[:-1] if op_name == "sum" else operands[0].shape
-    result_type = ir_type(shape)
+    result_type = ir_type(shape, np.float32)
     module = GraphIRModule(functions=[GraphIRFunction(
         name=f"physical_math_{op_name}",
         args=[IRArg(name, typ) for name, typ in zip(names, types)],
@@ -43,12 +48,15 @@ def _artifact(rt: Any, target: str, family: str, op_name: str, operands, kwargs=
                    result_type=str(result_type), kwargs=dict(kwargs or {}))],
         return_values=["%o"],
     )])
-    scheduled = scheduled_kernel.lower_scheduled_kernel(module, target="x86")
-    package = x86_native.package_scheduled_kernel(scheduled, pipeline_name="tessera-lower-to-x86")
+    scheduled = scheduled_kernel.lower_scheduled_kernel(
+        module, target="x86" if target == "x86" else "rocm_gfx1151")
+    package = (x86_native.package_scheduled_kernel(scheduled, pipeline_name="tessera-lower-to-x86")
+               if target == "x86" else
+               rocm_native.package_scheduled_kernel(scheduled, pipeline_name="tessera-lower-to-rocm"))
     artifact = rt.RuntimeArtifact(
         graph_ir=scheduled.graph_ir, schedule_ir=scheduled.schedule_ir,
         tile_ir=package.tile_ir, target_ir=package.target_ir,
-        metadata={"target": "x86"}, native_image=package.image,
+        metadata={"target": package.image.target}, native_image=package.image,
         launch_descriptor=package.descriptor,
     )
     # Execute the persisted contract, including image bytes, rather than the
@@ -211,14 +219,14 @@ def _checked_launch(rt, target, artifact, operands):
     expected = "native_cpu" if target == "x86" else "native_gpu"
     if not result.get("ok") or result.get("execution_kind") != expected:
         raise RuntimeError(f"{target} benchmark requires observed {expected} execution: {result.get('reason', result.get('execution_kind'))}")
-    if target == "x86":
+    if getattr(artifact, "native_image", None) is not None:
         expected_identity = {
             "execution_mode": "descriptor", "artifact_hash": artifact.artifact_hash,
             "image_digest": artifact.native_image.image_digest,
             "launch_descriptor_digest": artifact.launch_descriptor.descriptor_digest,
         }
         if any(result.get(key) != value for key, value in expected_identity.items()):
-            raise RuntimeError("x86 math launch receipt differs from the serialized package")
+            raise RuntimeError("physical math launch receipt differs from the serialized package")
     return result
 
 
@@ -227,7 +235,8 @@ def _measure_dtype(rt: Any, target: str, dtype_name: str,
     result_rows = []
     for family, op_name, operands, kwargs, reference_fn in _cases(target, dtype_name):
         artifact = _artifact(rt, target, family, op_name, operands, kwargs)
-        launch_args = _native_arguments(artifact, operands) if target == "x86" else operands
+        packaged = getattr(artifact, "native_image", None) is not None
+        launch_args = _native_arguments(artifact, operands) if packaged else operands
         start = time.perf_counter_ns()
         cold = _checked_launch(rt, target, artifact, launch_args)
         cold_ns = time.perf_counter_ns() - start
@@ -264,8 +273,8 @@ def _measure_dtype(rt: Any, target: str, dtype_name: str,
         result_rows.append({
             "family": family,
             "op_name": op_name,
-            "compiler_boundary": ("serialized_native_package" if target == "x86" else "metadata_runtime_probe"),
-            **({"package_receipt": _package_receipt(artifact)} if target == "x86" else {}),
+            "compiler_boundary": ("serialized_native_package" if packaged else "metadata_runtime_probe"),
+            **({"package_receipt": _package_receipt(artifact)} if packaged else {}),
             "warm_samples_ns": samples,
             "dtype": dtype_name,
             "shape": list(operands[0].shape),
@@ -299,25 +308,31 @@ def _rocm_cache_comparison(rt: Any, cached_rows: list[dict[str, Any]],
                            iterations: int) -> list[dict[str, Any]]:
     """Measure the old per-call module policy against the retained cache."""
     cached = {
-        (row["family"], row["op_name"]): float(row["warm_median_ms"])
+        (row["family"], row["op_name"]): row
         for row in cached_rows
     }
     result = []
     for family, op_name, operands, kwargs, _reference_fn in _cases("rocm", "f32"):
+        row = cached[(family, op_name)]
+        # Native descriptors use a different module lifetime; clearing the
+        # legacy math cache cannot construct a comparable per-call arm.
+        if row.get("compiler_boundary") == "serialized_native_package":
+            continue
         artifact = _artifact(rt, "rocm", family, op_name, operands, kwargs)
+        launch_args = operands
         samples = []
         for _ in range(iterations):
             # Include module load in the timed region but charge teardown to
             # neither the superseded per-call policy nor the retained cache.
             _clear_rocm_math_modules(rt)
             start = time.perf_counter_ns()
-            launched = _checked_launch(rt, "rocm", artifact, operands)
+            launched = _checked_launch(rt, "rocm", artifact, launch_args)
             samples.append(time.perf_counter_ns() - start)
             if not launched.get("ok"):
                 raise RuntimeError(launched.get("reason", f"{family}/{op_name} failed"))
         _clear_rocm_math_modules(rt)
         per_call_ms = statistics.median(samples) / 1.0e6
-        cached_ms = cached[(family, op_name)]
+        cached_ms = float(row["warm_median_ms"])
         result.append({
             "family": family,
             "op_name": op_name,
@@ -342,7 +357,8 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         "host": platform.platform(),
         "processor": platform.processor(),
         "timing_domain": "synchronized_host_wall",
-        "compiler_boundary": "serialized_native_package" if target == "x86" else "metadata_runtime_probe",
+        "compiler_boundary": ("serialized_native_package" if target == "x86" else
+                              "mixed_native_sum_and_metadata_probes"),
         "promotion_eligible": False,
         "eligibility_reason": "no exact-artifact clean-host paired promotion packet",
         "iterations": iterations,
@@ -378,7 +394,7 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         "selector_eligible": False,
         "device_event_follow_up": WSL_WITNESS_MISSING,
         "storage_dtypes": ["f32", "f16", "bf16"],
-        "module_policy": "process_lifetime_cache_by_family_chip_kind_dtype",
+        "module_policy": "mixed_legacy_process_cache_native_sum_per_launch",
         "dtype_rows": dtype_rows,
         "f32_cache_comparison": _rocm_cache_comparison(
             rt, rows_by_dtype["f32"], iterations

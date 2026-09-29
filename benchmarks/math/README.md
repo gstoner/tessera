@@ -9,10 +9,14 @@ hashes. Compilation, JSON roundtrip and argument allocation are outside the
 launch timing; these are completed host-wrapper times, not isolated kernel time.
 The direct x86 scan C ABI comparison remains a separate diagnostic.
 
-ROCm probes still construct explicit runtime metadata and require observed native
-execution and finite, correctly shaped outputs. Their `metadata_runtime_probe`
-boundary does not prove serialized compiler ancestry. ROCm package migration
-remains open; no x86 evidence transfers to gfx1151 or gfx1201.
+The gfx1151 f32/f16/bf16 `sum` rows now reload native Graph → Schedule →
+Tile → Target packages and bind each launch receipt to the serialized image.
+The other 18 ROCm rows still construct explicit runtime metadata and retain
+their `metadata_runtime_probe` label. Their execution does not prove compiler
+ancestry. The legacy cache comparison retains only those six metadata rows;
+packaged sum has a separate module lifetime. All ROCm timing remains
+synchronized host-wrapper time; broader package migration and gfx1201 proof
+remain open.
 
 Run from the repository root with `PYTHONPATH=.:python`, choose `--target x86`
 or `--target rocm`, and use positive `--iterations`. ROCm requires `--dtype all`.

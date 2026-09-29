@@ -11,6 +11,21 @@ def _residual(theta, x):
     return x * x * x - theta
 
 
+def _coupled_residual(theta, x):
+    return (x * x - theta) * (x + theta)
+
+
+def test_coupled_residual_traces_one_shared_input_and_nonlinear_chain():
+    x = np.linspace(0.25, 1.25, 17, dtype=np.float32)
+    theta = (0.4 * x + 0.1).astype(np.float32)
+    traced = trace(_coupled_residual, theta, x)
+    assert [op.op_name for op in traced.body] == [
+        "tessera.mul", "tessera.sub", "tessera.add", "tessera.mul"]
+    module = to_graph_ir_module(traced, name="coupled", source_hash="test", target="x86")
+    assert module.verify().ok
+    np.testing.assert_allclose(traced.output_values[0], (x * x - theta) * (x + theta))
+
+
 def test_tensor_arithmetic_traces_canonical_residual_and_broadcast():
     x = np.linspace(0.25, 1.25, 17, dtype=np.float32)
     theta = np.array([0.5], dtype=np.float32)

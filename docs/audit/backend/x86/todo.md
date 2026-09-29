@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`: evidence, fragments and residuals
+
+Owners EVIDENCE-PACKET-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+The x86 math package code remains on its existing native path; the new gfx1151 `sum` package has no x86 consumer. Public coupled residual tracing passes host-free Graph checks, while CUDA/HIP tape execution does not establish an x86 backend lane. The NVIDIA MMA change has no x86 physical consumer.
+No selector or performance promotion.
+
+[Evidence](../../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
+
 ## `FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: traced residual and typed-loop proof
 
 Owners FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / W1.1.
@@ -66,12 +74,13 @@ Owner E2E-REAL-6 (log entry of the same date). Branch `codex/x86-batch3-dedup` (
   them). The retired constructors are the oracle `tests/_support/x86_kernel_baseline.py`.
 - **Envelope.** Elementwise: all 71 spellings + `where`, any positive static
   rank — carried in full (dashboard: `gap` -> `generic`). Cohort-2: all but
-  ALiBi. Breadth: all but rank-3 cholesky/tri_solve. AVX-512 image only, as
-  before (the base image refuses these families on both routes).
-- **Still gap, why.** ALiBi (`_alibi_contract`, retained): the Graph operand
+  ALiBi. At this historical slice, breadth still excluded rank-3
+  cholesky/tri_solve; the later COMPILER-NEXT-SLICES slice above closes it.
+  AVX-512 image only, as before (the base image refuses these families on both routes).
+- **Historical gap at this slice.** ALiBi (`_alibi_contract`, retained): the Graph operand
   list is not decodable by position and ODS `tessera.alibi` has no slopes
-  operand. Batched linalg (`batched_linalg_contract`, retained): ODS
-  cholesky/tri_solve are rank-2 only. Each needs a Graph ODS change first.
+  operand. Batched linalg was retained at this point because ODS
+  cholesky/tri_solve were rank-2 only; the later slice above closes that gap.
 - **Refused on purpose (15, pinned in `test_x86_kernel_differential.py`).**
   Unknown keywords, comparison `signedness`, integer `keepdims`, flattened
   rank >= 2 scans, norm `numeric_policy` / non-last `axis`, upper cholesky,

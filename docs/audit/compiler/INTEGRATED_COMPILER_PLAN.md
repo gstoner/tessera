@@ -279,7 +279,7 @@ and every Apple CPU example launch is oracle-checked. Accelerator examples
 remain artifact claims; exact-device execution stays backend-owned.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [batched x86 linalg and ROCm attention image identity](INTEGRATED_COMPILER_LOG.md#2026-09-28--batched-x86-linalg-and-rocm-attention-image-identity)
+- Latest: [x86 ALiBi explicit slopes native Schedule](INTEGRATED_COMPILER_LOG.md#2026-09-29--x86-alibi-explicit-slopes-reaches-native-schedule-and-tile)
 
 ### W1.1
 

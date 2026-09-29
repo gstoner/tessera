@@ -10,7 +10,7 @@ scope: ROCm backend implementation and exact-device proof
 ## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
 
 Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.
-The HIP-free ROCm HSACO serialization lane now uses exact LLVM/MLIR/lld 23.1.1, matching Princess-Luna and Tajasarus. It proves host-free compilation only; gfx1151 and gfx1201 execution remain device-owned.
+The HIP-free ROCm HSACO serialization lane now uses exact LLVM/MLIR/lld 23.1.1, matching Princess-Luna and Tajasarus. The gfx1201 uniform fragment-scale lit fixture expects the required masked-column scale-zero load. This proves host-free compilation only; gfx1151 and gfx1201 execution remain device-owned.
 
 [Compiler log](../../compiler/INTEGRATED_COMPILER_LOG.md).
 

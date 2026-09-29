@@ -4,7 +4,8 @@
 // ROCM-FP8-BLOCKSCALE-1 (FOUNDATION-BATCH-3-2026-09-28). A weight-scale block
 // that is a whole number of fragment widths (scale_n % 16 == 0) holds every
 // column of a fragment whose origin is PROVABLY 16-aligned, so the weight
-// scale is loaded once per fragment. The proof is derived from the origin's
+// scale is loaded once per fragment, plus one scale-zero load for masked
+// columns. The proof is derived from the origin's
 // arithmetic; an origin it cannot prove keeps one load per element, and so
 // does a block narrower than a fragment.
 
@@ -12,7 +13,7 @@
 
 // CHECK-LABEL: func.func @aligned_origin(
 // CHECK-SAME: memref<?xf32>, %[[SB:[a-z0-9_]+]]: memref<?xf32>
-// CHECK-COUNT-1: memref.load %[[SB]][
+// CHECK-COUNT-2: memref.load %[[SB]][
 // CHECK-NOT: memref.load %[[SB]][
 // CHECK: return
 func.func @aligned_origin(%sa: memref<?xf32>, %sb: memref<?xf32>, %blk: index,

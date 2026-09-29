@@ -6276,6 +6276,8 @@ MLIR 23.1.2 against fleet pin 23.1.1. The verified official release archive
 has SHA256 `832aeb58d105de1cabc7b982dd2c65de0610f7377df48ae8fc2dd8e97420a15c`.
 Princess-Luna WSL configured Tessera with exact 23.1.1 from that archive;
 the automatic no-RTTI CMake configuration built `tessera-rocm-opt` and
-three ROCm HSACO serialization tests passed with the pinned tools. CI and
-audit drift tests passed 64 cases before hosted validation.
+three ROCm HSACO serialization tests passed with the pinned tools. The
+hosted lit lane exposed a stale gfx1201 scale-load fixture; its expected
+second masked-column scale-zero load passes FileCheck on host LLVM 23.1.1.
+CI and audit drift tests passed 72 cases before hosted validation.
 <!-- entry-fields:end -->

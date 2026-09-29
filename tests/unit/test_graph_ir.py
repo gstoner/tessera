@@ -597,3 +597,53 @@ class TestGraphIRBuilder:
         ir = with_dropout.graph_ir.to_mlir()
         # The function should be tagged with its inferred effect
         assert "random" in ir or "func.func @with_dropout" in ir
+
+
+def test_traced_alibi_explicit_slopes_infers_bias_shape():
+    @tessera.jit
+    def bias(slopes: tessera.f32[4]):
+        return tessera.nn.alibi(num_heads=4, seq_len=7, slopes=slopes)
+
+    ir = bias.graph_ir.to_mlir()
+    assert "tessera.alibi" in ir
+    assert "tensor<4x7x7xf32>" in ir
+
+
+def test_traced_alibi_explicit_slopes_reaches_x86_package():
+    from tessera.compiler.scheduled_matmul import find_tessera_opt
+    from tessera.compiler.x86_native import package_cohort2, supports_cohort2, tools_available
+
+    if find_tessera_opt() is None or not tools_available():
+        pytest.skip("native compiler required")
+
+    @tessera.jit
+    def bias(slopes: tessera.f32[4]):
+        return tessera.nn.alibi(num_heads=4, seq_len=7, slopes=slopes)
+
+    assert supports_cohort2(bias.graph_ir)
+    package = package_cohort2(bias.graph_ir, pipeline_name="tessera-lower-to-x86")
+    assert "tile.alibi_kernel" in package.tile_ir
+    assert package.descriptor.entry_symbol == package.image.entry_points[0].symbol
+
+    import numpy as np
+    from tessera import runtime as rt
+
+    slopes = np.asarray([0.1, 0.2, 0.3, 0.4], dtype=np.float32)
+    output = np.empty((4, 7, 7), dtype=np.float32)
+    inputs = [binding for binding in package.descriptor.buffers if binding.direction == "input"]
+    outputs = [binding for binding in package.descriptor.buffers if binding.direction == "output"]
+    assert len(inputs) == len(outputs) == 1
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": "x86"}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir,
+        target_ir=package.target_ir,
+    )
+    launched = rt.launch(artifact, {
+        inputs[0].name: slopes, outputs[0].name: output, "H": 4, "S": 7,
+    })
+    assert launched["ok"] and launched["execution_kind"] == "native_cpu"
+    positions = np.arange(7, dtype=np.float32)
+    expected = slopes[:, None, None] * (
+        positions[None, None, :] - positions[None, :, None]
+    )
+    np.testing.assert_allclose(output, expected, rtol=0, atol=1e-6)

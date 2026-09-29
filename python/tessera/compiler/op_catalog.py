@@ -754,6 +754,8 @@ LOWERING_SHAPE_RULE: dict = {
 
 #: Per-op rules that override the lowering-kind default.
 OP_SHAPE_RULE: dict = {
+    # ALiBi consumes optional slopes[H] but returns a bias[H, S, S].
+    "tessera.alibi": "alibi_bias",
     "tessera.matmul": "matmul_2d",
     # MC1: shape-preserving matrix functions. det/logdet/trace/norm reduce to a
     # scalar and vec/kron/solve/eigh each have their own rule, so only these two
@@ -1122,6 +1124,7 @@ SHAPE_RULE_NAMES = frozenset({
     "kron",            # (p, q) x (r, s) -> (p*r, q*s)
     "eigh",            # -> ((..., n), (..., n, n))
     "same_as_first",
+    "alibi_bias",
     "depth_attention",
     "matmul_2d",
     "es_population_features",

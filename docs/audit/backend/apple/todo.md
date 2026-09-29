@@ -8,6 +8,12 @@ last_updated: 2026-09-29
 
 # Apple compiler, exact-device, and performance plan
 
+## E2E-REAL-6-ALIBI-SHAPE-2026-09-29: traced ALiBi result type
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
+Follow-up required: the shared Graph shape contract now yields f32 [H,S,S] for a traced explicit-slopes call. No Apple Schedule/Metal execution or Mac parity is claimed for that form.
+
+
 ## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
 
 Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-2026-09-29.

@@ -3971,8 +3971,25 @@ def _shape_depth_attention(operand_types: List[IRType],
                           layout=sources.layout)
 
 
+def _shape_alibi_bias(operand_types: List[IRType],
+                      attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """ALiBi slopes[H] and static attributes produce an f32 bias[H, S, S]."""
+    attrs = attrs or {}
+    heads = attrs.get("num_heads")
+    sequence = attrs.get("seq_len")
+    if (type(heads) is not int or type(sequence) is not int
+            or heads <= 0 or sequence <= 0 or len(operand_types) > 1):
+        return TENSOR_OPAQUE
+    if operand_types:
+        slopes = operand_types[0]
+        if slopes.rank != 1 or slopes.shape != (str(heads),) or slopes.dtype != "fp32":
+            return TENSOR_OPAQUE
+    return tensor_ir_type((heads, sequence, sequence), "fp32")
+
+
 _SHAPE_RULES = {
     "same_as_first": _shape_same_as_first,
+    "alibi_bias": _shape_alibi_bias,
     "matrix_scalar": _shape_matrix_scalar,
     "vec": _shape_vec,
     "kron": _shape_kron,
@@ -4092,7 +4109,7 @@ def _infer_result_type(op_name: str, operand_types: List[IRType],
     The reference collectives are single-rank no-op stubs, so a probe agreed
     and the wrong rule looked confirmed.
     """
-    if not operand_types:
+    if not operand_types and op_name != "tessera.alibi":
         return TENSOR_OPAQUE
     from .op_catalog import shape_rule_for
     rule = shape_rule_for(op_name)

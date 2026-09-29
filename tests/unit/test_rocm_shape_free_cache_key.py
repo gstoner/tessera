@@ -354,3 +354,49 @@ def test_exact_device_new_shape_and_symbol_reuse_one_image(family) -> None:
         assert other.image.compile_state == "cold"
         assert other.image.payload != first.image.payload
         assert other.descriptor.entry_symbol != first.descriptor.entry_symbol
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("architecture", ["gfx1151", "gfx1201"])
+def test_scheduled_attention_shape_and_symbol_reuse_one_image(architecture):
+    gate = "TESSERA_ROCM_E2E_DEVICE_TEST" if architecture == "gfx1151" else "TESSERA_GFX1201_DEVICE_PROOF"
+    if os.environ.get(gate) != "1":
+        pytest.skip(f"set {gate}=1 on the exact owning device")
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_attention
+    from tessera.compiler.attention_contract import reference_streaming_attention
+    from tests.unit.test_scheduled_attention_consumers import _module
+
+    assert rt._rocm_live_arch() == architecture
+    rocm_native._cache.clear()
+    rocm_native._shape_free_targets.clear()
+    packages = []
+    for index, (b, hq, hkv, sq, sk) in enumerate(((1, 4, 2, 17, 19), (2, 6, 3, 23, 37))):
+        module = _module(target="rocm", query_rows=sq, rocm_dims=(b, hq, hkv, sk))
+        module.functions[0].name = f"attention_shape_{index}"
+        artifact = scheduled_attention.lower_scheduled_attention(module, target=f"rocm_{architecture}")
+        package = rocm_native.package_scheduled_attention(artifact, pipeline_name=PIPELINE)
+        packages.append(package)
+        assert package.image.compile_state == ("cold" if index == 0 else "warm_cache")
+        rng = np.random.default_rng(120 + index)
+        q, k, v = [(rng.normal(size=shape) * 0.2).astype(np.float16)
+                   for shape in ((b, hq, sq, 64), (b, hkv, sk, 64), (b, hkv, sk, 64))]
+        out = np.full((b, hq, sq, 64), np.nan, np.float32)
+        runtime = rt.RuntimeArtifact(metadata={"target": f"rocm_{architecture}"},
+            native_image=package.image, launch_descriptor=package.descriptor,
+            tile_ir=package.tile_ir, target_ir=package.target_ir)
+        result = rt.launch(runtime, dict(q=q, k=k, v=v, o=out, Sq=sq, Sk=sk,
+                         Scale=0.125, Causal=1, Hq=hq, KvRatio=hq // hkv, Window=64))
+        assert result["ok"] and result["execution_kind"] == "native_gpu", result
+        expected = reference_streaming_attention(q, k, v, block_size=16, scale=0.125,
+                                                causal=True, window_left=64, window_right=0)
+        np.testing.assert_allclose(out, expected, rtol=3e-2, atol=3e-2)
+    assert packages[0].image.image_digest == packages[1].image.image_digest
+    assert packages[0].tile_ir != packages[1].tile_ir
+    assert packages[0].descriptor.shape_guards != packages[1].descriptor.shape_guards
+    assert packages[0].descriptor.provenance["schedule_digest"] != packages[1].descriptor.provenance["schedule_digest"]
+    changed = _module(target="rocm", bias=True)
+    artifact = scheduled_attention.lower_scheduled_attention(changed, target=f"rocm_{architecture}")
+    biased = rocm_native.package_scheduled_attention(artifact, pipeline_name=PIPELINE)
+    assert biased.image.compile_state == "cold"
+    assert biased.image.image_digest != packages[0].image.image_digest

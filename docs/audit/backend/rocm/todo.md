@@ -7,6 +7,27 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `COMPILER-NEXT-SLICES-2026-09-28`: implementation and exact-device loops
+
+Owner E2E-REAL-6; shared synchronization key `COMPILER-NEXT-SLICES-2026-09-28`.
+
+Native forward-attention Target IR now excludes runtime-only batch,
+head-count and sequence extents from the device code identity. Packaging
+replays native Schedule/Tile and compiles the shape-free directive; it retains
+all physical/numerical policies and per-launch guards. gfx1151: 47 passed,
+5 other-device skips; gfx1201: 29 passed, 1 other-device skip. Varying batch,
+heads and both sequence lengths reuses an image; bias requires a new image.
+Four query lengths compile once on each device. New-shape package cost:
+69.63–71.69 ms gfx1151, 50.67–52.22 ms gfx1201. Replay overhead remains.
+The merged gfx1151 MoE Schedule route was confirmed, not duplicated: 21
+movement tests passed. Paged KV measured 2.81 us device / 2.23 ms full call;
+MoE 2.32 us / 1.88 ms. Existing non-regression gates fail: no promotion.
+General paged layouts, matmul shape-dependent image keys, W8A8 coverage and
+MXFP4 optimization remain open. Shared rank-3 linalg Graph admission needs
+ROCm-specific consumer follow-up; no rank-3 ROCm proof is claimed.
+
+[Evidence packet](../../../../benchmarks/baselines/compiler_next_slices_20260928/README.md).
+
 ## `E2E-REAL-6-x86-kernel-2026-09-28`: x86 native Schedule contract — sibling outcome — follow-up required
 
 Owner E2E-REAL-6 ([x86 queue](../x86/todo.md)); sync

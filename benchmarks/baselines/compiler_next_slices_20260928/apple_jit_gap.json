@@ -1,0 +1,40 @@
+[
+  {
+    "operation": "ntk_rope",
+    "execution_kind": "artifact_only",
+    "compiler_path": "target_ir_artifact",
+    "native_image": false,
+    "launch_descriptor": false,
+    "error": null,
+    "tool_invocations": [
+      {
+        "tool": "/Users/gregorystoner/.codex/worktrees/compiler-next-slices/tessera/build/tools/tessera-opt/tessera-opt",
+        "pipeline_name": "tessera-lower-to-apple_gpu-runtime",
+        "available": true,
+        "status": "failed",
+        "elapsed_ms": 192.93870800174773,
+        "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr": "<stdin>:3:27: error: expected ':'\n    %v0 = tessera.ntk_rope(%x, %theta) {scale = 2.0, tessera.effect_kind = \"pure\"} : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>\n                          ^"
+      }
+    ]
+  },
+  {
+    "operation": "target_verify",
+    "execution_kind": "artifact_only",
+    "compiler_path": "target_ir_artifact",
+    "native_image": false,
+    "launch_descriptor": false,
+    "error": null,
+    "tool_invocations": [
+      {
+        "tool": "/Users/gregorystoner/.codex/worktrees/compiler-next-slices/tessera/build/tools/tessera-opt/tessera-opt",
+        "pipeline_name": "tessera-lower-to-apple_gpu-runtime",
+        "available": true,
+        "status": "failed",
+        "elapsed_ms": 58.5439580027014,
+        "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr": "<stdin>:3:32: error: expected ':'\n    %v0 = tessera.target_verify(%tokens, %logits) {tessera.effect_kind = \"pure\"} : (tensor<4xi32>, tensor<4x8xf32>) -> tensor<4x8xf32>\n                               ^"
+      }
+    ]
+  }
+]

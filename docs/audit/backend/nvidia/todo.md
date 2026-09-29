@@ -8,6 +8,22 @@ last_updated: 2026-09-28
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `COMPILER-NEXT-SLICES-2026-09-28`: implementation and exact-device loops
+
+Owner E2E-REAL-6; shared synchronization key `COMPILER-NEXT-SLICES-2026-09-28`.
+
+Super-Bear RTX 5070 sm_120 rebuilt merged main and passed 25 packed/state
+Schedule replay tests. Paged-KV numerical checks passed for all three recorder
+envelopes in two runs. Increasing to 41 samples / 300 device repetitions did
+not stabilize every row; only canonical 2048-token timing met the gate in
+both runs. Raw unstable results are retained; no selector change.
+Attention LSE/backward and nvfp4/int4/mx migrations remain open. Shared rank-3
+linalg Graph verification requires NVIDIA physical-consumer follow-up; no
+rank-3 device proof. ROCm attention code-identity changes are not applicable
+to NVIDIA code generation.
+
+[Evidence packet](../../../../benchmarks/baselines/compiler_next_slices_20260928/README.md).
+
 ## `E2E-REAL-6-x86-kernel-2026-09-28`: x86 native Schedule contract — sibling outcome — follow-up required
 
 Owner E2E-REAL-6 ([x86 queue](../x86/todo.md)); sync

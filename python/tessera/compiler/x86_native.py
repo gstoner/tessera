@@ -323,7 +323,6 @@ def package_native(
         return package_cohort2(module, pipeline_name=pipeline_name)
     if kind == "breadth":
         from .x86_breadth import package_graph_breadth
-
         return package_graph_breadth(module, pipeline_name=pipeline_name)
     if kind == "elementwise":
         return package_elementwise(module, pipeline_name=pipeline_name)

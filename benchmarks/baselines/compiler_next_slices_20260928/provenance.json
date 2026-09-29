@@ -1,0 +1,26 @@
+{
+  "base": "4f3396b5a",
+  "state": "uncommitted validated source slice",
+  "source_sha256": {
+    "src/compiler/ir/TesseraOps.cpp": "a1b5dce75ec0bfc63547393e748e28842ae8bd476419bb84126bf9b32eae79a5",
+    "src/compiler/programming_model/lib/NativeX86Kernel.h": "3c38f242757ed45f0e6811e937678222c58f819a0dbc3d9ca654292c1b8afc4d",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "fa4ba454ab13c382a59e12d54a99c11c48977951d9878cd6faacf66ce24dc677",
+    "python/tessera/compiler/native_x86_kernel.py": "5a45ace6d1750b902a524f53135d514d4c4aa064bc9d1c499fe370b066355624",
+    "python/tessera/compiler/x86_native.py": "52406d9af2c3ba9cf7947ded0af2da97f72b9976ea42be39bad4c75d1fa30661",
+    "python/tessera/compiler/x86_breadth.py": "761581c423a26725418936897ea1376361fa0c96b042dc364e875cdffd28fa84",
+    "python/tessera/compiler/rocm_native.py": "485f26358b1fc89f82843c820466354037da7ea76068e379862ee07f3364994a"
+  },
+  "compiler_sha256": {
+    "Princess-Luna": "26fea265a3bb73fd65a00bd03a2699b661bc7e2d4f2e2619d7b8d46c6aa2eb26",
+    "Tajasarus": "e4c8d75e0dbe11de119e455c027ee7f612346f1d59c198e10af6fd5eb5ab2eba",
+    "Super-Bear": "09c54f380f49d904d12c7306809a161487fb06fe63525c14d02bad8b88651cfa",
+    "Mac": "aeebd773cc22a05d74ed4416ecac448ca30cf655db4646df98151bf1275f2bdc",
+    "Mac_Metal_runtime": "0eee619c6bfb5016e074e55d9d2df201acb9dfd511165b4c9f29bff7f4bb8c74"
+  },
+  "host_source_notes": {
+    "Princess-Luna": "merged #877 plus this slice; gfx1151 movement measured before attention-only C++ edit",
+    "Tajasarus": "existing #876 source at 0a2d7fa7a plus this slice attention C++/Python/tests; no x86 claim",
+    "Super-Bear": "merged #877; shared paged-KV validation only",
+    "Mac": "fresh compiler and Metal runtime built from merged #877; Apple execution-gap probe only"
+  }
+}

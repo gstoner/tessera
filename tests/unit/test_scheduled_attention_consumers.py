@@ -14,10 +14,11 @@ from tessera.compiler.scheduled_attention import ScheduledAttentionArtifact
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
-def _module(*, target: str, bias: bool = False, query_rows: int = 17) -> GraphIRModule:
+def _module(*, target: str, bias: bool = False, query_rows: int = 17,
+            rocm_dims: tuple[int, int, int, int] = (1, 4, 2, 19)) -> GraphIRModule:
     rocm = target == "rocm"
     dtype, element = ("fp16", "f16") if rocm else ("fp32", "f32")
-    b, hq, hkv, sk, d, dv = (1, 4, 2, 19, 64, 64) if rocm else (1, 2, 2, 7, 4, 3)
+    b, hq, hkv, sk, d, dv = (*rocm_dims, 64, 64) if rocm else (1, 2, 2, 7, 4, 3)
     q = IRType(f"tensor<{b}x{hq}x{query_rows}x{d}x{element}>", tuple(map(str, (b, hq, query_rows, d))), dtype)
     k = IRType(f"tensor<{b}x{hkv}x{sk}x{d}x{element}>", tuple(map(str, (b, hkv, sk, d))), dtype)
     v = IRType(f"tensor<{b}x{hkv}x{sk}x{dv}x{element}>", tuple(map(str, (b, hkv, sk, dv))), dtype)
@@ -235,7 +236,7 @@ def test_rocm_packages_exact_attention_tile(monkeypatch) -> None:
         rocm_native,
         "_compile_scheduled_attention_tile_ir",
         lambda tile: (
-            ("target", "backend", b"hsaco", "compiler", "toolchain", (), "cold")
+            ('module {\n  tessera_rocm.flash_attn {name = "attention_test"}\n}\n', "backend", b"hsaco", "compiler", "toolchain", (), "cold")
             if tile == artifact.tile_ir
             else pytest.fail("Tile artifact was resynthesized")
         ),
@@ -429,7 +430,7 @@ def test_driver_records_adjacent_attention_lineage(monkeypatch, target: str) -> 
         monkeypatch.setattr(
             rocm_native,
             "_compile_scheduled_attention_tile_ir",
-            lambda tile: ("target", "backend", b"hsaco", "compiler", "toolchain", (), "cold"),
+            lambda tile: ('module {\n  tessera_rocm.flash_attn {name = "attention_test"}\n}\n', "backend", b"hsaco", "compiler", "toolchain", (), "cold"),
         )
     bundle = compile_graph_module(
         _module(target="x86" if target == "x86" else "rocm"),

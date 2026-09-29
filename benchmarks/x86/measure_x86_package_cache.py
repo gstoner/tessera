@@ -66,6 +66,13 @@ def _cases():
     yield ("breadth.cholesky", _module("tessera.cholesky", [("m", (32, 32), f32)], ((32, 32), f32)),
            kernel_baseline.package_graph_breadth, x86_breadth.package_graph_breadth)
 
+    yield ("breadth.cholesky_batched", _module("tessera.cholesky", [("m", (2, 32, 32), f32)],
+                                               ((2, 32, 32), f32)),
+           kernel_baseline.package_graph_breadth, x86_breadth.package_graph_breadth)
+    yield ("breadth.tri_solve_batched", _module("tessera.tri_solve",
+              [("m", (2, 32, 32), f32), ("rhs", (2, 32, 5), f32)], ((2, 32, 5), f32)),
+           kernel_baseline.package_graph_breadth, x86_breadth.package_graph_breadth)
+
 
 def _ms(call) -> float:
     start = time.perf_counter()

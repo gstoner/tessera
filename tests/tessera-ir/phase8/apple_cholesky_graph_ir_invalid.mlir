@@ -18,8 +18,8 @@ func.func @chol_shape_mismatch(%a: tensor<4x4xf32>) -> tensor<8x8xf32> {
 
 // -----
 
-func.func @chol_rank3(%a: tensor<2x4x4xf32>) -> tensor<2x4x4xf32> {
-  // expected-error @+1 {{'tessera.cholesky' op expects rank-2 input and result tensors}}
-  %0 = tessera.cholesky %a : (tensor<2x4x4xf32>) -> tensor<2x4x4xf32>
-  return %0 : tensor<2x4x4xf32>
+func.func @chol_rank4(%a: tensor<2x2x4x4xf32>) -> tensor<2x2x4x4xf32> {
+  // expected-error @+1 {{'tessera.cholesky' op expects matching rank-2 or rank-3 input and result tensors}}
+  %0 = tessera.cholesky %a : (tensor<2x2x4x4xf32>) -> tensor<2x2x4x4xf32>
+  return %0 : tensor<2x2x4x4xf32>
 }

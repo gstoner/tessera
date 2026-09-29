@@ -444,3 +444,26 @@ def test_family_route_requires_consumer_on_that_target():
     assert audit._target_family_route('apple_gpu', 'matmul') is not None
     assert audit._target_family_route('nvidia_sm120', 'depth_attention') is None
     assert audit._target_family_route('rocm_gfx1151', 'depth_attention') is not None
+
+
+def test_x86_breadth_has_no_retained_constructor():
+    assert audit._packager_is_generic_scheduled("x86", "breadth")
+    row = next(r for r in audit.family_rows() if r[:2] == ("x86", "breadth"))
+    assert row[3] == "generic_compiled"
+
+
+@pytest.mark.parametrize("provider_tail,body,expected", [
+    ("", "return package_scheduled_kernel(scheduled_kernel.lower_scheduled_kernel(module, target='x86'))", True),
+    ("package_scheduled_kernel = legacy\n", "return package_scheduled_kernel(scheduled_kernel.lower_scheduled_kernel(module, target='x86'))", False),
+    ("", "scheduled_kernel.lower_scheduled_kernel(module, target='x86'); return legacy(module)", False),
+])
+def test_external_breadth_requires_proved_lowering_and_unshadowed_consumer(
+        monkeypatch, tmp_path, provider_tail, body, expected):
+    (tmp_path / "x86_native.py").write_text(
+        "def package_scheduled_kernel(artifact, **kwargs):\n    return artifact\n" + provider_tail)
+    (tmp_path / "x86_breadth.py").write_text(
+        "from . import scheduled_kernel\n"
+        "from .x86_native import package_scheduled_kernel\n"
+        "def package_graph_breadth(module, **kwargs):\n    " + body + "\n")
+    monkeypatch.setattr(audit, "_COMPILER", tmp_path)
+    assert audit._packager_is_generic_scheduled("x86", "breadth") is expected

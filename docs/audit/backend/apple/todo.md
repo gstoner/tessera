@@ -8,6 +8,24 @@ last_updated: 2026-09-28
 
 # Apple compiler, exact-device, and performance plan
 
+## `COMPILER-NEXT-SLICES-2026-09-28`: implementation and exact-device loops
+
+Owner E2E-REAL-6; shared synchronization key `COMPILER-NEXT-SLICES-2026-09-28`.
+
+A fresh Mac compiler and shared Metal runtime passed both checked direct
+ABI numerical tests (scaled RoPE and Philox Langevin). Static @jit probes
+still report artifact_only, without native images/descriptors; optional
+compiler validation receives noncanonical Graph text and fails parsing.
+Returned eager values do not close this gap. Native Schedule/package work
+for target_verify, scaled ntk_rope and Philox remains required.
+Shared rank-3 linalg Graph verification is now admitted for the x86 native
+consumer. Apple CPU lowering now refuses rank-3 Cholesky/triangular solve
+before emitting an executable rank-2 LAPACK ABI call; Apple GPU physical
+parity remains follow-up required.
+ROCm attention image caching is not applicable to Apple code generation.
+
+[Evidence packet](../../../../benchmarks/baselines/compiler_next_slices_20260928/README.md).
+
 ## `E2E-REAL-6-x86-kernel-2026-09-28`: x86 native Schedule contract — sibling outcome — follow-up required
 
 Owner E2E-REAL-6 ([x86 queue](../x86/todo.md)); sync

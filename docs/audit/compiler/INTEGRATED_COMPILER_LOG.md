@@ -6199,3 +6199,25 @@ Evidence: Tajasarus gfx1201, 32 folded numerical device tests passed;
 N values against pinned Radiance `dfdfa383`. [Packet](../../../benchmarks/baselines/gfx1201_batch3_dedup_20260928/README.md).
 
 <!-- entry-fields:end -->
+
+### 2026-09-28 — batched x86 linalg and ROCm attention image identity
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: pending; sync `COMPILER-NEXT-SLICES-2026-09-28`.
+
+Outcome: Rank-3 x86 Cholesky/triangular solve use native Graph/Schedule/Tile;
+the retained Python constructor is removed. ROCm forward attention reuses
+images across runtime-only extents while retaining replay and launch guards.
+
+Remaining: Apple native package execution, x86 ALiBi, general paged layouts,
+NVIDIA LSE/backward/quantized routes, ROCm matmul cache identity and physical
+W8A8/MXFP4 follow-ups. Movement and sm_120 timing gates did not justify promotion.
+
+Evidence: 1,112 x86 differential/breadth/registry checks; gfx1151 attention
+47 passed/5 skipped, gfx1201 29 passed/1 skipped; 21 gfx1151 movement checks;
+25 sm_120 packed/state replay checks; two fresh direct Apple Metal ABI checks.
+[Measured packet](../../../benchmarks/baselines/compiler_next_slices_20260928/README.md)
+keeps compile cost, device timing and full-call time separate. Apple @jit
+still records artifact-only provenance. All four backend queues were assessed.
+<!-- entry-fields:end -->

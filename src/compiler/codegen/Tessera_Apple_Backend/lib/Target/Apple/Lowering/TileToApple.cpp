@@ -660,6 +660,23 @@ struct LowerTileToAppleCPUPass
         if (!sp)
           sp = linalgSpecFor(src);
         if (sp) {
+          // Graph IR also admits the native x86 batched envelope. The Apple
+          // CPU LAPACK dispatch still exposes a rank-2 ABI, so refuse before
+          // emitting an executable call rather than fail at launch.
+          if (sp->graphName == "tessera.cholesky" ||
+              sp->graphName == "tessera.tri_solve") {
+            for (Value operand : op->getOperands()) {
+              auto type = dyn_cast<RankedTensorType>(operand.getType());
+              if (!type || type.getRank() != 2) {
+                op->emitError("apple_cpu value lowering: ")
+                    << sp->graphName << " requires rank-2 tensor operands; "
+                       "the CPU linalg ABI does not support batches";
+                signalPassFailure();
+                return;
+              }
+            }
+          }
+
           llvm::StringRef opKind = sp->graphName;
           opKind.consume_front("tessera.");
           emitAppleValueCall(builder, op, "tessera_apple.cpu.call", opKind,

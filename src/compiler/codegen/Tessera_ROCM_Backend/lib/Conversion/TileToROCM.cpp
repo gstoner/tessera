@@ -1507,6 +1507,27 @@ private:
 /// store uses. The lane's column is constant across its elements on every
 /// family that keeps the column in the low lane bits, so LLVM folds the
 /// repeated rhs-scale loads; the lhs loads walk this lane's rows.
+/// True when `v`'s defining arithmetic proves it a multiple of `d`: a
+/// constant multiple, a product with such a factor, or a sum of two. Anything
+/// else (a block argument, a division, an unknown op) is not proven.
+static bool isKnownMultipleOf(Value v, int64_t d, unsigned depth = 0) {
+  if (d <= 1)
+    return true;
+  if (depth > 16)
+    return false;
+  if (auto cst = v.getDefiningOp<arith::ConstantIndexOp>())
+    return cst.value() % d == 0;
+  if (auto cst = v.getDefiningOp<arith::ConstantIntOp>())
+    return cst.value() % d == 0;
+  if (auto mul = v.getDefiningOp<arith::MulIOp>())
+    return isKnownMultipleOf(mul.getLhs(), d, depth + 1) ||
+           isKnownMultipleOf(mul.getRhs(), d, depth + 1);
+  if (auto add = v.getDefiningOp<arith::AddIOp>())
+    return isKnownMultipleOf(add.getLhs(), d, depth + 1) &&
+           isKnownMultipleOf(add.getRhs(), d, depth + 1);
+  return false;
+}
+
 struct ConvertFragmentScaledAccumulate
     : public OpConversionPattern<tessera::tile::FragmentScaledAccumulateOp> {
   ConvertFragmentScaledAccumulate(const TypeConverter &converter,
@@ -1552,6 +1573,30 @@ struct ConvertFragmentScaledAccumulate
     Value partial = adaptor.getPartial();
     Value result = acc;
     auto slt = arith::CmpIPredicate::slt;
+    // A weight-scale block that is a whole number of fragment widths holds
+    // every column of a fragment whose origin is 16-aligned, so the element
+    // loop's `rhs_scale[group * colGroups + col / scale_n]` is one value per
+    // fragment: load it once, from a wave-uniform address, instead of once
+    // per element from a per-lane one. The alignment is derived from the
+    // origin's arithmetic (never assumed); an origin it cannot prove keeps the
+    // per-element form. Out-of-range lanes still use scale block zero, as the
+    // fragment contract requires. On the gfx1201 W8A8 bodies this took
+    // the 128x128 K loop from 1066 to 971 instructions and ran 1.02-1.21x
+    // faster, output bitwise unchanged (FOUNDATION-BATCH-3-2026-09-28).
+    Value uniformRhs;
+    Value zeroRhs;
+    if (op.getScaleN() % 16 == 0 &&
+        isKnownMultipleOf(adaptor.getColOrigin(), 16)) {
+      Value block = arith::MinUIOp::create(
+          rewriter, loc,
+          arith::DivUIOp::create(rewriter, loc, adaptor.getColOrigin(), scaleN),
+          arith::SubIOp::create(rewriter, loc, colGroups, c1));
+      uniformRhs = memref::LoadOp::create(
+          rewriter, loc, adaptor.getRhsScale(),
+          ValueRange{arith::AddIOp::create(rewriter, loc, rhsGroupBase, block)});
+      zeroRhs = memref::LoadOp::create(
+          rewriter, loc, adaptor.getRhsScale(), ValueRange{rhsGroupBase});
+    }
     for (int64_t i = 0; i < physical->accumulatorElementsPerLane; ++i) {
       auto [row, col] = accumulatorElementCoordinate(
           rewriter, loc, *physical, i, coords.lane, coords.storeGroup,
@@ -1573,8 +1618,12 @@ struct ConvertFragmentScaledAccumulate
           arith::DivUIOp::create(rewriter, loc, safeCol, scaleN));
       Value lhsScale = memref::LoadOp::create(
           rewriter, loc, adaptor.getLhsScale(), ValueRange{lhsIndex});
-      Value rhsScale = memref::LoadOp::create(
-          rewriter, loc, adaptor.getRhsScale(), ValueRange{rhsIndex});
+      Value rhsScale = uniformRhs ? Value(arith::SelectOp::create(
+                                          rewriter, loc, colOk, uniformRhs,
+                                          zeroRhs))
+                                  : Value(memref::LoadOp::create(
+                                        rewriter, loc, adaptor.getRhsScale(),
+                                        ValueRange{rhsIndex}));
       Value scale = arith::MulFOp::create(rewriter, loc, lhsScale, rhsScale);
       Value p = vector::ExtractOp::create(rewriter, loc, partial,
                                           ArrayRef<int64_t>{i});

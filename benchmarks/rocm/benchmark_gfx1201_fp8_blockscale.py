@@ -494,6 +494,10 @@ def main() -> None:
                         help="also time AITER alongside --sweep variants")
     parser.add_argument("--no-production", action="store_true",
                         help="omit the production kn arm (the nk production arm is always kept)")
+    parser.add_argument("--aiter-config-from", default=None,
+                        help="N,K: take AITER's tuned config from this (N, K) file for "
+                             "every shape (a K scan at one fixed AITER config; "
+                             "FOUNDATION-BATCH-3-2026-09-28)")
     parser.add_argument("--windows", type=int, default=10)
     parser.add_argument("--min-window-ms", type=float, default=6.0)
     parser.add_argument("--output", type=Path, required=True)
@@ -613,7 +617,9 @@ def main() -> None:
             row[label] = meta
             arms[label] = launch
         if fn is not None:
-            config, source = aiter_config(args.aiter_root, n, k, m)
+            cn, ck = ((int(v) for v in args.aiter_config_from.split(","))
+                      if args.aiter_config_from else (n, k))
+            config, source = aiter_config(args.aiter_root, cn, ck, m)
             try:
                 launch, info = aiter_launch(hip, device, fn, m, n, k, config)
                 launch()

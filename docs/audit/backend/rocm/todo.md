@@ -16,6 +16,21 @@ changed in this slice. Princess-Luna host drift gates passed. The ROCm
 family migrations and gfx1151/gfx1201 exact-device parity for these new
 Graph spellings remain follow-ups.
 
+## `FOUNDATION-BATCH-3-DEDUP-2026-09-28`: gfx1201 W8A8 and MXFP4 physical follow-ups — landing
+
+Owners ROCM-FP8-BLOCKSCALE-1 and ROCM-MXFP4-W4A8-1. The post-#875
+physical W8A8 change groups 128x64 LDS fragment reads before WMMA when the
+register budget admits it, and loads one uniform weight scale per fragment.
+Tajasarus passed 57 exact-device W8A8 cases and two changed lit fixtures.
+A paired, source-matched four-row packet shows both M=200 regressions faster
+than #875 and AITER, and K=1536 near AITER. Short-K and ragged-K envelope
+closure remain open. The M=256 folded MXFP4 attribution probes isolate A
+fetch plus LDS restaging as the dominant removable cost at N=8192/12288;
+no output-changing probe is a production candidate. The unchanged opt-in
+folded route passed 32 numerical device tests. [Packet](../../../../benchmarks/baselines/gfx1201_batch3_dedup_20260928/README.md).
+No shared IR, ABI, dtype/op, or sibling physical schedule changed; Apple,
+NVIDIA, and x86 have no consumer of these gfx1201 WMMA/LDS changes.
+
 ## `E2E-REAL-6-GFX1151-PAGED-2026-09-28`: native paged-KV Schedule/Tile — landing
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1151-PAGED-2026-09-28`.

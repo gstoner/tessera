@@ -78,6 +78,9 @@ SMALL = ((128, 5120, 8704), (128, 17408, 5120), (256, 5120, 8704), (256, 17408, 
 #: memory, not from the previous launch's cache footprint.
 NSCAN = tuple((256, n, 5120) for n in (4096, 8192, 12288, 16384, 17408, 20480, 24576))
 NSCAN_DECOMPOSITION = tuple((256, n, 5120) for n in (8192, 12288, 17408))
+#: Three N at M = 256, K = 5120 for a per-column slope, the per-column cost's
+#: attribution probes (FOUNDATION-BATCH-3-2026-09-28).
+SLOPE = tuple((256, n, 5120) for n in (8192, 12288, 16384))
 SWEEP = (
     (128, 5120, 8704), (128, 17408, 5120), (256, 17408, 5120),
     (512, 5120, 8704), (512, 17408, 5120), (1024, 5120, 8704),
@@ -289,7 +292,12 @@ def run_case(
             outputs["tessera_exact_k32"][np.ix_(rows, cols)], reference,
             err_msg=f"{case.label}: exact K32 fails the independent oracle",
         )
+        engine_by_name = {engine.name: engine for engine in engines}
         for name, output in outputs.items():
+            if name != exact.name and engine_by_name[name].metadata.get("diagnostic_bound", False):
+                # Output-changing attribution probes are identified by the
+                # source edit, independent of the caller's display label.
+                continue
             np.testing.assert_array_equal(
                 output.view(np.uint16), outputs["tessera_exact_k32"].view(np.uint16),
                 err_msg=f"{case.label}: {name} changed BF16 output",
@@ -431,7 +439,7 @@ def main() -> None:
     parser.add_argument("--radiance-revision", required=True)
     parser.add_argument("--tessera-opt", type=Path, required=True)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--shapes", choices=("production", "sweep", "all", "small", "nscan", "nscan_decomposition"),
+    parser.add_argument("--shapes", choices=("production", "sweep", "all", "small", "nscan", "nscan_decomposition", "slope"),
                         default="production")
     parser.add_argument("--decomposition", action="store_true")
     parser.add_argument("--packed", action="store_true",
@@ -474,7 +482,7 @@ def main() -> None:
         raise SystemExit("source tree has uncommitted changes; commit first or pass --diagnostic")
     shapes = {"production": PRODUCTION, "sweep": SWEEP, "all": PRODUCTION + SWEEP,
               "small": SMALL, "nscan": NSCAN,
-              "nscan_decomposition": NSCAN_DECOMPOSITION}[args.shapes]
+              "nscan_decomposition": NSCAN_DECOMPOSITION, "slope": SLOPE}[args.shapes]
     output.parent.mkdir(parents=True, exist_ok=True)
     processes = []
     for index in range(args.processes):

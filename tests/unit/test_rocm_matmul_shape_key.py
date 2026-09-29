@@ -56,26 +56,28 @@ def test_matmul_projection_refuses_missing_provenance_or_other_code() -> None:
 
 
 @pytest.mark.hardware_rocm
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
 @pytest.mark.skipif(
     os.environ.get("TESSERA_ROCM_E2E_DEVICE_TEST") != "1",
     reason="requires explicit gfx1151 device proof gate",
 )
-def test_three_shapes_share_one_live_gfx1151_image() -> None:
+def test_three_shapes_share_one_live_gfx1151_image(dtype: str) -> None:
     from tessera import runtime as rt
 
     assert rt._rocm_live_arch() == rt._rocm_chip() == "gfx1151"
     rng = np.random.default_rng(885)
+    storage = np.float16 if dtype == "fp16" else pytest.importorskip("ml_dtypes").bfloat16
     digests = []
     for shape in ((16, 16, 16), (32, 16, 16), (48, 16, 16)):
         m, k, n = shape
         scheduled = scheduled_matmul.lower_scheduled_matmul(
-            _module(target="rocm", shape=shape), target="rocm_gfx1151"
+            _module(target="rocm", shape=shape, dtype=dtype), target="rocm_gfx1151"
         )
         package = rocm_native.package_scheduled_matmul(
             scheduled, pipeline_name="tessera-lower-to-rocm"
         )
-        a = (rng.normal(size=(m, k)) * 0.2).astype(np.float16)
-        b = (rng.normal(size=(k, n)) * 0.2).astype(np.float16)
+        a = (rng.normal(size=(m, k)) * 0.2).astype(storage)
+        b = (rng.normal(size=(k, n)) * 0.2).astype(storage)
         output = np.zeros((m, n), np.float32)
         artifact = rt.RuntimeArtifact(
             metadata={"target": package.image.target},

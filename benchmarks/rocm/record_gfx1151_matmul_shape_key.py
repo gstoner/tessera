@@ -41,12 +41,14 @@ def record(samples: int = 31) -> dict[str, object]:
     dirty = bool(_git("status", "--porcelain", "--untracked-files=no"))
     rng = np.random.default_rng(885)
     rows = []
+    scheduled_artifacts = []
     digests = []
     for shape in SHAPES:
         m, k, n = shape
         scheduled = scheduled_matmul.lower_scheduled_matmul(
             _module(target="rocm", shape=shape), target="rocm_gfx1151"
         )
+        scheduled_artifacts.append(scheduled)
         start = time.perf_counter_ns()
         package = rocm_native.package_scheduled_matmul(
             scheduled, pipeline_name="tessera-lower-to-rocm"
@@ -94,6 +96,20 @@ def record(samples: int = 31) -> dict[str, object]:
         })
     if len(set(digests)) != 1 or [row["compile_state"] for row in rows] != ["cold", "warm_cache", "warm_cache"]:
         raise RuntimeError("three shapes did not share exactly one compiled image")
+    # Historical Tile-text key as a compile-only control. It is run from this
+    # same source and compiler, but is not launched or used as a speedup claim.
+    control = []
+    for shape, scheduled in zip(SHAPES, scheduled_artifacts):
+        start = time.perf_counter_ns()
+        compiled = rocm_native._compile_scheduled_matmul_tile_ir(scheduled.tile_ir)
+        control.append({
+            "shape": list(shape),
+            "compile_state": compiled[-1],
+            "compile_ms": (time.perf_counter_ns() - start) / 1e6,
+            "payload_sha256": hashlib.sha256(compiled[2]).hexdigest(),
+        })
+    if [row["compile_state"] for row in control] != ["cold"] * len(SHAPES):
+        raise RuntimeError("historical Tile-text key did not compile each shape")
     return {
         "schema": "tessera.rocm_matmul_shape_key.v1",
         "architecture": live,
@@ -106,6 +122,7 @@ def record(samples: int = 31) -> dict[str, object]:
         "promotion_eligible": False,
         "samples_per_shape": samples,
         "rows": rows,
+        "tile_text_control_compile_only": control,
     }
 
 

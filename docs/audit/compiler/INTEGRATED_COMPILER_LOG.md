@@ -6267,9 +6267,9 @@ apt.llvm.org MLIR 23.1.2. The resolver and CMake both enforce the exact
 fleet pin. The release's ICU70 runtime is isolated beside the toolchain,
 and Tessera matches its no-RTTI LLVM ABI.
 
-Remaining: Run all hosted opt-in lanes on this PR and confirm available disk
-and link behavior on GitHub runners. Exact-device backend proof remains owned
-by each device host.
+Remaining: Exact-device backend execution and performance proof remains owned
+by each device host. The hosted compiler lanes are host-free and do not replace
+those results.
 
 Evidence: GitHub main lit artifact from run 36514973125 recorded LLVM and
 MLIR 23.1.2 against fleet pin 23.1.1. The verified official release archive
@@ -6279,5 +6279,9 @@ the automatic no-RTTI CMake configuration built `tessera-rocm-opt` and
 three ROCm HSACO serialization tests passed with the pinned tools. The
 hosted lit lane exposed a stale gfx1201 scale-load fixture; its expected
 second masked-column scale-zero load passes FileCheck on host LLVM 23.1.1.
-CI and audit drift tests passed 72 cases before hosted validation.
+CI and audit drift tests passed 72 cases on WSL. GitHub PR run
+36571380840 recorded exact 23.1.1 LLVM/MLIR, 542/542 lit passes and successful
+ROCm HSACO serialization, alongside required lint, unit, audit and fan-in
+checks. The earlier full dispatch run 36568476381 passed ASAN, TSAN and UBSAN
+with the same pinned compiler bundle.
 <!-- entry-fields:end -->

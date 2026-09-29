@@ -21,9 +21,9 @@ current proof. Current priorities live only in the plan.
 
 ### 2026-09-29 — GitHub LLVM/MLIR patch pin corrected
 
-Owner: [Foundation F0](INTEGRATED_COMPILER_PLAN.md#foundation-program)
+Owner: [F0](INTEGRATED_COMPILER_PLAN.md#f0)
 
-PRs: pending; sync `CI-LLVM-EXACT-2026-09-29`.
+PRs: [#883](https://github.com/gstoner/tessera/pull/883); sync `CI-LLVM-EXACT-2026-09-29`.
 
 Outcome: Hosted lit, ROCm serialization, and sanitizer lanes install a
 SHA256-checked official LLVM/MLIR 23.1.1 release instead of rolling

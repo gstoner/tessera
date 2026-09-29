@@ -29,6 +29,24 @@ int tessera_nvidia_ptx_register(const char* kernel_name, const char* ptx);
 // launches, syncs, copies outputs D2H. Returns 0 ok; nonzero rc: 4 = no PTX
 // registered for the name, 5 = unknown kernel ABI / bad shape, 2 = no usable
 // GPU, 3 = a device op failed.
+// Launch one approved resident package kernel using caller-owned CUDA device
+// pointers and stream. Supported only for RMSNorm and scheduled fp16 matmul.
+int tessera_nvidia_ptx_benchmark_resident(const char* kernel_name,
+                                          void** device_buffers,
+                                          size_t num_buffers,
+                                          const int64_t* dims,
+                                          size_t num_dims,
+                                          void* stream,
+                                          int warmup, int repetitions,
+                                          float* latency_ms);
+
+int tessera_nvidia_ptx_invoke_resident(const char* kernel_name,
+                                       void** device_buffers,
+                                       size_t num_buffers,
+                                       const int64_t* dims,
+                                       size_t num_dims,
+                                       void* stream);
+
 int tessera_nvidia_ptx_invoke(const char* kernel_name,
                               void** buffers, size_t num_buffers,
                               const int64_t* dims, size_t num_dims);

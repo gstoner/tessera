@@ -171,6 +171,309 @@ class NVIDIANativePackage:
     descriptor: LaunchDescriptor
 
 
+@dataclass(frozen=True)
+class NVIDIANativeTensorProgramResult:
+    producer_receipt: Mapping[str, Any]
+    consumer_receipt: Mapping[str, Any]
+    intermediate: Any
+    output: Any
+    device_session: Any = None
+
+    def close(self) -> None:
+        if self.device_session is not None:
+            self.device_session.close()
+
+    def __enter__(self) -> "NVIDIANativeTensorProgramResult":
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+
+@dataclass(frozen=True)
+class NVIDIANativeTensorProgram:
+    """One checked static SM120 producer-to-matmul package edge.
+
+    Python only sequences two already-compiled Graph -> Schedule -> Tile
+    packages. The producer and consumer semantics, layouts, and ABIs remain
+    owned by their native compiler artifacts.
+    """
+
+    producer: NVIDIANativePackage
+    consumer: NVIDIANativePackage
+    producer_input_name: str
+    intermediate_name: str
+    consumer_input_name: str
+    consumer_rhs_name: str
+    output_name: str
+    m: int
+    k: int
+    n: int
+    dtype: str = "fp16"
+
+    @staticmethod
+    def _binding(package: NVIDIANativePackage, name: str, direction: str) -> BufferBinding:
+        matches = [
+            item for item in package.descriptor.buffers
+            if item.name == name and item.direction == direction
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"tensor program requires exactly one {direction} binding named {name!r}"
+            )
+        return matches[0]
+
+    @staticmethod
+    def _static_shape(package: NVIDIANativePackage, name: str, rank: int) -> tuple[int, ...]:
+        rows = sorted(
+            (guard.dimension, guard.predicate, guard.value)
+            for guard in package.descriptor.shape_guards
+            if guard.binding == name
+        )
+        if (len(rows) != rank or [row[0] for row in rows] != list(range(rank))
+                or any(predicate != "eq" or type(value) is not int or value <= 0
+                       for _, predicate, value in rows)):
+            raise ValueError(f"tensor program requires static equality shape guards for {name!r}")
+        return tuple(value for _, _, value in rows)
+
+    def validate(self) -> None:
+        if self.dtype != "fp16" or min(self.m, self.k, self.n) <= 0:
+            raise ValueError("SM120 RMSNorm-to-matmul v1 requires positive static fp16 shapes")
+        for package in (self.producer, self.consumer):
+            if (package.image.target != "nvidia_sm120"
+                    or package.image.architecture != "sm_120a"
+                    or package.descriptor.image_digest != package.image.image_digest):
+                raise ValueError("tensor program packages must be identity-bound SM120 images")
+            provenance = package.descriptor.provenance
+            if (provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not provenance.get("schedule_digest")
+                    or not provenance.get("tile_ir_digest")
+                    or hashlib.sha256(package.tile_ir.encode()).hexdigest()
+                    != provenance.get("tile_ir_digest")):
+                raise ValueError("tensor program requires canonical replayed Schedule/Tile packages")
+            if "completion" not in package.descriptor.ordering.synchronization:
+                raise ValueError("tensor program edge requires producer completion before consumption")
+        producer_provenance = self.producer.descriptor.provenance
+        if (self.producer.descriptor.abi_id != SM120_NORM_F16_ABI
+                or producer_provenance.get("kind") != "rmsnorm"
+                or producer_provenance.get("storage") != "f16"):
+            raise ValueError("v1 tensor producer must be the scheduled SM120 fp16 RMSNorm package")
+        if (self.consumer.descriptor.abi_id != SM120_F16_ABI
+                or self.consumer.descriptor.provenance.get("storage") != "f16"):
+            raise ValueError("v1 tensor consumer must be the scheduled SM120 fp16/f32-accumulate matmul package")
+        producer_input = self._binding(self.producer, self.producer_input_name, "input")
+        produced = self._binding(self.producer, self.intermediate_name, "output")
+        consumed = self._binding(self.consumer, self.consumer_input_name, "input")
+        if (producer_input.dtype != self.dtype or producer_input.rank != 2
+                or producer_input.layout != "row_major"
+                or produced.dtype != self.dtype or consumed.dtype != self.dtype
+                or produced.rank != 2 or consumed.rank != 2
+                or produced.layout != "row_major" or consumed.layout != "row_major"
+                or produced.alignment < consumed.alignment):
+            raise ValueError("RMSNorm output and matmul A bindings have incompatible storage/layout")
+        if (self._static_shape(self.producer, self.producer_input_name, 2) != (self.m, self.k)
+                or self._static_shape(self.producer, self.intermediate_name, 2) != (self.m, self.k)
+                or self._static_shape(self.consumer, self.consumer_input_name, 2) != (self.m, self.k)):
+            raise ValueError("RMSNorm output and matmul A shapes do not match")
+        rhs = self._binding(self.consumer, self.consumer_rhs_name, "input")
+        if (rhs.dtype != self.dtype or rhs.rank != 2 or rhs.layout != "col_major"
+                or self._static_shape(self.consumer, self.consumer_rhs_name, 2) != (self.k, self.n)):
+            raise ValueError("v1 matmul RHS must be static fp16 column-major KxN")
+        output = self._binding(self.consumer, self.output_name, "output")
+        if (output.dtype != "fp32" or output.rank != 2 or output.layout != "row_major"
+                or self._static_shape(self.consumer, self.output_name, 2) != (self.m, self.n)):
+            raise ValueError("v1 matmul output must be static row-major fp32 MxN")
+        if not self.producer.descriptor.ordering.ordered_submission:
+            raise ValueError("producer package must declare ordered submission")
+
+    def execute_resident(
+        self,
+        producer_input: Any,
+        rhs: Any,
+    ) -> NVIDIANativeTensorProgramResult:
+        """Run the two packages on one caller-owned CUDA stream and edge allocation.
+
+        Inputs are uploaded once. The producer writes a device allocation that
+        the consumer reads directly; no host transfer occurs between launches.
+        The returned result owns the stream and allocations until close().
+        """
+        self.validate()
+        import numpy as np
+        from tessera import runtime as rt
+        from .emit.nvidia_cuda import NvidiaDeviceSession
+
+        source = np.asarray(producer_input)
+        right = np.asarray(rhs)
+        if source.shape != (self.m, self.k) or source.dtype != np.float16 or not source.flags.c_contiguous:
+            raise ValueError("RMSNorm source must be contiguous fp16 with shape MxK")
+        if right.shape != (self.k, self.n) or right.dtype != np.float16 or not right.flags.f_contiguous:
+            raise ValueError("matmul RHS must be column-major fp16 with shape KxN")
+
+        session = NvidiaDeviceSession()
+        try:
+            device_source = session.upload(source)
+            device_rhs = session.upload(right, layout="col_major")
+            edge = session.empty((self.m, self.k), np.float16)
+            result = session.empty((self.m, self.n), np.float32)
+
+            def runtime_artifact(package: NVIDIANativePackage) -> Any:
+                return rt.RuntimeArtifact(
+                    metadata={"target": "nvidia_sm120"},
+                    native_image=package.image,
+                    launch_descriptor=package.descriptor,
+                    tile_ir=package.tile_ir,
+                    target_ir=package.target_ir,
+                )
+
+            producer_receipt = rt.launch(
+                runtime_artifact(self.producer),
+                {
+                    self.producer_input_name: device_source,
+                    self.intermediate_name: edge,
+                    "Rows": self.m,
+                    "Columns": self.k,
+                },
+                stream=session.stream,
+            )
+            if (producer_receipt.get("ok") is not True
+                    or producer_receipt.get("execution_kind") != "native_gpu"):
+                raise RuntimeError(f"resident RMSNorm producer failed: {producer_receipt}")
+            consumer_receipt = rt.launch(
+                runtime_artifact(self.consumer),
+                {
+                    self.consumer_input_name: edge,
+                    self.consumer_rhs_name: device_rhs,
+                    self.output_name: result,
+                    "M": self.m,
+                    "N": self.n,
+                    "K": self.k,
+                },
+                stream=session.stream,
+            )
+            if (consumer_receipt.get("ok") is not True
+                    or consumer_receipt.get("execution_kind") != "native_gpu"):
+                raise RuntimeError(f"resident matmul consumer failed: {consumer_receipt}")
+            if session.synchronize() != 0:
+                raise RuntimeError("resident RMSNorm-to-matmul stream did not complete")
+            return NVIDIANativeTensorProgramResult(
+                producer_receipt=producer_receipt,
+                consumer_receipt=consumer_receipt,
+                intermediate=edge,
+                output=result,
+                device_session=session,
+            )
+        except Exception:
+            session.close()
+            raise
+
+    def execute(
+        self,
+        producer_input: Any,
+        rhs: Any,
+        *,
+        intermediate: Any | None = None,
+        output: Any | None = None,
+    ) -> NVIDIANativeTensorProgramResult:
+        """Run both native packages with an explicit caller-owned edge buffer."""
+        self.validate()
+        import numpy as np
+        from tessera import runtime as rt
+
+        source = np.asarray(producer_input)
+        right = np.asarray(rhs)
+        if source.shape != (self.m, self.k) or source.dtype != np.float16 or not source.flags.c_contiguous:
+            raise ValueError("RMSNorm source must be contiguous fp16 with shape MxK")
+        if right.shape != (self.k, self.n) or right.dtype != np.float16 or not right.flags.f_contiguous:
+            raise ValueError("matmul RHS must be column-major fp16 with shape KxN")
+        edge = np.empty((self.m, self.k), dtype=np.float16) if intermediate is None else np.asarray(intermediate)
+        result = np.empty((self.m, self.n), dtype=np.float32) if output is None else np.asarray(output)
+        if edge.shape != (self.m, self.k) or edge.dtype != np.float16 or not edge.flags.c_contiguous:
+            raise ValueError("intermediate must be caller-owned contiguous fp16 with shape MxK")
+        if result.shape != (self.m, self.n) or result.dtype != np.float32 or not result.flags.c_contiguous:
+            raise ValueError("matmul output must be contiguous fp32 with shape MxN")
+        if (np.shares_memory(edge, source) or np.shares_memory(edge, right)
+                or np.shares_memory(edge, result) or np.shares_memory(result, source)
+                or np.shares_memory(result, right)):
+            raise ValueError("producer intermediate and consumer output must not alias live inputs")
+
+        def runtime_artifact(package: NVIDIANativePackage) -> Any:
+            return rt.RuntimeArtifact(
+                metadata={"target": "nvidia_sm120"},
+                native_image=package.image,
+                launch_descriptor=package.descriptor,
+                tile_ir=package.tile_ir,
+                target_ir=package.target_ir,
+            )
+
+        producer_args: dict[str, Any] = {
+            self.producer_input_name: source,
+            self.intermediate_name: edge,
+            "Rows": self.m,
+            "Columns": self.k,
+        }
+        producer_receipt = rt.launch(runtime_artifact(self.producer), producer_args)
+        if (producer_receipt.get("ok") is not True
+                or producer_receipt.get("execution_kind") != "native_gpu"):
+            raise RuntimeError(f"RMSNorm producer did not complete natively: {producer_receipt}")
+        # Retain and pass the exact output allocation through consumer completion.
+        consumer_args: dict[str, Any] = {
+            self.consumer_input_name: edge,
+            self.consumer_rhs_name: right,
+            self.output_name: result,
+            "M": self.m,
+            "N": self.n,
+            "K": self.k,
+        }
+        consumer_receipt = rt.launch(runtime_artifact(self.consumer), consumer_args)
+        if (consumer_receipt.get("ok") is not True
+                or consumer_receipt.get("execution_kind") != "native_gpu"):
+            raise RuntimeError(f"matmul consumer did not complete natively: {consumer_receipt}")
+        return NVIDIANativeTensorProgramResult(
+            producer_receipt=producer_receipt,
+            consumer_receipt=consumer_receipt,
+            intermediate=edge,
+            output=result,
+        )
+
+
+def package_scheduled_rmsnorm_matmul(
+    producer_artifact: Any,
+    consumer_artifact: Any,
+    *,
+    pipeline_name: str,
+) -> NVIDIANativeTensorProgram:
+    """Package the first bounded native tensor edge: fp16 RMSNorm -> fp16 matmul."""
+    if (producer_artifact.target != "nvidia_sm120"
+            or producer_artifact.family != "norm"
+            or producer_artifact.kind != "rmsnorm"
+            or producer_artifact.dtype != "fp16"
+            or producer_artifact.storage != "f16"
+            or producer_artifact.output_shape != producer_artifact.input_shape):
+        raise ValueError("producer must be a shape-preserving fp16 RMSNorm Schedule artifact")
+    if (consumer_artifact.target != "nvidia_sm120"
+            or consumer_artifact.storage != "f16"
+            or consumer_artifact.a_dtype != "fp16"
+            or consumer_artifact.output_dtype != "fp32"
+            or consumer_artifact.a_name == consumer_artifact.b_name):
+        raise ValueError("consumer must be a scheduled fp16-input SM120 matmul")
+    producer = package_scheduled_kernel(producer_artifact, pipeline_name=pipeline_name)
+    consumer = package_scheduled_matmul(consumer_artifact, pipeline_name=pipeline_name)
+    program = NVIDIANativeTensorProgram(
+        producer=producer,
+        consumer=consumer,
+        producer_input_name=producer_artifact.input_name,
+        intermediate_name=producer_artifact.output_name,
+        consumer_input_name=consumer_artifact.a_name,
+        consumer_rhs_name=consumer_artifact.b_name,
+        output_name=consumer_artifact.output_name,
+        m=consumer_artifact.m,
+        k=consumer_artifact.k,
+        n=consumer_artifact.n,
+    )
+    program.validate()
+    return program
+
+
 _cache: dict[
     str,
     tuple[

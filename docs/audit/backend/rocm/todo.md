@@ -12,6 +12,13 @@ scope: ROCm backend implementation and exact-device proof
 Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
 Follow-up required: the shared Graph shape contract now yields f32 [H,S,S] for a traced explicit-slopes call. Existing gfx1151/gfx1201 ALiBi lanes have no new native Schedule/HSACO or exact-device proof from this change.
 
+## E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29: bounded image identity
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29.
+Owning gfx1151 route: static, unfused, unsplit f16/bf16 register matmul at K-unroll 1 now compiles the replayed Target directive under a shape-independent image key. Princess-Luna ran six exact-device numerical shapes; three f16 shapes shared one image, while the historical Tile-text key compiled three identical payloads. gfx1201 and fused/split/dynamic/LDS routes remain follow-up required. Host-wall package and launch timings are diagnostic, not kernel speed or selector promotion. The raw E2E-REAL-4 launcher now resolves the package descriptor symbol; the aligned 64x64x64 and ragged 65x67x31 cases passed exact gfx1151 NumPy checks after rebase. A small-shape timing run still fails its throughput gate, so there is no promotion.
+
+[Packet](../../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
+
 
 ## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
 

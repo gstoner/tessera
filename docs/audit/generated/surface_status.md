@@ -7,7 +7,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | Surface | Entries | Status breakdown |
 |---|--:|---|
 | examples | 25 | runnable=23, runnable_optional=2 |
-| benchmarks | 25 | archived=1, compile_only=13, runnable=11 |
+| benchmarks | 26 | archived=1, compile_only=14, runnable=11 |
 | research | 2 | compile_only=1, runnable=1 |
 | tools | 6 | archived=1, compile_only=2, runnable=3 |
 | tests | 10 | archived=2, compile_only=3, runnable=1, scaffold=4 |
@@ -67,6 +67,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `benchmarks/linalg` | runnable | `benchmarks/linalg/linalg_bench.py` |  |
 | `benchmarks/math` | compile_only | `benchmarks/math/benchmark_physical_math.py` |  |
 | `benchmarks/rl` | compile_only | `benchmarks/rl/benchmark_policy_losses.py` |  |
+| `benchmarks/rocm` | compile_only | `benchmarks/rocm/record_gfx1151_matmul_shape_key.py` |  |
 | `benchmarks/spectral` | runnable | `benchmarks/spectral/spectral_correctness.py` |  |
 | `benchmarks/spectral` | runnable | `benchmarks/spectral/spectral_bench.py` |  |
 | `benchmarks/visual_complex_core` | compile_only | `benchmarks/visual_complex_core/core.py` |  |

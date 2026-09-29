@@ -99,6 +99,13 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         ),
     ),
     SurfaceEntry(
+        directory="benchmarks/rocm",
+        entry_point="benchmarks/rocm/record_gfx1151_matmul_shape_key.py",
+        status="compile_only",
+        command="python -m py_compile benchmarks/rocm/record_gfx1151_matmul_shape_key.py",
+        notes="Exact gfx1151 hardware-gated image-key and numerical recorder. CI checks syntax only; WSL host-wall samples are diagnostic and never kernel-time or selector promotion evidence.",
+    ),
+    SurfaceEntry(
         directory="benchmarks/math",
         entry_point="benchmarks/math/benchmark_physical_math.py",
         status="compile_only",

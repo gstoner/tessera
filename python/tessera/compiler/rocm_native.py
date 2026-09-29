@@ -1375,10 +1375,13 @@ _SHAPE_FREE_DIRECTIVES: dict[str, str] = {
     "paged_kv": "tessera_rocm.paged_kv_read",
     "moe_dispatch": "tessera_rocm.moe_dispatch",
     "attention": "tessera_rocm.flash_attn",
+    # The bounded gfx1151 register route uses runtime M/N/K. The WMMA
+    # directive describes the fixed instruction tile and physical panel.
+    "matmul": "tessera_rocm.wmma_gemm",
 }
 
 #: Host-side scaffolding TileToROCM leaves around the directive in a scheduled
-#: unary Target IR module. None of it reaches the HSACO (the generator emits
+#: Target IR module. None of it reaches the HSACO (the generator emits
 #: the kernel from the directive; the host function is not serialized). Any
 #: other operation fails closed: dropping an op we have not audited could drop
 #: something the binary depends on.
@@ -1399,7 +1402,7 @@ _shape_free_targets: dict[str, str] = {}
 
 
 def _shape_free_target_ir(target_ir: str, *, family: str, directive: str) -> str:
-    """Project one scheduled unary Target IR module onto its kernel identity.
+    """Project one audited ROCm Target IR module onto its kernel identity.
 
     Returns a Target IR module holding only the module header and the one
     directive, with the directive's ``name`` replaced by a symbol derived from
@@ -1441,6 +1444,21 @@ def _shape_free_target_ir(target_ir: str, *, family: str, directive: str) -> str
     if len(directive_lines) != 1:
         raise RuntimeError(f"ROCm shape-free kernel identity requires exactly one {directive} directive")
     line = directive_lines[0]
+    if family == "matmul":
+        # Schedule ancestry is checked against the replayed Tile artifact and
+        # remains in the launch descriptor. The generator does not read this
+        # provenance-only attribute; leaving it on the directive would make
+        # each runtime shape a distinct image despite identical GPU code.
+        schedule_hash = re.findall(
+            r', tessera\.schedule_hash = "([0-9a-f]{64})"', line
+        )
+        if len(schedule_hash) != 1:
+            raise RuntimeError(
+                "ROCm matmul shape-free identity requires one Schedule hash"
+            )
+        line = re.sub(
+            r', tessera\.schedule_hash = "[0-9a-f]{64}"', "", line
+        )
     if not (line.startswith(directive + " {") and line.endswith("}")):
         raise RuntimeError(f"ROCm shape-free kernel identity requires one attribute-only {directive} directive")
     if len(_NAME_ATTR_RE.findall(line)) != 1:
@@ -1613,7 +1631,7 @@ def _compile_reduction_tile_ir(tile_ir: str):
 
 
 def _compile_shape_free_tile_ir(tile_ir: str, *, family: str, architecture: str):
-    """Compile a scheduled softmax/reduction by its shape-free kernel identity.
+    """Compile an audited scheduled family by its shape-free kernel identity.
 
     The Tile IR is the replay of a Schedule record whose digest binds the static
     shape, and its function carries the Graph symbol, so keying the image on
@@ -1923,6 +1941,13 @@ def package_scheduled_matmul(
         artifact, staging=staging, k_unroll=k_unroll)
     if staging == "lds" and k_unroll != 1:
         raise ValueError("ROCm LDS staging and K unrolling are separate physical schedules")
+    shape_free_matmul = (
+        arch == "gfx1151" and staging == "register" and k_unroll == 1
+        and split_k == 1 and artifact.bias_name is None
+        and artifact.activation == "none"
+        and not (artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k)
+        and artifact.a_dtype in {"fp16", "bf16"}
+    )
     (
         target_ir,
         backend_ir,
@@ -1931,13 +1956,14 @@ def package_scheduled_matmul(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = (_compile_scheduled_matmul_tile_ir(artifact.tile_ir)
-         if arch == "gfx1151" and staging == "register" and k_unroll == 1 else
+    ) = (_compile_shape_free_tile_ir(artifact.tile_ir, family="matmul", architecture=arch)
+         if shape_free_matmul else
          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.wmma",
                                  family="matmul", architecture=arch, staging=staging,
                                  lds_waves=(int(lds_waves[0]), int(lds_waves[1])),
                                  k_unroll=int(k_unroll)))
-    entry = artifact.function_name
+    entry = (_directive_symbol(target_ir, "tessera_rocm.wmma_gemm")
+             if shape_free_matmul else artifact.function_name)
     if artifact.residual_name is not None:
         raise ValueError("ROCm scheduled matmul does not carry a residual epilogue")
     fused = artifact.bias_name is not None or artifact.activation != "none"

@@ -531,10 +531,11 @@ def test_rocm_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
     # This test isolates final image consumption; native replay is tested below.
     monkeypatch.setattr(scheduled_matmul, "verify_matmul_projection", lambda _: None)
 
-    def fake_compile(tile_ir: str):
+    def fake_compile(tile_ir: str, *, family: str, architecture: str):
         assert tile_ir == artifact.tile_ir
+        assert (family, architecture) == ("matmul", "gfx1151")
         return (
-            'module { "tessera_rocm.wmma"() : () -> () }',
+            'module {\n  tessera_rocm.wmma_gemm {name = "tessera_rocm_matmul_fixture"}\n}',
             "module { gpu.binary @gfx1151 }",
             b"hsaco-image",
             "compiler",
@@ -543,13 +544,14 @@ def test_rocm_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
             "cold",
         )
 
-    monkeypatch.setattr(rocm_native, "_compile_scheduled_matmul_tile_ir", fake_compile)
+    monkeypatch.setattr(rocm_native, "_compile_shape_free_tile_ir", fake_compile)
     package = rocm_native.package_scheduled_matmul(
         artifact,
         pipeline_name="tessera-lower-to-rocm",
     )
 
     assert package.tile_ir == artifact.tile_ir
+    assert package.descriptor.entry_symbol == "tessera_rocm_matmul_fixture"
     assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
     assert package.descriptor.provenance["tile_ir_digest"] == artifact.tile_digest
     assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
@@ -724,9 +726,9 @@ def test_driver_records_adjacent_scheduled_matmul_lineage(
     elif target == "rocm_gfx1151":
         monkeypatch.setattr(
             rocm_native,
-            "_compile_scheduled_matmul_tile_ir",
-            lambda tile_ir: (
-                'module { "tessera_rocm.wmma"() : () -> () }',
+            "_compile_shape_free_tile_ir",
+            lambda tile_ir, *, family, architecture: (
+                'module {\n  tessera_rocm.wmma_gemm {name = "tessera_rocm_matmul_fixture"}\n}',
                 "module { gpu.binary @gfx1151 }",
                 b"hsaco-image",
                 "compiler",

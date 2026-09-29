@@ -19,30 +19,7 @@ current proof. Current priorities live only in the plan.
 
 
 
-### 2026-09-29 — GitHub LLVM/MLIR patch pin corrected
 
-Owner: [F0](INTEGRATED_COMPILER_PLAN.md#f0)
-
-PRs: [#883](https://github.com/gstoner/tessera/pull/883); sync `CI-LLVM-EXACT-2026-09-29`.
-
-Outcome: Hosted lit, ROCm serialization, and sanitizer lanes install a
-SHA256-checked official LLVM/MLIR 23.1.1 release instead of rolling
-apt.llvm.org MLIR 23.1.2. The resolver and CMake both enforce the exact
-fleet pin. The release's ICU70 runtime is isolated beside the toolchain,
-and Tessera matches its no-RTTI LLVM ABI.
-
-Remaining: Run all hosted opt-in lanes on this PR and confirm available disk
-and link behavior on GitHub runners. Exact-device backend proof remains owned
-by each device host.
-
-Evidence: GitHub main lit artifact from run 36514973125 recorded LLVM and
-MLIR 23.1.2 against fleet pin 23.1.1. The verified official release archive
-has SHA256 `832aeb58d105de1cabc7b982dd2c65de0610f7377df48ae8fc2dd8e97420a15c`.
-Princess-Luna WSL configured Tessera with exact 23.1.1 from that archive;
-the automatic no-RTTI CMake configuration built `tessera-rocm-opt` and
-three ROCm HSACO serialization tests passed with the pinned tools. CI and
-audit drift tests passed 64 cases before hosted validation.
-<!-- entry-fields:end -->
 
 ### 2026-09-28 — gfx1151 paged-KV native Schedule and shape-free image
 
@@ -6276,4 +6253,29 @@ source-matched coupled residual run. The math and residual timings are
 synchronized host calls, not device-kernel measurements.
 [Packet](../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
 
+<!-- entry-fields:end -->
+
+### 2026-09-29 — GitHub LLVM/MLIR patch pin corrected
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: [#883](https://github.com/gstoner/tessera/pull/883); sync `CI-LLVM-EXACT-2026-09-29`.
+
+Outcome: Hosted lit, ROCm serialization, and sanitizer lanes install a
+SHA256-checked official LLVM/MLIR 23.1.1 release instead of rolling
+apt.llvm.org MLIR 23.1.2. The resolver and CMake both enforce the exact
+fleet pin. The release's ICU70 runtime is isolated beside the toolchain,
+and Tessera matches its no-RTTI LLVM ABI.
+
+Remaining: Run all hosted opt-in lanes on this PR and confirm available disk
+and link behavior on GitHub runners. Exact-device backend proof remains owned
+by each device host.
+
+Evidence: GitHub main lit artifact from run 36514973125 recorded LLVM and
+MLIR 23.1.2 against fleet pin 23.1.1. The verified official release archive
+has SHA256 `832aeb58d105de1cabc7b982dd2c65de0610f7377df48ae8fc2dd8e97420a15c`.
+Princess-Luna WSL configured Tessera with exact 23.1.1 from that archive;
+the automatic no-RTTI CMake configuration built `tessera-rocm-opt` and
+three ROCm HSACO serialization tests passed with the pinned tools. CI and
+audit drift tests passed 64 cases before hosted validation.
 <!-- entry-fields:end -->

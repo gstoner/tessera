@@ -13,8 +13,10 @@ The gfx1151 f32/f16/bf16 `sum` rows now reload native Graph → Schedule →
 Tile → Target packages and bind each launch receipt to the serialized image.
 The other 18 ROCm rows still construct explicit runtime metadata and retain
 their `metadata_runtime_probe` label. Their execution does not prove compiler
-ancestry. All ROCm timing remains synchronized host-wrapper time; broader
-package migration and gfx1201 proof remain open.
+ancestry. The legacy cache comparison retains only those six metadata rows;
+packaged sum has a separate module lifetime. All ROCm timing remains
+synchronized host-wrapper time; broader package migration and gfx1201 proof
+remain open.
 
 Run from the repository root with `PYTHONPATH=.:python`, choose `--target x86`
 or `--target rocm`, and use positive `--iterations`. ROCm requires `--dtype all`.

@@ -1,9 +1,7 @@
-// RUN: %tnv --allow-unregistered-dialect --lower-tile-to-nvidia='sm=120' %s | FileCheck %s
+// RUN: not %tnv --allow-unregistered-dialect --lower-tile-to-nvidia='sm=120' %s 2>&1 | FileCheck %s
 
-// Consumer Blackwell (RTX 50-series, sm_120) is NOT a superset of datacenter
-// sm_100: tile.mma must lower to warp-level `mma.sync`, never tcgen05_mma /
-// tmem_alloc (those are datacenter sm_100a only). Mirrors the Python guard
-// tests/unit/test_target_ir.py::test_lower_tile_to_nvidia_sm120_target_ir_maps_mma_to_warp_level_mma_sync.
+// A tensor-valued tile.mma has no physical lane fragment mapping. The
+// positive typed accumulator-loop fixture proves sm_120 mma.sync lowering.
 
 module {
   func.func @kernel(%a: tensor<16x16xf32>, %b: tensor<16x16xf32>) {
@@ -12,8 +10,4 @@ module {
   }
 }
 
-// CHECK: tessera_nvidia.mma_sync
-// CHECK-SAME: arch = "sm_120"
-// CHECK-SAME: shape = "m16n8k16"
-// CHECK-NOT: tessera_nvidia.tcgen05_mma
-// CHECK-NOT: tessera_nvidia.tmem_alloc
+// CHECK: sm_120 tile.mma requires typed fragment registers and an accumulator

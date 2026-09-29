@@ -184,3 +184,16 @@ def test_rocm_math_rejects_unbound_serialized_receipt():
     rt = SimpleNamespace(launch=lambda *args: {"ok": True, "execution_kind": "native_gpu"})
     with pytest.raises(RuntimeError, match="serialized package"):
         benchmark._checked_launch(rt, "rocm", artifact, ())
+
+
+def test_rocm_cache_comparison_excludes_serialized_native_sum(monkeypatch):
+    from types import SimpleNamespace
+
+    inputs = (np.ones((1, 2), dtype=np.float32),)
+    monkeypatch.setattr(benchmark, "_cases", lambda *args: [
+        ("reduce", "sum", inputs, {"axis": -1}, lambda: np.ones(1))])
+    monkeypatch.setattr(benchmark, "_artifact", lambda *args: pytest.fail(
+        "packaged sum must not enter the legacy cache comparison"))
+    rows = [{"family": "reduce", "op_name": "sum", "warm_median_ms": 1.0,
+             "compiler_boundary": "serialized_native_package"}]
+    assert benchmark._rocm_cache_comparison(SimpleNamespace(), rows, 2) == []

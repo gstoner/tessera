@@ -308,14 +308,18 @@ def _rocm_cache_comparison(rt: Any, cached_rows: list[dict[str, Any]],
                            iterations: int) -> list[dict[str, Any]]:
     """Measure the old per-call module policy against the retained cache."""
     cached = {
-        (row["family"], row["op_name"]): float(row["warm_median_ms"])
+        (row["family"], row["op_name"]): row
         for row in cached_rows
     }
     result = []
     for family, op_name, operands, kwargs, _reference_fn in _cases("rocm", "f32"):
+        row = cached[(family, op_name)]
+        # Native descriptors use a different module lifetime; clearing the
+        # legacy math cache cannot construct a comparable per-call arm.
+        if row.get("compiler_boundary") == "serialized_native_package":
+            continue
         artifact = _artifact(rt, "rocm", family, op_name, operands, kwargs)
-        launch_args = (_native_arguments(artifact, operands)
-                       if getattr(artifact, "native_image", None) is not None else operands)
+        launch_args = operands
         samples = []
         for _ in range(iterations):
             # Include module load in the timed region but charge teardown to
@@ -328,7 +332,7 @@ def _rocm_cache_comparison(rt: Any, cached_rows: list[dict[str, Any]],
                 raise RuntimeError(launched.get("reason", f"{family}/{op_name} failed"))
         _clear_rocm_math_modules(rt)
         per_call_ms = statistics.median(samples) / 1.0e6
-        cached_ms = cached[(family, op_name)]
+        cached_ms = float(row["warm_median_ms"])
         result.append({
             "family": family,
             "op_name": op_name,
@@ -390,7 +394,7 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         "selector_eligible": False,
         "device_event_follow_up": WSL_WITNESS_MISSING,
         "storage_dtypes": ["f32", "f16", "bf16"],
-        "module_policy": "process_lifetime_cache_by_family_chip_kind_dtype",
+        "module_policy": "mixed_legacy_process_cache_native_sum_per_launch",
         "dtype_rows": dtype_rows,
         "f32_cache_comparison": _rocm_cache_comparison(
             rt, rows_by_dtype["f32"], iterations

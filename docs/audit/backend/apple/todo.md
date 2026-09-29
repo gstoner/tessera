@@ -8,6 +8,17 @@ last_updated: 2026-09-28
 
 # Apple compiler, exact-device, and performance plan
 
+## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: split residual ABI
+
+Owners AD-RESIDUAL-EVAL-1 / EVIDENCE-PACKET-1 / W1.1.
+Shared CUDA/HIP persistent tape validation now binds residual-source identity
+and exported slots across both products. Apple has no persistent Metal tape
+consumer; parity and performance remain follow-up required. The gfx1151 math
+packet and NVIDIA tensor-fragment producer work are not Apple device proof.
+
+[Evidence](../../../../benchmarks/baselines/compiler_math_residual_next_20260929/README.md).
+
+
 ## `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`: evidence, fragments and residuals
 
 Owners EVIDENCE-PACKET-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

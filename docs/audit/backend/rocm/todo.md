@@ -7,6 +7,20 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: measured packet and split ABI
+
+Owners EVIDENCE-PACKET-1 / AD-RESIDUAL-EVAL-1 / W1.1.
+Princess-Luna gfx1151 produced 21 numerically gated math rows: three
+serialized native `sum` packages and 18 metadata probes across six remaining
+operations and three dtypes. Three nested SAVE tape cases passed exact-device
+capture, backward, and mutation controls with the strengthened residual-source
+ABI. This host-wall packet is diagnostic, not kernel timing or promotion.
+gfx1201 remains unmeasured for this change; NVIDIA fragment producers are
+architecture-specific and not ROCm parity.
+
+[Evidence](../../../../benchmarks/baselines/compiler_math_residual_next_20260929/README.md).
+
+
 ## `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`: evidence, fragments and residuals
 
 Owners EVIDENCE-PACKET-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

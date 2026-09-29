@@ -79,6 +79,26 @@ def _input_status_count(package):
     return count
 
 
+def _validate_product_residuals(forward, backward):
+    """Match exported residual slots and sources across split products."""
+    count = forward.get('primal_results')
+    sources = forward.get('residual_sources')
+    if (type(count) is not int or count < 0 or
+            not isinstance(sources, list) or
+            not all(isinstance(source, str) and source for source in sources) or
+            sources != backward.get('residual_sources')):
+        raise ValueError('persistent tape residual source contract disagrees')
+    forward_results = forward.get('results')
+    backward_inputs = backward.get('inputs')
+    if (not isinstance(forward_results, list) or
+            not isinstance(backward_inputs, list) or
+            len(forward_results) != count + len(sources) or
+            backward.get('primal_results') != count or
+            backward.get('primal_inputs') != forward.get('primal_inputs') or
+            backward_inputs != forward.get('inputs', []) + forward_results):
+        raise ValueError('persistent tape residual ABI disagrees')
+
+
 def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip, checked_status=False, gated_input=False, status_inputs=1):
     """Generate, bufferize and materialize both products from one fresh request."""
     compiler,llvm_bin=Path(compiler),Path(llvm_bin)
@@ -120,7 +140,8 @@ def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip, ch
     if lineages[0]!=lineages[1]:
         raise ValueError('persistent tape native products have different lineage')
     f,b=contracts
-    if b['inputs']!=f['inputs']+f['results'] or b['results']!=f['inputs']:
+    _validate_product_residuals(f,b)
+    if b['results']!=f['inputs']:
         raise ValueError('persistent tape requires gradients for every primal input')
     result=PersistentTapePair(packages[0],packages[1],hashlib.sha256(lineages[0].encode()).hexdigest())
     result.validate()
@@ -156,7 +177,8 @@ class PersistentTapePair:
         if _checked_status(self.forward)!=_checked_status(self.backward):
             raise ValueError('persistent tape status contracts disagree')
         f,b=contracts
-        if b['inputs']!=f['inputs']+f['results'] or b['results']!=f['inputs']:
+        _validate_product_residuals(f,b)
+        if b['results']!=f['inputs']:
             raise ValueError('persistent tape residual ABI disagrees')
         return f,b
 

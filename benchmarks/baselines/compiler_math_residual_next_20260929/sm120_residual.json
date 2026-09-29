@@ -1,0 +1,39 @@
+{
+  "backend": "nvidia",
+  "rows": [
+    {
+      "width": 4,
+      "lineage": "3fdc18e0a30b87f5db160ef1d951165efba1d3e812b3c9130bdcf4aced3714c0",
+      "forward": "100345cc0c04a69560949342def9a4820e9aa55e7ceb53972b115bd80fd6a24c",
+      "backward": "2fc47ce4381b9105b80cde595fe5f60c2ff05f5b8856e0c46c01c5b1030cb9b3",
+      "repeated_backward": true,
+      "residual_mutation_control": true
+    },
+    {
+      "width": 8,
+      "lineage": "ca53aa02fba5466bd861216ee8271d15655325644f3990870d98af1c0a742a0a",
+      "forward": "7f729747659da23aa3ec2285fcd9dac72d1de31f867a4b16ff7e522fedb364ca",
+      "backward": "d03ac6100cf403f6e039edb3035fc013d8b4140f51243d127bad82f3f449266a",
+      "repeated_backward": true,
+      "residual_mutation_control": true
+    },
+    {
+      "width": 16,
+      "lineage": "82809a17308cca03bdbdd22c609327bf8f6b63424225100a819e2598326f1295",
+      "forward": "d47fd5b2bade12ec662331f7ffbbc511bb4fd8d918be0ca10a78f2184d35bb0d",
+      "backward": "12aa9b3e7bbcd63ff90d9a51fbe989a0943814194e22713a92d22c5f81c5ed7a",
+      "repeated_backward": true,
+      "residual_mutation_control": true
+    }
+  ],
+  "compiler_sha256": "daac9626f676e3d9a66f63ebf3ece75522f7e076e909a21b5d66bec41ecf07ca",
+  "source_hashes": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "8a7d50550353ef47999ea460169eff253cce159f2a9c3af8a154cdb78d8750e7",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "b308bd265dc035356f2bafea3700aee3b664bc751a9f84b55e53bc11fc75fade",
+    "python/tessera/compiler/native_persistent_tape.py": "2da5e6a54c74748a4a4bc9c6cea05196609ed18fa5d9d37ca468526a6938159d",
+    "python/tessera/compiler/native_gpu_storage.py": "e311c9d00b538dd66afba5cd7bdfebe0af956eb867b6559276c95b8dd6d53326",
+    "python/tessera/compiler/native_gpu_tensor.py": "8531a34a9b81e72ca61f366b2b4b7e5cf0e221886ad4ec409ffe9b8a0eb8dfeb",
+    "python/tessera/compiler/native_storage_contract.py": "75fcc10ce8c864164207a345fe9bd9b7d5d096f0f10af1a5f6c39667c60f8283"
+  },
+  "recorder_sha256": "268fd88418e982957b57a115236a2db8f1aeef94f702a6627bd50fc6d6c7429d"
+}

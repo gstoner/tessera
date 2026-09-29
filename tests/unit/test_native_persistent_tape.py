@@ -6,8 +6,27 @@ import pytest
 import numpy as np
 import tessera as ts
 from benchmarks.record_persistent_split_tape import source
-from tessera.compiler.native_persistent_tape import materialize_persistent_tape, _shape
+from tessera.compiler.native_persistent_tape import materialize_persistent_tape, _shape, _validate_product_residuals
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+
+def test_split_residual_sources_match_exported_slots():
+    forward = dict(inputs=['tensor<4xf32>'], primal_inputs=1, primal_results=1,
+                   results=['tensor<4xf32>', 'tensor<1x4xf32>'],
+                   residual_sources=['generic_for:state_tape'])
+    backward = dict(inputs=forward['inputs'] + forward['results'],
+                    primal_inputs=1, primal_results=1,
+                    residual_sources=['generic_for:state_tape'])
+    _validate_product_residuals(forward, backward)
+    for changed in (
+        dict(backward, residual_sources=['different:state_tape']),
+        dict(backward, inputs=backward['inputs'][:-1]),
+        dict(backward, primal_results=2),
+    ):
+        with pytest.raises(ValueError, match='residual'):
+            _validate_product_residuals(forward, changed)
+    with pytest.raises(ValueError, match='residual'):
+        _validate_product_residuals(dict(forward, residual_sources=[]), backward)
 
 
 def test_jit_reverse_trace_materializes_split_products():

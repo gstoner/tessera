@@ -139,6 +139,7 @@ def _correctness_row(hip: Any, direct_hsaco: bytes, shape: tuple[int, int, int])
         a,
         b,
         None,
+        entry_symbol=package.descriptor.entry_symbol,
     )
     try:
         direct_output = direct.download()
@@ -212,6 +213,7 @@ def run(*, size: int, trials: int, iterations: int, warmup: int) -> dict[str, An
         a,
         b,
         None,
+        entry_symbol=scheduled_package.descriptor.entry_symbol,
     )
     direct_samples: list[float] = []
     scheduled_samples: list[float] = []

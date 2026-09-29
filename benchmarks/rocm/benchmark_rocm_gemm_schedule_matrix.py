@@ -200,7 +200,7 @@ def _mr(pointer: ctypes.c_void_p, size: int) -> list[Any]:
 class DeviceCase:
     def __init__(self, hip: ctypes.CDLL, hsaco: bytes, case: Case,
                  tile: tuple[int, int], a: np.ndarray, b: np.ndarray,
-                 bias: np.ndarray | None):
+                 bias: np.ndarray | None, *, entry_symbol: str = "gemm"):
         self.hip = hip
         self.case = case
         self.tile = tile
@@ -208,8 +208,10 @@ class DeviceCase:
         if hip.hipModuleLoadData(ctypes.byref(self.mod), hsaco) != 0:
             raise RuntimeError("hipModuleLoadData failed")
         self.fn = ctypes.c_void_p()
-        if hip.hipModuleGetFunction(ctypes.byref(self.fn), self.mod, b"gemm") != 0:
-            raise RuntimeError("kernel symbol gemm was not found")
+        if hip.hipModuleGetFunction(
+            ctypes.byref(self.fn), self.mod, entry_symbol.encode("ascii")
+        ) != 0:
+            raise RuntimeError(f"kernel symbol {entry_symbol} was not found")
         self.out_dtype = np.int32 if case.dtype in ("int8", "int4") else np.float32
         self.output = np.empty((case.m, case.n), dtype=self.out_dtype)
         self.devs: list[ctypes.c_void_p] = []

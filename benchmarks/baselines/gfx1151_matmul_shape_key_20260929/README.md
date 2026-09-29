@@ -21,3 +21,5 @@ source scripts/_rocm_env.sh
 PYTHONPATH=python:. TESSERA_OPT=/path/to/rebuilt/tessera-opt TESSERA_ROCM_CHIP=gfx1151 \
   python benchmarks/rocm/record_gfx1151_matmul_shape_key.py
 ```
+
+Post-review raw-launch validation: the E2E-REAL-4 benchmark resolves the scheduled entry from its package descriptor. Princess-Luna gfx1151 passed NumPy checks for 64x64x64 (maximum absolute error 1.94e-7) and ragged 65x67x31 (8.94e-8). Its 64-cube timing run returned a reject verdict against the canonical throughput floor; that small shape is correctness evidence only.

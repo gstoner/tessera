@@ -322,7 +322,8 @@ def package_native(
     if kind == "cohort2":
         return package_cohort2(module, pipeline_name=pipeline_name)
     if kind == "breadth":
-        return package_breadth(module, pipeline_name=pipeline_name)
+        from .x86_breadth import package_graph_breadth
+        return package_graph_breadth(module, pipeline_name=pipeline_name)
     if kind == "elementwise":
         return package_elementwise(module, pipeline_name=pipeline_name)
     raise ValueError(
@@ -1632,19 +1633,6 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86Native
     from .scheduled_attention import lower_scheduled_attention
     return package_scheduled_attention(lower_scheduled_attention(module, target='x86'),
                                        pipeline_name=pipeline_name)
-
-
-def package_breadth(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
-    """Compile every admitted breadth envelope through native Schedule/Tile."""
-    from . import scheduled_kernel
-    from .x86_breadth import requests_graph_breadth
-
-    if not requests_graph_breadth(module):
-        raise ValueError("x86 breadth packaging requires one isomorphic static Graph operation")
-    return package_scheduled_kernel(
-        scheduled_kernel.lower_scheduled_kernel(module, target="x86"),
-        pipeline_name=pipeline_name,
-    )
 
 
 def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:

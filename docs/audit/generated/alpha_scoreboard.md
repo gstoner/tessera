@@ -25,7 +25,7 @@ MLIR passes. A cell is alpha-complete only when all five stages are
 
 | Surface | Count |
 |---|---|
-| Graph-input `package_*` constructors | 46 |
+| Graph-input `package_*` constructors | 45 |
 | Packagers that delegate to a runtime compiler / library | 3 |
 | `emit/*` source emitters (`KernelEmitter` subclasses) | 5 |
 | Target IR ops without a required contract | 104 |

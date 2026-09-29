@@ -66,7 +66,7 @@ print(tessera.__version__)
 Tessera builds on **macOS (Apple backend)** and **Ubuntu 26.04 LTS (x86 / ROCm /
 CUDA backends)** from one source tree. The Python flow needs only the lean deps above;
 the C++ compiler (`tessera-opt` and friends) additionally needs a matched
-**LLVM/MLIR 23.1.x** toolchain.
+**LLVM/MLIR 23.1.1** toolchain (exact fleet and CI pin).
 
 ### macOS (Homebrew) — Apple backend
 

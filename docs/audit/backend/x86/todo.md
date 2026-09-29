@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-28
+last_updated: 2026-09-29
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
+
+Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.
+Hosted x86 MLIR lit coverage now uses exact LLVM/MLIR 23.1.1, matching the fleet pin. No new AVX-512 timing or route promotion follows.
+
+[Compiler log](../../compiler/INTEGRATED_COMPILER_LOG.md).
 
 ## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: split residual ABI
 

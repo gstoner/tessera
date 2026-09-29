@@ -118,10 +118,18 @@ endif()
 # --------------------------------------------------------------------------
 # LLVM / MLIR
 # --------------------------------------------------------------------------
-# Tessera has one compiler backbone: matched LLVM/MLIR 23.1. Accept any 23.1
-# patch release, but reject other major/minor versions and mixed installations.
+# Tessera has one compiler backbone: matched LLVM/MLIR 23.1. The exact
+# patch pin below is the fleet and hosted-CI default; mismatched installs fail.
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
+
+# The official 23.1.1 release bundle disables RTTI, while fleet apt/Homebrew
+# packages enable it. Compile our MLIR clients with the imported LLVM ABI;
+# otherwise linking a Tessera pass against the release bundle fails on typeinfo
+# for mlir::Pass and mlir::RewritePattern.
+if(NOT LLVM_ENABLE_RTTI)
+  add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>")
+endif()
 
 if(NOT LLVM_VERSION_MAJOR EQUAL 23 OR NOT LLVM_VERSION_MINOR EQUAL 1)
   message(FATAL_ERROR

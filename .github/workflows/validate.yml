@@ -223,23 +223,11 @@ jobs:
         run: python -m tessera.cli.claim_lint --check
 
   # ────────────────────────────────────────────────────────────────────
-  # LLVM/MLIR toolchain rule for every lane below that builds against MLIR
-  # (rocm-serialize, lit, sanitizer) — owner decision 2026-09-27, sync
-  # FOUNDATION-BATCH-2-2026-09-27:
-  #
-  #   * hosted CI accepts ANY patch in the fleet pin's major.minor series
-  #     (23.1.x): apt.llvm.org is a rolling source and cannot be held;
-  #   * the lane RECORDS the exact version it ran (job summary + the
-  #     `ci-toolchain-*` artifact), via scripts/ci_resolve_llvm.sh;
-  #   * the lane FAILS — never skips — when no matched 23.1.x is present.
-  #
-  # The fleet boxes keep the EXACT pin (cmake/TesseraToolchainPins.cmake);
-  # CI opts into the tolerance explicitly with -DTESSERA_LLVM_PIN_MODE=minor.
-  # Before 2026-09-27 these lanes compared 23.1.2 against the exact 23.1.1
-  # pin, printed a ::warning, skipped configure/build/test and reported
-  # success having tested nothing (push run 36347063229 on main).
-  # tests/unit/test_ci_workflow.py::TestNoSilentToolchainSkip gates the
-  # pattern.
+  # LLVM/MLIR compiler-proof lanes use the exact fleet pin (23.1.1).
+  # apt.llvm.org is rolling and produced 23.1.2 on GitHub while the fleet
+  # remained on 23.1.1. The official release bundle is digest-checked by
+  # ci_install_pinned_llvm.sh; ci_resolve_llvm.sh fails on any version drift.
+  # Each lane uploads the exact toolchain record even when later proof fails.
   # ────────────────────────────────────────────────────────────────────
   # ────────────────────────────────────────────────────────────────────
   # ROCm hsaco serialization  (host-free — no GPU, no ROCm install)
@@ -261,7 +249,7 @@ jobs:
   #     CI-LIT-BACKEND-DIALECTS-2026-08-12);
   #   * the ROCm backend's CMake has no HIP dependency.
   #
-  # `lld-23` is required and is NOT part of the lit lane's install set.
+  # The pinned bundle carries the same 23.1.1 ld.lld as LLVM and MLIR.
   #
   # Coverage boundary, stated so this lane is not read as more than it is: it
   # proves the lane still PRODUCES a code object. It does not prove the object
@@ -294,27 +282,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install system deps + LLVM/MLIR 23 + lld
+      - name: Install system deps and exact LLVM/MLIR 23.1.1
         run: |
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
                      /etc/apt/sources.list.d/azure-cli.list \
                      /etc/apt/sources.list.d/azure-cli.sources 2>/dev/null || true
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build wget gnupg
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          codename="$(lsb_release -cs)"
-          echo "deb http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-23 main" \
-            | sudo tee /etc/apt/sources.list.d/llvm23.list
-          sudo apt-get update || true
-          # lld-23 is the linker MLIR's ROCDL serializer shells out to. It is
-          # NOT in the lit lane's set; without it this lane can only reproduce
-          # the very failure it exists to catch. An install failure fails the
-          # lane (there is no `|| echo ::warning` fallback any more).
-          sudo apt-get install -y --no-install-recommends \
-            llvm-23-dev mlir-23-tools libmlir-23-dev clang-23 lld-23
+            build-essential cmake ninja-build curl xz-utils
+          bash scripts/ci_install_pinned_llvm.sh
 
-      - name: Resolve LLVM/MLIR 23.1.x + lld (record or fail)
+      - name: Resolve exact LLVM/MLIR 23.1.1 + lld (record or fail)
         run: |
           bash scripts/ci_resolve_llvm.sh --lane rocm-serialize --require-lld \
             --manifest ci-toolchain/rocm-serialize.json
@@ -341,9 +319,8 @@ jobs:
             -DTESSERA_BUILD_ROCM_BACKEND=ON \
             -DTESSERA_ENABLE_HIP=OFF \
             -DTESSERA_ENABLE_CUDA=OFF \
-            -DTESSERA_LLVM_PIN_MODE=minor \
-            -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
-            -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
+            -DMLIR_DIR="$MLIR_DIR" \
+            -DLLVM_DIR="$LLVM_DIR"
           cmake --build build-rocm-ci --target tessera-rocm-opt
           cp build-rocm-ci/tessera_llvm_pin.txt ci-toolchain/rocm-serialize-configure.txt
 
@@ -388,26 +365,25 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install system deps + LLVM/MLIR 23
+      - name: Install system deps and exact LLVM/MLIR 23.1.1
         run: |
-          # Drop the runner's flaky pre-installed Microsoft apt repos (see above).
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
                      /etc/apt/sources.list.d/azure-cli.list \
                      /etc/apt/sources.list.d/azure-cli.sources 2>/dev/null || true
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build wget gnupg
-          # The official LLVM apt repo for LLVM 23. An install failure fails
-          # the lane (there is no `|| echo ::warning` fallback any more).
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+            build-essential cmake ninja-build curl xz-utils
+          # FileCheck and not are test readers. MLIR, LLVM, Clang and lld come
+          # from the verified 23.1.1 release bundle below.
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
           codename="$(lsb_release -cs)"
           echo "deb http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-23 main" \
             | sudo tee /etc/apt/sources.list.d/llvm23.list
-          sudo apt-get update || true
-          sudo apt-get install -y --no-install-recommends \
-            llvm-23-dev mlir-23-tools libmlir-23-dev clang-23
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends llvm-23-tools
+          bash scripts/ci_install_pinned_llvm.sh
 
-      - name: Resolve LLVM/MLIR 23.1.x (record or fail)
+      - name: Resolve exact LLVM/MLIR 23.1.1 (record or fail)
         run: |
           bash scripts/ci_resolve_llvm.sh --lane lit --manifest ci-toolchain/lit.json
 
@@ -437,9 +413,8 @@ jobs:
             -DTESSERA_FORCE_FULL_COMPILER_DRIVER=ON \
             -DTESSERA_ENABLE_CUDA=OFF \
             -DTESSERA_ENABLE_HIP=OFF \
-            -DTESSERA_LLVM_PIN_MODE=minor \
-            -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
-            -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
+            -DMLIR_DIR="$MLIR_DIR" \
+            -DLLVM_DIR="$LLVM_DIR"
           cp build/tessera_llvm_pin.txt ci-toolchain/lit-configure.txt
           # The Apple Target-IR dialect + lowering passes are portable MLIR
           # (only the Metal runtime .mm is Darwin-gated; Linux builds the
@@ -461,9 +436,9 @@ jobs:
       - name: Run MLIR tool proof tests
         env:
           PYTHONPATH: python
-          PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-23/bin:${{ env.PATH }}"
           TESSERA_OPT: "${{ github.workspace }}/build/tools/tessera-opt/tessera-opt"
         run: |
+          export PATH="$TESSERA_CI_LLVM_PREFIX/bin:$GITHUB_WORKSPACE/build/tools/tessera-opt:$GITHUB_WORKSPACE/build/tools/tessera-translate:/usr/lib/llvm-23/bin:$PATH"
           python -m pytest \
             tests/unit/test_cli_translate.py \
             tests/unit/test_tessera_opt_build.py \
@@ -478,8 +453,8 @@ jobs:
       - name: Run lit smoke (TESSERA_VALIDATE_LIT=1)
         env:
           TESSERA_VALIDATE_LIT: "1"
-          PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-23/bin:${{ env.PATH }}"
         run: |
+          export PATH="$TESSERA_CI_LLVM_PREFIX/bin:$GITHUB_WORKSPACE/build/tools/tessera-opt:$GITHUB_WORKSPACE/build/tools/tessera-translate:/usr/lib/llvm-23/bin:$PATH"
           lit tests/tessera-ir -v -o ci-toolchain/lit-results.json
           python scripts/check_lit_fleet_union.py ci-toolchain/lit-results.json
 
@@ -516,38 +491,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install system deps + LLVM/MLIR 23
+      - name: Install system deps and exact LLVM/MLIR 23.1.1
         run: |
-          # Drop the runner's flaky pre-installed Microsoft apt repos (see above).
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
                      /etc/apt/sources.list.d/azure-cli.list \
                      /etc/apt/sources.list.d/azure-cli.sources 2>/dev/null || true
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build wget gnupg
-          # The top-level CMakeLists runs find_package(LLVM/MLIR) on every
-          # configure, including this smoke-only one: without them the last
-          # real run (35609056270, 2026-09-21) failed at find_package(MLIR).
-          # clang-23 + libclang-rt-23-dev are the Linux TSAN runtime
-          # scripts/run_sanitizers.sh builds with.
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          codename="$(lsb_release -cs)"
-          echo "deb http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-23 main" \
-            | sudo tee /etc/apt/sources.list.d/llvm23.list
-          sudo apt-get update || true
-          sudo apt-get install -y --no-install-recommends \
-            llvm-23-dev mlir-23-tools libmlir-23-dev clang-23 libclang-rt-23-dev
+            build-essential cmake ninja-build curl xz-utils
+          bash scripts/ci_install_pinned_llvm.sh
 
-      - name: Resolve LLVM/MLIR 23.1.x (record or fail)
+      - name: Resolve exact LLVM/MLIR 23.1.1 (record or fail)
         run: |
           bash scripts/ci_resolve_llvm.sh --lane "sanitizer-${{ matrix.sanitizer }}" \
             --manifest "ci-toolchain/sanitizer-${{ matrix.sanitizer }}.json"
 
       - name: Run sanitizer smoke (${{ matrix.sanitizer }})
-        env:
-          LLVM_DIR: /usr/lib/llvm-23/lib/cmake/llvm
-          MLIR_DIR: /usr/lib/llvm-23/lib/cmake/mlir
-          TESSERA_LLVM_PIN_MODE: minor
         run: bash scripts/run_sanitizers.sh ${{ matrix.sanitizer }}
 
       - name: Record toolchain

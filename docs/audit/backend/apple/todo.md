@@ -3,10 +3,17 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-28
+last_updated: 2026-09-29
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
+
+Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.
+Apple backend compiler coverage in hosted lit now uses the same exact LLVM/MLIR 23.1.1 patch as the Mac fleet pin. This is compiler-toolchain parity, not new Metal execution evidence.
+
+[Compiler log](../../compiler/INTEGRATED_COMPILER_LOG.md).
 
 ## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: split residual ABI
 

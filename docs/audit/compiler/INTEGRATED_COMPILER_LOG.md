@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-28
+last_updated: 2026-09-29
 audit_role: reference
 ---
 
@@ -16,6 +16,8 @@ primary Owner; end the five-field block with `<!-- entry-fields:end -->` and
 link additional owners in the body. Update that owner record in
 the same PR. Evidence corrections are explicit; do not rewrite old results as
 current proof. Current priorities live only in the plan.
+
+
 
 
 
@@ -6251,4 +6253,35 @@ source-matched coupled residual run. The math and residual timings are
 synchronized host calls, not device-kernel measurements.
 [Packet](../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
 
+<!-- entry-fields:end -->
+
+### 2026-09-29 — GitHub LLVM/MLIR patch pin corrected
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: [#883](https://github.com/gstoner/tessera/pull/883); sync `CI-LLVM-EXACT-2026-09-29`.
+
+Outcome: Hosted lit, ROCm serialization, and sanitizer lanes install a
+SHA256-checked official LLVM/MLIR 23.1.1 release instead of rolling
+apt.llvm.org MLIR 23.1.2. The resolver and CMake both enforce the exact
+fleet pin. The release's ICU70 runtime is isolated beside the toolchain,
+and Tessera matches its no-RTTI LLVM ABI.
+
+Remaining: Exact-device backend execution and performance proof remains owned
+by each device host. The hosted compiler lanes are host-free and do not replace
+those results.
+
+Evidence: GitHub main lit artifact from run 36514973125 recorded LLVM and
+MLIR 23.1.2 against fleet pin 23.1.1. The verified official release archive
+has SHA256 `832aeb58d105de1cabc7b982dd2c65de0610f7377df48ae8fc2dd8e97420a15c`.
+Princess-Luna WSL configured Tessera with exact 23.1.1 from that archive;
+the automatic no-RTTI CMake configuration built `tessera-rocm-opt` and
+three ROCm HSACO serialization tests passed with the pinned tools. The
+hosted lit lane exposed a stale gfx1201 scale-load fixture; its expected
+second masked-column scale-zero load passes FileCheck on host LLVM 23.1.1.
+CI and audit drift tests passed 72 cases on WSL. GitHub PR run
+36571380840 recorded exact 23.1.1 LLVM/MLIR, 542/542 lit passes and successful
+ROCm HSACO serialization, alongside required lint, unit, audit and fan-in
+checks. The earlier full dispatch run 36568476381 passed ASAN, TSAN and UBSAN
+with the same pinned compiler bundle.
 <!-- entry-fields:end -->

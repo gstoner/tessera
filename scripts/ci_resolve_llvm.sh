@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
-# Resolve the LLVM/MLIR toolchain a hosted CI lane will build against, or FAIL.
+# Resolve the exact LLVM/MLIR toolchain a hosted compiler lane builds against,
+# or FAIL. The official 23.1.1 release bundle is installed by
+# ci_install_pinned_llvm.sh and must match the fleet pin to the patch.
 #
-# Owner decision (2026-09-27, sync FOUNDATION-BATCH-2-2026-09-27): hosted CI
-# accepts ANY patch release in the fleet pin's major.minor series (23.1.x),
-# records the exact version it ran, and FAILS -- never skips -- when no such
-# toolchain is present. The fleet boxes keep the EXACT pin in
-# cmake/TesseraToolchainPins.cmake; this script is the CI-only tolerance and
-# pairs with `-DTESSERA_LLVM_PIN_MODE=minor` at configure time.
-#
-# Why this exists: until 2026-09-27 the `lit` and `rocm-serialize` lanes
-# compared apt.llvm.org's rolling 23.1.2 against the exact 23.1.1 pin, printed
-# a ::warning, skipped configure/build/test, and reported SUCCESS having tested
-# nothing (push run 36347063229 on main). A toolchain mismatch is a lane
-# failure or a recorded tolerance -- never a green skip.
+# A prior hosted tolerance accepted apt.llvm.org's rolling 23.1.2 while the
+# fleet used 23.1.1 (main lit artifact 36514973125). That was useful to stop
+# green skips, but the resulting MLIR contract was not fleet-comparable.
 #
 # Usage:
 #   scripts/ci_resolve_llvm.sh --lane <name> [--require-lld] [--manifest <path>]
@@ -23,7 +16,7 @@
 #                           llvm_prefix / fleet_pin / pin_match
 #   GITHUB_STEP_SUMMARY     when set, receives a markdown record of the result
 #
-# Exit status: 0 only when a matched 23.1.x LLVM + MLIR (+ ld.lld if asked) is
+# Exit status: 0 only when exact-pinned LLVM + MLIR (+ ld.lld if asked) are
 # present and usable. Anything else is exit 1 with a ::error annotation.
 set -euo pipefail
 
@@ -56,10 +49,10 @@ summary() {
 
 fail() {
   local why="$1"
-  echo "::error ::[$lane] LLVM/MLIR toolchain unusable: $why -- this lane FAILS rather than skipping (hosted CI accepts any ${series:-<pin series>}.x patch; see scripts/ci_resolve_llvm.sh)" >&2
+  echo "::error ::[$lane] LLVM/MLIR toolchain unusable: $why -- this lane FAILS rather than skipping (required exact pin ${fleet_pin:-unknown})" >&2
   summary "### $lane: LLVM/MLIR toolchain" "" \
     "**FAILED** -- $why" "" \
-    "Fleet pin: \`${fleet_pin:-unknown}\`; CI accepts \`${series:-?}.x\`; prefix \`$prefix\`."
+    "Required exact fleet pin: \`${fleet_pin:-unknown}\`; prefix \`$prefix\`."
   exit 1
 }
 
@@ -108,12 +101,10 @@ if (( require_lld )); then
   fi
 fi
 
-if [[ "$llvm_version" == "$fleet_pin" ]]; then
-  pin_match="exact"
-else
-  pin_match="series"
-  echo "::notice ::[$lane] running LLVM/MLIR $llvm_version under the CI ${series}.x tolerance; the fleet pin is $fleet_pin, so this result is not a fleet-comparable measurement"
+if [[ "$llvm_version" != "$fleet_pin" ]]; then
+  fail "LLVM/MLIR $llvm_version disagrees with exact fleet pin $fleet_pin"
 fi
+pin_match="exact"
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
@@ -132,7 +123,7 @@ summary "### $lane: LLVM/MLIR toolchain" "" \
   "| ld.lld | \`${lld_version:-not required}\` |" \
   "| prefix | \`$prefix\` |" \
   "| fleet pin | \`$fleet_pin\` |" \
-  "| match | $pin_match (CI accepts \`${series}.x\`) |" ""
+  "| match | $pin_match |" ""
 
 if [[ -n "$manifest" ]]; then
   mkdir -p "$(dirname "$manifest")"
@@ -145,7 +136,6 @@ if [[ -n "$manifest" ]]; then
   "lld_version": "${lld_version}",
   "llvm_prefix": "$prefix",
   "fleet_pin": "$fleet_pin",
-  "accepted_series": "${series}.x",
   "pin_match": "$pin_match",
   "commit": "${GITHUB_SHA:-}",
   "run_id": "${GITHUB_RUN_ID:-}",

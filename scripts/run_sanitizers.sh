@@ -81,7 +81,9 @@ run_one() {
   # including mixed LLVM/MLIR installations.
   local llvm_flags=()
   local llvm_prefix=""
-  if [[ -d "/opt/homebrew/opt/llvm@23/lib/cmake/llvm" ]]; then
+  if [[ -n "${LLVM_DIR:-}" ]]; then
+    llvm_prefix="${LLVM_DIR%/lib/cmake/llvm}"
+  elif [[ -d "/opt/homebrew/opt/llvm@23/lib/cmake/llvm" ]]; then
     llvm_prefix="/opt/homebrew/opt/llvm@23"
   elif [[ -d "/usr/lib/llvm-23/lib/cmake/llvm" ]]; then
     llvm_prefix="/usr/lib/llvm-23"
@@ -96,8 +98,8 @@ run_one() {
   elif [[ -n "$llvm_prefix" ]]; then
     llvm_flags+=(-DMLIR_DIR="$llvm_prefix/lib/cmake/mlir")
   fi
-  # Hosted CI sets TESSERA_LLVM_PIN_MODE=minor (any 23.1.x patch, recorded by
-  # scripts/ci_resolve_llvm.sh); unset, configure keeps the fleet's exact pin.
+  # The default exact fleet pin applies in CI and on the development hosts.
+  # Preserve an explicit caller override for controlled toolchain experiments.
   if [[ -n "${TESSERA_LLVM_PIN_MODE:-}" ]]; then
     llvm_flags+=(-DTESSERA_LLVM_PIN_MODE="$TESSERA_LLVM_PIN_MODE")
   fi

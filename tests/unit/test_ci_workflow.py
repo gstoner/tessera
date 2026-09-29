@@ -251,25 +251,15 @@ class TestWorkflowStructure:
             )
 
     @pytest.mark.parametrize("lane", MLIR_LANES)
-    def test_mlir_lanes_resolve_a_23_1_series_toolchain_or_fail(self, lane: str) -> None:
-        """A rolling apt.llvm.org patch is recorded, never a reason to skip.
-
-        Owner decision 2026-09-27 (sync ``FOUNDATION-BATCH-2-2026-09-27``):
-        hosted CI accepts any 23.1.x patch, records the exact version it ran,
-        and FAILS when none is available. The previous shape of this test
-        required the lane to set ``mlir=false`` and skip on patch drift --
-        which is exactly how the lit and rocm-serialize lanes went green on
-        main having built and tested nothing.
-        """
-
+    def test_mlir_lanes_install_and_resolve_exact_fleet_pin(self, lane: str) -> None:
+        """A hosted compiler lane must use the digest-checked fleet version."""
         wf = _load_workflow()
         steps = wf["jobs"][lane].get("steps", [])
         run_text = "\n".join(step.get("run", "") for step in steps)
-        assert "scripts/ci_resolve_llvm.sh" in run_text, (
-            f"{lane} must resolve (record or fail) its LLVM/MLIR through "
-            "scripts/ci_resolve_llvm.sh"
+        install_at = next(
+            i for i, step in enumerate(steps)
+            if "scripts/ci_install_pinned_llvm.sh" in step.get("run", "")
         )
-        assert "--manifest" in run_text, f"{lane} must record a toolchain manifest"
         resolve_at = next(
             i for i, step in enumerate(steps)
             if "scripts/ci_resolve_llvm.sh" in step.get("run", "")
@@ -280,17 +270,12 @@ class TestWorkflowStructure:
              or "bash scripts/run_sanitizers.sh" in _code(step.get("run", ""))),
             None,
         )
-        assert build_at is not None and resolve_at < build_at, (
-            f"{lane} must resolve the toolchain before it configures"
-        )
-        opted_in = "-DTESSERA_LLVM_PIN_MODE=minor" in _code(run_text) or any(
+        assert build_at is not None and install_at < resolve_at < build_at
+        assert "--manifest" in run_text
+        assert "-DTESSERA_LLVM_PIN_MODE=minor" not in _code(run_text)
+        assert not any(
             (step.get("env") or {}).get("TESSERA_LLVM_PIN_MODE") == "minor"
             for step in steps
-        )
-        assert opted_in, (
-            f"{lane} must opt into the CI-only 23.1.x tolerance explicitly "
-            "(-DTESSERA_LLVM_PIN_MODE=minor); without it CMake's exact fleet "
-            "pin fails configure on every rolling patch"
         )
 
     def test_rocm_compiler_suite_is_local_only(self) -> None:
@@ -366,6 +351,7 @@ class TestWorkflowEnv:
 
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 RESOLVER = REPO_ROOT / "scripts" / "ci_resolve_llvm.sh"
+INSTALLER = REPO_ROOT / "scripts" / "ci_install_pinned_llvm.sh"
 REQUIRE_EXECUTED = REPO_ROOT / "scripts" / "ci_require_executed.py"
 PINS = REPO_ROOT / "cmake" / "TesseraToolchainPins.cmake"
 
@@ -481,13 +467,9 @@ class TestNoSilentToolchainSkip:
         run_text = "\n".join(
             step.get("run", "") for step in wf["jobs"]["sanitizer"].get("steps", [])
         )
-        for package in ("llvm-23-dev", "libmlir-23-dev", "mlir-23-tools", "clang-23"):
-            assert package in run_text, (
-                f"the sanitizer lane configures the top-level CMakeLists, which "
-                f"runs find_package(LLVM/MLIR); it must install {package}"
-            )
+        assert "scripts/ci_install_pinned_llvm.sh" in run_text
         san_text = (REPO_ROOT / "scripts" / "run_sanitizers.sh").read_text(encoding="utf-8")
-        assert "TESSERA_LLVM_PIN_MODE" in san_text
+        assert 'llvm_prefix="${LLVM_DIR%/lib/cmake/llvm}"' in san_text
 
     def test_advisory_success_is_explicitly_allowlisted(self) -> None:
         found = set()
@@ -512,7 +494,7 @@ class TestNoSilentToolchainSkip:
 
 
 class TestFleetPinStaysExact:
-    """The CI tolerance must not leak into the fleet gate."""
+    """The exact fleet pin applies to hosted CI and development hosts."""
 
     def test_fleet_pin_is_a_full_version_and_default_mode_is_exact(self) -> None:
         text = PINS.read_text(encoding="utf-8")
@@ -523,8 +505,8 @@ class TestFleetPinStaysExact:
         mode = re.search(r'set\(TESSERA_LLVM_PIN_MODE\s+"([a-z]+)"', text)
         assert mode and mode.group(1) == "exact"
 
-    def test_only_hosted_ci_opts_into_the_minor_tolerance(self) -> None:
-        """No fleet build entry point may pass the CI tolerance."""
+    def test_no_workflow_or_fleet_entry_point_uses_minor_tolerance(self) -> None:
+        """The old hosted patch tolerance must not silently return."""
 
         offenders = []
         for path in (REPO_ROOT / "scripts").glob("*.sh"):
@@ -536,7 +518,10 @@ class TestFleetPinStaysExact:
                 encoding="utf-8"
             ):
                 offenders.append(str(path.relative_to(REPO_ROOT)))
-        assert not offenders, f"fleet entry points pass the CI-only tolerance: {offenders}"
+        for path in (REPO_ROOT / ".github" / "workflows").glob("*.yml"):
+            if "TESSERA_LLVM_PIN_MODE=minor" in _code(path.read_text(encoding="utf-8")):
+                offenders.append(str(path.relative_to(REPO_ROOT)))
+        assert not offenders, f"entry points pass the minor tolerance: {offenders}"
 
 
 def _fake_prefix(root: Path, llvm: str, mlir: str, lld: str | None, cmake: bool = True) -> Path:
@@ -557,6 +542,19 @@ def _fake_prefix(root: Path, llvm: str, mlir: str, lld: str | None, cmake: bool 
             (root / "lib" / "cmake" / pkg).mkdir(parents=True, exist_ok=True)
             (root / "lib" / "cmake" / pkg / cfg).write_text("")
     return root
+
+
+def test_pinned_installer_refuses_tampered_archive(tmp_path: Path) -> None:
+    archive = tmp_path / "LLVM-23.1.1-Linux-X64.tar.xz"
+    archive.write_bytes(b"wrong compiler archive")
+    env = dict(os.environ)
+    env.update(TESSERA_CI_LLVM_ROOT=str(tmp_path),
+               TESSERA_CI_LLVM_ARCHIVE=str(archive))
+    env.pop("GITHUB_ACTIONS", None)
+    result = subprocess.run([_bash(), str(INSTALLER)], capture_output=True,
+                            text=True, env=env, timeout=30)
+    assert result.returncode != 0
+    assert "SHA256 mismatch" in result.stderr
 
 
 class TestResolverBehaviour:
@@ -605,16 +603,16 @@ class TestResolverBehaviour:
         manifest = json.loads((tmp_path / "manifest.json").read_text())
         assert manifest["llvm_version"] == pin and manifest["mlir_version"] == pin
 
-    def test_newer_patch_in_series_passes_and_records_the_real_version(self, tmp_path: Path) -> None:
+    def test_newer_patch_in_series_fails_against_exact_fleet_pin(self, tmp_path: Path) -> None:
         pin = self._pin()
         major_minor = pin.rsplit(".", 1)[0]
         newer = f"{major_minor}.{int(pin.rsplit('.', 1)[1]) + 1}"
         rc, log, outputs, summary = self._run(
             tmp_path, _fake_prefix(tmp_path / "p", f"{newer}~++20260926", newer, newer)
         )
-        assert rc == 0, log
-        assert outputs["llvm_version"] == newer and outputs["pin_match"] == "series"
-        assert newer in summary and "::notice" in log
+        assert rc == 1 and "disagrees with exact fleet pin" in log
+        assert not outputs
+        assert pin in summary
 
     @pytest.mark.parametrize(
         "llvm, mlir, lld, cmake, require_lld, why",

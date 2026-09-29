@@ -3,10 +3,17 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-28
+last_updated: 2026-09-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
+
+Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.
+Portable NVIDIA MLIR lit coverage now uses exact LLVM/MLIR 23.1.1, matching Super-Bear's fleet pin. It does not replace sm_120 device proof or close the two tensor-valued fragment producers.
+
+[Compiler log](../../compiler/INTEGRATED_COMPILER_LOG.md).
 
 ## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: split residual ABI
 

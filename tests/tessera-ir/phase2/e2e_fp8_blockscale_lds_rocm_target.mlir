@@ -106,6 +106,9 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // GEN: tile.view {{.*}}space = "lds", order = "row_major"
 // GEN: tile.view {{.*}}space = "lds", order = "col_major"
 // GEN: tile.mma
+// The 128x128 body's grouped live set would not fit the VGPR ceiling, so its
+// stage schedule is left to LLVM (FOUNDATION-BATCH-3-2026-09-28).
+// GEN-NOT: rocdl.sched.group.barrier
 // GEN-COUNT-8: tile.fragment_scaled_accumulate
 // GEN-NOT: tile.fragment_scaled_accumulate
 // GEN: tile.store
@@ -114,12 +117,22 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 // GEN: tile.store {{.*}}tile.epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">
 // GEN-LABEL: gpu.func @w8a8_lds_narrow(
 // GEN-SAME: tessera.rocm.lds_waves = array<i64: 4, 2>
+// The 128x64 body groups each stage: its 8 panels x 4 fragment reads, then
+// its 8 x 4 WMMAs.
+// GEN: tile.mma
+// GEN: rocdl.sched.group.barrier ds_read, 32, 0
+// GEN-NEXT: rocdl.sched.group.barrier mfma_wmma, 32, 0
 // GEN-COUNT-4: tile.fragment_scaled_accumulate
 // GEN-NOT: tile.fragment_scaled_accumulate
 
-// The bf16 store rounds the fp32 accumulator once.
+// The bf16 store rounds the fp32 accumulator once. Every fragment origin is
+// 16-aligned and a 128-wide weight-scale block covers a fragment, so each of
+// the eight joins load one uniform weight scale and one block-zero scale
+// for masked columns (FOUNDATION-BATCH-3-2026-09-28).
 // LOWER-LABEL: gpu.func @w8a8_lds_bf16(
 // LOWER-NOT: {{[[:space:]]tile\.[a-z_]+ }}
+// LOWER-COUNT-16: memref.load %arg3[
+// LOWER-NOT: memref.load %arg3[
 // LOWER: arith.truncf {{.*}} : f32 to bf16
 // LOWER: memref.store {{.*}} : memref<?xbf16>
 

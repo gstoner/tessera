@@ -298,10 +298,12 @@ def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
 
 @pytest.mark.parametrize(("macro", "warps", "depth", "knobs", "spill_free"), [
     # The register-staged next slab sits beside the 32x64 wave panel's 128
-    # accumulators and spills -- one reason it measured slower and is not
-    # selected. (Double-buffering 128x128 needs 72 KiB of LDS and is refused
-    # below.)
-    ((128, 128), 8, 1, {"blockscale_prefetch": 1}, False),        # register next slab
+    # accumulators. It spilled until the scaled join loaded each fragment's
+    # weight scale once (FOUNDATION-BATCH-3-2026-09-28), which freed the
+    # registers; it measured slower when it spilled and is not selected (not
+    # re-timed since). (Double-buffering 128x128 needs 72 KiB of LDS and is
+    # refused below.)
+    ((128, 128), 8, 1, {"blockscale_prefetch": 1}, True),         # register next slab
     ((128, 64), 8, 2, {}, True),                                  # double-buffered, 32x32 waves
     ((128, 64), 8, 1, {"blockscale_stage_k": 64}, True),          # two slabs per group
     ((128, 64), 8, 1, {"blockscale_lds_pad_bytes": 0}, True),     # unpadded rows

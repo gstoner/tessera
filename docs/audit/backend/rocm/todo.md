@@ -7,6 +7,15 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-2026-09-29.
+Graph ALiBi now declares an optional rank-one f32 slopes operand and checks
+its explicit-output shape. Neither gfx1151 nor gfx1201 has a new native
+Schedule/HSACO consumer or exact-device result for this form. Existing ROCm
+ALiBi paths must be assessed before claiming parity; x86 proof does not
+transfer.
+
 ## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
 
 Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.

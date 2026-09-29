@@ -95,12 +95,8 @@ def test_cohort2_contract_and_package(monkeypatch, op_name, abi) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native._lower", fake_lower)
     package = package_cohort2(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
-    if op_name == "tessera.alibi":
-        # ALiBi keeps its retired constructor (undecodable Graph operand list).
-        assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
-    else:
-        assert package.descriptor.provenance["work_item"] == "E2E-REAL-6"
-        assert len(package.descriptor.provenance["schedule_digest"]) == 64
+    assert package.descriptor.provenance["work_item"] == "E2E-REAL-6"
+    assert len(package.descriptor.provenance["schedule_digest"]) == 64
     if op_name == "tessera.cumsum":
         assert package.descriptor.provenance["inclusive"] is True
 

@@ -8,6 +8,14 @@ last_updated: 2026-09-29
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-2026-09-29.
+Graph ALiBi now declares an optional rank-one f32 slopes operand and checks
+its explicit-output shape. The sm_120 backend has no new typed Tile/Target
+consumer or exact-device result for this form. The attention and fragment
+producer obligations are unchanged; x86 proof does not transfer.
+
 ## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
 
 Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.

@@ -292,7 +292,6 @@ _DECODABLE_WITHOUT_FLAGS = {
 _UNDECODABLE_OPERAND_LISTS = {
     "tessera.adafactor",
     "tessera.adamw",
-    "tessera.alibi",
     "tessera.conv2d_nhwc",
     "tessera.conv3d_ndhwc",
     "tessera.fused_epilogue",

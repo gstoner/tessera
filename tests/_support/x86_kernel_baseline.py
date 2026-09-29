@@ -8,14 +8,9 @@ x86 elementwise / cohort-2 / breadth cut (2026-09-28), byte-for-byte from
 and ``emit_elementwise_tile_ir`` / ``emit_cohort2_tile_ir`` / ``package_abi``
 author Tile IR text beside the compiled Graph -> Schedule -> Tile route.
 
-Production now admits through ``scheduled_kernel.supports_scheduled_kernel(
-target="x86")`` and packages the replayed ``ScheduledKernelArtifact`` with
-``x86_native.package_scheduled_kernel`` (the native owner is
-``src/compiler/programming_model/lib/NativeX86Kernel.h``; normalization rides
-``schedule.norm``). ``tessera.alibi`` alone keeps its retired constructor in
-production (its Graph operand list is not decodable by position), so
-``x86_native`` still carries the narrowed ``_alibi_contract`` /
-``_emit_alibi_tile_ir``.
+Production now admits every cohort-2 operation through the native
+scheduled contract, including explicit-slopes ALiBi. This module retains the
+old Graph-owned ALiBi constructor as the declared differential oracle.
 
 This module is the **declared oracle** Decision #31(a) allows; its only
 consumers are the differential tests (``tests/unit/test_x86_kernel_differential.py``)

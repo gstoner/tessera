@@ -367,7 +367,7 @@ _SPECS = [
     OpSpec("mla_decode_fused", "tessera.mla_decode_fused", 5, 5, effect="state", lowering="attention"),
     OpSpec("rope_split", "tessera.rope_split", 1, 1, lowering="layout_transform"),
     OpSpec("rope_merge", "tessera.rope_merge", 2, 2, lowering="layout_transform"),
-    OpSpec("alibi", "tessera.alibi", 0, 2, lowering="position_encoding"),
+    OpSpec("alibi", "tessera.alibi", 0, 1, lowering="position_encoding"),
     OpSpec("ntk_rope", "tessera.ntk_rope", 2, 2, lowering="position_encoding"),
     OpSpec("multi_head_attention", "tessera.multi_head_attention", 3, 3, effect="state", lowering="attention"),
     OpSpec("gqa_attention", "tessera.gqa_attention", 3, 3, effect="state", lowering="attention"),

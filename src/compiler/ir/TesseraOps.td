@@ -1278,9 +1278,10 @@ def Tessera_NTKRopeOp : Op<Tessera_Dialect, "ntk_rope", [Pure]> {
 
 def Tessera_ALiBiOp : Op<Tessera_Dialect, "alibi", [Pure]> {
   let summary = "ALiBi positional bias helper";
-  let arguments = (ins I64Attr:$num_heads, I64Attr:$seq_len);
+  let arguments = (ins Optional<TensorType>:$slopes,
+                       I64Attr:$num_heads, I64Attr:$seq_len);
   let results = (outs TensorType:$bias);
-  let assemblyFormat = "attr-dict `:` type($bias)";
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
 

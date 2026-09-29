@@ -21,6 +21,28 @@ current proof. Current priorities live only in the plan.
 
 
 
+### 2026-09-29 — x86 ALiBi explicit slopes reaches native Schedule and Tile
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: pending; sync E2E-REAL-6-ALIBI-2026-09-29.
+
+Outcome: Graph ALiBi declares and verifies its optional f32 slopes operand.
+The x86 explicit-slopes envelope lowers through a content-addressed native
+Schedule record to Tile and a replay-projected AVX-512 launch descriptor.
+The remaining Python ALiBi constructor has moved out of production.
+
+Remaining: Apple JIT execution, ROCm paged layouts and matmul image keys,
+NVIDIA attention/quantized migrations, and the route census. Sibling ALiBi
+operand consumers need their own target proof.
+
+Evidence: Princess-Luna WSL rebuilt with LLVM/MLIR 23.1.1 and the x86
+backend, passed 1,088 x86 differential/cohort/position tests and 38 operator
+registry/arity tests. Four numerical benchmark rows agree with NumPy and
+record diagnostic package and host-wall launch timing only.
+[Packet](../../../benchmarks/baselines/x86_alibi_native_20260929/README.md).
+<!-- entry-fields:end -->
+
 ### 2026-09-28 — gfx1151 paged-KV native Schedule and shape-free image
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)

@@ -18,9 +18,8 @@
 //
 // `tessera.absolute`/`floor`/`ceil`/`cumsum` stay with NativeAbsolute.h (their
 // contract predates this one); normalization rides the semantic-kernel
-// `schedule.norm` route; `tessera.alibi` stays on its retired route because
-// its Graph operand list is not decodable by position (ODS declares no slopes
-// operand; `tests/unit/test_op_arity_contract.py::_UNDECODABLE_OPERAND_LISTS`).
+// `schedule.norm` route. `tessera.alibi` consumes its explicit slopes
+// operand and records head/sequence extents in the native Schedule contract.
 namespace {
 
 struct X86KernelSpec {
@@ -95,6 +94,7 @@ static const X86KernelSpec kX86KernelSpecs[] = {
     {"tessera.cummax", "scan", "scan", "max"},
     {"tessera.cummin", "scan", "scan", "min"},
     {"tessera.rope", "rope", "rope", "rope"},
+    {"tessera.alibi", "alibi", "alibi", "alibi"},
     {"tessera.gather", "abi", "gather_f32", "gather"},
     {"tessera.loss.mse", "abi", "pointwise_loss_f32", "pointwise_loss"},
     {"tessera.loss.mae", "abi", "pointwise_loss_f32", "pointwise_loss"},
@@ -387,6 +387,22 @@ static FailureOr<DictionaryAttr> x86KernelContract(Operation *op) {
                                       b.getStringAttr("interleaved_pairs")));
     scalars.push_back(b.getNamedAttr("Rows", i64(rowsOf(result))));
     scalars.push_back(b.getNamedAttr("Cols", i64(result.getShape().back())));
+  } else if (family == "alibi") {
+    allowed.insert("num_heads");
+    allowed.insert("seq_len");
+    auto heads = op->getAttrOfType<IntegerAttr>("num_heads");
+    auto seq = op->getAttrOfType<IntegerAttr>("seq_len");
+    if (op->getNumOperands() != 1 || types[0].getRank() != 1 ||
+        !types[0].getElementType().isF32() || result.getRank() != 3 ||
+        !result.getElementType().isF32() || !heads || !seq ||
+        heads.getInt() <= 0 || seq.getInt() <= 0 ||
+        types[0].getDimSize(0) != heads.getInt() ||
+        result.getDimSize(0) != heads.getInt() ||
+        result.getDimSize(1) != seq.getInt() ||
+        result.getDimSize(2) != seq.getInt())
+      return fail("x86 native ALiBi requires f32 slopes [H] and f32 result [H,S,S]");
+    scalars.push_back(b.getNamedAttr("H", i64(heads.getInt())));
+    scalars.push_back(b.getNamedAttr("S", i64(seq.getInt())));
   } else {
     // Breadth: an isomorphic public Graph op over one stable C ABI entry.
     const X86AbiSpec *abi = x86AbiSpec(spec->subfamily);
@@ -628,6 +644,9 @@ static LogicalResult lowerNativeX86Kernel(ModuleOp mod) {
     } else if (family == "rope") {
       tile.addAttribute("storage", b.getStringAttr("f32"));
       tile.addAttribute("layout", b.getStringAttr("interleaved_pairs"));
+    } else if (family == "alibi") {
+      tile.addAttribute("storage", b.getStringAttr("f32"));
+      tile.addAttribute("formula", b.getStringAttr("slope_times_j_minus_i"));
     } else {
       tile.addAttribute("symbol", b.getStringAttr(abi->symbol));
       tile.addAttribute("abi", b.getStringAttr(abi->abi));

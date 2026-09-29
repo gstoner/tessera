@@ -9,6 +9,19 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## E2E-REAL-6-ALIBI-2026-09-29: explicit slopes native package
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-2026-09-29.
+The explicit f32 slopes operand now parses as Graph IR, lowers through a
+content-addressed native Schedule record and a Tile ALiBi launch, and projects
+the unchanged AVX-512 ABI from replayed IR. The Python Graph-owned ALiBi
+constructor is retired; its frozen test oracle remains for differential proof.
+Princess-Luna passed 1,088 x86 kernel, cohort, and position tests including
+exact CPU numerical execution. Four diagnostic host-wall benchmark shapes
+passed NumPy; no kernel-time or selector promotion follows.
+
+[Evidence](../../../../benchmarks/baselines/x86_alibi_native_20260929/README.md).
+
 ## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
 
 Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.

@@ -30,11 +30,11 @@ the bootstrap row can go.
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 34 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 14 |
 | — unclassified/raw inputs (not assumed compiled) | 14 |
-| Lines in those modules | 10957 |
+| Lines in those modules | 10873 |
 | Classified family/target candidates (shape admission not implied) | 54 |
 | — covered by a compiled route | 6 |
-| — packager lowers only through the generic Schedule→Tile route | 10 |
-| — **gap (no declared family route)** | 38 |
+| — packager lowers only through the generic Schedule→Tile route | 11 |
+| — **gap (no declared family route)** | 37 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -47,7 +47,7 @@ exact artifacts before treating a row as a constructor deletion target.
 |---|---|---|---|---|---|---|
 | `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 11 | 12 | 3841 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3399 |
-| `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1687 |
+| `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1815 |
 
@@ -104,7 +104,7 @@ queues own.
 | `x86` | `matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |
 | `x86` | `attention` | `scheduled_attention.supports_scheduled_attention` | ✅ compiled |
 | `x86` | `attention_backward` | `scheduled_attention_backward.supports_scheduled_attention_backward` | ✅ compiled |
-| `x86` | `cohort2` | — | 🔴 **gap** |
+| `x86` | `cohort2` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `x86` | `breadth` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `x86` | `elementwise` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `apple_cpu` | `batched_gemm` | — | 🔴 **gap** |

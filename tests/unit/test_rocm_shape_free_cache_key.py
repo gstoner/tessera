@@ -146,7 +146,7 @@ def test_directive_without_exactly_one_name_fails_closed() -> None:
 
 def test_a_family_without_an_audited_identity_is_refused() -> None:
     with pytest.raises(ValueError, match="no audited shape-free kernel identity"):
-        rocm_native._compile_shape_free_tile_ir("module {}", family="matmul", architecture="gfx1151")
+        rocm_native._compile_shape_free_tile_ir("module {}", family="binary", architecture="gfx1151")
 
 
 # --- the cache ----------------------------------------------------------------------------------

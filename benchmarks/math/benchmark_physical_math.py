@@ -347,6 +347,11 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
     """Produce diagnostic host-wrapper evidence, without promotion authority."""
     if target not in {"x86", "rocm"} or type(iterations) is not int or iterations <= 0:
         raise ValueError("known target and positive iterations required")
+    if target == "rocm" and dtype_name != "all":
+        raise ValueError(
+            "the ROCm evidence packet must aggregate f32, f16, and bf16; "
+            "use --dtype all"
+        )
     from tessera import runtime as rt
     from tessera.compiler.profiler_timing import WSL_WITNESS_MISSING
 
@@ -394,11 +399,6 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
             ),
         }
 
-    if dtype_name != "all":
-        raise ValueError(
-            "the ROCm evidence packet must aggregate f32, f16, and bf16; "
-            "use --dtype all"
-        )
     dtype_rows = []
     rows_by_dtype = {}
     for storage in ("f32", "f16", "bf16"):

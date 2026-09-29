@@ -3261,9 +3261,21 @@ LogicalResult ALiBiOp::verify() {
   if (failed(verifyPositiveI64(getOperation(), "num_heads", getNumHeads())) ||
       failed(verifyPositiveI64(getOperation(), "seq_len", getSeqLen())))
     return failure();
+  if (auto slopes = getSlopes()) {
+    auto slopeTy = dyn_cast<RankedTensorType>(slopes.getType());
+    if (!slopeTy || slopeTy.getRank() != 1 ||
+        !slopeTy.getElementType().isF32() ||
+        !dimsAgree(slopeTy.getDimSize(0), getNumHeads()))
+      return emitOpError("slopes must be rank-1 f32 with num_heads elements");
+  }
   if (auto biasTy = dyn_cast<RankedTensorType>(getBias().getType())) {
     if (!isFloatTensor(biasTy))
       return emitOpError("bias result must be a floating tensor");
+    if (getSlopes() &&
+        (biasTy.getRank() != 3 ||
+         !biasTy.getElementType().isF32() ||
+         !dimsAgree(biasTy.getDimSize(0), getNumHeads())))
+      return emitOpError("explicit slopes require an f32 [num_heads, seq_len, seq_len] bias");
     int64_t rank = biasTy.getRank();
     if (rank >= 2) {
       int64_t s0 = biasTy.getDimSize(rank - 2);

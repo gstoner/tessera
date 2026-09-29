@@ -106,6 +106,13 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         notes="Hardware-gated metadata runtime probes for x86/ROCm. CI checks syntax only; host-wall diagnostics do not prove package ancestry or promotion. See benchmarks/COMPILER_ALIGNMENT.md.",
     ),
     SurfaceEntry(
+        directory="benchmarks/x86",
+        entry_point="benchmarks/x86/record_alibi_native_package.py",
+        status="compile_only",
+        command="python -m py_compile benchmarks/x86/record_alibi_native_package.py",
+        notes="Exact-host AVX-512 ALiBi package and NumPy diagnostic recorder; WSL host-wall timing is not selector evidence.",
+    ),
+    SurfaceEntry(
         directory="benchmarks/autodiff",
         entry_point="benchmarks/autodiff/benchmark_native_jvp.py",
         status="compile_only",

@@ -13,7 +13,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from typing import Any, cast
+from typing import cast
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (
@@ -534,17 +534,6 @@ def package_attention_backward_semantics(
 
 
 
-def _emit_alibi_tile_ir(*, entry: str) -> str:
-    """The ALiBi launch envelope, still authored here (see ``_alibi_contract``)."""
-    return f'''module {{
-  llvm.func @{entry}(%slopes: !llvm.ptr, %o: !llvm.ptr, %h: i64, %s: i64) {{
-    tile.alibi_kernel %slopes, %o, %h, %s {{ storage = "f32", formula = "slope_times_j_minus_i" }} : !llvm.ptr, !llvm.ptr, i64, i64
-    llvm.return
-  }}
-}}
-'''
-
-
 def requests_softmax(module: GraphIRModule) -> bool:
     return (
         len(module.functions) == 1 and len(module.functions[0].body) == 1
@@ -714,53 +703,15 @@ def _attention_contract(
 
 
 
-def _alibi_contract(module: GraphIRModule) -> dict[str, object] | None:
-    """ALiBi alone stays on its retired Graph-owned route (E2E-REAL-6 gap).
-
-    Its Graph operand list is not decodable by position: the catalog admits
-    0-2 optional operands without presence flags and the ODS op declares no
-    slopes operand at all (``tests/unit/test_op_arity_contract.py::
-    _UNDECODABLE_OPERAND_LISTS``), so the native Graph -> Schedule route
-    cannot parse the x86 slopes form. Every other cohort-2 op lowers through
-    ``scheduled_kernel``; the retired constructors for those live in
-    ``tests/_support/x86_kernel_baseline.py``.
-    """
-    if not requests_cohort2(module) or module.functions[0].body[0].op_name != "tessera.alibi":
-        return None
-    function, op = module.functions[0], module.functions[0].body[0]
-    args = {arg.name: arg for arg in function.args}
-    names = tuple(value.removeprefix("%") for value in op.operands)
-    if len(function.result_types) != 1 or len(names) != 1 or names[0] not in args:
-        return None
-    result = function.result_types[0]
-    try:
-        output_shape = tuple(int(value) for value in result.shape)
-    except (TypeError, ValueError):
-        return None
-    slopes_shape = _shape(module, names[0])
-    h, s = op.kwargs.get("num_heads"), op.kwargs.get("seq_len")
-    if (not isinstance(h, int) or isinstance(h, bool) or not isinstance(s, int) or
-            isinstance(s, bool) or h <= 0 or s <= 0 or slopes_shape != (h,) or
-            args[names[0]].ir_type.dtype != "fp32" or result.dtype != "fp32" or
-            output_shape != (h, s, s)):
-        return None
-    return {"family": "alibi", "kind": "alibi", "inputs": names,
-            "output": op.result or "output", "shape": slopes_shape,
-            "output_shape": output_shape, "rows": h, "cols": s}
-
-
 def supports_cohort2(module: GraphIRModule) -> bool:
     """An x86 cohort-2 op (argreduce/scan/norm/rope/alibi) with an admitted route.
 
-    E2E-REAL-6 (2026-09-28): admission is the scheduled contract's for every
-    op but ALiBi (see ``_alibi_contract``).
+    Admission is the native scheduled contract for every cohort-2 operation.
     """
     from . import scheduled_kernel
 
     if not requests_cohort2(module):
         return False
-    if module.functions[0].body[0].op_name == "tessera.alibi":
-        return _alibi_contract(module) is not None
     return scheduled_kernel.supports_scheduled_kernel(module, target="x86")
 
 
@@ -857,7 +808,7 @@ def _image(
 
 
 def package_cohort2(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
-    """Compile an x86 cohort-2 op; all but ALiBi through native Schedule/Tile.
+    """Compile an x86 cohort-2 op through native Schedule/Tile.
 
     E2E-REAL-6 (x86 cohort-2 family, 2026-09-28): argmax/argmin, the scans and
     rope lower through ``NativeX86Kernel.h``, cumsum through
@@ -869,52 +820,10 @@ def package_cohort2(module: GraphIRModule, *, pipeline_name: str) -> X86NativePa
 
     if not requests_cohort2(module):
         raise ValueError("x86 native cohort 2 requires one supported static f32 operation")
-    if module.functions[0].body[0].op_name == "tessera.alibi":
-        return _package_alibi(module, pipeline_name=pipeline_name)
     return package_scheduled_kernel(
         scheduled_kernel.lower_scheduled_kernel(module, target="x86"),
         pipeline_name=pipeline_name,
     )
-
-
-def _package_alibi(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
-    contract = _alibi_contract(module)
-    if contract is None:
-        raise ValueError("x86 native ALiBi requires static f32 slopes (num_heads,) and a (H, S, S) result")
-    symbol, abi = "tessera_x86_avx512_alibi_f32", X86_ALIBI_F32_ABI
-    tile_ir = _emit_alibi_tile_ir(entry="tessera_tile_x86_alibi_alibi")
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol, "alibi")
-    image = _image(
-        target_ir=target_ir, payload=payload, compiler=compiler,
-        toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
-    )
-    slopes = cast(tuple[str, ...], contract["inputs"])[0]
-    output_name = str(contract["output"])
-    heads, seq = int(cast(Any, contract["rows"])), int(cast(Any, contract["cols"]))
-    output_shape = cast(tuple[int, ...], contract["output_shape"])
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=(
-            BufferBinding(0, slopes, "input", "fp32", 1, "row_major", 4),
-            BufferBinding(1, output_name, "output", "fp32", 3, "row_major", 4),
-        ),
-        scalars=(ScalarArgument(2, "H", "int64"), ScalarArgument(3, "S", "int64")),
-        shape_guards=tuple(
-            [ShapeGuard(slopes, 0, "eq", heads)]
-            + [ShapeGuard(output_name, axis, "eq", extent) for axis, extent in enumerate(output_shape)]
-        ),
-        geometry=LaunchGeometry(policy="x86_avx512_alibi"),
-        ordering=OrderingSemantics(
-            ordered_submission=True, residency="all", synchronization=("return",),
-        ),
-        provenance={
-            "work_item": "X86-E2E-2", "route": "avx512_c_abi",
-            "family": "alibi", "kind": "alibi", "shape": [heads],
-            "output_shape": list(output_shape), "rows": heads, "cols": seq,
-            "storage": "f32",
-        },
-    )
-    return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
 
 
 def _scheduled_unary_architecture(architecture: str) -> str:
@@ -1325,11 +1234,12 @@ def _package_x86_kernel(artifact: ScheduledKernelArtifact, *, pipeline_name: str
             "storage": ("mixed_i8_f32" if sub == "where" else projection.storage[0]),
             "output_storage": projection.storage[-1],
         }
-    elif family in {"argreduce", "scan", "rope"}:
+    elif family in {"argreduce", "scan", "rope", "alibi"}:
         symbol, abi = {
             "argreduce": ("tessera_x86_avx512_argreduce_f32", X86_ARGREDUCE_F32_ABI),
             "scan": ("tessera_x86_avx512_scan_f32", X86_SCAN_F32_ABI),
             "rope": ("tessera_x86_avx512_rope_f32", X86_ROPE_F32_ABI),
+            "alibi": ("tessera_x86_avx512_alibi_f32", X86_ALIBI_F32_ABI),
         }[family]
         logical = projection.extras.get("logical_shape", shapes[0])
         if not isinstance(logical, tuple) or math.prod(logical) != math.prod(shapes[0]):
@@ -1339,7 +1249,11 @@ def _package_x86_kernel(artifact: ScheduledKernelArtifact, *, pipeline_name: str
         # constructor described a rank-1 operand the caller never passes, and
         # the runtime refused that descriptor for any rank >= 2 operand.
         input_shapes = list(shapes[:-1])
-        rows, cols = int(projection.scalars["Rows"]), int(projection.scalars["Cols"])
+        rows, cols = (
+            (int(projection.scalars["H"]), int(projection.scalars["S"]))
+            if family == "alibi" else
+            (int(projection.scalars["Rows"]), int(projection.scalars["Cols"]))
+        )
         buffers = tuple(
             BufferBinding(index, name, "input", "fp32", len(shape), "row_major", 4)
             for index, (name, shape) in enumerate(zip(names[:-1], input_shapes))
@@ -1350,8 +1264,9 @@ def _package_x86_kernel(artifact: ScheduledKernelArtifact, *, pipeline_name: str
             for name, shape in zip(names, (*input_shapes, shapes[-1]))
             for axis, extent in enumerate(shape)
         )
-        scalars = (ScalarArgument(len(buffers), "Rows", "int64"),
-                   ScalarArgument(len(buffers) + 1, "Cols", "int64"))
+        scalar_names = ("H", "S") if family == "alibi" else ("Rows", "Cols")
+        scalars = (ScalarArgument(len(buffers), scalar_names[0], "int64"),
+                   ScalarArgument(len(buffers) + 1, scalar_names[1], "int64"))
         geometry = f"x86_avx512_{family}"
         pipeline_family = family
         provenance = {
@@ -1362,7 +1277,8 @@ def _package_x86_kernel(artifact: ScheduledKernelArtifact, *, pipeline_name: str
         }
         expected = ({"kind": f'"{kind}"', "tie_break": '"first"'} if family == "argreduce"
                     else {"kind": f'"{kind}"', "inclusive": "true"} if family == "scan"
-                    else {"layout": '"interleaved_pairs"'})
+                    else {"layout": '"interleaved_pairs"'} if family == "rope"
+                    else {"formula": '"slope_times_j_minus_i"'})
         if any(tile_attrs.get(key) != value for key, value in expected.items()):
             raise ValueError(f"x86 native {family} Tile op disagrees with its contract")
     else:

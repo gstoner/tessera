@@ -128,6 +128,10 @@ def _cohort2_cases():
     for shape in [(1, 2), (3, 18), (2, 3, 4)]:
         yield (f"tessera.rope{shape}", _module(
             "tessera.rope", [("x", shape, "fp32"), ("theta", shape, "fp32")], (shape, "fp32")))
+    for heads, seq in [(1, 1), (4, 7), (8, 33)]:
+        yield (f"tessera.alibi{heads}x{seq}", _module(
+            "tessera.alibi", [("slopes", (heads,), "fp32")],
+            ((heads, seq, seq), "fp32"), {"num_heads": heads, "seq_len": seq}))
 
 
 def _breadth_cases():
@@ -437,12 +441,16 @@ def test_retired_constructors_left_production():
     assert not hasattr(x86_breadth, "graph_breadth_contract")
 
 
-def test_only_alibi_keeps_a_graph_owned_constructor():
+@_needs_compiler
+def test_alibi_has_native_schedule_and_retired_oracle():
     alibi = _module("tessera.alibi", [("slopes", (4,), "fp32")], ((4, 7, 7), "fp32"),
                     {"num_heads": 4, "seq_len": 7})
-    assert x86_native._alibi_contract(alibi) is not None
+    assert baseline._cohort2_contract(alibi) is not None
     assert x86_native.supports_cohort2(alibi)
-    assert not scheduled_kernel.supports_scheduled_kernel(alibi, target="x86")
+    assert scheduled_kernel.supports_scheduled_kernel(alibi, target="x86")
+    assert not hasattr(x86_native, "_alibi_contract")
+    assert not hasattr(x86_native, "_package_alibi")
+    assert not hasattr(x86_native, "_emit_alibi_tile_ir")
 
 
 def test_only_the_avx512_image_exists_for_these_families():
@@ -553,6 +561,8 @@ def _run(package, inputs):
         args.update(provenance["graph_scalars"])
     elif "elements" in provenance:
         args["N"] = provenance["elements"]
+    elif provenance["family"] == "alibi":
+        args.update(H=provenance["rows"], S=provenance["cols"])
     else:
         args.update(Rows=provenance["rows"], Cols=provenance["cols"])
         if "eps" in provenance:

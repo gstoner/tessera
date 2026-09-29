@@ -8,6 +8,14 @@ last_updated: 2026-09-29
 
 # Apple compiler, exact-device, and performance plan
 
+## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-2026-09-29.
+Graph ALiBi now declares an optional rank-one f32 slopes operand and checks
+its explicit-output shape. Apple has no new Schedule, Metal image, or Mac
+execution proof for this form. The Apple target_verify, scaled ntk_rope and
+Philox JIT routes remain open; x86 proof confers no Metal parity.
+
 ## `CI-LLVM-EXACT-2026-09-29`: hosted compiler toolchain pin
 
 Owner compiler foundation F0; sync `CI-LLVM-EXACT-2026-09-29`.

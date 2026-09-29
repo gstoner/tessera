@@ -255,6 +255,14 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 **Remaining Graph-owned packaging and frontend retirement**
 
+- Current slice (2026-09-29, sync E2E-REAL-6-ALIBI-2026-09-29): x86
+  explicit-slopes ALiBi now enters native Graph, Schedule and Tile, and the
+  narrowed Python constructor is retired. Princess-Luna numerical and
+  differential proof covers the existing AVX-512 ABI. Apple JIT packages,
+  ROCm paged layouts/matmul identity, NVIDIA LSE/backward/quantized routes and
+  the route census remain open. Diagnostic WSL host-wall timing is not
+  performance admission. [Evidence](../../../benchmarks/baselines/x86_alibi_native_20260929/README.md).
+
 - Current slice (2026-09-28, sync `COMPILER-NEXT-SLICES-2026-09-28`): x86 rank-3 Cholesky/triangular solve now use native Graph→Schedule→Tile and their retained Python constructor is retired. The derived breadth census recognizes the compiled route. ROCm forward-attention images now reuse across runtime batch/head/sequence extents, with exact gfx1151/gfx1201 numerical proof; per-shape guards and Schedule ancestry remain distinct. Native MoE/paged-KV execution was revalidated on gfx1151 and paged KV on sm_120. Movement non-regression and most sm_120 timing-stability gates remain unsatisfied. The Mac passed direct scaled-RoPE/Philox Metal ABI tests, but static `target_verify`/`ntk_rope` @jit remains artifact-only. Remaining: Apple native package execution; x86 ALiBi explicit slopes; general paged layouts and launch overhead; NVIDIA LSE/backward/quantized routes; ROCm matmul image identity and physical W8A8/MXFP4 work. See the [measured packet](../../../benchmarks/baselines/compiler_next_slices_20260928/README.md).
 
 - Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
@@ -271,7 +279,7 @@ and every Apple CPU example launch is oracle-checked. Accelerator examples
 remain artifact claims; exact-device execution stays backend-owned.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [batched x86 linalg and ROCm attention image identity](INTEGRATED_COMPILER_LOG.md#2026-09-28--batched-x86-linalg-and-rocm-attention-image-identity)
+- Latest: [x86 ALiBi explicit slopes native Schedule](INTEGRATED_COMPILER_LOG.md#2026-09-29--x86-alibi-explicit-slopes-reaches-native-schedule-and-tile)
 
 ### W1.1
 

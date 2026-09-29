@@ -107,6 +107,7 @@ X86_KERNEL_OPS: dict[str, tuple[str, str, str]] = {
     "tessera.cummax": ("scan", "scan", "max"),
     "tessera.cummin": ("scan", "scan", "min"),
     "tessera.rope": ("rope", "rope", "rope"),
+    "tessera.alibi": ("alibi", "alibi", "alibi"),
     "tessera.gather": ("x86_abi", "gather_f32", "gather"),
     "tessera.loss.mse": ("x86_abi", "pointwise_loss_f32", "pointwise_loss"),
     "tessera.loss.mae": ("x86_abi", "pointwise_loss_f32", "pointwise_loss"),
@@ -133,6 +134,7 @@ TILE_OPS: dict[str, str] = {
     "argreduce": "tile.argreduce_kernel",
     "scan": "tile.scan_kernel",
     "rope": "tile.rope_kernel",
+    "alibi": "tile.alibi_kernel",
     "x86_abi": "tile.x86_abi_kernel",
 }
 
@@ -286,6 +288,15 @@ def admit(module: GraphIRModule) -> X86KernelRequest:
         if (len(inputs) != 2 or dtypes != ["fp32", "fp32"] or shapes[0] != shapes[1]
                 or shapes[0] != result_shape or result_dtype != "fp32" or result_shape[-1] % 2):
             raise ValueError("x86 native rope requires same-shape f32 x/theta with an even last dimension")
+    elif family == "alibi":
+        allowed = {"num_heads", "seq_len"}
+        heads = _int(raw.get("num_heads"), "num_heads")
+        seq = _int(raw.get("seq_len"), "seq_len")
+        if (len(inputs) != 1 or dtypes != ["fp32"] or heads <= 0 or seq <= 0
+                or shapes[0] != (heads,) or result_dtype != "fp32"
+                or result_shape != (heads, seq, seq)):
+            raise ValueError("x86 native ALiBi requires f32 slopes [H] and f32 result [H,S,S]")
+        kwargs.update(num_heads=heads, seq_len=seq)
     else:
         if result_dtype != "fp32":
             raise ValueError("x86 native breadth requires an f32 result")

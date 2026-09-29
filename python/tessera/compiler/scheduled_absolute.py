@@ -5,7 +5,7 @@ import copy
 import json
 import re
 from threading import RLock
-from typing import ClassVar, cast
+from typing import ClassVar
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 
@@ -57,18 +57,18 @@ def lower_absolute(module):
 
 
 def _lower_unary(module, artifact_type, op_name):
-    # Only the frontend admission boundary handles Python Graph objects.
-    from .x86_native import _elementwise_contract, _cohort2_contract
-    if artifact_type.contract_name == "cumsum":
-        scan = _cohort2_contract(module)
-        if not scan or scan["family"] != "scan" or scan["kind"] != "sum":
-            raise ValueError('scheduled cumsum requires a trailing-axis f32 scan')
-        bindings = [cast(tuple[str, ...], scan["inputs"])[0], str(scan["output"])]
-    else:
-        contract = _elementwise_contract(module)
-        if contract is None or contract[:2] != ('unary', artifact_type.kind):
-            raise ValueError('scheduled unary requires its static same-shape f32 operation')
-        bindings = [contract[2][0], contract[3]]
+    # Admit through the canonical native x86 contract; these packagers remain
+    # as differential baselines for the migrated native Schedule route.
+    from . import native_x86_kernel
+    try:
+        request = native_x86_kernel.admit(module)
+    except ValueError as exc:
+        raise ValueError(
+            f"scheduled {artifact_type.contract_name} requires its static f32 operation: {exc}"
+        ) from exc
+    if request.record != artifact_type.contract_name:
+        raise ValueError(f"scheduled {artifact_type.contract_name} requires its own operation")
+    bindings = list(request.bindings)
     target = copy.deepcopy(module)
     target.functions[0].body[0].op_name = op_name
     target.module_attrs.update({'tessera.target':'"x86"', 'tessera.arch':'"zen5-avx512"',

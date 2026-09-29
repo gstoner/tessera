@@ -3544,3 +3544,152 @@ def Tessera_CumsumOp : Op<Tessera_Dialect, "cumsum", [Pure]> {
   let results = (outs AnyRankedTensor:$output);
   let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
 }
+
+// ---------------------------------------------------------------------------
+// E2E-REAL-6, x86 elementwise / cohort-2 / breadth families (2026-09-28).
+//
+// Public spellings the canonical Python op catalog (`op_catalog.py`) has long
+// accepted, and that `x86_native` packaged by authoring Tile IR in Python,
+// were never Graph ODS ops: `tessera-opt` could not parse them, so no native
+// Graph -> Schedule route could own them. Registering them closes that Graph
+// dialect gap (the same step the tensor/tensor comparisons took above). The
+// consumer is the x86 native kernel contract
+// (`src/compiler/programming_model/lib/NativeX86Kernel.h`), which admits the
+// static x86 envelope and fails closed on everything else; registration is
+// not backend evidence for any other target. No AD interface is declared:
+// none of these carries an adjoint rule at the Graph layer yet (Decision #29).
+// ---------------------------------------------------------------------------
+
+// Shape- and dtype-preserving unary pointwise op (x -> y).
+class Tessera_PointwiseUnaryOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic, [Pure]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Shape- and dtype-preserving binary pointwise op (lhs, rhs -> result).
+class Tessera_PointwiseBinaryOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic, [Pure]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Floating-point class test (x -> i1 mask of the same shape).
+class Tessera_FloatPredicateOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic, [Pure]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$mask);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_SqrtOp : Tessera_PointwiseUnaryOp<"sqrt", "Elementwise square root">;
+def Tessera_RsqrtOp : Tessera_PointwiseUnaryOp<"rsqrt", "Elementwise reciprocal square root">;
+def Tessera_ReciprocalOp : Tessera_PointwiseUnaryOp<"reciprocal", "Elementwise reciprocal (1 / x)">;
+def Tessera_SignOp : Tessera_PointwiseUnaryOp<"sign", "Elementwise sign (-1, 0 or +1; NaN propagates)">;
+def Tessera_RoundOp : Tessera_PointwiseUnaryOp<"round", "Elementwise round half to even">;
+def Tessera_ExpOp : Tessera_PointwiseUnaryOp<"exp", "Elementwise natural exponential">;
+def Tessera_LogOp : Tessera_PointwiseUnaryOp<"log", "Elementwise natural logarithm">;
+def Tessera_ErfOp : Tessera_PointwiseUnaryOp<"erf", "Elementwise error function">;
+def Tessera_ErfcOp : Tessera_PointwiseUnaryOp<"erfc", "Elementwise complementary error function">;
+def Tessera_Expm1Op : Tessera_PointwiseUnaryOp<"expm1", "Elementwise exp(x) - 1">;
+def Tessera_Log1pOp : Tessera_PointwiseUnaryOp<"log1p", "Elementwise log(1 + x)">;
+def Tessera_CosOp : Tessera_PointwiseUnaryOp<"cos", "Elementwise cosine">;
+def Tessera_TanOp : Tessera_PointwiseUnaryOp<"tan", "Elementwise tangent">;
+def Tessera_SinhOp : Tessera_PointwiseUnaryOp<"sinh", "Elementwise hyperbolic sine">;
+def Tessera_CoshOp : Tessera_PointwiseUnaryOp<"cosh", "Elementwise hyperbolic cosine">;
+def Tessera_AsinOp : Tessera_PointwiseUnaryOp<"asin", "Elementwise arcsine">;
+def Tessera_AcosOp : Tessera_PointwiseUnaryOp<"acos", "Elementwise arccosine">;
+def Tessera_AtanOp : Tessera_PointwiseUnaryOp<"atan", "Elementwise arctangent">;
+def Tessera_LgammaOp : Tessera_PointwiseUnaryOp<"lgamma", "Elementwise log-gamma">;
+def Tessera_DigammaOp : Tessera_PointwiseUnaryOp<"digamma", "Elementwise digamma">;
+
+def Tessera_MaximumOp : Tessera_PointwiseBinaryOp<"maximum", "Elementwise maximum (NaN propagates)">;
+def Tessera_MinimumOp : Tessera_PointwiseBinaryOp<"minimum", "Elementwise minimum (NaN propagates)">;
+def Tessera_ModOp : Tessera_PointwiseBinaryOp<"mod", "Elementwise floored modulo (sign of divisor)">;
+def Tessera_FloorDivOp : Tessera_PointwiseBinaryOp<"floor_div", "Elementwise floored division">;
+def Tessera_PowOp : Tessera_PointwiseBinaryOp<"pow", "Elementwise power (lhs ** rhs)">;
+
+def Tessera_IsNanOp : Tessera_FloatPredicateOp<"isnan", "Elementwise NaN test">;
+def Tessera_IsInfOp : Tessera_FloatPredicateOp<"isinf", "Elementwise infinity test">;
+def Tessera_IsFiniteOp : Tessera_FloatPredicateOp<"isfinite", "Elementwise finiteness test">;
+
+// Boolean (i1) logic. Operands and result share shape and i1 element type.
+def Tessera_LogicalAndOp : Tessera_PointwiseBinaryOp<"logical_and", "Elementwise boolean and">;
+def Tessera_LogicalOrOp : Tessera_PointwiseBinaryOp<"logical_or", "Elementwise boolean or">;
+def Tessera_LogicalXorOp : Tessera_PointwiseBinaryOp<"logical_xor", "Elementwise boolean xor">;
+def Tessera_LogicalNotOp : Tessera_PointwiseUnaryOp<"logical_not", "Elementwise boolean not">;
+
+// Integer bit logic. Operands and result share shape and integer element type.
+def Tessera_BitwiseAndOp : Tessera_PointwiseBinaryOp<"bitwise_and", "Elementwise bitwise and">;
+def Tessera_BitwiseOrOp : Tessera_PointwiseBinaryOp<"bitwise_or", "Elementwise bitwise or">;
+def Tessera_BitwiseXorOp : Tessera_PointwiseBinaryOp<"bitwise_xor", "Elementwise bitwise xor">;
+def Tessera_BitwiseNotOp : Tessera_PointwiseUnaryOp<"bitwise_not", "Elementwise bitwise not">;
+def Tessera_PopcountOp : Tessera_PointwiseUnaryOp<"popcount", "Elementwise population count">;
+
+// The public ternary `where` (cond ? a : b), the catalog spelling of the same
+// data-parallel conditional `tessera.select` carries.
+def Tessera_WhereOp : Op<Tessera_Dialect, "where", [Pure]> {
+  let summary = "Elementwise where (cond ? a : b) with an i1 condition";
+  let arguments = (ins TensorType:$cond, TensorType:$a, TensorType:$b);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Index of the extreme element along one axis (first occurrence on ties).
+class Tessera_ArgReduceOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic, [Pure]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$x, OptionalAttr<I64Attr>:$axis,
+                       DefaultValuedAttr<BoolAttr, "false">:$keepdims);
+  let results = (outs TensorType:$indices);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+def Tessera_ArgmaxOp : Tessera_ArgReduceOp<"argmax", "Index of the maximum along one axis">;
+def Tessera_ArgminOp : Tessera_ArgReduceOp<"argmin", "Index of the minimum along one axis">;
+
+// Inclusive scans beside `tessera.cumsum` (same type-preserving contract).
+class Tessera_InclusiveScanOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic, [Pure]
+> {
+  let summary = summaryText;
+  let hasVerifier = 1;
+  let arguments = (ins AnyRankedTensor:$input, DefaultValuedAttr<I64Attr, "-1">:$axis);
+  let results = (outs AnyRankedTensor:$output);
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
+}
+def Tessera_CumprodOp : Tessera_InclusiveScanOp<"cumprod", "Inclusive cumulative product">;
+def Tessera_CummaxOp : Tessera_InclusiveScanOp<"cummax", "Inclusive cumulative maximum">;
+def Tessera_CumminOp : Tessera_InclusiveScanOp<"cummin", "Inclusive cumulative minimum">;
+
+// Index a source tensor along one axis; the result takes the index shape.
+def Tessera_GatherOp : Op<Tessera_Dialect, "gather", [Pure]> {
+  let summary = "Gather source elements along one axis by integer indices";
+  let arguments = (ins TensorType:$source, TensorType:$indices,
+                       DefaultValuedAttr<I64Attr, "0">:$axis);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_LogCoshLossOp : Op<Tessera_Dialect, "loss.log_cosh", [Pure]> {
+  let summary = "Log-cosh regression loss with explicit reduction semantics";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}

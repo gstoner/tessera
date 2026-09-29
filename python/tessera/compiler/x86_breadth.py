@@ -299,6 +299,87 @@ _POINTWISE_LOSSES: Mapping[str, tuple[int, str | None]] = {
 }
 
 
+
+
+
+
+
+
+def batched_linalg_contract(module: GraphIRModule) -> dict[str, Any] | None:
+    """Batched (rank-3) cholesky / tri_solve: the one retained breadth route.
+
+    E2E-REAL-6 (x86 breadth family, 2026-09-28) moved gather, the pointwise
+    losses and rank-2 cholesky / tri_solve to the native Schedule route. The
+    Graph ODS cholesky / tri_solve verifiers are rank-2 only ("batched rank-3
+    is a follow-on", pinned by ``apple_cholesky_graph_ir_invalid.mlir``), so a
+    batched request cannot be expressed as Graph IR yet and keeps this
+    Graph-owned admission, verbatim from the retired ``graph_breadth_contract``.
+    """
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return None
+    function, op = module.functions[0], module.functions[0].body[0]
+    if op.op_name not in {"tessera.cholesky", "tessera.tri_solve"}:
+        return None
+    args = {argument.name: argument for argument in function.args}
+    names = tuple(value.removeprefix("%") for value in op.operands)
+    output_name = op.result or "output"
+    output_shape = _result_shape(module)
+    if output_shape is None or function.result_types[0].dtype != "fp32":
+        return None
+    expected = 1 if op.op_name == "tessera.cholesky" else 2
+    if len(names) != expected or any(name not in args for name in names):
+        return None
+    shapes = tuple(_static_shape(module, name) for name in names)
+    matrix_shape = shapes[0]
+    if (
+        matrix_shape is None or len(matrix_shape) != 3
+        or matrix_shape[-1] != matrix_shape[-2]
+        or any(args[name].ir_type.dtype != "fp32" for name in names)
+    ):
+        return None
+    batch, n = matrix_shape[0], matrix_shape[1]
+    if op.op_name == "tessera.cholesky":
+        if output_shape != matrix_shape:
+            return None
+        return {
+            "key": "cholesky_f32", "family": "cholesky",
+            "inputs": names, "output": output_name,
+            "shapes": {"matrix": matrix_shape, "lower": output_shape},
+            "names": {"matrix": names[0], "lower": output_name},
+            "scalars": {"Batch": batch, "N": n},
+        }
+    rhs_shape = shapes[1]
+    if (rhs_shape is None or output_shape != rhs_shape or len(rhs_shape) != 3
+            or rhs_shape[:2] != (batch, n)):
+        return None
+    return {
+        "key": "tri_solve_f32", "family": "tri_solve",
+        "inputs": names, "output": output_name,
+        "shapes": {"matrix": matrix_shape, "rhs": rhs_shape, "output": output_shape},
+        "names": {"matrix": names[0], "rhs": names[1], "output": output_name},
+        "scalars": {"Batch": batch, "N": n, "M": rhs_shape[2],
+                    "Lower": int(bool(op.kwargs.get("lower", True)))},
+    }
+
+
+def package_batched_linalg(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
+    """Package a batched cholesky / tri_solve through the explicit C ABI."""
+    contract = batched_linalg_contract(module)
+    if contract is None:
+        raise ValueError("x86 batched linalg requires a static rank-3 f32 cholesky / tri_solve")
+    package = package_abi(
+        str(contract["key"]), pipeline_name=pipeline_name,
+        buffer_shapes=cast(Mapping[str, tuple[int, ...]], contract["shapes"]),
+        buffer_names=cast(Mapping[str, str], contract["names"]),
+    )
+    descriptor = replace(package.descriptor, provenance={
+        **package.descriptor.provenance,
+        "graph_level": True, "selector_family": str(contract["family"]),
+        "graph_scalars": cast(Mapping[str, object], contract["scalars"]),
+    })
+    return replace(package, descriptor=descriptor)
+
+
 def _static_shape(module: GraphIRModule, name: str) -> tuple[int, ...] | None:
     argument = next(
         (item for item in module.functions[0].args if item.name == name), None
@@ -322,114 +403,6 @@ def _result_shape(module: GraphIRModule) -> tuple[int, ...] | None:
     return shape if all(value > 0 for value in shape) else None
 
 
-def graph_breadth_contract(module: GraphIRModule) -> dict[str, Any] | None:
-    """Return an isomorphic public-Graph/direct-ABI contract, if one exists."""
-    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
-        return None
-    function, op = module.functions[0], module.functions[0].body[0]
-    args = {argument.name: argument for argument in function.args}
-    names = tuple(value.removeprefix("%") for value in op.operands)
-    output_name = op.result or "output"
-    output_shape = _result_shape(module)
-    if output_shape is None or function.result_types[0].dtype != "fp32":
-        return None
-    if op.op_name == "tessera.gather":
-        if len(names) != 2 or any(name not in args for name in names):
-            return None
-        source_shape, index_shape = (_static_shape(module, name) for name in names)
-        axis = op.kwargs.get("axis", 0)
-        if (
-            source_shape is None or index_shape is None
-            or len(source_shape) != 1 or len(index_shape) != 1
-            or output_shape != index_shape or axis not in {0, -1}
-            or args[names[0]].ir_type.dtype != "fp32"
-            or args[names[1]].ir_type.dtype != "int64"
-        ):
-            return None
-        return {
-            "key": "gather_f32", "family": "gather", "inputs": names,
-            "output": output_name,
-            "shapes": {"source": source_shape, "indices": index_shape,
-                       "output": output_shape},
-            "names": {"source": names[0], "indices": names[1],
-                      "output": output_name},
-            "scalars": {"SourceN": source_shape[0], "N": index_shape[0]},
-        }
-    if op.op_name in _POINTWISE_LOSSES:
-        if len(names) != 2 or any(name not in args for name in names):
-            return None
-        shapes = tuple(_static_shape(module, name) for name in names)
-        if (
-            any(shape is None for shape in shapes) or len(set(shapes)) != 1
-            or output_shape != shapes[0]
-            or any(args[name].ir_type.dtype != "fp32" for name in names)
-            or str(op.kwargs.get("reduction", "mean")) != "none"
-        ):
-            return None
-        shape = shapes[0]
-        kind, parameter_name = _POINTWISE_LOSSES[op.op_name]
-        parameter = float(op.kwargs.get(parameter_name, 1.0)) if parameter_name else 0.0
-        if not math.isfinite(parameter) or parameter < 0.0:
-            return None
-        return {
-            "key": "pointwise_loss_f32", "family": "pointwise_loss",
-            "inputs": names, "output": output_name,
-            "shapes": {"prediction": shape, "target": shape, "output": output_shape},
-            "names": {"prediction": names[0], "target": names[1],
-                      "output": output_name},
-            "scalars": {"N": math.prod(shape), "Kind": kind,
-                        "Parameter": parameter},
-            "kind": kind, "parameter": parameter,
-        }
-    if op.op_name in {"tessera.cholesky", "tessera.tri_solve"}:
-        expected = 1 if op.op_name == "tessera.cholesky" else 2
-        if len(names) != expected or any(name not in args for name in names):
-            return None
-        shapes = tuple(_static_shape(module, name) for name in names)
-        matrix_shape = shapes[0]
-        if (
-            matrix_shape is None or len(matrix_shape) not in {2, 3}
-            or matrix_shape[-1] != matrix_shape[-2]
-            or any(args[name].ir_type.dtype != "fp32" for name in names)
-        ):
-            return None
-        batch, n = (1, matrix_shape[0]) if len(matrix_shape) == 2 else (
-            matrix_shape[0], matrix_shape[1]
-        )
-        if op.op_name == "tessera.cholesky":
-            if output_shape != matrix_shape:
-                return None
-            return {
-                "key": "cholesky_f32", "family": "cholesky",
-                "inputs": names, "output": output_name,
-                "shapes": {"matrix": matrix_shape, "lower": output_shape},
-                "names": {"matrix": names[0], "lower": output_name},
-                "scalars": {"Batch": batch, "N": n},
-            }
-        rhs_shape = shapes[1]
-        if rhs_shape is None or output_shape != rhs_shape:
-            return None
-        if len(matrix_shape) == 2:
-            valid_rhs = len(rhs_shape) == 2 and rhs_shape[0] == n
-            columns = rhs_shape[1] if valid_rhs else 0
-        else:
-            valid_rhs = len(rhs_shape) == 3 and rhs_shape[:2] == (batch, n)
-            columns = rhs_shape[2] if valid_rhs else 0
-        if not valid_rhs:
-            return None
-        return {
-            "key": "tri_solve_f32", "family": "tri_solve",
-            "inputs": names, "output": output_name,
-            "shapes": {"matrix": matrix_shape, "rhs": rhs_shape,
-                       "output": output_shape},
-            "names": {"matrix": names[0], "rhs": names[1],
-                      "output": output_name},
-            "scalars": {"Batch": batch, "N": n, "M": columns,
-                        "Lower": int(bool(op.kwargs.get("lower", True)))},
-        }
-    return None
-
-
 def requests_graph_breadth(module: GraphIRModule) -> bool:
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
         return False
@@ -440,39 +413,61 @@ def requests_graph_breadth(module: GraphIRModule) -> bool:
 
 
 def supports_graph_breadth(module: GraphIRModule) -> bool:
-    return graph_breadth_contract(module) is not None
+    """A public Graph breadth op the compiled Schedule -> Tile route admits.
+
+    E2E-REAL-6 (x86 breadth family, 2026-09-28): admission is the scheduled
+    contract's (``NativeX86Kernel.h``); the retired Graph-owned
+    ``graph_breadth_contract`` is the oracle in
+    ``tests/_support/x86_kernel_baseline.py``.
+    """
+    from . import scheduled_kernel
+
+    return requests_graph_breadth(module) and (
+        scheduled_kernel.supports_scheduled_kernel(module, target="x86")
+        or batched_linalg_contract(module) is not None
+    )
 
 
 def supports_promoted_graph_breadth(module: GraphIRModule) -> bool:
     """Measured Level-C selector policy; thresholds are benchmark-owned."""
-    contract = graph_breadth_contract(module)
-    if contract is None:
+    from . import native_x86_kernel
+
+    if not supports_graph_breadth(module):
         return False
-    output_shape = _result_shape(module)
-    assert output_shape is not None
-    elements = math.prod(output_shape)
-    family = str(contract["family"])
+    batched = batched_linalg_contract(module)
+    output: tuple[int, ...]
+    if batched is not None:
+        family = str(batched["family"])
+        output = tuple(int(d) for d in module.functions[0].result_types[0].shape)
+    else:
+        request = native_x86_kernel.admit(module)
+        family, output = request.kind, request.shapes[-1]
     threshold = GRAPH_PROMOTION_THRESHOLDS[family]
-    return threshold is not None and elements >= threshold
+    return threshold is not None and math.prod(output) >= threshold
 
 
 def package_graph_breadth(
     module: GraphIRModule, *, pipeline_name: str,
 ) -> X86NativePackage:
-    contract = graph_breadth_contract(module)
-    if contract is None:
+    """Compile an x86 breadth op (gather / pointwise loss / cholesky / tri_solve).
+
+    E2E-REAL-6 (x86 breadth family, 2026-09-28): the Graph op lowers through
+    ``NativeX86Kernel.h`` to the same ``tile.x86_abi_kernel`` carrier the
+    explicit ABI registry (``X86_BREADTH_ABIS``) describes, and
+    ``x86_native.package_scheduled_kernel`` projects the package from the
+    replayed IR; the retired Graph-owned constructor is the oracle in
+    ``tests/_support/x86_kernel_baseline.py``. Batched (rank-3) cholesky /
+    tri_solve keep the retained constructor (:func:`batched_linalg_contract`),
+    so the family stays a bootstrap-prune gap.
+    """
+    from . import scheduled_kernel
+    from .x86_native import package_scheduled_kernel
+
+    if not requests_graph_breadth(module):
         raise ValueError("x86 breadth packaging requires one isomorphic static Graph operation")
-    package = package_abi(
-        str(contract["key"]), pipeline_name=pipeline_name,
-        buffer_shapes=cast(Mapping[str, tuple[int, ...]], contract["shapes"]),
-        buffer_names=cast(Mapping[str, str], contract["names"]),
+    if batched_linalg_contract(module) is not None:
+        return package_batched_linalg(module, pipeline_name=pipeline_name)
+    return package_scheduled_kernel(
+        scheduled_kernel.lower_scheduled_kernel(module, target="x86"),
+        pipeline_name=pipeline_name,
     )
-    descriptor = replace(package.descriptor, provenance={
-        **package.descriptor.provenance,
-        "graph_level": True, "selector_family": str(contract["family"]),
-        "graph_scalars": cast(Mapping[str, object], contract["scalars"]),
-        **({"kind": int(contract["kind"]),
-            "parameter": float(contract["parameter"])}
-           if "kind" in contract else {}),
-    })
-    return replace(package, descriptor=descriptor)

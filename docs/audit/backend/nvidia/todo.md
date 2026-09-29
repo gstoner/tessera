@@ -8,6 +8,15 @@ last_updated: 2026-09-28
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `E2E-REAL-6-x86-kernel-2026-09-28`: x86 native Schedule contract — sibling outcome — follow-up required
+
+Owner E2E-REAL-6 ([x86 queue](../x86/todo.md)); sync
+`E2E-REAL-6-x86-kernel-2026-09-28`. The 45 new Graph ODS declarations
+have target-neutral verifiers; `schedule.norm` additionally admits Zen 5
+without changing the sm_120 branch. Princess-Luna host drift gates passed.
+No Super-Bear exact-device run has been made for this branch, so sm_120
+parser and execution parity remain a follow-up.
+
 ## `E2E-REAL-6-GFX1151-PAGED-2026-09-28`: sibling outcome — follow-up required
 
 The shared native paged-KV Schedule producer now also admits `rocm_gfx1151`;

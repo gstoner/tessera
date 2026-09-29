@@ -9,6 +9,56 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `E2E-REAL-6-x86-kernel-2026-09-28`: x86 elementwise / cohort-2 / breadth lower through a native Schedule contract; x86 package compile cache
+
+Owner E2E-REAL-6 (log entry of the same date). Branch `codex/x86-batch3-dedup` (based on merged #875).
+
+- **What moved.** `package_elementwise`, `package_cohort2` and
+  `x86_breadth.package_graph_breadth` (and `supports_elementwise` /
+  `supports_cohort2` / `supports_graph_breadth`, hence `supports_native_package`)
+  admit through `scheduled_kernel.supports_scheduled_kernel(target="x86")` and
+  hand `lower_scheduled_kernel` straight to `package_scheduled_kernel`, which
+  projects the descriptor from the replayed Tile IR contract
+  (`native_x86_kernel.project`). Native owner:
+  `src/compiler/programming_model/lib/NativeX86Kernel.h` (table of 69 ops,
+  opt-in by `tessera.launch_bindings`), `NativeAbsolute.h` for
+  absolute/floor/ceil/trunc/cumsum, `schedule.norm` for the norms (Zen 5 admitted in
+  `getSemanticKernelSchedule` and the `NormOp` verifier). 45 unique catalog spellings
+  were registered as Graph ODS ops first (the native compiler could not parse
+  them). The retired constructors are the oracle `tests/_support/x86_kernel_baseline.py`.
+- **Envelope.** Elementwise: all 71 spellings + `where`, any positive static
+  rank — carried in full (dashboard: `gap` -> `generic`). Cohort-2: all but
+  ALiBi. Breadth: all but rank-3 cholesky/tri_solve. AVX-512 image only, as
+  before (the base image refuses these families on both routes).
+- **Still gap, why.** ALiBi (`_alibi_contract`, retained): the Graph operand
+  list is not decodable by position and ODS `tessera.alibi` has no slopes
+  operand. Batched linalg (`batched_linalg_contract`, retained): ODS
+  cholesky/tri_solve are rank-2 only. Each needs a Graph ODS change first.
+- **Refused on purpose (15, pinned in `test_x86_kernel_differential.py`).**
+  Unknown keywords, comparison `signedness`, integer `keepdims`, flattened
+  rank >= 2 scans, norm `numeric_policy` / non-last `axis`, upper cholesky,
+  `trans` / `unit_diag` tri_solve, zero huber `delta`, rank-1 rope, flattened
+  keepdims argmax over rank >= 2, repeated operands. **Corrected:** flattened
+  argmax over rank >= 2 now describes its real operand (the retired descriptor
+  was refused by the runtime); `epsilon=` on a norm is honoured.
+- **Package cache.** `x86_compile_cache`: every `tessera-opt` run keyed on
+  (compiler SHA-256 via `rocm_native._tool_digest`, pass option, exact source
+  text), the `--version` probe on the compiler digest, the shared object on its
+  stat signature; failures uncached; descriptors/replays rebuilt every call.
+  Princess-Luna, corrected cold-cache package wall time: compiled cold
+  53.65-82.10 ms, warm 0.29-0.95 ms with zero compiler subprocesses;
+  retired cold 25.44-26.86 ms except absolute at 82.37 ms (`benchmarks/baselines/x86_package_cache_20260928/`).
+- **Proof.** On the deduplicated Princess-Luna Zen 5 checkout, 1,049
+  differential cases passed, including bitwise native-image execution for two
+  seeds per admitted envelope; 122 focused cache, cohort, breadth and #875
+  unary regression tests passed. Both new lit fixtures passed with the freshly
+  built full Graph compiler. Broader x86 suite and other-host proof remain to
+  be refreshed for this branch.
+- **Sibling outcomes.** ROCm: follow-up required (the gfx1151 elementwise and
+  cohort constructors can now target the registered Graph ops; see the ROCm
+  queue). NVIDIA: follow-up required (not evaluated on sm_120). Apple: follow-up required for a fresh Mac registry sweep; no Apple
+  route changed.
+
 ## `E2E-REAL-6-GFX1151-PAGED-2026-09-28`: sibling outcome — not applicable
 
 The bounded gfx1151 paged-KV physical read changes no x86 Schedule, native

@@ -36,6 +36,8 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SHA256.h"
 #include "llvm/Support/raw_ostream.h"
@@ -59,6 +61,7 @@ namespace tessera {
 #include "NativeMoeDispatch.h"
 #include "NativeSSD.h"
 #include "NativeAbsolute.h"
+#include "NativeX86Kernel.h"
 #include "NativeSparse.h"
 
 // ---------------------------------------------------------------------------
@@ -1286,7 +1289,10 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   if (opName == "tessera.rmsnorm" || opName == "tessera.rmsnorm_safe" || opName == "tessera.layer_norm") {
     auto eps = op->getAttrOfType<FloatAttr>("eps");
     auto axis = op->getAttrOfType<IntegerAttr>("axis");
-    if (!nvidia || schedule.storage.empty() || input.getShape() != output.getShape() ||
+    // E2E-REAL-6 x86 (2026-09-28): Zen 5 carries the static f32 unweighted
+    // row normalization the retired `x86_native.package_cohort2` served.
+    if ((!nvidia && !x86) || (x86 && schedule.storage != "f32") ||
+        schedule.storage.empty() || input.getShape() != output.getShape() ||
         input.getElementType() != output.getElementType() ||
         (axis && axis.getInt() != -1 && axis.getInt() != input.getRank() - 1) ||
         op->hasAttr("numeric_policy")) return failure();
@@ -1298,7 +1304,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.kind = opName == "tessera.layer_norm" ? "layernorm" : "rmsnorm";
     schedule.columns = input.getShape().back();
     for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
-    schedule.workgroupSize = 128;
+    schedule.workgroupSize = nvidia ? 128 : 1;
     return schedule;
   }
   if (opName == "tessera.softmax") {
@@ -2801,6 +2807,7 @@ struct GraphToSchedulePass
     }
     OpBuilder builder(mod.getContext());
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
+    if (failed(scheduleNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(scheduleNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(scheduleNativePagedKV(mod))) return signalPassFailure();
     if (failed(scheduleNativeMoeDispatch(mod))) return signalPassFailure();
@@ -3061,9 +3068,15 @@ struct GraphToSchedulePass
     SmallVector<Operation *> semanticKernels;
     mod.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
+      bool norm = name == "tessera.rmsnorm" || name == "tessera.rmsnorm_safe" ||
+                  name == "tessera.layer_norm";
+      StringRef target = moduleString(mod, "tessera.target", "target");
+      // x86 normalization is claimed only for an isolated native-package
+      // request (the module names its launch bindings); a norm inside any
+      // other x86 program passes through unchanged, as before.
       if (name == "tessera.softmax" || name == "tessera.reduce" ||
-          (moduleString(mod, "tessera.target", "target") == "nvidia_sm120" &&
-           (name == "tessera.rmsnorm" || name == "tessera.rmsnorm_safe" || name == "tessera.layer_norm")))
+          (norm && (target == "nvidia_sm120" ||
+                    (target == "x86" && mod->hasAttr("tessera.launch_bindings")))))
         semanticKernels.push_back(op);
     });
     for (Operation *op : semanticKernels) {
@@ -3786,6 +3799,7 @@ struct ScheduleToTilePass
       op.erase();
     }
     if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
+    if (failed(lowerNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();
     if (failed(lowerNativeMoeDispatch(mod))) return signalPassFailure();
@@ -4852,8 +4866,23 @@ struct ScheduleToTilePass
           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
 
       OperationState kernelState(
-          loc, isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
-      if (isSoftmax) {
+          loc, isNorm ? "tile.norm_kernel"
+                      : isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
+      if (isNorm) {
+        // x86 (E2E-REAL-6): the unweighted row-normalization ABI takes
+        // (x, o, rows, cols, eps) with the epsilon the Schedule hashed.
+        Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);
+        Value columns =
+            builder.create<arith::ConstantIntOp>(loc, selected->columns, 64);
+        Value epsilon = builder.create<arith::ConstantOp>(
+            loc, builder.getF32FloatAttr(selected->epsilon));
+        kernelState.addOperands({inputPointer, outputPointer, rows, columns, epsilon});
+        kernelState.addAttribute("kind", builder.getStringAttr(selected->kind));
+        kernelState.addAttribute("storage", builder.getStringAttr(selected->storage));
+        kernelState.addAttribute("accum", builder.getStringAttr(selected->accum));
+        kernelState.addAttribute("axis", builder.getI64IntegerAttr(-1));
+        kernelState.addAttribute("affine", builder.getBoolAttr(false));
+      } else if (isSoftmax) {
         Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);
         Value columns =
             builder.create<arith::ConstantIntOp>(loc, selected->columns, 64);

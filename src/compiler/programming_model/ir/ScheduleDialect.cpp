@@ -275,12 +275,16 @@ LogicalResult NormOp::verify() {
   if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),
           getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
     return failure();
-  if (getArch() != "sm_120" || getAccum() != "f32" || getAxis() != -1 ||
-      getWorkgroupSize() != 128 ||
-      (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
+  // sm_120 (f16/bf16/f32, 128-lane rows) and, since E2E-REAL-6 x86
+  // (2026-09-28), Zen 5 AVX-512 (f32, one serial row walker).
+  bool sm120 = getArch() == "sm_120" && getWorkgroupSize() == 128 &&
+               (getStorage() == "f16" || getStorage() == "bf16" || getStorage() == "f32");
+  bool zen5 = getArch() == "zen5-avx512" && getWorkgroupSize() == 1 &&
+              getStorage() == "f32";
+  if ((!sm120 && !zen5) || getAccum() != "f32" || getAxis() != -1 ||
       (getKind() != "rmsnorm" && getKind() != "layernorm") ||
       !getEpsilon().isFinite() || getEpsilon().convertToDouble() <= 0.0)
-    return emitOpError("requires SM120 unweighted row normalization with positive finite f32 epsilon");
+    return emitOpError("requires SM120 or Zen 5 unweighted row normalization with positive finite f32 epsilon");
   return success();
 }
 

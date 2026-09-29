@@ -8,6 +8,14 @@ last_updated: 2026-09-28
 
 # Apple compiler, exact-device, and performance plan
 
+## `E2E-REAL-6-x86-kernel-2026-09-28`: x86 native Schedule contract — sibling outcome — follow-up required
+
+Owner E2E-REAL-6 ([x86 queue](../x86/todo.md)); sync
+`E2E-REAL-6-x86-kernel-2026-09-28`. The 45 new Graph ODS declarations
+and verifiers are target-neutral. Princess-Luna host drift gates passed;
+no fresh Mac runtime or compiler sweep has been run for this deduplicated
+branch. No Apple route or ABI changed. Apple CPU/GPU gap families remain open.
+
 ## `E2E-REAL-6-GFX1151-PAGED-2026-09-28`: sibling outcome — not applicable
 
 The bounded ROCm physical-page f32/i32 Graph read and HSACO symbol contract

@@ -17,6 +17,13 @@ from tessera.compiler.x86_native import (
     tools_available,
 )
 
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+# E2E-REAL-6 (x86 elementwise / cohort-2 / breadth cut, 2026-09-28): packaging
+# lowers through the native Graph -> Schedule -> Tile route, so these gates need
+# `tessera-opt` even where the final target compilation is stubbed.
+pytestmark = pytest.mark.skipif(find_tessera_opt() is None, reason="native compiler required")
+
 
 def _module(op_name: str, shape: tuple[int, ...]) -> GraphIRModule:
     extent = "x".join(map(str, shape))
@@ -62,7 +69,7 @@ def test_followon_flat_packages_lower_to_stable_abi(
     assert supports_elementwise(module)
     package = package_elementwise(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
-    assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
+    assert package.descriptor.provenance["work_item"] == "E2E-REAL-6"
     assert f"call @{package.descriptor.entry_symbol}" in package.target_ir
 
 

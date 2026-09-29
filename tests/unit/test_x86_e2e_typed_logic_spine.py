@@ -15,11 +15,18 @@ from tessera.compiler.x86_native import (
     X86_COMPARE_KINDS,
     X86_LOGICAL_I8_ABI,
     X86_LOGICAL_KINDS,
-    emit_elementwise_tile_ir,
     package_elementwise,
     supports_elementwise,
     tools_available,
 )
+from tests._support.x86_kernel_baseline import emit_elementwise_tile_ir  # retired carrier (oracle)
+
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+# E2E-REAL-6 (x86 elementwise / cohort-2 / breadth cut, 2026-09-28): packaging
+# lowers through the native Graph -> Schedule -> Tile route, so these gates need
+# `tessera-opt` even where the final target compilation is stubbed.
+pytestmark = pytest.mark.skipif(find_tessera_opt() is None, reason="native compiler required")
 
 
 def _module(op_name: str, shape: tuple[int, ...] = (3, 17)) -> GraphIRModule:
@@ -73,7 +80,7 @@ def test_explicit_package_has_stable_abi_and_provenance(monkeypatch, op_name, ab
     assert supports_elementwise(module)
     package = package_elementwise(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
-    assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
+    assert package.descriptor.provenance["work_item"] == "E2E-REAL-6"
 
 
 def test_contract_rejects_cross_family_dtype() -> None:

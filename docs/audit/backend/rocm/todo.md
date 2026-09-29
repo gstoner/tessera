@@ -7,6 +7,15 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `E2E-REAL-6-x86-kernel-2026-09-28`: x86 native Schedule contract — sibling outcome — follow-up required
+
+Owner E2E-REAL-6 ([x86 queue](../x86/todo.md)); sync
+`E2E-REAL-6-x86-kernel-2026-09-28`. The 45 new Graph ODS declarations
+and verifiers are target-neutral; no ROCm Schedule, Target IR, or ABI
+changed in this slice. Princess-Luna host drift gates passed. The ROCm
+family migrations and gfx1151/gfx1201 exact-device parity for these new
+Graph spellings remain follow-ups.
+
 ## `FOUNDATION-BATCH-3-DEDUP-2026-09-28`: gfx1201 W8A8 and MXFP4 physical follow-ups — landing
 
 Owners ROCM-FP8-BLOCKSCALE-1 and ROCM-MXFP4-W4A8-1. The post-#875

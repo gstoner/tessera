@@ -13,11 +13,18 @@ from tessera.compiler.x86_native import (
     X86_NORM_F32_ABI,
     X86_ROPE_F32_ABI,
     X86_SCAN_F32_ABI,
-    emit_cohort2_tile_ir,
     package_cohort2,
     supports_cohort2,
     tools_available,
 )
+from tests._support.x86_kernel_baseline import emit_cohort2_tile_ir  # retired carrier (oracle)
+
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+# E2E-REAL-6 (x86 elementwise / cohort-2 / breadth cut, 2026-09-28): packaging
+# lowers through the native Graph -> Schedule -> Tile route, so these gates need
+# `tessera-opt` even where the final target compilation is stubbed.
+pytestmark = pytest.mark.skipif(find_tessera_opt() is None, reason="native compiler required")
 
 
 def _type(shape: tuple[int, ...], dtype: str = "fp32") -> IRType:
@@ -88,12 +95,14 @@ def test_cohort2_contract_and_package(monkeypatch, op_name, abi) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native._lower", fake_lower)
     package = package_cohort2(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
-    if op_name == "tessera.cumsum":
+    if op_name == "tessera.alibi":
+        # ALiBi keeps its retired constructor (undecodable Graph operand list).
+        assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
+    else:
         assert package.descriptor.provenance["work_item"] == "E2E-REAL-6"
         assert len(package.descriptor.provenance["schedule_digest"]) == 64
+    if op_name == "tessera.cumsum":
         assert package.descriptor.provenance["inclusive"] is True
-    else:
-        assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
 
 
 def _launch(op_name: str, inputs: tuple[np.ndarray, ...]) -> np.ndarray:

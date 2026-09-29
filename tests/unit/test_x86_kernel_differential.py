@@ -157,7 +157,7 @@ def _breadth_cases():
 
 
 def _batched_linalg_cases():
-    """The retained constructor's envelope (rank-3 cholesky / tri_solve)."""
+    """Batched native Schedule envelopes (rank-3 cholesky / tri_solve)."""
     yield ("cholesky(2, 4, 4)", _module("tessera.cholesky", [("matrix", (2, 4, 4), "fp32")], ((2, 4, 4), "fp32")))
     for kwargs in ({}, {"lower": True}, {"lower": False}):
         yield (f"tri_solve(2, 4, 4){kwargs}", _module(
@@ -168,7 +168,7 @@ def _batched_linalg_cases():
 _CASES = {
     "elementwise": list(_elementwise_cases()),
     "cohort2": list(_cohort2_cases()),
-    "breadth": list(_breadth_cases()),
+    "breadth": list(_breadth_cases()) + list(_batched_linalg_cases()),
 }
 _ALL = [(family, case_id, module) for family, cases in _CASES.items() for case_id, module in cases]
 
@@ -306,23 +306,6 @@ _OLD_ADMITTED_NEW_REFUSED = {
         "tessera.gather", [("s", (8,), "fp32"), ("i", (4,), "int64")], ((4,), "fp32"),
         {"axis": 0, "mode": "clip"})),
 }
-
-
-_BATCHED = list(_batched_linalg_cases())
-
-
-@_needs_compiler
-@pytest.mark.parametrize("case_id,module", _BATCHED, ids=[c[0] for c in _BATCHED])
-def test_batched_linalg_keeps_the_retained_constructor(monkeypatch, case_id, module):
-    """Rank-3 cholesky / tri_solve cannot be Graph IR yet (the ODS ops are
-    rank-2), so they stay on the retained constructor -- identical packages,
-    no scheduled route claimed."""
-    _stub_lower(monkeypatch)
-    assert baseline.supports_graph_breadth(module) and x86_breadth.supports_graph_breadth(module)
-    assert not scheduled_kernel.supports_scheduled_kernel(module, target="x86")
-    old = baseline.package_graph_breadth(module, pipeline_name=PIPELINE)
-    new = x86_breadth.package_graph_breadth(module, pipeline_name=PIPELINE)
-    assert old.descriptor == new.descriptor and old.tile_ir == new.tile_ir
 
 
 @_needs_compiler
@@ -598,3 +581,23 @@ def test_device_retired_and_compiled_images_agree_bitwise(family, case_id, modul
         if (got_new.dtype == np.float32 and math.prod(got_new.shape) > 8
                 and not x86_native.requests_elementwise(module)):
             assert np.isfinite(got_new).all(), case_id
+
+
+@_needs_compiler
+@pytest.mark.parametrize("case_id,module", list(_batched_linalg_cases()))
+def test_batched_linalg_native_schedule_matches_numpy(case_id, module):
+    if not x86_native.tools_available_for_architecture(AVX512):
+        pytest.skip(f"{AVX512} shared image not available on this host")
+    package = x86_breadth.package_graph_breadth(module, pipeline_name=PIPELINE)
+    assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    assert package.descriptor.provenance["graph_scalars"]["Batch"] == 2
+    op = module.functions[0].body[0]
+    for seed in (11, 31):
+        inputs = _inputs(case_id, module, np.random.default_rng(seed))
+        if op.op_name == "tessera.cholesky":
+            expected = np.linalg.cholesky(inputs["matrix"])
+        else:
+            if not op.kwargs.get("lower", True):
+                inputs["matrix"] = np.ascontiguousarray(np.swapaxes(inputs["matrix"], -1, -2))
+            expected = np.linalg.solve(inputs["matrix"], inputs["rhs"])
+        np.testing.assert_allclose(_run(package, inputs), expected, rtol=2e-5, atol=2e-6)

@@ -1374,6 +1374,7 @@ _SHAPE_FREE_DIRECTIVES: dict[str, str] = {
     "reduction": "tessera_rocm.reduce",
     "paged_kv": "tessera_rocm.paged_kv_read",
     "moe_dispatch": "tessera_rocm.moe_dispatch",
+    "attention": "tessera_rocm.flash_attn",
 }
 
 #: Host-side scaffolding TileToROCM leaves around the directive in a scheduled
@@ -1685,10 +1686,8 @@ def _compile_attention_tile_ir(tile_ir: str):
 
 
 def _compile_scheduled_attention_tile_ir(tile_ir: str):
-    return _compile_native_tile_ir(
-        tile_ir,
-        directive="tessera_rocm.flash_attn",
-        family="attention",
+    return _compile_shape_free_tile_ir(
+        tile_ir, family="attention", architecture="gfx1151",
     )
 
 
@@ -2245,9 +2244,9 @@ def package_scheduled_attention(
         device_libraries,
         compile_state,
     ) = (_compile_scheduled_attention_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
-         _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.flash_attn", family="attention", architecture=arch))
+         _compile_shape_free_tile_ir(artifact.tile_ir, family="attention", architecture=arch))
     abi = GFX_ATTN_F16_ABI if artifact.dtype == "fp16" else GFX_ATTN_BF16_ABI
-    entry = artifact.function_name
+    entry = _directive_symbol(target_ir, "tessera_rocm.flash_attn")
     image = NativeImageArtifact(
         target=f"rocm_{arch}",
         architecture=arch,

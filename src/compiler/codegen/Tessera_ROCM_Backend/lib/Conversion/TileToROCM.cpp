@@ -2072,13 +2072,12 @@ static LogicalResult materializeCanonicalStreamingAttention(
   state.addAttribute("rank4_distribution", builder.getBoolAttr(true));
   state.addAttribute("ssa_pipeline", builder.getBoolAttr(true));
   state.addAttribute("kv_block", kvBlock);
-  state.addAttribute("logical_sk", logicalSk);
-  state.addAttribute("batch", builder.getI64IntegerAttr(batch));
-  state.addAttribute("query_heads",
-                     builder.getI64IntegerAttr(queryHeads));
-  state.addAttribute("kv_heads", builder.getI64IntegerAttr(kvHeads));
-  state.addAttribute("query_rows", builder.getI64IntegerAttr(queryRows));
-  state.addAttribute("key_rows", builder.getI64IntegerAttr(keyRows));
+  // The validated static extents stay in the Schedule/Tile ancestry and host
+  // descriptor. GenerateWMMAFlashAttnKernel takes Sq/Sk (and Hq/KvRatio for
+  // GQA) as runtime arguments; no static batch/head/row extent is consumed
+  // by its device body. Keep Target IR a kernel identity so distinct legal
+  // launch envelopes can share one compiled image. head_dim and every policy
+  // above remain code-generation inputs and therefore part of that identity.
   builder.create(state);
   function.erase();
   return success();

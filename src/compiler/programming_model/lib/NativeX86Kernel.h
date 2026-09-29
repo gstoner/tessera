@@ -449,16 +449,14 @@ static FailureOr<DictionaryAttr> x86KernelContract(Operation *op) {
             return fail("x86 native triangular solve implements trans = false, "
                         "unit_diag = false only");
         }
-      // Rank-2 only: the Graph ODS cholesky/tri_solve verifiers admit no
-      // batch dimension yet; the batched envelope stays on x86_breadth's
-      // retained constructor.
-      if (op->getNumOperands() != (cholesky ? 1u : 2u) || matrix.getRank() != 2 ||
+      if (op->getNumOperands() != (cholesky ? 1u : 2u) ||
+          (matrix.getRank() != 2 && matrix.getRank() != 3) ||
           matrix.getShape().back() != matrix.getShape()[matrix.getRank() - 2] ||
           llvm::any_of(types, [](RankedTensorType t) {
             return !t.getElementType().isF32();
           }))
-        return fail("x86 native linalg requires a square rank-2 f32 matrix");
-      int64_t batch = 1;
+        return fail("x86 native linalg requires a square rank-2 or rank-3 f32 matrix");
+      int64_t batch = matrix.getRank() == 3 ? matrix.getDimSize(0) : 1;
       int64_t n = matrix.getShape().back();
       scalars.push_back(b.getNamedAttr("Batch", i64(batch)));
       scalars.push_back(b.getNamedAttr("N", i64(n)));
@@ -470,7 +468,9 @@ static FailureOr<DictionaryAttr> x86KernelContract(Operation *op) {
                       "matrix shape only");
       } else {
         RankedTensorType rhs = types[1];
-        if (rhs.getRank() != 2 || rhs.getDimSize(0) != n || result != rhs)
+        if (rhs.getRank() != matrix.getRank() ||
+            rhs.getDimSize(rhs.getRank() - 2) != n ||
+            (matrix.getRank() == 3 && rhs.getDimSize(0) != batch) || result != rhs)
           return fail("x86 native triangular solve rhs/result disagree with the matrix");
         scalars.push_back(b.getNamedAttr("M", i64(rhs.getShape().back())));
         scalars.push_back(b.getNamedAttr("Lower", b.getI32IntegerAttr(lower ? 1 : 0)));

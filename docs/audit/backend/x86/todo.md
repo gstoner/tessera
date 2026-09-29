@@ -9,6 +9,22 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `COMPILER-NEXT-SLICES-2026-09-28`: implementation and exact-device loops
+
+Owner E2E-REAL-6; shared synchronization key `COMPILER-NEXT-SLICES-2026-09-28`.
+
+Batched Cholesky and triangular solve now pass matching rank-2/rank-3
+Graph verification and native Schedule/Tile admission. The Python batched
+constructor is retired. Princess-Luna passed 1,112 differential/breadth/op
+registry checks, including independent NumPy comparisons, plus both affected
+lit fixtures. Warm batched packages cost 0.88–0.96 ms with zero compiler
+subprocesses; cold 59.18–59.69 ms. ALiBi's explicit slopes operand remains open.
+Shared Graph changes: ROCm/NVIDIA/Apple follow-up required for their rank-3
+physical consumers; these x86 results confer no sibling execution support.
+ROCm attention cache changes are not applicable to x86 code generation.
+
+[Evidence packet](../../../../benchmarks/baselines/compiler_next_slices_20260928/README.md).
+
 ## `E2E-REAL-6-x86-kernel-2026-09-28`: x86 elementwise / cohort-2 / breadth lower through a native Schedule contract; x86 package compile cache
 
 Owner E2E-REAL-6 (log entry of the same date). Branch `codex/x86-batch3-dedup` (based on merged #875).

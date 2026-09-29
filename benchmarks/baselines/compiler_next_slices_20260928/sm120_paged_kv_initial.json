@@ -1,0 +1,841 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "rows": [
+    {
+      "boundary_length": 128,
+      "candidate": "canonical_tile_direct",
+      "case": "tokens_128_boundary",
+      "compile_state": {
+        "cold": "cold",
+        "cold_ms": 655.8849400025792,
+        "image_digest_reproducible": true,
+        "warm": "warm_cache",
+        "warm_ms": 323.1045099964831
+      },
+      "device_stable": false,
+      "device_winner_consensus": true,
+      "dtype": "f32",
+      "end_to_end_stable": true,
+      "end_to_end_winner_consensus": true,
+      "page_mapping": "permuted",
+      "resource_evidence_complete": true,
+      "resources": [
+        {
+          "block_threads": 256,
+          "cubin_sha256": "62e11f5b687d37d09f4e086dc7e6c523c46b9066d0419eea34965b172096e722",
+          "kernel": "tessera_tile_paged_kv_read_f32_direct",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 6,
+          "registers_per_thread": 26,
+          "resource_fingerprint": "sha256:fcb695cc5551520954a5f3dce9fcfc51683d1c3d50d7f79eb017a48253db61f8",
+          "row_kind": "paged_kv_candidate",
+          "sass_instruction_families": [],
+          "schedule": "canonical_tile_direct",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100.0
+        }
+      ],
+      "runs": [
+        {
+          "device_event_ms": 0.009464960545301437,
+          "device_samples_ms": [
+            0.01471519935876131,
+            0.00797440018504858,
+            0.008258880116045475,
+            0.009464960545301437,
+            0.01295487955212593,
+            0.009568000212311745,
+            0.010513919405639172,
+            0.008525759913027287,
+            0.011695359833538532,
+            0.008567679673433304,
+            0.00979647971689701,
+            0.007995519787073135,
+            0.008317120373249054,
+            0.00972704030573368,
+            0.007850879803299904
+          ],
+          "end_to_end_ms": 0.9910823006066494,
+          "end_to_end_samples_ms": [
+            1.094013151305262,
+            1.0204889986198395,
+            1.0273760999552906,
+            1.0317826992832124,
+            0.9903728001518175,
+            0.929682950663846,
+            0.9398441499797627,
+            0.9910823006066494,
+            0.9597311494871974,
+            1.5516424493398517,
+            0.898878849693574,
+            1.0551127488724887,
+            0.9994139996706508,
+            0.9273516494431533,
+            0.9054465990629978
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.009034560061991215,
+          "device_samples_ms": [
+            0.010505599901080132,
+            0.009411199949681759,
+            0.009172160178422928,
+            0.00851455982774496,
+            0.009034560061991215,
+            0.013676799833774567,
+            0.008881599642336369,
+            0.009073920547962189,
+            0.014322560280561447,
+            0.007934720255434513,
+            0.00780543964356184,
+            0.007939199917018414,
+            0.014844479970633984,
+            0.007467839866876602,
+            0.008392639458179474
+          ],
+          "end_to_end_ms": 1.0259153990773484,
+          "end_to_end_samples_ms": [
+            1.500045599823352,
+            1.0642740511684678,
+            1.0939196494291537,
+            1.0113528507645242,
+            1.0198033996857703,
+            0.967891349864658,
+            1.6587709993473254,
+            1.0183449005126022,
+            1.6376323503209278,
+            0.9504289002506994,
+            1.8124798007193021,
+            1.0259153990773484,
+            1.6442060994450003,
+            1.011771750927437,
+            0.9998070003348403
+          ],
+          "run": 2
+        }
+      ],
+      "sampling": {
+        "candidate_order": "rotated_interleaved",
+        "device_reps": 100,
+        "end_to_end_reps": 20,
+        "samples_per_run": 15
+      },
+      "selected_route": "existing_serving_policy_unchanged",
+      "shape": [
+        8,
+        16,
+        8,
+        64,
+        0,
+        128
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.047639340527596476,
+        "end_to_end_ms": 0.03514652461190905
+      },
+      "stable": false,
+      "wsl_margin_accepted_domains": []
+    },
+    {
+      "boundary_length": 128,
+      "candidate": "legacy_cuda_staged",
+      "case": "tokens_128_boundary",
+      "compile_state": {
+        "cold": "nvcc_cache_managed",
+        "warm": "process_artifact_cache"
+      },
+      "device_stable": false,
+      "device_winner_consensus": false,
+      "dtype": "f32",
+      "end_to_end_stable": false,
+      "end_to_end_winner_consensus": false,
+      "page_mapping": "permuted",
+      "resource_evidence_complete": true,
+      "resources": [
+        {
+          "block_threads": 256,
+          "cubin_sha256": "710a8122467d2ca5cbfb29dd10b221ba270bb7746723dfcf9157f396f7cbbf19",
+          "kernel": "_Z6kvreadPKfPKiPflliii",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 6,
+          "registers_per_thread": 30,
+          "resource_fingerprint": "sha256:52fc6066a6060406cc29dc56770839e67dd410d309a0b9b3fa442c0e7a0fe218",
+          "row_kind": "paged_kv_candidate",
+          "sass_instruction_families": [],
+          "schedule": "legacy_cuda_staged",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100.0
+        }
+      ],
+      "runs": [
+        {
+          "device_event_ms": 0.010554560460150242,
+          "device_samples_ms": [
+            0.01129439938813448,
+            0.008387519977986813,
+            0.008508159779012203,
+            0.01588863879442215,
+            0.008439360186457634,
+            0.0108339199796319,
+            0.009543679654598236,
+            0.016744960099458694,
+            0.010554560460150242,
+            0.01581760123372078,
+            0.008023359812796116,
+            0.009339840151369572,
+            0.011500159278512001,
+            0.010372799821197987,
+            0.014766720123589039
+          ],
+          "end_to_end_ms": 1.478587300516665,
+          "end_to_end_samples_ms": [
+            1.478587300516665,
+            3.256714549206663,
+            1.6380619010305963,
+            0.9096085501369089,
+            1.471266700536944,
+            2.177394099999219,
+            0.8653749508084729,
+            1.578735549992416,
+            0.8867399490554817,
+            1.4161889004753903,
+            0.866513499931898,
+            2.1185567500651814,
+            1.3505699505913071,
+            4.731070200796239,
+            3.2669875494320877
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.009773120284080505,
+          "device_samples_ms": [
+            0.0076076798141002655,
+            0.00976799987256527,
+            0.009353600442409515,
+            0.014766399748623371,
+            0.007648959755897522,
+            0.011476160027086735,
+            0.01056000031530857,
+            0.009773120284080505,
+            0.01113216020166874,
+            0.036685761064291,
+            0.007084159646183252,
+            0.010974080301821232,
+            0.007956479676067829,
+            0.01636992022395134,
+            0.006777280010282993
+          ],
+          "end_to_end_ms": 1.97862764907768,
+          "end_to_end_samples_ms": [
+            5.5677123498753645,
+            5.884414700267371,
+            3.1688738497905433,
+            1.5059529498103075,
+            2.8364398996927775,
+            0.8726226500584744,
+            3.2267589500406757,
+            0.9192566998535767,
+            0.7699683512328193,
+            1.2823459503124468,
+            3.619968549173791,
+            4.410213300434407,
+            1.97862764907768,
+            0.9106384997721761,
+            1.5666478997445665
+          ],
+          "run": 2
+        }
+      ],
+      "sampling": {
+        "candidate_order": "rotated_interleaved",
+        "device_reps": 100,
+        "end_to_end_reps": 20,
+        "samples_per_run": 15
+      },
+      "selected_route": "existing_serving_policy_unchanged",
+      "shape": [
+        8,
+        16,
+        8,
+        64,
+        0,
+        128
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.07995810481762197,
+        "end_to_end_ms": 0.3381879097610842
+      },
+      "stable": false,
+      "wsl_margin_accepted_domains": []
+    },
+    {
+      "boundary_length": 507,
+      "candidate": "canonical_tile_direct",
+      "case": "tokens_512_ragged",
+      "compile_state": {
+        "cold": "cold",
+        "cold_ms": 484.87975500756875,
+        "image_digest_reproducible": true,
+        "warm": "warm_cache",
+        "warm_ms": 325.1741440035403
+      },
+      "device_stable": false,
+      "device_winner_consensus": false,
+      "dtype": "f32",
+      "end_to_end_stable": true,
+      "end_to_end_winner_consensus": true,
+      "page_mapping": "permuted",
+      "resource_evidence_complete": true,
+      "resources": [
+        {
+          "block_threads": 256,
+          "cubin_sha256": "62e11f5b687d37d09f4e086dc7e6c523c46b9066d0419eea34965b172096e722",
+          "kernel": "tessera_tile_paged_kv_read_f32_direct",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 6,
+          "registers_per_thread": 26,
+          "resource_fingerprint": "sha256:fcb695cc5551520954a5f3dce9fcfc51683d1c3d50d7f79eb017a48253db61f8",
+          "row_kind": "paged_kv_candidate",
+          "sass_instruction_families": [],
+          "schedule": "canonical_tile_direct",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100.0
+        }
+      ],
+      "runs": [
+        {
+          "device_event_ms": 0.011099840514361858,
+          "device_samples_ms": [
+            0.011099840514361858,
+            0.01146559976041317,
+            0.011600639671087265,
+            0.00827935989946127,
+            0.008812479674816132,
+            0.009117440320551395,
+            0.008293439634144306,
+            0.009041599929332733,
+            0.016098879277706146,
+            0.12848447263240814,
+            0.009056320413947105,
+            0.011998079717159271,
+            0.00727199949324131,
+            0.01428736001253128,
+            0.01130720041692257
+          ],
+          "end_to_end_ms": 1.2103019500500523,
+          "end_to_end_samples_ms": [
+            1.2336742991465144,
+            3.0702166506671347,
+            1.1815783494967036,
+            2.487249999830965,
+            1.2156443495769054,
+            1.2138878504629247,
+            1.1743095004931092,
+            1.1111797502962872,
+            1.144692799425684,
+            1.198513999406714,
+            1.2103019500500523,
+            1.1841262006782927,
+            2.0036970992805436,
+            1.2130023489589803,
+            1.1793780999141745
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.008944320492446423,
+          "device_samples_ms": [
+            0.009837440215051174,
+            0.008818560279905796,
+            0.008060479536652565,
+            0.008599359542131424,
+            0.009341760538518429,
+            0.01084543950855732,
+            0.00846495945006609,
+            0.013992640189826488,
+            0.00884127989411354,
+            0.008138880133628845,
+            0.008944320492446423,
+            0.013006400316953659,
+            0.007436159998178482,
+            0.013018880039453506,
+            0.010581760667264462
+          ],
+          "end_to_end_ms": 1.2025807998725213,
+          "end_to_end_samples_ms": [
+            1.2025807998725213,
+            1.2189134489744902,
+            1.188666999223642,
+            1.1112542502814904,
+            1.2353513506241143,
+            1.1217681007110514,
+            1.1933368499740027,
+            1.2485181010561064,
+            1.199971599271521,
+            1.0759297510958277,
+            1.2235785005032085,
+            1.1886514999787323,
+            3.070398551062681,
+            1.2415487508405931,
+            1.2163413994130678
+          ],
+          "run": 2
+        }
+      ],
+      "sampling": {
+        "candidate_order": "rotated_interleaved",
+        "device_reps": 100,
+        "end_to_end_reps": 20,
+        "samples_per_run": 15
+      },
+      "selected_route": "existing_serving_policy_unchanged",
+      "shape": [
+        32,
+        16,
+        8,
+        64,
+        3,
+        507
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.24099315579487524,
+        "end_to_end_ms": 0.006420483495453627
+      },
+      "stable": false,
+      "wsl_margin_accepted_domains": []
+    },
+    {
+      "boundary_length": 507,
+      "candidate": "legacy_cuda_staged",
+      "case": "tokens_512_ragged",
+      "compile_state": {
+        "cold": "nvcc_cache_managed",
+        "warm": "process_artifact_cache"
+      },
+      "device_stable": true,
+      "device_winner_consensus": false,
+      "dtype": "f32",
+      "end_to_end_stable": false,
+      "end_to_end_winner_consensus": false,
+      "page_mapping": "permuted",
+      "resource_evidence_complete": true,
+      "resources": [
+        {
+          "block_threads": 256,
+          "cubin_sha256": "710a8122467d2ca5cbfb29dd10b221ba270bb7746723dfcf9157f396f7cbbf19",
+          "kernel": "_Z6kvreadPKfPKiPflliii",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 6,
+          "registers_per_thread": 30,
+          "resource_fingerprint": "sha256:52fc6066a6060406cc29dc56770839e67dd410d309a0b9b3fa442c0e7a0fe218",
+          "row_kind": "paged_kv_candidate",
+          "sass_instruction_families": [],
+          "schedule": "legacy_cuda_staged",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100.0
+        }
+      ],
+      "runs": [
+        {
+          "device_event_ms": 0.010705599561333656,
+          "device_samples_ms": [
+            0.010938559658825397,
+            0.01183007936924696,
+            0.009821119718253613,
+            0.01044991984963417,
+            0.01011584047228098,
+            0.025477120652794838,
+            0.1252819150686264,
+            0.023175999522209167,
+            0.015919359400868416,
+            0.009518720209598541,
+            0.007798399776220322,
+            0.012381759472191334,
+            0.010705599561333656,
+            0.009104319848120213,
+            0.007555840071290731
+          ],
+          "end_to_end_ms": 2.228472600108944,
+          "end_to_end_samples_ms": [
+            4.488862250582315,
+            1.0501184005988762,
+            4.72446945059346,
+            1.6400979991885833,
+            2.7905973998713307,
+            6.286154150438961,
+            2.228472600108944,
+            4.678049399808515,
+            5.705176549963653,
+            4.935937699337956,
+            1.6389804499340244,
+            1.0524331999477,
+            1.3456299013341777,
+            1.507001400750596,
+            1.0852734500076622
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.01059488020837307,
+          "device_samples_ms": [
+            0.009883839637041092,
+            0.011078080162405968,
+            0.010865599848330021,
+            0.015492159873247147,
+            0.008894720114767551,
+            0.01812640018761158,
+            0.007918080314993858,
+            0.008264640346169472,
+            0.007823360152542591,
+            0.010453440248966217,
+            0.009235200472176075,
+            0.02995232120156288,
+            0.01059488020837307,
+            0.011101440526545048,
+            0.012261760421097279
+          ],
+          "end_to_end_ms": 1.5500883513595909,
+          "end_to_end_samples_ms": [
+            1.0573168488917872,
+            6.589749950217083,
+            1.0591657992335968,
+            1.0643224493833259,
+            1.0764217498945072,
+            1.2493831498431973,
+            2.9130241498933174,
+            14.652744799968787,
+            1.5500883513595909,
+            7.926175199099816,
+            4.753035999601707,
+            5.36925619962858,
+            0.9447312986594625,
+            1.4199887489667162,
+            7.665271750011016
+          ],
+          "run": 2
+        }
+      ],
+      "sampling": {
+        "candidate_order": "rotated_interleaved",
+        "device_reps": 100,
+        "end_to_end_reps": 20,
+        "samples_per_run": 15
+      },
+      "selected_route": "existing_serving_policy_unchanged",
+      "shape": [
+        32,
+        16,
+        8,
+        64,
+        3,
+        507
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.010450269449303043,
+        "end_to_end_ms": 0.43764231126202485
+      },
+      "stable": false,
+      "wsl_margin_accepted_domains": []
+    },
+    {
+      "boundary_length": 2034,
+      "candidate": "canonical_tile_direct",
+      "case": "tokens_2048_ragged",
+      "compile_state": {
+        "cold": "cold",
+        "cold_ms": 485.9869960055221,
+        "image_digest_reproducible": true,
+        "warm": "warm_cache",
+        "warm_ms": 322.20446498831734
+      },
+      "device_stable": true,
+      "device_winner_consensus": true,
+      "dtype": "f32",
+      "end_to_end_stable": true,
+      "end_to_end_winner_consensus": true,
+      "page_mapping": "permuted",
+      "resource_evidence_complete": true,
+      "resources": [
+        {
+          "block_threads": 256,
+          "cubin_sha256": "62e11f5b687d37d09f4e086dc7e6c523c46b9066d0419eea34965b172096e722",
+          "kernel": "tessera_tile_paged_kv_read_f32_direct",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 6,
+          "registers_per_thread": 26,
+          "resource_fingerprint": "sha256:fcb695cc5551520954a5f3dce9fcfc51683d1c3d50d7f79eb017a48253db61f8",
+          "row_kind": "paged_kv_candidate",
+          "sass_instruction_families": [],
+          "schedule": "canonical_tile_direct",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100.0
+        }
+      ],
+      "runs": [
+        {
+          "device_event_ms": 0.012951040640473366,
+          "device_samples_ms": [
+            0.013053120113909245,
+            0.012961280532181263,
+            0.012730879709124565,
+            0.013296960853040218,
+            0.012738560326397419,
+            0.012752640061080456,
+            0.012785919941961765,
+            0.01345376018434763,
+            0.012951040640473366,
+            0.012830079533159733,
+            0.01293920073658228,
+            0.012975039891898632,
+            0.012830720283091068,
+            0.0129843195900321,
+            0.014432639814913273
+          ],
+          "end_to_end_ms": 3.1241561999195255,
+          "end_to_end_samples_ms": [
+            5.126275350630749,
+            6.312021600024309,
+            3.0752607504837215,
+            5.071472498821095,
+            3.1111552510992624,
+            3.7454315504874103,
+            3.032885299762711,
+            3.126899601193145,
+            3.1764956991537474,
+            3.0483646507491358,
+            3.0250356503529474,
+            3.1569564001983963,
+            3.0482724512694404,
+            3.0457688495516777,
+            3.1241561999195255
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.012981120496988297,
+          "device_samples_ms": [
+            0.014041599817574024,
+            0.013080639764666557,
+            0.01297312043607235,
+            0.013389760628342628,
+            0.012763520702719688,
+            0.012980800122022629,
+            0.01290143933147192,
+            0.013320960104465485,
+            0.01299872063100338,
+            0.012945599853992462,
+            0.014215040020644665,
+            0.012981120496988297,
+            0.012906240299344063,
+            0.013175999745726585,
+            0.01295647956430912
+          ],
+          "end_to_end_ms": 3.217071949620731,
+          "end_to_end_samples_ms": [
+            3.1025182994198985,
+            6.235422399186064,
+            2.8013866001856513,
+            5.793931850348599,
+            3.129490949504543,
+            3.8309547497192398,
+            3.7905650489847176,
+            3.8094400500995107,
+            3.0464209005003795,
+            3.036157099995762,
+            4.340268899977673,
+            3.217071949620731,
+            4.452398700232152,
+            3.1310032500186935,
+            3.178731149819214
+          ],
+          "run": 2
+        }
+      ],
+      "sampling": {
+        "candidate_order": "rotated_interleaved",
+        "device_reps": 100,
+        "end_to_end_reps": 20,
+        "samples_per_run": 15
+      },
+      "selected_route": "existing_serving_policy_unchanged",
+      "shape": [
+        128,
+        16,
+        8,
+        64,
+        7,
+        2034
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.002322582204006681,
+        "end_to_end_ms": 0.02974107047003573
+      },
+      "stable": true,
+      "wsl_margin_accepted_domains": []
+    },
+    {
+      "boundary_length": 2034,
+      "candidate": "legacy_cuda_staged",
+      "case": "tokens_2048_ragged",
+      "compile_state": {
+        "cold": "nvcc_cache_managed",
+        "warm": "process_artifact_cache"
+      },
+      "device_stable": true,
+      "device_winner_consensus": false,
+      "dtype": "f32",
+      "end_to_end_stable": false,
+      "end_to_end_winner_consensus": false,
+      "page_mapping": "permuted",
+      "resource_evidence_complete": true,
+      "resources": [
+        {
+          "block_threads": 256,
+          "cubin_sha256": "710a8122467d2ca5cbfb29dd10b221ba270bb7746723dfcf9157f396f7cbbf19",
+          "kernel": "_Z6kvreadPKfPKiPflliii",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 6,
+          "registers_per_thread": 30,
+          "resource_fingerprint": "sha256:52fc6066a6060406cc29dc56770839e67dd410d309a0b9b3fa442c0e7a0fe218",
+          "row_kind": "paged_kv_candidate",
+          "sass_instruction_families": [],
+          "schedule": "legacy_cuda_staged",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100.0
+        }
+      ],
+      "runs": [
+        {
+          "device_event_ms": 0.01551136001944542,
+          "device_samples_ms": [
+            0.02024831995368004,
+            0.015294719487428665,
+            0.01521311979740858,
+            0.015588480047881603,
+            0.02083071880042553,
+            0.02184479869902134,
+            0.015313279815018177,
+            0.015974080190062523,
+            0.015224000439047813,
+            0.015611520037055016,
+            0.015372480265796185,
+            0.015329600311815739,
+            0.01551136001944542,
+            0.01585504040122032,
+            0.015447360463440418
+          ],
+          "end_to_end_ms": 5.881982500432059,
+          "end_to_end_samples_ms": [
+            7.100299950980116,
+            2.8277436504140496,
+            5.881982500432059,
+            2.885072999924887,
+            9.039226100139786,
+            9.90795635007089,
+            6.308425549650565,
+            2.98047635005787,
+            4.58052940084599,
+            19.77302610030165,
+            4.6815670997602865,
+            3.469170349126216,
+            14.015093249327037,
+            3.8758843002142385,
+            6.215586300822906
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.015700800344347954,
+          "device_samples_ms": [
+            0.018842240795493126,
+            0.015928320586681366,
+            0.017753921449184418,
+            0.015700800344347954,
+            0.015193920582532883,
+            0.015398399904370308,
+            0.016567999497056007,
+            0.02085184119641781,
+            0.015390720218420029,
+            0.015568959526717663,
+            0.0157481599599123,
+            0.015427199192345142,
+            0.01569375954568386,
+            0.015849919989705086,
+            0.015408320352435112
+          ],
+          "end_to_end_ms": 4.29201734950766,
+          "end_to_end_samples_ms": [
+            5.648106150329113,
+            2.8391296495101415,
+            5.979030150047038,
+            2.5639237006544136,
+            2.852571749826893,
+            2.7906385497772135,
+            2.7705809494364075,
+            4.29201734950766,
+            17.044758949487004,
+            2.8252988500753418,
+            6.073659099638462,
+            5.985883349785581,
+            15.127460900112055,
+            2.8427297991584055,
+            14.27935539977625
+          ],
+          "run": 2
+        }
+      ],
+      "sampling": {
+        "candidate_order": "rotated_interleaved",
+        "device_reps": 100,
+        "end_to_end_reps": 20,
+        "samples_per_run": 15
+      },
+      "selected_route": "existing_serving_policy_unchanged",
+      "shape": [
+        128,
+        16,
+        8,
+        64,
+        7,
+        2034
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.012213005478890792,
+        "end_to_end_ms": 0.37044704656349664
+      },
+      "stable": false,
+      "wsl_margin_accepted_domains": []
+    }
+  ],
+  "schema": "tessera.nvidia.e2e_spine.paged_kv.v1",
+  "selector_decision": "unchanged_pending_timing_domain_consensus",
+  "stability_policy": {
+    "margin_rows_selector_eligible": false,
+    "relative_fraction": 0.04,
+    "required_domains": [
+      "device_event_ms",
+      "end_to_end_ms"
+    ],
+    "wsl_acceptance_margin_fraction": 0.0005
+  }
+}

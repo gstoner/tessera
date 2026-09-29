@@ -324,12 +324,8 @@ def admit(module: GraphIRModule) -> X86KernelRequest:
             if len(inputs) != (1 if cholesky else 2) or any(d != "fp32" for d in dtypes):
                 raise ValueError("x86 native linalg requires f32 operands")
             matrix = shapes[0]
-            # The Graph ODS cholesky/tri_solve are rank-2 ("batched rank-3 is a
-            # follow-on", TesseraOps.cpp; pinned by
-            # apple_cholesky_graph_ir_invalid.mlir). The batched envelope stays
-            # on x86_breadth's retained constructor.
-            if len(matrix) != 2 or matrix[-1] != matrix[-2]:
-                raise ValueError("x86 native linalg requires a square rank-2 matrix")
+            if len(matrix) not in (2, 3) or matrix[-1] != matrix[-2]:
+                raise ValueError("x86 native linalg requires a square rank-2 or rank-3 matrix")
             lower = _bool(raw, "lower", True)
             if "lower" in raw:
                 kwargs["lower"] = lower
@@ -342,7 +338,8 @@ def admit(module: GraphIRModule) -> X86KernelRequest:
                         raise ValueError("x86 native triangular solve implements trans/unit_diag = False only")
                 rhs = shapes[1]
                 n = matrix[-1]
-                valid = len(rhs) == 2 and rhs[0] == n
+                valid = (len(rhs) == len(matrix) and rhs[-2] == n
+                         and (len(matrix) == 2 or rhs[0] == matrix[0]))
                 if not valid or result_shape != rhs:
                     raise ValueError("x86 native triangular solve rhs/result disagree with the matrix")
     unknown = sorted(set(raw) - allowed)

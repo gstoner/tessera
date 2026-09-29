@@ -22,19 +22,19 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 73 |
-| — Graph-input boundaries (including scheduled wrappers) | 45 |
+| `package_*` functions total | 74 |
+| — Graph-input boundaries (including scheduled wrappers) | 46 |
 |   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 8 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 2 |
 |   ·  of the bootstrap, both | 1 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 34 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 35 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 14 |
 | — unclassified/raw inputs (not assumed compiled) | 14 |
-| Lines in those modules | 10959 |
+| Lines in those modules | 10969 |
 | Classified family/target candidates (shape admission not implied) | 54 |
 | — covered by a compiled route | 6 |
-| — packager lowers only through the generic Schedule→Tile route | 9 |
-| — **gap (no declared family route)** | 39 |
+| — packager lowers only through the generic Schedule→Tile route | 10 |
+| — **gap (no declared family route)** | 38 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -46,8 +46,8 @@ exact artifacts before treating a row as a constructor deletion target.
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
 | `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 11 | 12 | 3841 |
-| `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3400 |
-| `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1688 |
+| `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3399 |
+| `x86` | `x86_native.py` | 8 | 4 | 1 | 8 | 1699 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1815 |
 
@@ -105,7 +105,7 @@ queues own.
 | `x86` | `attention` | `scheduled_attention.supports_scheduled_attention` | ✅ compiled |
 | `x86` | `attention_backward` | `scheduled_attention_backward.supports_scheduled_attention_backward` | ✅ compiled |
 | `x86` | `cohort2` | — | 🔴 **gap** |
-| `x86` | `breadth` | — | 🔴 **gap** |
+| `x86` | `breadth` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `x86` | `elementwise` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `apple_cpu` | `batched_gemm` | — | 🔴 **gap** |
 | `apple_cpu` | `cholesky` | — | 🔴 **gap** |

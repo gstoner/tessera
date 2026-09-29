@@ -2008,20 +2008,14 @@ LogicalResult CholeskyOp::verify() {
   auto resultType = dyn_cast<RankedTensorType>(getResult().getType());
   if (!aType || !resultType)
     return success();
-  // L-series pilot: rank-2 square SPD input; result matches input shape.
-  // (Batched rank-3 is a follow-on once the rank-2 spine is proven.)
-  if (aType.getRank() != 2 || resultType.getRank() != 2)
-    return emitOpError("expects rank-2 input and result tensors");
-  int64_t m = aType.getDimSize(0);
-  int64_t n = aType.getDimSize(1);
-  if (!ShapedType::isDynamic(m) && !ShapedType::isDynamic(n) && m != n)
+  int64_t rank = aType.getRank();
+  if ((rank != 2 && rank != 3) || resultType.getRank() != rank)
+    return emitOpError("expects matching rank-2 or rank-3 input and result tensors");
+  if (!dimsAgree(aType.getDimSize(rank - 2), aType.getDimSize(rank - 1)))
     return emitOpError("input matrix must be square");
-  int64_t rm = resultType.getDimSize(0);
-  int64_t rn = resultType.getDimSize(1);
-  if (!ShapedType::isDynamic(m) && !ShapedType::isDynamic(rm) && m != rm)
-    return emitOpError("result must have the same shape as the input");
-  if (!ShapedType::isDynamic(n) && !ShapedType::isDynamic(rn) && n != rn)
-    return emitOpError("result must have the same shape as the input");
+  for (int64_t axis = 0; axis < rank; ++axis)
+    if (!dimsAgree(aType.getDimSize(axis), resultType.getDimSize(axis)))
+      return emitOpError("result must have the same shape as the input");
   return success();
 }
 
@@ -2034,15 +2028,18 @@ LogicalResult TriSolveOp::verify() {
   auto x = dyn_cast<RankedTensorType>(getResult().getType());
   if (!a || !b || !x)
     return success();
-  if (a.getRank() != 2 || b.getRank() != 2 || x.getRank() != 2)
-    return emitOpError("expects rank-2 A, B, and result tensors");
-  if (!dimsAgree(a.getDimSize(0), a.getDimSize(1)))
+  int64_t rank = a.getRank();
+  if ((rank != 2 && rank != 3) || b.getRank() != rank || x.getRank() != rank)
+    return emitOpError("expects matching rank-2 or rank-3 A, B, and result tensors");
+  if (!dimsAgree(a.getDimSize(rank - 2), a.getDimSize(rank - 1)))
     return emitOpError("A must be square");
-  if (!dimsAgree(a.getDimSize(0), b.getDimSize(0)))
+  if (!dimsAgree(a.getDimSize(rank - 2), b.getDimSize(rank - 2)))
     return emitOpError("A rows must match B rows (op(A) X = B)");
-  if (!dimsAgree(b.getDimSize(0), x.getDimSize(0)) ||
-      !dimsAgree(b.getDimSize(1), x.getDimSize(1)))
-    return emitOpError("result must have the same shape as B");
+  if (rank == 3 && !dimsAgree(a.getDimSize(0), b.getDimSize(0)))
+    return emitOpError("A and B batch dimensions must match");
+  for (int64_t axis = 0; axis < rank; ++axis)
+    if (!dimsAgree(b.getDimSize(axis), x.getDimSize(axis)))
+      return emitOpError("result must have the same shape as B");
   return success();
 }
 

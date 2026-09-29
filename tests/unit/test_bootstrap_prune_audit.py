@@ -444,3 +444,9 @@ def test_family_route_requires_consumer_on_that_target():
     assert audit._target_family_route('apple_gpu', 'matmul') is not None
     assert audit._target_family_route('nvidia_sm120', 'depth_attention') is None
     assert audit._target_family_route('rocm_gfx1151', 'depth_attention') is not None
+
+
+def test_x86_breadth_has_no_retained_constructor():
+    assert audit._packager_is_generic_scheduled("x86", "breadth")
+    row = next(r for r in audit.family_rows() if r[:2] == ("x86", "breadth"))
+    assert row[3] == "generic_compiled"

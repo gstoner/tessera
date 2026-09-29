@@ -6325,7 +6325,7 @@ Evidence: Host WSL traced-frontend and exact Zen 5 numerical test compares the n
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
 
-PRs: pending; sync E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29.
+PRs: [#887](https://github.com/gstoner/tessera/pull/887); sync E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29.
 
 Outcome: The static unfused unsplit gfx1151 f16/bf16 register-matmul route projects one replayed Target directive, excludes only shape-bound wrapper text and its checked Schedule digest, and compiles the image from that exact directive. Three distinct static shapes reuse one image while retaining separate Schedule and Tile artifacts. The ROCm-specific packet schema is registered as a syntax-only benchmark surface.
 

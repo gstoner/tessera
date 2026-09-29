@@ -6312,7 +6312,7 @@ record diagnostic package and host-wall launch timing only.
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
 
-PRs: pending; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
+PRs: [#886](https://github.com/gstoner/tessera/pull/886); sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
 
 Outcome: The catalog names an ALiBi-specific shape rule: optional slopes[H] and static num_heads/seq_len produce f32 [H,S,S]. A public @jit trace now passes the Graph verifier, native x86 Schedule/Tile packaging and checked AVX-512 launch.
 

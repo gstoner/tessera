@@ -14,6 +14,18 @@ The HIP-free ROCm HSACO serialization lane now uses exact LLVM/MLIR/lld 23.1.1, 
 
 [Compiler log](../../compiler/INTEGRATED_COMPILER_LOG.md).
 
+## `ROCM-MATH-DEVICE-IDENTITY-2026-09-29`: exact-device packet correction
+
+Owner EVIDENCE-PACKET-1; sync `ROCM-MATH-DEVICE-IDENTITY-2026-09-29`.
+The gfx1151 physical-math recorder now queries the selected HIP device before
+measurement, rejects an unknown or non-gfx1151 architecture and a mismatched
+compiler chip, and records both identities in the packet. The measurement
+remains synchronized host-wall timing and is not selector or kernel-speed
+evidence. Apple, NVIDIA, and x86 benchmark routes do not use this HIP identity
+gate.
+
+[Evidence](../../../../benchmarks/baselines/compiler_math_residual_next_20260929/README.md).
+
 ## `COMPILER-MATH-RESIDUAL-NEXT-2026-09-29`: measured packet and split ABI
 
 Owners EVIDENCE-PACKET-1 / AD-RESIDUAL-EVAL-1 / W1.1.

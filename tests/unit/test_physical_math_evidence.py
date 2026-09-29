@@ -56,6 +56,17 @@ def test_gfx1151_math_packet_covers_dtypes_and_cache_gain() -> None:
     assert all(row["speedup"] > 1.4 for row in packet["f32_cache_comparison"])
 
 
+def test_gfx1151_followup_packet_records_live_device_identity() -> None:
+    packet = _packet("compiler_math_residual_next_20260929/gfx1151_math.json")
+    assert packet["architecture"] == packet["device"] == "gfx1151"
+    assert packet["device_identity"] == {
+        "architecture": "gfx1151",
+        "configured_architecture": "gfx1151",
+        "source": "hipGetDevicePropertiesR0600",
+    }
+    assert len(packet["dtype_rows"]) == 21
+
+
 def _generated_rows(_rt, target, dtype, _iterations):
     families = (
         ("unary", "sqrt"),
@@ -88,7 +99,8 @@ def test_generator_emits_complete_rocm_packet_schema(monkeypatch) -> None:
     from tessera import runtime as rt
 
     monkeypatch.setattr(benchmark, "_measure_dtype", _generated_rows)
-    monkeypatch.setattr(rt, "_rocm_device_name", lambda: "gfx1151")
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1151")
+    monkeypatch.setattr(rt, "_rocm_chip", lambda: "gfx1151")
     monkeypatch.setattr(
         benchmark, "_rocm_cache_comparison",
         lambda _rt, rows, _iterations: [
@@ -98,6 +110,12 @@ def test_generator_emits_complete_rocm_packet_schema(monkeypatch) -> None:
     )
     packet = benchmark._run("rocm", "all", 4)
     assert packet["selector_eligible"] is False
+    assert packet["architecture"] == packet["device"] == "gfx1151"
+    assert packet["device_identity"] == {
+        "architecture": "gfx1151",
+        "configured_architecture": "gfx1151",
+        "source": "hipGetDevicePropertiesR0600",
+    }
     assert packet["device_event_follow_up"] == "kernel_clock_witness_required"
     assert packet["storage_dtypes"] == ["f32", "f16", "bf16"]
     assert len(packet["dtype_rows"]) == 21
@@ -105,6 +123,32 @@ def test_generator_emits_complete_rocm_packet_schema(monkeypatch) -> None:
         "f32", "f16", "bf16"
     }
     assert len(packet["f32_cache_comparison"]) == 7
+
+
+@pytest.mark.parametrize("queried", [None, "gfx1201"])
+def test_generator_rejects_unverified_or_wrong_rocm_device(monkeypatch, queried) -> None:
+    from tessera import runtime as rt
+
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: queried)
+    monkeypatch.setattr(
+        benchmark, "_measure_dtype",
+        lambda *args: pytest.fail("device must be checked before measuring"),
+    )
+    with pytest.raises(RuntimeError, match="requires a live gfx1151 HIP device"):
+        benchmark._run("rocm", "all", 1)
+
+
+def test_generator_rejects_rocm_compile_chip_mismatch(monkeypatch) -> None:
+    from tessera import runtime as rt
+
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1151")
+    monkeypatch.setattr(rt, "_rocm_chip", lambda: "gfx1201")
+    monkeypatch.setattr(
+        benchmark, "_measure_dtype",
+        lambda *args: pytest.fail("compile chip must be checked before measuring"),
+    )
+    with pytest.raises(RuntimeError, match="compile chip differs"):
+        benchmark._run("rocm", "all", 1)
 
 
 def test_generator_rejects_partial_rocm_packet(monkeypatch) -> None:

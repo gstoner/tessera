@@ -7,6 +7,12 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## E2E-REAL-6-ALIBI-SHAPE-2026-09-29: traced ALiBi result type
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
+Follow-up required: the shared Graph shape contract now yields f32 [H,S,S] for a traced explicit-slopes call. Existing gfx1151/gfx1201 ALiBi lanes have no new native Schedule/HSACO or exact-device proof from this change.
+
+
 ## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
 
 Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-2026-09-29.

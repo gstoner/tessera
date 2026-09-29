@@ -6307,3 +6307,16 @@ registry/arity tests. Four numerical benchmark rows agree with NumPy and
 record diagnostic package and host-wall launch timing only.
 [Packet](../../../benchmarks/baselines/x86_alibi_native_20260929/README.md).
 <!-- entry-fields:end -->
+
+### 2026-09-29 — traced ALiBi result shape reaches native x86 execution
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#886](https://github.com/gstoner/tessera/pull/886); sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
+
+Outcome: The catalog names an ALiBi-specific shape rule: optional slopes[H] and static num_heads/seq_len produce f32 [H,S,S]. A public @jit trace now passes the Graph verifier, native x86 Schedule/Tile packaging and checked AVX-512 launch.
+
+Remaining: Apple, gfx1151/gfx1201 ROCm and sm_120 ALiBi consumers still require their own physical parity. The other E2E-REAL-6 family migrations remain open.
+
+Evidence: Host WSL traced-frontend and exact Zen 5 numerical test compares the native output with NumPy. Focused shape-rule, operator, and generated-doc gates run with this slice; no new kernel-time measurement is claimed.
+<!-- entry-fields:end -->

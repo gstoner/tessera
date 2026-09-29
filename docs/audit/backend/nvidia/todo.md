@@ -8,6 +8,12 @@ last_updated: 2026-09-29
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## E2E-REAL-6-ALIBI-SHAPE-2026-09-29: traced ALiBi result type
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
+Follow-up required: the shared Graph shape contract now yields f32 [H,S,S] for a traced explicit-slopes call. No sm_120 typed Tile/Target or exact-device proof follows from the x86 route.
+
+
 ## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
 
 Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-2026-09-29.

@@ -9,6 +9,12 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## E2E-REAL-6-ALIBI-SHAPE-2026-09-29: traced ALiBi result type
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
+Parity validated on Princess-Luna Zen 5: a public traced explicit-slopes ALiBi now infers f32 [H,S,S], passes the Graph verifier, reaches the native Schedule/Tile package, and launches with the NumPy bias oracle. The earlier four-shape host-wall packet remains diagnostic; this fix adds no performance claim.
+
+
 ## E2E-REAL-6-ALIBI-2026-09-29: explicit slopes native package
 
 Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-2026-09-29.

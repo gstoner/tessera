@@ -449,3 +449,22 @@ def test_nvfp4_scale_is_per_block_not_per_tensor():
     probe = tensor_ir_type(("4", "32"), "f32")
     _, predicted_scale = _infer_result_types("tessera.quantize_nvfp4", [probe])
     assert tuple(predicted_scale.shape) == ("4", "2")
+
+
+def test_alibi_explicit_slopes_shape_is_not_the_slopes_shape():
+    """The catalog result contract agrees with the ALiBi Graph verifier."""
+    from tessera.compiler.graph_ir import TENSOR_OPAQUE
+
+    slopes = tensor_ir_type((4,), "fp32")
+    expected = "tensor<4x7x7xf32>"
+    assert str(_infer_result_types(
+        "tessera.alibi", [slopes], {"num_heads": 4, "seq_len": 7}
+    )[0]) == expected
+    assert str(_infer_result_types(
+        "tessera.alibi", [], {"num_heads": 4, "seq_len": 7}
+    )[0]) == expected
+    assert _infer_result_type("tessera.alibi", [slopes], {"num_heads": 4}) == TENSOR_OPAQUE
+    assert _infer_result_type(
+        "tessera.alibi", [tensor_ir_type((3,), "fp32")],
+        {"num_heads": 4, "seq_len": 7}
+    ) == TENSOR_OPAQUE

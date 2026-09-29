@@ -23,16 +23,22 @@ from tessera.compiler.native_persistent_tape import PersistentTapePair
 
 
 def record(*, backend: str, chip: str, compiler: Path, llvm_bin: Path,
-           width: int = 17, samples: int = 11) -> dict:
+           width: int = 17, samples: int = 11, case: str = "cubic") -> dict:
     if width <= 0 or samples <= 0:
         raise ValueError("positive width and samples required")
+    if case not in {"cubic", "coupled"}:
+        raise ValueError("unknown residual case")
 
-    @ts.jit(target="nvidia_sm120" if backend == "nvidia" else "rocm", autodiff="reverse")
-    def residual(theta, x):
+    def cubic(theta, x):
         return x * x * x - theta
 
+    def coupled(theta, x):
+        return (x * x - theta) * (x + theta)
+
+    residual = ts.jit(target="nvidia_sm120" if backend == "nvidia" else "rocm",
+                      autodiff="reverse")(cubic if case == "cubic" else coupled)
     x = np.linspace(0.25, 1.25, width, dtype=np.float32)
-    theta = (x * x * x).astype(np.float32)
+    theta = ((x * x * x) if case == "cubic" else (0.4 * x + 0.1)).astype(np.float32)
     seed = np.linspace(-0.75, 0.75, width, dtype=np.float32)
     pair = residual.compile_persistent_device_tape(theta, x, compiler=compiler,
                 llvm_bin=llvm_bin, backend=backend, chip=chip)
@@ -48,12 +54,15 @@ def record(*, backend: str, chip: str, compiler: Path, llvm_bin: Path,
     try:
         dtheta, dx, dy = (memory.put(v) for v in (theta, x, seed))
         with pair.capture(dtheta, dx) as frame:
-            np.testing.assert_allclose(memory.get(frame.primals[0]), 0, atol=1e-6)
+            primal = (x * x * x - theta) if case == "cubic" else ((x * x - theta) * (x + theta))
+            np.testing.assert_allclose(memory.get(frame.primals[0]), primal, rtol=1e-5, atol=1e-6)
             # Mutate caller buffers after capture: derivatives must consume
             # the frame's saved inputs and residuals, not live aliases.
             memory.write(dx, np.full_like(x, 9))
             memory.write(dtheta, np.full_like(theta, -7))
-            expected = (-seed, 3 * x * x * seed)
+            expected = ((-seed, 3 * x * x * seed) if case == "cubic" else
+                        ((x * x - x - 2 * theta) * seed,
+                         (3 * x * x + 2 * x * theta - theta) * seed))
             for _ in range(samples):
                 start = time.perf_counter_ns()
                 outputs = frame.backward(dy)
@@ -81,7 +90,7 @@ def record(*, backend: str, chip: str, compiler: Path, llvm_bin: Path,
         raise AssertionError("residual source lost tracer authority")
     return {
         "work_items": ["FRONTEND-IR-MEDIUM-1", "AD-RESIDUAL-EVAL-1"],
-        "backend": backend, "chip": chip, "width": width,
+        "backend": backend, "chip": chip, "width": width, "case": case,
         "compiler_boundary": "public_jit_to_mlir_split_products",
         "frontend_authority": "tracer", "promotion_eligible": False,
         "timing_domain": "synchronized_host_wall",
@@ -108,9 +117,10 @@ def main():
     parser.add_argument("--compiler", type=Path, required=True)
     parser.add_argument("--llvm-bin", type=Path, default=Path("/usr/lib/llvm-23/bin"))
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--case", choices=("cubic", "coupled"), default="cubic")
     args = parser.parse_args()
     packet = record(backend=args.backend, chip=args.chip, compiler=args.compiler,
-                    llvm_bin=args.llvm_bin)
+                    llvm_bin=args.llvm_bin, case=args.case)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2) + "\n")
     print(json.dumps({key: packet[key] for key in ("chip", "width", "backward_median_ms", "residual_bytes")}))

@@ -7,6 +7,14 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`: evidence, fragments and residuals
+
+Owners EVIDENCE-PACKET-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Princess-Luna gfx1151: f32/f16/bf16 `sum` math rows now reload serialized Graph/Schedule/Tile/Target packages and bind launch receipts. Eighteen other math rows remain metadata probes. The public coupled residual passes native tape capture and repeated backward. No gfx1201 or NVIDIA fragment parity follows.
+No selector or performance promotion.
+
+[Evidence](../../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
+
 ## `FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: traced residual and typed-loop proof
 
 Owners FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / W1.1.
@@ -83,7 +91,8 @@ symbol; image identity excludes shape-only wrapper arguments and is compiled
 from that exact directive. Princess-Luna WSL passed 13 focused tests, including
 four exact gfx1151 permuted-page numerical launches, replay-drift refusal,
 and cross-shape cache reuse. This covers the direct static envelope only;
-general KV layouts, throughput, and `moe_dispatch` Schedule migration remain
+general KV layouts and throughput remain. The merged `moe_dispatch`
+Schedule route was revalidated above; broader MoE movement remains
 open. A [host-wall timing packet](../../../../benchmarks/baselines/e2e_real6_gfx1151_paged_20260928/README.md)
 records 94–103 ms warm packaging and 2.16–2.26 ms launches across three
 intervals with one image; these are not kernel timings. NVIDIA's existing

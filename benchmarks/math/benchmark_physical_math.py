@@ -350,10 +350,27 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
     from tessera import runtime as rt
     from tessera.compiler.profiler_timing import WSL_WITNESS_MISSING
 
+    live_arch = None
+    if target == "rocm":
+        # Query the selected HIP device, not the compiler chip override or
+        # a runtime helper that can return unknown on WSL.
+        live_arch = rt._rocm_live_arch()
+        if live_arch != "gfx1151":
+            raise RuntimeError(
+                "gfx1151 physical math evidence requires a live gfx1151 HIP "
+                f"device; queried {live_arch!r}"
+            )
+        configured_arch = rt._rocm_chip()
+        if configured_arch != live_arch:
+            raise RuntimeError(
+                "physical math ROCm compile chip differs from the live HIP "
+                f"device: configured {configured_arch!r}, queried {live_arch!r}"
+            )
+
     common = {
         "schema": "tessera.physical_math_evidence.v1",
         "target": target,
-        "architecture": "zen5-avx512" if target == "x86" else "gfx1151",
+        "architecture": "zen5-avx512" if target == "x86" else live_arch,
         "host": platform.platform(),
         "processor": platform.processor(),
         "timing_domain": "synchronized_host_wall",
@@ -390,7 +407,12 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         dtype_rows.extend(rows)
     return {
         **common,
-        "device": rt._rocm_device_name() or "unknown",
+        "device": live_arch,
+        "device_identity": {
+            "architecture": live_arch,
+            "configured_architecture": configured_arch,
+            "source": "hipGetDevicePropertiesR0600",
+        },
         "selector_eligible": False,
         "device_event_follow_up": WSL_WITNESS_MISSING,
         "storage_dtypes": ["f32", "f16", "bf16"],

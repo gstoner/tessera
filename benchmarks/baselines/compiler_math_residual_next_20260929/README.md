@@ -1,7 +1,10 @@
 # gfx1151 math and residual follow-up, 2026-09-29
 
-Princess-Luna gfx1151, host WSL, current stacked source branch. The physical
-math recorder used three warm host-wall samples per row. It produced 21 rows:
+Princess-Luna gfx1151, host WSL, PR #882 merged source with the device
+identity follow-up. The physical math recorder used three warm host-wall samples per row. The corrected
+recorder queries the selected HIP device with `hipGetDevicePropertiesR0600`,
+requires live `gfx1151`, and rejects a different configured compiler chip
+before recording any row; the packet stores both identities. It produced 21 rows:
 three serialized Graph/Schedule/Tile/Target `sum` packages and 18 explicit
 metadata runtime probes across `sqrt`, `exp`, `add`, `div`, `cumsum`,
 and `cummax` at f32, f16, and bf16. All passed their numerical gates.

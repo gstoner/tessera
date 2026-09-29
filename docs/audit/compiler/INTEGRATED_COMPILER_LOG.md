@@ -6320,3 +6320,16 @@ Remaining: Apple, gfx1151/gfx1201 ROCm and sm_120 ALiBi consumers still require 
 
 Evidence: Host WSL traced-frontend and exact Zen 5 numerical test compares the native output with NumPy. Focused shape-rule, operator, and generated-doc gates run with this slice; no new kernel-time measurement is claimed.
 <!-- entry-fields:end -->
+
+### 2026-09-29 — gfx1151 bounded matmul image identity
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: pending; sync E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29.
+
+Outcome: The static unfused unsplit gfx1151 f16/bf16 register-matmul route projects one replayed Target directive, excludes only shape-bound wrapper text and its checked Schedule digest, and compiles the image from that exact directive. Three distinct static shapes reuse one image while retaining separate Schedule and Tile artifacts. The ROCm-specific packet schema is registered as a syntax-only benchmark surface.
+
+Remaining: gfx1201, fused, split-K, dynamic and LDS matmul image identities; Schedule/Tile replay package cost; clean device-kernel timing and any selector decision. Apple, x86 and NVIDIA have no consumer of this HSACO key.
+
+Evidence: Clean-source Princess-Luna gfx1151 with rebuilt LLVM/MLIR 23.1.1 passed 34 focused shape-free tests (one other-device skip). A 31-sample-per-shape packet records numerical error below 9e-8, one image across three shapes, and three cold compilations under the historical Tile-text control. Timings are WSL host-wall diagnostics. [Packet](../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
+<!-- entry-fields:end -->

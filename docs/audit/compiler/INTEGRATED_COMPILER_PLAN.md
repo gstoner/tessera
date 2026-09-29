@@ -257,6 +257,8 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 - Current slice (2026-09-29, sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29): the public explicit-slopes ALiBi trace now infers f32 [H,S,S] from num_heads/seq_len rather than inheriting slopes[H]. Princess-Luna traces, packages, launches and matches NumPy through the checked AVX-512 ABI. Apple, ROCm and NVIDIA follow-ups remain target-owned.
 
+- Current slice (2026-09-29, sync E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29): static unfused unsplit gfx1151 f16/bf16 register matmul now compiles a shape-independent Target directive image after Schedule/Tile replay. Exact gfx1151 numerical proof and a three-shape compile control are recorded; gfx1201, fused/split/dynamic/LDS and host replay cost remain open. [Packet](../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
+
 - Current slice (2026-09-29, sync E2E-REAL-6-ALIBI-2026-09-29): x86
   explicit-slopes ALiBi now enters native Graph, Schedule and Tile, and the
   narrowed Python constructor is retired. Princess-Luna numerical and
@@ -281,7 +283,7 @@ and every Apple CPU example launch is oracle-checked. Accelerator examples
 remain artifact claims; exact-device execution stays backend-owned.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [traced ALiBi result shape and native x86 execution](INTEGRATED_COMPILER_LOG.md#2026-09-29--traced-alibi-result-shape-reaches-native-x86-execution)
+- Latest: [gfx1151 bounded matmul image identity](INTEGRATED_COMPILER_LOG.md#2026-09-29--gfx1151-bounded-matmul-image-identity)
 
 ### W1.1
 

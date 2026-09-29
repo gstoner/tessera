@@ -13,6 +13,13 @@ last_updated: 2026-09-29
 Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
 Follow-up required: the shared Graph shape contract now yields f32 [H,S,S] for a traced explicit-slopes call. No sm_120 typed Tile/Target or exact-device proof follows from the x86 route.
 
+## E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29: bounded image identity
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29.
+Not applicable to sm_120 images: this change keys only gfx1151 HSACO matmul directives and adds a ROCm-specific diagnostic packet. No shared Graph IR, ABI, dtype, PTX route, or NVIDIA fragment producer changed.
+
+[Packet](../../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
+
 
 ## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
 

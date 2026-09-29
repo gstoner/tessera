@@ -14,6 +14,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
 Parity validated on Princess-Luna Zen 5: a public traced explicit-slopes ALiBi now infers f32 [H,S,S], passes the Graph verifier, reaches the native Schedule/Tile package, and launches with the NumPy bias oracle. The earlier four-shape host-wall packet remains diagnostic; this fix adds no performance claim.
 
+## E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29: bounded image identity
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29.
+Not applicable to x86 images: this change keys only gfx1151 HSACO matmul directives and adds a ROCm-specific diagnostic packet. No shared Graph IR, ABI, dtype, or AVX-512 package contract changed.
+
+[Packet](../../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
+
 
 ## E2E-REAL-6-ALIBI-2026-09-29: explicit slopes native package
 

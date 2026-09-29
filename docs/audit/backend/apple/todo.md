@@ -13,6 +13,13 @@ last_updated: 2026-09-29
 Owner E2E-REAL-6; sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29.
 Follow-up required: the shared Graph shape contract now yields f32 [H,S,S] for a traced explicit-slopes call. No Apple Schedule/Metal execution or Mac parity is claimed for that form.
 
+## E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29: bounded image identity
+
+Owner E2E-REAL-6; sync E2E-REAL-6-ROCM-MATMUL-IMAGE-2026-09-29.
+Not applicable to Apple images: this change keys only gfx1151 HSACO matmul directives and adds a ROCm-specific diagnostic packet. No shared Graph IR, ABI, dtype, or Apple Metal route changed; the Apple JIT gaps remain open.
+
+[Packet](../../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
+
 
 ## E2E-REAL-6-ALIBI-2026-09-29: shared Graph operand — follow-up required
 

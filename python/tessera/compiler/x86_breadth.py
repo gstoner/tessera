@@ -335,19 +335,15 @@ def supports_promoted_graph_breadth(module: GraphIRModule) -> bool:
     return threshold is not None and math.prod(output) >= threshold
 
 
-def package_graph_breadth(
-    module: GraphIRModule, *, pipeline_name: str,
-) -> X86NativePackage:
-    """Compile an x86 breadth op (gather / pointwise loss / cholesky / tri_solve).
 
-    E2E-REAL-6 (x86 breadth family, 2026-09-28): the Graph op lowers through
-    ``NativeX86Kernel.h`` to the same ``tile.x86_abi_kernel`` carrier the
-    explicit ABI registry (``X86_BREADTH_ABIS``) describes, and
-    ``x86_native.package_scheduled_kernel`` projects the package from the
-    replayed IR; the retired Graph-owned constructor is the oracle in
-    ``tests/_support/x86_kernel_baseline.py``. Rank-2 and rank-3 Cholesky /
-    triangular solve share the native contract and its explicit batch scalar.
-    """
-    from .x86_native import package_breadth
+def package_graph_breadth(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
+    """Package rank-2/rank-3 breadth through native Schedule and Tile."""
+    from . import scheduled_kernel
+    from .x86_native import package_scheduled_kernel
 
-    return package_breadth(module, pipeline_name=pipeline_name)
+    if not requests_graph_breadth(module):
+        raise ValueError("x86 breadth packaging requires one supported Graph operation")
+    return package_scheduled_kernel(
+        scheduled_kernel.lower_scheduled_kernel(module, target="x86"),
+        pipeline_name=pipeline_name,
+    )

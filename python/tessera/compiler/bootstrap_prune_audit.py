@@ -511,6 +511,8 @@ def _import_binds_real_lowering(node: ast.AST, name: str) -> bool:
             continue
         if name == "lower_scheduled_kernel":
             return alias.name == name and node.module == "scheduled_kernel"
+        if name == "package_scheduled_kernel":
+            return alias.name == name and node.module == "x86_native"
         if name == "scheduled_kernel":
             return alias.name == name and not node.module
     return False
@@ -591,7 +593,18 @@ def _names_are_the_real_lowering(tree: ast.Module, fn: ast.FunctionDef) -> bool:
                      for n in ast.walk(fn))
         if loaded and use not in imported:
             return False
-    return top_level_defs == 1
+    if top_level_defs == 1:
+        return "package_scheduled_kernel" not in imported
+    if top_level_defs == 0 and "package_scheduled_kernel" in imported:
+        # The external breadth entrypoint imports this exact consumer. Prove
+        # the provider's binding too; an import alone is not route authority.
+        provider = _parse(_COMPILER / "x86_native.py")
+        if provider is None or provider is tree:
+            return False
+        definitions = [n for n in provider.body if isinstance(n, ast.FunctionDef)
+                       and n.name == "package_scheduled_kernel"]
+        return len(definitions) == 1 and _names_are_the_real_lowering(provider, definitions[0])
+    return False
 
 
 def _packaged_artifact(call: ast.Call) -> ast.expr | None:
@@ -616,10 +629,14 @@ def _packager_is_generic_scheduled(target: str, family: str) -> bool:
     filename = dict(_BACKEND_MODULES).get(target)
     if filename is None:
         return False
+    name = f"package_{family}"
+    if (target, family) == ("x86", "breadth"):
+        # This existing public entrypoint lives beside the ABI registry; do
+        # not add a duplicate Graph-input wrapper merely for the census.
+        filename, name = "x86_breadth.py", "package_graph_breadth"
     tree = _parse(_COMPILER / filename)
     if tree is None:
         return False
-    name = f"package_{family}"
     # Exactly one module-level binding, an undecorated def (review: a second
     # def, a later ``package_x = legacy``, or a decorator could replace it).
     bindings_at_module = 0

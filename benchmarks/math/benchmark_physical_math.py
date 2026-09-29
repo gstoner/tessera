@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
 import platform
 import statistics
@@ -15,6 +16,87 @@ import numpy as np
 
 
 def _artifact(rt: Any, target: str, family: str, op_name: str, operands, kwargs=None):
+    if target == "rocm":
+        # These families still lack a uniform native package contract. Keep
+        # their diagnostic boundary explicit; never claim compiler ancestry.
+        return _legacy_rocm_artifact(rt, target, family, op_name, operands, kwargs)
+    from tessera.compiler import scheduled_kernel, x86_native
+    from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
+
+    def ir_type(shape):
+        dims = "x".join(map(str, shape))
+        return IRType(f"tensor<{dims + 'x' if dims else ''}f32>", tuple(map(str, shape)), "fp32")
+
+    if any(value.dtype != np.float32 for value in operands):
+        raise ValueError("x86 physical math package requires f32 operands")
+    names = [f"a{index}" for index in range(len(operands))]
+    types = [ir_type(value.shape) for value in operands]
+    shape = operands[0].shape[:-1] if op_name == "sum" else operands[0].shape
+    result_type = ir_type(shape)
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name=f"physical_math_{op_name}",
+        args=[IRArg(name, typ) for name, typ in zip(names, types)],
+        result_types=[result_type],
+        body=[IROp(result="o", op_name=f"tessera.{op_name}",
+                   operands=[f"%{name}" for name in names],
+                   operand_types=[str(typ) for typ in types],
+                   result_type=str(result_type), kwargs=dict(kwargs or {}))],
+        return_values=["%o"],
+    )])
+    scheduled = scheduled_kernel.lower_scheduled_kernel(module, target="x86")
+    package = x86_native.package_scheduled_kernel(scheduled, pipeline_name="tessera-lower-to-x86")
+    artifact = rt.RuntimeArtifact(
+        graph_ir=scheduled.graph_ir, schedule_ir=scheduled.schedule_ir,
+        tile_ir=package.tile_ir, target_ir=package.target_ir,
+        metadata={"target": "x86"}, native_image=package.image,
+        launch_descriptor=package.descriptor,
+    )
+    # Execute the persisted contract, including image bytes, rather than the
+    # in-memory object that happened to be returned by the compiler.
+    return rt.RuntimeArtifact.from_json(artifact.to_json())
+
+
+def _native_arguments(artifact, operands):
+    descriptor = artifact.launch_descriptor
+    inputs = [binding for binding in descriptor.buffers if binding.direction == "input"]
+    if len(inputs) != len(operands):
+        raise ValueError("physical math input count differs from native descriptor")
+    args = {binding.name: value for binding, value in zip(inputs, operands)}
+    for binding in descriptor.buffers:
+        if binding.direction == "output":
+            guards = sorted((g for g in descriptor.shape_guards if g.binding == binding.name),
+                            key=lambda g: g.dimension)
+            if len(guards) != binding.rank or any(g.predicate != "eq" for g in guards):
+                raise ValueError("physical math requires static output shape guards")
+            args[binding.name] = np.empty(tuple(g.value for g in guards), np.float32)
+    provenance = descriptor.provenance
+    scalar_values = {
+        "N": provenance.get("elements"), "Rows": provenance.get("rows"),
+        "Cols": provenance.get("cols"), "Outer": provenance.get("outer"),
+        "AxisExtent": provenance.get("axis_extent"), "Inner": provenance.get("inner"),
+    }
+    for scalar in descriptor.scalars:
+        value = scalar_values.get(scalar.name)
+        if value is None:
+            raise ValueError(f"physical math has no native scalar {scalar.name}")
+        args[scalar.name] = value
+    return args
+
+
+def _package_receipt(artifact):
+    image = artifact.native_image.to_dict()
+    del image["payload_b64"]
+    return {
+        "artifact_hash": artifact.artifact_hash,
+        "native_image": image,
+        "launch_descriptor": artifact.launch_descriptor.to_dict(),
+        "ir_sha256": {stage: hashlib.sha256(getattr(artifact, stage).encode()).hexdigest()
+                      for stage in ("graph_ir", "schedule_ir", "tile_ir", "target_ir")},
+        "serialization": "RuntimeArtifact JSON roundtrip before launch",
+    }
+
+
+def _legacy_rocm_artifact(rt: Any, target: str, family: str, op_name: str, operands, kwargs=None):
     names = [f"a{index}" for index in range(len(operands))]
     return rt.RuntimeArtifact(metadata={
         "target": target,
@@ -129,6 +211,14 @@ def _checked_launch(rt, target, artifact, operands):
     expected = "native_cpu" if target == "x86" else "native_gpu"
     if not result.get("ok") or result.get("execution_kind") != expected:
         raise RuntimeError(f"{target} benchmark requires observed {expected} execution: {result.get('reason', result.get('execution_kind'))}")
+    if target == "x86":
+        expected_identity = {
+            "execution_mode": "descriptor", "artifact_hash": artifact.artifact_hash,
+            "image_digest": artifact.native_image.image_digest,
+            "launch_descriptor_digest": artifact.launch_descriptor.descriptor_digest,
+        }
+        if any(result.get(key) != value for key, value in expected_identity.items()):
+            raise RuntimeError("x86 math launch receipt differs from the serialized package")
     return result
 
 
@@ -137,8 +227,9 @@ def _measure_dtype(rt: Any, target: str, dtype_name: str,
     result_rows = []
     for family, op_name, operands, kwargs, reference_fn in _cases(target, dtype_name):
         artifact = _artifact(rt, target, family, op_name, operands, kwargs)
+        launch_args = _native_arguments(artifact, operands) if target == "x86" else operands
         start = time.perf_counter_ns()
-        cold = _checked_launch(rt, target, artifact, operands)
+        cold = _checked_launch(rt, target, artifact, launch_args)
         cold_ns = time.perf_counter_ns() - start
         if not cold.get("ok"):
             raise RuntimeError(cold.get("reason", f"{family}/{op_name} failed"))
@@ -146,7 +237,7 @@ def _measure_dtype(rt: Any, target: str, dtype_name: str,
         output = None
         for _ in range(iterations):
             start = time.perf_counter_ns()
-            launched = _checked_launch(rt, target, artifact, operands)
+            launched = _checked_launch(rt, target, artifact, launch_args)
             samples.append(time.perf_counter_ns() - start)
             if not launched.get("ok"):
                 raise RuntimeError(launched.get("reason", f"{family}/{op_name} failed"))
@@ -173,6 +264,9 @@ def _measure_dtype(rt: Any, target: str, dtype_name: str,
         result_rows.append({
             "family": family,
             "op_name": op_name,
+            "compiler_boundary": ("serialized_native_package" if target == "x86" else "metadata_runtime_probe"),
+            **({"package_receipt": _package_receipt(artifact)} if target == "x86" else {}),
+            "warm_samples_ns": samples,
             "dtype": dtype_name,
             "shape": list(operands[0].shape),
             "cold_ms": cold_ns / 1.0e6,
@@ -248,7 +342,7 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         "host": platform.platform(),
         "processor": platform.processor(),
         "timing_domain": "synchronized_host_wall",
-        "compiler_boundary": "metadata_runtime_probe",
+        "compiler_boundary": "serialized_native_package" if target == "x86" else "metadata_runtime_probe",
         "promotion_eligible": False,
         "eligibility_reason": "no exact-artifact clean-host paired promotion packet",
         "iterations": iterations,

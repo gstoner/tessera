@@ -1,0 +1,1383 @@
+{
+  "architecture": "zen5-avx512",
+  "compiler_boundary": "serialized_native_package",
+  "eligibility_reason": "no exact-artifact clean-host paired promotion packet",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "iterations": 31,
+  "processor": "",
+  "promotion_eligible": false,
+  "rows": [
+    {
+      "cold_ms": 10.132826,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 2.654202816010125,
+      "error_limit": 0.005,
+      "family": "unary",
+      "max_abs_error": 0.0,
+      "op_name": "sqrt",
+      "package_receipt": {
+        "artifact_hash": "4788cbe1e82df251472c25074e07c5b9e20a1ccbeef0fd5dfdb575c74fecf073",
+        "ir_sha256": {
+          "graph_ir": "400a7b4c9f7ead05d00c2499608749b59ba018208abc16a3ccffa9a5694a68c9",
+          "schedule_ir": "ad48142801b952f26c37fd57fed163efc1aff16f93dd73a4aa7e672055cbbc9d",
+          "target_ir": "6b74ea66930e50be5f292d0a65cb9b3d37499fca14017a17e83cec5eb28f5fc5",
+          "tile_ir": "3e107b6e2369b314c103f649dbf650facfdfc6fb989d32ce1bb62f4a9a9d1928"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.x86.elementwise.unary.x_o_n_kind.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "a4e160236ca7a32771b0986612f4fba9709de3d3bc3aca7b55e5410332013a1e",
+          "descriptor_digest": "715f1990da82680ef0d362b066c75a9c76a3047e1cac8d1e821ac694872cd001",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_x86_avx512_unary_f32",
+          "geometry": {
+            "grid": null,
+            "policy": "x86_avx512_flat",
+            "workgroup": null
+          },
+          "image_digest": "e9d4555b5b8afdd5e551d3fe4867d35ced03fbe61849c0c57b36fbb2848c2067",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "all",
+            "synchronization": [
+              "return"
+            ]
+          },
+          "provenance": {
+            "elements": 262144,
+            "family": "unary",
+            "kind": "sqrt",
+            "numeric_policy": "c_abi_unary",
+            "output_storage": "f32",
+            "route": "canonical_scheduled_tile_consumer",
+            "schedule_digest": "2b9a0962f92018a886828642b91bef6ffc85321752110e73eb46e0da6ca2d97c",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f32",
+            "tile_ir_digest": "3e107b6e2369b314c103f649dbf650facfdfc6fb989d32ce1bb62f4a9a9d1928",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 2
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "x86_64_avx512",
+          "binary_format": "shared_object",
+          "cache_key": "e846c2390b41e533c94d755c92cacdfa8d99ace84a95efe10b46587fd834e7a9",
+          "compile_state": "prepackaged",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [],
+          "entry_points": [
+            {
+              "abi_id": "tessera.x86.elementwise.unary.x_o_n_kind.f32.v1",
+              "symbol": "tessera_x86_avx512_unary_f32"
+            }
+          ],
+          "image_digest": "e9d4555b5b8afdd5e551d3fe4867d35ced03fbe61849c0c57b36fbb2848c2067",
+          "payload_digest": "48ed7fc2a9a84dcf71c6576386f5816b3e0cc4354c5cced157615236e0d765a0",
+          "pipeline_name": "tessera-lower-to-x86",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "x86",
+          "target_ir_digest": "6b74ea66930e50be5f292d0a65cb9b3d37499fca14017a17e83cec5eb28f5fc5",
+          "toolchain_fingerprint": "c291df59be99551825f5856c07eab3a1339e0ee3a39c7a066d1f46dd07eee67f"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.015801,
+      "warm_median_ms": 0.790125,
+      "warm_samples_ns": [
+        3442325,
+        769464,
+        836468,
+        815406,
+        800856,
+        790125,
+        755933,
+        831667,
+        798325,
+        800156,
+        792345,
+        787945,
+        790685,
+        769993,
+        793786,
+        864899,
+        785095,
+        770464,
+        774324,
+        784674,
+        807116,
+        782775,
+        795155,
+        813116,
+        738232,
+        772894,
+        785805,
+        810016,
+        787274,
+        756232,
+        779525
+      ]
+    },
+    {
+      "cold_ms": 1.350237,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 2.6758090960707883,
+      "error_limit": 0.005,
+      "family": "transcendental",
+      "max_abs_error": 9.5367431640625e-07,
+      "op_name": "exp",
+      "package_receipt": {
+        "artifact_hash": "891ef2a09a047a3c20e2be490f94c62654603924c3fce1cbfd970831854c418d",
+        "ir_sha256": {
+          "graph_ir": "66d77fc2a617e7f94c388d34ab06f256912d0b4f72ed9740b679b6250de4b04a",
+          "schedule_ir": "2043dacc2340c5577a926f5a5ebcd26d6755adee110e02347fb23c1c1ba9a533",
+          "target_ir": "f000afe0b5da85ee3efc85d0b86c4d4cc2ddae5c97367dacb798aa1a5d5bef2c",
+          "tile_ir": "f286a191262dc839b7d0f242c4fa970ad2707e3c9630df1afacb8d680f275374"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.x86.elementwise.transcendental.x_o_n_kind.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "9aa50be9134f3bce73bbbc52af6b9abfde1fa47ab8b1d8528759a41b8037e91b",
+          "descriptor_digest": "8033a07033b181dc642526c8b49a887e76feb6551b48c446c9cd5293cf0b459f",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_x86_avx512_transcendental_f32",
+          "geometry": {
+            "grid": null,
+            "policy": "x86_avx512_flat",
+            "workgroup": null
+          },
+          "image_digest": "bc02176e50f4ff4622acc8d466c19a951eee3b471e8ec497e34912c38485a91b",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "all",
+            "synchronization": [
+              "return"
+            ]
+          },
+          "provenance": {
+            "elements": 262144,
+            "family": "transcendental",
+            "kind": "exp",
+            "numeric_policy": "c_abi_transcendental",
+            "output_storage": "f32",
+            "route": "canonical_scheduled_tile_consumer",
+            "schedule_digest": "6c6c980642f0195fdd0e3be7ad0cef4812610f79624bb38b6f9f6a6ca65dfed3",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f32",
+            "tile_ir_digest": "f286a191262dc839b7d0f242c4fa970ad2707e3c9630df1afacb8d680f275374",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 2
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "x86_64_avx512",
+          "binary_format": "shared_object",
+          "cache_key": "e8b1d56d1bb0c1146b8dd375bb021d40e06931ab200dec41adced9cf4d8af3cd",
+          "compile_state": "prepackaged",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [],
+          "entry_points": [
+            {
+              "abi_id": "tessera.x86.elementwise.transcendental.x_o_n_kind.f32.v1",
+              "symbol": "tessera_x86_avx512_transcendental_f32"
+            }
+          ],
+          "image_digest": "bc02176e50f4ff4622acc8d466c19a951eee3b471e8ec497e34912c38485a91b",
+          "payload_digest": "48ed7fc2a9a84dcf71c6576386f5816b3e0cc4354c5cced157615236e0d765a0",
+          "pipeline_name": "tessera-lower-to-x86",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "x86",
+          "target_ir_digest": "f000afe0b5da85ee3efc85d0b86c4d4cc2ddae5c97367dacb798aa1a5d5bef2c",
+          "toolchain_fingerprint": "c291df59be99551825f5856c07eab3a1339e0ee3a39c7a066d1f46dd07eee67f"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 2.0334367935332703e-07,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.021922,
+      "warm_median_ms": 0.783745,
+      "warm_samples_ns": [
+        800015,
+        841688,
+        783745,
+        793825,
+        778084,
+        733212,
+        794135,
+        872829,
+        792365,
+        779855,
+        732431,
+        815807,
+        762283,
+        730412,
+        815496,
+        828287,
+        823247,
+        761823,
+        729142,
+        789655,
+        767594,
+        838337,
+        767384,
+        743132,
+        817747,
+        759233,
+        773644,
+        855289,
+        771594,
+        793695,
+        778324
+      ]
+    },
+    {
+      "cold_ms": 1.336316,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 4.020798502998605,
+      "error_limit": 0.005,
+      "family": "binary",
+      "max_abs_error": 0.0,
+      "op_name": "add",
+      "package_receipt": {
+        "artifact_hash": "ad5fa901747ea885a62774ef02dc73310c6b800acde6cfd9170794c2626482db",
+        "ir_sha256": {
+          "graph_ir": "b86e503984919534d857cf5a2e8567816ecabff6dc41a1b8e467e3241434de51",
+          "schedule_ir": "b3abad68fcf8625a1b25c18a12eeb5bbcca7d03172ee3a0f8e6f9b3b5824c5b1",
+          "target_ir": "de4cb1c01453b03d94f7d41e043f5186db0878e48128ddda3d8d5a30b04f3be3",
+          "tile_ir": "df4a83187877d42bab15bab27e8fbf52e05e718dc515fe1ca5421a5a3c51454c"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.x86.elementwise.binary.a_b_o_n_kind.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a1",
+              "ordinal": 1,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 2,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "e0ba56b78a0be79d5d33dbec2987d707c5b72bcd7724e0e67af721c870f15382",
+          "descriptor_digest": "5114adb772aa55e954edb2dac88b755040ea86e41346aacea19728968ef9bd3b",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_x86_avx512_binary_f32",
+          "geometry": {
+            "grid": null,
+            "policy": "x86_avx512_flat",
+            "workgroup": null
+          },
+          "image_digest": "4875b0864cbbdcc18fe7fcd29a3558701138cdc86c7a235cc398fadad22a4ae3",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "all",
+            "synchronization": [
+              "return"
+            ]
+          },
+          "provenance": {
+            "elements": 262144,
+            "family": "binary",
+            "kind": "add",
+            "numeric_policy": "c_abi_binary",
+            "output_storage": "f32",
+            "route": "canonical_scheduled_tile_consumer",
+            "schedule_digest": "ee2b4e9a0205a045e3f55757e3ebf2b2cf038ca1a1610376dc4463fd57a6e16e",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f32",
+            "tile_ir_digest": "df4a83187877d42bab15bab27e8fbf52e05e718dc515fe1ca5421a5a3c51454c",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "a1",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a1",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "x86_64_avx512",
+          "binary_format": "shared_object",
+          "cache_key": "88f19827e704089544a52c07dd8f00ffad34fb2dca9604ceb4659ca26a376d87",
+          "compile_state": "prepackaged",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [],
+          "entry_points": [
+            {
+              "abi_id": "tessera.x86.elementwise.binary.a_b_o_n_kind.f32.v1",
+              "symbol": "tessera_x86_avx512_binary_f32"
+            }
+          ],
+          "image_digest": "4875b0864cbbdcc18fe7fcd29a3558701138cdc86c7a235cc398fadad22a4ae3",
+          "payload_digest": "48ed7fc2a9a84dcf71c6576386f5816b3e0cc4354c5cced157615236e0d765a0",
+          "pipeline_name": "tessera-lower-to-x86",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "x86",
+          "target_ir_digest": "de4cb1c01453b03d94f7d41e043f5186db0878e48128ddda3d8d5a30b04f3be3",
+          "toolchain_fingerprint": "c291df59be99551825f5856c07eab3a1339e0ee3a39c7a066d1f46dd07eee67f"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.019442,
+      "warm_median_ms": 0.782364,
+      "warm_samples_ns": [
+        783745,
+        787935,
+        755333,
+        852198,
+        770004,
+        780034,
+        792395,
+        732332,
+        782364,
+        791095,
+        750753,
+        791085,
+        729111,
+        777834,
+        793275,
+        735751,
+        701980,
+        755203,
+        804896,
+        801336,
+        799195,
+        739642,
+        830587,
+        801806,
+        801696,
+        744942,
+        718261,
+        776034,
+        821147,
+        784405,
+        753112
+      ]
+    },
+    {
+      "cold_ms": 1.321965,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 4.020279501319548,
+      "error_limit": 0.005,
+      "family": "binary",
+      "max_abs_error": 0.0,
+      "op_name": "div",
+      "package_receipt": {
+        "artifact_hash": "f84892c42b0e7f948afe453dd932900a7cb9752fb2d34509eb4301ad3ff09710",
+        "ir_sha256": {
+          "graph_ir": "27f314b90378e7c020bdb2d2779803adf62eb2dd3f0fd3cf8dc3b5af90acd257",
+          "schedule_ir": "0d15e07889ba6f32fb7370fd2902856f80b91aa7811eb8c4f314050a8c7bc0bb",
+          "target_ir": "81aa4138936de1626066bd4959a8f4b1b845a5d6493229bfe106f16744756916",
+          "tile_ir": "dee395ae09e3725512793443774ee07d4dda530077e745be6e11b0a8dbfa9ab3"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.x86.elementwise.binary.a_b_o_n_kind.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a1",
+              "ordinal": 1,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 2,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "e1e2e54bab1c804ece9c50655ab332fa7b6314b4c953fbad0a0b34168dfc8d84",
+          "descriptor_digest": "452b6f0510286b287e56731663332c30a2701f491d6020e112f9704627b0f5f2",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_x86_avx512_binary_f32",
+          "geometry": {
+            "grid": null,
+            "policy": "x86_avx512_flat",
+            "workgroup": null
+          },
+          "image_digest": "7ff4c441c4eb983b769c12d4f469bc4f9e917ee747b83e55ac2b3d5f312c0d5f",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "all",
+            "synchronization": [
+              "return"
+            ]
+          },
+          "provenance": {
+            "elements": 262144,
+            "family": "binary",
+            "kind": "div",
+            "numeric_policy": "c_abi_binary",
+            "output_storage": "f32",
+            "route": "canonical_scheduled_tile_consumer",
+            "schedule_digest": "5b48ae8e8e1b71539c374e8e6db0205bed63c5cc513a08f8a8c88c01fd4633c2",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f32",
+            "tile_ir_digest": "dee395ae09e3725512793443774ee07d4dda530077e745be6e11b0a8dbfa9ab3",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "a1",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a1",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "x86_64_avx512",
+          "binary_format": "shared_object",
+          "cache_key": "0fa2ad4906bf1a1b562f39fe20ec07030525668ad908b205199389155453df6a",
+          "compile_state": "prepackaged",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [],
+          "entry_points": [
+            {
+              "abi_id": "tessera.x86.elementwise.binary.a_b_o_n_kind.f32.v1",
+              "symbol": "tessera_x86_avx512_binary_f32"
+            }
+          ],
+          "image_digest": "7ff4c441c4eb983b769c12d4f469bc4f9e917ee747b83e55ac2b3d5f312c0d5f",
+          "payload_digest": "48ed7fc2a9a84dcf71c6576386f5816b3e0cc4354c5cced157615236e0d765a0",
+          "pipeline_name": "tessera-lower-to-x86",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "x86",
+          "target_ir_digest": "81aa4138936de1626066bd4959a8f4b1b845a5d6493229bfe106f16744756916",
+          "toolchain_fingerprint": "c291df59be99551825f5856c07eab3a1339e0ee3a39c7a066d1f46dd07eee67f"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.025922,
+      "warm_median_ms": 0.782465,
+      "warm_samples_ns": [
+        826077,
+        803026,
+        742362,
+        801836,
+        792385,
+        744572,
+        718101,
+        759833,
+        813246,
+        789845,
+        744102,
+        709351,
+        766023,
+        758753,
+        826497,
+        756543,
+        815447,
+        803115,
+        740172,
+        782465,
+        786415,
+        737572,
+        773133,
+        793626,
+        824876,
+        790555,
+        727822,
+        759073,
+        730881,
+        785265,
+        809906
+      ]
+    },
+    {
+      "cold_ms": 1.275883,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 1.411147202443694,
+      "error_limit": 0.005,
+      "family": "reduce",
+      "max_abs_error": 0.000244140625,
+      "op_name": "sum",
+      "package_receipt": {
+        "artifact_hash": "1a4fd93e9b4c1e9383a6abcb960f3c0a3a37bc274c3f9e519a3bae61121e70be",
+        "ir_sha256": {
+          "graph_ir": "2a1d02aeec299a96df168ead5e854088e2548b8b2e81599a375de9c89fff72d0",
+          "schedule_ir": "33e8bd9d1d8654a834e7185c0da333a525ad8c3b13e632e9744f01504370c36e",
+          "target_ir": "91c2eff56ced6c87cfd834bd0ee87793a9e39e1058225e85593813862240e1b3",
+          "tile_ir": "83e363a0ed173c38713353a0fe7c27ed4f480a67bf8d7033feaa6f4b38e4deed"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.x86.reduce.x_o_outer_axis_inner.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 1
+            }
+          ],
+          "cache_fingerprint": "4876384369dc1913e6a8a98029a91ff0124a58c1a44c2d57b3f15f3781b83a7d",
+          "descriptor_digest": "4e28c972483eee85aa9ac831e803e5c62840c57c0439062818eb717b9e25d7e6",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_x86_avx512_reduce_f32",
+          "geometry": {
+            "grid": null,
+            "policy": "x86_64_avx512_rows",
+            "workgroup": null
+          },
+          "image_digest": "4fe16f3f8faf63fdad0610e86305a3120fd0af90dba4b533bcd1744e1f311675",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "all",
+            "synchronization": [
+              "return"
+            ]
+          },
+          "provenance": {
+            "accum": "f32",
+            "axis": 1,
+            "axis_extent": 1024,
+            "columns": 1,
+            "exp_mode": "accurate",
+            "family": "reduce",
+            "ftz": false,
+            "inner": 1,
+            "keepdims": false,
+            "kind": "sum",
+            "nan_mode": "propagate",
+            "outer": 256,
+            "output_shape": [
+              256
+            ],
+            "required_features": [
+              "avx512f"
+            ],
+            "route": "canonical_scheduled_tile_consumer",
+            "rows": 1,
+            "schedule_digest": "6e6750ccb187831646653bc97aaae0659a049ece24a389fb808bc45796c7bdc4",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f32",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "tile_ir_digest": "83e363a0ed173c38713353a0fe7c27ed4f480a67bf8d7033feaa6f4b38e4deed",
+            "work_item": "E2E-REAL-5"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Outer",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "AxisExtent",
+              "ordinal": 3
+            },
+            {
+              "dtype": "int64",
+              "name": "Inner",
+              "ordinal": 4
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "x86_64_avx512",
+          "binary_format": "shared_object",
+          "cache_key": "6741ff7a636c932251201c88a4f1c2c609e678627ff52d20983460013233b35d",
+          "compile_state": "prepackaged",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [],
+          "entry_points": [
+            {
+              "abi_id": "tessera.x86.reduce.x_o_outer_axis_inner.f32.v1",
+              "symbol": "tessera_x86_avx512_reduce_f32"
+            }
+          ],
+          "image_digest": "4fe16f3f8faf63fdad0610e86305a3120fd0af90dba4b533bcd1744e1f311675",
+          "payload_digest": "48ed7fc2a9a84dcf71c6576386f5816b3e0cc4354c5cced157615236e0d765a0",
+          "pipeline_name": "tessera-lower-to-x86",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "x86",
+          "target_ir_digest": "91c2eff56ced6c87cfd834bd0ee87793a9e39e1058225e85593813862240e1b3",
+          "toolchain_fingerprint": "c291df59be99551825f5856c07eab3a1339e0ee3a39c7a066d1f46dd07eee67f"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 8.252451954949927e-05,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.029822,
+      "warm_median_ms": 0.743792,
+      "warm_samples_ns": [
+        753223,
+        704650,
+        842538,
+        743792,
+        773614,
+        731252,
+        701610,
+        805436,
+        730181,
+        704490,
+        777045,
+        733001,
+        810876,
+        729812,
+        700150,
+        761573,
+        797185,
+        773334,
+        802766,
+        715820,
+        754203,
+        734992,
+        705590,
+        798156,
+        726071,
+        763503,
+        771964,
+        700880,
+        796895,
+        725261,
+        686369
+      ]
+    },
+    {
+      "cold_ms": 1.335065,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 2.628619416782086,
+      "error_limit": 0.005,
+      "family": "scan",
+      "max_abs_error": 0.00146484375,
+      "op_name": "cumsum",
+      "package_receipt": {
+        "artifact_hash": "a8e30ed1ab72c5033d9e5e73b6d22d109c254b2685f62a1b8047c1a32e77d3ef",
+        "ir_sha256": {
+          "graph_ir": "ded3f6e3b61b8f72a11df3579db09bb834fc4332f69e27e9ad892c14f7392942",
+          "schedule_ir": "9076d16e6383968ff0534ec362bea0144b5180c09bf81249e8f19e59f53f3598",
+          "target_ir": "a8552fdc780739a7c1a6d733feba84d48cd663bb79ee66b03d3544bb8cf29bec",
+          "tile_ir": "9ed677d0c1e113c329848086672bbeb5d63349c76a7d18cc58e947c136c03497"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.x86.scan.x_o_rows_cols.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "808bfe239c489f814450b47b4281ecd44cafe89282f824d88cdb201e5497bccc",
+          "descriptor_digest": "4acbf1341690abec298f3daf1a16a62546bc5f8899adabc9ce03cdca3ba66455",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_x86_avx512_scan_f32",
+          "geometry": {
+            "grid": null,
+            "policy": "x86_avx512_scan",
+            "workgroup": null
+          },
+          "image_digest": "726071bb7c081e741e315a8f85f308d15011dffc00b92f1d9ec3525aff4e3fa0",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "all",
+            "synchronization": [
+              "return"
+            ]
+          },
+          "provenance": {
+            "cols": 1024,
+            "family": "scan",
+            "inclusive": true,
+            "kind": "sum",
+            "numeric_policy": "f32_inclusive_scan",
+            "output_shape": [
+              256,
+              1024
+            ],
+            "route": "canonical_scheduled_tile_consumer",
+            "rows": 256,
+            "schedule_digest": "9191744535f579241bc0f8612bb3b6fca5b3349b01a2988e34783f9f7d8e3f91",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f32",
+            "tile_ir_digest": "9ed677d0c1e113c329848086672bbeb5d63349c76a7d18cc58e947c136c03497",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Rows",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "Cols",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "x86_64_avx512",
+          "binary_format": "shared_object",
+          "cache_key": "e1f641483d34e1f1bc74a435275e246fbf204641e4c28320caacb1d8e58f6b80",
+          "compile_state": "prepackaged",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [],
+          "entry_points": [
+            {
+              "abi_id": "tessera.x86.scan.x_o_rows_cols.f32.v1",
+              "symbol": "tessera_x86_avx512_scan_f32"
+            }
+          ],
+          "image_digest": "726071bb7c081e741e315a8f85f308d15011dffc00b92f1d9ec3525aff4e3fa0",
+          "payload_digest": "48ed7fc2a9a84dcf71c6576386f5816b3e0cc4354c5cced157615236e0d765a0",
+          "pipeline_name": "tessera-lower-to-x86",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "x86",
+          "target_ir_digest": "a8552fdc780739a7c1a6d733feba84d48cd663bb79ee66b03d3544bb8cf29bec",
+          "toolchain_fingerprint": "c291df59be99551825f5856c07eab3a1339e0ee3a39c7a066d1f46dd07eee67f"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.000248907228560521,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.025271,
+      "warm_median_ms": 0.797815,
+      "warm_samples_ns": [
+        842178,
+        833198,
+        767653,
+        787785,
+        780855,
+        794135,
+        836197,
+        807276,
+        807146,
+        778394,
+        794335,
+        845739,
+        772314,
+        819526,
+        786514,
+        830188,
+        846308,
+        765283,
+        772544,
+        778634,
+        778185,
+        832267,
+        825127,
+        798975,
+        776974,
+        797815,
+        841058,
+        759733,
+        766263,
+        825787,
+        804846
+      ]
+    },
+    {
+      "cold_ms": 1.375578,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 2.3384287388453213,
+      "error_limit": 0.005,
+      "family": "scan",
+      "max_abs_error": 0.0,
+      "op_name": "cummax",
+      "package_receipt": {
+        "artifact_hash": "d90b16e014a72c371f8c2d46729f575f56fc4f6a63e325b6645c930ba9c04f96",
+        "ir_sha256": {
+          "graph_ir": "97f6e9bfeb0418054da01f3fd20dc040bde028847f2673fd6a66de0abb6eaf77",
+          "schedule_ir": "e208ca49075c5ccd12fca3c47697c41b6f075f4ec2af2e62e93b7969d41c5887",
+          "target_ir": "00ba8a88afb2ba7dab485b230a78c7f120a49f517c1174774f195722b43bfbee",
+          "tile_ir": "63b127dda20b61252d6c2a367952ff7d67abf5395a9f8158fed2a8e21e3b2fbd"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.x86.scan.x_o_rows_cols.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "36fe518836af70bc8a12326308a292057cf0f7636c02806c0a46bbc1aa7814ae",
+          "descriptor_digest": "84e054b315ad5402f6268638eb88d46d6f880ee940522de0a3230f0fe4b5707c",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_x86_avx512_scan_f32",
+          "geometry": {
+            "grid": null,
+            "policy": "x86_avx512_scan",
+            "workgroup": null
+          },
+          "image_digest": "ec1f1f02d565b697664dc521d0b0c409f0528be9e95257e52f0646494a007239",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "all",
+            "synchronization": [
+              "return"
+            ]
+          },
+          "provenance": {
+            "cols": 1024,
+            "family": "scan",
+            "inclusive": true,
+            "kind": "max",
+            "numeric_policy": "c_abi_scan",
+            "output_shape": [
+              256,
+              1024
+            ],
+            "route": "canonical_scheduled_tile_consumer",
+            "rows": 256,
+            "schedule_digest": "f9180f0263bcad9dd8ac833ee1ffff63f23d1138075de51e0eef2624dffbd8e7",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f32",
+            "tile_ir_digest": "63b127dda20b61252d6c2a367952ff7d67abf5395a9f8158fed2a8e21e3b2fbd",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Rows",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "Cols",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "x86_64_avx512",
+          "binary_format": "shared_object",
+          "cache_key": "f6c1efcbcaf6158a83d0f1d89d1af47d6896df1fa2f0f21ede1cb9d6ee45b1f6",
+          "compile_state": "prepackaged",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [],
+          "entry_points": [
+            {
+              "abi_id": "tessera.x86.scan.x_o_rows_cols.f32.v1",
+              "symbol": "tessera_x86_avx512_scan_f32"
+            }
+          ],
+          "image_digest": "ec1f1f02d565b697664dc521d0b0c409f0528be9e95257e52f0646494a007239",
+          "payload_digest": "48ed7fc2a9a84dcf71c6576386f5816b3e0cc4354c5cced157615236e0d765a0",
+          "pipeline_name": "tessera-lower-to-x86",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "x86",
+          "target_ir_digest": "00ba8a88afb2ba7dab485b230a78c7f120a49f517c1174774f195722b43bfbee",
+          "toolchain_fingerprint": "c291df59be99551825f5856c07eab3a1339e0ee3a39c7a066d1f46dd07eee67f"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.023002,
+      "warm_median_ms": 0.896821,
+      "warm_samples_ns": [
+        968575,
+        888390,
+        875940,
+        866809,
+        859688,
+        890831,
+        949104,
+        896821,
+        896441,
+        938813,
+        878950,
+        881041,
+        855958,
+        923213,
+        926293,
+        934073,
+        904431,
+        859399,
+        941214,
+        837717,
+        855209,
+        905741,
+        919823,
+        970065,
+        897081,
+        897891,
+        905931,
+        915252,
+        886451,
+        867909,
+        890881
+      ]
+    }
+  ],
+  "scan_selector_evidence": [
+    {
+      "max_abs_difference": 6.103515625e-05,
+      "op_name": "cumsum",
+      "reference_median_ms": 0.103556,
+      "selected_median_ms": 0.052803,
+      "selected_policy": "avx512_hillis_steele_16",
+      "speedup": 1.9611764483078613
+    },
+    {
+      "max_abs_difference": 5.245208740234375e-06,
+      "op_name": "cumprod",
+      "reference_median_ms": 0.153189,
+      "selected_median_ms": 0.083715,
+      "selected_policy": "avx512_hillis_steele_16",
+      "speedup": 1.829887117004121
+    },
+    {
+      "max_abs_difference": 0.0,
+      "op_name": "cummax",
+      "reference_median_ms": 0.115776,
+      "selected_median_ms": 0.119087,
+      "selected_policy": "scalar_recurrence_retained",
+      "speedup": 0.9721967972994533
+    },
+    {
+      "max_abs_difference": 0.0,
+      "op_name": "cummin",
+      "reference_median_ms": 0.142718,
+      "selected_median_ms": 0.142898,
+      "selected_policy": "scalar_recurrence_retained",
+      "speedup": 0.9987403602569666
+    }
+  ],
+  "schema": "tessera.physical_math_evidence.v1",
+  "selector_eligible": false,
+  "storage_dtypes": [
+    "f32"
+  ],
+  "target": "x86",
+  "timing_domain": "synchronized_host_wall",
+  "workload_shape": [
+    256,
+    1024
+  ]
+}

@@ -7,6 +7,16 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## `EVIDENCE-MATH-PACKAGES-2026-09-28`: serialized x86 consumers
+
+Owner EVIDENCE-PACKET-1; sync `EVIDENCE-MATH-PACKAGES-2026-09-28`.
+Follow-up required: the physical-math probes still use explicit runtime
+metadata; gfx1151/gfx1201 package ancestry must be proved independently.
+The x86 package consumer adds no ROCm route or performance evidence.
+No promotion eligibility is granted.
+
+[Evidence](../../../../benchmarks/baselines/evidence_math_packages_20260928/README.md).
+
 ## `COMPILER-NEXT-SLICES-2026-09-28`: implementation and exact-device loops
 
 Owner E2E-REAL-6; shared synchronization key `COMPILER-NEXT-SLICES-2026-09-28`.

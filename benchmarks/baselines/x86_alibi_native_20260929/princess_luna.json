@@ -1,0 +1,55 @@
+{
+  "schema": "tessera.x86_alibi_native_package.v1",
+  "source_commit": "85d24da91f856d0f7d05412e8ad38d25f20e3f5a",
+  "source_dirty": false,
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu_model": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "architecture": "zen5-avx512",
+  "timing_domain": "synchronized_host_wall",
+  "promotion_eligible": false,
+  "samples_per_row": 31,
+  "compiler_sha256": "92ada5d4e8fa3c0f8054d056569ce9fec41a5f291efa2affb197ddf60aacff44",
+  "library_sha256": "b391c9a226fa4ca9909673ad146dd06770457d817c2ada7935b9a64f07d36dbc",
+  "rows": [
+    {
+      "heads": 1,
+      "seq": 1,
+      "image_digest": "9e4ba5972d263b1c59107bda1e0be381f21cad0151d088c4c160ce2a04cd5734",
+      "schedule_digest": "8b792bb61cbdb809acb91b11dfa1ab0a531fcfeb87f427e124e3f9dfa09d8a4d",
+      "cold_package_ms": 122.864822,
+      "warm_package_median_ms": 0.801565,
+      "launch_host_wall_median_ms": 0.728741,
+      "max_abs_error": 0.0
+    },
+    {
+      "heads": 4,
+      "seq": 7,
+      "image_digest": "4c6a16582363f155e2790af5cc9324242093fb94231221540c9b7355afd3c094",
+      "schedule_digest": "bd8a2acf289ed7c347f9145468752e15a568fde371462447dad18f143c091431",
+      "cold_package_ms": 59.833888,
+      "warm_package_median_ms": 0.786355,
+      "launch_host_wall_median_ms": 0.740041,
+      "max_abs_error": 0.0
+    },
+    {
+      "heads": 8,
+      "seq": 33,
+      "image_digest": "548f53d6becc6ad134fd2c6efd4d4567d1f2ac4cc8d29a67a792be920a2c9ae3",
+      "schedule_digest": "bf2bad0941dd8d2db7c6f5b5f402cabd053c4848370bb4723b976717f7f5f73a",
+      "cold_package_ms": 58.139092,
+      "warm_package_median_ms": 0.769353,
+      "launch_host_wall_median_ms": 0.726132,
+      "max_abs_error": 0.0
+    },
+    {
+      "heads": 32,
+      "seq": 128,
+      "image_digest": "e69cf3634f3300043a9de0cf7d52b2b4ee0a83826f5bcae269819db8e0887012",
+      "schedule_digest": "71d9a8cdca85ad2e5593addb159d4ff3cbefbdd89b43c4201d9936e91b30c1e1",
+      "cold_package_ms": 56.982395,
+      "warm_package_median_ms": 0.769884,
+      "launch_host_wall_median_ms": 0.975155,
+      "max_abs_error": 0.0
+    }
+  ]
+}

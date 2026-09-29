@@ -1,0 +1,122 @@
+{
+  "schema": "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1",
+  "target": "nvidia_sm120",
+  "architecture": "sm_120a",
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "host": {
+    "node": "The-Super-Bear",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "wsl": true
+  },
+  "source_revision": "9d1ceec05b1d55bc0d271d16e78b140092fad5ec",
+  "worktree_dirty": true,
+  "method": "two checked native packages; numerical oracle before separate CUDA-event timing",
+  "edge": {
+    "producer": "tessera.rmsnorm",
+    "consumer": "tessera.matmul",
+    "shape": [
+      255,
+      127
+    ],
+    "dtype": "fp16",
+    "layout": "row_major",
+    "buffer_owner": "caller",
+    "lifetime": "producer completion through consumer completion",
+    "aliasing": "disjoint from source, RHS, and final output"
+  },
+  "packages": {
+    "producer": {
+      "compiler_fingerprint": "lower-tile-to-nvidia:bc0bb34ee42eefabe85ff737cc9ea76f91fc840a54fb31d8cf8c2e226d94d18a",
+      "toolchain_fingerprint": "mlir-opt=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;mlir-translate=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=93d6b5b9c8b284a2273b2b2578ac42c59b21c9091e1d35bb63a9b7f9072079dd",
+      "image_digest": "89682cb9799be19ee90deba5e8f2192fe37e21577259b8926d95c72fbd56dfbc",
+      "descriptor_digest": "796fdb765239aefff9f4a124d4361987a1ccbcff9c07cd27f579260a87d66fe5",
+      "schedule_digest": "88f607d56f4cd0584d68e11a37e6495fbb8606ba1d27f756cac6ec06b2010a5c",
+      "tile_digest": "f69de4e08d1c9e8da222b8529027c7f5d794d5fd1f89a9f4e496b707125a3b4b"
+    },
+    "consumer": {
+      "compiler_fingerprint": "lower-tile-to-nvidia:bc0bb34ee42eefabe85ff737cc9ea76f91fc840a54fb31d8cf8c2e226d94d18a",
+      "toolchain_fingerprint": "mlir-opt=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;mlir-translate=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=93d6b5b9c8b284a2273b2b2578ac42c59b21c9091e1d35bb63a9b7f9072079dd",
+      "image_digest": "5c7924c71201080be90bbf8eca47f529edca03f3ac302151a6c332015d2fbc7a",
+      "descriptor_digest": "d77aa2e4fe9df2b15e0a4eef40b2cdc991b2b78e8bf157d522e1013a2a6a656c",
+      "schedule_digest": "d296f5829c8c41825f32c741eef59a494c53b354740c5a2bc006bd7b0b769995",
+      "tile_digest": "776091a90d9f3073ecdcf5349b14930b072eba4d03e841f3eac60bed69749a1b"
+    }
+  },
+  "correctness": {
+    "producer_max_abs_error": 0.0009765625,
+    "consumer_max_abs_error": 6.67572021484375e-06,
+    "producer_execution_kind": "native_gpu",
+    "consumer_execution_kind": "native_gpu",
+    "intermediate_same_allocation": true,
+    "resident_producer_max_abs_error": 0.0009765625,
+    "resident_consumer_max_abs_error": 6.67572021484375e-06,
+    "resident_execution_kind": "native_gpu",
+    "resident_uploads_once_no_intermediate_copy": true
+  },
+  "timing": {
+    "domain": "CUDA events; resident buffers within each repeated package timing",
+    "producer_ms": [
+      0.029007039964199066,
+      0.02876880019903183,
+      0.02898528054356575,
+      0.02877199836075306,
+      0.02881472185254097
+    ],
+    "producer_median_ms": 0.02881472185254097,
+    "producer_cov": 0.0036319314972513314,
+    "consumer_ms": [
+      0.00925792008638382,
+      0.008890080265700817,
+      0.00822640024125576,
+      0.00884735956788063,
+      0.00869567971676588
+    ],
+    "consumer_median_ms": 0.00884735956788063,
+    "consumer_cov": 0.038053304114028755,
+    "synchronous_two_launch_host_wall_ms": 777.1984290156979,
+    "host_wall_is_not_kernel_time": true,
+    "resident_device_stream": {
+      "producer_ms": [
+        0.028781600296497345,
+        0.028827039524912834,
+        0.028826238587498665,
+        0.028818240389227867,
+        0.028804801404476166
+      ],
+      "producer_median_ms": 0.028818240389227867,
+      "producer_cov": 0.0005896245756987153,
+      "consumer_ms": [
+        0.009027520194649696,
+        0.009239519946277142,
+        0.009251520037651062,
+        0.009258720092475414,
+        0.009210879914462566
+      ],
+      "consumer_median_ms": 0.009239519946277142,
+      "consumer_cov": 0.009416221311550106,
+      "domain": "CUDA events; C++ repeated launches on one stream with device-resident buffers"
+    }
+  },
+  "resources": {
+    "producer": {
+      "provenance": "scheduled Tile IR; ptxas --arch=sm_120a -v",
+      "metrics": {
+        "registers_per_thread": 18,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 0
+      }
+    },
+    "consumer": {
+      "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+      "metrics": {
+        "registers_per_thread": 35,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 0
+      }
+    }
+  },
+  "selector_changed": false,
+  "promotion": "none; one SM120 shape family slice, no cross-target promotion"
+}

@@ -10036,3 +10036,12 @@ packed-state tests pass. The shared MoE Graph direct-gather subtype has no
 sm_120 physical consumer; follow-up required before NVIDIA support is claimed.
 Attention with LSE/backward and nvfp4/int4/mx matmul migrations remain open.
 No paged-KV performance claim follows from these correctness tests.
+## RMSNorm to matmul caller-buffer edge -- 2026-09-29
+
+Owner: W1.1 / NVIDIA fragment-producer closure; sync SM120-RMSNORM-MATMUL-EDGE-2026-09-29.
+
+Parity validated on Super-Bear (RTX 5070, sm_120a) for one named Graph->Schedule->Tile package edge: fp16 tessera.rmsnorm -> fp16 tessera.matmul, fp32 output. The package verifies static shapes, dtypes, layouts, alignment, completion order, and non-aliasing. A caller-owned device allocation is passed unchanged between separately compiled packages on the same CUDA stream; the stream is synchronized before the result lease is returned.
+
+The resident slice passed on three shapes: 64x64x64, 512x256x512, and ragged 255x127x129. Max absolute errors were 0/0.00000334, 0.001953125/0.00001526, and 0.00097656/0.00000668 for producer/consumer. At 512x256x512, C++-loop CUDA-event medians were 59.49 us producer and 12.85 us consumer; CV was 0.03% and 2.44%, matching the checked-in packet. Inputs are uploaded once, with no intermediate host copy. The synchronous host wall includes package/runtime overhead and is not kernel time. No selector promotion or fusion claim. See the [case matrix](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260929/README.md) and packets.
+
+Resident CUDA inputs must report the same CUDA Array Interface stream as the explicit launch stream; mismatched, missing, and default/sentinel producer streams fail closed rather than launching without a dependency. Follow-up required: widen to additional dtypes/layouts and dynamic-shape contracts, then migrate the remaining NVIDIA tensor-valued fragment producers. This bounded fp16 slice does not close W1.1.

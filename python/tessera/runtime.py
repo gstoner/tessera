@@ -2892,6 +2892,17 @@ def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
         ctypes.c_size_t,
     ]
     lib.tessera_nvidia_ptx_invoke.restype = ctypes.c_int
+    lib.tessera_nvidia_ptx_invoke_resident.argtypes = [
+        ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int64), ctypes.c_size_t, ctypes.c_void_p,
+    ]
+    lib.tessera_nvidia_ptx_invoke_resident.restype = ctypes.c_int
+    lib.tessera_nvidia_ptx_benchmark_resident.argtypes = [
+        ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int64), ctypes.c_size_t, ctypes.c_void_p,
+        ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_float),
+    ]
+    lib.tessera_nvidia_ptx_benchmark_resident.restype = ctypes.c_int
     lib.tessera_nvidia_ptx_invoke_v2.argtypes = [
         ctypes.c_char_p,
         ctypes.POINTER(ctypes.c_void_p),
@@ -2946,6 +2957,29 @@ def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
     return lib
 
 
+def _validate_nvidia_cuda_buffer_streams(
+    cuda_interfaces: list[Mapping[str, Any]],
+    launch_stream: Any,
+) -> None:
+    """Require every resident CUDA buffer to be ordered on the launch stream.
+
+    The resident bridge does not import producer-library stream machinery, so
+    it accepts only buffers whose CUDA Array Interface stream exactly matches
+    the caller-owned launch stream. This fails closed for default/sentinel,
+    missing, or different producer streams.
+    """
+    if launch_stream is None:
+        raise RuntimeError("resident SM120 packages require an explicit CUDA stream")
+    expected = int(launch_stream)
+    for index, interface in enumerate(cuda_interfaces):
+        producer_stream = interface.get("stream")
+        if type(producer_stream) is not int or producer_stream != expected:
+            raise RuntimeError(
+                "resident SM120 CUDA buffer producer stream must match the "
+                f"explicit launch stream (buffer {index})"
+            )
+
+
 def _submit_nvidia_sm120_native(
     image: NativeImageArtifact,
     descriptor: LaunchDescriptor,
@@ -2954,7 +2988,6 @@ def _submit_nvidia_sm120_native(
     stream: Any,
 ) -> Any:
     """Submit a compiler-owned SM120 PTX image through the shipped bridge."""
-    del stream  # The current bridge uses the CUDA primary-context default stream.
     dynamic_local_memory_bytes = (
         descriptor.resolve_dynamic_local_memory_bytes(scalars)
     )
@@ -3094,6 +3127,38 @@ def _submit_nvidia_sm120_native(
 
     ordered_buffers = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     raw = [buffers[item.name] for item in ordered_buffers]
+    cuda_interfaces = [getattr(value, "__cuda_array_interface__", None) for value in raw]
+    if any(interface is not None for interface in cuda_interfaces):
+        if (not all(isinstance(interface, Mapping) for interface in cuda_interfaces)
+                or stream is None):
+            raise RuntimeError("resident SM120 packages require all CUDA buffers and an explicit stream")
+        is_rmsnorm = entry.startswith("tessera_tile_norm_")
+        is_matmul = entry.startswith("nvidia_sm120_scheduled_matmul_") and "_fused_" not in entry
+        if not (is_rmsnorm or is_matmul):
+            raise RuntimeError("resident SM120 launch is limited to RMSNorm and scheduled matmul")
+        _validate_nvidia_cuda_buffer_streams(
+            [cast(Mapping[str, Any], interface) for interface in cuda_interfaces],
+            stream,
+        )
+        addresses = [
+            int(cast(Mapping[str, Any], interface)["data"][0])
+            for interface in cuda_interfaces
+        ]
+        c_buffers = (ctypes.c_void_p * len(addresses))(*addresses)
+        ordered_scalars = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+        dimensions = tuple(int(cast(int, scalars[item.name])) for item in ordered_scalars)
+        dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
+        rc = lib.tessera_nvidia_ptx_invoke_resident(
+            entry.encode(), c_buffers, len(addresses), dims, len(dimensions),
+            ctypes.c_void_p(int(stream)),
+        )
+        if rc:
+            raise RuntimeError(
+                f"SM120 resident descriptor invoke returned {_nvidia_ptx_failure(lib, rc)}"
+            )
+        return next(
+            buffers[item.name] for item in ordered_buffers if item.direction == "output"
+        )
     try:
         addresses = [int(value.ctypes.data) for value in raw]
     except (AttributeError, TypeError, ValueError) as exc:
@@ -7368,6 +7433,49 @@ def _nvidia_native_descriptor_device_latency(
         )
     if rc:
         raise RuntimeError(f"canonical NVIDIA descriptor benchmark rc={rc}")
+    return float(latency.value)
+
+
+def _nvidia_native_descriptor_resident_device_latency(
+    image: Any,
+    descriptor: Any,
+    args: Mapping[str, Any],
+    *,
+    stream: int,
+    warmup: int = 10,
+    reps: int = 100,
+) -> float:
+    """CUDA-event timing from a C++ launch loop over resident device buffers."""
+    if image.target != "nvidia_sm120" or not stream or reps <= 0 or warmup < 0:
+        raise ValueError("resident timing requires SM120, a CUDA stream, and positive repetitions")
+    values, contracts, scalars = _split_native_arguments(descriptor, args)
+    descriptor.validate_invocation(image, contracts, scalars)
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    entry = descriptor.entry_symbol
+    if _register_nvidia_ptx(lib, entry, image.payload.decode("ascii")) != 0:
+        raise RuntimeError(f"PTX register failed for resident entry {entry}")
+    ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    interfaces = [getattr(values[item.name], "__cuda_array_interface__", None)
+                  for item in ordered]
+    if not all(isinstance(interface, Mapping) for interface in interfaces):
+        raise ValueError("resident timing requires CUDA device buffers for every binding")
+    pointers = [
+        int(cast(Mapping[str, Any], interface)["data"][0])
+        for interface in interfaces
+    ]
+    addresses = (ctypes.c_void_p * len(pointers))(*pointers)
+    ordered_scalars = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+    dimensions = tuple(int(cast(int, scalars[item.name])) for item in ordered_scalars)
+    dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
+    latency = ctypes.c_float()
+    rc = lib.tessera_nvidia_ptx_benchmark_resident(
+        entry.encode(), addresses, len(pointers), dims, len(dimensions),
+        ctypes.c_void_p(int(stream)), int(warmup), int(reps), ctypes.byref(latency),
+    )
+    if rc:
+        raise RuntimeError(f"resident descriptor benchmark rc={_nvidia_ptx_failure(lib, rc)}")
     return float(latency.value)
 
 
@@ -34558,6 +34666,33 @@ def _native_buffer_value(value: Any) -> tuple[Any, BufferArgument]:
         else:
             layout = "strided"
     address = 0
+    cuda_interface = getattr(value, "__cuda_array_interface__", None)
+    if isinstance(cuda_interface, Mapping):
+        data = cuda_interface.get("data")
+        if (not isinstance(data, tuple) or not data or not isinstance(data[0], int)
+                or data[0] <= 0):
+            raise ArtifactContractError(
+                "E_LAUNCH_BINDING_MISMATCH",
+                "CUDA buffers need a non-null __cuda_array_interface__ data pointer",
+            )
+        import numpy as np
+        cuda_dtype = np.dtype(cuda_interface.get("typestr"))
+        cuda_shape = tuple(int(dim) for dim in cuda_interface.get("shape", ()))
+        strides = cuda_interface.get("strides")
+        if len(cuda_shape) == 2 and strides is not None:
+            layout = "col_major" if tuple(strides) == (
+                cuda_dtype.itemsize, cuda_dtype.itemsize * cuda_shape[0]
+            ) else "row_major" if tuple(strides) == (
+                cuda_dtype.itemsize * cuda_shape[1], cuda_dtype.itemsize
+            ) else "strided"
+        else:
+            layout = "row_major"
+        address = int(data[0])
+        alignment = address & -address
+        return value, BufferArgument(
+            dtype=str(cuda_dtype), shape=cuda_shape, layout=layout,
+            address_alignment=alignment,
+        )
     array_interface = getattr(value, "__array_interface__", None)
     if isinstance(array_interface, Mapping):
         data = array_interface.get("data")

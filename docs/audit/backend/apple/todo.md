@@ -10240,3 +10240,8 @@ numerical/invalid-counter test pass. Follow-up required: `ntk_rope` and
 results. Philox likewise lacks a public compiled JIT binding. The new MoE
 direct-gather subtype has no Apple physical schedule. No JIT or performance
 promotion is claimed.
+
+
+## NVIDIA resident tensor-edge sibling assessment -- 2026-09-29
+
+Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to apple: the change adds an SM120-only CUDA-device-buffer launch path for NVIDIA RMSNorm and scheduled matmul. No sibling compiler, runtime ABI, physical schedule, or execution claim changed; this does not transfer NVIDIA evidence to apple.

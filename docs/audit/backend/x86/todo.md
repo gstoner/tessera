@@ -6650,3 +6650,8 @@ body. The remaining `cohort2`, `breadth` and elementwise constructors require
 native migrations. The shared MoE direct-gather Graph subtype does not change
 x86 execution; parity requires its own physical consumer and proof. See the
 [timing packet](../../../../benchmarks/baselines/e2e_real6_x86_trunc_cache_20260928/README.md).
+
+
+## NVIDIA resident tensor-edge sibling assessment -- 2026-09-29
+
+Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to x86: the change adds an SM120-only CUDA-device-buffer launch path for NVIDIA RMSNorm and scheduled matmul. No sibling compiler, runtime ABI, physical schedule, or execution claim changed; this does not transfer NVIDIA evidence to x86.

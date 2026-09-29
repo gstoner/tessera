@@ -12475,3 +12475,8 @@ Paged KV still admits the bounded static physical-page envelope; its packet
 measures host launch wall time, not GPU kernel time. WSL HIP events on this
 host are invalid and `/dev/kfd` counters are unavailable. Broader layouts and
 exact kernel attribution remain open.
+
+
+## NVIDIA resident tensor-edge sibling assessment -- 2026-09-29
+
+Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to rocm: the change adds an SM120-only CUDA-device-buffer launch path for NVIDIA RMSNorm and scheduled matmul. No sibling compiler, runtime ABI, physical schedule, or execution claim changed; this does not transfer NVIDIA evidence to rocm.

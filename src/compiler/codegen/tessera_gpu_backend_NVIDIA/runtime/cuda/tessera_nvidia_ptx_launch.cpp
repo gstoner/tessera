@@ -2354,6 +2354,54 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
     return 5;                                        // unknown kernel ABI
 }
 
+
+// Resident package launch seam for the bounded RMSNorm -> scheduled matmul edge.
+// Unlike invokeImpl this accepts CUDA device addresses, performs no allocation
+// or copies, and queues both kernels on the caller-owned stream.
+int invokeResident(const char* name, void** buffers, size_t nbuf,
+                  const int64_t* dims, size_t ndim, void* stream) {
+    if (!name || !buffers || !dims || !stream || !ensureContext()) return 5;
+    std::lock_guard<std::mutex> lock(g_mu);
+    CUfunction fn = getFunctionLocked(name);
+    if (!fn) return g_ptx.count(name) ? 3 : 4;
+    if (std::strncmp(name, kTileNormPrefix, std::strlen(kTileNormPrefix)) == 0) {
+        if (nbuf != 2 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||
+            dims[0] >= (1LL << 31) || dims[1] >= (1LL << 31) ||
+            dims[0] > (1LL << 31) / dims[1]) return 5;
+        CUdeviceptr x = reinterpret_cast<CUdeviceptr>(buffers[0]);
+        CUdeviceptr y = reinterpret_cast<CUdeviceptr>(buffers[1]);
+        long long rows = dims[0], columns = dims[1];
+        void* args[] = {&x, &y, &rows, &columns};
+        const unsigned grid = static_cast<unsigned>((rows + 127) / 128);
+        return cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0,
+                                   static_cast<CUstream>(stream), args, 0),
+                    "cuLaunchKernel(resident rmsnorm)") ? 0 : 3;
+    }
+    if (std::strncmp(name, kScheduledSm120MatmulPrefix,
+                     std::strlen(kScheduledSm120MatmulPrefix)) == 0 &&
+        std::strstr(name, "_fused_") == nullptr) {
+        if (nbuf != 3 || ndim != 3 || dims[0] <= 0 || dims[1] <= 0 ||
+            dims[2] <= 0 || dims[0] >= (1LL << 31) ||
+            dims[1] >= (1LL << 31) || dims[2] >= (1LL << 31)) return 5;
+        const long long m = dims[0], n = dims[1], k = dims[2];
+        CUdeviceptr a = reinterpret_cast<CUdeviceptr>(buffers[0]);
+        CUdeviceptr b = reinterpret_cast<CUdeviceptr>(buffers[1]);
+        CUdeviceptr d = reinterpret_cast<CUdeviceptr>(buffers[2]);
+        long long mArg = m, nArg = n, kArg = k;
+        void* args[] = {&a, &b, &d, &mArg, &nArg, &kArg};
+        const bool macro = std::strstr(name, "_macro_kernel") != nullptr;
+        const unsigned tileM = macro ? 32 : 16;
+        const unsigned tileN = macro ? 32 : 8;
+        const unsigned threads = macro ? 128 : 32;
+        const unsigned gx = static_cast<unsigned>((n + tileN - 1) / tileN);
+        const unsigned gy = static_cast<unsigned>((m + tileM - 1) / tileM);
+        return cuOk(cuLaunchKernel(fn, gx, gy, 1, threads, 1, 1, 0,
+                                   static_cast<CUstream>(stream), args, 0),
+                    "cuLaunchKernel(resident matmul)") ? 0 : 3;
+    }
+    return 5;
+}
+
 // tsrGpuLauncherFn: the backend-agnostic seam. Maps a launch rc to a TsrStatus,
 // declining (NOT_FOUND) for non-nvidia targets or unbridged kernels so the core
 // runtime still reports honestly (Decision #21).
@@ -2394,6 +2442,65 @@ int tessera_nvidia_ptx_register(const char* kernel_name, const char* ptx) {
         g_funcs.erase(kernel_name);
     }
     return 0;
+}
+
+int tessera_nvidia_ptx_invoke_resident(const char* kernel_name, void** device_buffers, size_t num_buffers, const int64_t* dims, size_t num_dims, void* stream);
+
+int tessera_nvidia_ptx_benchmark_resident(const char* kernel_name,
+                                          void** device_buffers,
+                                          size_t num_buffers,
+                                          const int64_t* dims,
+                                          size_t num_dims,
+                                          void* stream,
+                                          int warmup, int repetitions,
+                                          float* latency_ms) {
+    if (!kernel_name || !device_buffers || !dims || !stream || !latency_ms ||
+        warmup < 0 || repetitions <= 0) return 5;
+    for (int i = 0; i < warmup; ++i) {
+        int rc = invokeResident(kernel_name, device_buffers, num_buffers,
+                                dims, num_dims, stream);
+        if (rc) return rc;
+    }
+    if (!cuOk(cuStreamSynchronize(static_cast<CUstream>(stream)),
+              "cuStreamSynchronize(resident warmup)")) return 3;
+    CUevent start = nullptr, stop = nullptr;
+    int rc = 0;
+    if (!cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+        !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") ||
+        !cuOk(cuEventRecord(start, static_cast<CUstream>(stream)),
+              "cuEventRecord(resident start)")) {
+        rc = 3;
+    }
+    for (int i = 0; !rc && i < repetitions; ++i)
+        rc = invokeResident(kernel_name, device_buffers, num_buffers,
+                            dims, num_dims, stream);
+    if (!rc && (!cuOk(cuEventRecord(stop, static_cast<CUstream>(stream)),
+                       "cuEventRecord(resident stop)") ||
+                !cuOk(cuEventSynchronize(stop),
+                       "cuEventSynchronize(resident stop)")))
+        rc = 3;
+    if (!rc) {
+        float total = 0.0f;
+        if (!cuOk(cuEventElapsedTime(&total, start, stop),
+                  "cuEventElapsedTime(resident)"))
+            rc = 3;
+        else
+            *latency_ms = total / static_cast<float>(repetitions);
+    }
+    if (start) cuEventDestroy(start);
+    if (stop) cuEventDestroy(stop);
+    return rc;
+}
+
+int tessera_nvidia_ptx_invoke_resident(const char* kernel_name,
+                                       void** device_buffers,
+                                       size_t num_buffers,
+                                       const int64_t* dims,
+                                       size_t num_dims,
+                                       void* stream) {
+    g_last_error.clear();
+    return invokeResident(kernel_name, device_buffers, num_buffers, dims,
+                          num_dims, stream);
 }
 
 int tessera_nvidia_ptx_invoke(const char* kernel_name, void** buffers,

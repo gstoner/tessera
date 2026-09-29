@@ -9,6 +9,17 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## `FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: traced residual and typed-loop proof
+
+Owners FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / W1.1.
+Shared tensor arithmetic tracing and strict public persistent-tape capture
+are covered by WSL frontend regressions. The persistent device-tape API has
+CUDA/HIP consumers only; no x86 residual-execution or timing claim follows.
+The NVIDIA fragment ABI is not applicable.
+No selector or performance promotion.
+
+[Evidence](../../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md).
+
 ## `EVIDENCE-MATH-PACKAGES-2026-09-28`: serialized x86 consumers
 
 Owner EVIDENCE-PACKET-1; sync `EVIDENCE-MATH-PACKAGES-2026-09-28`.

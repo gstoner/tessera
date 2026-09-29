@@ -1526,7 +1526,7 @@ class JitFn:
         request = self.differentiation_request
         if request is None or request.mode != "reverse":
             raise TesseraJitError("persistent device tape requires reverse autodiff")
-        module = self._specialized_autodiff_module(args, kwargs)
+        module = self._traced_autodiff_module(args, kwargs)
         source = re.sub(r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
         return materialize_persistent_tape(source, compiler=compiler, llvm_bin=llvm_bin, backend=backend, chip=chip)
 

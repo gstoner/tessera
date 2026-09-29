@@ -1,0 +1,103 @@
+{
+  "work_items": [
+    "FRONTEND-IR-MEDIUM-1",
+    "AD-RESIDUAL-EVAL-1"
+  ],
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "width": 17,
+  "compiler_boundary": "public_jit_to_mlir_split_products",
+  "frontend_authority": "tracer",
+  "promotion_eligible": false,
+  "timing_domain": "synchronized_host_wall",
+  "timing_scope": "backward allocation, native launch and synchronization; readback excluded",
+  "graph_sha256": "5303ab5bd54ef3536ebcfeb27ef193781b2363688453fcbb28808653b9423af2",
+  "lineage_digest": "b13070aa94452fd33b824f5e96809e2cf646b31ca2039eb6490deda2bb9927b1",
+  "compiler_digest": "09c54f380f49d904d12c7306809a161487fb06fe63525c14d02bad8b88651cfa",
+  "llvm_digest": "6a18ad10ba826cdb2709263b31e7e9b504e963ce7014a2e2935e57983ab8bb5d",
+  "forward_binding_digest": "80ba6027247d00a6c23859067167114bc2774db285bcd3329501aa7b5bd256c9",
+  "backward_binding_digest": "c1b87f4aa2ecd964125730fd0d16495263ed8843f1ec409cc550e22adae72c68",
+  "forward_abi": {
+    "entry": "residual",
+    "inputs": [
+      "tensor<17xf32>",
+      "tensor<17xf32>"
+    ],
+    "primal_inputs": 2,
+    "primal_results": 1,
+    "residual_sources": [],
+    "results": [
+      "tensor<17xf32>"
+    ],
+    "role": "forward",
+    "schema": 1
+  },
+  "backward_abi": {
+    "entry": "residual__bwd",
+    "inputs": [
+      "tensor<17xf32>",
+      "tensor<17xf32>",
+      "tensor<17xf32>"
+    ],
+    "primal_inputs": 2,
+    "primal_results": 1,
+    "residual_sources": [],
+    "results": [
+      "tensor<17xf32>",
+      "tensor<17xf32>"
+    ],
+    "role": "backward",
+    "schema": 1
+  },
+  "residual_bytes": 0,
+  "saved_input_bytes": 136,
+  "caller_mutation_isolated": true,
+  "closed_frame_refused": true,
+  "samples": [
+    {
+      "backward_ns": 1441273,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 225214,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 206144,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 186993,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 185623,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 222763,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 190173,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 181153,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 181602,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 189853,
+      "max_abs_error": 0.0
+    },
+    {
+      "backward_ns": 176553,
+      "max_abs_error": 0.0
+    }
+  ],
+  "backward_median_ms": 0.189853
+}

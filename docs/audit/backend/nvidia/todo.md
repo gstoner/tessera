@@ -8,6 +8,18 @@ last_updated: 2026-09-28
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `FRONTEND-RESIDUAL-FRAGMENT-2026-09-28`: traced residual and typed-loop proof
+
+Owners FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / W1.1.
+Parity validated on Super-Bear sm_120: public traced cubic-residual native
+AD products preserve input snapshots across mutation and repeated backward.
+Four typed accumulator-loop rows (zero through four K panels) pass NumPy;
+the existing nine fragment tests and FileCheck pass. The two tensor-valued
+TileIRLoweringPass producers remain follow-up required.
+No selector or performance promotion.
+
+[Evidence](../../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md).
+
 ## `EVIDENCE-MATH-PACKAGES-2026-09-28`: serialized x86 consumers
 
 Owner EVIDENCE-PACKET-1; sync `EVIDENCE-MATH-PACKAGES-2026-09-28`.

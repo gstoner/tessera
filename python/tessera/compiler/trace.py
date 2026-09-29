@@ -102,6 +102,27 @@ class Tracer:
     # Excluded from eq/hash (a numpy array is unhashable).
     value: Any = field(default=None, compare=False, repr=False)
 
+    # Tensor arithmetic syntax must reach the same canonical op hooks as
+    # explicit tessera.ops calls. Scalar constants retain their separate
+    # admission contract; do not infer or invent an SSA constant here.
+    def __add__(self, other):
+        if not isinstance(other, Tracer):
+            return NotImplemented
+        from tessera import ops
+        return ops.add(self, other)
+
+    def __sub__(self, other):
+        if not isinstance(other, Tracer):
+            return NotImplemented
+        from tessera import ops
+        return ops.sub(self, other)
+
+    def __mul__(self, other):
+        if not isinstance(other, Tracer):
+            return NotImplemented
+        from tessera import ops
+        return ops.mul(self, other)
+
     def __bool__(self):
         # A raw Python ``if tracer:`` / ``while tracer:`` would silently take one
         # path (a frozen dataclass is truthy) — the classic abstract-trace hazard.

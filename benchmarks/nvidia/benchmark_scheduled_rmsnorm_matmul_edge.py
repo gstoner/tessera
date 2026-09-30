@@ -29,18 +29,33 @@ from tessera.compiler.graph_ir import (  # noqa: E402
 )
 
 
-def _modules(m: int, k: int, n: int, *, dynamic_n: bool = False,
-             dynamic_k: bool = False):
-    a = IRType(f"tensor<{m}x{k}xf16>", (str(m), str(k)), "fp16")
+def _numpy_storage_dtype(dtype: str) -> np.dtype[Any]:
+    if dtype == "fp16":
+        return np.dtype(np.float16)
+    if dtype == "bf16":
+        import ml_dtypes
+        return np.dtype(ml_dtypes.bfloat16)
+    raise ValueError(f"unsupported RMSNorm-matmul storage dtype: {dtype}")
+
+
+def _modules(
+    m: int, k: int, n: int, *, dtype: str = "fp16",
+    dynamic_n: bool = False, dynamic_k: bool = False,
+):
+    element = {"fp16": "f16", "bf16": "bf16"}.get(dtype)
+    if element is None:
+        raise ValueError(f"unsupported RMSNorm-matmul storage dtype: {dtype}")
+    a = IRType(f"tensor<{m}x{k}x{element}>", (str(m), str(k)), dtype)
     consumer_a = (
-        IRType(f"tensor<{m}x?xf16>", (str(m), "?"), "fp16")
+        IRType(f"tensor<{m}x?x{element}>", (str(m), "?"), dtype)
         if dynamic_k else a
     )
     b = (
-        IRType(f"tensor<{k}x?xf16>", (str(k), "?"), "fp16")
+        IRType(f"tensor<{k}x?x{element}>", (str(k), "?"), dtype)
         if dynamic_n else
-        IRType(f"tensor<?x{n}xf16>", ("?", str(n)), "fp16")
-        if dynamic_k else IRType(f"tensor<{k}x{n}xf16>", (str(k), str(n)), "fp16")
+        IRType(f"tensor<?x{n}x{element}>", ("?", str(n)), dtype)
+        if dynamic_k else
+        IRType(f"tensor<{k}x{n}x{element}>", (str(k), str(n)), dtype)
     )
     out = (
         IRType(f"tensor<{m}x?xf32>", (str(m), "?"), "fp32")
@@ -90,9 +105,13 @@ def _version(cmd: list[str]) -> str:
 def _dynamic_n_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
                          bound_n: int, active_n: int) -> int:
     rng = np.random.default_rng(0x5A17 + m + k + bound_n + active_n)
-    source = np.ascontiguousarray(rng.normal(0.0, 0.25, size=(m, k)).astype(np.float16))
+    storage_dtype = _numpy_storage_dtype(args.dtype)
+    norm_tolerance, matmul_tolerance = (
+        (2e-3, 2e-4) if args.dtype == "fp16" else (3e-2, 3e-2)
+    )
+    source = np.ascontiguousarray(rng.normal(0.0, 0.25, size=(m, k)).astype(storage_dtype))
     weights = np.asfortranarray(
-        rng.normal(0.0, 0.25, size=(k, active_n)).astype(np.float16)
+        rng.normal(0.0, 0.25, size=(k, active_n)).astype(storage_dtype)
     )
     resident = program.execute_resident(source, weights)
     try:
@@ -103,13 +122,13 @@ def _dynamic_n_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
             source_f32 / np.sqrt(
                 np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5
             )
-        ).astype(np.float16)
+        ).astype(storage_dtype)
         norm_error = float(np.max(np.abs(
             edge.astype(np.float32) - norm_reference.astype(np.float32)
         )))
         matmul_reference = edge.astype(np.float32) @ weights.astype(np.float32)
         matmul_error = float(np.max(np.abs(output - matmul_reference)))
-        if norm_error > 2e-3 or matmul_error > 2e-4:
+        if norm_error > norm_tolerance or matmul_error > matmul_tolerance:
             raise RuntimeError(
                 f"resident dynamic-N oracle mismatch: norm={norm_error}, matmul={matmul_error}"
             )
@@ -166,7 +185,7 @@ def _dynamic_n_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
             "method": "bounded dynamic N; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
             "edge": {
                 "producer": "tessera.rmsnorm", "consumer": "tessera.matmul",
-                "storage": "fp16", "layout": "row_major intermediate",
+                "storage": args.dtype, "layout": "row_major intermediate",
                 "static_mk": [m, k], "dynamic_n_bound": bound_n,
                 "measured_active_n": active_n,
                 "same_allocation": True, "same_stream": True,
@@ -211,14 +230,18 @@ def _dynamic_n_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
 def _dynamic_m_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
                          n: int, first_active_m: int) -> int:
     rng = np.random.default_rng(0x5A17 + m + k + n)
+    storage_dtype = _numpy_storage_dtype(args.dtype)
+    norm_tolerance, matmul_tolerance = (
+        (2e-3, 2e-4) if args.dtype == "fp16" else (3e-2, 3e-2)
+    )
     weights = np.asfortranarray(
-        rng.normal(0.0, 0.25, size=(k, n)).astype(np.float16)
+        rng.normal(0.0, 0.25, size=(k, n)).astype(storage_dtype)
     )
     cases: list[dict[str, Any]] = []
     package_digest = program.consumer.image.image_digest
     for active_m in sorted(set((first_active_m, m))):
         source = np.ascontiguousarray(
-            rng.normal(0.0, 0.25, size=(active_m, k)).astype(np.float16)
+            rng.normal(0.0, 0.25, size=(active_m, k)).astype(storage_dtype)
         )
         resident = program.execute_resident(source, weights)
         try:
@@ -229,14 +252,14 @@ def _dynamic_m_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
                 source_f32 / np.sqrt(
                     np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5
                 )
-            ).astype(np.float16)
+            ).astype(storage_dtype)
             active_edge = edge[:active_m]
             norm_error = float(np.max(np.abs(
                 active_edge.astype(np.float32) - norm_reference.astype(np.float32)
             )))
             matmul_reference = active_edge.astype(np.float32) @ weights.astype(np.float32)
             matmul_error = float(np.max(np.abs(output - matmul_reference)))
-            if norm_error > 2e-3 or matmul_error > 2e-4:
+            if norm_error > norm_tolerance or matmul_error > matmul_tolerance:
                 raise RuntimeError(
                     f"resident dynamic-M oracle mismatch: norm={norm_error}, matmul={matmul_error}"
                 )
@@ -316,7 +339,7 @@ def _dynamic_m_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
         "method": "bounded dynamic M; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
         "edge": {
             "producer": "tessera.rmsnorm", "consumer": "tessera.matmul",
-            "storage": "fp16", "layout": "row_major intermediate",
+            "storage": args.dtype, "layout": "row_major intermediate",
             "dynamic_m_bound": m, "static_nk": [n, k],
             "measured_active_m": [row["active_m"] for row in cases],
             "same_allocation": True, "same_stream": True,
@@ -344,6 +367,10 @@ def _dynamic_m_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
 def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
                          bound_k: int, n: int) -> int:
     rng = np.random.default_rng(0x5A17 + m + bound_k + n)
+    storage_dtype = _numpy_storage_dtype(args.dtype)
+    norm_tolerance, matmul_tolerance = (
+        (2e-3, 2e-4) if args.dtype == "fp16" else (3e-2, 3e-2)
+    )
     cases: list[dict[str, Any]] = []
     package_digest = program.consumer.image.image_digest
     if args.dynamic_mnk:
@@ -367,15 +394,15 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
         else:
             active_m, active_k = active_shape
             active_n = n
-        source_backing = np.zeros((active_m, active_k + 3), dtype=np.float16)
+        source_backing = np.zeros((active_m, active_k + 3), dtype=storage_dtype)
         source_backing[:, :active_k] = rng.normal(
             0.0, 0.25, size=(active_m, active_k)
-        ).astype(np.float16)
+        ).astype(storage_dtype)
         source = source_backing[:, :active_k]
-        weights_backing = np.zeros((bound_k + 5, n + 3), dtype=np.float16, order="F")
+        weights_backing = np.zeros((bound_k + 5, n + 3), dtype=storage_dtype, order="F")
         weights_backing[:active_k, :active_n] = rng.normal(
             0.0, 0.25, size=(active_k, active_n)
-        ).astype(np.float16)
+        ).astype(storage_dtype)
         weights = weights_backing[:active_k, :active_n]
         resident = program.execute_resident(source, weights)
         try:
@@ -386,13 +413,13 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
                 source_f32 / np.sqrt(
                     np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5
                 )
-            ).astype(np.float16)
+            ).astype(storage_dtype)
             norm_error = float(np.max(np.abs(
                 edge.astype(np.float32) - norm_reference.astype(np.float32)
             )))
             matmul_reference = edge.astype(np.float32) @ weights.astype(np.float32)
             matmul_error = float(np.max(np.abs(output - matmul_reference)))
-            if norm_error > 2e-3 or matmul_error > 2e-4:
+            if norm_error > norm_tolerance or matmul_error > matmul_tolerance:
                 raise RuntimeError(
                     f"resident dynamic-K oracle mismatch: norm={norm_error}, matmul={matmul_error}"
                 )
@@ -477,7 +504,7 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
         ) + "; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
         "edge": {
             "producer": "tessera.rmsnorm", "consumer": "tessera.matmul",
-            "storage": "fp16", "layout": "compact row_major intermediate",
+            "storage": args.dtype, "layout": "compact row_major intermediate",
             "shape_bounds_mnk": [m, n, bound_k],
             "dynamic_m_bound": m if args.dynamic_mk or args.dynamic_mnk else None,
             "dynamic_n_bound": n if args.dynamic_mnk else None,
@@ -507,6 +534,7 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dtype", choices=("fp16", "bf16"), default="fp16")
     parser.add_argument("--m", type=int, default=512)
     parser.add_argument("--k", type=int, default=256)
     parser.add_argument("--n", type=int, default=512, help="static N or dynamic-N capacity bound")
@@ -560,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--active-m requires --dynamic-m")
         active_n = n
     producer_module, consumer_module = _modules(
-        m, k, n, dynamic_n=args.dynamic_n,
+        m, k, n, dtype=args.dtype, dynamic_n=args.dynamic_n,
         dynamic_k=args.dynamic_k
     )
     if args.dynamic_m:
@@ -602,9 +630,13 @@ def main(argv: list[str] | None = None) -> int:
         return _dynamic_k_benchmark(args, program, m, k, n)
 
     rng = np.random.default_rng(0x5A17 + m + k + n)
-    source = np.ascontiguousarray(rng.normal(0.0, 0.25, size=(m, k)).astype(np.float16))
-    weights = np.asfortranarray(rng.normal(0.0, 0.25, size=(k, n)).astype(np.float16))
-    intermediate = np.empty((m, k), dtype=np.float16, order="C")
+    storage_dtype = _numpy_storage_dtype(args.dtype)
+    norm_tolerance, matmul_tolerance = (
+        (2e-3, 2e-4) if args.dtype == "fp16" else (3e-2, 3e-2)
+    )
+    source = np.ascontiguousarray(rng.normal(0.0, 0.25, size=(m, k)).astype(storage_dtype))
+    weights = np.asfortranarray(rng.normal(0.0, 0.25, size=(k, n)).astype(storage_dtype))
+    intermediate = np.empty((m, k), dtype=storage_dtype, order="C")
     output = np.empty((m, n), dtype=np.float32, order="C")
 
     wall_start = time.perf_counter()
@@ -620,13 +652,13 @@ def main(argv: list[str] | None = None) -> int:
     source_f32 = source.astype(np.float32)
     norm_reference = (
         source_f32 / np.sqrt(np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5)
-    ).astype(np.float16)
+    ).astype(storage_dtype)
     norm_error = float(np.max(np.abs(intermediate.astype(np.float32) - norm_reference.astype(np.float32))))
-    if norm_error > 2e-3:
+    if norm_error > norm_tolerance:
         raise RuntimeError(f"RMSNorm producer disagrees with oracle: max_abs_error={norm_error}")
     matmul_reference = intermediate.astype(np.float32) @ weights.astype(np.float32)
     matmul_error = float(np.max(np.abs(output - matmul_reference)))
-    if matmul_error > 2e-4:
+    if matmul_error > matmul_tolerance:
         raise RuntimeError(f"matmul consumer disagrees with oracle: max_abs_error={matmul_error}")
 
     producer_args = {
@@ -667,7 +699,7 @@ def main(argv: list[str] | None = None) -> int:
     resident_matmul_error = float(np.max(np.abs(
         resident_output - (resident_edge.astype(np.float32) @ weights.astype(np.float32))
     )))
-    if resident_norm_error > 2e-3 or resident_matmul_error > 2e-4:
+    if resident_norm_error > norm_tolerance or resident_matmul_error > matmul_tolerance:
         resident.close()
         raise RuntimeError(
             "resident package chain disagrees with numerical oracle: "
@@ -733,7 +765,7 @@ def main(argv: list[str] | None = None) -> int:
             "producer": "tessera.rmsnorm",
             "consumer": "tessera.matmul",
             "shape": [m, k],
-            "dtype": "fp16",
+            "dtype": args.dtype,
             "layout": "row_major",
             "buffer_owner": "caller",
             "lifetime": "producer completion through consumer completion",

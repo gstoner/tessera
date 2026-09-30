@@ -201,6 +201,138 @@ def _dynamic_n_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
     return 0
 
 
+def _dynamic_m_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
+                         n: int, first_active_m: int) -> int:
+    rng = np.random.default_rng(0x5A17 + m + k + n)
+    weights = np.asfortranarray(
+        rng.normal(0.0, 0.25, size=(k, n)).astype(np.float16)
+    )
+    cases: list[dict[str, Any]] = []
+    package_digest = program.consumer.image.image_digest
+    for active_m in sorted(set((first_active_m, m))):
+        source = np.ascontiguousarray(
+            rng.normal(0.0, 0.25, size=(active_m, k)).astype(np.float16)
+        )
+        resident = program.execute_resident(source, weights)
+        try:
+            edge = resident.intermediate.numpy()
+            output = resident.output.numpy()
+            source_f32 = source.astype(np.float32)
+            norm_reference = (
+                source_f32 / np.sqrt(
+                    np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5
+                )
+            ).astype(np.float16)
+            active_edge = edge[:active_m]
+            norm_error = float(np.max(np.abs(
+                active_edge.astype(np.float32) - norm_reference.astype(np.float32)
+            )))
+            matmul_reference = active_edge.astype(np.float32) @ weights.astype(np.float32)
+            matmul_error = float(np.max(np.abs(output - matmul_reference)))
+            if norm_error > 2e-3 or matmul_error > 2e-4:
+                raise RuntimeError(
+                    f"resident dynamic-M oracle mismatch: norm={norm_error}, matmul={matmul_error}"
+                )
+            session = resident.device_session
+            device_source, device_rhs = session._buffers[0], session._buffers[1]
+            consumer_edge = resident.intermediate.view(
+                0, (active_m, k), resident.intermediate.dtype, layout="strided"
+            )
+            if consumer_edge.ptr != resident.intermediate.ptr:
+                raise RuntimeError("dynamic-M consumer edge copied the producer allocation")
+            producer_args = {
+                program.producer_input_name: device_source,
+                program.intermediate_name: resident.intermediate,
+                "Rows": active_m, "Columns": k,
+            }
+            consumer_args = {
+                program.consumer_input_name: consumer_edge,
+                program.consumer_rhs_name: device_rhs,
+                program.output_name: resident.output,
+                "M": active_m, "N": n, "K": k,
+                "LDA": k, "LDB": k, "LDD": n,
+            }
+            producer_samples = [
+                rt._nvidia_native_descriptor_resident_device_latency(
+                    program.producer.image, program.producer.descriptor, producer_args,
+                    stream=session.stream, warmup=args.warmup, reps=args.reps,
+                ) for _ in range(args.samples)
+            ]
+            consumer_samples = [
+                rt._nvidia_native_descriptor_resident_device_latency(
+                    program.consumer.image, program.consumer.descriptor, consumer_args,
+                    stream=session.stream, warmup=args.warmup, reps=args.reps,
+                ) for _ in range(args.samples)
+            ]
+            cases.append({
+                "active_m": active_m,
+                "output_shape": list(output.shape),
+                "correctness": {
+                    "producer_max_abs_error": norm_error,
+                    "consumer_max_abs_error": matmul_error,
+                    "producer_execution_kind": resident.producer_receipt.get("execution_kind"),
+                    "consumer_execution_kind": resident.consumer_receipt.get("execution_kind"),
+                    "same_intermediate_pointer": consumer_edge.ptr == resident.intermediate.ptr,
+                    "image_digest_stable": program.consumer.image.image_digest == package_digest,
+                },
+                "timing": {
+                    "domain": "CUDA events around repeated native launches on resident buffers; producer and consumer measured separately",
+                    "producer_ms": producer_samples,
+                    "producer_median_ms": statistics.median(producer_samples),
+                    "producer_cov": _cv(producer_samples),
+                    "consumer_ms": consumer_samples,
+                    "consumer_median_ms": statistics.median(consumer_samples),
+                    "consumer_cov": _cv(consumer_samples),
+                },
+            })
+        finally:
+            resident.close()
+    packet: dict[str, Any] = {
+        "schema": "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1",
+        "target": "nvidia_sm120",
+        "architecture": program.consumer.image.architecture,
+        "device": _version([
+            "nvidia-smi", "--query-gpu=name,compute_cap", "--format=csv,noheader",
+        ]),
+        "host": {
+            "node": platform.node(), "platform": platform.platform(),
+            "wsl": "microsoft" in platform.release().lower(),
+        },
+        "source_revision": subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+            text=True, check=True,
+        ).stdout.strip(),
+        "worktree_dirty": bool(subprocess.run(
+            ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True,
+            text=True, check=True,
+        ).stdout.strip()),
+        "method": "bounded dynamic M; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
+        "edge": {
+            "producer": "tessera.rmsnorm", "consumer": "tessera.matmul",
+            "storage": "fp16", "layout": "row_major intermediate",
+            "dynamic_m_bound": m, "static_nk": [n, k],
+            "measured_active_m": [row["active_m"] for row in cases],
+            "same_allocation": True, "same_stream": True,
+            "rhs_layout": "strided ABI over compact column-major storage",
+            "output_layout": "strided ABI over compact row-major storage",
+        },
+        "packages": {
+            "producer_image": program.producer.image.image_digest,
+            "consumer_image": program.consumer.image.image_digest,
+            "consumer_descriptor": program.consumer.descriptor.descriptor_digest,
+            "consumer_schedule": program.consumer.descriptor.provenance["schedule_digest"],
+            "consumer_tile": program.consumer.descriptor.provenance["tile_ir_digest"],
+        },
+        "cases": cases,
+        "selector_changed": False,
+        "promotion": "none; bounded dynamic-M SM120 envelope",
+    }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(packet, indent=2) + chr(10))
+    print(json.dumps(packet, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--m", type=int, default=512)
@@ -208,38 +340,66 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--n", type=int, default=512, help="static N or dynamic-N capacity bound")
     parser.add_argument("--active-n", type=int, help="active N when --dynamic-n is set (default: n//2)")
     parser.add_argument("--dynamic-n", action="store_true", help="package one bounded dynamic-N consumer")
+    parser.add_argument("--active-m", type=int, help="first active M when --dynamic-m is set (second case uses bound M)")
+    parser.add_argument("--dynamic-m", action="store_true", help="package one bounded dynamic-M producer/consumer edge")
     parser.add_argument("--warmup", type=int, default=30)
     parser.add_argument("--reps", type=int, default=500)
     parser.add_argument("--samples", type=int, default=7)
-    parser.add_argument(
-        "--output", type=Path,
-        default=ROOT / "benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260929/sm120.json",
-    )
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     m, k, n = args.m, args.k, args.n
+    if args.dynamic_m and args.dynamic_n:
+        parser.error("dynamic M and dynamic N are currently separate package envelopes")
+    if args.output is None:
+        output_name = (
+            "dynamic_m_sm120.json" if args.dynamic_m
+            else "dynamic_n_sm120.json" if args.dynamic_n
+            else "sm120.json"
+        )
+        args.output = ROOT / "benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930" / output_name
     if min(m, k, n) <= 0 or args.reps <= 0 or args.samples < 3:
         parser.error("dimensions/repetitions must be positive and samples must be at least three")
 
-    if args.dynamic_n:
+    if args.dynamic_m:
+        first_active_m = args.active_m if args.active_m is not None else max(1, m // 2)
+        if first_active_m <= 0 or first_active_m > m:
+            parser.error("active M must be positive and no greater than the dynamic-M bound")
+        if args.active_n is not None:
+            parser.error("--active-n cannot be combined with --dynamic-m")
+        active_n = n
+    elif args.dynamic_n:
+        if args.active_m is not None:
+            parser.error("--active-m requires --dynamic-m")
         active_n = args.active_n if args.active_n is not None else max(1, n // 2)
         if active_n <= 0 or active_n > n:
             parser.error("active N must be positive and no greater than the dynamic-N bound")
     else:
         if args.active_n is not None:
             parser.error("--active-n requires --dynamic-n")
+        if args.active_m is not None:
+            parser.error("--active-m requires --dynamic-m")
         active_n = n
     producer_module, consumer_module = _modules(m, k, n, dynamic_n=args.dynamic_n)
-    producer_ir = scheduled_kernel.lower_scheduled_kernel(
-        producer_module, target="nvidia_sm120",
-    )
-    consumer_ir = scheduled_matmul.lower_scheduled_matmul(
-        consumer_module, target="nvidia_sm120",
-    )
-    program = nvidia_native.package_scheduled_rmsnorm_matmul(
-        producer_ir, consumer_ir,
-        pipeline_name="tessera-lower-to-nvidia-sm120",
-    )
+    if args.dynamic_m:
+        program = nvidia_native.package_scheduled_rmsnorm_matmul(
+            producer_module, consumer_module,
+            pipeline_name="tessera-lower-to-nvidia-sm120",
+            dynamic_m_bound=m,
+        )
+    else:
+        producer_ir = scheduled_kernel.lower_scheduled_kernel(
+            producer_module, target="nvidia_sm120",
+        )
+        consumer_ir = scheduled_matmul.lower_scheduled_matmul(
+            consumer_module, target="nvidia_sm120",
+        )
+        program = nvidia_native.package_scheduled_rmsnorm_matmul(
+            producer_ir, consumer_ir,
+            pipeline_name="tessera-lower-to-nvidia-sm120",
+        )
     program.validate()
+    if args.dynamic_m:
+        return _dynamic_m_benchmark(args, program, m, k, n, first_active_m)
     if args.dynamic_n:
         return _dynamic_n_benchmark(args, program, m, k, n, active_n)
 

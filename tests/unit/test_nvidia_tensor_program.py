@@ -5,7 +5,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tessera.compiler import nvidia_native, scheduled_kernel, scheduled_matmul
+from tessera.compiler import nvidia_native, scheduled_matmul
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera import runtime as rt
 
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="none"):
+def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="none", dynamic_m=False):
     m, k, n = 16, 16, 16 if dynamic_n else 8
     elem = "f16" if dtype == "fp16" else "bf16"
     a = IRType(f"tensor<{m}x{k}x{elem}>", (str(m), str(k)), dtype)
@@ -58,14 +58,10 @@ def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="non
         )],
         return_values=["%result"],
     )])
-    producer = scheduled_kernel.lower_scheduled_kernel(
-        producer_module, target="nvidia_sm120",
-    )
-    consumer = scheduled_matmul.lower_scheduled_matmul(
-        consumer_module, target="nvidia_sm120",
-    )
     return nvidia_native.package_scheduled_rmsnorm_matmul(
-        producer, consumer, pipeline_name="tessera-lower-to-nvidia-sm120",
+        producer_module, consumer_module,
+        pipeline_name="tessera-lower-to-nvidia-sm120",
+        dynamic_m_bound=m if dynamic_m else None,
     )
 
 
@@ -109,6 +105,61 @@ def test_sm120_rmsnorm_tensor_edge_rejects_shape_drift_and_aliasing():
     weights = np.asfortranarray(np.ones((program.k, program.n), dtype=np.float16))
     with pytest.raises(ValueError, match="must not alias"):
         program.execute(source, weights, intermediate=source)
+
+
+def test_sm120_rmsnorm_tensor_edge_projects_bounded_dynamic_m():
+    for dtype in ("fp16", "bf16"):
+        program = _program(dtype, dynamic_m=True)
+        program.validate()
+        assert program.dynamic_m
+        assert not program.dynamic_n
+        assert program.consumer.descriptor.provenance["dynamic_shape_bounds"] == [
+            program.m, program.n, program.k,
+        ]
+        assert program.producer.descriptor.provenance["dynamic_m_bound"] == program.m
+        for name in (program.producer_input_name, program.intermediate_name):
+            shape, dynamic = program._shape_bound(program.producer, name, 2)
+            assert shape == (program.m, program.k)
+            assert dynamic == (True, False)
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_sm120_rmsnorm_tensor_edge_reuses_dynamic_m_package_on_exact_device(dtype):
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires exact SM120 device execution")
+    import ml_dtypes
+
+    storage_dtype = np.float16 if dtype == "fp16" else np.dtype(ml_dtypes.bfloat16)
+    program = _program(dtype, dynamic_m=True)
+    rng = np.random.default_rng(17017)
+    rhs = np.asfortranarray(
+        rng.normal(0.0, 0.25, (program.k, program.n)).astype(storage_dtype)
+    )
+    image_digest = program.consumer.image.image_digest
+    for active_m in (7, program.m):
+        source = np.ascontiguousarray(
+            rng.normal(0.0, 0.25, (active_m, program.k)).astype(storage_dtype)
+        )
+        with program.execute_resident(source, rhs) as result:
+            edge = result.intermediate.numpy()
+            output = result.output.numpy()
+            x32 = source.astype(np.float32)
+            expected_edge = (
+                x32 / np.sqrt(np.mean(x32 * x32, axis=-1, keepdims=True) + 1e-5)
+            ).astype(storage_dtype)
+            expected_output = expected_edge.astype(np.float32) @ rhs.astype(np.float32)
+            if program.consumer.descriptor.provenance["epilogue"]["output"] == "f16":
+                expected_output = expected_output.astype(np.float16)
+            np.testing.assert_allclose(edge[:active_m], expected_edge, rtol=0.0, atol=2e-3)
+            np.testing.assert_allclose(output, expected_output, rtol=0.0, atol=2e-3)
+            assert result.output.shape == (active_m, program.n)
+            assert result.producer_receipt["execution_kind"] == "native_gpu"
+            assert result.consumer_receipt["execution_kind"] == "native_gpu"
+        assert program.consumer.image.image_digest == image_digest
+    with pytest.raises(ValueError, match="within the MxK bound"):
+        program.execute_resident(
+            np.ones((program.m + 1, program.k), dtype=storage_dtype), rhs
+        )
 
 
 def test_sm120_rmsnorm_tensor_edge_uses_same_resident_device_buffer(monkeypatch):

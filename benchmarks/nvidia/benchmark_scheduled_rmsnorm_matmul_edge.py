@@ -347,12 +347,16 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
     cases: list[dict[str, Any]] = []
     package_digest = program.consumer.image.image_digest
     for active_k in sorted(set((max(1, bound_k // 2), max(1, (3 * bound_k) // 4), bound_k))):
-        source = np.ascontiguousarray(
-            rng.normal(0.0, 0.25, size=(m, active_k)).astype(np.float16)
-        )
-        weights = np.asfortranarray(
-            rng.normal(0.0, 0.25, size=(active_k, n)).astype(np.float16)
-        )
+        source_backing = np.zeros((m, active_k + 3), dtype=np.float16)
+        source_backing[:, :active_k] = rng.normal(
+            0.0, 0.25, size=(m, active_k)
+        ).astype(np.float16)
+        source = source_backing[:, :active_k]
+        weights_backing = np.zeros((bound_k + 5, n), dtype=np.float16, order="F")
+        weights_backing[:active_k, :] = rng.normal(
+            0.0, 0.25, size=(active_k, n)
+        ).astype(np.float16)
+        weights = weights_backing[:active_k, :]
         resident = program.execute_resident(source, weights)
         try:
             edge = resident.intermediate.numpy()
@@ -452,7 +456,8 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
             "static_mn": [m, n], "dynamic_k_bound": bound_k,
             "measured_active_k": [row["active_k"] for row in cases],
             "same_allocation": True, "same_stream": True,
-            "rhs_layout": "compact column-major storage",
+            "rhs_layout": "padded host column-major view packed to compact column-major device storage",
+            "host_input_layout": "padded row-major source and padded column-major RHS views; pack/upload excluded from device-event stage timings",
             "output_layout": "compact row-major storage",
         },
         "packages": {

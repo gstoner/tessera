@@ -6374,3 +6374,33 @@ Remaining: dynamic K combined with M/N; broader dtype/layout coverage; and follo
 Evidence: [gfx1201 dynamic-K method and packet](../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/README.md); [gfx1201 BF16 packet](../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/dynamic_k_bf16.json); [sm_120 packet](../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/dynamic_k_sm120.json).
 
 <!-- entry-fields:end -->
+
+### 2026-09-30 — padded host-view ingress on the resident edge
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#891](https://github.com/gstoner/tessera/pull/891); sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+
+Outcome: The paired resident RMSNorm → matmul route accepts padded and sliced
+host views, normalizing the source to compact row-major storage and RHS to
+compact column-major storage before device upload. CUDA staging allocations
+remain owned until a successful stream synchronization. This keeps device
+leading dimensions aligned with the checked ABI and makes host packing explicit.
+The gfx1201 path already normalized host views and now has exact-device
+regressions that exercise them.
+
+Remaining: physical noncompact device layouts are outside this ingress contract.
+Combined dynamic extents and broader producer/layout coverage remain open.
+Apple and x86 have no consumer of this CUDA resident ABI; their execution
+obligations remain independent. No performance claim or route promotion.
+
+Evidence: Tajasaurus RX 9070 XT (gfx1201) passed 20/20 resident tests, including
+padded source/RHS bounded-K fp16 and bf16 cases. Super-Bear RTX 5070 (sm_120)
+passed 27/27 tensor-program tests, including both dtypes, padded views, numerical
+oracle checks, stable images, and same-allocation producer/consumer execution.
+A host-free fake-runtime regression verifies CUDA upload staging survives failed
+synchronization and is released only after successful synchronization. Device
+event timings keep producer and consumer separate and exclude host packing and
+upload; the new gfx1201 probe showed severe variance at K=192/256 and is
+diagnostic only.
+<!-- entry-fields:end -->

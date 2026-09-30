@@ -449,20 +449,24 @@ class NVIDIANativeTensorProgram:
             or active_m > self.m
             or (active_m != self.m and not self.dynamic_m)
             or source.dtype != storage_dtype
-            or not source.flags.c_contiguous
         ):
             raise ValueError(
-                f"RMSNorm source must be contiguous {self.dtype} within the MxK bound"
+                f"RMSNorm source must be {self.dtype} within the MxK bound"
             )
         active_n = self._validate_rhs_shape(tuple(right.shape), active_k=active_k)
-        if right.dtype != storage_dtype or not right.flags.f_contiguous:
-            raise ValueError(f"matmul RHS must be column-major {self.dtype} within its KxN bound")
+        if right.dtype != storage_dtype:
+            raise ValueError(f"matmul RHS must have dtype {self.dtype} within its KxN bound")
 
+        # Host views may be padded or sliced. Normalize them to the compact
+        # row-major producer input and column-major matmul RHS required by the
+        # native ABI; never advertise caller strides as device pitches.
+        packed_source = np.array(source, copy=True, order="C")
+        packed_rhs = np.array(right, copy=True, order="F")
         session = NvidiaDeviceSession()
         try:
-            device_source = session.upload(source)
+            device_source = session.upload(packed_source)
             device_rhs = session.upload(
-                right, layout="strided"
+                packed_rhs, layout="strided"
                 if (self.dynamic_n or self.dynamic_m or self.dynamic_k) else "col_major"
             )
             edge_shape = (

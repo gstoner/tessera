@@ -12513,3 +12513,14 @@ Owner: E2E-REAL-6 / W1.1; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026
 Parity validated for the bounded dynamic-K contract on Tajasaurus RX 9070 XT (gfx1201): the public `from_text` route packages Graph → Schedule → Tile producer and consumer once, keeps the intermediate resident, checks fp16 and bf16 storage at active K prefixes 128/192/256 under bound 256, and compares outputs to an independent fp32 oracle. The owning resident RMSNorm/matmul tests pass 20/20. Producer and consumer are timed separately with HIP events. Packet medians have high variation at K=128 and K=256; they support stage attribution only, not a performance claim or selector promotion. This slice admits one dynamic extent per package. Dynamic M+K/N+K, other storage/layouts, and gfx1151 parity remain follow-up required.
 
 [Packet and method](../../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/README.md); fp16 and [BF16 samples](../../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/dynamic_k_bf16.json).
+
+
+## `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`: padded host-view ingress on the resident edge
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+The gfx1201 resident session already packs host inputs into compact ABI
+allocations. Exact RX 9070 XT tests now pass padded source and RHS views for
+fp16/bf16 bounded-K prefixes, preserving numerical results and allocation
+reuse. A correctness-gated benchmark exercises these inputs and reports device
+stages separately; host staging is outside those event timings. High timing
+variance is diagnostic only.

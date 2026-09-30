@@ -605,8 +605,14 @@ def test_gfx1201_resident_rmsnorm_to_bounded_dynamic_k_reuses_capacity(storage_d
         addresses = session.run(warmup=0, iterations=1)["buffer_addresses"]
         epsilon = float(session._norm.provenance["epsilon"])
         for active_k in (13, 21, k_bound):
-            x = x_bound[:, :active_k].copy()
-            rhs = rhs_bound[:active_k, :].copy()
+            x_backing = np.zeros((m, active_k + 3), dtype=storage_np_dtype)
+            x_backing[:, :active_k] = x_bound[:, :active_k]
+            x = x_backing[:, :active_k]
+            rhs_backing = np.zeros((k_bound + 5, n + 3), dtype=storage_np_dtype)
+            rhs_backing[:active_k, :n] = rhs_bound[:active_k, :]
+            rhs = rhs_backing[:active_k, :n]
+            assert not x.flags.c_contiguous
+            assert not rhs.flags.c_contiguous
             result = session.run(warmup=1, iterations=3, x=x, rhs=rhs)
             x32 = x.astype(np.float32)
             normalized = (

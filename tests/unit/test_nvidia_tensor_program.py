@@ -444,10 +444,16 @@ def test_sm120_rmsnorm_tensor_edge_reuses_bounded_dynamic_k_package_on_exact_dev
     bound_rhs = rng.normal(0.0, 0.25, (program.k, program.n)).astype(storage_dtype)
     image_digest = program.consumer.image.image_digest
     for active_k in (7, 11, program.k):
-        source = np.ascontiguousarray(
-            rng.normal(0.0, 0.25, (program.m, active_k)).astype(storage_dtype)
-        )
-        rhs = np.asfortranarray(bound_rhs[:active_k, :])
+        source_backing = np.zeros((program.m, active_k + 3), dtype=storage_dtype)
+        source_backing[:, :active_k] = rng.normal(
+            0.0, 0.25, (program.m, active_k)
+        ).astype(storage_dtype)
+        source = source_backing[:, :active_k]
+        rhs_backing = np.zeros((program.k + 5, program.n), dtype=storage_dtype, order="F")
+        rhs_backing[:active_k, :] = bound_rhs[:active_k, :]
+        rhs = rhs_backing[:active_k, :]
+        assert not source.flags.c_contiguous
+        assert not rhs.flags.f_contiguous
         with program.execute_resident(source, rhs) as result:
             edge = result.intermediate.numpy()
             output = result.output.numpy()
@@ -463,3 +469,37 @@ def test_sm120_rmsnorm_tensor_edge_reuses_bounded_dynamic_k_package_on_exact_dev
     rhs = np.asfortranarray(np.ones((program.k + 1, program.n), dtype=storage_dtype))
     with pytest.raises(ValueError, match="within the MxK bound"):
         program.execute_resident(source, rhs)
+
+
+def test_nvidia_device_upload_retains_host_staging_until_successful_sync():
+    from types import SimpleNamespace
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+
+    class FakeLibrary:
+        sync_status = 1
+
+        def tessera_nvidia_device_upload(self, device, host, nbytes, stream):
+            return 0
+
+        def tessera_nvidia_stream_synchronize(self, stream):
+            return self.sync_status
+
+    session = NvidiaDeviceSession.__new__(NvidiaDeviceSession)
+    session.lib = FakeLibrary()
+    session.stream = 1
+    session._upload_staging = []
+    session.empty = lambda shape, dtype, **kwargs: SimpleNamespace(
+        ptr=2, nbytes=int(np.prod(shape)) * np.dtype(dtype).itemsize,
+        shape=shape, dtype=dtype, layout=kwargs.get("layout", "row_major"),
+        storage_order=kwargs.get("storage_order", "row_major"),
+    )
+    backing = np.arange(24, dtype=np.float32).reshape(4, 6)
+    view = backing[:, :4]
+    session.upload(view)
+    assert len(session._upload_staging) == 1
+    np.testing.assert_array_equal(session._upload_staging[0], view)
+    assert session.synchronize() == 1
+    assert len(session._upload_staging) == 1
+    session.lib.sync_status = 0
+    assert session.synchronize() == 0
+    assert not session._upload_staging

@@ -96,8 +96,12 @@ with package_graph_rmsnorm_matmul(
     elif args.dynamic_k:
         active_ks = (max(1, k // 2), max(1, (3 * k) // 4), k)
         for active_k in active_ks:
-            active_x = x[:, :active_k].copy()
-            active_rhs = rhs[:active_k, :].copy()
+            active_x_backing = np.zeros((m, active_k + 3), dtype=storage_dtype)
+            active_x_backing[:, :active_k] = x[:, :active_k]
+            active_x = active_x_backing[:, :active_k]
+            active_rhs_backing = np.zeros((k + 5, n + 3), dtype=storage_dtype)
+            active_rhs_backing[:active_k, :n] = rhs[:active_k, :]
+            active_rhs = active_rhs_backing[:active_k, :n]
             active_x32 = active_x.astype(np.float32)
             active_normalized = (
                 active_x32 / np.sqrt(

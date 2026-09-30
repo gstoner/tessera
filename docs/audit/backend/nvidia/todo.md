@@ -10094,3 +10094,14 @@ Owner: E2E-REAL-6 / W1.1; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026
 Parity validated on Super-Bear (RTX 5070, sm_120): fp16 and bf16 exact-device tests trace public `from_text` RMSNorm/matmul Graphs, apply the bounded dynamic-K package contract, and execute K=7, 11, and 16 through Graph → Schedule → Tile. A correctness-gated fp16 packet additionally checks M=128, K bound=256, N=256 at active K=128/192/256. Producer and consumer are timed separately on the same resident allocation and stream; image identity is stable. Producer timing is stable, but consumer CUDA-event CV remains 45–54%, so the timing is diagnostic and supports no speedup claim or route promotion. gfx1201 has its own architecture-specific packet and 20/20 owning tests; no physical schedule or timing is transferred. Dynamic M+K/N+K, broader layouts/storage, and remaining W1.1 producer sites remain open.
 
 [SM120 packet](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/dynamic_k_sm120.json).
+
+
+## `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`: padded host-view ingress on the resident edge
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+The sm_120 resident RMSNorm → matmul route now accepts padded/sliced host views,
+packs them to compact row-major producer and column-major RHS storage before
+upload, and holds async upload staging memory until successful stream sync.
+Exact RTX 5070 tests cover fp16/bf16, bounded K prefixes, numerical parity,
+stable package images and resident intermediate reuse. Producer and consumer
+device-event timings exclude packing/upload. No performance promotion.

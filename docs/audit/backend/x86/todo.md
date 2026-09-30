@@ -6682,3 +6682,11 @@ The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accu
 Owner: E2E-REAL-6; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
 
 Not applicable to x86: this slice extends the architecture-specific CUDA and HIP resident RMSNorm/matmul launch descriptors and per-backend packages. It changes no shared Graph/Schedule operation or x86 ABI and includes no Zen 5 execution claim.
+
+
+## `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`: padded host-view ingress on the resident edge
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+Not applicable to x86 code generation or runtime: the change covers CUDA
+resident-session staging and the existing gfx1201 resident ingress path. No
+AVX-512 package or host-input ABI changed; no x86 parity or timing claim follows.

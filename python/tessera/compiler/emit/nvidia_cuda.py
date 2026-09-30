@@ -3556,6 +3556,9 @@ class NvidiaDeviceSession:
             raise RuntimeError("CUDA stream creation failed")
         self.stream = int(stream.value or 0)
         self._buffers: list[CudaOwnedDeviceBuffer] = []
+        # Uploads use an asynchronous stream. Keep host staging allocations alive
+        # until stream synchronization proves the DMA has completed.
+        self._upload_staging: list[Any] = []
 
     def _bind(self) -> None:
         lib = self.lib
@@ -3609,12 +3612,6 @@ class NvidiaDeviceSession:
         if layout not in {"row_major", "col_major", "strided"}:
             raise ValueError("CUDA upload layout must be row_major, col_major, or strided")
         source = np.asarray(array)
-        if layout == "strided" and not (
-                source.flags.c_contiguous or source.flags.f_contiguous):
-            raise ValueError(
-                "CUDA strided upload requires compact row-major or column-major "
-                "storage; padded or sliced views are not supported"
-            )
         storage_order = (
             "col_major" if layout == "col_major" or
             (layout == "strided" and source.ndim == 2 and source.flags.f_contiguous
@@ -3627,6 +3624,7 @@ class NvidiaDeviceSession:
                 ctypes.c_void_p(out.ptr), _ptr(host), out.nbytes,
                 ctypes.c_void_p(self.stream)) != 0:
             raise RuntimeError("CUDA asynchronous upload failed")
+        self._upload_staging.append(host)
         return out
 
     def download(self, buffer: CudaOwnedDeviceBuffer) -> Any:
@@ -3642,8 +3640,11 @@ class NvidiaDeviceSession:
         return host
 
     def synchronize(self) -> int:
-        return int(self.lib.tessera_nvidia_stream_synchronize(
+        status = int(self.lib.tessera_nvidia_stream_synchronize(
             ctypes.c_void_p(self.stream)))
+        if status == 0:
+            self._upload_staging.clear()
+        return status
 
     def gemm(self, a: CudaOwnedDeviceBuffer, b: CudaOwnedDeviceBuffer,
              out: CudaOwnedDeviceBuffer, dtype_key: str) -> None:

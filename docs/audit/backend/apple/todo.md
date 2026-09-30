@@ -10272,3 +10272,12 @@ The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accu
 Owner: E2E-REAL-6; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
 
 Not applicable to Apple: this slice extends the architecture-specific CUDA and HIP resident RMSNorm/matmul launch descriptors and per-backend packages. It changes no shared Graph/Schedule operation or Metal ABI, and includes no Apple execution claim. Apple JIT execution gaps remain tracked separately.
+
+
+## `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`: padded host-view ingress on the resident edge
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+Not applicable to Apple code generation or runtime: the new ingress normalization
+is in the CUDA resident-session uploader, while Apple has no consumer of this
+NVIDIA resident ABI. Apple JIT execution obligations remain open; no Metal
+parity follows.

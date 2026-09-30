@@ -283,7 +283,9 @@ and every Apple CPU example launch is oracle-checked. Accelerator examples
 remain artifact claims; exact-device execution stays backend-owned.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [NVIDIA bounded dynamic-M resident RMSNorm-to-matmul](INTEGRATED_COMPILER_LOG.md#2026-09-30--nvidia-bounded-dynamic-m-resident-rmsnorm-to-matmul)
+- Current slice (2026-09-30, sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`): the paired resident RMSNorm → matmul packages now reuse one Graph → Schedule → Tile image for bounded K prefixes on gfx1201 and sm_120. Public `from_text` traces, fp16/bf16 storage, numerical parity and producer/consumer residency are proved on each owning GPU. Event variance remains diagnostic; dynamic K with M/N and broader layout coverage remain open. [Evidence](../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/README.md) and [SM120 packet](../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/dynamic_k_sm120.json).
+
+- Latest: [bounded dynamic-K resident RMSNorm-to-matmul](INTEGRATED_COMPILER_LOG.md#2026-09-30--bounded-dynamic-k-resident-rmsnorm-to-matmul)
 
 ### W1.1
 

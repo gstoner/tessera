@@ -14,14 +14,12 @@ Not applicable to Apple: the new bf16 Schedule/Tile and runtime ABI are gated to
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
-Follow-up required for Apple: shared tracing now preserves output shape/dtype and public `matmul(output_dtype="fp32")` expresses the f16-storage/f32-accumulation Graph contract. Schedule projection accepts the traced function attributes. No Mac compiler/runtime execution was performed in this slice, so Metal route support is not inferred; `target_verify`, `ntk_rope`, Philox JIT, and Apple consumer parity remain open. NVIDIA/CUDA and ROCm/HIP packages and physical schedules do not transfer to Metal.
+Follow-up required for Apple: shared tracing now preserves output shape/dtype and public `matmul(output_dtype="fp32")` expresses the f16-storage/f32-accumulation Graph contract. Schedule projection accepts the traced function attributes. No Mac compiler/runtime execution was performed in this slice, so Metal route support is not inferred; `target_verify`, `ntk_rope`, Philox JIT, and Apple consumer parity remain open. NVIDIA/CUDA and ROCm/HIP packages and physical schedules do not transfer to Metal. The later bounded dynamic-M extension is gfx1201-only; no Apple execution proof is implied.
 
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 
 Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.
-Not applicable to Apple: this slice changes the NVIDIA CUDA resident PTX
-bridge and its device-buffer layout metadata. No shared Graph/Schedule
-operation, Apple ABI, Metal schedule, or Apple execution claim changed.
+Not applicable to Apple: the referenced SM120 slice changes the NVIDIA CUDA resident PTX bridge and its device-buffer layout metadata. No shared Graph/Schedule operation, Apple ABI, Metal schedule, or Apple execution claim changed.
 
 # Apple compiler, exact-device, and performance plan
 

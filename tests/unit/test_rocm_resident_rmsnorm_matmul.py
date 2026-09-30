@@ -318,6 +318,101 @@ def test_gfx1201_public_bf16_dynamic_n_resident_edge_reuses_package():
             )
 
 
+
+
+@pytest.mark.compiler_route
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires native compiler")
+@pytest.mark.parametrize("storage_dtype", ["fp16", "bf16"])
+def test_gfx1201_dynamic_m_graph_projects_to_bounded_schedule(storage_dtype):
+    """The compiler lane checks dynamic-M projection without ROCm libraries."""
+    from tessera.compiler.resident_rocm_norm_matmul import _with_bounded_dynamic_m
+    from tessera.compiler.scheduled_matmul import lower_scheduled_matmul
+
+    m_bound, k, n = 8, 32, 16
+    _, graph = _public_rmsnorm_matmul_graphs(
+        m_bound, k, n, storage_dtype=storage_dtype
+    )
+    if storage_dtype == "bf16":
+        import ml_dtypes
+        storage_np_dtype = np.dtype(ml_dtypes.bfloat16)
+    else:
+        storage_np_dtype = np.dtype(np.float16)
+    graph = _with_bounded_dynamic_m(
+        graph, np.zeros((m_bound, k), dtype=storage_np_dtype), m_bound
+    )
+    artifact = lower_scheduled_matmul(graph, target="rocm_gfx1201")
+    assert artifact.dynamic_m
+    assert not artifact.dynamic_n and not artifact.dynamic_k
+    assert (artifact.m, artifact.k, artifact.n) == (m_bound, k, n)
+    assert "schedule.matmul" in artifact.schedule_ir
+    assert "tile.matmul_kernel" in artifact.tile_ir
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+@pytest.mark.parametrize("storage_dtype", ["fp16", "bf16"])
+def test_gfx1201_public_dynamic_m_resident_edge_reuses_package(storage_dtype):
+    """Reuse max-capacity norm/matmul packages for shorter row prefixes."""
+    from tessera import runtime as rt
+    from tessera.compiler.resident_rocm_norm_matmul import package_graph_rmsnorm_matmul
+
+    assert rt._rocm_live_arch() == rt._rocm_chip() == "gfx1201"
+    m_bound, k, n = 8, 32, 16
+    norm_graph, matmul_graph = _public_rmsnorm_matmul_graphs(
+        m_bound, k, n, storage_dtype=storage_dtype
+    )
+    if storage_dtype == "bf16":
+        import ml_dtypes
+        storage_np_dtype = np.dtype(ml_dtypes.bfloat16)
+        tolerance = 3e-2
+    else:
+        storage_np_dtype = np.dtype(np.float16)
+        tolerance = 2e-3
+    rng = np.random.default_rng(1201_64008)
+    x_bound = rng.normal(0.0, 0.5, (m_bound, k)).astype(storage_np_dtype)
+    rhs = rng.normal(0.0, 0.25, (k, n)).astype(storage_np_dtype)
+    with package_graph_rmsnorm_matmul(
+        norm_graph, matmul_graph, x_bound, rhs, dynamic_m_bound=m_bound
+    ) as session:
+        assert session._dynamic_m and not session._dynamic_n
+        assert any(
+            guard.binding == session._gemm_a and guard.dimension == 0
+            and guard.predicate == "max" and guard.value == m_bound
+            for guard in session._gemm.shape_guards
+        )
+        assert any(
+            guard.binding == session._norm_input and guard.dimension == 0
+            and guard.predicate == "max" and guard.value == m_bound
+            for guard in session._norm.shape_guards
+        )
+        addresses = session.run(warmup=0, iterations=1)["buffer_addresses"]
+        epsilon = float(session._norm.provenance["epsilon"])
+        for active_m in (3, m_bound):
+            x = x_bound[:active_m].copy()
+            result = session.run(warmup=1, iterations=3, x=x)
+            x32 = x.astype(np.float32)
+            normalized = (
+                x32 / np.sqrt(np.mean(x32 * x32, axis=-1, keepdims=True) + epsilon)
+            ).astype(storage_np_dtype)
+            expected = normalized.astype(np.float32) @ rhs.astype(np.float32)
+            assert result["buffer_addresses"] == addresses
+            assert result["producer_median_ms"] > 0
+            assert result["consumer_median_ms"] > 0
+            assert all(output.shape == (active_m, n) for output in result["outputs"])
+            for output in result["outputs"]:
+                np.testing.assert_allclose(
+                    output, expected, rtol=tolerance, atol=tolerance
+                )
+        with pytest.raises(ValueError, match="M bound"):
+            session.run(
+                warmup=0, iterations=1,
+                x=np.ones((m_bound + 1, k), dtype=storage_np_dtype),
+            )
+
+
 def test_public_bf16_rmsnorm_trace_preserves_graph_storage_dtype():
     norm_graph, matmul_graph = _public_rmsnorm_matmul_graphs(
         5, 32, 16, storage_dtype="bf16"

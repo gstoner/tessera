@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import ctypes
+from dataclasses import replace
 from typing import Any, cast
 
 import numpy as np
@@ -88,6 +89,22 @@ class ResidentROCmNormMatmul:
             and guard.value == self.n
             for guard in self._gemm.shape_guards
         )
+        self._dynamic_m = any(
+            guard.binding == self._gemm_a
+            and guard.dimension == 0
+            and guard.predicate == "max"
+            and guard.value == self.m
+            for guard in self._gemm.shape_guards
+        )
+        norm_dynamic_m = any(
+            guard.binding == self._norm_input
+            and guard.dimension == 0
+            and guard.predicate == "max"
+            and guard.value == self.rows
+            for guard in self._norm.shape_guards
+        )
+        if norm_dynamic_m != self._dynamic_m:
+            raise ValueError("resident normalization and matmul must agree on the dynamic M bound")
         norm_scalars = {item.name for item in self._norm.scalars}
         gemm_scalars = {item.name for item in self._gemm.scalars}
         if norm_scalars != {"Rows", "K", "Epsilon"} or gemm_scalars != {"M", "N", "K"}:
@@ -257,10 +274,25 @@ class ResidentROCmNormMatmul:
         if rc != 0:
             raise RuntimeError(f"resident norm-matmul kernel launch failed rc={rc}")
 
-    def _run_once(self, rhs: Any | None = None) -> tuple[np.ndarray, float, float]:
+    def _run_once(
+        self, rhs: Any | None = None, x: Any | None = None,
+    ) -> tuple[np.ndarray, float, float]:
         if self._closed:
             raise RuntimeError("resident norm-matmul session is closed")
         hip = self._require_hip()
+        active_x = self.x if x is None else np.array(
+            x, dtype=self.storage_dtype, order="C", copy=True,
+        )
+        active_m = int(active_x.shape[0]) if active_x.ndim == 2 else 0
+        if (
+            active_x.ndim != 2
+            or active_x.shape[1] != self.k
+            or active_m <= 0
+            or active_m > self.rows
+            or (active_m != self.rows and not self._dynamic_m)
+            or not np.isfinite(active_x).all()
+        ):
+            raise ValueError("runtime input must satisfy the scheduled RMSNorm M bound")
         active_rhs = self.rhs if rhs is None else np.array(rhs, dtype=self.storage_dtype, order="C", copy=True)
         if (
             active_rhs.ndim != 2
@@ -272,28 +304,48 @@ class ResidentROCmNormMatmul:
         ):
             raise ValueError("runtime RHS must satisfy the scheduled matmul N bound")
         active_n = int(active_rhs.shape[1])
-        active_output = np.empty((self.m, active_n), dtype=np.float32)
+        active_output = np.empty((active_m, active_n), dtype=np.float32)
         from tessera.compiler.native_artifact import BufferArgument
 
         runtime_buffers = {
-            self._gemm_a: BufferArgument(self.storage_dtype_name, (self.m, self.k), "row_major", 2),
+            self._gemm_a: BufferArgument(self.storage_dtype_name, (active_m, self.k), "row_major", 2),
             self._gemm_b: BufferArgument(self.storage_dtype_name, (self.k, active_n), "row_major", 2),
-            self._gemm_output: BufferArgument("fp32", (self.m, active_n), "row_major", 4),
+            self._gemm_output: BufferArgument("fp32", (active_m, active_n), "row_major", 4),
         }
-        runtime_scalars = {"M": self.m, "N": active_n, "K": self.k}
+        runtime_scalars = {"M": active_m, "N": active_n, "K": self.k}
         self._gemm.validate_invocation(self._matmul_package.image, runtime_buffers, runtime_scalars)
-        hip = self._require_hip()
-        start_norm, stop_norm, start_gemm, stop_gemm = self._events
+        norm_runtime_buffers = {
+            self._norm_input: BufferArgument(
+                self.storage_dtype_name, (active_m, self.k), "row_major", 2,
+            ),
+            self._norm_output: BufferArgument(
+                self.storage_dtype_name, (active_m, self.k), "row_major", 2,
+            ),
+        }
+        self._norm.validate_invocation(
+            self._norm_package.image,
+            norm_runtime_buffers,
+            {"Rows": active_m, "K": self.k, "Epsilon": self.epsilon},
+        )
+        if x is not None and hip.hipMemcpyAsync(
+            self._buffers["x"],
+            active_x.ctypes.data_as(ctypes.c_void_p),
+            active_x.nbytes,
+            1,
+            self._stream,
+        ) != 0:
+            raise RuntimeError("resident RMSNorm input upload failed")
         if hip.hipMemcpyAsync(
             self._buffers["rhs"], active_rhs.ctypes.data_as(ctypes.c_void_p), active_rhs.nbytes, 1, self._stream
         ) != 0:
             raise RuntimeError("resident matmul RHS upload failed")
+        start_norm, stop_norm, start_gemm, stop_gemm = self._events
         if hip.hipEventRecord(start_norm, self._stream) != 0:
             raise RuntimeError("resident RMSNorm start event failed")
         norm_args = (
-            self._memref(self._buffers["x"], self.rows * self.k)
-            + self._memref(self._buffers["intermediate"], self.rows * self.k)
-            + [ctypes.c_int64(self.rows), ctypes.c_int64(self.k), ctypes.c_float(self.epsilon)]
+            self._memref(self._buffers["x"], active_m * self.k)
+            + self._memref(self._buffers["intermediate"], active_m * self.k)
+            + [ctypes.c_int64(active_m), ctypes.c_int64(self.k), ctypes.c_float(self.epsilon)]
         )
         self._launch(self._norm_function, self._grid_norm, self._block_norm, norm_args)
         if hip.hipEventRecord(stop_norm, self._stream) != 0:
@@ -301,10 +353,10 @@ class ResidentROCmNormMatmul:
         if hip.hipEventRecord(start_gemm, self._stream) != 0:
             raise RuntimeError("resident matmul start event failed")
         gemm_args = (
-            self._memref(self._buffers["intermediate"], self.m * self.k)
+            self._memref(self._buffers["intermediate"], active_m * self.k)
             + self._memref(self._buffers["rhs"], self.k * active_n)
-            + self._memref(self._buffers["output"], self.m * active_n)
-            + [ctypes.c_int64(self.m), ctypes.c_int64(active_n), ctypes.c_int64(self.k)]
+            + self._memref(self._buffers["output"], active_m * active_n)
+            + [ctypes.c_int64(active_m), ctypes.c_int64(active_n), ctypes.c_int64(self.k)]
         )
         grid_gemm = (
             (active_n + self._macro_tile[1] - 1) // self._macro_tile[1],
@@ -336,15 +388,16 @@ class ResidentROCmNormMatmul:
         return active_output, float(norm_ms.value), float(gemm_ms.value)
 
     def run(
-        self, *, warmup: int = 2, iterations: int = 5, rhs: Any | None = None
+        self, *, warmup: int = 2, iterations: int = 5,
+        rhs: Any | None = None, x: Any | None = None,
     ) -> dict[str, Any]:
         if warmup < 0 or iterations <= 0:
             raise ValueError("warmup must be nonnegative and iterations positive")
         for _ in range(warmup):
-            self._run_once(rhs)
+            self._run_once(rhs=rhs, x=x)
         producer, consumer, outputs = [], [], []
         for _ in range(iterations):
-            output, norm_ms, gemm_ms = self._run_once(rhs)
+            output, norm_ms, gemm_ms = self._run_once(rhs=rhs, x=x)
             outputs.append(output)
             producer.append(norm_ms)
             consumer.append(gemm_ms)
@@ -399,6 +452,70 @@ class ResidentROCmNormMatmul:
             self.close()
         except Exception:
             pass
+
+
+def _with_bounded_dynamic_m(matmul_module: Any, x: Any, bound: int) -> Any:
+    """Give one traced Graph matmul a bounded dynamic M contract."""
+    from .graph_ir import tensor_ir_type
+
+    if bound <= 0:
+        raise ValueError("dynamic M bound must be positive")
+    module = copy.deepcopy(matmul_module)
+    if len(module.functions) != 1:
+        raise ValueError("bounded dynamic M requires one Graph function")
+    function = module.functions[0]
+    if len(function.args) != 2 or len(function.result_types) != 1:
+        raise ValueError("bounded dynamic M requires a two-input, one-result matmul")
+    matmuls = [op for op in function.body if op.op_name == "tessera.matmul"]
+    if len(matmuls) != 1:
+        raise ValueError("bounded dynamic M requires one Graph matmul operation")
+    lhs_type, rhs_type = function.args[0].ir_type, function.args[1].ir_type
+    output_type = function.result_types[0]
+    try:
+        traced_m, k = (int(str(dim)) for dim in lhs_type.shape)
+        rhs_k, n = (int(str(dim)) for dim in rhs_type.shape)
+        out_m, out_n = (int(str(dim)) for dim in output_type.shape)
+        actual_x_shape = tuple(int(dim) for dim in x.shape)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("bounded dynamic M requires static traced tensor shapes") from exc
+    if actual_x_shape != (bound, k) or traced_m != bound or out_m != bound:
+        raise ValueError("dynamic M bound must match the traced LHS capacity")
+    if rhs_k != k or out_n != n:
+        raise ValueError("bounded dynamic M requires matching static K and N")
+    dynamic_lhs = tensor_ir_type(
+        ("?", str(k)), lhs_type.dtype, layout=lhs_type.layout,
+    )
+    dynamic_output = tensor_ir_type(
+        ("?", str(n)), output_type.dtype, layout=output_type.layout,
+    )
+    function.args[0].ir_type = dynamic_lhs
+    function.result_types[0] = dynamic_output
+    op = matmuls[0]
+    op.operand_types[0] = str(dynamic_lhs)
+    op.result_type = str(dynamic_output)
+    op.inferred_type = dynamic_output
+    op.kwargs["shape_bounds"] = [bound, n, k]
+    return module
+
+
+def _with_dynamic_m_capacity(norm_package: Any, bound: int) -> Any:
+    """Mark a maximum-sized norm allocation as admitting shorter row prefixes."""
+    from .native_artifact import ShapeGuard
+
+    descriptor = norm_package.descriptor
+    input_name = next(item.name for item in descriptor.buffers if item.direction == "input")
+    output_name = next(item.name for item in descriptor.buffers if item.direction == "output")
+    guards = tuple(
+        ShapeGuard(guard.binding, guard.dimension, "max", bound)
+        if guard.binding in {input_name, output_name} and guard.dimension == 0
+        else guard
+        for guard in descriptor.shape_guards
+    )
+    provenance = {**descriptor.provenance, "dynamic_rows_bound": bound}
+    return replace(
+        norm_package,
+        descriptor=replace(descriptor, shape_guards=guards, provenance=provenance),
+    )
 
 
 def _with_bounded_dynamic_n(matmul_module: Any, rhs: Any, bound: int) -> Any:
@@ -464,6 +581,7 @@ def package_graph_rmsnorm_matmul(
     rhs: Any,
     *,
     dynamic_n_bound: int | None = None,
+    dynamic_m_bound: int | None = None,
     pipeline_name: str = "tessera-lower-to-rocm",
 ) -> ResidentROCmNormMatmul:
     """Create the resident gfx1201 package directly from traced Graph IR.
@@ -473,12 +591,18 @@ def package_graph_rmsnorm_matmul(
     """
     from . import rocm_native
 
+    if dynamic_n_bound is not None and dynamic_m_bound is not None:
+        raise ValueError("resident matmul currently admits one dynamic extent per package")
     if dynamic_n_bound is not None:
         matmul_module = _with_bounded_dynamic_n(matmul_module, rhs, dynamic_n_bound)
+    if dynamic_m_bound is not None:
+        matmul_module = _with_bounded_dynamic_m(matmul_module, x, dynamic_m_bound)
     norm, matmul = lower_graph_rmsnorm_matmul(norm_module, matmul_module)
     norm_package = rocm_native.package_scheduled_kernel(
         norm, pipeline_name=pipeline_name,
     )
+    if dynamic_m_bound is not None:
+        norm_package = _with_dynamic_m_capacity(norm_package, dynamic_m_bound)
     matmul_package = rocm_native.package_scheduled_matmul(
         matmul, pipeline_name=pipeline_name,
     )

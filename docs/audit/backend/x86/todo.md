@@ -15,14 +15,12 @@ Not applicable to x86: the new bf16 RMSNorm route uses gfx1201 workgroup and HIP
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
-Follow-up required for x86: shared tracing now preserves result shape/dtype and public `matmul(output_dtype="fp32")` carries the explicit output request into Graph IR. The paired GPU packages and physical schedules do not apply to x86, and no Zen 5 execution was performed in this slice. Existing x86 scheduled matmul support does not establish a low-precision input/fp32 output route; verify or explicitly refuse that dtype combination on the owning Zen 5 host before claiming parity.
+Follow-up required for x86: shared tracing now preserves result shape/dtype and public `matmul(output_dtype="fp32")` carries the explicit output request into Graph IR. The paired GPU packages and physical schedules do not apply to x86, and no Zen 5 execution was performed in this slice. Existing x86 scheduled matmul support does not establish a low-precision input/fp32 output route; verify or explicitly refuse that dtype combination on the owning Zen 5 host before claiming parity. The later bounded dynamic-M extension is gfx1201-only; no x86 execution proof is implied.
 
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 
 Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.
-Not applicable to x86: this slice changes the NVIDIA CUDA resident PTX bridge
-and its device-buffer layout metadata. No shared Graph/Schedule operation,
-x86 ABI, CPU schedule, or x86 execution claim changed.
+Not applicable to x86: the referenced SM120 slice changes the NVIDIA CUDA resident PTX bridge and its device-buffer layout metadata. No shared Graph/Schedule operation, x86 ABI, CPU schedule, or x86 execution claim changed.
 
 # x86 backend TODO
 

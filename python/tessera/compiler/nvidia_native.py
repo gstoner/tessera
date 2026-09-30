@@ -332,9 +332,17 @@ class NVIDIANativeTensorProgram:
         output = self._binding(self.consumer, self.output_name, "output")
         output_shape, output_dynamic = self._shape_bound(self.consumer, self.output_name, 2)
         epilogue = self.consumer.descriptor.provenance.get("epilogue")
-        output_storage = (
-            epilogue.get("output") if isinstance(epilogue, Mapping) else None
-        )
+        if (
+            not isinstance(epilogue, Mapping)
+            or epilogue.get("bias") is not False
+            or epilogue.get("residual") is not False
+            or epilogue.get("activation") != "none"
+        ):
+            raise ValueError(
+                "resident RMSNorm-to-matmul edge does not support fused bias, "
+                "residual, or activation"
+            )
+        output_storage = epilogue.get("output")
         expected_output_dtype = (
             {"f16": "fp16", "f32": "fp32"}.get(output_storage)
             if isinstance(output_storage, str)
@@ -572,8 +580,13 @@ def package_scheduled_rmsnorm_matmul(
             or consumer_artifact.storage != storage
             or consumer_artifact.a_dtype != producer_artifact.dtype
             or consumer_artifact.output_dtype not in {"fp16", "fp32"}
+            or consumer_artifact.bias_name is not None
+            or consumer_artifact.residual_name is not None
+            or consumer_artifact.activation != "none"
             or consumer_artifact.a_name == consumer_artifact.b_name):
-        raise ValueError("consumer must be a matching scheduled fp16/bf16 SM120 matmul")
+        raise ValueError(
+            "consumer must be an unfused matching scheduled fp16/bf16 SM120 matmul"
+        )
     producer = package_scheduled_kernel(producer_artifact, pipeline_name=pipeline_name)
     consumer = package_scheduled_matmul(consumer_artifact, pipeline_name=pipeline_name)
     program = NVIDIANativeTensorProgram(

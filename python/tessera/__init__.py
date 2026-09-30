@@ -245,19 +245,18 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             A = A._data
         if hasattr(B, "_data"):
             B = B._data
+        requested_output_dtype = None
         if output_dtype is None:
             out = np.matmul(A, B)
         else:
-            output_dtype = str(output_dtype).lower()
-            if output_dtype not in {"fp16", "fp32"}:
+            requested_output_dtype = str(output_dtype).lower()
+            if requested_output_dtype not in {"fp16", "fp32"}:
                 raise ValueError("matmul output_dtype must be fp16 or fp32")
-            # Match the scheduled low-precision contract: fp32 accumulation
-            # precedes the selected output conversion.
+            # Match the scheduled low-precision contract: keep the fp32
+            # accumulator through the epilogue, then convert the final result.
             accum_a = np.asarray(A, dtype=np.float32)
             accum_b = np.asarray(B, dtype=np.float32)
             out = np.matmul(accum_a, accum_b)
-            if output_dtype == "fp16":
-                out = out.astype(np.float16)
         if bias is not None or residual is not None or activation != "none":
             if epilogue is not None:
                 raise ValueError(
@@ -282,6 +281,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 )
         if epilogue:
             out = fused_epilogue(out, **epilogue)
+        if requested_output_dtype == "fp16":
+            out = out.astype(np.float16)
         return out
 
     def matmul(

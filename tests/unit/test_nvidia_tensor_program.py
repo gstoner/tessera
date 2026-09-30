@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32"):
+def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="none"):
     m, k, n = 16, 16, 16 if dynamic_n else 8
     elem = "f16" if dtype == "fp16" else "bf16"
     a = IRType(f"tensor<{m}x{k}x{elem}>", (str(m), str(k)), dtype)
@@ -52,7 +52,9 @@ def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32"):
             result="result", op_name="tessera.matmul",
             operands=["%normalized", "%weights"],
             operand_types=[str(a), str(b)], result_type=str(out),
-            kwargs={"shape_bounds": [m, n, k]} if dynamic_n else {},
+            kwargs=({"shape_bounds": [m, n, k]} if dynamic_n else {}) | {
+                "activation": activation,
+            },
         )],
         return_values=["%result"],
     )])
@@ -79,6 +81,23 @@ def test_sm120_rmsnorm_tensor_edge_keeps_both_canonical_packages():
     assert "tile.fragment_pack" in program.consumer.tile_ir
     assert program.intermediate_name == "normalized"
     assert program.consumer_input_name == "normalized"
+
+
+def test_sm120_rmsnorm_tensor_package_refuses_fused_consumer_artifact():
+    with pytest.raises(ValueError, match="unfused"):
+        _program(activation="relu")
+
+
+def test_sm120_rmsnorm_tensor_edge_rejects_fused_consumer_provenance():
+    program = _program()
+    provenance = dict(program.consumer.descriptor.provenance)
+    provenance["epilogue"] = {
+        **provenance["epilogue"], "activation": "relu",
+    }
+    descriptor = replace(program.consumer.descriptor, provenance=provenance)
+    consumer = replace(program.consumer, descriptor=descriptor)
+    with pytest.raises(ValueError, match="does not support fused"):
+        replace(program, consumer=consumer).validate()
 
 
 def test_sm120_rmsnorm_tensor_edge_rejects_shape_drift_and_aliasing():

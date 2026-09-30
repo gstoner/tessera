@@ -10072,3 +10072,9 @@ Parity validated on Super-Bear (RTX 5070, sm_120a) for one named Graph->Schedule
 The resident slice passed on three shapes: 64x64x64, 512x256x512, and ragged 255x127x129. Max absolute errors were 0/0.00000334, 0.001953125/0.00001526, and 0.00097656/0.00000668 for producer/consumer. At 512x256x512, C++-loop CUDA-event medians were 59.49 us producer and 12.85 us consumer; CV was 0.03% and 2.44%, matching the checked-in packet. Inputs are uploaded once, with no intermediate host copy. The synchronous host wall includes package/runtime overhead and is not kernel time. No selector promotion or fusion claim. See the [case matrix](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260929/README.md) and packets.
 
 Resident CUDA inputs must report the same CUDA Array Interface stream as the explicit launch stream; mismatched, missing, and default/sentinel producer streams fail closed rather than launching without a dependency. Follow-up required: widen to additional dtypes/layouts and dynamic-shape contracts, then migrate the remaining NVIDIA tensor-valued fragment producers. This bounded fp16 slice does not close W1.1.
+
+## Matmul output conversion and resident edge review -- 2026-09-30
+
+Owner: E2E-REAL-6 / W1.1; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
+
+Parity validated on Super-Bear (RTX 5070, sm_120) for the existing unfused fp16/bf16 RMSNorm-to-matmul resident contract. Package construction and descriptor validation now reject consumers with bias, residual, or activation because the resident edge ABI carries only the produced tensor and RHS. The shared eager reference retains fp32 through the epilogue before fp16 conversion. Follow-up required: extend the resident ABI before admitting fused consumers; broader producer migration remains open. No benchmark or route promotion.

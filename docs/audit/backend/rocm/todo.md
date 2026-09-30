@@ -12499,3 +12499,9 @@ exact kernel attribution remain open.
 ## NVIDIA resident tensor-edge sibling assessment -- 2026-09-29
 
 Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to rocm: the change adds an SM120-only CUDA-device-buffer launch path for NVIDIA RMSNorm and scheduled matmul. No sibling compiler, runtime ABI, physical schedule, or execution claim changed; this does not transfer NVIDIA evidence to rocm.
+
+## Matmul output conversion and resident edge review -- 2026-09-30
+
+Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
+
+The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. ROCm lowering/runtime are unchanged. Follow-up required: run the rounding-sensitive epilogue parity case on gfx1151 and gfx1201; Super-Bear lacks the ROCm executable pass, so it supplies no HIP evidence. Dynamic-M helper projection remains a host compiler check until its owning gfx1201 suite reruns.

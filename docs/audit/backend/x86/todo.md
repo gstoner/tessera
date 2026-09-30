@@ -6670,3 +6670,9 @@ x86 execution; parity requires its own physical consumer and proof. See the
 ## NVIDIA resident tensor-edge sibling assessment -- 2026-09-29
 
 Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to x86: the change adds an SM120-only CUDA-device-buffer launch path for NVIDIA RMSNorm and scheduled matmul. No sibling compiler, runtime ABI, physical schedule, or execution claim changed; this does not transfer NVIDIA evidence to x86.
+
+## Matmul output conversion and resident edge review -- 2026-09-30
+
+Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
+
+The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. X86 lowering/runtime are unchanged. Follow-up required: run the rounding-sensitive epilogue parity case through the native x86 package; no x86 device result is inferred from the shared reference test.

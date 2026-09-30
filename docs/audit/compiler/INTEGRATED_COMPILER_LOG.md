@@ -6333,3 +6333,16 @@ Remaining: gfx1201, fused, split-K, dynamic and LDS matmul image identities; Sch
 
 Evidence: Clean-source Princess-Luna gfx1151 with rebuilt LLVM/MLIR 23.1.1 passed 34 focused shape-free tests (one other-device skip). A 31-sample-per-shape packet records numerical error below 9e-8, one image across three shapes, and three cold compilations under the historical Tile-text control. Timings are WSL host-wall diagnostics. Post-review, the raw benchmark launcher resolves the package descriptor entry; exact gfx1151 aligned 64x64x64 and ragged 65x67x31 cases pass NumPy, while the small-shape throughput gate remains rejected. [Packet](../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
 <!-- entry-fields:end -->
+
+### 2026-09-30 -- fp32 matmul epilogues and resident-edge fused-input refusal
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6) / W1.1.
+
+PR: [#890](https://github.com/gstoner/tessera/pull/890); sync MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30.
+
+Outcome: The eager matmul reference now retains fp32 accumulation through explicit and mapping epilogues and casts only the final output when fp16 is requested. The SM120 RMSNorm-to-matmul resident package rejects fused bias, residual, and activation at both Schedule artifact admission and descriptor validation because its current edge ABI does not carry those operands.
+
+Remaining: the consumer ABI needs an explicit extension before fused resident epilogues are admitted. Rounding-sensitive native parity remains follow-up work for Apple, x86, gfx1151 and gfx1201. NVIDIA attention and quantized routes and the other E2E-REAL-6 families remain open. No performance claim or route promotion.
+
+Evidence: Super-Bear (RTX 5070, sm_120) passed the 20-test `test_nvidia_tensor_program.py` suite, including exact-device resident execution. Seven eager matmul/dynamic-M projection checks passed; 11 unrelated rows were deselected. The test uses a bias/ReLU value chosen so early fp16 rounding flips the activation result. The gfx1201 packaging test could not run on Super-Bear because its selected `tessera-opt` lacks the ROCm executable pass; rerun the owning gfx1201 suite on Tajasarus.
+<!-- entry-fields:end -->

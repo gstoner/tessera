@@ -10260,3 +10260,9 @@ promotion is claimed.
 ## NVIDIA resident tensor-edge sibling assessment -- 2026-09-29
 
 Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to apple: the change adds an SM120-only CUDA-device-buffer launch path for NVIDIA RMSNorm and scheduled matmul. No sibling compiler, runtime ABI, physical schedule, or execution claim changed; this does not transfer NVIDIA evidence to apple.
+
+## Matmul output conversion and resident edge review -- 2026-09-30
+
+Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
+
+The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. Apple physical lowering is unchanged. Follow-up required: run the rounding-sensitive epilogue parity case through Apple `@jit`; no Apple device result is inferred from the host reference test.

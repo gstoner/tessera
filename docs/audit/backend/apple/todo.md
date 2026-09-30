@@ -10266,3 +10266,36 @@ Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to apple: the change 
 Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
 
 The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. Apple physical lowering is unchanged. Follow-up required: run the rounding-sensitive epilogue parity case through Apple `@jit`; no Apple device result is inferred from the host reference test.
+
+## Bounded dynamic-K resident RMSNorm → matmul — 2026-09-30
+
+Owner: E2E-REAL-6; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Not applicable to Apple: this slice extends the architecture-specific CUDA and HIP resident RMSNorm/matmul launch descriptors and per-backend packages. It changes no shared Graph/Schedule operation or Metal ABI, and includes no Apple execution claim. Apple JIT execution gaps remain tracked separately.
+
+
+## `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`: padded host-view ingress on the resident edge
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+Not applicable to Apple code generation or runtime: the new ingress normalization
+is in the CUDA resident-session uploader, while Apple has no consumer of this
+NVIDIA resident ABI. Apple JIT execution obligations remain open; no Metal
+parity follows.
+
+
+## `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`: paired bounded dynamic M+K resident edge
+
+Owner E2E-REAL-6 / W1.1; sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+Follow-up required: the shared Graph projection now expresses independently
+bounded M and K for RMSNorm-to-matmul, but Apple has no corresponding resident
+Metal package or execution proof. No Metal Schedule, ABI, or parity is inferred;
+Apple JIT obligations remain tracked separately.
+
+## E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30: paired bounded dynamic M/N/K resident edge — follow-up required
+
+Owner E2E-REAL-6 / W1.1; sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
+The shared Graph projection covers independently bounded M, N, and K, with
+host-free shape-contract tests and exact gfx1201 / sm_120 consumer evidence.
+Apple has no corresponding resident Metal package or execution ABI. Follow-up
+is required before any Apple consumer or parity claim; this GPU evidence does
+not transfer to Metal.

@@ -10086,3 +10086,48 @@ Owner: E2E-REAL-6 / W1.1; sync `SM120-RMSNORM-MATMUL-DYNAMIC-M-2026-09-30`.
 Parity validated on Super-Bear (RTX 5070, sm_120) for Graph -> Schedule -> Tile fp16 and bf16 RMSNorm-to-matmul packages. Active M=7 and 16 execute under bound 16 in exact-device tests; the correctness-gated CUDA-event packet also checks active M=64 and 128 under bound 128. Producer and consumer retain the same resident allocation, stream and package images. Fused bias/residual/activation remains rejected until the ABI carries those operands.
 
 The 31-sample timing packet records clean source revision `1053c284`; medians are 11.76/12.74 us (producer/consumer) at M=64 and 16.42/13.58 us at M=128. CV reaches 25.8%, so timing is diagnostic and does not justify promotion. Dynamic M+N, non-row-major layouts, and additional storage formats remain open. The related gfx1201 shared bounded-M transformation was revalidated on Tajasaurus at PR head 6a84094 with a fresh compiler and 18/18 resident tests; this adds no gfx1201 timing claim. [Packet](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/README.md).
+
+## Bounded dynamic-K resident RMSNorm → matmul — 2026-09-30
+
+Owner: E2E-REAL-6 / W1.1; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Parity validated on Super-Bear (RTX 5070, sm_120): fp16 and bf16 exact-device tests trace public `from_text` RMSNorm/matmul Graphs, apply the bounded dynamic-K package contract, and execute K=7, 11, and 16 through Graph → Schedule → Tile. A correctness-gated fp16 packet additionally checks M=128, K bound=256, N=256 at active K=128/192/256. Producer and consumer are timed separately on the same resident allocation and stream; image identity is stable. Producer timing is stable, but consumer CUDA-event CV remains 45–54%, so the timing is diagnostic and supports no speedup claim or route promotion. gfx1201 has its own architecture-specific packet and 20/20 owning tests; no physical schedule or timing is transferred. Dynamic M+K/N+K, broader layouts/storage, and remaining W1.1 producer sites remain open.
+
+[SM120 packet](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/dynamic_k_sm120.json).
+
+
+## `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`: padded host-view ingress on the resident edge
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+The sm_120 resident RMSNorm → matmul route now accepts padded/sliced host views,
+packs them to compact row-major producer and column-major RHS storage before
+upload, and holds async upload staging memory until successful stream sync.
+Exact RTX 5070 tests cover fp16/bf16, bounded K prefixes, numerical parity,
+stable package images and resident intermediate reuse. Producer and consumer
+device-event timings exclude packing/upload. No performance promotion.
+
+
+## `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`: paired bounded dynamic M+K resident edge
+
+Owner E2E-REAL-6 / W1.1; sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+Parity validated on Super-Bear RTX 5070 (sm_120) for fp16 and bf16 exact-device
+Graph-traced RMSNorm → matmul at active (M,K)=(5,7),(11,11),(16,16), plus a
+padded-ingress benchmark at (64,128),(128,192),(128,256). The shared Graph
+projection emits both dynamic axes and the checked shape bounds; producer and
+consumer reuse the same resident allocation and package images. Host packing
+and upload are excluded from CUDA-event stage timing. High consumer variation
+remains diagnostic; no selector or performance promotion.
+[Packet](../../../../benchmarks/baselines/resident_dynamic_mk_20260930/README.md).
+
+## E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30: paired bounded dynamic M/N/K resident edge — parity validated
+
+Owner E2E-REAL-6 / W1.1; sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
+Parity validated on Super-Bear RTX 5070 (sm_120) for public Graph-traced
+RMSNorm to matmul with fp16 and bf16 storage, bounded M/N/K, padded host views,
+numerical checks, stable images, and intermediate allocation reuse. The 31-sample fp16 and bf16 packets measure active M/N/K of
+(256,256,128), (384,384,192), and (512,512,256) under bound
+(512,512,256). Stage medians/CVs are recorded separately; they support
+attribution only, with no performance promotion. The standalone CUDA
+`strided` uploader rejects noncompact 2-D host views before allocation;
+the public resident-program path packs accepted padded views to compact
+storage. Physical device pitches remain out of scope. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).

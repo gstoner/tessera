@@ -12505,3 +12505,43 @@ Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to rocm: the change a
 Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
 
 The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. ROCm lowering/runtime are unchanged. Follow-up required: run the rounding-sensitive epilogue parity case on gfx1151 and gfx1201; Super-Bear lacks the ROCm executable pass, so it supplies no HIP evidence. The shared bounded dynamic-M helper now passes the owning gfx1201 resident suite 18/18 on Tajasaurus from PR head 6a84094 with a freshly built compiler; no new gfx1201 timing claim. The rounding-sensitive fp16 epilogue parity case remains open for both gfx1151 and gfx1201.
+
+## Bounded dynamic-K resident RMSNorm → matmul — 2026-09-30
+
+Owner: E2E-REAL-6 / W1.1; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Parity validated for the bounded dynamic-K contract on Tajasaurus RX 9070 XT (gfx1201): the public `from_text` route packages Graph → Schedule → Tile producer and consumer once, keeps the intermediate resident, checks fp16 and bf16 storage at active K prefixes 128/192/256 under bound 256, and compares outputs to an independent fp32 oracle. The owning resident RMSNorm/matmul tests pass 20/20. Producer and consumer are timed separately with HIP events. Packet medians have high variation at K=128 and K=256; they support stage attribution only, not a performance claim or selector promotion. This slice admits one dynamic extent per package. Dynamic M+K/N+K, other storage/layouts, and gfx1151 parity remain follow-up required.
+
+[Packet and method](../../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/README.md); fp16 and [BF16 samples](../../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/dynamic_k_bf16.json).
+
+
+## `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`: padded host-view ingress on the resident edge
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+The gfx1201 resident session already packs host inputs into compact ABI
+allocations. Exact RX 9070 XT tests now pass padded source and RHS views for
+fp16/bf16 bounded-K prefixes, preserving numerical results and allocation
+reuse. A correctness-gated benchmark exercises these inputs and reports device
+stages separately; host staging is outside those event timings. High timing
+variance is diagnostic only.
+
+
+## `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`: paired bounded dynamic M+K resident edge
+
+Owner E2E-REAL-6 / W1.1; sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+Parity validated on Tajasaurus RX 9070 XT (gfx1201) for fp16 and bf16 at active
+(M,K)=(3,13),(5,21),(8,32), including padded host views. One paired Graph →
+Schedule → Tile package reuses its producer/consumer images and resident
+allocation; numerical results match the fp32 oracle. Separate HIP-event stages
+exclude host packing and upload. Several rows have high event variation, so
+results are diagnostic and do not promote a route.
+[Packet](../../../../benchmarks/baselines/resident_dynamic_mk_20260930/README.md).
+
+## E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30: paired bounded dynamic M/N/K resident edge — parity validated
+
+Owner E2E-REAL-6 / W1.1; sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
+Parity validated on Tajasaurus RX 9070 XT (gfx1201) for fp16 and bf16 at
+active M/N/K of (3,7,13), (5,15,21), and (8,24,32), with padded host views,
+numerical checks, and package/allocation reuse. The 100-sample fp16 and bf16 packets cover (64,128,128), (96,192,192), and
+(128,256,256) under bound (128,256,256). Several event CVs are high, especially
+for bf16; these measurements support attribution only. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).

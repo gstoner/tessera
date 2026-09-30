@@ -6676,3 +6676,34 @@ Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to x86: the change ad
 Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
 
 The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. X86 lowering/runtime are unchanged. Follow-up required: run the rounding-sensitive epilogue parity case through the native x86 package; no x86 device result is inferred from the shared reference test.
+
+## Bounded dynamic-K resident RMSNorm → matmul — 2026-09-30
+
+Owner: E2E-REAL-6; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Not applicable to x86: this slice extends the architecture-specific CUDA and HIP resident RMSNorm/matmul launch descriptors and per-backend packages. It changes no shared Graph/Schedule operation or x86 ABI and includes no Zen 5 execution claim.
+
+
+## `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`: padded host-view ingress on the resident edge
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+Not applicable to x86 code generation or runtime: the change covers CUDA
+resident-session staging and the existing gfx1201 resident ingress path. No
+AVX-512 package or host-input ABI changed; no x86 parity or timing claim follows.
+
+
+## `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`: paired bounded dynamic M+K resident edge
+
+Owner E2E-REAL-6 / W1.1; sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+Follow-up required: the shared Graph projection can express bounded M and K,
+but this slice adds only gfx1201 HIP and sm_120 CUDA resident package consumers.
+No AVX-512 lowering, runtime ABI, or x86 numerical parity is included; any x86
+resident consumer needs its own package and exact-CPU proof.
+
+## E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30: paired bounded dynamic M/N/K resident edge — follow-up required
+
+Owner E2E-REAL-6 / W1.1; sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
+The shared Graph projection is exercised for all three bounded axes, but this
+slice adds only gfx1201 HIP and sm_120 CUDA resident package consumers. x86 has
+no resident package/runtime consumer for this edge. Any such consumer needs its
+own ABI, native Schedule/Tile route, numerical proof, and exact-CPU evidence.

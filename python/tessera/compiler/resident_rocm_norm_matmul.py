@@ -96,6 +96,13 @@ class ResidentROCmNormMatmul:
             and guard.value == self.m
             for guard in self._gemm.shape_guards
         )
+        self._dynamic_k = any(
+            guard.binding == self._gemm_a
+            and guard.dimension == 1
+            and guard.predicate == "max"
+            and guard.value == self.k
+            for guard in self._gemm.shape_guards
+        )
         norm_dynamic_m = any(
             guard.binding == self._norm_input
             and guard.dimension == 0
@@ -103,8 +110,17 @@ class ResidentROCmNormMatmul:
             and guard.value == self.rows
             for guard in self._norm.shape_guards
         )
+        norm_dynamic_k = any(
+            guard.binding == self._norm_input
+            and guard.dimension == 1
+            and guard.predicate == "max"
+            and guard.value == self.k
+            for guard in self._norm.shape_guards
+        )
         if norm_dynamic_m != self._dynamic_m:
             raise ValueError("resident normalization and matmul must agree on the dynamic M bound")
+        if norm_dynamic_k != self._dynamic_k:
+            raise ValueError("resident normalization and matmul must agree on the dynamic K bound")
         norm_scalars = {item.name for item in self._norm.scalars}
         gemm_scalars = {item.name for item in self._gemm.scalars}
         if norm_scalars != {"Rows", "K", "Epsilon"} or gemm_scalars != {"M", "N", "K"}:
@@ -286,7 +302,9 @@ class ResidentROCmNormMatmul:
         active_m = int(active_x.shape[0]) if active_x.ndim == 2 else 0
         if (
             active_x.ndim != 2
-            or active_x.shape[1] != self.k
+            or active_x.shape[1] <= 0
+            or active_x.shape[1] > self.k
+            or (active_x.shape[1] != self.k and not self._dynamic_k)
             or active_m <= 0
             or active_m > self.rows
             or (active_m != self.rows and not self._dynamic_m)
@@ -296,7 +314,7 @@ class ResidentROCmNormMatmul:
         active_rhs = self.rhs if rhs is None else np.array(rhs, dtype=self.storage_dtype, order="C", copy=True)
         if (
             active_rhs.ndim != 2
-            or active_rhs.shape[0] != self.k
+            or active_rhs.shape[0] != active_x.shape[1]
             or active_rhs.shape[1] <= 0
             or active_rhs.shape[1] > self.n
             or (active_rhs.shape[1] != self.n and not self._dynamic_n)
@@ -308,24 +326,25 @@ class ResidentROCmNormMatmul:
         from tessera.compiler.native_artifact import BufferArgument
 
         runtime_buffers = {
-            self._gemm_a: BufferArgument(self.storage_dtype_name, (active_m, self.k), "row_major", 2),
-            self._gemm_b: BufferArgument(self.storage_dtype_name, (self.k, active_n), "row_major", 2),
+            self._gemm_a: BufferArgument(self.storage_dtype_name, (active_m, active_x.shape[1]), "row_major", 2),
+            self._gemm_b: BufferArgument(self.storage_dtype_name, (active_x.shape[1], active_n), "row_major", 2),
             self._gemm_output: BufferArgument("fp32", (active_m, active_n), "row_major", 4),
         }
-        runtime_scalars = {"M": active_m, "N": active_n, "K": self.k}
+        active_k = int(active_x.shape[1])
+        runtime_scalars = {"M": active_m, "N": active_n, "K": active_k}
         self._gemm.validate_invocation(self._matmul_package.image, runtime_buffers, runtime_scalars)
         norm_runtime_buffers = {
             self._norm_input: BufferArgument(
-                self.storage_dtype_name, (active_m, self.k), "row_major", 2,
+                self.storage_dtype_name, (active_m, active_x.shape[1]), "row_major", 2,
             ),
             self._norm_output: BufferArgument(
-                self.storage_dtype_name, (active_m, self.k), "row_major", 2,
+                self.storage_dtype_name, (active_m, active_x.shape[1]), "row_major", 2,
             ),
         }
         self._norm.validate_invocation(
             self._norm_package.image,
             norm_runtime_buffers,
-            {"Rows": active_m, "K": self.k, "Epsilon": self.epsilon},
+            {"Rows": active_m, "K": active_k, "Epsilon": self.epsilon},
         )
         if x is not None and hip.hipMemcpyAsync(
             self._buffers["x"],
@@ -343,24 +362,24 @@ class ResidentROCmNormMatmul:
         if hip.hipEventRecord(start_norm, self._stream) != 0:
             raise RuntimeError("resident RMSNorm start event failed")
         norm_args = (
-            self._memref(self._buffers["x"], active_m * self.k)
-            + self._memref(self._buffers["intermediate"], active_m * self.k)
-            + [ctypes.c_int64(active_m), ctypes.c_int64(self.k), ctypes.c_float(self.epsilon)]
+            self._memref(self._buffers["x"], active_m * active_k)
+            + self._memref(self._buffers["intermediate"], active_m * active_k)
+            + [ctypes.c_int64(active_m), ctypes.c_int64(active_k), ctypes.c_float(self.epsilon)]
         )
-        self._launch(self._norm_function, self._grid_norm, self._block_norm, norm_args)
+        self._launch(self._norm_function, (active_m, 1, 1), self._block_norm, norm_args)
         if hip.hipEventRecord(stop_norm, self._stream) != 0:
             raise RuntimeError("resident RMSNorm stop event failed")
         if hip.hipEventRecord(start_gemm, self._stream) != 0:
             raise RuntimeError("resident matmul start event failed")
         gemm_args = (
-            self._memref(self._buffers["intermediate"], active_m * self.k)
-            + self._memref(self._buffers["rhs"], self.k * active_n)
+            self._memref(self._buffers["intermediate"], active_m * active_k)
+            + self._memref(self._buffers["rhs"], active_k * active_n)
             + self._memref(self._buffers["output"], active_m * active_n)
-            + [ctypes.c_int64(active_m), ctypes.c_int64(active_n), ctypes.c_int64(self.k)]
+            + [ctypes.c_int64(active_m), ctypes.c_int64(active_n), ctypes.c_int64(active_k)]
         )
         grid_gemm = (
             (active_n + self._macro_tile[1] - 1) // self._macro_tile[1],
-            self._grid_gemm[1],
+            (active_m + self._macro_tile[0] - 1) // self._macro_tile[0],
             1,
         )
         self._launch(self._gemm_function, grid_gemm, self._block_gemm, gemm_args)
@@ -474,6 +493,67 @@ def _with_dynamic_m_capacity(norm_package: Any, bound: int) -> Any:
     )
 
 
+def _with_dynamic_k_capacity(norm_package: Any, bound: int) -> Any:
+    """Mark max-sized RMSNorm rows as accepting a bounded column prefix."""
+    from .native_artifact import ShapeGuard
+
+    descriptor = norm_package.descriptor
+    input_name = next(item.name for item in descriptor.buffers if item.direction == "input")
+    output_name = next(item.name for item in descriptor.buffers if item.direction == "output")
+    guards = []
+    for guard in descriptor.shape_guards:
+        if guard.binding in {input_name, output_name} and guard.dimension == 1:
+            if guard.predicate != "eq" or guard.value != bound:
+                raise ValueError("dynamic K producer guards disagree with the bound")
+            guard = ShapeGuard(guard.binding, guard.dimension, "max", bound)
+        guards.append(guard)
+    shape_guards = tuple(guards)
+    provenance = {**descriptor.provenance, "dynamic_columns_bound": bound}
+    return replace(
+        norm_package,
+        descriptor=replace(descriptor, shape_guards=shape_guards, provenance=provenance),
+    )
+
+
+def _with_bounded_dynamic_k(matmul_module: Any, x: Any, rhs: Any, bound: int) -> Any:
+    """Give one Graph matmul matching bounded dynamic K operands."""
+    from .graph_ir import tensor_ir_type
+
+    if bound <= 0:
+        raise ValueError("dynamic K bound must be positive")
+    module = copy.deepcopy(matmul_module)
+    if len(module.functions) != 1:
+        raise ValueError("bounded dynamic K requires one Graph function")
+    function = module.functions[0]
+    if len(function.args) != 2 or len(function.result_types) != 1:
+        raise ValueError("bounded dynamic K requires a two-input, one-result matmul")
+    matmuls = [op for op in function.body if op.op_name == "tessera.matmul"]
+    if len(matmuls) != 1:
+        raise ValueError("bounded dynamic K requires one Graph matmul operation")
+    lhs_type, rhs_type = function.args[0].ir_type, function.args[1].ir_type
+    output_type = function.result_types[0]
+    try:
+        m, k = (int(str(dim)) for dim in lhs_type.shape)
+        rhs_k, n = (int(str(dim)) for dim in rhs_type.shape)
+        out_m, out_n = (int(str(dim)) for dim in output_type.shape)
+        actual_x_shape = tuple(int(dim) for dim in x.shape)
+        actual_rhs_shape = tuple(int(dim) for dim in rhs.shape)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("bounded dynamic K requires static traced tensor shapes") from exc
+    if (k, rhs_k) != (bound, bound) or actual_x_shape != (m, bound) or actual_rhs_shape != (bound, n):
+        raise ValueError("dynamic K bound must match both traced operand capacities")
+    if (out_m, out_n) != (m, n):
+        raise ValueError("dynamic K must preserve the traced matmul result shape")
+    dynamic_lhs = tensor_ir_type((str(m), "?"), lhs_type.dtype, layout=lhs_type.layout)
+    dynamic_rhs = tensor_ir_type(("?", str(n)), rhs_type.dtype, layout=rhs_type.layout)
+    function.args[0].ir_type = dynamic_lhs
+    function.args[1].ir_type = dynamic_rhs
+    op = matmuls[0]
+    op.operand_types = [str(dynamic_lhs), str(dynamic_rhs)]
+    op.kwargs["shape_bounds"] = [m, n, bound]
+    return module
+
+
 def _with_bounded_dynamic_n(matmul_module: Any, rhs: Any, bound: int) -> Any:
     """Give one traced Graph matmul a bounded dynamic N contract."""
     from .graph_ir import tensor_ir_type
@@ -538,6 +618,7 @@ def package_graph_rmsnorm_matmul(
     *,
     dynamic_n_bound: int | None = None,
     dynamic_m_bound: int | None = None,
+    dynamic_k_bound: int | None = None,
     pipeline_name: str = "tessera-lower-to-rocm",
 ) -> ResidentROCmNormMatmul:
     """Create the resident gfx1201 package directly from traced Graph IR.
@@ -546,13 +627,31 @@ def package_graph_rmsnorm_matmul(
     into a bounded runtime N guard while retaining its maximum storage.
     """
     from . import rocm_native
-    from .scheduled_matmul import with_bounded_dynamic_m
+    from .scheduled_matmul import (
+        with_bounded_dynamic_axes, with_bounded_dynamic_m, with_bounded_dynamic_mk,
+    )
 
-    if dynamic_n_bound is not None and dynamic_m_bound is not None:
-        raise ValueError("resident matmul currently admits one dynamic extent per package")
-    if dynamic_n_bound is not None:
+    explicit_dynamic_axes = tuple(
+        axis for axis, bound in (
+            ("M", dynamic_m_bound), ("N", dynamic_n_bound),
+            ("K", dynamic_k_bound),
+        ) if bound is not None
+    )
+    if "N" in explicit_dynamic_axes and len(explicit_dynamic_axes) > 1:
+        matmul_module = with_bounded_dynamic_axes(
+            matmul_module, explicit_dynamic_axes
+        )
+    elif dynamic_n_bound is not None:
         matmul_module = _with_bounded_dynamic_n(matmul_module, rhs, dynamic_n_bound)
-    if dynamic_m_bound is not None:
+    elif dynamic_m_bound is not None and dynamic_k_bound is not None:
+        matmul_module = with_bounded_dynamic_mk(
+            matmul_module, dynamic_m_bound, dynamic_k_bound
+        )
+        if tuple(np.shape(x)) != (dynamic_m_bound, dynamic_k_bound):
+            raise ValueError("dynamic M/K bounds must match the resident input capacity")
+    elif dynamic_k_bound is not None:
+        matmul_module = _with_bounded_dynamic_k(matmul_module, x, rhs, dynamic_k_bound)
+    elif dynamic_m_bound is not None:
         matmul_module = with_bounded_dynamic_m(matmul_module, dynamic_m_bound)
         if tuple(np.shape(x)) != (dynamic_m_bound, int(str(matmul_module.functions[0].args[0].ir_type.shape[1]))):
             raise ValueError("dynamic M bound must match the resident input capacity")
@@ -562,6 +661,8 @@ def package_graph_rmsnorm_matmul(
     )
     if dynamic_m_bound is not None:
         norm_package = _with_dynamic_m_capacity(norm_package, dynamic_m_bound)
+    if dynamic_k_bound is not None:
+        norm_package = _with_dynamic_k_capacity(norm_package, dynamic_k_bound)
     matmul_package = rocm_native.package_scheduled_matmul(
         matmul, pipeline_name=pipeline_name,
     )

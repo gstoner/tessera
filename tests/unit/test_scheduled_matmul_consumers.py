@@ -230,6 +230,66 @@ def test_nvidia_sm120_uses_shared_scheduled_matmul_contract() -> None:
     artifact.validate()
 
 
+def test_sm120_dynamic_k_projection_preserves_reusable_graph_module():
+    lhs = IRType("tensor<16x16xf16>", ("16", "16"), "fp16")
+    rhs = IRType("tensor<16x8xf16>", ("16", "8"), "fp16")
+    output = IRType("tensor<16x8xf32>", ("16", "8"), "fp32")
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name="matmul_static_graph",
+        args=[IRArg("lhs", lhs), IRArg("rhs", rhs)],
+        result_types=[output],
+        body=[IROp(
+            result="result", op_name="tessera.matmul",
+            operands=["%lhs", "%rhs"],
+            operand_types=[str(lhs), str(rhs)], result_type=str(output),
+        )],
+        return_values=["%result"],
+    )])
+    original_function = module.functions[0]
+    original_kwargs = dict(original_function.body[0].kwargs)
+
+    projected = nvidia_native._with_bounded_dynamic_k(module, 16)
+
+    assert projected is not module
+    assert projected.functions[0] is not original_function
+    assert module.functions[0].args[0].ir_type == lhs
+    assert module.functions[0].args[1].ir_type == rhs
+    assert module.functions[0].body[0].operand_types == [str(lhs), str(rhs)]
+    assert module.functions[0].body[0].kwargs == original_kwargs == {}
+    assert projected.functions[0].args[0].ir_type.shape == ("16", "?")
+    assert projected.functions[0].args[1].ir_type.shape == ("?", "8")
+    assert projected.functions[0].body[0].kwargs["shape_bounds"] == [16, 8, 16]
+
+
+@pytest.mark.parametrize("axes", [("M", "N"), ("N", "K"), ("M", "N", "K")])
+def test_bounded_dynamic_axes_projection_preserves_graph_and_all_axis_bounds(axes):
+    module = _module(target="nvidia_sm120", shape=(17, 19, 23))
+    original = module.functions[0]
+    original_shapes = tuple(str(arg.ir_type) for arg in original.args)
+    original_output = str(original.result_types[0])
+
+    projected = scheduled_matmul.with_bounded_dynamic_axes(module, axes)
+
+    function = projected.functions[0]
+    dynamic_axes = set(axes)
+    assert projected is not module and function is not original
+    assert tuple(str(arg.ir_type) for arg in module.functions[0].args) == original_shapes
+    assert str(module.functions[0].result_types[0]) == original_output
+    assert function.args[0].ir_type.shape == (
+        "?" if "M" in dynamic_axes else "17",
+        "?" if "K" in dynamic_axes else "19",
+    )
+    assert function.args[1].ir_type.shape == (
+        "?" if "K" in dynamic_axes else "19",
+        "?" if "N" in dynamic_axes else "23",
+    )
+    assert function.result_types[0].shape == (
+        "?" if "M" in dynamic_axes else "17",
+        "?" if "N" in dynamic_axes else "23",
+    )
+    assert function.body[0].kwargs["shape_bounds"] == [17, 23, 19]
+
+
 def test_nvidia_sm120_bf16_uses_shared_scheduled_matmul_contract() -> None:
     module = _module(target="nvidia_sm120", dtype="bf16")
     assert scheduled_matmul.supports_scheduled_matmul(
@@ -251,6 +311,22 @@ def test_nvidia_bounded_dynamic_graph_emits_strided_typed_carrier() -> None:
     assert artifact.tile_ir.count("leading_dim = 0") == 3
     assert artifact.tile_ir.count("tile.materialize_composed_layout") == 2
     assert "i64, i64, i64, i64, i64, i64)" in artifact.tile_ir
+
+
+@pytest.mark.parametrize("axes", [("M", "N"), ("N", "K"), ("M", "N", "K")])
+@requires_tessera_opt
+@requires_nvidia_target_ir
+def test_nvidia_composed_dynamic_axes_lower_through_schedule_and_tile(axes):
+    graph = _module(target="nvidia_sm120", shape=(17, 19, 23))
+    projected = scheduled_matmul.with_bounded_dynamic_axes(graph, axes)
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        projected, target="nvidia_sm120"
+    )
+    assert (artifact.dynamic_m, artifact.dynamic_n, artifact.dynamic_k) == tuple(
+        axis in axes for axis in ("M", "N", "K")
+    )
+    assert "schedule.matmul" in artifact.schedule_ir
+    assert "tile.matmul_kernel" in artifact.tile_ir
 
 
 @requires_tessera_opt
@@ -1942,3 +2018,29 @@ def test_x86_mixed_capability_does_not_admit_unsigned_rhs_or_wide_extents():
     assert not module.verify(target='x86').ok
     with pytest.raises(ValueError, match='i32 runtime ABI'):
         scheduled_matmul._graph_contract(_mixed_x86_module((1, 2**31, 1)), 'x86')
+
+
+def test_bounded_dynamic_mk_projects_graph_axes_and_capacity_metadata():
+    graph = _module(target="rocm", shape=(8, 32, 16), dtype="bf16")
+    projected = scheduled_matmul.with_bounded_dynamic_mk(graph, 8, 32)
+    function = projected.functions[0]
+    op = function.body[0]
+    assert function.args[0].ir_type.shape == ("?", "?")
+    assert function.args[1].ir_type.shape == ("?", "16")
+    assert function.result_types[0].shape == ("?", "16")
+    assert op.operand_types == [
+        str(function.args[0].ir_type), str(function.args[1].ir_type),
+    ]
+    assert op.result_type == str(function.result_types[0])
+    assert op.inferred_type == function.result_types[0]
+    assert op.kwargs["shape_bounds"] == [8, 16, 32]
+    assert graph.functions[0].args[0].ir_type.shape == ("8", "32")
+    assert graph.functions[0].args[1].ir_type.shape == ("32", "16")
+    assert graph.functions[0].result_types[0].shape == ("8", "16")
+
+
+@pytest.mark.parametrize("m_bound,k_bound", [(0, 32), (8, 0), (7, 32), (8, 31)])
+def test_bounded_dynamic_mk_rejects_inconsistent_capacities(m_bound, k_bound):
+    graph = _module(target="rocm", shape=(8, 32, 16), dtype="bf16")
+    with pytest.raises(ValueError, match="bound|capacity"):
+        scheduled_matmul.with_bounded_dynamic_mk(graph, m_bound, k_bound)

@@ -6360,3 +6360,100 @@ Remaining: dynamic M and N cannot be combined in one package; only row-major fp1
 
 Evidence: Super-Bear RTX 5070 (sm_120) passed the focused NVIDIA tensor-program and fp16 epilogue regression selection (25 passed), plus Ruff. A clean-source 31-sample packet checks active M=64 and 128 under bound 128; producer/consumer max errors are 0/2.38e-6 and 9.77e-4/2.38e-6. Same-allocation and stable-image checks pass. Stage medians are 11.76/12.74 us at M=64 and 16.42/13.58 us at M=128, but CV ranges from 9.7% to 25.8%; these are diagnostics only. The Tajasaurus 18/18 rerun establishes current gfx1201 correctness, with no new gfx1201 timing claim. [Packet](../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/README.md).
 <!-- entry-fields:end -->
+
+### 2026-09-30 — bounded dynamic-K resident RMSNorm-to-matmul
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#891](https://github.com/gstoner/tessera/pull/891); sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Outcome: The resident producer → consumer package contract admits an active K prefix within a fixed package bound while preserving package reuse, producer-to-consumer buffer residency, and checked runtime leading dimensions. The gfx1201 public Graph → Schedule → Tile route is numerically proved on Tajasaurus for fp16 and bf16 storage at K=128/192/256 under bound 256 (20/20 focused fp16 tests plus a correctness-gated BF16 device packet). The NVIDIA route is separately proved on Super-Bear sm_120 from public `from_text` RMSNorm/matmul traces for fp16 and bf16 at K=7/11/16 (4/4 focused tests), with an additional fp16 benchmark at M=128, K-bound=256, N=256. Both packets check the stable resident allocation and separately record producer/consumer device-event timing. Timing variability remains too high for a speedup claim or route promotion. Apple/x86 plans record architecture-specific non-applicability; no sibling execution claims are inferred.
+
+Remaining: dynamic K combined with M/N; broader dtype/layout coverage; and follow-on producer migrations under W1.1.
+
+Evidence: [gfx1201 dynamic-K method and packet](../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/README.md); [gfx1201 BF16 packet](../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/dynamic_k_bf16.json); [sm_120 packet](../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/dynamic_k_sm120.json).
+
+<!-- entry-fields:end -->
+
+### 2026-09-30 — padded host-view ingress on the resident edge
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#891](https://github.com/gstoner/tessera/pull/891); sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
+
+Outcome: The paired resident RMSNorm → matmul route accepts padded and sliced
+host views, normalizing the source to compact row-major storage and RHS to
+compact column-major storage before device upload. CUDA staging allocations
+remain owned until a successful stream synchronization. This keeps device
+leading dimensions aligned with the checked ABI and makes host packing explicit.
+The gfx1201 path already normalized host views and now has exact-device
+regressions that exercise them.
+
+Remaining: physical noncompact device layouts are outside this ingress contract.
+Combined dynamic extents and broader producer/layout coverage remain open.
+Apple and x86 have no consumer of this CUDA resident ABI; their execution
+obligations remain independent. No performance claim or route promotion.
+
+Evidence: Tajasaurus RX 9070 XT (gfx1201) passed 20/20 resident tests, including
+padded source/RHS bounded-K fp16 and bf16 cases. Super-Bear RTX 5070 (sm_120)
+passed 28/28 tensor-program tests, including both dtypes, padded views, numerical
+oracle checks, stable images, and same-allocation producer/consumer execution.
+A host-free fake-runtime regression verifies CUDA upload staging survives failed
+synchronization and is released only after successful synchronization. Device
+event timings keep producer and consumer separate and exclude host packing and
+upload; the gfx1201 probe showed high variation at K=128/256, while sm_120
+consumer K=128 also varied sharply. These results are diagnostic only. [Packets](../../../benchmarks/baselines/resident_strided_ingress_20260930/README.md).
+<!-- entry-fields:end -->
+
+### 2026-09-30 — paired bounded dynamic M+K resident RMSNorm-to-matmul
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#891](https://github.com/gstoner/tessera/pull/891); sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+
+Outcome: A shared Graph projection represents bounded dynamic M and K together,
+and both gfx1201 and sm_120 resident RMSNorm → matmul packages consume those
+bounds through Schedule, Tile, and checked native launch descriptors. Dynamic N
+remains separate. Padded/sliced host views normalize to the compact device ABI;
+the CUDA session retains upload staging through successful synchronization.
+
+Remaining: Apple and x86 need independent resident package/runtime consumers
+before claiming parity. Dynamic N combined with M/K, broader storage/layout
+envelopes, and remaining W1.1 producers are still open. No performance or
+selector promotion.
+
+Evidence: the gfx1201 suite passed 22/22 and the sm_120 tensor-program suite
+passed 30/30, including fp16/bf16 numerical parity, package reuse, and resident
+buffer checks. Five host-free Graph projection tests passed. Exact-device
+benchmark packets check three active (M,K) pairs on each target and record
+separate producer/consumer events; multiple CVs are high, so timings support
+attribution only. [Packets](../../../benchmarks/baselines/resident_dynamic_mk_20260930/README.md).
+<!-- entry-fields:end -->
+
+### 2026-09-30 — paired bounded dynamic M/N/K resident RMSNorm-to-matmul
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#891](https://github.com/gstoner/tessera/pull/891); sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
+
+Outcome: The shared Graph projection composes bounded M, N, and K, and both
+native resident consumers carry the projected extents through Schedule, Tile,
+and checked launch descriptors. Exact-device tests passed for fp16 and bf16 on
+Tajasaurus gfx1201 and Super-Bear sm_120. Each route reuses package images and
+the producer intermediate while accepting padded host views.
+
+Remaining: Apple and x86 have no resident package/runtime consumer for this
+edge. Wider physical device layouts and further W1.1 producer migrations remain
+separate work. No selector or performance promotion.
+
+Evidence: Host-free bounded-axis projection tests cover M/N, N/K, and M/N/K.
+The gfx1201 focused joint-M/N/K exact-device test passed 2/2 dtype rows. Its
+clean-source fp16 and bf16 packets each record 100 separate HIP-event samples
+per stage at active M/N/K=(64,128,128),(96,192,192),(128,256,256). The sm_120
+focused test passed 2/2 dtype rows; its clean-source fp16 and bf16 packets
+each record 31 separate CUDA-event samples per stage at
+(256,256,128),(384,384,192),(512,512,256). Correctness, stable image identity,
+and same-allocation checks passed. gfx1201 event variation remains high,
+especially for bf16; these measurements support stage attribution only.
+[Packets](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+<!-- entry-fields:end -->

@@ -12505,3 +12505,11 @@ Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to rocm: the change a
 Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
 
 The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. ROCm lowering/runtime are unchanged. Follow-up required: run the rounding-sensitive epilogue parity case on gfx1151 and gfx1201; Super-Bear lacks the ROCm executable pass, so it supplies no HIP evidence. The shared bounded dynamic-M helper now passes the owning gfx1201 resident suite 18/18 on Tajasaurus from PR head 6a84094 with a freshly built compiler; no new gfx1201 timing claim. The rounding-sensitive fp16 epilogue parity case remains open for both gfx1151 and gfx1201.
+
+## Bounded dynamic-K resident RMSNorm → matmul — 2026-09-30
+
+Owner: E2E-REAL-6 / W1.1; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Parity validated for the bounded dynamic-K contract on Tajasaurus RX 9070 XT (gfx1201): the public `from_text` route packages Graph → Schedule → Tile producer and consumer once, keeps the intermediate resident, checks active K prefixes 128/192/256 under bound 256, and compares outputs to an independent fp32 oracle. The owning resident RMSNorm/matmul tests pass 20/20. Producer and consumer are timed separately with HIP events. Packet medians have high variation at K=128 and K=256; they support stage attribution only, not a performance claim or selector promotion. This slice admits one dynamic extent per package. Dynamic M+K/N+K, other storage/layouts, and gfx1151 parity remain follow-up required.
+
+[Packet and method](../../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/README.md).

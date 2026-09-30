@@ -6359,4 +6359,18 @@ Outcome: A public Graph RMSNorm -> matmul pair now projects one bounded M extent
 Remaining: dynamic M and N cannot be combined in one package; only row-major fp16/bf16 is proved. Tajasaurus RX 9070 XT (gfx1201) rebuilt tessera-opt from this PR head and passed the owning resident suite 18/18, revalidating the shared bounded-M transformation. More NVIDIA tensor-valued producers remain under W1.1. CUDA-event timing variation is too high for a performance claim or route promotion.
 
 Evidence: Super-Bear RTX 5070 (sm_120) passed the focused NVIDIA tensor-program and fp16 epilogue regression selection (25 passed), plus Ruff. A clean-source 31-sample packet checks active M=64 and 128 under bound 128; producer/consumer max errors are 0/2.38e-6 and 9.77e-4/2.38e-6. Same-allocation and stable-image checks pass. Stage medians are 11.76/12.74 us at M=64 and 16.42/13.58 us at M=128, but CV ranges from 9.7% to 25.8%; these are diagnostics only. The Tajasaurus 18/18 rerun establishes current gfx1201 correctness, with no new gfx1201 timing claim. [Packet](../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/README.md).
+
+
+### 2026-09-30 — bounded dynamic-K resident RMSNorm-to-matmul
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: follow-up branch based on #890; sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Outcome: The resident producer → consumer package contract admits an active K prefix within a fixed package bound while preserving package reuse, producer-to-consumer buffer residency, and checked runtime leading dimensions. The gfx1201 public Graph → Schedule → Tile route is numerically proved on Tajasaurus for K=128/192/256 under bound 256 (20/20 focused tests). The NVIDIA route is separately proved on Super-Bear sm_120 for fp16 and bf16 at K=7/11/16 (4/4 focused tests), with an additional fp16 benchmark at M=128, K-bound=256, N=256. Both packets check the stable resident allocation and separately record producer/consumer device-event timing. Timing variability remains too high for a speedup claim or route promotion. Apple/x86 plans record architecture-specific non-applicability; no sibling execution claims are inferred.
+
+Remaining: dynamic K combined with M/N; broader dtype/layout coverage; and follow-on producer migrations under W1.1.
+
+Evidence: [gfx1201 dynamic-K method and packet](../../../benchmarks/baselines/gfx1201_resident_dynamic_k_20260930/README.md); [sm_120 packet](../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/dynamic_k_sm120.json).
+
 <!-- entry-fields:end -->

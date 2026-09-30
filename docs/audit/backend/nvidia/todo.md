@@ -10086,3 +10086,11 @@ Owner: E2E-REAL-6 / W1.1; sync `SM120-RMSNORM-MATMUL-DYNAMIC-M-2026-09-30`.
 Parity validated on Super-Bear (RTX 5070, sm_120) for Graph -> Schedule -> Tile fp16 and bf16 RMSNorm-to-matmul packages. Active M=7 and 16 execute under bound 16 in exact-device tests; the correctness-gated CUDA-event packet also checks active M=64 and 128 under bound 128. Producer and consumer retain the same resident allocation, stream and package images. Fused bias/residual/activation remains rejected until the ABI carries those operands.
 
 The 31-sample timing packet records clean source revision `1053c284`; medians are 11.76/12.74 us (producer/consumer) at M=64 and 16.42/13.58 us at M=128. CV reaches 25.8%, so timing is diagnostic and does not justify promotion. Dynamic M+N, non-row-major layouts, and additional storage formats remain open. The related gfx1201 shared bounded-M transformation was revalidated on Tajasaurus at PR head 6a84094 with a fresh compiler and 18/18 resident tests; this adds no gfx1201 timing claim. [Packet](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/README.md).
+
+## Bounded dynamic-K resident RMSNorm → matmul — 2026-09-30
+
+Owner: E2E-REAL-6 / W1.1; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Parity validated on Super-Bear (RTX 5070, sm_120): fp16 and bf16 exact-device tests reuse bounded dynamic-K Graph → Schedule → Tile packages for active K=7, 11, and 16. A correctness-gated fp16 packet additionally checks M=128, K bound=256, N=256 at active K=128/192/256. Producer and consumer are timed separately on the same resident allocation and stream; image identity is stable. Producer timing is stable, but consumer CUDA-event CV remains 45–54%, so the timing is diagnostic and supports no speedup claim or route promotion. gfx1201 has its own architecture-specific packet and 20/20 owning tests; no physical schedule or timing is transferred. Dynamic M+K/N+K, broader layouts/storage, and remaining W1.1 producer sites remain open.
+
+[SM120 packet](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/dynamic_k_sm120.json).

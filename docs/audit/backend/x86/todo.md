@@ -6676,3 +6676,9 @@ Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to x86: the change ad
 Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
 
 The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. X86 lowering/runtime are unchanged. Follow-up required: run the rounding-sensitive epilogue parity case through the native x86 package; no x86 device result is inferred from the shared reference test.
+
+## Bounded dynamic-K resident RMSNorm → matmul — 2026-09-30
+
+Owner: E2E-REAL-6; cross-backend sync `E2E-REAL-6-RESIDENT-DYNAMIC-K-2026-09-30`.
+
+Not applicable to x86: this slice extends the architecture-specific CUDA and HIP resident RMSNorm/matmul launch descriptors and per-backend packages. It changes no shared Graph/Schedule operation or x86 ABI and includes no Zen 5 execution claim.

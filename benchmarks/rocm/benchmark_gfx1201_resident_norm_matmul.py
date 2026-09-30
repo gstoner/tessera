@@ -17,8 +17,9 @@ parser.add_argument("--warmup", type=int, default=25)
 parser.add_argument("--iterations", type=int, default=100)
 parser.add_argument("--dynamic-n", action="store_true")
 parser.add_argument("--dynamic-m", action="store_true")
+parser.add_argument("--dynamic-k", action="store_true")
 args = parser.parse_args()
-if args.dynamic_m and args.dynamic_n:
+if sum((args.dynamic_m, args.dynamic_n, args.dynamic_k)) > 1:
     parser.error("choose one dynamic extent per package")
 if args.warmup < 0 or args.iterations <= 0:
     parser.error("warmup must be nonnegative and iterations must be positive")
@@ -51,6 +52,7 @@ with package_graph_rmsnorm_matmul(
     rhs,
     dynamic_n_bound=n if args.dynamic_n else None,
     dynamic_m_bound=m if args.dynamic_m else None,
+    dynamic_k_bound=k if args.dynamic_k else None,
     pipeline_name="tessera-lower-to-rocm",
 ) as session:
     check = session.run(warmup=0, iterations=1)
@@ -64,6 +66,7 @@ with package_graph_rmsnorm_matmul(
     np.testing.assert_allclose(check["outputs"][0], expected, rtol=tolerance, atol=tolerance)
     active_n_runs = []
     active_m_runs = []
+    active_k_runs = []
     if args.dynamic_m:
         for active_m in (max(1, m // 2), m):
             active_x = x[:active_m]
@@ -83,6 +86,35 @@ with package_graph_rmsnorm_matmul(
                 )
             active_m_runs.append({
                 "active_m": active_m,
+                "correctness_checked": True,
+                "producer_device_event_ms": result["producer_device_event_ms"],
+                "consumer_device_event_ms": result["consumer_device_event_ms"],
+                "producer_median_ms": result["producer_median_ms"],
+                "consumer_median_ms": result["consumer_median_ms"],
+                "resident_buffer_addresses": result["buffer_addresses"],
+            })
+    elif args.dynamic_k:
+        active_ks = (max(1, k // 2), max(1, (3 * k) // 4), k)
+        for active_k in active_ks:
+            active_x = x[:, :active_k].copy()
+            active_rhs = rhs[:active_k, :].copy()
+            active_x32 = active_x.astype(np.float32)
+            active_normalized = (
+                active_x32 / np.sqrt(
+                    np.mean(active_x32 * active_x32, axis=-1, keepdims=True) + epsilon
+                )
+            ).astype(storage_dtype)
+            active_expected = active_normalized.astype(np.float32) @ active_rhs.astype(np.float32)
+            result = session.run(
+                warmup=args.warmup, iterations=args.iterations,
+                x=active_x, rhs=active_rhs,
+            )
+            for output in result["outputs"]:
+                np.testing.assert_allclose(
+                    output, active_expected, rtol=tolerance, atol=tolerance
+                )
+            active_k_runs.append({
+                "active_k": active_k,
                 "correctness_checked": True,
                 "producer_device_event_ms": result["producer_device_event_ms"],
                 "consumer_device_event_ms": result["consumer_device_event_ms"],
@@ -141,8 +173,10 @@ with package_graph_rmsnorm_matmul(
         "shape_mkn": [m, k, n],
         "dynamic_n_bound": n if args.dynamic_n else None,
         "dynamic_m_bound": m if args.dynamic_m else None,
+        "dynamic_k_bound": k if args.dynamic_k else None,
         "active_n_runs": active_n_runs,
         "active_m_runs": active_m_runs,
+        "active_k_runs": active_k_runs,
         "storage": args.dtype,
         "accumulation": "fp32",
         "output": "fp32",

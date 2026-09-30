@@ -561,3 +561,66 @@ def test_gfx1201_public_frontend_packages_and_executes_resident_edge():
         repeated = session.run(warmup=0, iterations=1)
         assert repeated["buffer_addresses"] == addresses
         np.testing.assert_allclose(repeated["outputs"][0], expected, rtol=2e-3, atol=2e-3)
+
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+@pytest.mark.parametrize("storage_dtype", ["fp16", "bf16"])
+def test_gfx1201_resident_rmsnorm_to_bounded_dynamic_k_reuses_capacity(storage_dtype):
+    """Reuse both images and resident allocations as the contracted K prefix changes."""
+    from tessera import runtime as rt
+    from tessera.compiler.resident_rocm_norm_matmul import package_graph_rmsnorm_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+
+    assert rt._rocm_live_arch() == rt._rocm_chip() == "gfx1201"
+    m, k_bound, n = 5, 32, 16
+    if storage_dtype == "bf16":
+        import ml_dtypes
+        storage_np_dtype = np.dtype(ml_dtypes.bfloat16)
+    else:
+        storage_np_dtype = np.dtype(np.float16)
+    norm_graph = _rmsnorm_graph(dtype=storage_dtype, shape=(m, k_bound))
+    matmul_graph = matmul_module(
+        target="rocm", shape=(m, k_bound, n), dtype=storage_dtype, output_dtype="fp32"
+    )
+    rng = np.random.default_rng(1201_64013)
+    x_bound = rng.normal(0.0, 0.5, (m, k_bound)).astype(storage_np_dtype)
+    rhs_bound = rng.normal(0.0, 0.25, (k_bound, n)).astype(storage_np_dtype)
+
+    with package_graph_rmsnorm_matmul(
+        norm_graph, matmul_graph, x_bound, rhs_bound, dynamic_k_bound=k_bound
+    ) as session:
+        assert session._dynamic_k
+        assert not session._dynamic_m and not session._dynamic_n
+        assert session._norm.provenance["dynamic_columns_bound"] == k_bound
+        assert any(
+            guard.predicate == "max" and guard.binding == session._gemm_a
+            and guard.dimension == 1 and guard.value == k_bound
+            for guard in session._gemm.shape_guards
+        )
+        addresses = session.run(warmup=0, iterations=1)["buffer_addresses"]
+        epsilon = float(session._norm.provenance["epsilon"])
+        for active_k in (13, 21, k_bound):
+            x = x_bound[:, :active_k].copy()
+            rhs = rhs_bound[:active_k, :].copy()
+            result = session.run(warmup=1, iterations=3, x=x, rhs=rhs)
+            x32 = x.astype(np.float32)
+            normalized = (
+                x32 / np.sqrt(np.mean(x32 * x32, axis=-1, keepdims=True) + epsilon)
+            ).astype(storage_np_dtype)
+            expected = normalized.astype(np.float32) @ rhs.astype(np.float32)
+            assert all(output.shape == (m, n) for output in result["outputs"])
+            assert result["buffer_addresses"] == addresses
+            assert result["producer_median_ms"] > 0
+            assert result["consumer_median_ms"] > 0
+            for output in result["outputs"]:
+                np.testing.assert_allclose(output, expected, rtol=3e-2 if storage_dtype == "bf16" else 2e-3,
+                                           atol=3e-2 if storage_dtype == "bf16" else 2e-3)
+        with pytest.raises(ValueError, match="dynamic K bound"):
+            package_graph_rmsnorm_matmul(
+                norm_graph, matmul_graph, x_bound, rhs_bound, dynamic_k_bound=k_bound + 1
+            )

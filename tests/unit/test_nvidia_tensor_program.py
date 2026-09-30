@@ -16,13 +16,19 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="none", dynamic_m=False):
+def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="none", dynamic_m=False, dynamic_k=False):
     m, k, n = 16, 16, 16 if dynamic_n else 8
     elem = "f16" if dtype == "fp16" else "bf16"
     a = IRType(f"tensor<{m}x{k}x{elem}>", (str(m), str(k)), dtype)
+    consumer_a = (
+        IRType(f"tensor<{m}x?x{elem}>", (str(m), "?"), dtype)
+        if dynamic_k else a
+    )
     b = (
         IRType(f"tensor<{k}x?x{elem}>", (str(k), "?"), dtype)
         if dynamic_n
+        else IRType(f"tensor<?x{n}x{elem}>", ("?", str(n)), dtype)
+        if dynamic_k
         else IRType(f"tensor<{k}x{n}x{elem}>", (str(k), str(n)), dtype)
     )
     output_elem = "f16" if output_dtype == "fp16" else "f32"
@@ -46,13 +52,13 @@ def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="non
     )])
     consumer_module = GraphIRModule(functions=[GraphIRFunction(
         name="sm120_rmsnorm_matmul_consumer",
-        args=[IRArg("normalized", a), IRArg("weights", b)],
+        args=[IRArg("normalized", consumer_a), IRArg("weights", b)],
         result_types=[out],
         body=[IROp(
             result="result", op_name="tessera.matmul",
             operands=["%normalized", "%weights"],
-            operand_types=[str(a), str(b)], result_type=str(out),
-            kwargs=({"shape_bounds": [m, n, k]} if dynamic_n else {}) | {
+            operand_types=[str(consumer_a), str(b)], result_type=str(out),
+            kwargs=({"shape_bounds": [m, n, k]} if dynamic_n or dynamic_k else {}) | {
                 "activation": activation,
             },
         )],
@@ -62,6 +68,7 @@ def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="non
         producer_module, consumer_module,
         pipeline_name="tessera-lower-to-nvidia-sm120",
         dynamic_m_bound=m if dynamic_m else None,
+        dynamic_k_bound=k if dynamic_k else None,
     )
 
 
@@ -386,3 +393,59 @@ def test_sm120_rmsnorm_tensor_edge_executes_public_frontend_on_exact_device():
         np.testing.assert_allclose(output, expected, rtol=0.0, atol=2e-3)
         assert result.producer_receipt["execution_kind"] == "native_gpu"
         assert result.consumer_receipt["execution_kind"] == "native_gpu"
+
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_sm120_rmsnorm_tensor_edge_projects_bounded_dynamic_k(dtype):
+    program = _program(dtype, dynamic_k=True)
+    program.validate()
+    assert program.dynamic_k
+    assert not program.dynamic_m and not program.dynamic_n
+    assert program.consumer.descriptor.provenance["dynamic_shape_bounds"] == [
+        program.m, program.n, program.k,
+    ]
+    assert program.producer.descriptor.provenance["dynamic_k_bound"] == program.k
+    for name in (program.producer_input_name, program.intermediate_name):
+        shape, dynamic = program._shape_bound(program.producer, name, 2)
+        assert shape == (program.m, program.k)
+        assert dynamic == (False, True)
+    assert program._shape_bound(program.consumer, program.consumer_input_name, 2)[1] == (
+        False, True
+    )
+    assert program._shape_bound(program.consumer, program.consumer_rhs_name, 2)[1] == (
+        True, False
+    )
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_sm120_rmsnorm_tensor_edge_reuses_bounded_dynamic_k_package_on_exact_device(dtype):
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires exact SM120 device execution")
+    import ml_dtypes
+
+    storage_dtype = np.float16 if dtype == "fp16" else np.dtype(ml_dtypes.bfloat16)
+    program = _program(dtype, dynamic_k=True)
+    rng = np.random.default_rng(17123)
+    bound_rhs = rng.normal(0.0, 0.25, (program.k, program.n)).astype(storage_dtype)
+    image_digest = program.consumer.image.image_digest
+    for active_k in (7, 11, program.k):
+        source = np.ascontiguousarray(
+            rng.normal(0.0, 0.25, (program.m, active_k)).astype(storage_dtype)
+        )
+        rhs = np.asfortranarray(bound_rhs[:active_k, :])
+        with program.execute_resident(source, rhs) as result:
+            edge = result.intermediate.numpy()
+            output = result.output.numpy()
+            x32 = source.astype(np.float32)
+            expected_edge = (
+                x32 / np.sqrt(np.mean(x32 * x32, axis=-1, keepdims=True) + 1e-5)
+            ).astype(storage_dtype)
+            expected_output = expected_edge.astype(np.float32) @ rhs.astype(np.float32)
+            np.testing.assert_allclose(edge, expected_edge, rtol=3e-2, atol=3e-2)
+            np.testing.assert_allclose(output, expected_output, rtol=3e-2, atol=3e-2)
+        assert program.consumer.image.image_digest == image_digest
+    source = np.ones((program.m, program.k + 1), dtype=storage_dtype)
+    rhs = np.asfortranarray(np.ones((program.k + 1, program.n), dtype=storage_dtype))
+    with pytest.raises(ValueError, match="within the MxK bound"):
+        program.execute_resident(source, rhs)

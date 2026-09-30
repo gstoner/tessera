@@ -331,8 +331,14 @@ class NVIDIANativeTensorProgram:
             raise ValueError("matmul RHS must have a bounded column-major KxN contract")
         output = self._binding(self.consumer, self.output_name, "output")
         output_shape, output_dynamic = self._shape_bound(self.consumer, self.output_name, 2)
-        expected_output_dtype = {"f16": "fp16", "f32": "fp32"}.get(
-            self.consumer.descriptor.provenance.get("epilogue", {}).get("output")
+        epilogue = self.consumer.descriptor.provenance.get("epilogue")
+        output_storage = (
+            epilogue.get("output") if isinstance(epilogue, Mapping) else None
+        )
+        expected_output_dtype = (
+            {"f16": "fp16", "f32": "fp32"}.get(output_storage)
+            if isinstance(output_storage, str)
+            else None
         )
         if (
             output.dtype != expected_output_dtype

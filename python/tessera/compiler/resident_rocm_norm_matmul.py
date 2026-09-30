@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ctypes
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -23,12 +23,14 @@ class ResidentROCmNormMatmul:
         from tessera.compiler.rocm_native import GFX_MATMUL_F16_F32_ABI, GFX_NORM_F16_ABI
 
         self._closed = False
-        self._hip = None
+        self._hip: ctypes.CDLL | None = None
         self._stream = ctypes.c_void_p()
         self._modules: list[ctypes.c_void_p] = []
         self._events: list[ctypes.c_void_p] = []
         self._buffers: dict[str, ctypes.c_void_p] = {}
         self._image_storage: list[Any] = []
+        self._norm_function = ctypes.c_void_p()
+        self._gemm_function = ctypes.c_void_p()
         self._norm_package, self._matmul_package = norm_package, matmul_package
         self._norm, self._gemm = norm_package.descriptor, matmul_package.descriptor
         if any(
@@ -98,7 +100,9 @@ class ResidentROCmNormMatmul:
             (self.m + self._macro_tile[0] - 1) // self._macro_tile[0],
             1,
         )
-        self._block_gemm = tuple(int(v) for v in workgroup)
+        self._block_gemm = cast(
+            tuple[int, int, int], tuple(int(v) for v in workgroup)
+        )
         if rt._rocm_live_arch() != "gfx1201" or rt._rocm_chip() != "gfx1201":
             raise RuntimeError("resident norm-matmul requires the exact gfx1201 owning device")
         hip = rt._load_hip_for_launch()
@@ -113,8 +117,12 @@ class ResidentROCmNormMatmul:
         try:
             if hip.hipStreamCreateWithFlags(ctypes.byref(self._stream), 1) != 0:
                 raise RuntimeError("resident norm-matmul stream creation failed")
-            self._load_module(norm_package.image.payload, self._norm.entry_symbol)
-            self._load_module(matmul_package.image.payload, self._gemm.entry_symbol)
+            self._norm_function = self._load_module(
+                norm_package.image.payload, self._norm.entry_symbol
+            )
+            self._gemm_function = self._load_module(
+                matmul_package.image.payload, self._gemm.entry_symbol
+            )
             for name, array in (
                 ("x", self.x),
                 ("rhs", self.rhs),
@@ -171,8 +179,14 @@ class ResidentROCmNormMatmul:
             {"M": self.m, "N": self.n, "K": self.k},
         )
 
-    def _bind_hip_api(self) -> None:
+    def _require_hip(self) -> ctypes.CDLL:
         hip = self._hip
+        if hip is None:
+            raise RuntimeError("resident norm-matmul HIP library is not initialized")
+        return hip
+
+    def _bind_hip_api(self) -> None:
+        hip = self._require_hip()
         hip.hipStreamCreateWithFlags.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint]
         hip.hipStreamSynchronize.argtypes = [ctypes.c_void_p]
         hip.hipStreamDestroy.argtypes = [ctypes.c_void_p]
@@ -185,21 +199,23 @@ class ResidentROCmNormMatmul:
         hip.hipModuleLoadData.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p]
         hip.hipModuleUnload.argtypes = [ctypes.c_void_p]
 
-    def _load_module(self, payload: bytes, entry: str) -> None:
+    def _load_module(self, payload: bytes, entry: str) -> ctypes.c_void_p:
+        hip = self._require_hip()
         storage = ctypes.create_string_buffer(payload)
         module = ctypes.c_void_p()
-        if self._hip.hipModuleLoadData(ctypes.byref(module), ctypes.cast(storage, ctypes.c_void_p)) != 0:
+        if hip.hipModuleLoadData(ctypes.byref(module), ctypes.cast(storage, ctypes.c_void_p)) != 0:
             raise RuntimeError("resident norm-matmul HSACO load failed")
         self._image_storage.append(storage)
         self._modules.append(module)
         function = ctypes.c_void_p()
-        if self._hip.hipModuleGetFunction(ctypes.byref(function), module, entry.encode()) != 0:
+        if hip.hipModuleGetFunction(ctypes.byref(function), module, entry.encode()) != 0:
             raise RuntimeError(f"resident norm-matmul entry {entry!r} not found")
-        setattr(self, f"_function_{len(self._modules)}", function)
+        return function
 
     def _allocate(self, name: str, size: int) -> None:
+        hip = self._require_hip()
         pointer = ctypes.c_void_p()
-        if self._hip.hipMalloc(ctypes.byref(pointer), max(int(size), 1)) != 0 or pointer.value is None:
+        if hip.hipMalloc(ctypes.byref(pointer), max(int(size), 1)) != 0 or pointer.value is None:
             raise RuntimeError(f"resident norm-matmul {name} allocation failed")
         self._buffers[name] = pointer
 
@@ -221,13 +237,15 @@ class ResidentROCmNormMatmul:
             holders[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
         gx, gy, gz = grid
         bx, by, bz = block
-        rc = self._hip.hipModuleLaunchKernel(function, gx, gy, gz, bx, by, bz, 0, self._stream, holders, None)
+        hip = self._require_hip()
+        rc = hip.hipModuleLaunchKernel(function, gx, gy, gz, bx, by, bz, 0, self._stream, holders, None)
         if rc != 0:
             raise RuntimeError(f"resident norm-matmul kernel launch failed rc={rc}")
 
     def _run_once(self, rhs: Any | None = None) -> tuple[np.ndarray, float, float]:
         if self._closed:
             raise RuntimeError("resident norm-matmul session is closed")
+        hip = self._require_hip()
         active_rhs = self.rhs if rhs is None else np.array(rhs, dtype=np.float16, order="C", copy=True)
         if (
             active_rhs.ndim != 2
@@ -249,7 +267,7 @@ class ResidentROCmNormMatmul:
         }
         runtime_scalars = {"M": self.m, "N": active_n, "K": self.k}
         self._gemm.validate_invocation(self._matmul_package.image, runtime_buffers, runtime_scalars)
-        hip = self._hip
+        hip = self._require_hip()
         start_norm, stop_norm, start_gemm, stop_gemm = self._events
         if hip.hipMemcpyAsync(
             self._buffers["rhs"], active_rhs.ctypes.data_as(ctypes.c_void_p), active_rhs.nbytes, 1, self._stream
@@ -262,7 +280,7 @@ class ResidentROCmNormMatmul:
             + self._memref(self._buffers["intermediate"], self.rows * self.k)
             + [ctypes.c_int64(self.rows), ctypes.c_int64(self.k), ctypes.c_float(self.epsilon)]
         )
-        self._launch(self._function_1, self._grid_norm, self._block_norm, norm_args)
+        self._launch(self._norm_function, self._grid_norm, self._block_norm, norm_args)
         if hip.hipEventRecord(stop_norm, self._stream) != 0:
             raise RuntimeError("resident RMSNorm stop event failed")
         if hip.hipEventRecord(start_gemm, self._stream) != 0:
@@ -278,7 +296,7 @@ class ResidentROCmNormMatmul:
             self._grid_gemm[1],
             1,
         )
-        self._launch(self._function_2, grid_gemm, self._block_gemm, gemm_args)
+        self._launch(self._gemm_function, grid_gemm, self._block_gemm, gemm_args)
         if hip.hipEventRecord(stop_gemm, self._stream) != 0 or hip.hipEventSynchronize(stop_gemm) != 0:
             raise RuntimeError("resident matmul completion event failed")
         norm_ms, gemm_ms = ctypes.c_float(), ctypes.c_float()
@@ -321,7 +339,10 @@ class ResidentROCmNormMatmul:
             "consumer_device_event_ms": consumer,
             "producer_median_ms": float(np.median(producer)),
             "consumer_median_ms": float(np.median(consumer)),
-            "buffer_addresses": {name: int(ptr.value) for name, ptr in self._buffers.items()},
+            "buffer_addresses": {
+                name: int(ptr.value) if ptr.value is not None else 0
+                for name, ptr in self._buffers.items()
+            },
             "device_id": self._device_id,
         }
 

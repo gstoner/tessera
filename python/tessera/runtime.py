@@ -5073,8 +5073,6 @@ def _submit_rocm_gfx1151_native(
                 arguments.extend(memref_args(device, int(array.size)))
             arguments.extend(memref_args(device_o, int(output.size)))
             arguments.extend(ctypes.c_int64(value) for value in dimensions)
-            if normalization:
-                arguments.append(ctypes.c_float(epsilon))
         argument_array = (ctypes.c_void_p * len(arguments))()
         for index, value in enumerate(arguments):
             argument_array[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)

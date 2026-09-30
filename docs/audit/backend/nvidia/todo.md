@@ -10127,4 +10127,7 @@ RMSNorm to matmul with fp16 and bf16 storage, bounded M/N/K, padded host views,
 numerical checks, stable images, and intermediate allocation reuse. The 31-sample fp16 and bf16 packets measure active M/N/K of
 (256,256,128), (384,384,192), and (512,512,256) under bound
 (512,512,256). Stage medians/CVs are recorded separately; they support
-attribution only, with no performance promotion. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+attribution only, with no performance promotion. The standalone CUDA
+`strided` uploader rejects noncompact 2-D host views before allocation;
+the public resident-program path packs accepted padded views to compact
+storage. Physical device pitches remain out of scope. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).

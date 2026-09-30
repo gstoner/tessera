@@ -10281,3 +10281,12 @@ Not applicable to Apple code generation or runtime: the new ingress normalizatio
 is in the CUDA resident-session uploader, while Apple has no consumer of this
 NVIDIA resident ABI. Apple JIT execution obligations remain open; no Metal
 parity follows.
+
+
+## `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`: paired bounded dynamic M+K resident edge
+
+Owner E2E-REAL-6 / W1.1; sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+Follow-up required: the shared Graph projection now expresses independently
+bounded M and K for RMSNorm-to-matmul, but Apple has no corresponding resident
+Metal package or execution proof. No Metal Schedule, ABI, or parity is inferred;
+Apple JIT obligations remain tracked separately.

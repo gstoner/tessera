@@ -6404,3 +6404,28 @@ event timings keep producer and consumer separate and exclude host packing and
 upload; the gfx1201 probe showed high variation at K=128/256, while sm_120
 consumer K=128 also varied sharply. These results are diagnostic only. [Packets](../../../benchmarks/baselines/resident_strided_ingress_20260930/README.md).
 <!-- entry-fields:end -->
+
+### 2026-09-30 — paired bounded dynamic M+K resident RMSNorm-to-matmul
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#891](https://github.com/gstoner/tessera/pull/891); sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+
+Outcome: A shared Graph projection represents bounded dynamic M and K together,
+and both gfx1201 and sm_120 resident RMSNorm → matmul packages consume those
+bounds through Schedule, Tile, and checked native launch descriptors. Dynamic N
+remains separate. Padded/sliced host views normalize to the compact device ABI;
+the CUDA session retains upload staging through successful synchronization.
+
+Remaining: Apple and x86 need independent resident package/runtime consumers
+before claiming parity. Dynamic N combined with M/K, broader storage/layout
+envelopes, and remaining W1.1 producers are still open. No performance or
+selector promotion.
+
+Evidence: the gfx1201 suite passed 22/22 and the sm_120 tensor-program suite
+passed 30/30, including fp16/bf16 numerical parity, package reuse, and resident
+buffer checks. Five host-free Graph projection tests passed. Exact-device
+benchmark packets check three active (M,K) pairs on each target and record
+separate producer/consumer events; multiple CVs are high, so timings support
+attribution only. [Packets](../../../benchmarks/baselines/resident_dynamic_mk_20260930/README.md).
+<!-- entry-fields:end -->

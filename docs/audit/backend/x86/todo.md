@@ -6690,3 +6690,12 @@ Owner E2E-REAL-6; sync `E2E-REAL-6-RESIDENT-STRIDED-INGRESS-2026-09-30`.
 Not applicable to x86 code generation or runtime: the change covers CUDA
 resident-session staging and the existing gfx1201 resident ingress path. No
 AVX-512 package or host-input ABI changed; no x86 parity or timing claim follows.
+
+
+## `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`: paired bounded dynamic M+K resident edge
+
+Owner E2E-REAL-6 / W1.1; sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+Follow-up required: the shared Graph projection can express bounded M and K,
+but this slice adds only gfx1201 HIP and sm_120 CUDA resident package consumers.
+No AVX-512 lowering, runtime ABI, or x86 numerical parity is included; any x86
+resident consumer needs its own package and exact-CPU proof.

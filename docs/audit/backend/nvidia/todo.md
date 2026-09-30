@@ -10105,3 +10105,16 @@ upload, and holds async upload staging memory until successful stream sync.
 Exact RTX 5070 tests cover fp16/bf16, bounded K prefixes, numerical parity,
 stable package images and resident intermediate reuse. Producer and consumer
 device-event timings exclude packing/upload. No performance promotion.
+
+
+## `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`: paired bounded dynamic M+K resident edge
+
+Owner E2E-REAL-6 / W1.1; sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+Parity validated on Super-Bear RTX 5070 (sm_120) for fp16 and bf16 exact-device
+Graph-traced RMSNorm → matmul at active (M,K)=(5,7),(11,11),(16,16), plus a
+padded-ingress benchmark at (64,128),(128,192),(128,256). The shared Graph
+projection emits both dynamic axes and the checked shape bounds; producer and
+consumer reuse the same resident allocation and package images. Host packing
+and upload are excluded from CUDA-event stage timing. High consumer variation
+remains diagnostic; no selector or performance promotion.
+[Packet](../../../../benchmarks/baselines/resident_dynamic_mk_20260930/README.md).

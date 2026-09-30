@@ -12524,3 +12524,15 @@ fp16/bf16 bounded-K prefixes, preserving numerical results and allocation
 reuse. A correctness-gated benchmark exercises these inputs and reports device
 stages separately; host staging is outside those event timings. High timing
 variance is diagnostic only.
+
+
+## `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`: paired bounded dynamic M+K resident edge
+
+Owner E2E-REAL-6 / W1.1; sync `E2E-REAL-6-RESIDENT-DYNAMIC-MK-2026-09-30`.
+Parity validated on Tajasaurus RX 9070 XT (gfx1201) for fp16 and bf16 at active
+(M,K)=(3,13),(5,21),(8,32), including padded host views. One paired Graph →
+Schedule → Tile package reuses its producer/consumer images and resident
+allocation; numerical results match the fp32 oracle. Separate HIP-event stages
+exclude host packing and upload. Several rows have high event variation, so
+results are diagnostic and do not promote a route.
+[Packet](../../../../benchmarks/baselines/resident_dynamic_mk_20260930/README.md).

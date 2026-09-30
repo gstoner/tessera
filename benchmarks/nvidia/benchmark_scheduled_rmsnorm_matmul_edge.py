@@ -367,7 +367,7 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
         weights = weights_backing[:active_k, :]
         resident = program.execute_resident(source, weights)
         try:
-            edge = resident.intermediate.numpy()
+            edge = resident.intermediate.numpy()[:active_m, :]
             output = resident.output.numpy()
             source_f32 = source.astype(np.float32)
             norm_reference = (

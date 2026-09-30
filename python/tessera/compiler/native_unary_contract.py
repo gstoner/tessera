@@ -30,10 +30,13 @@ def verify_unary_projection(artifact, parent: str) -> None:
     import math
     import re
     tensor = r'tensor<((?:[1-9][0-9]*x)*)(f32|f16|bf16)>'
-    functions = re.findall(r'func.func @([\w]+)\(%[\w]+: ' + tensor
-                           + r'\) -> ' + tensor + r' \{', parent)
+    functions = re.findall(
+        r'func.func @([\w]+)\(%[\w]+: ' + tensor
+        + r'\) -> ' + tensor + r'(?: attributes \{[^{}]*\})? \{',
+        parent,
+    )
     if len(functions) != 1 or parent.count('func.func ') != 1:
-        raise ValueError('Native unary descriptor requires one static f32 native function')
+        raise ValueError('Native unary descriptor requires one static tensor function')
     name, input_dims, storage, output_dims, output_storage = functions[0]
     input_shape = tuple(int(d) for d in input_dims.split('x') if d)
     output_shape = tuple(int(d) for d in output_dims.split('x') if d)

@@ -3524,14 +3524,15 @@ class CudaOwnedDeviceBuffer:
             self._closed = True
 
     def view(self, offset_bytes: int, shape: tuple[int, ...],
-             dtype: Any) -> "CudaOwnedDeviceBuffer":
+             dtype: Any, *, layout: str | None = None) -> "CudaOwnedDeviceBuffer":
         import numpy as np
         nbytes = int(np.prod(shape)) * np.dtype(dtype).itemsize
         if offset_bytes < 0 or offset_bytes + nbytes > self.nbytes:
             raise ValueError("CUDA device view exceeds its parent allocation")
         return CudaOwnedDeviceBuffer(
             self._session, self.ptr + offset_bytes, shape, dtype, nbytes,
-            owns=False, layout=self.layout, storage_order=self.storage_order)
+            owns=False, layout=self.layout if layout is None else layout,
+            storage_order=self.storage_order)
 
     def __del__(self) -> None:
         try:

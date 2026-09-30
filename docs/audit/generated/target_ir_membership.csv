@@ -77,7 +77,7 @@ rocm,mla_absorb_decode,optional-only,,dst_space src_space
 rocm,block_sparse_attention,optional-only,,dst_space src_space
 rocm,block_sparse_attention_tiled,optional-only,,dst_space src_space
 rocm,block_sparse_topk_select,optional-only,,dst_space src_space
-rocm,norm,requires,dtype,dst_space src_space
+rocm,norm,requires,dtype scheduled_unary,dst_space src_space
 rocm,int4_pack,optional-only,,dst_space src_space
 rocm,reduce,requires,dtype,dst_space src_space
 rocm,paged_kv_read,requires,storage table_storage,dst_space src_space

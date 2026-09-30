@@ -91,6 +91,8 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 
 | Recorder | Output |
 |---|---|
+| `rocm/benchmark_gfx1201_resident_norm_matmul.py` | `baselines/gfx1201_resident_frontend_20260930/` (exact-device Graph -> Schedule -> Tile resident RMSNorm/matmul packet) |
+| `nvidia/benchmark_scheduled_rmsnorm_matmul_edge.py` | `baselines/sm120_rmsnorm_matmul_edge_20260930/` (exact-device SM120 resident edge packet) |
 | `nvidia/record_attention_forward_schedule_matrix.py` | `nvidia_sm120_attention_forward_schedules.json` |
 | `nvidia/record_autotune_reproducibility.py` | `nvidia_sm120_autotune_reproducibility.json` (reads `autotune_corpus.json` and every `nvidia*resource*.json`) |
 | `nvidia/record_bf16_reduction_breadth.py` | `nvidia_sm120_bf16_reduction_breadth.json` |

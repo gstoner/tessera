@@ -29,10 +29,16 @@ from tessera.compiler.graph_ir import (  # noqa: E402
 )
 
 
-def _modules(m: int, k: int, n: int):
+def _modules(m: int, k: int, n: int, *, dynamic_n: bool = False):
     a = IRType(f"tensor<{m}x{k}xf16>", (str(m), str(k)), "fp16")
-    b = IRType(f"tensor<{k}x{n}xf16>", (str(k), str(n)), "fp16")
-    out = IRType(f"tensor<{m}x{n}xf32>", (str(m), str(n)), "fp32")
+    b = (
+        IRType(f"tensor<{k}x?xf16>", (str(k), "?"), "fp16")
+        if dynamic_n else IRType(f"tensor<{k}x{n}xf16>", (str(k), str(n)), "fp16")
+    )
+    out = (
+        IRType(f"tensor<{m}x?xf32>", (str(m), "?"), "fp32")
+        if dynamic_n else IRType(f"tensor<{m}x{n}xf32>", (str(m), str(n)), "fp32")
+    )
     producer = GraphIRModule(functions=[GraphIRFunction(
         name="sm120_rmsnorm_tensor_producer",
         args=[IRArg("x", a)],
@@ -51,7 +57,8 @@ def _modules(m: int, k: int, n: int):
         body=[IROp(
             result="result", op_name="tessera.matmul",
             operands=["%normalized", "%weights"],
-            operand_types=[str(a), str(b)], result_type=str(out), kwargs={},
+            operand_types=[str(a), str(b)], result_type=str(out),
+            kwargs={"shape_bounds": [m, n, k]} if dynamic_n else {},
         )],
         return_values=["%result"],
     )])
@@ -71,11 +78,136 @@ def _version(cmd: list[str]) -> str:
     return (result.stdout or result.stderr).strip().splitlines()[0]
 
 
+
+
+def _dynamic_n_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
+                         bound_n: int, active_n: int) -> int:
+    rng = np.random.default_rng(0x5A17 + m + k + bound_n + active_n)
+    source = np.ascontiguousarray(rng.normal(0.0, 0.25, size=(m, k)).astype(np.float16))
+    weights = np.asfortranarray(
+        rng.normal(0.0, 0.25, size=(k, active_n)).astype(np.float16)
+    )
+    resident = program.execute_resident(source, weights)
+    try:
+        edge = resident.intermediate.numpy()
+        output = resident.output.numpy()
+        source_f32 = source.astype(np.float32)
+        norm_reference = (
+            source_f32 / np.sqrt(
+                np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5
+            )
+        ).astype(np.float16)
+        norm_error = float(np.max(np.abs(
+            edge.astype(np.float32) - norm_reference.astype(np.float32)
+        )))
+        matmul_reference = edge.astype(np.float32) @ weights.astype(np.float32)
+        matmul_error = float(np.max(np.abs(output - matmul_reference)))
+        if norm_error > 2e-3 or matmul_error > 2e-4:
+            raise RuntimeError(
+                f"resident dynamic-N oracle mismatch: norm={norm_error}, matmul={matmul_error}"
+            )
+        session = resident.device_session
+        device_source, device_rhs = session._buffers[0], session._buffers[1]
+        consumer_edge = resident.intermediate.view(
+            0, resident.intermediate.shape, resident.intermediate.dtype, layout="strided"
+        )
+        if consumer_edge.ptr != resident.intermediate.ptr:
+            raise RuntimeError("dynamic-N consumer edge copied the producer allocation")
+        producer_args = {
+            program.producer_input_name: device_source,
+            program.intermediate_name: resident.intermediate,
+            "Rows": m, "Columns": k,
+        }
+        consumer_args = {
+            program.consumer_input_name: consumer_edge,
+            program.consumer_rhs_name: device_rhs,
+            program.output_name: resident.output,
+            "M": m, "N": active_n, "K": k,
+            "LDA": k, "LDB": k, "LDD": active_n,
+        }
+        producer_samples = [
+            rt._nvidia_native_descriptor_resident_device_latency(
+                program.producer.image, program.producer.descriptor, producer_args,
+                stream=session.stream, warmup=args.warmup, reps=args.reps,
+            ) for _ in range(args.samples)
+        ]
+        consumer_samples = [
+            rt._nvidia_native_descriptor_resident_device_latency(
+                program.consumer.image, program.consumer.descriptor, consumer_args,
+                stream=session.stream, warmup=args.warmup, reps=args.reps,
+            ) for _ in range(args.samples)
+        ]
+        packet: dict[str, Any] = {
+            "schema": "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1",
+            "target": "nvidia_sm120",
+            "architecture": program.consumer.image.architecture,
+            "device": _version([
+                "nvidia-smi", "--query-gpu=name,compute_cap", "--format=csv,noheader",
+            ]),
+            "host": {
+                "node": platform.node(), "platform": platform.platform(),
+                "wsl": "microsoft" in platform.release().lower(),
+            },
+            "source_revision": subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+                text=True, check=True,
+            ).stdout.strip(),
+            "worktree_dirty": bool(subprocess.run(
+                ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True,
+                text=True, check=True,
+            ).stdout.strip()),
+            "method": "bounded dynamic N; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
+            "edge": {
+                "producer": "tessera.rmsnorm", "consumer": "tessera.matmul",
+                "storage": "fp16", "layout": "row_major intermediate",
+                "static_mk": [m, k], "dynamic_n_bound": bound_n,
+                "measured_active_n": active_n,
+                "same_allocation": True, "same_stream": True,
+                "rhs_layout": "strided ABI over compact column-major storage",
+                "output_layout": "strided ABI over compact row-major storage",
+            },
+            "packages": {
+                "producer_image": program.producer.image.image_digest,
+                "consumer_image": program.consumer.image.image_digest,
+                "consumer_descriptor": program.consumer.descriptor.descriptor_digest,
+                "consumer_schedule": program.consumer.descriptor.provenance["schedule_digest"],
+                "consumer_tile": program.consumer.descriptor.provenance["tile_ir_digest"],
+            },
+            "correctness": {
+                "producer_max_abs_error": norm_error,
+                "consumer_max_abs_error": matmul_error,
+                "producer_execution_kind": resident.producer_receipt.get("execution_kind"),
+                "consumer_execution_kind": resident.consumer_receipt.get("execution_kind"),
+                "same_intermediate_pointer": consumer_edge.ptr == resident.intermediate.ptr,
+                "package_digest_stable": True,
+            },
+            "timing": {
+                "domain": "CUDA events around C++ repeated launches on resident buffers; producer and consumer timed separately",
+                "producer_ms": producer_samples,
+                "producer_median_ms": statistics.median(producer_samples),
+                "producer_cov": _cv(producer_samples),
+                "consumer_ms": consumer_samples,
+                "consumer_median_ms": statistics.median(consumer_samples),
+                "consumer_cov": _cv(consumer_samples),
+            },
+            "selector_changed": False,
+            "promotion": "none; one bounded dynamic-N SM120 envelope",
+        }
+    finally:
+        resident.close()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(packet, indent=2) + "\n")
+    print(json.dumps(packet, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--m", type=int, default=512)
     parser.add_argument("--k", type=int, default=256)
-    parser.add_argument("--n", type=int, default=512)
+    parser.add_argument("--n", type=int, default=512, help="static N or dynamic-N capacity bound")
+    parser.add_argument("--active-n", type=int, help="active N when --dynamic-n is set (default: n//2)")
+    parser.add_argument("--dynamic-n", action="store_true", help="package one bounded dynamic-N consumer")
     parser.add_argument("--warmup", type=int, default=30)
     parser.add_argument("--reps", type=int, default=500)
     parser.add_argument("--samples", type=int, default=7)
@@ -88,7 +220,15 @@ def main(argv: list[str] | None = None) -> int:
     if min(m, k, n) <= 0 or args.reps <= 0 or args.samples < 3:
         parser.error("dimensions/repetitions must be positive and samples must be at least three")
 
-    producer_module, consumer_module = _modules(m, k, n)
+    if args.dynamic_n:
+        active_n = args.active_n if args.active_n is not None else max(1, n // 2)
+        if active_n <= 0 or active_n > n:
+            parser.error("active N must be positive and no greater than the dynamic-N bound")
+    else:
+        if args.active_n is not None:
+            parser.error("--active-n requires --dynamic-n")
+        active_n = n
+    producer_module, consumer_module = _modules(m, k, n, dynamic_n=args.dynamic_n)
     producer_ir = scheduled_kernel.lower_scheduled_kernel(
         producer_module, target="nvidia_sm120",
     )
@@ -100,6 +240,8 @@ def main(argv: list[str] | None = None) -> int:
         pipeline_name="tessera-lower-to-nvidia-sm120",
     )
     program.validate()
+    if args.dynamic_n:
+        return _dynamic_n_benchmark(args, program, m, k, n, active_n)
 
     rng = np.random.default_rng(0x5A17 + m + k + n)
     source = np.ascontiguousarray(rng.normal(0.0, 0.25, size=(m, k)).astype(np.float16))

@@ -3,14 +3,13 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 ---
 
-## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling outcome - follow-up required
+## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: paired package edge - parity validated
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
-The paired sm_120 work remains follow-up required: gfx1201 RMSNorm admission and ABI do not prove NVIDIA producer-to-matmul residency, typed fragments, stream ordering, or exact RTX 5070 behavior. Preserve the existing sm_120 queue until its owning-device tests pass.
-
+Parity validated on exact devices: Super-Bear RTX 5070 (sm_120) and Tajasaurus RX 9070 XT (gfx1201) each ran compiler-owned RMSNorm -> matmul packages with a resident intermediate, ordered same-stream execution, numerical checks, and stable allocation lifetime. Both public `from_text` routes now carry `matmul(output_dtype="fp32")` into Graph IR and compile through native Schedule/Tile packages with fp16 inputs, fp32 accumulation, and fp32 output. The new explicit-output exact-device test passes on each owner; Super-Bear's tensor-program file passes 19/19. NVIDIA additionally retains fp16/bf16 input/output coverage and bounded dynamic-N reuse (N=7 and N=16 with static M/K). The gfx1201 correctness-gated 128x256x256 public-route packet records separate 100-trial HIP-event medians of 11.20 us for RMSNorm and 14.40 us for matmul; timings varied across reruns and are diagnostic only, with no promotion. The combined gfx1201 host-free/exact-device compiler, frontend, registry, and audit lane passed 456 tests before two added direct API cases; those cases separately passed with the public frontend checks. The paired targets use distinct schedules and binaries; no physical schedule is transferred. The refreshed Super-Bear packet `benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/` records correctness-gated static-N and bounded dynamic-N runs: producer/consumer medians 54.3/9.9 us and 54.1/8.9 us respectively; short-run variance is diagnostic and no selector promotion is made. The expanded focused cross-contract lane passed 357 tests with 19 skips, including active SM120 device rows. Apple and x86 owning-device parity for the shared output dtype request remains follow-up required.
 
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: bounded resident package reuse
 

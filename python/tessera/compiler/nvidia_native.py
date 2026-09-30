@@ -224,24 +224,63 @@ class NVIDIANativeTensorProgram:
         return matches[0]
 
     @staticmethod
-    def _static_shape(package: NVIDIANativePackage, name: str, rank: int) -> tuple[int, ...]:
+    def _shape_bound(
+        package: NVIDIANativePackage, name: str, rank: int
+    ) -> tuple[tuple[int, ...], tuple[bool, ...]]:
         rows = sorted(
             (guard.dimension, guard.predicate, guard.value)
             for guard in package.descriptor.shape_guards
             if guard.binding == name
         )
-        if (len(rows) != rank or [row[0] for row in rows] != list(range(rank))
-                or any(predicate != "eq" or type(value) is not int or value <= 0
-                       for _, predicate, value in rows)):
+        if (
+            len(rows) != rank
+            or [row[0] for row in rows] != list(range(rank))
+            or any(
+                predicate not in {"eq", "max"} or type(value) is not int or value <= 0
+                for _, predicate, value in rows
+            )
+        ):
+            raise ValueError(f"tensor program requires positive bounded shape guards for {name!r}")
+        return (
+            tuple(value for _, _, value in rows),
+            tuple(predicate == "max" for _, predicate, _ in rows),
+        )
+
+    @staticmethod
+    def _static_shape(package: NVIDIANativePackage, name: str, rank: int) -> tuple[int, ...]:
+        shape, dynamic = NVIDIANativeTensorProgram._shape_bound(package, name, rank)
+        if any(dynamic):
             raise ValueError(f"tensor program requires static equality shape guards for {name!r}")
-        return tuple(value for _, _, value in rows)
+        return shape
+
+    @property
+    def dynamic_n(self) -> bool:
+        _, dynamic = self._shape_bound(self.consumer, self.consumer_rhs_name, 2)
+        return dynamic[1]
+
+    def _validate_rhs_shape(self, shape: tuple[int, ...]) -> int:
+        if (
+            len(shape) != 2
+            or shape[0] != self.k
+            or shape[1] <= 0
+            or shape[1] > self.n
+            or (shape[1] != self.n and not self.dynamic_n)
+        ):
+            raise ValueError("matmul RHS shape must satisfy the scheduled KxN bound")
+        return shape[1]
 
     def validate(self) -> None:
         if self.dtype not in {"fp16", "bf16"} or min(self.m, self.k, self.n) <= 0:
             raise ValueError("SM120 RMSNorm-to-matmul requires positive static fp16/bf16 shapes")
         storage = "f16" if self.dtype == "fp16" else "bf16"
         norm_abi = SM120_NORM_F16_ABI if storage == "f16" else SM120_NORM_BF16_ABI
-        matmul_abi = SM120_F16_ABI if storage == "f16" else SM120_BF16_ABI
+        static_matmul_abis = {
+            SM120_F16_ABI if storage == "f16" else SM120_BF16_ABI,
+            f"tessera.nvidia.matmul.a_b_d_m_n_k.{storage}.out_f16.v2",
+        }
+        dynamic_matmul_abi = (
+            SM120_STRIDED_F16_ABI if storage == "f16" else SM120_STRIDED_BF16_ABI
+        )
         for package in (self.producer, self.consumer):
             if (package.image.target != "nvidia_sm120"
                     or package.image.architecture != "sm_120a"
@@ -261,9 +300,10 @@ class NVIDIANativeTensorProgram:
                 or producer_provenance.get("kind") != "rmsnorm"
                 or producer_provenance.get("storage") != storage):
             raise ValueError("tensor producer must be the matching scheduled SM120 RMSNorm package")
-        if (self.consumer.descriptor.abi_id != matmul_abi
+        if (self.consumer.descriptor.abi_id not in static_matmul_abis | {dynamic_matmul_abi}
                 or self.consumer.descriptor.provenance.get("storage") != storage):
             raise ValueError("tensor consumer must be a matching scheduled SM120 matmul package")
+        dynamic_n = self.consumer.descriptor.abi_id == dynamic_matmul_abi
         producer_input = self._binding(self.producer, self.producer_input_name, "input")
         produced = self._binding(self.producer, self.intermediate_name, "output")
         consumed = self._binding(self.consumer, self.consumer_input_name, "input")
@@ -271,7 +311,8 @@ class NVIDIANativeTensorProgram:
                 or producer_input.layout != "row_major"
                 or produced.dtype != self.dtype or consumed.dtype != self.dtype
                 or produced.rank != 2 or consumed.rank != 2
-                or produced.layout != "row_major" or consumed.layout != "row_major"
+                or produced.layout != "row_major"
+                or consumed.layout != ("strided" if dynamic_n else "row_major")
                 or produced.alignment < consumed.alignment):
             raise ValueError("RMSNorm output and matmul A bindings have incompatible storage/layout")
         if (self._static_shape(self.producer, self.producer_input_name, 2) != (self.m, self.k)
@@ -279,13 +320,37 @@ class NVIDIANativeTensorProgram:
                 or self._static_shape(self.consumer, self.consumer_input_name, 2) != (self.m, self.k)):
             raise ValueError("RMSNorm output and matmul A shapes do not match")
         rhs = self._binding(self.consumer, self.consumer_rhs_name, "input")
-        if (rhs.dtype != self.dtype or rhs.rank != 2 or rhs.layout != "col_major"
-                or self._static_shape(self.consumer, self.consumer_rhs_name, 2) != (self.k, self.n)):
-            raise ValueError("v1 matmul RHS must be static fp16 column-major KxN")
+        rhs_shape, rhs_dynamic = self._shape_bound(self.consumer, self.consumer_rhs_name, 2)
+        if (
+            rhs.dtype != self.dtype
+            or rhs.rank != 2
+            or rhs.layout != ("strided" if dynamic_n else "col_major")
+            or rhs_shape != (self.k, self.n)
+            or rhs_dynamic != (False, dynamic_n)
+        ):
+            raise ValueError("matmul RHS must have a bounded column-major KxN contract")
         output = self._binding(self.consumer, self.output_name, "output")
-        if (output.dtype != "fp32" or output.rank != 2 or output.layout != "row_major"
-                or self._static_shape(self.consumer, self.output_name, 2) != (self.m, self.n)):
-            raise ValueError("v1 matmul output must be static row-major fp32 MxN")
+        output_shape, output_dynamic = self._shape_bound(self.consumer, self.output_name, 2)
+        expected_output_dtype = {"f16": "fp16", "f32": "fp32"}.get(
+            self.consumer.descriptor.provenance.get("epilogue", {}).get("output")
+        )
+        if (
+            output.dtype != expected_output_dtype
+            or output.rank != 2
+            or output.layout != ("strided" if dynamic_n else "row_major")
+            or output_shape != (self.m, self.n)
+            or output_dynamic != (False, dynamic_n)
+        ):
+            raise ValueError("matmul output must match the row-major fp32 bounded MxN contract")
+        if expected_output_dtype is None:
+            raise ValueError("matmul output must use the scheduled fp16 or fp32 output contract")
+        if dynamic_n and (
+            self.consumer.descriptor.provenance.get("dynamic_shape_bounds")
+            != [self.m, self.n, self.k]
+            or self.consumer.descriptor.provenance.get("leading_dimension_abi")
+            != "runtime_i64"
+        ):
+            raise ValueError("dynamic N requires the bounded strided scheduled package")
         if not self.producer.descriptor.ordering.ordered_submission:
             raise ValueError("producer package must declare ordered submission")
 
@@ -313,15 +378,29 @@ class NVIDIANativeTensorProgram:
             storage_dtype = np.dtype(ml_dtypes.bfloat16)
         if source.shape != (self.m, self.k) or source.dtype != storage_dtype or not source.flags.c_contiguous:
             raise ValueError(f"RMSNorm source must be contiguous {self.dtype} with shape MxK")
-        if right.shape != (self.k, self.n) or right.dtype != storage_dtype or not right.flags.f_contiguous:
-            raise ValueError(f"matmul RHS must be column-major {self.dtype} with shape KxN")
+        active_n = self._validate_rhs_shape(tuple(right.shape))
+        if right.dtype != storage_dtype or not right.flags.f_contiguous:
+            raise ValueError(f"matmul RHS must be column-major {self.dtype} within its KxN bound")
 
         session = NvidiaDeviceSession()
         try:
             device_source = session.upload(source)
-            device_rhs = session.upload(right, layout="col_major")
+            device_rhs = session.upload(
+                right, layout="strided" if self.dynamic_n else "col_major"
+            )
             edge = session.empty((self.m, self.k), storage_dtype)
-            result = session.empty((self.m, self.n), np.float32)
+            output_dtype = self._binding(
+                self.consumer, self.output_name, "output"
+            ).dtype
+            output_storage_dtype = {"fp16": np.float16, "fp32": np.float32}[output_dtype]
+            consumer_edge = (
+                edge.view(0, edge.shape, edge.dtype, layout="strided")
+                if self.dynamic_n else edge
+            )
+            result = session.empty(
+                (self.m, active_n), output_storage_dtype,
+                layout="strided" if self.dynamic_n else "row_major",
+            )
 
             def runtime_artifact(package: NVIDIANativePackage) -> Any:
                 return rt.RuntimeArtifact(
@@ -348,12 +427,14 @@ class NVIDIANativeTensorProgram:
             consumer_receipt = rt.launch(
                 runtime_artifact(self.consumer),
                 {
-                    self.consumer_input_name: edge,
+                    self.consumer_input_name: consumer_edge,
                     self.consumer_rhs_name: device_rhs,
                     self.output_name: result,
                     "M": self.m,
-                    "N": self.n,
+                    "N": active_n,
                     "K": self.k,
+                    **({"LDA": self.k, "LDB": self.k, "LDD": active_n}
+                       if self.dynamic_n else {}),
                 },
                 stream=session.stream,
             )
@@ -394,14 +475,19 @@ class NVIDIANativeTensorProgram:
             storage_dtype = np.dtype(ml_dtypes.bfloat16)
         if source.shape != (self.m, self.k) or source.dtype != storage_dtype or not source.flags.c_contiguous:
             raise ValueError(f"RMSNorm source must be contiguous {self.dtype} with shape MxK")
-        if right.shape != (self.k, self.n) or right.dtype != storage_dtype or not right.flags.f_contiguous:
-            raise ValueError(f"matmul RHS must be column-major {self.dtype} with shape KxN")
+        active_n = self._validate_rhs_shape(tuple(right.shape))
+        if self.dynamic_n:
+            raise ValueError("bounded dynamic-N tensor programs require execute_resident")
+        if right.dtype != storage_dtype or not right.flags.f_contiguous:
+            raise ValueError(f"matmul RHS must be column-major {self.dtype} within its KxN bound")
+        output_dtype = self._binding(self.consumer, self.output_name, "output").dtype
+        output_storage_dtype = {"fp16": np.float16, "fp32": np.float32}[output_dtype]
         edge = np.empty((self.m, self.k), dtype=storage_dtype) if intermediate is None else np.asarray(intermediate)
-        result = np.empty((self.m, self.n), dtype=np.float32) if output is None else np.asarray(output)
+        result = np.empty((self.m, active_n), dtype=output_storage_dtype) if output is None else np.asarray(output)
         if edge.shape != (self.m, self.k) or edge.dtype != storage_dtype or not edge.flags.c_contiguous:
             raise ValueError(f"intermediate must be caller-owned contiguous {self.dtype} with shape MxK")
-        if result.shape != (self.m, self.n) or result.dtype != np.float32 or not result.flags.c_contiguous:
-            raise ValueError("matmul output must be contiguous fp32 with shape MxN")
+        if result.shape != (self.m, active_n) or result.dtype != output_storage_dtype or not result.flags.c_contiguous:
+            raise ValueError("matmul output must match its scheduled dtype and active MxN shape")
         if (np.shares_memory(edge, source) or np.shares_memory(edge, right)
                 or np.shares_memory(edge, result) or np.shares_memory(result, source)
                 or np.shares_memory(result, right)):
@@ -432,7 +518,7 @@ class NVIDIANativeTensorProgram:
             self.consumer_rhs_name: right,
             self.output_name: result,
             "M": self.m,
-            "N": self.n,
+            "N": active_n,
             "K": self.k,
         }
         consumer_receipt = rt.launch(runtime_artifact(self.consumer), consumer_args)
@@ -453,7 +539,21 @@ def package_scheduled_rmsnorm_matmul(
     *,
     pipeline_name: str,
 ) -> NVIDIANativeTensorProgram:
-    """Package the first bounded native tensor edge: fp16 RMSNorm -> fp16 matmul."""
+    """Package a resident RMSNorm -> matmul edge from Graph or Schedule IR.
+
+    Graph IR is lowered through the canonical Schedule path before entering
+    this same package contract.
+    """
+    if isinstance(producer_artifact, GraphIRModule):
+        if not isinstance(consumer_artifact, GraphIRModule):
+            raise TypeError("Graph RMSNorm and matmul inputs must both be GraphIRModule")
+        from .scheduled_kernel import lower_scheduled_kernel
+        from .scheduled_matmul import lower_scheduled_matmul
+
+        producer_artifact = lower_scheduled_kernel(
+            producer_artifact, target="nvidia_sm120")
+        consumer_artifact = lower_scheduled_matmul(
+            consumer_artifact, target="nvidia_sm120")
     if (producer_artifact.target != "nvidia_sm120"
             or producer_artifact.family != "norm"
             or producer_artifact.kind != "rmsnorm"
@@ -465,7 +565,7 @@ def package_scheduled_rmsnorm_matmul(
     if (consumer_artifact.target != "nvidia_sm120"
             or consumer_artifact.storage != storage
             or consumer_artifact.a_dtype != producer_artifact.dtype
-            or consumer_artifact.output_dtype != "fp32"
+            or consumer_artifact.output_dtype not in {"fp16", "fp32"}
             or consumer_artifact.a_name == consumer_artifact.b_name):
         raise ValueError("consumer must be a matching scheduled fp16/bf16 SM120 matmul")
     producer = package_scheduled_kernel(producer_artifact, pipeline_name=pipeline_name)

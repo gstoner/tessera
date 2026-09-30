@@ -862,7 +862,11 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     for key, value in [('tessera.target', artifact.target), ('tessera.arch', artifact.architecture)]:
         if not re.search(r'(?:^|, )'+re.escape(key)+' = "'+re.escape(value)+'"(?:,|$)', header[1]):
             raise ValueError('matmul native target identity disagrees')
-    functions = re.findall(r'func.func @(\w+)\(([^\n]*)\) -> (tensor<[^>]+>) \{', parent)
+    functions = re.findall(
+        r'func.func @(\w+)\(([^\n]*)\) -> (tensor<[^>]+>)'
+        r'(?: attributes \{[^{}]*\})? \{',
+        parent,
+    )
     records = re.findall(r' = schedule.matmul %\w+ \{([^{}]*)\}', parent)
     keys = re.findall(r'shape_key = "M=(\d+);N=(\d+);K=(\d+);dtype=(\w+)"', parent)
     if len(functions) != 1 or len(records) != 1 or len(keys) != 1 or parent.count('func.func ') != 1:

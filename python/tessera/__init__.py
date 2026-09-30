@@ -237,14 +237,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     import numpy as np
 
     def gemm(
-        A, B, bias=None, residual=None, *, epilogue=None, activation="none"
+        A, B, bias=None, residual=None, *, epilogue=None, activation="none",
+        output_dtype=None,
     ):
         """Matrix multiply A @ B."""
         if hasattr(A, "_data"):
             A = A._data
         if hasattr(B, "_data"):
             B = B._data
-        out = np.matmul(A, B)
+        if output_dtype is None:
+            out = np.matmul(A, B)
+        else:
+            output_dtype = str(output_dtype).lower()
+            if output_dtype not in {"fp16", "fp32"}:
+                raise ValueError("matmul output_dtype must be fp16 or fp32")
+            # Match the scheduled low-precision contract: fp32 accumulation
+            # precedes the selected output conversion.
+            accum_a = np.asarray(A, dtype=np.float32)
+            accum_b = np.asarray(B, dtype=np.float32)
+            out = np.matmul(accum_a, accum_b)
+            if output_dtype == "fp16":
+                out = out.astype(np.float16)
         if bias is not None or residual is not None or activation != "none":
             if epilogue is not None:
                 raise ValueError(
@@ -272,11 +285,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return out
 
     def matmul(
-        A, B, bias=None, residual=None, *, epilogue=None, activation="none"
+        A, B, bias=None, residual=None, *, epilogue=None, activation="none",
+        output_dtype=None,
     ):
         return gemm(
             A, B, epilogue=epilogue, bias=bias, residual=residual,
-            activation=activation,
+            activation=activation, output_dtype=output_dtype,
         )
 
     def batched_gemm(A, B, epilogue=None):
@@ -6061,6 +6075,15 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
                 )
             else:
                 out = fn(*args, **kwargs)
+
+            requested_output = kwargs.get("output_dtype")
+            if requested_output is not None:
+                output_types = {"fp16": _np.float16, "fp32": _np.float32}
+                try:
+                    requested_type = output_types[str(requested_output).lower()]
+                except KeyError as exc:
+                    raise ValueError("matmul output_dtype must be fp16 or fp32") from exc
+                return _np.asarray(out).astype(requested_type, copy=False)
 
             # Multi-result ops store back the PRIMARY tensor only. `out[0]` is
             # the value carrying the operand's storage dtype; the rest is

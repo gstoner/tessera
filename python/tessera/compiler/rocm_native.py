@@ -2176,7 +2176,10 @@ def package_scheduled_kernel(
             ScalarArgument(4, "Epsilon", "fp32"),
         )
         geometry = f"{arch}_norm_workgroup_per_row_256"
-        semantic_provenance = {"epsilon": artifact.epsilon}
+        semantic_provenance = {
+            "epsilon": artifact.epsilon,
+            "workgroup": [artifact.workgroup_size, 1, 1],
+        }
     elif artifact.family == "reduce":
         abi = {"f16": GFX_REDUCE_F16_ABI, "bf16": GFX_REDUCE_BF16_ABI, "f32": GFX_REDUCE_F32_ABI}[storage]
         # A reduction accumulates and stores f32 whatever its input storage.

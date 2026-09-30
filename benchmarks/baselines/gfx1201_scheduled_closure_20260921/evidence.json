@@ -40,7 +40,7 @@
       "test_gfx1201_scheduled_paged_kv_package_executes": 4
     }
   },
-  "fixture": "tests/unit/test_rocm_gfx1201_scheduled.py",
+  "fixture": "benchmarks/baselines/gfx1201_scheduled_closure_20260921/test_source.py",
   "fixture_sha256": "8d9e2c54731aac79d272453100ca6f7d1ed209d7fdc0a79a3b7309d3e1c8b321",
   "host": "tajasarus",
   "host_contract_cases": {

@@ -3,14 +3,13 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 ---
 
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
-Not applicable to Apple execution: this slice adds a gfx1201 ROCm RMSNorm Schedule/Tile package and architecture-specific runtime ABI. It does not change the Apple Graph route, Metal ABI, or claim Apple execution; the Apple @jit gaps remain open.
-
+Follow-up required for Apple: shared tracing now preserves output shape/dtype and public `matmul(output_dtype="fp32")` expresses the f16-storage/f32-accumulation Graph contract. Schedule projection accepts the traced function attributes. No Mac compiler/runtime execution was performed in this slice, so Metal route support is not inferred; `target_verify`, `ntk_rope`, Philox JIT, and Apple consumer parity remain open. NVIDIA/CUDA and ROCm/HIP packages and physical schedules do not transfer to Metal.
 
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 

@@ -3143,7 +3143,8 @@ def _submit_nvidia_sm120_native(
             entry.startswith("nvidia_sm120_scheduled_matmul_")
             and (("_fused_" not in entry) or
                  (descriptor.abi_id in {
-                     SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI
+                     SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI,
+                     *SM120_REDUCED_OUTPUT_ABIS,
                  } and not has_fused_epilogue and len(raw) == 3))
         )
         is_native_attention = descriptor.abi_id in {

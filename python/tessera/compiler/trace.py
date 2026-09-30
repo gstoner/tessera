@@ -142,6 +142,7 @@ class TracedFunction:
     body: List[IROp]
     outputs: List[str]                            # output SSA names
     output_values: Tuple[Any, ...] = field(default=(), compare=False, repr=False)
+    output_specs: Tuple[Tuple[Tuple[Any, ...], str], ...] = ()
     source_state_groups: tuple[tuple[int, ...], ...] = ()
     source_error_specs: tuple = ()
     source_state_views: tuple = ()
@@ -359,6 +360,17 @@ class TraceBuilder:
             )
             dtypes = (tracer_args[0].dtype if tracer_args else "fp32",)
             values = (None,)
+        if graph_name == "tessera.matmul" and kwargs.get("output_dtype") is not None:
+            output_dtype = str(kwargs["output_dtype"]).lower()
+            if output_dtype not in {"fp16", "fp32"}:
+                raise TesseraTraceError(
+                    "matmul output_dtype must be fp16 or fp32"
+                )
+            if len(dtypes) != 1:
+                raise TesseraTraceError(
+                    "matmul output_dtype requires one tensor result"
+                )
+            dtypes = (output_dtype,)
         if graph_name == "tessera.reduce":
             if name in {"sum", "mean"}:
                 ir_kwargs.setdefault("kind", name)
@@ -599,9 +611,15 @@ class TraceBuilder:
     def set_outputs(self, outs: List[str]) -> None:
         self.outputs = list(outs)
 
-    def finish(self, output_values: Tuple[Any, ...] = ()) -> TracedFunction:
-        return TracedFunction(args=list(self.args), body=list(self.body),
-                              outputs=list(self.outputs), output_values=output_values)
+    def finish(
+        self,
+        output_values: Tuple[Any, ...] = (),
+        output_specs: Tuple[Tuple[Tuple[Any, ...], str], ...] = (),
+    ) -> TracedFunction:
+        return TracedFunction(
+            args=list(self.args), body=list(self.body), outputs=list(self.outputs),
+            output_values=output_values, output_specs=output_specs,
+        )
 
 
 # ── trace entry points ────────────────────────────────────────────────────── #
@@ -697,7 +715,10 @@ def trace(
                 "trace: function must return Tracer value(s); got "
                 f"{type(o).__name__}")
     tb.set_outputs([o.ssa for o in outs])
-    traced=tb.finish(tuple(o.value for o in outs))
+    traced = tb.finish(
+        tuple(o.value for o in outs),
+        tuple((tuple(dim if isinstance(dim, (int, str)) else str(dim) for dim in o.shape), str(o.dtype)) for o in outs),
+    )
     traced.source_state_views=source_state_views
     traced.source_state_groups=source_state_groups
     traced.source_error_specs=source_error_specs
@@ -734,13 +755,20 @@ def to_graph_ir_module(
         for op in traced.body
         for result in op.result_names
     }
-    for output in traced.outputs:
+    for index, output in enumerate(traced.outputs):
         operation = by_result.get(output)
         if operation is None or not operation.result_type:
             raise TesseraTraceError(
                 f"trace output %{output} has no typed Graph IR definition"
             )
-        result_types.append(IRType(operation.result_type))
+        if index < len(traced.output_specs):
+            shape, dtype = traced.output_specs[index]
+            typed = tensor_ir_type(tuple(str(dim) for dim in shape), dtype)
+            result_types.append(IRType(
+                operation.result_type, typed.shape, typed.dtype, typed.layout,
+            ))
+        else:
+            result_types.append(IRType(operation.result_type))
     structured_cfg = recover_structured_cfg(traced.body)
     function = GraphIRFunction(
         name=name,

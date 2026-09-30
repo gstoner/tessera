@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -8,8 +8,9 @@ scope: ROCm backend implementation and exact-device proof
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: gfx1201 RMSNorm package - landing
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
-This slice admits last-axis RMSNorm with f16/f32 storage, f32 accumulation, and workgroup 256 through Graph-to-Schedule-to-Tile and a shape-free native package ABI. Super-Bear host-free tests and TileToROCM/FileCheck pass. Exact-device execution on Tajasaurus is pending; resident producer-to-matmul lifetime, numerical, and separate timing evidence are still required before widening this envelope.
+This slice admits last-axis RMSNorm with f16/f32 storage, f32 accumulation, and workgroup 256 through Graph-to-Schedule-to-Tile and a shape-free native package ABI. On Tajasaurus RX 9070 XT, the f16 producer-to-matmul edge runs two checked gfx1201 HSACOs on one HIP stream with a resident intermediate; numerical comparison, stable allocation across repeated launches, close-time synchronization, and closed-session refusal pass. One bounded dynamic-N matmul package was reused for N=17 and N=32 with the same allocations and per-invocation descriptor guards. RMSNorm M/K and matmul M/K remain static.
 
+Public frontend integration is now parity validated on gfx1201 and sm_120: traced `from_text` modules flow into target-specific native Schedule/Tile package helpers and the resident runner. A public `matmul(output_dtype="fp32")` option gives both graphs an explicit f32 output while preserving fp16 storage and fp32 accumulation; abstract tracing and concrete tracing preserve that result dtype. The native unary ancestry checker accepts canonical function attributes emitted by the tracer. Tajasaurus `tessera-opt` was rebuilt from this checkout before the exact route was rerun. The paired host-free/exact-device compiler, frontend, registry, and audit run passed 456 tests before two added direct API cases; the two direct cases and three focused public frontend tests then passed separately. A correctness-gated 128x256x256 public-route packet records 100-trial HIP-event medians of 11.20 us RMSNorm and 14.40 us matmul (observed ranges 11.00-12.68 us and 14.24-15.52 us); rerun spread remains diagnostic, not a performance claim or selector promotion. Packet provenance records compiler/toolchain fingerprints, image digests, Git revision, dirty-diff hash, and benchmark script hash. Dynamic M/K, additional layouts/storage, and Apple/x86 frontend parity remain open. NVIDIA uses its own Schedule/Tile images and no CUDA schedule was transferred. A later host-only trace-shape regression check passes, but the current Tajasaurus SSH session exposes neither `/dev/kfd` nor `/dev/dri/renderD*`; it could not refresh exact gfx1201 execution evidence in that rerun. The previously recorded exact-device packet and test results remain the latest gfx1201 execution evidence.
 
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 

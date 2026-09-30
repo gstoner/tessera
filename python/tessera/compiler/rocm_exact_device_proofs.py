@@ -47,7 +47,9 @@ class ROCmExactDeviceSuiteProof:
 
 GFX1201_SCHEDULED_SUITE_PROOF = ROCmExactDeviceSuiteProof(
     target="rocm_gfx1201",
-    numerical_fixture="tests/unit/test_rocm_gfx1201_scheduled.py",
+    numerical_fixture=(
+        "benchmarks/baselines/gfx1201_scheduled_closure_20260921/test_source.py"
+    ),
     evidence_packet=(
         "benchmarks/baselines/gfx1201_scheduled_closure_20260921/evidence.json"
     ),

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -10,8 +10,7 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
-Not applicable to x86: the new package ABI and launch geometry are ROCm gfx1201-specific. No shared Graph op, x86 Schedule, AVX-512 codegen, or x86 execution claim changed.
-
+Follow-up required for x86: shared tracing now preserves result shape/dtype and public `matmul(output_dtype="fp32")` carries the explicit output request into Graph IR. The paired GPU packages and physical schedules do not apply to x86, and no Zen 5 execution was performed in this slice. Existing x86 scheduled matmul support does not establish a low-precision input/fp32 output route; verify or explicitly refuse that dtype combination on the owning Zen 5 host before claiming parity.
 
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 

@@ -18,3 +18,13 @@ Reproduce on Tajasaurus with the gfx1201 build and environment configured:
 python3 benchmarks/rocm/benchmark_gfx1201_resident_norm_matmul.py \
   --dynamic-k --warmup 25 --iterations 100
 ```
+
+
+## BF16 extension
+
+`dynamic_k_bf16.json` repeats the same exact-device public `from_text` route,
+bound, active-K set, correctness oracle, and separate HIP-event timing with
+BF16 storage. All three K prefixes passed numerical checking. Medians were
+15.50/13.40 µs (producer/consumer) at K=128, 11.08/14.52 µs at K=192, and
+11.32/15.84 µs at K=256. Several rows have high event variation; these values
+remain diagnostic only. The paired SM120 exact-device tests also cover BF16.

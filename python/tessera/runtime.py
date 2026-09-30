@@ -5948,6 +5948,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_MATMUL_I4_I32_ABI,
         GFX_MATMUL_I8_I32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
+        GFX_NORM_F16_ABI,
+        GFX_NORM_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
         GFX_REDUCE_BF16_ABI,
         GFX_REDUCE_F16_ABI,
@@ -5977,6 +5979,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
          or (target == "rocm_gfx1201" and
              (abi_id in _gfx1201_proved_scheduled_abis()
               or abi_id in _gfx1201_manual_probe_abis())))
+        and (abi_id not in {GFX_NORM_F16_ABI, GFX_NORM_F32_ABI}
+             or target == "rocm_gfx1201")
         and abi_id
         in {
             GFX_SOFTMAX_F16_ABI,
@@ -5986,6 +5990,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_REDUCE_F32_ABI,
             GFX_PAGED_KV_F32_ABI,
             GFX_MOE_DISPATCH_F32_ABI,
+            GFX_NORM_F16_ABI,
+            GFX_NORM_F32_ABI,
             GFX_MATMUL_F16_F32_ABI,
             GFX_MATMUL_F16_F32_FUSED_ABI,
             GFX_MATMUL_BF16_F32_ABI,

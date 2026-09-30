@@ -542,7 +542,7 @@ def main(argv: list[str] | None = None) -> int:
         active_n = n
     producer_module, consumer_module = _modules(
         m, k, n, dynamic_n=args.dynamic_n,
-        dynamic_k=args.dynamic_k or args.dynamic_mk
+        dynamic_k=args.dynamic_k
     )
     if args.dynamic_m:
         program = nvidia_native.package_scheduled_rmsnorm_matmul(

@@ -7,6 +7,13 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
+
+Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.
+Not applicable to x86: this slice changes the NVIDIA CUDA resident PTX bridge
+and its device-buffer layout metadata. No shared Graph/Schedule operation,
+x86 ABI, CPU schedule, or x86 execution claim changed.
+
 # x86 backend TODO
 
 ## E2E-REAL-6-ALIBI-SHAPE-2026-09-29: traced ALiBi result type

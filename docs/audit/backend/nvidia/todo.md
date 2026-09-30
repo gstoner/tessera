@@ -6,6 +6,23 @@ target: nvidia_sm120
 last_updated: 2026-09-29
 ---
 
+## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: bounded resident package reuse
+
+Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.
+Exact Super-Bear RTX 5070 proof: two canonical bounded-dynamic Schedule/Tile
+matmul packages were reused for producer/consumer chains at 17x19x13x11 and
+9x5x7x6, with the intermediate held in a caller-owned CUDA allocation and
+both packages submitted on one explicit stream. Both stages matched NumPy
+after synchronization. The resident launch now accepts the six-scalar
+M/N/K/LDA/LDB/LDD ABI, and the CUDA buffer wrapper preserves strided contract
+labels while retaining row/column storage order. Seven CUDA-event batches of
+80 invocations measured 386.07 us producer and 387.41 us consumer median per
+launch; these stream intervals include Python enqueue gaps and are not isolated
+kernel timings or promotion evidence. Apple, ROCm, and x86 are not applicable:
+the changed resident ABI, PTX bridge, and buffer wrapper are NVIDIA CUDA
+specific; no shared Graph/Schedule operation or physical schedule changed.
+The two generic tensor-valued `tile.mma` producers remain open under W1.1.
+
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
 ## E2E-REAL-6-ALIBI-SHAPE-2026-09-29: traced ALiBi result type

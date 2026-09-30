@@ -16,10 +16,11 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _program():
+def _program(dtype="fp16"):
     m, k, n = 16, 16, 8
-    a = IRType(f"tensor<{m}x{k}xf16>", (str(m), str(k)), "fp16")
-    b = IRType(f"tensor<{k}x{n}xf16>", (str(k), str(n)), "fp16")
+    elem = "f16" if dtype == "fp16" else "bf16"
+    a = IRType(f"tensor<{m}x{k}x{elem}>", (str(m), str(k)), dtype)
+    b = IRType(f"tensor<{k}x{n}x{elem}>", (str(k), str(n)), dtype)
     out = IRType(f"tensor<{m}x{n}xf32>", (str(m), str(n)), "fp32")
     producer_module = GraphIRModule(functions=[GraphIRFunction(
         name="sm120_rmsnorm_tensor_producer",
@@ -128,3 +129,59 @@ def test_sm120_resident_launch_requires_matching_cuda_buffer_stream():
 def test_sm120_resident_launch_rejects_missing_cuda_buffer_stream():
     with pytest.raises(RuntimeError, match="producer stream must match"):
         rt._validate_nvidia_cuda_buffer_streams([{}], 0x1234)
+
+
+def test_sm120_bf16_rmsnorm_tensor_edge_executes_on_one_resident_allocation():
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires exact SM120 device execution")
+    import ml_dtypes
+
+    program = _program("bf16")
+    program.validate()
+    rng = np.random.default_rng(119)
+    source = np.ascontiguousarray(
+        rng.normal(0.0, 0.25, (program.m, program.k)).astype(ml_dtypes.bfloat16)
+    )
+    rhs = np.asfortranarray(
+        rng.normal(0.0, 0.25, (program.k, program.n)).astype(ml_dtypes.bfloat16)
+    )
+    with program.execute_resident(source, rhs) as result:
+        intermediate = result.intermediate.numpy()
+        output = result.output.numpy()
+        source_f32 = source.astype(np.float32)
+        expected_norm = source_f32 / np.sqrt(
+            np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5
+        )
+        np.testing.assert_allclose(
+            intermediate.astype(np.float32), expected_norm,
+            rtol=8e-3, atol=8e-3,
+        )
+        reference = intermediate.astype(np.float32) @ rhs.astype(np.float32)
+        np.testing.assert_allclose(output, reference, rtol=0.0, atol=2e-5)
+        assert result.producer_receipt["execution_kind"] == "native_gpu"
+        assert result.consumer_receipt["execution_kind"] == "native_gpu"
+
+
+def test_cuda_buffer_preserves_registered_bf16_dtype_metadata():
+    import ml_dtypes
+
+    class Buffer:
+        dtype = np.dtype(ml_dtypes.bfloat16)
+        shape = (2, 3)
+        flags = type("Flags", (), {"c_contiguous": True, "f_contiguous": False})()
+
+        @property
+        def __cuda_array_interface__(self):
+            return {
+                "shape": self.shape,
+                "strides": None,
+                "typestr": self.dtype.str,
+                "data": (0x1000, False),
+                "version": 3,
+                "stream": 0x2000,
+            }
+
+    _, argument = rt._native_buffer_value(Buffer())
+    assert argument.dtype == "bf16"
+    assert argument.shape == (2, 3)
+    assert argument.layout == "row_major"

@@ -3133,9 +3133,27 @@ def _submit_nvidia_sm120_native(
                 or stream is None):
             raise RuntimeError("resident SM120 packages require all CUDA buffers and an explicit stream")
         is_rmsnorm = entry.startswith("tessera_tile_norm_")
-        is_matmul = entry.startswith("nvidia_sm120_scheduled_matmul_") and "_fused_" not in entry
-        if not (is_rmsnorm or is_matmul):
-            raise RuntimeError("resident SM120 launch is limited to RMSNorm and scheduled matmul")
+        epilogue = descriptor.provenance.get("epilogue", {})
+        has_fused_epilogue = isinstance(epilogue, Mapping) and (
+            bool(epilogue.get("bias"))
+            or bool(epilogue.get("residual"))
+            or epilogue.get("activation", "none") != "none"
+        )
+        is_matmul = (
+            entry.startswith("nvidia_sm120_scheduled_matmul_")
+            and (("_fused_" not in entry) or
+                 (descriptor.abi_id in {
+                     SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI
+                 } and not has_fused_epilogue and len(raw) == 3))
+        )
+        is_native_attention = descriptor.abi_id in {
+            SM120_ATTN_F32_ABI, SM120_ATTN_LSE_F32_ABI,
+        }
+        if not (is_rmsnorm or is_matmul or is_native_attention):
+            raise RuntimeError(
+                "resident SM120 launch is limited to RMSNorm, scheduled matmul, "
+                "and native f32 attention"
+            )
         _validate_nvidia_cuda_buffer_streams(
             [cast(Mapping[str, Any], interface) for interface in cuda_interfaces],
             stream,
@@ -34677,6 +34695,15 @@ def _native_buffer_value(value: Any) -> tuple[Any, BufferArgument]:
             )
         import numpy as np
         cuda_dtype = np.dtype(cuda_interface.get("typestr"))
+        # NumPy represents ml_dtypes.bfloat16 as opaque |V2 in the CUDA
+        # array interface. Preserve the owning buffer's registered dtype name
+        # when available; the typestring still supplies the physical itemsize.
+        declared_dtype = getattr(value, "dtype", None)
+        native_dtype = (
+            _numpy_native_dtype_name(declared_dtype)
+            if isinstance(declared_dtype, np.dtype)
+            else str(cuda_dtype)
+        )
         cuda_shape = tuple(int(dim) for dim in cuda_interface.get("shape", ()))
         strides = cuda_interface.get("strides")
         if len(cuda_shape) == 2 and strides is not None:
@@ -34687,10 +34714,15 @@ def _native_buffer_value(value: Any) -> tuple[Any, BufferArgument]:
             ) else "strided"
         else:
             layout = "row_major"
+        # Tessera-owned CUDA buffers may carry a logical launch-contract label
+        # such as "strided" even when their physical allocation is contiguous.
+        # External CUDA arrays have no such label and use their interface strides.
+        if explicit_layout in {"row_major", "col_major", "strided"}:
+            layout = explicit_layout
         address = int(data[0])
         alignment = address & -address
         return value, BufferArgument(
-            dtype=str(cuda_dtype), shape=cuda_shape, layout=layout,
+            dtype=native_dtype, shape=cuda_shape, layout=layout,
             address_alignment=alignment,
         )
     array_interface = getattr(value, "__array_interface__", None)

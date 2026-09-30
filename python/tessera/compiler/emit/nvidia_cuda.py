@@ -3476,17 +3476,28 @@ class CudaOwnedDeviceBuffer:
 
     def __init__(self, session: "NvidiaDeviceSession", ptr: int,
                  shape: tuple[int, ...], dtype: Any, nbytes: int,
-                 *, owns: bool = True, layout: str = "row_major") -> None:
-        if layout not in {"row_major", "col_major"}:
-            raise ValueError("CUDA device buffer layout must be row_major or col_major")
+                 *, owns: bool = True, layout: str = "row_major",
+                 storage_order: str | None = None) -> None:
+        if layout not in {"row_major", "col_major", "strided"}:
+            raise ValueError("CUDA device buffer layout must be row_major, col_major, or strided")
+        if storage_order is None:
+            storage_order = "col_major" if layout == "col_major" else "row_major"
+        if storage_order not in {"row_major", "col_major"}:
+            raise ValueError("CUDA device storage order must be row_major or col_major")
         self._session = session
         self.ptr = ptr
         self.shape = shape
         self.dtype = dtype
         self.nbytes = nbytes
         self.layout = layout
+        self.storage_order = storage_order
         self._owns = owns
         self._closed = False
+
+    @property
+    def tessera_layout(self) -> str:
+        """Logical layout label used by native launch binding validation."""
+        return self.layout
 
     @property
     def __cuda_array_interface__(self) -> dict[str, Any]:
@@ -3494,7 +3505,7 @@ class CudaOwnedDeviceBuffer:
         if self._closed:
             raise RuntimeError("CUDA device buffer is closed")
         strides = None
-        if self.layout == "col_major" and len(self.shape) == 2:
+        if self.storage_order == "col_major" and len(self.shape) == 2:
             strides = (np.dtype(self.dtype).itemsize,
                        np.dtype(self.dtype).itemsize * self.shape[0])
         return {"shape": self.shape, "strides": strides,
@@ -3520,7 +3531,7 @@ class CudaOwnedDeviceBuffer:
             raise ValueError("CUDA device view exceeds its parent allocation")
         return CudaOwnedDeviceBuffer(
             self._session, self.ptr + offset_bytes, shape, dtype, nbytes,
-            owns=False, layout=self.layout)
+            owns=False, layout=self.layout, storage_order=self.storage_order)
 
     def __del__(self) -> None:
         try:
@@ -3574,27 +3585,43 @@ class NvidiaDeviceSession:
         lib.tessera_nvidia_event_elapsed_ms.restype = ctypes.c_int
 
     def empty(self, shape: tuple[int, ...], dtype: Any, *,
-              layout: str = "row_major") -> CudaOwnedDeviceBuffer:
+              layout: str = "row_major",
+              storage_order: str | None = None) -> CudaOwnedDeviceBuffer:
         import numpy as np
-        if layout not in {"row_major", "col_major"}:
-            raise ValueError("CUDA device allocation layout must be row_major or col_major")
+        if layout not in {"row_major", "col_major", "strided"}:
+            raise ValueError("CUDA device allocation layout must be row_major, col_major, or strided")
+        if storage_order is None:
+            storage_order = "col_major" if layout == "col_major" else "row_major"
         nbytes = int(np.prod(shape)) * np.dtype(dtype).itemsize
         ptr = ctypes.c_void_p()
         if self.lib.tessera_nvidia_device_alloc(
                 ctypes.byref(ptr), nbytes) != 0:
             raise RuntimeError("CUDA device allocation failed")
         out = CudaOwnedDeviceBuffer(
-            self, int(ptr.value or 0), shape, dtype, nbytes, layout=layout)
+            self, int(ptr.value or 0), shape, dtype, nbytes, layout=layout,
+            storage_order=storage_order)
         self._buffers.append(out)
         return out
 
     def upload(self, array: Any, *, layout: str = "row_major") -> CudaOwnedDeviceBuffer:
         import numpy as np
-        if layout not in {"row_major", "col_major"}:
-            raise ValueError("CUDA upload layout must be row_major or col_major")
+        if layout not in {"row_major", "col_major", "strided"}:
+            raise ValueError("CUDA upload layout must be row_major, col_major, or strided")
         source = np.asarray(array)
-        host = np.array(source, copy=True, order="F" if layout == "col_major" else "C")
-        out = self.empty(tuple(host.shape), host.dtype, layout=layout)
+        if layout == "strided" and not (
+                source.flags.c_contiguous or source.flags.f_contiguous):
+            raise ValueError(
+                "CUDA strided upload requires compact row-major or column-major "
+                "storage; padded or sliced views are not supported"
+            )
+        storage_order = (
+            "col_major" if layout == "col_major" or
+            (layout == "strided" and source.ndim == 2 and source.flags.f_contiguous
+             and not source.flags.c_contiguous) else "row_major"
+        )
+        host = np.array(source, copy=True, order="F" if storage_order == "col_major" else "C")
+        out = self.empty(tuple(host.shape), host.dtype, layout=layout,
+                         storage_order=storage_order)
         if self.lib.tessera_nvidia_device_upload(
                 ctypes.c_void_p(out.ptr), _ptr(host), out.nbytes,
                 ctypes.c_void_p(self.stream)) != 0:
@@ -3605,7 +3632,7 @@ class NvidiaDeviceSession:
         import numpy as np
         host = np.empty(
             buffer.shape, dtype=buffer.dtype,
-            order="F" if buffer.layout == "col_major" else "C",
+            order="F" if buffer.storage_order == "col_major" else "C",
         )
         if self.lib.tessera_nvidia_device_download(
                 _ptr(host), ctypes.c_void_p(buffer.ptr), buffer.nbytes,

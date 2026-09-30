@@ -115,7 +115,7 @@ def _module(
 def _dynamic_module(
     *, bounds: tuple[int, int, int] = (32, 24, 32), dtype: str = "fp16",
     target: str = "nvidia_sm120", activation: str = "none",
-    bias: bool = False, residual: bool = False,
+    bias: bool = False, residual: bool = False, output_dtype: str = "fp32",
 ) -> GraphIRModule:
     m, n, k = bounds
     module = _module(
@@ -126,7 +126,10 @@ def _dynamic_module(
     element = "f16" if dtype == "fp16" else "bf16"
     fn.args[0].ir_type = IRType(f"tensor<?x?x{element}>", ("?", "?"), dtype)
     fn.args[1].ir_type = IRType(f"tensor<?x?x{element}>", ("?", "?"), dtype)
-    fn.result_types[0] = IRType("tensor<?x?xf32>", ("?", "?"), "fp32")
+    output_element = {"fp16": "f16", "fp32": "f32"}[output_dtype]
+    fn.result_types[0] = IRType(
+        f"tensor<?x?x{output_element}>", ("?", "?"), output_dtype
+    )
     op = fn.body[0]
     op.operand_types[:2] = [str(fn.args[0].ir_type), str(fn.args[1].ir_type)]
     op.result_type = str(fn.result_types[0])
@@ -277,6 +280,80 @@ def test_nvidia_large_bounded_dynamic_graph_selects_alignment_safe_macro_cta() -
     assert 'staging = "masked_scalar_shared_ab_16bit"' in artifact.tile_ir
     assert 'completion = "cta_barrier"' in artifact.tile_ir
     assert 'stages = 1 : i64' in artifact.tile_ir
+
+
+@pytest.mark.skipif(
+    not nvidia_cuda_host_ready()
+    or not nvidia_native.tools_available()
+    or scheduled_matmul.find_tessera_opt() is None,
+    reason="requires the SM120 CUDA compiler, PTX bridge, and RTX host",
+)
+def test_sm120_resident_dynamic_matmul_edge_reuses_packages_across_shapes() -> None:
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+
+    producer_artifact = scheduled_matmul.lower_scheduled_matmul(
+        _dynamic_module(bounds=(32, 24, 32), output_dtype="fp16"),
+        target="nvidia_sm120",
+    )
+    consumer_artifact = scheduled_matmul.lower_scheduled_matmul(
+        _dynamic_module(bounds=(32, 20, 24), output_dtype="fp16"),
+        target="nvidia_sm120",
+    )
+    producer = nvidia_native.package_scheduled_matmul(
+        producer_artifact, pipeline_name="tessera-lower-to-nvidia-sm120",
+    )
+    consumer = nvidia_native.package_scheduled_matmul(
+        consumer_artifact, pipeline_name="tessera-lower-to-nvidia-sm120",
+    )
+    assert producer.descriptor.abi_id == nvidia_native.SM120_STRIDED_F16_ABI
+    assert consumer.descriptor.abi_id == nvidia_native.SM120_STRIDED_F16_ABI
+    assert all(g.predicate == "max" for g in producer.descriptor.shape_guards)
+    assert all(g.predicate == "max" for g in consumer.descriptor.shape_guards)
+
+    rng = np.random.default_rng(17_091)
+    with NvidiaDeviceSession() as session:
+        for m, k, n, p in ((17, 19, 13, 11), (9, 5, 7, 6)):
+            a = np.ascontiguousarray(rng.standard_normal((m, k)).astype(np.float16))
+            b = np.asfortranarray(rng.standard_normal((k, n)).astype(np.float16))
+            c = np.asfortranarray(rng.standard_normal((n, p)).astype(np.float16))
+            source = session.upload(a, layout="strided")
+            producer_rhs = session.upload(b, layout="strided")
+            consumer_rhs = session.upload(c, layout="strided")
+            edge = session.empty((m, n), np.float16, layout="strided")
+            output = session.empty((m, p), np.float16, layout="strided")
+            producer_result = rt.launch(
+                rt.RuntimeArtifact(metadata={"target": "nvidia_sm120"},
+                                   native_image=producer.image,
+                                   launch_descriptor=producer.descriptor,
+                                   tile_ir=producer.tile_ir,
+                                   target_ir=producer.target_ir),
+                {"a": source, "b": producer_rhs, "o": edge,
+                 "M": m, "N": n, "K": k, "LDA": k, "LDB": k, "LDD": n},
+                stream=session.stream,
+            )
+            assert producer_result["ok"] is True, producer_result.get("reason")
+            consumer_result = rt.launch(
+                rt.RuntimeArtifact(metadata={"target": "nvidia_sm120"},
+                                   native_image=consumer.image,
+                                   launch_descriptor=consumer.descriptor,
+                                   tile_ir=consumer.tile_ir,
+                                   target_ir=consumer.target_ir),
+                {"a": edge, "b": consumer_rhs, "o": output,
+                 "M": m, "N": p, "K": n, "LDA": n, "LDB": n, "LDD": p},
+                stream=session.stream,
+            )
+            assert consumer_result["ok"] is True, consumer_result.get("reason")
+            assert session.synchronize() == 0
+            edge_host = edge.numpy()
+            output_host = output.numpy()
+            np.testing.assert_allclose(
+                edge_host, a.astype(np.float32) @ b.astype(np.float32),
+                rtol=2e-2, atol=2e-2,
+            )
+            np.testing.assert_allclose(
+                output_host, edge_host.astype(np.float32) @ c.astype(np.float32),
+                rtol=2e-2, atol=2e-2,
+            )
 
 
 @pytest.mark.skipif(

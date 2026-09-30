@@ -5,6 +5,13 @@ plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
+
+Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.
+Not applicable to ROCm: this slice changes the NVIDIA CUDA resident PTX
+bridge and its device-buffer layout metadata. No shared Graph/Schedule
+operation, HIP ABI, ROCm schedule, or ROCm execution claim changed.
+
 # ROCm backend TODO
 
 ## E2E-REAL-6-ALIBI-SHAPE-2026-09-29: traced ALiBi result type

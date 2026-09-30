@@ -132,6 +132,29 @@ def test_sm120_saved_lse_forward_backward_matches_recompute_and_oracle() -> None
     assert saved_forward["ok"], saved_forward.get("reason")
     assert recompute_forward["ok"], recompute_forward.get("reason")
     ref_o, ref_lse, ref_grads = _reference(q, k, v, do)
+    # Exercise saved-LSE on caller-owned CUDA buffers and one explicit stream.
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+    with NvidiaDeviceSession() as session:
+        qd, kd, vd = session.upload(q), session.upload(k), session.upload(v)
+        resident_o = session.empty(saved_o.shape, np.float32)
+        resident_lse = session.empty(row_lse.shape, np.float32)
+        resident_artifact = compile_result_from_bundle(
+            forward_saved, module=_forward_module(saved=True)
+        ).to_runtime_artifact()
+        resident = launch(
+            resident_artifact,
+            {"q": qd, "k": kd, "v": vd, "o": resident_o,
+             "row_lse": resident_lse, **scalars},
+            stream=session.stream,
+        )
+        assert resident["ok"], resident.get("reason")
+        assert resident["execution_kind"] == "native_gpu"
+        np.testing.assert_allclose(
+            session.download(resident_o), ref_o, rtol=3e-5, atol=3e-5
+        )
+        np.testing.assert_allclose(
+            session.download(resident_lse), ref_lse, rtol=3e-5, atol=3e-5
+        )
     np.testing.assert_allclose(saved_forward["output"][0], ref_o, rtol=3e-5, atol=3e-5)
     np.testing.assert_allclose(saved_forward["output"][1], ref_lse, rtol=3e-5, atol=3e-5)
     np.testing.assert_allclose(saved_forward["output"][0], recompute_forward["output"], rtol=0.0, atol=0.0)

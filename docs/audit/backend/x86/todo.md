@@ -6699,3 +6699,11 @@ Follow-up required: the shared Graph projection can express bounded M and K,
 but this slice adds only gfx1201 HIP and sm_120 CUDA resident package consumers.
 No AVX-512 lowering, runtime ABI, or x86 numerical parity is included; any x86
 resident consumer needs its own package and exact-CPU proof.
+
+## E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30: paired bounded dynamic M/N/K resident edge — follow-up required
+
+Owner E2E-REAL-6 / W1.1; sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
+The shared Graph projection is exercised for all three bounded axes, but this
+slice adds only gfx1201 HIP and sm_120 CUDA resident package consumers. x86 has
+no resident package/runtime consumer for this edge. Any such consumer needs its
+own ABI, native Schedule/Tile route, numerical proof, and exact-CPU evidence.

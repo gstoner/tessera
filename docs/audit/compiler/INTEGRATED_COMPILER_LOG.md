@@ -6429,3 +6429,30 @@ benchmark packets check three active (M,K) pairs on each target and record
 separate producer/consumer events; multiple CVs are high, so timings support
 attribution only. [Packets](../../../benchmarks/baselines/resident_dynamic_mk_20260930/README.md).
 <!-- entry-fields:end -->
+
+### 2026-09-30 — paired bounded dynamic M/N/K resident RMSNorm-to-matmul
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#891](https://github.com/gstoner/tessera/pull/891); sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
+
+Outcome: The shared Graph projection composes bounded M, N, and K, and both
+native resident consumers carry the projected extents through Schedule, Tile,
+and checked launch descriptors. Exact-device tests passed for fp16 and bf16 on
+Tajasaurus gfx1201 and Super-Bear sm_120. Each route reuses package images and
+the producer intermediate while accepting padded host views.
+
+Remaining: Apple and x86 have no resident package/runtime consumer for this
+edge. Wider physical device layouts and further W1.1 producer migrations remain
+separate work. No selector or performance promotion.
+
+Evidence: Host-free bounded-axis projection tests cover M/N, N/K, and M/N/K.
+The gfx1201 focused joint-M/N/K exact-device test passed 2/2 dtype rows; its
+clean-source fp16 packet records 100 separate HIP-event samples per stage and
+active M/N/K=(64,128,128),(96,192,192),(128,256,256). The sm_120 focused test
+passed 2/2 dtype rows; its clean-source fp16 packet records 31 separate
+CUDA-event samples per stage and active M/N/K=(256,256,128),(384,384,192),
+(512,512,256). Correctness, stable image identity, and same-allocation checks
+passed. gfx1201 event variation is high; timing supports stage attribution
+only. [Packets](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+<!-- entry-fields:end -->

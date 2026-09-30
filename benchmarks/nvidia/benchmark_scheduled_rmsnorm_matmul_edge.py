@@ -222,7 +222,7 @@ def _dynamic_m_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
         )
         resident = program.execute_resident(source, weights)
         try:
-            edge = resident.intermediate.numpy()
+            edge = resident.intermediate.numpy()[:active_m, :]
             output = resident.output.numpy()
             source_f32 = source.astype(np.float32)
             norm_reference = (
@@ -346,10 +346,18 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
     rng = np.random.default_rng(0x5A17 + m + bound_k + n)
     cases: list[dict[str, Any]] = []
     package_digest = program.consumer.image.image_digest
-    for active_k in sorted(set((max(1, bound_k // 2), max(1, (3 * bound_k) // 4), bound_k))):
-        source_backing = np.zeros((m, active_k + 3), dtype=np.float16)
+    active_shapes = (
+        ((max(1, m // 2), max(1, bound_k // 2)),
+         (m, max(1, (3 * bound_k) // 4)), (m, bound_k))
+        if args.dynamic_mk else
+        tuple((m, active_k) for active_k in sorted(
+            set((max(1, bound_k // 2), max(1, (3 * bound_k) // 4), bound_k))
+        ))
+    )
+    for active_m, active_k in active_shapes:
+        source_backing = np.zeros((active_m, active_k + 3), dtype=np.float16)
         source_backing[:, :active_k] = rng.normal(
-            0.0, 0.25, size=(m, active_k)
+            0.0, 0.25, size=(active_m, active_k)
         ).astype(np.float16)
         source = source_backing[:, :active_k]
         weights_backing = np.zeros((bound_k + 5, n), dtype=np.float16, order="F")
@@ -379,20 +387,20 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
             session = resident.device_session
             device_source, device_rhs = session._buffers[0], session._buffers[1]
             consumer_edge = resident.intermediate.view(
-                0, (m, active_k), resident.intermediate.dtype, layout="strided"
+                0, (active_m, active_k), resident.intermediate.dtype, layout="strided"
             )
             if consumer_edge.ptr != resident.intermediate.ptr:
                 raise RuntimeError("dynamic-K consumer edge copied the producer allocation")
             producer_args = {
                 program.producer_input_name: device_source,
                 program.intermediate_name: resident.intermediate,
-                "Rows": m, "Columns": active_k,
+                "Rows": active_m, "Columns": active_k,
             }
             consumer_args = {
                 program.consumer_input_name: consumer_edge,
                 program.consumer_rhs_name: device_rhs,
                 program.output_name: resident.output,
-                "M": m, "N": n, "K": active_k,
+                "M": active_m, "N": n, "K": active_k,
                 "LDA": active_k, "LDB": active_k, "LDD": n,
             }
             producer_samples = [
@@ -408,6 +416,7 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
                 ) for _ in range(args.samples)
             ]
             cases.append({
+                "active_m": active_m,
                 "active_k": active_k,
                 "output_shape": list(output.shape),
                 "correctness": {
@@ -449,12 +458,16 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
             ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True,
             text=True, check=True,
         ).stdout.strip()),
-        "method": "bounded dynamic K; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
+        "method": (
+            "bounded dynamic M+K" if args.dynamic_mk else "bounded dynamic K"
+        ) + "; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
         "edge": {
             "producer": "tessera.rmsnorm", "consumer": "tessera.matmul",
             "storage": "fp16", "layout": "compact row_major intermediate",
-            "static_mn": [m, n], "dynamic_k_bound": bound_k,
-            "measured_active_k": [row["active_k"] for row in cases],
+            "shape_bounds_mnk": [m, n, bound_k],
+            "dynamic_m_bound": m if args.dynamic_mk else None,
+            "dynamic_k_bound": bound_k,
+            "measured_active_mk": [[row["active_m"], row["active_k"]] for row in cases],
             "same_allocation": True, "same_stream": True,
             "rhs_layout": "padded host column-major view packed to compact column-major device storage",
             "host_input_layout": "padded row-major source and padded column-major RHS views; pack/upload excluded from device-event stage timings",
@@ -487,18 +500,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--active-m", type=int, help="first active M when --dynamic-m is set (second case uses bound M)")
     parser.add_argument("--dynamic-m", action="store_true", help="package one bounded dynamic-M producer/consumer edge")
     parser.add_argument("--dynamic-k", action="store_true", help="package one bounded dynamic-K producer/consumer edge")
+    parser.add_argument("--dynamic-mk", action="store_true", help="package jointly bounded dynamic-M/K producer/consumer edge")
     parser.add_argument("--warmup", type=int, default=30)
     parser.add_argument("--reps", type=int, default=500)
     parser.add_argument("--samples", type=int, default=7)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     m, k, n = args.m, args.k, args.n
-    if sum((args.dynamic_m, args.dynamic_n, args.dynamic_k)) > 1:
-        parser.error("dynamic M, N, and K are currently separate package envelopes")
+    if sum((args.dynamic_m, args.dynamic_n, args.dynamic_k, args.dynamic_mk)) > 1:
+        parser.error("choose one dynamic extent envelope; --dynamic-mk combines M and K")
     if args.output is None:
         output_name = (
             "dynamic_m_sm120.json" if args.dynamic_m
             else "dynamic_n_sm120.json" if args.dynamic_n
+            else "dynamic_mk_sm120.json" if args.dynamic_mk
             else "dynamic_k_sm120.json" if args.dynamic_k
             else "sm120.json"
         )
@@ -526,7 +541,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--active-m requires --dynamic-m")
         active_n = n
     producer_module, consumer_module = _modules(
-        m, k, n, dynamic_n=args.dynamic_n, dynamic_k=args.dynamic_k
+        m, k, n, dynamic_n=args.dynamic_n,
+        dynamic_k=args.dynamic_k or args.dynamic_mk
     )
     if args.dynamic_m:
         program = nvidia_native.package_scheduled_rmsnorm_matmul(
@@ -534,10 +550,11 @@ def main(argv: list[str] | None = None) -> int:
             pipeline_name="tessera-lower-to-nvidia-sm120",
             dynamic_m_bound=m,
         )
-    elif args.dynamic_k:
+    elif args.dynamic_k or args.dynamic_mk:
         program = nvidia_native.package_scheduled_rmsnorm_matmul(
             producer_module, consumer_module,
             pipeline_name="tessera-lower-to-nvidia-sm120",
+            dynamic_m_bound=m if args.dynamic_mk else None,
             dynamic_k_bound=k,
         )
     else:
@@ -556,7 +573,7 @@ def main(argv: list[str] | None = None) -> int:
         return _dynamic_m_benchmark(args, program, m, k, n, first_active_m)
     if args.dynamic_n:
         return _dynamic_n_benchmark(args, program, m, k, n, active_n)
-    if args.dynamic_k:
+    if args.dynamic_k or args.dynamic_mk:
         return _dynamic_k_benchmark(args, program, m, k, n)
 
     rng = np.random.default_rng(0x5A17 + m + k + n)

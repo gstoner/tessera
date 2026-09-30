@@ -18,9 +18,10 @@ parser.add_argument("--iterations", type=int, default=100)
 parser.add_argument("--dynamic-n", action="store_true")
 parser.add_argument("--dynamic-m", action="store_true")
 parser.add_argument("--dynamic-k", action="store_true")
+parser.add_argument("--dynamic-mk", action="store_true")
 args = parser.parse_args()
-if sum((args.dynamic_m, args.dynamic_n, args.dynamic_k)) > 1:
-    parser.error("choose one dynamic extent per package")
+if sum((args.dynamic_m, args.dynamic_n, args.dynamic_k, args.dynamic_mk)) > 1:
+    parser.error("choose one dynamic extent envelope; --dynamic-mk combines M and K")
 if args.warmup < 0 or args.iterations <= 0:
     parser.error("warmup must be nonnegative and iterations must be positive")
 assert rt._rocm_live_arch() == rt._rocm_chip() == "gfx1201"
@@ -51,8 +52,8 @@ with package_graph_rmsnorm_matmul(
     x,
     rhs,
     dynamic_n_bound=n if args.dynamic_n else None,
-    dynamic_m_bound=m if args.dynamic_m else None,
-    dynamic_k_bound=k if args.dynamic_k else None,
+    dynamic_m_bound=m if args.dynamic_m or args.dynamic_mk else None,
+    dynamic_k_bound=k if args.dynamic_k or args.dynamic_mk else None,
     pipeline_name="tessera-lower-to-rocm",
 ) as session:
     check = session.run(warmup=0, iterations=1)
@@ -67,7 +68,46 @@ with package_graph_rmsnorm_matmul(
     active_n_runs = []
     active_m_runs = []
     active_k_runs = []
-    if args.dynamic_m:
+    active_mk_runs = []
+    if args.dynamic_mk:
+        active_shapes = (
+            (max(1, m // 2), max(1, k // 2)),
+            (m, max(1, (3 * k) // 4)),
+            (m, k),
+        )
+        for active_m, active_k in active_shapes:
+            active_x_backing = np.zeros((active_m, active_k + 3), dtype=storage_dtype)
+            active_x_backing[:, :active_k] = x[:active_m, :active_k]
+            active_x = active_x_backing[:, :active_k]
+            active_rhs_backing = np.zeros((k + 5, n + 3), dtype=storage_dtype)
+            active_rhs_backing[:active_k, :n] = rhs[:active_k, :]
+            active_rhs = active_rhs_backing[:active_k, :n]
+            active_x32 = active_x.astype(np.float32)
+            active_normalized = (
+                active_x32 / np.sqrt(
+                    np.mean(active_x32 * active_x32, axis=-1, keepdims=True) + epsilon
+                )
+            ).astype(storage_dtype)
+            active_expected = active_normalized.astype(np.float32) @ active_rhs.astype(np.float32)
+            result = session.run(
+                warmup=args.warmup, iterations=args.iterations,
+                x=active_x, rhs=active_rhs,
+            )
+            for output in result["outputs"]:
+                np.testing.assert_allclose(
+                    output, active_expected, rtol=tolerance, atol=tolerance
+                )
+            active_mk_runs.append({
+                "active_m": active_m,
+                "active_k": active_k,
+                "correctness_checked": True,
+                "producer_device_event_ms": result["producer_device_event_ms"],
+                "consumer_device_event_ms": result["consumer_device_event_ms"],
+                "producer_median_ms": result["producer_median_ms"],
+                "consumer_median_ms": result["consumer_median_ms"],
+                "resident_buffer_addresses": result["buffer_addresses"],
+            })
+    elif args.dynamic_m:
         for active_m in (max(1, m // 2), m):
             active_x = x[:active_m]
             active_x32 = active_x.astype(np.float32)
@@ -176,11 +216,12 @@ with package_graph_rmsnorm_matmul(
         "consumer_toolchain_fingerprint": session._matmul_package.image.toolchain_fingerprint,
         "shape_mkn": [m, k, n],
         "dynamic_n_bound": n if args.dynamic_n else None,
-        "dynamic_m_bound": m if args.dynamic_m else None,
-        "dynamic_k_bound": k if args.dynamic_k else None,
+        "dynamic_m_bound": m if args.dynamic_m or args.dynamic_mk else None,
+        "dynamic_k_bound": k if args.dynamic_k or args.dynamic_mk else None,
         "active_n_runs": active_n_runs,
         "active_m_runs": active_m_runs,
         "active_k_runs": active_k_runs,
+        "active_mk_runs": active_mk_runs,
         "storage": args.dtype,
         "accumulation": "fp32",
         "output": "fp32",

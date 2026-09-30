@@ -6396,11 +6396,11 @@ obligations remain independent. No performance claim or route promotion.
 
 Evidence: Tajasaurus RX 9070 XT (gfx1201) passed 20/20 resident tests, including
 padded source/RHS bounded-K fp16 and bf16 cases. Super-Bear RTX 5070 (sm_120)
-passed 27/27 tensor-program tests, including both dtypes, padded views, numerical
+passed 28/28 tensor-program tests, including both dtypes, padded views, numerical
 oracle checks, stable images, and same-allocation producer/consumer execution.
 A host-free fake-runtime regression verifies CUDA upload staging survives failed
 synchronization and is released only after successful synchronization. Device
 event timings keep producer and consumer separate and exclude host packing and
-upload; the new gfx1201 probe showed severe variance at K=192/256 and is
-diagnostic only.
+upload; the gfx1201 probe showed high variation at K=128/256, while sm_120
+consumer K=128 also varied sharply. These results are diagnostic only. [Packets](../../../benchmarks/baselines/resident_strided_ingress_20260930/README.md).
 <!-- entry-fields:end -->

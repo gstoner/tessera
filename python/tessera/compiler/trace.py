@@ -381,6 +381,13 @@ class TraceBuilder:
             tensor_ir_type(tuple(str(dim) for dim in item.shape), item.dtype)
             for item in tracer_args
         ]
+        from .op_catalog import shape_rule_for
+        if tracer_args and shape_rule_for(graph_name) == "same_as_first":
+            # The concrete NumPy reference can promote low-precision storage
+            # (notably bfloat16 RMSNorm) through scalar arithmetic. Graph IR's
+            # canonical same_as_first contract owns storage dtype; eager values
+            # remain the numerical oracle but cannot redefine that ABI.
+            dtypes = tuple(tracer_args[0].dtype for _ in dtypes)
         _canonicalize_spectral_attrs(graph_name, operand_ir_types, ir_kwargs)
         ssas = tuple(self._fresh() for _ in out_shapes)
         result_ir_types = tuple(

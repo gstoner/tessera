@@ -60,6 +60,7 @@ GFX_REDUCE_F16_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.f16_f32out.v1"
 GFX_REDUCE_BF16_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.bf16_f32out.v1"
 GFX_NORM_F16_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.f16.v1"
 GFX_NORM_F32_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.f32.v1"
+GFX_NORM_BF16_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.bf16.v1"
 GFX_PAGED_KV_F32_ABI = "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1"
 GFX_MOE_DISPATCH_F32_ABI = "tessera.rocm.moe_dispatch.x_token_o_t_s_h.f32_i32.v1"
 GFX_ATTN_F16_ABI = "tessera.rocm.attention.q_k_v_o_dims.f16_f32out.v1"
@@ -2165,9 +2166,9 @@ def package_scheduled_kernel(
     elif artifact.family == "norm":
         if artifact.kind != "rmsnorm" or artifact.axis != -1 or artifact.keepdims:
             raise ValueError("ROCm scheduled norm requires unweighted last-axis RMSNorm")
-        if artifact.architecture != "gfx1201" or storage not in {"f16", "f32"}:
-            raise ValueError("gfx1201 scheduled RMSNorm currently requires f16/f32 storage")
-        abi = GFX_NORM_F16_ABI if storage == "f16" else GFX_NORM_F32_ABI
+        if artifact.architecture != "gfx1201" or storage not in {"f16", "bf16", "f32"}:
+            raise ValueError("gfx1201 scheduled RMSNorm requires f16/bf16/f32 storage")
+        abi = {"f16": GFX_NORM_F16_ABI, "bf16": GFX_NORM_BF16_ABI, "f32": GFX_NORM_F32_ABI}[storage]
         output_dtype, output_alignment = artifact.dtype, alignment
         compile_family = "normalization"
         scalars = (
@@ -3391,6 +3392,9 @@ __all__ = [
     "GFX_ATTN_F16_ABI",
     "GFX_DEPTH_ATTN_F32_ABI",
     "GFX_MOE_DISPATCH_F32_ABI",
+    "GFX_NORM_BF16_ABI",
+    "GFX_NORM_F16_ABI",
+    "GFX_NORM_F32_ABI",
     "GFX_MATMUL_E4M3_F32_ABI",
     "GFX_MATMUL_E5M2_F32_ABI",
     "GFX_MATMUL_E4M3_E5M2_F32_ABI",

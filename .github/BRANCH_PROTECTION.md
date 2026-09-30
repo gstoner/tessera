@@ -1,7 +1,7 @@
 # Branch protection — required CI checks
 
 Tessera's `Validate` workflow (`.github/workflows/validate.yml`) is
-split into 6 lanes plus one aggregator job. The aggregator
+split into four required lanes plus optional proof lanes and one aggregator job.\nThe aggregator
 (`validate-required`) is the single status check we wire into branch
 protection — it succeeds iff every required lane succeeds.
 
@@ -12,12 +12,9 @@ status checks to pass before merging":
 
 | Check                | Source            | Why required                    |
 |----------------------|-------------------|---------------------------------|
-| `validate-required`  | `validate.yml`    | Fans in lint / unit / audit — one check, three lanes. |
+| `validate-required`  | `validate.yml`    | Fans in lint / unit / audit / compiler-route — one check, four required lanes. |
 
-Selecting just `validate-required` is sufficient. Each underlying
-lane (`lint (ruff + mypy ratchet)`, `unit (pytest -m "not slow")`, and
-`audit (drift + claim_lint + examples)`) is still reported
-individually in the PR Checks tab so contributors can see which lane failed
+Selecting just `validate-required` is sufficient. Each underlying lane is reported individually in the PR Checks tab so contributors can see which lane failed
 without expanding the aggregator log.
 
 ## Opt-in lanes (NOT required for merge)

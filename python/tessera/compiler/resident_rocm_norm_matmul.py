@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import ctypes
 from typing import Any, cast
 
@@ -9,10 +10,10 @@ import numpy as np
 
 
 class ResidentROCmNormMatmul:
-    """Keep an f16 RMSNorm result resident between two scheduled gfx1201 images.
+    """Keep an f16/bf16 RMSNorm result resident between scheduled gfx1201 images.
 
-    The narrow API admits one static, contiguous f16 last-axis RMSNorm producer
-    and one static f16x f16 -> f32 scheduled matmul consumer. Both launches use
+    The API admits one static, contiguous low-precision last-axis RMSNorm
+    producer and one same-storage, f32-accumulating matmul consumer. Both launches use
     one private HIP stream and one owned intermediate allocation. Host arrays
     are snapshotted at construction; close synchronizes before releasing any
     image, event, stream, or allocation.
@@ -20,7 +21,10 @@ class ResidentROCmNormMatmul:
 
     def __init__(self, norm_package: Any, matmul_package: Any, x: Any, rhs: Any):
         from tessera import runtime as rt
-        from tessera.compiler.rocm_native import GFX_MATMUL_F16_F32_ABI, GFX_NORM_F16_ABI
+        from tessera.compiler.rocm_native import (
+            GFX_MATMUL_BF16_F32_ABI, GFX_MATMUL_F16_F32_ABI,
+            GFX_NORM_BF16_ABI, GFX_NORM_F16_ABI,
+        )
 
         self._closed = False
         self._hip: ctypes.CDLL | None = None
@@ -40,8 +44,19 @@ class ResidentROCmNormMatmul:
             for package in (norm_package, matmul_package)
         ):
             raise ValueError("resident norm-matmul requires gfx1201 HSACO packages")
-        if self._norm.abi_id != GFX_NORM_F16_ABI or self._gemm.abi_id != GFX_MATMUL_F16_F32_ABI:
-            raise ValueError("resident norm-matmul requires f16 RMSNorm and f16x f16 -> f32 matmul ABIs")
+        abi_pairs = {
+            GFX_NORM_F16_ABI: ("fp16", GFX_MATMUL_F16_F32_ABI),
+            GFX_NORM_BF16_ABI: ("bf16", GFX_MATMUL_BF16_F32_ABI),
+        }
+        pair = abi_pairs.get(self._norm.abi_id)
+        if pair is None or self._gemm.abi_id != pair[1]:
+            raise ValueError("resident norm-matmul requires matching f16 or bf16 producer/consumer ABIs")
+        self.storage_dtype_name = pair[0]
+        if self.storage_dtype_name == "bf16":
+            import ml_dtypes
+            self.storage_dtype = np.dtype(ml_dtypes.bfloat16)
+        else:
+            self.storage_dtype = np.dtype(np.float16)
         if self._norm.provenance.get("family") != "norm" or self._norm.provenance.get("kind") != "rmsnorm":
             raise ValueError("resident norm-matmul producer must be scheduled RMSNorm")
         if self._gemm.provenance.get("activation") != "none" or self._gemm.provenance.get("bias"):
@@ -53,14 +68,14 @@ class ResidentROCmNormMatmul:
         self.epsilon = float(self._norm.provenance["epsilon"])
         if not np.isfinite(self.epsilon) or self.epsilon <= 0:
             raise ValueError("resident RMSNorm epsilon must be finite and positive")
-        self.x = np.array(x, dtype=np.float16, order="C", copy=True)
-        self.rhs = np.array(rhs, dtype=np.float16, order="C", copy=True)
+        self.x = np.array(x, dtype=self.storage_dtype, order="C", copy=True)
+        self.rhs = np.array(rhs, dtype=self.storage_dtype, order="C", copy=True)
         if self.x.shape != (self.rows, self.k) or self.rhs.shape != (self.k, self.n):
             raise ValueError("resident inputs disagree with package shapes")
         if not np.isfinite(self.x).all() or not np.isfinite(self.rhs).all():
             raise ValueError("resident inputs must contain finite values")
         self.output = np.empty((self.m, self.n), dtype=np.float32)
-        self._tmp_host = np.empty((self.rows, self.k), dtype=np.float16)
+        self._tmp_host = np.empty((self.rows, self.k), dtype=self.storage_dtype)
         self._norm_input = self._binding_name(self._norm, "input")
         self._norm_output = self._binding_name(self._norm, "output")
         self._gemm_a = self._binding_name(self._gemm, "input", ordinal=0)
@@ -160,12 +175,12 @@ class ResidentROCmNormMatmul:
         from tessera.compiler.native_artifact import BufferArgument
 
         norm_args = {
-            self._norm_input: BufferArgument("fp16", (self.rows, self.k), "row_major", 2),
-            self._norm_output: BufferArgument("fp16", (self.rows, self.k), "row_major", 2),
+            self._norm_input: BufferArgument(self.storage_dtype_name, (self.rows, self.k), "row_major", 2),
+            self._norm_output: BufferArgument(self.storage_dtype_name, (self.rows, self.k), "row_major", 2),
         }
         gemm_args = {
-            self._gemm_a: BufferArgument("fp16", (self.m, self.k), "row_major", 2),
-            self._gemm_b: BufferArgument("fp16", (self.k, self.n), "row_major", 2),
+            self._gemm_a: BufferArgument(self.storage_dtype_name, (self.m, self.k), "row_major", 2),
+            self._gemm_b: BufferArgument(self.storage_dtype_name, (self.k, self.n), "row_major", 2),
             self._gemm_output: BufferArgument("fp32", (self.m, self.n), "row_major", 4),
         }
         self._norm.validate_invocation(
@@ -246,7 +261,7 @@ class ResidentROCmNormMatmul:
         if self._closed:
             raise RuntimeError("resident norm-matmul session is closed")
         hip = self._require_hip()
-        active_rhs = self.rhs if rhs is None else np.array(rhs, dtype=np.float16, order="C", copy=True)
+        active_rhs = self.rhs if rhs is None else np.array(rhs, dtype=self.storage_dtype, order="C", copy=True)
         if (
             active_rhs.ndim != 2
             or active_rhs.shape[0] != self.k
@@ -261,8 +276,8 @@ class ResidentROCmNormMatmul:
         from tessera.compiler.native_artifact import BufferArgument
 
         runtime_buffers = {
-            self._gemm_a: BufferArgument("fp16", (self.m, self.k), "row_major", 2),
-            self._gemm_b: BufferArgument("fp16", (self.k, active_n), "row_major", 2),
+            self._gemm_a: BufferArgument(self.storage_dtype_name, (self.m, self.k), "row_major", 2),
+            self._gemm_b: BufferArgument(self.storage_dtype_name, (self.k, active_n), "row_major", 2),
             self._gemm_output: BufferArgument("fp32", (self.m, active_n), "row_major", 4),
         }
         runtime_scalars = {"M": self.m, "N": active_n, "K": self.k}
@@ -386,6 +401,50 @@ class ResidentROCmNormMatmul:
             pass
 
 
+def _with_bounded_dynamic_n(matmul_module: Any, rhs: Any, bound: int) -> Any:
+    """Give one traced Graph matmul a bounded dynamic N contract."""
+    from .graph_ir import tensor_ir_type
+
+    if bound <= 0:
+        raise ValueError("dynamic N bound must be positive")
+    module = copy.deepcopy(matmul_module)
+    if len(module.functions) != 1:
+        raise ValueError("bounded dynamic N requires one Graph function")
+    function = module.functions[0]
+    if len(function.args) != 2 or len(function.result_types) != 1:
+        raise ValueError("bounded dynamic N requires a two-input, one-result matmul")
+    matmuls = [op for op in function.body if op.op_name == "tessera.matmul"]
+    if len(matmuls) != 1:
+        raise ValueError("bounded dynamic N requires one Graph matmul operation")
+    lhs_type, rhs_type = function.args[0].ir_type, function.args[1].ir_type
+    output_type = function.result_types[0]
+    try:
+        m, k = (int(str(dim)) for dim in lhs_type.shape)
+        rhs_k, rhs_n = (int(str(dim)) for dim in rhs_type.shape)
+        out_m, out_n = (int(str(dim)) for dim in output_type.shape)
+        actual_rhs_shape = tuple(int(dim) for dim in rhs.shape)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("bounded dynamic N requires static traced tensor shapes") from exc
+    if (rhs_k, rhs_n) != (k, bound) or actual_rhs_shape != (k, bound):
+        raise ValueError("dynamic N bound must match the traced RHS capacity")
+    if (out_m, out_n) != (m, bound):
+        raise ValueError("dynamic N bound must match the traced matmul result")
+    dynamic_rhs = tensor_ir_type(
+        (str(k), "?"), rhs_type.dtype, layout=rhs_type.layout,
+    )
+    dynamic_output = tensor_ir_type(
+        (str(m), "?"), output_type.dtype, layout=output_type.layout,
+    )
+    function.args[1].ir_type = dynamic_rhs
+    function.result_types[0] = dynamic_output
+    op = matmuls[0]
+    op.operand_types[1] = str(dynamic_rhs)
+    op.result_type = str(dynamic_output)
+    op.inferred_type = dynamic_output
+    op.kwargs["shape_bounds"] = [m, bound, k]
+    return module
+
+
 def lower_graph_rmsnorm_matmul(norm_module: Any, matmul_module: Any) -> tuple[Any, Any]:
     """Lower traced Graph IR modules through gfx1201 Schedule and Tile IR."""
     from .scheduled_kernel import lower_scheduled_kernel
@@ -404,11 +463,18 @@ def package_graph_rmsnorm_matmul(
     x: Any,
     rhs: Any,
     *,
+    dynamic_n_bound: int | None = None,
     pipeline_name: str = "tessera-lower-to-rocm",
 ) -> ResidentROCmNormMatmul:
-    """Create the resident gfx1201 package directly from traced Graph IR."""
+    """Create the resident gfx1201 package directly from traced Graph IR.
+
+    When supplied, dynamic_n_bound turns the traced consumer's static N extent
+    into a bounded runtime N guard while retaining its maximum storage.
+    """
     from . import rocm_native
 
+    if dynamic_n_bound is not None:
+        matmul_module = _with_bounded_dynamic_n(matmul_module, rhs, dynamic_n_bound)
     norm, matmul = lower_graph_rmsnorm_matmul(norm_module, matmul_module)
     norm_package = rocm_native.package_scheduled_kernel(
         norm, pipeline_name=pipeline_name,

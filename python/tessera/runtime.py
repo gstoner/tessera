@@ -4292,7 +4292,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
 
     return frozenset({
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
-        rn.GFX_NORM_F16_ABI, rn.GFX_NORM_F32_ABI,
+        rn.GFX_NORM_F16_ABI, rn.GFX_NORM_BF16_ABI, rn.GFX_NORM_F32_ABI,
         rn.GFX_MATMUL_F16_F32_ABI, rn.GFX_MATMUL_F16_F32_FUSED_ABI,
         rn.GFX_MATMUL_E4M3_F32_ABI, rn.GFX_MATMUL_E5M2_F32_ABI,
         rn.GFX_MATMUL_E4M3_E5M2_F32_ABI, rn.GFX_MATMUL_E5M2_E4M3_F32_ABI,
@@ -4533,6 +4533,7 @@ def _submit_rocm_gfx1151_native(
         GFX_MATMUL_I8_I32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
         GFX_NORM_F16_ABI,
+        GFX_NORM_BF16_ABI,
         GFX_NORM_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
         GFX_REDUCE_BF16_ABI,
@@ -4593,6 +4594,7 @@ def _submit_rocm_gfx1151_native(
         GFX_PAGED_KV_F32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
         GFX_NORM_F16_ABI,
+        GFX_NORM_BF16_ABI,
         GFX_NORM_F32_ABI,
         GFX_ATTN_F16_ABI,
         GFX_ATTN_BF16_ABI,
@@ -4617,7 +4619,7 @@ def _submit_rocm_gfx1151_native(
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     paged_kv = descriptor.abi_id == GFX_PAGED_KV_F32_ABI
     moe_dispatch = descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
-    normalization = descriptor.abi_id in {GFX_NORM_F16_ABI, GFX_NORM_F32_ABI}
+    normalization = descriptor.abi_id in {GFX_NORM_F16_ABI, GFX_NORM_BF16_ABI, GFX_NORM_F32_ABI}
     attention = descriptor.abi_id in {
         GFX_ATTN_F16_ABI,
         GFX_ATTN_BF16_ABI,
@@ -4867,7 +4869,13 @@ def _submit_rocm_gfx1151_native(
         rows = int(cast(int, scalars["Rows"]))
         columns = int(cast(int, scalars["K"]))
         epsilon = float(cast(float, scalars["Epsilon"]))
-        expected_storage = np.float16 if descriptor.abi_id == GFX_NORM_F16_ABI else np.float32
+        if descriptor.abi_id == GFX_NORM_F16_ABI:
+            expected_storage = np.dtype(np.float16)
+        elif descriptor.abi_id == GFX_NORM_BF16_ABI:
+            import ml_dtypes
+            expected_storage = np.dtype(ml_dtypes.bfloat16)
+        else:
+            expected_storage = np.dtype(np.float32)
         expected_dtype = expected_storage
         if (tuple(x.shape) != (rows, columns) or tuple(output.shape) != tuple(x.shape)
                 or x.dtype != expected_storage or output.dtype != expected_storage
@@ -5950,6 +5958,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_MATMUL_I8_I32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
         GFX_NORM_F16_ABI,
+        GFX_NORM_BF16_ABI,
         GFX_NORM_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
         GFX_REDUCE_BF16_ABI,
@@ -5980,7 +5989,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
          or (target == "rocm_gfx1201" and
              (abi_id in _gfx1201_proved_scheduled_abis()
               or abi_id in _gfx1201_manual_probe_abis())))
-        and (abi_id not in {GFX_NORM_F16_ABI, GFX_NORM_F32_ABI}
+        and (abi_id not in {GFX_NORM_F16_ABI, GFX_NORM_BF16_ABI, GFX_NORM_F32_ABI}
              or target == "rocm_gfx1201")
         and abi_id
         in {
@@ -5992,6 +6001,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_PAGED_KV_F32_ABI,
             GFX_MOE_DISPATCH_F32_ABI,
             GFX_NORM_F16_ABI,
+            GFX_NORM_BF16_ABI,
             GFX_NORM_F32_ABI,
             GFX_MATMUL_F16_F32_ABI,
             GFX_MATMUL_F16_F32_FUSED_ABI,

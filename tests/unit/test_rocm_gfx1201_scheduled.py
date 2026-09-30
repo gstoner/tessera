@@ -17,7 +17,7 @@ from tests.unit.test_scheduled_kernel_consumers import _module
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 
 def _rmsnorm_graph(dtype="fp16", shape=(2, 16)):
-    storage = "f16" if dtype == "fp16" else "f32"
+    storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     source = IRType("tensor<" + "x".join(map(str, shape)) + "x" + storage + ">", tuple(map(str, shape)), dtype)
     return GraphIRModule(functions=[GraphIRFunction(
         name="gfx1201_scheduled_rmsnorm",
@@ -32,6 +32,8 @@ def _rmsnorm_graph(dtype="fp16", shape=(2, 16)):
     )])
 
 
+@pytest.mark.compiler_tool
+@pytest.mark.compiler_route
 def test_gfx1201_rmsnorm_graph_replays_through_native_schedule_and_tile():
     assert scheduled_kernel.supports_scheduled_kernel(_rmsnorm_graph(), target="rocm_gfx1201")
     artifact = scheduled_kernel.lower_scheduled_kernel(

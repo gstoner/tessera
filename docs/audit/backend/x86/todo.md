@@ -7,6 +7,11 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.
+Not applicable to x86: the new bf16 RMSNorm route uses gfx1201 workgroup and HIP ABI contracts. No x86 Schedule, AVX-512 runtime ABI, or Zen 5 execution claim changed; x86 execution remains not applicable to this architecture-scoped HIP ABI.
+
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.

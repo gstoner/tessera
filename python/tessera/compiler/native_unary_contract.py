@@ -75,7 +75,7 @@ def verify_unary_projection(artifact, parent: str) -> None:
         eps = re.search(r'(?:^|, )epsilon = ([-+0-9.eE]+) : f32(?:,|$)', attrs)
         norm_target_ok = artifact.target == 'x86' or (
             artifact.target == 'rocm' and artifact.architecture == 'gfx1201'
-            and storage in {'f16', 'f32'} and kind is not None and kind[1] == 'rmsnorm'
+            and storage in {'f16', 'bf16', 'f32'} and kind is not None and kind[1] == 'rmsnorm'
         )
         if (not norm_target_ok or axis != -1 or output_shape != input_shape
                 or kind is None or eps is None

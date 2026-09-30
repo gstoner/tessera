@@ -6,6 +6,11 @@ target: nvidia_sm120
 last_updated: 2026-09-30
 ---
 
+## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.
+Not applicable to the NVIDIA implementation: this adds an architecture-scoped ROCm RMSNorm ABI and gfx1201 Schedule/Tile admission; no CUDA lowering, SM120 ABI, or NVIDIA runtime dispatch changed. The existing SM120 bf16 resident tensor edge remains a separate CUDA implementation. The focused NVIDIA tensor-program suite reran 18/18 on Super-Bear RTX 5070 (sm_120) with its CUDA 13.4 GEMM/PTX libraries selected explicitly; this is a regression check, not parity inferred from ROCm timings or physical schedules.
+
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: paired package edge - parity validated
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.

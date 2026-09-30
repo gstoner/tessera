@@ -5,6 +5,11 @@ plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: bf16 resident edge - parity validated
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.
+Tajasaurus gfx1201 now compiles bf16 RMSNorm and bf16-to-f32 matmul packages from Graph through Schedule and Tile, admits the new `GFX_NORM_BF16_ABI` only after exact-device proof, and launches both through the generic ROCm dispatcher and the resident same-stream edge. The owning-device test checks the fp32 oracle, distinct/stable intermediate allocation, repeated launches, and separate producer/consumer events. The focused resident, scheduled gfx1201, and shape-rule registry suites pass 128/128 on Tajasaurus WSL. A static correctness-gated 128x256x256 packet with 25 warmups and 100 iterations measured 11.479 us RMSNorm and 12.820 us matmul. The new bounded dynamic-N packet reuses one BF16 package at active N=128 and N=256 (bound 256), checks both outputs against the numerical oracle, and records unchanged input/RHS/intermediate/output allocation addresses. After synchronizing the branch source onto Tajasaurus and rerunning the focused suite, separate producer/consumer event medians are 8.52/10.68 us at N=128 and 11.36/14.04 us at N=256. Both packets capture dirty worktrees, so timings are diagnostic only and support no selector or performance promotion. M/K remain static and the storage contract remains row-major. The PR required unit lane is still red because its CPU runner invokes the Graph/Schedule route test without a production `tessera-opt`; no skip or test weakening was applied, and a compiler-backed CI lane remains required.
+
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: gfx1201 RMSNorm package - landing
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.

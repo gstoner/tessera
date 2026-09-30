@@ -1293,7 +1293,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     // row normalization the retired `x86_native.package_cohort2` served.
     bool gfx1201Norm = rocm && schedule.arch == "gfx1201" &&
                        opName == "tessera.rmsnorm" &&
-                       (schedule.storage == "f16" || schedule.storage == "f32");
+                       (schedule.storage == "f16" || schedule.storage == "bf16" ||
+                        schedule.storage == "f32");
     if ((!nvidia && !x86 && !gfx1201Norm) || (x86 && schedule.storage != "f32") ||
         schedule.storage.empty() || input.getShape() != output.getShape() ||
         input.getElementType() != output.getElementType() ||

@@ -350,7 +350,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         if norm is not None and target == "x86" and norm[0] != "fp32":
             norm = None
         if norm is not None and target == "rocm_gfx1201" and (
-            norm[0] not in {"fp16", "fp32"} or norm[1] != "rmsnorm"
+            norm[0] not in {"fp16", "bf16", "fp32"} or norm[1] != "rmsnorm"
         ):
             norm = None
         if norm is None or op.kwargs.get("numeric_policy") is not None or mode != "serial":

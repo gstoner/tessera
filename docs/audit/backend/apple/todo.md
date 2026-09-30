@@ -6,6 +6,11 @@ target: apple_gpu
 last_updated: 2026-09-30
 ---
 
+## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.
+Not applicable to Apple: the new bf16 Schedule/Tile and runtime ABI are gated to gfx1201. No Metal target admission, Apple runtime ABI, or Mac device evidence changed; Apple execution remains not applicable to this gfx1201-only Schedule/Tile extension.
+
 ## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.

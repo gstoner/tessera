@@ -282,7 +282,7 @@ LogicalResult NormOp::verify() {
   bool zen5 = getArch() == "zen5-avx512" && getWorkgroupSize() == 1 &&
               getStorage() == "f32";
   bool gfx1201 = getArch() == "gfx1201" && getWorkgroupSize() == 256 &&
-                 (getStorage() == "f16" || getStorage() == "f32") &&
+                 (getStorage() == "f16" || getStorage() == "bf16" || getStorage() == "f32") &&
                  getKind() == "rmsnorm";
   if ((!sm120 && !zen5 && !gfx1201) || getAccum() != "f32" || getAxis() != -1 ||
       (getKind() != "rmsnorm" && getKind() != "layernorm") ||

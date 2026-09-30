@@ -2628,7 +2628,7 @@ struct LowerTileToROCMPass
       if (name == "tile.sparse_mma" || name == "tile.mma" || name == "tile.matmul_kernel" ||
           name == "tile.scaled_matmul_kernel" ||
           name == "tile.materialize_composed_layout" ||
-          name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
+          name == "tile.norm_kernel" || name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
           name == "tile.attention_kernel" ||
           name == "tile.depth_attention_kernel" ||
           name == "tile.tridiagonal_solve_kernel" ||
@@ -3160,6 +3160,53 @@ struct LowerTileToROCMPass
         state.addAttribute("linear_solver", solver);
         state.addAttribute("product_mode", productMode);
         state.addAttribute("dtype", builder.getStringAttr("f32"));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.norm_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto kind = op->getAttrOfType<StringAttr>("kind");
+        auto axis = op->getAttrOfType<IntegerAttr>("axis");
+        auto affine = op->getAttrOfType<BoolAttr>("affine");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        if (!storage || !accum || !kind || !axis || !affine || !hash ||
+            hash.getValue().size() != 64 || op->getNumOperands() != 5) {
+          op->emitError("ROCm norm lowering requires a replayed scheduled unary contract");
+          signalPassFailure();
+          return;
+        }
+        if ((storage.getValue() != "f16" && storage.getValue() != "bf16" &&
+             storage.getValue() != "f32") || accum.getValue() != "f32" ||
+            kind.getValue() != "rmsnorm" || axis.getInt() != -1 ||
+            affine.getValue()) {
+          op->emitError("ROCm scheduled norm currently requires unweighted RMSNorm, "
+                        "last-axis reduction, and f16/bf16/f32 storage with f32 accumulation");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm norm lowering requires a symbol-owned launch envelope");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.norm");
+        state.addAttribute("name", symbol);
+        state.addAttribute("kind", kind);
+        state.addAttribute("dtype", storage);
+        state.addAttribute("scheduled_unary", builder.getBoolAttr(true));
+        state.addAttribute("arch", builder.getStringAttr(arch));
+        state.addAttribute("source", builder.getStringAttr("tile.norm_kernel"));
         builder.create(state);
         op->erase();
         continue;

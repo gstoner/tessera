@@ -41,6 +41,59 @@ def _module(*, family: str, target: str) -> GraphIRModule:
     )])
 
 
+def _gfx1201_norm_artifact() -> ScheduledKernelArtifact:
+    digest = hashlib.sha256(b"gfx1201-rmsnorm-f16").hexdigest()
+    graph = '''module attributes {{tessera.target = "rocm", tessera.arch = "gfx1201"}} {{
+  func.func @gfx1201_norm(%x: tensor<2x16xf16>) -> tensor<2x16xf16> {
+    %o = tessera.rmsnorm %x {axis = -1 : i64, eps = 1.0E-5 : f64} : tensor<2x16xf16> -> tensor<2x16xf16>
+    return %o : tensor<2x16xf16>
+  }
+}'''
+    schedule = f'''module attributes {{tessera.target = "rocm", tessera.arch = "gfx1201"}} {{
+  %graph = "tessera.rmsnorm"() {{schedule.artifact_hash = "{digest}"}} : () -> tensor<2x16xf16>
+  %scheduled = schedule.norm %graph {{kind = "rmsnorm", storage = "f16", accum = "f32", axis = -1 : i64, epsilon = 1.0E-5 : f32, workgroup_size = 256 : i64, artifact_hash = "{digest}"}} : tensor<2x16xf16> -> tensor<2x16xf16>
+  schedule.artifact {{hash = "{digest}"}}
+}}'''
+    tile = f'''module attributes {{tessera.target = "rocm", tessera.arch = "gfx1201"}} {{
+  llvm.func @gfx1201_norm(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %columns: i64, %epsilon: f32) {{
+    tile.norm_kernel %x, %o, %rows, %columns, %epsilon {{
+      kind = "rmsnorm", storage = "f16", accum = "f32", axis = -1 : i64, affine = false,
+      tessera.schedule_hash = "{digest}", tessera.workgroup_size = 256 : i64
+    }} : !llvm.ptr, !llvm.ptr, i64, i64, f32
+    llvm.return
+  }}
+}}'''
+    artifact = ScheduledKernelArtifact(
+        graph_ir=graph,
+        schedule_ir=schedule,
+        tile_ir=tile,
+        target="rocm",
+        architecture="gfx1201",
+        function_name="gfx1201_norm",
+        family="norm",
+        kind="rmsnorm",
+        input_name="x",
+        output_name="o",
+        input_shape=(2, 16),
+        output_shape=(2, 16),
+        dtype="fp16",
+        storage="f16",
+        accum="f32",
+        axis=-1,
+        keepdims=False,
+        rows=2,
+        columns=16,
+        outer=1,
+        axis_extent=1,
+        inner=1,
+        workgroup_size=256,
+        schedule_digest=digest,
+        epsilon=1.0e-5,
+    )
+    artifact.validate()
+    return artifact
+
+
 def _artifact(*, family: str, target: str) -> ScheduledKernelArtifact:
     digest = hashlib.sha256(f"{family}-{target}".encode()).hexdigest()
     compiler_target, architecture, workgroup = {
@@ -145,6 +198,46 @@ def test_x86_packages_exact_scheduled_softmax(monkeypatch) -> None:
     assert package.tile_ir == artifact.tile_ir
     assert package.descriptor.provenance["work_item"] == "E2E-REAL-5"
     assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
+
+
+def test_gfx1201_admits_typed_rmsnorm_graph_contract() -> None:
+    source = IRType("tensor<2x16xf16>", ("2", "16"), "fp16")
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name="rmsnorm_gfx1201",
+        args=[IRArg("x", source)],
+        result_types=[source],
+        body=[IROp(
+            result="o", op_name="tessera.rmsnorm", operands=["%x"],
+            operand_types=[str(source)], result_type=str(source),
+            kwargs={"axis": -1, "eps": 1.0e-5},
+        )],
+        return_values=["%o"],
+    )])
+    assert scheduled_kernel.supports_scheduled_kernel(module, target="rocm_gfx1201")
+    assert not scheduled_kernel.supports_scheduled_kernel(module, target="rocm_gfx1151")
+
+
+def test_rocm_packages_exact_gfx1201_scheduled_rmsnorm(monkeypatch) -> None:
+    from tessera.compiler import native_unary_contract
+    monkeypatch.setattr(native_unary_contract, "verify_unary_ancestry", lambda *args, **kwargs: None)
+    artifact = _gfx1201_norm_artifact()
+
+    def fake_compile(tile_ir: str, *, family: str, architecture: str):
+        assert tile_ir == artifact.tile_ir
+        assert family == "normalization" and architecture == "gfx1201"
+        target = 'module {\n  tessera_rocm.norm {name = "tessera_rocm_norm_fake", kind = "rmsnorm", dtype = "f16", scheduled_unary = true}\n}\n'
+        return target, "rocm-backend", b"hsaco", "compiler", "toolchain", (), "cold"
+
+    monkeypatch.setattr(rocm_native, "_compile_shape_free_tile_ir", fake_compile)
+    package = rocm_native.package_scheduled_kernel(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.image.architecture == "gfx1201"
+    assert package.descriptor.abi_id == rocm_native.GFX_NORM_F16_ABI
+    assert [(item.ordinal, item.name) for item in package.descriptor.buffers] == [(0, "x"), (1, "o")]
+    assert [(item.ordinal, item.name, item.dtype) for item in package.descriptor.scalars] == [
+        (2, "Rows", "int64"), (3, "K", "int64"), (4, "Epsilon", "fp32")
+    ]
+    assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
+    assert package.descriptor.provenance["sync_key"] == "E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09"
 
 
 def test_rocm_packages_exact_scheduled_reduction(monkeypatch) -> None:

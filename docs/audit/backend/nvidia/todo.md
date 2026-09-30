@@ -6,6 +6,12 @@ target: nvidia_sm120
 last_updated: 2026-09-29
 ---
 
+## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling outcome - follow-up required
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
+The paired sm_120 work remains follow-up required: gfx1201 RMSNorm admission and ABI do not prove NVIDIA producer-to-matmul residency, typed fragments, stream ordering, or exact RTX 5070 behavior. Preserve the existing sm_120 queue until its owning-device tests pass.
+
+
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: bounded resident package reuse
 
 Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.

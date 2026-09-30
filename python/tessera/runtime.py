@@ -4291,6 +4291,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
 
     return frozenset({
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
+        rn.GFX_NORM_F16_ABI, rn.GFX_NORM_F32_ABI,
         rn.GFX_MATMUL_F16_F32_ABI, rn.GFX_MATMUL_F16_F32_FUSED_ABI,
         rn.GFX_MATMUL_E4M3_F32_ABI, rn.GFX_MATMUL_E5M2_F32_ABI,
         rn.GFX_MATMUL_E4M3_E5M2_F32_ABI, rn.GFX_MATMUL_E5M2_E4M3_F32_ABI,
@@ -4530,6 +4531,8 @@ def _submit_rocm_gfx1151_native(
         GFX_MATMUL_I4_I32_ABI,
         GFX_MATMUL_I8_I32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
+        GFX_NORM_F16_ABI,
+        GFX_NORM_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
         GFX_REDUCE_BF16_ABI,
         GFX_REDUCE_F16_ABI,
@@ -4588,6 +4591,8 @@ def _submit_rocm_gfx1151_native(
         GFX_REDUCE_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
+        GFX_NORM_F16_ABI,
+        GFX_NORM_F32_ABI,
         GFX_ATTN_F16_ABI,
         GFX_ATTN_BF16_ABI,
         GFX_MATMUL_F16_F32_ABI,
@@ -4611,6 +4616,7 @@ def _submit_rocm_gfx1151_native(
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     paged_kv = descriptor.abi_id == GFX_PAGED_KV_F32_ABI
     moe_dispatch = descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
+    normalization = descriptor.abi_id in {GFX_NORM_F16_ABI, GFX_NORM_F32_ABI}
     attention = descriptor.abi_id in {
         GFX_ATTN_F16_ABI,
         GFX_ATTN_BF16_ABI,
@@ -4854,6 +4860,21 @@ def _submit_rocm_gfx1151_native(
         input_arrays = [np.ascontiguousarray(pages), np.ascontiguousarray(table)]
         dimensions = (p, logical_pages, page_size, heads, dim, start, tokens)
         grid_x = (tokens * heads * dim + 255) // 256
+    elif normalization:
+        x = buffers[ordered[0].name]
+        output = buffers[ordered[1].name]
+        rows = int(cast(int, scalars["Rows"]))
+        columns = int(cast(int, scalars["K"]))
+        epsilon = float(cast(float, scalars["Epsilon"]))
+        expected_storage = np.float16 if descriptor.abi_id == GFX_NORM_F16_ABI else np.float32
+        expected_dtype = expected_storage
+        if (tuple(x.shape) != (rows, columns) or tuple(output.shape) != tuple(x.shape)
+                or x.dtype != expected_storage or output.dtype != expected_storage
+                or not np.isfinite(epsilon) or epsilon <= 0.0):
+            raise RuntimeError("gfx1201 scheduled RMSNorm arrays disagree with Rows/K, epsilon, or ABI dtype")
+        input_arrays = [np.ascontiguousarray(x)]
+        dimensions = (rows, columns)
+        grid_x = rows
     elif moe_dispatch:
         x = buffers[ordered[0].name]
         token = buffers[ordered[1].name]
@@ -5001,7 +5022,12 @@ def _submit_rocm_gfx1151_native(
             return output
 
         arguments = []
-        if attention:
+        if normalization:
+            arguments.extend(memref_args(device_inputs[0], int(input_arrays[0].size)))
+            arguments.extend(memref_args(device_o, int(output.size)))
+            arguments.extend((ctypes.c_int64(dimensions[0]), ctypes.c_int64(dimensions[1]),
+                              ctypes.c_float(float(cast(float, scalars["Epsilon"])))) )
+        elif attention:
             for device, array in zip(device_inputs[:3], input_arrays[:3], strict=True):
                 arguments.extend(memref_args(device, int(array.size)))
             arguments.extend(memref_args(device_o, int(output.size)))

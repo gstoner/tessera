@@ -46,7 +46,7 @@ static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
 void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
                   bool isLayerNorm, StringRef epilogue,
-                  double epilogueParam) {
+                  double epilogueParam, bool scheduledUnary) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
   bool isF32 = storeTy.isF32();
@@ -58,11 +58,23 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   Value red = f.addWorkgroupAttribution(ldsT, loc);
 
   b.setInsertionPointToStart(&f.getBody().front());
-  Value X = f.getArgument(0), gamma = f.getArgument(1);
-  Value beta = f.getArgument(2), consumer = f.getArgument(3);
-  Value O = f.getArgument(4);
-  Value M = f.getArgument(5), K = f.getArgument(6), eps = f.getArgument(7);
-  Value hasGamma = f.getArgument(8), hasBeta = f.getArgument(9);
+  Value X = f.getArgument(0);
+  Value gamma = scheduledUnary ? X : f.getArgument(1);
+  Value beta = scheduledUnary ? X : f.getArgument(2);
+  Value consumer = scheduledUnary ? X : f.getArgument(3);
+  Value O = f.getArgument(scheduledUnary ? 1 : 4);
+  Value M = f.getArgument(scheduledUnary ? 2 : 5);
+  Value K = f.getArgument(scheduledUnary ? 3 : 6);
+  Value eps = f.getArgument(scheduledUnary ? 4 : 7);
+  Value hasGamma;
+  Value hasBeta;
+  if (scheduledUnary) {
+    hasGamma = b.create<arith::ConstantIntOp>(loc, 0, 1).getResult();
+    hasBeta = b.create<arith::ConstantIntOp>(loc, 0, 1).getResult();
+  } else {
+    hasGamma = f.getArgument(8);
+    hasBeta = f.getArgument(9);
+  }
 
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
   Value c0 = ci(0), cBD = ci(BD);
@@ -544,6 +556,14 @@ struct GenerateROCMNormKernelPass
       bool backward = false;
       if (auto a = op->getAttrOfType<BoolAttr>("backward"))
         backward = a.getValue();
+      bool scheduledUnary = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("scheduled_unary"))
+        scheduledUnary = a.getValue();
+      if (scheduledUnary &&
+          (backward || kind != "rmsnorm" || op->hasAttr("epilogue"))) {
+        op->emitError("scheduled unary norm supports forward RMSNorm without an epilogue");
+        return signalPassFailure();
+      }
       StringRef epilogue = "none";
       if (auto a = op->getAttrOfType<StringAttr>("epilogue"))
         epilogue = a.getValue();
@@ -603,6 +623,10 @@ struct GenerateROCMNormKernelPass
             {memTy, memTy, memTy, memTy, accumTy, idxTy, idxTy, f32,
              b.getI1Type()},
             {});
+      } else if (scheduledUnary) {
+        // The Schedule/Tile unary contract owns the exact five-argument
+        // (X, O, M, K, epsilon) ABI. Do not expose the legacy affine slots.
+        fnTy = b.getFunctionType({memTy, memTy, idxTy, idxTy, f32}, {});
       } else {
         // X, gamma, beta, binary-consumer, O plus runtime shape/epsilon and
         // uniform affine flags. Unary/no-consumer routes alias X into the
@@ -620,7 +644,7 @@ struct GenerateROCMNormKernelPass
                              kind == "layer_norm");
       else
         emitNormBody(body, loc, gpuFunc, storeTy, kind == "layer_norm",
-                     epilogue, epilogueParam);
+                     epilogue, epilogueParam, scheduledUnary);
       if (backward) {
         auto accumTy = MemRefType::get({ShapedType::kDynamic}, f32);
         auto finalizeTy = b.getFunctionType(

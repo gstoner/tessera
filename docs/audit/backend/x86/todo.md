@@ -7,6 +7,12 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
+Not applicable to x86: the new package ABI and launch geometry are ROCm gfx1201-specific. No shared Graph op, x86 Schedule, AVX-512 codegen, or x86 execution claim changed.
+
+
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 
 Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.

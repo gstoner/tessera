@@ -6,6 +6,12 @@ target: apple_gpu
 last_updated: 2026-09-29
 ---
 
+## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
+Not applicable to Apple execution: this slice adds a gfx1201 ROCm RMSNorm Schedule/Tile package and architecture-specific runtime ABI. It does not change the Apple Graph route, Metal ABI, or claim Apple execution; the Apple @jit gaps remain open.
+
+
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 
 Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.

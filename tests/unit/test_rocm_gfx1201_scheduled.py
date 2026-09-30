@@ -14,6 +14,36 @@ from tessera.compiler.native_unary_contract import verify_unary_ancestry
 from tessera.compiler.rocm_pipeline import ROCMExecutablePipeline
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tests.unit.test_scheduled_kernel_consumers import _module
+from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
+
+def _rmsnorm_graph(dtype="fp16", shape=(2, 16)):
+    storage = "f16" if dtype == "fp16" else "f32"
+    source = IRType("tensor<" + "x".join(map(str, shape)) + "x" + storage + ">", tuple(map(str, shape)), dtype)
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="gfx1201_scheduled_rmsnorm",
+        args=[IRArg("x", source)],
+        result_types=[source],
+        body=[IROp(
+            result="o", op_name="tessera.rmsnorm", operands=["%x"],
+            operand_types=[str(source)], result_type=str(source),
+            kwargs={"axis": -1, "eps": 1.0e-5},
+        )],
+        return_values=["%o"],
+    )])
+
+
+def test_gfx1201_rmsnorm_graph_replays_through_native_schedule_and_tile():
+    assert scheduled_kernel.supports_scheduled_kernel(_rmsnorm_graph(), target="rocm_gfx1201")
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        _rmsnorm_graph(), target="rocm_gfx1201"
+    )
+    verify_unary_ancestry(artifact, target="rocm", architecture="gfx1201")
+    assert artifact.family == "norm" and artifact.kind == "rmsnorm"
+    assert artifact.storage == "f16" and artifact.accum == "f32"
+    assert 'schedule.norm' in artifact.schedule_ir
+    assert 'tile.norm_kernel' in artifact.tile_ir
+    assert artifact.workgroup_size == 256
+
 
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(
@@ -67,6 +97,32 @@ def test_gfx1201_unary_projection_rejects_stale_metadata(family):
     ]:
         with pytest.raises(ValueError):
             verify_unary_ancestry(changed, target="rocm", architecture="gfx1201")
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
+@pytest.mark.parametrize("dtype", ["fp16", "fp32"])
+def test_gfx1201_scheduled_rmsnorm_package_executes(dtype):
+    """Prove Graph -> Schedule -> Tile -> native RMSNorm on gfx1201."""
+    from tessera import runtime as rt
+    assert rt._rocm_live_arch() == "gfx1201"
+    assert rt._rocm_chip() == "gfx1201"
+    artifact = scheduled_kernel.lower_scheduled_kernel(_rmsnorm_graph(dtype=dtype, shape=(5, 32)), target="rocm_gfx1201")
+    verify_unary_ancestry(artifact, target="rocm", architecture="gfx1201")
+    package = rocm_native.package_scheduled_kernel(artifact, pipeline_name="tessera-lower-to-rocm")
+    assert package.image.architecture == "gfx1201"
+    expected_dtype = np.float16 if dtype == "fp16" else np.float32
+    x = np.random.default_rng(120132).normal(size=(5, 32)).astype(expected_dtype)
+    output = np.zeros_like(x)
+    runtime = rt.RuntimeArtifact(metadata={"target": package.image.target}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(runtime, {"buffers": {"x": x, "o": output},
+        "scalars": {"Rows": 5, "K": 32, "Epsilon": 1.0e-5}})
+    assert result["ok"] and result["execution_kind"] == "native_gpu", json.dumps(result, default=str)
+    x32 = x.astype(np.float32)
+    expected = x32 / np.sqrt(np.mean(x32 * x32, axis=-1, keepdims=True) + 1.0e-5)
+    tol = 2e-3 if dtype == "fp16" else 2e-5
+    np.testing.assert_allclose(output, expected, rtol=tol, atol=tol)
 
 
 @pytest.mark.hardware_rocm

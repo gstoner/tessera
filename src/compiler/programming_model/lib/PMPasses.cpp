@@ -1291,7 +1291,10 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     auto axis = op->getAttrOfType<IntegerAttr>("axis");
     // E2E-REAL-6 x86 (2026-09-28): Zen 5 carries the static f32 unweighted
     // row normalization the retired `x86_native.package_cohort2` served.
-    if ((!nvidia && !x86) || (x86 && schedule.storage != "f32") ||
+    bool gfx1201Norm = rocm && schedule.arch == "gfx1201" &&
+                       opName == "tessera.rmsnorm" &&
+                       (schedule.storage == "f16" || schedule.storage == "f32");
+    if ((!nvidia && !x86 && !gfx1201Norm) || (x86 && schedule.storage != "f32") ||
         schedule.storage.empty() || input.getShape() != output.getShape() ||
         input.getElementType() != output.getElementType() ||
         (axis && axis.getInt() != -1 && axis.getInt() != input.getRank() - 1) ||
@@ -1304,7 +1307,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.kind = opName == "tessera.layer_norm" ? "layernorm" : "rmsnorm";
     schedule.columns = input.getShape().back();
     for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
-    schedule.workgroupSize = nvidia ? 128 : 1;
+    schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
     return schedule;
   }
   if (opName == "tessera.softmax") {
@@ -3071,19 +3074,22 @@ struct GraphToSchedulePass
       bool norm = name == "tessera.rmsnorm" || name == "tessera.rmsnorm_safe" ||
                   name == "tessera.layer_norm";
       StringRef target = moduleString(mod, "tessera.target", "target");
+      StringRef architecture = moduleString(mod, "tessera.arch", "arch");
       // x86 normalization is claimed only for an isolated native-package
       // request (the module names its launch bindings); a norm inside any
       // other x86 program passes through unchanged, as before.
       if (name == "tessera.softmax" || name == "tessera.reduce" ||
           (norm && (target == "nvidia_sm120" ||
+                    (target == "rocm" && architecture == "gfx1201" &&
+                     name == "tessera.rmsnorm") ||
                     (target == "x86" && mod->hasAttr("tessera.launch_bindings")))))
         semanticKernels.push_back(op);
     });
     for (Operation *op : semanticKernels) {
       FailureOr<SemanticKernelSchedule> selected = getSemanticKernelSchedule(op);
       if (failed(selected)) {
-        op->emitError("E2E-REAL-5 Graph->Schedule requires a supported static "
-                      "x86 or gfx1151 softmax/reduction contract");
+        op->emitError("E2E-REAL-6 Graph->Schedule requires a supported static "
+                      "semantic-kernel contract for the selected target");
         return signalPassFailure();
       }
       std::string digest = semanticKernelDigest(*selected);

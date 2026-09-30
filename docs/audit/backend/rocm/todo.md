@@ -5,6 +5,12 @@ plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: gfx1201 RMSNorm package - landing
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
+This slice admits last-axis RMSNorm with f16/f32 storage, f32 accumulation, and workgroup 256 through Graph-to-Schedule-to-Tile and a shape-free native package ABI. Super-Bear host-free tests and TileToROCM/FileCheck pass. Exact-device execution on Tajasaurus is pending; resident producer-to-matmul lifetime, numerical, and separate timing evidence are still required before widening this envelope.
+
+
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 
 Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.

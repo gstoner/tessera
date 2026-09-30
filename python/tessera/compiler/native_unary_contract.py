@@ -70,7 +70,11 @@ def verify_unary_projection(artifact, parent: str) -> None:
         import struct
         kind = re.search(r'(?:^|, )kind = "(rmsnorm|layernorm)"(?:,|$)', attrs)
         eps = re.search(r'(?:^|, )epsilon = ([-+0-9.eE]+) : f32(?:,|$)', attrs)
-        if (artifact.target != 'x86' or axis != -1 or output_shape != input_shape
+        norm_target_ok = artifact.target == 'x86' or (
+            artifact.target == 'rocm' and artifact.architecture == 'gfx1201'
+            and storage in {'f16', 'f32'} and kind is not None and kind[1] == 'rmsnorm'
+        )
+        if (not norm_target_ok or axis != -1 or output_shape != input_shape
                 or kind is None or eps is None
                 or struct.pack('f', float(eps[1])) != struct.pack('f', artifact.epsilon)):
             raise ValueError('Native norm kind/axis/epsilon is unsupported')

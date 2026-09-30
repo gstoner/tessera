@@ -556,3 +556,60 @@ def test_sm120_rmsnorm_tensor_edge_reuses_bounded_dynamic_mk_package_on_exact_de
             assert result.intermediate.ptr != result.output.ptr
         assert program.producer.image.image_digest == producer_digest
         assert program.consumer.image.image_digest == consumer_digest
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_sm120_rmsnorm_tensor_edge_reuses_joint_dynamic_mnk_on_exact_device(dtype):
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires exact SM120 device execution")
+    import ml_dtypes
+    from tessera.compiler.from_text import from_text
+
+    storage_dtype = np.float16 if dtype == "fp16" else np.dtype(ml_dtypes.bfloat16)
+    producer_jit = from_text(
+        "def rmsnorm_dynamic_mnk(x):\n    return ts.ops.rmsnorm(x, eps=1e-5)"
+    )
+    consumer_jit = from_text(
+        "def matmul_dynamic_mnk(normalized, weights):\n    "
+        "return ts.ops.matmul(normalized, weights, output_dtype=\"fp32\")"
+    )
+    bound_source = np.ones((16, 16), dtype=storage_dtype)
+    bound_rhs = np.ones((16, 8), dtype=storage_dtype, order="F")
+    producer_jit(bound_source)
+    consumer_jit(bound_source, bound_rhs)
+    program = nvidia_native.package_scheduled_rmsnorm_matmul(
+        producer_jit.graph_ir, consumer_jit.graph_ir,
+        pipeline_name="tessera-lower-to-nvidia-sm120",
+        dynamic_m_bound=16, dynamic_n_bound=8, dynamic_k_bound=16,
+    )
+    program.validate()
+    assert program.dynamic_m and program.dynamic_n and program.dynamic_k
+    producer_digest = program.producer.image.image_digest
+    consumer_digest = program.consumer.image.image_digest
+    rng = np.random.default_rng(17125)
+    for active_m, active_k, active_n in ((3, 5, 2), (7, 11, 5), (16, 16, 8)):
+        source_backing = np.zeros((active_m, active_k + 3), dtype=storage_dtype)
+        source_backing[:, :active_k] = rng.normal(
+            0.0, 0.25, (active_m, active_k)
+        ).astype(storage_dtype)
+        source = source_backing[:, :active_k]
+        rhs_backing = np.zeros((program.k + 5, program.n + 3), dtype=storage_dtype, order="F")
+        rhs_backing[:active_k, :active_n] = rng.normal(
+            0.0, 0.25, (active_k, active_n)
+        ).astype(storage_dtype)
+        rhs = rhs_backing[:active_k, :active_n]
+        with program.execute_resident(source, rhs) as result:
+            x32 = source.astype(np.float32)
+            expected_edge = (
+                x32 / np.sqrt(np.mean(x32 * x32, axis=-1, keepdims=True) + 1e-5)
+            ).astype(storage_dtype)
+            expected = expected_edge.astype(np.float32) @ rhs.astype(np.float32)
+            assert result.output.shape == (active_m, active_n)
+            np.testing.assert_allclose(
+                result.intermediate.numpy()[:active_m], expected_edge,
+                rtol=3e-2, atol=3e-2,
+            )
+            np.testing.assert_allclose(result.output.numpy(), expected, rtol=3e-2, atol=3e-2)
+            assert result.producer_receipt["execution_kind"] == "native_gpu"
+            assert result.consumer_receipt["execution_kind"] == "native_gpu"
+    assert program.producer.image.image_digest == producer_digest
+    assert program.consumer.image.image_digest == consumer_digest

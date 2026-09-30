@@ -320,8 +320,6 @@ class NVIDIANativeTensorProgram:
         dynamic_abi = self.consumer.descriptor.abi_id == dynamic_matmul_abi
         dynamic_n = self.dynamic_n
         dynamic_k = self.dynamic_k
-        if dynamic_n and (self.dynamic_m or dynamic_k):
-            raise ValueError("dynamic N remains a separate resident package envelope")
         producer_input = self._binding(self.producer, self.producer_input_name, "input")
         produced = self._binding(self.producer, self.intermediate_name, "output")
         consumed = self._binding(self.consumer, self.consumer_input_name, "input")
@@ -724,6 +722,7 @@ def package_scheduled_rmsnorm_matmul(
     *,
     pipeline_name: str,
     dynamic_m_bound: int | None = None,
+    dynamic_n_bound: int | None = None,
     dynamic_k_bound: int | None = None,
 ) -> NVIDIANativeTensorProgram:
     """Package a resident RMSNorm -> matmul edge from Graph or Schedule IR.
@@ -731,6 +730,12 @@ def package_scheduled_rmsnorm_matmul(
     Graph IR is lowered through the canonical Schedule path before entering
     this same package contract.
     """
+    explicit_dynamic_axes = tuple(
+        axis for axis, bound in (
+            ("M", dynamic_m_bound), ("N", dynamic_n_bound),
+            ("K", dynamic_k_bound),
+        ) if bound is not None
+    )
     if isinstance(producer_artifact, GraphIRModule):
         if not isinstance(consumer_artifact, GraphIRModule):
             raise TypeError("Graph RMSNorm and matmul inputs must both be GraphIRModule")
@@ -739,11 +744,20 @@ def package_scheduled_rmsnorm_matmul(
             lower_scheduled_matmul,
             with_bounded_dynamic_m,
             with_bounded_dynamic_mk,
+            with_bounded_dynamic_axes,
         )
 
         producer_artifact = lower_scheduled_kernel(
             producer_artifact, target="nvidia_sm120")
-        if dynamic_m_bound is not None and dynamic_k_bound is not None:
+        if "N" in explicit_dynamic_axes and len(explicit_dynamic_axes) > 1:
+            consumer_artifact = with_bounded_dynamic_axes(
+                consumer_artifact, explicit_dynamic_axes
+            )
+        elif dynamic_n_bound is not None:
+            consumer_artifact = with_bounded_dynamic_axes(
+                consumer_artifact, ("N",)
+            )
+        elif dynamic_m_bound is not None and dynamic_k_bound is not None:
             consumer_artifact = with_bounded_dynamic_mk(
                 consumer_artifact, dynamic_m_bound, dynamic_k_bound
             )
@@ -787,7 +801,6 @@ def package_scheduled_rmsnorm_matmul(
     if dynamic_m_bound is not None and (
         dynamic_m_bound != consumer_artifact.m
         or not consumer_artifact.dynamic_m
-        or consumer_artifact.dynamic_n
     ):
         raise ValueError("dynamic M requires a bounded row extent in the consumer")
     if dynamic_m_bound is None and consumer_artifact.dynamic_m:
@@ -795,11 +808,17 @@ def package_scheduled_rmsnorm_matmul(
     if dynamic_k_bound is not None and (
         dynamic_k_bound != consumer_artifact.k
         or not consumer_artifact.dynamic_k
-        or consumer_artifact.dynamic_n
     ):
         raise ValueError("dynamic K requires a bounded contraction extent in the consumer")
     if dynamic_k_bound is None and consumer_artifact.dynamic_k:
         raise ValueError("dynamic K consumer requires dynamic_k_bound")
+    if dynamic_n_bound is not None and (
+        dynamic_n_bound != consumer_artifact.n
+        or not consumer_artifact.dynamic_n
+    ):
+        raise ValueError("dynamic N requires a bounded column extent in the consumer")
+    if dynamic_n_bound is None and consumer_artifact.dynamic_n and explicit_dynamic_axes:
+        raise ValueError("explicit dynamic N projection requires dynamic_n_bound")
     producer = package_scheduled_kernel(producer_artifact, pipeline_name=pipeline_name)
     consumer = package_scheduled_matmul(consumer_artifact, pipeline_name=pipeline_name)
     if dynamic_m_bound is not None:

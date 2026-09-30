@@ -412,6 +412,68 @@ def test_gfx1201_public_dynamic_m_resident_edge_reuses_package(storage_dtype):
             )
 
 
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="explicit gfx1201 owning-device gate",
+)
+@pytest.mark.parametrize("storage_dtype", ["fp16", "bf16"])
+def test_gfx1201_resident_rmsnorm_joint_dynamic_mnk_reuses_capacity(storage_dtype):
+    """Reuse both packages and resident buffers while M, N, and K vary together."""
+    from tessera import runtime as rt
+    from tessera.compiler.resident_rocm_norm_matmul import package_graph_rmsnorm_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
+
+    assert rt._rocm_live_arch() == rt._rocm_chip() == "gfx1201"
+    m_bound, k_bound, n_bound = 8, 32, 24
+    if storage_dtype == "bf16":
+        import ml_dtypes
+        dtype = np.dtype(ml_dtypes.bfloat16)
+    else:
+        dtype = np.dtype(np.float16)
+    norm_graph = _rmsnorm_graph(dtype=storage_dtype, shape=(m_bound, k_bound))
+    matmul_graph = matmul_module(
+        target="rocm", shape=(m_bound, k_bound, n_bound),
+        dtype=storage_dtype, output_dtype="fp32",
+    )
+    rng = np.random.default_rng(1201_83034)
+    x_bound = rng.normal(0.0, 0.5, (m_bound, k_bound)).astype(dtype)
+    rhs_bound = rng.normal(0.0, 0.25, (k_bound, n_bound)).astype(dtype)
+
+    with package_graph_rmsnorm_matmul(
+        norm_graph, matmul_graph, x_bound, rhs_bound,
+        dynamic_m_bound=m_bound, dynamic_n_bound=n_bound,
+        dynamic_k_bound=k_bound,
+    ) as session:
+        assert session._dynamic_m and session._dynamic_n and session._dynamic_k
+        addresses = session.run(warmup=0, iterations=1)["buffer_addresses"]
+        epsilon = float(session._norm.provenance["epsilon"])
+        for active_m, active_k, active_n in (
+            (3, 13, 7), (5, 21, 15), (m_bound, k_bound, n_bound),
+        ):
+            x_backing = np.zeros((active_m, active_k + 3), dtype=dtype)
+            x_backing[:, :active_k] = x_bound[:active_m, :active_k]
+            x = x_backing[:, :active_k]
+            rhs_backing = np.zeros(
+                (k_bound + 5, n_bound + 3), dtype=dtype, order="F"
+            )
+            rhs_backing[:active_k, :active_n] = rhs_bound[:active_k, :active_n]
+            rhs = rhs_backing[:active_k, :active_n]
+            result = session.run(warmup=1, iterations=2, x=x, rhs=rhs)
+            x32 = x.astype(np.float32)
+            normalized = (
+                x32 / np.sqrt(np.mean(x32 * x32, axis=-1, keepdims=True) + epsilon)
+            ).astype(dtype)
+            expected = normalized.astype(np.float32) @ rhs.astype(np.float32)
+            assert result["buffer_addresses"] == addresses
+            assert all(output.shape == (active_m, active_n) for output in result["outputs"])
+            assert result["producer_median_ms"] > 0
+            assert result["consumer_median_ms"] > 0
+            tolerance = 3e-2 if storage_dtype == "bf16" else 2e-3
+            for output in result["outputs"]:
+                np.testing.assert_allclose(output, expected, rtol=tolerance, atol=tolerance)
+
+
 def test_public_bf16_rmsnorm_trace_preserves_graph_storage_dtype():
     norm_graph, matmul_graph = _public_rmsnorm_matmul_graphs(
         5, 32, 16, storage_dtype="bf16"

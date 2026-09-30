@@ -121,8 +121,6 @@ class ResidentROCmNormMatmul:
             raise ValueError("resident normalization and matmul must agree on the dynamic M bound")
         if norm_dynamic_k != self._dynamic_k:
             raise ValueError("resident normalization and matmul must agree on the dynamic K bound")
-        if self._dynamic_n and (self._dynamic_m or self._dynamic_k):
-            raise ValueError("dynamic N remains a separate resident package envelope")
         norm_scalars = {item.name for item in self._norm.scalars}
         gemm_scalars = {item.name for item in self._gemm.scalars}
         if norm_scalars != {"Rows", "K", "Epsilon"} or gemm_scalars != {"M", "N", "K"}:
@@ -368,7 +366,7 @@ class ResidentROCmNormMatmul:
             + self._memref(self._buffers["intermediate"], active_m * active_k)
             + [ctypes.c_int64(active_m), ctypes.c_int64(active_k), ctypes.c_float(self.epsilon)]
         )
-        self._launch(self._norm_function, self._grid_norm, self._block_norm, norm_args)
+        self._launch(self._norm_function, (active_m, 1, 1), self._block_norm, norm_args)
         if hip.hipEventRecord(stop_norm, self._stream) != 0:
             raise RuntimeError("resident RMSNorm stop event failed")
         if hip.hipEventRecord(start_gemm, self._stream) != 0:
@@ -381,7 +379,7 @@ class ResidentROCmNormMatmul:
         )
         grid_gemm = (
             (active_n + self._macro_tile[1] - 1) // self._macro_tile[1],
-            self._grid_gemm[1],
+            (active_m + self._macro_tile[0] - 1) // self._macro_tile[0],
             1,
         )
         self._launch(self._gemm_function, grid_gemm, self._block_gemm, gemm_args)
@@ -629,15 +627,23 @@ def package_graph_rmsnorm_matmul(
     into a bounded runtime N guard while retaining its maximum storage.
     """
     from . import rocm_native
-    from .scheduled_matmul import with_bounded_dynamic_m, with_bounded_dynamic_mk
+    from .scheduled_matmul import (
+        with_bounded_dynamic_axes, with_bounded_dynamic_m, with_bounded_dynamic_mk,
+    )
 
-    if dynamic_n_bound is not None and (
-        dynamic_m_bound is not None or dynamic_k_bound is not None
-    ):
-        raise ValueError("dynamic N remains a separate resident package envelope")
-    if dynamic_n_bound is not None:
+    explicit_dynamic_axes = tuple(
+        axis for axis, bound in (
+            ("M", dynamic_m_bound), ("N", dynamic_n_bound),
+            ("K", dynamic_k_bound),
+        ) if bound is not None
+    )
+    if "N" in explicit_dynamic_axes and len(explicit_dynamic_axes) > 1:
+        matmul_module = with_bounded_dynamic_axes(
+            matmul_module, explicit_dynamic_axes
+        )
+    elif dynamic_n_bound is not None:
         matmul_module = _with_bounded_dynamic_n(matmul_module, rhs, dynamic_n_bound)
-    if dynamic_m_bound is not None and dynamic_k_bound is not None:
+    elif dynamic_m_bound is not None and dynamic_k_bound is not None:
         matmul_module = with_bounded_dynamic_mk(
             matmul_module, dynamic_m_bound, dynamic_k_bound
         )

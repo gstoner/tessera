@@ -114,6 +114,61 @@ def with_bounded_dynamic_mk(
     return module
 
 
+def with_bounded_dynamic_axes(
+    matmul_module: GraphIRModule, axes: tuple[str, ...],
+) -> GraphIRModule:
+    """Project selected static Graph matmul axes to bounded runtime extents."""
+    from .graph_ir import tensor_ir_type
+
+    dynamic_axes = frozenset(axes)
+    if not dynamic_axes or not dynamic_axes <= {"M", "N", "K"}:
+        raise ValueError("bounded dynamic matmul axes must be a nonempty subset of M/N/K")
+    module = copy.deepcopy(matmul_module)
+    if len(module.functions) != 1:
+        raise ValueError("bounded dynamic axes require one Graph function")
+    function = module.functions[0]
+    if len(function.args) != 2 or len(function.result_types) != 1:
+        raise ValueError("bounded dynamic axes require a two-input, one-result matmul")
+    matmuls = [op for op in function.body if op.op_name == "tessera.matmul"]
+    if len(matmuls) != 1:
+        raise ValueError("bounded dynamic axes require one Graph matmul operation")
+    lhs_type, rhs_type = function.args[0].ir_type, function.args[1].ir_type
+    output_type = function.result_types[0]
+    try:
+        m, k = (int(str(dim)) for dim in lhs_type.shape)
+        rhs_k, n = (int(str(dim)) for dim in rhs_type.shape)
+        out_m, out_n = (int(str(dim)) for dim in output_type.shape)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("bounded dynamic axes require static traced tensor shapes") from exc
+    if min(m, n, k) <= 0 or (rhs_k, out_m, out_n) != (k, m, n):
+        raise ValueError("bounded dynamic axes require matching positive M/N/K capacities")
+
+    dynamic_lhs = tensor_ir_type(
+        ("?" if "M" in dynamic_axes else str(m),
+         "?" if "K" in dynamic_axes else str(k)),
+        lhs_type.dtype, layout=lhs_type.layout,
+    )
+    dynamic_rhs = tensor_ir_type(
+        ("?" if "K" in dynamic_axes else str(k),
+         "?" if "N" in dynamic_axes else str(n)),
+        rhs_type.dtype, layout=rhs_type.layout,
+    )
+    dynamic_output = tensor_ir_type(
+        ("?" if "M" in dynamic_axes else str(m),
+         "?" if "N" in dynamic_axes else str(n)),
+        output_type.dtype, layout=output_type.layout,
+    )
+    function.args[0].ir_type = dynamic_lhs
+    function.args[1].ir_type = dynamic_rhs
+    function.result_types[0] = dynamic_output
+    op = matmuls[0]
+    op.operand_types = [str(dynamic_lhs), str(dynamic_rhs)]
+    op.result_type = str(dynamic_output)
+    op.inferred_type = dynamic_output
+    op.kwargs["shape_bounds"] = [m, n, k]
+    return module
+
+
 @dataclass(frozen=True)
 class ScheduledMatmulArtifact:
     graph_ir: str

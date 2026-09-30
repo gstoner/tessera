@@ -2379,16 +2379,24 @@ int invokeResident(const char* name, void** buffers, size_t nbuf,
     }
     if (std::strncmp(name, kScheduledSm120MatmulPrefix,
                      std::strlen(kScheduledSm120MatmulPrefix)) == 0 &&
-        std::strstr(name, "_fused_") == nullptr) {
-        if (nbuf != 3 || ndim != 3 || dims[0] <= 0 || dims[1] <= 0 ||
-            dims[2] <= 0 || dims[0] >= (1LL << 31) ||
+        (std::strstr(name, "_fused_") == nullptr ||
+         (std::strstr(name, "_outf16") != nullptr && nbuf == 3))) {
+        if (nbuf != 3 || (ndim != 3 && ndim != 6) || dims[0] <= 0 ||
+            dims[1] <= 0 || dims[2] <= 0 || dims[0] >= (1LL << 31) ||
             dims[1] >= (1LL << 31) || dims[2] >= (1LL << 31)) return 5;
         const long long m = dims[0], n = dims[1], k = dims[2];
+        const long long lda = ndim == 6 ? dims[3] : k;
+        const long long ldb = ndim == 6 ? dims[4] : k;
+        const long long ldd = ndim == 6 ? dims[5] : n;
+        if (lda < k || ldb < k || ldd < n || lda >= (1LL << 31) ||
+            ldb >= (1LL << 31) || ldd >= (1LL << 31)) return 5;
         CUdeviceptr a = reinterpret_cast<CUdeviceptr>(buffers[0]);
         CUdeviceptr b = reinterpret_cast<CUdeviceptr>(buffers[1]);
         CUdeviceptr d = reinterpret_cast<CUdeviceptr>(buffers[2]);
         long long mArg = m, nArg = n, kArg = k;
-        void* args[] = {&a, &b, &d, &mArg, &nArg, &kArg};
+        long long ldaArg = lda, ldbArg = ldb, lddArg = ldd;
+        void* args[] = {&a, &b, &d, &mArg, &nArg, &kArg,
+                        &ldaArg, &ldbArg, &lddArg};
         const bool macro = std::strstr(name, "_macro_kernel") != nullptr;
         const unsigned tileM = macro ? 32 : 16;
         const unsigned tileN = macro ? 32 : 8;
@@ -2398,6 +2406,36 @@ int invokeResident(const char* name, void** buffers, size_t nbuf,
         return cuOk(cuLaunchKernel(fn, gx, gy, 1, threads, 1, 1, 0,
                                    static_cast<CUstream>(stream), args, 0),
                     "cuLaunchKernel(resident matmul)") ? 0 : 3;
+    }
+    if (std::strncmp(name, kTileAttentionPrefix,
+                     std::strlen(kTileAttentionPrefix)) == 0) {
+        const bool hasSavedLse=std::strstr(name,"_lse_")!=nullptr;
+        if (nbuf != (hasSavedLse ? 5u : 4u) || ndim != 7) return 5;
+        const long long B=dims[0], Hq=dims[1], Hkv=dims[2], Sq=dims[3];
+        const long long Sk=dims[4], D=dims[5], Dv=dims[6];
+        const long long limit=1LL<<31;
+        if (B<=0 || Hq<=0 || Hkv<=0 || Sq<=0 || Sk<=0 || D<=0 || Dv<=0 ||
+            B>=limit || Hq>=limit || Hkv>=limit || Sq>=limit || Sk>=limit ||
+            D>=limit || Dv>=limit || Hq%Hkv ||
+            B>limit/Hq || B*Hq>limit/Sq || B*Hq*Sq>limit/Dv)
+            return 5;
+        CUdeviceptr q=reinterpret_cast<CUdeviceptr>(buffers[0]);
+        CUdeviceptr k=reinterpret_cast<CUdeviceptr>(buffers[1]);
+        CUdeviceptr v=reinterpret_cast<CUdeviceptr>(buffers[2]);
+        CUdeviceptr o=reinterpret_cast<CUdeviceptr>(buffers[3]);
+        CUdeviceptr lse=hasSavedLse
+            ? reinterpret_cast<CUdeviceptr>(buffers[4]) : CUdeviceptr{};
+        long long args64[7]={B,Hq,Hkv,Sq,Sk,D,Dv};
+        void* args[12]={&q,&k,&v,&o};
+        size_t arg=4;
+        if(hasSavedLse) args[arg++]=&lse;
+        for(size_t i=0;i<7;++i) args[arg++]=&args64[i];
+        const size_t outputs=(size_t)B*(size_t)Hq*(size_t)Sq*(size_t)Dv;
+        const unsigned grid=(unsigned)((outputs+127)/128);
+        return cuOk(cuLaunchKernel(fn,grid,1,1,128,1,1,0,
+                                   static_cast<CUstream>(stream),args,0),
+                    hasSavedLse ? "cuLaunchKernel(resident saved-LSE attention)"
+                                : "cuLaunchKernel(resident attention)") ? 0 : 3;
     }
     return 5;
 }

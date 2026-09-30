@@ -6,6 +6,13 @@ target: apple_gpu
 last_updated: 2026-09-29
 ---
 
+## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
+
+Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.
+Not applicable to Apple: this slice changes the NVIDIA CUDA resident PTX
+bridge and its device-buffer layout metadata. No shared Graph/Schedule
+operation, Apple ABI, Metal schedule, or Apple execution claim changed.
+
 # Apple compiler, exact-device, and performance plan
 
 ## E2E-REAL-6-ALIBI-SHAPE-2026-09-29: traced ALiBi result type

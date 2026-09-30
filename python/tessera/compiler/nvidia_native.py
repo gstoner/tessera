@@ -237,8 +237,11 @@ class NVIDIANativeTensorProgram:
         return tuple(value for _, _, value in rows)
 
     def validate(self) -> None:
-        if self.dtype != "fp16" or min(self.m, self.k, self.n) <= 0:
-            raise ValueError("SM120 RMSNorm-to-matmul v1 requires positive static fp16 shapes")
+        if self.dtype not in {"fp16", "bf16"} or min(self.m, self.k, self.n) <= 0:
+            raise ValueError("SM120 RMSNorm-to-matmul requires positive static fp16/bf16 shapes")
+        storage = "f16" if self.dtype == "fp16" else "bf16"
+        norm_abi = SM120_NORM_F16_ABI if storage == "f16" else SM120_NORM_BF16_ABI
+        matmul_abi = SM120_F16_ABI if storage == "f16" else SM120_BF16_ABI
         for package in (self.producer, self.consumer):
             if (package.image.target != "nvidia_sm120"
                     or package.image.architecture != "sm_120a"
@@ -254,13 +257,13 @@ class NVIDIANativeTensorProgram:
             if "completion" not in package.descriptor.ordering.synchronization:
                 raise ValueError("tensor program edge requires producer completion before consumption")
         producer_provenance = self.producer.descriptor.provenance
-        if (self.producer.descriptor.abi_id != SM120_NORM_F16_ABI
+        if (self.producer.descriptor.abi_id != norm_abi
                 or producer_provenance.get("kind") != "rmsnorm"
-                or producer_provenance.get("storage") != "f16"):
-            raise ValueError("v1 tensor producer must be the scheduled SM120 fp16 RMSNorm package")
-        if (self.consumer.descriptor.abi_id != SM120_F16_ABI
-                or self.consumer.descriptor.provenance.get("storage") != "f16"):
-            raise ValueError("v1 tensor consumer must be the scheduled SM120 fp16/f32-accumulate matmul package")
+                or producer_provenance.get("storage") != storage):
+            raise ValueError("tensor producer must be the matching scheduled SM120 RMSNorm package")
+        if (self.consumer.descriptor.abi_id != matmul_abi
+                or self.consumer.descriptor.provenance.get("storage") != storage):
+            raise ValueError("tensor consumer must be a matching scheduled SM120 matmul package")
         producer_input = self._binding(self.producer, self.producer_input_name, "input")
         produced = self._binding(self.producer, self.intermediate_name, "output")
         consumed = self._binding(self.consumer, self.consumer_input_name, "input")
@@ -304,16 +307,20 @@ class NVIDIANativeTensorProgram:
 
         source = np.asarray(producer_input)
         right = np.asarray(rhs)
-        if source.shape != (self.m, self.k) or source.dtype != np.float16 or not source.flags.c_contiguous:
-            raise ValueError("RMSNorm source must be contiguous fp16 with shape MxK")
-        if right.shape != (self.k, self.n) or right.dtype != np.float16 or not right.flags.f_contiguous:
-            raise ValueError("matmul RHS must be column-major fp16 with shape KxN")
+        storage_dtype = np.float16
+        if self.dtype == "bf16":
+            import ml_dtypes
+            storage_dtype = np.dtype(ml_dtypes.bfloat16)
+        if source.shape != (self.m, self.k) or source.dtype != storage_dtype or not source.flags.c_contiguous:
+            raise ValueError(f"RMSNorm source must be contiguous {self.dtype} with shape MxK")
+        if right.shape != (self.k, self.n) or right.dtype != storage_dtype or not right.flags.f_contiguous:
+            raise ValueError(f"matmul RHS must be column-major {self.dtype} with shape KxN")
 
         session = NvidiaDeviceSession()
         try:
             device_source = session.upload(source)
             device_rhs = session.upload(right, layout="col_major")
-            edge = session.empty((self.m, self.k), np.float16)
+            edge = session.empty((self.m, self.k), storage_dtype)
             result = session.empty((self.m, self.n), np.float32)
 
             def runtime_artifact(package: NVIDIANativePackage) -> Any:
@@ -381,14 +388,18 @@ class NVIDIANativeTensorProgram:
 
         source = np.asarray(producer_input)
         right = np.asarray(rhs)
-        if source.shape != (self.m, self.k) or source.dtype != np.float16 or not source.flags.c_contiguous:
-            raise ValueError("RMSNorm source must be contiguous fp16 with shape MxK")
-        if right.shape != (self.k, self.n) or right.dtype != np.float16 or not right.flags.f_contiguous:
-            raise ValueError("matmul RHS must be column-major fp16 with shape KxN")
-        edge = np.empty((self.m, self.k), dtype=np.float16) if intermediate is None else np.asarray(intermediate)
+        storage_dtype = np.float16
+        if self.dtype == "bf16":
+            import ml_dtypes
+            storage_dtype = np.dtype(ml_dtypes.bfloat16)
+        if source.shape != (self.m, self.k) or source.dtype != storage_dtype or not source.flags.c_contiguous:
+            raise ValueError(f"RMSNorm source must be contiguous {self.dtype} with shape MxK")
+        if right.shape != (self.k, self.n) or right.dtype != storage_dtype or not right.flags.f_contiguous:
+            raise ValueError(f"matmul RHS must be column-major {self.dtype} with shape KxN")
+        edge = np.empty((self.m, self.k), dtype=storage_dtype) if intermediate is None else np.asarray(intermediate)
         result = np.empty((self.m, self.n), dtype=np.float32) if output is None else np.asarray(output)
-        if edge.shape != (self.m, self.k) or edge.dtype != np.float16 or not edge.flags.c_contiguous:
-            raise ValueError("intermediate must be caller-owned contiguous fp16 with shape MxK")
+        if edge.shape != (self.m, self.k) or edge.dtype != storage_dtype or not edge.flags.c_contiguous:
+            raise ValueError(f"intermediate must be caller-owned contiguous {self.dtype} with shape MxK")
         if result.shape != (self.m, self.n) or result.dtype != np.float32 or not result.flags.c_contiguous:
             raise ValueError("matmul output must be contiguous fp32 with shape MxN")
         if (np.shares_memory(edge, source) or np.shares_memory(edge, right)
@@ -446,16 +457,17 @@ def package_scheduled_rmsnorm_matmul(
     if (producer_artifact.target != "nvidia_sm120"
             or producer_artifact.family != "norm"
             or producer_artifact.kind != "rmsnorm"
-            or producer_artifact.dtype != "fp16"
-            or producer_artifact.storage != "f16"
+            or producer_artifact.dtype not in {"fp16", "bf16"}
+            or producer_artifact.storage != ("f16" if producer_artifact.dtype == "fp16" else "bf16")
             or producer_artifact.output_shape != producer_artifact.input_shape):
-        raise ValueError("producer must be a shape-preserving fp16 RMSNorm Schedule artifact")
+        raise ValueError("producer must be a shape-preserving fp16/bf16 RMSNorm Schedule artifact")
+    storage = "f16" if producer_artifact.dtype == "fp16" else "bf16"
     if (consumer_artifact.target != "nvidia_sm120"
-            or consumer_artifact.storage != "f16"
-            or consumer_artifact.a_dtype != "fp16"
+            or consumer_artifact.storage != storage
+            or consumer_artifact.a_dtype != producer_artifact.dtype
             or consumer_artifact.output_dtype != "fp32"
             or consumer_artifact.a_name == consumer_artifact.b_name):
-        raise ValueError("consumer must be a scheduled fp16-input SM120 matmul")
+        raise ValueError("consumer must be a matching scheduled fp16/bf16 SM120 matmul")
     producer = package_scheduled_kernel(producer_artifact, pipeline_name=pipeline_name)
     consumer = package_scheduled_matmul(consumer_artifact, pipeline_name=pipeline_name)
     program = NVIDIANativeTensorProgram(
@@ -469,6 +481,7 @@ def package_scheduled_rmsnorm_matmul(
         m=consumer_artifact.m,
         k=consumer_artifact.k,
         n=consumer_artifact.n,
+        dtype=producer_artifact.dtype,
     )
     program.validate()
     return program

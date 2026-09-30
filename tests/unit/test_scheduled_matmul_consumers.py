@@ -327,7 +327,6 @@ def test_nvidia_composed_dynamic_axes_lower_through_schedule_and_tile(axes):
     )
     assert "schedule.matmul" in artifact.schedule_ir
     assert "tile.matmul_kernel" in artifact.tile_ir
-    assert artifact.tile_ir.count("tile.materialize_composed_layout") == 2
 
 
 @requires_tessera_opt

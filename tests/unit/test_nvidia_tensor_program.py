@@ -425,7 +425,21 @@ def test_sm120_rmsnorm_tensor_edge_reuses_bounded_dynamic_k_package_on_exact_dev
     import ml_dtypes
 
     storage_dtype = np.float16 if dtype == "fp16" else np.dtype(ml_dtypes.bfloat16)
-    program = _program(dtype, dynamic_k=True)
+    from tessera.compiler.from_text import from_text
+
+    producer_jit = from_text("def rmsnorm_dynamic_k(x):\n    return ts.ops.rmsnorm(x, eps=1e-5)")
+    consumer_jit = from_text("def matmul_dynamic_k(normalized, weights):\n    return ts.ops.matmul(normalized, weights, output_dtype=\"fp32\")")
+    bound_source = np.ones((16, 16), dtype=storage_dtype)
+    bound_rhs = np.ones((16, 8), dtype=storage_dtype, order="F")
+    producer_jit(bound_source)
+    consumer_jit(bound_source, bound_rhs)
+    assert producer_jit.frontend_authority == consumer_jit.frontend_authority == "tracer"
+    program = nvidia_native.package_scheduled_rmsnorm_matmul(
+        producer_jit.graph_ir, consumer_jit.graph_ir,
+        pipeline_name="tessera-lower-to-nvidia-sm120", dynamic_k_bound=16,
+    )
+    program.validate()
+    assert program.dynamic_k and not program.dynamic_m and not program.dynamic_n
     rng = np.random.default_rng(17123)
     bound_rhs = rng.normal(0.0, 0.25, (program.k, program.n)).astype(storage_dtype)
     image_digest = program.consumer.image.image_digest

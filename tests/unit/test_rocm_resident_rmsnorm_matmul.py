@@ -325,8 +325,9 @@ def test_gfx1201_public_bf16_dynamic_n_resident_edge_reuses_package():
 @pytest.mark.parametrize("storage_dtype", ["fp16", "bf16"])
 def test_gfx1201_dynamic_m_graph_projects_to_bounded_schedule(storage_dtype):
     """The compiler lane checks dynamic-M projection without ROCm libraries."""
-    from tessera.compiler.resident_rocm_norm_matmul import _with_bounded_dynamic_m
-    from tessera.compiler.scheduled_matmul import lower_scheduled_matmul
+    from tessera.compiler.scheduled_matmul import (
+        lower_scheduled_matmul, with_bounded_dynamic_m,
+    )
 
     m_bound, k, n = 8, 32, 16
     _, graph = _public_rmsnorm_matmul_graphs(
@@ -337,9 +338,7 @@ def test_gfx1201_dynamic_m_graph_projects_to_bounded_schedule(storage_dtype):
         storage_np_dtype = np.dtype(ml_dtypes.bfloat16)
     else:
         storage_np_dtype = np.dtype(np.float16)
-    graph = _with_bounded_dynamic_m(
-        graph, np.zeros((m_bound, k), dtype=storage_np_dtype), m_bound
-    )
+    graph = with_bounded_dynamic_m(graph, m_bound)
     artifact = lower_scheduled_matmul(graph, target="rocm_gfx1201")
     assert artifact.dynamic_m
     assert not artifact.dynamic_n and not artifact.dynamic_k
@@ -469,6 +468,33 @@ def test_public_matmul_output_dtype_uses_fp32_accumulation(
         expected = expected.astype(np.float16)
     assert result.dtype == expected_dtype
     np.testing.assert_array_equal(result, expected)
+
+
+@pytest.mark.parametrize("epilogue_mode", ["explicit", "mapping"])
+def test_public_matmul_fp16_cast_happens_after_epilogue(epilogue_mode):
+    import tessera as ts
+
+    # The fp32 dot product is just above 1.0. Rounding it to fp16 before
+    # adding the bias would leave a positive value after the bias, unlike the fp32 result.
+    a = np.asarray([[1.0, 0.001]], dtype=np.float16)
+    b = np.asarray([[1.0], [0.5]], dtype=np.float16)
+    bias = np.asarray([-1.0007], dtype=np.float32)
+    accumulator = a.astype(np.float32) @ b.astype(np.float32)
+    expected = np.maximum(accumulator + bias, 0.0).astype(np.float16)
+
+    if epilogue_mode == "explicit":
+        result = ts.ops.matmul(
+            a, b, bias=bias, activation="relu", output_dtype="fp16"
+        )
+    else:
+        result = ts.ops.matmul(
+            a, b, epilogue={"bias": bias, "activation": "relu"},
+            output_dtype="fp16",
+        )
+
+    assert result.dtype == np.float16
+    np.testing.assert_array_equal(result, expected)
+    assert result.item() == 0.0
 
 
 def test_public_matmul_output_dtype_is_explicit_in_abstract_trace():

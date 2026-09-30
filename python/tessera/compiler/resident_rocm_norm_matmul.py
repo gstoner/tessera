@@ -454,50 +454,6 @@ class ResidentROCmNormMatmul:
             pass
 
 
-def _with_bounded_dynamic_m(matmul_module: Any, x: Any, bound: int) -> Any:
-    """Give one traced Graph matmul a bounded dynamic M contract."""
-    from .graph_ir import tensor_ir_type
-
-    if bound <= 0:
-        raise ValueError("dynamic M bound must be positive")
-    module = copy.deepcopy(matmul_module)
-    if len(module.functions) != 1:
-        raise ValueError("bounded dynamic M requires one Graph function")
-    function = module.functions[0]
-    if len(function.args) != 2 or len(function.result_types) != 1:
-        raise ValueError("bounded dynamic M requires a two-input, one-result matmul")
-    matmuls = [op for op in function.body if op.op_name == "tessera.matmul"]
-    if len(matmuls) != 1:
-        raise ValueError("bounded dynamic M requires one Graph matmul operation")
-    lhs_type, rhs_type = function.args[0].ir_type, function.args[1].ir_type
-    output_type = function.result_types[0]
-    try:
-        traced_m, k = (int(str(dim)) for dim in lhs_type.shape)
-        rhs_k, n = (int(str(dim)) for dim in rhs_type.shape)
-        out_m, out_n = (int(str(dim)) for dim in output_type.shape)
-        actual_x_shape = tuple(int(dim) for dim in x.shape)
-    except (AttributeError, TypeError, ValueError) as exc:
-        raise ValueError("bounded dynamic M requires static traced tensor shapes") from exc
-    if actual_x_shape != (bound, k) or traced_m != bound or out_m != bound:
-        raise ValueError("dynamic M bound must match the traced LHS capacity")
-    if rhs_k != k or out_n != n:
-        raise ValueError("bounded dynamic M requires matching static K and N")
-    dynamic_lhs = tensor_ir_type(
-        ("?", str(k)), lhs_type.dtype, layout=lhs_type.layout,
-    )
-    dynamic_output = tensor_ir_type(
-        ("?", str(n)), output_type.dtype, layout=output_type.layout,
-    )
-    function.args[0].ir_type = dynamic_lhs
-    function.result_types[0] = dynamic_output
-    op = matmuls[0]
-    op.operand_types[0] = str(dynamic_lhs)
-    op.result_type = str(dynamic_output)
-    op.inferred_type = dynamic_output
-    op.kwargs["shape_bounds"] = [bound, n, k]
-    return module
-
-
 def _with_dynamic_m_capacity(norm_package: Any, bound: int) -> Any:
     """Mark a maximum-sized norm allocation as admitting shorter row prefixes."""
     from .native_artifact import ShapeGuard
@@ -590,13 +546,16 @@ def package_graph_rmsnorm_matmul(
     into a bounded runtime N guard while retaining its maximum storage.
     """
     from . import rocm_native
+    from .scheduled_matmul import with_bounded_dynamic_m
 
     if dynamic_n_bound is not None and dynamic_m_bound is not None:
         raise ValueError("resident matmul currently admits one dynamic extent per package")
     if dynamic_n_bound is not None:
         matmul_module = _with_bounded_dynamic_n(matmul_module, rhs, dynamic_n_bound)
     if dynamic_m_bound is not None:
-        matmul_module = _with_bounded_dynamic_m(matmul_module, x, dynamic_m_bound)
+        matmul_module = with_bounded_dynamic_m(matmul_module, dynamic_m_bound)
+        if tuple(np.shape(x)) != (dynamic_m_bound, int(str(matmul_module.functions[0].args[0].ir_type.shape[1]))):
+            raise ValueError("dynamic M bound must match the resident input capacity")
     norm, matmul = lower_graph_rmsnorm_matmul(norm_module, matmul_module)
     norm_package = rocm_native.package_scheduled_kernel(
         norm, pipeline_name=pipeline_name,

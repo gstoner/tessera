@@ -4925,7 +4925,7 @@ def _submit_rocm_gfx1151_native(
                 raise RuntimeError("gfx1151 bf16 reduction requires ml_dtypes")
         else:
             expected_dtype = np.float32
-    elif not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention:
+    elif not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention and not normalization:
         rows = int(cast(int, scalars["Rows"]))
         columns = int(cast(int, scalars["K"]))
         if x.size != rows * columns or tuple(output.shape) != tuple(x.shape):
@@ -4933,7 +4933,7 @@ def _submit_rocm_gfx1151_native(
         dimensions = (rows, columns)
         grid_x = rows
         expected_dtype = np.float16 if descriptor.abi_id == GFX_SOFTMAX_F16_ABI else np.float32
-    if not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention:
+    if not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention and not normalization:
         expected_output_dtype = np.float32 if reduction else expected_dtype
         if x.dtype != expected_dtype or output.dtype != expected_output_dtype:
             raise RuntimeError("gfx1151 native array dtype disagrees with descriptor ABI")
@@ -5072,6 +5072,8 @@ def _submit_rocm_gfx1151_native(
                 arguments.extend(memref_args(device, int(array.size)))
             arguments.extend(memref_args(device_o, int(output.size)))
             arguments.extend(ctypes.c_int64(value) for value in dimensions)
+            if normalization:
+                arguments.append(ctypes.c_float(epsilon))
         argument_array = (ctypes.c_void_p * len(arguments))()
         for index, value in enumerate(arguments):
             argument_array[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)

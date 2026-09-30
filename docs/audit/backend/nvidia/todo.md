@@ -10078,3 +10078,11 @@ Resident CUDA inputs must report the same CUDA Array Interface stream as the exp
 Owner: E2E-REAL-6 / W1.1; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
 
 Parity validated on Super-Bear (RTX 5070, sm_120) for the existing unfused fp16/bf16 RMSNorm-to-matmul resident contract. Package construction and descriptor validation now reject consumers with bias, residual, or activation because the resident edge ABI carries only the produced tensor and RHS. The shared eager reference retains fp32 through the epilogue before fp16 conversion. Follow-up required: extend the resident ABI before admitting fused consumers; broader producer migration remains open. No benchmark or route promotion.
+
+## Bounded dynamic-M resident RMSNorm to matmul — 2026-09-30
+
+Owner: E2E-REAL-6 / W1.1; sync `SM120-RMSNORM-MATMUL-DYNAMIC-M-2026-09-30`.
+
+Parity validated on Super-Bear (RTX 5070, sm_120) for Graph -> Schedule -> Tile fp16 and bf16 RMSNorm-to-matmul packages. Active M=7 and 16 execute under bound 16 in exact-device tests; the correctness-gated CUDA-event packet also checks active M=64 and 128 under bound 128. Producer and consumer retain the same resident allocation, stream and package images. Fused bias/residual/activation remains rejected until the ABI carries those operands.
+
+The 31-sample timing packet records clean source revision `1053c284`; medians are 11.76/12.74 us (producer/consumer) at M=64 and 16.42/13.58 us at M=128. CV reaches 25.8%, so timing is diagnostic and does not justify promotion. Dynamic M+N, non-row-major layouts, and additional storage formats remain open. The related gfx1201 shared bounded-M transformation needs fresh exact-device validation on Tajasaurus. [Packet](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/README.md).

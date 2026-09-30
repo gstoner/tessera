@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 audit_role: reference
 ---
 
@@ -6345,4 +6345,18 @@ Outcome: The eager matmul reference now retains fp32 accumulation through explic
 Remaining: the consumer ABI needs an explicit extension before fused resident epilogues are admitted. Rounding-sensitive native parity remains follow-up work for Apple, x86, gfx1151 and gfx1201. NVIDIA attention and quantized routes and the other E2E-REAL-6 families remain open. No performance claim or route promotion.
 
 Evidence: Super-Bear (RTX 5070, sm_120) passed the 20-test `test_nvidia_tensor_program.py` suite, including exact-device resident execution. Seven eager matmul/dynamic-M projection checks passed; 11 unrelated rows were deselected. The test uses a bias/ReLU value chosen so early fp16 rounding flips the activation result. The gfx1201 packaging test could not run on Super-Bear because its selected `tessera-opt` lacks the ROCm executable pass; rerun the owning gfx1201 suite on Tajasarus.
+<!-- entry-fields:end -->
+
+
+### 2026-09-30 — NVIDIA bounded dynamic-M resident RMSNorm-to-matmul
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#890](https://github.com/gstoner/tessera/pull/890); sync SM120-RMSNORM-MATMUL-DYNAMIC-M-2026-09-30.
+
+Outcome: A public Graph RMSNorm -> matmul pair now projects one bounded M extent through Schedule, Tile and native packaging on sm_120. fp16 and bf16 producers and consumers accept active row prefixes within the package bound, reuse the same intermediate allocation and image, and preserve same-stream completion. The existing admission checks still refuse fused epilogues because their operands are absent from this resident ABI. This slice also advances W1.1's NVIDIA producer-to-matmul edge proof.
+
+Remaining: dynamic M and N cannot be combined in one package; only row-major fp16/bf16 is proved. The shared gfx1201 bounded-M transformation needs a fresh Tajasaurus retest. More NVIDIA tensor-valued producers remain under W1.1. CUDA-event timing variation is too high for a performance claim or route promotion.
+
+Evidence: Super-Bear RTX 5070 (sm_120) passed the focused NVIDIA tensor-program and fp16 epilogue regression selection (25 passed), plus Ruff. A clean-source 31-sample packet checks active M=64 and 128 under bound 128; producer/consumer max errors are 0/2.38e-6 and 9.77e-4/2.38e-6. Same-allocation and stable-image checks pass. Stage medians are 11.76/12.74 us at M=64 and 16.42/13.58 us at M=128, but CV ranges from 9.7% to 25.8%; these are diagnostics only. [Packet](../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/README.md).
 <!-- entry-fields:end -->

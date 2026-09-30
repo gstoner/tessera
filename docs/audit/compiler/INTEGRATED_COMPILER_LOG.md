@@ -6447,12 +6447,13 @@ edge. Wider physical device layouts and further W1.1 producer migrations remain
 separate work. No selector or performance promotion.
 
 Evidence: Host-free bounded-axis projection tests cover M/N, N/K, and M/N/K.
-The gfx1201 focused joint-M/N/K exact-device test passed 2/2 dtype rows; its
-clean-source fp16 packet records 100 separate HIP-event samples per stage and
-active M/N/K=(64,128,128),(96,192,192),(128,256,256). The sm_120 focused test
-passed 2/2 dtype rows; its clean-source fp16 packet records 31 separate
-CUDA-event samples per stage and active M/N/K=(256,256,128),(384,384,192),
-(512,512,256). Correctness, stable image identity, and same-allocation checks
-passed. gfx1201 event variation is high; timing supports stage attribution
-only. [Packets](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+The gfx1201 focused joint-M/N/K exact-device test passed 2/2 dtype rows. Its
+clean-source fp16 and bf16 packets each record 100 separate HIP-event samples
+per stage at active M/N/K=(64,128,128),(96,192,192),(128,256,256). The sm_120
+focused test passed 2/2 dtype rows; its clean-source fp16 and bf16 packets
+each record 31 separate CUDA-event samples per stage at
+(256,256,128),(384,384,192),(512,512,256). Correctness, stable image identity,
+and same-allocation checks passed. gfx1201 event variation remains high,
+especially for bf16; these measurements support stage attribution only.
+[Packets](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 <!-- entry-fields:end -->

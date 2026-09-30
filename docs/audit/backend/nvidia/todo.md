@@ -10124,7 +10124,7 @@ remains diagnostic; no selector or performance promotion.
 Owner E2E-REAL-6 / W1.1; sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
 Parity validated on Super-Bear RTX 5070 (sm_120) for public Graph-traced
 RMSNorm to matmul with fp16 and bf16 storage, bounded M/N/K, padded host views,
-numerical checks, stable images, and intermediate allocation reuse. The
-31-sample fp16 packet measures active M/N/K of (256,256,128), (384,384,192),
-and (512,512,256) under bound (512,512,256). Stage medians/CVs are recorded
-separately; no performance promotion. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+numerical checks, stable images, and intermediate allocation reuse. The 31-sample fp16 and bf16 packets measure active M/N/K of
+(256,256,128), (384,384,192), and (512,512,256) under bound
+(512,512,256). Stage medians/CVs are recorded separately; they support
+attribution only, with no performance promotion. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).

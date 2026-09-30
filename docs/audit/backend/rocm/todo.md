@@ -12542,7 +12542,6 @@ results are diagnostic and do not promote a route.
 Owner E2E-REAL-6 / W1.1; sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30.
 Parity validated on Tajasaurus RX 9070 XT (gfx1201) for fp16 and bf16 at
 active M/N/K of (3,7,13), (5,15,21), and (8,24,32), with padded host views,
-numerical checks, and package/allocation reuse. The 100-sample fp16 packet
-covers (64,128,128), (96,192,192), and (128,256,256) under bound
-(128,256,256). Several event CVs are high, so these measurements support
-attribution only. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+numerical checks, and package/allocation reuse. The 100-sample fp16 and bf16 packets cover (64,128,128), (96,192,192), and
+(128,256,256) under bound (128,256,256). Several event CVs are high, especially
+for bf16; these measurements support attribution only. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).

@@ -356,6 +356,12 @@ def test_sm120_resident_dynamic_matmul_edge_reuses_packages_across_shapes() -> N
             )
 
 
+@pytest.mark.skipif(
+    not nvidia_cuda_host_ready()
+    or not nvidia_native.tools_available()
+    or scheduled_matmul.find_tessera_opt() is None,
+    reason="requires the SM120 CUDA compiler, PTX bridge, and RTX host",
+)
 @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
 def test_sm120_bounded_dynamic_strided_matmul_exact_device(dtype) -> None:
     storage_type = np.float16 if dtype == "fp16" else pytest.importorskip("ml_dtypes").bfloat16

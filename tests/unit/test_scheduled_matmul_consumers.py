@@ -230,6 +230,37 @@ def test_nvidia_sm120_uses_shared_scheduled_matmul_contract() -> None:
     artifact.validate()
 
 
+def test_sm120_dynamic_k_projection_preserves_reusable_graph_module():
+    lhs = IRType("tensor<16x16xf16>", ("16", "16"), "fp16")
+    rhs = IRType("tensor<16x8xf16>", ("16", "8"), "fp16")
+    output = IRType("tensor<16x8xf32>", ("16", "8"), "fp32")
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name="matmul_static_graph",
+        args=[IRArg("lhs", lhs), IRArg("rhs", rhs)],
+        result_types=[output],
+        body=[IROp(
+            result="result", op_name="tessera.matmul",
+            operands=["%lhs", "%rhs"],
+            operand_types=[str(lhs), str(rhs)], result_type=str(output),
+        )],
+        return_values=["%result"],
+    )])
+    original_function = module.functions[0]
+    original_kwargs = dict(original_function.body[0].kwargs)
+
+    projected = nvidia_native._with_bounded_dynamic_k(module, 16)
+
+    assert projected is not module
+    assert projected.functions[0] is not original_function
+    assert module.functions[0].args[0].ir_type == lhs
+    assert module.functions[0].args[1].ir_type == rhs
+    assert module.functions[0].body[0].operand_types == [str(lhs), str(rhs)]
+    assert module.functions[0].body[0].kwargs == original_kwargs == {}
+    assert projected.functions[0].args[0].ir_type.shape == ("16", "?")
+    assert projected.functions[0].args[1].ir_type.shape == ("?", "8")
+    assert projected.functions[0].body[0].kwargs["shape_bounds"] == [16, 8, 16]
+
+
 def test_nvidia_sm120_bf16_uses_shared_scheduled_matmul_contract() -> None:
     module = _module(target="nvidia_sm120", dtype="bf16")
     assert scheduled_matmul.supports_scheduled_matmul(

@@ -9,6 +9,7 @@ runtime consumes only the resulting :class:`NativeImageArtifact` and
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -677,6 +678,7 @@ def _with_bounded_dynamic_k(module: GraphIRModule, bound: int) -> GraphIRModule:
     """Give both matmul operands a single bounded dynamic contraction axis."""
     from .graph_ir import tensor_ir_type
 
+    module = copy.deepcopy(module)
     if bound <= 0 or len(module.functions) != 1:
         raise ValueError("bounded dynamic K requires one Graph function and a positive bound")
     function = module.functions[0]

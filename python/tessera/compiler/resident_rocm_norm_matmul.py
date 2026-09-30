@@ -121,8 +121,8 @@ class ResidentROCmNormMatmul:
             raise ValueError("resident normalization and matmul must agree on the dynamic M bound")
         if norm_dynamic_k != self._dynamic_k:
             raise ValueError("resident normalization and matmul must agree on the dynamic K bound")
-        if sum((self._dynamic_m, self._dynamic_n, self._dynamic_k)) > 1:
-            raise ValueError("resident matmul currently admits one dynamic extent per package")
+        if self._dynamic_n and (self._dynamic_m or self._dynamic_k):
+            raise ValueError("dynamic N remains a separate resident package envelope")
         norm_scalars = {item.name for item in self._norm.scalars}
         gemm_scalars = {item.name for item in self._gemm.scalars}
         if norm_scalars != {"Rows", "K", "Epsilon"} or gemm_scalars != {"M", "N", "K"}:
@@ -629,15 +629,23 @@ def package_graph_rmsnorm_matmul(
     into a bounded runtime N guard while retaining its maximum storage.
     """
     from . import rocm_native
-    from .scheduled_matmul import with_bounded_dynamic_m
+    from .scheduled_matmul import with_bounded_dynamic_m, with_bounded_dynamic_mk
 
-    if sum(value is not None for value in (dynamic_n_bound, dynamic_m_bound, dynamic_k_bound)) > 1:
-        raise ValueError("resident matmul currently admits one dynamic extent per package")
+    if dynamic_n_bound is not None and (
+        dynamic_m_bound is not None or dynamic_k_bound is not None
+    ):
+        raise ValueError("dynamic N remains a separate resident package envelope")
     if dynamic_n_bound is not None:
         matmul_module = _with_bounded_dynamic_n(matmul_module, rhs, dynamic_n_bound)
-    if dynamic_k_bound is not None:
+    if dynamic_m_bound is not None and dynamic_k_bound is not None:
+        matmul_module = with_bounded_dynamic_mk(
+            matmul_module, dynamic_m_bound, dynamic_k_bound
+        )
+        if tuple(np.shape(x)) != (dynamic_m_bound, dynamic_k_bound):
+            raise ValueError("dynamic M/K bounds must match the resident input capacity")
+    elif dynamic_k_bound is not None:
         matmul_module = _with_bounded_dynamic_k(matmul_module, x, rhs, dynamic_k_bound)
-    if dynamic_m_bound is not None:
+    elif dynamic_m_bound is not None:
         matmul_module = with_bounded_dynamic_m(matmul_module, dynamic_m_bound)
         if tuple(np.shape(x)) != (dynamic_m_bound, int(str(matmul_module.functions[0].args[0].ir_type.shape[1]))):
             raise ValueError("dynamic M bound must match the resident input capacity")

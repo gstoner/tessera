@@ -1942,3 +1942,29 @@ def test_x86_mixed_capability_does_not_admit_unsigned_rhs_or_wide_extents():
     assert not module.verify(target='x86').ok
     with pytest.raises(ValueError, match='i32 runtime ABI'):
         scheduled_matmul._graph_contract(_mixed_x86_module((1, 2**31, 1)), 'x86')
+
+
+def test_bounded_dynamic_mk_projects_graph_axes_and_capacity_metadata():
+    graph = _module(target="rocm", shape=(8, 32, 16), dtype="bf16")
+    projected = scheduled_matmul.with_bounded_dynamic_mk(graph, 8, 32)
+    function = projected.functions[0]
+    op = function.body[0]
+    assert function.args[0].ir_type.shape == ("?", "?")
+    assert function.args[1].ir_type.shape == ("?", "16")
+    assert function.result_types[0].shape == ("?", "16")
+    assert op.operand_types == [
+        str(function.args[0].ir_type), str(function.args[1].ir_type),
+    ]
+    assert op.result_type == str(function.result_types[0])
+    assert op.inferred_type == function.result_types[0]
+    assert op.kwargs["shape_bounds"] == [8, 16, 32]
+    assert graph.functions[0].args[0].ir_type.shape == ("8", "32")
+    assert graph.functions[0].args[1].ir_type.shape == ("32", "16")
+    assert graph.functions[0].result_types[0].shape == ("8", "16")
+
+
+@pytest.mark.parametrize("m_bound,k_bound", [(0, 32), (8, 0), (7, 32), (8, 31)])
+def test_bounded_dynamic_mk_rejects_inconsistent_capacities(m_bound, k_bound):
+    graph = _module(target="rocm", shape=(8, 32, 16), dtype="bf16")
+    with pytest.raises(ValueError, match="bound|capacity"):
+        scheduled_matmul.with_bounded_dynamic_mk(graph, m_bound, k_bound)

@@ -24,7 +24,7 @@ import numpy as np
 
 from .graph_ir import GraphIRFunction, GraphIRModule, IROp
 from .capabilities import normalize_target as _normalize_target
-from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, SUPPORTED_CPU_OPS, canonical_graph_op_name
+from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, SUPPORTED_CPU_OPS, canonical_graph_op_name, shape_rule_for
 from .schedule_planner import SchedulePlanner
 from .schedule_ir import lower_graph_to_schedule_ir
 from .target_ir import lower_tile_to_target_ir
@@ -267,7 +267,15 @@ class CPUPlan:
         operands = [_as_value(values[name]) for name in operand_names]
         if op.result is None:
             raise ValueError(f"CPU plan cannot execute void op {op.op_name!r}")
-        values[op.result] = _execute_op(op.op_name, operands, op.kwargs)
+        result = _execute_op(op.op_name, operands, op.kwargs)
+        # CPU reference execution must honor the same storage contract as
+        # Graph IR. NumPy weak-scalar promotion can widen a same_as_first
+        # operation such as bfloat16 RMSNorm to FP32.
+        if shape_rule_for(op.op_name) == "same_as_first" and isinstance(result, np.ndarray):
+            input_dtype = np.asarray(operands[0]).dtype
+            if result.dtype != input_dtype:
+                result = result.astype(input_dtype, copy=False)
+        values[op.result] = result
 
     def artifacts(self) -> tuple[LoweringArtifact, ...]:
         graph = LoweringArtifact("graph", self.graph_ir, producer="graph-ir-renderer")

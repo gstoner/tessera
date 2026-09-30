@@ -30,10 +30,13 @@ def verify_unary_projection(artifact, parent: str) -> None:
     import math
     import re
     tensor = r'tensor<((?:[1-9][0-9]*x)*)(f32|f16|bf16)>'
-    functions = re.findall(r'func.func @([\w]+)\(%[\w]+: ' + tensor
-                           + r'\) -> ' + tensor + r' \{', parent)
+    functions = re.findall(
+        r'func.func @([\w]+)\(%[\w]+: ' + tensor
+        + r'\) -> ' + tensor + r'(?: attributes \{[^{}]*\})? \{',
+        parent,
+    )
     if len(functions) != 1 or parent.count('func.func ') != 1:
-        raise ValueError('Native unary descriptor requires one static f32 native function')
+        raise ValueError('Native unary descriptor requires one static tensor function')
     name, input_dims, storage, output_dims, output_storage = functions[0]
     input_shape = tuple(int(d) for d in input_dims.split('x') if d)
     output_shape = tuple(int(d) for d in output_dims.split('x') if d)
@@ -70,7 +73,11 @@ def verify_unary_projection(artifact, parent: str) -> None:
         import struct
         kind = re.search(r'(?:^|, )kind = "(rmsnorm|layernorm)"(?:,|$)', attrs)
         eps = re.search(r'(?:^|, )epsilon = ([-+0-9.eE]+) : f32(?:,|$)', attrs)
-        if (artifact.target != 'x86' or axis != -1 or output_shape != input_shape
+        norm_target_ok = artifact.target == 'x86' or (
+            artifact.target == 'rocm' and artifact.architecture == 'gfx1201'
+            and storage in {'f16', 'bf16', 'f32'} and kind is not None and kind[1] == 'rmsnorm'
+        )
+        if (not norm_target_ok or axis != -1 or output_shape != input_shape
                 or kind is None or eps is None
                 or struct.pack('f', float(eps[1])) != struct.pack('f', artifact.epsilon)):
             raise ValueError('Native norm kind/axis/epsilon is unsupported')

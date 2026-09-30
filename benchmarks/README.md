@@ -91,6 +91,8 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 
 | Recorder | Output |
 |---|---|
+| `rocm/benchmark_gfx1201_resident_norm_matmul.py` | `baselines/gfx1201_resident_frontend_20260930/` (exact-device Graph -> Schedule -> Tile resident RMSNorm/matmul packet) |
+| `nvidia/benchmark_scheduled_rmsnorm_matmul_edge.py` | `baselines/sm120_rmsnorm_matmul_edge_20260929/` and `baselines/sm120_rmsnorm_matmul_edge_20260930/` (resident RMSNorm-to-matmul CUDA-event packets; 2026-09-30 includes bounded dynamic M) |
 | `nvidia/record_attention_forward_schedule_matrix.py` | `nvidia_sm120_attention_forward_schedules.json` |
 | `nvidia/record_autotune_reproducibility.py` | `nvidia_sm120_autotune_reproducibility.json` (reads `autotune_corpus.json` and every `nvidia*resource*.json`) |
 | `nvidia/record_bf16_reduction_breadth.py` | `nvidia_sm120_bf16_reduction_breadth.json` |
@@ -108,7 +110,7 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 | `nvidia/record_training_memory_foundation.py` | `nvidia_sm120_training_memory_foundation.json` |
 | `nvidia/record_transport_parity.py` | `nvidia_sm120_transport_parity.json` (reads `nvidia_sm120_test5_route_resources.json`) |
 | `nvidia/benchmark_scheduled_macro_matmul.py` | `nvidia_sm120_macro_cta_2026_08_24.json` (`tessera.nvidia.scheduled-macro-matmul.v3`) |
-| `nvidia/benchmark_scheduled_rmsnorm_matmul_edge.py` | `baselines/sm120_rmsnorm_matmul_edge_20260929/` (resident fp16 RMSNorm-to-matmul CUDA-event packets) |
+| `nvidia/benchmark_scheduled_rmsnorm_matmul_edge.py` | `baselines/sm120_rmsnorm_matmul_edge_20260929/` and `baselines/sm120_rmsnorm_matmul_edge_20260930/` (resident RMSNorm-to-matmul CUDA-event packets; 2026-09-30 includes bounded dynamic M) |
 | `nvidia/profile_test5_routes.py` | Nsight launch target for the TEST-5 production-route capture; `nvidia/parse_ncu_resources.py` normalises the export into `nvidia_sm120_test5_resources.json` |
 | `nvidia/profile_test5_emitted_gemm.py` | Nsight launch target for the `tessera_mma_gemm_f16` capture behind `nvidia_sm120_emitted_gemm_resources.json` |
 | `nvidia/profile_gemm_schedule_candidates.py` | Nsight launch target for the `nvidia_generic_cuda` / `nvidia_mma_fused` rows of `nvidia_sm120_test5_route_resources.json` |

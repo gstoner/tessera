@@ -3,15 +3,23 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 ---
+
+## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.
+Not applicable to Apple: the new bf16 Schedule/Tile and runtime ABI are gated to gfx1201. No Metal target admission, Apple runtime ABI, or Mac device evidence changed; Apple execution remains not applicable to this gfx1201-only Schedule/Tile extension.
+
+## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
+Follow-up required for Apple: shared tracing now preserves output shape/dtype and public `matmul(output_dtype="fp32")` expresses the f16-storage/f32-accumulation Graph contract. Schedule projection accepts the traced function attributes. No Mac compiler/runtime execution was performed in this slice, so Metal route support is not inferred; `target_verify`, `ntk_rope`, Philox JIT, and Apple consumer parity remain open. NVIDIA/CUDA and ROCm/HIP packages and physical schedules do not transfer to Metal. The later bounded dynamic-M extension is gfx1201-only; no Apple execution proof is implied.
 
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 
 Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.
-Not applicable to Apple: this slice changes the NVIDIA CUDA resident PTX
-bridge and its device-buffer layout metadata. No shared Graph/Schedule
-operation, Apple ABI, Metal schedule, or Apple execution claim changed.
+Not applicable to Apple: the referenced SM120 slice changes the NVIDIA CUDA resident PTX bridge and its device-buffer layout metadata. No shared Graph/Schedule operation, Apple ABI, Metal schedule, or Apple execution claim changed.
 
 # Apple compiler, exact-device, and performance plan
 
@@ -10252,3 +10260,9 @@ promotion is claimed.
 ## NVIDIA resident tensor-edge sibling assessment -- 2026-09-29
 
 Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to apple: the change adds an SM120-only CUDA-device-buffer launch path for NVIDIA RMSNorm and scheduled matmul. No sibling compiler, runtime ABI, physical schedule, or execution claim changed; this does not transfer NVIDIA evidence to apple.
+
+## Matmul output conversion and resident edge review -- 2026-09-30
+
+Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
+
+The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. Apple physical lowering is unchanged. Follow-up required: run the rounding-sensitive epilogue parity case through Apple `@jit`; no Apple device result is inferred from the host reference test.

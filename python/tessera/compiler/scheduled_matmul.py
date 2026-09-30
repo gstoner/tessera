@@ -29,6 +29,45 @@ _HASH_RE = re.compile(r'tessera\.schedule_hash = "([0-9a-f]{64})"')
 _SM120_SCHEDULED_MATMUL_PREFIX = "nvidia_sm120_scheduled_matmul_"
 
 
+def with_bounded_dynamic_m(matmul_module: GraphIRModule, bound: int) -> GraphIRModule:
+    """Return a Graph matmul module whose M extent has a checked maximum bound."""
+    from .graph_ir import tensor_ir_type
+
+    if bound <= 0:
+        raise ValueError("dynamic M bound must be positive")
+    module = copy.deepcopy(matmul_module)
+    if len(module.functions) != 1:
+        raise ValueError("bounded dynamic M requires one Graph function")
+    function = module.functions[0]
+    if len(function.args) != 2 or len(function.result_types) != 1:
+        raise ValueError("bounded dynamic M requires a two-input, one-result matmul")
+    matmuls = [op for op in function.body if op.op_name == "tessera.matmul"]
+    if len(matmuls) != 1:
+        raise ValueError("bounded dynamic M requires one Graph matmul operation")
+    lhs_type, rhs_type = function.args[0].ir_type, function.args[1].ir_type
+    output_type = function.result_types[0]
+    try:
+        traced_m, k = (int(str(dim)) for dim in lhs_type.shape)
+        rhs_k, n = (int(str(dim)) for dim in rhs_type.shape)
+        out_m, out_n = (int(str(dim)) for dim in output_type.shape)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("bounded dynamic M requires static traced tensor shapes") from exc
+    if bound != traced_m or out_m != bound:
+        raise ValueError("dynamic M bound must match the traced LHS capacity")
+    if rhs_k != k or out_n != n:
+        raise ValueError("bounded dynamic M requires matching static K and N")
+    dynamic_lhs = tensor_ir_type(("?", str(k)), lhs_type.dtype, layout=lhs_type.layout)
+    dynamic_output = tensor_ir_type(("?", str(n)), output_type.dtype, layout=output_type.layout)
+    function.args[0].ir_type = dynamic_lhs
+    function.result_types[0] = dynamic_output
+    op = matmuls[0]
+    op.operand_types[0] = str(dynamic_lhs)
+    op.result_type = str(dynamic_output)
+    op.inferred_type = dynamic_output
+    op.kwargs["shape_bounds"] = [bound, n, k]
+    return module
+
+
 @dataclass(frozen=True)
 class ScheduledMatmulArtifact:
     graph_ir: str
@@ -862,7 +901,11 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     for key, value in [('tessera.target', artifact.target), ('tessera.arch', artifact.architecture)]:
         if not re.search(r'(?:^|, )'+re.escape(key)+' = "'+re.escape(value)+'"(?:,|$)', header[1]):
             raise ValueError('matmul native target identity disagrees')
-    functions = re.findall(r'func.func @(\w+)\(([^\n]*)\) -> (tensor<[^>]+>) \{', parent)
+    functions = re.findall(
+        r'func.func @(\w+)\(([^\n]*)\) -> (tensor<[^>]+>)'
+        r'(?: attributes \{[^{}]*\})? \{',
+        parent,
+    )
     records = re.findall(r' = schedule.matmul %\w+ \{([^{}]*)\}', parent)
     keys = re.findall(r'shape_key = "M=(\d+);N=(\d+);K=(\d+);dtype=(\w+)"', parent)
     if len(functions) != 1 or len(records) != 1 or len(keys) != 1 or parent.count('func.func ') != 1:

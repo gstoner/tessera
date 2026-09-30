@@ -1,0 +1,68 @@
+{
+  "schema": "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1",
+  "target": "nvidia_sm120",
+  "architecture": "sm_120a",
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "host": {
+    "node": "The-Super-Bear",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "wsl": true
+  },
+  "source_revision": "3fa7fcba53238fc90ff853215fb9da6245c954e8",
+  "worktree_dirty": true,
+  "method": "bounded dynamic N; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
+  "edge": {
+    "producer": "tessera.rmsnorm",
+    "consumer": "tessera.matmul",
+    "storage": "fp16",
+    "layout": "row_major intermediate",
+    "static_mk": [
+      512,
+      256
+    ],
+    "dynamic_n_bound": 512,
+    "measured_active_n": 256,
+    "same_allocation": true,
+    "same_stream": true,
+    "rhs_layout": "strided ABI over compact column-major storage",
+    "output_layout": "strided ABI over compact row-major storage"
+  },
+  "packages": {
+    "producer_image": "e46677aadec01ed28d9592987213aa38be391fa261cda0bb9ef1cd5cfb0d7f15",
+    "consumer_image": "3c2de01aa828b316f535775a974e43cba2d13cc0103f1f4473667dd18b46f1eb",
+    "consumer_descriptor": "2fea8930ddb6ef88d52a644f74ed24ba5a7d77faa668d7ffaf63e40eadb822bb",
+    "consumer_schedule": "a46370a67aff84efab061754c940c0d3c2963b8911ca861ec71bebf9f3e7427c",
+    "consumer_tile": "3fcd017c3042ce4c4705ad5aa134a89e01555ec7ade0dae820512b8b81ba4143"
+  },
+  "correctness": {
+    "producer_max_abs_error": 0.001953125,
+    "consumer_max_abs_error": 1.52587890625e-05,
+    "producer_execution_kind": "native_gpu",
+    "consumer_execution_kind": "native_gpu",
+    "same_intermediate_pointer": true,
+    "package_digest_stable": true
+  },
+  "timing": {
+    "domain": "CUDA events around C++ repeated launches on resident buffers; producer and consumer timed separately",
+    "producer_ms": [
+      0.059827838093042374,
+      0.05958496034145355,
+      0.05949503928422928,
+      0.05952832102775574,
+      0.05962463840842247
+    ],
+    "producer_median_ms": 0.05958496034145355,
+    "producer_cov": 0.001958579184004165,
+    "consumer_ms": [
+      0.026651840656995773,
+      0.02668415941298008,
+      0.026671679690480232,
+      0.026836158707737923,
+      0.026675838977098465
+    ],
+    "consumer_median_ms": 0.026675838977098465,
+    "consumer_cov": 0.002507472463567152
+  },
+  "selector_changed": false,
+  "promotion": "none; one bounded dynamic-N SM120 envelope"
+}

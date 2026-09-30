@@ -54,3 +54,8 @@ PYTHONPATH=python \
 python -m benchmarks.rocm.record_gfx1201_scheduled_closure \
   --output /tmp/gfx1201-scheduled-closure.json
 ```
+
+The exact source file hashed by the 2026-09-21 run is preserved as
+[test_source.py](test_source.py). The live scheduled test module has grown
+since that run; keeping this snapshot makes the committed packet reproducible
+without claiming later tests were included in its 95-case result.

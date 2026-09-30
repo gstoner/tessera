@@ -3,8 +3,18 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 ---
+
+## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.
+Not applicable to the NVIDIA implementation: this adds an architecture-scoped ROCm RMSNorm ABI and gfx1201 Schedule/Tile admission; no CUDA lowering, SM120 ABI, or NVIDIA runtime dispatch changed. The existing SM120 bf16 resident tensor edge remains a separate CUDA implementation. The focused NVIDIA tensor-program suite reran 18/18 on Super-Bear RTX 5070 (sm_120) with its CUDA 13.4 GEMM/PTX libraries selected explicitly; this is a regression check, not parity inferred from ROCm timings or physical schedules.
+
+## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: paired package edge - parity validated
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
+Parity validated on exact devices: Super-Bear RTX 5070 (sm_120) and Tajasaurus RX 9070 XT (gfx1201) each ran compiler-owned RMSNorm -> matmul packages with a resident intermediate, ordered same-stream execution, numerical checks, and stable allocation lifetime. Both public `from_text` routes now carry `matmul(output_dtype="fp32")` into Graph IR and compile through native Schedule/Tile packages with fp16 inputs, fp32 accumulation, and fp32 output. The new explicit-output exact-device test passes on each owner; Super-Bear's tensor-program file passes 19/19. NVIDIA additionally retains fp16/bf16 input/output coverage and bounded dynamic-N reuse (N=7 and N=16 with static M/K). The gfx1201 correctness-gated 128x256x256 public-route packet records separate 100-trial HIP-event medians of 11.20 us for RMSNorm and 14.40 us for matmul; timings varied across reruns and are diagnostic only, with no promotion. The combined gfx1201 host-free/exact-device compiler, frontend, registry, and audit lane passed 456 tests before two added direct API cases; those cases separately passed with the public frontend checks. The paired targets use distinct schedules and binaries; no physical schedule is transferred. The refreshed Super-Bear packet `benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/` records correctness-gated static-N and bounded dynamic-N runs: producer/consumer medians 54.3/9.9 us and 54.1/8.9 us respectively; short-run variance is diagnostic and no selector promotion is made. The expanded focused cross-contract lane passed 357 tests with 19 skips, including active SM120 device rows. gfx1201 bounded dynamic-M proof is architecture-specific and does not transfer to sm_120; NVIDIA's own bounded dynamic-N resident route remains validated, while equivalent dynamic-M reuse remains follow-up required. Apple and x86 owning-device parity for the shared output dtype request remains follow-up required.
 
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: bounded resident package reuse
 
@@ -10062,3 +10072,17 @@ Parity validated on Super-Bear (RTX 5070, sm_120a) for one named Graph->Schedule
 The resident slice passed on three shapes: 64x64x64, 512x256x512, and ragged 255x127x129. Max absolute errors were 0/0.00000334, 0.001953125/0.00001526, and 0.00097656/0.00000668 for producer/consumer. At 512x256x512, C++-loop CUDA-event medians were 59.49 us producer and 12.85 us consumer; CV was 0.03% and 2.44%, matching the checked-in packet. Inputs are uploaded once, with no intermediate host copy. The synchronous host wall includes package/runtime overhead and is not kernel time. No selector promotion or fusion claim. See the [case matrix](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260929/README.md) and packets.
 
 Resident CUDA inputs must report the same CUDA Array Interface stream as the explicit launch stream; mismatched, missing, and default/sentinel producer streams fail closed rather than launching without a dependency. Follow-up required: widen to additional dtypes/layouts and dynamic-shape contracts, then migrate the remaining NVIDIA tensor-valued fragment producers. This bounded fp16 slice does not close W1.1.
+
+## Matmul output conversion and resident edge review -- 2026-09-30
+
+Owner: E2E-REAL-6 / W1.1; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
+
+Parity validated on Super-Bear (RTX 5070, sm_120) for the existing unfused fp16/bf16 RMSNorm-to-matmul resident contract. Package construction and descriptor validation now reject consumers with bias, residual, or activation because the resident edge ABI carries only the produced tensor and RHS. The shared eager reference retains fp32 through the epilogue before fp16 conversion. Follow-up required: extend the resident ABI before admitting fused consumers; broader producer migration remains open. No benchmark or route promotion.
+
+## Bounded dynamic-M resident RMSNorm to matmul — 2026-09-30
+
+Owner: E2E-REAL-6 / W1.1; sync `SM120-RMSNORM-MATMUL-DYNAMIC-M-2026-09-30`.
+
+Parity validated on Super-Bear (RTX 5070, sm_120) for Graph -> Schedule -> Tile fp16 and bf16 RMSNorm-to-matmul packages. Active M=7 and 16 execute under bound 16 in exact-device tests; the correctness-gated CUDA-event packet also checks active M=64 and 128 under bound 128. Producer and consumer retain the same resident allocation, stream and package images. Fused bias/residual/activation remains rejected until the ABI carries those operands.
+
+The 31-sample timing packet records clean source revision `1053c284`; medians are 11.76/12.74 us (producer/consumer) at M=64 and 16.42/13.58 us at M=128. CV reaches 25.8%, so timing is diagnostic and does not justify promotion. Dynamic M+N, non-row-major layouts, and additional storage formats remain open. The related gfx1201 shared bounded-M transformation was revalidated on Tajasaurus at PR head 6a84094 with a fresh compiler and 18/18 resident tests; this adds no gfx1201 timing claim. [Packet](../../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/README.md).

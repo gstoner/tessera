@@ -317,7 +317,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("gfx1151 scheduled softmax requires f16/f32 storage preserved to the output")
         if not softmax_like and (dtype not in {"fp16", "bf16", "fp32"} or output_dtype != "fp32"):
             raise ValueError("gfx1151 scheduled reduction requires f16/bf16/f32 storage and f32 output")
-    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name == "tessera.softmax"):
+    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name == "tessera.softmax") or (
+        target == "rocm_gfx1201" and op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}
+    ):
         expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"} else "fp32"
         if dtype not in {"fp16", "bf16", "fp32"} or output_dtype != expected_dtype:
             raise ValueError("NVIDIA scheduled unary storage contract is unsupported")
@@ -344,8 +346,12 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
 
         # E2E-REAL-6 x86 (2026-09-28): Zen 5 carries the static f32
         # unweighted row normalization the retired `package_cohort2` served.
-        norm = _norm_contract(module) if target in {"nvidia_sm120", "x86"} else None
+        norm = _norm_contract(module) if target in {"nvidia_sm120", "x86", "rocm_gfx1201"} else None
         if norm is not None and target == "x86" and norm[0] != "fp32":
+            norm = None
+        if norm is not None and target == "rocm_gfx1201" and (
+            norm[0] not in {"fp16", "bf16", "fp32"} or norm[1] != "rmsnorm"
+        ):
             norm = None
         if norm is None or op.kwargs.get("numeric_policy") is not None or mode != "serial":
             raise ValueError("unsupported scheduled normalization contract")

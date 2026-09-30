@@ -58,6 +58,9 @@ GFX_SOFTMAX_F32_ABI = "tessera.rocm.softmax.x_o_rows_k.f32.v1"
 GFX_REDUCE_F32_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.f32.v1"
 GFX_REDUCE_F16_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.f16_f32out.v1"
 GFX_REDUCE_BF16_ABI = "tessera.rocm.reduce.x_o_outer_axis_inner.bf16_f32out.v1"
+GFX_NORM_F16_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.f16.v1"
+GFX_NORM_F32_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.f32.v1"
+GFX_NORM_BF16_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.bf16.v1"
 GFX_PAGED_KV_F32_ABI = "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1"
 GFX_MOE_DISPATCH_F32_ABI = "tessera.rocm.moe_dispatch.x_token_o_t_s_h.f32_i32.v1"
 GFX_ATTN_F16_ABI = "tessera.rocm.attention.q_k_v_o_dims.f16_f32out.v1"
@@ -1372,6 +1375,7 @@ def _check_target_boundary(target_ir: str, *, directive: str, schedule_kernel: b
 _SHAPE_FREE_DIRECTIVES: dict[str, str] = {
     "softmax": "tessera_rocm.softmax",
     "reduction": "tessera_rocm.reduce",
+    "normalization": "tessera_rocm.norm",
     "paged_kv": "tessera_rocm.paged_kv_read",
     "moe_dispatch": "tessera_rocm.moe_dispatch",
     "attention": "tessera_rocm.flash_attn",
@@ -2140,7 +2144,7 @@ def package_scheduled_kernel(
     # E2E-REAL-6 (ROCm unary family): gfx1151 owns the narrow-storage and
     # keepdims envelope the retired Graph-owned constructors served; gfx1201
     # keeps its proved f32 rank-reducing rows until it has its own device proof.
-    if artifact.architecture == "gfx1201" and (storage != "f32" or artifact.keepdims):
+    if artifact.architecture == "gfx1201" and artifact.family != "norm" and (storage != "f32" or artifact.keepdims):
         raise ValueError(
             "gfx1201 scheduled semantic kernel has device proof only for the f32 rank-reducing contract"
         )
@@ -2159,6 +2163,24 @@ def package_scheduled_kernel(
         scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
         geometry = f"{arch}_softmax_workgroup_per_row_256"
         semantic_provenance = {}
+    elif artifact.family == "norm":
+        if artifact.kind != "rmsnorm" or artifact.axis != -1 or artifact.keepdims:
+            raise ValueError("ROCm scheduled norm requires unweighted last-axis RMSNorm")
+        if artifact.architecture != "gfx1201" or storage not in {"f16", "bf16", "f32"}:
+            raise ValueError("gfx1201 scheduled RMSNorm requires f16/bf16/f32 storage")
+        abi = {"f16": GFX_NORM_F16_ABI, "bf16": GFX_NORM_BF16_ABI, "f32": GFX_NORM_F32_ABI}[storage]
+        output_dtype, output_alignment = artifact.dtype, alignment
+        compile_family = "normalization"
+        scalars = (
+            ScalarArgument(2, "Rows", "int64"),
+            ScalarArgument(3, "K", "int64"),
+            ScalarArgument(4, "Epsilon", "fp32"),
+        )
+        geometry = f"{arch}_norm_workgroup_per_row_256"
+        semantic_provenance = {
+            "epsilon": artifact.epsilon,
+            "workgroup": [artifact.workgroup_size, 1, 1],
+        }
     elif artifact.family == "reduce":
         abi = {"f16": GFX_REDUCE_F16_ABI, "bf16": GFX_REDUCE_BF16_ABI, "f32": GFX_REDUCE_F32_ABI}[storage]
         # A reduction accumulates and stores f32 whatever its input storage.
@@ -2212,8 +2234,11 @@ def package_scheduled_kernel(
         geometry=LaunchGeometry(policy=geometry),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={
-            "work_item": "E2E-REAL-5",
-            "sync_key": "E2E-REAL-2026-08-05",
+            "work_item": "E2E-REAL-6" if artifact.family == "norm" else "E2E-REAL-5",
+            "sync_key": (
+                "E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09"
+                if artifact.family == "norm" else "E2E-REAL-2026-08-05"
+            ),
             "route": "canonical_scheduled_tile_consumer",
             "family": artifact.family,
             "kind": artifact.kind,
@@ -3367,6 +3392,9 @@ __all__ = [
     "GFX_ATTN_F16_ABI",
     "GFX_DEPTH_ATTN_F32_ABI",
     "GFX_MOE_DISPATCH_F32_ABI",
+    "GFX_NORM_BF16_ABI",
+    "GFX_NORM_F16_ABI",
+    "GFX_NORM_F32_ABI",
     "GFX_MATMUL_E4M3_F32_ABI",
     "GFX_MATMUL_E5M2_F32_ABI",
     "GFX_MATMUL_E4M3_E5M2_F32_ABI",

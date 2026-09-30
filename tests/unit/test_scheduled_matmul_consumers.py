@@ -1243,6 +1243,10 @@ def test_gfx1151_scheduled_matmul_executes_fused_epilogue(shape, activation, bia
     np.testing.assert_allclose(output, _epilogue_reference(a, b, bias_arr, activation), rtol=0, atol=5e-2)
 
 
+@pytest.mark.skipif(
+    rt._rocm_live_arch() != "gfx1151",
+    reason="requires the exact gfx1151 owning device",
+)
 @pytest.mark.hardware_rocm
 @pytest.mark.parametrize("shape", [(32, 32, 32), (17, 19, 23)])
 @pytest.mark.skipif(
@@ -1281,6 +1285,10 @@ def test_gfx1151_scheduled_matmul_executes_exact_artifact(shape) -> None:
     np.testing.assert_allclose(output, a.astype(np.float32) @ b.astype(np.float32), rtol=2e-2, atol=2e-2)
 
 
+@pytest.mark.skipif(
+    rt._rocm_live_arch() != "gfx1151",
+    reason="requires the exact gfx1151 owning device",
+)
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(
     not rocm_native.native_packaging_available(),

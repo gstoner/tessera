@@ -281,10 +281,13 @@ LogicalResult NormOp::verify() {
                (getStorage() == "f16" || getStorage() == "bf16" || getStorage() == "f32");
   bool zen5 = getArch() == "zen5-avx512" && getWorkgroupSize() == 1 &&
               getStorage() == "f32";
-  if ((!sm120 && !zen5) || getAccum() != "f32" || getAxis() != -1 ||
+  bool gfx1201 = getArch() == "gfx1201" && getWorkgroupSize() == 256 &&
+                 (getStorage() == "f16" || getStorage() == "bf16" || getStorage() == "f32") &&
+                 getKind() == "rmsnorm";
+  if ((!sm120 && !zen5 && !gfx1201) || getAccum() != "f32" || getAxis() != -1 ||
       (getKind() != "rmsnorm" && getKind() != "layernorm") ||
       !getEpsilon().isFinite() || getEpsilon().convertToDouble() <= 0.0)
-    return emitOpError("requires SM120 or Zen 5 unweighted row normalization with positive finite f32 epsilon");
+    return emitOpError("requires SM120, Zen 5, or the bounded gfx1201 RMSNorm row contract with positive finite f32 epsilon");
   return success();
 }
 

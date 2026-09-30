@@ -28,10 +28,10 @@ BRANCH_PROTECTION_DOC = REPO_ROOT / ".github" / "BRANCH_PROTECTION.md"
 
 
 # Required lanes (must all be inputs to the validate-required aggregator).
-REQUIRED_LANES = ("lint", "unit", "audit")
+REQUIRED_LANES = ("lint", "unit", "audit", "compiler-route")
 OPTIONAL_LANES = ("lit", "sanitizer", "rocm-serialize")
 #: Lanes that configure a CMake build against LLVM/MLIR 23.
-MLIR_LANES = ("lit", "rocm-serialize", "sanitizer")
+MLIR_LANES = ("lit", "rocm-serialize", "sanitizer", "compiler-route")
 AGGREGATOR_JOB = "validate-required"
 
 
@@ -148,6 +148,29 @@ class TestWorkflowStructure:
                 f"the documented triggers {tokens!r}; current `if:` is:\n"
                 f"  {condition}"
             )
+
+    def test_compiler_route_lane_builds_and_runs_graph_schedule_proof(self) -> None:
+        wf = _load_workflow()
+        lane = wf["jobs"]["compiler-route"]
+        script = "\n".join(
+            step.get("run", "") for step in lane.get("steps", [])
+            if "run" in step
+        )
+        assert "tessera-opt" in script
+        assert "compiler_route" in script
+        assert "TESSERA_OPT" in "\n".join(
+            str(step.get("env", "")) for step in lane.get("steps", [])
+        )
+
+    def test_cpu_unit_lane_excludes_only_compiler_route_marker(self) -> None:
+        wf = _load_workflow()
+        unit = wf["jobs"]["unit"]
+        script = "\n".join(
+            step.get("run", "") for step in unit.get("steps", [])
+            if "run" in step
+        )
+        assert "not compiler_route" in script
+        assert "not compiler_tool" not in script
 
     def test_lit_lane_builds_both_mlir_binaries(self) -> None:
         """The lit lane is responsible for both MLIR-bearing binaries.

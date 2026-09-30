@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 audit_role: reference
 ---
 
@@ -6332,4 +6332,31 @@ Outcome: The static unfused unsplit gfx1151 f16/bf16 register-matmul route proje
 Remaining: gfx1201, fused, split-K, dynamic and LDS matmul image identities; Schedule/Tile replay package cost; clean device-kernel timing and any selector decision. Apple, x86 and NVIDIA have no consumer of this HSACO key.
 
 Evidence: Clean-source Princess-Luna gfx1151 with rebuilt LLVM/MLIR 23.1.1 passed 34 focused shape-free tests (one other-device skip). A 31-sample-per-shape packet records numerical error below 9e-8, one image across three shapes, and three cold compilations under the historical Tile-text control. Timings are WSL host-wall diagnostics. Post-review, the raw benchmark launcher resolves the package descriptor entry; exact gfx1151 aligned 64x64x64 and ragged 65x67x31 cases pass NumPy, while the small-shape throughput gate remains rejected. [Packet](../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
+<!-- entry-fields:end -->
+
+### 2026-09-30 — fp32 matmul epilogues and resident-edge fused-input refusal
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#890](https://github.com/gstoner/tessera/pull/890); sync MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30.
+
+Outcome: The eager matmul reference now retains fp32 accumulation through explicit and mapping epilogues and casts only the final output when fp16 is requested. The SM120 RMSNorm-to-matmul resident package rejects fused bias, residual, and activation at both Schedule artifact admission and descriptor validation because its current edge ABI does not carry those operands.
+
+Remaining: the consumer ABI needs an explicit extension before fused resident epilogues are admitted. Rounding-sensitive native parity remains follow-up work for Apple, x86, gfx1151 and gfx1201. NVIDIA attention and quantized routes and the other E2E-REAL-6 families remain open. No performance claim or route promotion.
+
+Evidence: Super-Bear (RTX 5070, sm_120) passed the 20-test `test_nvidia_tensor_program.py` suite, including exact-device resident execution. Seven eager matmul/dynamic-M projection checks passed; 11 unrelated rows were deselected. The test uses a bias/ReLU value chosen so early fp16 rounding flips the activation result. The gfx1201 packaging test could not run on Super-Bear because its selected `tessera-opt` lacks the ROCm executable pass; rerun the owning gfx1201 suite on Tajasarus.
+<!-- entry-fields:end -->
+
+
+### 2026-09-30 — NVIDIA bounded dynamic-M resident RMSNorm-to-matmul
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: [#890](https://github.com/gstoner/tessera/pull/890); sync SM120-RMSNORM-MATMUL-DYNAMIC-M-2026-09-30.
+
+Outcome: A public Graph RMSNorm -> matmul pair now projects one bounded M extent through Schedule, Tile and native packaging on sm_120. fp16 and bf16 producers and consumers accept active row prefixes within the package bound, reuse the same intermediate allocation and image, and preserve same-stream completion. The existing admission checks still refuse fused epilogues because their operands are absent from this resident ABI. This slice also advances W1.1's NVIDIA producer-to-matmul edge proof.
+
+Remaining: dynamic M and N cannot be combined in one package; only row-major fp16/bf16 is proved. Tajasaurus RX 9070 XT (gfx1201) rebuilt tessera-opt from this PR head and passed the owning resident suite 18/18, revalidating the shared bounded-M transformation. More NVIDIA tensor-valued producers remain under W1.1. CUDA-event timing variation is too high for a performance claim or route promotion.
+
+Evidence: Super-Bear RTX 5070 (sm_120) passed the focused NVIDIA tensor-program and fp16 epilogue regression selection (25 passed), plus Ruff. A clean-source 31-sample packet checks active M=64 and 128 under bound 128; producer/consumer max errors are 0/2.38e-6 and 9.77e-4/2.38e-6. Same-allocation and stable-image checks pass. Stage medians are 11.76/12.74 us at M=64 and 16.42/13.58 us at M=128, but CV ranges from 9.7% to 25.8%; these are diagnostics only. The Tajasaurus 18/18 rerun establishes current gfx1201 correctness, with no new gfx1201 timing claim. [Packet](../../../benchmarks/baselines/sm120_rmsnorm_matmul_edge_20260930/README.md).
 <!-- entry-fields:end -->

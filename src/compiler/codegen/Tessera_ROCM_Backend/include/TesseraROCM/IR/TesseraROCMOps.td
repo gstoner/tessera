@@ -1042,7 +1042,8 @@ def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<ROCM_NormKindAttr, "\"rmsnorm\"">:$kind,
                        DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
-                       DefaultValuedAttr<BoolAttr, "false">:$backward);
+                       DefaultValuedAttr<BoolAttr, "false">:$backward,
+                       DefaultValuedAttr<BoolAttr, "false">:$scheduled_unary);
   let assemblyFormat = "attr-dict";
 }
 

@@ -283,7 +283,7 @@ and every Apple CPU example launch is oracle-checked. Accelerator examples
 remain artifact claims; exact-device execution stays backend-owned.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [gfx1151 bounded matmul image identity](INTEGRATED_COMPILER_LOG.md#2026-09-29--gfx1151-bounded-matmul-image-identity)
+- Latest: [NVIDIA bounded dynamic-M resident RMSNorm-to-matmul](INTEGRATED_COMPILER_LOG.md#2026-09-30--nvidia-bounded-dynamic-m-resident-rmsnorm-to-matmul)
 
 ### W1.1
 

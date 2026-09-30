@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -7,12 +7,20 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.
+Not applicable to x86: the new bf16 RMSNorm route uses gfx1201 workgroup and HIP ABI contracts. No x86 Schedule, AVX-512 runtime ABI, or Zen 5 execution claim changed; x86 execution remains not applicable to this architecture-scoped HIP ABI.
+
+## `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-NORM-MATMUL-2026-09`.
+Follow-up required for x86: shared tracing now preserves result shape/dtype and public `matmul(output_dtype="fp32")` carries the explicit output request into Graph IR. The paired GPU packages and physical schedules do not apply to x86, and no Zen 5 execution was performed in this slice. Existing x86 scheduled matmul support does not establish a low-precision input/fp32 output route; verify or explicitly refuse that dtype combination on the owning Zen 5 host before claiming parity. The later bounded dynamic-M extension is gfx1201-only; no x86 execution proof is implied.
+
 ## `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`: NVIDIA sibling assessment
 
 Owner E2E-REAL-6; sync `SM120-DYNAMIC-MATMUL-EDGE-2026-09-29`.
-Not applicable to x86: this slice changes the NVIDIA CUDA resident PTX bridge
-and its device-buffer layout metadata. No shared Graph/Schedule operation,
-x86 ABI, CPU schedule, or x86 execution claim changed.
+Not applicable to x86: the referenced SM120 slice changes the NVIDIA CUDA resident PTX bridge and its device-buffer layout metadata. No shared Graph/Schedule operation, x86 ABI, CPU schedule, or x86 execution claim changed.
 
 # x86 backend TODO
 
@@ -6662,3 +6670,9 @@ x86 execution; parity requires its own physical consumer and proof. See the
 ## NVIDIA resident tensor-edge sibling assessment -- 2026-09-29
 
 Sync: SM120-RMSNORM-MATMUL-EDGE-2026-09-29. Not applicable to x86: the change adds an SM120-only CUDA-device-buffer launch path for NVIDIA RMSNorm and scheduled matmul. No sibling compiler, runtime ABI, physical schedule, or execution claim changed; this does not transfer NVIDIA evidence to x86.
+
+## Matmul output conversion and resident edge review -- 2026-09-30
+
+Owner: E2E-REAL-6; sync `MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30`.
+
+The shared eager `ops.matmul(output_dtype="fp16")` reference now keeps fp32 accumulation through explicit or mapping epilogues and converts only the final result. X86 lowering/runtime are unchanged. Follow-up required: run the rounding-sensitive epilogue parity case through the native x86 package; no x86 device result is inferred from the shared reference test.

@@ -509,11 +509,11 @@ def _with_dynamic_k_capacity(norm_package: Any, bound: int) -> Any:
                 raise ValueError("dynamic K producer guards disagree with the bound")
             guard = ShapeGuard(guard.binding, guard.dimension, "max", bound)
         guards.append(guard)
-    guards = tuple(guards)
+    shape_guards = tuple(guards)
     provenance = {**descriptor.provenance, "dynamic_columns_bound": bound}
     return replace(
         norm_package,
-        descriptor=replace(descriptor, shape_guards=guards, provenance=provenance),
+        descriptor=replace(descriptor, shape_guards=shape_guards, provenance=provenance),
     )
 
 

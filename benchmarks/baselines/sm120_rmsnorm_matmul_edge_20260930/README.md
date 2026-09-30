@@ -24,6 +24,6 @@ and consumer separately over 21 CUDA-event samples of 500 launches each.
 | 256 | 54.69 µs | 9.89 µs | 0.9% | 53.7% |
 
 Consumer event variance remains high; all timings are diagnostic and support no
-performance comparison or route promotion. Exact-device fp16 and bf16 tests
-also reuse the package at active K=7, 11, and 16. See the complete samples and
+performance comparison or route promotion. Exact-device fp16 and bf16 tests trace the producer and consumer from public
+`from_text` functions and reuse the package at active K=7, 11, and 16. See the complete samples and
 compiler metadata in the JSON packet.

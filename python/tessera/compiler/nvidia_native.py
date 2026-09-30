@@ -684,12 +684,23 @@ def _with_bounded_dynamic_k(module: GraphIRModule, bound: int) -> GraphIRModule:
     lhs_type, rhs_type = function.args[0].ir_type, function.args[1].ir_type
     output_type = function.result_types[0]
     try:
-        m, k = (int(str(dim)) for dim in lhs_type.shape)
-        rhs_k, n = (int(str(dim)) for dim in rhs_type.shape)
+        lhs_shape = tuple(str(dim) for dim in lhs_type.shape)
+        rhs_shape = tuple(str(dim) for dim in rhs_type.shape)
+        m = int(lhs_shape[0])
+        n = int(rhs_shape[1])
+        lhs_k = bound if lhs_shape[1] == "?" else int(lhs_shape[1])
+        rhs_k = bound if rhs_shape[0] == "?" else int(rhs_shape[0])
         out_m, out_n = (int(str(dim)) for dim in output_type.shape)
-    except (AttributeError, TypeError, ValueError) as exc:
-        raise ValueError("bounded dynamic K requires static Graph capacities") from exc
-    if (k, rhs_k) != (bound, bound) or (out_m, out_n) != (m, n):
+    except (AttributeError, IndexError, TypeError, ValueError) as exc:
+        raise ValueError("bounded dynamic K requires ranked Graph tensors with bounded axes") from exc
+    if "?" in lhs_shape[1:2] or "?" in rhs_shape[:1]:
+        try:
+            declared_bounds = tuple(int(value) for value in matmuls[0].kwargs["shape_bounds"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("dynamic Graph K requires explicit M/N/K shape bounds") from exc
+        if declared_bounds != (m, n, bound):
+            raise ValueError("dynamic Graph shape bounds must match M, N, and K capacities")
+    if (lhs_k, rhs_k) != (bound, bound) or (out_m, out_n) != (m, n):
         raise ValueError("dynamic K bound must match the Graph operand capacities")
     dynamic_lhs = tensor_ir_type((str(m), "?"), lhs_type.dtype, layout=lhs_type.layout)
     dynamic_rhs = tensor_ir_type(("?", str(n)), rhs_type.dtype, layout=rhs_type.layout)

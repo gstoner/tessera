@@ -65,3 +65,32 @@ def test_timing_event_partial_creation_is_destroyed():
     with pytest.raises(RuntimeError, match="event creation"):
         session.measure(lambda: None, reps=1, warmup=0)
     assert session.lib.destroyed == [91]
+
+
+@pytest.mark.parametrize("order", ["C", "F"])
+def test_strided_upload_rejects_padded_host_views_before_allocating(order):
+    import numpy as np
+
+    session = NvidiaDeviceSession.__new__(NvidiaDeviceSession)
+    session.stream = 17
+    session._buffers = []
+    session.lib = object()
+    if order == "C":
+        backing = np.zeros((5, 9), dtype=np.float16, order="C")
+        source = backing[:, :7]
+    else:
+        backing = np.zeros((9, 7), dtype=np.float16, order="F")
+        source = backing[:5, :]
+    assert not source.flags.c_contiguous
+    assert not source.flags.f_contiguous
+
+    allocated = False
+    def unexpected_allocation(*args, **kwargs):
+        nonlocal allocated
+        allocated = True
+        raise AssertionError("invalid strided source reached device allocation")
+    session.empty = unexpected_allocation
+
+    with pytest.raises(ValueError, match="compact row-major or column-major"):
+        session.upload(source, layout="strided")
+    assert allocated is False

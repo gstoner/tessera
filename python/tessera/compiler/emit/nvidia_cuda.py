@@ -3608,6 +3608,12 @@ class NvidiaDeviceSession:
         if layout not in {"row_major", "col_major", "strided"}:
             raise ValueError("CUDA upload layout must be row_major, col_major, or strided")
         source = np.asarray(array)
+        if layout == "strided" and not (
+                source.flags.c_contiguous or source.flags.f_contiguous):
+            raise ValueError(
+                "CUDA strided upload requires compact row-major or column-major "
+                "storage; padded or sliced views are not supported"
+            )
         storage_order = (
             "col_major" if layout == "col_major" or
             (layout == "strided" and source.ndim == 2 and source.flags.f_contiguous

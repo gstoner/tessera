@@ -6334,11 +6334,11 @@ Remaining: gfx1201, fused, split-K, dynamic and LDS matmul image identities; Sch
 Evidence: Clean-source Princess-Luna gfx1151 with rebuilt LLVM/MLIR 23.1.1 passed 34 focused shape-free tests (one other-device skip). A 31-sample-per-shape packet records numerical error below 9e-8, one image across three shapes, and three cold compilations under the historical Tile-text control. Timings are WSL host-wall diagnostics. Post-review, the raw benchmark launcher resolves the package descriptor entry; exact gfx1151 aligned 64x64x64 and ragged 65x67x31 cases pass NumPy, while the small-shape throughput gate remains rejected. [Packet](../../../benchmarks/baselines/gfx1151_matmul_shape_key_20260929/README.md).
 <!-- entry-fields:end -->
 
-### 2026-09-30 -- fp32 matmul epilogues and resident-edge fused-input refusal
+### 2026-09-30 — fp32 matmul epilogues and resident-edge fused-input refusal
 
-Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6) / W1.1.
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
 
-PR: [#890](https://github.com/gstoner/tessera/pull/890); sync MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30.
+PRs: [#890](https://github.com/gstoner/tessera/pull/890); sync MATMUL-EPILOGUE-RESIDENT-EDGE-2026-09-30.
 
 Outcome: The eager matmul reference now retains fp32 accumulation through explicit and mapping epilogues and casts only the final output when fp16 is requested. The SM120 RMSNorm-to-matmul resident package rejects fused bias, residual, and activation at both Schedule artifact admission and descriptor validation because its current edge ABI does not carry those operands.
 

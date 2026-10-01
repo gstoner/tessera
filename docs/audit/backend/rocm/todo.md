@@ -5,6 +5,15 @@ plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## `NVIDIA-NVFP4-SCHEDULE-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `NVIDIA-NVFP4-SCHEDULE-2026-09`.
+Follow-up required: Graph IR now registers and prints NVFP4 scaled matmul with
+a named NVIDIA block-scale contract. ROCm must either reject this target
+contract explicitly or define its own physical storage/instruction mapping;
+no gfx1151/gfx1201 lowering or exact-device evidence changed. The sm_120
+schedule and timings do not transfer to RDNA.
+
 ## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: bf16 resident edge - parity validated
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.

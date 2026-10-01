@@ -144,6 +144,14 @@ def Tessera_ScaleLayoutAttr
 
 def TensorType : AnyTypeOf<[AnyRankedTensor, AnyUnrankedTensor]>;
 
+// Graph-level logical NVFP4 value. Physical packing and UE4M3 scale storage
+// remain target contracts; this type makes the semantic storage explicit at
+// the Graph/Schedule boundary instead of admitting an unregistered opaque name.
+def Tessera_Nvfp4Type : TypeDef<Tessera_Dialect, "Nvfp4"> {
+  let mnemonic = "nvfp4";
+  let summary = "Logical NVIDIA E2M1 FP4 values before physical packing";
+}
+
 def Tessera_KVCacheType : TypeDef<Tessera_Dialect, "KVCache"> {
   let mnemonic = "kv_cache";
   let summary = "Stateful KV cache handle with rolling-window/page semantics";

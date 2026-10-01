@@ -528,6 +528,50 @@ LogicalResult ScaledMatmulOp::verify() {
   };
   if (auto physical =
           getOperation()->getAttrOfType<StringAttr>("physical_contract")) {
+    if (physical.getValue() == "nvidia_sm120_nvfp4_blockscale_v1") {
+      auto nvfp4Type = [](Type type) { return isa<Nvfp4Type>(type); };
+      auto lhsScale = dyn_cast<RankedTensorType>(getLhsScale().getType());
+      auto rhsScale = dyn_cast<RankedTensorType>(getRhsScale().getType());
+      auto layout = getScaleLayoutAttr();
+      auto block = layout ? dyn_cast_or_null<ArrayAttr>(layout.get("block"))
+                          : ArrayAttr();
+      auto granularity =
+          layout ? dyn_cast_or_null<StringAttr>(layout.get("granularity"))
+                 : StringAttr();
+      auto format = layout ? dyn_cast_or_null<StringAttr>(layout.get("format"))
+                           : StringAttr();
+      auto policy = getNumericPolicyAttr();
+      auto accum = policy ? dyn_cast_or_null<StringAttr>(policy.get("accum"))
+                          : StringAttr();
+      auto mode = policy ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
+                         : StringAttr();
+      if (!aType || !bType || !rType || !aType.hasStaticShape() ||
+          !bType.hasStaticShape() || !rType.hasStaticShape() ||
+          getTransposeA() || getTransposeB() ||
+          !nvfp4Type(aType.getElementType()) ||
+          !nvfp4Type(bType.getElementType()) || !rType.getElementType().isF32())
+        return emitOpError("NVIDIA NVFP4 contract requires static logical NVFP4 A/B, f32 output, and no transpose");
+      const int64_t m = aType.getDimSize(0), k = aType.getDimSize(1);
+      const int64_t n = bType.getDimSize(1), scaleK = (k + 15) / 16;
+      if (k <= 0 || bType.getDimSize(0) != k || rType.getDimSize(0) != m ||
+          rType.getDimSize(1) != n || !lhsScale || !rhsScale ||
+          lhsScale.getRank() != 2 || rhsScale.getRank() != 2 ||
+          !(lhsScale.getElementType().isUnsignedInteger(8) ||
+            lhsScale.getElementType().isSignlessInteger(8)) ||
+          !(rhsScale.getElementType().isUnsignedInteger(8) ||
+            rhsScale.getElementType().isSignlessInteger(8)) ||
+          lhsScale.getDimSize(0) != m || lhsScale.getDimSize(1) != scaleK ||
+          rhsScale.getDimSize(0) != scaleK || rhsScale.getDimSize(1) != n ||
+          !granularity || granularity.getValue() != "block" ||
+          !block || block.size() != 2 ||
+          !isa<IntegerAttr>(block[0]) || cast<IntegerAttr>(block[0]).getInt() != 1 ||
+          !isa<IntegerAttr>(block[1]) || cast<IntegerAttr>(block[1]).getInt() != 16 ||
+          !format || format.getValue() != "ue4m3" || !accum ||
+          accum.getValue() != "fp32" || !mode ||
+          mode.getValue() != "exact_per_block")
+        return emitOpError("NVIDIA NVFP4 contract requires ui8 [M,ceil(K/16)] / [ceil(K/16),N] UE4M3 scales with exact K16 semantics");
+      return success();
+    }
     const bool folded =
         physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1";
     const bool packedFolded =

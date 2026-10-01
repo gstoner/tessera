@@ -2423,7 +2423,7 @@ def requests_nvfp4_matmul(module: GraphIRModule) -> bool:
         return False
     fn = module.functions[0]
     op = fn.body[0]
-    if op.op_name not in {"tessera.matmul", "tessera.gemm"}:
+    if op.op_name not in {"tessera.matmul", "tessera.gemm", "tessera.scaled_matmul"}:
         return False
     # Only A and B are inspected, per the docstring above: an operand-count test
     # here would reject a malformed scale/epilogue contract as "not NVFP4" and
@@ -2526,7 +2526,7 @@ def supports_nvfp4_matmul(module: GraphIRModule) -> bool:
         return False
     fn = module.functions[0]
     op = fn.body[0]
-    if op.op_name not in {"tessera.matmul", "tessera.gemm"}:
+    if op.op_name not in {"tessera.matmul", "tessera.gemm", "tessera.scaled_matmul"}:
         return False
     matrix_names = _matrix_names(op)
     # `_scale_names` returns None unless there are exactly 4 operands, so a
@@ -3131,11 +3131,50 @@ def package_nvfp4_matmul(
     *,
     pipeline_name: str,
 ) -> NVIDIANativePackage:
-    """Compile and package one static logical-shape NVFP4 Graph matmul."""
+    """Compile logical NVFP4 Graph through the canonical Schedule/Tile route."""
     if not supports_nvfp4_matmul(module):
         raise ValueError("SM120 NVFP4 packaging requires one static rank-2 matmul with logical scale_a/scale_b views")
-    entry = "tessera_tile_matmul_nvfp4"
-    tile_ir = emit_nvfp4_matmul_tile_ir(entry=entry)
+    from .scheduled_matmul import find_tessera_opt, lower_scheduled_matmul, run_tessera_opt
+
+    # Give the scale operands first-class Graph semantics. Keep the caller-owned
+    # module intact because callers commonly reuse the source for oracle runs.
+    scheduled_module = copy.deepcopy(module)
+    fn = scheduled_module.functions[0]
+    op = fn.body[0]
+    expected_contract = {
+        "scale_layout": {"granularity": "block", "block": [1, 16], "format": "ue4m3"},
+        "numeric_policy": {"accum": "fp32", "execution_mode": "exact_per_block"},
+        "physical_contract": "nvidia_sm120_nvfp4_blockscale_v1",
+    }
+    if op.op_name == "tessera.scaled_matmul":
+        for name, expected in expected_contract.items():
+            if op.kwargs.get(name) != expected:
+                raise ValueError(
+                    f"NVFP4 scaled_matmul requires {name}={expected!r}"
+                )
+    elif op.op_name in {"tessera.matmul", "tessera.gemm"}:
+        op.op_name = "tessera.scaled_matmul"
+        op.kwargs.update(expected_contract)
+    else:
+        raise ValueError("NVFP4 packaging requires matmul, gemm, or scaled_matmul")
+    artifact = lower_scheduled_matmul(scheduled_module, target="nvidia_sm120")
+    tool = find_tessera_opt()
+    if tool is None or run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+        raise ValueError("NVFP4 Tile does not replay from its canonical Schedule")
+    if (artifact.target != "nvidia_sm120" or artifact.storage != "nvfp4"
+            or artifact.accum != "f32" or artifact.output_dtype != "fp32"
+            or artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k
+            or artifact.bias_name or artifact.residual_name or artifact.activation != "none"):
+        raise ValueError("unsupported scheduled SM120 NVFP4 package contract")
+    tile_ir = artifact.tile_ir
+    if ('physical_contract = "nvidia_sm120_nvfp4_blockscale_v1"' not in tile_ir
+            or "tessera.scale_vector_size = 16 : i64" not in tile_ir
+            or "tessera.storage_pack" not in tile_ir):
+        raise ValueError("NVFP4 Tile lost its packed K16 scale contract")
+    entry_match = re.search(r"llvm.func @([A-Za-z0-9_]+)\(", tile_ir)
+    if entry_match is None or entry_match.group(1) != "tessera_tile_matmul_nvfp4":
+        raise ValueError("NVFP4 Schedule/Tile emitted an unexpected runtime entry")
+    entry = entry_match.group(1)
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
     )
@@ -3156,20 +3195,15 @@ def package_nvfp4_matmul(
             metrics=metrics,
         ),
     )
-    fn = module.functions[0]
-    op = fn.body[0]
-    a_name, b_name = _matrix_names(op)
-    scale_names = _scale_names(module)
-    assert scale_names is not None
-    scale_a_name, scale_b_name = scale_names
-    a_shape = _static_shape(module, a_name)
-    b_shape = _static_shape(module, b_name)
+    a_name, b_name = artifact.a_name, artifact.b_name
+    args = {arg.name: arg for arg in fn.args}
+    scale_a_name, scale_b_name = (value.removeprefix("%") for value in op.operands[2:4])
+    a_shape, b_shape = _static_shape(scheduled_module, a_name), _static_shape(scheduled_module, b_name)
     assert a_shape is not None and b_shape is not None
     m, k = a_shape
     n = b_shape[1]
-    packed_k = (k + 1) // 2
     scale_k = (k + 15) // 16
-    output_name = op.result or "output"
+    output_name = artifact.output_name
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
@@ -3188,8 +3222,8 @@ def package_nvfp4_matmul(
         ),
         shape_guards=(
             ShapeGuard(a_name, 0, "eq", m),
-            ShapeGuard(a_name, 1, "eq", packed_k),
-            ShapeGuard(b_name, 0, "eq", packed_k),
+            ShapeGuard(a_name, 1, "eq", (k + 1) // 2),
+            ShapeGuard(b_name, 0, "eq", (k + 1) // 2),
             ShapeGuard(b_name, 1, "eq", n),
             ShapeGuard(scale_a_name, 0, "eq", m),
             ShapeGuard(scale_a_name, 1, "eq", scale_k),
@@ -3207,7 +3241,7 @@ def package_nvfp4_matmul(
         provenance={
             "work_item": "NVIDIA-E2E-1",
             "sync_key": "E2E-SPINE-2026-07-18",
-            "schedule": "warp_m16n8_k64",
+            "schedule": "graph_schedule_tile_sm120_nvfp4_k16_m16n8k64",
             "shape": [m, n, k],
             "scale_vector_size": 16,
             "storage_pack": {
@@ -3216,6 +3250,7 @@ def package_nvfp4_matmul(
                 "factor": 2,
                 "signedness": "format_defined",
             },
+            "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )

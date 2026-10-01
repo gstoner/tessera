@@ -694,3 +694,15 @@ describe routing, not readiness. Historical mentions need not be active tasks.
 | FA-7 | [functional-analysis owner](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) | owner |
 | AD-FWD-NATIVE-1 | [active AD owner](AUTODIFF_EXECUTION_PLAN.md) | owner |
 | X86-EVIDENCE-VOCAB-1 | [X86-EVIDENCE-VOCAB-1](#x86-evidence-vocab-1) | owner |
+
+## NVIDIA-NVFP4-SCHEDULE-2026-09 - land with exact-device packet
+
+Owner E2E-REAL-6; synchronization key NVIDIA-NVFP4-SCHEDULE-2026-09.
+Implement the named static SM120 K16 NVFP4 block-scale contract in Graph to
+Schedule/Tile and require compiler-owned target lowering. Acceptance evidence
+is three exact-device numerical cases (including ragged M/N/K), replayed
+Schedule-to-Tile identity, zero spill resource record, and separate CUDA-event
+and end-to-end timings. No performance promotion follows the small-shape
+measurements. Sibling-backend outcomes and evidence are recorded in each
+backend todo. Packet:
+benchmarks/baselines/nvidia_sm120_nvfp4_scheduled_20260930/.

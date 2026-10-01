@@ -6457,3 +6457,17 @@ and same-allocation checks passed. gfx1201 event variation remains high,
 especially for bf16; these measurements support stage attribution only.
 [Packets](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 <!-- entry-fields:end -->
+
+## NVIDIA-NVFP4-SCHEDULE-2026-09: scheduled NVFP4 native package
+
+The SM120 NVFP4 scaled-matmul contract now traverses Graph IR, verified
+Schedule IR, replayed Tile IR, NVIDIA Target IR and PTX. The Graph dialect
+now registers its NVFP4 type and the scaled-matmul verifier checks static
+rank-2 operands, f32 output, K16 UE4M3 scale vectors, and the named physical
+contract. Exact Super-Bear RTX 5070 execution passes 16x8x64, 33x19x129, and
+ragged 7x5x31 against decoded NV_E2M1/UE4M3 NumPy (max absolute error 0.0).
+The packet reports CUDA-event kernel and runtime.launch end-to-end timing
+separately. Micro-shape timings are diagnostic; no selector promotion.
+Apple, ROCm, and x86 sibling plans record the need for explicit target
+rejection or independent backend lowering. Exact packet:
+benchmarks/baselines/nvidia_sm120_nvfp4_scheduled_20260930/.

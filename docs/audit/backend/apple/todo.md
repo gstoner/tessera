@@ -6,6 +6,16 @@ target: apple_gpu
 last_updated: 2026-09-30
 ---
 
+## `NVIDIA-NVFP4-SCHEDULE-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `NVIDIA-NVFP4-SCHEDULE-2026-09`.
+Follow-up required: Graph IR now registers and prints NVFP4 scaled matmul with
+a named block-scale contract, while Apple has no corresponding Metal lowering
+or exact-device execution. Confirm Apple rejects this architecture-specific
+contract clearly or implement a separate Metal route; NVIDIA schedules and
+RTX 5070 evidence do not transfer. Existing Apple JIT execution gaps remain
+unchanged.
+
 ## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.

@@ -44,9 +44,9 @@ performance conclusions.
 Evidence: Super-Bear WSL passed 9 NVFP4 ingest unit tests and lint. Tajasaurus
 was built from this source snapshot with the exact LLVM/MLIR 23.1.1 pin; the
 owning-device test passed and checked the result against the decoded ingested
-MXFP4 weights. Its diagnostic 17x19x64 packet records 106.6 ms Graph/Schedule/
-Tile/target package construction, 4.72 us resident HIP-event median, and
-2.39 ms runtime.launch median. First launch samples were warm-up outliers;
+MXFP4 weights. Its diagnostic 17x19x64 packet records 234.2 ms Graph/Schedule/
+Tile/target package construction, 4.33 us resident HIP-event median, and
+2.48 ms runtime.launch median. First launch samples were warm-up outliers;
 the packet is not a throughput claim. The source format to destination
 format conversion itself measured 0.368 / 0.422 relative RMS (8.69 / 7.48 dB)
 on these synthetic projection scales, confirming that checkpoint quality

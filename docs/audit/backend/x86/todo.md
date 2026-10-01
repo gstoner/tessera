@@ -7,6 +7,15 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## `NVIDIA-NVFP4-SCHEDULE-2026-09`: sibling assessment
+
+Owner E2E-REAL-6; sync `NVIDIA-NVFP4-SCHEDULE-2026-09`.
+Follow-up required: Graph IR now registers and prints NVFP4 scaled matmul with
+a named NVIDIA block-scale contract. x86 has no physical NVFP4 storage,
+Schedule/Tile mapping, or AVX-512 execution path for this format; ensure an
+explicit target refusal or design a distinct CPU representation. No Zen 5
+execution evidence is implied by sm_120 results.
+
 ## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.

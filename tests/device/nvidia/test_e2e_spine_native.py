@@ -1775,7 +1775,11 @@ def test_canonical_sm120_nvfp4_general_shape_scales_and_ragged(shape) -> None:
         "factor": 2,
         "signedness": "format_defined",
     }
-    assert "scale_a" in bundle.tile.text and "scale_b" in bundle.tile.text
+    # Schedule/Tile uses a canonical positional ABI, not source buffer names.
+    assert "llvm.func @tessera_tile_matmul_nvfp4" in bundle.tile.text
+    assert "physical_contract = \"nvidia_sm120_nvfp4_blockscale_v1\"" in bundle.tile.text
+    assert "tessera.scale_vector_size = 16 : i64" in bundle.tile.text
+    assert "tessera.storage_pack" in bundle.tile.text
     assert "mxf4nvf4.block_scale" in bundle.target_ir.text
 
     warm = compile_graph_module(
@@ -1794,9 +1798,9 @@ def test_canonical_sm120_nvfp4_general_shape_scales_and_ragged(shape) -> None:
     a_codes = rng.integers(0, 16, size=(m, k), dtype=np.uint8)
     b_codes = rng.integers(0, 16, size=(k, n), dtype=np.uint8)
     sk = (k + 15) // 16
-    choices = np.asarray([0x30, 0x38, 0x40], np.uint8)
-    scale_a = np.ascontiguousarray(choices[(np.arange(m)[:, None] + np.arange(sk)[None, :]) % 3])
-    scale_b = np.ascontiguousarray(choices[(2 * np.arange(sk)[:, None] + np.arange(n)[None, :]) % 3])
+    choices = np.asarray([0x30, 0x31, 0x33, 0x35, 0x38, 0x3A, 0x3D, 0x40, 0x42], np.uint8)
+    scale_a = np.ascontiguousarray(choices[(np.arange(m)[:, None] + np.arange(sk)[None, :]) % choices.size])
+    scale_b = np.ascontiguousarray(choices[(2 * np.arange(sk)[:, None] + np.arange(n)[None, :]) % choices.size])
     a_packed = _pack_nvfp4(a_codes, 1)
     b_packed = _pack_nvfp4(b_codes, 0)
     c = np.zeros((m, n), np.float32)

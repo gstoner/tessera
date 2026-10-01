@@ -602,8 +602,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     op = function.body[0]
     int4_gemm = (op.op_name == "tessera.gemm" and target == "nvidia_sm120"
                  and len(function.args) == 2 and all(a.ir_type.dtype == "int4" for a in function.args))
-    if (op.op_name != "tessera.matmul" and not int4_gemm) or not 2 <= len(op.operands) <= 4:
-        raise ValueError("scheduled matmul requires one tessera.matmul")
+    nvfp4_scaled = op.op_name == "tessera.scaled_matmul" and target == "nvidia_sm120"
+    if ((op.op_name != "tessera.matmul" and not int4_gemm and not nvfp4_scaled)
+            or not 2 <= len(op.operands) <= 4):
+        raise ValueError("scheduled matmul requires one supported Graph matmul")
     if op.kwargs.get("transposeA", False) or op.kwargs.get("transposeB", False):
         raise ValueError("scheduled matmul does not support transpose")
     args = {arg.name: arg for arg in function.args}
@@ -677,6 +679,26 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     if residual_value not in {None, False} and residual_name is None:
         raise ValueError("scheduled matmul residual must name a Graph argument")
     expected_operands = [f"%{a_name}", f"%{b_name}"]
+    if nvfp4_scaled:
+        if (len(op.operands) != 4 or len(function.args) != 4
+                or op.kwargs.get("physical_contract") != "nvidia_sm120_nvfp4_blockscale_v1"
+                or op.kwargs.get("activation", "none") != "none"
+                or bias_value not in {None, False} or residual_value not in {None, False}
+                or (a_dtype, b_dtype, output_dtype) != ("nvfp4", "nvfp4", "fp32")):
+            raise ValueError("NVFP4 Schedule requires static scaled NVFP4 Graph inputs and f32 output")
+        scale_a_name, scale_b_name = (v.removeprefix("%") for v in op.operands[2:4])
+        scale_k = (k + 15) // 16
+        if (scale_a_name not in args or scale_b_name not in args
+                or tuple(args[scale_a_name].ir_type.shape) != (str(m), str(scale_k))
+                or tuple(args[scale_b_name].ir_type.shape) != (str(scale_k), str(n))
+                or args[scale_a_name].ir_type.dtype != "uint8"
+                or args[scale_b_name].ir_type.dtype != "uint8"
+                or op.kwargs.get("scale_layout") != {"granularity": "block", "block": [1, 16], "format": "ue4m3"}
+                or op.kwargs.get("numeric_policy") != {"accum": "fp32", "execution_mode": "exact_per_block"}):
+            raise ValueError("NVFP4 Schedule scale operands/layout/numeric policy disagree")
+        expected_operands.extend((f"%{scale_a_name}", f"%{scale_b_name}"))
+        bias_name = residual_name = None
+        activation = "none"
     if bias_name is not None:
         expected_operands.append(f"%{bias_name}")
     if residual_name is not None:
@@ -782,6 +804,13 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "rocm", "gfx1151", "bf16" if a_dtype == "bf16" else "f16", "f32", panel_m, panel_n,
         )
+    elif target == "nvidia_sm120" and (a_dtype, b_dtype, output_dtype) == ("nvfp4", "nvfp4", "fp32"):
+        if (not nvfp4_scaled or dynamic_m or dynamic_n or dynamic_k
+                or bias_name or residual_name or activation != "none"):
+            raise ValueError("NVFP4 scheduled matmul requires static block-scaled inputs")
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "nvidia_sm120", "sm_120", "nvfp4", "f32", 16, 8)
+        function_name = "tessera_tile_matmul_nvfp4"
     elif target == "nvidia_sm120" and (a_dtype, b_dtype, output_dtype) == ("int4", "int4", "int32"):
         if not op.result or function.return_values != ["%" + op.result] or len(function.args) != 2:
             raise ValueError("INT4 native entry must return its matmul result with two inputs")

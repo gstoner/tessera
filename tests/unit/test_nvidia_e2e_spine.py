@@ -662,6 +662,10 @@ def test_sm120_nvfp4_native_packager_owns_scales_and_k64_contract() -> None:
     assert supports_op("nvidia_sm120", "tessera.matmul", dtype="nvfp4").supported
     assert not module.verify().ok
     assert module.verify(target="nvidia_sm120").ok
+    for sibling in ("rocm_gfx1151", "rocm_gfx1201", "apple_gpu", "x86"):
+        rejected = module.verify(target=sibling)
+        assert not rejected.ok, sibling
+        assert rejected.diagnostics[0].code == "LEGALITY_TARGET_CAPABILITY", sibling
     assert "tessera.matmul" in module.to_mlir(target="nvidia_sm120")
 
     source = emit_nvfp4_matmul_tile_ir(entry="tessera_tile_matmul_nvfp4")

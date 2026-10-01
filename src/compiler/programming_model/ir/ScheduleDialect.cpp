@@ -159,7 +159,9 @@ LogicalResult MatmulOp::verify() {
   if ((getScaleK() == 0) != getScaleFormat().empty())
     return emitOpError("scale_k and scale_format must be present together");
   const int64_t macroK = getBlockK() > 0 ? getBlockK() : getTileK();
-  if (getScaleK() > 0 &&
+  const bool nvidiaNvfp4 =
+      getPhysicalContract() == "nvidia_sm120_nvfp4_blockscale_v1";
+  if (getScaleK() > 0 && !nvidiaNvfp4 &&
       (getScaleK() % getTileK() != 0 || macroK % getScaleK() != 0))
     return emitOpError(
         "scale_k must be a multiple of tile_k and divide the macro K block");
@@ -171,7 +173,7 @@ LogicalResult MatmulOp::verify() {
       getPhysicalContract() == "rocm_fp8_w8a8_blockscale_v1" ||
       getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1";
   if (!getPhysicalContract().empty() && !packedMxfp4 && !foldedFamily &&
-      !fp8W8A8)
+      !fp8W8A8 && !nvidiaNvfp4)
     return emitOpError("unknown physical_contract");
   if (getScaleN() < 0 || (getScaleN() > 0) != fp8W8A8)
     return emitOpError("scale_n is stated exactly for the gfx1201 W8A8 "
@@ -190,6 +192,14 @@ LogicalResult MatmulOp::verify() {
        getScaleFormat() != "e8m0" || getAccum() != "f32" ||
        getOutput() != "bf16"))
     return emitOpError("gfx1201 MXFP4 W4A8 physical contract is inconsistent");
+  if (nvidiaNvfp4 &&
+      (getArch() != "sm_120" || getStorage() != "nvfp4" ||
+       getStorageB() != "nvfp4" || getTileM() != 16 || getTileN() != 8 ||
+       getTileK() != 64 || getScaleK() != 16 ||
+       getScaleFormat() != "ue4m3" || getAccum() != "f32" ||
+       getOutput() != "f32" || getBias() || getResidual() ||
+       getActivation() != "none" || getBlockK() != 0))
+    return emitOpError("SM120 NVFP4 K16 block-scale Schedule contract is inconsistent");
   if (foldedFamily &&
       (getArch() != "gfx1201" || getStorage() != "e4m3_raw_u8" ||
        getStorageB() != (packedFoldedMxfp4 ? "e2m1_fragment_nk2_u8"

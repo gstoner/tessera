@@ -450,6 +450,15 @@ static LogicalResult materializeSm120Nvfp4MatmulKernel(
   }
   if (failed(requireStoragePackDescriptor(op, "nvfp4", 2)))
     return failure();
+  auto physicalContract = op->getAttrOfType<StringAttr>("physical_contract");
+  auto scaleVector =
+      op->getAttrOfType<IntegerAttr>("tessera.scale_vector_size");
+  if (!physicalContract ||
+      physicalContract.getValue() != "nvidia_sm120_nvfp4_blockscale_v1" ||
+      !scaleVector || scaleVector.getInt() != 16) {
+    op->emitError("SM120 NVFP4 Tile requires the named K16 block-scale contract");
+    return failure();
+  }
   ValueRange inputs = kernel.getInputs();
   Value aBase = inputs[0], bBase = inputs[1];
   Value scaleABase = inputs[2], scaleBBase = inputs[3];

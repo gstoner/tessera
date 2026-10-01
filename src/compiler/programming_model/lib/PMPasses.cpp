@@ -14,6 +14,7 @@
 #include "tessera/ProgrammingModel/ScheduleDialect.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/IR/Dialects.h"
+#include "Tessera/IR/TesseraOps.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
@@ -701,6 +702,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   auto compatible = [](int64_t extent, int64_t expected) {
     return ShapedType::isDynamic(extent) || extent == expected;
   };
+  const bool nvidiaNvfp4 =
+      schedule.physicalContract == "nvidia_sm120_nvfp4_blockscale_v1";
   const bool packedMxfp4 =
       schedule.physicalContract == "rocm_mxfp4_w4a8_exact_v1";
   const bool foldedMxfp4 =
@@ -808,6 +811,29 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
                    schedule.k % 32 != 0 || schedule.scaleBlockK != 32 ||
                    schedule.scaleFormat != "e8m0" || !mode ||
                    mode.getValue() != "exact_per_block"))
+      return failure();
+  } else if (nvidiaNvfp4) {
+    auto lhsScale = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    auto rhsScale = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
+    auto lhsNvfp4 = dyn_cast<Nvfp4Type>(lhsElement);
+    auto rhsNvfp4 = dyn_cast<Nvfp4Type>(rhsElement);
+    auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+    auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr();
+    if (!nvidia_sm120 || schedule.dynamicM || schedule.dynamicN ||
+        schedule.dynamicK || !lhsNvfp4 || !rhsNvfp4 || !outElement.isF32() ||
+        !lhsScale || lhsScale.getRank() != 2 ||
+        !(lhsScale.getElementType().isUnsignedInteger(8) ||
+          lhsScale.getElementType().isSignlessInteger(8)) ||
+        lhsScale.getDimSize(0) != schedule.m ||
+        lhsScale.getDimSize(1) != (schedule.k + 15) / 16 ||
+        !rhsScale || rhsScale.getRank() != 2 ||
+        !(rhsScale.getElementType().isUnsignedInteger(8) ||
+          rhsScale.getElementType().isSignlessInteger(8)) ||
+        rhsScale.getDimSize(0) != (schedule.k + 15) / 16 ||
+        rhsScale.getDimSize(1) != schedule.n ||
+        schedule.scaleBlockK != 16 || schedule.scaleFormat != "ue4m3" ||
+        !mode || mode.getValue() != "exact_per_block" ||
+        schedule.bias || schedule.residual || schedule.activation != "none")
       return failure();
   } else if (!schedule.physicalContract.empty()) {
     return failure();
@@ -1078,6 +1104,20 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.macroTileN = 64;
     if (schedule.arch.empty())
       schedule.arch = "gfx1151";
+    return schedule;
+  }
+  if (nvidiaNvfp4) {
+    schedule.storage = "nvfp4";
+    schedule.storageB = "nvfp4";
+    schedule.accum = "f32";
+    schedule.output = "f32";
+    schedule.tileM = 16;
+    schedule.tileN = 8;
+    schedule.tileK = 64;
+    schedule.macroTileM = 16;
+    schedule.macroTileN = 8;
+    schedule.warps = 1;
+    if (schedule.arch.empty()) schedule.arch = "sm_120";
     return schedule;
   }
   if (nvidia_sm120 && lhsElement.isInteger(4) && rhsElement.isInteger(4) &&
@@ -4124,6 +4164,7 @@ struct ScheduleToTilePass
              (macroSm120Producer ? "_macro_kernel" : "_kernel"))
                 .str();
         if (selected->storage == "int4") kernelName = "tessera_tile_matmul_int4";
+        if (selected->storage == "nvfp4") kernelName = "tessera_tile_matmul_nvfp4";
         if (SymbolTable::lookupSymbolIn(mod, kernelName)) {
           scheduled.emitError("SM120 scheduled matmul kernel symbol already exists");
           return signalPassFailure();
@@ -4132,6 +4173,8 @@ struct ScheduleToTilePass
         auto pointerType = LLVM::LLVMPointerType::get(&getContext());
         auto i64 = builder.getI64Type();
         SmallVector<Type> kernelInputs{pointerType, pointerType};
+        const bool nvfp4 = selected->storage == "nvfp4";
+        if (nvfp4) kernelInputs.append({pointerType, pointerType});
         if (selected->bias)
           kernelInputs.push_back(pointerType);
         if (selected->residual)
@@ -4158,7 +4201,8 @@ struct ScheduleToTilePass
             selected->blockK > 0 && selected->tileK > 0
                 ? std::max<int64_t>(selected->blockK / selected->tileK, 1)
                 : 1,
-            selected->scaleBlockK, selected->scaleFormat);
+            nvfp4 ? 0 : selected->scaleBlockK,
+            nvfp4 ? StringRef() : selected->scaleFormat);
         auto epilogue = tile::TileEpilogueAttr::get(
             &getContext(), selected->bias, selected->activation,
             selected->output);
@@ -4416,6 +4460,22 @@ struct ScheduleToTilePass
         kernelState.addOperands(entry->getArguments());
         kernelState.addAttribute("mma", mma);
         kernelState.addAttribute("epilogue", epilogue);
+        if (selected->storage == "nvfp4") {
+          kernelState.addAttribute("tessera.storage_packed",
+                                   kernelBuilder.getBoolAttr(true));
+          kernelState.addAttribute("tessera.storage_container",
+                                   kernelBuilder.getStringAttr("int8"));
+          kernelState.addAttribute(
+              "tessera.storage_pack",
+              tile::TilePackedFormatAttr::get(
+                  &getContext(), "nvfp4", "int8", 4, 2, "format_defined",
+                  "nv_e2m1", "low_to_high"));
+          kernelState.addAttribute("tessera.scale_vector_size",
+                                   kernelBuilder.getI64IntegerAttr(16));
+          kernelState.addAttribute("physical_contract",
+                                   kernelBuilder.getStringAttr(
+                                       "nvidia_sm120_nvfp4_blockscale_v1"));
+        }
         if (selected->storage == "int4") {
           kernelState.addAttribute("tessera.storage_packed", kernelBuilder.getBoolAttr(true));
           kernelState.addAttribute("tessera.storage_container", kernelBuilder.getStringAttr("int8"));
@@ -4583,9 +4643,11 @@ struct ScheduleToTilePass
           &getContext(), selected->bias, selected->activation,
           selected->scaleBlockK > 0 ? selected->output : selected->accum);
 
+      const bool nvfp4 = selected->storage == "nvfp4";
       OperationState kernelState(
-          loc, selected->scaleBlockK > 0 ? "tile.scaled_matmul_kernel"
-                                        : "tile.matmul_kernel");
+          loc, selected->scaleBlockK > 0 && !nvfp4
+                   ? "tile.scaled_matmul_kernel"
+                   : "tile.matmul_kernel");
       if (selected->scaleBlockK > 0)
         kernelState.addOperands(
             {a, b, lhsScalePointer, rhsScalePointer, d, m, n, k});
@@ -4600,7 +4662,21 @@ struct ScheduleToTilePass
       // "lds" only for the W8A8 LDS-staged body the Schedule selected.
       kernelState.addAttribute("staging",
                                builder.getStringAttr(selected->staging));
-      if (selected->scaleBlockK > 0) {
+      if (nvfp4) {
+        auto packed = tile::TilePackedFormatAttr::get(
+            &getContext(), "nvfp4", "int8", 4, 2, "format_defined",
+            "nv_e2m1", "low_to_high");
+        kernelState.addAttribute("tessera.storage_packed",
+                                 builder.getBoolAttr(true));
+        kernelState.addAttribute("tessera.storage_container",
+                                 builder.getStringAttr("int8"));
+        kernelState.addAttribute("tessera.storage_pack", packed);
+        kernelState.addAttribute("tessera.scale_vector_size",
+                                 builder.getI64IntegerAttr(16));
+        kernelState.addAttribute("physical_contract",
+                                 builder.getStringAttr(selected->physicalContract));
+      }
+      if (selected->scaleBlockK > 0 && !nvfp4) {
         const bool foldedMxfp4 =
             selected->physicalContract == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
             selected->physicalContract ==

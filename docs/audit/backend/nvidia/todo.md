@@ -6,6 +6,24 @@ target: nvidia_sm120
 last_updated: 2026-09-30
 ---
 
+## `NVIDIA-NVFP4-SCHEDULE-2026-09`: scheduled NVFP4 package - parity validated
+
+Owner E2E-REAL-6; sync `NVIDIA-NVFP4-SCHEDULE-2026-09`.
+Super-Bear RTX 5070 (sm_120), built from this scratch checkout with LLVM/MLIR
+23.1.1 and CUDA 13.4.59: the NVFP4 scaled-matmul package now flows through
+Graph IR -> Schedule IR -> Tile IR -> NVIDIA Target IR -> PTX. Exact-device
+numerics pass for 16x8x64, 33x19x129, and ragged 7x5x31 against decoded
+NV_E2M1/UE4M3 NumPy. The correctness-gated packet records separate CUDA-event
+and end-to-end timings in the packet. End-to-end includes host
+binding/staging and synchronization. Repeated micro-shape runs show noticeable
+variance, so the measurements are diagnostic only; no selector or performance
+promotion follows. See
+[packet](../../../../benchmarks/baselines/nvidia_sm120_nvfp4_scheduled_20260930/README.md).
+
+Apple, ROCm, and x86 require follow-up to verify unsupported-target refusal or
+add their own lowering; the shared Graph NVFP4 type/serializer does not confer
+physical schedule or execution parity. NVIDIA evidence does not transfer.
+
 ## `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`: sibling assessment
 
 Owner E2E-REAL-6; sync `E2E-REAL-6-GFX1201-BF16-NORM-MATMUL-2026-09`.

@@ -1103,14 +1103,22 @@ class IROp:
             # regex, which also mishandled nested parens / dotted op names). The
             # default (non-canonical) form below keeps the paren rendering used by
             # human-inspection / golden-text consumers unchanged.
-            operand_part = f" {ops_str}" if ops_str else ""
+            if self.op_name == "tessera.scaled_matmul":
+                if len(self.operands) != 4:
+                    raise ValueError("scaled_matmul Graph emission requires A, B, scale A, and scale B")
+                operand_part = (
+                    f" {self.operands[0]}, {self.operands[1]} scales "
+                    f"({self.operands[2]}, {self.operands[3]})"
+                )
+            else:
+                operand_part = f" {ops_str}" if ops_str else ""
             return (f"{indent}{lhs}{self.op_name}{operand_part}{attr_str}{type_str}"
                     f"{_loc_suffix(self.source_span)}")
         return f"{indent}{lhs}{self.op_name}({ops_str}){attr_str}{type_str}"
 
 
 def _format_named_attr(key: str, value: Any) -> str:
-    if key == "numeric_policy" and isinstance(value, dict):
+    if key in {"numeric_policy", "scale_layout"} and isinstance(value, dict):
         return _format_dictionary_attr(value)
     return _format_attr_value(value)
 

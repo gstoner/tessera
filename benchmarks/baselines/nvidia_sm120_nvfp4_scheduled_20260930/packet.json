@@ -1,0 +1,161 @@
+{
+  "compiler": "LLVM/MLIR 23.1.1",
+  "compiler_binary_sha256": {
+    "TESSERA_NVIDIA_OPT": "b7fe4d22e8dd59c5b7b593abb684f2eb44a03ec6698f31c0a5a919dd7289b81e",
+    "TESSERA_OPT": "ce55f0a6d2fef81ee1b2a11f6f7f36be5d344077ae5a7a768c52c7922e48a6fd"
+  },
+  "device": "NVIDIA GeForce RTX 5070 (sm_120)",
+  "gpu_reported": "NVIDIA GeForce RTX 5070, 12.0, 610.88",
+  "method": {
+    "end_to_end_definition": "runtime.launch wall time per call, including host binding/staging and synchronization",
+    "repetitions": 100,
+    "samples": 7,
+    "selector_changed": false,
+    "timing_domains": [
+      "cuda_event",
+      "end_to_end"
+    ],
+    "warmup": 30
+  },
+  "packets": [
+    {
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "correctness": "passed_before_timing",
+      "device_event_median_ms": 0.016068480908870697,
+      "device_event_samples_ms": [
+        0.013961280696094036,
+        0.016068480908870697,
+        0.016588158905506134,
+        0.14463232457637787,
+        0.00935455970466137,
+        0.008666560053825378,
+        0.018847040832042694
+      ],
+      "end_to_end_median_ms": 1.5702277497621253,
+      "end_to_end_samples_ms": [
+        1.603725939639844,
+        1.1721246398519725,
+        1.5939586295280606,
+        1.17405976052396,
+        2.0049640396609902,
+        1.5702277497621253,
+        1.1571314802858979
+      ],
+      "entry": "tessera_tile_matmul_nvfp4",
+      "max_abs_error": 0.0,
+      "resources": {
+        "active_blocks_per_sm": 5,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "registers_per_thread": 92,
+        "static_shared_memory_bytes": 0
+      },
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "schedule_digest": "57992315fbf7a496b7819e2ef4b73a0496b4b85c489eaeac3f48a157accf7c8a",
+      "shape_mnk": [
+        16,
+        8,
+        64
+      ],
+      "tile_ir_digest": "fcf80188f633e059563acfe7d69d7a477402733f749c6e504e1bc4482ee5eda7"
+    },
+    {
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "correctness": "passed_before_timing",
+      "device_event_median_ms": 0.009809600189328194,
+      "device_event_samples_ms": [
+        0.009809600189328194,
+        0.009028160013258457,
+        0.009916800074279308,
+        0.008255040273070335,
+        0.00857503991574049,
+        0.013788479380309582,
+        0.009903360158205032
+      ],
+      "end_to_end_median_ms": 1.0665183904347941,
+      "end_to_end_samples_ms": [
+        1.0113370401086286,
+        1.0944149998249486,
+        1.4846545999171212,
+        1.0497923998627812,
+        1.4832221798133105,
+        0.9140559402294457,
+        1.0665183904347941
+      ],
+      "entry": "tessera_tile_matmul_nvfp4",
+      "max_abs_error": 0.0,
+      "resources": {
+        "active_blocks_per_sm": 5,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "registers_per_thread": 92,
+        "static_shared_memory_bytes": 0
+      },
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "schedule_digest": "a2d1b7f513421462ce89932cb5faa3d0a351aba7f8484dce4fbc361428d5269e",
+      "shape_mnk": [
+        33,
+        19,
+        129
+      ],
+      "tile_ir_digest": "4bd6b0207e8241b7a95417c537b413d5a1d33d8212b26ef7447f48a0e854cadd"
+    },
+    {
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "correctness": "passed_before_timing",
+      "device_event_median_ms": 0.011327040381729603,
+      "device_event_samples_ms": [
+        0.015266879461705685,
+        0.010168960317969322,
+        0.008262399584054947,
+        0.014378240332007408,
+        0.011327040381729603,
+        0.012707840651273727,
+        0.009056959301233292
+      ],
+      "end_to_end_median_ms": 1.169887349824421,
+      "end_to_end_samples_ms": [
+        1.0161570098716766,
+        1.169887349824421,
+        1.024675999651663,
+        1.7078188195591792,
+        1.2614038295578212,
+        0.937079869909212,
+        1.6256468702340499
+      ],
+      "entry": "tessera_tile_matmul_nvfp4",
+      "max_abs_error": 0.0,
+      "resources": {
+        "active_blocks_per_sm": 5,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "registers_per_thread": 92,
+        "static_shared_memory_bytes": 0
+      },
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "schedule_digest": "d6cb9e28b38c42c2861113a83b969ce21cb9f104b843476c0579681306d65391",
+      "shape_mnk": [
+        7,
+        5,
+        31
+      ],
+      "tile_ir_digest": "bf9d579d9a95f1e07f0f077309d09b56ca64a6a5ff61c68175ba31d72c527ec2"
+    }
+  ],
+  "schema": "tessera.nvidia.nvfp4_scheduled_benchmark.v1",
+  "source_revision": "c05a82dd3230bc53362e3f6404292cfc6042f20d",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_scheduled_nvfp4.py": "9198b691ceafd824f313718258a7a7715aa4594f96f97fafd0c8807676a12e8f",
+    "python/tessera/compiler/graph_ir.py": "46e4b8a5472670426088d7a2484df1908a95e7195e85dddcb5e16be8c6e48157",
+    "python/tessera/compiler/nvidia_native.py": "94955da341a67f00caa35f10d2b9d11beae10f7cf9811c0ab6273333871cb38e",
+    "python/tessera/compiler/scheduled_matmul.py": "f0b6e427274b5efe351b59efd291014dcd10a46516a7443c190a26cf71f86d2a",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "9d73268ad0acd49298cce03111f99fc66f14dc765ce46dadbf7e99de7e0e5d50",
+    "src/compiler/ir/TesseraOps.cpp": "05868bcc8579823cc6a9e73e355eab8b2b0f0ccb171191792d8920e2d3ea7373",
+    "src/compiler/ir/TesseraOps.td": "aabf1bb30ab1447ea694d6e1e6bbef456381af6eaaba26fd502cb9ca2bf6e610",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "7c0d5e23c87a0febae03bd3c101e100aa2c7b045a44c714924f39e1750386ee3",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "ba8e5a3b80c83728ab4e81ff741396d542bfb840620f465d57b636fd428e4f92",
+    "tests/device/nvidia/test_e2e_spine_native.py": "92851fe430d99beeb8d36141f6d2baa73d623e8873daf8c3305c5e46833edcde",
+    "tests/unit/test_nvidia_e2e_spine.py": "b5ef3c186c2b6a1aed6a7520a6ad452246fff3fb360442f950424b69ead40542"
+  },
+  "work_item": "NVIDIA-NVFP4-SCHEDULE-2026-09"
+}

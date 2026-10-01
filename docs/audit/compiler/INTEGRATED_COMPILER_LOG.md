@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-30
+last_updated: 2026-10-01
 audit_role: reference
 ---
 
@@ -20,6 +20,43 @@ current proof. Current priorities live only in the plan.
 
 
 
+
+### 2026-10-01 — gfx1201 NVFP4 projection ingest through scheduled W4A8
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+
+PRs: pending; sync ROCM-NVFP4-INGEST-1-2026-10-01.
+
+Outcome: Added an explicit NVFP4 checkpoint projection converter for packed E2M1
+weights with E4M3 K16 scales and per-projection global scales. It preserves the
+E2M1 payload, selects E8M0 K32 scales by decoded-weight SSE between the
+no-clip exponent and one binade finer, and emits relative RMS/SQNR metadata
+for the single declared scale-requantization loss. Gate/up projection metadata
+and row boundaries remain separate. A converted synthetic gate/up pair passes
+Graph→Schedule→Tile→gfx1201 Target IR packaging and launches the existing
+W4A8 WMMA ABI on Tajasaurus.
+
+Remaining: Run the route with a real NVFP4 checkpoint and compare the ingest
+against both its source BF16 weights and a direct BF16-to-MXFP4 conversion.
+Expand beyond the fixed 17x19x64 diagnostic package before drawing quality or
+performance conclusions.
+
+Evidence: Super-Bear WSL passed 9 NVFP4 ingest unit tests and lint. Tajasaurus
+was built from this source snapshot with the exact LLVM/MLIR 23.1.1 pin; the
+owning-device test passed and checked the result against the decoded ingested
+MXFP4 weights. Its diagnostic 17x19x64 packet records 106.6 ms Graph/Schedule/
+Tile/target package construction, 4.72 us resident HIP-event median, and
+2.39 ms runtime.launch median. First launch samples were warm-up outliers;
+the packet is not a throughput claim. The source format to destination
+format conversion itself measured 0.368 / 0.422 relative RMS (8.69 / 7.48 dB)
+on these synthetic projection scales, confirming that checkpoint quality
+needs a real distribution. Raw [gfx1201 packet](../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/gfx1201_nvfp4_ingest_schedule.json)
+and [benchmark source](../../../benchmarks/rocm/benchmark_rocm_nvfp4_ingest_schedule.py).
+No shared IR, operation, dtype, or runtime ABI was
+changed. Cross-backend assessment: NVIDIA has no affected lowering or ABI;
+Apple and x86 are not applicable to the ROCm-specific E2M1/E4M3-to-MXFP4
+conversion. Exact-device proof is gfx1201 only.
+<!-- entry-fields:end -->
 
 ### 2026-09-28 — gfx1151 paged-KV native Schedule and shape-free image
 

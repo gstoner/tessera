@@ -92,10 +92,10 @@ def _validate_projection(projection: NVFP4Projection) -> tuple[int, int, np.ndar
     global_scale = float(projection.global_scale)
     if not math.isfinite(global_scale) or global_scale <= 0.0:
         raise ValueError("NVFP4 projection global_scale must be finite and positive")
-    scales_f32 = scales.astype(np.float32) * np.float32(global_scale)
-    if not np.isfinite(scales_f32).all() or np.any(scales_f32 < 0.0):
+    scales_scaled = scales.astype(np.float64) * global_scale
+    if not np.isfinite(scales_scaled).all() or np.any(scales_scaled < 0.0):
         raise ValueError("NVFP4 E4M3 scales must be finite and non-negative")
-    return n, k, packed, scales_f32, global_scale
+    return n, k, packed, scales_scaled, global_scale
 
 
 def _choose_e8m0_exponent(code_values: np.ndarray, scale_values: np.ndarray) -> int:

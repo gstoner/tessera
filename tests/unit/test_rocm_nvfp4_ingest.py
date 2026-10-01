@@ -105,3 +105,13 @@ def test_merged_projections_require_unique_names_and_matching_k():
     )
     with pytest.raises(ValueError, match="matching K"):
         ingest.ingest_nvfp4_projections((first, other))
+
+
+def test_nonzero_source_scale_below_e8m0_range_is_not_silently_zeroed():
+    codes = np.full((1, 32), 7, dtype=np.uint8)
+    projection = ingest.NVFP4Projection(
+        "underflow", mx.pack_e2m1_codes(codes),
+        np.ones((1, 2), dtype=ml_dtypes.float8_e4m3fn), 1.0e-100,
+    )
+    with pytest.raises(ValueError, match="representable E8M0 range"):
+        ingest.requantize_nvfp4_projection(projection)

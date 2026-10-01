@@ -1,9 +1,28 @@
 ---
-last_updated: 2026-09-30
+last_updated: 2026-10-01
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## ROCM-NVFP4-INGEST-1-2026-10-01: first gfx1201 ingest slice
+
+Owner ROCM-NVFP4-INGEST-1; sync ROCM-NVFP4-INGEST-1-2026-10-01.
+The host converter preserves packed NVFP4 E2M1 values and combines each
+pair of E4M3 K16 scales with its projection's global scale, then chooses one
+E8M0 K32 exponent by decoded-value SSE. It records the single lossy
+requantization with relative RMS and SQNR, and retains gate/up scales and row
+boundaries independently. Synthetic gate/up projections with distinct global
+scales reached the existing gfx1201 MXFP4 W4A8 package through Graph, Schedule,
+Tile, and Target IR and matched a decoded-ingest reference on Tajasaurus.
+The 17x19x64 diagnostic packet reports 4.72 us resident HIP-event median and
+2.39 ms runtime.launch median; compile/package construction was 106.6 ms.
+Synthetic conversion quality was 0.368/0.422 relative RMS (8.69/7.48 dB),
+so this proves route correctness, not model-quality adequacy or performance.
+Raw [gfx1201 packet](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/gfx1201_nvfp4_ingest_schedule.json).
+Open: execute a real NVFP4 checkpoint and compare with source BF16 and direct
+BF16-to-MXFP4. NVIDIA has no affected ABI or lowering; Apple and x86 have no
+corresponding ROCm scale conversion. No sibling backend proof is transferred.
 
 ## `NVIDIA-NVFP4-SCHEDULE-2026-09`: sibling assessment
 

@@ -7,6 +7,7 @@ call here, move it there instead of deleting this line.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 import pytest
@@ -676,6 +677,55 @@ def test_sm120_nvfp4_native_packager_owns_scales_and_k64_contract() -> None:
     assert 'logical = "nvfp4"' in source
     assert 'container = "int8", logical_bits = 4' in source
     assert "elements_per_container = 2" in source
+
+    expected = {
+        "scale_layout": {"granularity": "block", "block": [1, 16], "format": "ue4m3"},
+        "numeric_policy": {"accum": "fp32", "execution_mode": "exact_per_block"},
+        "physical_contract": "nvidia_sm120_nvfp4_blockscale_v1",
+    }
+    from tessera.compiler.scheduled_matmul import find_tessera_opt, lower_scheduled_matmul, run_tessera_opt
+
+    tool = find_tessera_opt()
+    if tool is not None:
+        explicit_scaled = copy.deepcopy(module)
+        explicit_op = explicit_scaled.functions[0].body[0]
+        explicit_op.op_name = "tessera.scaled_matmul"
+        explicit_op.kwargs.update(expected)
+        scheduled = lower_scheduled_matmul(explicit_scaled, target="nvidia_sm120")
+        assert scheduled.target == "nvidia_sm120"
+        assert "tessera.storage_pack" in scheduled.tile_ir
+        assert explicit_op.kwargs == expected
+
+    for key, conflicting in (
+        ("scale_layout", {"granularity": "per_tensor", "block": [1, 16], "format": "ue4m3"}),
+        ("numeric_policy", {"accum": "fp32", "execution_mode": "approximate"}),
+        ("physical_contract", "other_nvfp4_contract"),
+    ):
+        scaled = copy.deepcopy(module)
+        scaled_op = scaled.functions[0].body[0]
+        scaled_op.op_name = "tessera.scaled_matmul"
+        scaled_op.kwargs.update(expected)
+        scaled_op.kwargs[key] = conflicting
+        with pytest.raises(ValueError, match=f"NVFP4 scaled_matmul requires {key}"):
+            package_nvfp4_matmul(scaled, pipeline_name="sm120_nvfp4")
+
+    if tool is not None:
+        for key, conflicting in (
+            ("granularity", "per_tensor"),
+            ("accum", "fp16"),
+        ):
+            malformed = copy.deepcopy(module)
+            malformed_op = malformed.functions[0].body[0]
+            malformed_op.op_name = "tessera.scaled_matmul"
+            malformed_op.kwargs.update(expected)
+            attr = "scale_layout" if key == "granularity" else "numeric_policy"
+            malformed_op.kwargs[attr][key] = conflicting
+            with pytest.raises(RuntimeError, match="NVIDIA NVFP4 contract"):
+                run_tessera_opt(
+                    tool,
+                    malformed.to_mlir(target="nvidia_sm120", canonical=True),
+                    "--tessera-graph-to-schedule",
+                )
 
 
 def _mx_matmul_module(dtype: str, *, scale_k: int = 2) -> GraphIRModule:

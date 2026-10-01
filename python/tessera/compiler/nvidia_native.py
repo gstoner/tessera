@@ -3141,12 +3141,22 @@ def package_nvfp4_matmul(
     scheduled_module = copy.deepcopy(module)
     fn = scheduled_module.functions[0]
     op = fn.body[0]
-    op.op_name = "tessera.scaled_matmul"
-    op.kwargs.update({
+    expected_contract = {
         "scale_layout": {"granularity": "block", "block": [1, 16], "format": "ue4m3"},
         "numeric_policy": {"accum": "fp32", "execution_mode": "exact_per_block"},
         "physical_contract": "nvidia_sm120_nvfp4_blockscale_v1",
-    })
+    }
+    if op.op_name == "tessera.scaled_matmul":
+        for name, expected in expected_contract.items():
+            if op.kwargs.get(name) != expected:
+                raise ValueError(
+                    f"NVFP4 scaled_matmul requires {name}={expected!r}"
+                )
+    elif op.op_name in {"tessera.matmul", "tessera.gemm"}:
+        op.op_name = "tessera.scaled_matmul"
+        op.kwargs.update(expected_contract)
+    else:
+        raise ValueError("NVFP4 packaging requires matmul, gemm, or scaled_matmul")
     artifact = lower_scheduled_matmul(scheduled_module, target="nvidia_sm120")
     tool = find_tessera_opt()
     if tool is None or run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:

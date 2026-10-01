@@ -1,8 +1,8 @@
 {
   "compiler": "LLVM/MLIR 23.1.1",
   "compiler_binary_sha256": {
-    "TESSERA_NVIDIA_OPT": "b7fe4d22e8dd59c5b7b593abb684f2eb44a03ec6698f31c0a5a919dd7289b81e",
-    "TESSERA_OPT": "ce55f0a6d2fef81ee1b2a11f6f7f36be5d344077ae5a7a768c52c7922e48a6fd"
+    "TESSERA_NVIDIA_OPT": "0dea3923e8ee8ea615c25985cfeeee6cb93d4dc1d727c940814d43eaeb978f29",
+    "TESSERA_OPT": "551fe6f57a75478b1a5cf5702c498acfee086133a6b565709da354e59a698897"
   },
   "device": "NVIDIA GeForce RTX 5070 (sm_120)",
   "gpu_reported": "NVIDIA GeForce RTX 5070, 12.0, 610.88",
@@ -21,30 +21,30 @@
     {
       "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
       "correctness": "passed_before_timing",
-      "device_event_median_ms": 0.016068480908870697,
+      "device_event_median_ms": 0.008457919582724571,
       "device_event_samples_ms": [
-        0.013961280696094036,
-        0.016068480908870697,
-        0.016588158905506134,
-        0.14463232457637787,
-        0.00935455970466137,
-        0.008666560053825378,
-        0.018847040832042694
+        0.00940576009452343,
+        0.007835839875042439,
+        0.008940800093114376,
+        0.008914880454540253,
+        0.008457919582724571,
+        0.008114560507237911,
+        0.008293760009109974
       ],
-      "end_to_end_median_ms": 1.5702277497621253,
+      "end_to_end_median_ms": 1.232115849852562,
       "end_to_end_samples_ms": [
-        1.603725939639844,
-        1.1721246398519725,
-        1.5939586295280606,
-        1.17405976052396,
-        2.0049640396609902,
-        1.5702277497621253,
-        1.1571314802858979
+        1.5938445797655731,
+        1.1806326900841668,
+        1.4923237299080938,
+        2.0574130897875875,
+        1.190234440146014,
+        1.232115849852562,
+        1.149112349958159
       ],
       "entry": "tessera_tile_matmul_nvfp4",
       "max_abs_error": 0.0,
       "resources": {
-        "active_blocks_per_sm": 5,
+        "active_blocks_per_sm": 20,
         "dynamic_shared_memory_bytes": 0,
         "local_memory_bytes": 0,
         "registers_per_thread": 92,
@@ -62,30 +62,30 @@
     {
       "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
       "correctness": "passed_before_timing",
-      "device_event_median_ms": 0.009809600189328194,
+      "device_event_median_ms": 0.007081919815391302,
       "device_event_samples_ms": [
-        0.009809600189328194,
-        0.009028160013258457,
-        0.009916800074279308,
-        0.008255040273070335,
-        0.00857503991574049,
-        0.013788479380309582,
-        0.009903360158205032
+        0.007066879887133837,
+        0.008596159517765045,
+        0.007274559698998928,
+        0.007081919815391302,
+        0.00701888045296073,
+        0.009458559565246105,
+        0.007020799908787012
       ],
-      "end_to_end_median_ms": 1.0665183904347941,
+      "end_to_end_median_ms": 1.3594292901689187,
       "end_to_end_samples_ms": [
-        1.0113370401086286,
-        1.0944149998249486,
-        1.4846545999171212,
-        1.0497923998627812,
-        1.4832221798133105,
-        0.9140559402294457,
-        1.0665183904347941
+        1.3594292901689187,
+        1.1752803198760375,
+        2.132222559885122,
+        1.9667236699024215,
+        1.0979374800808728,
+        1.5105870901606977,
+        1.2535403401125222
       ],
       "entry": "tessera_tile_matmul_nvfp4",
       "max_abs_error": 0.0,
       "resources": {
-        "active_blocks_per_sm": 5,
+        "active_blocks_per_sm": 20,
         "dynamic_shared_memory_bytes": 0,
         "local_memory_bytes": 0,
         "registers_per_thread": 92,
@@ -103,30 +103,30 @@
     {
       "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
       "correctness": "passed_before_timing",
-      "device_event_median_ms": 0.011327040381729603,
+      "device_event_median_ms": 0.00833280012011528,
       "device_event_samples_ms": [
-        0.015266879461705685,
-        0.010168960317969322,
-        0.008262399584054947,
-        0.014378240332007408,
-        0.011327040381729603,
-        0.012707840651273727,
-        0.009056959301233292
+        0.00833280012011528,
+        0.00681855995208025,
+        0.0071814400143921375,
+        0.008206719532608986,
+        0.008713600225746632,
+        0.010010559111833572,
+        0.010917439125478268
       ],
-      "end_to_end_median_ms": 1.169887349824421,
+      "end_to_end_median_ms": 1.3142168999183923,
       "end_to_end_samples_ms": [
-        1.0161570098716766,
-        1.169887349824421,
-        1.024675999651663,
-        1.7078188195591792,
-        1.2614038295578212,
-        0.937079869909212,
-        1.6256468702340499
+        1.4814240502892062,
+        1.1584266199497506,
+        1.3142168999183923,
+        1.1875777097884566,
+        1.1803828796837479,
+        1.6436918900581077,
+        1.6108496696688235
       ],
       "entry": "tessera_tile_matmul_nvfp4",
       "max_abs_error": 0.0,
       "resources": {
-        "active_blocks_per_sm": 5,
+        "active_blocks_per_sm": 20,
         "dynamic_shared_memory_bytes": 0,
         "local_memory_bytes": 0,
         "registers_per_thread": 92,
@@ -143,19 +143,19 @@
     }
   ],
   "schema": "tessera.nvidia.nvfp4_scheduled_benchmark.v1",
-  "source_revision": "c05a82dd3230bc53362e3f6404292cfc6042f20d",
+  "source_revision": "4e60c815683e0f1954adbc9b1e9223217ae63238",
   "source_sha256": {
-    "benchmarks/nvidia/benchmark_scheduled_nvfp4.py": "9198b691ceafd824f313718258a7a7715aa4594f96f97fafd0c8807676a12e8f",
+    "benchmarks/nvidia/benchmark_scheduled_nvfp4.py": "09235e71147d988a3ab318f8a88de5d05899f4ffe05a09ebedaf4db6d917df6b",
     "python/tessera/compiler/graph_ir.py": "46e4b8a5472670426088d7a2484df1908a95e7195e85dddcb5e16be8c6e48157",
-    "python/tessera/compiler/nvidia_native.py": "94955da341a67f00caa35f10d2b9d11beae10f7cf9811c0ab6273333871cb38e",
+    "python/tessera/compiler/nvidia_native.py": "ca1d65974dbbb69e6d869ed3177ec5cf640784938933dc0783a4cca6b0745615",
     "python/tessera/compiler/scheduled_matmul.py": "f0b6e427274b5efe351b59efd291014dcd10a46516a7443c190a26cf71f86d2a",
     "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "9d73268ad0acd49298cce03111f99fc66f14dc765ce46dadbf7e99de7e0e5d50",
-    "src/compiler/ir/TesseraOps.cpp": "05868bcc8579823cc6a9e73e355eab8b2b0f0ccb171191792d8920e2d3ea7373",
+    "src/compiler/ir/TesseraOps.cpp": "c965797cd7b8ccee9a94865029906dc29a0cb73643d6323d0004fc55405dfcbb",
     "src/compiler/ir/TesseraOps.td": "aabf1bb30ab1447ea694d6e1e6bbef456381af6eaaba26fd502cb9ca2bf6e610",
     "src/compiler/programming_model/ir/ScheduleDialect.cpp": "7c0d5e23c87a0febae03bd3c101e100aa2c7b045a44c714924f39e1750386ee3",
-    "src/compiler/programming_model/lib/PMPasses.cpp": "ba8e5a3b80c83728ab4e81ff741396d542bfb840620f465d57b636fd428e4f92",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "71e1ec14e912367735dde6fb0d21177ec75eadff62dc1ca61ab7daee387f1046",
     "tests/device/nvidia/test_e2e_spine_native.py": "92851fe430d99beeb8d36141f6d2baa73d623e8873daf8c3305c5e46833edcde",
-    "tests/unit/test_nvidia_e2e_spine.py": "b5ef3c186c2b6a1aed6a7520a6ad452246fff3fb360442f950424b69ead40542"
+    "tests/unit/test_nvidia_e2e_spine.py": "1086816f3942a166a0980bbaa53b98d0189ca314091db2b7659021c39aae3bd9"
   },
   "work_item": "NVIDIA-NVFP4-SCHEDULE-2026-09"
 }

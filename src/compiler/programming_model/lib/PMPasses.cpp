@@ -769,9 +769,12 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   }
   if (scaledMatmul) {
     auto layout = op->getAttrOfType<DictionaryAttr>("scale_layout");
+    auto granularity = layout ? layout.getAs<StringAttr>("granularity")
+                              : StringAttr();
     auto block = layout ? layout.getAs<ArrayAttr>("block") : ArrayAttr();
     auto format = layout ? layout.getAs<StringAttr>("format") : StringAttr();
-    if (!block || block.size() != 2 || !format)
+    if (!block || block.size() != 2 || !format ||
+        (nvidiaNvfp4 && (!granularity || granularity.getValue() != "block")))
       return failure();
     auto blockK = dyn_cast<IntegerAttr>(block[1]);
     if (!blockK || blockK.getInt() <= 0)
@@ -818,6 +821,7 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     auto lhsNvfp4 = dyn_cast<Nvfp4Type>(lhsElement);
     auto rhsNvfp4 = dyn_cast<Nvfp4Type>(rhsElement);
     auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+    auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr();
     auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr();
     if (!nvidia_sm120 || schedule.dynamicM || schedule.dynamicN ||
         schedule.dynamicK || !lhsNvfp4 || !rhsNvfp4 || !outElement.isF32() ||
@@ -832,7 +836,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
         rhsScale.getDimSize(0) != (schedule.k + 15) / 16 ||
         rhsScale.getDimSize(1) != schedule.n ||
         schedule.scaleBlockK != 16 || schedule.scaleFormat != "ue4m3" ||
-        !mode || mode.getValue() != "exact_per_block" ||
+        !accum || accum.getValue() != "fp32" || !mode ||
+        mode.getValue() != "exact_per_block" ||
         schedule.bias || schedule.residual || schedule.activation != "none")
       return failure();
   } else if (!schedule.physicalContract.empty()) {

@@ -1,6 +1,12 @@
 """Exact SM120 correctness-gated NVFP4 Schedule/Tile timing packet."""
 from __future__ import annotations
-import argparse, hashlib, json, os, statistics, subprocess, time
+import argparse
+import hashlib
+import json
+import os
+import statistics
+import subprocess
+import time
 from pathlib import Path
 import numpy as np
 from tessera.compiler.canonical_compile import compile_result_from_bundle
@@ -38,7 +44,7 @@ def run_shape(shape, samples, reps, warmup, seed):
             r=launch(artifact,args)
             if not r.get("ok"): raise RuntimeError(f"end-to-end launch failed: {r}")
         e2e.append((time.perf_counter()-start)*1e3/reps)
-    return {"shape_mnk":list(shape),"route":"GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX","entry":d.entry_symbol,"abi_id":d.abi_id,"schedule_digest":d.provenance.get("schedule_digest"),"tile_ir_digest":d.provenance.get("tile_ir_digest"),"max_abs_error":error,"correctness":"passed_before_timing","device_event_samples_ms":device,"device_event_median_ms":median(device),"end_to_end_samples_ms":e2e,"end_to_end_median_ms":median(e2e),"resources":_nvidia_native_descriptor_resources(i,d,block_size=128)}
+    return {"shape_mnk":list(shape),"route":"GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX","entry":d.entry_symbol,"abi_id":d.abi_id,"schedule_digest":d.provenance.get("schedule_digest"),"tile_ir_digest":d.provenance.get("tile_ir_digest"),"max_abs_error":error,"correctness":"passed_before_timing","device_event_samples_ms":device,"device_event_median_ms":median(device),"end_to_end_samples_ms":e2e,"end_to_end_median_ms":median(e2e),"resources":_nvidia_native_descriptor_resources(i,d,block_size=32)}
 def main():
     p=argparse.ArgumentParser();p.add_argument("--samples",type=int,default=7);p.add_argument("--reps",type=int,default=100);p.add_argument("--warmup",type=int,default=30);p.add_argument("--output",type=Path);a=p.parse_args()
     if not nvidia_cuda_host_ready(): raise SystemExit("exact-device SM120 unavailable")

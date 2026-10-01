@@ -535,9 +535,14 @@ LogicalResult ScaledMatmulOp::verify() {
       auto layout = getScaleLayoutAttr();
       auto block = layout ? dyn_cast_or_null<ArrayAttr>(layout.get("block"))
                           : ArrayAttr();
+      auto granularity =
+          layout ? dyn_cast_or_null<StringAttr>(layout.get("granularity"))
+                 : StringAttr();
       auto format = layout ? dyn_cast_or_null<StringAttr>(layout.get("format"))
                            : StringAttr();
       auto policy = getNumericPolicyAttr();
+      auto accum = policy ? dyn_cast_or_null<StringAttr>(policy.get("accum"))
+                          : StringAttr();
       auto mode = policy ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
                          : StringAttr();
       if (!aType || !bType || !rType || !aType.hasStaticShape() ||
@@ -557,10 +562,12 @@ LogicalResult ScaledMatmulOp::verify() {
             rhsScale.getElementType().isSignlessInteger(8)) ||
           lhsScale.getDimSize(0) != m || lhsScale.getDimSize(1) != scaleK ||
           rhsScale.getDimSize(0) != scaleK || rhsScale.getDimSize(1) != n ||
+          !granularity || granularity.getValue() != "block" ||
           !block || block.size() != 2 ||
           !isa<IntegerAttr>(block[0]) || cast<IntegerAttr>(block[0]).getInt() != 1 ||
           !isa<IntegerAttr>(block[1]) || cast<IntegerAttr>(block[1]).getInt() != 16 ||
-          !format || format.getValue() != "ue4m3" || !mode ||
+          !format || format.getValue() != "ue4m3" || !accum ||
+          accum.getValue() != "fp32" || !mode ||
           mode.getValue() != "exact_per_block")
         return emitOpError("NVIDIA NVFP4 contract requires ui8 [M,ceil(K/16)] / [ceil(K/16),N] UE4M3 scales with exact K16 semantics");
       return success();

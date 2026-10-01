@@ -10,6 +10,7 @@
 - Timing method: seven batches, 100 repetitions per batch, 30 warmup
   invocations. CUDA event timings are separated from end-to-end runtime.launch
   wall timings. End-to-end includes host binding/staging and synchronization.
+- Occupancy is queried with the actual one-warp 32-thread launch block.
 - These micro-shape results are diagnostic only; no selector or performance
   promotion is made.
 

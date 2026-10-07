@@ -1,11 +1,23 @@
 ---
-last_updated: 2026-09-30
+last_updated: 2026-10-07
 audit_role: plan
 plan_state: open
 owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+
+## NATIVE-JVP-SOURCE-CONSTRAINTS-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Shared public runtime contract: native_jvp checks source shape constraints
+before tracing, compiling or preparing a backend. The existing solver and
+constraint error semantics are reused. Positional/keyword x86, ROCm and
+SM120 selectors have host-free early-rejection coverage.
+x86 assessment: shared source-bound parity is validated; numerical/device
+execution is not applicable to this admission-only change.
+No image, kernel, dtype, operation or ABI changes are introduced.
+
 
 ## `NVIDIA-NVFP4-SCHEDULE-2026-09`: sibling assessment
 

@@ -140,10 +140,13 @@ class MathRecipe:
     def validate(self):
         tool = find_tessera_opt()
         if tool is None: raise RuntimeError("native math construction requires tessera-opt")
-        schedule = run_tessera_opt(tool,self.graph_ir,"--tessera-graph-to-schedule")
+        from .rocm_pass_cache import run as cached_replay
+        def replay(source, option):
+            return cached_replay(tool, source, option, execute=run_tessera_opt)
+        schedule = replay(self.graph_ir,"--tessera-graph-to-schedule")
         if schedule != self.schedule_ir:
             raise ValueError("native math Schedule differs from original Graph replay")
-        if run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile") != self.tile_ir:
+        if replay(schedule,"--tessera-schedule-to-tile") != self.tile_ir:
             raise ValueError("native math Tile differs from Schedule replay")
         if self.target != "rocm_"+_info(self.tile_ir)["architecture"]:
             raise ValueError("native math target differs from the native contract")

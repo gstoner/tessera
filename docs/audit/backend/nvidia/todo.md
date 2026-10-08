@@ -13845,3 +13845,12 @@ replay subprocess counts after PR894 and explicit cwd identity. Owning tests
 pass 23 gfx1151 / 22 gfx1201 (one unavailable NVIDIA-dialect skip).
 Not applicable to nvidia physical execution; no sibling performance claim.
 Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+## Native math Graph replay reuse — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Sync ROCM-MATH-REPLAY-2026-10-08.
+Shared contract: bounded pure replay additionally admits Graph-to-Schedule;
+MathRecipe retains per-call Graph/Schedule/Tile and descriptor validation.
+68 host regressions and 19 owning cache tests per architecture pass.
+Not applicable: CUDA packaging does not call the ROCm replay adapter. No SM120 ABI, selector or execution state is changed.
+Evidence: benchmarks/baselines/rocm_math_replay_cache_20261008/README.md.

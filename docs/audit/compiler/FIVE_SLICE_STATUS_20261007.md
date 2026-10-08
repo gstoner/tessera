@@ -1411,3 +1411,15 @@ requested rtol/atol; strict numerical rejection and mapped frontend
 consumers pass 26 focused / 243 integration host tests. Native compilation
 and runtime ownership are unchanged; generic closure remains open.
 Evidence: benchmarks/baselines/frontend_parity_numeric_policy_20261008/README.md.
+
+## Native math Graph ancestry reuse — 2026-10-08
+
+E2E-REAL-6 / FRONTEND-IR-MEDIUM-1; sync ROCM-MATH-REPLAY-2026-10-08.
+MathRecipe now reuses bounded pure native Graph/Schedule replay while checking
+all ancestry on each call. 68 host tests and 19 cache safety tests on each
+owning architecture pass. 72 correctness-gated f32/f16/bf16 math profiles
+remove two package subprocesses (three to one) with identical native images.
+gfx1151 warm package medians move 57.946–63.921 to 19.999–22.444 ms;
+gfx1201 moves 42.060–44.708 to 16.367–17.216 ms. No kernel speed claim.
+Broader families and generic compiler closure remain open.
+Evidence: benchmarks/baselines/rocm_math_replay_cache_20261008/README.md.

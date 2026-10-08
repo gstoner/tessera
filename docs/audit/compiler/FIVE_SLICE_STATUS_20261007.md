@@ -1381,3 +1381,8 @@ match authoritative bytes. Full-suite generic closure and delivery remain open.
 ## Nested native NVFP4 leading-prefix integration
 
 E2E-REAL-6 / NVIDIA-NVFP4-NESTED-MAPS-2026-10-08 extends the named SM120 contract through public nested maps, typed Graph MLIR, native Schedule flattening, Tile/Target/PTX and the checked existing ABI. Exact logical tuples survive package guards; equal-product prefix and scale permutations are rejected by direct native verification. RTX 5070 proof covers 24 nested cases plus scalar/single-map regressions. Evidence: benchmarks/baselines/nvidia_nested_nvfp4_20261008/README.md. Mixed/dynamic/nonleading batching and generic scaled-matmul transpose/AD closure remain open; no coverage flags are promoted.
+
+
+## Matching-source gfx1201 publication gate
+
+Current pre-publication source revalidation passes 113 owning gfx1201 composed primal/JVP/VJP and NVFP4 ingest tests after rebuilding core/ROCm tools and native HIP runtimes. Timestamp-preserving source transfer initially retained stale Make objects; the initial 41 failures and corrected terminal result are preserved with 4,931 input hashes and live device/tool fingerprints. Evidence: benchmarks/baselines/gfx1201_matching_source_20261008/README.md. No fresh performance, original-model quality or aggregate closure is claimed.

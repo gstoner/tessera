@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "source_parent": "e8d5d145fb2e253ca29949f1e03be28767fba681",
+  "source_dirty": true,
+  "proof_boundary": "public eager numerical semantics and native Graph verification; no physical backend changes",
+  "host": "Super-Bear WSL",
+  "passed": 385,
+  "skipped": 0,
+  "new_numerical_cases": 24,
+  "performance_claim": false,
+  "coverage_promoted": false,
+  "source_sha256": {
+    "python/tessera/compiler/reference_typed_scaled_matmul.py": "412fa174497563a1c3916858dabe4994cfc0b7ced01622dd3695689ac9d2f8ee",
+    "tests/unit/test_typed_scaled_reference_batch_orientation.py": "24cbe2b11a8a2d8c2574d81569d4393ce3c722f30f1678e4313fd351863c5212"
+  }
+}

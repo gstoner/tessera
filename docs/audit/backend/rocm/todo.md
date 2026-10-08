@@ -16242,7 +16242,7 @@ Semantic checkpoint verification and native Schedule projection now use one
 IR-owned sequence-capacity resolver; the JVP contract uses the same policy.
 Matching LLVM/MLIR 23.1.1 core/target builds and 574 host WSL regressions pass without skips.
 Not applicable to ROCm physical kernels: this resolver is used by the shared attention checkpoint dialect and NVIDIA native products. No gfx1151/gfx1201 schedule, image ABI or performance claim is changed.
-No dynamic JVP execution or generic scaled-matmul closure is claimed.
+Foundation verification alone does not establish execution; the native evidence is recorded below. Generic scaled-matmul closure remains open.
 
 ## Bounded saved-LSE JVP native integration — 2026-10-08
 
@@ -16255,3 +16255,16 @@ Not applicable to HIP physical execution: the schema-2 native tensor manifest is
 Kernel CUDA-event timing and capture/JVP/close host-wall timing are separate.
 No generic scaled-matmul closure or default-route promotion.
 Evidence: benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.
+
+## Named scaled-batch frontend orientation — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SCALED-BATCH-ORIENTATION-20261008.
+Shared eager numerical contract accepts transposed LHS for shared-RHS,
+shared-LHS and independent batches; 24 independent-oracle cases pass.
+385 host WSL frontend/native Graph/registry checks pass without skips.
+rocm physical lowering, admission and runtime ABI: not applicable to
+this reference-only correction. Existing architecture-owned execution
+envelopes remain unchanged; no new exact-device or timing evidence.
+Generic batching and transpose AD closure remain follow-up required.
+Evidence: benchmarks/baselines/scaled_batch_orientation_20261008/README.md.

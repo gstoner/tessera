@@ -13844,8 +13844,8 @@ Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1. Sync NVIDIA-BOUNDED-JVP-2026-10-08.
 Semantic checkpoint verification and native Schedule projection now use one
 IR-owned sequence-capacity resolver; the JVP contract uses the same policy.
 Matching LLVM/MLIR 23.1.1 core/target builds and 574 host WSL regressions pass without skips.
-Follow-up required: shared capacity resolution is the prerequisite for bounded saved-LSE JVP export, manifest, launch scalars and resident lifetime proof. Static and bounded backward admission remain unchanged.
-No dynamic JVP execution or generic scaled-matmul closure is claimed.
+Native bounded integration and its remaining boundaries are recorded below. Static and bounded backward admission remain unchanged.
+Foundation verification alone does not establish execution; the native evidence is recorded below. Generic scaled-matmul closure remains open.
 
 ## Bounded saved-LSE JVP native integration — 2026-10-08
 
@@ -13858,3 +13858,16 @@ Parity validated on RTX 5070 / SM120 for the bounded synchronous textual Graph/r
 Kernel CUDA-event timing and capture/JVP/close host-wall timing are separate.
 No generic scaled-matmul closure or default-route promotion.
 Evidence: benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.
+
+## Named scaled-batch frontend orientation — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SCALED-BATCH-ORIENTATION-20261008.
+Shared eager numerical contract accepts transposed LHS for shared-RHS,
+shared-LHS and independent batches; 24 independent-oracle cases pass.
+385 host WSL frontend/native Graph/registry checks pass without skips.
+nvidia physical lowering, admission and runtime ABI: not applicable to
+this reference-only correction. Existing architecture-owned execution
+envelopes remain unchanged; no new exact-device or timing evidence.
+Generic batching and transpose AD closure remain follow-up required.
+Evidence: benchmarks/baselines/scaled_batch_orientation_20261008/README.md.

@@ -16175,3 +16175,12 @@ Sync PR895-CI-ROUTE-REPAIR-2026-10-08.
 Native Schedule/Tile proof belongs to compiler-route; image proof additionally requires the ROCm SDK. Exact gfx1151/gfx1201 claims remain separate.
 Evidence: benchmarks/baselines/pr895_ci_route_repairs_20261008/README.md.
 Generic scaled_matmul batching/transpose closure remains open; no coverage flag is promoted.
+
+## Native unary replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.
+gfx1151 numerical proof and package A/B passed; gfx1201 follow-up required.
+Only successful native MLIR pass output is cached; artifact and descriptor
+validation still run per call. Compiler, loaded-library, environment and full
+IR identity participate, with bounded entry/byte retention.
+Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md.

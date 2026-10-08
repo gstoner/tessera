@@ -9790,3 +9790,12 @@ Sync PR895-CI-ROUTE-REPAIR-2026-10-08.
 Not applicable to AVX-512 code generation or admission; shared CPU test routing is repaired.
 Evidence: benchmarks/baselines/pr895_ci_route_repairs_20261008/README.md.
 Generic scaled_matmul batching/transpose closure remains open; no coverage flag is promoted.
+
+## Native unary replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.
+Not applicable: x86 retains its existing native pass cache.
+Only successful native MLIR pass output is cached; artifact and descriptor
+validation still run per call. Compiler, loaded-library, environment and full
+IR identity participate, with bounded entry/byte retention.
+Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md.

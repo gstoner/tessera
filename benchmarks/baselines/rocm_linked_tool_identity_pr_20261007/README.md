@@ -35,6 +35,7 @@ primed before both arms in warm mode.
 Version reuse reduces queries when creating an image. Warm image hits
 already bypass those queries and show no material metadata speedup.
 These are package wall timings, not kernel timings or promotion evidence.
+AST-only Graphify refresh passed (117806 nodes, 201253 edges).
 The broader non-slow suite is running; this PR remains draft pending that gate.
 
 Source is isolated on main commit 6bfd1a8ae89aaa3f6063f7148530488661f0c7a3.

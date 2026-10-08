@@ -13427,6 +13427,23 @@ applicable to this certification-only correction. Generic scaled-matmul
 batching/transpose and wider architecture-owned AD envelopes remain open.
 Evidence: benchmarks/baselines/frontend_parity_numeric_policy_20261008/README.md.
 
+## W1.1 current-head proof refresh — 2026-10-08
+
+Owner W1.1 / E2E-REAL-6. Sync NVIDIA-W11-CURRENT-HEAD-2026-10-08.
+Shared contracts changed: none; this refresh binds current source and tools.
+147 RTX 5070 cases and 24 correctness-gated timing profiles pass.
+Not applicable to Metal execution or its ABI; CUDA proof does not establish Apple-owned numerical parity.
+Evidence: benchmarks/baselines/nvidia_w11_current_head_20261008/README.md.
+
+## ROCm image SDK CI provisioning — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Sync ROCM-IMAGE-SDK-CI-2026-10-08.
+Shared test infrastructure changed: required compiler-route installs verified
+ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
+345 host WSL tests pass without skips; the unchanged execution gate passes.
+Not applicable to Metal toolchain or execution: the Linux CI SDK does not change Apple compiler/runtime contracts; no Mac numerical evidence is inferred.
+Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
+
 ## Native unary replay reuse — 2026-10-08
 
 Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.

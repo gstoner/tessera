@@ -1,0 +1,21 @@
+{
+  "source_revision": "57aba3b8e00e3ca49c723cd24cd0544f1955c756",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "tests": {
+    "passed": 147,
+    "skipped": 0,
+    "files": [
+      "tests/device/nvidia/test_tensor_producer_epilogues.py",
+      "tests/device/nvidia/test_macro_tensor_producer.py",
+      "tests/device/nvidia/test_native_tensor_partition_execution.py"
+    ]
+  },
+  "test_sha256": {
+    "tests/device/nvidia/test_tensor_producer_epilogues.py": "c28b527e6e632522a39a3ce91cc33917fed30722592860bdc3a38b91a490c645",
+    "tests/device/nvidia/test_macro_tensor_producer.py": "bcf92a76b220489e702e0190f8fc7ac21e2a469ccc33fd6f7c93c31f03311298",
+    "tests/device/nvidia/test_native_tensor_partition_execution.py": "b90920b797d32756a08fbb1f273f0914b64522b92b8f5c30760f62160afa5cbd"
+  },
+  "compiler_sha256": "b487e3ad06ba645dcba5372dc2de7b21525f1b76fffd69aa145993d68979d2dc",
+  "target_compiler_sha256": "34cc11367b156953c52a997d5706b03db8f57b15f68d63372056c025a39cb1bf",
+  "runtime_sha256": "8d685c33da88f5384ffae5d99a1ea02a988068e88a88e899ed972bc26f53897a"
+}

@@ -1402,3 +1402,24 @@ requested rtol/atol; strict numerical rejection and mapped frontend
 consumers pass 26 focused / 243 integration host tests. Native compilation
 and runtime ownership are unchanged; generic closure remains open.
 Evidence: benchmarks/baselines/frontend_parity_numeric_policy_20261008/README.md.
+
+## W1.1 current-head execution and timing refresh — 2026-10-08
+
+W1.1 / E2E-REAL-6; sync NVIDIA-W11-CURRENT-HEAD-2026-10-08.
+147 owning RTX 5070 tests pass with no skips; 24 fused producer/consumer
+profiles pass before and after device timing. Source/tool/runtime hashes
+and separate producer, consumer and complete resident-call costs are recorded.
+No new admission or physical selector is enabled. CI compiler-route image
+toolchain provision and generic scaled-matmul closure remain open.
+Evidence: benchmarks/baselines/nvidia_w11_current_head_20261008/README.md.
+
+## Portable ROCm image CI provisioning — 2026-10-08
+
+E2E-REAL-6 / FRONTEND-IR-MEDIUM-1; sync ROCM-IMAGE-SDK-CI-2026-10-08.
+The required compiler-route lane now provisions a hash-pinned core ROCm SDK
+with source-manifest checks and standard serializer paths. Actual installer
+plus unchanged test selection passes 345 host WSL cases, zero skips; the
+execution gate passes. Workflow/audit regressions pass 69 tests.
+This is image/ABI compiler proof, not AMD device execution. Hosted replay and
+generic scaled-matmul closure remain open.
+Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.

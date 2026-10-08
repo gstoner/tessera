@@ -7,6 +7,20 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-LINKED-TOOL-IDENTITY-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: bounded ROCm compiler metadata reuse and image-cache identity
+now include loaded ELF dependencies and loader search-path changes. Static
+ELF and non-ELF executable content semantics are preserved. Runtime ABI,
+Graph/Schedule/Tile semantics and physical schedules are unchanged.
+Focused host validation passes 372 checks with four hardware skips.
+gfx1201 owning-device validation and existing RMSNorm package A/B receipts
+are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/.
+This is a cache-contract slice; wider five-slice compiler closure remains open.
+
+Not applicable: CPU image identity and AVX-512 schedules are unchanged.
+
 ## NATIVE-JVP-SOURCE-CONSTRAINTS-2026-10-07
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
@@ -6728,3 +6742,5 @@ The shared Graph projection is exercised for all three bounded axes, but this
 slice adds only gfx1201 HIP and sm_120 CUDA resident package consumers. x86 has
 no resident package/runtime consumer for this edge. Any such consumer needs its
 own ABI, native Schedule/Tile route, numerical proof, and exact-CPU evidence.
+
+Matching-source x86-enabled full validation passes: 20,419 passed, 7,387 skipped, 874 deselected. Final drift gates pass 287 checks; generated-document checks pass. Historical build/fixture failures and repairs are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/README.md. Owning-device evidence remains architecture-specific.

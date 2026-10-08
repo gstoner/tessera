@@ -454,10 +454,100 @@ def _driver_selected_device_libraries(*, arch: str = "gfx1151") -> tuple[DeviceL
     )
 
 
+# Loaded ELF dependencies are part of compiler identity.
+_LINKED_TOOL_FILES: dict[tuple, tuple] = {}
+
+
+def _file_signature(path: Path) -> tuple:
+    try:
+        st = path.stat()
+    except FileNotFoundError:
+        return (str(path), None)
+    return (str(path), str(path.resolve()), st.st_dev, st.st_ino, st.st_size,
+            st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _loader_environment() -> tuple:
+    # The working directory is part of the identity: a relative RPATH/RUNPATH
+    # or an empty LD_LIBRARY_PATH entry is resolved against it by the loader.
+    try:
+        cwd = os.getcwd()
+    except OSError:
+        cwd = None
+    return tuple(os.environ.get(name) for name in
+                 ("PATH", "LD_LIBRARY_PATH", "LD_PRELOAD", "ROCM_PATH",
+                  "TESSERA_ROCM_CLANG")) + (cwd,)
+
+
+def _linked_tool_files(tool: Path) -> tuple[Path, ...]:
+    resolved = tool.resolve()
+    with resolved.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            return ()
+    key = (_file_signature(tool), _loader_environment())
+    cached = _LINKED_TOOL_FILES.get(key)
+    if cached is not None:
+        files, watches, signature = cached
+        if tuple(_file_signature(path) for path in watches) == signature:
+            return files
+    listing = subprocess.run(["ldd", str(resolved)], capture_output=True,
+                             text=True, check=False)
+    loader_text = listing.stdout + listing.stderr
+    if listing.returncode and ("not a dynamic executable" in loader_text
+                               or "statically linked" in loader_text):
+        if len(_LINKED_TOOL_FILES) >= 32:
+            _LINKED_TOOL_FILES.pop(next(iter(_LINKED_TOOL_FILES)))
+        _LINKED_TOOL_FILES[key] = ((), (), ())
+        return ()
+    if listing.returncode or "not found" in listing.stdout:
+        raise RuntimeError("Cannot establish compiler linked-library identity: "
+                           + (listing.stderr or listing.stdout).strip())
+    files = tuple(sorted({Path(match) for match in
+                          re.findall(r"(?:=>\s+|^\s*)(/[^\s]+)", listing.stdout,
+                                     re.MULTILINE)}, key=str))
+    search = {path.parent for path in files}
+    search.add(resolved.parent)
+    for owner in (resolved,) + files:
+        dynamic = subprocess.run(["readelf", "-d", str(owner)], capture_output=True,
+                                 text=True, check=False)
+        if dynamic.returncode:
+            raise RuntimeError("Cannot establish compiler loader search-path identity: "
+                               + dynamic.stderr.strip())
+        for value in re.findall(r"\((?:RPATH|RUNPATH)\).*?\[(.*?)\]", dynamic.stdout):
+            for entry in value.split(":"):
+                entry = entry.replace("$" + "{ORIGIN}", str(owner.parent)).replace(
+                    "$ORIGIN", str(owner.parent))
+                if "$" in entry:
+                    return files
+                search.add(Path(entry or ".").absolute())
+    for entry in os.environ.get("LD_LIBRARY_PATH", "").split(":"):
+        if entry or os.environ.get("LD_LIBRARY_PATH") is not None:
+            search.add(Path(entry or ".").absolute())
+    watches = tuple(sorted(set(files) | search | {Path("/etc/ld.so.cache")}, key=str))
+    signature = tuple(_file_signature(path) for path in watches)
+    if len(_LINKED_TOOL_FILES) >= 32:
+        _LINKED_TOOL_FILES.pop(next(iter(_LINKED_TOOL_FILES)))
+    _LINKED_TOOL_FILES[key] = (files, watches, signature)
+    return files
+
+
+_VERSION_FINGERPRINTS: dict[tuple, str] = {}
+_VERSION_FINGERPRINT_LIMIT = 32
+
 def _version_fingerprint(tool: Path) -> str:
+    key = (_file_signature(tool), _loader_environment(),
+           tuple(_file_signature(path) for path in _linked_tool_files(tool)))
+    cached = _VERSION_FINGERPRINTS.get(key)
+    if cached is not None:
+        return cached
     result = subprocess.run([str(tool), "--version"], capture_output=True, text=True, check=False)
     text = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
-    return hashlib.sha256((text or str(tool)).encode()).hexdigest()
+    fingerprint = hashlib.sha256((text or str(tool)).encode()).hexdigest()
+    if result.returncode == 0:
+        if len(_VERSION_FINGERPRINTS) >= _VERSION_FINGERPRINT_LIMIT:
+            _VERSION_FINGERPRINTS.pop(next(iter(_VERSION_FINGERPRINTS)))
+        _VERSION_FINGERPRINTS[key] = fingerprint
+    return fingerprint
 
 
 def _serializer_env() -> dict[str, str] | None:
@@ -1311,30 +1401,26 @@ def _native_cache_key(
     ).hexdigest()
 
 
-_TOOL_DIGESTS: dict[tuple[str, int, int, int, int], str] = {}
+_TOOL_DIGESTS: dict[tuple, str] = {}
 
 
 def _tool_digest(tool: Path) -> str:
-    """SHA-256 of the ``tessera-opt`` binary, memoized on its stat signature.
-
-    The digest is the compiler half of every ROCm compile-cache key (Decision
-    #11: a rebuilt compiler must miss). Re-reading and hashing a ~190 MB binary
-    on every packaging call cost ~160 ms of a ~265 ms warm hit on Princess-Luna
-    (FOUNDATION-BATCH-2-2026-09-27). A rebuild writes a new file, which changes
-    the inode or mtime/size, so the memo misses exactly when the digest could
-    have changed; the same stat-keyed rule ``toolchain_identity._file_digest``
-    applies to the files it fingerprints.
-    """
-    resolved = tool.resolve()
-    st = resolved.stat()
-    key = (str(resolved), st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size)
+    """Compiler executable plus loaded-library contents; bounded stat memoization."""
+    files = _linked_tool_files(tool)
+    key = (_file_signature(tool), _loader_environment(),
+           tuple(_file_signature(path) for path in files))
     digest = _TOOL_DIGESTS.get(key)
     if digest is None:
         hasher = hashlib.sha256()
-        with resolved.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1 << 20), b""):
-                hasher.update(chunk)
+        for path in (tool.resolve(),) + files:
+            if files:
+                hasher.update(str(path).encode() + b"\0")
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1 << 20), b""):
+                    hasher.update(chunk)
         digest = hasher.hexdigest()
+        if len(_TOOL_DIGESTS) >= 32:
+            _TOOL_DIGESTS.pop(next(iter(_TOOL_DIGESTS)))
         _TOOL_DIGESTS[key] = digest
     return digest
 

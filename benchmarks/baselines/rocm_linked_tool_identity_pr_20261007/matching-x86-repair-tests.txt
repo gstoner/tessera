@@ -1,0 +1,34 @@
+F....................................................................... [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 26%]
+........................................................................ [ 33%]
+........................................................................ [ 40%]
+........................................................................ [ 46%]
+...................ss.....................................ssssssssssssss [ 53%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 60%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 67%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 73%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 80%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 87%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 93%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss       [100%]
+=================================== FAILURES ===================================
+_____ test_exact_repeat_reruns_no_subprocess_and_rebuilds_an_equal_package _____
+
+counted = ([['ldd', '/home/angstorms/scratch/compiler-pr894-matching-main-20261008/tools/tessera-opt/tessera-opt'], ['readelf', ..., ...], PosixPath('/tmp/pytest-of-angstorms/pytest-200/test_exact_repeat_reruns_no_su0/libtessera_x86_elementwise.so'))
+
+    def test_exact_repeat_reruns_no_subprocess_and_rebuilds_an_equal_package(counted):
+        calls, _ = counted
+        first = x86_native.package_elementwise(_module(), pipeline_name=PIPELINE)
+        cold = len(calls)
+        # graph->schedule, schedule->tile, Tile->Target and --version. The two
+        # replays are already hits: they re-derive the same (binary, option, text)
+        # the lowering just ran, and still compare the artifact against it.
+>       assert cold == 4
+E       assert 14 == 4
+
+tests/unit/test_x86_compile_cache.py:63: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_x86_compile_cache.py::test_exact_repeat_reruns_no_subprocess_and_rebuilds_an_equal_package
+1 failed, 559 passed, 514 skipped in 29.44s

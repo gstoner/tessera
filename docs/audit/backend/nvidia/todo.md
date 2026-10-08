@@ -13807,3 +13807,16 @@ Evidence: benchmarks/baselines/pr895_ci_route_repairs_20261008/README.md.
 Generic scaled_matmul batching/transpose closure remains open; no coverage flag is promoted.
 
 Matching-source x86-enabled full validation passes: 20,419 passed, 7,387 skipped, 874 deselected. Final drift gates pass 287 checks; generated-document checks pass. Historical build/fixture failures and repairs are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/README.md. Owning-device evidence remains architecture-specific.
+
+## Frontend certificate numerical policy — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync FRONTEND-PARITY-NUMERIC-POLICY-2026-10-08.
+Frontend differential reuse binds rtol and atol in addition to tensor
+signature and permitted effects. Stricter requests must establish their own
+structural/numerical certificate. This shared frontend guard changes no
+nvidia physical lowering, native image, ABI or execution capability.
+Host numerical certificate tests are applicable; device performance is not
+applicable to this certification-only correction. Generic scaled-matmul
+batching/transpose and wider architecture-owned AD envelopes remain open.
+Evidence: benchmarks/baselines/frontend_parity_numeric_policy_20261008/README.md.

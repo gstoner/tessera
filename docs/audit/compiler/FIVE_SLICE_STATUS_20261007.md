@@ -1393,3 +1393,12 @@ The 44-test RTX 5070 current-head receipt is preserved at
 benchmarks/baselines/pr895_current_head_validation_20261008/README.md.
 This receipt proves its named device tests, not the aggregate unit suite.
 The CI aggregate unit job remains failing and requires separate repairs.
+
+## Frontend certificate numerical policy — 2026-10-08
+
+FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1; synchronization
+FRONTEND-PARITY-NUMERIC-POLICY-2026-10-08. Certificate reuse now binds
+requested rtol/atol; strict numerical rejection and mapped frontend
+consumers pass 26 focused / 243 integration host tests. Native compilation
+and runtime ownership are unchanged; generic closure remains open.
+Evidence: benchmarks/baselines/frontend_parity_numeric_policy_20261008/README.md.

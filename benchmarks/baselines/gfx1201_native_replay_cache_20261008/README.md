@@ -39,3 +39,12 @@ Sibling assessment: gfx1151 has its own six-profile numerical and timing
 packet. x86 keeps its existing cache; NVIDIA and Apple do not enter this ROCm
 path. Wider envelopes, matmul ancestry caching, discovery overhead and generic
 batching/transpose closure remain open.
+
+## Main synchronization identity guard
+
+After merged PR894, replay identity also explicitly includes the working
+directory, even if the resolved compiler/library bytes are unchanged. A host
+regression proves one replay per directory and reuse within a directory.
+The packet above retains its original measured source hashes; it predates
+this identity guard and is not a fresh benchmark of the synchronized head.
+The native passes, images and ABI remain unchanged.

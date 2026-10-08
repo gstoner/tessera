@@ -16213,7 +16213,7 @@ The four gfx1201 unary profiles improve package time from 43–44 ms to
 16.6–16.9 ms; two matmul controls remain unchanged. This is not kernel timing.
 Only successful native MLIR pass output is cached; artifact and descriptor
 validation still run per call. Compiler, loaded-library, environment and full
-IR identity participate, with bounded entry/byte retention.
+IR and working-directory identity participate, with bounded entry/byte retention.
 Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
 and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.
 

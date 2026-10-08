@@ -23,10 +23,10 @@ _outputs: OrderedDict[str, tuple[str, int]] = OrderedDict()
 _bytes = 0
 
 
-def _identity(tool: Path) -> tuple[str, str, tuple[tuple[str, str], ...]]:
+def _identity(tool: Path) -> tuple[str, str, tuple[tuple[str, str], ...], str]:
     from .rocm_native import _tool_digest
 
-    return str(tool.resolve()), _tool_digest(tool), tuple(sorted(os.environ.items()))
+    return str(tool.resolve()), _tool_digest(tool), tuple(sorted(os.environ.items())), os.getcwd()
 
 
 def clear() -> None:

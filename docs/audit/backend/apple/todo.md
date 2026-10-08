@@ -13443,3 +13443,16 @@ ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
 345 host WSL tests pass without skips; the unchanged execution gate passes.
 Not applicable to Metal toolchain or execution: the Linux CI SDK does not change Apple compiler/runtime contracts; no Mac numerical evidence is inferred.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
+
+## Named scaled-batch frontend orientation — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SCALED-BATCH-ORIENTATION-20261008.
+Shared eager numerical contract accepts transposed LHS for shared-RHS,
+shared-LHS and independent batches; 24 independent-oracle cases pass.
+385 host WSL frontend/native Graph/registry checks pass without skips.
+apple physical lowering, admission and runtime ABI: not applicable to
+this reference-only correction. Existing architecture-owned execution
+envelopes remain unchanged; no new exact-device or timing evidence.
+Generic batching and transpose AD closure remain follow-up required.
+Evidence: benchmarks/baselines/scaled_batch_orientation_20261008/README.md.

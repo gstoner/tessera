@@ -13786,4 +13786,5 @@ Not applicable: the SM120 package verifier does not use the new ROCm replay cach
 Only successful native MLIR pass output is cached; artifact and descriptor
 validation still run per call. Compiler, loaded-library, environment and full
 IR identity participate, with bounded entry/byte retention.
-Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md.
+Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
+and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.

@@ -36,8 +36,8 @@ native_unary_contract.py; their hashes are recorded in the recorder packet
 and follow-up receipt. The owning compiler is the existing LLVM23.1.1 snapshot;
 this is not a fresh matching-source build claim.
 
-Sibling assessment: gfx1201 uses this path but requires owning-device numerical
-and timing follow-up. x86 retains its existing cache implementation. NVIDIA and
+Sibling assessment: gfx1201 now has its own six-profile numerical and timing
+packet at ../gfx1201_native_replay_cache_20261008/README.md. x86 retains its existing cache implementation. NVIDIA and
 Apple do not enter this new ROCm cache path; no parity claim.
 Open: matmul ancestry caching, discovery overhead, wider unary envelopes, fresh
 gfx1151 matching-source build, generic closure and PR895 CI repair.

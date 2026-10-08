@@ -13434,3 +13434,12 @@ Shared contracts changed: none; this refresh binds current source and tools.
 147 RTX 5070 cases and 24 correctness-gated timing profiles pass.
 Not applicable to Metal execution or its ABI; CUDA proof does not establish Apple-owned numerical parity.
 Evidence: benchmarks/baselines/nvidia_w11_current_head_20261008/README.md.
+
+## ROCm image SDK CI provisioning — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Sync ROCM-IMAGE-SDK-CI-2026-10-08.
+Shared test infrastructure changed: required compiler-route installs verified
+ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
+345 host WSL tests pass without skips; the unchanged execution gate passes.
+Not applicable to Metal toolchain or execution: the Linux CI SDK does not change Apple compiler/runtime contracts; no Mac numerical evidence is inferred.
+Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.

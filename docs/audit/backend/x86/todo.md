@@ -9837,3 +9837,10 @@ Not applicable: this backend retains its existing native matmul replay path.
 Only artifact.target == rocm enters the bounded ROCm cache; sibling physical
 schedules and execution capabilities are unchanged.
 Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+ROCM-MATMUL-REPLAY-CACHE-2026-10-08 synchronized rerun: both gfx1151 and
+gfx1201 retain numerical parity, equal images/fingerprints and three-to-one
+replay subprocess counts after PR894 and explicit cwd identity. Owning tests
+pass 23 gfx1151 / 22 gfx1201 (one unavailable NVIDIA-dialect skip).
+Not applicable to x86 physical execution; no sibling performance claim.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.

@@ -16226,3 +16226,11 @@ each owning GPU with matching images/fingerprints: gfx1151 package medians
 63.1–64.3 ms to 20.7–21.6 ms; gfx1201 42.9–43.2 ms to 17.0–17.1 ms.
 These are package overhead measurements, not kernel gains.
 Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+ROCM-MATMUL-REPLAY-CACHE-2026-10-08 synchronized rerun: both gfx1151 and
+gfx1201 retain numerical parity, equal images/fingerprints and three-to-one
+replay subprocess counts after PR894 and explicit cwd identity. Owning tests
+pass 23 gfx1151 / 22 gfx1201 (one unavailable NVIDIA-dialect skip).
+Package timing is 61.9–65.7 to 20.8–22.5 ms on gfx1151 and
+42.4–43.9 to 16.7–17.0 ms on gfx1201; kernel performance is unchanged.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.

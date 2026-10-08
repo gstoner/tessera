@@ -1,0 +1,22 @@
+{
+  "source_revision": "f8c571b880d87aac9deb91a9d44420a1494db277",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "sources": {
+    "python/tessera/compiler/jit.py": "4510dbaaade4a357f9e1330a8771ecc3efd21475d084f3c26bc5c1d61ee8395b",
+    "python/tessera/compiler/native_vmap.py": "be9b2012729037db7ac6e2a249f23f4e55a760dbb26e1faa752e1770a8b40e9f",
+    "python/tessera/compiler/graph_ir.py": "b401e122b78802042d9ad5ca4eb8ec17a892fb84a9bac21550dea02bd1157968",
+    "python/tessera/compiler/scheduled_matmul.py": "1d4fb5f4a79c891606936cd530179605df28f1a6eb2c13d9b5b6718c9469c338",
+    "python/tessera/compiler/nvidia_native.py": "db334317523afaa2fdc405529d9e47cfcb2a767e23ef9a4755f79bf5ca33164d",
+    "python/tessera/compiler/resident_attention.py": "bbd0673ee58536e447cfb23b11f89da50800f884208a85d6cc77701420fdd138",
+    "python/tessera/runtime.py": "e4411e52e75b76dc76af3f58dc72cae0c9d6269ed0a745a0f8886c67a86e2177",
+    "tests/device/nvidia/test_nested_nvfp4_vmap.py": "e58b28553dead45e176325e0e6310d3994d4746c32402faca5adf8151a4c5087",
+    "tests/device/nvidia/test_bounded_attention_jit.py": "4e246e55e9dbc8ea08b274b4af080ec06bdf235cf80796dd50552aef28bb1946"
+  },
+  "tools": {
+    ".build-sm120-w1-1/tools/tessera-opt/tessera-opt": "b487e3ad06ba645dcba5372dc2de7b21525f1b76fffd69aa145993d68979d2dc",
+    ".build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": "34cc11367b156953c52a997d5706b03db8f57b15f68d63372056c025a39cb1bf",
+    ".build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so": "8d685c33da88f5384ffae5d99a1ea02a988068e88a88e899ed972bc26f53897a"
+  },
+  "device_tests_passed": 44,
+  "performance_rerun": false
+}

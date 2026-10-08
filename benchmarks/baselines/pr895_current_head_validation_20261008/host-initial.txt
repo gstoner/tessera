@@ -1,0 +1,210 @@
+..........................................................ssssssssssssss [ 25%]
+sssssss..ss..FFFFFFF.................................................... [ 51%]
+........................................................................ [ 77%]
+.............................................................            [100%]
+=================================== FAILURES ===================================
+_______ test_frontend_rejects_semantic_mutations_before_compiler[policy] _______
+
+change = 'policy'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x785ea4ae22e0>
+
+    @pytest.mark.parametrize("change",["policy","edge","result","target","bindings","argument_layout","function_contract"])
+    def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch):
+        from tessera.compiler import rocm_nvfp4_program as program
+        module=_full_graph(128,32,256,[0,16,32],(0,1,2,3,4))
+        fn=module.functions[0]
+        if change=="policy":
+            fn.body[2].kwargs["numeric_policy"]["execution_mode"]="exact_per_block"
+        elif change=="edge":
+            fn.body[2].operands[1]="%packed"
+        elif change=="result":
+            fn.return_values=["%packed"]
+        elif change=="target":
+            module.module_attrs["tessera.arch"]='"gfx1151"'
+        elif change=="argument_layout":
+            fn.args[0].layout="col_major"
+        elif change=="function_contract":
+            fn.fn_attrs["tessera.aliasing"]='"in_place"'
+        else:
+            fn.body[0].operands[2]=fn.body[0].operands[0]
+>       monkeypatch.setattr(program,"find_tessera_opt",lambda:pytest.fail("invalid Graph reached compiler"))
+E       AttributeError: <module 'tessera.compiler.rocm_nvfp4_program' from '/home/angstorms/scratch/next-five-compiler-slices/tests/unit/../../python/tessera/compiler/rocm_nvfp4_program.py'> has no attribute 'find_tessera_opt'
+
+tests/unit/test_rocm_nvfp4_frontend_program.py:45: AttributeError
+________ test_frontend_rejects_semantic_mutations_before_compiler[edge] ________
+
+change = 'edge'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x785ea62449f0>
+
+    @pytest.mark.parametrize("change",["policy","edge","result","target","bindings","argument_layout","function_contract"])
+    def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch):
+        from tessera.compiler import rocm_nvfp4_program as program
+        module=_full_graph(128,32,256,[0,16,32],(0,1,2,3,4))
+        fn=module.functions[0]
+        if change=="policy":
+            fn.body[2].kwargs["numeric_policy"]["execution_mode"]="exact_per_block"
+        elif change=="edge":
+            fn.body[2].operands[1]="%packed"
+        elif change=="result":
+            fn.return_values=["%packed"]
+        elif change=="target":
+            module.module_attrs["tessera.arch"]='"gfx1151"'
+        elif change=="argument_layout":
+            fn.args[0].layout="col_major"
+        elif change=="function_contract":
+            fn.fn_attrs["tessera.aliasing"]='"in_place"'
+        else:
+            fn.body[0].operands[2]=fn.body[0].operands[0]
+>       monkeypatch.setattr(program,"find_tessera_opt",lambda:pytest.fail("invalid Graph reached compiler"))
+E       AttributeError: <module 'tessera.compiler.rocm_nvfp4_program' from '/home/angstorms/scratch/next-five-compiler-slices/tests/unit/../../python/tessera/compiler/rocm_nvfp4_program.py'> has no attribute 'find_tessera_opt'
+
+tests/unit/test_rocm_nvfp4_frontend_program.py:45: AttributeError
+_______ test_frontend_rejects_semantic_mutations_before_compiler[result] _______
+
+change = 'result'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x785ea6244b40>
+
+    @pytest.mark.parametrize("change",["policy","edge","result","target","bindings","argument_layout","function_contract"])
+    def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch):
+        from tessera.compiler import rocm_nvfp4_program as program
+        module=_full_graph(128,32,256,[0,16,32],(0,1,2,3,4))
+        fn=module.functions[0]
+        if change=="policy":
+            fn.body[2].kwargs["numeric_policy"]["execution_mode"]="exact_per_block"
+        elif change=="edge":
+            fn.body[2].operands[1]="%packed"
+        elif change=="result":
+            fn.return_values=["%packed"]
+        elif change=="target":
+            module.module_attrs["tessera.arch"]='"gfx1151"'
+        elif change=="argument_layout":
+            fn.args[0].layout="col_major"
+        elif change=="function_contract":
+            fn.fn_attrs["tessera.aliasing"]='"in_place"'
+        else:
+            fn.body[0].operands[2]=fn.body[0].operands[0]
+>       monkeypatch.setattr(program,"find_tessera_opt",lambda:pytest.fail("invalid Graph reached compiler"))
+E       AttributeError: <module 'tessera.compiler.rocm_nvfp4_program' from '/home/angstorms/scratch/next-five-compiler-slices/tests/unit/../../python/tessera/compiler/rocm_nvfp4_program.py'> has no attribute 'find_tessera_opt'
+
+tests/unit/test_rocm_nvfp4_frontend_program.py:45: AttributeError
+_______ test_frontend_rejects_semantic_mutations_before_compiler[target] _______
+
+change = 'target'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x785ea62457f0>
+
+    @pytest.mark.parametrize("change",["policy","edge","result","target","bindings","argument_layout","function_contract"])
+    def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch):
+        from tessera.compiler import rocm_nvfp4_program as program
+        module=_full_graph(128,32,256,[0,16,32],(0,1,2,3,4))
+        fn=module.functions[0]
+        if change=="policy":
+            fn.body[2].kwargs["numeric_policy"]["execution_mode"]="exact_per_block"
+        elif change=="edge":
+            fn.body[2].operands[1]="%packed"
+        elif change=="result":
+            fn.return_values=["%packed"]
+        elif change=="target":
+            module.module_attrs["tessera.arch"]='"gfx1151"'
+        elif change=="argument_layout":
+            fn.args[0].layout="col_major"
+        elif change=="function_contract":
+            fn.fn_attrs["tessera.aliasing"]='"in_place"'
+        else:
+            fn.body[0].operands[2]=fn.body[0].operands[0]
+>       monkeypatch.setattr(program,"find_tessera_opt",lambda:pytest.fail("invalid Graph reached compiler"))
+E       AttributeError: <module 'tessera.compiler.rocm_nvfp4_program' from '/home/angstorms/scratch/next-five-compiler-slices/tests/unit/../../python/tessera/compiler/rocm_nvfp4_program.py'> has no attribute 'find_tessera_opt'
+
+tests/unit/test_rocm_nvfp4_frontend_program.py:45: AttributeError
+______ test_frontend_rejects_semantic_mutations_before_compiler[bindings] ______
+
+change = 'bindings'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x785ea64bba10>
+
+    @pytest.mark.parametrize("change",["policy","edge","result","target","bindings","argument_layout","function_contract"])
+    def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch):
+        from tessera.compiler import rocm_nvfp4_program as program
+        module=_full_graph(128,32,256,[0,16,32],(0,1,2,3,4))
+        fn=module.functions[0]
+        if change=="policy":
+            fn.body[2].kwargs["numeric_policy"]["execution_mode"]="exact_per_block"
+        elif change=="edge":
+            fn.body[2].operands[1]="%packed"
+        elif change=="result":
+            fn.return_values=["%packed"]
+        elif change=="target":
+            module.module_attrs["tessera.arch"]='"gfx1151"'
+        elif change=="argument_layout":
+            fn.args[0].layout="col_major"
+        elif change=="function_contract":
+            fn.fn_attrs["tessera.aliasing"]='"in_place"'
+        else:
+            fn.body[0].operands[2]=fn.body[0].operands[0]
+>       monkeypatch.setattr(program,"find_tessera_opt",lambda:pytest.fail("invalid Graph reached compiler"))
+E       AttributeError: <module 'tessera.compiler.rocm_nvfp4_program' from '/home/angstorms/scratch/next-five-compiler-slices/tests/unit/../../python/tessera/compiler/rocm_nvfp4_program.py'> has no attribute 'find_tessera_opt'
+
+tests/unit/test_rocm_nvfp4_frontend_program.py:45: AttributeError
+__ test_frontend_rejects_semantic_mutations_before_compiler[argument_layout] ___
+
+change = 'argument_layout'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x785ea64bb0e0>
+
+    @pytest.mark.parametrize("change",["policy","edge","result","target","bindings","argument_layout","function_contract"])
+    def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch):
+        from tessera.compiler import rocm_nvfp4_program as program
+        module=_full_graph(128,32,256,[0,16,32],(0,1,2,3,4))
+        fn=module.functions[0]
+        if change=="policy":
+            fn.body[2].kwargs["numeric_policy"]["execution_mode"]="exact_per_block"
+        elif change=="edge":
+            fn.body[2].operands[1]="%packed"
+        elif change=="result":
+            fn.return_values=["%packed"]
+        elif change=="target":
+            module.module_attrs["tessera.arch"]='"gfx1151"'
+        elif change=="argument_layout":
+            fn.args[0].layout="col_major"
+        elif change=="function_contract":
+            fn.fn_attrs["tessera.aliasing"]='"in_place"'
+        else:
+            fn.body[0].operands[2]=fn.body[0].operands[0]
+>       monkeypatch.setattr(program,"find_tessera_opt",lambda:pytest.fail("invalid Graph reached compiler"))
+E       AttributeError: <module 'tessera.compiler.rocm_nvfp4_program' from '/home/angstorms/scratch/next-five-compiler-slices/tests/unit/../../python/tessera/compiler/rocm_nvfp4_program.py'> has no attribute 'find_tessera_opt'
+
+tests/unit/test_rocm_nvfp4_frontend_program.py:45: AttributeError
+_ test_frontend_rejects_semantic_mutations_before_compiler[function_contract] __
+
+change = 'function_contract'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x785ea4b64910>
+
+    @pytest.mark.parametrize("change",["policy","edge","result","target","bindings","argument_layout","function_contract"])
+    def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch):
+        from tessera.compiler import rocm_nvfp4_program as program
+        module=_full_graph(128,32,256,[0,16,32],(0,1,2,3,4))
+        fn=module.functions[0]
+        if change=="policy":
+            fn.body[2].kwargs["numeric_policy"]["execution_mode"]="exact_per_block"
+        elif change=="edge":
+            fn.body[2].operands[1]="%packed"
+        elif change=="result":
+            fn.return_values=["%packed"]
+        elif change=="target":
+            module.module_attrs["tessera.arch"]='"gfx1151"'
+        elif change=="argument_layout":
+            fn.args[0].layout="col_major"
+        elif change=="function_contract":
+            fn.fn_attrs["tessera.aliasing"]='"in_place"'
+        else:
+            fn.body[0].operands[2]=fn.body[0].operands[0]
+>       monkeypatch.setattr(program,"find_tessera_opt",lambda:pytest.fail("invalid Graph reached compiler"))
+E       AttributeError: <module 'tessera.compiler.rocm_nvfp4_program' from '/home/angstorms/scratch/next-five-compiler-slices/tests/unit/../../python/tessera/compiler/rocm_nvfp4_program.py'> has no attribute 'find_tessera_opt'
+
+tests/unit/test_rocm_nvfp4_frontend_program.py:45: AttributeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_nvfp4_frontend_program.py::test_frontend_rejects_semantic_mutations_before_compiler[policy]
+FAILED tests/unit/test_rocm_nvfp4_frontend_program.py::test_frontend_rejects_semantic_mutations_before_compiler[edge]
+FAILED tests/unit/test_rocm_nvfp4_frontend_program.py::test_frontend_rejects_semantic_mutations_before_compiler[result]
+FAILED tests/unit/test_rocm_nvfp4_frontend_program.py::test_frontend_rejects_semantic_mutations_before_compiler[target]
+FAILED tests/unit/test_rocm_nvfp4_frontend_program.py::test_frontend_rejects_semantic_mutations_before_compiler[bindings]
+FAILED tests/unit/test_rocm_nvfp4_frontend_program.py::test_frontend_rejects_semantic_mutations_before_compiler[argument_layout]
+FAILED tests/unit/test_rocm_nvfp4_frontend_program.py::test_frontend_rejects_semantic_mutations_before_compiler[function_contract]
+7 failed, 247 passed, 23 skipped in 77.14s (0:01:17)

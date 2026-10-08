@@ -49,3 +49,14 @@ Final audit/citation tests: 14 passed. Generated documents: 32 in sync.
 Graphify refresh completed: 233247 nodes, 407402 edges, 11576 communities.
 
 Validation logs are retained byte-for-byte as .log.gz files. Decompress with gzip -dc.
+
+## CI eviction fixtures — 2026-10-08
+
+GitHub unit job 113483623479 at head 6186a6595 completed with four failures,
+19,405 passes and 9,397 skips. Two failures are the existing scaled_matmul
+batching/transpose closure assertions. Two are missing qkv_v_5_0 artifacts
+used by JVP/VJP registration-eviction tests: the original recorded files were
+locally present but ignored by Git. Both are now tracked without modification.
+Their SHA256 values and the original CI log are retained here. The two affected
+host WSL replay suites pass all 24 tests after staging. This repair does not
+close generic batching/transpose or establish fresh device numerics.

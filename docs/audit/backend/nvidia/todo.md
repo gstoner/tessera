@@ -13837,3 +13837,24 @@ ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
 345 host WSL tests pass without skips; the unchanged execution gate passes.
 Not applicable to CUDA toolchain/physical schedules: isolated ROCm SDK provisioning leaves SM120 packages and runtime unchanged; existing RTX 5070 proof is retained.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
+
+## Shared attention sequence-capacity foundation — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1. Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Semantic checkpoint verification and native Schedule projection now use one
+IR-owned sequence-capacity resolver; the JVP contract uses the same policy.
+Matching LLVM/MLIR 23.1.1 core/target builds and 574 host WSL regressions pass without skips.
+Follow-up required: shared capacity resolution is the prerequisite for bounded saved-LSE JVP export, manifest, launch scalars and resident lifetime proof. Static and bounded backward admission remain unchanged.
+No dynamic JVP execution or generic scaled-matmul closure is claimed.
+
+## Bounded saved-LSE JVP native integration — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Shared contracts: symbolic sequence AD, exact source-shaped inactive zeros,
+schema-2 native tensor manifests and checked actual-size product launch grids.
+574 host WSL regressions pass, zero skipped.
+Parity validated on RTX 5070 / SM120 for the bounded synchronous textual Graph/resident JVP envelope: 40 numerical cases, one image per policy reused across four shapes, and nine compiler-free fresh-process replays. Public Python @jit dynamic selection, prepared dynamic ABI and explicit asynchronous lifetime remain follow-up required.
+Kernel CUDA-event timing and capture/JVP/close host-wall timing are separate.
+No generic scaled-matmul closure or default-route promotion.
+Evidence: benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.

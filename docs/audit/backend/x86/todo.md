@@ -9849,3 +9849,24 @@ ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
 345 host WSL tests pass without skips; the unchanged execution gate passes.
 Not applicable to CPU physical schedules/runtime ABI: upstream LLVM/MLIR remains pinned to 23.1.1 and the ROCm SDK is isolated.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
+
+## Shared attention sequence-capacity foundation — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1. Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Semantic checkpoint verification and native Schedule projection now use one
+IR-owned sequence-capacity resolver; the JVP contract uses the same policy.
+Matching LLVM/MLIR 23.1.1 core/target builds and 574 host WSL regressions pass without skips.
+Not applicable to CPU physical execution: the shared attention semantic verifier uses this resolver, while x86 packages do not consume the SM120 checkpoint/JVP ABI.
+No dynamic JVP execution or generic scaled-matmul closure is claimed.
+
+## Bounded saved-LSE JVP native integration — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Shared contracts: symbolic sequence AD, exact source-shaped inactive zeros,
+schema-2 native tensor manifests and checked actual-size product launch grids.
+574 host WSL regressions pass, zero skipped.
+Not applicable to AVX-512 physical execution: the x86 backend does not consume this CUDA/HIP native-storage manifest or SM120 resident JVP image. Shared IR verification is covered; no CPU native execution or performance claim.
+Kernel CUDA-event timing and capture/JVP/close host-wall timing are separate.
+No generic scaled-matmul closure or default-route promotion.
+Evidence: benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.

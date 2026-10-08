@@ -1423,3 +1423,27 @@ execution gate passes. Workflow/audit regressions pass 69 tests.
 This is image/ABI compiler proof, not AMD device execution. Hosted replay and
 generic scaled-matmul closure remain open.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
+
+## Bounded attention JVP native integration — 2026-10-08
+
+E2E-REAL-6 / AD-RESIDUAL-EVAL-1; sync NVIDIA-BOUNDED-JVP-2026-10-08.
+The shared IR capacity resolver, symbolic forward AD and exact inactive
+zero regions now feed native Schedule/Tile JVP kernels. Schema-2 tensor
+manifests bind actual sequence scalars and checked product row grids.
+Pitches, key loops, full/broadcast bias and end-aligned masks use actual
+sequence sizes. Saved-generation identity retains symbolic bounds.
+
+Matching LLVM/MLIR 23.1.1 core and target builds succeed; 574 host WSL
+regressions pass without skips. Owning RTX 5070 proof passes 40 numerical
+cases across ten programs and four shapes per program, plus nine fresh-process
+compiler-free replays. Independent FP64 analytic/finite-difference checks,
+primal/LSE, tangent linearity and retained output checks pass before timing.
+Native CUDA-event kernel times and capture/JVP/close host-wall times are
+recorded separately; no performance promotion.
+
+Remaining integration: public Python @jit dynamic selection, prepared C++
+dynamic ABI, explicit asynchronous consumer retirement, and wider capacity
+envelopes. Generic scaled-matmul batching/transpose and original-checkpoint
+NVFP4 model-quality acceptance remain open. No sibling device evidence is
+transferred. Evidence:
+benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.

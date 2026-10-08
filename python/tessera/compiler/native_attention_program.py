@@ -65,12 +65,16 @@ class NativeAttentionJVPProgram:
         frame=self.pair.capture(*roles[:3],**({"bias":roles[3]} if biased else {}))
         try:
             self.tangent.validate()
-            expected=_checkpoint_identity(frame.dims,frame._scale,frame._causal,
-                bias=biased,bias_shape=frame._bias_shape if biased else ())
+            policy=self.pair.forward.descriptor.provenance
+            expected=_checkpoint_identity(tuple(policy['shape']),frame._scale,frame._causal,
+                bias=biased,bias_shape=tuple(policy.get('bias_shape',())) if biased else (),
+                shape_bounds=tuple(policy.get('shape_bounds',())))
             if f'tessera.attention_checkpoint_identity = "{expected}"' not in self.tangent.arena_ir:
                 raise ValueError('automatic attention program forward/tangent generations disagree')
             tensor_names=('q','k','v','primal','lse','dq','dk','dv') + (
                 ('bias','dbias') if biased else ()) + ('tangent','scratch')
+            if policy.get('shape_bounds'):
+                tensor_names+=('query_size','key_size')
             signature=inspect.Signature([inspect.Parameter(n,inspect.Parameter.POSITIONAL_ONLY) for n in tensor_names])
             frame._jvp_binding=generate_tensor_binding(self.tangent,signature)
             shapes=(*frame.shapes[:3], *((frame._bias_shape,) if biased else ()))
@@ -141,9 +145,11 @@ def compile_attention_program(source,active,*,compiler,llvm_bin,input_names=(),r
     if len(mapping)!=count or any(type(i) is not int for i in mapping) or sorted(mapping)!=list(range(count)) or any(i>=count for i in active):
         raise ValueError("native attention JVP frontend argument mapping disagrees")
     physical_active=tuple(mapping.index(i) for i in active)
-    bias_shape=_policy_indices(policy, "bias_shape") or ((dims[0],dims[1],dims[3],dims[4]) if biased else ())
-    tangent=materialize_generated(source,dims,policy['scale'],policy['causal'],
-        compiler=compiler,llvm_bin=llvm_bin,bias_shape=bias_shape)
+    symbolic=tuple(policy["shape"])
+    bias_shape=_policy_indices(policy, "bias_shape") or ((symbolic[0],symbolic[1],symbolic[3],symbolic[4]) if biased else ())
+    tangent=materialize_generated(source,tuple(policy['shape']),policy['scale'],policy['causal'],
+        compiler=compiler,llvm_bin=llvm_bin,bias_shape=bias_shape,
+        shape_bounds=tuple(policy.get('shape_bounds',())))
     # Both independently generated native products must agree on activity after
     # projecting frontend indices into physical Q/K/V roles.
     contract=re.findall(r'tessera.attention_jvp_contract = \{([^\n]*?)\}',tangent.arena_ir)

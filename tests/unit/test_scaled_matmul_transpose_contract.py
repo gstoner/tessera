@@ -57,7 +57,7 @@ def test_mlir_scaled_result_checks_free_axes_before_optional_scale_exit(
 def test_sm120_scaled_capability_admits_normalized_nvfp4_without_sibling_promotion():
     from tessera.compiler.capabilities import supports_op
     assert supports_op("nvidia_sm120", "tessera.scaled_matmul", dtype="nvfp4", rank=2).supported
-    assert not supports_op("nvidia_sm120", "tessera.scaled_matmul", dtype="nvfp4", rank=4).supported
+    assert supports_op("nvidia_sm120", "tessera.scaled_matmul", dtype="nvfp4", rank=4).supported
     for target in ("nvidia_sm90", "nvidia_sm100", "apple_gpu", "x86", "rocm_gfx1151"):
         assert not supports_op(target, "tessera.scaled_matmul", dtype="nvfp4", rank=2).supported
 

@@ -13376,3 +13376,11 @@ match authoritative bytes. Full-suite generic closure and delivery remain open.
 Owner E2E-REAL-6. Sync NVIDIA-NVFP4-NESTED-MAPS-2026-10-08.
 
 Follow-up required: Metal has no equivalent named logical NVFP4 leading-prefix package. The shared logical NVFP4 host wrapper accepts nested static prefixes, but the Apple capability remains gated; NVIDIA device proof does not establish Metal execution.
+
+## PR895 CI route repair — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / W1.1.
+Sync PR895-CI-ROUTE-REPAIR-2026-10-08.
+Not applicable to Metal lowering or admission; shared CPU test routing is repaired.
+Evidence: benchmarks/baselines/pr895_ci_route_repairs_20261008/README.md.
+Generic scaled_matmul batching/transpose closure remains open; no coverage flag is promoted.

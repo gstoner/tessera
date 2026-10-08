@@ -1386,3 +1386,10 @@ E2E-REAL-6 / NVIDIA-NVFP4-NESTED-MAPS-2026-10-08 extends the named SM120 contrac
 ## Matching-source gfx1201 publication gate
 
 Current pre-publication source revalidation passes 113 owning gfx1201 composed primal/JVP/VJP and NVFP4 ingest tests after rebuilding core/ROCm tools and native HIP runtimes. Timestamp-preserving source transfer initially retained stale Make objects; the initial 41 failures and corrected terminal result are preserved with 4,931 input hashes and live device/tool fingerprints. Evidence: benchmarks/baselines/gfx1201_matching_source_20261008/README.md. No fresh performance, original-model quality or aggregate closure is claimed.
+
+## PR895 current-head checkpoint
+
+The 44-test RTX 5070 current-head receipt is preserved at
+benchmarks/baselines/pr895_current_head_validation_20261008/README.md.
+This receipt proves its named device tests, not the aggregate unit suite.
+The CI aggregate unit job remains failing and requires separate repairs.

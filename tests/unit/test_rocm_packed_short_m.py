@@ -18,6 +18,8 @@ def test_zero_or_negative_m_refuses(m):
     with pytest.raises(ValueError):
         build_packed_consumer_module(m,32,64)
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("shape",[(m,n,k) for m in (1,16,32,64) for n,k in ((32,64),(80,256))])
 @pytest.mark.parametrize("runtime_mn",[False,True])
 def test_short_m_native_package(shape,runtime_mn):

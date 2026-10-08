@@ -21,6 +21,8 @@ def test_scalar_semantic_projection(ta,tb,encoded,k):
     assert graph.functions[0].body[0].kwargs.get("batching") is None
     assert graph.to_mlir(target="rocm_gfx1201")==before
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("k",[1,32,37,65])
 @pytest.mark.parametrize("ta,tb,encoded",tuple(itertools.product((False,True),repeat=3)))
 def test_native_scalar_plane_member(ta,tb,encoded,k):
@@ -36,6 +38,8 @@ def test_native_scalar_plane_member(ta,tb,encoded,k):
     assert step.get("batching")==("broadcast" if ta or k%32 else None)
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("k",[1,37])
 @pytest.mark.parametrize("ta,tb",tuple(itertools.product((False,True),repeat=2)))
 def test_native_scalar_scale_jvp(k,ta,tb):

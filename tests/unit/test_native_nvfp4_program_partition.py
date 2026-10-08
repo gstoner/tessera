@@ -17,6 +17,8 @@ def export(roles=(0,1,2,3,4), stage=None):
                           f"--tessera-autodiff-forward={flags}")
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 @pytest.mark.parametrize("roles", [(0,1,2,3,4), (2,0,4,1,3)])
 def test_native_nvfp4_plan_preserves_original_roles_and_lifetimes(roles):
     text = export(roles)
@@ -38,6 +40,8 @@ def test_native_nvfp4_plan_preserves_original_roles_and_lifetimes(roles):
         "tessera.nvfp4_requantize", "tessera.mxfp4_folded_storage", "tessera.scaled_matmul"))
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 @pytest.mark.parametrize("stage,carrier", [
     (0,"tile.nvfp4_requantize_kernel"),
     (1,"tile.mxfp4_folded_storage_kernel"),
@@ -56,6 +60,8 @@ def test_native_projected_member_reaches_schedule_and_tile(stage,carrier):
             "tessera_rocm.scaled_wmma_gemm")[stage] in target
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 def test_native_export_preserves_producer_edge_instead_of_retargeting():
     module = _full_graph(16,16,64,(0,16),(0,1,2,3,4))
     module.functions[0].body[1].operands[0] = "%arg0"
@@ -68,6 +74,8 @@ def test_native_export_preserves_producer_edge_instead_of_retargeting():
                        "--tessera-autodiff-forward=export-scaled-primal=true")
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 def test_native_export_rejects_existing_member_symbol():
     graph = _full_graph(16,16,64,(0,16),(0,1,2,3,4)).to_mlir(
         target="rocm_gfx1201", canonical=True)
@@ -78,6 +86,8 @@ def test_native_export_rejects_existing_member_symbol():
                        "--tessera-autodiff-forward=export-scaled-primal=true")
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 def test_adapter_never_constructs_graph_below_frontend(monkeypatch):
     from tessera.compiler import graph_ir
     from tessera.compiler.native_nvfp4_program import export_native_nvfp4_program
@@ -96,6 +106,8 @@ def test_adapter_never_constructs_graph_below_frontend(monkeypatch):
         assert native.project_member(index) == native.manifest["member_graphs"][index]
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 def test_native_member_records_roundtrip_and_reject_changed_projection(monkeypatch):
     from tessera.compiler import native_nvfp4_program as adapter
     source = _full_graph(16,16,64,(0,16),(2,0,4,1,3)).to_mlir(
@@ -169,6 +181,8 @@ def test_public_native_partition_replays_without_graph_constructors(shape,roles,
         np.testing.assert_allclose(session.read_output().astype(np.float32),expected,rtol=.008,atol=.015625)
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 @pytest.mark.parametrize("field,value", [
     ("bytes",1), ("shape",[0,64]), ("ownership","readonly_input"),
     ("first_write",0), ("last_read",1),

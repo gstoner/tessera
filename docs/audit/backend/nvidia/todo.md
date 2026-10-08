@@ -13770,3 +13770,11 @@ match authoritative bytes. Full-suite generic closure and delivery remain open.
 Owner E2E-REAL-6. Sync NVIDIA-NVFP4-NESTED-MAPS-2026-10-08.
 
 Native static nested NVFP4 leading maps execute on RTX 5070 (SM120): three coupled policies, all four operand orientations, rank-four/rank-five logical tensors, odd K31/K129. Twenty-four device cases prove one launch, changed-input compiler-free reuse and retained outputs. Full logical prefix guards reject equal-product rebinding. The scalar/single-map regression lane passes 198 tests; 31 nested native-host checks and 490 registry checks pass. Timing characterization is recorded separately in nvidia_nested_nvfp4_20261008. Dynamic/mixed/nonleading maps, encoded-storage AD and generic closure remain open.
+
+## PR895 CI route repair — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / W1.1.
+Sync PR895-CI-ROUTE-REPAIR-2026-10-08.
+Structural W1.1 proof belongs to compiler-route; exact SM120 execution remains hardware_nvidia. No device admission change.
+Evidence: benchmarks/baselines/pr895_ci_route_repairs_20261008/README.md.
+Generic scaled_matmul batching/transpose closure remains open; no coverage flag is promoted.

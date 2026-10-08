@@ -6,6 +6,8 @@ from tests.unit.test_public_independent_scaled_primal import case
 from tessera.compiler.native_scaled_program import package_native_scaled_jvp
 from tessera.compiler.rocm_typed_scaled_native import lower_typed_scaled,package_typed_scaled
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("tb,encoded",tuple(itertools.product((False,True),repeat=2)))
 def test_transposed_a_native_primal_image_and_serialized_orientation(tb,encoded):
     _,owner,values,_=case(4,tb,encoded,ta=True)
@@ -34,6 +36,8 @@ def test_transposed_a_native_primal_image_and_serialized_orientation(tb,encoded)
         with pytest.raises(ValueError):
             replace(native,program_json=json.dumps(corrupt)).validate()
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("tb",[False,True])
 def test_transposed_a_native_jvp_preserves_each_product_orientation(tb):
     _,owner,values,_=case(12,tb,jvp=True,ta=True)

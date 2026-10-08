@@ -4,6 +4,8 @@ import pytest
 from tests.unit.test_native_typed_scaled_vmap import case
 from tessera.compiler.rocm_typed_scaled_native import lower_typed_scaled, package_typed_scaled
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("policy",[None,"shared_rhs_rows","independent_rhs","shared_lhs"])
 @pytest.mark.parametrize("fmt",["fp32","e8m0"])
 @pytest.mark.parametrize("nk",[False,True])

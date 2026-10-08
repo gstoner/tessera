@@ -16167,3 +16167,11 @@ match authoritative bytes. Full-suite generic closure and delivery remain open.
 Owner E2E-REAL-6. Sync NVIDIA-NVFP4-NESTED-MAPS-2026-10-08.
 
 Follow-up required for sibling parity: this change extends the named SM120 NVFP4 prefix contract. The existing gfx1201 typed FP8 leading-prefix implementation retains its own Schedule/storage policy; its focused host contract tests pass in the 198-test lane. No fresh ROCm physical execution is claimed by NVIDIA results. gfx1151 has no named NVFP4 contract.
+
+## PR895 CI route repair — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / W1.1.
+Sync PR895-CI-ROUTE-REPAIR-2026-10-08.
+Native Schedule/Tile proof belongs to compiler-route; image proof additionally requires the ROCm SDK. Exact gfx1151/gfx1201 claims remain separate.
+Evidence: benchmarks/baselines/pr895_ci_route_repairs_20261008/README.md.
+Generic scaled_matmul batching/transpose closure remains open; no coverage flag is promoted.

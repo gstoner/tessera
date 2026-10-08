@@ -25,6 +25,8 @@ def source(prefixes, output=(2,3), tb=False, encoded=False):
       }}
     }}"""
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("mask",range(1,16))
 @pytest.mark.parametrize("tb,encoded",tuple(itertools.product((False,True),repeat=2)))
 def test_native_independent_primal_package(mask,tb,encoded):
@@ -39,6 +41,8 @@ def test_native_independent_primal_package(mask,tb,encoded):
     package.validate()
     assert package.images[0].startswith(b"\x7fELF")
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("prefixes,output",[
     (((2,1),(3,),(),(1,3)),(2,3)),
     (((),(),(),()),()),
@@ -49,6 +53,8 @@ def test_singleton_unequal_rank_and_unbatched_primal(prefixes,output):
     assert json.loads(package.members_json[0])["geometry"][2]==__import__("math").prod(output)
     package.validate()
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 def test_independent_prefix_changes_sealed_schedule_identity():
     texts=[source(((2,3),(),(),()),tb=True),source(((),(),(2,3),()),tb=True)]
     hashes=[]
@@ -60,6 +66,8 @@ def test_independent_prefix_changes_sealed_schedule_identity():
         hashes.append(re.findall(r'artifact_hash = "([^"]+)"',result.stdout))
     assert hashes[0] and hashes[1] and hashes[0]!=hashes[1]
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("tb,encoded",tuple(itertools.product((False,True),repeat=2)))
 def test_default_image_policy_retains_independent_plane_types(tb,encoded):
     text=source(((),(),(2,3),()),tb=tb,encoded=encoded)
@@ -68,6 +76,8 @@ def test_default_image_policy_retains_independent_plane_types(tb,encoded):
     assert default.images==static.images
     assert json.loads(default.members_json[0])["image_policy"]=="static_independent_prefix_v1"
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 def test_native_scale_jvp_independent_primal_members():
     from tessera.compiler.native_scaled_program import package_native_scaled_jvp
     text=source(((),(),(2,3),()),tb=True)
@@ -87,6 +97,8 @@ def independent_target():
     assert result.returncode==0,result.stderr
     return result.stdout
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
 @pytest.mark.parametrize("mutation",["count","output_prefix","scale_suffix","scale_storage","policy"])
 def test_native_target_rejects_forged_independent_planes(independent_target,mutation):
     import re

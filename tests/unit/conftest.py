@@ -362,3 +362,23 @@ def _strict_metal_dispatch(request, monkeypatch):
         if fspath is not None and fspath.basename in _STRICT_DISPATCH_LANES:
             monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
     yield
+
+@pytest.fixture
+def production_compiler(monkeypatch):
+    """Route native pass proof to the production compiler CI lane."""
+    from tessera.compiler.scheduled_matmul import find_tessera_opt
+    tool = find_tessera_opt()
+    if tool is None:
+        pytest.skip("production compiler unavailable; run the compiler-route lane")
+    # Direct subprocess tests and package discovery use the same tool.
+    monkeypatch.setenv("TESSERA_OPT", str(tool))
+    return tool
+
+
+@pytest.fixture
+def rocm_image_toolchain(production_compiler):
+    """HSACO packaging also requires AMD clang and ROCm device libraries."""
+    from tessera.compiler.rocm_native import native_packaging_available
+    if not native_packaging_available():
+        pytest.skip("ROCm image toolchain unavailable; owning-host proof required")
+    return production_compiler

@@ -90,6 +90,8 @@ def test_public_scale_jvp_preserves_independent_graph(mask,tb,prefix):
     assert owner.differentiation_request==scalar.differentiation_request
     assert owner.frontend_differential(*values[:4]) is owner.frontend_differential(*values[:4])
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("encoded",[False,True])
 def test_independent_package_binds_actual_native_member_image(encoded):
     import json

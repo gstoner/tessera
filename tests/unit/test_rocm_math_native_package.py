@@ -106,7 +106,8 @@ def test_native_math_registries_name_exact_device_proof(target,kind):
     from tessera.compiler.capabilities import TARGET_CAPABILITIES
     from tessera.compiler.execution_matrix import lookup
     capability=TARGET_CAPABILITIES[target].supported_ops["tessera."+kind]
-    assert capability.dtypes==("fp32",) and capability.ranks==(2,3)
+    expected_ranks = (2, 3, 4) if (target, kind) == ("rocm_gfx1201", "add") else (2, 3)
+    assert capability.dtypes==("fp32",) and capability.ranks==expected_ranks
     entries=[entry for entry in manifest_for(kind) if entry.target==target]
     assert len(entries)==1
     assert entries[0].status=="device_verified_jit"

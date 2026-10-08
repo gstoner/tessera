@@ -47,6 +47,8 @@ def test_partial_public_projection_retains_ceiling_scales(mask,ta,tb,encoded):
     assert graph.functions[0].body[0].kwargs["batching"]=="broadcast"
     assert scalar._frontend_batch_axes is None
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("k",[1,15,17,31,33,37,63,65])
 @pytest.mark.parametrize("ta,tb,encoded",tuple(itertools.product((False,True),repeat=3)))
 def test_native_partial_group_image_and_static_capacity(k,ta,tb,encoded):
@@ -59,6 +61,8 @@ def test_native_partial_group_image_and_static_capacity(k,ta,tb,encoded):
     assert member["scalars"]==[3,5,k]
     assert member["image_policy"]=="static_independent_prefix_v1"
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("mutation",["scale_groups","policy","lds","k_extent"])
 def test_partial_target_rejects_inconsistent_planes(mutation):
     import os,re,subprocess
@@ -78,6 +82,8 @@ def test_partial_target_rejects_inconsistent_planes(mutation):
     assert result.returncode!=0
 
 
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("rocm_image_toolchain")
 @pytest.mark.parametrize("k",[1,37])
 @pytest.mark.parametrize("ta,tb",tuple(itertools.product((False,True),repeat=2)))
 def test_partial_jvp_owns_three_bounded_scaled_products(k,ta,tb):

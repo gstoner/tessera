@@ -1,0 +1,4 @@
+e4e33848bc4b1b9378789dc2c47539a1f1c405ac0c93ec0e2df9713fdfe071d6  /home/angstorms/scratch/compiler-validation-pr894-20261007/bin/tessera-opt
+LLVM (http://llvm.org/):
+  LLVM version 23.1.1
+  Optimized build with assertions.

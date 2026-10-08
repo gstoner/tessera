@@ -7,6 +7,21 @@ last_updated: 2026-10-08
 ---
 
 
+
+## ROCM-LINKED-TOOL-IDENTITY-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: bounded ROCm compiler metadata reuse and image-cache identity
+now include loaded ELF dependencies and loader search-path changes. Static
+ELF and non-ELF executable content semantics are preserved. Runtime ABI,
+Graph/Schedule/Tile semantics and physical schedules are unchanged.
+Focused host validation passes 372 checks with four hardware skips.
+gfx1201 owning-device validation and existing RMSNorm package A/B receipts
+are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/.
+This is a cache-contract slice; wider five-slice compiler closure remains open.
+
+Not applicable: CUDA image identity and SM120 schedules are unchanged.
+
 ## NATIVE-JVP-SOURCE-CONSTRAINTS-2026-10-07
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
@@ -13790,6 +13805,8 @@ Sync PR895-CI-ROUTE-REPAIR-2026-10-08.
 Structural W1.1 proof belongs to compiler-route; exact SM120 execution remains hardware_nvidia. No device admission change.
 Evidence: benchmarks/baselines/pr895_ci_route_repairs_20261008/README.md.
 Generic scaled_matmul batching/transpose closure remains open; no coverage flag is promoted.
+
+Matching-source x86-enabled full validation passes: 20,419 passed, 7,387 skipped, 874 deselected. Final drift gates pass 287 checks; generated-document checks pass. Historical build/fixture failures and repairs are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/README.md. Owning-device evidence remains architecture-specific.
 
 ## Native unary replay reuse — 2026-10-08
 

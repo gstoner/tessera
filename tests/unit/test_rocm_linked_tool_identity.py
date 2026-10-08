@@ -87,3 +87,16 @@ def test_static_elf_retains_content_identity(tmp_path, monkeypatch):
         raise AssertionError("static warm identity must not launch subprocess")
     monkeypatch.setattr(native.subprocess, "run", refused)
     assert native._tool_digest(tool) == expected
+
+
+def test_loader_environment_tracks_working_directory(tmp_path, monkeypatch):
+    # Relative RPATH/RUNPATH and empty LD_LIBRARY_PATH entries resolve against
+    # the cwd, so a chdir must change the cache identity.
+    first = tmp_path / "a"
+    second = tmp_path / "b"
+    first.mkdir()
+    second.mkdir()
+    monkeypatch.chdir(first)
+    before = native._loader_environment()
+    monkeypatch.chdir(second)
+    assert native._loader_environment() != before

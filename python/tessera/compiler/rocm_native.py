@@ -468,9 +468,15 @@ def _file_signature(path: Path) -> tuple:
 
 
 def _loader_environment() -> tuple:
+    # The working directory is part of the identity: a relative RPATH/RUNPATH
+    # or an empty LD_LIBRARY_PATH entry is resolved against it by the loader.
+    try:
+        cwd = os.getcwd()
+    except OSError:
+        cwd = None
     return tuple(os.environ.get(name) for name in
                  ("PATH", "LD_LIBRARY_PATH", "LD_PRELOAD", "ROCM_PATH",
-                  "TESSERA_ROCM_CLANG"))
+                  "TESSERA_ROCM_CLANG")) + (cwd,)
 
 
 def _linked_tool_files(tool: Path) -> tuple[Path, ...]:

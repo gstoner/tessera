@@ -143,7 +143,7 @@ def test_public_jit_movement_executes_and_specializes_on_owning_gpu(arch, family
     ("gfx1151", "paged"), ("gfx1151", "paged_default"), ("gfx1151", "dispatched"),
     ("gfx1201", "paged"), ("gfx1201", "paged_default"),
 ])
-def test_prepared_native_binding_avoids_graph_serialization_and_rejects_views(arch, family, monkeypatch):
+def test_prepared_native_binding_avoids_serialization_and_checks_view_contract(arch, family, monkeypatch):
     from tessera import runtime as rt
     from tessera.compiler.graph_ir import GraphIRModule
     if os.environ.get("TESSERA_ROCM_MOVEMENT_DEVICE_PROOF") != "1":
@@ -169,14 +169,28 @@ def test_prepared_native_binding_avoids_graph_serialization_and_rejects_views(ar
     assert after["allocations"] == before["allocations"]
     source_index = 0 if family == "paged" else 1
     bad = list(args)
-    # Same shape/dtype and byte count: metadata must reject a non-contiguous view.
+    # Paged views now carry checked strides through native IR. MoE retains
+    # its compact-only contract; neither route may compact silently.
     expanded = np.repeat(args[source_index], 2, axis=-1)
     bad[source_index] = expanded[..., ::2]
     before = rt._rocm_native_movement_stats()
-    with pytest.raises(RuntimeError, match="prepared movement invocation"):
-        fn(*bad)
-    assert rt._rocm_native_movement_stats()["launches"] == before["launches"]
-    assert fn._native_descriptor_last_receipt is None
+    if family == "dispatched":
+        with pytest.raises(RuntimeError, match="layout mismatch"):
+            fn(*bad)
+        assert rt._rocm_native_movement_stats()["launches"] == before["launches"]
+        assert fn._native_descriptor_last_receipt is None
+    else:
+        from tessera.compiler.rocm_native import GFX_PAGED_KV_STRIDED_F32_ABI
+        np.testing.assert_array_equal(fn(*bad).view(np.uint32), expected.view(np.uint32))
+        assert fn.compile_result.launch_descriptor.abi_id == GFX_PAGED_KV_STRIDED_F32_ABI
+        assert 'page_layout = "strided"' in fn.compile_bundle.tile.text
+        before = rt._rocm_native_movement_stats()
+        with monkeypatch.context() as guard:
+            guard.setattr(GraphIRModule, "to_mlir", forbidden)
+            np.testing.assert_array_equal(fn(*bad).view(np.uint32), expected.view(np.uint32))
+        after = rt._rocm_native_movement_stats()
+        assert after["launches"]-before["launches"] == 1
+        assert after["allocations"] == before["allocations"]
     # A changed typed Graph cannot reuse the sealed prepared call.
     module, _ = fn._trace_frontend_capture(args, {})
     call = next(iter(fn._native_prepared_movement_calls.values()))

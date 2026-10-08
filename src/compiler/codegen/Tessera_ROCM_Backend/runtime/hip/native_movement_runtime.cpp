@@ -126,6 +126,15 @@ extern "C" int tessera_rocm_movement_launch(
       reinterpret_cast<uintptr_t>(indices) % alignof(int32_t) ||
       reinterpret_cast<uintptr_t>(output) % alignof(float) ||
       reinterpret_cast<uintptr_t>(dimensions) % alignof(int64_t)) return 1;
+  if (family == 2) {
+    uintptr_t source = reinterpret_cast<uintptr_t>(input);
+    uintptr_t table = reinterpret_cast<uintptr_t>(indices);
+    uintptr_t destination = reinterpret_cast<uintptr_t>(output);
+    if (source > UINTPTR_MAX-inputBytes || table > UINTPTR_MAX-indexBytes ||
+        destination > UINTPTR_MAX-outputBytes) return 1;
+    if ((destination < source+inputBytes && source < destination+outputBytes) ||
+        (destination < table+indexBytes && table < destination+outputBytes)) return 1;
+  }
   if (getpid() != process) return 2;
   size_t expectedInput = 0, expectedIndices = 0, expectedOutput = 0;
   if (family == 0 || family == 2) {

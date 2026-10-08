@@ -62,6 +62,7 @@ GFX_NORM_F16_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.f16.v1"
 GFX_NORM_F32_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.f32.v1"
 GFX_NORM_BF16_ABI = "tessera.rocm.norm.x_o_rows_k_epsilon.bf16.v1"
 GFX_PAGED_KV_F32_ABI = "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1"
+GFX_PAGED_KV_STRIDED_F32_ABI = "tessera.rocm.paged_kv.pages_table_o_dims_strides.f32_i32.v1"
 GFX_MOE_DISPATCH_F32_ABI = "tessera.rocm.moe_dispatch.x_token_o_t_s_h.f32_i32.v1"
 GFX_ATTN_F16_ABI = "tessera.rocm.attention.q_k_v_o_dims.f16_f32out.v1"
 GFX_ATTN_BF16_ABI = "tessera.rocm.attention.q_k_v_o_dims.bf16_f32out.v1"
@@ -2621,7 +2622,7 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
         )
     pages_name, table_name, output_name, dims = contract
     physical_pages, logical_pages, page_size, heads, dim, start, tokens = dims
-    from .scheduled_paged_kv import lower_scheduled_paged_kv_graph, project_scheduled_paged_kv_graph
+    from .scheduled_paged_kv import lower_scheduled_paged_kv_graph, project_scheduled_paged_kv_graph, paged_storage_layout
     if scheduled_artifact is None:
         artifact = lower_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}")
     else:
@@ -2629,6 +2630,11 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
         if artifact.graph_ir != project_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}"):
             raise ValueError("paged Schedule artifact disagrees with the caller Graph or target")
         artifact.validate()
+    layout = paged_storage_layout(module)
+    abi = GFX_PAGED_KV_STRIDED_F32_ABI if layout == "strided" else GFX_PAGED_KV_F32_ABI
+    scalar_names: tuple[str, ...] = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+    if layout == "strided":
+        scalar_names += ("StrideP", "StridePage", "StrideH", "StrideD")
     tile_ir = artifact.tile_ir
     (
         target_ir,
@@ -2651,22 +2657,22 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
         target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
         binary_format="hsaco",
         payload=payload,
-        entry_points=(NativeEntryPoint(entry, GFX_PAGED_KV_F32_ABI),),
+        entry_points=(NativeEntryPoint(entry, abi),),
         compile_state=compile_state,
         device_libraries=device_libraries,
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
-        abi_id=GFX_PAGED_KV_F32_ABI,
+        abi_id=abi,
         buffers=(
-            BufferBinding(0, pages_name, "input", "fp32", 4, "row_major", 4),
+            BufferBinding(0, pages_name, "input", "fp32", 4, layout, 4),
             BufferBinding(1, table_name, "input", "int32", 1, "row_major", 4),
             BufferBinding(2, output_name, "output", "fp32", 3, "row_major", 4),
         ),
         scalars=tuple(
             ScalarArgument(3 + index, name, "int64")
-            for index, name in enumerate(("P", "LP", "PageSize", "H", "D", "Start", "Tokens"))
+            for index, name in enumerate(scalar_names)
         ),
         shape_guards=(
             ShapeGuard(pages_name, 0, "eq", physical_pages),
@@ -2678,19 +2684,21 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
             ShapeGuard(output_name, 1, "eq", heads),
             ShapeGuard(output_name, 2, "eq", dim),
         ),
-        geometry=LaunchGeometry(policy=f"{architecture}_paged_kv_direct_256"),
+        geometry=LaunchGeometry(policy=f"{architecture}_paged_kv_{'strided' if layout == 'strided' else 'direct'}_256"),
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",
             synchronization=("completion",),
         ),
         provenance={
-            "work_item": "ROCM-E2E-2",
-            "sync_key": "E2E-SPINE-2026-07-18",
+            "work_item": "E2E-REAL-6" if layout == "strided" else "ROCM-E2E-2",
+            "sync_key": "ROCM-STRIDED-PAGED-KV-20261008" if layout == "strided" else "E2E-SPINE-2026-07-18",
             "route": "direct",
             "shape": list(dims),
             "storage": "f32",
             "table_storage": "i32",
+            **({"page_layout": layout, "page_stride_policy": "positive_runtime_element_strides",
+                "source_extent_policy": "checked_physical_span"} if layout == "strided" else {}),
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
             "schedule_digest": artifact.schedule_digest,
         },
@@ -3459,6 +3467,7 @@ __all__ = [
     "GFX_MATMUL_F16_F32_ABI",
     "GFX_MATMUL_F16_F32_FUSED_ABI",
     "GFX_PAGED_KV_F32_ABI",
+    "GFX_PAGED_KV_STRIDED_F32_ABI",
     "GFX_REDUCE_BF16_ABI",
     "GFX_REDUCE_F16_ABI",
     "GFX_REDUCE_F32_ABI",

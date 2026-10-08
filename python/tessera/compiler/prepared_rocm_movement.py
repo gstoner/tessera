@@ -21,10 +21,10 @@ class HostView(ct.Structure):
 
 
 class PreparedMovementCall:
-    def __init__(self, compiled, module, artifact, contract):
+    def __init__(self, compiled, module, artifact, contract, *, ordered=None):
         from tessera import runtime as rt
         from .native_artifact import BufferBinding, ShapeGuard, ScalarArgument, LaunchGeometry, OrderingSemantics, WorkspaceRequirement
-        from .rocm_native import GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI
+        from .rocm_native import GFX_PAGED_KV_F32_ABI, GFX_PAGED_KV_STRIDED_F32_ABI, GFX_MOE_DISPATCH_F32_ABI
         image, descriptor = artifact.native_image, artifact.launch_descriptor
         if not compiled.executable or image is None or descriptor is None:
             raise ValueError("prepared movement requires a complete executable compiler package")
@@ -32,7 +32,8 @@ class PreparedMovementCall:
         arch = image.target.removeprefix("rocm_")
         if arch not in {"gfx1151", "gfx1201"} or image.architecture != arch:
             raise ValueError("prepared movement needs its exact ROCm image target")
-        family = 0 if descriptor.abi_id == GFX_PAGED_KV_F32_ABI else 1
+        strided = descriptor.abi_id == GFX_PAGED_KV_STRIDED_F32_ABI
+        family = 2 if strided else 0 if descriptor.abi_id == GFX_PAGED_KV_F32_ABI else 1
         if family == 1 and (descriptor.abi_id != GFX_MOE_DISPATCH_F32_ABI or arch != "gfx1151"):
             raise ValueError("prepared movement has an unsupported ABI")
         stages = [compiled.bundle.graph, compiled.bundle.schedule, compiled.bundle.tile,
@@ -43,18 +44,20 @@ class PreparedMovementCall:
         names, dimensions = contract[:3], contract[3]
         shapes: tuple[tuple[int, ...], ...]
         scalar_names: tuple[str, ...]
-        if family == 0:
+        if family in {0, 2}:
             p, lp, page, h, d, start, tokens = dimensions
             shapes = ((p, page, h, d), (lp,), (tokens, h, d))
             scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
-            policy = arch + "_paged_kv_direct_256"
+            policy = arch + ("_paged_kv_strided_256" if strided else "_paged_kv_direct_256")
+            if strided:
+                scalar_names += ("StrideP", "StridePage", "StrideH", "StrideD")
         else:
             t, slots, h = dimensions
             shapes = ((t, h), (slots,), (slots, h))
             scalar_names = ("T", "S", "H")
             policy = "gfx1151_moe_dispatch_direct_256"
         expected_buffers = tuple(BufferBinding(i, name, "output" if i == 2 else "input",
-            "int32" if i == 1 else "fp32", len(shape), "row_major", 4)
+            "int32" if i == 1 else "fp32", len(shape), "strided" if strided and i == 0 else "row_major", 4)
             for i, (name, shape) in enumerate(zip(names, shapes, strict=True)))
         expected_guards = tuple(ShapeGuard(name, axis, "eq", extent)
             for name, shape in zip(names, shapes, strict=True) for axis, extent in enumerate(shape))
@@ -68,6 +71,15 @@ class PreparedMovementCall:
                 or descriptor.dynamic_local_memory_bytes or descriptor.dynamic_local_memory_expression
                 or tuple(descriptor.provenance.get("shape", ())) != dimensions):
             raise ValueError("prepared movement descriptor differs from its static native tensor ABI")
+        self._page_strides = None
+        native_dimensions = dimensions
+        if strided:
+            if ordered is None:
+                raise ValueError("strided preparation requires the actual host storage view")
+            from .paged_host_span import checked_page_span
+            position = next(i for i, arg in enumerate(module.functions[0].args) if arg.name == names[0])
+            _, self._page_strides = checked_page_span(ordered[position])
+            native_dimensions = (*dimensions, *self._page_strides)
         lib = rt._load_rocm_native_movement_runtime()
         if lib is None or not hasattr(lib, "tessera_rocm_movement_prepare"):
             raise ValueError("prepared movement requires the matching native runtime")
@@ -82,9 +94,9 @@ class PreparedMovementCall:
         lib.tessera_rocm_movement_close.restype = ct.c_int
         handle = ct.c_uint64()
         payload = ct.create_string_buffer(image.payload)
-        dims = (ct.c_int64 * len(dimensions))(*dimensions)
+        dims = (ct.c_int64 * len(native_dimensions))(*native_dimensions)
         rc = lib.tessera_rocm_movement_prepare(payload, len(image.payload),
-            descriptor.entry_symbol.encode(), arch.encode(), family, dims, len(dimensions), ct.byref(handle))
+            descriptor.entry_symbol.encode(), arch.encode(), family, dims, len(native_dimensions), ct.byref(handle))
         if rc:
             raise RuntimeError(f"native movement preparation failed rc={rc}")
         self._lib, self._handle = lib, handle.value
@@ -104,8 +116,14 @@ class PreparedMovementCall:
         from .resident_rocm_movement import ResidentMovementCall
         return ResidentMovementCall(self)
 
-    def matches(self, module):
-        return self._finalizer.alive and module == self.graph_snapshot
+    def matches(self, module, ordered=None):
+        if not self._finalizer.alive or module != self.graph_snapshot:
+            return False
+        if self._page_strides is not None and ordered is not None:
+            from .paged_host_span import checked_page_span
+            _, strides = checked_page_span(ordered[self.input_positions[0]])
+            return strides == self._page_strides
+        return True
 
     def close(self):
         self._finalizer()
@@ -118,10 +136,16 @@ class PreparedMovementCall:
         output = np.empty(self.output_shape, dtype=np.float32)
         arrays = (*inputs, output)
         views = (HostView * 3)()
-        for view, array in zip(views, arrays, strict=True):
+        for role, (view, array) in enumerate(zip(views, arrays, strict=True)):
             if not isinstance(array, np.ndarray) or array.ndim > 4:
                 raise TypeError("prepared movement requires host tensor arrays of rank at most four")
-            view.data, view.bytes, view.rank = array.ctypes.data, array.nbytes, array.ndim
+            physical_bytes = array.nbytes
+            if role == 0 and self._page_strides is not None:
+                from .paged_host_span import checked_page_span
+                physical_bytes, strides = checked_page_span(array)
+                if strides != self._page_strides:
+                    raise ValueError("page strides differ from the prepared native owner")
+            view.data, view.bytes, view.rank = array.ctypes.data, physical_bytes, array.ndim
             view.dtype = 1 if array.dtype == np.dtype("float32") else 2 if array.dtype == np.dtype("int32") else 0
             for axis, (shape, stride) in enumerate(zip(array.shape, array.strides, strict=True)):
                 view.shape[axis], view.strides[axis] = shape, stride

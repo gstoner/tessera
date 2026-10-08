@@ -17,6 +17,7 @@ class ScheduledPagedKVArtifact:
     names: tuple[str, str, str]
     dims: tuple[int, ...]
     entry: str = "tessera_tile_paged_kv_read_f32_direct"
+    page_layout: str = "row_major"
 
     def validate(self) -> None:
         tool = find_tessera_opt()
@@ -33,7 +34,11 @@ class ScheduledPagedKVArtifact:
             raise ValueError("paged descriptor disagrees with native contract")
         if re.findall(r'tessera.schedule_hash = "([0-9a-f]{64})"', self.tile_ir) != [self.schedule_digest]:
             raise ValueError("paged schedule hash disagrees")
-        if self.entry != "tessera_tile_paged_kv_read_f32_direct" or re.findall(
+        expected_entry = {
+            "row_major": "tessera_tile_paged_kv_read_f32_direct",
+            "strided": "tessera_tile_paged_kv_read_f32_strided",
+        }.get(self.page_layout)
+        if self.entry != expected_entry or re.findall(
             r"llvm.func @([\w]+)\(", self.tile_ir
         ) != [self.entry]:
             raise ValueError("paged entry disagrees with runtime ABI")
@@ -106,6 +111,41 @@ def lower_scheduled_paged_kv_graph(module, *, target: str) -> ScheduledPagedKVAr
     if len(hashes) != 1:
         raise RuntimeError("paged lowering lost its unique schedule hash")
     artifact = ScheduledPagedKVArtifact(graph, schedule, tile, hashes[0],
-                                        (pages, table, output), dims)
+                                        (pages, table, output), dims,
+                                        entry=("tessera_tile_paged_kv_read_f32_strided"
+                                               if paged_storage_layout(module) == "strided"
+                                               else "tessera_tile_paged_kv_read_f32_direct"),
+                                        page_layout=paged_storage_layout(module))
     artifact.validate()
     return artifact
+
+
+def paged_storage_layout(module) -> str:
+    from .rocm_native import _paged_kv_contract
+    contract = _paged_kv_contract(module)
+    if contract is None:
+        raise ValueError("paged storage requires the admitted typed Graph")
+    arg = next(arg for arg in module.functions[0].args if arg.name == contract[0])
+    layout = arg.layout or arg.ir_type.layout or "row_major"
+    if layout not in {"row_major", "strided"}:
+        raise ValueError("paged storage requires row_major or strided pages")
+    return layout
+
+
+def project_paged_host_storage(module, ordered):
+    """Project memory facts onto a copy; native passes own every IR lowering."""
+    from .rocm_native import _paged_kv_contract
+    from .paged_host_span import checked_page_span
+    contract = _paged_kv_contract(module)
+    if contract is None:
+        return module
+    arguments = module.functions[0].args
+    position = next(i for i, arg in enumerate(arguments) if arg.name == contract[0])
+    pages = ordered[position]
+    checked_page_span(pages)
+    layout = paged_storage_layout(module)
+    if pages.flags.c_contiguous and layout == "row_major":
+        return module
+    source = copy.deepcopy(module)
+    source.functions[0].args[position].layout = "strided"
+    return source

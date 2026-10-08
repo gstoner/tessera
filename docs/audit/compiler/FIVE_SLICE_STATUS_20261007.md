@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-07
+last_updated: 2026-10-08
 audit_role: reference
 ---
 
@@ -23,7 +23,7 @@ not constitute a production lowering.
 | NVIDIA W1.1 producer migration | Current census and 12 canonical tensor replay rows on RTX 5070; pointer-backed tile.view plus typed fragments and accumulator recovery. `benchmarks/baselines/nvidia_w11_census_20261006/README.md`. | Arbitrary producer composition, noncanonical accumulator lineage and generic dynamic reconstruction. Historical constructors remain for older SM; SM120 proof does not retire those architectures. |
 | NVIDIA attention forward with saved LSE | Public ordinary JIT tuple route; native paired AD; Graph/Schedule/Tile/Target ancestry replay; numerical O/LSE. `benchmarks/baselines/nvidia_ordinary_attention_20261006/README.md`, `nvidia_checkpoint_graph_lineage_20261007/README.md`. | Nested/dynamic tuples and general composed attention. Native explicit LSE cotangents are not covered by forward artifact proof. |
 | NVIDIA attention backward | Compiler-generated paired AD, private residual generation, reordered gradient requests, prepared native ownership and replay. Expanded paired timing on RTX 5070: `benchmarks/baselines/nvidia_paired_attention_cost_20261007/README.md`. Explicit static LSE cotangent packages, compiler-free replay and host/resident/event proof: `benchmarks/baselines/nvidia_lse_cotangent_package_20261007/README.md`. Compact/bias-gradient extension: `benchmarks/baselines/nvidia_lse_cotangent_gradient_roles_20261007/README.md`. Native semantic O/LSE differentiation: `benchmarks/baselines/nvidia_multiresult_attention_ad_20261007/README.md`. Public JIT two-result VJP and private residual ownership: `benchmarks/baselines/nvidia_jit_multiresult_owner_20261007/README.md` (72 cases; 600 timing windows). | General dynamic/nested/composed multi-result AD, automatic external-consumer lifetime tracking and broader batching/transpose closure. Explicit static asynchronous capture/backward with registered consumer streams is proved in nvidia_attention_async_owner_20261008. Native paired AD already saves O/LSE; standalone recompute benchmarking is not the current paired policy. |
-| ROCm route/performance closure | Native math and movement on gfx1151/gfx1201, image identity reuse for declared packed envelopes, FP8/MXFP8/MXFP4 guarded vector-scale evaluation. `benchmarks/baselines/rocm_native_math_20261006/README.md`, `rocm_packed_image_identity_20261006/README.md`, `gfx1201_packed_vector_scales_20261006/README.md`. | General paged-KV layouts, broader image-key families, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. Measured guarded gains do not close these programs. Current-source gfx1201 ingest/movement rerun: `benchmarks/baselines/gfx1201_current_source_revalidation_20261007/README.md`; gfx1151 matching-source math/movement revalidation is recorded below; broader family revalidation remains open. |
+| ROCm route/performance closure | Native math and movement on gfx1151/gfx1201, image identity reuse for declared packed envelopes, FP8/MXFP8/MXFP4 guarded vector-scale evaluation. `benchmarks/baselines/rocm_native_math_20261006/README.md`, `rocm_packed_image_identity_20261006/README.md`, `gfx1201_packed_vector_scales_20261006/README.md`. | Paged-KV layouts outside the positive-stride static f32 envelope, broader image-key families, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. Measured guarded gains do not close these programs. Current-source gfx1201 ingest/movement rerun: `benchmarks/baselines/gfx1201_current_source_revalidation_20261007/README.md`; gfx1151 matching-source math/movement revalidation is recorded below; broader family revalidation remains open. |
 
 ## Delivery gates
 
@@ -1437,3 +1437,31 @@ Counterbalanced paired paged-KV/softmax host ratios are 0.864–0.954 and
 event intervals and direct per-member events are different timing scopes.
 General KV layouts and generic scaled closure remain open.
 Evidence: benchmarks/baselines/rocm_native_graph_movement_20261008/README.md.
+
+
+## Checked strided paged-KV execution — 2026-10-08
+
+Owner E2E-REAL-6; synchronization key ROCM-STRIDED-PAGED-KV-20261008.
+Static rank-4 f32 pages now execute with four positive whole-element strides
+through public JIT, serialized Graph/Schedule/Tile/ROCm/LLVM packages and
+checked prepared/resident native ownership. Page-table/output storage stays
+compact. Backing-span/overflow, sealed pitch and writable/disjoint output
+checks precede GPU access. Read-only self-aliasing input is numerically proved.
+Native HIP graph replay captures the gather alone or its compact softmax
+consumer. Shape/pitch values reuse the named strided image per architecture.
+
+Matching LLVM/MLIR 23.1.1 tools were built on Super-Bear and installed unchanged
+on the GPU hosts; native movement runtimes were freshly built on each device.
+Final owning regressions: gfx1151 52 pass / 4 other-architecture skips;
+gfx1201 48 pass / 6 other-architecture/family skips. Earlier focused host gate:
+140 pass / 32 hardware skips; six-file mypy zero errors. These scopes are
+separate. Seventeen packet source hashes match delivered bytes.
+Seven rotating timing rounds per profile separate resident kernel events from
+completed public JIT calls. Host calls remain approximately 2–3 ms; no physical
+selector promotion or broad performance closure is claimed.
+Evidence: benchmarks/baselines/rocm_strided_paged_kv_20261008/README.md.
+Owning gfx1151/gfx1201 numerical and separate timing proof is recorded for
+padded/offset, permuted, Fortran and read-only self-aliasing pages. Follow-up
+required: symbolic extents, other storage dtypes/device-buffer carriers,
+negative/zero-stride semantics, host-cost attribution and coalescing work.
+Broader image families, W8A8 and MXFP4 obligations remain open.

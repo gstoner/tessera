@@ -1776,7 +1776,7 @@ class JitFn:
         from .rocm_native import (
             requests_paged_kv_read, requests_moe_dispatch,
             _paged_kv_contract, _moe_dispatch_contract,
-            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_PAGED_KV_F32_ABI, GFX_PAGED_KV_STRIDED_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
             GFX_SOFTMAX_F32_ABI, requests_softmax,
         )
         from .rocm_math_native import supports_math, requests_math, MATH_ABIS
@@ -1856,7 +1856,11 @@ class JitFn:
                     op.kwargs["rhs_storage_order"] = "row_major"
                 else:
                     raise ValueError("static native matmul requires compact RHS storage")
-        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        if movement and requests_paged_kv_read(module):
+            from .scheduled_paged_kv import project_paged_host_storage
+            module = project_paged_host_storage(module, ordered)
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str,
+                           value.shape, *((value.strides,) if movement else ())) for value in ordered)
         prepared_enabled = movement and os.environ.get(
             "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
         lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
@@ -1865,7 +1869,7 @@ class JitFn:
         if prepared_enabled:
             call = self._native_prepared_movement_calls.get(signature)
             if call is not None:
-                if call.matches(module):
+                if call.matches(module, ordered):
                     array, receipt = call(ordered)
                     self.compile_result = call.compiled
                     self.compile_bundle = call.compiled.bundle
@@ -1890,7 +1894,7 @@ class JitFn:
         scalar_names: tuple[str, ...]
         movement_contract: tuple[str, str, str, tuple[int, ...]] | None
         if movement:
-            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+            if descriptor.abi_id in {GFX_PAGED_KV_F32_ABI, GFX_PAGED_KV_STRIDED_F32_ABI}:
                 movement_contract = _paged_kv_contract(module)
                 scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
             elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
@@ -1901,11 +1905,18 @@ class JitFn:
             if movement_contract is None:
                 raise ValueError("traced movement is outside the native tensor contract")
             declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
-            if (tuple(item.name for item in declared) != scalar_names
+            if (tuple(item.name for item in declared) != (scalar_names +
+                        (("StrideP", "StridePage", "StrideH", "StrideD")
+                         if descriptor.abi_id == GFX_PAGED_KV_STRIDED_F32_ABI else ()))
                     or any(item.dtype != "int64" for item in declared)
                     or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
                 raise ValueError("movement descriptor differs from the traced tensor contract")
             scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+            if descriptor.abi_id == GFX_PAGED_KV_STRIDED_F32_ABI:
+                from .paged_host_span import checked_page_span
+                values = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+                _, strides = checked_page_span(values[movement_contract[0]])
+                scalars.update(zip(("StrideP", "StridePage", "StrideH", "StrideD"), strides, strict=True))
         elif native_math:
             info = descriptor.provenance.get("native_math")
             if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
@@ -2075,7 +2086,7 @@ class JitFn:
         if prepared_enabled:
             from .prepared_rocm_movement import PreparedMovementCall
             self._native_prepared_movement_calls[signature] = PreparedMovementCall(
-                compiled, module, artifact, movement_contract)
+                compiled, module, artifact, movement_contract, ordered=ordered)
         if attention_saved_lse:
             return tuple(arrays)
         return arrays[0] if movement or softmax or matmul or attention or native_math or nvfp4 or typed_scaled else tuple(arrays)
@@ -2365,14 +2376,16 @@ class JitFn:
         ordered = self._ordered_inputs(args, kwargs)
         if ordered is None:
             raise ValueError("resident movement requires every declared input")
+        from .scheduled_paged_kv import project_paged_host_storage
+        module = project_paged_host_storage(module, ordered)
         call = next((value for value in self._native_prepared_movement_calls.values()
-                     if value.matches(module)), None)
+                     if value.matches(module, ordered)), None)
         if call is None:
             result = self._try_native_descriptor_call(args, kwargs)
             if result is None:
                 raise ValueError("resident movement requires a supported native paged-read or token-gather Graph")
             call = next((value for value in self._native_prepared_movement_calls.values()
-                         if value.matches(module)), None)
+                         if value.matches(module, ordered)), None)
         if call is None:
             raise ValueError("resident movement requires the matching native prepared runtime")
         return call, ordered

@@ -1,5 +1,7 @@
 # ROCm linked-tool identity and bounded metadata cache
 
+Recorded by benchmarks/rocm/record_native_package_metadata_cache.py.
+
 Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Synchronization key ROCM-LINKED-TOOL-IDENTITY-2026-10-07.
 
@@ -44,3 +46,14 @@ build and is bound by SHA in benchmark.json. This PR has no C++ lowering
 changes; these receipts do not claim a newly rebuilt compiler from this
 isolated checkout. gfx1151/other-family performance proof and broader
 compiler closure remain open. No sibling physical schedule is promoted.
+
+## Broader validation repair
+
+The first non-slow run reported six failures, 17884 passes and 9916 skips.
+One failure was this recorder's missing documentation reference, now fixed.
+The other five used nonexistent build paths derived from the isolated
+checkout: two compiler-location failures and three CUDA ReplaySSM failures.
+All 20 targeted repair cases pass with absolute compiler/runtime paths.
+The first run completed before the subsequent native compiler rebuild began.
+A fresh full lane is running against immutable compiler SHA e4e33848...;
+do not treat the original failed run or targeted repairs as full-suite closure.

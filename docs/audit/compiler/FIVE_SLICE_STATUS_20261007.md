@@ -1444,3 +1444,8 @@ execution gate passes. Workflow/audit regressions pass 69 tests.
 This is image/ABI compiler proof, not AMD device execution. Hosted replay and
 generic scaled-matmul closure remain open.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
+
+ROCM-IMAGE-SDK-CI-2026-10-08 hosted confirmation: job 113519437685 at
+PR895 head e8d5d145f passes 345 cases with zero skips and the unchanged
+execution gate. Raw log and receipt are preserved in the existing SDK packet.
+Generic scaled-matmul closure remains open.

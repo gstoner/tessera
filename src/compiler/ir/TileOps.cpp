@@ -2658,9 +2658,12 @@ LogicalResult ESLowRankCorrectionKernelOp::verify() {
 }
 
 LogicalResult PagedKVReadKernelOp::verify() {
-  if (getInputs().size() != 10)
+  auto layout = getOperation()->getAttrOfType<StringAttr>("page_layout");
+  bool strided = layout && layout.getValue() == "strided";
+  if ((getOperation()->hasAttr("page_layout") && !strided) ||
+      getInputs().size() != (strided ? 14u : 10u))
     return emitOpError(
-        "expects pages, page table, output, P, LP, page size, H, D, start, and tokens");
+        "expects pages, page table, output, seven dimensions; strided pages additionally require four element strides");
   for (Value pointer : getInputs().take_front(3))
     if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
       return emitOpError("pages, page table, and output must be !llvm.ptr");

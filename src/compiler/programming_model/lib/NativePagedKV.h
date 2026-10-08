@@ -22,9 +22,19 @@ static FailureOr<NativePagedKV> pagedKVContract(Operation *graph) {
          graph->getOperand(1) == fn.getArgument(0))) ||
       graph->getResultTypes() != fn.getResultTypes())
     return graph->emitError("paged read requires an isolated SM120, gfx1151, or gfx1201 tensor entry"), failure();
-  for (unsigned i = 0; i < fn.getNumArguments(); ++i)
-    if (fn.getArgAttr(i, "tessera.layout"))
-      return graph->emitError("paged read layout overrides are unsupported"), failure();
+  const unsigned pagesArgument = cast<BlockArgument>(graph->getOperand(0)).getArgNumber();
+  bool strided = false;
+  for (unsigned i = 0; i < fn.getNumArguments(); ++i) {
+    if (Attribute raw = fn.getArgAttr(i, "tessera.layout")) {
+      auto layout = dyn_cast<StringAttr>(raw);
+      if (i != pagesArgument || !layout ||
+          (layout.getValue() != "row_major" && layout.getValue() != "strided"))
+        return graph->emitError("paged read requires row_major or strided pages and a compact table"), failure();
+      strided = layout.getValue() == "strided";
+    }
+  }
+  if (strided && sm120)
+    return graph->emitError("strided paged read needs an owning ROCm Target consumer"), failure();
   for (NamedAttribute attr : graph->getAttrs())
     if (attr.getName() != "start" && attr.getName() != "end" && attr.getName() != "schedule.artifact_hash" &&
         !(attr.getName() == "tessera.effect_kind" && attr.getValue() == StringAttr::get(graph->getContext(), "pure")))
@@ -53,7 +63,13 @@ static FailureOr<NativePagedKV> pagedKVContract(Operation *graph) {
       builder.getNamedAttr("target", target), builder.getNamedAttr("arch", arch),
       builder.getNamedAttr("page_ownership", builder.getStringAttr("read_only_borrow")),
       builder.getNamedAttr("table_bounds", builder.getStringAttr("runtime_checked_physical_page_indices")),
-      builder.getNamedAttr("layout", builder.getStringAttr("row_major"))});
+      builder.getNamedAttr("layout", builder.getStringAttr(strided ? "strided" : "row_major"))});
+  if (strided) {
+    SmallVector<NamedAttribute> fields(contract.getValue());
+    fields.push_back(builder.getNamedAttr("page_stride_policy", builder.getStringAttr("positive_runtime_element_strides")));
+    fields.push_back(builder.getNamedAttr("source_extent_policy", builder.getStringAttr("checked_physical_span")));
+    contract = builder.getDictionaryAttr(fields);
+  }
   std::string text; llvm::raw_string_ostream os(text); contract.print(os); os.flush();
   return NativePagedKV{fn, contract, llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true)};
 }
@@ -90,10 +106,11 @@ static LogicalResult lowerNativePagedKV(ModuleOp mod) {
         scheduled->getResultTypes() != graph->getResultTypes() || !ret || ret.getOperands() != scheduled->getResults() ||
         c->function.getBody().front().getOperations().size() != 3)
       return scheduled->emitError("paged Schedule contract changed after hashing");
-    StringRef entry = "tessera_tile_paged_kv_read_f32_direct";
+    bool strided = c->contract.getAs<StringAttr>("layout").getValue() == "strided";
+    StringRef entry = strided ? "tessera_tile_paged_kv_read_f32_strided" : "tessera_tile_paged_kv_read_f32_direct";
     if (SymbolTable::lookupSymbolIn(mod, entry)) return scheduled->emitError("paged entry collision");
     OpBuilder builder(mod.getContext()); builder.setInsertionPointToEnd(mod.getBody());
-    SmallVector<Type> args(3, LLVM::LLVMPointerType::get(mod.getContext())); args.append(7, builder.getI64Type());
+    SmallVector<Type> args(3, LLVM::LLVMPointerType::get(mod.getContext())); args.append(strided ? 11 : 7, builder.getI64Type());
     auto fn = LLVM::LLVMFuncOp::create(builder, scheduled->getLoc(), entry,
         LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(mod.getContext()), args, false));
     if (c->contract.getAs<StringAttr>("target").getValue() == "nvidia_sm120")
@@ -103,7 +120,9 @@ static LogicalResult lowerNativePagedKV(ModuleOp mod) {
     auto block = fn.addEntryBlock(builder); builder.setInsertionPointToStart(block);
     OperationState kernel(scheduled->getLoc(), "tile.paged_kv_read_kernel"); kernel.addOperands(block->getArguments());
     kernel.addAttribute("storage", builder.getStringAttr("f32")); kernel.addAttribute("table_storage", builder.getStringAttr("i32"));
-    kernel.addAttribute("route", builder.getStringAttr("direct")); builder.create(kernel);
+    kernel.addAttribute("route", builder.getStringAttr("direct"));
+    if (strided) kernel.addAttribute("page_layout", builder.getStringAttr("strided"));
+    builder.create(kernel);
     LLVM::ReturnOp::create(builder, scheduled->getLoc(), ValueRange{}); c->function.erase();
   }
   return success();

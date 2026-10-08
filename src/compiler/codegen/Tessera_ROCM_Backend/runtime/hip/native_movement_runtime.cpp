@@ -1,6 +1,7 @@
 // Synchronous host movement over compiler-generated HSACOs. No kernel source
 // or numerical semantics live here. Explicit clear precedes context teardown.
 #include <hip/hip_runtime.h>
+#include "MovementPhysicalSpan.h"
 #include <algorithm>
 #include <array>
 #include <climits>
@@ -20,6 +21,7 @@ extern "C" int tessera_rocm_image_acquire(const void *, size_t, const char *,
 extern "C" int tessera_rocm_image_release(void *);
 
 namespace {
+using tessera::rocm::pagedPhysicalSpan;
 int clearResidentCurrent();
 using Identity = std::tuple<int, uintptr_t, std::string>;
 constexpr size_t maxRetainedBytes = 128 * 1024 * 1024;
@@ -106,7 +108,8 @@ struct Memref {
 };
 } // namespace
 
-// family 0: paged KV f32/i32; family 1: MoE token gather f32/i32.
+// family 0: compact paged KV; family 1: MoE gather; family 2: strided paged KV.
+// Paged KV uses f32 pages and i32 indices; family 2 appends four element strides.
 // Status: 1 request, 2 identity, 3 image lease, 4 allocation, 5 copy,
 // 6 launch, 7 completion, 8 lease release, 9 free, 10 quarantined, 12 exception.
 // reuse=0 is an independently controlled allocation baseline.
@@ -117,15 +120,15 @@ extern "C" int tessera_rocm_movement_launch(
     size_t dimensionCount, int reuse) try {
   if (!image || imageBytes < 4 || std::memcmp(image, "\177ELF", 4) ||
       !entry || !*entry || !architecture || !input || !indices || !output ||
-      !dimensions || (family != 0 && family != 1) || (reuse != 0 && reuse != 1) ||
-      dimensionCount != (family == 0 ? 7u : 3u)) return 1;
+      !dimensions || family < 0 || family > 2 || (reuse != 0 && reuse != 1) ||
+      dimensionCount != (family == 0 ? 7u : family == 2 ? 11u : 3u)) return 1;
   if (reinterpret_cast<uintptr_t>(input) % alignof(float) ||
       reinterpret_cast<uintptr_t>(indices) % alignof(int32_t) ||
       reinterpret_cast<uintptr_t>(output) % alignof(float) ||
       reinterpret_cast<uintptr_t>(dimensions) % alignof(int64_t)) return 1;
   if (getpid() != process) return 2;
   size_t expectedInput = 0, expectedIndices = 0, expectedOutput = 0;
-  if (family == 0) {
+  if (family == 0 || family == 2) {
     auto p=dimensions[0], lp=dimensions[1], page=dimensions[2],
          h=dimensions[3], d=dimensions[4], start=dimensions[5], tokens=dimensions[6];
     size_t capacity = 0;
@@ -134,6 +137,7 @@ extern "C" int tessera_rocm_movement_launch(
         !product({tokens,h,d},4,expectedOutput) ||
         !product({lp,page},1,capacity) || start < 0 || uint64_t(start) > capacity ||
         uint64_t(tokens) > capacity - size_t(start)) return 1;
+    if (family == 2 && !pagedPhysicalSpan(dimensions, expectedInput)) return 1;
     if (inputBytes != expectedInput || indexBytes != expectedIndices ||
         outputBytes != expectedOutput) return 1;
     for (int64_t i=0; i<lp; ++i)
@@ -365,8 +369,8 @@ struct PreparedState {
 PreparedState &preparedState() { static auto *value=new PreparedState; return *value; }
 bool preparedShape(PreparedMovement &call) {
   auto &d=call.dimensions;
-  if (call.family==0) {
-    if (d.size()!=7) return false;
+  if (call.family==0 || call.family==2) {
+    if (d.size()!=(call.family==2?11u:7u)) return false;
     call.shapes={std::vector<int64_t>{d[0],d[2],d[3],d[4]},
                  std::vector<int64_t>{d[1]},
                  std::vector<int64_t>{d[6],d[3],d[4]}};
@@ -388,6 +392,7 @@ bool preparedShape(PreparedMovement &call) {
     }
     call.bytes[i]=size;
   }
+  if (call.family==2 && !pagedPhysicalSpan(d.data(),call.bytes[0])) return false;
   return (call.bytes[2]/4+255)/256<=INT_MAX;
 }
 } // namespace
@@ -410,7 +415,8 @@ extern "C" int tessera_rocm_movement_prepare(
   *handle=0;
   if (!image || imageBytes<4 || std::memcmp(image,"\177ELF",4) ||
       !entry || !*entry || !architecture || !dimensions ||
-      dimensionCount!=(family==0?7u:3u) ||
+      (family<0 || family>2) ||
+      dimensionCount!=(family==0?7u:family==2?11u:3u) ||
       reinterpret_cast<uintptr_t>(dimensions)%alignof(int64_t) ||
       getpid()!=process) return 1;
   auto call=std::make_shared<PreparedMovement>();
@@ -455,7 +461,11 @@ extern "C" int tessera_rocm_movement_invoke(
         uintptr_t(v.data)>UINTPTR_MAX-v.bytes) return 1;
     int64_t stride=4;
     for (int j=v.rank-1;j>=0;--j) {
-      if (v.shape[j]!=shape[j] || (shape[j]>1 && v.strides[j]!=stride)) return 1;
+      if (v.shape[j]!=shape[j]) return 1;
+      if (i==0 && call->family==2) {
+        if (uint64_t(call->dimensions[7+j])>uint64_t(INT64_MAX)/4 ||
+            v.strides[j]!=call->dimensions[7+j]*4) return 1;
+      } else if (shape[j]>1 && v.strides[j]!=stride) return 1;
       stride*=shape[j]; // preparedShape already checked the byte product.
     }
     for (size_t j=0;i==2 && j<i;++j)
@@ -531,7 +541,11 @@ bool residentView(const ResidentMovement &r,const TesseraMovementHostView &v,siz
       uintptr_t(v.data)>UINTPTR_MAX-v.bytes) return false;
   int64_t stride=4;
   for (int j=v.rank-1;j>=0;--j) {
-    if (v.shape[j]!=shape[j] || (shape[j]>1 && v.strides[j]!=stride)) return false;
+    if (v.shape[j]!=shape[j]) return false;
+    if (role==0 && r.call->family==2) {
+      if (uint64_t(r.call->dimensions[7+j])>uint64_t(INT64_MAX)/4 ||
+          v.strides[j]!=r.call->dimensions[7+j]*4) return false;
+    } else if (shape[j]>1 && v.strides[j]!=stride) return false;
     stride*=shape[j];
   }
   return true;
@@ -834,7 +848,7 @@ extern "C" int tessera_rocm_movement_resident_prepare_softmax(
     std::lock_guard<std::mutex> guard(r->mutex);
     if (r->closing || !residentContext(*r)) status=2;
     // This first edge is paged read, preserving its last axis and full extent.
-    else if (r->call->family!=0 || r->call->shapes[2].back()!=columns ||
+    else if ((r->call->family!=0 && r->call->family!=2) || r->call->shapes[2].back()!=columns ||
              uint64_t(rows)*uint64_t(columns)!=r->call->bytes[2]/4) status=1;
     else try {
       r->consumerArguments.reserve(12);

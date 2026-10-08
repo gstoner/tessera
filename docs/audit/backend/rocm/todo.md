@@ -16263,3 +16263,23 @@ Graph whole-sequence and direct member event scopes remain distinct.
 Owning gfx1151 and gfx1201 execution/changed-input/lifetime proof is recorded. Native graph replay is explicit; direct defaults stay unchanged. gfx1201 prepared MoE dispatch and general paged layouts remain follow-up required.
 Evidence: benchmarks/baselines/rocm_native_graph_movement_20261008/README.md.
 Generic scaled-product closure and broader five-slice obligations remain open.
+
+## Strided paged-KV compiler contract — in progress, 2026-10-08
+
+Owner E2E-REAL-6; synchronization key ROCM-STRIDED-PAGED-KV-20261008.
+Native Graph -> Schedule -> Tile -> ROCm Target lowering now has a candidate
+four-element-stride page-buffer contract, distinct from the existing compact
+ABI. Schedule identity seals the positive-stride and checked-physical-span
+policies. Malformed layout attributes must be rejected, and the gather output
+is compact. This work is not yet an executable public package route.
+
+The matching LLVM/MLIR 23.1.1 compiler build passes. Host WSL validation:
+15 new compiler/frontend checks, 12 compiled native footprint checks,
+11 backing-allocation checks, 34 audit/operator registry regressions and
+14 existing compact-route regressions pass; four owning-hardware checks skip
+on Super-Bear. The existing positive ROCm kernel FileCheck fixture passes.
+Native prepared/resident storage now validates sealed element strides and
+retains the addressed physical span; its C++ syntax gate passes with pinned
+ROCm headers. Public JIT/descriptor ABI integration and owning-device execution
+remain pending. These host results do not establish a strided device route.
+Follow-up required on both gfx1151 and gfx1201: wire the checked backing capacity into public and serialized descriptor admission, complete direct/prepared/resident ABI integration, numerical execution and separate kernel/end-to-end measurements. No strided device support is claimed yet.

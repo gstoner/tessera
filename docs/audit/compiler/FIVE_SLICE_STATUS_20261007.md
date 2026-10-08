@@ -1402,3 +1402,12 @@ seven alternating warm-image package A/B pairs. Native MLIR replay reuse
 removes two subprocesses; descriptor/Tile checks still execute per call.
 No kernel or generic closure claim.
 Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+## Frontend certificate numerical policy — 2026-10-08
+
+FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1; synchronization
+FRONTEND-PARITY-NUMERIC-POLICY-2026-10-08. Certificate reuse now binds
+requested rtol/atol; strict numerical rejection and mapped frontend
+consumers pass 26 focused / 243 integration host tests. Native compilation
+and runtime ownership are unchanged; generic closure remains open.
+Evidence: benchmarks/baselines/frontend_parity_numeric_policy_20261008/README.md.

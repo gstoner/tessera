@@ -1498,7 +1498,7 @@ class JitFn:
             (str(value.dtype), tuple(int(dim) for dim in value.shape))
             for value in ordered
         )
-        certificate_key = (signature, tuple(sorted(_permitted_effect_ops)))
+        certificate_key = (signature, tuple(sorted(_permitted_effect_ops)), float(rtol), float(atol))
         cached = self._frontend_differential_certificates.get(certificate_key)
         if cached is not None:
             self.last_frontend_differential = cached

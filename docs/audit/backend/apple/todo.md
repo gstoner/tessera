@@ -6,6 +6,18 @@ target: apple_gpu
 last_updated: 2026-10-08
 ---
 
+
+## NATIVE-JVP-SOURCE-CONSTRAINTS-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Shared public runtime contract: native_jvp checks source shape constraints
+before tracing, compiling or preparing a backend. The existing solver and
+constraint error semantics are reused. Positional/keyword x86, ROCm and
+SM120 selectors have host-free early-rejection coverage.
+apple assessment: shared source-bound parity is validated; numerical/device
+execution is not applicable to this admission-only change.
+No image, kernel, dtype, operation or ABI changes are introduced.
+
 ## Current actions — five-slice integration
 
 Current as of 2026-10-08. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
